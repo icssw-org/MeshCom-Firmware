@@ -7,7 +7,7 @@
 #include <Arduino.h>
 
 // Common LoRa Parameters
-#define RF_FREQUENCY 433175000   // Hz
+#define RF_FREQUENCY 432900000  // 433175000   // Hz
 #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 
 #ifdef RAK4630

@@ -4,6 +4,7 @@
 #include <SX126x-RAK4630.h>
 #include <debugconf.h>
 
+#include <WisBlock-API.h>
 /*
     RAK4631 PIN DEFINITIONS
 
@@ -114,9 +115,19 @@ static uint8_t RcvBuffer_before[UDP_TX_BUF_SIZE];
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
 static uint8_t ringBufferUDPout[MAX_RING_UDP_OUT][UDP_TX_BUF_SIZE]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
-static uint8_t ringBufferLoraInUDPout[MAX_RING_UDP_OUT][UDP_TX_BUF_SIZE]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
 uint8_t udpWrite = 0;   // counter for ringbuffer
 uint8_t udpRead = 0;    // counter for ringbuffer
+
+s_meshcom_settings g_meshcom_settings;
+bool g_meshcom_initialized;
+bool init_flash_done=false;
+
+// RINGBUFFER for incoming UDP lora packets for lora TX
+unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];
+int iWrite=0;
+int iRead=0;
+
+bool bDEBUG=false;
 
 //variables and helper functions
 int sendlng = 0;              // lora tx message length
@@ -133,6 +144,10 @@ unsigned long dhcp_timer = 0;         // dhcp refresh timer
 unsigned long ntp_timer = 0;          // dhcp refresh timer
 unsigned long chk_udp_conn_timer = 0; // we check periodically if we have received a HB from server
 //unsigned long till_header_time = 0;    // stores till a header is detected after preamble detect
+unsigned int msg_counter = 0;
+char msg_text[300];
+
+String strText="";
 
 // Prototypes
 bool is_new_packet(uint16_t size);                         // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
@@ -142,14 +157,98 @@ void sendHeartbeat();                                // heartbeat to server
 void doTX();                                         // LoraTX function
 void addUdpOutBuffer(uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer
 void printBuffer(uint8_t *buffer, int len);
+void printBuffer_ascii(uint8_t *buffer, int len);
+void sendMessage(char *buffer, int len);
+void commandAction(char *buffer, int len);
 
 // Client basic variables
-    uint32_t _GW_ID = 0x99999999; // ID of our Node
+    uint8_t dmac[6];
+    unsigned int _GW_ID = 0x4B424332; // ID of our Node
 
-    String _longname = "CL_NAME"; // our longanme, can be up to 20 chars ending with 0x00
+    String _owner_call = "XX0XXX-0"; // our longanme, can be up to 20 chars ending with 0x00
 
-    String shortname = "XXXXX";     //our shortname
+    String _owner_short = "XXX40";     //our shortname
 
+/**
+ * @brief Initialize LoRa HW and LoRaWan MAC layer
+ *
+ * @return int8_t result
+ *  0 => OK
+ * -1 => SX126x HW init failure
+ * -2 => LoRaWan MAC initialization failure
+ * -3 => Subband selection failure
+ */
+int8_t init_meshcom(void)
+{
+#ifdef ESP32
+	pinMode(WB_IO2, OUTPUT);
+	digitalWrite(WB_IO2, HIGH);
+	delay(500);
+#endif
+
+	// Initialize LoRa chip.
+	if (api_init_lora() != 0)
+	{
+		API_LOG("LORA", "Failed to initialize SX1262");
+		return -1;
+	}
+
+	// Setup the EUIs and Keys
+    /*KBC
+	lmh_setDevEui(g_lorawan_settings.node_device_eui);
+	lmh_setAppEui(g_lorawan_settings.node_app_eui);
+	lmh_setAppKey(g_lorawan_settings.node_app_key);
+	lmh_setNwkSKey(g_lorawan_settings.node_nws_key);
+	lmh_setAppSKey(g_lorawan_settings.node_apps_key);
+	lmh_setDevAddr(g_lorawan_settings.node_dev_addr);
+
+	// Setup the LoRaWan init structure
+	lora_param_init.adr_enable = g_lorawan_settings.adr_enabled;
+	lora_param_init.tx_data_rate = g_lorawan_settings.data_rate;
+	lora_param_init.enable_public_network = g_lorawan_settings.public_network;
+	lora_param_init.nb_trials = g_lorawan_settings.join_trials;
+	lora_param_init.tx_power = g_lorawan_settings.tx_power;
+	lora_param_init.duty_cycle = g_lorawan_settings.duty_cycle_enabled;
+   
+	API_LOG("LORA", "Initialize LoRaWAN for region %s", region_names[g_lorawan_settings.lora_region]);
+	// Initialize LoRaWan
+	if (lmh_init(&lora_callbacks, lora_param_init, g_lorawan_settings.otaa_enabled, (eDeviceClass)g_lorawan_settings.lora_class, (LoRaMacRegion_t)g_lorawan_settings.lora_region) != 0)
+	{
+		API_LOG("LORA", "Failed to initialize LoRaWAN");
+		return -2;
+	}
+
+	// For some regions we might need to define the sub band the gateway is listening to
+	// This must be called AFTER lmh_init()
+	if (!lmh_setSubBandChannels(g_lorawan_settings.subband_channels))
+	{
+		API_LOG("LORA", "lmh_setSubBandChannels failed. Wrong sub band requested?");
+		return -3;
+	}
+
+	API_LOG("LORA", "Begin timer");
+	// Initialize the app timer
+	api_timer_init();
+
+	API_LOG("LORA", "Start Join");
+	// Start Join process
+	lmh_join();
+
+    */
+	g_meshcom_initialized = true;
+	return 0;
+}
+
+void getMacAddr(uint8_t *dmac)
+{
+    const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
+    dmac[5] = src[0];
+    dmac[4] = src[1];
+    dmac[3] = src[2];
+    dmac[2] = src[3];
+    dmac[1] = src[4];
+    dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
+}
 void nrf52setup()
 {
 
@@ -247,22 +346,107 @@ void nrf52setup()
     DEBUG_MSG("RADIO", "Starting RX MODE");
     Radio.Rx(RX_TIMEOUT_VALUE);
 
-    // Ethernet INIT
-    //neth.initethDHCP();
+    getMacAddr(dmac);
+
+    _GW_ID = dmac[0] | (dmac[1] << 8) | (dmac[2] << 16) | (dmac[3] << 24);
+
+	// Initialize battery reading
+	init_batt();
+
     delay(100);
-    //sendHeartbeat();
 }
 
 void nrf52loop()
 {
-    //check if we got from the serial input
-    while(Serial.available() > 0)
+    if(!init_flash_done)
     {
-        String str = Serial.readString();
-        str.trim();                 // removes CR, NL, Whitespace at end
-        if (str.equals("reset"))
-            NVIC_SystemReset();     // resets the device
+        init_flash();
+
+        char _owner_c[20];
+        sprintf(_owner_c, "%s", g_meshcom_settings.node_call);
+        _owner_call = _owner_c;
+
+        sprintf(_owner_c, "%s", g_meshcom_settings.node_short);
+        _owner_short = _owner_c;
     }
+
+    // check if we have messages in ringbuffer to send
+    if (iWrite != iRead)
+    {
+        if(cmd_counter <= 0)
+        {
+            if (tx_is_active == false && is_receiving == false)
+                doTX();
+        }
+        else
+            cmd_counter--;
+    }
+
+    //check if we got from the serial input
+    if(Serial.available() > 0)
+    {
+        char rd = Serial.read();
+
+        Serial.print(rd);
+
+        strText += rd;
+
+        //str.trim();                 // removes CR, NL, Whitespace at end
+
+        if (strText.startsWith("reset"))
+        {
+            strText="";
+            NVIC_SystemReset();     // resets the device
+        }
+        else
+        if(strText.startsWith(":") || strText.startsWith("-"))
+        {
+            if(strText.endsWith("\n") || strText.endsWith("\r"))
+            {
+                strText.trim();
+                strcpy(msg_text, strText.c_str());
+
+                int inext=0;
+                char msg_buffer[300];
+                for(int itx=0; itx<(int)strText.length(); itx++)
+                {
+                    if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
+                    {
+                        inext--;
+                        if(inext < 0)
+                            inext=0;
+                            
+                        msg_buffer[inext+1]=0x00;
+                    }
+                    else
+                    {
+                        msg_buffer[inext]=msg_text[itx];
+                        msg_buffer[inext+1]=0x00;
+                        inext++;
+                    }
+                }
+
+                if(strText.startsWith(":"))
+                    sendMessage(msg_buffer, inext);
+
+                if(strText.startsWith("-"))
+                    commandAction(msg_buffer, inext);
+
+                strText="";
+            }
+        }
+        else
+        {
+            if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+            {
+                printf("MSG:%02X", rd);
+                printf("..not sent\n");
+            }
+            strText="";
+        }
+    }
+
+    msg_counter++;
     
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
@@ -282,13 +466,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     if (is_new_packet(size) || (SEE_ALL_PACKETS == 1))
     {
+		// :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
+
         // print which message type we got
-        uint8_t msg_type_b_lora = payload[17];
+        uint8_t msg_type_b_lora = payload[0];
 
         switch (msg_type_b_lora)
         {
 
-            case 0x01: DEBUG_MSG("RADIO", "Received Textmessage"); break;
+            case 0x3A: DEBUG_MSG("RADIO", "Received Textmessage"); break;
             case 0x03: DEBUG_MSG("RADIO", "Received PosInfo"); break;
             case 0x04: DEBUG_MSG("RADIO", "Received NodeInfo"); break;
             case 0x05: DEBUG_MSG("RADIO", "Routing APP"); break;
@@ -296,87 +482,89 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             case 0x20: DEBUG_MSG("RADIO", "Reply APP"); break;
             case 0x42: DEBUG_MSG("RADIO", "Rangetest APP"); break;
             case 0x43: DEBUG_MSG("RADIO", "Environmental APP"); break;
-            default: DEBUG_MSG("RADIO", "Received unknown"); break;
-        
+            default:
+                DEBUG_MSG("RADIO", "Received unknown");
+                if(bDEBUG)
+                    printBuffer(RcvBuffer, size);
+                break;
         }
 
-        // print hex of message
-        //neth.printBuffer(RcvBuffer, size);
-
-        // we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
-        // MODE BYTE: LongSlow = 1, MediumSlow = 3
-        // and send the UDP packet (done in the method)
-
-        // we only send the packet via UDP if we have no collision with UDP rx
-        // und wenn MSG nicht von einem anderen Gateway empfangen wurde welches es bereits vopm Server bekommen hat
-        int msg_id = (RcvBuffer[11]<<24) | (RcvBuffer[10]<<16) | (RcvBuffer[9]<<8) | RcvBuffer[8];
-        int msg_hop = 0;
-        int msg_hop_pos = 0;
-
-        // gültige Meldung
-        if(RcvBuffer[16] == 0x08)
+        // txtmessage
+        if(msg_type_b_lora == 0x3A)
         {
-            for(int ihop=18;ihop<size;ihop++)
+            // print ascii of message
+            printBuffer_ascii(RcvBuffer, size);
+
+            // we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
+            // MODE BYTE: LongSlow = 1, MediumSlow = 3
+            // and send the UDP packet (done in the method)
+
+            // we only send the packet via UDP if we have no collision with UDP rx
+            // und wenn MSG nicht von einem anderen Gateway empfangen wurde welches es bereits vopm Server bekommen hat
+            int msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
+            int msg_hop = RcvBuffer[5] & 0x07;
+            int msg_hop_pos = 5;
+            bool msg_server =false;
+            if(RcvBuffer[5] & 0x80)
+                msg_server=true;
+
+            int lora_msg_len = size;
+            if (lora_msg_len > UDP_TX_BUF_SIZE)
+            lora_msg_len = UDP_TX_BUF_SIZE; // zur Sicherheit
+
+            if(bDEBUG)
+                printf("msg_id: %04X msg_len: %i payload[%i]=%i via=%d\n", msg_id, lora_msg_len, msg_hop_pos, msg_hop, msg_server);
+
+            if(!msg_server) // Message kommt von User
             {
-                if(RcvBuffer[ihop] == 0x1A && RcvBuffer[ihop+1] > 0 && RcvBuffer[ihop+1] <= 7)
+                // Wiederaussendung via LORA
+                // Ringbuffer filling
+
+                bool bMsg=false;
+
+                for(int iop=0;iop<MAX_RING_UDP_OUT;iop++)
                 {
-                    msg_hop_pos=ihop;
-                    msg_hop=RcvBuffer[ihop+1];
-                    break;
-                }
-            }
-        }
+                    int ring_msg_id = (ringBufferUDPout[iop][4]<<24) | (ringBufferUDPout[iop][3]<<16) | (ringBufferUDPout[iop][2]<<8) | ringBufferUDPout[iop][1];
 
-        int lora_msg_len = size;
-        if (lora_msg_len > UDP_TX_BUF_SIZE)
-        lora_msg_len = UDP_TX_BUF_SIZE; // zur Sicherheit
+                    if(ring_msg_id != 0 && bDEBUG)
+                        printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, msg_id);
 
-        printf("msg_id: %04X msg_len: %i payload[%i]=%i\n", msg_id, lora_msg_len, msg_hop_pos, msg_hop);
-
-        if(RcvBuffer[11] != 0x77)
-        {
-            // Wiederaussendung via LORA
-            // Ringbuffer filling
-
-            bool bMsg=false;
-
-            for(int iop=0;iop<MAX_RING_UDP_OUT;iop++)
-            {
-                for(int irp=0;irp<UDP_TX_BUF_SIZE;irp++)
-                {
-                    if(ringBufferUDPout[iop][irp] == 0x00)
+                    if(ring_msg_id == msg_id)
                     {
-                        int ring_msg_id = (ringBufferUDPout[iop][irp+20]<<24) | (ringBufferUDPout[iop][irp+19]<<16) | (ringBufferUDPout[iop][irp+18]<<8) | ringBufferUDPout[iop][irp+17];
-
-                        if(ring_msg_id != 0)
-                            printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, msg_id);
-
-                        if(ring_msg_id == msg_id)
-                            bMsg=true;
+                        bMsg=true;
 
                         break;
                     }
                 }
-            }
 
-            if(!bMsg)
-            {
-                if(msg_hop > 0 && msg_hop_pos > 0)
-                    payload[msg_hop_pos]=msg_hop-1;
-            
-
-
-                if ((msg_type_b_lora == 0x01 || msg_type_b_lora == 0x03 || msg_type_b_lora == 0x04))
+                if(!bMsg)
                 {
-                    addNodeData(size, rssi, snr);
-                    DEBUG_MSG("RADIO", "Packet sent to -->");
-                }
-                else
-                    DEBUG_MSG("RADIO", "Packet not sent to -->");
-            }    
+                    if(msg_hop > 0 && msg_hop_pos > 0)
+                        payload[msg_hop_pos]=msg_hop-1;
+                
+
+
+                    if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x03 || msg_type_b_lora == 0x04))
+                    {
+                        addNodeData(size, rssi, snr);
+                        //DEBUG_MSG("RADIO", "Packet sent to -->");
+                    }
+                    else
+                    {
+                        //DEBUG_MSG("RADIO", "Packet not sent to -->");
+                    }
+                } 
+            }   
+        }
+        else
+        {
+            // print hex of message
+            if(bDEBUG)
+                printBuffer(RcvBuffer, size);
         }
 
-        Serial.println("");
+        if(bDEBUG)
+            Serial.println("");
 
         // store received message to compare later on
         memcpy(RcvBuffer_before, RcvBuffer, UDP_TX_BUF_SIZE);
@@ -451,54 +639,44 @@ void OnPreambleDetect(void)
     } 
 }
 
-/**@brief fires when a correct syncword is detected
- */
-/* NICHT BENÖTIGT
-void OnHeaderDetect(void)
-{
-    is_receiving = true;
-    DEBUG_MSG("RADIO", "Header detected");
-    //unsigned long diff = millis() - till_header_time;
-    //DEBUG_MSG_VAL("RADIO", diff, "Time Preamble to Header");
-}
-*/
-
-
 /**@brief our Lora TX sequence
  */
-/*
+
 void doTX()
 {
     tx_is_active = true;
 
-    if (neth.iWrite != neth.iRead && neth.iWrite < MAX_RING)
+    if (iWrite != iRead && iWrite < MAX_RING)
     {
+        int irs=iRead;
 
-        sendlng = neth.ringBuffer[neth.iRead][0];
-        memcpy(lora_tx_buffer, neth.ringBuffer[neth.iRead] + 1, sendlng);
+        sendlng = ringBuffer[iRead][0];
+        memcpy(lora_tx_buffer, ringBuffer[iRead] + 1, sendlng);
 
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
-            int irs = neth.iRead;
-
             digitalWrite(PIN_LED2, HIGH);
 
             // print tx buffer
-            // neth.printBuffer(neth.lora_tx_buffer_eth, neth.lora_tx_msg_len);
+            //printBuffer(neth.lora_tx_buffer_eth, neth.lora_tx_msg_len);
 
-            neth.iRead++;
-            if (neth.iRead >= MAX_RING)
-                neth.iRead = 0;
+            iRead++;
+            if (iRead >= MAX_RING)
+                iRead = 0;
 
             Radio.Send(lora_tx_buffer, sendlng);
 
             cmd_counter = WAIT_TX;
 
-            if (neth.iWrite == neth.iRead)
+            if (iWrite == iRead)
+            {
                 DEBUG_MSG_VAL("RADIO", irs, "TX (LAST) :");
+            }
             else
+            {
                 DEBUG_MSG_VAL("RADIO", irs, "TX :");
+            }
 
             Serial.println("");
         }
@@ -535,12 +713,12 @@ bool is_new_packet(uint16_t size)
 void addNodeData(uint16_t size, int16_t rssi, int8_t snr)
 {
 
-    uint8_t longname_len = _longname.length();
+    uint8_t longname_len = _owner_call.length();
     char longname_c[longname_len + 1];
 
     // copying the contents of the
     // string to char array
-    strcpy(longname_c, _longname.c_str());
+    strcpy(longname_c, _owner_call.c_str());
 
     uint8_t offset = 8 + longname_len + 1; // offset for the payload written into tx udp buffer. We add 0x00 after Longanme
 
@@ -593,9 +771,12 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
     ringBufferUDPout[udpWrite][0] = len;
     memcpy(ringBufferUDPout[udpWrite] + 1, buffer, len + 1);
 
-    Serial.printf("Out Ringbuffer added element: %u\n", udpWrite);
-    //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
-    printBuffer(ringBufferUDPout[udpWrite], len + 1);
+    if(bDEBUG)
+    {
+        Serial.printf("Out Ringbuffer added element: %u\n", udpWrite);
+        //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
+        printBuffer(ringBufferUDPout[udpWrite], len + 1);
+    }
 
     udpWrite++;
     if (udpWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
@@ -613,45 +794,35 @@ void printBuffer(uint8_t *buffer, int len)
   Serial.println("");
 }
 
-/**@brief Function to send our heartbeat
- * longanme0x000xAABBCCDDKEEPGW0100x00
- *               GW_ID
+/**@brief Method to print our buffers
  */
-/*
-void sendHeartbeat()
+void printBuffer_ascii(uint8_t *buffer, int len)
 {
-    String keep = "KEEP";
-    String firmware ="GW010";
-    uint8_t longname_len = neth._longname.length();
-    uint16_t hb_buffer_size = longname_len + 1 + sizeof(neth._GW_ID) + keep.length() + firmware.length();;
-    uint8_t hb_buffer[hb_buffer_size];
+  int i=0;
 
-    // Serial.print("\nHB buffer size: ");
-    // Serial.println(hb_buffer_size);
+  Serial.printf("%03i ", len);
 
-    char longname_c[longname_len + 1];
-    strcpy(longname_c, neth._longname.c_str());
-    longname_c[longname_len] = 0x00;
+  Serial.printf("%c !", buffer[0]);
+  for (i = 4; i > 0; i--)
+  {
+    Serial.printf("%02X", buffer[i]);
+  }
+  Serial.printf(" %02X ", buffer[5]);
 
-    char keep_c[keep.length()];
-    strcpy(keep_c, keep.c_str());
+  int ineg=2;
+  if(buffer[len-7] == 0x00)
+    ineg=6;
 
-    char firmware_c[firmware.length()];
-    strcpy(firmware_c, firmware.c_str());
+  for (i = 6; i < len-ineg; i++)
+  {
+    if(buffer[i] != 0x00)
+      Serial.printf("%c", buffer[i]);
+  }
 
-    // copying all together
-    memcpy(&hb_buffer, &longname_c, longname_len + 1);
-    memcpy(&hb_buffer[longname_len + 1], &neth._GW_ID, sizeof(neth._GW_ID));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(neth._GW_ID)], &keep_c, sizeof(keep_c));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(neth._GW_ID) + sizeof(keep_c)], &firmware_c, sizeof(firmware_c));
+  Serial.printf(" %02X", buffer[len-ineg]);
+  Serial.printf("%02X", buffer[(len-ineg)+1]);
 
-    // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
-    //also avoid UDP tx when UDP is getting a packet
-    // add HB message to the ringbuffer
-    //DEBUG_MSG("UDP", "HB Buffer");
-    //neth.printBuffer(hb_buffer, hb_buffer_size);
-    addUdpOutBuffer(hb_buffer, hb_buffer_size);
-
+  Serial.println("");
 }
 
 /**@brief Function to check if the modem detected a preamble
@@ -683,3 +854,147 @@ void print_radioStatus()
     if(Radio.GetStatus() == RF_CAD) Serial.println("RF_CAD");
 
 } 
+
+void sendMessage(char *msg_text, int len)
+{
+    uint8_t msg_buffer[300];
+    char msg_start[100];
+
+    // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
+
+    msg_buffer[0]=':';
+    msg_counter++;
+
+    msg_buffer[1]=msg_counter & 0xff;
+    msg_buffer[2]=(msg_counter >> 8) & 0xff;
+    msg_buffer[3]=(msg_counter >> 16) & 0xff;
+    msg_buffer[4]=(msg_counter >> 24) & 0xff;
+
+    msg_buffer[5]=0x05; //max hop
+
+    sprintf(msg_start, "%s>*", _owner_call.c_str());
+
+    memcpy(msg_buffer+6, msg_start, _owner_call.length()+2);
+
+    int inext=6+2+_owner_call.length();
+
+    memcpy(msg_buffer+inext, msg_text, len);
+
+    inext=inext+len;
+    
+    /*
+    msg_buffer[inext]='/';
+    inext++;
+
+    sprintf(msg_start, "%03d%%", mv_to_percent(read_batt()));
+    memcpy(msg_buffer+inext, msg_start, 4);
+
+    inext+=4;
+    */
+
+    msg_buffer[inext]=0x00;
+    inext++;
+
+    int FCS_SUMME=0;
+    for(int ifcs=0; ifcs<inext; ifcs++)
+    {
+        FCS_SUMME += msg_buffer[ifcs];
+    }
+    
+    // FCS
+    msg_buffer[inext] = (FCS_SUMME >> 8) & 0xFF;
+    inext++;
+    msg_buffer[inext] = FCS_SUMME & 0xFF;
+    inext++;
+
+    // _GW_ID   nur für 2.0 -> 4.0
+    msg_buffer[inext] = (_GW_ID) & 0xFF;
+    inext++;
+    msg_buffer[inext] = (_GW_ID >> 8) & 0xFF;
+    inext++;
+    msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
+    inext++;
+    msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
+    inext++;
+
+    if(bDEBUG)
+    {
+        printBuffer(msg_buffer, inext);
+        Serial.println("");
+    }
+
+    ringBuffer[iWrite][0]=inext;
+    memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
+    
+    iWrite++;
+    if(iWrite > MAX_RING)
+        iWrite=0;
+
+    DEBUG_MSG("RADIO", "Packet sent to -->");
+}
+
+void commandAction(char *msg_text, int len)
+{
+    // -info
+    // -set-owner
+
+    char _owner_c[20];
+
+    // copying the contents of the
+    // string to char array
+    strcpy(_owner_c, _owner_call.c_str());
+
+    bool bInfo=false;
+
+    if(memcmp(msg_text, "-info", 5) == 0)
+    {
+        sprintf(_owner_c, "%s", g_meshcom_settings.node_call);
+        _owner_call = _owner_c;
+
+        sprintf(_owner_c, "%s", g_meshcom_settings.node_short);
+        _owner_short = _owner_c;
+
+        bInfo=true;
+    }
+    else
+    if(memcmp(msg_text, "-set_owner ", 11) == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+11);
+        _owner_call = _owner_c;
+        _owner_call.toUpperCase();
+        sprintf(_owner_c, "%s", _owner_call.c_str());
+
+        memcpy(g_meshcom_settings.node_call, _owner_c, 10);
+
+        sprintf(_owner_c, "XXX40");
+
+        for(int its=11; its<21; its++)
+        {
+            if(msg_text[its] == '-')
+            {
+                memcpy(_owner_c, msg_text+its-3, 3);
+                _owner_c[3]=0x34;
+                _owner_c[4]=0x30;
+                _owner_c[5]=0x00;
+                break;
+            }
+        }
+
+        _owner_short = _owner_c;
+        _owner_short.toUpperCase();
+        sprintf(_owner_c, "%s", _owner_short.c_str());
+
+        memcpy(g_meshcom_settings.node_short, _owner_c, 6);
+
+        save_settings();
+
+        bInfo=true;
+    }
+
+    if(bInfo)
+    {
+        printf("\nMeshCom 4.0 Client\n...Call:  %s\n...Short: %s\n...ID %08X\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %f\n...PBATT %d%%\n", _owner_call.c_str(), _owner_short.c_str(), _GW_ID, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()));
+    }
+    else
+        printf("\nMeshCom 4.0 Client\n...wrong command %s\n", msg_text);
+}
