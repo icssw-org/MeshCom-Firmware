@@ -68,6 +68,9 @@ void init_flash(void)
         memcpy(g_meshcom_settings.node_call, old_struct.node_call, 10);
         memcpy(g_meshcom_settings.node_short, old_struct.node_short, 5);
 
+		g_meshcom_settings.auto_join = old_struct.auto_join;
+		memcpy(g_meshcom_settings.node_device_eui, old_struct.node_device_eui, 8);
+
         /*KBC
 		g_meshcom_settings.adr_enabled = old_struct.adr_enabled;
 		g_meshcom_settings.app_port = old_struct.app_port;

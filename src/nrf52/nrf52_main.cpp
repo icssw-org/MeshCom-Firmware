@@ -169,6 +169,9 @@ void commandAction(char *buffer, int len);
 
     String _owner_short = "XXX40";     //our shortname
 
+/** Set the device name, max length is 10 characters */
+    char g_ble_dev_name[10] = "RAK-TEST";
+
 /**
  * @brief Initialize LoRa HW and LoRaWan MAC layer
  *
@@ -251,6 +254,12 @@ void getMacAddr(uint8_t *dmac)
 }
 void nrf52setup()
 {
+#if defined NRF52_SERIES || defined ESP32
+	// Create the task event semaphore
+	g_task_sem = xSemaphoreCreateBinary();
+	// Initialize semaphore
+	xSemaphoreGive(g_task_sem);
+#endif
 
      // LEDs
     pinMode(PIN_LED1, OUTPUT);
@@ -264,7 +273,27 @@ void nrf52setup()
 
     //clear ringbuffer
     for(int i=0; i<MAX_RING_UDP_OUT; i++)
-        memset(ringBufferUDPout[i],0,UDP_TX_BUF_SIZE);
+    {
+        memset(ringBufferUDPout[i], 0, UDP_TX_BUF_SIZE);
+    }
+
+	// Initialize battery reading
+	init_batt();
+
+	// Get LoRa parameter
+	init_flash();
+
+    char _owner_c[20];
+    sprintf(_owner_c, "%s", g_meshcom_settings.node_call);
+    _owner_call = _owner_c;
+
+    sprintf(_owner_c, "%s", g_meshcom_settings.node_short);
+    _owner_short = _owner_c;
+
+     getMacAddr(dmac);
+
+    _GW_ID = dmac[0] | (dmac[1] << 8) | (dmac[2] << 16) | (dmac[3] << 24);
+
 
     //  Initialize the LoRa Module
     lora_rak4630_init();
@@ -283,6 +312,30 @@ void nrf52setup()
             break;
         }
     }
+
+    //KBC ?? g_enable_ble=true;
+
+#if defined NRF52_SERIES || defined ESP32
+	if (g_enable_ble)
+	{
+		API_LOG("API", "Init BLE");
+		// Init BLE
+		init_ble();
+	}
+	else
+	{
+		// BLE is not activated, switch off blue LED
+		digitalWrite(LED_BLUE, LOW);
+	}
+
+	// Take the semaphore so the loop will go to sleep until an event happens
+	xSemaphoreTake(g_task_sem, 10);
+#endif
+#ifdef ARDUINO_ARCH_RP2040
+	// RAK11310 does not have BLE, switch off blue LED
+	digitalWrite(LED_BLUE, LOW);
+#endif
+
 
     Serial.println("=====================================");
     Serial.println("CLIENT STARTED");
@@ -346,30 +399,11 @@ void nrf52setup()
     DEBUG_MSG("RADIO", "Starting RX MODE");
     Radio.Rx(RX_TIMEOUT_VALUE);
 
-    getMacAddr(dmac);
-
-    _GW_ID = dmac[0] | (dmac[1] << 8) | (dmac[2] << 16) | (dmac[3] << 24);
-
-	// Initialize battery reading
-	init_batt();
-
     delay(100);
 }
 
 void nrf52loop()
 {
-    if(!init_flash_done)
-    {
-        init_flash();
-
-        char _owner_c[20];
-        sprintf(_owner_c, "%s", g_meshcom_settings.node_call);
-        _owner_call = _owner_c;
-
-        sprintf(_owner_c, "%s", g_meshcom_settings.node_short);
-        _owner_short = _owner_c;
-    }
-
     // check if we have messages in ringbuffer to send
     if (iWrite != iRead)
     {
@@ -446,8 +480,6 @@ void nrf52loop()
         }
     }
 
-    msg_counter++;
-    
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
     yield();
@@ -648,7 +680,7 @@ void doTX()
 
     if (iWrite != iRead && iWrite < MAX_RING)
     {
-        int irs=iRead;
+        //int irs=iRead;
 
         sendlng = ringBuffer[iRead][0];
         memcpy(lora_tx_buffer, ringBuffer[iRead] + 1, sendlng);
@@ -863,7 +895,8 @@ void sendMessage(char *msg_text, int len)
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
     msg_buffer[0]=':';
-    msg_counter++;
+    
+    msg_counter=millis();
 
     msg_buffer[1]=msg_counter & 0xff;
     msg_buffer[2]=(msg_counter >> 8) & 0xff;
@@ -993,7 +1026,8 @@ void commandAction(char *msg_text, int len)
 
     if(bInfo)
     {
-        printf("\nMeshCom 4.0 Client\n...Call:  %s\n...Short: %s\n...ID %08X\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %f\n...PBATT %d%%\n", _owner_call.c_str(), _owner_short.c_str(), _GW_ID, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()));
+        printf("\nMeshCom 4.0 Client\n...Call:  %s\n...Short: %s\n...ID %08X\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
+         _owner_call.c_str(), _owner_short.c_str(), _GW_ID, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
     }
     else
         printf("\nMeshCom 4.0 Client\n...wrong command %s\n", msg_text);

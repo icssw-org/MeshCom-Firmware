@@ -175,6 +175,9 @@ struct s_meshcom_settings
 	uint8_t valid_mark_2 = MESHCOM_DATA_MARKER; // Just a marker for the Flash
 												// OTAA Device EUI MSB
 
+	// OTAA Device EUI MSB
+	uint8_t node_device_eui[8] = {0x00, 0x0D, 0x75, 0xE6, 0x56, 0x4D, 0xC1, 0xF3};
+
 	uint8_t node_call[10] = {0x58, 0x58, 0x30, 0x58, 0x58, 0x58, 0x2D, 0x30, 0x30, 0x00};
 	uint8_t node_short[6] = {0x58, 0x58, 0x58, 0x34, 0x30, 0x00};
 	// Default is off
@@ -208,6 +211,9 @@ struct s_meshcomcompat_settings
 {
 	uint8_t valid_mark_1 = 0xAA;				  // Just a marker for the Flash
 	uint8_t valid_mark_2 = MESHCOM_COMPAT_MARKER; // Just a marker for the Flash
+
+	// OTAA Device EUI MSB
+	uint8_t node_device_eui[8] = {0x00, 0x0D, 0x75, 0xE6, 0x56, 0x4D, 0xC1, 0xF3};
 
 	// Flag if node joins automatically after reboot
 	bool auto_join = false;
