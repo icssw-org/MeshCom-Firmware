@@ -105,8 +105,8 @@ void OnPreambleDetect(void);
 void OnHeaderDetect(void);
 
 
-// Ethernet Object
-//NrfETH neth;
+asm(".global _scanf_float");
+asm(".global _printf_float");
 
 // LoRa Events and Buffers
 static RadioEvents_t RadioEvents;
@@ -159,15 +159,12 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len); // function adds outgoing u
 void printBuffer(uint8_t *buffer, int len);
 void printBuffer_ascii(uint8_t *buffer, int len);
 void sendMessage(char *buffer, int len);
+void sendPosition(double lat, double lon, int alt, int batt);
 void commandAction(char *buffer, int len);
 
 // Client basic variables
     uint8_t dmac[6];
     unsigned int _GW_ID = 0x4B424332; // ID of our Node
-
-    String _owner_call = "XX0XXX-0"; // our longanme, can be up to 20 chars ending with 0x00
-
-    String _owner_short = "XXX40";     //our shortname
 
 /** Set the device name, max length is 10 characters */
     char g_ble_dev_name[10] = "RAK-TEST";
@@ -283,14 +280,7 @@ void nrf52setup()
 	// Get LoRa parameter
 	init_flash();
 
-    char _owner_c[20];
-    sprintf(_owner_c, "%s", g_meshcom_settings.node_call);
-    _owner_call = _owner_c;
-
-    sprintf(_owner_c, "%s", g_meshcom_settings.node_short);
-    _owner_short = _owner_c;
-
-     getMacAddr(dmac);
+    getMacAddr(dmac);
 
     _GW_ID = dmac[0] | (dmac[1] << 8) | (dmac[2] << 16) | (dmac[3] << 24);
 
@@ -507,8 +497,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         {
 
             case 0x3A: DEBUG_MSG("RADIO", "Received Textmessage"); break;
-            case 0x03: DEBUG_MSG("RADIO", "Received PosInfo"); break;
-            case 0x04: DEBUG_MSG("RADIO", "Received NodeInfo"); break;
+            case 0x21: DEBUG_MSG("RADIO", "Received PosInfo"); break;
             case 0x05: DEBUG_MSG("RADIO", "Routing APP"); break;
             case 0x06: DEBUG_MSG("RADIO", "Admin APP"); break;
             case 0x20: DEBUG_MSG("RADIO", "Reply APP"); break;
@@ -521,8 +510,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 break;
         }
 
-        // txtmessage
-        if(msg_type_b_lora == 0x3A)
+        // txtmessage, position
+        if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21)
         {
             // print ascii of message
             printBuffer_ascii(RcvBuffer, size);
@@ -576,7 +565,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 
 
 
-                    if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x03 || msg_type_b_lora == 0x04))
+                    if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21))
                     {
                         addNodeData(size, rssi, snr);
                         //DEBUG_MSG("RADIO", "Packet sent to -->");
@@ -744,28 +733,21 @@ bool is_new_packet(uint16_t size)
  */
 void addNodeData(uint16_t size, int16_t rssi, int8_t snr)
 {
-
-    uint8_t longname_len = _owner_call.length();
-    char longname_c[longname_len + 1];
-
     // copying the contents of the
     // string to char array
-    strcpy(longname_c, _owner_call.c_str());
+    uint8_t offset = 8 + strlen(g_meshcom_settings.node_call) + 1; // offset for the payload written into tx udp buffer. We add 0x00 after Longanme
 
-    uint8_t offset = 8 + longname_len + 1; // offset for the payload written into tx udp buffer. We add 0x00 after Longanme
-
-    if (longname_len <= LONGNAME_MAXLEN)
+    if (strlen(g_meshcom_settings.node_call) <= LONGNAME_MAXLEN)
     {
-        memcpy(&txBuffer, &longname_c, longname_len);
-        txBuffer[longname_len] = 0x00; // we add a trailing 0x00 to mark the end of longname
+        memcpy(txBuffer, g_meshcom_settings.node_call, strlen(g_meshcom_settings.node_call));
+        txBuffer[strlen(g_meshcom_settings.node_call)] = 0x00; // we add a trailing 0x00 to mark the end of longname
     }
     else
     {
         DEBUG_MSG("ERROR", "LongName is too long!");
-        longname_len = LONGNAME_MAXLEN;
     }
 
-    uint8_t offset_params = longname_len + 1;
+    uint8_t offset_params = strlen(g_meshcom_settings.node_call) + 1;
     memcpy(&txBuffer[offset_params], &_GW_ID, sizeof(_GW_ID));
     memcpy(&txBuffer[offset_params + 4], &rssi, sizeof(rssi));
     txBuffer[offset_params + 6] = snr;
@@ -905,11 +887,11 @@ void sendMessage(char *msg_text, int len)
 
     msg_buffer[5]=0x05; //max hop
 
-    sprintf(msg_start, "%s>*", _owner_call.c_str());
+    sprintf(msg_start, "%s>*", g_meshcom_settings.node_call);
 
-    memcpy(msg_buffer+6, msg_start, _owner_call.length()+2);
+    memcpy(msg_buffer+6, msg_start, strlen(g_meshcom_settings.node_call)+2);
 
-    int inext=6+2+_owner_call.length();
+    int inext=6+2+strlen(g_meshcom_settings.node_call);
 
     memcpy(msg_buffer+inext, msg_text, len);
 
@@ -966,38 +948,114 @@ void sendMessage(char *msg_text, int len)
     DEBUG_MSG("RADIO", "Packet sent to -->");
 }
 
+void sendPosition(double lat, double lon, int alt, int batt)
+{
+    uint8_t msg_buffer[300];
+    char msg_start[100];
+
+    // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
+
+    msg_buffer[0]='!';
+    
+    msg_counter=millis();
+
+    msg_buffer[1]=msg_counter & 0xff;
+    msg_buffer[2]=(msg_counter >> 8) & 0xff;
+    msg_buffer[3]=(msg_counter >> 16) & 0xff;
+    msg_buffer[4]=(msg_counter >> 24) & 0xff;
+
+    msg_buffer[5]=0x05; //max hop
+
+    sprintf(msg_start, "%s>*", g_meshcom_settings.node_call);
+
+    memcpy(msg_buffer+6, msg_start, strlen(g_meshcom_settings.node_call)+2);
+
+    int inext=6+2+strlen(g_meshcom_settings.node_call);
+
+    sprintf(msg_start, "!%07.2lfN%c%08.2lfE%c %i /A=%i", lat*100.0, g_meshcom_settings.node_symid, lon*100.0, g_meshcom_settings.node_symcd, batt, alt);
+
+    memcpy(msg_buffer+inext, msg_start, strlen(msg_start));
+
+    inext=inext+strlen(msg_start);
+    
+    msg_buffer[inext]=0x00;
+    inext++;
+
+    int FCS_SUMME=0;
+    for(int ifcs=0; ifcs<inext; ifcs++)
+    {
+        FCS_SUMME += msg_buffer[ifcs];
+    }
+    
+    // FCS
+    msg_buffer[inext] = (FCS_SUMME >> 8) & 0xFF;
+    inext++;
+    msg_buffer[inext] = FCS_SUMME & 0xFF;
+    inext++;
+
+    // _GW_ID   nur für 2.0 -> 4.0
+    msg_buffer[inext] = (_GW_ID) & 0xFF;
+    inext++;
+    msg_buffer[inext] = (_GW_ID >> 8) & 0xFF;
+    inext++;
+    msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
+    inext++;
+    msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
+    inext++;
+
+    if(bDEBUG)
+    {
+        printBuffer_ascii(msg_buffer, inext);
+    }
+
+    ringBuffer[iWrite][0]=inext;
+    memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
+    
+    iWrite++;
+    if(iWrite > MAX_RING)
+        iWrite=0;
+
+    DEBUG_MSG("RADIO", "Position sent to -->");
+}
+
 void commandAction(char *msg_text, int len)
 {
     // -info
     // -set-owner
 
     char _owner_c[20];
+    double fVar=0.0;
+    int iVar;
+    String sVar;
 
     // copying the contents of the
     // string to char array
-    strcpy(_owner_c, _owner_call.c_str());
 
     bool bInfo=false;
+    bool bPos=false;
 
     if(memcmp(msg_text, "-info", 5) == 0)
     {
-        sprintf(_owner_c, "%s", g_meshcom_settings.node_call);
-        _owner_call = _owner_c;
-
-        sprintf(_owner_c, "%s", g_meshcom_settings.node_short);
-        _owner_short = _owner_c;
-
         bInfo=true;
+    }
+    else
+    if(memcmp(msg_text, "-pos", 4) == 0)
+    {
+        bPos=true;
+    }
+    else
+    if(memcmp(msg_text, "-send-pos", 9) == 0)
+    {
+        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lon, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
+        return;
     }
     else
     if(memcmp(msg_text, "-set_owner ", 11) == 0)
     {
         sprintf(_owner_c, "%s", msg_text+11);
-        _owner_call = _owner_c;
-        _owner_call.toUpperCase();
-        sprintf(_owner_c, "%s", _owner_call.c_str());
-
-        memcpy(g_meshcom_settings.node_call, _owner_c, 10);
+        sVar = _owner_c;
+        sVar.toUpperCase();
+        sprintf(g_meshcom_settings.node_call, "%s", sVar.c_str());
 
         sprintf(_owner_c, "XXX40");
 
@@ -1013,21 +1071,63 @@ void commandAction(char *msg_text, int len)
             }
         }
 
-        _owner_short = _owner_c;
-        _owner_short.toUpperCase();
-        sprintf(_owner_c, "%s", _owner_short.c_str());
-
-        memcpy(g_meshcom_settings.node_short, _owner_c, 6);
+        sVar = _owner_c;
+        sVar.toUpperCase();
+        sprintf(g_meshcom_settings.node_short, "%s", sVar.c_str());
 
         save_settings();
 
         bInfo=true;
     }
+    else
+    if(memcmp(msg_text, "-set_lat ", 9) == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+9);
+        sscanf(_owner_c, "%lf", &fVar);
+
+        //printf("_owner_c:%s fVar:%f\n", _owner_c, fVar);
+
+        g_meshcom_settings.node_lat=fVar;
+
+        save_settings();
+
+        bPos=true;
+    }
+    else
+    if(memcmp(msg_text, "-set_lon ", 9) == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+9);
+        sscanf(_owner_c, "%lf", &fVar);
+
+        g_meshcom_settings.node_lon=fVar;
+
+        save_settings();
+
+        bPos=true;
+    }
+    else
+    if(memcmp(msg_text, "-set_alt ", 9) == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+9);
+        sscanf(_owner_c, "%d", &iVar);
+
+        g_meshcom_settings.node_alt=iVar;
+
+        save_settings();
+
+        bPos=true;
+    }
 
     if(bInfo)
     {
         printf("\nMeshCom 4.0 Client\n...Call:  %s\n...Short: %s\n...ID %08X\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
-         _owner_call.c_str(), _owner_short.c_str(), _GW_ID, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
+         g_meshcom_settings.node_call, g_meshcom_settings.node_short, _GW_ID, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
+    }
+    else
+    if(bPos)
+    {
+        printf("\nMeshCom 4.0 Client\n...LAT: %.6lf\n...LON: %.6lf\n...ALT: %i\n",
+         g_meshcom_settings.node_lat, g_meshcom_settings.node_lon, g_meshcom_settings.node_alt);
     }
     else
         printf("\nMeshCom 4.0 Client\n...wrong command %s\n", msg_text);

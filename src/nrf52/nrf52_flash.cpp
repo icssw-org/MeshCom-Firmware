@@ -68,6 +68,12 @@ void init_flash(void)
         memcpy(g_meshcom_settings.node_call, old_struct.node_call, 10);
         memcpy(g_meshcom_settings.node_short, old_struct.node_short, 5);
 
+		g_meshcom_settings.node_lat = old_struct.node_lat;
+		g_meshcom_settings.node_lon = old_struct.node_lon;
+		g_meshcom_settings.node_alt = old_struct.node_alt;
+		g_meshcom_settings.node_symid = old_struct.node_symid;
+		g_meshcom_settings.node_symcd = old_struct.node_symcd;
+
 		g_meshcom_settings.auto_join = old_struct.auto_join;
 		memcpy(g_meshcom_settings.node_device_eui, old_struct.node_device_eui, 8);
 
