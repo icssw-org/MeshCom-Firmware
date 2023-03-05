@@ -876,7 +876,7 @@ void sendToPhone()
 
     // we need to insert the first byte text msg flag
     uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
-    // swapping from LSB to MSB
+
     uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0] + 1;   //len ist um ein byte zu kurz
 
     toPhoneBuff[0] = blelen;

@@ -211,11 +211,17 @@ void bleuart_rx_callback(uint16_t conn_handle)
 	char str[MAX_MSG_LEN_PHONE + 1] = {0};
 	g_ble_uart.read(str, MAX_MSG_LEN_PHONE);
 
-	DEBUG_MSG_TXT("BLE",str,"BLE IN MSG: ");
+	
+	/*
+	  check for hello message from phone and set flag ready to start exchange data
+		Hello Messages is fixed and starts with "H"
+		Config Messages:
+		"CAL:LEN:OE1KFR-4" Length is 1-20
+		"CLA:48.123"
+		"CLO:14.123"
+		"CAT:230"
+	*/
 
-	// check for hello message from phone and set flag ready to start exchange data
-	// Hello Messages is fixed and starts with "H"
-	// Config Messages starting with "C:" and delimeted with ":" -> "C:OE1KFR-4:LAT:LON:ALT"
 	if(strcmp(str, "HXXaaYYzz") == 0){
 		DEBUG_MSG("BLE", "Hello MSG from phone");
 		// on connect we send first the config to phone then messages of ringbuffer
@@ -223,18 +229,81 @@ void bleuart_rx_callback(uint16_t conn_handle)
 		isPhoneReady = 1;
 	} 
 	// config string arrived
-	// values could be empty! eg. "C::LAT:LON:ALT"
 	if(str[0] == 'C'){
 		DEBUG_MSG_TXT("BLE",str,"Config Msg:");
-		String callsign = "";
-		double lon = 0;
-		double lat = 0;
-		int alt = 0;
-		sscanf(str, ":%s:%lf:%lf:%d", &callsign, &lat, &lon, &alt);
-		DEBUG_MSG_TXT("BLE", callsign,"Call Conf:");
-		DEBUG_MSG_VAL("BLE", lat,"Conf lat");
-		DEBUG_MSG_VAL("BLE", lon,"Conf lat");
-		DEBUG_MSG_VAL("BLE", alt,"Conf lat");
+		int call_len = 0;
+		uint8_t call_offset = 7;
+		int str_len = strlen(str);
+		DEBUG_MSG_VAL("BLE", str_len,"str len");
+
+		char id[3];
+
+		for(int i=0; i<3; i++){
+			id[i] = str[i];
+		}
+
+		char call_len_c[2];
+		char cal[] = "CAL";
+
+		if(strcmp(id,cal) == 0){
+			DEBUG_MSG("BLE", "Call received");
+			for(int i=0; i<2; i++){
+				call_len_c[i] = str[i + 4];
+			}
+			call_len = atoi(call_len_c);
+			DEBUG_MSG_VAL("BLE", call_len,"len");
+
+			char callsign[call_len];
+			for(int i=0; i<call_len; i++){
+				callsign[i] = str[i + call_offset];
+			}
+			DEBUG_MSG_TXT("BLE",callsign,"Callsign:");
+
+		}
+
+		char cla[] = "CLA"; 
+		if(strcmp(id,cla) == 0){
+			DEBUG_MSG("BLE", "Latitude received");
+			int lat_len = str_len - 4;
+			
+			char lat_c[lat_len];
+			for(int i=0; i<lat_len; i++){
+				lat_c[i] = str[i+4];
+			}
+			/// TODO FUNZT NICHT
+			double lat_d = atof(lat_c);
+			
+			DEBUG_MSG_VAL("BLE", lat_d,"Conf lat");
+		}
+
+		char clo[] = "CLO"; 
+
+		if(strcmp(id,clo) == 0){
+			DEBUG_MSG("BLE", "Longitude received");
+			int lon_len = str_len - 4;
+			char lon_c[lon_len];
+			for(int i=0; i<lon_len; i++){
+				lon_c[i] = str[i+4];
+			}
+			double lon_d = atof(lon_c);
+		
+			DEBUG_MSG_VAL("BLE", lon_d,"Conf lon");
+		}
+		
+		char cat[] = "CAT"; 
+
+		if(strcmp(id,cat) == 0){
+			DEBUG_MSG("BLE", "Altitude received");
+			int alt_len = str_len - 4;
+			char alt_c[alt_len];
+			for(int i=0; i<alt_len; i++){
+				alt_c[i] = str[i+4];
+			}
+			double alt_d = atof(alt_c);
+
+			DEBUG_MSG_VAL("BLE", alt_d,"Conf lat");
+		}
+		
 	}
 
 }
@@ -261,7 +330,7 @@ void sendConfigToPhone () {
 	uint8_t latOffset = call_offset + call_len;
 	memcpy(confBuff + latOffset, &g_meshcom_settings.node_lat, 8);
 	memcpy(confBuff + latOffset + 8, &g_meshcom_settings.node_lon, 8);
-	memcpy(confBuff + latOffset + 12, &g_meshcom_settings.node_alt, 4);
+	memcpy(confBuff + latOffset + 16, &g_meshcom_settings.node_alt, 4);
 
 	// send to phone
 	g_ble_uart.write(confBuff, conf_len);
