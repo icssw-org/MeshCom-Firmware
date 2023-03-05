@@ -2,10 +2,6 @@
 // DEBUG
 // -----------------------------------------------------------------------------
 
-//#include <NTPClient.h>
-//extern NrfETH neth;
-
-
 // If not on PIO or not defined in platformio.ini
 #ifndef DO_DEBUG
 // Debug output set to 0 to disable app debug output

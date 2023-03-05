@@ -18,6 +18,8 @@ extern uint8_t isPhoneReady;
 extern bool ble_busy_flag;
 extern uint16_t swap2bytes(uint16_t value);
 extern void commandAction(char *msg_text, int len);
+extern void sendMessage(char *buffer, int len);
+
 void sendConfigToPhone ();
 
 /** OTA DFU service */
@@ -228,7 +230,8 @@ void bleuart_rx_callback(uint16_t conn_handle)
 		// on connect we send first the config to phone then messages of ringbuffer
 		sendConfigToPhone();
 		isPhoneReady = 1;
-	} 
+	}
+	else
 	// config string arrived
 	if(str[0] == 'C'){
 		DEBUG_MSG_TXT("BLE",str,"Config Msg:");
@@ -305,6 +308,13 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			DEBUG_MSG_VAL("BLE", alt_d,"Conf lat");
 		}
 		
+	}
+	else
+	{
+		#if BLE_TEST > 0
+			if(str[0] == ':')
+				sendMessage(str, strlen(str));
+		#endif
 	}
 
 }

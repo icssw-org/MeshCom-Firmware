@@ -64,6 +64,7 @@
 // BLE Settings
 #define MAX_MSG_LEN_PHONE 300
 
+#define BLE_TEST 1
 
 #ifdef ESP32
 

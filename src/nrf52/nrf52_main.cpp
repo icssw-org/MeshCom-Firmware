@@ -159,7 +159,7 @@ int toPhoneWrite=0;
 int toPhoneRead=0;
 
 
-bool bDEBUG=true;
+bool bDEBUG=false;
 
 //variables and helper functions
 int sendlng = 0;              // lora tx message length
@@ -565,20 +565,6 @@ void nrf52setup()
     // set right button interrupt
     pinMode(RIGHT_BUTTON, INPUT);
     attachInterrupt(RIGHT_BUTTON, interruptHandle3, FALLING);
-
-
-    Serial.println("EPD Epaper-DEPG0213BNS800F4xHP test");
-
-    display.begin();
-
-    // large block of text
-    display.clearBuffer();
-
-    display.drawBitmap(DEPG_HP.position1_x, DEPG_HP.position1_y, rak_img, 150, 56, EPD_BLACK);
-
-    testdrawtext(DEPG_HP.position1_x, DEPG_HP.position1_y+50, (char*)"IoT Made Easy", (uint16_t)EPD_BLACK, (uint32_t)2);
-
-    display.display(true);
 
     delay(100);
 }
@@ -1103,9 +1089,27 @@ void sendToPhone()
     toPhoneBuff[0] = blelen;
     toPhoneBuff[2] = 0x40;
 
-    memcpy(toPhoneBuff +3, BLEtoPhoneBuff[toPhoneRead], blelen);
+    memcpy(toPhoneBuff+3, BLEtoPhoneBuff[toPhoneRead], blelen);
 
+#if BLE_TEST > 0
+    int tlen=0;
+    for(int i=9; i<blelen+3; i++)
+    {
+        if(toPhoneBuff[i] == 0x00)
+            break;
+        
+        toPhoneBuff[i-9]=toPhoneBuff[i];
+        toPhoneBuff[i-8]=0x0a;
+        toPhoneBuff[i-7]=0x00;
+        tlen++;
+    }
+    tlen++;
+    tlen++;
+
+    g_ble_uart.write(toPhoneBuff, tlen);
+#else
     g_ble_uart.write(toPhoneBuff, blelen + 3);
+#endif
 
     toPhoneRead++;
     if (toPhoneRead >= MAX_RING)
