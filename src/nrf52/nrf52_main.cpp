@@ -240,6 +240,7 @@ void testdrawtext(int16_t x, int16_t y, char *text, uint16_t text_color, uint32_
 
 uint8_t gKeyNum = 0; // which button is pressed
 int iGPSCount=0;
+int iBLECount=0;
 
 // left button interrupt handle function
 void interruptHandle1()
@@ -585,6 +586,7 @@ void nrf52setup()
 void nrf52loop()
 {
    	digitalWrite(LED_GREEN, LOW);
+   	digitalWrite(LED_BLUE, LOW);
 
     // check if we have messages in ringbuffer to send
     if (iWrite != iRead)
@@ -614,9 +616,9 @@ void nrf52loop()
 
         if(iGPSCount > 10)
         {
-           	digitalWrite(LED_GREEN, HIGH);
-
             getGPS();
+
+           	digitalWrite(LED_GREEN, HIGH);
 
             iGPSCount=0;
         }
@@ -702,12 +704,22 @@ void nrf52loop()
     }
 
     // check if we have messages for BLE to send
-    if (toPhoneWrite != toPhoneRead)
+    if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
     {
-        if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
+        if (toPhoneWrite != toPhoneRead)
         {
             sendToPhone();   
         }
+
+        iBLECount++;
+        if(iBLECount > 10)
+        {
+            iBLECount=0;
+            digitalWrite(LED_BLUE, HIGH);
+        }
+
+    }
+
     // posinfo
     if (((posinfo_time + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
     {

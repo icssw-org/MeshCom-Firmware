@@ -9,7 +9,7 @@
 // If not on PIO or not defined in platformio.ini
 #ifndef DO_DEBUG
 // Debug output set to 0 to disable app debug output
-#define DO_DEBUG 1
+#define DO_DEBUG 0
 #endif
 
 #if DO_DEBUG > 0
@@ -48,4 +48,5 @@
 #else
 #define DEBUG_MSG(...)
 #define DEBUG_MSG_VAL(...)
+#define DEBUG_MSG_TXT(...)
 #endif
