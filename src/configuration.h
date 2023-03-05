@@ -38,6 +38,7 @@
 #define WAIT_TX 30         // ticks waiting after Lora TX in doTX()
 #define WAIT_AFTER_RX 15      // ticks we wait after Lora RX for Lora TX
 #define WAIT_AFTER_TXDONE WAIT_TX // ticks waiting after Lora TxDone()
+#define MAX_CALL_LEN 20     // max length of Callsign
 
 
 // UDP
@@ -58,6 +59,9 @@
 // NTP
 #define NTP_UPDATE_TIME 240     // NTP update interval in Minutes
 #define TIME_OFFSET 60          // utc timeoffset in minutes
+
+// BLE Settings
+#define MAX_MSG_LEN_PHONE 300
 
 
 #ifdef ESP32

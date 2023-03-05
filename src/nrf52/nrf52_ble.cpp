@@ -11,6 +11,14 @@
 #ifdef NRF52_SERIES
 
 #include "WisBlock-API.h"
+#include <debugconf.h>
+#include <configuration.h>
+
+extern uint8_t isPhoneReady;
+extern bool ble_busy_flag;
+extern uint16_t swap2bytes(uint16_t value);
+extern void commandAction(char *msg_text, int len);
+void sendConfigToPhone ();
 
 /** OTA DFU service */
 BLEDfu ble_dfu;
@@ -166,8 +174,10 @@ void restart_advertising(uint16_t timeout)
 void connect_callback(uint16_t conn_handle)
 {
 	(void)conn_handle;
-	g_ble_uart_is_connected = true;
 	Bluefruit.setTxPower(8);
+	DEBUG_MSG("BLE", "Connected");
+	g_ble_uart_is_connected = true;
+
 }
 
 /**
@@ -180,7 +190,9 @@ void disconnect_callback(uint16_t conn_handle, uint8_t reason)
 	(void)conn_handle;
 	(void)reason;
 	g_ble_uart_is_connected = false;
+	isPhoneReady = 0;
 	Bluefruit.setTxPower(0);
+	DEBUG_MSG("BLE", "Disconnected");
 }
 
 /**
@@ -194,6 +206,67 @@ void bleuart_rx_callback(uint16_t conn_handle)
 
 	g_task_event_type |= BLE_DATA;
 	xSemaphoreGiveFromISR(g_task_sem, pdFALSE);
+
+	// Forward data from Mobile to our peripheral
+	char str[MAX_MSG_LEN_PHONE + 1] = {0};
+	g_ble_uart.read(str, MAX_MSG_LEN_PHONE);
+
+	DEBUG_MSG_TXT("BLE",str,"BLE IN MSG: ");
+
+	// check for hello message from phone and set flag ready to start exchange data
+	// Hello Messages is fixed and starts with "H"
+	// Config Messages starting with "C:" and delimeted with ":" -> "C:OE1KFR-4:LAT:LON:ALT"
+	if(strcmp(str, "HXXaaYYzz") == 0){
+		DEBUG_MSG("BLE", "Hello MSG from phone");
+		// on connect we send first the config to phone then messages of ringbuffer
+		sendConfigToPhone();
+		isPhoneReady = 1;
+	} 
+	// config string arrived
+	// values could be empty! eg. "C::LAT:LON:ALT"
+	if(str[0] == 'C'){
+		DEBUG_MSG_TXT("BLE",str,"Config Msg:");
+		String callsign = "";
+		double lon = 0;
+		double lat = 0;
+		int alt = 0;
+		sscanf(str, ":%s:%lf:%lf:%d", &callsign, &lat, &lon, &alt);
+		DEBUG_MSG_TXT("BLE", callsign,"Call Conf:");
+		DEBUG_MSG_VAL("BLE", lat,"Conf lat");
+		DEBUG_MSG_VAL("BLE", lon,"Conf lat");
+		DEBUG_MSG_VAL("BLE", alt,"Conf lat");
+	}
+
+}
+
+/**
+ * @brief Method to send configuration to phone 
+ * Config Format:
+ * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT)
+*/
+void sendConfigToPhone () {
+
+    ble_busy_flag = true;
+
+	// assemble conf message
+	uint16_t call_len = sizeof(g_meshcom_settings.node_call);
+	uint16_t conf_len = call_len + 24;	// currently fixed length - adapt if needed
+	uint8_t confBuff [conf_len] = {0};
+	uint8_t call_offset = 4;
+
+	confBuff [0] = conf_len;
+	confBuff [2] = 0x80;
+	confBuff [3] = call_len;
+	memcpy(confBuff + call_offset, g_meshcom_settings.node_call, call_len);
+	uint8_t latOffset = call_offset + call_len;
+	memcpy(confBuff + latOffset, &g_meshcom_settings.node_lat, 8);
+	memcpy(confBuff + latOffset + 8, &g_meshcom_settings.node_lon, 8);
+	memcpy(confBuff + latOffset + 12, &g_meshcom_settings.node_alt, 4);
+
+	// send to phone
+	g_ble_uart.write(confBuff, conf_len);
+
+	ble_busy_flag = false;
 }
 
 /**

@@ -127,7 +127,29 @@ unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];
 int iWrite=0;
 int iRead=0;
 
-bool bDEBUG=false;
+/**
+ * BLE Spec
+ * Messages to and from the phone need to have flag if it is a Text, Pos Msg or it is a configuration
+ * Text/Pos flag: 0x40
+ * Config Flag: 0x80
+ * 
+ * Config Message Parameters: Callsign, Lat, Lon, altitude
+ * Text/Pos Msg Format:
+ * LENGTH 2B - FLAG 1B - MSG xB
+ * Config Format:
+ * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 4B(Float) - LON 4B(Float) - ALT 4B(INT)
+ * 
+ * Hello Message from Phone is: "XXaaYYzz"
+ * Config of this device is sent to phone after hello msg from phone
+*/
+
+// BLE Ringbuffer to phone
+unsigned char BLEtoPhoneBuff[MAX_RING][UDP_TX_BUF_SIZE];
+int toPhoneWrite=0;
+int toPhoneRead=0;
+
+
+bool bDEBUG=true;
 
 //variables and helper functions
 int sendlng = 0;              // lora tx message length
@@ -137,6 +159,8 @@ uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
 bool tx_is_active = false;    // avoids calling doTX() on each main iteration when we are already in TX mode
 bool is_receiving = false;  // flag to store we are receiving a lora packet. triggered by header detect not preamble
 uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
+bool ble_busy_flag = false;    // flag to signal bluetooth uart is active
+uint8_t isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
 // timers
 unsigned long hb_time = 0;            // heartbeat timer
@@ -145,7 +169,7 @@ unsigned long ntp_timer = 0;          // dhcp refresh timer
 unsigned long chk_udp_conn_timer = 0; // we check periodically if we have received a HB from server
 //unsigned long till_header_time = 0;    // stores till a header is detected after preamble detect
 unsigned int msg_counter = 0;
-char msg_text[300];
+char msg_text[MAX_MSG_LEN_PHONE];
 
 String strText="";
 
@@ -161,10 +185,17 @@ void printBuffer_ascii(uint8_t *buffer, int len);
 void sendMessage(char *buffer, int len);
 void sendPosition(double lat, double lon, int alt, int batt);
 void commandAction(char *buffer, int len);
+void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
+void sendToPhone();
+uint16_t swap2bytes(uint16_t value);
 
 // Client basic variables
     uint8_t dmac[6];
     unsigned int _GW_ID = 0x4B424332; // ID of our Node
+
+/**
+ * BLE
+*/
 
 /** Set the device name, max length is 10 characters */
     char g_ble_dev_name[10] = "RAK-TEST";
@@ -259,8 +290,8 @@ void nrf52setup()
 #endif
 
      // LEDs
-    pinMode(PIN_LED1, OUTPUT);
-    pinMode(PIN_LED2, OUTPUT);
+    pinMode(LED_GREEN, OUTPUT);
+    pinMode(LED_BLUE, OUTPUT);
 
     // clear the buffers
     for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
@@ -303,7 +334,7 @@ void nrf52setup()
         }
     }
 
-    //KBC ?? g_enable_ble=true;
+    g_enable_ble=true;
 
 #if defined NRF52_SERIES || defined ESP32
 	if (g_enable_ble)
@@ -470,15 +501,24 @@ void nrf52loop()
         }
     }
 
+    // check if we have messages for BLE to send
+    if (toPhoneWrite != toPhoneRead)
+    {
+        if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
+        {
+            sendToPhone();   
+        }
+    }
+
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
     yield();
 }
 
-/**@brief Function to be executed on Radio Rx Done event
+
+
+/** @brief Function to be executed on Radio Rx Done event
  */
-
-
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
     //unsigned long diff_rx = millis() - till_header_time;
@@ -529,12 +569,17 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             if(RcvBuffer[5] & 0x80)
                 msg_server=true;
 
-            int lora_msg_len = size;
+            int lora_msg_len = size; // size ist uint16_t !
             if (lora_msg_len > UDP_TX_BUF_SIZE)
             lora_msg_len = UDP_TX_BUF_SIZE; // zur Sicherheit
 
             if(bDEBUG)
                 printf("msg_id: %04X msg_len: %i payload[%i]=%i via=%d\n", msg_id, lora_msg_len, msg_hop_pos, msg_hop, msg_server);
+
+            // add rcvMsg to BLE out Buff
+            // size message is int -> uint16_t buffer size 
+            addBLEOutBuffer(RcvBuffer, size);
+
 
             if(!msg_server) // Message kommt von User
             {
@@ -632,7 +677,7 @@ void OnTxDone(void)
     cmd_counter=WAIT_AFTER_TXDONE;
     Radio.Rx(RX_TIMEOUT_VALUE);
     tx_is_active = false;
-    digitalWrite(PIN_LED2, LOW);
+    digitalWrite(LED_BLUE, LOW);
 }
 
 /**@brief Function to be executed on Radio Tx Timeout event
@@ -641,7 +686,7 @@ void OnTxTimeout(void)
 {
     // DEBUG_MSG("RADIO", "OnTxTimeout");
     tx_is_active = false;
-    digitalWrite(PIN_LED2, LOW);
+    digitalWrite(LED_BLUE, LOW);
     Radio.Rx(RX_TIMEOUT_VALUE);
 }
 
@@ -677,7 +722,7 @@ void doTX()
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
-            digitalWrite(PIN_LED2, HIGH);
+            digitalWrite(LED_BLUE, HIGH);
 
             // print tx buffer
             //printBuffer(neth.lora_tx_buffer_eth, neth.lora_tx_msg_len);
@@ -692,11 +737,11 @@ void doTX()
 
             if (iWrite == iRead)
             {
-                DEBUG_MSG_VAL("RADIO", irs, "TX (LAST) :");
+                DEBUG_MSG("RADIO",  "TX (LAST) :");
             }
             else
             {
-                DEBUG_MSG_VAL("RADIO", irs, "TX :");
+                DEBUG_MSG("RADIO", "TX :");
             }
 
             Serial.println("");
@@ -781,7 +826,7 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
     if (len > UDP_TX_BUF_SIZE)
         len = UDP_TX_BUF_SIZE; // just for safety
 
-    //first byte is always the message length
+    //first two bytes are always the message length
     ringBufferUDPout[udpWrite][0] = len;
     memcpy(ringBufferUDPout[udpWrite] + 1, buffer, len + 1);
 
@@ -797,7 +842,71 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
         udpWrite = 0;
 }
 
-/**@brief Method to print our buffers
+/** @brief Function adding messages into outgoing BLE ringbuffer
+ * BLE to PHONE Buffer
+ */
+void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
+{
+    if (len > UDP_TX_BUF_SIZE)
+        len = UDP_TX_BUF_SIZE; // just for safety
+
+    //first two bytes are always the message length
+    BLEtoPhoneBuff[toPhoneWrite][0] = len;
+    memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len + 1);
+
+    if(bDEBUG)
+    {
+        Serial.printf("BLEtoPhone RingBuff added element: %u\n", toPhoneWrite);
+        //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
+        printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1);
+    }
+
+    toPhoneWrite++;
+    if (toPhoneWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
+        toPhoneWrite = 0;
+}
+
+/**
+ * @brief Method to send incoming LoRa messages to BLE connected device
+ * 
+*/
+void sendToPhone()
+{
+    ble_busy_flag = true;
+
+    // we need to insert the first byte text msg flag
+    uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
+    // swapping from LSB to MSB
+    uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0] + 1;   //len ist um ein byte zu kurz
+
+    toPhoneBuff[0] = blelen;
+    toPhoneBuff[2] = 0x40;
+
+    memcpy(toPhoneBuff +3, BLEtoPhoneBuff[toPhoneRead], blelen);
+
+    g_ble_uart.write(toPhoneBuff, blelen + 3);
+
+    toPhoneRead++;
+    if (toPhoneRead >= MAX_RING)
+        toPhoneRead = 0;
+
+    if (toPhoneWrite == toPhoneRead)
+    {
+        DEBUG_MSG_VAL("BLE", toPhoneRead,"TX (LAST) :");
+    }
+    else
+    {
+        DEBUG_MSG_VAL("BLE", toPhoneRead,"TX :");
+    }
+
+    Serial.println("");
+
+    ble_busy_flag = false;
+}
+
+
+
+/** @brief Method to print our buffers
  */
 void printBuffer(uint8_t *buffer, int len)
 {
@@ -808,7 +917,7 @@ void printBuffer(uint8_t *buffer, int len)
   Serial.println("");
 }
 
-/**@brief Method to print our buffers
+/** @brief Method to print our buffers
  */
 void printBuffer_ascii(uint8_t *buffer, int len)
 {
@@ -839,24 +948,24 @@ void printBuffer_ascii(uint8_t *buffer, int len)
   Serial.println("");
 }
 
-/**@brief Function to check if the modem detected a preamble
+/** @brief Function to check if the modem detected a preamble
  */
 void blinkLED()
 {
-    digitalWrite(PIN_LED1, HIGH);
+    digitalWrite(LED_GREEN, HIGH);
     delay(2);
-    digitalWrite(PIN_LED1, LOW);
+    digitalWrite(LED_GREEN, LOW);
 }
 
 void blinkLED2()
 {
-    digitalWrite(PIN_LED2, HIGH);
+    digitalWrite(LED_BLUE, HIGH);
     delay(2);
-    digitalWrite(PIN_LED2, LOW);
+    digitalWrite(LED_BLUE, LOW);
 }
 
 
-/**@brief Function to get the current Radio Status
+/** @brief Function to get the current Radio Status
  * Radio status.[RF_IDLE, RF_RX_RUNNING, RF_TX_RUNNING]
  */
 
@@ -950,7 +1059,7 @@ void sendMessage(char *msg_text, int len)
 
 void sendPosition(double lat, double lon, int alt, int batt)
 {
-    uint8_t msg_buffer[300];
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
     char msg_start[100];
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
@@ -1023,7 +1132,7 @@ void commandAction(char *msg_text, int len)
     // -info
     // -set-owner
 
-    char _owner_c[20];
+    char _owner_c[MAX_CALL_LEN];
     double fVar=0.0;
     int iVar;
     String sVar;
