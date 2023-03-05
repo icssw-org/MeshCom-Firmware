@@ -11,6 +11,14 @@
 #ifdef NRF52_SERIES
 
 #include "WisBlock-API.h"
+#include <debugconf.h>
+#include <configuration.h>
+
+extern uint8_t isPhoneReady;
+extern bool ble_busy_flag;
+extern uint16_t swap2bytes(uint16_t value);
+extern void commandAction(char *msg_text, int len);
+void sendConfigToPhone ();
 
 /** OTA DFU service */
 BLEDfu ble_dfu;
@@ -167,8 +175,10 @@ void restart_advertising(uint16_t timeout)
 void connect_callback(uint16_t conn_handle)
 {
 	(void)conn_handle;
-	g_ble_uart_is_connected = true;
 	Bluefruit.setTxPower(8);
+	DEBUG_MSG("BLE", "Connected");
+	g_ble_uart_is_connected = true;
+
 }
 
 /**
@@ -181,7 +191,9 @@ void disconnect_callback(uint16_t conn_handle, uint8_t reason)
 	(void)conn_handle;
 	(void)reason;
 	g_ble_uart_is_connected = false;
+	isPhoneReady = 0;
 	Bluefruit.setTxPower(0);
+	DEBUG_MSG("BLE", "Disconnected");
 }
 
 /**
@@ -195,6 +207,136 @@ void bleuart_rx_callback(uint16_t conn_handle)
 
 	g_task_event_type |= BLE_DATA;
 	xSemaphoreGiveFromISR(g_task_sem, pdFALSE);
+
+	// Forward data from Mobile to our peripheral
+	char str[MAX_MSG_LEN_PHONE + 1] = {0};
+	g_ble_uart.read(str, MAX_MSG_LEN_PHONE);
+
+	
+	/*
+	  check for hello message from phone and set flag ready to start exchange data
+		Hello Messages is fixed and starts with "H"
+		Config Messages:
+		"CAL:LEN:OE1KFR-4" Length is 1-20
+		"CLA:48.123"
+		"CLO:14.123"
+		"CAT:230"
+	*/
+
+	if(strcmp(str, "HXXaaYYzz") == 0){
+		DEBUG_MSG("BLE", "Hello MSG from phone");
+		// on connect we send first the config to phone then messages of ringbuffer
+		sendConfigToPhone();
+		isPhoneReady = 1;
+	} 
+	// config string arrived
+	if(str[0] == 'C'){
+		DEBUG_MSG_TXT("BLE",str,"Config Msg:");
+		int call_len = 0;
+		uint8_t call_offset = 7;
+		int str_len = strlen(str);
+		DEBUG_MSG_VAL("BLE", str_len,"str len");
+
+		char id[3];
+
+		for(int i=0; i<3; i++){
+			id[i] = str[i];
+		}
+
+		char call_len_c[2];
+		char cal[] = "CAL";
+
+		if(strcmp(id,cal) == 0){
+			DEBUG_MSG("BLE", "Call received");
+			for(int i=0; i<2; i++){
+				call_len_c[i] = str[i + 4];
+			}
+			call_len = atoi(call_len_c);
+			DEBUG_MSG_VAL("BLE", call_len,"len");
+
+			char callsign[call_len];
+			for(int i=0; i<call_len; i++){
+				callsign[i] = str[i + call_offset];
+			}
+			DEBUG_MSG_TXT("BLE",callsign,"Callsign:");
+
+		}
+
+		char cla[] = "CLA"; 
+		if(strcmp(id,cla) == 0){
+			DEBUG_MSG("BLE", "Latitude received");
+			int lat_len = str_len - 4;
+			
+			char lat_c[lat_len];
+			for(int i=0; i<lat_len; i++){
+				lat_c[i] = str[i+4];
+			}
+			/// TODO FUNZT NICHT
+			double lat_d = atof(lat_c);
+			
+			DEBUG_MSG_VAL("BLE", lat_d,"Conf lat");
+		}
+
+		char clo[] = "CLO"; 
+
+		if(strcmp(id,clo) == 0){
+			DEBUG_MSG("BLE", "Longitude received");
+			int lon_len = str_len - 4;
+			char lon_c[lon_len];
+			for(int i=0; i<lon_len; i++){
+				lon_c[i] = str[i+4];
+			}
+			double lon_d = atof(lon_c);
+		
+			DEBUG_MSG_VAL("BLE", lon_d,"Conf lon");
+		}
+		
+		char cat[] = "CAT"; 
+
+		if(strcmp(id,cat) == 0){
+			DEBUG_MSG("BLE", "Altitude received");
+			int alt_len = str_len - 4;
+			char alt_c[alt_len];
+			for(int i=0; i<alt_len; i++){
+				alt_c[i] = str[i+4];
+			}
+			double alt_d = atof(alt_c);
+
+			DEBUG_MSG_VAL("BLE", alt_d,"Conf lat");
+		}
+		
+	}
+
+}
+
+/**
+ * @brief Method to send configuration to phone 
+ * Config Format:
+ * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT)
+*/
+void sendConfigToPhone () {
+
+    ble_busy_flag = true;
+
+	// assemble conf message
+	uint16_t call_len = sizeof(g_meshcom_settings.node_call);
+	uint16_t conf_len = call_len + 24;	// currently fixed length - adapt if needed
+	uint8_t confBuff [conf_len] = {0};
+	uint8_t call_offset = 4;
+
+	confBuff [0] = conf_len;
+	confBuff [2] = 0x80;
+	confBuff [3] = call_len;
+	memcpy(confBuff + call_offset, g_meshcom_settings.node_call, call_len);
+	uint8_t latOffset = call_offset + call_len;
+	memcpy(confBuff + latOffset, &g_meshcom_settings.node_lat, 8);
+	memcpy(confBuff + latOffset + 8, &g_meshcom_settings.node_lon, 8);
+	memcpy(confBuff + latOffset + 16, &g_meshcom_settings.node_alt, 4);
+
+	// send to phone
+	g_ble_uart.write(confBuff, conf_len);
+
+	ble_busy_flag = false;
 }
 
 /**
