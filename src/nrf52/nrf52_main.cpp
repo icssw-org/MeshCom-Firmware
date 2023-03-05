@@ -5,6 +5,16 @@
 #include <debugconf.h>
 
 #include <WisBlock-API.h>
+
+#include <Wire.h>
+
+#include <Adafruit_GFX.h>
+#include <Adafruit_EPD.h>
+
+#include "WisBlock_EPaper_images.h"
+
+#include "TinyGPS.h"
+
 /*
     RAK4631 PIN DEFINITIONS
 
@@ -144,10 +154,110 @@ unsigned long dhcp_timer = 0;         // dhcp refresh timer
 unsigned long ntp_timer = 0;          // dhcp refresh timer
 unsigned long chk_udp_conn_timer = 0; // we check periodically if we have received a HB from server
 //unsigned long till_header_time = 0;    // stores till a header is detected after preamble detect
+uint32_t posinfo_time = 0;       // posinfo timer start in 10 Sekunden
+uint32_t posinfo_first = 0;      // posinfo timer start in 10 Sekunden
+
+// Common Variables
 unsigned int msg_counter = 0;
 char msg_text[300];
-
 String strText="";
+
+// TinyGPS
+TinyGPS gps;
+
+String tmp_data = "";
+int direction_S_N = 0;  //0--S, 1--N
+int direction_E_W = 0;  //0--E, 1--W
+char c_direction_S_N = {0};
+char c_direction_E_W = {0};
+
+void getGPS(void);
+
+// EPaper SSD1680
+typedef struct  DEPG {
+   int  width;
+   int  height;
+   int  position1_x;
+   int  position1_y;  
+   int  position2_x;
+   int  position2_y;  
+   int  position3_x;
+   int  position3_y; 
+   int  position4_x;
+   int  position4_y;   
+} DEPG;
+
+//DEPG  DEPG_HP = {250,122,40,20,40,30,40,50,90,40};  //use DEPG0213BNS800F41HP as default
+DEPG  DEPG_HP = {212,104,30,15,30,25,30,45,80,30};  //  this is for DEPG0213BNS800F42HP
+
+#define POWER_ENABLE   WB_IO2
+
+#define EPD_MOSI     MOSI
+#define EPD_MISO     -1 // not used
+#define EPD_SCK      SCK
+#define EPD_CS       SS
+#define EPD_DC       WB_IO1
+#define SRAM_CS      -1 // not used
+#define EPD_RESET    -1 // not used
+#define EPD_BUSY     WB_IO4
+#define LEFT_BUTTON    WB_IO3
+#define MIDDLE_BUTTON  WB_IO5
+#define RIGHT_BUTTON   WB_IO6
+
+// 2.13" EPD with SSD1680
+Adafruit_SSD1680 display(DEPG_HP.width, DEPG_HP.height, EPD_MOSI,
+                         EPD_SCK, EPD_DC, EPD_RESET,
+                         EPD_CS, SRAM_CS, EPD_MISO,
+                         EPD_BUSY);
+
+void testdrawtext(int16_t x, int16_t y, char *text, uint16_t text_color, uint32_t text_size);
+
+uint8_t gKeyNum = 0; // which button is pressed
+int iGPSCount=0;
+
+// left button interrupt handle function
+void interruptHandle1()
+{
+  if(gKeyNum == 0)
+  {
+    gKeyNum = 1;
+  }
+}
+
+// middle button interrupt handle function
+void interruptHandle2()
+{
+  if(gKeyNum == 0)
+  {
+    gKeyNum = 2;
+  }
+}
+
+// right button interrupt handle function
+void interruptHandle3()
+{
+  if(gKeyNum == 0)
+  {
+    gKeyNum = 3;
+  }
+}
+
+/**
+   @brief Write a text on the display
+   @param x x position to start
+   @param y y position to start
+   @param text text to write
+   @param text_color color of text
+   @param text_size size of text
+*/
+void testdrawtext(int16_t x, int16_t y, char *text, uint16_t text_color, uint32_t text_size)
+{
+  display.setCursor(x, y);
+  display.setTextColor(text_color);
+  display.setTextSize(text_size);
+  display.setTextWrap(true);
+  display.print(text);
+}
 
 // Prototypes
 bool is_new_packet(uint16_t size);                         // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
@@ -159,7 +269,7 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len); // function adds outgoing u
 void printBuffer(uint8_t *buffer, int len);
 void printBuffer_ascii(uint8_t *buffer, int len);
 void sendMessage(char *buffer, int len);
-void sendPosition(double lat, double lon, int alt, int batt);
+void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt);
 void commandAction(char *buffer, int len);
 
 // Client basic variables
@@ -258,10 +368,32 @@ void nrf52setup()
 	xSemaphoreGive(g_task_sem);
 #endif
 
+    /* EPaper
+    pinMode(POWER_ENABLE, INPUT_PULLUP);
+    digitalWrite(POWER_ENABLE, HIGH);
+    */
+
      // LEDs
     pinMode(PIN_LED1, OUTPUT);
     pinMode(PIN_LED2, OUTPUT);
 
+    //gps init
+
+    pinMode(WB_IO2, OUTPUT);
+    digitalWrite(WB_IO2, 0);
+    delay(1000);
+    digitalWrite(WB_IO2, 1);
+    delay(1000);
+    
+    Serial1.begin(9600);
+    
+    while (!Serial1)
+    {
+
+    }
+    
+    Serial.println("gps uart init ok!");
+    
     // clear the buffers
     for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
     {
@@ -303,7 +435,7 @@ void nrf52setup()
         }
     }
 
-    //KBC ?? g_enable_ble=true;
+    g_enable_ble=true;
 
 #if defined NRF52_SERIES || defined ESP32
 	if (g_enable_ble)
@@ -325,7 +457,6 @@ void nrf52setup()
 	// RAK11310 does not have BLE, switch off blue LED
 	digitalWrite(LED_BLUE, LOW);
 #endif
-
 
     Serial.println("=====================================");
     Serial.println("CLIENT STARTED");
@@ -389,11 +520,39 @@ void nrf52setup()
     DEBUG_MSG("RADIO", "Starting RX MODE");
     Radio.Rx(RX_TIMEOUT_VALUE);
 
+    // set left button interrupt
+    pinMode(LEFT_BUTTON, INPUT);
+    attachInterrupt(LEFT_BUTTON, interruptHandle1, FALLING);
+
+    // set middle button interrupt
+    pinMode(MIDDLE_BUTTON, INPUT);
+    attachInterrupt(MIDDLE_BUTTON, interruptHandle2, FALLING);
+
+    // set right button interrupt
+    pinMode(RIGHT_BUTTON, INPUT);
+    attachInterrupt(RIGHT_BUTTON, interruptHandle3, FALLING);
+
+
+    Serial.println("EPD Epaper-DEPG0213BNS800F4xHP test");
+
+    display.begin();
+
+    // large block of text
+    display.clearBuffer();
+
+    display.drawBitmap(DEPG_HP.position1_x, DEPG_HP.position1_y, rak_img, 150, 56, EPD_BLACK);
+
+    testdrawtext(DEPG_HP.position1_x, DEPG_HP.position1_y+50, (char*)"IoT Made Easy", (uint16_t)EPD_BLACK, (uint32_t)2);
+
+    display.display(true);
+
     delay(100);
 }
 
 void nrf52loop()
 {
+   	digitalWrite(LED_GREEN, LOW);
+
     // check if we have messages in ringbuffer to send
     if (iWrite != iRead)
     {
@@ -406,7 +565,46 @@ void nrf52loop()
             cmd_counter--;
     }
 
-    //check if we got from the serial input
+    if(gKeyNum == 1)
+    {
+        Serial.println("Left button pressed");
+        display.clearBuffer();
+        display.drawBitmap(DEPG_HP.position2_x, DEPG_HP.position2_y, rak_img, 150, 56, EPD_BLACK);
+        display.display(true);
+        gKeyNum = 0;
+    }
+
+    if(gKeyNum == 2)
+    {
+        // GPS FIX
+        iGPSCount++;
+
+        if(iGPSCount > 10)
+        {
+           	digitalWrite(LED_GREEN, HIGH);
+
+            getGPS();
+
+            iGPSCount=0;
+        }
+        /*
+        Serial.println("Middle button pressed");
+        display.clearBuffer();
+        testdrawtext(DEPG_HP.position3_x, DEPG_HP.position3_y, (char*)"IoT Made Easy", (uint16_t)EPD_BLACK, (uint32_t)2);
+        display.display(true);
+        */
+        gKeyNum = 0;
+    }
+
+    if(gKeyNum == 3)
+    {
+        Serial.println("Right button pressed");
+        display.clearBuffer();
+        display.drawBitmap(DEPG_HP.position4_x, DEPG_HP.position4_y, lora_img, 60, 40, EPD_BLACK);
+        display.display(true);
+        gKeyNum = 0;
+    }
+        //check if we got from the serial input
     if(Serial.available() > 0)
     {
         char rd = Serial.read();
@@ -468,6 +666,17 @@ void nrf52loop()
             }
             strText="";
         }
+    }
+
+    // posinfo
+    if (((posinfo_time + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
+    {
+        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
+        posinfo_first=2;
+
+        save_settings();    // Position ins Flash schreiben
+
+        posinfo_time = millis();
     }
 
     //  We are on FreeRTOS, give other tasks a chance to run
@@ -843,6 +1052,7 @@ void printBuffer_ascii(uint8_t *buffer, int len)
  */
 void blinkLED()
 {
+    // GREEN
     digitalWrite(PIN_LED1, HIGH);
     delay(2);
     digitalWrite(PIN_LED1, LOW);
@@ -850,6 +1060,7 @@ void blinkLED()
 
 void blinkLED2()
 {
+    // BLUE
     digitalWrite(PIN_LED2, HIGH);
     delay(2);
     digitalWrite(PIN_LED2, LOW);
@@ -948,7 +1159,7 @@ void sendMessage(char *msg_text, int len)
     DEBUG_MSG("RADIO", "Packet sent to -->");
 }
 
-void sendPosition(double lat, double lon, int alt, int batt)
+void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt)
 {
     uint8_t msg_buffer[300];
     char msg_start[100];
@@ -972,7 +1183,7 @@ void sendPosition(double lat, double lon, int alt, int batt)
 
     int inext=6+2+strlen(g_meshcom_settings.node_call);
 
-    sprintf(msg_start, "!%07.2lfN%c%08.2lfE%c %i /A=%i", lat*100.0, g_meshcom_settings.node_symid, lon*100.0, g_meshcom_settings.node_symcd, batt, alt);
+    sprintf(msg_start, "!%07.2lf%c%c%08.2lf%c%c %i /A=%i", lat*100.0, lat_c, g_meshcom_settings.node_symid, lon*100.0, lon_c, g_meshcom_settings.node_symcd, batt, alt);
 
     memcpy(msg_buffer+inext, msg_start, strlen(msg_start));
 
@@ -1018,6 +1229,72 @@ void sendPosition(double lat, double lon, int alt, int batt)
     DEBUG_MSG("RADIO", "Position sent to -->");
 }
 
+/**@brief Function for analytical direction.
+ */
+void direction_parse(String tmp)
+{
+    if (tmp.indexOf(",E,") != -1)
+    {
+        direction_E_W = 0;
+        c_direction_E_W='E';
+    }
+    else
+    {
+        direction_E_W = 1;
+        c_direction_E_W='W';
+    }
+    
+    if (tmp.indexOf(",S,") != -1)
+    {
+        direction_S_N = 0;
+        c_direction_S_N='S';
+    }
+    else
+    {
+        direction_S_N = 1;
+        c_direction_S_N='N';
+    }
+}
+
+/**@brief Function for handling a LoRa tx timer timeout event.
+ */
+void getGPS(void)
+{
+    bool newData = false;
+    // For one second we parse GPS data and report some key values
+    for (unsigned long start = millis(); millis() - start < 1000;)
+    {
+      while (Serial1.available())
+      {
+        char c = Serial1.read();
+        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        tmp_data += c;
+        if (gps.encode(c))// Did a new valid sentence come in?
+          newData = true;
+      }
+    }
+
+    direction_parse(tmp_data);
+    tmp_data = "";
+    float flat, flon;
+    if (newData)
+    {
+      unsigned long age;  
+      gps.f_get_position(&flat, &flon, &age);
+      flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
+      flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
+
+      //printf("flat:%f%c flon:%f%c alt:%i\n", flat, c_direction_E_W, flon, c_direction_S_N, (int)gps.f_altitude());
+      
+      g_meshcom_settings.node_lat=flat;
+      g_meshcom_settings.node_lat_c=c_direction_E_W;
+      g_meshcom_settings.node_lon=flon;
+      g_meshcom_settings.node_lon_c=c_direction_S_N;
+      g_meshcom_settings.node_alt = (int)gps.f_altitude();
+    }
+
+}
+
 void commandAction(char *msg_text, int len)
 {
     // -info
@@ -1044,9 +1321,18 @@ void commandAction(char *msg_text, int len)
         bPos=true;
     }
     else
+    if(memcmp(msg_text, "-gps", 4) == 0)
+    {
+        getGPS();
+        return;
+    }
+    else
     if(memcmp(msg_text, "-send-pos", 9) == 0)
     {
-        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lon, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
+        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
+
+        save_settings();    // Position ins Flash schreiben
+
         return;
     }
     else
@@ -1117,6 +1403,16 @@ void commandAction(char *msg_text, int len)
 
         bPos=true;
     }
+    else
+    if(memcmp(msg_text, "-set_sym ", 9) == 0)
+    {
+        g_meshcom_settings.node_symid = msg_text[9];
+        g_meshcom_settings.node_symcd = msg_text[10];
+
+        save_settings();
+
+        bPos=true;
+    }
 
     if(bInfo)
     {
@@ -1126,8 +1422,8 @@ void commandAction(char *msg_text, int len)
     else
     if(bPos)
     {
-        printf("\nMeshCom 4.0 Client\n...LAT: %.6lf\n...LON: %.6lf\n...ALT: %i\n",
-         g_meshcom_settings.node_lat, g_meshcom_settings.node_lon, g_meshcom_settings.node_alt);
+        printf("\nMeshCom 4.0 Client\n...LAT: %.6lf%c\n...LON: %.6lf%c\n...ALT: %i %c %c\n",
+         g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, g_meshcom_settings.node_symid, g_meshcom_settings.node_symcd);
     }
     else
         printf("\nMeshCom 4.0 Client\n...wrong command %s\n", msg_text);
