@@ -49,6 +49,7 @@
 #define SEE_ALL_PACKETS 1                  // switch to filter multiple receives of same packets from neighbours rebroadcasted
 #define UDP_MSG_INDICATOR_LEN 4            // the first n bytes to recognize which incoming message we have (GATE, CONF)
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
+#define POSINFO_INTERVAL 600               // POSINFO interval in seconds
 #define MAX_RING 30                        // max count of messages in ringbuffer
 #define MAX_RING_UDP_OUT 30                // size of Ringbuffer for UDP TX messages received from LoRa
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message

@@ -182,10 +182,12 @@ struct s_meshcom_settings
 	char node_short[6] = {0x58, 0x58, 0x58, 0x34, 0x30, 0x00};
 
 	double node_lat = 0.0;
+	char node_lat_c = {' '};
 	double node_lon = 0.0;
+	char node_lon_c = {' '};
 	int	  node_alt = 0;
-	char  node_symid = '\\';
-	char  node_symcd = '=';
+	char  node_symid = '/';
+	char  node_symcd = '#';
 
 	// Default is off
 	uint32_t send_repeat_time = 0;
@@ -229,10 +231,12 @@ struct s_meshcomcompat_settings
 	char node_short[6] = {0x58, 0x58, 0x58, 0x34, 0x30, 0x00};
 
 	double node_lat = 0.0;
+	char node_lat_c = {' '};
 	double node_lon = 0.0;
+	char node_lon_c = {' '};
 	int	  node_alt = 0;
-	char  node_symid = '\\';
-	char  node_symcd = '=';
+	char  node_symid = '/';
+	char  node_symcd = '#';
 
 	// Send repeat time in milliseconds: 2 * 60 * 1000 => 2 minutes
 	uint32_t send_repeat_time = 0;

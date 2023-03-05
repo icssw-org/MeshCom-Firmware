@@ -89,9 +89,10 @@ void init_ble(void)
 	// sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
 	// 		(uint8_t)(addr_high), (uint8_t)(addr_high >> 8), (uint8_t)(addr_low),
 	// 		(uint8_t)(addr_low >> 8), (uint8_t)(addr_low >> 16), (uint8_t)(addr_low >> 24));
-	sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-			(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
-			(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
+	//sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
+	//		(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
+	//		(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
+	sprintf(helper_string, "%s-%s", g_ble_dev_name, g_meshcom_settings.node_call);	// Anzeige mit callsign
 #endif
 
 	Bluefruit.setName(helper_string);
