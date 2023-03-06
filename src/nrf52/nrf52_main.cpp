@@ -5,6 +5,9 @@
 #include <debugconf.h>
 
 #include <WisBlock-API.h>
+#include <TinyGPS.h>
+#include <drivers\Adafruit_SSD1680.h>
+#include <WisBlock_EPaper_Images.h>
 /*
     RAK4631 PIN DEFINITIONS
 
@@ -167,7 +170,9 @@ unsigned long hb_time = 0;            // heartbeat timer
 unsigned long dhcp_timer = 0;         // dhcp refresh timer
 unsigned long ntp_timer = 0;          // dhcp refresh timer
 unsigned long chk_udp_conn_timer = 0; // we check periodically if we have received a HB from server
+unsigned long posinfo_timer = 0;      // we check periodically to send GPS
 //unsigned long till_header_time = 0;    // stores till a header is detected after preamble detect
+unsigned int posinfo_first = 0;
 unsigned int msg_counter = 0;
 char msg_text[MAX_MSG_LEN_PHONE];
 
@@ -179,8 +184,6 @@ TinyGPS gps;
 String tmp_data = "";
 int direction_S_N = 0;  //0--S, 1--N
 int direction_E_W = 0;  //0--E, 1--W
-char c_direction_S_N = {0};
-char c_direction_E_W = {0};
 
 void getGPS(void);
 
@@ -281,7 +284,7 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len); // function adds outgoing u
 void printBuffer(uint8_t *buffer, int len);
 void printBuffer_ascii(uint8_t *buffer, int len);
 void sendMessage(char *buffer, int len);
-void sendPosition(double lat, double lon, int alt, int batt);
+void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt);
 void commandAction(char *buffer, int len);
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void sendToPhone();
@@ -432,6 +435,18 @@ void nrf52setup()
         }
     }
 
+    //gps init
+    pinMode(WB_IO2, OUTPUT);
+    digitalWrite(WB_IO2, 0);
+    delay(1000);
+    digitalWrite(WB_IO2, 1);
+    delay(1000);
+    
+    Serial1.begin(9600);
+    while (!Serial1);
+    Serial.println("gps uart init ok!");
+
+    //ble init    
     g_enable_ble=true;
 
 #if defined NRF52_SERIES || defined ESP32
@@ -672,14 +687,14 @@ void nrf52loop()
     }
 
     // posinfo
-    if (((posinfo_time + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
+    if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
     {
         sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
         posinfo_first=2;
 
         save_settings();    // Position ins Flash schreiben
 
-        posinfo_time = millis();
+        posinfo_timer = millis();
     }
 
     //  We are on FreeRTOS, give other tasks a chance to run
@@ -1248,7 +1263,7 @@ void sendMessage(char *msg_text, int len)
     DEBUG_MSG("RADIO", "Packet sent to -->");
 }
 
-void sendPosition(double lat, double lon, int alt, int batt)
+void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt)
 {
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
     char msg_start[100];
@@ -1272,7 +1287,7 @@ void sendPosition(double lat, double lon, int alt, int batt)
 
     int inext=6+2+strlen(g_meshcom_settings.node_call);
 
-    sprintf(msg_start, "!%07.2lfN%c%08.2lfE%c %i /A=%i", lat*100.0, g_meshcom_settings.node_symid, lon*100.0, g_meshcom_settings.node_symcd, batt, alt);
+    sprintf(msg_start, "!%07.2lf%c%c%08.2lf%c%c %i /A=%i", lat*100.0, lat_c, g_meshcom_settings.node_symid, lon*100.0, lon_c, g_meshcom_settings.node_symcd, batt, alt);
 
     memcpy(msg_buffer+inext, msg_start, strlen(msg_start));
 
@@ -1318,6 +1333,82 @@ void sendPosition(double lat, double lon, int alt, int batt)
     DEBUG_MSG("RADIO", "Position sent to -->");
 }
 
+/**@brief Function for analytical direction.
+ */
+void direction_parse(String tmp)
+{
+    if (tmp.indexOf(",E,") != -1)
+    {
+        direction_E_W = 0;
+    }
+    else
+    {
+        direction_E_W = 1;
+    }
+    
+    if (tmp.indexOf(",S,") != -1)
+    {
+        direction_S_N = 0;
+    }
+    else
+    {
+        direction_S_N = 1;
+    }
+}
+
+/**@brief Function for handling a LoRa tx timer timeout event.
+ */
+void getGPS(void)
+{ 
+    bool newData = false;
+  
+    // For one second we parse GPS data and report some key values
+    for (unsigned long start = millis(); millis() - start < 1000;)
+    {
+      while (Serial1.available())
+      {
+        char c = Serial1.read();
+        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        tmp_data += c;
+        if (gps.encode(c))// Did a new valid sentence come in?
+          newData = true;
+      }
+    }
+
+    direction_parse(tmp_data);
+    tmp_data = "";
+    float flat, flon;
+    
+    if (newData)
+    {
+      unsigned long age;  
+      gps.f_get_position(&flat, &flon, &age);
+      flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
+      flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
+
+      g_meshcom_settings.node_lat = flat;
+      g_meshcom_settings.node_lon = flon;
+
+      if(direction_S_N == 0)
+      {
+        g_meshcom_settings.node_lat_c = 'S';
+      }
+      else
+      {
+        g_meshcom_settings.node_lat_c = 'N';
+      }
+
+      if(direction_E_W == 0)
+      {
+        g_meshcom_settings.node_lon_c = 'E';
+      }
+      else
+      {
+        g_meshcom_settings.node_lon_c = 'W';
+      }
+    }
+}
+
 void commandAction(char *msg_text, int len)
 {
     // -info
@@ -1344,9 +1435,15 @@ void commandAction(char *msg_text, int len)
         bPos=true;
     }
     else
+    if(memcmp(msg_text, "-gps", 4) == 0)
+    {
+        getGPS();
+        return;
+    }
+    else
     if(memcmp(msg_text, "-send-pos", 9) == 0)
     {
-        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lon, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
+        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
         return;
     }
     else
@@ -1426,8 +1523,8 @@ void commandAction(char *msg_text, int len)
     else
     if(bPos)
     {
-        printf("\nMeshCom 4.0 Client\n...LAT: %.6lf\n...LON: %.6lf\n...ALT: %i\n",
-         g_meshcom_settings.node_lat, g_meshcom_settings.node_lon, g_meshcom_settings.node_alt);
+        printf("\nMeshCom 4.0 Client\n...LAT: %.6lf %c\n...LON: %.6lf %c\n...ALT: %i\n",
+         g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt);
     }
     else
         printf("\nMeshCom 4.0 Client\n...wrong command %s\n", msg_text);
