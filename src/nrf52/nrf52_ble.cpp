@@ -225,7 +225,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 		"CAT:230"
 	*/
 
-	if(strcmp(str, "HXXaaYYzz") == 0){
+	if(memcmp(str, "HXXaaYYzz", 9) == 0){
 		DEBUG_MSG("BLE", "Hello MSG from phone");
 		// on connect we send first the config to phone then messages of ringbuffer
 		sendConfigToPhone();
@@ -313,7 +313,12 @@ void bleuart_rx_callback(uint16_t conn_handle)
 	{
 		#if BLE_TEST > 0
 			if(str[0] == ':')
+			{
+				if(str[strlen(str)-1] == 0x0a)
+					str[strlen(str)-1]=0x00;
+
 				sendMessage(str, strlen(str));
+			}
 		#endif
 	}
 
@@ -328,23 +333,30 @@ void sendConfigToPhone () {
 
     ble_busy_flag = true;
 
-	// assemble conf message
-	uint16_t call_len = sizeof(g_meshcom_settings.node_call);
-	uint16_t conf_len = call_len + 24;	// currently fixed length - adapt if needed
-	uint8_t confBuff [conf_len] = {0};
-	uint8_t call_offset = 4;
+	#if BLE_TEST
+		char bleBuff [100] = {0};
+		sprintf(bleBuff, "Connected to %s\n", g_meshcom_settings.node_call);
+		// send to phone
+		g_ble_uart.write(bleBuff, strlen(bleBuff));
+	#else
+		// assemble conf message
+		uint16_t call_len = sizeof(g_meshcom_settings.node_call);
+		uint16_t conf_len = call_len + 24;	// currently fixed length - adapt if needed
+		uint8_t confBuff [conf_len] = {0};
+		uint8_t call_offset = 4;
 
-	confBuff [0] = conf_len;
-	confBuff [2] = 0x80;
-	confBuff [3] = call_len;
-	memcpy(confBuff + call_offset, g_meshcom_settings.node_call, call_len);
-	uint8_t latOffset = call_offset + call_len;
-	memcpy(confBuff + latOffset, &g_meshcom_settings.node_lat, 8);
-	memcpy(confBuff + latOffset + 8, &g_meshcom_settings.node_lon, 8);
-	memcpy(confBuff + latOffset + 16, &g_meshcom_settings.node_alt, 4);
+		confBuff [0] = conf_len;
+		confBuff [2] = 0x80;
+		confBuff [3] = call_len;
+		memcpy(confBuff + call_offset, g_meshcom_settings.node_call, call_len);
+		uint8_t latOffset = call_offset + call_len;
+		memcpy(confBuff + latOffset, &g_meshcom_settings.node_lat, 8);
+		memcpy(confBuff + latOffset + 8, &g_meshcom_settings.node_lon, 8);
+		memcpy(confBuff + latOffset + 16, &g_meshcom_settings.node_alt, 4);
 
-	// send to phone
-	g_ble_uart.write(confBuff, conf_len);
+		// send to phone
+		g_ble_uart.write(confBuff, conf_len);
+	#endif
 
 	ble_busy_flag = false;
 }

@@ -1059,7 +1059,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 
     //first two bytes are always the message length
     BLEtoPhoneBuff[toPhoneWrite][0] = len;
-    memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len + 1);
+    memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
 
     if(bDEBUG)
     {
@@ -1087,9 +1087,10 @@ void sendToPhone()
     uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0] + 1;   //len ist um ein byte zu kurz
 
     toPhoneBuff[0] = blelen;
+    toPhoneBuff[1] = 0x00;
     toPhoneBuff[2] = 0x40;
 
-    memcpy(toPhoneBuff+3, BLEtoPhoneBuff[toPhoneRead], blelen);
+    memcpy(toPhoneBuff+3, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
 
 #if BLE_TEST > 0
     int tlen=0;
