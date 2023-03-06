@@ -764,8 +764,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 printf("msg_id: %04X msg_len: %i payload[%i]=%i via=%d\n", msg_id, lora_msg_len, msg_hop_pos, msg_hop, msg_server);
 
             // add rcvMsg to BLE out Buff
-            // size message is int -> uint16_t buffer size 
-            addBLEOutBuffer(RcvBuffer, size);
+            // size message is int -> uint16_t buffer size
+            if(isPhoneReady == 1)
+                addBLEOutBuffer(RcvBuffer, size);
 
 
             if(!msg_server) // Message kommt von User
@@ -1067,7 +1068,7 @@ void sendToPhone()
     uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0] + 1;   //len ist um ein byte zu kurz
 
     toPhoneBuff[0] = blelen;
-    toPhoneBuff[1] = 0x00;
+    toPhoneBuff[1] = blelen >> 8;
     toPhoneBuff[2] = 0x40;
 
     memcpy(toPhoneBuff+3, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
