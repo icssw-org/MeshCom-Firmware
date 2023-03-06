@@ -5,16 +5,6 @@
 #include <debugconf.h>
 
 #include <WisBlock-API.h>
-
-#include <Wire.h>
-
-#include <Adafruit_GFX.h>
-#include <Adafruit_EPD.h>
-
-#include "WisBlock_EPaper_images.h"
-
-#include "TinyGPS.h"
-
 /*
     RAK4631 PIN DEFINITIONS
 
@@ -178,12 +168,7 @@ unsigned long dhcp_timer = 0;         // dhcp refresh timer
 unsigned long ntp_timer = 0;          // dhcp refresh timer
 unsigned long chk_udp_conn_timer = 0; // we check periodically if we have received a HB from server
 //unsigned long till_header_time = 0;    // stores till a header is detected after preamble detect
-uint32_t posinfo_time = 0;       // posinfo timer start in 10 Sekunden
-uint32_t posinfo_first = 0;      // posinfo timer start in 10 Sekunden
-
-// Common Variables
 unsigned int msg_counter = 0;
-
 char msg_text[MAX_MSG_LEN_PHONE];
 
 String strText="";
@@ -296,11 +281,11 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len); // function adds outgoing u
 void printBuffer(uint8_t *buffer, int len);
 void printBuffer_ascii(uint8_t *buffer, int len);
 void sendMessage(char *buffer, int len);
-void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt);
+void sendPosition(double lat, double lon, int alt, int batt);
 void commandAction(char *buffer, int len);
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void sendToPhone();
-uint16_t swap2bytes(uint16_t value);
+
 
 // Client basic variables
     uint8_t dmac[6];
@@ -402,32 +387,10 @@ void nrf52setup()
 	xSemaphoreGive(g_task_sem);
 #endif
 
-    /* EPaper
-    pinMode(POWER_ENABLE, INPUT_PULLUP);
-    digitalWrite(POWER_ENABLE, HIGH);
-    */
-
      // LEDs
     pinMode(LED_GREEN, OUTPUT);
     pinMode(LED_BLUE, OUTPUT);
 
-    //gps init
-
-    pinMode(WB_IO2, OUTPUT);
-    digitalWrite(WB_IO2, 0);
-    delay(1000);
-    digitalWrite(WB_IO2, 1);
-    delay(1000);
-    
-    Serial1.begin(9600);
-    
-    while (!Serial1)
-    {
-
-    }
-    
-    Serial.println("gps uart init ok!");
-    
     // clear the buffers
     for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
     {
@@ -491,6 +454,7 @@ void nrf52setup()
 	// RAK11310 does not have BLE, switch off blue LED
 	digitalWrite(LED_BLUE, LOW);
 #endif
+
 
     Serial.println("=====================================");
     Serial.println("CLIENT STARTED");
@@ -625,7 +589,8 @@ void nrf52loop()
         display.display(true);
         gKeyNum = 0;
     }
-        //check if we got from the serial input
+
+  	//check if we got from the serial input
     if(Serial.available() > 0)
     {
         char rd = Serial.read();
@@ -1283,7 +1248,7 @@ void sendMessage(char *msg_text, int len)
     DEBUG_MSG("RADIO", "Packet sent to -->");
 }
 
-void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt)
+void sendPosition(double lat, double lon, int alt, int batt)
 {
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
     char msg_start[100];
@@ -1307,7 +1272,7 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
 
     int inext=6+2+strlen(g_meshcom_settings.node_call);
 
-    sprintf(msg_start, "!%07.2lf%c%c%08.2lf%c%c %i /A=%i", lat*100.0, lat_c, g_meshcom_settings.node_symid, lon*100.0, lon_c, g_meshcom_settings.node_symcd, batt, alt);
+    sprintf(msg_start, "!%07.2lfN%c%08.2lfE%c %i /A=%i", lat*100.0, g_meshcom_settings.node_symid, lon*100.0, g_meshcom_settings.node_symcd, batt, alt);
 
     memcpy(msg_buffer+inext, msg_start, strlen(msg_start));
 
@@ -1353,72 +1318,6 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     DEBUG_MSG("RADIO", "Position sent to -->");
 }
 
-/**@brief Function for analytical direction.
- */
-void direction_parse(String tmp)
-{
-    if (tmp.indexOf(",E,") != -1)
-    {
-        direction_E_W = 0;
-        c_direction_E_W='E';
-    }
-    else
-    {
-        direction_E_W = 1;
-        c_direction_E_W='W';
-    }
-    
-    if (tmp.indexOf(",S,") != -1)
-    {
-        direction_S_N = 0;
-        c_direction_S_N='S';
-    }
-    else
-    {
-        direction_S_N = 1;
-        c_direction_S_N='N';
-    }
-}
-
-/**@brief Function for handling a LoRa tx timer timeout event.
- */
-void getGPS(void)
-{
-    bool newData = false;
-    // For one second we parse GPS data and report some key values
-    for (unsigned long start = millis(); millis() - start < 1000;)
-    {
-      while (Serial1.available())
-      {
-        char c = Serial1.read();
-        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
-        tmp_data += c;
-        if (gps.encode(c))// Did a new valid sentence come in?
-          newData = true;
-      }
-    }
-
-    direction_parse(tmp_data);
-    tmp_data = "";
-    float flat, flon;
-    if (newData)
-    {
-      unsigned long age;  
-      gps.f_get_position(&flat, &flon, &age);
-      flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
-      flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
-
-      //printf("flat:%f%c flon:%f%c alt:%i\n", flat, c_direction_E_W, flon, c_direction_S_N, (int)gps.f_altitude());
-      
-      g_meshcom_settings.node_lat=flat;
-      g_meshcom_settings.node_lat_c=c_direction_E_W;
-      g_meshcom_settings.node_lon=flon;
-      g_meshcom_settings.node_lon_c=c_direction_S_N;
-      g_meshcom_settings.node_alt = (int)gps.f_altitude();
-    }
-
-}
-
 void commandAction(char *msg_text, int len)
 {
     // -info
@@ -1445,18 +1344,9 @@ void commandAction(char *msg_text, int len)
         bPos=true;
     }
     else
-    if(memcmp(msg_text, "-gps", 4) == 0)
-    {
-        getGPS();
-        return;
-    }
-    else
     if(memcmp(msg_text, "-send-pos", 9) == 0)
     {
-        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
-
-        save_settings();    // Position ins Flash schreiben
-
+        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lon, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
         return;
     }
     else
@@ -1527,16 +1417,6 @@ void commandAction(char *msg_text, int len)
 
         bPos=true;
     }
-    else
-    if(memcmp(msg_text, "-set_sym ", 9) == 0)
-    {
-        g_meshcom_settings.node_symid = msg_text[9];
-        g_meshcom_settings.node_symcd = msg_text[10];
-
-        save_settings();
-
-        bPos=true;
-    }
 
     if(bInfo)
     {
@@ -1546,8 +1426,8 @@ void commandAction(char *msg_text, int len)
     else
     if(bPos)
     {
-        printf("\nMeshCom 4.0 Client\n...LAT: %.6lf%c\n...LON: %.6lf%c\n...ALT: %i %c %c\n",
-         g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, g_meshcom_settings.node_symid, g_meshcom_settings.node_symcd);
+        printf("\nMeshCom 4.0 Client\n...LAT: %.6lf\n...LON: %.6lf\n...ALT: %i\n",
+         g_meshcom_settings.node_lat, g_meshcom_settings.node_lon, g_meshcom_settings.node_alt);
     }
     else
         printf("\nMeshCom 4.0 Client\n...wrong command %s\n", msg_text);
