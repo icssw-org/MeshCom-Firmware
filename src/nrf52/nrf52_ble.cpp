@@ -17,7 +17,7 @@
 extern uint8_t isPhoneReady;
 extern bool ble_busy_flag;
 extern uint16_t swap2bytes(uint16_t value);
-extern void commandAction(char *msg_text, int len);
+extern void commandAction(char *msg_text, int len, bool ble);
 extern void sendMessage(char *buffer, int len);
 
 void sendConfigToPhone ();
@@ -73,31 +73,7 @@ void init_ble(void)
 	digitalWrite(LED_BLUE, LOW);
 #endif
 
-	// Create device name
-	char helper_string[256] = {0};
-
-	// uint32_t addr_high = ((*((uint32_t *)(0x100000a8))) & 0x0000ffff) | 0x0000c000;
-	// uint32_t addr_low = *((uint32_t *)(0x100000a4));
-#ifdef _VARIANT_ISP4520_
-	/** Device name for ISP4520 */
-	// sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-	// 		(uint8_t)(addr_high), (uint8_t)(addr_high >> 8), (uint8_t)(addr_low),
-	// 		(uint8_t)(addr_low >> 8), (uint8_t)(addr_low >> 16), (uint8_t)(addr_low >> 24));
-	sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-			(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
-			(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
-#else
-	/** Device name for RAK4631 */
-	// sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-	// 		(uint8_t)(addr_high), (uint8_t)(addr_high >> 8), (uint8_t)(addr_low),
-	// 		(uint8_t)(addr_low >> 8), (uint8_t)(addr_low >> 16), (uint8_t)(addr_low >> 24));
-	//sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-	//		(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
-	//		(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
-	sprintf(helper_string, "%s-%s", g_ble_dev_name, g_meshcom_settings.node_call);	// Anzeige mit callsign
-#endif
-
-	Bluefruit.setName(helper_string);
+	init_ble_name();
 
 	// Set connection/disconnect callbacks
 	Bluefruit.Periph.setConnectCallback(connect_callback);
@@ -114,6 +90,8 @@ void init_ble(void)
 	ble_dis.setModel("RAK4631");
 #endif
 
+	char helper_string[256] = {0};
+	
 	sprintf(helper_string, "%d.%d.%d", g_sw_ver_1, g_sw_ver_2, g_sw_ver_3);
 	ble_dis.setSoftwareRev(helper_string);
 
@@ -158,6 +136,35 @@ void init_ble(void)
 	{
 		restart_advertising(0);
 	}
+}
+
+void init_ble_name(void)
+{
+	// Create device name
+	char helper_string[256] = {0};
+
+	// uint32_t addr_high = ((*((uint32_t *)(0x100000a8))) & 0x0000ffff) | 0x0000c000;
+	// uint32_t addr_low = *((uint32_t *)(0x100000a4));
+#ifdef _VARIANT_ISP4520_
+	/** Device name for ISP4520 */
+	// sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
+	// 		(uint8_t)(addr_high), (uint8_t)(addr_high >> 8), (uint8_t)(addr_low),
+	// 		(uint8_t)(addr_low >> 8), (uint8_t)(addr_low >> 16), (uint8_t)(addr_low >> 24));
+	sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
+			(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
+			(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
+#else
+	/** Device name for RAK4631 */
+	// sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
+	// 		(uint8_t)(addr_high), (uint8_t)(addr_high >> 8), (uint8_t)(addr_low),
+	// 		(uint8_t)(addr_low >> 8), (uint8_t)(addr_low >> 16), (uint8_t)(addr_low >> 24));
+	//sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
+	//		(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
+	//		(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
+	sprintf(helper_string, "%s-%s", g_ble_dev_name, g_meshcom_settings.node_call);	// Anzeige mit callsign
+#endif
+
+	Bluefruit.setName(helper_string);
 }
 
 /**
@@ -225,7 +232,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 		"CAT:230"
 	*/
 
-	if(memcmp(str, "HXXaaYYzz", 9) == 0){
+	if(memcmp(str, "HXXaaYYzz", 9) == 0 || memcmp(str, "connect", 7) == 0){
 		DEBUG_MSG("BLE", "Hello MSG from phone");
 		// on connect we send first the config to phone then messages of ringbuffer
 		sendConfigToPhone();
@@ -318,6 +325,11 @@ void bleuart_rx_callback(uint16_t conn_handle)
 					str[strlen(str)-1]=0x00;
 
 				sendMessage(str, strlen(str));
+			}
+			else
+			if(str[0] == '-')
+			{
+				commandAction(str, strlen(str), true);
 			}
 		#endif
 	}

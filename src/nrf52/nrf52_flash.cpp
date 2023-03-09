@@ -79,6 +79,17 @@ void init_flash(void)
 		g_meshcom_settings.auto_join = old_struct.auto_join;
 		memcpy(g_meshcom_settings.node_device_eui, old_struct.node_device_eui, 8);
 
+		g_meshcom_settings.node_date_year = old_struct.node_date_year;
+		g_meshcom_settings.node_date_month = old_struct.node_date_month;
+		g_meshcom_settings.node_date_day = old_struct.node_date_day;
+
+		g_meshcom_settings.node_date_hour = old_struct.node_date_hour;
+		g_meshcom_settings.node_date_minute = old_struct.node_date_minute;
+		g_meshcom_settings.node_date_second = old_struct.node_date_second;
+		g_meshcom_settings.node_date_hundredths = old_struct.node_date_hundredths;
+
+		g_meshcom_settings.node_age = old_struct.node_age;
+
         /*KBC
 		g_meshcom_settings.adr_enabled = old_struct.adr_enabled;
 		g_meshcom_settings.app_port = old_struct.app_port;

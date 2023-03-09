@@ -3,6 +3,7 @@
 #include <configuration.h>
 #include <SX126x-RAK4630.h>
 #include <debugconf.h>
+#include <time.h>
 
 #include <WisBlock-API.h>
 #include <TinyGPS.h>
@@ -280,12 +281,12 @@ void addNodeData(uint16_t size, int16_t rssi, int8_t snr); // add additional dat
 void blinkLED();
 void sendHeartbeat();                                // heartbeat to server
 void doTX();                                         // LoraTX function
-void addUdpOutBuffer(uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer
+void addUdpOutBuffer(int msg_id, uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer
 void printBuffer(uint8_t *buffer, int len);
 void printBuffer_ascii(uint8_t *buffer, int len);
 void sendMessage(char *buffer, int len);
 void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt);
-void commandAction(char *buffer, int len);
+void commandAction(char *buffer, int len, bool ble);
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void sendToPhone();
 
@@ -653,7 +654,7 @@ void nrf52loop()
                     sendMessage(msg_buffer, inext);
 
                 if(strText.startsWith("-"))
-                    commandAction(msg_buffer, inext);
+                    commandAction(msg_buffer, inext, false);
 
                 strText="";
             }
@@ -763,13 +764,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             if(bDEBUG)
                 printf("msg_id: %04X msg_len: %i payload[%i]=%i via=%d\n", msg_id, lora_msg_len, msg_hop_pos, msg_hop, msg_server);
 
-            // add rcvMsg to BLE out Buff
-            // size message is int -> uint16_t buffer size
-            if(isPhoneReady == 1)
-                addBLEOutBuffer(RcvBuffer, size);
-
-
-            if(!msg_server) // Message kommt von User
+            //if(!msg_server) // Message kommt von User
             {
                 // Wiederaussendung via LORA
                 // Ringbuffer filling
@@ -778,7 +773,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                 for(int iop=0;iop<MAX_RING_UDP_OUT;iop++)
                 {
-                    int ring_msg_id = (ringBufferUDPout[iop][4]<<24) | (ringBufferUDPout[iop][3]<<16) | (ringBufferUDPout[iop][2]<<8) | ringBufferUDPout[iop][1];
+                    int ring_msg_id = (ringBufferUDPout[iop][3]<<24) | (ringBufferUDPout[iop][2]<<16) | (ringBufferUDPout[iop][1]<<8) | ringBufferUDPout[iop][0];
 
                     if(ring_msg_id != 0 && bDEBUG)
                         printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, msg_id);
@@ -795,13 +790,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 {
                     if(msg_hop > 0 && msg_hop_pos > 0)
                         payload[msg_hop_pos]=msg_hop-1;
-                
-
 
                     if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21))
                     {
+                        // add rcvMsg to forward to LoRa TX
                         addNodeData(size, rssi, snr);
-                        //DEBUG_MSG("RADIO", "Packet sent to -->");
+
+                        // add rcvMsg to BLE out Buff
+                        // size message is int -> uint16_t buffer size
+                        if(isPhoneReady == 1)
+                            addBLEOutBuffer(RcvBuffer, size);
+
+                        DEBUG_MSG("RADIO", "Packet sent to -->");
                     }
                     else
                     {
@@ -997,7 +997,10 @@ void addNodeData(uint16_t size, int16_t rssi, int8_t snr)
         // TODO change txBuffer with rinbuffer
         //DEBUG_MSG("UDP", "UDP out Buffer");
         //neth.printBuffer(txBuffer, (size + offset));
-        addUdpOutBuffer(txBuffer, (size + offset));
+
+        int msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
+
+        addUdpOutBuffer(msg_id, txBuffer, (size + offset));
     }
     else
     {
@@ -1009,20 +1012,26 @@ void addNodeData(uint16_t size, int16_t rssi, int8_t snr)
 /**@brief Function adding messages into outgoing UDP ringbuffer
  * 
  */
-void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
+void addUdpOutBuffer(int msg_id, uint8_t *buffer, uint16_t len)
 {
     if (len > UDP_TX_BUF_SIZE)
         len = UDP_TX_BUF_SIZE; // just for safety
 
-    //first two bytes are always the message length
-    ringBufferUDPout[udpWrite][0] = len;
-    memcpy(ringBufferUDPout[udpWrite] + 1, buffer, len + 1);
+    // byte 0-3 msg_id
+    ringBufferUDPout[udpWrite][3] = msg_id >> 24;
+    ringBufferUDPout[udpWrite][2] = msg_id >> 16;
+    ringBufferUDPout[udpWrite][1] = msg_id >> 8;
+    ringBufferUDPout[udpWrite][0] = msg_id;
+
+    // byte 4 one byte is always the message length
+    ringBufferUDPout[udpWrite][4] = len;
+    memcpy(ringBufferUDPout[udpWrite] + 4 + 1, buffer, len);
 
     if(bDEBUG)
     {
         Serial.printf("Out Ringbuffer added element: %u\n", udpWrite);
         //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
-        printBuffer(ringBufferUDPout[udpWrite], len + 1);
+        printBuffer(ringBufferUDPout[udpWrite], len);
     }
 
     udpWrite++;
@@ -1266,6 +1275,9 @@ void sendMessage(char *msg_text, int len)
 
 void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt)
 {
+    if(lat == 0 or lon == 0)
+        return;
+
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
     char msg_start[100];
 
@@ -1382,36 +1394,55 @@ void getGPS(void)
     
     if (newData)
     {
-      unsigned long age;  
-      gps.f_get_position(&flat, &flon, &age);
-      flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
-      flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
+        unsigned long age;  
+        gps.f_get_position(&flat, &flon, &age);
+        flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
+        flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
 
-      g_meshcom_settings.node_lat = flat;
-      g_meshcom_settings.node_lon = flon;
+        g_meshcom_settings.node_lat = flat;
+        g_meshcom_settings.node_lon = flon;
 
-      if(direction_S_N == 0)
-      {
+        if(direction_S_N == 0)
+        {
         g_meshcom_settings.node_lat_c = 'S';
-      }
-      else
-      {
+        }
+        else
+        {
         g_meshcom_settings.node_lat_c = 'N';
-      }
+        }
 
-      if(direction_E_W == 0)
-      {
+        if(direction_E_W == 0)
+        {
         g_meshcom_settings.node_lon_c = 'E';
-      }
-      else
-      {
+        }
+        else
+        {
         g_meshcom_settings.node_lon_c = 'W';
-      }
+        }
+
+        g_meshcom_settings.node_alt = (int)gps.f_altitude();
+
+        unsigned long date, time;
+        gps.get_datetime(&date, &time, &g_meshcom_settings.node_age);
+
+        g_meshcom_settings.node_date_year = date % 100;
+        g_meshcom_settings.node_date_year += g_meshcom_settings.node_date_year > 80 ? 1900 : 2000;
+        g_meshcom_settings.node_date_month = (date / 100) % 100;        
+        g_meshcom_settings.node_date_day = date / 10000;
+
+        g_meshcom_settings.node_date_hour = time / 1000000;
+        g_meshcom_settings.node_date_minute = (time / 10000) % 100;
+        g_meshcom_settings.node_date_second = (time / 100) % 100;
+        g_meshcom_settings.node_date_hundredths = time % 100;
+
+        //printf("Time: %ld\n", time);
     }
 }
 
-void commandAction(char *msg_text, int len)
+void commandAction(char *msg_text, int len, bool ble)
 {
+    char print_buff[500];
+
     // -info
     // -set-owner
 
@@ -1475,6 +1506,8 @@ void commandAction(char *msg_text, int len)
 
         save_settings();
 
+        init_ble_name();
+
         bInfo=true;
     }
     else
@@ -1518,14 +1551,33 @@ void commandAction(char *msg_text, int len)
 
     if(bInfo)
     {
-        printf("\nMeshCom 4.0 Client\n...Call:  %s\n...Short: %s\n...ID %08X\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
-         g_meshcom_settings.node_call, g_meshcom_settings.node_short, _GW_ID, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
+        sprintf(print_buff, "MeshCom 4.0 Client\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
+                g_meshcom_settings.node_call, g_meshcom_settings.node_short, _GW_ID, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
+        if(ble)
+        {
+    		g_ble_uart.write(print_buff, strlen(print_buff));
+        }
+        else
+        {
+            printf("\n%s", print_buff);
+        }
     }
     else
     if(bPos)
     {
-        printf("\nMeshCom 4.0 Client\n...LAT: %.6lf %c\n...LON: %.6lf %c\n...ALT: %i\n",
-         g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt);
+        sprintf(print_buff, "MeshCom 4.0 Client\n...LAT: %.6lf %c\n...LON: %.6lf %c\n...ALT: %i\n...DATE: %i.%02i.%02i %02i:%02i:%02i UTC\n",
+         g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt,
+         g_meshcom_settings.node_date_year, g_meshcom_settings.node_date_month, g_meshcom_settings.node_date_day,
+         g_meshcom_settings.node_date_hour, g_meshcom_settings.node_date_minute, g_meshcom_settings.node_date_second);
+
+        if(ble)
+        {
+    		g_ble_uart.write(print_buff, strlen(print_buff));
+        }
+        else
+        {
+            printf("\n%s", print_buff);
+        }
     }
     else
         printf("\nMeshCom 4.0 Client\n...wrong command %s\n", msg_text);

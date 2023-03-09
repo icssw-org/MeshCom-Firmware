@@ -119,6 +119,7 @@ extern volatile uint16_t g_task_event_type;
 // BLE
 #include <bluefruit.h>
 void init_ble(void);
+void init_ble_name(void);
 BLEService init_settings_characteristic(void);
 void restart_advertising(uint16_t timeout);
 extern BLECharacteristic g_lora_data;
@@ -189,6 +190,17 @@ struct s_meshcom_settings
 	char  node_symid = '/';
 	char  node_symcd = '#';
 
+	int node_date_year = 0;
+	int node_date_month = 0;
+	int node_date_day = 0;
+
+	int node_date_hour = 0;
+	int node_date_minute = 0;
+	int node_date_second = 0;
+	int node_date_hundredths = 0;
+
+	unsigned long node_age = 0;
+
 	// Default is off
 	uint32_t send_repeat_time = 0;
 	bool auto_join = false;
@@ -237,6 +249,17 @@ struct s_meshcomcompat_settings
 	int	  node_alt = 0;
 	char  node_symid = '/';
 	char  node_symcd = '#';
+
+	int node_date_year = 0;
+	int node_date_month = 0;
+	int node_date_day = 0;
+
+	int node_date_hour = 0;
+	int node_date_minute = 0;
+	int node_date_second = 0;
+	int node_date_hundredths = 0;
+
+	unsigned long node_age = 0;
 
 	// Send repeat time in milliseconds: 2 * 60 * 1000 => 2 minutes
 	uint32_t send_repeat_time = 0;
