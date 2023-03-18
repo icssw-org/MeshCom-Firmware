@@ -9,6 +9,11 @@
 #include <TinyGPS.h>
 #include <drivers\Adafruit_SSD1680.h>
 #include <WisBlock_EPaper_Images.h>
+
+#include "Adafruit_SHTC3.h"
+
+#include "Adafruit_LPS2X.h"
+
 /*
     RAK4631 PIN DEFINITIONS
 
@@ -74,6 +79,15 @@
     _hwConfig.USE_RXEN_ANT_PWR = true;	   // RXEN is used as power for antenna switch
 
     */
+
+/*
+#define I2C_SCL_RAK1901 NRF_GPIO_PIN_MAP(0,14)
+#define I2C_SDA_RAK1901 NRF_GPIO_PIN_MAP(0,13)
+
+#define I2C_SCL_RAK12011 NRF_GPIO_PIN_MAP(0,14)
+#define I2C_SDA_RAK12011 NRF_GPIO_PIN_MAP(0,13)
+#define INT_RAK12011 NRF_GPIO_PIN_MAP(1,02)
+*/
 
 /*
 Sync Word Setting in Meshtastic
@@ -172,7 +186,13 @@ unsigned long dhcp_timer = 0;         // dhcp refresh timer
 unsigned long ntp_timer = 0;          // dhcp refresh timer
 unsigned long chk_udp_conn_timer = 0; // we check periodically if we have received a HB from server
 unsigned long posinfo_timer = 0;      // we check periodically to send GPS
-//unsigned long till_header_time = 0;    // stores till a header is detected after preamble detect
+unsigned long temphum_timer = 0;      // we check periodically get TEMP/HUM
+unsigned long druck_timer = 0;        // we check periodically get AIRPRESURE
+unsigned long aliveblink_timer = 0;   // we check periodically alive
+unsigned long bleblink_timer = 0;     // we check periodically BLE
+
+//unsigned long till_header_time = 0; // stores till a header is detected after preamble detect
+unsigned int resetCount = 0;
 unsigned int posinfo_first = 0;
 unsigned int msg_counter = 0;
 char msg_text[MAX_MSG_LEN_PHONE];
@@ -187,6 +207,15 @@ int direction_S_N = 0;  //0--S, 1--N
 int direction_E_W = 0;  //0--E, 1--W
 
 void getGPS(void);
+
+// TEMP/HUM
+Adafruit_SHTC3 shtc3 = Adafruit_SHTC3();
+
+void getTEMP(void);
+
+Adafruit_LPS22 g_lps22hb;
+
+void getPRESSURE(void);
 
 // EPaper SSD1680
 typedef struct  DEPG {
@@ -229,7 +258,6 @@ void testdrawtext(int16_t x, int16_t y, char *text, uint16_t text_color, uint32_
 
 uint8_t gKeyNum = 0; // which button is pressed
 int iGPSCount=0;
-int iBLECount=0;
 
 // left button interrupt handle function
 void interruptHandle1()
@@ -276,16 +304,21 @@ void testdrawtext(int16_t x, int16_t y, char *text, uint16_t text_color, uint32_
 }
 
 // Prototypes
-bool is_new_packet(uint16_t size);                         // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
+bool is_new_packet(void);                                // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
 void addNodeData(uint16_t size, int16_t rssi, int8_t snr); // add additional data we need and send the udp packet
-void blinkLED();
+void blinkLED();                                     // blink GREEN
+void blinkLED2();                                    // blink BLUE
 void sendHeartbeat();                                // heartbeat to server
 void doTX();                                         // LoraTX function
 void addUdpOutBuffer(int msg_id, uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer
 void printBuffer(uint8_t *buffer, int len);
 void printBuffer_ascii(uint8_t *buffer, int len);
+int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE]);
 void sendMessage(char *buffer, int len);
+int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt);
 void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt);
+void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press);
+void checkSerialCommand(void);
 void commandAction(char *buffer, int len, bool ble);
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void sendToPhone();
@@ -300,7 +333,7 @@ void sendToPhone();
 */
 
 /** Set the device name, max length is 10 characters */
-    char g_ble_dev_name[10] = "RAK-TEST";
+    char g_ble_dev_name[10] = "RAK-CL40";
 
 /**
  * @brief Initialize LoRa HW and LoRaWan MAC layer
@@ -444,18 +477,66 @@ void nrf52setup()
     delay(1000);
     
     Serial1.begin(9600);
+    Serial.setTimeout(500);
     while (!Serial1);
-    Serial.println("gps uart init ok!");
 
-    //ble init    
+    Serial.println("=====================================");
+    Serial.println("GPS UART init ok!");
+
+
+    Serial.println("Adafruit LPS33 check");
+
+    // Try to initialize!
+    if (!g_lps22hb.begin_I2C(0x5d)) 
+    {
+        Serial.println("Failed to find LPS33 chip");
+        while (1) 
+        { 
+            delay(10); 
+        }
+    }
+
+    Serial.println("LPS33 sensor found");
+
+    g_lps22hb.setDataRate(LPS22_RATE_10_HZ);
+    
+    /*
+    Serial.print("Data rate set to: ");
+
+    switch (g_lps22hb.getDataRate()) 
+    {
+        case LPS22_RATE_ONE_SHOT: Serial.println("One Shot / Power Down"); 
+            break;
+        case LPS22_RATE_1_HZ: Serial.println("1 Hz"); 
+            break;
+        case LPS22_RATE_10_HZ: Serial.println("10 Hz"); 
+            break;
+        case LPS22_RATE_25_HZ: Serial.println("25 Hz"); 
+            break;
+        case LPS22_RATE_50_HZ: Serial.println("50 Hz"); 
+            break;
+    }
+    */
+
+    Serial.println("Adafruit SHTC3 check");
+    if (!shtc3.begin()) {
+        Serial.println("Couldn't find SHTC3");
+        while (1) delay(1);
+    }
+    Serial.println("SHTC3 sensor found");
+
+    //////////////////////////////////////////////////////
+    // BLE INIT
+
     g_enable_ble=true;
 
 #if defined NRF52_SERIES || defined ESP32
 	if (g_enable_ble)
 	{
-		API_LOG("API", "Init BLE");
 		// Init BLE
 		init_ble();
+
+        Serial.println("Adafruit BLE init");
 	}
 	else
 	{
@@ -472,9 +553,7 @@ void nrf52setup()
 #endif
 
 
-    Serial.println("=====================================");
     Serial.println("CLIENT STARTED");
-    Serial.println("=====================================");
 
     //  Set the LoRa Callback Functions
     RadioEvents.TxDone = OnTxDone;
@@ -535,24 +614,28 @@ void nrf52setup()
     Radio.Rx(RX_TIMEOUT_VALUE);
 
     // set left button interrupt
-    pinMode(LEFT_BUTTON, INPUT);
-    attachInterrupt(LEFT_BUTTON, interruptHandle1, FALLING);
+    //pinMode(LEFT_BUTTON, INPUT);
+    //attachInterrupt(LEFT_BUTTON, interruptHandle1, FALLING);
 
     // set middle button interrupt
     pinMode(MIDDLE_BUTTON, INPUT);
     attachInterrupt(MIDDLE_BUTTON, interruptHandle2, FALLING);
 
     // set right button interrupt
-    pinMode(RIGHT_BUTTON, INPUT);
-    attachInterrupt(RIGHT_BUTTON, interruptHandle3, FALLING);
+    //pinMode(RIGHT_BUTTON, INPUT);
+    //attachInterrupt(RIGHT_BUTTON, interruptHandle3, FALLING);
+
+    sd_power_mode_set(NRF_POWER_MODE_CONSTLAT);
+
+    Serial.println("=====================================");
 
     delay(100);
 }
 
 void nrf52loop()
 {
-   	digitalWrite(LED_GREEN, LOW);
-   	digitalWrite(LED_BLUE, LOW);
+   	//digitalWrite(LED_GREEN, LOW);
+   	//digitalWrite(LED_BLUE, LOW);
 
     // check if we have messages in ringbuffer to send
     if (iWrite != iRead)
@@ -568,10 +651,16 @@ void nrf52loop()
 
     if(gKeyNum == 1)
     {
+        //getTEMP();
+
+        //getPRESSURE();
+
+        /*
         Serial.println("Left button pressed");
         display.clearBuffer();
         display.drawBitmap(DEPG_HP.position2_x, DEPG_HP.position2_y, rak_img, 150, 56, EPD_BLACK);
         display.display(true);
+        */
         gKeyNum = 0;
     }
 
@@ -584,7 +673,7 @@ void nrf52loop()
         {
             getGPS();
 
-           	digitalWrite(LED_GREEN, HIGH);
+           	//digitalWrite(LED_GREEN, HIGH);
 
             iGPSCount=0;
         }
@@ -600,106 +689,84 @@ void nrf52loop()
     if(gKeyNum == 3)
     {
         Serial.println("Right button pressed");
+        /*
         display.clearBuffer();
         display.drawBitmap(DEPG_HP.position4_x, DEPG_HP.position4_y, lora_img, 60, 40, EPD_BLACK);
         display.display(true);
+        */
+
         gKeyNum = 0;
     }
 
-  	//check if we got from the serial input
-    if(Serial.available() > 0)
-    {
-        char rd = Serial.read();
-
-        Serial.print(rd);
-
-        strText += rd;
-
-        //str.trim();                 // removes CR, NL, Whitespace at end
-
-        if (strText.startsWith("reset"))
-        {
-            strText="";
-            NVIC_SystemReset();     // resets the device
-        }
-        else
-        if(strText.startsWith(":") || strText.startsWith("-"))
-        {
-            if(strText.endsWith("\n") || strText.endsWith("\r"))
-            {
-                strText.trim();
-                strcpy(msg_text, strText.c_str());
-
-                int inext=0;
-                char msg_buffer[300];
-                for(int itx=0; itx<(int)strText.length(); itx++)
-                {
-                    if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
-                    {
-                        inext--;
-                        if(inext < 0)
-                            inext=0;
-                            
-                        msg_buffer[inext+1]=0x00;
-                    }
-                    else
-                    {
-                        msg_buffer[inext]=msg_text[itx];
-                        msg_buffer[inext+1]=0x00;
-                        inext++;
-                    }
-                }
-
-                if(strText.startsWith(":"))
-                    sendMessage(msg_buffer, inext);
-
-                if(strText.startsWith("-"))
-                    commandAction(msg_buffer, inext, false);
-
-                strText="";
-            }
-        }
-        else
-        {
-            if(!strText.startsWith("\n") && !strText.startsWith("\r"))
-            {
-                printf("MSG:%02X", rd);
-                printf("..not sent\n");
-            }
-            strText="";
-        }
-    }
+    checkSerialCommand();
 
     // check if we have messages for BLE to send
-    if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
+    if (toPhoneWrite != toPhoneRead)
     {
-        if (toPhoneWrite != toPhoneRead)
-        {
-            sendToPhone();   
-        }
-
-        iBLECount++;
-        if(iBLECount > 10)
-        {
-            iBLECount=0;
-            digitalWrite(LED_BLUE, HIGH);
-        }
-
+        sendToPhone();   
     }
 
     // posinfo
     if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
     {
-        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
+        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
         posinfo_first=2;
 
         save_settings();    // Position ins Flash schreiben
 
+        sendWeather(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt,
+         g_meshcom_settings.node_temp, g_meshcom_settings.node_hum, g_meshcom_settings.node_press);
+
         posinfo_timer = millis();
     }
 
+    // TEMP/HUM
+    if (((temphum_timer + TEMPHUM_INTERVAL) < millis()))
+    {
+        getTEMP();
+
+        temphum_timer = millis();
+    }
+
+    // DRUCK
+    if (((druck_timer + DRUCK_INTERVAL) < millis()))
+    {
+        getPRESSURE();
+
+        druck_timer = millis();
+    }
+
+    // hold alive
+    /*
+    if (((aliveblink_timer + ALIVEBLINK_INTERVAL) < millis()))
+    {
+        blinkLED();
+
+        aliveblink_timer = millis();
+
+        //DEBUG_MSG_VAL("ALIVE", g_meshcom_settings.node_date_hour*10000+g_meshcom_settings.node_date_minute*100+g_meshcom_settings.node_date_second, "alive info");
+
+        resetCount++;
+
+        if(resetCount > ALIVERESET_INTERVAL)
+            NVIC_SystemReset();
+    }
+
+    */
+
+    /*
+    // BLE LED2 blink
+    if (((bleblink_timer + BLEBLINK_INTERVAL) < millis()) && (g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1))
+    {
+        blinkLED2();
+
+        bleblink_timer = millis();
+    }
+    */
+
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
+    
     yield();
 }
 
@@ -714,7 +781,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     memcpy(RcvBuffer, payload, size);
 
-    if (is_new_packet(size) || (SEE_ALL_PACKETS == 1))
+    int msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
+
+    if(is_new_packet() || (SEE_ALL_PACKETS == 1))
     {
 		// :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -726,7 +795,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             case 0x3A: DEBUG_MSG("RADIO", "Received Textmessage"); break;
             case 0x21: DEBUG_MSG("RADIO", "Received PosInfo"); break;
-            case 0x05: DEBUG_MSG("RADIO", "Routing APP"); break;
+            case 0x40: DEBUG_MSG("RADIO", "Received Weather"); break;
             case 0x06: DEBUG_MSG("RADIO", "Admin APP"); break;
             case 0x20: DEBUG_MSG("RADIO", "Reply APP"); break;
             case 0x42: DEBUG_MSG("RADIO", "Rangetest APP"); break;
@@ -739,7 +808,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         }
 
         // txtmessage, position
-        if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21)
+        if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40)
         {
             // print ascii of message
             printBuffer_ascii(RcvBuffer, size);
@@ -750,7 +819,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             // we only send the packet via UDP if we have no collision with UDP rx
             // und wenn MSG nicht von einem anderen Gateway empfangen wurde welches es bereits vopm Server bekommen hat
-            int msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
             int msg_hop = RcvBuffer[5] & 0x07;
             int msg_hop_pos = 5;
             bool msg_server =false;
@@ -791,7 +859,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     if(msg_hop > 0 && msg_hop_pos > 0)
                         payload[msg_hop_pos]=msg_hop-1;
 
-                    if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21))
+                    if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40))
                     {
                         // add rcvMsg to forward to LoRa TX
                         addNodeData(size, rssi, snr);
@@ -801,7 +869,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         if(isPhoneReady == 1)
                             addBLEOutBuffer(RcvBuffer, size);
 
-                        DEBUG_MSG("RADIO", "Packet sent to -->");
+                        DEBUG_MSG("RADIO", "Packet resend to mesh");
                     }
                     else
                     {
@@ -825,10 +893,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         // set buffer to 0
         memset(RcvBuffer, 0, UDP_TX_BUF_SIZE);
 
-        blinkLED();
+        //blinkLED();
     }
     else
-        DEBUG_MSG("RADIO", "Packet discarded, already seen it!");
+    {
+        DEBUG_MSG_VAL("RADIO", msg_id, "Packet discarded, already seen it!");
+
+        char print_buff[100];
+
+        sprintf(print_buff, "MSG %08X ACK\n", msg_id);
+
+   		g_ble_uart.write(print_buff, strlen(print_buff));
+    }
 
     cmd_counter = WAIT_AFTER_RX;
     is_receiving = false;
@@ -865,7 +941,8 @@ void OnTxDone(void)
     cmd_counter=WAIT_AFTER_TXDONE;
     Radio.Rx(RX_TIMEOUT_VALUE);
     tx_is_active = false;
-    digitalWrite(LED_BLUE, LOW);
+    
+    //digitalWrite(LED_BLUE, LOW);
 }
 
 /**@brief Function to be executed on Radio Tx Timeout event
@@ -874,7 +951,9 @@ void OnTxTimeout(void)
 {
     // DEBUG_MSG("RADIO", "OnTxTimeout");
     tx_is_active = false;
-    digitalWrite(LED_BLUE, LOW);
+    
+    //digitalWrite(LED_BLUE, LOW);
+    
     Radio.Rx(RX_TIMEOUT_VALUE);
 }
 
@@ -910,7 +989,7 @@ void doTX()
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
-            digitalWrite(LED_BLUE, HIGH);
+            //digitalWrite(LED_BLUE, HIGH);
 
             // print tx buffer
             //printBuffer(neth.lora_tx_buffer_eth, neth.lora_tx_msg_len);
@@ -925,11 +1004,11 @@ void doTX()
 
             if (iWrite == iRead)
             {
-                DEBUG_MSG("RADIO",  "TX (LAST) :");
+                DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
             }
             else
             {
-                DEBUG_MSG("RADIO", "TX :");
+                DEBUG_MSG_VAL("RADIO", iRead, "TX :");
             }
 
             Serial.println("");
@@ -944,18 +1023,18 @@ void doTX()
 
 /**@brief Function to check if we have a Lora packet already received
  */
-bool is_new_packet(uint16_t size)
+bool is_new_packet(void)
 {
-    for (int i = 0; i < size; i++)
+    //:|01020304x
+
+    for (int i = 0; i < 5; i++)
     {
-        if (i != 12)
+        if (RcvBuffer[i] != RcvBuffer_before[i])
         {
-            if (RcvBuffer[i] != RcvBuffer_before[i])
-            {
-                return true;
-            }
+            return true;
         }
     }
+
     return false;
 }
 
@@ -1082,6 +1161,9 @@ void sendToPhone()
 
     memcpy(toPhoneBuff+3, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
 
+if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
+{
+
 #if BLE_TEST > 0
     int tlen=0;
     for(int i=9; i<blelen+3; i++)
@@ -1102,10 +1184,13 @@ void sendToPhone()
     g_ble_uart.write(toPhoneBuff, blelen + 3);
 #endif
 
+}
     toPhoneRead++;
     if (toPhoneRead >= MAX_RING)
         toPhoneRead = 0;
 
+if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
+{
     if (toPhoneWrite == toPhoneRead)
     {
         DEBUG_MSG_VAL("BLE", toPhoneRead,"TX (LAST) :");
@@ -1116,7 +1201,7 @@ void sendToPhone()
     }
 
     Serial.println("");
-
+}
     ble_busy_flag = false;
 }
 
@@ -1141,7 +1226,7 @@ void printBuffer_ascii(uint8_t *buffer, int len)
 
   Serial.printf("%03i ", len);
 
-  Serial.printf("%c !", buffer[0]);
+  Serial.printf("%c x", buffer[0]);
   for (i = 4; i > 0; i--)
   {
     Serial.printf("%02X", buffer[i]);
@@ -1169,14 +1254,14 @@ void printBuffer_ascii(uint8_t *buffer, int len)
 void blinkLED()
 {
     digitalWrite(LED_GREEN, HIGH);
-    delay(2);
+    delay(5);
     digitalWrite(LED_GREEN, LOW);
 }
 
 void blinkLED2()
 {
     digitalWrite(LED_BLUE, HIGH);
-    delay(2);
+    delay(20);
     digitalWrite(LED_BLUE, LOW);
 }
 
@@ -1194,14 +1279,13 @@ void print_radioStatus()
 
 } 
 
-void sendMessage(char *msg_text, int len)
+int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE])
 {
-    uint8_t msg_buffer[300];
     char msg_start[100];
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
-    msg_buffer[0]=':';
+    msg_buffer[0]=msg_type;
     
     msg_counter=millis();
 
@@ -1218,20 +1302,32 @@ void sendMessage(char *msg_text, int len)
 
     int inext=6+2+strlen(g_meshcom_settings.node_call);
 
-    memcpy(msg_buffer+inext, msg_text, len);
-
-    inext=inext+len;
-    
-    /*
-    msg_buffer[inext]='/';
+    msg_buffer[inext] = msg_type;
     inext++;
 
-    sprintf(msg_start, "%03d%%", mv_to_percent(read_batt()));
-    memcpy(msg_buffer+inext, msg_start, 4);
+    return inext;
+}
 
-    inext+=4;
-    */
+void sendMessage(char *msg_text, int len)
+{
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
+    int inext = CallToAPRS(':', msg_buffer);
+        
+    if(inext == 0)
+        return;
+
+    if(memcmp(msg_text, ":", 1) == 0)
+    {
+        memcpy(msg_buffer+inext, msg_text+1, len-1);
+        inext=inext+len-1;
+    }
+    else
+    {
+        memcpy(msg_buffer+inext, msg_text, len);
+        inext=inext+len;
+    }
+   
     msg_buffer[inext]=0x00;
     inext++;
 
@@ -1263,50 +1359,143 @@ void sendMessage(char *msg_text, int len)
         Serial.println("");
     }
 
+    if(inext > UDP_TX_BUF_SIZE)
+        inext = UDP_TX_BUF_SIZE;
+
     ringBuffer[iWrite][0]=inext;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
     iWrite++;
-    if(iWrite > MAX_RING)
+    if(iWrite >= MAX_RING)
         iWrite=0;
 
-    DEBUG_MSG("RADIO", "Packet sent to -->");
+    // store last message to compare later on
+    memcpy(RcvBuffer_before, msg_buffer, inext);
 }
 
-void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt)
+int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt)
 {
     if(lat == 0 or lon == 0)
-        return;
+    {
+        DEBUG_MSG("APRS", "Error PositionToAPRS");
+        return 0;
+    }
 
-    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
     char msg_start[100];
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
-    msg_buffer[0]='!';
+	double slat=lat*100.0;
+	double slon=lon*100.0;
+	
+    if(bConvPos)
+    {
+        double slatr=0;
+        double slonr=0;
+        
+        slat = (int)lat;
+        slatr = (lat - slat)*60.;
+        slat = (slat * 100.) + slatr;
+        
+        slon = (int)lon;
+        slonr = (lon - slon)*60.;
+        slon = (slon * 100.) + slonr;
+    }
+
+    if(bWeather)
+        sprintf(msg_start, "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", g_meshcom_settings.node_date_day, g_meshcom_settings.node_date_hour, g_meshcom_settings.node_date_minute, slat, lat_c, g_meshcom_settings.node_symid, slon, lon_c);
+    else
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c %i /A=%i", slat, lat_c, g_meshcom_settings.node_symid, slon, lon_c, g_meshcom_settings.node_symcd, batt, alt);
+
+    memcpy(msg_buffer, msg_start, strlen(msg_start));
+
+    int inext=strlen(msg_start);
     
-    msg_counter=millis();
+    return inext;
+}
 
-    msg_buffer[1]=msg_counter & 0xff;
-    msg_buffer[2]=(msg_counter >> 8) & 0xff;
-    msg_buffer[3]=(msg_counter >> 16) & 0xff;
-    msg_buffer[4]=(msg_counter >> 24) & 0xff;
+void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt)
+{
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
-    msg_buffer[5]=0x05; //max hop
+    int inext = CallToAPRS('!', msg_buffer);
 
-    sprintf(msg_start, "%s>*", g_meshcom_settings.node_call);
+    int inext_pos = PositionToAPRS(msg_buffer+inext, true, false, lat, lat_c, lon, lon_c, alt, batt);
+        
+    if(inext_pos == 0)
+        return;
 
-    memcpy(msg_buffer+6, msg_start, strlen(g_meshcom_settings.node_call)+2);
+    inext = inext + inext_pos;
 
-    int inext=6+2+strlen(g_meshcom_settings.node_call);
+    msg_buffer[inext] = 0x00;
+    inext++;
 
-    sprintf(msg_start, "!%07.2lf%c%c%08.2lf%c%c %i /A=%i", lat*100.0, lat_c, g_meshcom_settings.node_symid, lon*100.0, lon_c, g_meshcom_settings.node_symcd, batt, alt);
+    int FCS_SUMME=0;
+    for(int ifcs=0; ifcs<inext; ifcs++)
+    {
+        FCS_SUMME += msg_buffer[ifcs];
+    }
+    
+    // FCS
+    msg_buffer[inext] = (FCS_SUMME >> 8) & 0xFF;
+    inext++;
+    msg_buffer[inext] = FCS_SUMME & 0xFF;
+    inext++;
+
+    // _GW_ID   nur für 2.0 -> 4.0
+    msg_buffer[inext] = (_GW_ID) & 0xFF;
+    inext++;
+    msg_buffer[inext] = (_GW_ID >> 8) & 0xFF;
+    inext++;
+    msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
+    inext++;
+    msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
+    inext++;
+
+    if(bDEBUG)
+    {
+        printBuffer_ascii(msg_buffer, inext);
+    }
+
+    if(inext > UDP_TX_BUF_SIZE)
+        inext = UDP_TX_BUF_SIZE;
+
+    ringBuffer[iWrite][0]=inext;
+
+    memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
+    
+    iWrite++;
+    if(iWrite >= MAX_RING)
+        iWrite=0;
+
+    // store last message to compare later on
+    memcpy(RcvBuffer_before, msg_buffer, inext);
+}
+
+void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press)
+{
+    // @141324z4812.06N/01555.87E_270/...g...t...r000p000P...h..b10257Weather in Neulengbach
+
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+
+    int inext = CallToAPRS('@', msg_buffer);
+
+    int inext_pos = PositionToAPRS(msg_buffer+inext, true, true, lat, lat_c, lon, lon_c, 0, 0);
+        
+    if(inext_pos == 0)
+        return;
+
+    inext = inext + inext_pos;
+
+    char msg_start[100];
+
+    sprintf(msg_start, ".../...g...t%03ir...p...P...h%02ib%05ixMESH", (int)((temp*1.8)+32.0), (int)(hum), (int)(press*10.0));
 
     memcpy(msg_buffer+inext, msg_start, strlen(msg_start));
 
     inext=inext+strlen(msg_start);
-    
-    msg_buffer[inext]=0x00;
+
+    msg_buffer[inext] = 0x00;
     inext++;
 
     int FCS_SUMME=0;
@@ -1340,10 +1529,51 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
     iWrite++;
-    if(iWrite > MAX_RING)
+    if(iWrite >= MAX_RING)
         iWrite=0;
 
-    DEBUG_MSG("RADIO", "Position sent to -->");
+    // store last message to compare later on
+    memcpy(RcvBuffer_before, msg_buffer, inext);
+}
+
+
+/**@brief Function for handling a LoRa tx timer timeout event.
+ */
+void getTEMP(void)
+{
+    sensors_event_t humidity, temp;
+
+    shtc3.getEvent(&humidity, &temp); // populate temp and humidity objects with fresh data
+
+    /*
+    Serial.print("Temperature: "); Serial.print(temp.temperature); Serial.println(" degrees C");
+    Serial.print("Humidity: "); Serial.print(humidity.relative_humidity); Serial.println("% rH");
+    */
+    g_meshcom_settings.node_temp = temp.temperature;
+    g_meshcom_settings.node_hum = humidity.relative_humidity;
+}
+
+/**@brief Function for handling a LoRa tx timer timeout event.
+ */
+void getPRESSURE(void)
+{
+    sensors_event_t temp;
+    sensors_event_t pressure;
+    
+    g_lps22hb.getEvent(&pressure, &temp);
+
+    /*
+    Serial.print("Temperature: ");Serial.print(temp.temperature);Serial.println(" degrees C");
+    Serial.print("Pressure: ");Serial.print(pressure.pressure);Serial.println(" hPa");
+    Serial.println("");
+    */
+    
+    double home_alt=g_meshcom_settings.node_alt;    // Höhe des Standorts
+    double temperature_gradient = 0.0065;           // Standard-Temperaturgradient
+    double temperatureK = temp.temperature + 273.15;     // Temperatur in Kelvin
+    
+    // barometrische Höhenformel
+    g_meshcom_settings.node_press = pressure.pressure * pow((temperatureK / (temperatureK + home_alt * temperature_gradient)) , -5.255);
 }
 
 /**@brief Function for analytical direction.
@@ -1420,7 +1650,7 @@ void getGPS(void)
         g_meshcom_settings.node_lon_c = 'W';
         }
 
-        g_meshcom_settings.node_alt = (int)gps.f_altitude();
+        g_meshcom_settings.node_alt = ((g_meshcom_settings.node_alt * 10) + (int)gps.f_altitude()) / 11;
 
         unsigned long date, time;
         gps.get_datetime(&date, &time, &g_meshcom_settings.node_age);
@@ -1436,6 +1666,72 @@ void getGPS(void)
         g_meshcom_settings.node_date_hundredths = time % 100;
 
         //printf("Time: %ld\n", time);
+    }
+}
+
+void checkSerialCommand(void)
+{
+    //  Check Serial connected
+    if(!Serial)
+    {
+        DEBUG_MSG("SERIAL", "not connected");
+        return;
+    }
+
+ 	//check if we got from the serial input
+    if(Serial.available() > 0)
+    {
+        char rd = Serial.read();
+
+        Serial.print(rd);
+
+        strText += rd;
+
+        if(strText.startsWith(":") || strText.startsWith("-"))
+        {
+            if(strText.endsWith("\n") || strText.endsWith("\r"))
+            {
+                strText.trim();
+                strcpy(msg_text, strText.c_str());
+
+                int inext=0;
+                char msg_buffer[300];
+                for(int itx=0; itx<(int)strText.length(); itx++)
+                {
+                    if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
+                    {
+                        inext--;
+                        if(inext < 0)
+                            inext=0;
+                            
+                        msg_buffer[inext+1]=0x00;
+                    }
+                    else
+                    {
+                        msg_buffer[inext]=msg_text[itx];
+                        msg_buffer[inext+1]=0x00;
+                        inext++;
+                    }
+                }
+
+                if(strText.startsWith(":"))
+                    sendMessage(msg_buffer, inext);
+
+                if(strText.startsWith("-"))
+                    commandAction(msg_buffer, inext, false);
+
+                strText="";
+            }
+        }
+        else
+        {
+            if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+            {
+                printf("MSG:%02X", rd);
+                printf("..not sent\n");
+            }
+            strText="";
+        }
     }
 }
 
@@ -1456,7 +1752,29 @@ void commandAction(char *msg_text, int len, bool ble)
 
     bool bInfo=false;
     bool bPos=false;
+    bool bWeather=false;
 
+    if(memcmp(msg_text, "-reset", 6) == 0)
+    {
+        NVIC_SystemReset();     // resets the device
+    }
+    else
+    if(memcmp(msg_text, "-help", 5) == 0)
+    {
+        sprintf(print_buff, "MeshCom 4.0 Client commands\n-info     show info\n-pos      show lat/lon/alt/time info\n-weather   show temp/hum/press\n-sendpos  send pos info now\n-sendweather send weather info now\n-setowner set callsign (OE0XXX-1)\n-setlat   set latitude (44.12345)\n-setlon   set logitude (016.12345)\n-setalt   set altidude (9999)\n");
+
+        if(ble)
+        {
+    		g_ble_uart.write(print_buff, strlen(print_buff));
+        }
+        else
+        {
+            printf("\n%s", print_buff);
+        }
+
+        return;
+    }
+    else
     if(memcmp(msg_text, "-info", 5) == 0)
     {
         bInfo=true;
@@ -1467,21 +1785,35 @@ void commandAction(char *msg_text, int len, bool ble)
         bPos=true;
     }
     else
+    if(memcmp(msg_text, "-weather", 8) == 0)
+    {
+        bWeather=true;
+    }
+    else
     if(memcmp(msg_text, "-gps", 4) == 0)
     {
         getGPS();
         return;
     }
     else
-    if(memcmp(msg_text, "-send-pos", 9) == 0)
+    if(memcmp(msg_text, "-sendpos", 8) == 0)
     {
-        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, mv_to_percent(read_batt()));
+        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
         return;
     }
     else
-    if(memcmp(msg_text, "-set_owner ", 11) == 0)
+    if(memcmp(msg_text, "-sendweather", 12) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+11);
+        sendWeather(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt,
+         g_meshcom_settings.node_temp, g_meshcom_settings.node_hum, g_meshcom_settings.node_press);
+        return;
+    }
+    else
+    if(memcmp(msg_text, "-setowner ", 10) == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+10);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
         sVar = _owner_c;
         sVar.toUpperCase();
         sprintf(g_meshcom_settings.node_call, "%s", sVar.c_str());
@@ -1511,9 +1843,9 @@ void commandAction(char *msg_text, int len, bool ble)
         bInfo=true;
     }
     else
-    if(memcmp(msg_text, "-set_lat ", 9) == 0)
+    if(memcmp(msg_text, "-setlat ", 8) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
+        sprintf(_owner_c, "%s", msg_text+8);
         sscanf(_owner_c, "%lf", &fVar);
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, fVar);
@@ -1525,9 +1857,9 @@ void commandAction(char *msg_text, int len, bool ble)
         bPos=true;
     }
     else
-    if(memcmp(msg_text, "-set_lon ", 9) == 0)
+    if(memcmp(msg_text, "-setlon ", 8) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
+        sprintf(_owner_c, "%s", msg_text+8);
         sscanf(_owner_c, "%lf", &fVar);
 
         g_meshcom_settings.node_lon=fVar;
@@ -1537,9 +1869,9 @@ void commandAction(char *msg_text, int len, bool ble)
         bPos=true;
     }
     else
-    if(memcmp(msg_text, "-set_alt ", 9) == 0)
+    if(memcmp(msg_text, "-setalt ", 8) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
+        sprintf(_owner_c, "%s", msg_text+8);
         sscanf(_owner_c, "%d", &iVar);
 
         g_meshcom_settings.node_alt=iVar;
@@ -1569,6 +1901,21 @@ void commandAction(char *msg_text, int len, bool ble)
          g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt,
          g_meshcom_settings.node_date_year, g_meshcom_settings.node_date_month, g_meshcom_settings.node_date_day,
          g_meshcom_settings.node_date_hour, g_meshcom_settings.node_date_minute, g_meshcom_settings.node_date_second);
+
+        if(ble)
+        {
+    		g_ble_uart.write(print_buff, strlen(print_buff));
+        }
+        else
+        {
+            printf("\n%s", print_buff);
+        }
+    }
+     else
+    if(bWeather)
+    {
+        sprintf(print_buff, "MeshCom 4.0 Client\n...TEMP: %.2f °C\n...HUM: %.2f%% rH\n...PRESS: %.2f hPa\n",
+         g_meshcom_settings.node_temp, g_meshcom_settings.node_hum, g_meshcom_settings.node_press);
 
         if(ble)
         {

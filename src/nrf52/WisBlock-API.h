@@ -13,7 +13,7 @@
 
 #ifndef NO_BLE_LED
 // Set usage of BLE connection LED (blue). Comment the line to enable LED
-#define NO_BLE_LED 1
+//#define NO_BLE_LED 1
 #endif
 
 // Debug output set to 0 to disable app debug output
@@ -201,6 +201,10 @@ struct s_meshcom_settings
 
 	unsigned long node_age = 0;
 
+	float node_temp = 0;
+	float node_hum = 0;
+	float node_press = 0;
+
 	// Default is off
 	uint32_t send_repeat_time = 0;
 	bool auto_join = false;
@@ -260,6 +264,10 @@ struct s_meshcomcompat_settings
 	int node_date_hundredths = 0;
 
 	unsigned long node_age = 0;
+
+	float node_temp = 0;
+	float node_hum = 0;
+	float node_press = 0;
 
 	// Send repeat time in milliseconds: 2 * 60 * 1000 => 2 minutes
 	uint32_t send_repeat_time = 0;

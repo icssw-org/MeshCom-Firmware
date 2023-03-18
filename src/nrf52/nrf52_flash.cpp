@@ -90,6 +90,10 @@ void init_flash(void)
 
 		g_meshcom_settings.node_age = old_struct.node_age;
 
+		g_meshcom_settings.node_temp = old_struct.node_temp;
+		g_meshcom_settings.node_hum = old_struct.node_hum;
+		g_meshcom_settings.node_press = old_struct.node_press;
+
         /*KBC
 		g_meshcom_settings.adr_enabled = old_struct.adr_enabled;
 		g_meshcom_settings.app_port = old_struct.app_port;
