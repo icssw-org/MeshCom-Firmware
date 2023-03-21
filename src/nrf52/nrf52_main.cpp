@@ -167,9 +167,12 @@ int iRead=0;
 unsigned char BLEtoPhoneBuff[MAX_RING][UDP_TX_BUF_SIZE];
 int toPhoneWrite=0;
 int toPhoneRead=0;
+// Textmessage buffer from phone, hasMsgFromPhone flag indicates new message
+bool hasMsgFromPhone = false;
+char textbuff_phone [MAX_MSG_LEN_PHONE] = {0};
+uint8_t txt_msg_len_phone = 0;
 
-
-bool bDEBUG=false;
+bool bDEBUG=true;
 
 //variables and helper functions
 int sendlng = 0;              // lora tx message length
@@ -312,7 +315,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
 void sendDisplayHead();
 void sendDisplayText(uint8_t *text, int size);
 
-bool bInitDisplay = true;
+bool bInitDisplay = false;
 
 // Prototypes
 bool is_new_packet(void);                                // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
@@ -659,13 +662,13 @@ void nrf52setup()
 
 void nrf52loop()
 {
-    if(bInitDisplay)
+    if(!bInitDisplay)
     {
         mv_to_percent(read_batt());
 
         sendDisplayHead();
 
-        bInitDisplay=false;
+        bInitDisplay=true;
     }
 
    	//digitalWrite(LED_GREEN, LOW);
@@ -681,6 +684,14 @@ void nrf52loop()
         }
         else
             cmd_counter--;
+    }
+
+    // check if message from phone to send
+    if(hasMsgFromPhone)
+    {
+        sendMessage(textbuff_phone, txt_msg_len_phone);
+
+        hasMsgFromPhone = false;
     }
 
     if(gKeyNum == 1)
@@ -920,12 +931,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             sendDisplayText(RcvBuffer+6, size-6-3);
                         }
 
-
                         DEBUG_MSG("RADIO", "Packet resend to mesh");
-                    }
-                    else
-                    {
-                        //DEBUG_MSG("RADIO", "Packet not sent to -->");
                     }
                 } 
             }   
@@ -951,11 +957,20 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     {
         DEBUG_MSG_VAL("RADIO", msg_id, "Packet discarded, already seen it!");
 
-        char print_buff[100];
+        char print_buff[20];
 
-        sprintf(print_buff, "MSG %08X ACK\n", msg_id);
-
-   		g_ble_uart.write(print_buff, strlen(print_buff));
+        #if BLE_TEST > 0
+            sprintf(print_buff, "MSG %08X ACK\n", msg_id);
+       		g_ble_uart.write(print_buff, strlen(print_buff));
+        #else
+            // ACK MSG 0x41 | 0x01020304
+            print_buff[0]=0x41;
+            print_buff[1]=msg_id & 0xFF;
+            print_buff[2]=(msg_id >> 8) & 0xFF;
+            print_buff[3]=(msg_id >> 16) & 0xFF;
+            print_buff[4]=(msg_id >> 24) & 0xFF;
+            print_buff[5]=0x00;
+        #endif
     }
 
     cmd_counter = WAIT_AFTER_RX;
@@ -1208,13 +1223,11 @@ void sendToPhone()
     // we need to insert the first byte text msg flag
     uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
 
-    uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0] + 1;   //len ist um ein byte zu kurz
+    uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0];   //len ist um ein byte zu kurz
 
-    toPhoneBuff[0] = blelen;
-    toPhoneBuff[1] = blelen >> 8;
-    toPhoneBuff[2] = 0x40;
+    toPhoneBuff[0] = 0x40;
 
-    memcpy(toPhoneBuff+3, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
+    memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
 
 if(g_ble_uart_is_connected && isPhoneReady == 1)
 {
@@ -1236,7 +1249,7 @@ if(g_ble_uart_is_connected && isPhoneReady == 1)
 
     g_ble_uart.write(toPhoneBuff, tlen);
 #else
-    g_ble_uart.write(toPhoneBuff, blelen + 3);
+    g_ble_uart.write(toPhoneBuff, blelen + 2);
 #endif
 
 }
@@ -1461,6 +1474,12 @@ void sendMessage(char *msg_text, int len)
     inext++;
     msg_buffer[inext] = FCS_SUMME & 0xFF;
     inext++;
+
+    // An APP als Anzeige retour senden
+    if(hasMsgFromPhone)
+    {
+        addBLEOutBuffer(msg_buffer, inext);
+    }
 
     // _GW_ID   nur für 2.0 -> 4.0
     msg_buffer[inext] = (_GW_ID) & 0xFF;
@@ -1974,8 +1993,6 @@ void commandAction(char *msg_text, int len, bool ble)
         sprintf(g_meshcom_settings.node_short, "%s", sVar.c_str());
 
         save_settings();
-
-        init_ble_name();
 
         bInfo=true;
     }

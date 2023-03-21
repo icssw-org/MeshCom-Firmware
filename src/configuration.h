@@ -71,8 +71,10 @@
 
 // BLE Settings
 #define MAX_MSG_LEN_PHONE 300
+#define PAIRING_PIN "000000"    // Pairing PIN for BLE Connection
 
-#define BLE_TEST 1
+
+#define BLE_TEST 0
 
 #ifdef ESP32
 

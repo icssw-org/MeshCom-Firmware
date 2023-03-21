@@ -19,8 +19,15 @@ extern bool ble_busy_flag;
 extern uint16_t swap2bytes(uint16_t value);
 extern void commandAction(char *msg_text, int len, bool ble);
 extern void sendMessage(char *buffer, int len);
+extern bool hasMsgFromPhone;
+extern char textbuff_phone [MAX_MSG_LEN_PHONE];
+extern uint8_t txt_msg_len_phone;
+extern bool bInitDisplay;
 
 void sendConfigToPhone ();
+
+// Create device name
+char helper_string[256] = {0};
 
 /** OTA DFU service */
 BLEDfu ble_dfu;
@@ -64,6 +71,8 @@ void init_ble(void)
 #endif
 	// Start BLE
 	Bluefruit.begin(1, 0);
+	// BLE Pin 
+	Bluefruit.Security.setPIN(PAIRING_PIN);
 
 	// Set max power. Accepted values are: (min) -40, -20, -16, -12, -8, -4, 0, 2, 3, 4, 5, 6, 7, 8 (max)
 	Bluefruit.setTxPower(0);
@@ -73,7 +82,17 @@ void init_ble(void)
 	digitalWrite(LED_BLUE, LOW);
 #endif
 
-	init_ble_name();
+#ifdef _VARIANT_ISP4520_
+	/** Device name for ISP4520 */
+	sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
+			(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
+			(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
+#else
+	/** Device name for RAK4631 */
+	sprintf(helper_string, "%s-%s", g_ble_dev_name, g_meshcom_settings.node_call);	// Anzeige mit callsign
+#endif
+
+	Bluefruit.setName(helper_string);
 
 	// Set connection/disconnect callbacks
 	Bluefruit.Periph.setConnectCallback(connect_callback);
@@ -90,8 +109,6 @@ void init_ble(void)
 	ble_dis.setModel("RAK4631");
 #endif
 
-	char helper_string[256] = {0};
-	
 	sprintf(helper_string, "%d.%d.%d", g_sw_ver_1, g_sw_ver_2, g_sw_ver_3);
 	ble_dis.setSoftwareRev(helper_string);
 
@@ -102,6 +119,8 @@ void init_ble(void)
 	// Start the DFU service
 	ble_dfu.begin();
 
+	// Permission / Pairing
+	g_ble_uart.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
 	// Start the UART service
 	g_ble_uart.begin();
 	g_ble_uart.setRxCallback(bleuart_rx_callback);
@@ -136,35 +155,6 @@ void init_ble(void)
 	{
 		restart_advertising(0);
 	}
-}
-
-void init_ble_name(void)
-{
-	// Create device name
-	char helper_string[256] = {0};
-
-	// uint32_t addr_high = ((*((uint32_t *)(0x100000a8))) & 0x0000ffff) | 0x0000c000;
-	// uint32_t addr_low = *((uint32_t *)(0x100000a4));
-#ifdef _VARIANT_ISP4520_
-	/** Device name for ISP4520 */
-	// sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-	// 		(uint8_t)(addr_high), (uint8_t)(addr_high >> 8), (uint8_t)(addr_low),
-	// 		(uint8_t)(addr_low >> 8), (uint8_t)(addr_low >> 16), (uint8_t)(addr_low >> 24));
-	sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-			(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
-			(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
-#else
-	/** Device name for RAK4631 */
-	// sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-	// 		(uint8_t)(addr_high), (uint8_t)(addr_high >> 8), (uint8_t)(addr_low),
-	// 		(uint8_t)(addr_low >> 8), (uint8_t)(addr_low >> 16), (uint8_t)(addr_low >> 24));
-	//sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-	//		(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
-	//		(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
-	sprintf(helper_string, "%s-%s", g_ble_dev_name, g_meshcom_settings.node_call);	// Anzeige mit callsign
-#endif
-
-	Bluefruit.setName(helper_string);
 }
 
 /**
@@ -218,104 +208,160 @@ void bleuart_rx_callback(uint16_t conn_handle)
 	xSemaphoreGiveFromISR(g_task_sem, pdFALSE);
 
 	// Forward data from Mobile to our peripheral
-	char str[MAX_MSG_LEN_PHONE + 1] = {0};
-	g_ble_uart.read(str, MAX_MSG_LEN_PHONE);
+	uint8_t conf_data[MAX_MSG_LEN_PHONE] = {0};
+	g_ble_uart.read(conf_data, MAX_MSG_LEN_PHONE);
 
 	
-	/*
-	  check for hello message from phone and set flag ready to start exchange data
-		Hello Messages is fixed and starts with "H"
-		Config Messages:
-		"CAL:LEN:OE1KFR-4" Length is 1-20
-		"CLA:48.123"
-		"CLO:14.123"
-		"CAT:230"
-	*/
+	/**
+	 * Config Messages
+     * length 1B - Msg ID 1B - Data
+	 * Msg ID:
+	 * 0x10 - Hello Message (followed by 0x20, 0x30)
+	 * 0x50 - Callsign
+	 * 0x70 - Latitude
+	 * 0x80 - Longitude
+	 * 0x90 - Altitude
+	 * 0xA0 - Textmessage
+     * Data:
+     * Callsign: length Callsign 1B - Callsign
+     * Latitude: 8B Double
+     * Longitude: 8B Double
+     * Altitude: 4B Integer
+	 * 
+     * 
+     *  */ 
 
-	if(memcmp(str, "HXXaaYYzz", 9) == 0 || memcmp(str, "connect", 7) == 0){
-		DEBUG_MSG("BLE", "Hello MSG from phone");
-		// on connect we send first the config to phone then messages of ringbuffer
-		sendConfigToPhone();
-		isPhoneReady = 1;
-	}
-	else
-	// config string arrived
-	if(str[0] == 'C'){
-		DEBUG_MSG_TXT("BLE",str,"Config Msg:");
-		int call_len = 0;
-		uint8_t call_offset = 7;
-		int str_len = strlen(str);
-		DEBUG_MSG_VAL("BLE", str_len,"str len");
+	uint8_t msg_len = conf_data[0];
+	uint8_t msg_type = conf_data[1];
+	bool restart_ADV = false;
 
-		char id[3];
+	DEBUG_MSG_VAL("BLE", msg_len, "Msg from Device Length");
 
-		for(int i=0; i<3; i++){
-			id[i] = str[i];
+	Serial.printBuffer(conf_data, msg_len);
+	Serial.println();
+
+	switch (msg_type){
+
+		case 0x10: {
+
+			if(conf_data[2] == 0x20 && conf_data[3] == 0x30){
+				DEBUG_MSG("BLE", "Hello Msg from phone");
+				sendConfigToPhone();
+				isPhoneReady = 1;
+			}
+
+			break;
 		}
 
-		char call_len_c[2];
-		char cal[] = "CAL";
+		case 0x50: {
 
-		if(strcmp(id,cal) == 0){
-			DEBUG_MSG("BLE", "Call received");
-			for(int i=0; i<2; i++){
-				call_len_c[i] = str[i + 4];
-			}
-			call_len = atoi(call_len_c);
-			DEBUG_MSG_VAL("BLE", call_len,"len");
+			DEBUG_MSG("BLE", "Callsing Setting from phone");
 
-			char callsign[call_len];
-			for(int i=0; i<call_len; i++){
-				callsign[i] = str[i + call_offset];
-			}
-			DEBUG_MSG_TXT("BLE",callsign,"Callsign:");
+			char call_arr[(uint8_t)conf_data[2] + 1];
+			call_arr[(uint8_t)conf_data[2]] = '\0';
 
-		}
-
-		char cla[] = "CLA"; 
-		if(strcmp(id,cla) == 0){
-			DEBUG_MSG("BLE", "Latitude received");
-			int lat_len = str_len - 4;
+			for(int i=0; i<(uint8_t)conf_data[2]; i++)
+				call_arr[i] = conf_data[i+3];
 			
-			char lat_c[lat_len];
-			for(int i=0; i<lat_len; i++){
-				lat_c[i] = str[i+4];
-			}
-			/// TODO FUNZT NICHT
-			double lat_d = atof(lat_c);
+			String sVar = call_arr;
+			sVar.toUpperCase();
 			
-			DEBUG_MSG_VAL("BLE", lat_d,"Conf lat");
+
+			sprintf(g_meshcom_settings.node_call, "%s", sVar.c_str());
+
+			save_settings();
+
+			// send config back to phone
+			sendConfigToPhone();
+
+			sprintf(helper_string, "%s-%s", g_ble_dev_name, g_meshcom_settings.node_call);	// Anzeige mit callsign
+			Bluefruit.setName(helper_string);
+
+			bInitDisplay = false;
+
+			//restart_ADV = true;	//nicht notwendig
+
+			break;
 		}
 
-		char clo[] = "CLO"; 
+		case 0x70: {
 
-		if(strcmp(id,clo) == 0){
-			DEBUG_MSG("BLE", "Longitude received");
-			int lon_len = str_len - 4;
-			char lon_c[lon_len];
-			for(int i=0; i<lon_len; i++){
-				lon_c[i] = str[i+4];
-			}
-			double lon_d = atof(lon_c);
-		
-			DEBUG_MSG_VAL("BLE", lon_d,"Conf lon");
+			DEBUG_MSG("BLE", "Latitude Setting from phone");
+			float latitude;
+			memcpy(&latitude, conf_data + 2, sizeof(latitude));
+			Serial.println(latitude);
+
+			g_meshcom_settings.node_lat=latitude;
+
+        	save_settings();
+			// send config back to phone
+			sendConfigToPhone();
+
+			break;
 		}
-		
-		char cat[] = "CAT"; 
 
-		if(strcmp(id,cat) == 0){
-			DEBUG_MSG("BLE", "Altitude received");
-			int alt_len = str_len - 4;
-			char alt_c[alt_len];
-			for(int i=0; i<alt_len; i++){
-				alt_c[i] = str[i+4];
-			}
-			double alt_d = atof(alt_c);
+		case 0x80: {
 
-			DEBUG_MSG_VAL("BLE", alt_d,"Conf lat");
+			DEBUG_MSG("BLE", "Longitude Setting from phone");
+			float longitude;
+			memcpy(&longitude, conf_data + 2, sizeof(longitude));
+			Serial.println(longitude);
+
+			g_meshcom_settings.node_lon=longitude;
+
+        	save_settings();
+			// send config back to phone
+			sendConfigToPhone();
+
+			break;
 		}
-		
+
+		case 0x90: {
+
+			int altitude;
+			memcpy(&altitude, conf_data + 2, sizeof(altitude));
+			DEBUG_MSG_VAL("BLE", altitude, "Altitude from phone:");
+
+			g_meshcom_settings.node_alt=altitude;
+
+        	save_settings();
+			// send config back to phone
+			sendConfigToPhone();
+
+			break;
+		}
+
+		case 0xA0: {
+			// length 1B - Msg ID 1B - Text
+
+			uint8_t txt_len = msg_len - 1; // includes zero escape
+			txt_msg_len_phone = txt_len - 1;	// now zero escape for lora TX
+
+			char textbuff [txt_len] = {0};
+			textbuff [txt_len] = '\0';
+			memcpy(textbuff, conf_data + 2, txt_len);
+			// kopieren der message in buffer fuer main
+			memcpy(textbuff_phone,conf_data + 2, txt_msg_len_phone);
+
+			DEBUG_MSG_TXT("BLE", textbuff, "Message from phone:");
+			//Serial.printBuffer(textbuff_phone, txt_msg_len_phone);
+			//Serial.println();
+			// flag für main neue msg von phone
+			hasMsgFromPhone = true;
+
+		}
+
 	}
+
+	// BLE mit neuem Call resetten
+	if(restart_ADV)
+	{
+		delay(1000);
+		NVIC_SystemReset(); //resets the device 
+		// restart_advertising(0);
+	}
+
+/*	
 	else
 	{
 		#if BLE_TEST > 0
@@ -333,6 +379,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			}
 		#endif
 	}
+*/
 
 }
 
@@ -352,14 +399,13 @@ void sendConfigToPhone () {
 		g_ble_uart.write(bleBuff, strlen(bleBuff));
 	#else
 		// assemble conf message
-		uint16_t call_len = sizeof(g_meshcom_settings.node_call);
-		uint16_t conf_len = call_len + 24;	// currently fixed length - adapt if needed
+		uint8_t call_len = sizeof(g_meshcom_settings.node_call);
+		uint8_t conf_len = call_len + 22;	// currently fixed length - adapt if needed
 		uint8_t confBuff [conf_len] = {0};
-		uint8_t call_offset = 4;
+		uint8_t call_offset = 2;
 
-		confBuff [0] = conf_len;
-		confBuff [2] = 0x80;
-		confBuff [3] = call_len;
+		confBuff [0] = 0x80;
+		confBuff [1] = call_len;
 		memcpy(confBuff + call_offset, g_meshcom_settings.node_call, call_len);
 		uint8_t latOffset = call_offset + call_len;
 		memcpy(confBuff + latOffset, &g_meshcom_settings.node_lat, 8);
