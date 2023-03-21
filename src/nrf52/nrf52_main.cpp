@@ -957,19 +957,21 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     {
         DEBUG_MSG_VAL("RADIO", msg_id, "Packet discarded, already seen it!");
 
-        char print_buff[20];
 
         #if BLE_TEST > 0
+            char print_buff[20];
             sprintf(print_buff, "MSG %08X ACK\n", msg_id);
        		g_ble_uart.write(print_buff, strlen(print_buff));
         #else
             // ACK MSG 0x41 | 0x01020304
+            uint8_t print_buff[20];
             print_buff[0]=0x41;
             print_buff[1]=msg_id & 0xFF;
             print_buff[2]=(msg_id >> 8) & 0xFF;
             print_buff[3]=(msg_id >> 16) & 0xFF;
             print_buff[4]=(msg_id >> 24) & 0xFF;
             print_buff[5]=0x00;
+            addBLEOutBuffer(print_buff, 6);
         #endif
     }
 
