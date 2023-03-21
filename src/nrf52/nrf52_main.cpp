@@ -14,6 +14,8 @@
 
 #include "Adafruit_LPS2X.h"
 
+#include <U8g2lib.h> // Click to install library: http://librarymanager/All#u8g2
+
 /*
     RAK4631 PIN DEFINITIONS
 
@@ -249,7 +251,7 @@ DEPG  DEPG_HP = {212,104,30,15,30,25,30,45,80,30};  //  this is for DEPG0213BNS8
 #define RIGHT_BUTTON   WB_IO6
 
 // 2.13" EPD with SSD1680
-Adafruit_SSD1680 display(DEPG_HP.width, DEPG_HP.height, EPD_MOSI,
+Adafruit_SSD1680 display_1680(DEPG_HP.width, DEPG_HP.height, EPD_MOSI,
                          EPD_SCK, EPD_DC, EPD_RESET,
                          EPD_CS, SRAM_CS, EPD_MISO,
                          EPD_BUSY);
@@ -296,12 +298,21 @@ void interruptHandle3()
 */
 void testdrawtext(int16_t x, int16_t y, char *text, uint16_t text_color, uint32_t text_size)
 {
-  display.setCursor(x, y);
-  display.setTextColor(text_color);
-  display.setTextSize(text_size);
-  display.setTextWrap(true);
-  display.print(text);
+  display_1680.setCursor(x, y);
+  display_1680.setTextColor(text_color);
+  display_1680.setTextSize(text_size);
+  display_1680.setTextWrap(true);
+  display_1680.print(text);
 }
+
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
+
+// Display 128 x 64 px
+void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
+void sendDisplayHead();
+void sendDisplayText(uint8_t *text, int size);
+
+bool bInitDisplay = true;
 
 // Prototypes
 bool is_new_packet(void);                                // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
@@ -318,6 +329,7 @@ void sendMessage(char *buffer, int len);
 int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt);
 void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt);
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press);
+void sendWX(char *buffer, float temp, float hum, float press);
 void checkSerialCommand(void);
 void commandAction(char *buffer, int len, bool ble);
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
@@ -415,6 +427,7 @@ void getMacAddr(uint8_t *dmac)
     dmac[1] = src[4];
     dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
+
 void nrf52setup()
 {
 #if defined NRF52_SERIES || defined ESP32
@@ -484,39 +497,46 @@ void nrf52setup()
     Serial.println("GPS UART init ok!");
 
 
+    // Try to initialize!
+    #if defined(LPS33)
+    
     Serial.println("Adafruit LPS33 check");
 
-    // Try to initialize!
     if (!g_lps22hb.begin_I2C(0x5d)) 
     {
         Serial.println("Failed to find LPS33 chip");
-        while (1) 
+        //while (1) 
         { 
-            delay(10); 
+          //  delay(10); 
         }
     }
-
-    Serial.println("LPS33 sensor found");
-
-    g_lps22hb.setDataRate(LPS22_RATE_10_HZ);
-    
-    /*
-    Serial.print("Data rate set to: ");
-
-    switch (g_lps22hb.getDataRate()) 
+    else
     {
-        case LPS22_RATE_ONE_SHOT: Serial.println("One Shot / Power Down"); 
-            break;
-        case LPS22_RATE_1_HZ: Serial.println("1 Hz"); 
-            break;
-        case LPS22_RATE_10_HZ: Serial.println("10 Hz"); 
-            break;
-        case LPS22_RATE_25_HZ: Serial.println("25 Hz"); 
-            break;
-        case LPS22_RATE_50_HZ: Serial.println("50 Hz"); 
-            break;
+        Serial.println("LPS33 sensor found");
+
+        g_lps22hb.setDataRate(LPS22_RATE_10_HZ);
+
+        /*
+        Serial.print("Data rate set to: ");
+
+        switch (g_lps22hb.getDataRate()) 
+        {
+            case LPS22_RATE_ONE_SHOT: Serial.println("One Shot / Power Down"); 
+                break;
+            case LPS22_RATE_1_HZ: Serial.println("1 Hz"); 
+                break;
+            case LPS22_RATE_10_HZ: Serial.println("10 Hz"); 
+                break;
+            case LPS22_RATE_25_HZ: Serial.println("25 Hz"); 
+                break;
+            case LPS22_RATE_50_HZ: Serial.println("50 Hz"); 
+                break;
+        }
+        */
     }
-    */
+    #endif // LPS33
+
+    #if defined(SHT3)
 
     Serial.println("Adafruit SHTC3 check");
     if (!shtc3.begin()) {
@@ -524,6 +544,8 @@ void nrf52setup()
         while (1) delay(1);
     }
     Serial.println("SHTC3 sensor found");
+
+    #endif // SHT3
 
     //////////////////////////////////////////////////////
     // BLE INIT
@@ -552,6 +574,9 @@ void nrf52setup()
 	digitalWrite(LED_BLUE, LOW);
 #endif
 
+
+    Wire.begin();
+    u8g2.begin();
 
     Serial.println("CLIENT STARTED");
 
@@ -634,6 +659,15 @@ void nrf52setup()
 
 void nrf52loop()
 {
+    if(bInitDisplay)
+    {
+        mv_to_percent(read_batt());
+
+        sendDisplayHead();
+
+        bInitDisplay=false;
+    }
+
    	//digitalWrite(LED_GREEN, LOW);
    	//digitalWrite(LED_BLUE, LOW);
 
@@ -657,9 +691,9 @@ void nrf52loop()
 
         /*
         Serial.println("Left button pressed");
-        display.clearBuffer();
-        display.drawBitmap(DEPG_HP.position2_x, DEPG_HP.position2_y, rak_img, 150, 56, EPD_BLACK);
-        display.display(true);
+        display_1680.clearBuffer();
+        display_1680.drawBitmap(DEPG_HP.position2_x, DEPG_HP.position2_y, rak_img, 150, 56, EPD_BLACK);
+        display_1680.display(true);
         */
         gKeyNum = 0;
     }
@@ -679,9 +713,9 @@ void nrf52loop()
         }
         /*
         Serial.println("Middle button pressed");
-        display.clearBuffer();
+        display_1680.clearBuffer();
         testdrawtext(DEPG_HP.position3_x, DEPG_HP.position3_y, (char*)"IoT Made Easy", (uint16_t)EPD_BLACK, (uint32_t)2);
-        display.display(true);
+        display_1680.display(true);
         */
         gKeyNum = 0;
     }
@@ -690,9 +724,9 @@ void nrf52loop()
     {
         Serial.println("Right button pressed");
         /*
-        display.clearBuffer();
-        display.drawBitmap(DEPG_HP.position4_x, DEPG_HP.position4_y, lora_img, 60, 40, EPD_BLACK);
-        display.display(true);
+        display_1680.clearBuffer();
+        display_1680.drawBitmap(DEPG_HP.position4_x, DEPG_HP.position4_y, lora_img, 60, 40, EPD_BLACK);
+        display_1680.display(true);
         */
 
         gKeyNum = 0;
@@ -714,11 +748,17 @@ void nrf52loop()
 
         save_settings();    // Position ins Flash schreiben
 
+        #if defined(LPS33)
+
         sendWeather(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt,
          g_meshcom_settings.node_temp, g_meshcom_settings.node_hum, g_meshcom_settings.node_press);
 
+        #endif
+
         posinfo_timer = millis();
     }
+
+    #if defined(LPS33)
 
     // TEMP/HUM
     if (((temphum_timer + TEMPHUM_INTERVAL) < millis()))
@@ -728,6 +768,10 @@ void nrf52loop()
         temphum_timer = millis();
     }
 
+    #endif
+
+    #if defined(SHT3)
+
     // DRUCK
     if (((druck_timer + DRUCK_INTERVAL) < millis()))
     {
@@ -735,6 +779,8 @@ void nrf52loop()
 
         druck_timer = millis();
     }
+
+    #endif
 
     // hold alive
     /*
@@ -868,6 +914,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // size message is int -> uint16_t buffer size
                         if(isPhoneReady == 1)
                             addBLEOutBuffer(RcvBuffer, size);
+
+                        if(msg_type_b_lora == 0x3A)
+                        {
+                            sendDisplayText(RcvBuffer+6, size-6-3);
+                        }
+
 
                         DEBUG_MSG("RADIO", "Packet resend to mesh");
                     }
@@ -1130,10 +1182,10 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     BLEtoPhoneBuff[toPhoneWrite][0] = len;
     memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
 
+    Serial.printf("BLEtoPhone RingBuff added element: %u\n", toPhoneWrite);
+
     if(bDEBUG)
     {
-        Serial.printf("BLEtoPhone RingBuff added element: %u\n", toPhoneWrite);
-        //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
         printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1);
     }
 
@@ -1148,6 +1200,9 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 */
 void sendToPhone()
 {
+    if(ble_busy_flag)
+        return;
+
     ble_busy_flag = true;
 
     // we need to insert the first byte text msg flag
@@ -1161,7 +1216,7 @@ void sendToPhone()
 
     memcpy(toPhoneBuff+3, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
 
-if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
+if(g_ble_uart_is_connected && isPhoneReady == 1)
 {
 
 #if BLE_TEST > 0
@@ -1189,7 +1244,7 @@ if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
     if (toPhoneRead >= MAX_RING)
         toPhoneRead = 0;
 
-if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
+if(g_ble_uart_is_connected && isPhoneReady == 1)
 {
     if (toPhoneWrite == toPhoneRead)
     {
@@ -1205,7 +1260,71 @@ if(g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1)
     ble_busy_flag = false;
 }
 
+void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
+{
+	// display bme680 sensor data on OLED
+	if(bClear)
+    {
+        u8g2.clearBuffer();					// clear the internal memory
+    }
+	
+    u8g2.setFont(u8g2_font_6x10_mf);    // u8g2_font_ncenB10_tr); // choose a suitable font
 
+	if(memcmp(text, "L", 1) == 0)
+    {
+        //Serial.println("line");
+    	u8g2.drawHLine(3, 16, 120);
+    }
+    else
+    {
+        //Serial.println(text);
+        u8g2.drawUTF8(x, y, text);
+    }
+
+    if(bTransfer)
+    {
+        //Serial.println("Transfer");
+	    u8g2.sendBuffer(); // transfer internal memory to the display
+    }
+}
+
+void sendDisplayHead()
+{
+    sprintf(msg_text, "MeshCom 4.0     %3d%%", (int)mv_to_percent(read_batt()));
+
+    sendDisplay1306(true, false, 3, 13, msg_text);
+    sendDisplay1306(false, false, 3, 15, (char*)"L");
+
+    sprintf(msg_text, "Call:  %s", g_meshcom_settings.node_call);
+    sendDisplay1306(false, false, 3, 27, msg_text);
+
+    sprintf(msg_text, "Short: %s", g_meshcom_settings.node_short);
+    sendDisplay1306(false, false, 3, 40, msg_text);
+
+    sprintf(msg_text, "MAC:   %08X", _GW_ID);
+    sendDisplay1306(false, true, 3, 53, msg_text);
+}
+
+void sendDisplayText(uint8_t text[300], int size)
+{
+    int izeile=13;
+
+    bool bClear=true;
+
+    for(int itxt=0; itxt<size; itxt=itxt+20)
+    {
+        sprintf(msg_text, "%-20.20s", text+itxt);
+        
+        if(size-itxt < 20)
+            sendDisplay1306(bClear, true, 3, izeile, msg_text);
+        else
+            sendDisplay1306(bClear, false, 3, izeile, msg_text);
+        
+        izeile=izeile+13;
+
+        bClear=false;
+    }
+}
 
 /** @brief Method to print our buffers
  */
@@ -1537,6 +1656,18 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
 }
 
 
+void sendWX(char* text, float temp, float hum, float press)
+{
+    char msg_wx[200];
+
+    //sprintf(msg_wx, "%s, %.1f °C, %.1f hPa, %i %%", text, temp, press, (int)(hum));
+    sprintf(msg_wx, "%s, %.1f hPa, hum %i %%", text, press, (int)(hum));
+
+    msg_wx[0] = ':';
+
+    sendMessage(msg_wx, strlen(msg_wx));
+}
+
 /**@brief Function for handling a LoRa tx timer timeout event.
  */
 void getTEMP(void)
@@ -1790,6 +1921,12 @@ void commandAction(char *msg_text, int len, bool ble)
         bWeather=true;
     }
     else
+    if(memcmp(msg_text, "-WX", 3) == 0)
+    {
+        sendWX(msg_text, g_meshcom_settings.node_temp, g_meshcom_settings.node_hum, g_meshcom_settings.node_press);
+        return;
+    }
+    else
     if(memcmp(msg_text, "-gps", 4) == 0)
     {
         getGPS();
@@ -1850,7 +1987,14 @@ void commandAction(char *msg_text, int len, bool ble)
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, fVar);
 
+        g_meshcom_settings.node_lat_c='N';
         g_meshcom_settings.node_lat=fVar;
+
+        if(fVar < 0)
+        {
+            g_meshcom_settings.node_lat_c='S';
+            g_meshcom_settings.node_lat=fabs(fVar);
+        }
 
         save_settings();
 
@@ -1863,6 +2007,15 @@ void commandAction(char *msg_text, int len, bool ble)
         sscanf(_owner_c, "%lf", &fVar);
 
         g_meshcom_settings.node_lon=fVar;
+
+        g_meshcom_settings.node_lon_c='E';
+        g_meshcom_settings.node_lon=fVar;
+
+        if(fVar < 0)
+        {
+            g_meshcom_settings.node_lon_c='W';
+            g_meshcom_settings.node_lon=fabs(fVar);
+        }
 
         save_settings();
 
@@ -1885,6 +2038,7 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         sprintf(print_buff, "MeshCom 4.0 Client\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
                 g_meshcom_settings.node_call, g_meshcom_settings.node_short, _GW_ID, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
+
         if(ble)
         {
     		g_ble_uart.write(print_buff, strlen(print_buff));
@@ -1893,6 +2047,8 @@ void commandAction(char *msg_text, int len, bool ble)
         {
             printf("\n%s", print_buff);
         }
+
+        sendDisplayHead();
     }
     else
     if(bPos)

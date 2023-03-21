@@ -12,6 +12,9 @@
 
 #ifdef RAK4630
 
+//#define LPS33     // Druckmesser
+//#define SHTC3     // Temperatur
+
 // Define RAK LoRa parameters
 #define TX_OUTPUT_POWER 22       // dBm
 #define LORA_BANDWIDTH 1         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
