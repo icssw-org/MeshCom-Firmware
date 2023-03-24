@@ -27,6 +27,7 @@
 #ifdef BOARD_TBEAM
     #define MODUL_HARDWARE TBEAM
     #define RF_FREQUENCY 432.900000  // 433175000   // Hz
+    #define ENABLE_GPS
 #endif
 
 #ifdef BOARD_TLORA_OLV216

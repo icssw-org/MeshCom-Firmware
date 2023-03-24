@@ -15,16 +15,26 @@
 #include "bat.h"
 
 #include "TinyGPS.h"
+
+#ifdef BOARD_TBEAM
 #include <axp20x.h>
+#endif
+
+#ifdef BOARD_HELTEC
+#include <Adafruit_I2CDevice.h>
+#include <Adafruit_Sensor.h>
+#endif
+
 #include <HardwareSerial.h>
 #include <SparkFun_Ublox_Arduino_Library.h>
 
+#ifdef ENABLE_GPS
 #define GPS_SERIAL_NUM 1
 #define GPS_RX_PIN 34
 #define GPS_TX_PIN 12
 
 #define ADC_PIN    35  //ADC_PIN is the ADC pin the battery is connected to through a voltage divider
-
+#endif
 /**
  * RadioLib Infos und Examples:
  * SX127x:
@@ -92,8 +102,8 @@ bool deviceConnected = false;
 bool oldDeviceConnected = false;
 uint8_t txValue = 0;
 
-// See the following for generating UUIDs:
-// https://www.uuidgenerator.net/
+// Bluetooth UUIDs are standardized. For more info: https://www.bluetooth.com/specifications/assigned-numbers/
+// Nordic UUID DB is here: https://github.com/NordicSemiconductor/bluetooth-numbers-database
 
 #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
@@ -375,7 +385,11 @@ unsigned int msg_counter = 0;
 unsigned int posinfo_first = 0;
 unsigned long posinfo_timer = 0;      // we check periodically to send GPS
 
+#ifdef BOARD_HELTEC
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, 16, 15, 4);
+#else
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
+#endif
 
 // Display 128 x 64 px
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
@@ -415,11 +429,15 @@ int iRead=0;
 
 // TinyGPS
 TinyGPS gps;
+#ifdef BOARD_TBEAM
 AXP20X_Class axp;
+#endif
 SFE_UBLOX_GPS NEO6GPS;
 
 //SoftwareSerial ss(12,34);
+#ifdef ENABLE_GPS
 HardwareSerial GPSSerial(GPS_SERIAL_NUM);
+#endif
 
 String tmp_data = "";
 int direction_S_N = 0;  //0--S, 1--N
@@ -484,6 +502,9 @@ void esp32setup()
         memset(ringBufferUDPout[i], 0, UDP_TX_BUF_SIZE);
     }
 
+    #ifdef BOARD_HELTEC
+    Wire.setPins(4, 15);
+    #endif
     Wire.begin();
     u8g2.begin();
 
@@ -647,14 +668,17 @@ void esp32setup()
     // TXD	12 (WB_I02)
     // Baud	9600
 
-    Serial.begin(115200);
+    Serial.begin(MONITOR_SPEED);
     while(!Serial);
     Serial.println("SERIAL open");
+    #ifdef ENABLE_GPS
     GPSSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    #endif
     delay(300);
 
     Serial.println("SERIAL1 open");
 
+    #ifdef ENABLE_GPS
     do {
 
         if(NEO6GPS.begin(GPSSerial))
@@ -678,6 +702,7 @@ void esp32setup()
 
     Serial.println("Hello GPS");
     Serial.println("=====================================");
+    #endif
 
     Serial.println("CLIENT STARTED");
 
@@ -817,8 +842,9 @@ void esp32loop()
     // posinfo
     if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
     {
+        #ifdef GPS_ENABLE
         getGPS();
-
+        #endif
         sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
         posinfo_first=2;
 
@@ -1422,6 +1448,7 @@ void direction_parse(String tmp)
 
 /**@brief Function for handling a LoRa tx timer timeout event.
  */
+#ifdef ENABLE_GPS
 void getGPS(void)
 { 
     bool newData = false;
@@ -1489,7 +1516,7 @@ void getGPS(void)
         //printf("Time: %ld\n", time);
     }
 }
-
+#endif
 /**@brief Function to check if we have a Lora packet already received
  */
 bool is_new_packet(uint8_t compBuffer[4])
@@ -1975,7 +2002,9 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(memcmp(msg_text, "-gps", 4) == 0)
     {
+        #ifdef GPS_ENABLE
         getGPS();
+        #endif
         return;
     }
     else
