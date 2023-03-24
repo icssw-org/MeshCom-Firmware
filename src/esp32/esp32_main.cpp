@@ -193,7 +193,8 @@ class MyCallbacks: public BLECharacteristicCallbacks
 
                 g_meshcom_settings.node_lat=latitude;
 
-                save_settings();
+                // nur bei ALT speichern
+                // save_settings();
                 // send config back to phone
                 sendConfigToPhone();
 
@@ -208,7 +209,8 @@ class MyCallbacks: public BLECharacteristicCallbacks
 
                 g_meshcom_settings.node_lon=longitude;
 
-                save_settings();
+                // nur bei ALT speichern
+                // save_settings();
                 // send config back to phone
                 sendConfigToPhone();
 

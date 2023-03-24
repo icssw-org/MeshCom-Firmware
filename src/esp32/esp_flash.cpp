@@ -2,29 +2,63 @@
 
 #include "esp_flash.h"
 
+#include <Preferences.h>
+
+Preferences preferences;
+
 extern s_meshcom_settings g_meshcom_settings;
 
 // Get LoRa parameter
 void init_flash(void)
 {
-    #ifdef BOARD_TBEAM
-        sprintf(g_meshcom_settings.node_call, "%s", "OE1KBC-9");
-        sprintf(g_meshcom_settings.node_short, "%s", "KBC40");
-    #endif
+    preferences.begin("Credentials", false);
 
-    #ifdef BOARD_TLORA_OLV216
-        sprintf(g_meshcom_settings.node_call, "%s", "OE1KBC-7");
-        sprintf(g_meshcom_settings.node_short, "%s", "KBC40");
-    #endif
+    String strVar = preferences.getString("node_call");
+    sprintf(g_meshcom_settings.node_call, "%s", strVar.c_str());
 
-	g_meshcom_settings.node_lat = 48.1681;
-	g_meshcom_settings.node_lat_c = {'N'};
-	g_meshcom_settings.node_lon = 16.248;
-	g_meshcom_settings.node_lon_c = {'E'};
-	g_meshcom_settings.node_alt = 168;
+    strVar = preferences.getString("node_short");
+    sprintf(g_meshcom_settings.node_short, "%s", strVar.c_str());
+
+    g_meshcom_settings.node_symid = preferences.getChar("node_symid", '/');
+    g_meshcom_settings.node_symcd = preferences.getChar("node_symcd", '#');
+
+    g_meshcom_settings.node_lat = preferences.getDouble("node_lat", 0.0);
+    g_meshcom_settings.node_lon = preferences.getDouble("node_lon", 0.0);
+    g_meshcom_settings.node_alt = preferences.getInt("node_alt", 0);
+    g_meshcom_settings.node_lat_c = preferences.getChar("node_lat_c", 'N');
+    g_meshcom_settings.node_lon_c = preferences.getChar("node_lon_c", 'E');
+
+    g_meshcom_settings.node_temp = preferences.getFloat("node_temp", 0.0);
+    g_meshcom_settings.node_hum = preferences.getFloat("node_hum", 0.0);
+    g_meshcom_settings.node_press = preferences.getFloat("node_press", 0.0);
+
 }
 
 void save_settings(void)
 {
+    preferences.begin("Credentials", false);
 
+    String strVar;
+    
+    strVar = g_meshcom_settings.node_call;
+    preferences.putString("node_call", strVar); 
+
+    strVar = g_meshcom_settings.node_short;
+    preferences.putString("node_short", strVar); 
+
+    preferences.putChar("node_symid", g_meshcom_settings.node_symid);
+    preferences.putChar("node_symcd", g_meshcom_settings.node_symcd);
+
+    preferences.putDouble("node_lat", g_meshcom_settings.node_lat);
+    preferences.putDouble("node_lon", g_meshcom_settings.node_lon);
+    preferences.putInt("node_alt", g_meshcom_settings.node_alt);
+
+    preferences.putChar("node_lat_c", g_meshcom_settings.node_lat_c);
+    preferences.putChar("node_lon_c", g_meshcom_settings.node_lon_c);
+
+    preferences.putFloat("node_temp", g_meshcom_settings.node_temp);
+    preferences.putFloat("node_hum", g_meshcom_settings.node_hum);
+    preferences.putFloat("node_press", g_meshcom_settings.node_press);
+
+    preferences.end();
 }
