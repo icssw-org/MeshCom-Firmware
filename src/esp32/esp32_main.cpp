@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <RadioLib.h>
-//#include <TinyGPSPlus.h>
+
 #include <Wire.h>               
 #include "SSD1306Wire.h"
 #include <SPI.h>
@@ -12,10 +12,18 @@
 
 #include "debugconf.h"
 #include "esp_flash.h"
-#include "TinyGPS.h"
 #include "bat.h"
 
-#define ADC_PIN             34  //ADC_PIN is the ADC pin the battery is connected to through a voltage divider
+#include "TinyGPS.h"
+#include <axp20x.h>
+#include <HardwareSerial.h>
+#include <SparkFun_Ublox_Arduino_Library.h>
+
+#define GPS_SERIAL_NUM 1
+#define GPS_RX_PIN 34
+#define GPS_TX_PIN 12
+
+#define ADC_PIN    35  //ADC_PIN is the ADC pin the battery is connected to through a voltage divider
 
 /**
  * RadioLib Infos und Examples:
@@ -24,6 +32,10 @@
  * https://github.com/jgromes/RadioLib/blob/master/examples/SX127x/SX127x_Receive/SX127x_Receive.ino
  * https://github.com/jgromes/RadioLib/blob/master/examples/SX127x/SX127x_Transmit/SX127x_Transmit.ino
  * https://github.com/jgromes/RadioLib/blob/master/examples/SX127x/SX127x_PingPong/SX127x_PingPong.ino
+*/
+
+/** Flash Examples
+ * https://microcontrollerslab.com/save-data-esp32-flash-permanently-preferences-library/
 */
 
 // Wie mit fehlender DIO1 PinDefinition beim TLORA_OLED_V2 umgehen? Theoretisch wird DIO1 nur für LoRaWAN benötigt
@@ -403,6 +415,11 @@ int iRead=0;
 
 // TinyGPS
 TinyGPS gps;
+AXP20X_Class axp;
+SFE_UBLOX_GPS NEO6GPS;
+
+//SoftwareSerial ss(12,34);
+HardwareSerial GPSSerial(GPS_SERIAL_NUM);
 
 String tmp_data = "";
 int direction_S_N = 0;  //0--S, 1--N
@@ -422,6 +439,7 @@ unsigned int  getMacAddr(void)
 
 void showVoltage()
 {
+    #ifdef ADC_READ
     if (millis() - timeStamp > 1000) {
         timeStamp = millis();
         uint16_t v2 = analogRead(ADC_PIN);
@@ -429,6 +447,7 @@ void showVoltage()
         String voltage = "Voltage :" + String(battery_voltage) + "V\n";
         Serial.println(voltage);
     }
+    #endif
 }
 
 void esp32setup()
@@ -593,6 +612,8 @@ void esp32setup()
     Serial.println("Waiting a client connection to notify...");
     
     // BATT
+    #ifdef ADC_READ
+
     adcAttachPin(ADC_PIN);
     
     analogRead(ADC_PIN);
@@ -618,6 +639,7 @@ void esp32setup()
     }
    
     Serial.println();
+    #endif
 
     // gps init
     // TBEAM PINS
@@ -625,20 +647,37 @@ void esp32setup()
     // TXD	12 (WB_I02)
     // Baud	9600
 
-    /*
-    pinMode(12, OUTPUT);
-    digitalWrite(12, 0);
-    delay(1000);
-    digitalWrite(12, 1);
-    delay(1000);
-    
-    Serial1.begin(9600);
-    Serial1.setTimeout(500);
-    while (!Serial1);
+    Serial.begin(115200);
+    while(!Serial);
+    Serial.println("SERIAL open");
+    GPSSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    delay(300);
 
+    Serial.println("SERIAL1 open");
+
+    do {
+
+        if(NEO6GPS.begin(GPSSerial))
+        {
+            Serial.println("GPS connection OK");
+            NEO6GPS.setUART1Output(COM_TYPE_NMEA);
+            NEO6GPS.saveConfiguration();
+            Serial.printf("Enable NMEA");
+            NEO6GPS.enableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
+            NEO6GPS.enableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
+            NEO6GPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
+            NEO6GPS.enableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART1);
+            NEO6GPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
+            NEO6GPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART1);
+            NEO6GPS.saveConfiguration();
+            Serial.printf("Enable NMEA enables!");
+            break;
+        }
+        delay(1000);
+    } while(1);
+
+    Serial.println("Hello GPS");
     Serial.println("=====================================");
-    Serial.println("GPS UART init ok!");
-    */
 
     Serial.println("CLIENT STARTED");
 
@@ -778,6 +817,8 @@ void esp32loop()
     // posinfo
     if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
     {
+        getGPS();
+
         sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
         posinfo_first=2;
 
@@ -1386,12 +1427,12 @@ void getGPS(void)
     bool newData = false;
   
     // For one second we parse GPS data and report some key values
-    for (unsigned long start = millis(); millis() - start < 1000;)
+    for (unsigned long start = millis(); millis() - start < 3000;)
     {
-      while (Serial1.available())
+      while (GPSSerial.available())
       {
-        char c = Serial1.read();
-        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        char c = GPSSerial.read();
+        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         tmp_data += c;
         if (gps.encode(c))// Did a new valid sentence come in?
           newData = true;

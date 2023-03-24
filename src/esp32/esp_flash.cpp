@@ -32,6 +32,9 @@ void init_flash(void)
     g_meshcom_settings.node_hum = preferences.getFloat("node_hum", 0.0);
     g_meshcom_settings.node_press = preferences.getFloat("node_press", 0.0);
 
+    g_meshcom_settings.node_ssid = preferences.getString("node_ssid", "");
+    g_meshcom_settings.node_pwd = preferences.getString("node_pwd", "");
+
 }
 
 void save_settings(void)
@@ -59,6 +62,9 @@ void save_settings(void)
     preferences.putFloat("node_temp", g_meshcom_settings.node_temp);
     preferences.putFloat("node_hum", g_meshcom_settings.node_hum);
     preferences.putFloat("node_press", g_meshcom_settings.node_press);
+
+    preferences.putString("node_ssid", g_meshcom_settings.node_ssid); 
+    preferences.putString("node_pwd", g_meshcom_settings.node_pwd); 
 
     preferences.end();
 }

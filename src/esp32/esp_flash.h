@@ -19,6 +19,9 @@ struct s_meshcom_settings
 	char  node_symid = '/';
 	char  node_symcd = '#';
 
+	String node_ssid ="";
+	String node_pwd = "";
+
 	int node_date_year = 0;
 	int node_date_month = 0;
 	int node_date_day = 0;
