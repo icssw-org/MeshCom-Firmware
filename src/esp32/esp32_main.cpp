@@ -190,7 +190,6 @@ class MyCallbacks: public BLECharacteristicCallbacks
                 DEBUG_MSG("BLE", "Latitude Setting from phone");
                 float latitude;
                 memcpy(&latitude, conf_data + 2, sizeof(latitude));
-                Serial.println(latitude);
 
                 g_meshcom_settings.node_lat=latitude;
 
@@ -206,7 +205,6 @@ class MyCallbacks: public BLECharacteristicCallbacks
                 DEBUG_MSG("BLE", "Longitude Setting from phone");
                 float longitude;
                 memcpy(&longitude, conf_data + 2, sizeof(longitude));
-                Serial.println(longitude);
 
                 g_meshcom_settings.node_lon=longitude;
 
@@ -241,12 +239,12 @@ class MyCallbacks: public BLECharacteristicCallbacks
                 char textbuff [txt_len] = {0};
                 textbuff [txt_len] = '\0';
                 memcpy(textbuff, conf_data + 2, txt_len);
+
                 // kopieren der message in buffer fuer main
-                memcpy(textbuff_phone,conf_data + 2, txt_msg_len_phone);
+                memcpy(textbuff_phone, conf_data + 2, txt_msg_len_phone);
 
                 DEBUG_MSG_TXT("BLE", textbuff, "Message from phone:");
-                //Serial.printBuffer(textbuff_phone, txt_msg_len_phone);
-                //Serial.println();
+
                 // flag für main neue msg von phone
                 hasMsgFromPhone = true;
 
@@ -255,33 +253,20 @@ class MyCallbacks: public BLECharacteristicCallbacks
         }
     }
 
-/*
-	// BLE mit neuem Call resetten
-	if(restart_ADV)
-	{
-		delay(1000);
-		NVIC_SystemReset(); //resets the device 
-		// restart_advertising(0);
-	}
+    #if BLE_TEST > 0
+        if(str[0] == ':')
+        {
+            if(str[strlen(str)-1] == 0x0a)
+                str[strlen(str)-1]=0x00;
 
-	else
-	{
-		#if BLE_TEST > 0
-			if(str[0] == ':')
-			{
-				if(str[strlen(str)-1] == 0x0a)
-					str[strlen(str)-1]=0x00;
-
-				sendMessage(str, strlen(str));
-			}
-			else
-			if(str[0] == '-')
-			{
-				commandAction(str, strlen(str), true);
-			}
-		#endif
-	}
-*/
+            sendMessage(str, strlen(str));
+        }
+        else
+        if(str[0] == '-')
+        {
+            commandAction(str, strlen(str), true);
+        }
+    #endif
 
 };
 
@@ -342,16 +327,18 @@ void OnTxTimeout(void);
 void OnPreambleDetect(void);
 void OnHeaderDetect(void);
 void doTX();        // LoraTX function
-void setFlag();     // LoRaRX Interrupt function
+void setInterruptFlag();     // LoRaRX Interrupt function
 
 
 asm(".global _scanf_float");
 asm(".global _printf_float");
 
+// save transmission state between loops
+int transmissionState = RADIOLIB_ERR_UNKNOWN;
+
 bool is_receiving = false;  // flag to store we are receiving a lora packet. triggered by header detect not preamble
 
 int sendlng = 0;              // lora tx message length
-uint8_t cmd_counter = 2;      // ticker dependant on main cycle delay time
 
 // LoRa Events and Buffers
 
@@ -381,7 +368,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
 void sendDisplayHead();
 void sendDisplayText(uint8_t *text, int size);
 
-bool is_new_packet(void);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
+bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
 bool tx_is_active = false;    // avoids calling doTX() on each main iteration when we are already in TX mode
 void addNodeData(uint16_t size, int16_t rssi, int8_t snr); // add additional data we need and send the udp packet
 void checkSerialCommand(void);
@@ -401,7 +388,7 @@ static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx,
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
 
 static uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
-static uint8_t RcvBuffer_before[UDP_TX_BUF_SIZE];
+static uint8_t RcvBuffer_before[MAX_RING_UDP_OUT][4];
 
 static uint8_t ringBufferUDPout[MAX_RING_UDP_OUT][UDP_TX_BUF_SIZE]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
 uint8_t udpWrite = 0;   // counter for ringbuffer
@@ -444,6 +431,42 @@ void showVoltage()
 
 void esp32setup()
 {
+ 	// Get LoRa parameter
+	init_flash();
+
+   _GW_ID = getMacAddr();
+
+    dmac[0] = 0x00;
+    dmac[1] = 0x00;
+    dmac[2] = _GW_ID >> 24;
+    dmac[3] = _GW_ID >> 16;
+    dmac[4] = _GW_ID >> 8;
+    dmac[5] = _GW_ID;
+
+    // clear the buffers
+    for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
+    {
+        RcvBuffer[i] = 0x00;
+    }
+
+    for(int ib=0; ib<MAX_RING_UDP_OUT; ib++)
+    {
+        RcvBuffer_before[ib][0] = 0x00;
+        RcvBuffer_before[ib][1] = 0x00;
+        RcvBuffer_before[ib][2] = 0x00;
+        RcvBuffer_before[ib][3] = 0x00;
+    }
+
+    //clear ringbuffer
+    for(int i=0; i<MAX_RING_UDP_OUT; i++)
+    {
+        memset(ringBufferUDPout[i], 0, UDP_TX_BUF_SIZE);
+    }
+
+    Wire.begin();
+    u8g2.begin();
+
+    Serial.begin(115200);
 
     // initialize SX1278 with default settings
     Serial.print(F("[SX1278] Initializing ... "));
@@ -463,54 +486,54 @@ void esp32setup()
 
     // set carrier frequency 
     if (radio.setFrequency(RF_FREQUENCY) == RADIOLIB_ERR_INVALID_FREQUENCY) {
-    Serial.println(F("Selected frequency is invalid for this module!"));
-    while (true);
+        Serial.println(F("Selected frequency is invalid for this module!"));
+        while (true);
     }
 
     // set bandwidth 
     if (radio.setBandwidth(LORA_BANDWIDTH) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
-    Serial.println(F("Selected bandwidth is invalid for this module!"));
-    while (true);
+        Serial.println(F("Selected bandwidth is invalid for this module!"));
+        while (true);
     }
 
     // set spreading factor 
     if (radio.setSpreadingFactor(LORA_SF) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR) {
-    Serial.println(F("Selected spreading factor is invalid for this module!"));
-    while (true);
+        Serial.println(F("Selected spreading factor is invalid for this module!"));
+        while (true);
     }
 
     // set coding rate 
     if (radio.setCodingRate(LORA_CR) == RADIOLIB_ERR_INVALID_CODING_RATE) {
-    Serial.println(F("Selected coding rate is invalid for this module!"));
-    while (true);
+        Serial.println(F("Selected coding rate is invalid for this module!"));
+        while (true);
     }
 
     // set LoRa sync word 
     // NOTE: value 0x34 is reserved for LoRaWAN networks and should not be used
     if (radio.setSyncWord(SYNC_WORD_SX127x) != RADIOLIB_ERR_NONE) {
-    Serial.println(F("Unable to set sync word!"));
-    while (true);
+        Serial.println(F("Unable to set sync word!"));
+        while (true);
     }
 
     // set output power to 10 dBm (accepted range is -3 - 17 dBm)
     // NOTE: 20 dBm value allows high power operation, but transmission
     //       duty cycle MUST NOT exceed 1%
     if (radio.setOutputPower(TX_OUTPUT_POWER) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
-    Serial.println(F("Selected output power is invalid for this module!"));
-    while (true);
+        Serial.println(F("Selected output power is invalid for this module!"));
+        while (true);
     }
 
     // set over current protection limit (accepted range is 45 - 240 mA)
     // NOTE: set value to 0 to disable overcurrent protection
     if (radio.setCurrentLimit(CURRENT_LIMIT) == RADIOLIB_ERR_INVALID_CURRENT_LIMIT) {
-    Serial.println(F("Selected current limit is invalid for this module!"));
-    while (true);
+        Serial.println(F("Selected current limit is invalid for this module!"));
+        while (true);
     }
 
     // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
     if (radio.setPreambleLength(LORA_PREAMBLE_LENGTH) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
-    Serial.println(F("Selected preamble length is invalid for this module!"));
-    while (true);
+        Serial.println(F("Selected preamble length is invalid for this module!"));
+     while (true);
     }
 
     // set amplifier gain  (accepted range is 1 - 6, where 1 is maximum gain)
@@ -518,50 +541,22 @@ void esp32setup()
     //       leave at 0 unless you know what you're doing
     if (radio.setGain(0) == RADIOLIB_ERR_INVALID_GAIN)
     {
-    Serial.println(F("Selected gain is invalid for this module!"));
-    while (true);
+        Serial.println(F("Selected gain is invalid for this module!"));
+        while (true);
     }
 
     // set the function that will be called
     // when new packet is received
-    radio.setDio0Action(setFlag);
+    radio.setDio0Action(setInterruptFlag);
 
-    // start listening for LoRa packets
-    Serial.print(F("[SX1278] Starting to listen ... "));
-    state = radio.startReceive();
-    if (state == RADIOLIB_ERR_NONE)
-    {
-        Serial.println(F("success!"));
-    }
-    else
-    {
-        Serial.print(F("failed, code "));
-        Serial.println(state);
-    }
+    // put module back to listen mode
+    radio.startReceive();
 
     Serial.println(F("All settings successfully changed!"));
 
-
- 	// Get LoRa parameter
-	init_flash();
-
-   _GW_ID = getMacAddr();
-
-    dmac[0] = 0x00;
-    dmac[1] = 0x00;
-    dmac[2] = _GW_ID >> 24;
-    dmac[3] = _GW_ID >> 16;
-    dmac[4] = _GW_ID >> 8;
-    dmac[5] = _GW_ID;
-
-    Wire.begin();
-    u8g2.begin();
-
-    Serial.begin(115200);
-
     // Create the BLE Device
     char strBLEName[50]={0};
-    sprintf(strBLEName, "MeshCom-%s", g_meshcom_settings.node_call);
+    sprintf(strBLEName, "MeshCom-%02x%02x-%s", dmac[4], dmac[5], g_meshcom_settings.node_call);
     BLEDevice::init(strBLEName);
 
     // Create the BLE Server
@@ -595,7 +590,6 @@ void esp32setup()
     pServer->getAdvertising()->start();
     Serial.println("Waiting a client connection to notify...");
     
-    /*
     // BATT
     adcAttachPin(ADC_PIN);
     
@@ -620,8 +614,8 @@ void esp32setup()
     {
         Serial.println("Default Vref: 1100mV");
     }
+   
     Serial.println();
-*/
 
     // gps init
     // TBEAM PINS
@@ -651,6 +645,9 @@ void esp32setup()
 // flag to indicate that a packet was received
 volatile bool receivedFlag = false;
 
+// flag to indicate that a packet was sent
+volatile bool transmittedFlag = false;
+
 // this function is called when a complete packet
 // is received by the module
 // IMPORTANT: this function MUST be 'void' type
@@ -658,14 +655,82 @@ volatile bool receivedFlag = false;
 #if defined(ESP8266) || defined(ESP32)
   ICACHE_RAM_ATTR
 #endif
-void setFlag(void)
+void setInterruptFlag(void)
 {
-  // we got a packet, set the flag
-  receivedFlag = true;
+    if(tx_is_active)
+    {
+        if(bDEBUG)
+            Serial.println("transmit done");
+
+        // we sent a packet, set the flag
+        transmittedFlag = true;
+    }
+    else
+    {
+        if(bDEBUG)
+            Serial.println("receive ready");
+
+        // we got a packet, set the flag
+        receivedFlag = true;
+    }
 }
 
 void esp32loop()
 {
+    // check if the previous transmission finished
+    if(transmittedFlag)
+    {
+        // reset flag
+        transmittedFlag = false;
+
+        if (transmissionState == RADIOLIB_ERR_NONE)
+        {
+            // packet was successfully sent
+            if(bDEBUG)
+                Serial.println(F("transmission finished!"));
+
+            // NOTE: when using interrupt-driven transmit method,
+            //       it is not possible to automatically measure
+            //       transmission data rate using getDataRate()
+            OnTxDone();
+        }
+        else
+        {
+                Serial.print(F("TX failed, code "));
+                Serial.println(transmissionState);
+
+                OnTxTimeout();
+        }
+
+        transmissionState = RADIOLIB_ERR_UNKNOWN;
+
+        // clean up after transmission is finished
+        // this will ensure transmitter is disabled,
+        // RF switch is powered down etc.
+        radio.finishTransmit();
+    }
+
+    // LORA RECEIVE
+    if(receivedFlag)
+    {
+        checkRX();
+    
+        // reset flag
+        receivedFlag = false;
+
+        // put module back to listen mode
+        radio.startReceive();
+    }
+
+    // LORA SEND
+    // check if we have messages in ringbuffer to send
+    if (iWrite != iRead)
+    {
+        if (tx_is_active == false && is_receiving == false)
+            doTX();
+    }
+
+    // BLE
     if (deviceConnected)
     {
         pTxCharacteristic->setValue(&txValue, 1);
@@ -706,31 +771,6 @@ void esp32loop()
         sendMessage(textbuff_phone, txt_msg_len_phone);
 
         hasMsgFromPhone = false;
-    }
-
-    // LORA RECEIVE
-    if(receivedFlag)
-    {
-        // reset flag
-        receivedFlag = false;
-
-        checkRX();
-    
-        // put module back to listen mode
-        radio.startReceive();
-    }
-
-    // LORA SEND
-    // check if we have messages in ringbuffer to send
-    if (iWrite != iRead)
-    {
-        if(cmd_counter <= 0)
-        {
-            if (tx_is_active == false && is_receiving == false)
-                doTX();
-        }
-        else
-            cmd_counter--;
     }
 
     // posinfo
@@ -774,6 +814,8 @@ void checkRX(void)
     //       See example ReceiveInterrupt for details
     //       on non-blocking reception method.
 
+    is_receiving=true;
+
     uint8_t payload[UDP_TX_BUF_SIZE];
 
     String str;
@@ -791,69 +833,32 @@ void checkRX(void)
         }
     }
 
-    /*
-    char buffer[str.length() + 1];
-    str.toCharArray(buffer, str.length() + 1);
-
-    for(int irx=0; irx<str.length(); irx++)
-    {
-        payload[irx] = buffer[irx];
-    }
-    */
-
     if (state == RADIOLIB_ERR_NONE)
     {
-        /*
-        // packet was successfully received
-        //Serial.println(F("success!"));
-
-        // print the data of the packet
-        //Serial.print(F("[SX1278] Data:\t\t\t"));
-        //Serial.println(str);
-
-        printBuffer(payload, ibytes);
-
-        // print the RSSI (Received Signal Strength Indicator)
-        // of the last received packet
-        Serial.print(F("[SX1278] RSSI:\t\t\t"));
-        Serial.print(radio.getRSSI());
-        Serial.println(F(" dBm"));
-
-        // print the SNR (Signal-to-Noise Ratio)
-        // of the last received packet
-        Serial.print(F("[SX1278] SNR:\t\t\t"));
-        Serial.print(radio.getSNR());
-        Serial.println(F(" dB"));
-
-        // print frequency error
-        // of the last received packet
-        Serial.print(F("[SX1278] Frequency error:\t"));
-        Serial.print(radio.getFrequencyError());
-        Serial.println(F(" Hz"));
-        */
-
         OnRxDone(payload, ibytes, (int16_t)radio.getRSSI(), (int8_t)radio.getSNR());
     }
     else
     if (state == RADIOLIB_ERR_RX_TIMEOUT)
     {
+        if(bDEBUG)
+            Serial.println("RX timeout");
+
         OnRxTimeout();
-        // timeout occurred while waiting for a packet
-        //Serial.println(F("timeout!"));
     }
     else
     if (state == RADIOLIB_ERR_CRC_MISMATCH)
     {
+        if(bDEBUG)
+            Serial.println("RX CRC mismatch");
+
         OnRxError();
-        // packet was received, but is malformed
-        //Serial.println(F("CRC error!"));
     }
     else
     {
+        if(bDEBUG)
+            Serial.println("RX Error");
+
         OnRxError();
-        // some other error occurred
-        //Serial.print(F("failed, code "));
-        //Serial.println(state);
     }
 }
 
@@ -861,14 +866,11 @@ void checkRX(void)
  */
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-    //unsigned long diff_rx = millis() - till_header_time;
-    //DEBUG_MSG_VAL("RADIO", diff_rx, "Time Preamble to RxDone");
-
     memcpy(RcvBuffer, payload, size);
 
     int msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
 
-    if(is_new_packet() || (SEE_ALL_PACKETS == 1))
+    if(is_new_packet(RcvBuffer+1) || (SEE_ALL_PACKETS == 1))
     {
 		// :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -976,8 +978,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         if(bDEBUG)
             Serial.println("");
 
-        // store received message to compare later on
-        memcpy(RcvBuffer_before, RcvBuffer, UDP_TX_BUF_SIZE);
         // set buffer to 0
         memset(RcvBuffer, 0, UDP_TX_BUF_SIZE);
 
@@ -1002,14 +1002,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             print_buff[4]=(msg_id >> 24) & 0xFF;
             print_buff[5]=0x00;
             addBLEOutBuffer(print_buff, 6);
+
+            Serial.printf("ACK sent to phone ");
+            printBuffer(print_buff, 6);
         #endif
     }
 
-    cmd_counter = WAIT_AFTER_RX;
     is_receiving = false;
-
-    //Radio.Rx(RX_TIMEOUT_VALUE);
-
 }
 
 /**@brief Function to be executed on Radio Rx Timeout event
@@ -1024,9 +1023,6 @@ void OnRxTimeout(void)
 
 void OnRxError(void)
 {
-    cmd_counter = WAIT_AFTER_RX;
-    //DEBUG_MSG("RADIO", "RX ERROR");
-    //Radio.Rx(RX_TIMEOUT_VALUE);
     is_receiving = false;
 }
 
@@ -1061,51 +1057,7 @@ void doTX()
             // NOTE: transmit() is a blocking method!
             //       See example SX127x_Transmit_Interrupt for details
             //       on non-blocking transmission method.
-            int state = radio.transmit(lora_tx_buffer, sendlng);
-
-            // you can also transmit byte array up to 256 bytes long
-            /*
-            byte byteArr[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
-            int state = radio.transmit(byteArr, 8);
-            */
-
-            if (state == RADIOLIB_ERR_NONE)
-            {
-                /*
-                // the packet was successfully transmitted
-                Serial.println(F(" success!"));
-
-                // print measured data rate
-                Serial.print(F("[SX1278] Datarate:\t"));
-                Serial.print(radio.getDataRate());
-                Serial.println(F(" bps"));
-                */
-
-                OnTxDone();
-            }
-            else
-            if (state == RADIOLIB_ERR_PACKET_TOO_LONG)
-            {
-                // the supplied packet was longer than 256 bytes
-                Serial.println(F("too long!"));
-                OnTxTimeout();
-            }
-            else
-            if (state == RADIOLIB_ERR_TX_TIMEOUT)
-            {
-                // timeout occurred while transmitting packet
-                Serial.println(F("timeout!"));
-                OnTxTimeout();
-            }
-            else
-            {
-                // some other error occurred
-                Serial.print(F("failed, code "));
-                Serial.println(state);
-                OnTxTimeout();
-            }
-
-            cmd_counter = WAIT_TX;
+            transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
 
             if (iWrite == iRead)
             {
@@ -1115,14 +1067,17 @@ void doTX()
             {
                 DEBUG_MSG_VAL("RADIO", iRead, "TX :");
             }
-
-            Serial.println("");
+            
+            if(bDEBUG)
+                Serial.println("");
         }
         else
         {
             DEBUG_MSG("RADIO", "TX DISABLED");
         }
     }
+
+    tx_is_active = false;
 
     // wait for a second before transmitting again
     // delay(1000);
@@ -1132,8 +1087,6 @@ void doTX()
  */
 void OnTxDone(void)
 {
-    // DEBUG_MSG("RADIO", "OnTxDone");
-    cmd_counter=WAIT_AFTER_TXDONE;
     //Radio.Rx(RX_TIMEOUT_VALUE);
     tx_is_active = false;
     
@@ -1315,18 +1268,21 @@ void printBuffer_ascii(uint8_t *buffer, int len)
   }
   Serial.printf(" %02X ", buffer[5]);
 
-  int ineg=2;
-  if(buffer[len-7] == 0x00)
-    ineg=6;
+  int ineg=0;
 
-  for (i = 6; i < len-ineg; i++)
+  for (i = 6; i < len; i++)
   {
-    if(buffer[i] != 0x00)
-      Serial.printf("%c", buffer[i]);
+    if(buffer[i] == 0x00)
+    {
+        ineg=i;
+        break;
+    }
+
+    Serial.printf("%c", buffer[i]);
   }
 
-  Serial.printf(" %02X", buffer[len-ineg]);
-  Serial.printf("%02X", buffer[(len-ineg)+1]);
+  Serial.printf(" %02X", buffer[ineg]);
+  Serial.printf("%02X", buffer[ineg+1]);
 
   Serial.println("");
 }
@@ -1493,24 +1449,27 @@ void getGPS(void)
 
 /**@brief Function to check if we have a Lora packet already received
  */
-bool is_new_packet(void)
+bool is_new_packet(uint8_t compBuffer[4])
 {
     //:|01020304x
 
-    for (int i = 0; i < 5; i++)
+    for(int ib=0; ib < MAX_RING_UDP_OUT; ib++)
     {
-        if (RcvBuffer[i] != RcvBuffer_before[i])
+        for (int i = 0; i < 4; i++)
         {
-            if(bDEBUG)
-                Serial.printf("MSG: new one\n");
-            return true;
+            if (memcmp(compBuffer, RcvBuffer_before[ib], 4) == 0)
+            {
+                if(bDEBUG)
+                    Serial.printf("MSG: old one\n");
+                return false;
+            }
         }
     }
 
     if(bDEBUG)
-        Serial.printf("old one\n");
+        Serial.printf("new one\n");
 
-    return false;
+    return true;
 }
 
 /**@brief Function to write our additional data into the UDP tx buffer
@@ -1605,7 +1564,8 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     BLEtoPhoneBuff[toPhoneWrite][0] = len;
     memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
 
-    Serial.printf("BLEtoPhone RingBuff added element: %u\n", toPhoneWrite);
+    if(bDEBUG)
+        Serial.printf("BLEtoPhone RingBuff added element: %u\n", toPhoneWrite);
 
     if(bDEBUG)
     {
@@ -1665,9 +1625,12 @@ void sendMessage(char *msg_text, int len)
     msg_buffer[inext] = MODUL_HARDWARE;
     inext++;
 
-    // An APP als Anzeige retour senden
+    // An APP als Anzeige und damit die MSG_ID bekannt ist retour senden
     if(hasMsgFromPhone)
     {
+        if(bDEBUG)
+            printBuffer_ascii(msg_buffer, inext);
+
         addBLEOutBuffer(msg_buffer, inext);
     }
 
@@ -1683,12 +1646,13 @@ void sendMessage(char *msg_text, int len)
     ringBuffer[iWrite][0]=inext;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
+    // store last message to compare later on
+    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
+
     iWrite++;
     if(iWrite >= MAX_RING)
         iWrite=0;
 
-    // store last message to compare later on
-    memcpy(RcvBuffer_before, msg_buffer, inext);
 }
 
 int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE])
@@ -1814,12 +1778,13 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
 
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
+    // store last message to compare later on
+    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
+
     iWrite++;
     if(iWrite >= MAX_RING)
         iWrite=0;
 
-    // store last message to compare later on
-    memcpy(RcvBuffer_before, msg_buffer, inext);
 }
 
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press)
@@ -1881,12 +1846,12 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     ringBuffer[iWrite][0]=inext;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
+    // store last message to compare later on
+    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
+
     iWrite++;
     if(iWrite >= MAX_RING)
         iWrite=0;
-
-    // store last message to compare later on
-    memcpy(RcvBuffer_before, msg_buffer, inext);
 }
 
 void sendWX(char* text, float temp, float hum, float press)

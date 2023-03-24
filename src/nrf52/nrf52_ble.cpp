@@ -23,6 +23,8 @@ extern bool hasMsgFromPhone;
 extern char textbuff_phone [MAX_MSG_LEN_PHONE];
 extern uint8_t txt_msg_len_phone;
 extern bool bInitDisplay;
+extern uint8_t dmac[6];
+
 
 void sendConfigToPhone ();
 
@@ -89,7 +91,7 @@ void init_ble(void)
 			(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
 #else
 	/** Device name for RAK4631 */
-	sprintf(helper_string, "%s-%s", g_ble_dev_name, g_meshcom_settings.node_call);	// Anzeige mit callsign
+	sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], g_meshcom_settings.node_call);	// Anzeige mit callsign
 #endif
 
 	Bluefruit.setName(helper_string);
@@ -274,7 +276,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			// send config back to phone
 			sendConfigToPhone();
 
-			sprintf(helper_string, "%s-%s", g_ble_dev_name, g_meshcom_settings.node_call);	// Anzeige mit callsign
+			sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], g_meshcom_settings.node_call);	// Anzeige mit callsign
 			Bluefruit.setName(helper_string);
 
 			bInitDisplay = false;

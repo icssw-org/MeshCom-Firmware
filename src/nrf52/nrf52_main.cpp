@@ -132,7 +132,7 @@ asm(".global _printf_float");
 static RadioEvents_t RadioEvents;
 
 static uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
-static uint8_t RcvBuffer_before[UDP_TX_BUF_SIZE];
+static uint8_t RcvBuffer_before[MAX_RING_UDP_OUT][4];
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
 static uint8_t ringBufferUDPout[MAX_RING_UDP_OUT][UDP_TX_BUF_SIZE]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
@@ -319,7 +319,7 @@ void sendDisplayText(uint8_t *text, int size);
 bool bInitDisplay = false;
 
 // Prototypes
-bool is_new_packet(void);                                // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
+bool is_new_packet(uint8_t compBuffer[4]);                                // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
 void addNodeData(uint16_t size, int16_t rssi, int8_t snr); // add additional data we need and send the udp packet
 void blinkLED();                                     // blink GREEN
 void blinkLED2();                                    // blink BLUE
@@ -350,76 +350,6 @@ void sendToPhone();
 /** Set the device name, max length is 10 characters */
     char g_ble_dev_name[10] = "RAK-CL40";
 
-/**
- * @brief Initialize LoRa HW and LoRaWan MAC layer
- *
- * @return int8_t result
- *  0 => OK
- * -1 => SX126x HW init failure
- * -2 => LoRaWan MAC initialization failure
- * -3 => Subband selection failure
- */
-int8_t init_meshcom(void)
-{
-#ifdef ESP32
-	pinMode(WB_IO2, OUTPUT);
-	digitalWrite(WB_IO2, HIGH);
-	delay(500);
-#endif
-
-	// Initialize LoRa chip.
-	if (api_init_lora() != 0)
-	{
-		API_LOG("LORA", "Failed to initialize SX1262");
-		return -1;
-	}
-
-	// Setup the EUIs and Keys
-    /*KBC
-	lmh_setDevEui(g_lorawan_settings.node_device_eui);
-	lmh_setAppEui(g_lorawan_settings.node_app_eui);
-	lmh_setAppKey(g_lorawan_settings.node_app_key);
-	lmh_setNwkSKey(g_lorawan_settings.node_nws_key);
-	lmh_setAppSKey(g_lorawan_settings.node_apps_key);
-	lmh_setDevAddr(g_lorawan_settings.node_dev_addr);
-
-	// Setup the LoRaWan init structure
-	lora_param_init.adr_enable = g_lorawan_settings.adr_enabled;
-	lora_param_init.tx_data_rate = g_lorawan_settings.data_rate;
-	lora_param_init.enable_public_network = g_lorawan_settings.public_network;
-	lora_param_init.nb_trials = g_lorawan_settings.join_trials;
-	lora_param_init.tx_power = g_lorawan_settings.tx_power;
-	lora_param_init.duty_cycle = g_lorawan_settings.duty_cycle_enabled;
-   
-	API_LOG("LORA", "Initialize LoRaWAN for region %s", region_names[g_lorawan_settings.lora_region]);
-	// Initialize LoRaWan
-	if (lmh_init(&lora_callbacks, lora_param_init, g_lorawan_settings.otaa_enabled, (eDeviceClass)g_lorawan_settings.lora_class, (LoRaMacRegion_t)g_lorawan_settings.lora_region) != 0)
-	{
-		API_LOG("LORA", "Failed to initialize LoRaWAN");
-		return -2;
-	}
-
-	// For some regions we might need to define the sub band the gateway is listening to
-	// This must be called AFTER lmh_init()
-	if (!lmh_setSubBandChannels(g_lorawan_settings.subband_channels))
-	{
-		API_LOG("LORA", "lmh_setSubBandChannels failed. Wrong sub band requested?");
-		return -3;
-	}
-
-	API_LOG("LORA", "Begin timer");
-	// Initialize the app timer
-	api_timer_init();
-
-	API_LOG("LORA", "Start Join");
-	// Start Join process
-	lmh_join();
-
-    */
-	g_meshcom_initialized = true;
-	return 0;
-}
-
 void getMacAddr(uint8_t *dmac)
 {
     const uint8_t *src = (const uint8_t *)NRF_FICR->DEVICEADDR;
@@ -447,7 +377,15 @@ void nrf52setup()
     // clear the buffers
     for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
     {
-        RcvBuffer[i] = RcvBuffer_before[i] = 0x00;
+        RcvBuffer[i] = 0x00;
+    }
+
+    for(int ib=0; ib<MAX_RING_UDP_OUT; ib++)
+    {
+        RcvBuffer_before[ib][0] = 0x00;
+        RcvBuffer_before[ib][1] = 0x00;
+        RcvBuffer_before[ib][2] = 0x00;
+        RcvBuffer_before[ib][3] = 0x00;
     }
 
     //clear ringbuffer
@@ -843,7 +781,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     int msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
 
-    if(is_new_packet() || (SEE_ALL_PACKETS == 1))
+    if(is_new_packet(RcvBuffer+1) || (SEE_ALL_PACKETS == 1))
     {
 		// :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -951,9 +889,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         if(bDEBUG)
             Serial.println("");
 
-        // store received message to compare later on
-        memcpy(RcvBuffer_before, RcvBuffer, UDP_TX_BUF_SIZE);
-        // set buffer to 0
         memset(RcvBuffer, 0, UDP_TX_BUF_SIZE);
 
         //blinkLED();
@@ -1097,19 +1032,27 @@ void doTX()
 
 /**@brief Function to check if we have a Lora packet already received
  */
-bool is_new_packet(void)
+bool is_new_packet(uint8_t compBuffer[4])
 {
     //:|01020304x
 
-    for (int i = 0; i < 5; i++)
+    for(int ib=0; ib < MAX_RING_UDP_OUT; ib++)
     {
-        if (RcvBuffer[i] != RcvBuffer_before[i])
+        for (int i = 0; i < 4; i++)
         {
-            return true;
+            if (memcmp(compBuffer, RcvBuffer_before[ib], 4) == 0)
+            {
+                if(bDEBUG)
+                    Serial.printf("MSG: old one\n");
+                return false;
+            }
         }
     }
 
-    return false;
+    if(bDEBUG)
+        Serial.printf("new one\n");
+
+    return true;
 }
 
 /**@brief Function to write our additional data into the UDP tx buffer
@@ -1488,12 +1431,6 @@ void sendMessage(char *msg_text, int len)
     msg_buffer[inext] = FCS_SUMME & 0xFF;
     inext++;
 
-    // An APP als Anzeige retour senden
-    if(hasMsgFromPhone)
-    {
-        addBLEOutBuffer(msg_buffer, inext);
-    }
-
     // _GW_ID   nur für 2.0 -> 4.0
     msg_buffer[inext] = (_GW_ID) & 0xFF;
     inext++;
@@ -1507,6 +1444,12 @@ void sendMessage(char *msg_text, int len)
     msg_buffer[inext] = MODUL_HARDWARE;
     inext++;
 
+    // An APP als Anzeige retour senden
+    if(hasMsgFromPhone)
+    {
+        addBLEOutBuffer(msg_buffer, inext);
+    }
+
     if(bDEBUG)
     {
         printBuffer(msg_buffer, inext);
@@ -1519,12 +1462,13 @@ void sendMessage(char *msg_text, int len)
     ringBuffer[iWrite][0]=inext;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
+    // store last message to compare later on
+    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, inext);
+
     iWrite++;
     if(iWrite >= MAX_RING)
         iWrite=0;
 
-    // store last message to compare later on
-    memcpy(RcvBuffer_before, msg_buffer, inext);
 }
 
 int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt)
@@ -1621,12 +1565,13 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
 
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
+    // store last message to compare later on
+    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, inext);
+
     iWrite++;
     if(iWrite >= MAX_RING)
         iWrite=0;
 
-    // store last message to compare later on
-    memcpy(RcvBuffer_before, msg_buffer, inext);
 }
 
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press)
@@ -1688,12 +1633,12 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     ringBuffer[iWrite][0]=inext;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
+    // store last message to compare later on
+    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, inext);
+
     iWrite++;
     if(iWrite >= MAX_RING)
         iWrite=0;
-
-    // store last message to compare later on
-    memcpy(RcvBuffer_before, msg_buffer, inext);
 }
 
 
