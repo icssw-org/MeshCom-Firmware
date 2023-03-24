@@ -799,13 +799,9 @@ void esp32loop()
     // BLE
     if (deviceConnected)
     {
-        pTxCharacteristic->setValue(&txValue, 1);
-        pTxCharacteristic->notify();
-        txValue++;
-    
+
     	g_ble_uart_is_connected = true;
 	
-    	delay(10); // bluetooth stack will go into congestion, if too many packets are sent
 	}
 
     // disconnecting
