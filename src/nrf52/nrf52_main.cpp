@@ -113,7 +113,7 @@ Sync Word Setting in Meshtastic
     Method
 */
 
-// NVIC_SystemReset(); resets the device
+//NVIC_SystemReset(); resets the device
 
 // Lora callback Function declarations
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
@@ -130,6 +130,7 @@ asm(".global _printf_float");
 
 // LoRa Events and Buffers
 static RadioEvents_t RadioEvents;
+
 static uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
 static uint8_t RcvBuffer_before[UDP_TX_BUF_SIZE];
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
@@ -172,7 +173,7 @@ bool hasMsgFromPhone = false;
 char textbuff_phone [MAX_MSG_LEN_PHONE] = {0};
 uint8_t txt_msg_len_phone = 0;
 
-bool bDEBUG=true;
+bool bDEBUG=false;
 
 //variables and helper functions
 int sendlng = 0;              // lora tx message length
@@ -322,7 +323,6 @@ bool is_new_packet(void);                                // switch if we have a 
 void addNodeData(uint16_t size, int16_t rssi, int8_t snr); // add additional data we need and send the udp packet
 void blinkLED();                                     // blink GREEN
 void blinkLED2();                                    // blink BLUE
-void sendHeartbeat();                                // heartbeat to server
 void doTX();                                         // LoraTX function
 void addUdpOutBuffer(int msg_id, uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer
 void printBuffer(uint8_t *buffer, int len);
@@ -485,7 +485,9 @@ void nrf52setup()
         }
     }
 
+
     //gps init
+    
     pinMode(WB_IO2, OUTPUT);
     digitalWrite(WB_IO2, 0);
     delay(1000);
@@ -493,12 +495,12 @@ void nrf52setup()
     delay(1000);
     
     Serial1.begin(9600);
-    Serial.setTimeout(500);
+    Serial1.setTimeout(500);
     while (!Serial1);
+
 
     Serial.println("=====================================");
     Serial.println("GPS UART init ok!");
-
 
     // Try to initialize!
     #if defined(LPS33)
@@ -589,7 +591,7 @@ void nrf52setup()
     RadioEvents.TxTimeout = OnTxTimeout;
     RadioEvents.RxTimeout = OnRxTimeout;
     RadioEvents.RxError = OnRxError;
-    //RadioEvents.PreAmpDetect = OnPreambleDetect;
+    RadioEvents.PreAmpDetect = OnPreambleDetect;
     //NICHT BENÖTIGTRadioEvents.HeaderDetect = OnHeaderDetect;
     
 
@@ -748,7 +750,8 @@ void nrf52loop()
     // check if we have messages for BLE to send
     if (toPhoneWrite != toPhoneRead)
     {
-        sendToPhone();   
+        if(isPhoneReady == 1)
+            sendToPhone();   
     }
 
     // posinfo
@@ -924,7 +927,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // add rcvMsg to BLE out Buff
                         // size message is int -> uint16_t buffer size
                         if(isPhoneReady == 1)
+                        {
                             addBLEOutBuffer(RcvBuffer, size);
+                        }
 
                         if(msg_type_b_lora == 0x3A)
                         {
@@ -1314,10 +1319,13 @@ void sendDisplayHead()
     sendDisplay1306(false, false, 3, 27, msg_text);
 
     sprintf(msg_text, "Short: %s", g_meshcom_settings.node_short);
-    sendDisplay1306(false, false, 3, 40, msg_text);
+    sendDisplay1306(false, false, 3, 39, msg_text);
 
     sprintf(msg_text, "MAC:   %08X", _GW_ID);
-    sendDisplay1306(false, true, 3, 53, msg_text);
+    sendDisplay1306(false, true, 3, 51, msg_text);
+
+    //sprintf(msg_text, "Modul: %i", MODUL_HARDWARE);
+    //sendDisplay1306(false, true, 3, 63, msg_text);
 }
 
 void sendDisplayText(uint8_t text[300], int size)
@@ -1335,7 +1343,7 @@ void sendDisplayText(uint8_t text[300], int size)
         else
             sendDisplay1306(bClear, false, 3, izeile, msg_text);
         
-        izeile=izeile+13;
+        izeile=izeile+12;
 
         bClear=false;
     }
@@ -1367,18 +1375,21 @@ void printBuffer_ascii(uint8_t *buffer, int len)
   }
   Serial.printf(" %02X ", buffer[5]);
 
-  int ineg=2;
-  if(buffer[len-7] == 0x00)
-    ineg=6;
+  int ineg=0;
 
-  for (i = 6; i < len-ineg; i++)
+  for (i = 6; i < len; i++)
   {
-    if(buffer[i] != 0x00)
-      Serial.printf("%c", buffer[i]);
+    if(buffer[i] == 0x00)
+    {
+        ineg=i;
+        break;
+    }
+
+    Serial.printf("%c", buffer[i]);
   }
 
-  Serial.printf(" %02X", buffer[len-ineg]);
-  Serial.printf("%02X", buffer[(len-ineg)+1]);
+  Serial.printf(" %02X", buffer[ineg]);
+  Serial.printf("%02X", buffer[ineg+1]);
 
   Serial.println("");
 }
@@ -1493,6 +1504,9 @@ void sendMessage(char *msg_text, int len)
     msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
     inext++;
 
+    msg_buffer[inext] = MODUL_HARDWARE;
+    inext++;
+
     if(bDEBUG)
     {
         printBuffer(msg_buffer, inext);
@@ -1592,6 +1606,9 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
     inext++;
 
+    msg_buffer[inext] = MODUL_HARDWARE;
+    inext++;
+
     if(bDEBUG)
     {
         printBuffer_ascii(msg_buffer, inext);
@@ -1658,6 +1675,9 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
     inext++;
     msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
+    inext++;
+
+    msg_buffer[inext] = MODUL_HARDWARE;
     inext++;
 
     if(bDEBUG)
@@ -1763,7 +1783,8 @@ void getGPS(void)
       while (Serial1.available())
       {
         char c = Serial1.read();
-        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        if(bDEBUG)
+            Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         tmp_data += c;
         if (gps.encode(c))// Did a new valid sentence come in?
           newData = true;
@@ -1778,8 +1799,8 @@ void getGPS(void)
     {
         unsigned long age;  
         gps.f_get_position(&flat, &flon, &age);
-        flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
-        flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
+        //flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
+        //flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
 
         g_meshcom_settings.node_lat = flat;
         g_meshcom_settings.node_lon = flon;
@@ -2055,8 +2076,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
     if(bInfo)
     {
-        sprintf(print_buff, "MeshCom 4.0 Client\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
-                g_meshcom_settings.node_call, g_meshcom_settings.node_short, _GW_ID, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
+        sprintf(print_buff, "MeshCom 4.0 Client\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...MODUL %i\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
+                g_meshcom_settings.node_call, g_meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
 
         if(ble)
         {
