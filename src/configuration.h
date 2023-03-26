@@ -16,7 +16,7 @@
 #define RAK4631 9
 #define HELTEC_V2_1 10
 #define HELTEC_V1 11
-#define DIY_v1 39
+#define EBYTE_E22 39
 
 // set hardware
 #ifdef BOARD_RAK4630
@@ -28,16 +28,25 @@
     #define MODUL_HARDWARE TBEAM
     #define RF_FREQUENCY 432.900000  // 433175000   // Hz
     #define ENABLE_GPS
+    #define SX127X
 #endif
 
 #ifdef BOARD_TLORA_OLV216
     #define MODUL_HARDWARE TLORA_V2_1_1p6
     #define RF_FREQUENCY 432.900000  // 433175000   // Hz
+    #define SX127X
 #endif
 
 #ifdef 	BOARD_HELTEC
     #define MODUL_HARDWARE HELTEC_V2_1
     #define RF_FREQUENCY 432.900000  // 433175000   // Hz
+    #define SX127X
+#endif
+
+#ifdef 	BOARD_E22
+    #define MODUL_HARDWARE EBYTE_E22
+    #define RF_FREQUENCY 432.900000  // 433175000   // Hz
+    #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
 #endif
 
 // Common LoRa Parameters
@@ -136,7 +145,14 @@
 #define SYNC_WORD_SX127x 0x2b  // Meshtastic Sync Word!!
 #define SYNC_WORD_SX126x 0x242b  // Meshtastic Sync Word!!
 
+#ifdef SX127X
 #define TX_OUTPUT_POWER 17
+#endif
+
+#ifdef SX126X
+#define TX_OUTPUT_POWER 21  // SX1262 / SX1268 have up to +22dBm
+#endif
+
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
 /**
@@ -307,6 +323,23 @@ static const uint8_t SCK =  5;
 #define LORA_DIO0 LORA_IRQ
 #define LORA_DIO1 LORA_D1
 //#define LORA_CS  //already defined
+#endif
+
+#ifdef BOARD_E22
+// Custom Board homemade E22-Ebyte Module + AZ Delivery ESP32 DevKitC v4
+
+#define RF_FREQUENCY 432.900000
+#define LORA_RST  27
+#define LORA_DIO0 26 // aka BUSY Pin
+#define LORA_DIO1 33
+#define LORA_DIO2 32
+#define LORA_CS 5
+#define RXEN 14
+#define TXEN 13
+#define LED 2
+#define SDA 21
+#define SCL 22
+
 #endif
 
 #endif
