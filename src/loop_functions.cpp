@@ -95,7 +95,7 @@ void sendDisplayHead()
 
     char print_text[500];
 
-    sprintf(print_text, "MC 4.0          %3d%%", 100);  // (int)mv_to_percent(read_batt()));
+    sprintf(print_text, "MC 4.0          %3d%%", (int)mv_to_percent(read_batt()));
 
     sendDisplay1306(true, false, 3, 11, print_text);
     sendDisplay1306(false, false, 3, 9, (char*)"L");
@@ -135,7 +135,7 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
         if(text[itxt] == ':' && itxt < 20)
         {
             text[itxt]=0x00;
-            if(rssi != 0)
+            if(rssi != 0 && itxt < (20-7))
                 sprintf(msg_text, "%s <%i>", text, rssi);
             else
                 sprintf(msg_text, "%s", text);
@@ -146,6 +146,7 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
             break;
         }
     }
+
 
     char line_text[20];
     char words[100][20];
@@ -187,16 +188,23 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
         {
             line_text[19]=0x00;
             sprintf(msg_text, "%s", line_text);
+
+            if(izeile > 60)
+                bEnd=true;
+
+            if(bEnd && itxt < iwords)
+                sprintf(msg_text, "%-17.17s...", line_text);
+
             sendDisplay1306(bClear, bEnd, 3, izeile, msg_text);
             izeile=izeile+12;
             
             memset(line_text, 0x00, 20);
 
-            if(izeile > 63)
+            if(izeile > 61)
             {
                 break;
             }
-            
+
             if(itxt+1 == iwords)
                 bEnd=true;
 
@@ -214,12 +222,13 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
 
     if(strlen(line_text) > 0)
     {
-        if(izeile > 63)
-            izeile=63;
+        if(izeile > 61)
+            izeile=61;
 
         bEnd=true;
         line_text[19]=0x00;
         sprintf(msg_text, "%s", line_text);
+        //Serial.printf("1306-02:%s len:%i izeile:%i\n", msg_text, strlen(msg_text), izeile);
         sendDisplay1306(bClear, bEnd, 3, izeile, msg_text);
     }
 }

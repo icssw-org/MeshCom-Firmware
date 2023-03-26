@@ -28,8 +28,11 @@
 #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 
 /** Analog input for battery level */
-uint32_t vbat_pin = 34;
-
+#if defined NRF52_SERIES
+	uint32_t vbat_pin = WB_A0;
+#else
+	uint32_t vbat_pin = 34;
+#endif
 /**
  * @brief Initialize the battery analog input
  *
