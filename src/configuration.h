@@ -27,6 +27,7 @@
 #ifdef BOARD_TBEAM
     #define MODUL_HARDWARE TBEAM
     #define RF_FREQUENCY 432.900000  // 433175000   // Hz
+    #define ENABLE_GPS
 #endif
 
 #ifdef BOARD_TLORA_OLV216
@@ -87,6 +88,7 @@
 #define UDP_MSG_INDICATOR_LEN 4            // the first n bytes to recognize which incoming message we have (GATE, CONF)
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
 #define POSINFO_INTERVAL 600               // POSINFO interval in seconds
+#define GPS_REFRESH_INTERVAL 10            // GPS Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds
 #define ALIVEBLINK_INTERVAL 3000           // ALIVEBLINK interval in milliseconds
@@ -174,18 +176,14 @@ static const uint8_t DIO0 = 26;
 static const uint8_t DIO1 = 35;
 static const uint8_t DIO2 = 34;
 static const uint8_t KEY_BUILTIN = 0;
-
 static const uint8_t TX = 1;
 static const uint8_t RX = 3;
-
 static const uint8_t SDA = 21;
 static const uint8_t SCL = 22;
-
 static const uint8_t SS    = 18;
 static const uint8_t MOSI  = 27;
 static const uint8_t MISO  = 19;
 static const uint8_t SCK   = 5;
-
 #define WIFI_LoRa_32_V2 true
 #define DISPLAY_HEIGHT 64
 #define DISPLAY_WIDTH  128
@@ -200,10 +198,8 @@ static const uint8_t SCK   = 5;
 #ifdef BOARD_TBEAM
 /**
  * #define LED_BUILTIN LED_BUILTIN
-
 static const uint8_t TX = 1;
 static const uint8_t RX = 3;
-
 static const uint8_t SDA = 21;
 static const uint8_t SCL = 22;
  
@@ -212,7 +208,6 @@ static const uint8_t MOSI  = 27;
 static const uint8_t MISO  = 19;
 static const uint8_t SCK   = 5;
 static const uint8_t KEY_BUILTIN = 39;
-
 // SPI LoRa Radio
 #define LORA_SCK 5      // GPIO5  - SX1276 SCK
 #define LORA_MISO 19    // GPIO19 - SX1276 MISO
@@ -234,15 +229,11 @@ static const uint8_t KEY_BUILTIN = 39;
 #ifdef BOARD_TLORA_OLV2
 /**
  * #define LED_BUILTIN LED_BUILTIN
-
 static const uint8_t KEY_BUILTIN =  0;
-
 static const uint8_t TX =   1;
 static const uint8_t RX =   3;
-
 static const uint8_t SDA =  21;
 static const uint8_t SCL =  22;
-
 static const uint8_t SS =   18;
 static const uint8_t MOSI = 27;
 static const uint8_t MISO = 19;
@@ -251,7 +242,6 @@ static const uint8_t SCK =  5;
 #define OLED_SDA    21
 #define OLED_SCL    22
 #define OLED_RST    16
-
 // SPI LoRa Radio
 #define LORA_SCK    5   // GPIO5 - SX1276 SCK
 #define LORA_MISO   19  // GPIO19 - SX1276 MISO
@@ -270,13 +260,10 @@ static const uint8_t SCK =  5;
 #ifdef BOARD_TLORA_OLV216
 /**
  * static const uint8_t KEY_BUILTIN =  0;
-
 static const uint8_t TX =   1;
 static const uint8_t RX =   3;
-
 static const uint8_t SDA =  21;
 static const uint8_t SCL =  22;
-
 static const uint8_t SS =   18;
 static const uint8_t MOSI = 27;
 static const uint8_t MISO = 19;
@@ -285,7 +272,6 @@ static const uint8_t SCK =  5;
 #define OLED_SDA    21
 #define OLED_SCL    22
 #define OLED_RST    16
-
 // SPI LoRa Radio
 #define LORA_SCK    5   // GPIO5 - SX1276 SCK
 #define LORA_MISO   19  // GPIO19 - SX1276 MISO
@@ -295,7 +281,6 @@ static const uint8_t SCK =  5;
 #define LORA_IRQ    26  // GPIO26 - SX1276 IRQ (interrupt request)
 #define LORA_D1     33  // GPIO33 - SX1276 IO1 (for LMIC Arduino library)
 #define LORA_D2     32 // GPIO32 - SX1276 IO2
-
 // SD card
 #define SD_SCK  14
 #define SD_MISO 2

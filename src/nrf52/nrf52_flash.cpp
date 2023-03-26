@@ -65,56 +65,56 @@ void init_flash(void)
 		lora_file.close();
 		// Merge old structure into new structure
 
-        memcpy(g_meshcom_settings.node_call, old_struct.node_call, 10);
-        memcpy(g_meshcom_settings.node_short, old_struct.node_short, 5);
+        memcpy(meshcom_settings.node_call, old_struct.node_call, 10);
+        memcpy(meshcom_settings.node_short, old_struct.node_short, 5);
 
-		g_meshcom_settings.node_lat = old_struct.node_lat;
-		g_meshcom_settings.node_lat_c = old_struct.node_lat_c;
-		g_meshcom_settings.node_lon = old_struct.node_lon;
-		g_meshcom_settings.node_lon_c = old_struct.node_lon_c;
-		g_meshcom_settings.node_alt = old_struct.node_alt;
-		g_meshcom_settings.node_symid = old_struct.node_symid;
-		g_meshcom_settings.node_symcd = old_struct.node_symcd;
+		meshcom_settings.node_lat = old_struct.node_lat;
+		meshcom_settings.node_lat_c = old_struct.node_lat_c;
+		meshcom_settings.node_lon = old_struct.node_lon;
+		meshcom_settings.node_lon_c = old_struct.node_lon_c;
+		meshcom_settings.node_alt = old_struct.node_alt;
+		meshcom_settings.node_symid = old_struct.node_symid;
+		meshcom_settings.node_symcd = old_struct.node_symcd;
 
-		g_meshcom_settings.auto_join = old_struct.auto_join;
-		memcpy(g_meshcom_settings.node_device_eui, old_struct.node_device_eui, 8);
+		meshcom_settings.auto_join = old_struct.auto_join;
+		memcpy(meshcom_settings.node_device_eui, old_struct.node_device_eui, 8);
 
-		g_meshcom_settings.node_date_year = old_struct.node_date_year;
-		g_meshcom_settings.node_date_month = old_struct.node_date_month;
-		g_meshcom_settings.node_date_day = old_struct.node_date_day;
+		meshcom_settings.node_date_year = old_struct.node_date_year;
+		meshcom_settings.node_date_month = old_struct.node_date_month;
+		meshcom_settings.node_date_day = old_struct.node_date_day;
 
-		g_meshcom_settings.node_date_hour = old_struct.node_date_hour;
-		g_meshcom_settings.node_date_minute = old_struct.node_date_minute;
-		g_meshcom_settings.node_date_second = old_struct.node_date_second;
-		g_meshcom_settings.node_date_hundredths = old_struct.node_date_hundredths;
+		meshcom_settings.node_date_hour = old_struct.node_date_hour;
+		meshcom_settings.node_date_minute = old_struct.node_date_minute;
+		meshcom_settings.node_date_second = old_struct.node_date_second;
+		meshcom_settings.node_date_hundredths = old_struct.node_date_hundredths;
 
-		g_meshcom_settings.node_age = old_struct.node_age;
+		meshcom_settings.node_age = old_struct.node_age;
 
-		g_meshcom_settings.node_temp = old_struct.node_temp;
-		g_meshcom_settings.node_hum = old_struct.node_hum;
-		g_meshcom_settings.node_press = old_struct.node_press;
+		meshcom_settings.node_temp = old_struct.node_temp;
+		meshcom_settings.node_hum = old_struct.node_hum;
+		meshcom_settings.node_press = old_struct.node_press;
 
         /*KBC
-		g_meshcom_settings.adr_enabled = old_struct.adr_enabled;
-		g_meshcom_settings.app_port = old_struct.app_port;
-		g_meshcom_settings.auto_join = old_struct.auto_join;
-		g_meshcom_settings.confirmed_msg_enabled = old_struct.confirmed_msg_enabled;
-		g_meshcom_settings.data_rate = old_struct.data_rate;
-		g_meshcom_settings.duty_cycle_enabled = old_struct.duty_cycle_enabled;
-		g_meshcom_settings.join_trials = old_struct.join_trials;
-		g_meshcom_settings.lora_class = old_struct.lora_class;
-		g_meshcom_settings.lora_region = old_struct.lora_region;
-		memcpy(g_meshcom_settings.node_app_eui, old_struct.node_app_eui, 8);
-		memcpy(g_meshcom_settings.node_app_key, old_struct.node_app_key, 16);
-		memcpy(g_meshcom_settings.node_apps_key, old_struct.node_apps_key, 16);
-		g_meshcom_settings.node_dev_addr = old_struct.node_dev_addr;
-		memcpy(g_meshcom_settings.node_device_eui, old_struct.node_device_eui, 8);
-		memcpy(g_meshcom_settings.node_nws_key, old_struct.node_nws_key, 16);
-		g_meshcom_settings.otaa_enabled = old_struct.otaa_enabled;
-		g_meshcom_settings.public_network = old_struct.public_network;
-		g_meshcom_settings.send_repeat_time = old_struct.send_repeat_time;
-		g_meshcom_settings.subband_channels = old_struct.subband_channels;
-		g_meshcom_settings.tx_power = old_struct.tx_power;
+		meshcom_settings.adr_enabled = old_struct.adr_enabled;
+		meshcom_settings.app_port = old_struct.app_port;
+		meshcom_settings.auto_join = old_struct.auto_join;
+		meshcom_settings.confirmed_msg_enabled = old_struct.confirmed_msg_enabled;
+		meshcom_settings.data_rate = old_struct.data_rate;
+		meshcom_settings.duty_cycle_enabled = old_struct.duty_cycle_enabled;
+		meshcom_settings.join_trials = old_struct.join_trials;
+		meshcom_settings.lora_class = old_struct.lora_class;
+		meshcom_settings.lora_region = old_struct.lora_region;
+		memcpy(meshcom_settings.node_app_eui, old_struct.node_app_eui, 8);
+		memcpy(meshcom_settings.node_app_key, old_struct.node_app_key, 16);
+		memcpy(meshcom_settings.node_apps_key, old_struct.node_apps_key, 16);
+		meshcom_settings.node_dev_addr = old_struct.node_dev_addr;
+		memcpy(meshcom_settings.node_device_eui, old_struct.node_device_eui, 8);
+		memcpy(meshcom_settings.node_nws_key, old_struct.node_nws_key, 16);
+		meshcom_settings.otaa_enabled = old_struct.otaa_enabled;
+		meshcom_settings.public_network = old_struct.public_network;
+		meshcom_settings.send_repeat_time = old_struct.send_repeat_time;
+		meshcom_settings.subband_channels = old_struct.subband_channels;
+		meshcom_settings.tx_power = old_struct.tx_power;
         */
 		save_settings();
 		// delay(1000);
@@ -125,13 +125,13 @@ void init_flash(void)
 		// Found new structure
 		lora_file.close();
 		lora_file.open(settings_name, FILE_O_READ);
-		lora_file.read((uint8_t *)&g_meshcom_settings, sizeof(s_meshcom_settings));
+		lora_file.read((uint8_t *)&meshcom_settings, sizeof(s_meshcom_settings));
 		lora_file.close();
 
-		//printf("g_meshcom_settings%s\n", g_meshcom_settings.node_call);
+		//printf("meshcom_settings%s\n", meshcom_settings.node_call);
 
 		// Check if it is LPWAN settings^
-		if ((g_meshcom_settings.valid_mark_1 != 0xAA) || (g_meshcom_settings.valid_mark_2 != MESHCOM_DATA_MARKER))
+		if ((meshcom_settings.valid_mark_1 != 0xAA) || (meshcom_settings.valid_mark_2 != MESHCOM_DATA_MARKER))
 		{
 			// Data is not valid, reset to defaults
 			DEBUG_MSG("FLASH", "Invalid data set, deleting and restart node");
@@ -171,7 +171,7 @@ boolean save_settings(void)
 	
 	//printf("g_flash_content%s\n", g_flash_content.node_call);
 
-	if (memcmp((void *)&g_flash_content, (void *)&g_meshcom_settings, sizeof(s_meshcom_settings)) != 0)
+	if (memcmp((void *)&g_flash_content, (void *)&meshcom_settings, sizeof(s_meshcom_settings)) != 0)
 	{
 		DEBUG_MSG("FLASH", "Flash content changed, writing new data");
 		delay(100);
@@ -180,7 +180,7 @@ boolean save_settings(void)
 
 		if (lora_file.open(settings_name, FILE_O_WRITE))
 		{
-			lora_file.write((uint8_t *)&g_meshcom_settings, sizeof(s_meshcom_settings));
+			lora_file.write((uint8_t *)&meshcom_settings, sizeof(s_meshcom_settings));
 			lora_file.flush();
 		}
 		else
@@ -217,97 +217,8 @@ void ble_log_settings(void)
 {
 	g_ble_uart.printf("Saved settings:");
 	delay(50);
-	g_ble_uart.printf("Marks: %02X %02X", g_meshcom_settings.valid_mark_1, g_meshcom_settings.valid_mark_2);
+	g_ble_uart.printf("Marks: %02X %02X", meshcom_settings.valid_mark_1, meshcom_settings.valid_mark_2);
 	delay(50);
-
-    /*KBC
-    g_ble_uart.printf("Dev EUI %02X%02X%02X%02X%02X%02X%02X%02X", g_meshcom_settings.node_device_eui[0], g_meshcom_settings.node_device_eui[1],
-					  g_meshcom_settings.node_device_eui[2], g_meshcom_settings.node_device_eui[3],
-					  g_meshcom_settings.node_device_eui[4], g_meshcom_settings.node_device_eui[5],
-					  g_meshcom_settings.node_device_eui[6], g_meshcom_settings.node_device_eui[7]);
-	delay(50);
-	g_ble_uart.printf("App EUI %02X%02X%02X%02X%02X%02X%02X%02X", g_meshcom_settings.node_app_eui[0], g_meshcom_settings.node_app_eui[1],
-					  g_meshcom_settings.node_app_eui[2], g_meshcom_settings.node_app_eui[3],
-					  g_meshcom_settings.node_app_eui[4], g_meshcom_settings.node_app_eui[5],
-					  g_meshcom_settings.node_app_eui[6], g_meshcom_settings.node_app_eui[7]);
-	delay(50);
-	g_ble_uart.printf("App Key %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
-					  g_meshcom_settings.node_app_key[0], g_meshcom_settings.node_app_key[1],
-					  g_meshcom_settings.node_app_key[2], g_meshcom_settings.node_app_key[3],
-					  g_meshcom_settings.node_app_key[4], g_meshcom_settings.node_app_key[5],
-					  g_meshcom_settings.node_app_key[6], g_meshcom_settings.node_app_key[7],
-					  g_meshcom_settings.node_app_key[8], g_meshcom_settings.node_app_key[9],
-					  g_meshcom_settings.node_app_key[10], g_meshcom_settings.node_app_key[11],
-					  g_meshcom_settings.node_app_key[12], g_meshcom_settings.node_app_key[13],
-					  g_meshcom_settings.node_app_key[14], g_meshcom_settings.node_app_key[15]);
-	delay(50);
-	g_ble_uart.printf("Dev Addr %08lX", g_meshcom_settings.node_dev_addr);
-	delay(50);
-	g_ble_uart.printf("NWS Key %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
-					  g_meshcom_settings.node_nws_key[0], g_meshcom_settings.node_nws_key[1],
-					  g_meshcom_settings.node_nws_key[2], g_meshcom_settings.node_nws_key[3],
-					  g_meshcom_settings.node_nws_key[4], g_meshcom_settings.node_nws_key[5],
-					  g_meshcom_settings.node_nws_key[6], g_meshcom_settings.node_nws_key[7],
-					  g_meshcom_settings.node_nws_key[8], g_meshcom_settings.node_nws_key[9],
-					  g_meshcom_settings.node_nws_key[10], g_meshcom_settings.node_nws_key[11],
-					  g_meshcom_settings.node_nws_key[12], g_meshcom_settings.node_nws_key[13],
-					  g_meshcom_settings.node_nws_key[14], g_meshcom_settings.node_nws_key[15]);
-	delay(50);
-	g_ble_uart.printf("Apps Key %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
-					  g_meshcom_settings.node_apps_key[0], g_meshcom_settings.node_apps_key[1],
-					  g_meshcom_settings.node_apps_key[2], g_meshcom_settings.node_apps_key[3],
-					  g_meshcom_settings.node_apps_key[4], g_meshcom_settings.node_apps_key[5],
-					  g_meshcom_settings.node_apps_key[6], g_meshcom_settings.node_apps_key[7],
-					  g_meshcom_settings.node_apps_key[8], g_meshcom_settings.node_apps_key[9],
-					  g_meshcom_settings.node_apps_key[10], g_meshcom_settings.node_apps_key[11],
-					  g_meshcom_settings.node_apps_key[12], g_meshcom_settings.node_apps_key[13],
-					  g_meshcom_settings.node_apps_key[14], g_meshcom_settings.node_apps_key[15]);
-	delay(50);
-	g_ble_uart.printf("OTAA %s", g_meshcom_settings.otaa_enabled ? "enabled" : "disabled");
-	delay(50);
-	g_ble_uart.printf("ADR %s", g_meshcom_settings.adr_enabled ? "enabled" : "disabled");
-	delay(50);
-	g_ble_uart.printf("%s Network", g_meshcom_settings.public_network ? "Public" : "Private");
-	delay(50);
-	g_ble_uart.printf("Dutycycle %s", g_meshcom_settings.duty_cycle_enabled ? "enabled" : "disabled");
-	delay(50);
-	g_ble_uart.printf("Repeat time %ld", g_meshcom_settings.send_repeat_time);
-	delay(50);
-	g_ble_uart.printf("Join trials %d", g_meshcom_settings.join_trials);
-	delay(50);
-	g_ble_uart.printf("TX Power %d", g_meshcom_settings.tx_power);
-	delay(50);
-	g_ble_uart.printf("DR %d", g_meshcom_settings.data_rate);
-	delay(50);
-	g_ble_uart.printf("Class %d", g_meshcom_settings.lora_class);
-	delay(50);
-	g_ble_uart.printf("Subband %d", g_meshcom_settings.subband_channels);
-	delay(50);
-	g_ble_uart.printf("Auto join %s", g_meshcom_settings.auto_join ? "enabled" : "disabled");
-	delay(50);
-	g_ble_uart.printf("Fport %d", g_meshcom_settings.app_port);
-	delay(50);
-	g_ble_uart.printf("%s Message", g_meshcom_settings.confirmed_msg_enabled ? "Confirmed" : "Unconfirmed");
-	delay(50);
-	g_ble_uart.printf("Region %s", region_names[g_meshcom_settings.lora_region]);
-	delay(50);
-	g_ble_uart.printf("Mode %s", g_meshcom_settings.lorawan_enable ? "LPWAN" : "P2P");
-	delay(50);
-	g_ble_uart.printf("P2P frequency %ld", g_meshcom_settings.p2p_frequency);
-	delay(50);
-	g_ble_uart.printf("P2P TX Power %d", g_meshcom_settings.p2p_tx_power);
-	delay(50);
-	g_ble_uart.printf("P2P BW %d", g_meshcom_settings.p2p_bandwidth);
-	delay(50);
-	g_ble_uart.printf("P2P SF %d", g_meshcom_settings.p2p_sf);
-	delay(50);
-	g_ble_uart.printf("P2P CR %d", g_meshcom_settings.p2p_cr);
-	delay(50);
-	g_ble_uart.printf("P2P Preamble length %d", g_meshcom_settings.p2p_preamble_len);
-	delay(50);
-	g_ble_uart.printf("P2P Symbol Timeout %d", g_meshcom_settings.p2p_symbol_timeout);
-	delay(50);
-    */
 }
 
 #endif

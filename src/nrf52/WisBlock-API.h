@@ -212,8 +212,8 @@ struct s_meshcom_settings
 	bool lorawan_enable = true;
 };
 
-// int size = sizeof(s_meshcom_settings);
-extern s_meshcom_settings g_meshcom_settings;
+extern s_meshcom_settings meshcom_settings;
+
 extern uint8_t g_rx_lora_data[];
 extern uint8_t g_rx_data_len;
 extern uint8_t g_tx_lora_data[];

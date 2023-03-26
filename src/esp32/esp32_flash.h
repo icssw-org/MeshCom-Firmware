@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #define MESHCOM_DATA_MARKER 0x55
 struct s_meshcom_settings
 {
@@ -43,6 +45,7 @@ struct s_meshcom_settings
 	// Flag for LoRaWAN or LoRa P2P
 	bool lorawan_enable = true;
 };
+
 
 void save_settings(void);
 // Get LoRa parameter
