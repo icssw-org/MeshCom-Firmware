@@ -29,7 +29,9 @@ Legende:
 | … dient nur zur Darstellung der Trennungen hier im Text
 
 Meldungselemente
-- : !	Meldungs-Kennung	Version 4.0
+- : Text-Meldung
+- !	Positions-Meldung
+- @ Wetter-Meldung
 - MMMMMMMM	Meldungs-ID	32-Bit LSB->MSB
 - HH	MAX-HOP	8-Bit Bit-Maske 0x07
 - Message via MQTT-Server	Bit-Maske 0x80
