@@ -44,12 +44,22 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
         return;
     }
     else
-    if(memcmp(msg_text, "-display", 8) == 0)
+    if(memcmp(msg_text, "-display fix", 12) == 0)
     {
         sprintf(print_buff, "OE1KBC-11,OE3XOC>*:Das ist der Text zum testen des OLED-Displays mit besonders langem Text welcher aus dem Display raus geht");
-        memcpy(buffer, print_buff, 500);
+        memcpy(buffer, print_buff, 499);
 
         sendDisplayText(buffer, strlen(print_buff), -20, 9);
+
+        return;
+    }
+    else
+    if(memcmp(msg_text, "-display ", 9) == 0)
+    {
+        sprintf(print_buff, "OE6DJG-7>*:%s", msg_text+9);
+        memcpy(buffer, print_buff, 499);
+
+        sendDisplayText(buffer, strlen(print_buff), -25, 9);
 
         return;
     }
@@ -97,7 +107,7 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
         sVar.toUpperCase();
         sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
 
-        sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call));
+        sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
         Serial.printf("Call:%s Short:%s set\n", meshcom_settings.node_call, meshcom_settings.node_short);
 

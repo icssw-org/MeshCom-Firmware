@@ -95,7 +95,11 @@ void sendDisplayHead()
 
     char print_text[500];
 
-    sprintf(print_text, "MC 4.0          %3d%%", (int)mv_to_percent(read_batt()));
+    #ifdef BOARD_RAK4630
+        sprintf(print_text, "MC 4.0          %3d%%", (int)mv_to_percent(read_batt()));
+    #else
+        sprintf(print_text, "MC 4.0          %3d%%", 100); //(int)mv_to_percent(read_batt()));
+    #endif
 
     sendDisplay1306(true, false, 3, 11, print_text);
     sendDisplay1306(false, false, 3, 9, (char*)"L");
@@ -139,7 +143,10 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
                 sprintf(msg_text, "%s <%i>", text, rssi);
             else
                 sprintf(msg_text, "%s", text);
+
+            msg_text[20]=0x00;
             sendDisplay1306(bClear, true, 3, izeile, msg_text);
+
             izeile=izeile+12;
             istarttext=itxt+1;
             bClear=false;
@@ -148,8 +155,8 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
     }
 
 
-    char line_text[20];
-    char words[100][20];
+    char line_text[21];
+    char words[100][21];
     int iwords=0;
     int ipos=0;
 
@@ -163,9 +170,9 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
             ipos=0;
         }
         else
-        if(ipos > 18)
+        if(ipos > 19)
         {
-            words[iwords][19]=0x00;
+            words[iwords][20]=0x00;
             iwords++;
             words[iwords][0]=text[itxt];
             ipos=1;
@@ -177,16 +184,16 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
     words[iwords][ipos]=0x00;
     iwords++;
 
-    memset(line_text, 0x00, 20);
+    memset(line_text, 0x00, 21);
     strcat(line_text, words[0]);
 
     bool bEnd=false;
 
     for(itxt=1; itxt<iwords; itxt++)
     {
-        if((strlen(line_text) + strlen(words[itxt])) > 18)
+        if((strlen(line_text) + strlen(words[itxt])) > 19)
         {
-            line_text[19]=0x00;
+            line_text[20]=0x00;
             sprintf(msg_text, "%s", line_text);
 
             if(izeile > 60)
@@ -195,10 +202,12 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
             if(bEnd && itxt < iwords)
                 sprintf(msg_text, "%-17.17s...", line_text);
 
+            msg_text[20]=0x00;
             sendDisplay1306(bClear, bEnd, 3, izeile, msg_text);
+
             izeile=izeile+12;
             
-            memset(line_text, 0x00, 20);
+            memset(line_text, 0x00, 21);
 
             if(izeile > 61)
             {
@@ -226,9 +235,10 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
             izeile=61;
 
         bEnd=true;
-        line_text[19]=0x00;
+        line_text[20]=0x00;
         sprintf(msg_text, "%s", line_text);
         //Serial.printf("1306-02:%s len:%i izeile:%i\n", msg_text, strlen(msg_text), izeile);
+        msg_text[20]=0x00;
         sendDisplay1306(bClear, bEnd, 3, izeile, msg_text);
     }
 }

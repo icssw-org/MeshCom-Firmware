@@ -384,6 +384,14 @@ void nrf52setup()
 
     _GW_ID = dmac[0] | (dmac[1] << 8) | (dmac[2] << 16) | (dmac[3] << 24);
 
+    // BLE ID
+    meshcom_settings.node_device_eui[0]=0x4D;   // M
+    meshcom_settings.node_device_eui[1]=0x43;   // C
+    for(int ieui=0; ieui<6; ieui++)
+    {
+        meshcom_settings.node_device_eui[ieui+2] = dmac[ieui];
+    }
+
 
     //  Initialize the LoRa Module
     lora_rak4630_init();
