@@ -329,10 +329,23 @@ void sendConfigToPhone () {
 };
 
 
+bool bDEBUG=false;
+
+#ifdef SX127X
 // RadioModule SX1278 
 SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 // SyncWord - 1byte for SX127x, 2 bytes for SX126x
 // Check which chip is used !!!
+#endif
+
+#ifdef SX126X
+    // RadioModule SX1268 
+    // cs - irq - reset - interrupt gpio
+    // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
+    // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
+    SX1268 radio = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_DIO0);
+
+#endif
 
 // Lora callback Function declarations
 void checkRX(void);
@@ -345,6 +358,8 @@ void OnPreambleDetect(void);
 void OnHeaderDetect(void);
 void doTX();        // LoraTX function
 void setInterruptFlag();     // LoRaRX Interrupt function
+void enableRX(void);    // for Modules with RXEN / TXEN Pin
+void enableTX(void);    // for Modules with RXEN / TXEN Pin
 
 
 asm(".global _scanf_float");
@@ -373,6 +388,17 @@ uint8_t dmac[6] = {0};
 
 unsigned int posinfo_first = 0;
 unsigned long posinfo_timer = 0;      // we check periodically to send GPS
+
+#ifdef BOARD_HELTEC
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, 16, 15, 4);
+#else
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
+#endif
+
+// Display 128 x 64 px
+void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
+void sendDisplayHead();
+void sendDisplayText(uint8_t *text, int size);
 unsigned long gps_refresh_timer = 0;
 
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
@@ -465,10 +491,25 @@ void esp32setup()
     #ifdef BOARD_HELTEC
     Wire.setPins(4, 15);
     #endif
+    #ifdef BOARD_E22
+    Wire.setPins(21, 22);
+    #endif
+
     Wire.begin();
     u8g2.begin();
 
     Serial.begin(115200);
+
+#ifdef BOARD_E22
+    // if RESET Pin is connected
+    pinMode(LORA_RST, PULLUP);
+    digitalWrite(LORA_RST, LOW);
+    delay(100);
+    digitalWrite(LORA_RST, HIGH);
+
+    // we have TXEN and RXEN Pin connected
+    radio.setRfSwitchPins(RXEN, TXEN);
+#endif
 
     // initialize SX1278 with default settings
     Serial.print(F("[SX1278] Initializing ... "));
@@ -512,10 +553,19 @@ void esp32setup()
 
     // set LoRa sync word 
     // NOTE: value 0x34 is reserved for LoRaWAN networks and should not be used
+    #ifdef SX127X
     if (radio.setSyncWord(SYNC_WORD_SX127x) != RADIOLIB_ERR_NONE) {
         Serial.println(F("Unable to set sync word!"));
         while (true);
     }
+    #endif
+
+    #ifdef SX126X
+    if (radio.setSyncWord(SYNC_WORD_SX127x) != RADIOLIB_ERR_NONE) {
+        Serial.println(F("Unable to set sync word!"));
+        while (true);
+    }
+    #endif
 
     // set output power to 10 dBm (accepted range is -3 - 17 dBm)
     // NOTE: 20 dBm value allows high power operation, but transmission
@@ -538,6 +588,7 @@ void esp32setup()
      while (true);
     }
 
+    #ifdef SX127X
     // set amplifier gain  (accepted range is 1 - 6, where 1 is maximum gain)
     // NOTE: set value to 0 to enable automatic gain control
     //       leave at 0 unless you know what you're doing
@@ -550,6 +601,17 @@ void esp32setup()
     // set the function that will be called
     // when new packet is received
     radio.setDio0Action(setInterruptFlag);
+    #endif
+
+    // setup for SX126x Radios
+    #ifdef SX126X
+    // interrupt pin
+    radio.setDio1Action(setInterruptFlag);
+    // if DIO2 controls the RF Switch you need to set it
+    // radio.setDio2AsRfSwitch(true);
+    // Important! To enable receive you need to switch the SX126x rf switch to RECEIVE 
+    
+    #endif
 
     // put module back to listen mode
     radio.startReceive();
@@ -812,7 +874,7 @@ void esp32loop()
         #endif
 
         sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
-        
+
         posinfo_first=2;
 
         #if defined(LPS33)
@@ -838,6 +900,27 @@ void esp32loop()
 
     yield();
 }
+
+
+#ifdef BOARD_E22
+// Set RX pin HIGH and TX pin LOW to switch to RECEIVE
+/*
+void enableRX(void)
+{
+  digitalWrite(RXEN, HIGH);
+  digitalWrite(TXEN, LOW);
+  delay(100);
+}
+
+// Set TX pin HIGH and RX pin LOW to switch to TRANSMIT
+void enableTX(void)
+{
+  digitalWrite(RXEN, LOW);
+  digitalWrite(TXEN, HIGH);
+  delay(100);
+}
+*/
+#endif
 
 void checkRX(void)
 {
