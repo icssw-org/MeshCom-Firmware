@@ -329,8 +329,6 @@ void sendConfigToPhone () {
 };
 
 
-bool bDEBUG=false;
-
 #ifdef SX127X
 // RadioModule SX1278 
 SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
@@ -388,12 +386,6 @@ uint8_t dmac[6] = {0};
 
 unsigned int posinfo_first = 0;
 unsigned long posinfo_timer = 0;      // we check periodically to send GPS
-
-#ifdef BOARD_HELTEC
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, 16, 15, 4);
-#else
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
-#endif
 
 // Display 128 x 64 px
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
@@ -489,10 +481,11 @@ void esp32setup()
     }
 
     #ifdef BOARD_HELTEC
-    Wire.setPins(4, 15);
+        Wire.setPins(4, 15);
     #endif
+    
     #ifdef BOARD_E22
-    Wire.setPins(21, 22);
+        Wire.setPins(21, 22);
     #endif
 
     Wire.begin();
