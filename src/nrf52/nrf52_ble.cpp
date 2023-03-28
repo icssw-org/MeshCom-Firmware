@@ -87,11 +87,11 @@ void init_ble(void)
 #ifdef _VARIANT_ISP4520_
 	/** Device name for ISP4520 */
 	sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
-			(uint8_t)(g_meshcom_settings.node_device_eui[2]), (uint8_t)(g_meshcom_settings.node_device_eui[3]),
-			(uint8_t)(g_meshcom_settings.node_device_eui[4]), (uint8_t)(g_meshcom_settings.node_device_eui[5]), (uint8_t)(g_meshcom_settings.node_device_eui[6]), (uint8_t)(g_meshcom_settings.node_device_eui[7]));
+			(uint8_t)(meshcom_settings.node_device_eui[2]), (uint8_t)(meshcom_settings.node_device_eui[3]),
+			(uint8_t)(meshcom_settings.node_device_eui[4]), (uint8_t)(meshcom_settings.node_device_eui[5]), (uint8_t)(meshcom_settings.node_device_eui[6]), (uint8_t)(meshcom_settings.node_device_eui[7]));
 #else
 	/** Device name for RAK4631 */
-	sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], g_meshcom_settings.node_call);	// Anzeige mit callsign
+	sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);	// Anzeige mit callsign
 #endif
 
 	Bluefruit.setName(helper_string);
@@ -149,7 +149,7 @@ void init_ble(void)
 	Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
 	Bluefruit.Advertising.setFastTimeout(15);	// number of seconds in fast mode
 	// Bluefruit.Advertising.start(60);			// 0 = Don't stop advertising
-	if (g_meshcom_settings.auto_join)
+	if (meshcom_settings.auto_join)
 	{
 		restart_advertising(60);
 	}
@@ -269,14 +269,14 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			sVar.toUpperCase();
 			
 
-			sprintf(g_meshcom_settings.node_call, "%s", sVar.c_str());
+			sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
 
 			save_settings();
 
 			// send config back to phone
 			sendConfigToPhone();
 
-			sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], g_meshcom_settings.node_call);	// Anzeige mit callsign
+			sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);	// Anzeige mit callsign
 			Bluefruit.setName(helper_string);
 
 			bInitDisplay = false;
@@ -293,7 +293,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			memcpy(&latitude, conf_data + 2, sizeof(latitude));
 			Serial.println(latitude);
 
-			g_meshcom_settings.node_lat=latitude;
+			meshcom_settings.node_lat=latitude;
 
         	save_settings();
 			// send config back to phone
@@ -309,7 +309,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			memcpy(&longitude, conf_data + 2, sizeof(longitude));
 			Serial.println(longitude);
 
-			g_meshcom_settings.node_lon=longitude;
+			meshcom_settings.node_lon=longitude;
 
         	save_settings();
 			// send config back to phone
@@ -324,7 +324,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			memcpy(&altitude, conf_data + 2, sizeof(altitude));
 			DEBUG_MSG_VAL("BLE", altitude, "Altitude from phone:");
 
-			g_meshcom_settings.node_alt=altitude;
+			meshcom_settings.node_alt=altitude;
 
         	save_settings();
 			// send config back to phone
@@ -396,23 +396,23 @@ void sendConfigToPhone () {
 
 	#if BLE_TEST
 		char bleBuff [100] = {0};
-		sprintf(bleBuff, "Connected to %s\n", g_meshcom_settings.node_call);
+		sprintf(bleBuff, "Connected to %s\n", meshcom_settings.node_call);
 		// send to phone
 		g_ble_uart.write(bleBuff, strlen(bleBuff));
 	#else
 		// assemble conf message
-		uint8_t call_len = sizeof(g_meshcom_settings.node_call);
+		uint8_t call_len = sizeof(meshcom_settings.node_call);
 		uint8_t conf_len = call_len + 22;	// currently fixed length - adapt if needed
 		uint8_t confBuff [conf_len] = {0};
 		uint8_t call_offset = 2;
 
 		confBuff [0] = 0x80;
 		confBuff [1] = call_len;
-		memcpy(confBuff + call_offset, g_meshcom_settings.node_call, call_len);
+		memcpy(confBuff + call_offset, meshcom_settings.node_call, call_len);
 		uint8_t latOffset = call_offset + call_len;
-		memcpy(confBuff + latOffset, &g_meshcom_settings.node_lat, 8);
-		memcpy(confBuff + latOffset + 8, &g_meshcom_settings.node_lon, 8);
-		memcpy(confBuff + latOffset + 16, &g_meshcom_settings.node_alt, 4);
+		memcpy(confBuff + latOffset, &meshcom_settings.node_lat, 8);
+		memcpy(confBuff + latOffset + 8, &meshcom_settings.node_lon, 8);
+		memcpy(confBuff + latOffset + 16, &meshcom_settings.node_alt, 4);
 
 		// send to phone
 		g_ble_uart.write(confBuff, conf_len);
@@ -436,7 +436,7 @@ BLEService init_settings_characteristic(void)
 
 	g_lora_data.begin();
 
-	g_lora_data.write((void *)&g_meshcom_settings, sizeof(s_meshcom_settings));
+	g_lora_data.write((void *)&meshcom_settings, sizeof(s_meshcom_settings));
 
 	return lora_service;
 }
@@ -475,19 +475,19 @@ void settings_rx_callback(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *da
 		}
 
 		// Save new LoRa settings
-		memcpy((void *)&g_meshcom_settings, data, sizeof(s_meshcom_settings));
+		memcpy((void *)&meshcom_settings, data, sizeof(s_meshcom_settings));
 
 		// Save new settings
 		save_settings();
 
 		// Update settings
-		g_lora_data.write((void *)&g_meshcom_settings, sizeof(s_meshcom_settings));
+		g_lora_data.write((void *)&meshcom_settings, sizeof(s_meshcom_settings));
 
 		// Inform connected device about new settings
-		g_lora_data.notify((void *)&g_meshcom_settings, sizeof(s_meshcom_settings));
+		g_lora_data.notify((void *)&meshcom_settings, sizeof(s_meshcom_settings));
 
         /*KBC
-        if (g_meshcom_settings.resetRequest)
+        if (meshcom_settings.resetRequest)
 		{
 			API_LOG("SETT", "Initiate reset");
 			delay(1000);

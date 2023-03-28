@@ -2,6 +2,7 @@
 // DEBUG
 // -----------------------------------------------------------------------------
 
+#define bDEBUG 0
 
 // If not on PIO or not defined in platformio.ini
 #ifndef DO_DEBUG

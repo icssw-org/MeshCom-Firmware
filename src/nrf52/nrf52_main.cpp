@@ -1,11 +1,19 @@
+// (C) 2023 OE1KBC Kurt Baumann, OE1KFR Rainer 
+// (C) 2016, 2017, 2018, 2018, 2019, 2020 OE1KBC Kurt Baumann
+//
+// This code is not for distribution and may not be published!
+// Vervielfältigung und Veröffentlichung des Codes sind nicht gestattet!
+// Lizenz: kein Open Source.
+// zugelassen ausschließlich für OE1KBC, OE1KFR
+// alle anderen Finger weg !
+// 20230326: Version 4.00: START
+
 #include <Arduino.h>
 #include <SPI.h>
-#include <configuration.h>
 #include <SX126x-RAK4630.h>
 #include <debugconf.h>
 #include <time.h>
 
-#include <WisBlock-API.h>
 #include <TinyGPS.h>
 #include <drivers\Adafruit_SSD1680.h>
 #include <WisBlock_EPaper_Images.h>
@@ -14,7 +22,12 @@
 
 #include "Adafruit_LPS2X.h"
 
-#include <U8g2lib.h> // Click to install library: http://librarymanager/All#u8g2
+// MeshCom Common (ers32/nrf52) Funktions
+#include <loop_functions.h>
+#include <loop_functions_extern.h>
+#include <command_functions.h>
+#include <batt_functions.h>
+
 
 /*
     RAK4631 PIN DEFINITIONS
@@ -131,22 +144,12 @@ asm(".global _printf_float");
 // LoRa Events and Buffers
 static RadioEvents_t RadioEvents;
 
-static uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
-static uint8_t RcvBuffer_before[MAX_RING_UDP_OUT][4];
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
-static uint8_t ringBufferUDPout[MAX_RING_UDP_OUT][UDP_TX_BUF_SIZE]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
-uint8_t udpWrite = 0;   // counter for ringbuffer
-uint8_t udpRead = 0;    // counter for ringbuffer
 
-s_meshcom_settings g_meshcom_settings;
 bool g_meshcom_initialized;
 bool init_flash_done=false;
 
-// RINGBUFFER for incoming UDP lora packets for lora TX
-unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];
-int iWrite=0;
-int iRead=0;
 
 /**
  * BLE Spec
@@ -164,16 +167,9 @@ int iRead=0;
  * Config of this device is sent to phone after hello msg from phone
 */
 
-// BLE Ringbuffer to phone
-unsigned char BLEtoPhoneBuff[MAX_RING][UDP_TX_BUF_SIZE];
-int toPhoneWrite=0;
-int toPhoneRead=0;
 // Textmessage buffer from phone, hasMsgFromPhone flag indicates new message
-bool hasMsgFromPhone = false;
 char textbuff_phone [MAX_MSG_LEN_PHONE] = {0};
 uint8_t txt_msg_len_phone = 0;
-
-bool bDEBUG=false;
 
 //variables and helper functions
 int sendlng = 0;              // lora tx message length
@@ -200,8 +196,6 @@ unsigned long bleblink_timer = 0;     // we check periodically BLE
 //unsigned long till_header_time = 0; // stores till a header is detected after preamble detect
 unsigned int resetCount = 0;
 unsigned int posinfo_first = 0;
-unsigned int msg_counter = 0;
-char msg_text[MAX_MSG_LEN_PHONE];
 
 String strText="";
 
@@ -309,12 +303,7 @@ void testdrawtext(int16_t x, int16_t y, char *text, uint16_t text_color, uint32_
   display_1680.print(text);
 }
 
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
-
-// Display 128 x 64 px
-void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
-void sendDisplayHead();
-void sendDisplayText(uint8_t *text, int size);
+extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
 bool bInitDisplay = false;
 
@@ -325,8 +314,6 @@ void blinkLED();                                     // blink GREEN
 void blinkLED2();                                    // blink BLUE
 void doTX();                                         // LoraTX function
 void addUdpOutBuffer(int msg_id, uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer
-void printBuffer(uint8_t *buffer, int len);
-void printBuffer_ascii(uint8_t *buffer, int len);
 int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE]);
 void sendMessage(char *buffer, int len);
 int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt);
@@ -334,18 +321,11 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press);
 void sendWX(char *buffer, float temp, float hum, float press);
 void checkSerialCommand(void);
-void commandAction(char *buffer, int len, bool ble);
-void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void sendToPhone();
 
 
 // Client basic variables
     uint8_t dmac[6];
-    unsigned int _GW_ID = 0x4B424332; // ID of our Node
-
-/**
- * BLE
-*/
 
 /** Set the device name, max length is 10 characters */
     char g_ble_dev_name[10] = "RAK-CL40";
@@ -403,6 +383,14 @@ void nrf52setup()
     getMacAddr(dmac);
 
     _GW_ID = dmac[0] | (dmac[1] << 8) | (dmac[2] << 16) | (dmac[3] << 24);
+
+    // BLE ID
+    meshcom_settings.node_device_eui[0]=0x4D;   // M
+    meshcom_settings.node_device_eui[1]=0x43;   // C
+    for(int ieui=0; ieui<6; ieui++)
+    {
+        meshcom_settings.node_device_eui[ieui+2] = dmac[ieui];
+    }
 
 
     //  Initialize the LoRa Module
@@ -695,15 +683,15 @@ void nrf52loop()
     // posinfo
     if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
     {
-        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
+        sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
         posinfo_first=2;
 
         save_settings();    // Position ins Flash schreiben
 
         #if defined(LPS33)
 
-        sendWeather(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt,
-         g_meshcom_settings.node_temp, g_meshcom_settings.node_hum, g_meshcom_settings.node_press);
+        sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
+         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
 
         #endif
 
@@ -742,7 +730,7 @@ void nrf52loop()
 
         aliveblink_timer = millis();
 
-        //DEBUG_MSG_VAL("ALIVE", g_meshcom_settings.node_date_hour*10000+g_meshcom_settings.node_date_minute*100+g_meshcom_settings.node_date_second, "alive info");
+        //DEBUG_MSG_VAL("ALIVE", meshcom_settings.node_date_hour*10000+meshcom_settings.node_date_minute*100+meshcom_settings.node_date_second, "alive info");
 
         resetCount++;
 
@@ -781,12 +769,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     int msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
 
+    // print which message type we got
+    uint8_t msg_type_b_lora = RcvBuffer[0];
+
     if(is_new_packet(RcvBuffer+1) || (SEE_ALL_PACKETS == 1))
     {
 		// :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-
-        // print which message type we got
-        uint8_t msg_type_b_lora = payload[0];
 
         switch (msg_type_b_lora)
         {
@@ -871,7 +859,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         if(msg_type_b_lora == 0x3A)
                         {
-                            sendDisplayText(RcvBuffer+6, size-6-3);
+                            sendDisplayText(RcvBuffer+6, size-6-3, rssi, snr);
                         }
 
                         DEBUG_MSG("RADIO", "Packet resend to mesh");
@@ -903,15 +891,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             sprintf(print_buff, "MSG %08X ACK\n", msg_id);
        		g_ble_uart.write(print_buff, strlen(print_buff));
         #else
-            // ACK MSG 0x41 | 0x01020304
-            uint8_t print_buff[20];
-            print_buff[0]=0x41;
-            print_buff[1]=msg_id & 0xFF;
-            print_buff[2]=(msg_id >> 8) & 0xFF;
-            print_buff[3]=(msg_id >> 16) & 0xFF;
-            print_buff[4]=(msg_id >> 24) & 0xFF;
-            print_buff[5]=0x00;
-            addBLEOutBuffer(print_buff, 6);
+            if(msg_type_b_lora == 0x3A)
+            {
+                // ACK MSG 0x41 | 0x01020304
+                uint8_t print_buff[20];
+                print_buff[0]=0x41;
+                print_buff[1]=msg_id & 0xFF;
+                print_buff[2]=(msg_id >> 8) & 0xFF;
+                print_buff[3]=(msg_id >> 16) & 0xFF;
+                print_buff[4]=(msg_id >> 24) & 0xFF;
+                print_buff[5]=0x00;
+                addBLEOutBuffer(print_buff, 6);
+            }
         #endif
     }
 
@@ -1055,6 +1046,7 @@ bool is_new_packet(uint8_t compBuffer[4])
     return true;
 }
 
+
 /**@brief Function to write our additional data into the UDP tx buffer
  * we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
  * MODE BYTE: LongSlow = 1, MediumSlow = 3
@@ -1064,19 +1056,19 @@ void addNodeData(uint16_t size, int16_t rssi, int8_t snr)
 {
     // copying the contents of the
     // string to char array
-    uint8_t offset = 8 + strlen(g_meshcom_settings.node_call) + 1; // offset for the payload written into tx udp buffer. We add 0x00 after Longanme
+    uint8_t offset = 8 + strlen(meshcom_settings.node_call) + 1; // offset for the payload written into tx udp buffer. We add 0x00 after Longanme
 
-    if (strlen(g_meshcom_settings.node_call) <= LONGNAME_MAXLEN)
+    if (strlen(meshcom_settings.node_call) <= LONGNAME_MAXLEN)
     {
-        memcpy(txBuffer, g_meshcom_settings.node_call, strlen(g_meshcom_settings.node_call));
-        txBuffer[strlen(g_meshcom_settings.node_call)] = 0x00; // we add a trailing 0x00 to mark the end of longname
+        memcpy(txBuffer, meshcom_settings.node_call, strlen(meshcom_settings.node_call));
+        txBuffer[strlen(meshcom_settings.node_call)] = 0x00; // we add a trailing 0x00 to mark the end of longname
     }
     else
     {
         DEBUG_MSG("ERROR", "LongName is too long!");
     }
 
-    uint8_t offset_params = strlen(g_meshcom_settings.node_call) + 1;
+    uint8_t offset_params = strlen(meshcom_settings.node_call) + 1;
     memcpy(&txBuffer[offset_params], &_GW_ID, sizeof(_GW_ID));
     memcpy(&txBuffer[offset_params + 4], &rssi, sizeof(rssi));
     txBuffer[offset_params + 6] = snr;
@@ -1135,29 +1127,6 @@ void addUdpOutBuffer(int msg_id, uint8_t *buffer, uint16_t len)
         udpWrite = 0;
 }
 
-/** @brief Function adding messages into outgoing BLE ringbuffer
- * BLE to PHONE Buffer
- */
-void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
-{
-    if (len > UDP_TX_BUF_SIZE)
-        len = UDP_TX_BUF_SIZE; // just for safety
-
-    //first two bytes are always the message length
-    BLEtoPhoneBuff[toPhoneWrite][0] = len;
-    memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
-
-    Serial.printf("BLEtoPhone RingBuff added element: %u\n", toPhoneWrite);
-
-    if(bDEBUG)
-    {
-        printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1);
-    }
-
-    toPhoneWrite++;
-    if (toPhoneWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
-        toPhoneWrite = 0;
-}
 
 /**
  * @brief Method to send incoming LoRa messages to BLE connected device
@@ -1223,120 +1192,6 @@ if(g_ble_uart_is_connected && isPhoneReady == 1)
     ble_busy_flag = false;
 }
 
-void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
-{
-	// display bme680 sensor data on OLED
-	if(bClear)
-    {
-        u8g2.clearBuffer();					// clear the internal memory
-    }
-	
-    u8g2.setFont(u8g2_font_6x10_mf);    // u8g2_font_ncenB10_tr); // choose a suitable font
-
-	if(memcmp(text, "L", 1) == 0)
-    {
-        //Serial.println("line");
-    	u8g2.drawHLine(3, 16, 120);
-    }
-    else
-    {
-        //Serial.println(text);
-        u8g2.drawUTF8(x, y, text);
-    }
-
-    if(bTransfer)
-    {
-        //Serial.println("Transfer");
-	    u8g2.sendBuffer(); // transfer internal memory to the display
-    }
-}
-
-void sendDisplayHead()
-{
-    sprintf(msg_text, "MeshCom 4.0     %3d%%", (int)mv_to_percent(read_batt()));
-
-    sendDisplay1306(true, false, 3, 13, msg_text);
-    sendDisplay1306(false, false, 3, 15, (char*)"L");
-
-    sprintf(msg_text, "Call:  %s", g_meshcom_settings.node_call);
-    sendDisplay1306(false, false, 3, 27, msg_text);
-
-    sprintf(msg_text, "Short: %s", g_meshcom_settings.node_short);
-    sendDisplay1306(false, false, 3, 39, msg_text);
-
-    sprintf(msg_text, "MAC:   %08X", _GW_ID);
-    sendDisplay1306(false, true, 3, 51, msg_text);
-
-    //sprintf(msg_text, "Modul: %i", MODUL_HARDWARE);
-    //sendDisplay1306(false, true, 3, 63, msg_text);
-}
-
-void sendDisplayText(uint8_t text[300], int size)
-{
-    int izeile=13;
-
-    bool bClear=true;
-
-    for(int itxt=0; itxt<size; itxt=itxt+20)
-    {
-        sprintf(msg_text, "%-20.20s", text+itxt);
-        
-        if(size-itxt < 20)
-            sendDisplay1306(bClear, true, 3, izeile, msg_text);
-        else
-            sendDisplay1306(bClear, false, 3, izeile, msg_text);
-        
-        izeile=izeile+12;
-
-        bClear=false;
-    }
-}
-
-/** @brief Method to print our buffers
- */
-void printBuffer(uint8_t *buffer, int len)
-{
-  for (int i = 0; i < len; i++)
-  {
-    Serial.printf("%02X ", buffer[i]);
-  }
-  Serial.println("");
-}
-
-/** @brief Method to print our buffers
- */
-void printBuffer_ascii(uint8_t *buffer, int len)
-{
-  int i=0;
-
-  Serial.printf("%03i ", len);
-
-  Serial.printf("%c x", buffer[0]);
-  for (i = 4; i > 0; i--)
-  {
-    Serial.printf("%02X", buffer[i]);
-  }
-  Serial.printf(" %02X ", buffer[5]);
-
-  int ineg=0;
-
-  for (i = 6; i < len; i++)
-  {
-    if(buffer[i] == 0x00)
-    {
-        ineg=i;
-        break;
-    }
-
-    Serial.printf("%c", buffer[i]);
-  }
-
-  Serial.printf(" %02X", buffer[ineg]);
-  Serial.printf("%02X", buffer[ineg+1]);
-
-  Serial.println("");
-}
-
 /** @brief Function to check if the modem detected a preamble
  */
 void blinkLED()
@@ -1367,292 +1222,6 @@ void print_radioStatus()
 
 } 
 
-int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE])
-{
-    char msg_start[100];
-
-    // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-
-    msg_buffer[0]=msg_type;
-    
-    msg_counter=millis();
-
-    msg_buffer[1]=msg_counter & 0xff;
-    msg_buffer[2]=(msg_counter >> 8) & 0xff;
-    msg_buffer[3]=(msg_counter >> 16) & 0xff;
-    msg_buffer[4]=(msg_counter >> 24) & 0xff;
-
-    msg_buffer[5]=0x05; //max hop
-
-    sprintf(msg_start, "%s>*", g_meshcom_settings.node_call);
-
-    memcpy(msg_buffer+6, msg_start, strlen(g_meshcom_settings.node_call)+2);
-
-    int inext=6+2+strlen(g_meshcom_settings.node_call);
-
-    msg_buffer[inext] = msg_type;
-    inext++;
-
-    return inext;
-}
-
-void sendMessage(char *msg_text, int len)
-{
-    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
-
-    int inext = CallToAPRS(':', msg_buffer);
-        
-    if(inext == 0)
-        return;
-
-    if(memcmp(msg_text, ":", 1) == 0)
-    {
-        memcpy(msg_buffer+inext, msg_text+1, len-1);
-        inext=inext+len-1;
-    }
-    else
-    {
-        memcpy(msg_buffer+inext, msg_text, len);
-        inext=inext+len;
-    }
-   
-    msg_buffer[inext]=0x00;
-    inext++;
-
-    int FCS_SUMME=0;
-    for(int ifcs=0; ifcs<inext; ifcs++)
-    {
-        FCS_SUMME += msg_buffer[ifcs];
-    }
-    
-    // FCS
-    msg_buffer[inext] = (FCS_SUMME >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = FCS_SUMME & 0xFF;
-    inext++;
-
-    // _GW_ID   nur für 2.0 -> 4.0
-    msg_buffer[inext] = (_GW_ID) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
-    inext++;
-
-    msg_buffer[inext] = MODUL_HARDWARE;
-    inext++;
-
-    // An APP als Anzeige retour senden
-    if(hasMsgFromPhone)
-    {
-        addBLEOutBuffer(msg_buffer, inext);
-    }
-
-    if(bDEBUG)
-    {
-        printBuffer(msg_buffer, inext);
-        Serial.println("");
-    }
-
-    if(inext > UDP_TX_BUF_SIZE)
-        inext = UDP_TX_BUF_SIZE;
-
-    ringBuffer[iWrite][0]=inext;
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
-    
-    // store last message to compare later on
-    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, inext);
-
-    iWrite++;
-    if(iWrite >= MAX_RING)
-        iWrite=0;
-
-}
-
-int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt)
-{
-    if(lat == 0 or lon == 0)
-    {
-        DEBUG_MSG("APRS", "Error PositionToAPRS");
-        return 0;
-    }
-
-    char msg_start[100];
-
-    // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-
-	double slat=lat*100.0;
-	double slon=lon*100.0;
-	
-    if(bConvPos)
-    {
-        double slatr=0;
-        double slonr=0;
-        
-        slat = (int)lat;
-        slatr = (lat - slat)*60.;
-        slat = (slat * 100.) + slatr;
-        
-        slon = (int)lon;
-        slonr = (lon - slon)*60.;
-        slon = (slon * 100.) + slonr;
-    }
-
-    if(bWeather)
-        sprintf(msg_start, "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", g_meshcom_settings.node_date_day, g_meshcom_settings.node_date_hour, g_meshcom_settings.node_date_minute, slat, lat_c, g_meshcom_settings.node_symid, slon, lon_c);
-    else
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c %i /A=%i", slat, lat_c, g_meshcom_settings.node_symid, slon, lon_c, g_meshcom_settings.node_symcd, batt, alt);
-
-    memcpy(msg_buffer, msg_start, strlen(msg_start));
-
-    int inext=strlen(msg_start);
-    
-    return inext;
-}
-
-void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt)
-{
-    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
-
-    int inext = CallToAPRS('!', msg_buffer);
-
-    int inext_pos = PositionToAPRS(msg_buffer+inext, true, false, lat, lat_c, lon, lon_c, alt, batt);
-        
-    if(inext_pos == 0)
-        return;
-
-    inext = inext + inext_pos;
-
-    msg_buffer[inext] = 0x00;
-    inext++;
-
-    int FCS_SUMME=0;
-    for(int ifcs=0; ifcs<inext; ifcs++)
-    {
-        FCS_SUMME += msg_buffer[ifcs];
-    }
-    
-    // FCS
-    msg_buffer[inext] = (FCS_SUMME >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = FCS_SUMME & 0xFF;
-    inext++;
-
-    // _GW_ID   nur für 2.0 -> 4.0
-    msg_buffer[inext] = (_GW_ID) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
-    inext++;
-
-    msg_buffer[inext] = MODUL_HARDWARE;
-    inext++;
-
-    if(bDEBUG)
-    {
-        printBuffer_ascii(msg_buffer, inext);
-    }
-
-    if(inext > UDP_TX_BUF_SIZE)
-        inext = UDP_TX_BUF_SIZE;
-
-    ringBuffer[iWrite][0]=inext;
-
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
-    
-    // store last message to compare later on
-    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, inext);
-
-    iWrite++;
-    if(iWrite >= MAX_RING)
-        iWrite=0;
-
-}
-
-void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press)
-{
-    // @141324z4812.06N/01555.87E_270/...g...t...r000p000P...h..b10257Weather in Neulengbach
-
-    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
-
-    int inext = CallToAPRS('@', msg_buffer);
-
-    int inext_pos = PositionToAPRS(msg_buffer+inext, true, true, lat, lat_c, lon, lon_c, 0, 0);
-        
-    if(inext_pos == 0)
-        return;
-
-    inext = inext + inext_pos;
-
-    char msg_start[100];
-
-    sprintf(msg_start, ".../...g...t%03ir...p...P...h%02ib%05ixMESH", (int)((temp*1.8)+32.0), (int)(hum), (int)(press*10.0));
-
-    memcpy(msg_buffer+inext, msg_start, strlen(msg_start));
-
-    inext=inext+strlen(msg_start);
-
-    msg_buffer[inext] = 0x00;
-    inext++;
-
-    int FCS_SUMME=0;
-    for(int ifcs=0; ifcs<inext; ifcs++)
-    {
-        FCS_SUMME += msg_buffer[ifcs];
-    }
-    
-    // FCS
-    msg_buffer[inext] = (FCS_SUMME >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = FCS_SUMME & 0xFF;
-    inext++;
-
-    // _GW_ID   nur für 2.0 -> 4.0
-    msg_buffer[inext] = (_GW_ID) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
-    inext++;
-
-    msg_buffer[inext] = MODUL_HARDWARE;
-    inext++;
-
-    if(bDEBUG)
-    {
-        printBuffer_ascii(msg_buffer, inext);
-    }
-
-    ringBuffer[iWrite][0]=inext;
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
-    
-    // store last message to compare later on
-    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, inext);
-
-    iWrite++;
-    if(iWrite >= MAX_RING)
-        iWrite=0;
-}
-
-
-void sendWX(char* text, float temp, float hum, float press)
-{
-    char msg_wx[200];
-
-    //sprintf(msg_wx, "%s, %.1f °C, %.1f hPa, %i %%", text, temp, press, (int)(hum));
-    sprintf(msg_wx, "%s, %.1f hPa, hum %i %%", text, press, (int)(hum));
-
-    msg_wx[0] = ':';
-
-    sendMessage(msg_wx, strlen(msg_wx));
-}
 
 /**@brief Function for handling a LoRa tx timer timeout event.
  */
@@ -1666,8 +1235,8 @@ void getTEMP(void)
     Serial.print("Temperature: "); Serial.print(temp.temperature); Serial.println(" degrees C");
     Serial.print("Humidity: "); Serial.print(humidity.relative_humidity); Serial.println("% rH");
     */
-    g_meshcom_settings.node_temp = temp.temperature;
-    g_meshcom_settings.node_hum = humidity.relative_humidity;
+    meshcom_settings.node_temp = temp.temperature;
+    meshcom_settings.node_hum = humidity.relative_humidity;
 }
 
 /**@brief Function for handling a LoRa tx timer timeout event.
@@ -1685,12 +1254,12 @@ void getPRESSURE(void)
     Serial.println("");
     */
     
-    double home_alt=g_meshcom_settings.node_alt;    // Höhe des Standorts
+    double home_alt=meshcom_settings.node_alt;    // Höhe des Standorts
     double temperature_gradient = 0.0065;           // Standard-Temperaturgradient
     double temperatureK = temp.temperature + 273.15;     // Temperatur in Kelvin
     
     // barometrische Höhenformel
-    g_meshcom_settings.node_press = pressure.pressure * pow((temperatureK / (temperatureK + home_alt * temperature_gradient)) , -5.255);
+    meshcom_settings.node_press = pressure.pressure * pow((temperatureK / (temperatureK + home_alt * temperature_gradient)) , -5.255);
 }
 
 /**@brief Function for analytical direction.
@@ -1747,41 +1316,41 @@ void getGPS(void)
         //flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
         //flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
 
-        g_meshcom_settings.node_lat = flat;
-        g_meshcom_settings.node_lon = flon;
+        meshcom_settings.node_lat = flat;
+        meshcom_settings.node_lon = flon;
 
         if(direction_S_N == 0)
         {
-        g_meshcom_settings.node_lat_c = 'S';
+        meshcom_settings.node_lat_c = 'S';
         }
         else
         {
-        g_meshcom_settings.node_lat_c = 'N';
+        meshcom_settings.node_lat_c = 'N';
         }
 
         if(direction_E_W == 0)
         {
-        g_meshcom_settings.node_lon_c = 'E';
+        meshcom_settings.node_lon_c = 'E';
         }
         else
         {
-        g_meshcom_settings.node_lon_c = 'W';
+        meshcom_settings.node_lon_c = 'W';
         }
 
-        g_meshcom_settings.node_alt = ((g_meshcom_settings.node_alt * 10) + (int)gps.f_altitude()) / 11;
+        meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)gps.f_altitude()) / 11;
 
         unsigned long date, time;
-        gps.get_datetime(&date, &time, &g_meshcom_settings.node_age);
+        gps.get_datetime(&date, &time, &meshcom_settings.node_age);
 
-        g_meshcom_settings.node_date_year = date % 100;
-        g_meshcom_settings.node_date_year += g_meshcom_settings.node_date_year > 80 ? 1900 : 2000;
-        g_meshcom_settings.node_date_month = (date / 100) % 100;        
-        g_meshcom_settings.node_date_day = date / 10000;
+        meshcom_settings.node_date_year = date % 100;
+        meshcom_settings.node_date_year += meshcom_settings.node_date_year > 80 ? 1900 : 2000;
+        meshcom_settings.node_date_month = (date / 100) % 100;        
+        meshcom_settings.node_date_day = date / 10000;
 
-        g_meshcom_settings.node_date_hour = time / 1000000;
-        g_meshcom_settings.node_date_minute = (time / 10000) % 100;
-        g_meshcom_settings.node_date_second = (time / 100) % 100;
-        g_meshcom_settings.node_date_hundredths = time % 100;
+        meshcom_settings.node_date_hour = time / 1000000;
+        meshcom_settings.node_date_minute = (time / 10000) % 100;
+        meshcom_settings.node_date_second = (time / 100) % 100;
+        meshcom_settings.node_date_hundredths = time % 100;
 
         //printf("Time: %ld\n", time);
     }
@@ -1836,7 +1405,7 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer, inext);
 
                 if(strText.startsWith("-"))
-                    commandAction(msg_buffer, inext, false);
+                    commandAction(msg_buffer, inext, false, _GW_ID, dmac);
 
                 strText="";
             }
@@ -1851,222 +1420,4 @@ void checkSerialCommand(void)
             strText="";
         }
     }
-}
-
-void commandAction(char *msg_text, int len, bool ble)
-{
-    char print_buff[500];
-
-    // -info
-    // -set-owner
-
-    char _owner_c[MAX_CALL_LEN];
-    double fVar=0.0;
-    int iVar;
-    String sVar;
-
-    // copying the contents of the
-    // string to char array
-
-    bool bInfo=false;
-    bool bPos=false;
-    bool bWeather=false;
-
-    if(memcmp(msg_text, "-reset", 6) == 0)
-    {
-        NVIC_SystemReset();     // resets the device
-    }
-    else
-    if(memcmp(msg_text, "-help", 5) == 0)
-    {
-        sprintf(print_buff, "MeshCom 4.0 Client commands\n-info     show info\n-pos      show lat/lon/alt/time info\n-weather   show temp/hum/press\n-sendpos  send pos info now\n-sendweather send weather info now\n-setowner set callsign (OE0XXX-1)\n-setlat   set latitude (44.12345)\n-setlon   set logitude (016.12345)\n-setalt   set altidude (9999)\n");
-
-        if(ble)
-        {
-    		g_ble_uart.write(print_buff, strlen(print_buff));
-        }
-        else
-        {
-            printf("\n%s", print_buff);
-        }
-
-        return;
-    }
-    else
-    if(memcmp(msg_text, "-info", 5) == 0)
-    {
-        bInfo=true;
-    }
-    else
-    if(memcmp(msg_text, "-pos", 4) == 0)
-    {
-        bPos=true;
-    }
-    else
-    if(memcmp(msg_text, "-weather", 8) == 0)
-    {
-        bWeather=true;
-    }
-    else
-    if(memcmp(msg_text, "-WX", 3) == 0)
-    {
-        sendWX(msg_text, g_meshcom_settings.node_temp, g_meshcom_settings.node_hum, g_meshcom_settings.node_press);
-        return;
-    }
-    else
-    if(memcmp(msg_text, "-gps", 4) == 0)
-    {
-        getGPS();
-        return;
-    }
-    else
-    if(memcmp(msg_text, "-sendpos", 8) == 0)
-    {
-        sendPosition(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
-        return;
-    }
-    else
-    if(memcmp(msg_text, "-sendweather", 12) == 0)
-    {
-        sendWeather(g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt,
-         g_meshcom_settings.node_temp, g_meshcom_settings.node_hum, g_meshcom_settings.node_press);
-        return;
-    }
-    else
-    if(memcmp(msg_text, "-setowner ", 10) == 0)
-    {
-        sprintf(_owner_c, "%s", msg_text+10);
-        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
-            _owner_c[strlen(_owner_c)-1] = 0x00;
-        sVar = _owner_c;
-        sVar.toUpperCase();
-        sprintf(g_meshcom_settings.node_call, "%s", sVar.c_str());
-
-        sprintf(_owner_c, "XXX40");
-
-        for(int its=11; its<21; its++)
-        {
-            if(msg_text[its] == '-')
-            {
-                memcpy(_owner_c, msg_text+its-3, 3);
-                _owner_c[3]=0x34;
-                _owner_c[4]=0x30;
-                _owner_c[5]=0x00;
-                break;
-            }
-        }
-
-        sVar = _owner_c;
-        sVar.toUpperCase();
-        sprintf(g_meshcom_settings.node_short, "%s", sVar.c_str());
-
-        save_settings();
-
-        bInfo=true;
-    }
-    else
-    if(memcmp(msg_text, "-setlat ", 8) == 0)
-    {
-        sprintf(_owner_c, "%s", msg_text+8);
-        sscanf(_owner_c, "%lf", &fVar);
-
-        //printf("_owner_c:%s fVar:%f\n", _owner_c, fVar);
-
-        g_meshcom_settings.node_lat_c='N';
-        g_meshcom_settings.node_lat=fVar;
-
-        if(fVar < 0)
-        {
-            g_meshcom_settings.node_lat_c='S';
-            g_meshcom_settings.node_lat=fabs(fVar);
-        }
-
-        save_settings();
-
-        bPos=true;
-    }
-    else
-    if(memcmp(msg_text, "-setlon ", 8) == 0)
-    {
-        sprintf(_owner_c, "%s", msg_text+8);
-        sscanf(_owner_c, "%lf", &fVar);
-
-        g_meshcom_settings.node_lon=fVar;
-
-        g_meshcom_settings.node_lon_c='E';
-        g_meshcom_settings.node_lon=fVar;
-
-        if(fVar < 0)
-        {
-            g_meshcom_settings.node_lon_c='W';
-            g_meshcom_settings.node_lon=fabs(fVar);
-        }
-
-        save_settings();
-
-        bPos=true;
-    }
-    else
-    if(memcmp(msg_text, "-setalt ", 8) == 0)
-    {
-        sprintf(_owner_c, "%s", msg_text+8);
-        sscanf(_owner_c, "%d", &iVar);
-
-        g_meshcom_settings.node_alt=iVar;
-
-        save_settings();
-
-        bPos=true;
-    }
-
-    if(bInfo)
-    {
-        sprintf(print_buff, "MeshCom 4.0 Client\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...MODUL %i\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
-                g_meshcom_settings.node_call, g_meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
-
-        if(ble)
-        {
-    		g_ble_uart.write(print_buff, strlen(print_buff));
-        }
-        else
-        {
-            printf("\n%s", print_buff);
-        }
-
-        sendDisplayHead();
-    }
-    else
-    if(bPos)
-    {
-        sprintf(print_buff, "MeshCom 4.0 Client\n...LAT: %.6lf %c\n...LON: %.6lf %c\n...ALT: %i\n...DATE: %i.%02i.%02i %02i:%02i:%02i UTC\n",
-         g_meshcom_settings.node_lat, g_meshcom_settings.node_lat_c, g_meshcom_settings.node_lon, g_meshcom_settings.node_lon_c, g_meshcom_settings.node_alt,
-         g_meshcom_settings.node_date_year, g_meshcom_settings.node_date_month, g_meshcom_settings.node_date_day,
-         g_meshcom_settings.node_date_hour, g_meshcom_settings.node_date_minute, g_meshcom_settings.node_date_second);
-
-        if(ble)
-        {
-    		g_ble_uart.write(print_buff, strlen(print_buff));
-        }
-        else
-        {
-            printf("\n%s", print_buff);
-        }
-    }
-     else
-    if(bWeather)
-    {
-        sprintf(print_buff, "MeshCom 4.0 Client\n...TEMP: %.2f °C\n...HUM: %.2f%% rH\n...PRESS: %.2f hPa\n",
-         g_meshcom_settings.node_temp, g_meshcom_settings.node_hum, g_meshcom_settings.node_press);
-
-        if(ble)
-        {
-    		g_ble_uart.write(print_buff, strlen(print_buff));
-        }
-        else
-        {
-            printf("\n%s", print_buff);
-        }
-    }
-    else
-        printf("\nMeshCom 4.0 Client\n...wrong command %s\n", msg_text);
 }
