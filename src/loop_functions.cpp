@@ -322,6 +322,11 @@ int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE])
 
 void sendMessage(char *msg_text, int len)
 {
+    if(len < 1 || len > 160)
+    {
+        Serial.printf("sendMessage wrong text length:%i\n", len);
+    }
+
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
     int inext = CallToAPRS(':', msg_buffer);

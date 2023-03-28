@@ -1,6 +1,7 @@
 # Meshcom_Client 4.0
 
-MeshCom 4.0 Protokoll
+## MeshCom 4.0 Protokoll
+
 MeshCom 4.0 verwendet für die Payload-Daten das AX.25 Protokoll, wie es für APRS definiert ist. (aprs101.pdf APRS PROTOCOL REFERENCE Version 1.0 2000, Seite 12)
 
 Verwendung finden:
@@ -29,7 +30,7 @@ Legende:
 | … dient nur zur Darstellung der Trennungen hier im Text
 
 Meldungselemente
-- : , ! , @ Medlungskennung Text-, Positions-, Wetter-Meldung
+- Medlungskennung : ! @ ... Text-, Positions-, Wetter-Meldung
 - MMMMMMMM	Meldungs-ID	32-Bit LSB->MSB
 - HH	MAX-HOP	8-Bit Bit-Maske 0x07
 - Message via MQTT-Server	Bit-Maske 0x80
