@@ -156,7 +156,7 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
 
 
     char line_text[21];
-    char words[100][21];
+    char words[100][21]={0};
     int iwords=0;
     int ipos=0;
 
@@ -166,6 +166,11 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
         if(text[itxt] == ' ' || text[itxt] == '-')
         {
             words[iwords][ipos]=0x00;
+            if(ipos == 0)
+            {
+                words[iwords][ipos]=0x20;
+                words[iwords][ipos+1]=0x00;
+            }
             iwords++;
             ipos=0;
         }
@@ -322,6 +327,10 @@ int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE])
 
 void sendMessage(char *msg_text, int len)
 {
+    // TODO - warum kommt diese Meldung?
+    if(len == 1 && msg_text[0] == 0x20)
+        return;
+
     if(len < 1 || len > 160)
     {
         Serial.printf("sendMessage wrong text length:%i\n", len);
