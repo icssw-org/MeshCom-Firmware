@@ -328,7 +328,7 @@ int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE])
 void sendMessage(char *msg_text, int len)
 {
     // TODO - warum kommt diese Meldung?
-    if(len == 1 && msg_text[0] == 0x20)
+    if(len == 2  && msg_text[0] == 0x3A && msg_text[1] == 0x20)
         return;
 
     if(len < 1 || len > 160)

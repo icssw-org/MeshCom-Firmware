@@ -702,10 +702,10 @@ void esp32setup()
             NEO6GPS.setUART1Output(COM_TYPE_NMEA);
             NEO6GPS.saveConfiguration();
             Serial.printf("Enable NMEA");
-            NEO6GPS.enableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
-            NEO6GPS.enableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
-            NEO6GPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
-            NEO6GPS.enableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART1);
+            NEO6GPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
+            NEO6GPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
+            NEO6GPS.disableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
+            NEO6GPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART1);
             NEO6GPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
             NEO6GPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART1);
             NEO6GPS.saveConfiguration();
