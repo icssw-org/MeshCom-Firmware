@@ -163,9 +163,10 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
     for(itxt=istarttext; itxt<size; itxt++)
     {
         words[iwords][ipos]=text[itxt];
-        if(text[itxt] == ' ' || text[itxt] == '-')
+        if(text[itxt] == ' ')
         {
-            words[iwords][ipos]=0x00;
+            words[iwords][ipos+1]=0x00;
+
             if(ipos == 0)
             {
                 words[iwords][ipos]=0x20;
@@ -229,7 +230,6 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
         }
         else
         {
-            strcat(line_text, " ");
             strcat(line_text, words[itxt]);
         }
     }
@@ -327,13 +327,10 @@ int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE])
 
 void sendMessage(char *msg_text, int len)
 {
-    // TODO - warum kommt diese Meldung?
-    if(len == 2  && msg_text[0] == 0x3A && msg_text[1] == 0x20)
-        return;
-
     if(len < 1 || len > 160)
     {
         Serial.printf("sendMessage wrong text length:%i\n", len);
+        return;
     }
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
@@ -401,7 +398,7 @@ void sendMessage(char *msg_text, int len)
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
     // store last message to compare later on
-    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, inext);
+    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
 
     iWrite++;
     if(iWrite >= MAX_RING)
@@ -504,7 +501,7 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
     // store last message to compare later on
-    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, inext);
+    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
 
     iWrite++;
     if(iWrite >= MAX_RING)
@@ -572,7 +569,7 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
     
     // store last message to compare later on
-    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, inext);
+    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
 
     iWrite++;
     if(iWrite >= MAX_RING)

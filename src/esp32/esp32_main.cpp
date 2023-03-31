@@ -352,9 +352,8 @@ void OnRxTimeout(void);
 void OnRxError(void);
 void OnTxDone(void);
 void OnTxTimeout(void);
-void OnPreambleDetect(void);
-void OnHeaderDetect(void);
 void doTX();        // LoraTX function
+
 void setInterruptFlag();     // LoRaRX Interrupt function
 void enableRX(void);    // for Modules with RXEN / TXEN Pin
 void enableTX(void);    // for Modules with RXEN / TXEN Pin
@@ -387,10 +386,6 @@ uint8_t dmac[6] = {0};
 unsigned int posinfo_first = 0;
 unsigned long posinfo_timer = 0;      // we check periodically to send GPS
 
-// Display 128 x 64 px
-void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
-void sendDisplayHead();
-void sendDisplayText(uint8_t *text, int size);
 unsigned long gps_refresh_timer = 0;
 
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
@@ -398,8 +393,6 @@ bool tx_is_active = false;    // avoids calling doTX() on each main iteration wh
 void addNodeData(uint16_t size, int16_t rssi, int8_t snr); // add additional data we need and send the udp packet
 void checkSerialCommand(void);
 void addUdpOutBuffer(int msg_id, uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer
-void printBuffer(uint8_t *buffer, int len);
-void printBuffer_ascii(uint8_t *buffer, int len);
 void sendToPhone();
 
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
@@ -417,7 +410,6 @@ SFE_UBLOX_GPS NEO6GPS;
 HardwareSerial GPSSerial(GPS_SERIAL_NUM);
 #endif
 
-String tmp_data = "";
 int direction_S_N = 0;  //0--S, 1--N
 int direction_E_W = 0;  //0--E, 1--W
 
@@ -468,10 +460,7 @@ void esp32setup()
 
     for(int ib=0; ib<MAX_RING_UDP_OUT; ib++)
     {
-        RcvBuffer_before[ib][0] = 0x00;
-        RcvBuffer_before[ib][1] = 0x00;
-        RcvBuffer_before[ib][2] = 0x00;
-        RcvBuffer_before[ib][3] = 0x00;
+        memset(RcvBuffer_before[ib], 0x00, 4);
     }
 
     //clear ringbuffer
@@ -491,7 +480,9 @@ void esp32setup()
     Wire.begin();
     u8g2.begin();
 
-    Serial.begin(115200);
+    Serial.begin(MONITOR_SPEED);
+    while(!Serial);
+    Serial.println("SERIAL open");
 
 #ifdef BOARD_E22
     // if RESET Pin is connected
@@ -683,11 +674,8 @@ void esp32setup()
     // TXD	12 (WB_I02)
     // Baud	9600
 
-    Serial.begin(MONITOR_SPEED);
-    while(!Serial);
-    Serial.println("SERIAL open");
     #ifdef ENABLE_GPS
-    GPSSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        GPSSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     #endif
     delay(300);
 
@@ -1382,6 +1370,8 @@ void direction_parse(String tmp)
 #ifdef ENABLE_GPS
 void getGPS(void)
 { 
+    String tmp_data = "";
+
     bool newData = false;
   
     // For one second we parse GPS data and report some key values
@@ -1390,7 +1380,6 @@ void getGPS(void)
       while (GPSSerial.available())
       {
         char c = GPSSerial.read();
-        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         tmp_data += c;
         
         if (gps.encode(c))// Did a new valid sentence come in?
@@ -1398,13 +1387,15 @@ void getGPS(void)
       }
     }
 
-    direction_parse(tmp_data);
-    tmp_data = "";
-    float flat, flon;
-    
+    if(bDEBUG)
+        Serial.printf("%s\n", tmp_data); // uncomment this line if you want to see the GPS data flowing
+
     if (newData)
     {
-        unsigned long age;  
+        direction_parse(tmp_data);
+        float flat, flon;
+        unsigned long age;
+
         gps.f_get_position(&flat, &flon, &age);
         //flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
         //flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
@@ -1447,7 +1438,8 @@ void getGPS(void)
 
         sendDisplayMainline();
 
-        //printf("Time: %ld\n", time);
+        if(bDEBUG)
+            printf("Time: %ld\n", time);
     }
 }
 #endif

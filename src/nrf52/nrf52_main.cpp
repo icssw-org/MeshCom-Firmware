@@ -135,7 +135,6 @@ void OnRxError(void);
 void OnTxDone(void);
 void OnTxTimeout(void);
 void OnPreambleDetect(void);
-void OnHeaderDetect(void);
 
 
 asm(".global _scanf_float");
@@ -174,7 +173,6 @@ uint8_t txt_msg_len_phone = 0;
 //variables and helper functions
 int sendlng = 0;              // lora tx message length
 uint8_t cmd_counter = 2;      // ticker dependant on main cycle delay time
-void print_radioStatus(void); // prints the current Radio Status
 uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
 bool tx_is_active = false;    // avoids calling doTX() on each main iteration when we are already in TX mode
 bool is_receiving = false;  // flag to store we are receiving a lora packet. triggered by header detect not preamble
@@ -183,26 +181,15 @@ bool ble_busy_flag = false;    // flag to signal bluetooth uart is active
 uint8_t isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
 // timers
-unsigned long hb_time = 0;            // heartbeat timer
-unsigned long dhcp_timer = 0;         // dhcp refresh timer
-unsigned long ntp_timer = 0;          // dhcp refresh timer
-unsigned long chk_udp_conn_timer = 0; // we check periodically if we have received a HB from server
 unsigned long posinfo_timer = 0;      // we check periodically to send GPS
 unsigned long temphum_timer = 0;      // we check periodically get TEMP/HUM
 unsigned long druck_timer = 0;        // we check periodically get AIRPRESURE
-unsigned long aliveblink_timer = 0;   // we check periodically alive
-unsigned long bleblink_timer = 0;     // we check periodically BLE
-
-//unsigned long till_header_time = 0; // stores till a header is detected after preamble detect
-unsigned int resetCount = 0;
-unsigned int posinfo_first = 0;
 
 String strText="";
 
 // TinyGPS
 TinyGPS gps;
 
-String tmp_data = "";
 int direction_S_N = 0;  //0--S, 1--N
 int direction_E_W = 0;  //0--E, 1--W
 
@@ -362,10 +349,7 @@ void nrf52setup()
 
     for(int ib=0; ib<MAX_RING_UDP_OUT; ib++)
     {
-        RcvBuffer_before[ib][0] = 0x00;
-        RcvBuffer_before[ib][1] = 0x00;
-        RcvBuffer_before[ib][2] = 0x00;
-        RcvBuffer_before[ib][3] = 0x00;
+        memset(RcvBuffer_before[ib], 0x00, 4);
     }
 
     //clear ringbuffer
@@ -518,7 +502,6 @@ void nrf52setup()
     RadioEvents.RxTimeout = OnRxTimeout;
     RadioEvents.RxError = OnRxError;
     RadioEvents.PreAmpDetect = OnPreambleDetect;
-    //NICHT BENÖTIGTRadioEvents.HeaderDetect = OnHeaderDetect;
     
 
     //  Initialize the LoRa Transceiver
@@ -628,12 +611,6 @@ void nrf52loop()
 
         //getPRESSURE();
 
-        /*
-        Serial.println("Left button pressed");
-        display_1680.clearBuffer();
-        display_1680.drawBitmap(DEPG_HP.position2_x, DEPG_HP.position2_y, rak_img, 150, 56, EPD_BLACK);
-        display_1680.display(true);
-        */
         gKeyNum = 0;
     }
 
@@ -650,23 +627,13 @@ void nrf52loop()
 
             iGPSCount=0;
         }
-        /*
-        Serial.println("Middle button pressed");
-        display_1680.clearBuffer();
-        testdrawtext(DEPG_HP.position3_x, DEPG_HP.position3_y, (char*)"IoT Made Easy", (uint16_t)EPD_BLACK, (uint32_t)2);
-        display_1680.display(true);
-        */
+
         gKeyNum = 0;
     }
 
     if(gKeyNum == 3)
     {
         Serial.println("Right button pressed");
-        /*
-        display_1680.clearBuffer();
-        display_1680.drawBitmap(DEPG_HP.position4_x, DEPG_HP.position4_y, lora_img, 60, 40, EPD_BLACK);
-        display_1680.display(true);
-        */
 
         gKeyNum = 0;
     }
@@ -681,18 +648,13 @@ void nrf52loop()
     }
 
     // posinfo
-    if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
+    if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()))
     {
         sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
-        posinfo_first=2;
-
-        save_settings();    // Position ins Flash schreiben
 
         #if defined(LPS33)
-
-        sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
-
+            sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
+             meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
         #endif
 
         posinfo_timer = millis();
@@ -721,34 +683,6 @@ void nrf52loop()
     }
 
     #endif
-
-    // hold alive
-    /*
-    if (((aliveblink_timer + ALIVEBLINK_INTERVAL) < millis()))
-    {
-        blinkLED();
-
-        aliveblink_timer = millis();
-
-        //DEBUG_MSG_VAL("ALIVE", meshcom_settings.node_date_hour*10000+meshcom_settings.node_date_minute*100+meshcom_settings.node_date_second, "alive info");
-
-        resetCount++;
-
-        if(resetCount > ALIVERESET_INTERVAL)
-            NVIC_SystemReset();
-    }
-
-    */
-
-    /*
-    // BLE LED2 blink
-    if (((bleblink_timer + BLEBLINK_INTERVAL) < millis()) && (g_ble_uart_is_connected && !ble_busy_flag && isPhoneReady == 1))
-    {
-        blinkLED2();
-
-        bleblink_timer = millis();
-    }
-    */
 
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
@@ -829,8 +763,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 {
                     int ring_msg_id = (ringBufferUDPout[iop][3]<<24) | (ringBufferUDPout[iop][2]<<16) | (ringBufferUDPout[iop][1]<<8) | ringBufferUDPout[iop][0];
 
-                    if(ring_msg_id != 0 && bDEBUG)
-                        printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, msg_id);
+                    //if(ring_msg_id != 0 && bDEBUG)
+                      //  printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, msg_id);
 
                     if(ring_msg_id == msg_id)
                     {
@@ -1209,20 +1143,6 @@ void blinkLED2()
 }
 
 
-/** @brief Function to get the current Radio Status
- * Radio status.[RF_IDLE, RF_RX_RUNNING, RF_TX_RUNNING]
- */
-
-void print_radioStatus()
-{
-    if(Radio.GetStatus() == RF_IDLE) Serial.println("RF_IDLE");
-    if(Radio.GetStatus() == RF_RX_RUNNING) Serial.println("RF_RX_RUNNING");
-    if(Radio.GetStatus() == RF_TX_RUNNING) Serial.println("RF_TX_RUNNING");
-    if(Radio.GetStatus() == RF_CAD) Serial.println("RF_CAD");
-
-} 
-
-
 /**@brief Function for handling a LoRa tx timer timeout event.
  */
 void getTEMP(void)
@@ -1289,6 +1209,8 @@ void direction_parse(String tmp)
  */
 void getGPS(void)
 { 
+    String tmp_data = "";
+
     bool newData = false;
   
     // For one second we parse GPS data and report some key values
@@ -1297,20 +1219,22 @@ void getGPS(void)
       while (Serial1.available())
       {
         char c = Serial1.read();
-        if(bDEBUG)
-            Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+
         tmp_data += c;
+
         if (gps.encode(c))// Did a new valid sentence come in?
           newData = true;
       }
     }
 
-    direction_parse(tmp_data);
-    tmp_data = "";
-    float flat, flon;
-    
+    //if(bDEBUG)
+      //  Serial.printf("%s\n", tmp_data.c_str()); // uncomment this line if you want to see the GPS data flowing
+
     if (newData)
     {
+        direction_parse(tmp_data);
+        float flat, flon;
+        
         unsigned long age;  
         gps.f_get_position(&flat, &flon, &age);
         //flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
@@ -1352,7 +1276,8 @@ void getGPS(void)
         meshcom_settings.node_date_second = (time / 100) % 100;
         meshcom_settings.node_date_hundredths = time % 100;
 
-        //printf("Time: %ld\n", time);
+        if(bDEBUG)
+            Serial.printf("Time: %ld\n", time);
     }
 }
 
