@@ -1103,8 +1103,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 print_buff[5]=0x00;
                 addBLEOutBuffer(print_buff, 6);
 
-                Serial.printf("ACK sent to phone");
-                printBuffer(print_buff, 6);
+                if(bDEBUG)
+                {
+                    Serial.printf("ACK sent to phone");
+                    printBuffer(print_buff, 6);
+                }
             }
         #endif
     }
