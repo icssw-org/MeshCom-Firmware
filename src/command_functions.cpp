@@ -1,5 +1,6 @@
 #include "command_functions.h"
 #include "loop_functions.h"
+#include <loop_functions_extern.h>
 #include "batt_functions.h"
 
 void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8_t dmac[6])
@@ -29,7 +30,7 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
     else
     if(memcmp(msg_text, "-help", 5) == 0)
     {
-        sprintf(print_buff, "MeshCom 4.0 Client commands\n-info     show info\n-setcall  set callsign (OE0XXX-1)\n-pos      show lat/lon/alt/time info\n-weather   show temp/hum/press\n-sendpos  send pos info now\n-sendweather send weather info now\n-setlat   set latitude (44.12345)\n-setlon   set logitude (016.12345)\n-setalt   set altidude (9999)\n");
+        sprintf(print_buff, "MeshCom 4.0 Client commands\n-info     show info\n-setcall  set callsign (OE0XXX-1)\n-pos      show lat/lon/alt/time info\n-weather   show temp/hum/press\n-sendpos  send pos info now\n-sendweather send weather info now\n-setlat   set latitude (44.12345)\n-setlon   set logitude (016.12345)\n-setalt   set altidude (9999)\n-debug on/off\n");
 
         if(ble)
         {
@@ -67,6 +68,18 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
     if(memcmp(msg_text, "-info", 5) == 0)
     {
         bInfo=true;
+    }
+    else
+    if(memcmp(msg_text, "-debug on", 9) == 0)
+    {
+        bDEBUG=true;
+        return;
+    }
+    else
+    if(memcmp(msg_text, "-debug off", 10) == 0)
+    {
+        bDEBUG=false;
+        return;
     }
     else
     if(memcmp(msg_text, "-pos", 4) == 0)

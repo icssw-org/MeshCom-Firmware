@@ -1,5 +1,7 @@
 #include "loop_functions.h"
 
+bool bDEBUG = false;
+
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE] = {0};
 
@@ -33,7 +35,7 @@ unsigned char BLEtoPhoneBuff[MAX_RING][UDP_TX_BUF_SIZE];
 int toPhoneWrite=0;
 int toPhoneRead=0;
 
-uint8_t ringBufferUDPout[MAX_RING_UDP_OUT][UDP_TX_BUF_SIZE]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
+uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
 uint8_t udpWrite = 0;   // counter for ringbuffer
 uint8_t udpRead = 0;    // counter for ringbuffer
 
@@ -62,6 +64,27 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
         toPhoneWrite = 0;
 }
 
+/**@brief Function adding messages into outgoing UDP ringbuffer
+ * 
+ */
+void addLoraRxBuffer(int msg_id)
+{
+    // byte 0-3 msg_id
+    ringBufferLoraRX[udpWrite][3] = msg_id >> 24;
+    ringBufferLoraRX[udpWrite][2] = msg_id >> 16;
+    ringBufferLoraRX[udpWrite][1] = msg_id >> 8;
+    ringBufferLoraRX[udpWrite][0] = msg_id;
+
+    if(bDEBUG)
+    {
+        Serial.printf("LoraRX Ringbuffer added element: %u\n", udpWrite);
+        printBuffer(ringBufferLoraRX[udpWrite], 4);
+    }
+
+    udpWrite++;
+    if (udpWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
+        udpWrite = 0;
+}
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
@@ -73,7 +96,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 	
     u8g2.setFont(u8g2_font_6x10_mf);    // u8g2_font_ncenB10_tr); // choose a suitable font
 
-	if(memcmp(text, "L", 1) == 0)
+	if(memcmp(text, "#L", 2) == 0)
     {
         //Serial.println("line");
     	u8g2.drawHLine(3, 16, 120);
@@ -102,7 +125,7 @@ void sendDisplayHead()
     #endif
 
     sendDisplay1306(true, false, 3, 11, print_text);
-    sendDisplay1306(false, false, 3, 9, (char*)"L");
+    sendDisplay1306(false, false, 3, 9, (char*)"#L");
 
     sprintf(msg_text, "Call:  %s", meshcom_settings.node_call);
     sendDisplay1306(false, false, 3, 27, msg_text);
@@ -133,6 +156,11 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
 
     int istarttext=0;
 
+    char line_text[21];
+    char words[100][21]={0};
+    int iwords=0;
+    int ipos=0;
+
     // Check Source-Call
     for(itxt=0; itxt<size; itxt++)
     {
@@ -142,7 +170,11 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
             if(rssi != 0 && itxt < (20-7))
                 sprintf(msg_text, "%s <%i>", text, rssi);
             else
+            {
                 sprintf(msg_text, "%s", text);
+                sprintf(words[iwords], "<%i>", rssi);
+                iwords++;
+            }
 
             msg_text[20]=0x00;
             sendDisplay1306(bClear, true, 3, izeile, msg_text);
@@ -155,17 +187,12 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
     }
 
 
-    char line_text[21];
-    char words[100][21]={0};
-    int iwords=0;
-    int ipos=0;
-
     for(itxt=istarttext; itxt<size; itxt++)
     {
         words[iwords][ipos]=text[itxt];
         if(text[itxt] == ' ')
         {
-            words[iwords][ipos+1]=0x00;
+            words[iwords][ipos]=0x00;
 
             if(ipos == 0)
             {
@@ -230,6 +257,7 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
         }
         else
         {
+            strcat(line_text, " ");
             strcat(line_text, words[itxt]);
         }
     }

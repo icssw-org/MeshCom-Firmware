@@ -8,6 +8,8 @@
 // alle anderen Finger weg !
 // 20230326: Version 4.00: START
 
+extern bool bDEBUG;
+
 extern s_meshcom_settings meshcom_settings;
 
 // common variables
@@ -38,7 +40,7 @@ extern unsigned char BLEtoPhoneBuff[MAX_RING][UDP_TX_BUF_SIZE];
 extern int toPhoneWrite;
 extern int toPhoneRead;
 
-extern uint8_t ringBufferUDPout[MAX_RING_UDP_OUT][UDP_TX_BUF_SIZE]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
+extern uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
 extern uint8_t udpWrite;   // counter for ringbuffer
 extern uint8_t udpRead;    // counter for ringbuffer
 

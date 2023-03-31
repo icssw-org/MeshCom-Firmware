@@ -2,8 +2,6 @@
 // DEBUG
 // -----------------------------------------------------------------------------
 
-#define bDEBUG 1
-
 // If not on PIO or not defined in platformio.ini
 #ifndef DO_DEBUG
 // Debug output set to 0 to disable app debug output

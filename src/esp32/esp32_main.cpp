@@ -392,7 +392,6 @@ bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet rec
 bool tx_is_active = false;    // avoids calling doTX() on each main iteration when we are already in TX mode
 void addNodeData(uint16_t size, int16_t rssi, int8_t snr); // add additional data we need and send the udp packet
 void checkSerialCommand(void);
-void addUdpOutBuffer(int msg_id, uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer
 void sendToPhone();
 
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
@@ -466,7 +465,7 @@ void esp32setup()
     //clear ringbuffer
     for(int i=0; i<MAX_RING_UDP_OUT; i++)
     {
-        memset(ringBufferUDPout[i], 0, UDP_TX_BUF_SIZE);
+        memset(ringBufferLoraRX[i], 0, 4);
     }
 
     #ifdef BOARD_HELTEC
@@ -1027,7 +1026,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                 for(int iop=0;iop<MAX_RING_UDP_OUT;iop++)
                 {
-                    int ring_msg_id = (ringBufferUDPout[iop][3]<<24) | (ringBufferUDPout[iop][2]<<16) | (ringBufferUDPout[iop][1]<<8) | ringBufferUDPout[iop][0];
+                    int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
 
                     if(ring_msg_id != 0 && bDEBUG)
                         printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, msg_id);
@@ -1509,41 +1508,11 @@ void addNodeData(uint16_t size, int16_t rssi, int8_t snr)
 
         int msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
 
-        addUdpOutBuffer(msg_id, txBuffer, (size + offset));
+        addLoraRxBuffer(msg_id);
     }
     else
     {
         DEBUG_MSG("ERROR", "Exceeding Buffer length!");
     }
 
-}
-
-/**@brief Function adding messages into outgoing UDP ringbuffer
- * 
- */
-void addUdpOutBuffer(int msg_id, uint8_t *buffer, uint16_t len)
-{
-    if (len > UDP_TX_BUF_SIZE)
-        len = UDP_TX_BUF_SIZE; // just for safety
-
-    // byte 0-3 msg_id
-    ringBufferUDPout[udpWrite][3] = msg_id >> 24;
-    ringBufferUDPout[udpWrite][2] = msg_id >> 16;
-    ringBufferUDPout[udpWrite][1] = msg_id >> 8;
-    ringBufferUDPout[udpWrite][0] = msg_id;
-
-    // byte 4 one byte is always the message length
-    ringBufferUDPout[udpWrite][4] = len;
-    memcpy(ringBufferUDPout[udpWrite] + 4 + 1, buffer, len);
-
-    if(bDEBUG)
-    {
-        Serial.printf("Out Ringbuffer added element: %u\n", udpWrite);
-        //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
-        printBuffer(ringBufferUDPout[udpWrite], len);
-    }
-
-    udpWrite++;
-    if (udpWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
-        udpWrite = 0;
 }
