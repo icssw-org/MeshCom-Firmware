@@ -1093,20 +1093,21 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         #else
             if(msg_type_b_lora == 0x3A) // nur Textmelungen
             {
-                // ACK MSG 0x41 | 0x01020304
+                // ACK MSG 0x41 | 0x01020304 | HopCount
                 uint8_t print_buff[20];
                 print_buff[0]=0x41;
                 print_buff[1]=msg_id & 0xFF;
                 print_buff[2]=(msg_id >> 8) & 0xFF;
                 print_buff[3]=(msg_id >> 16) & 0xFF;
                 print_buff[4]=(msg_id >> 24) & 0xFF;
-                print_buff[5]=0x00;
-                addBLEOutBuffer(print_buff, 6);
+                print_buff[5]=RcvBuffer[5];     // hop count
+                print_buff[6]=0x00;
+                addBLEOutBuffer(print_buff, 7);
 
                 if(bDEBUG)
                 {
                     Serial.printf("ACK sent to phone");
-                    printBuffer(print_buff, 6);
+                    printBuffer(print_buff, 7);
                 }
             }
         #endif

@@ -15,7 +15,7 @@
 #include <time.h>
 
 #include <TinyGPS.h>
-#include <drivers\Adafruit_SSD1680.h>
+#include <drivers/Adafruit_SSD1680.h>
 #include <WisBlock_EPaper_Images.h>
 
 #include "Adafruit_SHTC3.h"
@@ -506,7 +506,7 @@ void nrf52setup()
     //  Initialize the LoRa Transceiver
     Radio.Init(&RadioEvents);
 
-    // Sets the Syncowrd new that we can set the MESHTASTIC SWORD
+    // Sets the Syncword new that we can set the MESHCOM SWORD
     DEBUG_MSG("RADIO", "Setting new LoRa Sync Word");
     Radio.SetPublicNetwork(true);
 
@@ -826,15 +826,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         #else
             if(msg_type_b_lora == 0x3A)
             {
-                // ACK MSG 0x41 | 0x01020304
+                // ACK MSG 0x41 | 0x01020304 | HopCount
                 uint8_t print_buff[20];
                 print_buff[0]=0x41;
                 print_buff[1]=msg_id & 0xFF;
                 print_buff[2]=(msg_id >> 8) & 0xFF;
                 print_buff[3]=(msg_id >> 16) & 0xFF;
                 print_buff[4]=(msg_id >> 24) & 0xFF;
-                print_buff[5]=0x00;
-                addBLEOutBuffer(print_buff, 6);
+                print_buff[5]=RcvBuffer[5];     // hop count
+                print_buff[6]=0x00;
+                addBLEOutBuffer(print_buff, 7);
             }
         #endif
     }
