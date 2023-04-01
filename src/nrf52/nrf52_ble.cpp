@@ -11,6 +11,7 @@
 #ifdef NRF52_SERIES
 
 #include "WisBlock-API.h"
+#include <loop_functions.h>
 #include <debugconf.h>
 #include <configuration.h>
 
@@ -271,10 +272,14 @@ void bleuart_rx_callback(uint16_t conn_handle)
 
 			sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
 
+            sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
+
 			save_settings();
 
 			// send config back to phone
 			sendConfigToPhone();
+
+			sendDisplayHead();			
 
 			sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);	// Anzeige mit callsign
 			Bluefruit.setName(helper_string);

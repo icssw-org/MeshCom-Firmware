@@ -111,7 +111,7 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
         return;
     }
     else
-    if(memcmp(msg_text, "-setcall ", 10) == 0)
+    if(memcmp(msg_text, "-setcall ", 9) == 0)
     {
         sprintf(_owner_c, "%s", msg_text+10);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)

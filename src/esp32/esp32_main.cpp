@@ -191,11 +191,15 @@ class MyCallbacks: public BLECharacteristicCallbacks
                 
 
                 sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
+        
+                sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
                 save_settings();
 
                 // send config back to phone
                 sendConfigToPhone();
+
+                sendDisplayHead();
 
                 bInitDisplay = false;
 
@@ -688,7 +692,7 @@ void esp32setup()
             Serial.println("GPS connection OK");
             NEO6GPS.setUART1Output(COM_TYPE_NMEA);
             NEO6GPS.saveConfiguration();
-            Serial.printf("Enable NMEA");
+            Serial.println("Enable NMEA");
             NEO6GPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
             NEO6GPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
             NEO6GPS.disableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
@@ -696,7 +700,7 @@ void esp32setup()
             NEO6GPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
             NEO6GPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART1);
             NEO6GPS.saveConfiguration();
-            Serial.printf("Enable NMEA enables!");
+            Serial.println("Enable NMEA enables!");
             break;
         }
         delay(1000);
@@ -1396,6 +1400,7 @@ void getGPS(void)
     if (newData)
     {
         direction_parse(tmp_data);
+
         float flat, flon;
         unsigned long age;
 
@@ -1439,7 +1444,7 @@ void getGPS(void)
         meshcom_settings.node_date_second = (time / 100) % 100;
         meshcom_settings.node_date_hundredths = time % 100;
 
-        sendDisplayMainline();
+        //sendDisplayMainline();
 
         if(bDEBUG)
             printf("Time: %ld\n", time);
@@ -1489,7 +1494,7 @@ void addNodeData(uint16_t size, int16_t rssi, int8_t snr)
     }
     else
     {
-        DEBUG_MSG("ERROR", "LongName is too long!");
+        DEBUG_MSG("ERROR", "Callsign is too long!");
     }
 
     uint8_t offset_params = strlen(meshcom_settings.node_call) + 1;
