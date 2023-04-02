@@ -1,7 +1,7 @@
 #include "loop_functions.h"
 
 bool bDEBUG = false;
-bool bPosDisplay = false;
+bool bPosDisplay = true;
 
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE] = {0};
@@ -285,8 +285,8 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
 
 void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, int batt)
 {
-    //if(!bPosDisplay)
-    //    return;
+    if(!bPosDisplay)
+        return;
 
     char print_text[500];
     int ipt=0;
