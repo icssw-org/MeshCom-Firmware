@@ -16,9 +16,11 @@
 #include <U8g2lib.h> // Click to install library: http://librarymanager/All#u8g2
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
-void sendDisplayHead();
-void sendDisplayMainline();
+void sendDisplayHead(int batt);
+void sendDisplayMainline(int batt);
 void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr);
+void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, int batt);
+
 void printBuffer(uint8_t *buffer, int len);
 void printBuffer_ascii(uint8_t *buffer, int len);
 

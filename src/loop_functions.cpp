@@ -1,6 +1,7 @@
 #include "loop_functions.h"
 
 bool bDEBUG = false;
+bool bPosDisplay = false;
 
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE] = {0};
@@ -113,42 +114,48 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     }
 }
 
-void sendDisplayHead()
+void sendDisplayHead(int batt)
 {
-
     char print_text[500];
 
-    #ifdef BOARD_RAK4630
-        sprintf(print_text, "MC 4.0          %3d%%", (int)mv_to_percent(read_batt()));
-    #else
-        sprintf(print_text, "MC 4.0          %3d%%", 100); //(int)mv_to_percent(read_batt()));
-    #endif
-
+    sprintf(print_text, "MC 4.0          %3d%%", batt);
     sendDisplay1306(true, false, 3, 11, print_text);
     sendDisplay1306(false, false, 3, 9, (char*)"#L");
 
-    sprintf(msg_text, "Call:  %s", meshcom_settings.node_call);
-    sendDisplay1306(false, false, 3, 27, msg_text);
+    sprintf(print_text, "Call:  %s", meshcom_settings.node_call);
+    sendDisplay1306(false, false, 3, 27, print_text);
 
-    sprintf(msg_text, "Short: %s", meshcom_settings.node_short);
-    sendDisplay1306(false, false, 3, 40, msg_text);
+    sprintf(print_text, "Short: %s", meshcom_settings.node_short);
+    sendDisplay1306(false, false, 3, 39, print_text);
 
-    sprintf(msg_text, "MAC:   %08X", _GW_ID);
-    sendDisplay1306(false, false, 3, 52, msg_text);
+    sprintf(print_text, "MAC:   %08X", _GW_ID);
+    sendDisplay1306(false, false, 3, 51, print_text);
 
-    sprintf(msg_text, "Modul: %i", MODUL_HARDWARE);
-    sendDisplay1306(false, true, 3, 63, msg_text);
+    sprintf(print_text, "Modul: %i", MODUL_HARDWARE);
+    sendDisplay1306(false, true, 3, 63, print_text);
 }
 
-void sendDisplayMainline()
+void sendDisplayMainline(int batt)
 {
-    sprintf(msg_text, "MC 4.0 %02i:%02i:%02i %3d%%", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, 100); // (int)mv_to_percent(read_batt()));
+    char print_text[500];
 
-    sendDisplay1306(false, true, 3, 11, msg_text);
+    if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
+    {
+        sprintf(print_text, "MC 4.0          %3d%%", batt);
+    }
+    else
+    {
+        sprintf(print_text, "MC 4.0 %02i:%02i:%02i %3d%%", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, batt); // (int)mv_to_percent(read_batt()));
+    }
+
+    sendDisplay1306(true, false, 3, 11, print_text);
+    sendDisplay1306(false, true, 3, 9, (char*)"#L");
 }
 
 void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
 {
+    bPosDisplay=false;
+    
     int izeile=13;
     int itxt=0;
 
@@ -177,7 +184,7 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
             }
 
             msg_text[20]=0x00;
-            sendDisplay1306(bClear, true, 3, izeile, msg_text);
+            sendDisplay1306(bClear, false, 3, izeile, msg_text);
 
             izeile=izeile+12;
             istarttext=itxt+1;
@@ -273,6 +280,149 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
         //Serial.printf("1306-02:%s len:%i izeile:%i\n", msg_text, strlen(msg_text), izeile);
         msg_text[20]=0x00;
         sendDisplay1306(bClear, bEnd, 3, izeile, msg_text);
+    }
+}
+
+void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, int batt)
+{
+    //if(!bPosDisplay)
+    //    return;
+
+    char print_text[500];
+    int ipt=0;
+
+    int izeile=27;
+    int itxt=0;
+    int istarttext=0;
+
+
+    bool bClear=false;
+
+    sendDisplayMainline(batt);
+
+    // Check Source-Call
+    for(itxt=0; itxt<size; itxt++)
+    {
+        if(text[itxt] == '!')
+        {
+            print_text[ipt]=0x00;
+
+            if(rssi != 0 && itxt < (20-7))
+                sprintf(msg_text, "%s <%i>", print_text, rssi);
+            else
+            {
+                sprintf(msg_text, "%s", print_text);
+            }
+
+            msg_text[20]=0x00;
+            sendDisplay1306(bClear, true, 3, izeile, msg_text);
+
+            istarttext=itxt+1;
+            izeile=izeile+12;
+            bClear=false;
+            break;
+        }
+        else
+        {
+            print_text[ipt]=text[itxt];
+            ipt++;
+        }
+    }
+
+    ipt=0;
+
+    for(itxt=istarttext; itxt<size; itxt++)
+    {
+        if((text[itxt] == 'N' || text[itxt] == 'S'))
+        {
+            print_text[ipt]=0x00;
+
+            sprintf(msg_text, "LAT:  %s %c", print_text, text[itxt]);
+            msg_text[20]=0x00;
+            sendDisplay1306(bClear, true, 3, izeile, msg_text);
+
+            istarttext=itxt+2;
+            izeile=izeile+12;
+            bClear=false;
+            break;
+        }
+        else
+        {
+            print_text[ipt]=text[itxt];
+            ipt++;
+        }
+    }
+
+    ipt=0;
+
+    for(itxt=istarttext; itxt<size; itxt++)
+    {
+        if((text[itxt] == 'W' || text[itxt] == 'E'))
+        {
+            print_text[ipt]=0x00;
+
+            sprintf(msg_text, "LON: %s %c", print_text, text[itxt]);
+            msg_text[20]=0x00;
+            sendDisplay1306(bClear, true, 3, izeile, msg_text);
+
+            istarttext=itxt+3;
+            izeile=izeile+12;
+            bClear=false;
+            break;
+        }
+        else
+        {
+            print_text[ipt]=text[itxt];
+            ipt++;
+        }
+    }
+
+    ipt=0;
+
+    for(itxt=istarttext; itxt<size; itxt++)
+    {
+        if((text[itxt] == '/' || text[itxt] == 0x00))
+        {
+            print_text[ipt]=0x00;
+
+            //sprintf(msg_text, "BAT: %s", print_text);
+            //msg_text[20]=0x00;
+            //sendDisplay1306(bClear, true, 3, izeile, msg_text);
+
+            istarttext=itxt+3;
+            //izeile=izeile+12;
+            bClear=false;
+            break;
+        }
+        else
+        {
+            print_text[ipt]=text[itxt];
+            ipt++;
+        }
+    }
+
+    ipt=0;
+
+    for(itxt=istarttext; itxt<size; itxt++)
+    {
+        if((text[itxt] == 0x00))
+        {
+            print_text[ipt]=0x00;
+
+            sprintf(msg_text, "ALT: %s m", print_text);
+            msg_text[20]=0x00;
+            sendDisplay1306(bClear, true, 3, izeile, msg_text);
+
+            istarttext=itxt+2;
+            izeile=izeile+12;
+            bClear=false;
+            break;
+        }
+        else
+        {
+            print_text[ipt]=text[itxt];
+            ipt++;
+        }
     }
 }
 
@@ -516,10 +666,8 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     msg_buffer[inext] = MODUL_HARDWARE;
     inext++;
 
-    if(bDEBUG)
-    {
-        printBuffer_ascii(msg_buffer, inext);
-    }
+    Serial.printf("POS->");
+    printBuffer_ascii(msg_buffer, inext);
 
     if(inext > UDP_TX_BUF_SIZE)
         inext = UDP_TX_BUF_SIZE;
@@ -588,10 +736,8 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     msg_buffer[inext] = MODUL_HARDWARE;
     inext++;
 
-    if(bDEBUG)
-    {
-        printBuffer_ascii(msg_buffer, inext);
-    }
+    Serial.printf("WX->");
+    printBuffer_ascii(msg_buffer, inext);
 
     ringBuffer[iWrite][0]=inext;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);

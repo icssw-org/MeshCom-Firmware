@@ -492,6 +492,12 @@ void nrf52setup()
     Wire.begin();
     u8g2.begin();
 
+    // reset GPS-Time parameter
+    meshcom_settings.node_date_hour = 0;
+    meshcom_settings.node_date_minute = 0;
+    meshcom_settings.node_date_second = 0;
+    meshcom_settings.node_date_hundredths = 0;
+
     Serial.println("CLIENT STARTED");
 
     //  Set the LoRa Callback Functions
@@ -574,9 +580,7 @@ void nrf52loop()
 {
     if(!bInitDisplay)
     {
-        mv_to_percent(read_batt());
-
-        sendDisplayHead();
+        sendDisplayHead(mv_to_percent(read_batt()));
 
         bInitDisplay=true;
     }
@@ -793,6 +797,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         if(msg_type_b_lora == 0x3A)
                         {
                             sendDisplayText(RcvBuffer+6, size-6-3, rssi, snr);
+                        }
+                        else
+                        if(msg_type_b_lora == 0x21)
+                        {
+                            sendDisplayPosition(RcvBuffer+6, size-6-2, rssi, snr, (int)mv_to_percent(read_batt()));
                         }
 
                         DEBUG_MSG("RADIO", "Packet resend to mesh");

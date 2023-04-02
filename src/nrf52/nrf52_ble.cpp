@@ -279,7 +279,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			// send config back to phone
 			sendConfigToPhone();
 
-			sendDisplayHead();			
+			sendDisplayHead(0);			
 
 			sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);	// Anzeige mit callsign
 			Bluefruit.setName(helper_string);

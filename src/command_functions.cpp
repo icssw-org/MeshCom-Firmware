@@ -30,7 +30,7 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
     else
     if(memcmp(msg_text, "-help", 5) == 0)
     {
-        sprintf(print_buff, "MeshCom 4.0 Client commands\n-info     show info\n-setcall  set callsign (OE0XXX-1)\n-pos      show lat/lon/alt/time info\n-weather   show temp/hum/press\n-sendpos  send pos info now\n-sendweather send weather info now\n-setlat   set latitude (44.12345)\n-setlon   set logitude (016.12345)\n-setalt   set altidude (9999)\n-debug on/off\n");
+        sprintf(print_buff, "MeshCom 4.0 Client commands\n-info     show info\n-setcall  set callsign (OE0XXX-1)\n-pos      show lat/lon/alt/time info\n-weather   show temp/hum/press\n-sendpos  send pos info now\n-sendweather send weather info now\n-setlat   set latitude (44.12345)\n-setlon   set logitude (016.12345)\n-setalt   set altidude (9999)\n-debug on/off\n-pos display on/off\n");
 
         if(ble)
         {
@@ -68,6 +68,18 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
     if(memcmp(msg_text, "-info", 5) == 0)
     {
         bInfo=true;
+    }
+    else
+    if(memcmp(msg_text, "-pos display on", 15) == 0)
+    {
+        bPosDisplay=true;
+        return;
+    }
+    else
+    if(memcmp(msg_text, "-pos display off", 16) == 0)
+    {
+        bPosDisplay=false;
+        return;
     }
     else
     if(memcmp(msg_text, "-debug on", 9) == 0)
@@ -198,7 +210,7 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
             printf("\n%s", print_buff);
         }
 
-        sendDisplayHead();
+        sendDisplayHead(mv_to_percent(read_batt()));
     }
     else
     if(bPos)

@@ -199,7 +199,7 @@ class MyCallbacks: public BLECharacteristicCallbacks
                 // send config back to phone
                 sendConfigToPhone();
 
-                sendDisplayHead();
+                sendDisplayHead((int)mv_to_percent(read_batt()));
 
                 bInitDisplay = false;
 
@@ -387,7 +387,6 @@ bool g_ble_uart_is_connected = false;
 // Client basic variables
 uint8_t dmac[6] = {0};
 
-unsigned int posinfo_first = 0;
 unsigned long posinfo_timer = 0;      // we check periodically to send GPS
 
 unsigned long gps_refresh_timer = 0;
@@ -710,6 +709,12 @@ void esp32setup()
     Serial.println("=====================================");
     #endif
 
+    // reset GPS-Time parameter
+    meshcom_settings.node_date_hour = 0;
+    meshcom_settings.node_date_minute = 0;
+    meshcom_settings.node_date_second = 0;
+    meshcom_settings.node_date_hundredths = 0;
+
     Serial.println("CLIENT STARTED");
 
 }
@@ -826,7 +831,7 @@ void esp32loop()
 
     if(bInitDisplay)
     {
-      sendDisplayHead();
+      sendDisplayHead((int)mv_to_percent(read_batt()));
 
       bInitDisplay=false;
     }
@@ -850,22 +855,17 @@ void esp32loop()
     }
 
     // posinfo
-    if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()) || posinfo_first == 1)
+    if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()))
     {
         #ifdef ENABLE_GPS
             getGPS();
-            save_settings();    // Position ins Flash schreiben
         #endif
 
         sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
 
-        posinfo_first=2;
-
         #if defined(LPS33)
-
         sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
          meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
-
         #endif
 
         posinfo_timer = millis();
@@ -1063,6 +1063,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         if(msg_type_b_lora == 0x3A)
                         {
                             sendDisplayText(RcvBuffer+6, size-6-3, rssi, snr);
+                        }
+                        else
+                        if(msg_type_b_lora == 0x21)
+                        {
+                            sendDisplayPosition(RcvBuffer+6, size-6-2, rssi, snr, (int)mv_to_percent(read_batt()));
                         }
 
                         DEBUG_MSG("RADIO", "Packet resend to mesh");

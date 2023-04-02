@@ -9,6 +9,7 @@
 // 20230326: Version 4.00: START
 
 extern bool bDEBUG;
+extern bool bPosDisplay;
 
 extern s_meshcom_settings meshcom_settings;
 
