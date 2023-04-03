@@ -3,7 +3,7 @@
 #include <loop_functions_extern.h>
 #include "batt_functions.h"
 
-void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8_t dmac[6])
+void commandAction(char *msg_text, int len, bool ble)
 {
     char print_buff[500];
     uint8_t buffer[500];
@@ -23,12 +23,18 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
     bool bPos=false;
     bool bWeather=false;
 
-    if(memcmp(msg_text, "-reset", 6) == 0)
+    if(memcmp(msg_text, "--", 2) != 0)
+    {
+        printf("\nMeshCom 4.0 Client\n...wrong command %s\n", msg_text);
+        return;
+    }
+
+    if(memcmp(msg_text+1, "-reset", 6) == 0)
     {
         //NVIC_SystemReset();     // resets the device
     }
     else
-    if(memcmp(msg_text, "-help", 5) == 0)
+    if(memcmp(msg_text+1, "-help", 5) == 0)
     {
         sprintf(print_buff, "MeshCom 4.0 Client commands\n-info     show info\n-setcall  set callsign (OE0XXX-1)\n-pos      show lat/lon/alt/time info\n-weather   show temp/hum/press\n-sendpos  send pos info now\n-sendweather send weather info now\n-setlat   set latitude (44.12345)\n-setlon   set logitude (016.12345)\n-setalt   set altidude (9999)\n-debug on/off\n-pos display on/off\n");
 
@@ -45,67 +51,67 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
         return;
     }
     else
-    if(memcmp(msg_text, "-info", 5) == 0)
+    if(memcmp(msg_text+1, "-info", 5) == 0)
     {
         bInfo=true;
     }
     else
-    if(memcmp(msg_text, "-pos display on", 15) == 0)
+    if(memcmp(msg_text+1, "-pos display on", 15) == 0 || memcmp(msg_text+1, "-all", 4) == 0)
     {
         bPosDisplay=true;
         return;
     }
     else
-    if(memcmp(msg_text, "-pos display off", 16) == 0)
+    if(memcmp(msg_text+1, "-pos display off", 16) == 0 || memcmp(msg_text+1, "-msg", 4) == 0)
     {
         bPosDisplay=false;
         return;
     }
     else
-    if(memcmp(msg_text, "-debug on", 9) == 0)
+    if(memcmp(msg_text+1, "-debug on", 9) == 0)
     {
         bDEBUG=true;
         return;
     }
     else
-    if(memcmp(msg_text, "-debug off", 10) == 0)
+    if(memcmp(msg_text+1, "-debug off", 10) == 0)
     {
         bDEBUG=false;
         return;
     }
     else
-    if(memcmp(msg_text, "-pos", 4) == 0)
+    if(memcmp(msg_text+1, "-pos", 4) == 0)
     {
         bPos=true;
     }
     else
-    if(memcmp(msg_text, "-weather", 8) == 0)
+    if(memcmp(msg_text+1, "-weather", 8) == 0)
     {
         bWeather=true;
     }
     else
-    if(memcmp(msg_text, "-WX", 3) == 0)
+    if(memcmp(msg_text+1, "-WX", 3) == 0)
     {
         sendWX(msg_text, meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
         return;
     }
     else
-    if(memcmp(msg_text, "-sendpos", 8) == 0)
+    if(memcmp(msg_text+1, "-sendpos", 8) == 0)
     {
         sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
         return;
     }
     else
-    if(memcmp(msg_text, "-sendweather", 12) == 0)
+    if(memcmp(msg_text+1, "-sendweather", 12) == 0)
     {
         sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
          meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
         return;
     }
     else
-    if(memcmp(msg_text, "-setcall ", 9) == 0)
+    if(memcmp(msg_text+1, "-setcall ", 9) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+10);
+        sprintf(_owner_c, "%s", msg_text+11);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
             _owner_c[strlen(_owner_c)-1] = 0x00;
         sVar = _owner_c;
@@ -121,9 +127,9 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
         bInfo=true;
     }
     else
-    if(memcmp(msg_text, "-setlat ", 8) == 0)
+    if(memcmp(msg_text+1, "-setlat ", 8) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+8);
+        sprintf(_owner_c, "%s", msg_text+9);
         sscanf(_owner_c, "%lf", &fVar);
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, fVar);
@@ -142,9 +148,9 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
         bPos=true;
     }
     else
-    if(memcmp(msg_text, "-setlon ", 8) == 0)
+    if(memcmp(msg_text+1, "-setlon ", 8) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+8);
+        sprintf(_owner_c, "%s", msg_text+9);
         sscanf(_owner_c, "%lf", &fVar);
 
         meshcom_settings.node_lon=fVar;
@@ -163,9 +169,9 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
         bPos=true;
     }
     else
-    if(memcmp(msg_text, "-setalt ", 8) == 0)
+    if(memcmp(msg_text+1, "-setalt ", 8) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+8);
+        sprintf(_owner_c, "%s", msg_text+9);
         sscanf(_owner_c, "%d", &iVar);
 
         meshcom_settings.node_alt=iVar;
@@ -177,8 +183,8 @@ void commandAction(char *msg_text, int len, bool ble, unsigned int _GW_ID, uint8
 
     if(bInfo)
     {
-        sprintf(print_buff, "MeshCom 4.0 Client\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...MODUL %i\n...MAC %02X %02X %02X %02X %02X %02X\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
-                meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5], read_batt(), mv_to_percent(read_batt()), millis());
+        sprintf(print_buff, "MeshCom 4.0 Client\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...MODUL %i\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n",
+                meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, read_batt(), mv_to_percent(read_batt()), millis());
 
         if(ble)
         {

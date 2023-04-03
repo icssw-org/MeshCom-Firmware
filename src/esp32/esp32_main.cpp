@@ -288,7 +288,7 @@ class MyCallbacks: public BLECharacteristicCallbacks
         else
         if(str[0] == '-')
         {
-            commandAction(str, strlen(str), true, _GW_ID, dmac);
+            commandAction(str, strlen(str), true);
         }
     #endif
 
@@ -1155,7 +1155,7 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer, inext);
 
                 if(strText.startsWith("-"))
-                    commandAction(msg_buffer, inext, false, _GW_ID, dmac);
+                    commandAction(msg_buffer, inext, false);
 
                 strText="";
             }

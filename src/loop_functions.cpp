@@ -1,4 +1,5 @@
 #include "loop_functions.h"
+#include "command_functions.h"
 
 bool bDEBUG = false;
 bool bPosDisplay = true;
@@ -486,6 +487,12 @@ void sendMessage(char *msg_text, int len)
     if(len < 1 || len > 160)
     {
         Serial.printf("sendMessage wrong text length:%i\n", len);
+        return;
+    }
+
+    if(memcmp(msg_text, "--", 2) == 0)
+    {
+        commandAction(msg_text, len, true);
         return;
     }
 

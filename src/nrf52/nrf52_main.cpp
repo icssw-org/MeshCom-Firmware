@@ -1044,7 +1044,7 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer, inext);
 
                 if(strText.startsWith("-"))
-                    commandAction(msg_buffer, inext, false, _GW_ID, dmac);
+                    commandAction(msg_buffer, inext, false);
 
                 strText="";
             }
