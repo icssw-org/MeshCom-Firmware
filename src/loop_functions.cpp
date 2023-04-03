@@ -40,6 +40,12 @@ uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4]; //Ringbuffer for UDP TX from LoRa
 uint8_t udpWrite = 0;   // counter for ringbuffer
 uint8_t udpRead = 0;    // counter for ringbuffer
 
+uint8_t cmd_counter = 2;      // ticker dependant on main cycle delay time
+
+bool is_receiving = false;  // flag to store we are receiving a lora packet. triggered by header detect not preamble
+
+uint8_t isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
+
 /** @brief Function adding messages into outgoing BLE ringbuffer
  * BLE to PHONE Buffer
  */
@@ -152,52 +158,36 @@ void sendDisplayMainline(int batt)
     sendDisplay1306(false, true, 3, 9, (char*)"#L");
 }
 
-void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
+void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
     bPosDisplay=false;
     
     int izeile=13;
-    int itxt=0;
+    unsigned int itxt=0;
 
     bool bClear=true;
-
-    int istarttext=0;
 
     char line_text[21];
     char words[100][21]={0};
     int iwords=0;
     int ipos=0;
 
-    // Check Source-Call
-    for(itxt=0; itxt<size; itxt++)
+    if(aprsmsg.msg_source_path.length() < (20-7))
+        sprintf(msg_text, "%s <%i>", aprsmsg.msg_source_path.c_str(), rssi);
+    else
+        sprintf(msg_text, "%s", aprsmsg.msg_source_path.c_str());
+
+    msg_text[20]=0x00;
+    sendDisplay1306(bClear, false, 3, izeile, msg_text);
+
+    izeile=izeile+12;
+    bClear=false;
+
+    for(itxt=0; itxt<aprsmsg.msg_payload.length(); itxt++)
     {
-        if(text[itxt] == ':' && itxt < 20)
-        {
-            text[itxt]=0x00;
-            if(rssi != 0 && itxt < (20-7))
-                sprintf(msg_text, "%s <%i>", text, rssi);
-            else
-            {
-                sprintf(msg_text, "%s", text);
-                sprintf(words[iwords], "<%i>", rssi);
-                iwords++;
-            }
+        words[iwords][ipos]=aprsmsg.msg_payload.charAt(itxt);
 
-            msg_text[20]=0x00;
-            sendDisplay1306(bClear, false, 3, izeile, msg_text);
-
-            izeile=izeile+12;
-            istarttext=itxt+1;
-            bClear=false;
-            break;
-        }
-    }
-
-
-    for(itxt=istarttext; itxt<size; itxt++)
-    {
-        words[iwords][ipos]=text[itxt];
-        if(text[itxt] == ' ')
+        if(words[iwords][ipos] == ' ')
         {
             words[iwords][ipos]=0x00;
 
@@ -214,7 +204,7 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
         {
             words[iwords][20]=0x00;
             iwords++;
-            words[iwords][0]=text[itxt];
+            words[iwords][0]=aprsmsg.msg_payload.charAt(itxt);
             ipos=1;
         }
         else
@@ -283,7 +273,7 @@ void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr)
     }
 }
 
-void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, int batt)
+void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, int batt)
 {
     if(!bPosDisplay)
         return;
@@ -292,7 +282,7 @@ void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, 
     int ipt=0;
 
     int izeile=27;
-    int itxt=0;
+    unsigned int itxt=0;
     int istarttext=0;
 
 
@@ -300,46 +290,28 @@ void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, 
 
     sendDisplayMainline(batt);
 
-    // Check Source-Call
-    for(itxt=0; itxt<size; itxt++)
-    {
-        if(text[itxt] == '!')
-        {
-            print_text[ipt]=0x00;
+    if(aprsmsg.msg_source_path.length() < (20-7))
+        sprintf(msg_text, "%s <%i>", aprsmsg.msg_source_path.c_str(), rssi);
+    else
+        sprintf(msg_text, "%s", aprsmsg.msg_source_path.c_str());
 
-            if(rssi != 0 && itxt < (20-7))
-                sprintf(msg_text, "%s <%i>", print_text, rssi);
-            else
-            {
-                sprintf(msg_text, "%s", print_text);
-            }
+    msg_text[20]=0x00;
+    sendDisplay1306(bClear, false, 3, izeile, msg_text);
 
-            msg_text[20]=0x00;
-            sendDisplay1306(bClear, true, 3, izeile, msg_text);
-
-            istarttext=itxt+1;
-            izeile=izeile+12;
-            bClear=false;
-            break;
-        }
-        else
-        {
-            print_text[ipt]=text[itxt];
-            ipt++;
-        }
-    }
+    izeile=izeile+12;
+    bClear=false;
 
     ipt=0;
 
-    for(itxt=istarttext; itxt<size; itxt++)
+    for(itxt=0; itxt<aprsmsg.msg_payload.length(); itxt++)
     {
-        if((text[itxt] == 'N' || text[itxt] == 'S'))
+        if((aprsmsg.msg_payload.charAt(itxt) == 'N' || aprsmsg.msg_payload.charAt(itxt) == 'S'))
         {
             print_text[ipt]=0x00;
 
-            sprintf(msg_text, "LAT:  %s %c", print_text, text[itxt]);
+            sprintf(msg_text, "LAT:  %s %c", print_text, aprsmsg.msg_payload.charAt(itxt));
             msg_text[20]=0x00;
-            sendDisplay1306(bClear, true, 3, izeile, msg_text);
+            sendDisplay1306(bClear, false, 3, izeile, msg_text);
 
             istarttext=itxt+2;
             izeile=izeile+12;
@@ -348,22 +320,22 @@ void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, 
         }
         else
         {
-            print_text[ipt]=text[itxt];
+            print_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
             ipt++;
         }
     }
 
     ipt=0;
 
-    for(itxt=istarttext; itxt<size; itxt++)
+    for(itxt=istarttext; itxt<aprsmsg.msg_payload.length(); itxt++)
     {
-        if((text[itxt] == 'W' || text[itxt] == 'E'))
+        if((aprsmsg.msg_payload.charAt(itxt) == 'W' || aprsmsg.msg_payload.charAt(itxt) == 'E'))
         {
             print_text[ipt]=0x00;
 
-            sprintf(msg_text, "LON: %s %c", print_text, text[itxt]);
+            sprintf(msg_text, "LON: %s %c", print_text, aprsmsg.msg_payload.charAt(itxt));
             msg_text[20]=0x00;
-            sendDisplay1306(bClear, true, 3, izeile, msg_text);
+            sendDisplay1306(bClear, false, 3, izeile, msg_text);
 
             istarttext=itxt+3;
             izeile=izeile+12;
@@ -372,22 +344,22 @@ void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, 
         }
         else
         {
-            print_text[ipt]=text[itxt];
+            print_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
             ipt++;
         }
     }
 
     ipt=0;
 
-    for(itxt=istarttext; itxt<size; itxt++)
+    for(itxt=istarttext; itxt<aprsmsg.msg_payload.length(); itxt++)
     {
-        if((text[itxt] == '/' || text[itxt] == 0x00))
+        if(aprsmsg.msg_payload.charAt(itxt) == '/')
         {
             print_text[ipt]=0x00;
 
             //sprintf(msg_text, "BAT: %s", print_text);
             //msg_text[20]=0x00;
-            //sendDisplay1306(bClear, true, 3, izeile, msg_text);
+            //sendDisplay1306(bClear, false, 3, izeile, msg_text);
 
             istarttext=itxt+3;
             //izeile=izeile+12;
@@ -396,18 +368,19 @@ void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, 
         }
         else
         {
-            print_text[ipt]=text[itxt];
+            print_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
             ipt++;
         }
     }
 
     ipt=0;
 
-    for(itxt=istarttext; itxt<size; itxt++)
+    for(itxt=istarttext; itxt<aprsmsg.msg_payload.length(); itxt++)
     {
-        if((text[itxt] == 0x00))
+        if(itxt == aprsmsg.msg_payload.length()-1)
         {
-            print_text[ipt]=0x00;
+            print_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
+            print_text[ipt+1]=0x00;
 
             sprintf(msg_text, "ALT: %s m", print_text);
             msg_text[20]=0x00;
@@ -420,7 +393,7 @@ void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, 
         }
         else
         {
-            print_text[ipt]=text[itxt];
+            print_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
             ipt++;
         }
     }
@@ -435,6 +408,11 @@ void printBuffer(uint8_t *buffer, int len)
     Serial.printf("%02X ", buffer[i]);
   }
   Serial.println("");
+}
+
+void printBuffer_aprs(struct aprsMessage &aprsmsg)
+{
+  Serial.printf("%03i %c x%08X %02X %i %s>%s%c%s %04X\n", aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_fcs);
 }
 
 /** @brief Method to print our buffers

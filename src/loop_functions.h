@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <configuration.h>
 #include <debugconf.h>
+#include <aprs_functions.h>
 
 #if defined(ESP8266) || defined(ESP32)
     #include "esp32/esp32_flash.h"
@@ -18,10 +19,11 @@
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
 void sendDisplayHead(int batt);
 void sendDisplayMainline(int batt);
-void sendDisplayText(uint8_t text[300], int size, int16_t rssi, int8_t snr);
-void sendDisplayPosition(uint8_t text[300], int size, int16_t rssi, int8_t snr, int batt);
+void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr);
+void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, int batt);
 
 void printBuffer(uint8_t *buffer, int len);
+void printBuffer_aprs(struct aprsMessage &aprsMessage);
 void printBuffer_ascii(uint8_t *buffer, int len);
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);

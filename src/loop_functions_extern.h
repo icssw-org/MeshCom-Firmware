@@ -45,3 +45,7 @@ extern uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4]; //Ringbuffer for UDP TX fr
 extern uint8_t udpWrite;   // counter for ringbuffer
 extern uint8_t udpRead;    // counter for ringbuffer
 
+extern uint8_t cmd_counter;      // ticker dependant on main cycle delay time
+extern bool is_receiving;  // flag to store we are receiving a lora packet. triggered by header detect not preamble
+extern uint8_t isPhoneReady;      // flag we receive from phone when itis ready to receive data
+
