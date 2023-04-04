@@ -61,7 +61,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                 for(int iop=0;iop<MAX_RING_UDP_OUT;iop++)
                 {
-                    int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
+                    unsigned int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
 
                     if(ring_msg_id != 0 && bDEBUG)
                         printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, aprsmsg.msg_id);
@@ -142,25 +142,25 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     }
     else
     {
-        DEBUG_MSG_VAL("RADIO", msg_id, "Packet discarded, already seen it!");
+        DEBUG_MSG_VAL("RADIO", aprsmsg.msg_id, "Packet discarded, already seen it!");
 
 
         #if BLE_TEST > 0
             char print_buff[20];
-            sprintf(print_buff, "MSG %08X ACK\n", msg_id);
+            sprintf(print_buff, "MSG %08X ACK\n", aprsmsg.msg_id);
        		g_ble_uart.write(print_buff, strlen(print_buff));
         #else
             if(msg_type_b_lora == 0x3A) // nur Textmelungen
             {
-                // ACK MSG 0x41 | 0x01020304 | HopCount
+                // ACK MSG 0x41 | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
                 uint8_t print_buff[20];
                 print_buff[0]=0x41;
                 print_buff[1]=aprsmsg.msg_id & 0xFF;
                 print_buff[2]=(aprsmsg.msg_id >> 8) & 0xFF;
                 print_buff[3]=(aprsmsg.msg_id >> 16) & 0xFF;
                 print_buff[4]=(aprsmsg.msg_id >> 24) & 0xFF;
-                print_buff[5]=RcvBuffer[5];     // hop count
-                print_buff[6]=0x00;
+                print_buff[5]=0x00;     // switch ack GW / Node currently fixed to 0x00 
+                print_buff[6]=0x00;     // msg always 0x00 at the end
                 addBLEOutBuffer(print_buff, 7);
 
                 if(bDEBUG)

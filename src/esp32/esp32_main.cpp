@@ -150,18 +150,32 @@ class MyCallbacks: public BLECharacteristicCallbacks
          * 0xA0 - Textmessage
          * Data:
          * Callsign: length Callsign 1B - Callsign
-         * Latitude: 8B Double
-         * Longitude: 8B Double
+         * Latitude: 4B Double
+         * Longitude: 4B Double
          * Altitude: 4B Integer
          * 
          * 
+         * Position Settings from phone are: length 1B | Msg ID 1B | 4B lat/lon/alt | 1B save_settings_flag
+         * Save_flag is 0x0A for save and 0x0B for don't save
+         * If phone send periodicaly position, we don't save them.
          *  */ 
 
         uint8_t msg_len = conf_data[0];
         uint8_t msg_type = conf_data[1];
         bool restart_ADV = false;
+        bool save_setting = false;		//flag to save when positions from phone. config or periodic positions
+        float latitude = 0.0;
+        float longitude = 0.0;
 
         //DEBUG_MSG_VAL("BLE", conf_length, "Msg from Device Length");
+
+        // get save settings flag if position setting
+	    if(msg_type == 0x70 || msg_type == 0x80 || msg_type == 0x90){
+
+		    if(conf_data[6] == 0x0A)  save_setting = true;
+		    if(conf_data[6] == 0x0B)  save_setting = false;
+	    }
+
 
         switch (msg_type)
         {
@@ -210,46 +224,67 @@ class MyCallbacks: public BLECharacteristicCallbacks
             case 0x70: {
 
                 DEBUG_MSG("BLE", "Latitude Setting from phone");
-                float latitude;
+                
                 memcpy(&latitude, conf_data + 2, sizeof(latitude));
 
-                meshcom_settings.node_lat=latitude;
+                if(save_setting){
 
-                // nur bei ALT speichern
-                // save_settings();
-                // send config back to phone
-                sendConfigToPhone();
+                    meshcom_settings.node_lat=latitude;
 
+                    // nur bei ALT speichern
+                    // save_settings();
+                    // send config back to phone
+                    sendConfigToPhone();
+                }
+                
                 break;
             }
 
             case 0x80: {
 
                 DEBUG_MSG("BLE", "Longitude Setting from phone");
-                float longitude;
+                
                 memcpy(&longitude, conf_data + 2, sizeof(longitude));
 
-                meshcom_settings.node_lon=longitude;
+                if(save_setting){
 
-                // nur bei ALT speichern
-                // save_settings();
-                // send config back to phone
-                sendConfigToPhone();
+                    meshcom_settings.node_lon=longitude;
+
+                    // nur bei ALT speichern
+                    // save_settings();
+                    // send config back to phone
+                    sendConfigToPhone();
+                }
 
                 break;
             }
 
-            case 0x90: {
+            case 0x90:
+            {
 
                 int altitude;
                 memcpy(&altitude, conf_data + 2, sizeof(altitude));
                 DEBUG_MSG_VAL("BLE", altitude, "Altitude from phone:");
 
-                meshcom_settings.node_alt=altitude;
+                if (save_setting)
+                {
 
-                save_settings();
-                // send config back to phone
-                sendConfigToPhone();
+                    meshcom_settings.node_alt = altitude;
+
+                    save_settings();
+                    // send config back to phone
+                    sendConfigToPhone();
+                }
+                else
+                {
+                    // send to mesh - phone sends pos perdiocaly
+                    double d_lat = (double) latitude;
+                    double d_lon = (double) longitude;
+
+                    ///TODO N/S und E/W Char muss man noch korrekt setzen
+                    DEBUG_MSG("RADIO", "Sending Pos from Phone to Mesh");
+                    sendPosition(d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude, (int)mv_to_percent(read_batt()));
+                }
 
                 break;
             }
@@ -466,11 +501,11 @@ void esp32setup()
     }
 
     #ifdef BOARD_HELTEC
-        Wire.setPins(4, 15);
+        Wire.setPins(SDA_PIN, SCL_PIN);
     #endif
     
     #ifdef BOARD_E22
-        Wire.setPins(21, 22);
+        Wire.setPins(SDA_PIN, SCL_PIN);
     #endif
 
     Wire.begin();
@@ -491,8 +526,8 @@ void esp32setup()
     radio.setRfSwitchPins(RXEN, TXEN);
 #endif
 
-    // initialize SX1278 with default settings
-    Serial.print(F("[SX1278] Initializing ... "));
+    // initialize SX12xx with default settings
+    Serial.print(F("LoRa Modem Initializing ... "));
     int state = radio.begin();
     
     if (state == RADIOLIB_ERR_NONE) {
@@ -533,19 +568,10 @@ void esp32setup()
 
     // set LoRa sync word 
     // NOTE: value 0x34 is reserved for LoRaWAN networks and should not be used
-    #ifdef SX127X
     if (radio.setSyncWord(SYNC_WORD_SX127x) != RADIOLIB_ERR_NONE) {
         Serial.println(F("Unable to set sync word!"));
         while (true);
     }
-    #endif
-
-    #ifdef SX126X
-    if (radio.setSyncWord(SYNC_WORD_SX127x) != RADIOLIB_ERR_NONE) {
-        Serial.println(F("Unable to set sync word!"));
-        while (true);
-    }
-    #endif
 
     // set output power to 10 dBm (accepted range is -3 - 17 dBm)
     // NOTE: 20 dBm value allows high power operation, but transmission
@@ -880,25 +906,6 @@ void esp32loop()
 }
 
 
-#ifdef BOARD_E22
-// Set RX pin HIGH and TX pin LOW to switch to RECEIVE
-/*
-void enableRX(void)
-{
-  digitalWrite(RXEN, HIGH);
-  digitalWrite(TXEN, LOW);
-  delay(100);
-}
-
-// Set TX pin HIGH and RX pin LOW to switch to TRANSMIT
-void enableTX(void)
-{
-  digitalWrite(RXEN, LOW);
-  digitalWrite(TXEN, HIGH);
-  delay(100);
-}
-*/
-#endif
 
 void checkRX(void)
 {

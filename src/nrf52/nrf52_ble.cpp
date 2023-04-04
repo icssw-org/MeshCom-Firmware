@@ -227,21 +227,33 @@ void bleuart_rx_callback(uint16_t conn_handle)
 	 * 0xA0 - Textmessage
      * Data:
      * Callsign: length Callsign 1B - Callsign
-     * Latitude: 8B Double
-     * Longitude: 8B Double
+     * Latitude: 4B Float
+     * Longitude: 4B Float
      * Altitude: 4B Integer
 	 * 
-     * 
+     * Position Settings from phone are: length 1B | Msg ID 1B | 4B lat/lon/alt | 1B save_settings_flag
+	 * Save_flag is 0x0A for save and 0x0B for don't save
+	 * If phone send periodicaly position, we don't save them.
      *  */ 
 
 	uint8_t msg_len = conf_data[0];
 	uint8_t msg_type = conf_data[1];
 	bool restart_ADV = false;
+	bool save_setting = false;		//flag to save when positions from phone. config or periodic positions
+	float lat_phone = 0.0;
+	float long_phone = 0.0;
 
 	DEBUG_MSG_VAL("BLE", msg_len, "Msg from Device Length");
 
 	Serial.printBuffer(conf_data, msg_len);
 	Serial.println();
+
+	// get save settings flag if position setting
+	if(msg_type == 0x70 || msg_type == 0x80 || msg_type == 0x90){
+
+		if(conf_data[6] == 0x0A)  save_setting = true;
+		if(conf_data[6] == 0x0B)  save_setting = false;
+	}
 
 	switch (msg_type){
 
@@ -256,84 +268,107 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			break;
 		}
 
-		case 0x50: {
+		case 0x50:
+		{
 
 			DEBUG_MSG("BLE", "Callsing Setting from phone");
 
 			char call_arr[(uint8_t)conf_data[2] + 1];
 			call_arr[(uint8_t)conf_data[2]] = '\0';
 
-			for(int i=0; i<(uint8_t)conf_data[2]; i++)
-				call_arr[i] = conf_data[i+3];
-			
+			for (int i = 0; i < (uint8_t)conf_data[2]; i++)
+				call_arr[i] = conf_data[i + 3];
+
 			String sVar = call_arr;
 			sVar.toUpperCase();
-			
 
 			sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
 
-            sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
+			sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
 			save_settings();
 
 			// send config back to phone
 			sendConfigToPhone();
 
-			sendDisplayHead(0);			
+			sendDisplayHead(0);
 
-			sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);	// Anzeige mit callsign
+			sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
 			Bluefruit.setName(helper_string);
 
 			bInitDisplay = false;
 
-			//restart_ADV = true;	//nicht notwendig
+			// restart_ADV = true;	//nicht notwendig
 
 			break;
 		}
 
-		case 0x70: {
+		case 0x70:
+		{
 
 			DEBUG_MSG("BLE", "Latitude Setting from phone");
-			float latitude;
-			memcpy(&latitude, conf_data + 2, sizeof(latitude));
-			Serial.println(latitude);
+			memcpy(&lat_phone, conf_data + 2, sizeof(lat_phone));
+			Serial.println(lat_phone);
 
-			meshcom_settings.node_lat=latitude;
+			if (save_setting)
+			{
+				meshcom_settings.node_lat = lat_phone;
 
-        	save_settings();
-			// send config back to phone
-			sendConfigToPhone();
+				// send config back to phone
+				sendConfigToPhone();
+			}
 
 			break;
 		}
 
-		case 0x80: {
+		case 0x80:
+		{
 
 			DEBUG_MSG("BLE", "Longitude Setting from phone");
-			float longitude;
-			memcpy(&longitude, conf_data + 2, sizeof(longitude));
-			Serial.println(longitude);
 
-			meshcom_settings.node_lon=longitude;
+			memcpy(&long_phone, conf_data + 2, sizeof(long_phone));
+			Serial.println(long_phone);
 
-        	save_settings();
-			// send config back to phone
-			sendConfigToPhone();
+			if (save_setting)
+			{
+				meshcom_settings.node_lon = long_phone;
+
+				// send config back to phone
+				sendConfigToPhone();
+			}
 
 			break;
 		}
 
-		case 0x90: {
-
-			int altitude;
+		case 0x90:
+		{
+			int altitude = 0;
 			memcpy(&altitude, conf_data + 2, sizeof(altitude));
 			DEBUG_MSG_VAL("BLE", altitude, "Altitude from phone:");
 
-			meshcom_settings.node_alt=altitude;
+			if (save_setting)
+			{
+				meshcom_settings.node_alt = altitude;
 
-        	save_settings();
-			// send config back to phone
-			sendConfigToPhone();
+				// if we have all three pos settings, save to flash
+				save_settings();
+				// send config back to phone
+				sendConfigToPhone();
+			}
+			else
+			{
+				// send to mesh - phone sends pos perdiocaly
+				double d_lat = (double)lat_phone;
+				double d_lon = (double)long_phone;
+				DEBUG_MSG_VAL("BLE", lat_phone, "Lat from node");
+				DEBUG_MSG_VAL("BLE", long_phone, "Lon from node");
+				DEBUG_MSG_VAL("BLE", d_lat, "dLat from node");
+				DEBUG_MSG_VAL("BLE", d_lon, "dLon from node");
+
+				/// TODO N/S und E/W Char muss man noch korrekt setzen
+				DEBUG_MSG("RADIO", "Sending Pos from Phone to Mesh");
+				sendPosition(d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude, (int)mv_to_percent(read_batt()));
+			}
 
 			break;
 		}

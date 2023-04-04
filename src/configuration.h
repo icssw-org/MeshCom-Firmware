@@ -144,7 +144,7 @@
 // wird aber grundsätzlich in der Modem-Config benötigt!!!
 
 #define SYNC_WORD_SX127x 0x2b  // Meshtastic Sync Word!!
-#define SYNC_WORD_SX126x 0x242b  // Meshtastic Sync Word!!
+
 
 #ifdef SX127X
 #define TX_OUTPUT_POWER 17
@@ -208,6 +208,8 @@ static const uint8_t SCK   = 5;
 #define LORA_DIO0 DIO0
 #define LORA_DIO1 DIO1
 #define LORA_CS SS
+#define SDA_PIN 4
+#define SCL_PIN 15
 
 #endif
 
@@ -321,8 +323,8 @@ static const uint8_t SCK =  5;
 #define RXEN 14
 #define TXEN 13
 #define LED 2
-#define SDA 21
-#define SCL 22
+#define SDA_PIN 21
+#define SCL_PIN 22
 
 #endif
 
