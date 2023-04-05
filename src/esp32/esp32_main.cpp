@@ -20,6 +20,7 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <command_functions.h>
+#include <phone_commands.h>
 #include <aprs_functions.h>
 #include <batt_functions.h>
 #include <lora_functions.h>
@@ -138,195 +139,8 @@ class MyCallbacks: public BLECharacteristicCallbacks
 
         memcpy(conf_data, pCharacteristic->getData() , conf_length);
 
-        /**
-         * Config Messages
-         * length 1B - Msg ID 1B - Data
-         * Msg ID:
-         * 0x10 - Hello Message (followed by 0x20, 0x30)
-         * 0x50 - Callsign
-         * 0x70 - Latitude
-         * 0x80 - Longitude
-         * 0x90 - Altitude
-         * 0xA0 - Textmessage
-         * Data:
-         * Callsign: length Callsign 1B - Callsign
-         * Latitude: 4B Double
-         * Longitude: 4B Double
-         * Altitude: 4B Integer
-         * 
-         * 
-         * Position Settings from phone are: length 1B | Msg ID 1B | 4B lat/lon/alt | 1B save_settings_flag
-         * Save_flag is 0x0A for save and 0x0B for don't save
-         * If phone send periodicaly position, we don't save them.
-         *  */ 
-
-        uint8_t msg_len = conf_data[0];
-        uint8_t msg_type = conf_data[1];
-        bool restart_ADV = false;
-        bool save_setting = false;		//flag to save when positions from phone. config or periodic positions
-        float latitude = 0.0;
-        float longitude = 0.0;
-
-        //DEBUG_MSG_VAL("BLE", conf_length, "Msg from Device Length");
-
-        // get save settings flag if position setting
-	    if(msg_type == 0x70 || msg_type == 0x80 || msg_type == 0x90){
-
-		    if(conf_data[6] == 0x0A)  save_setting = true;
-		    if(conf_data[6] == 0x0B)  save_setting = false;
-	    }
-
-
-        switch (msg_type)
-        {
-            case 0x10: {
-
-                if(conf_data[2] == 0x20 && conf_data[3] == 0x30)
-                {
-                    DEBUG_MSG("BLE", "Hello Msg from phone");
-                    sendConfigToPhone();
-                    isPhoneReady = 1;
-                }
-
-                break;
-            }
-
-            case 0x50: {
-
-                DEBUG_MSG("BLE", "Callsing Setting from phone");
-
-                char call_arr[(uint8_t)conf_data[2] + 1];
-                call_arr[(uint8_t)conf_data[2]] = '\0';
-
-                for(int i=0; i<(uint8_t)conf_data[2]; i++)
-                    call_arr[i] = conf_data[i+3];
-                
-                String sVar = call_arr;
-                sVar.toUpperCase();
-                
-
-                sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
-        
-                sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
-
-                save_settings();
-
-                // send config back to phone
-                sendConfigToPhone();
-
-                sendDisplayHead((int)mv_to_percent(read_batt()));
-
-                bInitDisplay = false;
-
-                break;
-            }
-
-            case 0x70: {
-
-                DEBUG_MSG("BLE", "Latitude Setting from phone");
-                
-                memcpy(&latitude, conf_data + 2, sizeof(latitude));
-
-                if(save_setting){
-
-                    meshcom_settings.node_lat=latitude;
-
-                    // nur bei ALT speichern
-                    // save_settings();
-                    // send config back to phone
-                    sendConfigToPhone();
-                }
-                
-                break;
-            }
-
-            case 0x80: {
-
-                DEBUG_MSG("BLE", "Longitude Setting from phone");
-                
-                memcpy(&longitude, conf_data + 2, sizeof(longitude));
-
-                if(save_setting){
-
-                    meshcom_settings.node_lon=longitude;
-
-                    // nur bei ALT speichern
-                    // save_settings();
-                    // send config back to phone
-                    sendConfigToPhone();
-                }
-
-                break;
-            }
-
-            case 0x90:
-            {
-
-                int altitude;
-                memcpy(&altitude, conf_data + 2, sizeof(altitude));
-                DEBUG_MSG_VAL("BLE", altitude, "Altitude from phone:");
-
-                if (save_setting)
-                {
-
-                    meshcom_settings.node_alt = altitude;
-
-                    save_settings();
-                    // send config back to phone
-                    sendConfigToPhone();
-                }
-                else
-                {
-                    // send to mesh - phone sends pos perdiocaly
-                    double d_lat = (double) latitude;
-                    double d_lon = (double) longitude;
-
-                    ///TODO N/S und E/W Char muss man noch korrekt setzen
-                    DEBUG_MSG("RADIO", "Sending Pos from Phone to Mesh");
-                    sendPosition(d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude, (int)mv_to_percent(read_batt()));
-                }
-
-                break;
-            }
-
-            case 0xA0: {
-                // length 1B - Msg ID 1B - Text
-
-                uint8_t txt_len = msg_len - 1; // includes zero escape
-                txt_msg_len_phone = txt_len - 1;	// now zero escape for lora TX
-
-                char textbuff [txt_len] = {0};
-                textbuff [txt_len] = '\0';
-                memcpy(textbuff, conf_data + 2, txt_len);
-
-                // kopieren der message in buffer fuer main
-                memcpy(textbuff_phone, conf_data + 2, txt_msg_len_phone);
-
-                DEBUG_MSG_TXT("BLE", textbuff, "Message from phone:");
-
-                // flag für main neue msg von phone
-                hasMsgFromPhone = true;
-
-            }
-
-        }
+    	readPhoneCommand(conf_data);
     }
-
-    #if BLE_TEST > 0
-        if(str[0] == ':')
-        {
-            if(str[strlen(str)-1] == 0x0a)
-                str[strlen(str)-1]=0x00;
-
-            sendMessage(str, strlen(str));
-        }
-        else
-        if(str[0] == '-')
-        {
-            commandAction(str, strlen(str), true);
-        }
-    #endif
-
 };
 
 /**
@@ -417,8 +231,6 @@ bool g_ble_uart_is_connected = false;
 
 // Client basic variables
 uint8_t dmac[6] = {0};
-
-unsigned long posinfo_timer = 0;      // we check periodically to send GPS
 
 unsigned long gps_refresh_timer = 0;
 
@@ -621,6 +433,7 @@ void esp32setup()
 
     // put module back to listen mode
     radio.startReceive();
+    Serial.println("startReceive Start");
 
     Serial.println(F("All settings successfully changed!"));
 
@@ -793,10 +606,10 @@ void esp32loop()
         }
         else
         {
-                Serial.print(F("TX failed, code "));
-                Serial.println(transmissionState);
+            Serial.print(F("TX failed, code "));
+            Serial.println(transmissionState);
 
-                OnTxTimeout();
+            OnTxTimeout();
         }
 
         transmissionState = RADIOLIB_ERR_UNKNOWN;
@@ -805,26 +618,37 @@ void esp32loop()
         // this will ensure transmitter is disabled,
         // RF switch is powered down etc.
         radio.finishTransmit();
+
+        // put module back to listen mode
+        radio.startReceive();
     }
 
     // LORA RECEIVE
     if(receivedFlag)
     {
-        checkRX();
+        if (tx_is_active == false && is_receiving == false)
+        {
+            checkRX();
+
+            // put module back to listen mode
+            radio.startReceive();
+        }
     
         // reset flag
         receivedFlag = false;
-
-        // put module back to listen mode
-        radio.startReceive();
     }
 
     // LORA SEND
     // check if we have messages in ringbuffer to send
     if (iWrite != iRead)
     {
-        if (tx_is_active == false && is_receiving == false)
-            doTX();
+        if(cmd_counter <= 0)
+        {
+            if (tx_is_active == false && is_receiving == false)
+                doTX();
+        }
+        else
+            cmd_counter--;
     }
 
     // BLE
@@ -1016,7 +840,7 @@ void doTX()
         }
     }
 
-    tx_is_active = false;
+    //tx_is_active = false;
 
     // wait for a second before transmitting again
     // delay(1000);

@@ -49,3 +49,7 @@ extern uint8_t cmd_counter;      // ticker dependant on main cycle delay time
 extern bool is_receiving;  // flag to store we are receiving a lora packet. triggered by header detect not preamble
 extern uint8_t isPhoneReady;      // flag we receive from phone when itis ready to receive data
 
+// timers
+extern unsigned long posinfo_timer;      // we check periodically to send GPS
+extern unsigned long temphum_timer;      // we check periodically get TEMP/HUM
+extern unsigned long druck_timer;        // we check periodically get AIRPRESURE

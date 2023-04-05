@@ -14,7 +14,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     // print which message type we got
     uint8_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
 
-    if(is_new_packet(RcvBuffer+1) || (SEE_ALL_PACKETS == 1))
+    if(msg_type_b_lora == 0x00)
+    {
+        Serial.printf("RCV:%s\n", RcvBuffer+6);
+        //printBuffer(RcvBuffer, size);
+    }
+    else
+    if(is_new_packet(RcvBuffer+1))
     {
 		// :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -76,11 +82,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                 if(!bMsg)
                 {
-                    if(aprsmsg.max_hop > 0)
-                        aprsmsg.max_hop--;
-
-                    RcvBuffer[5] = aprsmsg.max_hop;
-
                     if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40))
                     {
                         // add rcvMsg to forward to LoRa TX
@@ -105,6 +106,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         // send to Mesh TODO PATH erweitern
                         {
+                            if(aprsmsg.max_hop > 0)
+                                aprsmsg.max_hop--;
+
+                            aprsmsg.msg_source_path.concat(',');
+                            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+
+                            memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
+
+                            size = encodeAPRS(RcvBuffer, aprsmsg, _GW_ID);
+
                             if(size > UDP_TX_BUF_SIZE)
                                 size = UDP_TX_BUF_SIZE;
 
@@ -118,11 +129,19 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(iWrite >= MAX_RING)
                                 iWrite=0;
     
-                            Serial.println("Packet resend to mesh");
+                            Serial.println(" Packet resend to mesh");
+
+                            printBuffer_aprs(aprsmsg);
+                            Serial.println("");
                         }
                         
                     }
+                    else
+                        Serial.println("");
+
                 } 
+                else
+                    Serial.println("");
             }   
         }
         else
@@ -142,9 +161,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     }
     else
     {
-        DEBUG_MSG_VAL("RADIO", aprsmsg.msg_id, "Packet discarded, already seen it!");
-
-
         #if BLE_TEST > 0
             char print_buff[20];
             sprintf(print_buff, "MSG %08X ACK\n", aprsmsg.msg_id);
@@ -172,8 +188,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         #endif
     }
 
+    cmd_counter = WAIT_AFTER_RX;
+
     #if defined NRF52_SERIES
-        cmd_counter = WAIT_AFTER_RX;
         Radio.Rx(RX_TIMEOUT_VALUE);
     #endif
 
@@ -196,8 +213,9 @@ void OnRxTimeout(void)
 
 void OnRxError(void)
 {
+    cmd_counter = WAIT_AFTER_RX;
+
     #if defined NRF52_SERIES
-        cmd_counter = WAIT_AFTER_RX;
         Radio.Rx(RX_TIMEOUT_VALUE);
     #endif
 

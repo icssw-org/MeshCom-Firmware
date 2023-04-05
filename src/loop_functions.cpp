@@ -47,6 +47,11 @@ bool is_receiving = false;  // flag to store we are receiving a lora packet. tri
 
 uint8_t isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
+// timers
+unsigned long posinfo_timer = 0;      // we check periodically to send GPS
+unsigned long temphum_timer = 0;      // we check periodically get TEMP/HUM
+unsigned long druck_timer = 0;        // we check periodically get AIRPRESURE
+
 /** @brief Function adding messages into outgoing BLE ringbuffer
  * BLE to PHONE Buffer
  */
@@ -170,7 +175,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     char line_text[21];
     char words[100][21]={0};
-    int iwords=0;
+    unsigned int iwords=0;
     int ipos=0;
 
     if(aprsmsg.msg_source_path.length() < (20-7))
@@ -291,10 +296,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, 
 
     sendDisplayMainline(batt);
 
-    if(aprsmsg.msg_source_path.length() < (20-7))
-        sprintf(msg_text, "%s <%i>", aprsmsg.msg_source_path.c_str(), rssi);
-    else
-        sprintf(msg_text, "%s", aprsmsg.msg_source_path.c_str());
+    sprintf(msg_text, "%s", aprsmsg.msg_source_path.c_str());
 
     msg_text[20]=0x00;
     sendDisplay1306(bClear, false, 3, izeile, msg_text);
@@ -383,7 +385,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, 
             print_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
             print_text[ipt+1]=0x00;
 
-            sprintf(msg_text, "ALT: %s m", print_text);
+            sprintf(msg_text, "ALT: %sm rssi:%i", print_text, rssi);
             msg_text[20]=0x00;
             sendDisplay1306(bClear, true, 3, izeile, msg_text);
 
@@ -413,7 +415,7 @@ void printBuffer(uint8_t *buffer, int len)
 
 void printBuffer_aprs(struct aprsMessage &aprsmsg)
 {
-  Serial.printf("%03i %c x%08X %02X %i %s>%s%c%s %04X\n", aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_fcs);
+  Serial.printf("%03i %c x%08X %02X %i %s>%s%c%s %04X", aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_fcs);
 }
 
 /** @brief Method to print our buffers
@@ -626,7 +628,7 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     msg_buffer[inext] = 0x00;
     inext++;
 
-    int FCS_SUMME=0;
+    unsigned int FCS_SUMME=0;
     for(int ifcs=0; ifcs<inext; ifcs++)
     {
         FCS_SUMME += msg_buffer[ifcs];

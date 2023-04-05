@@ -174,11 +174,6 @@ bool tx_is_active = false;    // avoids calling doTX() on each main iteration wh
 uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
 bool ble_busy_flag = false;    // flag to signal bluetooth uart is active
 
-// timers
-unsigned long posinfo_timer = 0;      // we check periodically to send GPS
-unsigned long temphum_timer = 0;      // we check periodically get TEMP/HUM
-unsigned long druck_timer = 0;        // we check periodically get AIRPRESURE
-
 String strText="";
 
 // TinyGPS
@@ -292,18 +287,13 @@ bool bInitDisplay = false;
 void blinkLED();                                     // blink GREEN
 void blinkLED2();                                    // blink BLUE
 void doTX();                                         // LoraTX function
-int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE]);
-void sendMessage(char *buffer, int len);
-int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt);
-void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt);
-void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press);
-void sendWX(char *buffer, float temp, float hum, float press);
+
 void checkSerialCommand(void);
 void sendToPhone();
 
 
 // Client basic variables
-    uint8_t dmac[6];
+uint8_t dmac[6];
 
 /** Set the device name, max length is 10 characters */
     char g_ble_dev_name[10] = "RAK-CL40";
