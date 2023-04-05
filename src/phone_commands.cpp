@@ -17,6 +17,10 @@ extern bool bInitDisplay;
 // Client basic variables
 extern uint8_t dmac[6];
 
+// lat / lon from phone. Phone currently sends float and we cast to double. We should fix that
+double d_lat = 0.0;
+double d_lon = 0.0;
+
 void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 {
 	/**
@@ -117,6 +121,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			DEBUG_MSG("BLE", "Latitude Setting from phone");
 			memcpy(&lat_phone, conf_data + 2, sizeof(lat_phone));
+			d_lat = (double)lat_phone;
 			
 			if(bDEBUG)
 			{
@@ -140,6 +145,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			DEBUG_MSG("BLE", "Longitude Setting from phone");
 
 			memcpy(&long_phone, conf_data + 2, sizeof(long_phone));
+			d_lon = (double)long_phone;
 		
 			if(bDEBUG)
 			{
@@ -175,14 +181,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			else
 			{
 				// send to mesh - phone sends pos perdiocaly
-				double d_lat = (double)lat_phone;
-				double d_lon = (double)long_phone;
-
-				DEBUG_MSG_VAL("BLE", lat_phone, "Lat from node");
-				DEBUG_MSG_VAL("BLE", long_phone, "Lon from node");
-				DEBUG_MSG_VAL("BLE", d_lat, "dLat from node");
-				DEBUG_MSG_VAL("BLE", d_lon, "dLon from node");
-
 				/// TODO N/S und E/W Char muss man noch korrekt setzen
 				DEBUG_MSG("RADIO", "Sending Pos from Phone to Mesh");
 
