@@ -314,7 +314,6 @@ static const uint8_t SCK =  5;
 #ifdef BOARD_E22
 // Custom Board homemade E22-Ebyte Module + AZ Delivery ESP32 DevKitC v4
 
-#define RF_FREQUENCY 432.900000
 #define LORA_RST  27
 #define LORA_DIO0 26 // aka BUSY Pin
 #define LORA_DIO1 33
