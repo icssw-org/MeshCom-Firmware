@@ -1,3 +1,5 @@
+#include "Arduino.h"
+
 #include "loop_functions.h"
 #include "command_functions.h"
 
@@ -413,76 +415,14 @@ void printBuffer(uint8_t *buffer, int len)
   Serial.println("");
 }
 
-void printBuffer_aprs(struct aprsMessage &aprsmsg)
+void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-  Serial.printf("%03i %c x%08X %02X %i %s>%s%c%s %04X", aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_fcs);
-}
-
-/** @brief Method to print our buffers
- */
-void printBuffer_ascii(uint8_t *buffer, int len)
-{
-  int i=0;
-
-  Serial.printf("%03i ", len);
-
-  Serial.printf("%c x", buffer[0]);
-  for (i = 4; i > 0; i--)
-  {
-    Serial.printf("%02X", buffer[i]);
-  }
-  Serial.printf(" %02X ", buffer[5]);
-
-  int ineg=0;
-
-  for (i = 6; i < len; i++)
-  {
-    if(buffer[i] == 0x00)
-    {
-        ineg=i;
-        break;
-    }
-
-    Serial.printf("%c", buffer[i]);
-  }
-
-  Serial.printf(" %02X", buffer[ineg]);
-  Serial.printf("%02X", buffer[ineg+1]);
-
-  Serial.println("");
+  Serial.printf("%s: %03i %c x%08X %02X %i %s>%s%c%s %04X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
+    aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_fcs);
 }
 
 ///////////////////////////////////////////////////////////////////////////
 // APRS Meldungen
-
-int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE])
-{
-    char msg_start[100];
-
-    // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-
-    msg_buffer[0]=msg_type;
-    
-    msg_counter=millis();
-
-    msg_buffer[1]=msg_counter & 0xff;
-    msg_buffer[2]=(msg_counter >> 8) & 0xff;
-    msg_buffer[3]=(msg_counter >> 16) & 0xff;
-    msg_buffer[4]=(msg_counter >> 24) & 0xff;
-
-    msg_buffer[5]=0x05; //max hop
-
-    sprintf(msg_start, "%s>*", meshcom_settings.node_call);
-
-    memcpy(msg_buffer+6, msg_start, strlen(meshcom_settings.node_call)+2);
-
-    int inext=6+2+strlen(meshcom_settings.node_call);
-
-    msg_buffer[inext] = msg_type;
-    inext++;
-
-    return inext;
-}
 
 void sendMessage(char *msg_text, int len)
 {
@@ -500,67 +440,36 @@ void sendMessage(char *msg_text, int len)
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
-    int inext = CallToAPRS(':', msg_buffer);
-        
-    if(inext == 0)
-        return;
+    struct aprsMessage aprsmsg;
 
-    if(memcmp(msg_text, ":", 1) == 0)
-    {
-        memcpy(msg_buffer+inext, msg_text+1, len-1);
-        inext=inext+len-1;
-    }
-    else
-    {
-        memcpy(msg_buffer+inext, msg_text, len);
-        inext=inext+len;
-    }
-   
-    msg_buffer[inext]=0x00;
-    inext++;
+    initAPRS(aprsmsg);
 
-    int FCS_SUMME=0;
-    for(int ifcs=0; ifcs<inext; ifcs++)
-    {
-        FCS_SUMME += msg_buffer[ifcs];
-    }
-    
-    // FCS
-    msg_buffer[inext] = (FCS_SUMME >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = FCS_SUMME & 0xFF;
-    inext++;
+    aprsmsg.msg_len = 0;
+    aprsmsg.msg_id = millis();
+    aprsmsg.payload_type = ':';
+    aprsmsg.max_hop = 5;
+    aprsmsg.msg_server = false;
+    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    aprsmsg.msg_destination_path = "*";
+    aprsmsg.msg_payload = msg_text;
+    aprsmsg.msg_fcs = 0;
 
-    // _GW_ID   nur für 2.0 -> 4.0
-    msg_buffer[inext] = (_GW_ID) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
-    inext++;
+    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg, _GW_ID);
 
-    msg_buffer[inext] = MODUL_HARDWARE;
-    inext++;
+    printBuffer_aprs((char*)"TX-POS ", aprsmsg);
+    Serial.println();
 
     // An APP als Anzeige retour senden
     if(hasMsgFromPhone)
     {
-        addBLEOutBuffer(msg_buffer, inext);
+        addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
     }
 
-    if(bDEBUG)
-    {
-        printBuffer(msg_buffer, inext);
-        Serial.println("");
-    }
+    if(aprsmsg.msg_len > UDP_TX_BUF_SIZE)
+        aprsmsg.msg_len = UDP_TX_BUF_SIZE;
 
-    if(inext > UDP_TX_BUF_SIZE)
-        inext = UDP_TX_BUF_SIZE;
-
-    ringBuffer[iWrite][0]=inext;
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
+    ringBuffer[iWrite][0]=aprsmsg.msg_len;
+    memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     
     // store last message to compare later on
     memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
@@ -571,12 +480,12 @@ void sendMessage(char *msg_text, int len)
 
 }
 
-int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt)
+String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt)
 {
     if(lat == 0 or lon == 0)
     {
         DEBUG_MSG("APRS", "Error PositionToAPRS");
-        return 0;
+        return "";
     }
 
     char msg_start[100];
@@ -603,65 +512,55 @@ int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bW
     if(bWeather)
         sprintf(msg_start, "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, slat, lat_c, meshcom_settings.node_symid, slon, lon_c);
     else
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c %i /A=%i", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, batt, alt);
+    {
+        char cbatt[5]={0};
+        char calt[11]={0};
 
-    memcpy(msg_buffer, msg_start, strlen(msg_start));
+        if(batt > 0)
+            sprintf(cbatt, " %i", batt);
 
-    int inext=strlen(msg_start);
+        if(alt > 0)
+            sprintf(calt, " /A=%i", alt);
+
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, cbatt, calt);
+    }
+
     
-    return inext;
+    return msg_start;
 }
 
 void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt)
 {
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
-    int inext = CallToAPRS('!', msg_buffer);
+    struct aprsMessage aprsmsg;
 
-    int inext_pos = PositionToAPRS(msg_buffer+inext, true, false, lat, lat_c, lon, lon_c, alt, batt);
-        
-    if(inext_pos == 0)
+    initAPRS(aprsmsg);
+
+    aprsmsg.msg_len = 0;
+    aprsmsg.msg_id = millis();
+    aprsmsg.payload_type = '!';
+    aprsmsg.max_hop = 5;
+    aprsmsg.msg_server = false;
+    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    aprsmsg.msg_destination_path = "*";
+    aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt, batt);
+    aprsmsg.msg_fcs = 0;
+
+    if(aprsmsg.msg_payload == "")
         return;
 
-    inext = inext + inext_pos;
+    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg, _GW_ID);
 
-    msg_buffer[inext] = 0x00;
-    inext++;
+    printBuffer_aprs((char*)"TX-POS>", aprsmsg);
+    Serial.println();
 
-    unsigned int FCS_SUMME=0;
-    for(int ifcs=0; ifcs<inext; ifcs++)
-    {
-        FCS_SUMME += msg_buffer[ifcs];
-    }
-    
-    // FCS
-    msg_buffer[inext] = (FCS_SUMME >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = FCS_SUMME & 0xFF;
-    inext++;
+    if(aprsmsg.msg_len > UDP_TX_BUF_SIZE)
+        aprsmsg.msg_len = UDP_TX_BUF_SIZE;
 
-    // _GW_ID   nur für 2.0 -> 4.0
-    msg_buffer[inext] = (_GW_ID) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
-    inext++;
+    ringBuffer[iWrite][0]=aprsmsg.msg_len;
 
-    msg_buffer[inext] = MODUL_HARDWARE;
-    inext++;
-
-    Serial.printf("POS->");
-    printBuffer_ascii(msg_buffer, inext);
-
-    if(inext > UDP_TX_BUF_SIZE)
-        inext = UDP_TX_BUF_SIZE;
-
-    ringBuffer[iWrite][0]=inext;
-
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
+    memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     
     // store last message to compare later on
     memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
@@ -672,62 +571,37 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
 
 }
 
-void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press)
+void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press, int batt)
 {
     // @141324z4812.06N/01555.87E_270/...g...t...r000p000P...h..b10257Weather in Neulengbach
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
-    int inext = CallToAPRS('@', msg_buffer);
+    struct aprsMessage aprsmsg;
 
-    int inext_pos = PositionToAPRS(msg_buffer+inext, true, true, lat, lat_c, lon, lon_c, 0, 0);
-        
-    if(inext_pos == 0)
-        return;
+    initAPRS(aprsmsg);
 
-    inext = inext + inext_pos;
+    aprsmsg.msg_len = 0;
+    aprsmsg.msg_id = millis();
+    aprsmsg.payload_type = '@';
+    aprsmsg.max_hop = 5;
+    aprsmsg.msg_server = false;
+    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    aprsmsg.msg_destination_path = "*";
+    aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt, batt);
+    aprsmsg.msg_fcs = 0;
 
-    char msg_start[100];
+    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg, _GW_ID);
 
-    sprintf(msg_start, ".../...g...t%03ir...p...P...h%02ib%05ixMESH", (int)((temp*1.8)+32.0), (int)(hum), (int)(press*10.0));
+    printBuffer_aprs((char*)"TX-WX >", aprsmsg);
+    Serial.println();
 
-    memcpy(msg_buffer+inext, msg_start, strlen(msg_start));
+    if(aprsmsg.msg_len > UDP_TX_BUF_SIZE)
+        aprsmsg.msg_len = UDP_TX_BUF_SIZE;
 
-    inext=inext+strlen(msg_start);
+    ringBuffer[iWrite][0]=aprsmsg.msg_len;
 
-    msg_buffer[inext] = 0x00;
-    inext++;
-
-    int FCS_SUMME=0;
-    for(int ifcs=0; ifcs<inext; ifcs++)
-    {
-        FCS_SUMME += msg_buffer[ifcs];
-    }
-    
-    // FCS
-    msg_buffer[inext] = (FCS_SUMME >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = FCS_SUMME & 0xFF;
-    inext++;
-
-    // _GW_ID   nur für 2.0 -> 4.0
-    msg_buffer[inext] = (_GW_ID) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 16) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (_GW_ID >> 24) & 0xFF;
-    inext++;
-
-    msg_buffer[inext] = MODUL_HARDWARE;
-    inext++;
-
-    Serial.printf("WX->");
-    printBuffer_ascii(msg_buffer, inext);
-
-    ringBuffer[iWrite][0]=inext;
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, inext);
+    memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     
     // store last message to compare later on
     memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
@@ -744,8 +618,6 @@ void sendWX(char* text, float temp, float hum, float press)
 
     //sprintf(msg_wx, "%s, %.1f °C, %.1f hPa, %i %%", text, temp, press, (int)(hum));
     sprintf(msg_wx, "%s, %.1f hPa, hum %i %%", text, press, (int)(hum));
-
-    msg_wx[0] = ':';
 
     sendMessage(msg_wx, strlen(msg_wx));
 }

@@ -81,7 +81,7 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
 
         if(!bDestinationEndOk)
         {
-            Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - bDestinationEndOk (payloadf_type) missing!\n");
+            Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - bDestinationEndOk (payload_type) missing!\n");
 
             return 0x00;
         }
@@ -135,7 +135,7 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
 
 int encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
 {
-    char msg_start[100];
+    char msg_start[MAX_MSG_LEN_PHONE];
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -162,7 +162,7 @@ int encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &a
 
 int encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
 {
-    char msg_start[200];
+    char msg_start[MAX_MSG_LEN_PHONE];
 
     sprintf(msg_start, "%s", aprsmsg.msg_payload.c_str());
 
@@ -198,6 +198,8 @@ uint8_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprs
     inext++;
     msg_buffer[inext] = FCS_SUMME & 0xFF;
     inext++;
+
+    aprsmsg.msg_fcs = FCS_SUMME;
 
     // _GW_ID   nur für 2.0 -> 4.0
     msg_buffer[inext] = (GW_ID) & 0xFF;

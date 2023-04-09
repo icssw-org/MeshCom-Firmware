@@ -94,7 +94,11 @@ void init_ble(void)
 			(uint8_t)(meshcom_settings.node_device_eui[4]), (uint8_t)(meshcom_settings.node_device_eui[5]), (uint8_t)(meshcom_settings.node_device_eui[6]), (uint8_t)(meshcom_settings.node_device_eui[7]));
 #else
 	/** Device name for RAK4631 */
-	sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);	// Anzeige mit callsign
+	sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);	// Anzeige mit callsign
+
+	Serial.print("init helper_string:");
+	Serial.println(helper_string);
+
 #endif
 
 	Bluefruit.setName(helper_string);
@@ -216,7 +220,6 @@ void bleuart_rx_callback(uint16_t conn_handle)
 	uint8_t conf_data[MAX_MSG_LEN_PHONE] = {0};
 	g_ble_uart.read(conf_data, MAX_MSG_LEN_PHONE);
 
-	
 	readPhoneCommand(conf_data);
 
 }

@@ -60,7 +60,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 	}
 
 	// get save settings flag if position setting
-	if(msg_type == 0x70 || msg_type == 0x80 || msg_type == 0x90){
+	if(msg_type == 0x70 || msg_type == 0x80 || msg_type == 0x90)
+	{
 
 		if(conf_data[6] == 0x0A)  save_setting = true;
 		if(conf_data[6] == 0x0B)  save_setting = false;
@@ -106,6 +107,10 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			#if defined NRF52_SERIES
 				sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
+				
+				Serial.print("helper_string:");
+				Serial.println(helper_string);
+
 				Bluefruit.setName(helper_string);
 			#endif
 
@@ -195,16 +200,12 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 		case 0xA0: {
 			// length 1B - Msg ID 1B - Text
 
-			uint8_t txt_len = msg_len - 1; // includes zero escape
-			txt_msg_len_phone = txt_len - 1;	// now zero escape for lora TX
+			txt_msg_len_phone = msg_len - 2;	// now zero escape for lora TX
 
-			char textbuff [txt_len] = {0};
-			textbuff [txt_len] = '\0';
-			memcpy(textbuff, conf_data + 2, txt_len);
 			// kopieren der message in buffer fuer main
-			memcpy(textbuff_phone,conf_data + 2, txt_msg_len_phone);
+			memcpy(textbuff_phone, conf_data + 2, txt_msg_len_phone);
+			textbuff_phone[txt_msg_len_phone]=0x00;
 
-			DEBUG_MSG_TXT("BLE", textbuff, "Message from phone:");
 			//Serial.printBuffer(textbuff_phone, txt_msg_len_phone);
 			//Serial.println();
 			// flag für main neue msg von phone

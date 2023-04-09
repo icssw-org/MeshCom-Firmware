@@ -16,8 +16,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     if(msg_type_b_lora == 0x00)
     {
-        Serial.printf("RCV:%s\n", RcvBuffer+6);
-        //printBuffer(RcvBuffer, size);
+        //Serial.printf("RCV:%s\n", RcvBuffer+6);
     }
     else
     if(is_new_packet(RcvBuffer+1))
@@ -42,7 +41,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40)
         {
             // print aprs message
-            printBuffer_aprs(aprsmsg);
+            printBuffer_aprs((char*)"RX-LoRa", aprsmsg);
 
             // we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
             // MODE BYTE: LongSlow = 1, MediumSlow = 3
@@ -58,91 +57,84 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             if(bDEBUG)
                 printf("src:%s msg_id: %04X msg_len: %i payload[5]=%i via=%d\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_id, lora_msg_len, aprsmsg.max_hop, aprsmsg.msg_server);
 
-            //if(!msg_server) // Message kommt von User
+            // Wiederaussendung via LORA
+            // Ringbuffer filling
+
+            bool bMsg=false;
+
+            for(int iop=0;iop<MAX_RING_UDP_OUT;iop++)
             {
-                // Wiederaussendung via LORA
-                // Ringbuffer filling
+                unsigned int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
 
-                bool bMsg=false;
+                if(ring_msg_id != 0 && bDEBUG)
+                    printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, aprsmsg.msg_id);
 
-                for(int iop=0;iop<MAX_RING_UDP_OUT;iop++)
+                if(ring_msg_id == aprsmsg.msg_id)
                 {
-                    unsigned int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
+                    bMsg=true;
 
-                    if(ring_msg_id != 0 && bDEBUG)
-                        printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, aprsmsg.msg_id);
-
-                    if(ring_msg_id == aprsmsg.msg_id)
-                    {
-                        bMsg=true;
-
-                        break;
-                    }
+                    break;
                 }
+            }
 
-                if(!bMsg)
+            if(!bMsg)
+            {
+                if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40))
                 {
-                    if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40))
+                    // add rcvMsg to forward to LoRa TX
+                    addLoraRxBuffer(aprsmsg.msg_id);
+
+                    // add rcvMsg to BLE out Buff
+                    // size message is int -> uint16_t buffer size
+                    if(isPhoneReady == 1)
                     {
-                        // add rcvMsg to forward to LoRa TX
-                        addLoraRxBuffer(aprsmsg.msg_id);
+                        addBLEOutBuffer(RcvBuffer, size);
+                    }
 
-                        // add rcvMsg to BLE out Buff
-                        // size message is int -> uint16_t buffer size
-                        if(isPhoneReady == 1)
-                        {
-                            addBLEOutBuffer(RcvBuffer, size);
-                        }
-
-                        if(msg_type_b_lora == 0x3A)
-                        {
-                            sendDisplayText(aprsmsg, rssi, snr);
-                        }
-                        else
-                        if(msg_type_b_lora == 0x21)
-                        {
-                            sendDisplayPosition(aprsmsg, rssi, snr, (int)mv_to_percent(read_batt()));
-                        }
-
-                        // send to Mesh TODO PATH erweitern
-                        {
-                            if(aprsmsg.max_hop > 0)
-                                aprsmsg.max_hop--;
-
-                            aprsmsg.msg_source_path.concat(',');
-                            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-
-                            memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
-
-                            size = encodeAPRS(RcvBuffer, aprsmsg, _GW_ID);
-
-                            if(size > UDP_TX_BUF_SIZE)
-                                size = UDP_TX_BUF_SIZE;
-
-                            ringBuffer[iWrite][0]=size;
-                            memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
-                            
-                            // store last message to compare later on
-                            memcpy(RcvBuffer_before[iWrite], RcvBuffer+1, 4);
-
-                            iWrite++;
-                            if(iWrite >= MAX_RING)
-                                iWrite=0;
-    
-                            Serial.println(" Packet resend to mesh");
-
-                            printBuffer_aprs(aprsmsg);
-                            Serial.println("");
-                        }
-                        
+                    if(msg_type_b_lora == 0x3A)
+                    {
+                        sendDisplayText(aprsmsg, rssi, snr);
                     }
                     else
-                        Serial.println("");
+                    if(msg_type_b_lora == 0x21)
+                    {
+                        sendDisplayPosition(aprsmsg, rssi, snr, (int)mv_to_percent(read_batt()));
+                    }
 
-                } 
-                else
-                    Serial.println("");
+                    // send to Mesh TODO PATH erweitern
+                    {
+                        if(aprsmsg.max_hop > 0)
+                            aprsmsg.max_hop--;
+
+                        aprsmsg.msg_source_path.concat(',');
+                        aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+
+                        memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
+
+                        size = encodeAPRS(RcvBuffer, aprsmsg, _GW_ID);
+
+                        if(size > UDP_TX_BUF_SIZE)
+                            size = UDP_TX_BUF_SIZE;
+
+                        ringBuffer[iWrite][0]=size;
+                        memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
+                        
+                        // store last message to compare later on
+                        memcpy(RcvBuffer_before[iWrite], RcvBuffer+1, 4);
+
+                        iWrite++;
+                        if(iWrite >= MAX_RING)
+                            iWrite=0;
+
+                        Serial.println(" Packet resend to mesh");
+
+                        printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
+                    }
+                    
+                }
             }   
+
+            Serial.println("");
         }
         else
         {

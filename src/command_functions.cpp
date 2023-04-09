@@ -105,13 +105,13 @@ void commandAction(char *msg_text, int len, bool ble)
     if(memcmp(msg_text+1, "-sendweather", 12) == 0)
     {
         sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
+         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press, 0);
         return;
     }
     else
     if(memcmp(msg_text+1, "-setcall ", 9) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+11);
+        sprintf(_owner_c, "%s", msg_text+10);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
             _owner_c[strlen(_owner_c)-1] = 0x00;
         sVar = _owner_c;

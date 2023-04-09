@@ -21,31 +21,31 @@
 // set hardware
 #ifdef BOARD_RAK4630
     #define MODUL_HARDWARE RAK4631
-    #define RF_FREQUENCY 432900000  // 433175000   // Hz
+    #define RF_FREQUENCY 433175000 // 432900000   // Hz
 #endif
 
 #ifdef BOARD_TBEAM
     #define MODUL_HARDWARE TBEAM
-    #define RF_FREQUENCY 432.900000  // 433175000   // Hz
+    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define SX127X
 #endif
 
 #ifdef BOARD_TLORA_OLV216
     #define MODUL_HARDWARE TLORA_V2_1_1p6
-    #define RF_FREQUENCY 432.900000  // 433175000   // Hz
+    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX127X
 #endif
 
 #ifdef 	BOARD_HELTEC
     #define MODUL_HARDWARE HELTEC_V2_1
-    #define RF_FREQUENCY 432.900000  // 433175000   // Hz
+    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX127X
 #endif
 
 #ifdef 	BOARD_E22
     #define MODUL_HARDWARE EBYTE_E22
-    #define RF_FREQUENCY 432.900000  // 433175000   // Hz
+    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
 #endif
 

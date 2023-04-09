@@ -15,8 +15,6 @@
 #include <time.h>
 
 #include <TinyGPS.h>
-#include <drivers/Adafruit_SSD1680.h>
-#include <WisBlock_EPaper_Images.h>
 
 #include "Adafruit_SHTC3.h"
 
@@ -193,23 +191,6 @@ Adafruit_LPS22 g_lps22hb;
 
 void getPRESSURE(void);
 
-// EPaper SSD1680
-typedef struct  DEPG {
-   int  width;
-   int  height;
-   int  position1_x;
-   int  position1_y;  
-   int  position2_x;
-   int  position2_y;  
-   int  position3_x;
-   int  position3_y; 
-   int  position4_x;
-   int  position4_y;   
-} DEPG;
-
-//DEPG  DEPG_HP = {250,122,40,20,40,30,40,50,90,40};  //use DEPG0213BNS800F41HP as default
-DEPG  DEPG_HP = {212,104,30,15,30,25,30,45,80,30};  //  this is for DEPG0213BNS800F42HP
-
 #define POWER_ENABLE   WB_IO2
 
 #define EPD_MOSI     MOSI
@@ -223,14 +204,6 @@ DEPG  DEPG_HP = {212,104,30,15,30,25,30,45,80,30};  //  this is for DEPG0213BNS8
 #define LEFT_BUTTON    WB_IO3
 #define MIDDLE_BUTTON  WB_IO5
 #define RIGHT_BUTTON   WB_IO6
-
-// 2.13" EPD with SSD1680
-Adafruit_SSD1680 display_1680(DEPG_HP.width, DEPG_HP.height, EPD_MOSI,
-                         EPD_SCK, EPD_DC, EPD_RESET,
-                         EPD_CS, SRAM_CS, EPD_MISO,
-                         EPD_BUSY);
-
-void testdrawtext(int16_t x, int16_t y, char *text, uint16_t text_color, uint32_t text_size);
 
 uint8_t gKeyNum = 0; // which button is pressed
 int iGPSCount=0;
@@ -262,23 +235,6 @@ void interruptHandle3()
   }
 }
 
-/**
-   @brief Write a text on the display
-   @param x x position to start
-   @param y y position to start
-   @param text text to write
-   @param text_color color of text
-   @param text_size size of text
-*/
-void testdrawtext(int16_t x, int16_t y, char *text, uint16_t text_color, uint32_t text_size)
-{
-  display_1680.setCursor(x, y);
-  display_1680.setTextColor(text_color);
-  display_1680.setTextSize(text_size);
-  display_1680.setTextWrap(true);
-  display_1680.print(text);
-}
-
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
 bool bInitDisplay = false;
@@ -306,7 +262,7 @@ void getMacAddr(uint8_t *dmac)
     dmac[3] = src[2];
     dmac[2] = src[3];
     dmac[1] = src[4];
-    dmac[0] = src[5] | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
+    dmac[0] = src[5]; // | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
 
 void nrf52setup()
@@ -345,6 +301,9 @@ void nrf52setup()
 	// Get LoRa parameter
 	init_flash();
 
+    //  Initialize the LoRa Module
+    lora_rak4630_init();
+
     getMacAddr(dmac);
 
     _GW_ID = dmac[0] | (dmac[1] << 8) | (dmac[2] << 16) | (dmac[3] << 24);
@@ -357,9 +316,6 @@ void nrf52setup()
         meshcom_settings.node_device_eui[ieui+2] = dmac[ieui];
     }
 
-
-    //  Initialize the LoRa Module
-    lora_rak4630_init();
 
     //  Initialize the Serial Port for debug output
     time_t timeout = millis();
@@ -573,13 +529,19 @@ void nrf52loop()
     // check if we have messages in ringbuffer to send
     if (iWrite != iRead)
     {
+        //Serial.printf("cmd_counter:%i tx_is_active:%i is_receiving:%i\n", cmd_counter, tx_is_active, is_receiving);
+
         if(cmd_counter <= 0)
         {
             if (tx_is_active == false && is_receiving == false)
                 doTX();
         }
         else
+        {
             cmd_counter--;
+            if(cmd_counter < 0)
+                cmd_counter=0;
+        }
     }
 
     // check if message from phone to send
@@ -735,7 +697,7 @@ void doTX()
             //digitalWrite(LED_BLUE, HIGH);
 
             // print tx buffer
-            //printBuffer(neth.lora_tx_buffer_eth, neth.lora_tx_msg_len);
+            // printBuffer(lora_tx_buffer, sendlng);
 
             iRead++;
             if (iRead >= MAX_RING)
@@ -753,8 +715,6 @@ void doTX()
             {
                 DEBUG_MSG_VAL("RADIO", iRead, "TX :");
             }
-
-            Serial.println("");
         }
         else
         {
@@ -821,8 +781,6 @@ if(g_ble_uart_is_connected && isPhoneReady == 1)
     {
         DEBUG_MSG_VAL("BLE", toPhoneRead,"TX :");
     }
-
-    Serial.println("");
 }
     ble_busy_flag = false;
 }

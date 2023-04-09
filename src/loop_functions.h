@@ -23,17 +23,15 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr);
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, int batt);
 
 void printBuffer(uint8_t *buffer, int len);
-void printBuffer_aprs(struct aprsMessage &aprsMessage);
-void printBuffer_ascii(uint8_t *buffer, int len);
+void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void addLoraRxBuffer(int msg_id);
 
-int CallToAPRS(char msg_type, uint8_t msg_buffer[MAX_MSG_LEN_PHONE]);
 void sendMessage(char *msg_text, int len);
-int PositionToAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt);
+String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt);
 void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt);
-void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press);
+void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press, int batt);
 void sendWX(char* text, float temp, float hum, float press);
 
 String convertCallToShort(char callsign[10]);
