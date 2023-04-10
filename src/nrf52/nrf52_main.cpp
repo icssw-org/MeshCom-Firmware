@@ -164,13 +164,13 @@ bool init_flash_done=false;
 // Textmessage buffer from phone, hasMsgFromPhone flag indicates new message
 char textbuff_phone [MAX_MSG_LEN_PHONE] = {0};
 uint8_t txt_msg_len_phone = 0;
+bool ble_busy_flag = false;    // flag to signal bluetooth uart is active
 
 //variables and helper functions
 int sendlng = 0;              // lora tx message length
 uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
 bool tx_is_active = false;    // avoids calling doTX() on each main iteration when we are already in TX mode
 uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
-bool ble_busy_flag = false;    // flag to signal bluetooth uart is active
 
 String strText="";
 
