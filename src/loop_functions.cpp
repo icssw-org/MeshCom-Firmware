@@ -25,7 +25,10 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
 unsigned int msg_counter = 0;
 
 uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
-uint8_t RcvBuffer_before[MAX_RING_UDP_OUT][4];
+
+// nur eigene msg_id
+uint8_t own_msg_id[MAX_RING][4];
+int iWriteOwn=0;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
 unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];
@@ -43,9 +46,10 @@ uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4]; //Ringbuffer for UDP TX from LoRa
 uint8_t udpWrite = 0;   // counter for ringbuffer
 uint8_t udpRead = 0;    // counter for ringbuffer
 
+// LoRa RX/TX sequence control
 uint8_t cmd_counter = 2;      // ticker dependant on main cycle delay time
-
-bool is_receiving = false;  // flag to store we are receiving a lora packet. triggered by header detect not preamble
+bool is_receiving = false;  // flag to store we are receiving a lora packet.
+bool tx_is_active = false;  // flag to store we are transmitting  a lora packet.
 
 uint8_t isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
@@ -470,14 +474,15 @@ void sendMessage(char *msg_text, int len)
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
-    
-    // store last message to compare later on
-    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
-
     iWrite++;
     if(iWrite >= MAX_RING)
         iWrite=0;
-
+    
+    // store last message to compare later on
+    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+    iWriteOwn++;
+    if(iWriteOwn >= MAX_RING)
+        iWriteOwn=0;
 }
 
 String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt)
@@ -563,7 +568,10 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     
     // store last message to compare later on
-    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
+    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+    iWriteOwn++;
+    if(iWriteOwn >= MAX_RING)
+        iWriteOwn=0;
 
     iWrite++;
     if(iWrite >= MAX_RING)
@@ -604,7 +612,10 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     
     // store last message to compare later on
-    memcpy(RcvBuffer_before[iWrite], msg_buffer+1, 4);
+    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+    iWriteOwn++;
+    if(iWriteOwn >= MAX_RING)
+        iWriteOwn=0;
 
     iWrite++;
     if(iWrite >= MAX_RING)

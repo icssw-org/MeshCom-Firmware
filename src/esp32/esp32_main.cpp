@@ -203,7 +203,6 @@ SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 void checkRX(void);
 void OnTxDone(void);
 void OnTxTimeout(void);
-void doTX();        // LoraTX function
 
 void setInterruptFlag();     // LoRaRX Interrupt function
 void enableRX(void);    // for Modules with RXEN / TXEN Pin
@@ -215,8 +214,6 @@ asm(".global _printf_float");
 
 // save transmission state between loops
 int transmissionState = RADIOLIB_ERR_UNKNOWN;
-
-int sendlng = 0;              // lora tx message length
 
 // LoRa Events and Buffers
 
@@ -235,11 +232,8 @@ uint8_t dmac[6] = {0};
 unsigned long gps_refresh_timer = 0;
 
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
-bool tx_is_active = false;    // avoids calling doTX() on each main iteration when we are already in TX mode
 void checkSerialCommand(void);
 void sendToPhone();
-
-uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
 
 // TinyGPS
 TinyGPS gps;
@@ -301,9 +295,9 @@ void esp32setup()
         RcvBuffer[i] = 0x00;
     }
 
-    for(int ib=0; ib<MAX_RING_UDP_OUT; ib++)
+    for(int ib=0; ib<MAX_RING; ib++)
     {
-        memset(RcvBuffer_before[ib], 0x00, 4);
+        memset(own_msg_id[ib], 0x00, 4);
     }
 
     //clear ringbuffer
@@ -439,7 +433,7 @@ void esp32setup()
 
     // Create the BLE Device
     char strBLEName[50]={0};
-    sprintf(strBLEName, "MeshCom-%02x%02x-%s", dmac[4], dmac[5], meshcom_settings.node_call);
+    sprintf(strBLEName, "ESP-CL40-%02x%02x-%s", dmac[4], dmac[5], meshcom_settings.node_call);
     BLEDevice::init(strBLEName);
 
     // Create the BLE Server
@@ -787,87 +781,6 @@ void checkRX(void)
         OnRxError();
     }
 }
-
-
-/**@brief our Lora TX sequence
- */
-
-void doTX()
-{
-    tx_is_active = true;
-
-    if (iWrite != iRead && iWrite < MAX_RING)
-    {
-        //int irs=iRead;
-
-        sendlng = ringBuffer[iRead][0];
-        memcpy(lora_tx_buffer, ringBuffer[iRead] + 1, sendlng);
-
-        // we can now tx the message
-        if (TX_ENABLE == 1)
-        {
-            //digitalWrite(LED_BLUE, HIGH);
-
-            // print tx buffer
-            //printBuffer(neth.lora_tx_buffer_eth, neth.lora_tx_msg_len);
-
-            iRead++;
-            if (iRead >= MAX_RING)
-                iRead = 0;
-
-            // you can transmit C-string or Arduino string up to
-            // 256 characters long
-            // NOTE: transmit() is a blocking method!
-            //       See example SX127x_Transmit_Interrupt for details
-            //       on non-blocking transmission method.
-            transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
-
-            if (iWrite == iRead)
-            {
-                DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
-            }
-            else
-            {
-                DEBUG_MSG_VAL("RADIO", iRead, "TX :");
-            }
-            
-            if(bDEBUG)
-                Serial.println("");
-        }
-        else
-        {
-            DEBUG_MSG("RADIO", "TX DISABLED");
-        }
-    }
-
-    //tx_is_active = false;
-
-    // wait for a second before transmitting again
-    // delay(1000);
-}
-
-/**@brief Function to be executed on Radio Tx Done event
- */
-void OnTxDone(void)
-{
-    //Radio.Rx(RX_TIMEOUT_VALUE);
-    tx_is_active = false;
-    
-    //digitalWrite(LED_BLUE, LOW);
-}
-
-/**@brief Function to be executed on Radio Tx Timeout event
- */
-void OnTxTimeout(void)
-{
-    // DEBUG_MSG("RADIO", "OnTxTimeout");
-    tx_is_active = false;
-    
-    //digitalWrite(LED_BLUE, LOW);
-    
-    //Radio.Rx(RX_TIMEOUT_VALUE);
-}
-
 
 /* @brief Method to send incoming LoRa messages to BLE connected device
  */

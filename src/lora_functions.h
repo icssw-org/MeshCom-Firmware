@@ -10,6 +10,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
 void OnRxTimeout(void);
 void OnRxError(void);
 bool is_new_packet(uint8_t compBuffer[4]);
-bool checkLoraRxBuffer(uint8_t compBuffer[4]);
+bool checkOwnTx(uint8_t compBuffer[4]);
+
+void doTX();
+void OnTxDone(void);
+void OnTxTimeout(void);
+void OnPreambleDetect(void);
 
 #endif

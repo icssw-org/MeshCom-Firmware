@@ -127,19 +127,11 @@ Sync Word Setting in Meshtastic
 
 //NVIC_SystemReset(); resets the device
 
-// Lora callback Function declarations
-void OnTxDone(void);
-void OnTxTimeout(void);
-void OnPreambleDetect(void);
-
-
 asm(".global _scanf_float");
 asm(".global _printf_float");
 
 // LoRa Events and Buffers
 static RadioEvents_t RadioEvents;
-
-uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
@@ -167,9 +159,6 @@ uint8_t txt_msg_len_phone = 0;
 bool ble_busy_flag = false;    // flag to signal bluetooth uart is active
 
 //variables and helper functions
-int sendlng = 0;              // lora tx message length
-uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
-bool tx_is_active = false;    // avoids calling doTX() on each main iteration when we are already in TX mode
 uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
 
 String strText="";
@@ -242,7 +231,6 @@ bool bInitDisplay = false;
 // Prototypes
 void blinkLED();                                     // blink GREEN
 void blinkLED2();                                    // blink BLUE
-void doTX();                                         // LoraTX function
 
 void checkSerialCommand(void);
 void sendToPhone();
@@ -284,9 +272,9 @@ void nrf52setup()
         RcvBuffer[i] = 0x00;
     }
 
-    for(int ib=0; ib<MAX_RING_UDP_OUT; ib++)
+    for(int ib=0; ib<MAX_RING; ib++)
     {
-        memset(RcvBuffer_before[ib], 0x00, 4);
+        memset(own_msg_id[ib], 0x00, 4);
     }
 
     //clear ringbuffer
@@ -637,91 +625,6 @@ void nrf52loop()
     yield();
 }
 
-
-/**@brief Function to be executed on Radio Tx Done event
- */
-void OnTxDone(void)
-{
-    // DEBUG_MSG("RADIO", "OnTxDone");
-    cmd_counter=WAIT_AFTER_TXDONE;
-    Radio.Rx(RX_TIMEOUT_VALUE);
-    tx_is_active = false;
-    
-    //digitalWrite(LED_BLUE, LOW);
-}
-
-/**@brief Function to be executed on Radio Tx Timeout event
- */
-void OnTxTimeout(void)
-{
-    // DEBUG_MSG("RADIO", "OnTxTimeout");
-    tx_is_active = false;
-    
-    //digitalWrite(LED_BLUE, LOW);
-    
-    Radio.Rx(RX_TIMEOUT_VALUE);
-}
-
-/**@brief fires when a preamble is detected 
- * currently not used!
- */
-void OnPreambleDetect(void)
-{
-    //till_header_time = millis();
-    preamble_cnt++;
-
-    if(preamble_cnt >= 2){
-
-        //DEBUG_MSG("RADIO", "Preamble detected");
-        preamble_cnt = 0;
-    } 
-}
-
-/**@brief our Lora TX sequence
- */
-
-void doTX()
-{
-    tx_is_active = true;
-
-    if (iWrite != iRead && iWrite < MAX_RING)
-    {
-        //int irs=iRead;
-
-        sendlng = ringBuffer[iRead][0];
-        memcpy(lora_tx_buffer, ringBuffer[iRead] + 1, sendlng);
-
-        // we can now tx the message
-        if (TX_ENABLE == 1)
-        {
-            //digitalWrite(LED_BLUE, HIGH);
-
-            // print tx buffer
-            // printBuffer(lora_tx_buffer, sendlng);
-
-            iRead++;
-            if (iRead >= MAX_RING)
-                iRead = 0;
-
-            Radio.Send(lora_tx_buffer, sendlng);
-
-            cmd_counter = WAIT_TX;
-
-            if (iWrite == iRead)
-            {
-                DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
-            }
-            else
-            {
-                DEBUG_MSG_VAL("RADIO", iRead, "TX :");
-            }
-        }
-        else
-        {
-            DEBUG_MSG("RADIO", "TX DISABLED");
-        }
-    }
-}
 
 /**
  * @brief Method to send incoming LoRa messages to BLE connected device

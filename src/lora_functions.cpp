@@ -1,7 +1,21 @@
+#if defined NRF52_SERIES
+#else
+    #include <RadioLib.h>
+    extern SX1278 radio;
+    extern int transmissionState;
+#endif
+
 #include "lora_functions.h"
 #include "loop_functions.h"
 #include <loop_functions_extern.h>
 #include <batt_functions.h>
+
+int sendlng = 0;
+uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
+uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
+
+//////////////////////////////////////////////////////////////////////////
+// LoRa RX functions
 
 /** @brief Function to be executed on Radio Rx Done event
  */
@@ -17,11 +31,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         Serial.printf("ACK from LoRa %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
 
-        if(checkLoraRxBuffer(print_buff+6))
+        if(checkOwnTx(print_buff+6))
         {
             print_buff[5] = 0x41;
             addBLEOutBuffer(print_buff+5, 7);
-            Serial.println("ACK to Phone");
+            Serial.printf("ACK to Phone  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
         }
         else
         {
@@ -36,7 +50,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 if(iWrite >= MAX_RING)
                 iWrite=0;
     
-                Serial.println("ACK from LoRa to LoRa");
+                Serial.printf("ACK forward  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
             }
         }
     }
@@ -130,33 +144,44 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         {
                             sendDisplayText(aprsmsg, rssi, snr);
 
-                            // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
-                            msg_counter=millis();   // ACK mit neuer msg_id versenden
-
-                            print_buff[0]=0x41;
-                            print_buff[1]=msg_counter & 0xFF;
-                            print_buff[2]=(msg_counter >> 8) & 0xFF;
-                            print_buff[3]=(msg_counter >> 16) & 0xFF;
-                            print_buff[4]=(msg_counter >> 24) & 0xFF;
-                            print_buff[5]=0x05; // max hop
                             print_buff[6]=aprsmsg.msg_id & 0xFF;
                             print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
                             print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
                             print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
-                            print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
-                            print_buff[11]=0x00;     // msg always 0x00 at the end
-                            
-                            ringBuffer[iWrite][0]=12;
-                            memcpy(ringBuffer[iWrite]+1, print_buff, 12);
 
-                            iWrite++;
-                            if(iWrite >= MAX_RING)
-                                iWrite=0;
-                        
-                            if(bDEBUG)
+                            // nur fremde Meldungen 
+                            if(!checkOwnTx(print_buff+6) && !aprsmsg.msg_server)
                             {
-                                Serial.printf("ACK sent to source-node");
-                                printBuffer(print_buff, 12);
+                                // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
+                                msg_counter=millis();   // ACK mit neuer msg_id versenden
+
+                                print_buff[0]=0x41;
+                                print_buff[1]=msg_counter & 0xFF;
+                                print_buff[2]=(msg_counter >> 8) & 0xFF;
+                                print_buff[3]=(msg_counter >> 16) & 0xFF;
+                                print_buff[4]=(msg_counter >> 24) & 0xFF;
+                                print_buff[5]=0x05; // max hop
+                                /* done lines
+                                print_buff[6]=aprsmsg.msg_id & 0xFF;
+                                print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
+                                print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
+                                print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
+                                */
+                                print_buff[10]=0x00;     // switch ack GW / Node currently fixed to 0x00 
+                                print_buff[11]=0x00;     // msg always 0x00 at the end
+                                
+                                ringBuffer[iWrite][0]=12;
+                                memcpy(ringBuffer[iWrite]+1, print_buff, 12);
+
+                                iWrite++;
+                                if(iWrite >= MAX_RING)
+                                    iWrite=0;
+                            
+                                if(bDEBUG)
+                                {
+                                    Serial.printf("ACK sent to source-node");
+                                    printBuffer(print_buff, 12);
+                                }
                             }
                         }
                         else
@@ -165,36 +190,25 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             sendDisplayPosition(aprsmsg, rssi, snr, (int)mv_to_percent(read_batt()));
                         }
 
-                        // send to Mesh TODO PATH erweitern
-                        {
-                            if(aprsmsg.max_hop > 0)
-                                aprsmsg.max_hop--;
+                        if(aprsmsg.max_hop > 0)
+                            aprsmsg.max_hop--;
 
-                            aprsmsg.msg_source_path.concat(',');
-                            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                        aprsmsg.msg_source_path.concat(',');
+                        aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
 
-                            memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
+                        memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
 
-                            size = encodeAPRS(RcvBuffer, aprsmsg, _GW_ID);
+                        size = encodeAPRS(RcvBuffer, aprsmsg, _GW_ID);
 
-                            if(size > UDP_TX_BUF_SIZE)
-                                size = UDP_TX_BUF_SIZE;
+                        if(size > UDP_TX_BUF_SIZE)
+                            size = UDP_TX_BUF_SIZE;
 
-                            ringBuffer[iWrite][0]=size;
-                            memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
-                            
-                            // store last message to compare later on
-                            memcpy(RcvBuffer_before[iWrite], RcvBuffer+1, 4);
-
-                            iWrite++;
-                            if(iWrite >= MAX_RING)
-                                iWrite=0;
-
-                            Serial.println(" Packet resend to mesh");
-
-                            printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
-                        }
+                        ringBuffer[iWrite][0]=size;
+                        memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
                         
+                        Serial.println(" Packet resend to mesh");
+
+                        printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
                     }
                 }   
 
@@ -215,6 +229,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             //blinkLED();
         }
+        /*
         else
         {
             #if BLE_TEST > 0
@@ -233,7 +248,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     print_buff[4]=(aprsmsg.msg_id >> 24) & 0xFF;
                     print_buff[5]=0x00;     // switch ack GW / Node currently fixed to 0x00 
                     print_buff[6]=0x00;     // msg always 0x00 at the end
+
                     addBLEOutBuffer(print_buff, 7);
+
+                    Serial.printf("ACK !is_new_packet to Phone %02X %02X%02X%02X%02X %02X %02X\n", print_buff[0], print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[6]);
 
                     if(bDEBUG)
                     {
@@ -243,6 +261,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 }
             #endif
         }
+        */
     }
 
     cmd_counter = WAIT_AFTER_RX;
@@ -283,13 +302,11 @@ void OnRxError(void)
  */
 bool is_new_packet(uint8_t compBuffer[4])
 {
-    //:|01020304x
-
     for(int ib=0; ib < MAX_RING_UDP_OUT; ib++)
     {
         for (int i = 0; i < 4; i++)
         {
-            if (memcmp(compBuffer, RcvBuffer_before[ib], 4) == 0)
+            if (memcmp(compBuffer, ringBufferLoraRX[ib], 4) == 0)
             {
                 if(bDEBUG)
                     Serial.printf("MSG: old one\n");
@@ -304,14 +321,103 @@ bool is_new_packet(uint8_t compBuffer[4])
     return true;
 }
 
-bool checkLoraRxBuffer(uint8_t compBuffer[4])
+bool checkOwnTx(uint8_t compBuffer[4])
 {
-    for(int ilo=0; ilo<MAX_RING_UDP_OUT; ilo++)
+    for(int ilo=0; ilo<MAX_RING; ilo++)
     {
-        if(memcmp(ringBufferLoraRX[ilo], compBuffer, 4) == 0)
+        if(memcmp(own_msg_id[ilo], compBuffer, 4) == 0)
             return true;
     }
 
     return false;
 }
 
+
+//////////////////////////////////////////////////////////////////////////
+// LoRa TX functions
+
+/**@brief our Lora TX sequence
+ */
+void doTX()
+{
+    tx_is_active = true;
+
+    if (iWrite != iRead && iWrite < MAX_RING)
+    {
+        sendlng = ringBuffer[iRead][0];
+        memcpy(lora_tx_buffer, ringBuffer[iRead] + 1, sendlng);
+
+        // we can now tx the message
+        if (TX_ENABLE == 1)
+        {
+            iRead++;
+            if (iRead >= MAX_RING)
+                iRead = 0;
+
+            // you can transmit C-string or Arduino string up to
+            // 256 characters long
+            #if defined NRF52_SERIES
+                Radio.Send(lora_tx_buffer, sendlng);
+            #else
+                transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
+            #endif
+
+            if (iWrite == iRead)
+            {
+                DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
+            }
+            else
+            {
+                DEBUG_MSG_VAL("RADIO", iRead, "TX :");
+            }
+            
+            if(bDEBUG)
+                Serial.println("");
+        }
+        else
+        {
+            DEBUG_MSG("RADIO", "TX DISABLED");
+        }
+    }
+}
+
+/**@brief Function to be executed on Radio Tx Done event
+ */
+void OnTxDone(void)
+{
+    #if defined NRF52_SERIES
+        Radio.Rx(RX_TIMEOUT_VALUE);
+    #endif
+
+    cmd_counter = WAIT_AFTER_TXDONE;
+
+    tx_is_active = false;
+}
+
+/**@brief Function to be executed on Radio Tx Timeout event
+ */
+void OnTxTimeout(void)
+{
+    #if defined NRF52_SERIES
+        Radio.Rx(RX_TIMEOUT_VALUE);
+    #endif
+
+    cmd_counter = WAIT_AFTER_TXDONE;
+
+    tx_is_active = false;
+}
+
+/**@brief fires when a preamble is detected 
+ * currently not used!
+ */
+void OnPreambleDetect(void)
+{
+    //till_header_time = millis();
+    preamble_cnt++;
+
+    if(preamble_cnt >= 2)
+    {
+        //DEBUG_MSG("RADIO", "Preamble detected");
+        preamble_cnt = 0;
+    } 
+}

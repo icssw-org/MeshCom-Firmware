@@ -27,7 +27,8 @@ extern unsigned int _GW_ID; // ID of our Node
 extern unsigned int msg_counter;
 
 extern uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
-extern uint8_t RcvBuffer_before[MAX_RING_UDP_OUT][4];
+
+extern uint8_t own_msg_id[MAX_RING][4];
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];
@@ -45,8 +46,10 @@ extern uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4]; //Ringbuffer for UDP TX fr
 extern uint8_t udpWrite;   // counter for ringbuffer
 extern uint8_t udpRead;    // counter for ringbuffer
 
-extern uint8_t cmd_counter;      // ticker dependant on main cycle delay time
-extern bool is_receiving;  // flag to store we are receiving a lora packet. triggered by header detect not preamble
+extern uint8_t cmd_counter; // ticker dependant on main cycle delay time
+extern bool is_receiving;   // flag to store we are receiving a lora packet.
+extern bool tx_is_active;   // flag to store we are transmitting  a lora packet.
+
 extern uint8_t isPhoneReady;      // flag we receive from phone when itis ready to receive data
 
 // timers
