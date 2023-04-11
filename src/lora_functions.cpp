@@ -205,6 +205,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         ringBuffer[iWrite][0]=size;
                         memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
+                        iWrite++;
+                        if(iWrite >= MAX_RING)
+                            iWrite=0;
                         
                         Serial.println(" Packet resend to mesh");
 
