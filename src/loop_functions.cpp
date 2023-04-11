@@ -86,7 +86,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 /**@brief Function adding messages into outgoing UDP ringbuffer
  * 
  */
-void addLoraRxBuffer(int msg_id)
+void addLoraRxBuffer(unsigned int msg_id)
 {
     // byte 0-3 msg_id
     ringBufferLoraRX[udpWrite][3] = msg_id >> 24;
@@ -421,8 +421,14 @@ void printBuffer(uint8_t *buffer, int len)
 
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-  Serial.printf("%s: %03i %c x%08X %02X %i %s>%s%c%s %04X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
-    aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_fcs);
+    Serial.printf("%s: %03i %c x%08X %02X %i %s>%s%c%s %04X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
+        aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_fcs);
+    
+    if(aprsmsg.msg_source_id != 0)
+    {
+        Serial.printf(" %08X HW:%02i", aprsmsg.msg_source_id, aprsmsg.msg_source_hw);
+    }
+
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -458,7 +464,11 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_payload = msg_text;
     aprsmsg.msg_fcs = 0;
 
-    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg, _GW_ID);
+    // make it compatible to 2.0
+    aprsmsg.msg_source_id = _GW_ID;
+    aprsmsg.msg_source_hw = MODUL_HARDWARE;
+
+    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg);
 
     printBuffer_aprs((char*)"TX-POS ", aprsmsg);
     Serial.println();
@@ -555,7 +565,11 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     if(aprsmsg.msg_payload == "")
         return;
 
-    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg, _GW_ID);
+    // make it compatible to 2.0
+    aprsmsg.msg_source_id = _GW_ID;
+    aprsmsg.msg_source_hw = MODUL_HARDWARE;
+
+    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg);
 
     printBuffer_aprs((char*)"TX-POS>", aprsmsg);
     Serial.println();
@@ -564,18 +578,17 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
         aprsmsg.msg_len = UDP_TX_BUF_SIZE;
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
-
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
+    iWrite++;
+    if(iWrite >= MAX_RING)
+        iWrite=0;
+
     
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
-
-    iWrite++;
-    if(iWrite >= MAX_RING)
-        iWrite=0;
 
 }
 
@@ -599,7 +612,11 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt, batt);
     aprsmsg.msg_fcs = 0;
 
-    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg, _GW_ID);
+    // make it compatible to 2.0
+    aprsmsg.msg_source_id = _GW_ID;
+    aprsmsg.msg_source_hw = MODUL_HARDWARE;
+
+    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg);
 
     printBuffer_aprs((char*)"TX-WX >", aprsmsg);
     Serial.println();

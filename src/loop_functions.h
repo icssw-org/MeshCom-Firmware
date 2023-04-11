@@ -26,7 +26,7 @@ void printBuffer(uint8_t *buffer, int len);
 void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
-void addLoraRxBuffer(int msg_id);
+void addLoraRxBuffer(unsigned int msg_id);
 
 void sendMessage(char *msg_text, int len);
 String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt);

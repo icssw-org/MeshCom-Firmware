@@ -39,18 +39,25 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         }
         else
         {
-            if(print_buff[5] > 0x01)
+            if(is_new_packet(print_buff+1))
             {
-                print_buff[5]--;
+                if(print_buff[5] > 0x01)
+                {
+                    print_buff[5]--;
 
-                ringBuffer[iWrite][0]=12;
-                memcpy(ringBuffer[iWrite]+1, print_buff, 12);
+                    ringBuffer[iWrite][0]=12;
+                    memcpy(ringBuffer[iWrite]+1, print_buff, 12);
 
-                iWrite++;
-                if(iWrite >= MAX_RING)
-                iWrite=0;
-    
-                Serial.printf("ACK forward  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                    iWrite++;
+                    if(iWrite >= MAX_RING)
+                    iWrite=0;
+        
+                    Serial.printf("ACK forward  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+
+                    // add rcvMsg to forward to LoRa TX
+                    unsigned int mid=(print_buff[1]) | (print_buff[2]>>8) | (print_buff[3]>>16) | (print_buff[4]>>24);
+                    addLoraRxBuffer(mid);
+                }
             }
         }
     }
@@ -176,12 +183,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 iWrite++;
                                 if(iWrite >= MAX_RING)
                                     iWrite=0;
-                            
-                                if(bDEBUG)
-                                {
-                                    Serial.printf("ACK sent to source-node");
-                                    printBuffer(print_buff, 12);
-                                }
+        
+                                unsigned int mid=(print_buff[1]) | (print_buff[2]>>8) | (print_buff[3]>>16) | (print_buff[4]>>24);
+                                addLoraRxBuffer(mid);
                             }
                         }
                         else
@@ -198,7 +202,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
 
-                        size = encodeAPRS(RcvBuffer, aprsmsg, _GW_ID);
+                        size = encodeAPRS(RcvBuffer, aprsmsg);
 
                         if(size > UDP_TX_BUF_SIZE)
                             size = UDP_TX_BUF_SIZE;

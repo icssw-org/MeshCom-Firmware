@@ -26,6 +26,9 @@ struct aprsMessage
     String msg_destination_path;
     String msg_payload;
     unsigned int msg_fcs;
+    bool msg_4_0;
+    unsigned int msg_source_id;     // only for compatibility 2.0
+    uint8_t msg_source_hw;     // only for compatibility 2.0
 };
 
 struct aprsPosition

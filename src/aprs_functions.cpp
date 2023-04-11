@@ -14,6 +14,9 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_destination_path = "";
     aprsmsg.msg_payload = "";
     aprsmsg.msg_fcs = 0;
+    aprsmsg.msg_4_0 = true;
+    aprsmsg.msg_source_id = 0;
+    aprsmsg.msg_source_hw = 0;
 }
 
 uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprsMessage &aprsmsg)
@@ -21,6 +24,9 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
     initAPRS(aprsmsg);
 
     aprsmsg.msg_len = size;
+
+    if(RcvBuffer[0] == 0x41)    // ACK
+        return 0x41;
 
     if(size < 16)
     {
@@ -123,6 +129,17 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
             return 0x00;
         }
 
+        inext++;
+        inext++;
+
+        // source info als MAC
+        if(inext+5 == size)
+        {
+            aprsmsg.msg_source_id = (RcvBuffer[inext]) | (RcvBuffer[inext+1] << 8) | (RcvBuffer[inext+2] << 16) | (RcvBuffer[inext+3] << 24);
+            aprsmsg.msg_source_hw = RcvBuffer[inext+4];
+            aprsmsg.msg_4_0 = false;
+        }
+
         return aprsmsg.payload_type;
     }
     else
@@ -173,7 +190,7 @@ int encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage 
     return ilng;
 }
 
-uint8_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprsmsg, unsigned int GW_ID)
+uint8_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprsmsg)
 {
     uint8_t inext = encodeStartAPRS(msg_buffer, aprsmsg);
 
@@ -202,17 +219,20 @@ uint8_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprs
     aprsmsg.msg_fcs = FCS_SUMME;
 
     // _GW_ID   nur für 2.0 -> 4.0
-    msg_buffer[inext] = (GW_ID) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (GW_ID >> 8) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (GW_ID >> 16) & 0xFF;
-    inext++;
-    msg_buffer[inext] = (GW_ID >> 24) & 0xFF;
-    inext++;
+    if(aprsmsg.msg_source_id != 0)
+    {
+        msg_buffer[inext] = (aprsmsg.msg_source_id) & 0xFF;
+        inext++;
+        msg_buffer[inext] = (aprsmsg.msg_source_id >> 8) & 0xFF;
+        inext++;
+        msg_buffer[inext] = (aprsmsg.msg_source_id >> 16) & 0xFF;
+        inext++;
+        msg_buffer[inext] = (aprsmsg.msg_source_id >> 24) & 0xFF;
+        inext++;
 
-    msg_buffer[inext] = MODUL_HARDWARE;
-    inext++;
+        msg_buffer[inext] = aprsmsg.msg_source_hw; // MODUL_HARDWARE;
+        inext++;
+    }
 
     if(inext > UDP_TX_BUF_SIZE)
         inext = UDP_TX_BUF_SIZE;
