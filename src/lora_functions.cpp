@@ -75,7 +75,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             //Serial.printf("RCV:%s\n", RcvBuffer+6);
         }
         else
-        if(is_new_packet(RcvBuffer+1))
+        if(is_new_packet(RcvBuffer+1) && !checkOwnTx(RcvBuffer+1))
         {
             // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
