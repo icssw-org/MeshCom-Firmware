@@ -218,7 +218,7 @@ int transmissionState = RADIOLIB_ERR_UNKNOWN;
 // LoRa Events and Buffers
 
 /** Set the device name, max length is 10 characters */
-char g_ble_dev_name[10] = "RAK-CL40";
+char g_ble_dev_name[10] = "ESP-CL40";
 
 int vref = 1100;                //Default value. We'll get a more accurate value from the efuses
 uint64_t timeStamp = 0;
@@ -433,7 +433,7 @@ void esp32setup()
 
     // Create the BLE Device
     char strBLEName[50]={0};
-    sprintf(strBLEName, "ESP-CL40-%02x%02x-%s", dmac[4], dmac[5], meshcom_settings.node_call);
+    sprintf(strBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);
     BLEDevice::init(strBLEName);
 
     // Create the BLE Server

@@ -94,28 +94,9 @@ void init_flash(void)
 		meshcom_settings.node_hum = old_struct.node_hum;
 		meshcom_settings.node_press = old_struct.node_press;
 
-        /*KBC
-		meshcom_settings.adr_enabled = old_struct.adr_enabled;
-		meshcom_settings.app_port = old_struct.app_port;
-		meshcom_settings.auto_join = old_struct.auto_join;
-		meshcom_settings.confirmed_msg_enabled = old_struct.confirmed_msg_enabled;
-		meshcom_settings.data_rate = old_struct.data_rate;
-		meshcom_settings.duty_cycle_enabled = old_struct.duty_cycle_enabled;
-		meshcom_settings.join_trials = old_struct.join_trials;
-		meshcom_settings.lora_class = old_struct.lora_class;
-		meshcom_settings.lora_region = old_struct.lora_region;
-		memcpy(meshcom_settings.node_app_eui, old_struct.node_app_eui, 8);
-		memcpy(meshcom_settings.node_app_key, old_struct.node_app_key, 16);
-		memcpy(meshcom_settings.node_apps_key, old_struct.node_apps_key, 16);
-		meshcom_settings.node_dev_addr = old_struct.node_dev_addr;
-		memcpy(meshcom_settings.node_device_eui, old_struct.node_device_eui, 8);
-		memcpy(meshcom_settings.node_nws_key, old_struct.node_nws_key, 16);
-		meshcom_settings.otaa_enabled = old_struct.otaa_enabled;
-		meshcom_settings.public_network = old_struct.public_network;
-		meshcom_settings.send_repeat_time = old_struct.send_repeat_time;
-		meshcom_settings.subband_channels = old_struct.subband_channels;
-		meshcom_settings.tx_power = old_struct.tx_power;
-        */
+		meshcom_settings.node_ssid = old_struct.node_ssid;
+		meshcom_settings.node_pwd = old_struct.node_pwd;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
