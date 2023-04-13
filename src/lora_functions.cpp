@@ -29,19 +29,19 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
 
-        Serial.printf("ACK from LoRa %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+        Serial.printf("ACK from LoRa %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
 
         if(checkOwnTx(print_buff+6))
         {
             print_buff[5] = 0x41;
             addBLEOutBuffer(print_buff+5, 7);
-            Serial.printf("ACK to Phone  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+            Serial.printf("ACK to Phone  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
         }
         else
         {
             if(is_new_packet(print_buff+1))
             {
-                if(print_buff[5] > 0x01)
+                if(print_buff[5] > 0x01 && print_buff[5] < 0x07)
                 {
                     print_buff[5]--;
 
@@ -52,7 +52,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     if(iWrite >= MAX_RING)
                     iWrite=0;
         
-                    Serial.printf("ACK forward  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                    Serial.printf("ACK forward  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
 
                     // add rcvMsg to forward to LoRa TX
                     unsigned int mid=(print_buff[1]) | (print_buff[2]>>8) | (print_buff[3]>>16) | (print_buff[4]>>24);
@@ -311,15 +311,12 @@ bool is_new_packet(uint8_t compBuffer[4])
 {
     for(int ib=0; ib < MAX_RING_UDP_OUT; ib++)
     {
-        for (int i = 0; i < 4; i++)
-        {
             if (memcmp(compBuffer, ringBufferLoraRX[ib], 4) == 0)
             {
                 if(bDEBUG)
                     Serial.printf("MSG: old one\n");
                 return false;
             }
-        }
     }
 
     if(bDEBUG)
