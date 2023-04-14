@@ -129,10 +129,9 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(memcmp(msg_text+1, "-setssid ", 9) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+10);
-        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
-            _owner_c[strlen(_owner_c)-1] = 0x00;
-        meshcom_settings.node_ssid = _owner_c;
+        msg_text[50]=0x00;
+
+        sprintf(meshcom_settings.node_ssid, "%s", msg_text+10);
 
         save_settings();
 
@@ -141,11 +140,10 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(memcmp(msg_text+1, "-setpwd ", 8) == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
-        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
-            _owner_c[strlen(_owner_c)-1] = 0x00;
-        meshcom_settings.node_pwd = _owner_c;
-
+        msg_text[49]=0x00;
+        
+        sprintf(meshcom_settings.node_pwd, "%s", msg_text+9);
+        
         save_settings();
 
         bInfo=true;
@@ -208,7 +206,7 @@ void commandAction(char *msg_text, int len, bool ble)
     if(bInfo)
     {
         sprintf(print_buff, "MeshCom 4.0 Client\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...MODUL %i\n...BATT %.2f mV\n...PBATT %d %%\n...TIME %li ms\n...SSID %s\n...PWD %s\n",
-                meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, read_batt(), mv_to_percent(read_batt()), millis(), meshcom_settings.node_ssid.c_str(), meshcom_settings.node_pwd.c_str());
+                meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, read_batt(), mv_to_percent(read_batt()), millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd);
 
         if(ble)
         {

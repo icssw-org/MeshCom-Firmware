@@ -627,16 +627,15 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
 
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
+    iWrite++;
+    if(iWrite >= MAX_RING)
+        iWrite=0;
     
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
-
-    iWrite++;
-    if(iWrite >= MAX_RING)
-        iWrite=0;
 }
 
 

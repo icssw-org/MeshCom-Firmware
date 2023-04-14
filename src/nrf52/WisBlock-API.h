@@ -205,8 +205,8 @@ struct s_meshcom_settings
 	float node_hum = 0;
 	float node_press = 0;
 
-	String node_ssid = "";
-	String node_pwd = "";
+	char node_ssid[40] = {0};
+	char node_pwd[40] = {0};
 
 	// Default is off
 	uint32_t send_repeat_time = 0;
@@ -272,8 +272,8 @@ struct s_meshcomcompat_settings
 	float node_hum = 0;
 	float node_press = 0;
 
-	String node_ssid = "";
-	String node_pwd = "";
+	char node_ssid[40] = {0};
+	char node_pwd[40] = {0};
 
 	// Send repeat time in milliseconds: 2 * 60 * 1000 => 2 minutes
 	uint32_t send_repeat_time = 0;

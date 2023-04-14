@@ -25,21 +25,32 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     if(payload[0] == 0x41)
     {
-        memcpy(print_buff, payload, 12);
-
-        // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
-
-        Serial.printf("ACK from LoRa %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
-
-        if(checkOwnTx(print_buff+6))
+        if(is_new_packet(print_buff+1))
         {
-            print_buff[5] = 0x41;
-            addBLEOutBuffer(print_buff+5, 7);
-            Serial.printf("ACK to Phone  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
-        }
-        else
-        {
-            if(is_new_packet(print_buff+1))
+            memcpy(print_buff, payload, 12);
+
+            // add rcvMsg to forward to LoRa TX
+            unsigned int mid=(print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
+            addLoraRxBuffer(mid);
+
+            // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
+
+            Serial.printf("ACK from LoRa %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+
+            int icheck = checkOwnTx(print_buff+6);
+
+            if(icheck >= 0)
+            {
+                if(own_msg_id[icheck][4] == 0)
+                {
+                    print_buff[5] = 0x41;
+                    addBLEOutBuffer(print_buff+5, 7);
+                    Serial.printf("ACK to Phone  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                    
+                    own_msg_id[icheck][4] = print_buff[10];
+                }
+            }
+            else
             {
                 if(print_buff[5] > 0x01 && print_buff[5] < 0x07)
                 {
@@ -53,10 +64,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     iWrite=0;
         
                     Serial.printf("ACK forward  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
-
-                    // add rcvMsg to forward to LoRa TX
-                    unsigned int mid=(print_buff[1]) | (print_buff[2]>>8) | (print_buff[3]>>16) | (print_buff[4]>>24);
-                    addLoraRxBuffer(mid);
                 }
             }
         }
@@ -75,7 +82,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             //Serial.printf("RCV:%s\n", RcvBuffer+6);
         }
         else
-        if(is_new_packet(RcvBuffer+1) && !checkOwnTx(RcvBuffer+1))
+        if(is_new_packet(RcvBuffer+1) && checkOwnTx(RcvBuffer+1) < 0)
         {
             // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -151,13 +158,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         {
                             sendDisplayText(aprsmsg, rssi, snr);
 
+                            /* nur am Gateway
                             print_buff[6]=aprsmsg.msg_id & 0xFF;
                             print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
                             print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
                             print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
 
                             // nur fremde Meldungen 
-                            if(!checkOwnTx(print_buff+6) && !aprsmsg.msg_server)
+                            if(!checkOwnTx(print_buff+6, 0) && !aprsmsg.msg_server)
                             {
                                 // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
                                 msg_counter=millis();   // ACK mit neuer msg_id versenden
@@ -168,12 +176,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 print_buff[3]=(msg_counter >> 16) & 0xFF;
                                 print_buff[4]=(msg_counter >> 24) & 0xFF;
                                 print_buff[5]=0x05; // max hop
-                                /* done lines
-                                print_buff[6]=aprsmsg.msg_id & 0xFF;
-                                print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
-                                print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
-                                print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
-                                */
                                 print_buff[10]=0x00;     // switch ack GW / Node currently fixed to 0x00 
                                 print_buff[11]=0x00;     // msg always 0x00 at the end
                                 
@@ -184,9 +186,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 if(iWrite >= MAX_RING)
                                     iWrite=0;
         
-                                unsigned int mid=(print_buff[1]) | (print_buff[2]>>8) | (print_buff[3]>>16) | (print_buff[4]>>24);
+                                unsigned int mid=(print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
                                 addLoraRxBuffer(mid);
                             }
+                            */
                         }
                         else
                         if(msg_type_b_lora == 0x21)
@@ -236,7 +239,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             //blinkLED();
         }
-        /*
         else
         {
             #if BLE_TEST > 0
@@ -244,7 +246,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 sprintf(print_buff, "MSG %08X ACK\n", aprsmsg.msg_id);
                 g_ble_uart.write(print_buff, strlen(print_buff));
             #else
-                if(msg_type_b_lora == 0x3A) // nur Textmelungen
+                if(msg_type_b_lora == 0x3A) // nur Textmeldungen
                 {
                     // ACK MSG 0x41 | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
                     uint8_t print_buff[20];
@@ -256,19 +258,19 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     print_buff[5]=0x00;     // switch ack GW / Node currently fixed to 0x00 
                     print_buff[6]=0x00;     // msg always 0x00 at the end
 
-                    addBLEOutBuffer(print_buff, 7);
+                    int icheck = checkOwnTx(print_buff+1);
 
-                    Serial.printf("ACK !is_new_packet to Phone %02X %02X%02X%02X%02X %02X %02X\n", print_buff[0], print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[6]);
-
-                    if(bDEBUG)
+                    if(icheck >= 0)
                     {
-                        Serial.printf("ACK sent to phone");
-                        printBuffer(print_buff, 7);
+                        if(own_msg_id[icheck][4] == 0)
+                        {
+                            addBLEOutBuffer(print_buff, 7);
+                            Serial.printf("ACK !is_new_packet to Phone %02X %02X%02X%02X%02X %02X %02X\n", print_buff[0], print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[6]);
+                        }
                     }
                 }
             #endif
         }
-        */
     }
 
     cmd_counter = WAIT_AFTER_RX;
@@ -325,17 +327,16 @@ bool is_new_packet(uint8_t compBuffer[4])
     return true;
 }
 
-bool checkOwnTx(uint8_t compBuffer[4])
+int checkOwnTx(uint8_t compBuffer[4])
 {
     for(int ilo=0; ilo<MAX_RING; ilo++)
     {
         if(memcmp(own_msg_id[ilo], compBuffer, 4) == 0)
-            return true;
+            return ilo;
     }
 
-    return false;
+    return -1;
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 // LoRa TX functions
