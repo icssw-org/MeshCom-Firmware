@@ -297,7 +297,7 @@ void esp32setup()
 
     for(int ib=0; ib<MAX_RING; ib++)
     {
-        memset(own_msg_id[ib], 0x00, 4);
+        memset(own_msg_id[ib], 0x00, 5);
     }
 
     //clear ringbuffer

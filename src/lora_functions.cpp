@@ -417,12 +417,9 @@ void OnTxTimeout(void)
  */
 void OnPreambleDetect(void)
 {
-    //till_header_time = millis();
-    preamble_cnt++;
+}
 
-    if(preamble_cnt >= 2)
-    {
-        //DEBUG_MSG("RADIO", "Preamble detected");
-        preamble_cnt = 0;
-    } 
+void OnHeaderDetect(void)
+{
+    is_receiving = true;
 }

@@ -27,7 +27,7 @@ unsigned int msg_counter = 0;
 uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
 
 // nur eigene msg_id
-uint8_t own_msg_id[MAX_RING][4];
+uint8_t own_msg_id[MAX_RING][5];
 int iWriteOwn=0;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
@@ -490,6 +490,7 @@ void sendMessage(char *msg_text, int len)
     
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+    own_msg_id[iWriteOwn][4]=0x00;
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
@@ -586,6 +587,7 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+    own_msg_id[iWriteOwn][4]=0x00;
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
@@ -633,6 +635,7 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+    own_msg_id[iWriteOwn][4]=0x00;
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;

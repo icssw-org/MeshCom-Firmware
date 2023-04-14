@@ -274,7 +274,7 @@ void nrf52setup()
 
     for(int ib=0; ib<MAX_RING; ib++)
     {
-        memset(own_msg_id[ib], 0x00, 4);
+        memset(own_msg_id[ib], 0x00, 5);
     }
 
     //clear ringbuffer
@@ -432,7 +432,8 @@ void nrf52setup()
     RadioEvents.TxTimeout = OnTxTimeout;
     RadioEvents.RxTimeout = OnRxTimeout;
     RadioEvents.RxError = OnRxError;
-    RadioEvents.PreAmpDetect = OnPreambleDetect;
+    //RadioEvents.PreAmpDetect = OnPreambleDetect;
+    RadioEvents.HeaderDetect = OnHeaderDetect;
     
 
     //  Initialize the LoRa Transceiver

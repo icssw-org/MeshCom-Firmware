@@ -28,7 +28,7 @@ extern unsigned int msg_counter;
 
 extern uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
 
-extern uint8_t own_msg_id[MAX_RING][4];
+extern uint8_t own_msg_id[MAX_RING][5];
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];

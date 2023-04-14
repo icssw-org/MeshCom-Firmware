@@ -16,5 +16,6 @@ void doTX();
 void OnTxDone(void);
 void OnTxTimeout(void);
 void OnPreambleDetect(void);
+void OnHeaderDetect(void);
 
 #endif
