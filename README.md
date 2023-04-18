@@ -19,11 +19,11 @@ Verwendung finden:
 
 Meldungen:
 - Textmeldungen:
-:|!MMMMMMMM|!HH|OE0XXX-99|>*|:|Text-Meldung|!00|FCS#|!GGGGGGGG|!HW
+:|!MMMMMMMM|!HH|OE0XXX-99|>*|:|Text-Meldung|!00|!HW|!MOD|FCS#
 - Textmeldungen mit Path aus Mesh:
-:|!MMMMMMMM|!HH|OE0XXX-99,OE3XXX-12,OE3YYY-12|>*|:|Text-Meldung|!00|FCS#|!GGGGGGGG|!HW
+:|!MMMMMMMM|!HH|OE0XXX-99,OE3XXX-12,OE3YYY-12|>*|:|Text-Meldung|!00|!HW|!MOD|FCS#
 - Positionsmeldungen:
-!|!MMMMMMMM|!HH|OE0XXX-99|>*|!|4800.00|N|/|01600.00|E|#| BBB /A=HHHH|!00|FCS#|!GGGGGGGG|!HW
+!|!MMMMMMMM|!HH|OE0XXX-99|>*|!|4800.00|N|/|01600.00|E|#| BBB /A=HHHH|!00|!HW|!MOD|FCS#
 
 Legende:
 
@@ -44,6 +44,8 @@ Meldungselemente
 - BBB	Akkuzustand in %	int 0 - 100
 - /A=HHHH	GPS Meereshöhe (m)	int 0 - 9999
 - Meldungsabschluss	schließt den APRS-Meldungsbereich ab	0x00
+- HW ... Hardware-Type ID
+- MOD ... LoRa-Modulation ID
 - FCS#	Prüfsumme inkl. Kennung und 0x00 vom Meldungsabschluss	unsigned int 16-Bit
 - GGGGGGGG	Gateway-ID (nur für MeshCom 2.0 Kompatibilität)	32-Bit LSB->MSB
 - HW	Hardware-ID	8-Bit (siehe Tabelle)
@@ -59,3 +61,13 @@ MeshCom Hardware
 - 10	HELTEC_V2_1
 - 11	HELTEC_V1
 - 39	DIY_v1
+
+MeshCom LoRa Modulationen
+- 0	LONG_FAST	
+- 1	LONG_SLOW	0.275 kbps
+- 2	VERY_LONG_SLOW	0.183 kbps
+- 3	MEDIUM_SLOW	
+- 4	MEDIUM_FAST	5.469 kbps
+- 5	SHORT_SLOW	
+- 6	SHORT_FAST	21.875 kbps
+- 7	LONG_MODERATE
