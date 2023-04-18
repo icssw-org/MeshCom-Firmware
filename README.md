@@ -14,8 +14,9 @@ Verwendung finden:
 - Zieladresse — Dieses Feld kann ein APRS-Ziel enthalten Rufzeichen oder „*“ für Übertragungen an ALLE.
 - Digipeater — Es können 0 bis 8 Digipeater-Rufzeichen in diesem Feld enthalten sein. Hinweis: Diese Digipeater-Adressen können durch einen generischen APRS-Digipeater-Pfad überschrieben werden (angegeben durch die SSID der  Zieladresse).
 - Information – Dieses Feld enthält Transportdaten. Das erste Zeichen dieses Feldes ist der APRS-Datentyp-Identifikator, der angibt welche Art von Daten folgen.
+- Hardware-ID
+- Modulations-ID
 - Frame Check Sequence – Der FCS ist eine Sequenz von 16 Bits, die verwendet wird um die Integrität eines empfangenen Rahmens zu überprüfen.
-- Gateway-ID – Das Gateway welches die nachricht an den MQTT-Server übergibt hängt die 32-Bit MAC-Adresse an damit eine Kompatibilität zu MeshCom 2.0 gegeben ist.
 
 Meldungen:
 - Textmeldungen:
