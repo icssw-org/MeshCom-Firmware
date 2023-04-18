@@ -421,14 +421,8 @@ void printBuffer(uint8_t *buffer, int len)
 
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-    Serial.printf("%s: %03i %c x%08X %02X %i %s>%s%c%s %04X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
-        aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_fcs);
-    
-    if(aprsmsg.msg_source_id != 0)
-    {
-        Serial.printf(" %08X HW:%02i", aprsmsg.msg_source_id, aprsmsg.msg_source_hw);
-    }
-
+    Serial.printf("%s: %03i %c x%08X %02X %i %s>%s%c%s HW:%02i MOD:%02i %04X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
+        aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -462,11 +456,9 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
     aprsmsg.msg_payload = msg_text;
-    aprsmsg.msg_fcs = 0;
-
-    // make it compatible to 2.0
-    aprsmsg.msg_source_id = _GW_ID;
     aprsmsg.msg_source_hw = MODUL_HARDWARE;
+    aprsmsg.msg_source_mod = 3;
+    aprsmsg.msg_fcs = 0;
 
     aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg);
 
@@ -561,14 +553,12 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
     aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt, batt);
+    aprsmsg.msg_source_hw = MODUL_HARDWARE;
+    aprsmsg.msg_source_mod = 3;
     aprsmsg.msg_fcs = 0;
 
     if(aprsmsg.msg_payload == "")
         return;
-
-    // make it compatible to 2.0
-    aprsmsg.msg_source_id = _GW_ID;
-    aprsmsg.msg_source_hw = MODUL_HARDWARE;
 
     aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg);
 
@@ -612,11 +602,9 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
     aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt, batt);
-    aprsmsg.msg_fcs = 0;
-
-    // make it compatible to 2.0
-    aprsmsg.msg_source_id = _GW_ID;
     aprsmsg.msg_source_hw = MODUL_HARDWARE;
+    aprsmsg.msg_source_mod = 3;
+    aprsmsg.msg_fcs = 0;
 
     aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg);
 

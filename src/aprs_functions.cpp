@@ -12,11 +12,11 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_server = false;
     aprsmsg.msg_source_path = "";
     aprsmsg.msg_destination_path = "";
+    aprsmsg.msg_gateway_call = "";
     aprsmsg.msg_payload = "";
     aprsmsg.msg_fcs = 0;
-    aprsmsg.msg_4_0 = true;
-    aprsmsg.msg_source_id = 0;
     aprsmsg.msg_source_hw = 0;
+    aprsmsg.msg_source_mod = 3;
 }
 
 uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprsMessage &aprsmsg)
@@ -113,6 +113,12 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
             return 0x00;
         }
 
+        aprsmsg.msg_source_hw = RcvBuffer[inext];
+        inext++;
+
+        aprsmsg.msg_source_mod = RcvBuffer[inext];
+        inext++;
+
         aprsmsg.msg_fcs = (RcvBuffer[inext] << 8) | RcvBuffer[inext+1];
 
         // Check FCS
@@ -129,17 +135,6 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
             return 0x00;
         }
 
-        inext++;
-        inext++;
-
-        // source info als MAC
-        if(inext+5 == size)
-        {
-            aprsmsg.msg_source_id = (RcvBuffer[inext]) | (RcvBuffer[inext+1] << 8) | (RcvBuffer[inext+2] << 16) | (RcvBuffer[inext+3] << 24);
-            aprsmsg.msg_source_hw = RcvBuffer[inext+4];
-            aprsmsg.msg_4_0 = false;
-        }
-
         return aprsmsg.payload_type;
     }
     else
@@ -148,6 +143,111 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
 
         return 0x00;
     }
+}
+
+void    initAPRSPOS(struct aprsPosition &aprspos)
+{
+    aprspos.lat = 0.0;
+    aprspos.lat_c = 0x00;
+    aprspos.lon = 0.0;
+    aprspos.lon_c = 0x00;
+    aprspos.alt = 0;
+    aprspos.bat = 0;
+
+}
+
+uint8_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
+{
+    initAPRSPOS(aprspos);
+
+    char decode_text[25];
+    unsigned int itxt=0;
+    int istarttext = 0;
+
+    
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    int ipt=0;
+
+    for(itxt=0; itxt<PayloadBuffer.length(); itxt++)
+    {
+        if((PayloadBuffer.charAt(itxt) == 'N' || PayloadBuffer.charAt(itxt) == 'S'))
+        {
+            decode_text[ipt]=0x00;
+
+            sscanf(decode_text, "%lf", &aprspos.lat);
+            aprspos.lat_c = PayloadBuffer.charAt(itxt);
+            istarttext = itxt+2;    // Char-Symbol 1
+            break;
+        }
+        else
+        {
+            decode_text[ipt]=PayloadBuffer.charAt(itxt);
+            ipt++;
+        }
+    }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+    {
+        if((PayloadBuffer.charAt(itxt) == 'W' || PayloadBuffer.charAt(itxt) == 'E'))
+        {
+            decode_text[ipt]=0x00;
+
+            sscanf(decode_text, "%lf", &aprspos.lon);
+            aprspos.lon_c = PayloadBuffer.charAt(itxt);
+            istarttext = itxt+2;    // Char-Symbol 2
+            break;
+        }
+        else
+        {
+            decode_text[ipt]=PayloadBuffer.charAt(itxt);
+            ipt++;
+        }
+    }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/')
+        {
+            decode_text[ipt]=0x00;
+
+            sscanf(decode_text, "%d", &aprspos.bat);
+            istarttext = itxt+3;    // "/A="
+            break;
+        }
+        else
+        {
+            decode_text[ipt]=PayloadBuffer.charAt(itxt);
+            ipt++;
+        }
+    }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+    {
+        if(itxt == PayloadBuffer.length()-1)    // 0x00 Abschluss
+        {
+            decode_text[ipt]=0x00;
+
+            sscanf(decode_text, "%d", &aprspos.alt);
+            break;
+        }
+        else
+        {
+            decode_text[ipt]=PayloadBuffer.charAt(itxt);
+            ipt++;
+        }
+    }
+
+    return 0x01;
 }
 
 int encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
@@ -204,6 +304,12 @@ uint8_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprs
     msg_buffer[inext] = 0x00;
     inext++;
 
+    msg_buffer[inext] = aprsmsg.msg_source_hw;
+    inext++;
+
+    msg_buffer[inext] = aprsmsg.msg_source_mod;
+    inext++;
+
     unsigned int FCS_SUMME=0;
     for(int ifcs=0; ifcs<inext; ifcs++)
     {
@@ -217,22 +323,6 @@ uint8_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprs
     inext++;
 
     aprsmsg.msg_fcs = FCS_SUMME;
-
-    // _GW_ID   nur für 2.0 -> 4.0
-    if(aprsmsg.msg_source_id != 0)
-    {
-        msg_buffer[inext] = (aprsmsg.msg_source_id) & 0xFF;
-        inext++;
-        msg_buffer[inext] = (aprsmsg.msg_source_id >> 8) & 0xFF;
-        inext++;
-        msg_buffer[inext] = (aprsmsg.msg_source_id >> 16) & 0xFF;
-        inext++;
-        msg_buffer[inext] = (aprsmsg.msg_source_id >> 24) & 0xFF;
-        inext++;
-
-        msg_buffer[inext] = aprsmsg.msg_source_hw; // MODUL_HARDWARE;
-        inext++;
-    }
 
     if(inext > UDP_TX_BUF_SIZE)
         inext = UDP_TX_BUF_SIZE;

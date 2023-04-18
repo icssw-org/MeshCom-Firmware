@@ -25,10 +25,10 @@ struct aprsMessage
     String msg_source_path;
     String msg_destination_path;
     String msg_payload;
+    String msg_gateway_call;
     unsigned int msg_fcs;
-    bool msg_4_0;
-    unsigned int msg_source_id;     // only for compatibility 2.0
-    uint8_t msg_source_hw;     // only for compatibility 2.0
+    uint8_t msg_source_hw;
+    uint8_t msg_source_mod;
 };
 
 struct aprsPosition
@@ -38,6 +38,7 @@ struct aprsPosition
     double lon;
     char lon_c;
     int alt;
+    int bat;
 };
 
 #endif // _APRS_FUNCTIONS_H_
