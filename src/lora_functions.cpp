@@ -35,7 +35,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
 
-            Serial.printf("ACK from LoRa %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+            //Serial.printf("ACK from LoRa %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
 
             int icheck = checkOwnTx(print_buff+6);
 
@@ -79,7 +79,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         if(msg_type_b_lora == 0x00)
         {
-            //Serial.printf("RCV:%s\n", RcvBuffer+6);
+            //Serial.printf("%03i RCV:%s\n", size, RcvBuffer+6);
         }
         else
         if(is_new_packet(RcvBuffer+1) && checkOwnTx(RcvBuffer+1) < 0)
@@ -206,9 +206,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
 
                         size = encodeAPRS(RcvBuffer, aprsmsg);
-
-                        if(size > UDP_TX_BUF_SIZE)
-                            size = UDP_TX_BUF_SIZE;
 
                         ringBuffer[iWrite][0]=size;
                         memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);

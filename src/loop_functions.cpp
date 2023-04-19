@@ -460,7 +460,7 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_source_mod = 3;
     aprsmsg.msg_fcs = 0;
 
-    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg);
+    encodeAPRS(msg_buffer, aprsmsg);
 
     printBuffer_aprs((char*)"TX-POS ", aprsmsg);
     Serial.println();
@@ -470,9 +470,6 @@ void sendMessage(char *msg_text, int len)
     {
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
     }
-
-    if(aprsmsg.msg_len > UDP_TX_BUF_SIZE)
-        aprsmsg.msg_len = UDP_TX_BUF_SIZE;
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
@@ -560,13 +557,10 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     if(aprsmsg.msg_payload == "")
         return;
 
-    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg);
+    encodeAPRS(msg_buffer, aprsmsg);
 
     printBuffer_aprs((char*)"TX-POS>", aprsmsg);
     Serial.println();
-
-    if(aprsmsg.msg_len > UDP_TX_BUF_SIZE)
-        aprsmsg.msg_len = UDP_TX_BUF_SIZE;
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
@@ -606,13 +600,10 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.msg_source_mod = 3;
     aprsmsg.msg_fcs = 0;
 
-    aprsmsg.msg_len = encodeAPRS(msg_buffer, aprsmsg);
+    encodeAPRS(msg_buffer, aprsmsg);
 
     printBuffer_aprs((char*)"TX-WX >", aprsmsg);
     Serial.println();
-
-    if(aprsmsg.msg_len > UDP_TX_BUF_SIZE)
-        aprsmsg.msg_len = UDP_TX_BUF_SIZE;
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
 

@@ -17,7 +17,7 @@
 
 struct aprsMessage
 {
-    uint8_t msg_len;
+    uint16_t msg_len;
     char payload_type;
     unsigned int msg_id;
     uint8_t max_hop;

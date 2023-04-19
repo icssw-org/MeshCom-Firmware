@@ -740,22 +740,13 @@ void checkRX(void)
 
     String str;
     
-    int ibytes = UDP_TX_BUF_SIZE;
+    size_t ibytes = UDP_TX_BUF_SIZE;
 
     int state = radio.readData(payload, ibytes);
 
-    for(int irx=6; irx<UDP_TX_BUF_SIZE; irx++)
-    {
-        if(payload[irx] == 0x00)
-        {
-            ibytes=irx+3;   // ikl. FCS
-            break;
-        }
-    }
-
     if (state == RADIOLIB_ERR_NONE)
     {
-        OnRxDone(payload, ibytes, (int16_t)radio.getRSSI(), (int8_t)radio.getSNR());
+        OnRxDone(payload, (uint16_t)ibytes, (int16_t)radio.getRSSI(), (int8_t)radio.getSNR());
     }
     else
     if (state == RADIOLIB_ERR_RX_TIMEOUT)

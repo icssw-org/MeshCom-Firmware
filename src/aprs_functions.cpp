@@ -19,18 +19,18 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_source_mod = 3;
 }
 
-uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprsMessage &aprsmsg)
+uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct aprsMessage &aprsmsg)
 {
     initAPRS(aprsmsg);
 
-    aprsmsg.msg_len = size;
+    aprsmsg.msg_len = rsize;
 
     if(RcvBuffer[0] == 0x41)    // ACK
         return 0x41;
 
-    if(size < 16)
+    if(rsize < 16)
     {
-        Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - size <%i> to short!\n", size);
+        Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - size <%i> to short!\n", rsize);
 
         return 0x00;
     }
@@ -39,7 +39,7 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
 
     if(aprsmsg.payload_type == 0x3A || aprsmsg.payload_type == 0x21 || aprsmsg.payload_type == 0x40)
     {
-        int ib=0;
+        uint16_t ib=0;
 
         aprsmsg.msg_id = RcvBuffer[1] | (RcvBuffer[2] << 8) | (RcvBuffer[3] << 16) | (RcvBuffer[4] << 24);
 
@@ -48,11 +48,11 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
         if((RcvBuffer[5] & 0x80) == 0x80)
             aprsmsg.msg_server = true;
 
-        int inext=0;
+        uint16_t inext=0;
 
         // Source Path
         bool bSourceEndOk=false;
-        for(ib=6; ib < size; ib++)
+        for(ib=6; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == '>')
             {
@@ -73,7 +73,7 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
 
         // Destination Path
         bool bDestinationEndOk=false;
-        for(ib=inext; ib < size; ib++)
+        for(ib=inext; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == aprsmsg.payload_type)
             {
@@ -94,7 +94,7 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
 
         // Payload
         bool bPayloadEndOk=false;
-        for(ib=inext; ib < size; ib++)
+        for(ib=inext; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == 0x00)
             {
@@ -120,6 +120,8 @@ uint8_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint8_t size, struct aprs
         inext++;
 
         aprsmsg.msg_fcs = (RcvBuffer[inext] << 8) | RcvBuffer[inext+1];
+
+        Serial.printf("rsize:%i inext:%i RcvBuffer[inext]:%i RcvBuffer[inext+1]:%i\n", rsize, inext, RcvBuffer[inext], RcvBuffer[inext+1]);
 
         // Check FCS
         unsigned int FCS_SUMME=0;
@@ -156,7 +158,7 @@ void    initAPRSPOS(struct aprsPosition &aprspos)
 
 }
 
-uint8_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
+uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 {
     initAPRSPOS(aprspos);
 
@@ -250,7 +252,7 @@ uint8_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     return 0x01;
 }
 
-int encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
+uint16_t encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
 {
     char msg_start[MAX_MSG_LEN_PHONE];
 
@@ -270,31 +272,31 @@ int encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &a
 
     sprintf(msg_start, "%s>%s%c", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type);
 
-    int ilng=aprsmsg.msg_source_path.length() + 1 + aprsmsg.msg_destination_path.length() + 1;
+    uint16_t ilng=aprsmsg.msg_source_path.length() + 1 + aprsmsg.msg_destination_path.length() + 1;
     
     memcpy(msg_buffer+6, msg_start, ilng);
 
     return ilng+6;
 }
 
-int encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
+uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
 {
     char msg_start[MAX_MSG_LEN_PHONE];
 
     sprintf(msg_start, "%s", aprsmsg.msg_payload.c_str());
 
-    int ilng=aprsmsg.msg_payload.length();
+    uint16_t ilng=aprsmsg.msg_payload.length();
     
     memcpy(msg_buffer, msg_start, ilng);
     
     return ilng;
 }
 
-uint8_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprsmsg)
+uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprsmsg)
 {
-    uint8_t inext = encodeStartAPRS(msg_buffer, aprsmsg);
+    uint16_t inext = encodeStartAPRS(msg_buffer, aprsmsg);
 
-    uint8_t inext_payload = encodePayloadAPRS(msg_buffer+inext, aprsmsg);
+    uint16_t inext_payload = encodePayloadAPRS(msg_buffer+inext, aprsmsg);
         
     if(inext_payload == 0)
         return 0;
@@ -326,6 +328,8 @@ uint8_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprs
 
     if(inext > UDP_TX_BUF_SIZE)
         inext = UDP_TX_BUF_SIZE;
+
+    aprsmsg.msg_len = inext;
 
     return inext;
 }
