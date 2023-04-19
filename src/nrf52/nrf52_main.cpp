@@ -525,13 +525,11 @@ void nrf52loop()
             if (tx_is_active == false && is_receiving == false)
                 doTX();
         }
-        else
-        {
-            cmd_counter--;
-            if(cmd_counter < 0)
-                cmd_counter=0;
-        }
     }
+
+    cmd_counter--;
+    if(cmd_counter < 0)
+        cmd_counter=0;
 
     // check if message from phone to send
     if(hasMsgFromPhone)

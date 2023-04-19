@@ -270,12 +270,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         }
     }
 
-    cmd_counter = WAIT_AFTER_RX;
-
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
     #endif
 
+    cmd_counter = WAIT_AFTER_RX;
     is_receiving = false;
 }
 
@@ -287,6 +286,7 @@ void OnRxTimeout(void)
         Radio.Rx(RX_TIMEOUT_VALUE);
     #endif
 
+    cmd_counter = WAIT_AFTER_RX;
     is_receiving = false;
 }
 
@@ -295,12 +295,11 @@ void OnRxTimeout(void)
 
 void OnRxError(void)
 {
-    cmd_counter = WAIT_AFTER_RX;
-
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
     #endif
 
+    cmd_counter = WAIT_AFTER_RX;
     is_receiving = false;
 }
 
@@ -392,7 +391,6 @@ void OnTxDone(void)
     #endif
 
     cmd_counter = WAIT_AFTER_TXDONE;
-
     tx_is_active = false;
 }
 
@@ -403,7 +401,6 @@ void OnTxTimeout(void)
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
     #endif
-
     cmd_counter = WAIT_AFTER_TXDONE;
 
     tx_is_active = false;
@@ -416,6 +413,8 @@ void OnPreambleDetect(void)
 {
 }
 
+/**@brief fires when a header is detected 
+ */
 void OnHeaderDetect(void)
 {
     is_receiving = true;

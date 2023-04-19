@@ -47,7 +47,7 @@ uint8_t udpWrite = 0;   // counter for ringbuffer
 uint8_t udpRead = 0;    // counter for ringbuffer
 
 // LoRa RX/TX sequence control
-uint8_t cmd_counter = 2;      // ticker dependant on main cycle delay time
+int cmd_counter = 2;      // ticker dependant on main cycle delay time
 bool is_receiving = false;  // flag to store we are receiving a lora packet.
 bool tx_is_active = false;  // flag to store we are transmitting  a lora packet.
 

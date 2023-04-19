@@ -641,9 +641,11 @@ void esp32loop()
             if (tx_is_active == false && is_receiving == false)
                 doTX();
         }
-        else
-            cmd_counter--;
     }
+
+    cmd_counter--;
+    if(cmd_counter < 0)
+        cmd_counter=0;
 
     // BLE
     if (deviceConnected)
