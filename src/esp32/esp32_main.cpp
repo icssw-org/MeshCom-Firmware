@@ -793,6 +793,8 @@ void sendToPhone()
 
     memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
 
+    //printBuffer(toPhoneBuff, blelen+2);
+
 if(g_ble_uart_is_connected && isPhoneReady == 1)
 {
 

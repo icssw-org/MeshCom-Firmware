@@ -121,7 +121,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         aprsmsg.msg_fcs = (RcvBuffer[inext] << 8) | RcvBuffer[inext+1];
 
-        Serial.printf("rsize:%i inext:%i RcvBuffer[inext]:%i RcvBuffer[inext+1]:%i\n", rsize, inext, RcvBuffer[inext], RcvBuffer[inext+1]);
+        //Serial.printf("rsize:%i inext:%i RcvBuffer[inext]:%i RcvBuffer[inext+1]:%i\n", rsize, inext, RcvBuffer[inext], RcvBuffer[inext+1]);
 
         // Check FCS
         unsigned int FCS_SUMME=0;
@@ -136,6 +136,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
             return 0x00;
         }
+
+        aprsmsg.msg_len = inext + 2;
+
 
         return aprsmsg.payload_type;
     }

@@ -25,13 +25,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     if(payload[0] == 0x41)
     {
-        if(is_new_packet(print_buff+1))
+        if(is_new_packet(print_buff+1) || checkOwnTx(print_buff+6) > 0)
         {
             memcpy(print_buff, payload, 12);
 
             // add rcvMsg to forward to LoRa TX
-            unsigned int mid=(print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
-            addLoraRxBuffer(mid);
+            if(is_new_packet(print_buff+1))
+            {
+                unsigned int mid=(print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
+                addLoraRxBuffer(mid);
+            }
 
             // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
 
@@ -76,6 +79,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         
         // print which message type we got
         uint8_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
+
+        size = aprsmsg.msg_len;
 
         if(msg_type_b_lora == 0x00)
         {
@@ -275,6 +280,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     #endif
 
     cmd_counter = WAIT_AFTER_RX;
+
+    Serial.printf("Header off - SD cmd_counter:%i payload[0]:%02X\n", cmd_counter, payload[0]);
+
     is_receiving = false;
 }
 
@@ -287,6 +295,9 @@ void OnRxTimeout(void)
     #endif
 
     cmd_counter = WAIT_AFTER_RX;
+
+    Serial.printf("Header off - TO cmd_counter:%i\n", cmd_counter);
+
     is_receiving = false;
 }
 
@@ -300,6 +311,9 @@ void OnRxError(void)
     #endif
 
     cmd_counter = WAIT_AFTER_RX;
+
+    Serial.printf("Header off - ER md_counter:%i\n", cmd_counter);
+
     is_receiving = false;
 }
 
@@ -418,4 +432,5 @@ void OnPreambleDetect(void)
 void OnHeaderDetect(void)
 {
     is_receiving = true;
+    Serial.printf("Header on - HD cmd_counter:%i\n", cmd_counter);
 }
