@@ -36,6 +36,8 @@ void init_flash(void)
     sprintf(meshcom_settings.node_ssid, "%s", strVar.c_str());
     strVar = preferences.getString("node_pwd", "none");
     sprintf(meshcom_settings.node_pwd, "%s", strVar.c_str());
+
+    meshcom_settings.node_hamnet_only = preferences.getInt("node_hamnet_only", 0);
 }
 
 void save_settings(void)
@@ -68,6 +70,8 @@ void save_settings(void)
     preferences.putString("node_ssid", strVar); 
     strVar = meshcom_settings.node_pwd;
     preferences.putString("node_pwd", strVar); 
+
+    preferences.putInt("node_hamnet_only", meshcom_settings.node_hamnet_only);
 
     preferences.end();
 }

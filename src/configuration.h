@@ -31,6 +31,13 @@
     #define SX127X
 #endif
 
+#ifdef BOARD_TBEAM_SX126x
+    #define MODUL_HARDWARE TBEAM
+    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define ENABLE_GPS
+    #define SX126X
+#endif
+
 #ifdef BOARD_TLORA_OLV216
     #define MODUL_HARDWARE TLORA_V2_1_1p6
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
@@ -242,6 +249,11 @@ static const uint8_t KEY_BUILTIN = 39;
 #define LORA_DIO1 LORA_IO1
 //#define LORA_CS  //already defined
 
+#endif
+
+#ifdef BOARD_TBEAM_SX126x
+#define LORA_DIO0 LORA_IO0
+#define LORA_DIO1 LORA_IO1
 #endif
 
 #ifdef BOARD_TLORA_OLV2

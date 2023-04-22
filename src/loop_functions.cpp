@@ -441,7 +441,6 @@ void sendMessage(char *msg_text, int len)
         commandAction(msg_text, len, true);
         return;
     }
-
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
     struct aprsMessage aprsmsg;

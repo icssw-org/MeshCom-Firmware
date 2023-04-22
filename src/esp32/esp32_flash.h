@@ -39,11 +39,15 @@ struct s_meshcom_settings
 	float node_hum = 0;
 	float node_press = 0;
 
+	int node_hamnet_only = 0;
+
 	// Default is off
+	/*
 	uint32_t send_repeat_time = 0;
 	bool auto_join = false;
 	// Flag for LoRaWAN or LoRa P2P
 	bool lorawan_enable = true;
+	*/
 };
 
 

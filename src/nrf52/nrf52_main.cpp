@@ -240,7 +240,7 @@ void sendToPhone();
 uint8_t dmac[6];
 
 /** Set the device name, max length is 10 characters */
-    char g_ble_dev_name[10] = "RAK-CL40";
+    char g_ble_dev_name[10] = "CL";
 
 void getMacAddr(uint8_t *dmac)
 {
@@ -891,7 +891,7 @@ void checkSerialCommand(void)
                 }
 
                 if(strText.startsWith(":"))
-                    sendMessage(msg_buffer, inext);
+                    sendMessage(msg_buffer+1, inext-1);
 
                 if(strText.startsWith("-"))
                     commandAction(msg_buffer, inext, false);

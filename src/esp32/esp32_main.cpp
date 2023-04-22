@@ -218,7 +218,7 @@ int transmissionState = RADIOLIB_ERR_UNKNOWN;
 // LoRa Events and Buffers
 
 /** Set the device name, max length is 10 characters */
-char g_ble_dev_name[10] = "ESP-CL40";
+char g_ble_dev_name[10] = "CL";
 
 int vref = 1100;                //Default value. We'll get a more accurate value from the efuses
 uint64_t timeStamp = 0;
