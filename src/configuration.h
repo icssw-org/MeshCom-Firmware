@@ -6,6 +6,8 @@
 
 #include <Arduino.h>
 
+#define SOURCE_VERSION "4.04"
+
 //Hardware Types
 #define TLORA_V2 1
 #define TLORA_V1 2

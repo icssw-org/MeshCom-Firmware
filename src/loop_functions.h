@@ -36,4 +36,6 @@ void sendWX(char* text, float temp, float hum, float press);
 
 String convertCallToShort(char callsign[10]);
 
+uint8_t shortVERSION();
+
 #endif // _LOOP_FUNCTIONS_H_

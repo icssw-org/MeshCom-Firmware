@@ -136,7 +136,7 @@ void sendDisplayHead(int batt)
 {
     char print_text[500];
 
-    sprintf(print_text, "MC 4.0          %3d%%", batt);
+    sprintf(print_text, "MC %-4.4s         %3d%%", SOURCE_VERSION, batt);
     sendDisplay1306(true, false, 3, 11, print_text);
     sendDisplay1306(false, false, 3, 9, (char*)"#L");
 
@@ -159,11 +159,11 @@ void sendDisplayMainline(int batt)
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
-        sprintf(print_text, "MC 4.0          %3d%%", batt);
+        sprintf(print_text, "MC %-4.4s         %3d%%", SOURCE_VERSION, batt);
     }
     else
     {
-        sprintf(print_text, "MC 4.0 %02i:%02i:%02i %3d%%", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, batt); // (int)mv_to_percent(read_batt()));
+        sprintf(print_text, "MC%-4.4s %02i:%02i:%02i %3d%%", SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, batt); // (int)mv_to_percent(read_batt()));
     }
 
     sendDisplay1306(true, false, 3, 11, print_text);
@@ -421,8 +421,8 @@ void printBuffer(uint8_t *buffer, int len)
 
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-    Serial.printf("%s: %03i %c x%08X %02X %i %s>%s%c%s HW:%02i MOD:%02i %04X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
-        aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs);
+    Serial.printf("%s: %03i %c x%08X %02X %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X V:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
+        aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_fw_version);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -458,6 +458,8 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_source_hw = MODUL_HARDWARE;
     aprsmsg.msg_source_mod = 3;
     aprsmsg.msg_fcs = 0;
+
+    aprsmsg.msg_fw_version = shortVERSION();
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -553,6 +555,8 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     aprsmsg.msg_source_mod = 3;
     aprsmsg.msg_fcs = 0;
 
+    aprsmsg.msg_fw_version = shortVERSION();
+
     if(aprsmsg.msg_payload == "")
         return;
 
@@ -598,6 +602,8 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.msg_source_hw = MODUL_HARDWARE;
     aprsmsg.msg_source_mod = 3;
     aprsmsg.msg_fcs = 0;
+
+    aprsmsg.msg_fw_version = shortVERSION();
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -650,4 +656,12 @@ String convertCallToShort(char callsign[10])
     sVar.toUpperCase();
 
     return sVar;
+}
+
+uint8_t shortVERSION()
+{
+    double dversion=0.0;
+    sscanf(SOURCE_VERSION, "%lf", &dversion);
+    int iversion = dversion * 100.0;
+    return (uint8_t)(iversion - 400);
 }

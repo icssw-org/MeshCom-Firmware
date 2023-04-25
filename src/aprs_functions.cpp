@@ -17,6 +17,7 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_fcs = 0;
     aprsmsg.msg_source_hw = 0;
     aprsmsg.msg_source_mod = 3;
+    aprsmsg.msg_fw_version = 0;
 }
 
 uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct aprsMessage &aprsmsg)
@@ -130,6 +131,8 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             FCS_SUMME += RcvBuffer[ib];
         }
 
+        inext=inext+2;
+
         if(aprsmsg.msg_fcs != FCS_SUMME)
         {
             Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - FCS <%i>:<%i> wrong!\n", aprsmsg.msg_fcs, FCS_SUMME);
@@ -137,7 +140,13 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             return 0x00;
         }
 
-        aprsmsg.msg_len = inext + 2;
+        if(inext < rsize)
+        {
+            aprsmsg.msg_fw_version = RcvBuffer[inext];
+            inext++;
+        }
+
+        aprsmsg.msg_len = inext;
 
 
         return aprsmsg.payload_type;
@@ -150,7 +159,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
     }
 }
 
-void    initAPRSPOS(struct aprsPosition &aprspos)
+void initAPRSPOS(struct aprsPosition &aprspos)
 {
     aprspos.lat = 0.0;
     aprspos.lat_c = 0x00;
@@ -328,6 +337,9 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     inext++;
 
     aprsmsg.msg_fcs = FCS_SUMME;
+
+    msg_buffer[inext] = aprsmsg.msg_fw_version;
+    inext++;
 
     if(inext > UDP_TX_BUF_SIZE)
         inext = UDP_TX_BUF_SIZE;

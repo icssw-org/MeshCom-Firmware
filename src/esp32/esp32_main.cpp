@@ -42,10 +42,16 @@
 
 #ifdef ENABLE_GPS
 #define GPS_SERIAL_NUM 1
-#define GPS_RX_PIN 34
-#define GPS_TX_PIN 12
+    #ifdef BOARD_TBEAM
+        #define GPS_RX_PIN 34
+        #define GPS_TX_PIN 12
+    #else
+        #define GPS_RX_PIN 34
+        #define GPS_TX_PIN 12
+    #endif
 
 #define ADC_PIN    35  //ADC_PIN is the ADC pin the battery is connected to through a voltage divider
+
 #endif
 /**
  * RadioLib Infos und Examples:
@@ -685,7 +691,7 @@ void esp32loop()
     }
 
     // gps refresh
-    if (((gps_refresh_timer + GPS_REFRESH_INTERVAL * 1000) < millis()))
+    if (((gps_refresh_timer + GPS_REFRESH_INTERVAL * 100) < millis()))
     {
         #ifdef ENABLE_GPS
             getGPS();
@@ -942,6 +948,8 @@ void getGPS(void)
     String tmp_data = "";
 
     bool newData = false;
+
+    //Serial.printf("GPS check: %i\n", GPSSerial.available());
   
     // For one second we parse GPS data and report some key values
     for (unsigned long start = millis(); millis() - start < 1000;)
@@ -949,6 +957,7 @@ void getGPS(void)
       while (GPSSerial.available())
       {
         char c = GPSSerial.read();
+        //Serial.print(c);
         tmp_data += c;
         
         if (gps.encode(c))// Did a new valid sentence come in?
@@ -1005,8 +1014,6 @@ void getGPS(void)
         meshcom_settings.node_date_minute = (time / 10000) % 100;
         meshcom_settings.node_date_second = (time / 100) % 100;
         meshcom_settings.node_date_hundredths = time % 100;
-
-        //sendDisplayMainline();
 
         if(bDEBUG)
             printf("Time: %ld\n", time);

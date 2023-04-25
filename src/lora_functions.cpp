@@ -1,7 +1,17 @@
+#include "configuration.h"
+
 #if defined NRF52_SERIES
-#else
+#endif
+
+#ifdef SX127X
     #include <RadioLib.h>
     extern SX1278 radio;
+    extern int transmissionState;
+#endif
+
+#ifdef SX126X
+    #include <RadioLib.h>
+    extern SX1268 radio;
     extern int transmissionState;
 #endif
 
@@ -281,7 +291,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     cmd_counter = WAIT_AFTER_RX;
 
-    Serial.printf("Header off - SD cmd_counter:%i payload[0]:%02X\n", cmd_counter, payload[0]);
+    //Serial.printf("Header off - SD cmd_counter:%i payload[0]:%02X\n", cmd_counter, payload[0]);
 
     is_receiving = false;
 }
@@ -296,7 +306,7 @@ void OnRxTimeout(void)
 
     cmd_counter = WAIT_AFTER_RX;
 
-    Serial.printf("Header off - TO cmd_counter:%i\n", cmd_counter);
+    //Serial.printf("Header off - TO cmd_counter:%i\n", cmd_counter);
 
     is_receiving = false;
 }
@@ -312,7 +322,7 @@ void OnRxError(void)
 
     cmd_counter = WAIT_AFTER_RX;
 
-    Serial.printf("Header off - ER md_counter:%i\n", cmd_counter);
+    //Serial.printf("Header off - ER md_counter:%i\n", cmd_counter);
 
     is_receiving = false;
 }
@@ -432,5 +442,5 @@ void OnPreambleDetect(void)
 void OnHeaderDetect(void)
 {
     is_receiving = true;
-    Serial.printf("Header on - HD cmd_counter:%i\n", cmd_counter);
+    //Serial.printf("Header on - HD cmd_counter:%i\n", cmd_counter);
 }
