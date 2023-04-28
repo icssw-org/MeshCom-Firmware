@@ -31,7 +31,7 @@
 #if defined NRF52_SERIES
 	uint32_t vbat_pin = WB_A0;
 #else
-	uint32_t vbat_pin = 34;
+	uint32_t vbat_pin = 14;
 #endif
 /**
  * @brief Initialize the battery analog input
@@ -61,10 +61,19 @@ void init_batt(void)
  */
 float read_batt(void)
 {
+//	return 0.0;
+
 	float raw;
 
 	// Get the raw 12-bit, 0..3000mV ADC value
 	raw = analogRead(vbat_pin);
+
+	#if defined NRF52_SERIES
+	#else
+		raw = raw * 10.0;
+	#endif
+
+	//Serial.printf("raw:%f\n", raw);
 
 	// Convert the raw value to compensated mv, taking the resistor-
 	// divider into account (providing the actual LIPO voltage)

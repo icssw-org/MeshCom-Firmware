@@ -223,7 +223,7 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(bPos)
     {
-        sprintf(print_buff, "MeshCom %-4.4s Client\n...LAT: %.6lf %c\n...LON: %.6lf %c\n...ALT: %i\n...DATE: %i.%02i.%02i %02i:%02i:%02i UTC\n", SOURCE_VERSION,
+        sprintf(print_buff, "MeshCom %-4.4s Client\n...LAT: %.6lf %c\n...LON: %.6lf %c\n...ALT: %i\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_VERSION,
          meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
          meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,
          meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);

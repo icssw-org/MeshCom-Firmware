@@ -16,6 +16,8 @@
 #include <SPI.h>
 #include <WiFi.h>
 
+#include "esp32_gps.h"
+
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
@@ -26,33 +28,14 @@
 #include <lora_functions.h>
 
 #include <esp_adc_cal.h>
-#include "TinyGPS.h"
-
-#ifdef BOARD_TBEAM
-#include <axp20x.h>
-#endif
 
 #ifdef BOARD_HELTEC
 #include <Adafruit_I2CDevice.h>
 #include <Adafruit_Sensor.h>
 #endif
 
-#include <HardwareSerial.h>
-#include <SparkFun_Ublox_Arduino_Library.h>
+#define ADC_PIN 35  //ADC_PIN is the ADC pin the battery is connected to through a voltage divider
 
-#ifdef ENABLE_GPS
-#define GPS_SERIAL_NUM 1
-    #ifdef BOARD_TBEAM
-        #define GPS_RX_PIN 34
-        #define GPS_TX_PIN 12
-    #else
-        #define GPS_RX_PIN 34
-        #define GPS_TX_PIN 12
-    #endif
-
-#define ADC_PIN    35  //ADC_PIN is the ADC pin the battery is connected to through a voltage divider
-
-#endif
 /**
  * RadioLib Infos und Examples:
  * SX127x:
@@ -99,7 +82,6 @@ bool ble_busy_flag = false;
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-
 
 // Textmessage buffer from phone, hasMsgFromPhone flag indicates new message
 char textbuff_phone [MAX_MSG_LEN_PHONE] = {0};
@@ -207,8 +189,6 @@ SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 
 // Lora callback Function declarations
 void checkRX(void);
-void OnTxDone(void);
-void OnTxTimeout(void);
 
 void setInterruptFlag();     // LoRaRX Interrupt function
 void enableRX(void);    // for Modules with RXEN / TXEN Pin
@@ -240,23 +220,6 @@ unsigned long gps_refresh_timer = 0;
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
 void checkSerialCommand(void);
 void sendToPhone();
-
-// TinyGPS
-TinyGPS gps;
-#ifdef BOARD_TBEAM
-AXP20X_Class axp;
-#endif
-SFE_UBLOX_GPS NEO6GPS;
-
-//SoftwareSerial ss(12,34);
-#ifdef ENABLE_GPS
-HardwareSerial GPSSerial(GPS_SERIAL_NUM);
-#endif
-
-int direction_S_N = 0;  //0--S, 1--N
-int direction_E_W = 0;  //0--E, 1--W
-
-void getGPS(void);
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
@@ -320,12 +283,21 @@ void esp32setup()
         Wire.setPins(SDA_PIN, SCL_PIN);
     #endif
 
-    Wire.begin();
-    u8g2.begin();
-
     Serial.begin(MONITOR_SPEED);
     while(!Serial);
     Serial.println("SERIAL open");
+
+    Serial.println("============");
+    Serial.println("CLIENT SETUP");
+    Serial.println("============");
+
+    #ifdef BOARD_TBEAM
+        setupGPS();
+    #else
+        Wire.begin();
+    #endif
+
+    u8g2.begin();
 
 #ifdef BOARD_E22
     // if RESET Pin is connected
@@ -503,52 +475,15 @@ void esp32setup()
     Serial.println();
     #endif
 
-    // gps init
-    // TBEAM PINS
-    // RXD	34 
-    // TXD	12 (WB_I02)
-    // Baud	9600
-
-    #ifdef ENABLE_GPS
-        GPSSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-    #endif
-    delay(300);
-
-    Serial.println("SERIAL1 open");
-
-    #ifdef ENABLE_GPS
-    do {
-
-        if(NEO6GPS.begin(GPSSerial))
-        {
-            Serial.println("GPS connection OK");
-            NEO6GPS.setUART1Output(COM_TYPE_NMEA);
-            NEO6GPS.saveConfiguration();
-            Serial.println("Enable NMEA");
-            NEO6GPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
-            NEO6GPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
-            NEO6GPS.disableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
-            NEO6GPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART1);
-            NEO6GPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
-            NEO6GPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART1);
-            NEO6GPS.saveConfiguration();
-            Serial.println("Enable NMEA enables!");
-            break;
-        }
-        delay(1000);
-    } while(1);
-
-    Serial.println("Hello GPS");
-    Serial.println("=====================================");
-    #endif
-
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;
     meshcom_settings.node_date_minute = 0;
     meshcom_settings.node_date_second = 0;
     meshcom_settings.node_date_hundredths = 0;
 
+    Serial.println("==============");
     Serial.println("CLIENT STARTED");
+    Serial.println("==============");
 
 }
 
@@ -691,7 +626,7 @@ void esp32loop()
     }
 
     // gps refresh
-    if (((gps_refresh_timer + GPS_REFRESH_INTERVAL * 100) < millis()))
+    if (((gps_refresh_timer + GPS_REFRESH_INTERVAL * 1000) < millis()))
     {
         #ifdef ENABLE_GPS
             getGPS();
@@ -916,107 +851,3 @@ void checkSerialCommand(void)
         }
     }
 }
-
-/**@brief Function for analytical direction.
- */
-void direction_parse(String tmp)
-{
-    if (tmp.indexOf(",E,") != -1)
-    {
-        direction_E_W = 0;
-    }
-    else
-    {
-        direction_E_W = 1;
-    }
-    
-    if (tmp.indexOf(",S,") != -1)
-    {
-        direction_S_N = 0;
-    }
-    else
-    {
-        direction_S_N = 1;
-    }
-}
-
-/**@brief Function for handling a LoRa tx timer timeout event.
- */
-#ifdef ENABLE_GPS
-void getGPS(void)
-{ 
-    String tmp_data = "";
-
-    bool newData = false;
-
-    //Serial.printf("GPS check: %i\n", GPSSerial.available());
-  
-    // For one second we parse GPS data and report some key values
-    for (unsigned long start = millis(); millis() - start < 1000;)
-    {
-      while (GPSSerial.available())
-      {
-        char c = GPSSerial.read();
-        //Serial.print(c);
-        tmp_data += c;
-        
-        if (gps.encode(c))// Did a new valid sentence come in?
-          newData = true;
-      }
-    }
-
-    if(bDEBUG)
-        Serial.printf("%s\n", tmp_data); // uncomment this line if you want to see the GPS data flowing
-
-    if (newData)
-    {
-        direction_parse(tmp_data);
-
-        float flat, flon;
-        unsigned long age;
-
-        gps.f_get_position(&flat, &flon, &age);
-        //flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
-        //flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
-
-        meshcom_settings.node_lat = flat;
-        meshcom_settings.node_lon = flon;
-
-        if(direction_S_N == 0)
-        {
-        meshcom_settings.node_lat_c = 'S';
-        }
-        else
-        {
-        meshcom_settings.node_lat_c = 'N';
-        }
-
-        if(direction_E_W == 0)
-        {
-        meshcom_settings.node_lon_c = 'E';
-        }
-        else
-        {
-        meshcom_settings.node_lon_c = 'W';
-        }
-
-        meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)gps.f_altitude()) / 11;
-
-        unsigned long date, time;
-        gps.get_datetime(&date, &time, &meshcom_settings.node_age);
-
-        meshcom_settings.node_date_year = date % 100;
-        meshcom_settings.node_date_year += meshcom_settings.node_date_year > 80 ? 1900 : 2000;
-        meshcom_settings.node_date_month = (date / 100) % 100;        
-        meshcom_settings.node_date_day = date / 10000;
-
-        meshcom_settings.node_date_hour = time / 1000000;
-        meshcom_settings.node_date_minute = (time / 10000) % 100;
-        meshcom_settings.node_date_second = (time / 100) % 100;
-        meshcom_settings.node_date_hundredths = time % 100;
-
-        if(bDEBUG)
-            printf("Time: %ld\n", time);
-    }
-}
-#endif

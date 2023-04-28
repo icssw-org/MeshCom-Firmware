@@ -6,7 +6,7 @@
 
 #include <Arduino.h>
 
-#define SOURCE_VERSION "4.04"
+#define SOURCE_VERSION "4.05"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -250,12 +250,15 @@ static const uint8_t KEY_BUILTIN = 39;
 #define LORA_DIO0 LORA_IO0
 #define LORA_DIO1 LORA_IO1
 //#define LORA_CS  //already defined
-
+#define SDA_PIN 21
+#define SCL_PIN 22
 #endif
 
 #ifdef BOARD_TBEAM_SX126x
 #define LORA_DIO0 LORA_IO0
 #define LORA_DIO1 LORA_IO1
+#define SDA_PIN 21
+#define SCL_PIN 22
 #endif
 
 #ifdef BOARD_TLORA_OLV2

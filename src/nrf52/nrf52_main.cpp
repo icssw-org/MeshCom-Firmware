@@ -827,15 +827,22 @@ void getGPS(void)
         unsigned long date, time;
         gps.get_datetime(&date, &time, &meshcom_settings.node_age);
 
-        meshcom_settings.node_date_year = date % 100;
-        meshcom_settings.node_date_year += meshcom_settings.node_date_year > 80 ? 1900 : 2000;
-        meshcom_settings.node_date_month = (date / 100) % 100;        
-        meshcom_settings.node_date_day = date / 10000;
+        time = time + 2000000;  // MESZ
+        if(time > 24000000)
+        {
+            date++;
+            time = time - 24000000;
+        }
 
         meshcom_settings.node_date_hour = time / 1000000;
         meshcom_settings.node_date_minute = (time / 10000) % 100;
         meshcom_settings.node_date_second = (time / 100) % 100;
         meshcom_settings.node_date_hundredths = time % 100;
+
+        meshcom_settings.node_date_year = date % 100;
+        meshcom_settings.node_date_year += meshcom_settings.node_date_year > 80 ? 1900 : 2000;
+        meshcom_settings.node_date_month = (date / 100) % 100;        
+        meshcom_settings.node_date_day = date / 10000;
 
         if(bDEBUG)
             Serial.printf("\nTime: %ld", time);
