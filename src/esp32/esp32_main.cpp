@@ -59,7 +59,6 @@
 */
 
 bool bInitDisplay = true;
-bool ble_busy_flag = false;
 
 /*
     Video: https://www.youtube.com/watch?v=oCMOYS71NIU
@@ -78,37 +77,33 @@ bool ble_busy_flag = false;
    6. Start advertising.
 */
 
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
+#include <NimBLEDevice.h>
 
 // Textmessage buffer from phone, hasMsgFromPhone flag indicates new message
-char textbuff_phone [MAX_MSG_LEN_PHONE] = {0};
-uint8_t txt_msg_len_phone = 0;
+extern char textbuff_phone [MAX_MSG_LEN_PHONE];
+extern uint8_t txt_msg_len_phone;
+extern bool ble_busy_flag;
 
 BLEServer *pServer = NULL;
 BLECharacteristic * pTxCharacteristic;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
+uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Kennwort
+
 // Bluetooth UUIDs are standardized. For more info: https://www.bluetooth.com/specifications/assigned-numbers/
 // Nordic UUID DB is here: https://github.com/NordicSemiconductor/bluetooth-numbers-database
-
-#define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
-#define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
-#define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-
-void sendConfigToPhone();
 
 
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       deviceConnected = true;
+      Serial.println("BLE connected");
     };
 
     void onDisconnect(BLEServer* pServer) {
       deviceConnected = false;
+      Serial.println("BLE disconnected");
     }
 };
 
@@ -120,54 +115,15 @@ class MyCallbacks: public BLECharacteristicCallbacks
         uint8_t conf_data[MAX_MSG_LEN_PHONE] = {0};
         size_t conf_length=0;
 
-        conf_length = pCharacteristic->getLength();
+        conf_length = pCharacteristic->getDataLength(); // getLength();
 
         if (conf_length <= 0)
             return;
 
-        memcpy(conf_data, pCharacteristic->getData() , conf_length);
+        memcpy(conf_data, pCharacteristic->getValue() , conf_length);
 
     	readPhoneCommand(conf_data);
     }
-};
-
-/**
- * @brief Method to send configuration to phone 
- * Config Format:
- * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT)
-*/
-void sendConfigToPhone () {
-
-    ble_busy_flag = true;
-
-	#if BLE_TEST
-		char bleBuff [100] = {0};
-		sprintf(bleBuff, "Connected to %s\n", meshcom_settings.node_call);
-		// send to phone
-        site_t blelen=strlen(bleBuff);
-        pTxCharacteristic->setValue(bleBuff, blelen);
-        pTxCharacteristic->notify();
-	#else
-		// assemble conf message
-		uint8_t call_len = sizeof(meshcom_settings.node_call);
-		size_t conf_len = call_len + 22;	// currently fixed length - adapt if needed
-		uint8_t confBuff [conf_len] = {0};
-		uint8_t call_offset = 2;
-
-		confBuff [0] = 0x80;
-		confBuff [1] = call_len;
-		memcpy(confBuff + call_offset, meshcom_settings.node_call, call_len);
-		uint8_t latOffset = call_offset + call_len;
-		memcpy(confBuff + latOffset, &meshcom_settings.node_lat, 8);
-		memcpy(confBuff + latOffset + 8, &meshcom_settings.node_lon, 8);
-		memcpy(confBuff + latOffset + 16, &meshcom_settings.node_alt, 4);
-
-		// send to phone via BLE
-        pTxCharacteristic->setValue(confBuff, conf_len);
-        pTxCharacteristic->notify();
-	#endif
-
-	ble_busy_flag = false;
 };
 
 
@@ -219,7 +175,6 @@ unsigned long gps_refresh_timer = 0;
 
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
 void checkSerialCommand(void);
-void sendToPhone();
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
@@ -291,7 +246,7 @@ void esp32setup()
     Serial.println("CLIENT SETUP");
     Serial.println("============");
 
-    #ifdef BOARD_TBEAM
+    #if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
         setupGPS();
     #else
         Wire.begin();
@@ -412,27 +367,45 @@ void esp32setup()
     // Create the BLE Device
     char strBLEName[50]={0};
     sprintf(strBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);
-    BLEDevice::init(strBLEName);
+    NimBLEDevice::init(strBLEName);
+
+#ifdef ESP_PLATFORM
+    NimBLEDevice::setPower(ESP_PWR_LVL_N9); /** +9db */
+#else
+    NimBLEDevice::setPower(9); /** +9db */
+#endif
 
     // Create the BLE Server
-    pServer = BLEDevice::createServer();
+    pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new MyServerCallbacks());
 
     // Create the BLE Service
-    BLEService *pService = pServer->createService(SERVICE_UUID);
+    static BLEUUID serviceUUID((uint16_t)0xF0A0);
+    static BLEUUID rxdataUUID((uint16_t)0xF0A1);
+    static BLEUUID txdataUUID((uint16_t)0xF0A2);
+
+#define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
+#define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+#define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+
+//#define SERVICE_UUID            "6E41"
+//#define CHARACTERISTIC_UUID_RX  "6E42"
+//#define CHARACTERISTIC_UUID_TX  "6E43"
+
+    NimBLEService *pService = pServer->createService(SERVICE_UUID);
 
     // Create a BLE Characteristic
     pTxCharacteristic = pService->createCharacteristic(
                                             CHARACTERISTIC_UUID_TX,
-                                            BLECharacteristic::PROPERTY_NOTIFY
+                                            NIMBLE_PROPERTY::NOTIFY
                                         );
                         
-    pTxCharacteristic->addDescriptor(new BLE2902());
+    pTxCharacteristic->addDescriptor(new NimBLE2904());
 
-    BLECharacteristic * pRxCharacteristic = pService->createCharacteristic(
+    NimBLECharacteristic * pRxCharacteristic = pService->createCharacteristic(
                                                 CHARACTERISTIC_UUID_RX,
-                                                BLECharacteristic::PROPERTY_READ |
-                                                BLECharacteristic::PROPERTY_WRITE
+                                                NIMBLE_PROPERTY::READ |
+                                                NIMBLE_PROPERTY::WRITE
                                             );
 
     pRxCharacteristic->setCallbacks(new MyCallbacks());
@@ -442,7 +415,11 @@ void esp32setup()
 
     // Start advertising
     pServer->getAdvertising()->addServiceUUID(pService->getUUID());
+    //pServer->getAdvertising()->setScanResponse(true);
+    //pServer->getAdvertising()->setMinPreferred(0x06);  // functions that help with iPhone connections issue
+    //pServer->getAdvertising()->setMinPreferred(0x12);
     pServer->getAdvertising()->start();
+    
     Serial.println("Waiting a client connection to notify...");
     
     // BATT
@@ -485,6 +462,12 @@ void esp32setup()
     Serial.println("CLIENT STARTED");
     Serial.println("==============");
 
+}
+
+void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
+{
+    pTxCharacteristic->setValue(confBuff, conf_len);
+    pTxCharacteristic->notify();
 }
 
 // flag to indicate that a packet was received
@@ -626,7 +609,7 @@ void esp32loop()
     }
 
     // gps refresh
-    if (((gps_refresh_timer + GPS_REFRESH_INTERVAL * 1000) < millis()))
+    if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
     {
         #ifdef ENABLE_GPS
             getGPS();
@@ -635,8 +618,8 @@ void esp32loop()
         gps_refresh_timer = millis();
     }
 
-    // posinfo
-    if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()))
+    // POSINFO_INTERVAL in Minuten
+    if ((posinfo_timer + (POSINFO_INTERVAL * 1000 * 60)) < millis())
     {
         #ifdef ENABLE_GPS
             getGPS();
@@ -715,76 +698,6 @@ void checkRX(void)
         OnRxError();
     }
 }
-
-/* @brief Method to send incoming LoRa messages to BLE connected device
- */
-void sendToPhone()
-{
-    if(ble_busy_flag)
-        return;
-
-    ble_busy_flag = true;
-
-    // we need to insert the first byte text msg flag
-    uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
-
-    size_t blelen = BLEtoPhoneBuff[toPhoneRead][0];   //len ist um ein byte zu kurz
-
-    toPhoneBuff[0] = 0x40;
-
-    memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
-
-    //printBuffer(toPhoneBuff, blelen+2);
-
-if(g_ble_uart_is_connected && isPhoneReady == 1)
-{
-
-#if BLE_TEST > 0
-    size_t tlen=0;
-    for(int i=9; i<blelen+3; i++)
-    {
-        if(toPhoneBuff[i] == 0x00)
-            break;
-        
-        toPhoneBuff[i-9]=toPhoneBuff[i];
-        toPhoneBuff[i-8]=0x0a;
-        toPhoneBuff[i-7]=0x00;
-        tlen++;
-    }
-    tlen++;
-    tlen++;
-
-	// send to phone
-    pTxCharacteristic->setValue(toPhoneBuff, tlen);
-    pTxCharacteristic->notify();
-#else
-    // send to phone
-    blelen=blelen+2;
-    pTxCharacteristic->setValue(toPhoneBuff, blelen);
-    pTxCharacteristic->notify();
-#endif
-
-}
-    toPhoneRead++;
-    if (toPhoneRead >= MAX_RING)
-        toPhoneRead = 0;
-
-if(g_ble_uart_is_connected && isPhoneReady == 1)
-{
-    if (toPhoneWrite == toPhoneRead)
-    {
-        DEBUG_MSG_VAL("BLE", toPhoneRead,"TX (LAST) :");
-    }
-    else
-    {
-        DEBUG_MSG_VAL("BLE", toPhoneRead,"TX :");
-    }
-
-    Serial.println("");
-}
-    ble_busy_flag = false;
-}
-
 
 void checkSerialCommand(void)
 {

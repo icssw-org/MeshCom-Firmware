@@ -6,7 +6,7 @@
 
 #include <Arduino.h>
 
-#define SOURCE_VERSION "4.05"
+#define SOURCE_VERSION "4.06"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -33,7 +33,7 @@
     #define SX127X
 #endif
 
-#ifdef BOARD_TBEAM_SX126x
+#ifdef BOARD_SX1268
     #define MODUL_HARDWARE TBEAM
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define ENABLE_GPS
@@ -105,7 +105,7 @@
 #define SEE_ALL_PACKETS 0                  // switch to filter multiple receives of same packets from neighbours rebroadcasted
 #define UDP_MSG_INDICATOR_LEN 4            // the first n bytes to recognize which incoming message we have (GATE, CONF)
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
-#define POSINFO_INTERVAL 600               // POSINFO interval in seconds
+#define POSINFO_INTERVAL 30                // POSINFO interval in minutes
 #define GPS_REFRESH_INTERVAL 10            // GPS Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds
@@ -254,7 +254,7 @@ static const uint8_t KEY_BUILTIN = 39;
 #define SCL_PIN 22
 #endif
 
-#ifdef BOARD_TBEAM_SX126x
+#ifdef BOARD_SX1268
 #define LORA_DIO0 LORA_IO0
 #define LORA_DIO1 LORA_IO1
 #define SDA_PIN 21

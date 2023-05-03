@@ -5,13 +5,12 @@
 #include <configuration.h>
 #include <batt_functions.h>
 
-extern void sendConfigToPhone ();
-
 // Create device name
 extern char helper_string[256];
 
-extern char textbuff_phone [MAX_MSG_LEN_PHONE];
-extern uint8_t txt_msg_len_phone;
+char textbuff_phone [MAX_MSG_LEN_PHONE] = {0};
+uint8_t txt_msg_len_phone = 0;
+
 extern bool bInitDisplay;
 
 // Client basic variables
@@ -21,6 +20,121 @@ extern uint8_t dmac[6];
 double d_lat = 0.0;
 double d_lon = 0.0;
 
+bool ble_busy_flag = false;
+
+void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len);
+
+extern bool g_ble_uart_is_connected;
+
+/**
+ * @brief Method to send configuration to phone 
+ * Config Format:
+ * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT) - 1B SSID_Length - Wifi_SSID - 1B Wifi_PWD - Wifi_PWD
+ * SSID and PWD Buffers have as always a fixed length with trailing zeros. 
+*/
+void sendConfigToPhone ()
+{
+
+    ble_busy_flag = true;
+
+	// assemble conf message
+	uint8_t call_len = sizeof(meshcom_settings.node_call);
+	uint8_t ssid_len = sizeof(meshcom_settings.node_ssid);
+	uint8_t pwd_len = sizeof(meshcom_settings.node_pwd);
+
+	
+	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 1;	// currently fixed length - adapt if needed
+	uint8_t confBuff [conf_len] = {0};
+	uint8_t call_offset = 2;
+	
+
+	confBuff [0] = 0x80;
+	confBuff [1] = call_len;
+	memcpy(confBuff + call_offset, meshcom_settings.node_call, call_len);
+
+	uint8_t latOffset = call_offset + call_len;
+	uint8_t ssid_offset = latOffset + 20; // first byte is ssid_length
+	uint8_t pwd_offset = ssid_offset + ssid_len + 1; // first byte is pwd_length
+
+	//DEBUG_MSG_VAL("Wifi", ssid_len, "SSID Len");
+	//DEBUG_MSG_VAL("Wifi", pwd_len, "PWD Len");
+	//DEBUG_MSG_VAL("Wifi", conf_len, "Conf Len");
+	//DEBUG_MSG_TXT("Wifi", meshcom_settings.node_ssid, "Wifi SSID to phone");
+	//DEBUG_MSG_TXT("Wifi", meshcom_settings.node_pwd, "Wifi PWD");
+
+	memcpy(confBuff + latOffset, &meshcom_settings.node_lat, 8);
+	memcpy(confBuff + latOffset + 8, &meshcom_settings.node_lon, 8);
+	memcpy(confBuff + latOffset + 16, &meshcom_settings.node_alt, 4);
+
+	confBuff[ssid_offset] = ssid_len;
+	memcpy(confBuff + ssid_offset + 1, &meshcom_settings.node_ssid, ssid_len);
+	confBuff[pwd_offset] = pwd_len;
+	memcpy(confBuff + pwd_offset + 1, &meshcom_settings.node_pwd, pwd_len);
+
+	//printBuffer(confBuff, conf_len);
+
+	// send to phone
+	#if defined(ESP8266) || defined(ESP32)
+		esp32_write_ble(confBuff, conf_len);
+	#else
+		g_ble_uart.write(confBuff, conf_len);
+	#endif
+
+	ble_busy_flag = false;
+}
+
+/**
+ * @brief Method to send incoming LoRa messages to BLE connected device
+ * 
+*/
+void sendToPhone()
+{
+    if(ble_busy_flag)
+        return;
+
+    ble_busy_flag = true;
+
+    // we need to insert the first byte text msg flag
+    uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
+
+    uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0];   //len ist um ein byte zu kurz
+
+    toPhoneBuff[0] = 0x40;
+
+    memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
+
+    if(g_ble_uart_is_connected && isPhoneReady == 1)
+    {
+
+	// send to phone
+	#if defined(ESP8266) || defined(ESP32)
+		blelen=blelen+2;
+		esp32_write_ble(toPhoneBuff, blelen);
+	#else
+        g_ble_uart.write(toPhoneBuff, blelen + 2);
+	#endif
+
+    }
+
+    toPhoneRead++;
+    if (toPhoneRead >= MAX_RING)
+        toPhoneRead = 0;
+
+    if(g_ble_uart_is_connected && isPhoneReady == 1)
+    {
+        if (toPhoneWrite == toPhoneRead)
+        {
+            DEBUG_MSG_VAL("BLE", toPhoneRead,"TX (LAST) :");
+        }
+        else
+        {
+            DEBUG_MSG_VAL("BLE", toPhoneRead,"TX :");
+        }
+    }
+    
+    ble_busy_flag = false;
+}
+
 void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 {
 	/**
@@ -29,6 +143,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 	 * Msg ID:
 	 * 0x10 - Hello Message (followed by 0x20, 0x30)
 	 * 0x50 - Callsign
+	 * 0x55 - Wifi SSID and PW
 	 * 0x70 - Latitude
 	 * 0x80 - Longitude
 	 * 0x90 - Altitude
@@ -39,10 +154,14 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
      * Longitude: 4B Float
      * Altitude: 4B Integer
 	 * 
+	 * WiFi SSID and PWD:
+	 * 1B - SSID Length - SSID - 1B PWD Length - PWD
+	 * 
      * Position Settings from phone are: length 1B | Msg ID 1B | 4B lat/lon/alt | 1B save_settings_flag
 	 * Save_flag is 0x0A for save and 0x0B for don't save
 	 * If phone send periodicaly position, we don't save them.
      *  */ 
+
 
 	uint8_t msg_len = conf_data[0];
 	uint8_t msg_type = conf_data[1];
@@ -213,6 +332,40 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 		}
 
+		case 0x55: {
+			// 1B - SSID Length - SSID - 1B PWD Length - PWD
+
+			DEBUG_MSG("BLE", "Wifi Setting from phone");
+			
+
+			uint8_t ssid_len = conf_data[2];
+			uint8_t pwd_len = conf_data[ssid_len + 3];
+
+			if(ssid_len > 0 && pwd_len > 0){
+
+				char ssid_arr [ssid_len +1] = {0};
+				char pwd_arr [pwd_len +1] = {0};
+
+				ssid_arr[ssid_len +1] = '\0';
+				pwd_arr[ssid_len +1] = '\0';
+				
+				memcpy(ssid_arr, conf_data + 3, ssid_len);
+				memcpy(pwd_arr, conf_data + (4 + ssid_len), pwd_len);
+
+				String s_SSID = ssid_arr;
+				String s_PWD = pwd_arr;
+
+				sprintf(meshcom_settings.node_ssid, "%s", s_SSID.c_str());
+				sprintf(meshcom_settings.node_pwd, "%s", s_PWD.c_str());
+
+				save_settings();
+
+				Serial.println("Wifi Setting from phone set");
+
+			}
+			
+		}
+
 	}
 
 	// BLE mit neuem Call resetten
@@ -224,24 +377,4 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			// restart_advertising(0);
 		#endif
 	}
-
-/*	
-	else
-	{
-		#if BLE_TEST > 0
-			if(str[0] == ':')
-			{
-				if(str[strlen(str)-1] == 0x0a)
-					str[strlen(str)-1]=0x00;
-
-				sendMessage(str, strlen(str));
-			}
-			else
-			if(str[0] == '-')
-			{
-				commandAction(str, strlen(str), true);
-			}
-		#endif
-	}
-*/
 }

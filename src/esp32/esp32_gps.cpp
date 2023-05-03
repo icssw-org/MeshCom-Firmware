@@ -9,7 +9,7 @@
 #define GPS_BAUDRATE 9600
 #define GPS_SERIAL_NUM 2
 
-#if MODUL_HARDWARE == TBEAM
+#if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
     #define GPS_RX_PIN 34
     #define GPS_TX_PIN 12
     #define I2C_SDA    21

@@ -27,6 +27,7 @@
 #include <aprs_functions.h>
 #include <batt_functions.h>
 #include <lora_functions.h>
+#include <phone_commands.h>
 
 /*
     RAK4631 PIN DEFINITIONS
@@ -154,9 +155,10 @@ bool init_flash_done=false;
 */
 
 // Textmessage buffer from phone, hasMsgFromPhone flag indicates new message
-char textbuff_phone [MAX_MSG_LEN_PHONE] = {0};
-uint8_t txt_msg_len_phone = 0;
-bool ble_busy_flag = false;    // flag to signal bluetooth uart is active
+extern char textbuff_phone [MAX_MSG_LEN_PHONE];
+extern uint8_t txt_msg_len_phone;
+
+extern bool ble_busy_flag;    // flag to signal bluetooth uart is active
 
 //variables and helper functions
 uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
@@ -233,7 +235,6 @@ void blinkLED();                                     // blink GREEN
 void blinkLED2();                                    // blink BLUE
 
 void checkSerialCommand(void);
-void sendToPhone();
 
 
 // Client basic variables
@@ -582,7 +583,7 @@ void nrf52loop()
     }
 
     // posinfo
-    if (((posinfo_timer + POSINFO_INTERVAL * 1000) < millis()))
+    if ((posinfo_timer + (POSINFO_INTERVAL * 1000 * 60)) < millis())
     {
         sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
 
@@ -622,69 +623,6 @@ void nrf52loop()
     delay(100);
     
     yield();
-}
-
-
-/**
- * @brief Method to send incoming LoRa messages to BLE connected device
- * 
-*/
-void sendToPhone()
-{
-    if(ble_busy_flag)
-        return;
-
-    ble_busy_flag = true;
-
-    // we need to insert the first byte text msg flag
-    uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
-
-    uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0];   //len ist um ein byte zu kurz
-
-    toPhoneBuff[0] = 0x40;
-
-    memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
-
-if(g_ble_uart_is_connected && isPhoneReady == 1)
-{
-
-#if BLE_TEST > 0
-    int tlen=0;
-    for(int i=9; i<blelen+3; i++)
-    {
-        if(toPhoneBuff[i] == 0x00)
-            break;
-        
-        toPhoneBuff[i-9]=toPhoneBuff[i];
-        toPhoneBuff[i-8]=0x0a;
-        toPhoneBuff[i-7]=0x00;
-        tlen++;
-    }
-    tlen++;
-    tlen++;
-
-    g_ble_uart.write(toPhoneBuff, tlen);
-#else
-    g_ble_uart.write(toPhoneBuff, blelen + 2);
-#endif
-
-}
-    toPhoneRead++;
-    if (toPhoneRead >= MAX_RING)
-        toPhoneRead = 0;
-
-if(g_ble_uart_is_connected && isPhoneReady == 1)
-{
-    if (toPhoneWrite == toPhoneRead)
-    {
-        DEBUG_MSG_VAL("BLE", toPhoneRead,"TX (LAST) :");
-    }
-    else
-    {
-        DEBUG_MSG_VAL("BLE", toPhoneRead,"TX :");
-    }
-}
-    ble_busy_flag = false;
 }
 
 /** @brief Function to check if the modem detected a preamble

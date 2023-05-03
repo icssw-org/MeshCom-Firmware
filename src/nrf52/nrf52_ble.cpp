@@ -29,8 +29,6 @@ extern bool bInitDisplay;
 extern uint8_t dmac[6];
 
 
-void sendConfigToPhone ();
-
 // Create device name
 char helper_string[256] = {0};
 
@@ -222,42 +220,6 @@ void bleuart_rx_callback(uint16_t conn_handle)
 
 	readPhoneCommand(conf_data);
 
-}
-
-/**
- * @brief Method to send configuration to phone 
- * Config Format:
- * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT)
-*/
-void sendConfigToPhone () {
-
-    ble_busy_flag = true;
-
-	#if BLE_TEST
-		char bleBuff [100] = {0};
-		sprintf(bleBuff, "Connected to %s\n", meshcom_settings.node_call);
-		// send to phone
-		g_ble_uart.write(bleBuff, strlen(bleBuff));
-	#else
-		// assemble conf message
-		uint8_t call_len = sizeof(meshcom_settings.node_call);
-		uint8_t conf_len = call_len + 22;	// currently fixed length - adapt if needed
-		uint8_t confBuff [conf_len] = {0};
-		uint8_t call_offset = 2;
-
-		confBuff [0] = 0x80;
-		confBuff [1] = call_len;
-		memcpy(confBuff + call_offset, meshcom_settings.node_call, call_len);
-		uint8_t latOffset = call_offset + call_len;
-		memcpy(confBuff + latOffset, &meshcom_settings.node_lat, 8);
-		memcpy(confBuff + latOffset + 8, &meshcom_settings.node_lon, 8);
-		memcpy(confBuff + latOffset + 16, &meshcom_settings.node_alt, 4);
-
-		// send to phone
-		g_ble_uart.write(confBuff, conf_len);
-	#endif
-
-	ble_busy_flag = false;
 }
 
 /**
