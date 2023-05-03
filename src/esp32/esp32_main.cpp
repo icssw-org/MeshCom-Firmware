@@ -84,7 +84,7 @@ extern char textbuff_phone [MAX_MSG_LEN_PHONE];
 extern uint8_t txt_msg_len_phone;
 extern bool ble_busy_flag;
 
-BLEServer *pServer = NULL;
+NimBLEServer *pServer = NULL;
 NimBLECharacteristic* pTxCharacteristic;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
