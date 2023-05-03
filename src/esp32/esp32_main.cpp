@@ -86,6 +86,7 @@ extern bool ble_busy_flag;
 
 NimBLEServer *pServer = NULL;
 NimBLECharacteristic* pTxCharacteristic;
+NimBLEService *pService;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
@@ -96,26 +97,31 @@ uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Ken
 
 
 class MyServerCallbacks: public NimBLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
-      deviceConnected = true;
-      Serial.println("BLE connected");
+    void onConnect(NimBLEServer* pServer)
+    {
+        deviceConnected = true;
+        NimBLEDevice::setPower(ESP_PWR_LVL_N9); /** +9db */
+        Serial.println("BLE connected");
     };
 
-    void onDisconnect(BLEServer* pServer) {
-      deviceConnected = false;
-      Serial.println("BLE disconnected");
+    void onDisconnect(NimBLEServer* pServer)
+    {
+        deviceConnected = false;
+        NimBLEDevice::setPower(ESP_PWR_LVL_N0); /** +0db */
+        Serial.println("BLE disconnected");
     }
+
+	/***************** New - Security handled here ********************
+	****** Note: these are the same return values as defaults ********/
+	uint32_t onPassKeyRequest() {
+		Serial.println("Server PassKeyRequest");
+		return 000000;
+	}
+	/*******************************************************************/
 };
 
 class MyCallbacks: public NimBLECharacteristicCallbacks 
 {
-    void onRead(NimBLECharacteristic* pCharacteristic)
-    {
-        Serial.print(pCharacteristic->getUUID().toString().c_str());
-        Serial.print(": onRead(), value: ");
-        Serial.println(pCharacteristic->getValue().c_str());
-    };
-
     void onWrite(NimBLECharacteristic *pCharacteristic)
     {
         // Forward data from Mobile to our peripheral
@@ -124,19 +130,12 @@ class MyCallbacks: public NimBLECharacteristicCallbacks
 
         conf_length = pCharacteristic->getDataLength(); // getLength();
 
-        Serial.printf("MyCallbacks conf_length:%i\n", conf_length);
-
         if (conf_length <= 0)
             return;
 
         memcpy(conf_data, pCharacteristic->getValue() , conf_length);
 
     	readPhoneCommand(conf_data);
-    };
-
-    void onNotify(NimBLECharacteristic* pCharacteristic)
-    {
-        Serial.println("Sending notification to clients");
     };
 };
 
@@ -383,39 +382,46 @@ void esp32setup()
     NimBLEDevice::init(strBLEName);
 
 #ifdef ESP_PLATFORM
-    NimBLEDevice::setPower(ESP_PWR_LVL_N0); /** +9db */
+    NimBLEDevice::setPower(ESP_PWR_LVL_N0); /** +0db */
 #else
     NimBLEDevice::setPower(9); /** +9db */
 #endif
+
+    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setSecurityPasskey(123456);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
 
 #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
-//#define SERVICE_UUID           "F0A0"
-//#define CHARACTERISTIC_UUID    "F0A1"
-//#define CHARACTERISTIC_UUID_RX "F0A1"
-//#define CHARACTERISTIC_UUID_TX "F0A1"
-
     // Create the BLE Server
-    NimBLEServer* pServer = NimBLEDevice::createServer();
+    pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new MyServerCallbacks());
     pServer->advertiseOnDisconnect(false);
 
     // Create the BLE Service
-    NimBLEService *pService = pServer->createService(SERVICE_UUID);
+    pService = pServer->createService(SERVICE_UUID);
 
     // Create a BLE Characteristic
     pTxCharacteristic = pService->createCharacteristic(
                         CHARACTERISTIC_UUID_TX,
                         NIMBLE_PROPERTY::READ   |
                         NIMBLE_PROPERTY::WRITE  |
+                        /** Require a secure connection for read and write access */
+                        NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
+                        NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
+                        NIMBLE_PROPERTY::READ_AUTHEN |
                         NIMBLE_PROPERTY::NOTIFY );
 
     NimBLECharacteristic* pRxCharacteristic = pService->createCharacteristic(
                         CHARACTERISTIC_UUID_RX,
                         NIMBLE_PROPERTY::READ   |
                         NIMBLE_PROPERTY::WRITE  |
+                        /** Require a secure connection for read and write access */
+                        NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
+                        NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
+                        NIMBLE_PROPERTY::READ_AUTHEN |
                         NIMBLE_PROPERTY::NOTIFY );
 
     pRxCharacteristic->setCallbacks(new MyCallbacks());

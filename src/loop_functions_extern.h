@@ -10,6 +10,7 @@
 
 extern bool bDEBUG;
 extern bool bPosDisplay;
+extern bool bDisplayOff;
 
 extern s_meshcom_settings meshcom_settings;
 

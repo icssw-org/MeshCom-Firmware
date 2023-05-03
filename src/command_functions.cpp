@@ -36,7 +36,7 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(memcmp(msg_text+1, "-help", 5) == 0)
     {
-        sprintf(print_buff, "MeshCom %-4.4s Client commands\n-info     show info\n-setcall  set callsign (OE0XXX-1)\n-setssid  WLAN SSID\n-setpwd  WLAN PASSWORD\n-pos      show lat/lon/alt/time info\n-weather   show temp/hum/press\n-sendpos  send pos info now\n-sendweather send weather info now\n-setlat   set latitude (44.12345)\n-setlon   set logitude (016.12345)\n-setalt   set altidude (9999)\n-debug on/off\n-pos display on/off\n", SOURCE_VERSION);
+        sprintf(print_buff, "MeshCom %-4.4s Client commands\n-info     show info\n-setcall  set callsign (OE0XXX-1)\n-setssid  WLAN SSID\n-setpwd  WLAN PASSWORD\n-pos      show lat/lon/alt/time info\n-weather   show temp/hum/press\n-sendpos  send pos info now\n-sendweather send weather info now\n-setlat   set latitude (44.12345)\n-setlon   set logitude (016.12345)\n-setalt   set altidude (9999)\n-debug on/off\n-display on/off\n", SOURCE_VERSION);
 
         if(ble)
         {
@@ -56,15 +56,34 @@ void commandAction(char *msg_text, int len, bool ble)
         bInfo=true;
     }
     else
-    if(memcmp(msg_text+1, "-pos display on", 15) == 0 || memcmp(msg_text+1, "-all", 4) == 0)
+    if(memcmp(msg_text+1, "-all", 4) == 0)
     {
         bPosDisplay=true;
         return;
     }
     else
-    if(memcmp(msg_text+1, "-pos display off", 16) == 0 || memcmp(msg_text+1, "-msg", 4) == 0)
+    if(memcmp(msg_text+1, "-msg", 4) == 0)
     {
         bPosDisplay=false;
+        return;
+    }
+    else
+    if(memcmp(msg_text+1, "-display on", 11) == 0)
+    {
+        bDisplayOff=false;
+        bPosDisplay=true;
+
+        sendDisplayHead(0);
+
+        return;
+    }
+    else
+    if(memcmp(msg_text+1, "-display off", 12) == 0)
+    {
+        bDisplayOff=true;
+        
+        sendDisplayHead(0);
+
         return;
     }
     else

@@ -5,6 +5,7 @@
 
 bool bDEBUG = false;
 bool bPosDisplay = true;
+bool bDisplayOff = false;
 
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE] = {0};
@@ -115,6 +116,11 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 	
     u8g2.setFont(u8g2_font_6x10_mf);    // u8g2_font_ncenB10_tr); // choose a suitable font
 
+	if(memcmp(text, "#C", 2) == 0)
+    {
+        // only clear
+    }
+    else
 	if(memcmp(text, "#L", 2) == 0)
     {
         //Serial.println("line");
@@ -134,6 +140,12 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 
 void sendDisplayHead(int batt)
 {
+    if(bDisplayOff)
+    {
+        sendDisplay1306(true, true, 0, 0, (char*)"#C");
+        return;
+    }
+
     char print_text[500];
 
     sprintf(print_text, "MC %-4.4s         %3d%%", SOURCE_VERSION, batt);
@@ -155,6 +167,12 @@ void sendDisplayHead(int batt)
 
 void sendDisplayMainline(int batt)
 {
+    if(bDisplayOff)
+    {
+        sendDisplay1306(true, true, 0, 0, (char*)"#C");
+        return;
+    }
+
     char print_text[500];
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
@@ -172,6 +190,11 @@ void sendDisplayMainline(int batt)
 
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
+    if(bDisplayOff)
+    {
+        bDisplayOff=false;
+    }
+
     bPosDisplay=false;
     
     int izeile=13;
@@ -287,6 +310,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, int batt)
 {
+    if(bDisplayOff)
+    {
+        sendDisplay1306(true, true, 0, 0, (char*)"#C");
+        return;
+    }
+
     if(!bPosDisplay)
         return;
 
