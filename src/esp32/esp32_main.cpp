@@ -85,7 +85,7 @@ extern uint8_t txt_msg_len_phone;
 extern bool ble_busy_flag;
 
 BLEServer *pServer = NULL;
-BLECharacteristic * pTxCharacteristic;
+NimBLECharacteristic* pTxCharacteristic;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
@@ -95,7 +95,7 @@ uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Ken
 // Nordic UUID DB is here: https://github.com/NordicSemiconductor/bluetooth-numbers-database
 
 
-class MyServerCallbacks: public BLEServerCallbacks {
+class MyServerCallbacks: public NimBLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       deviceConnected = true;
       Serial.println("BLE connected");
@@ -107,9 +107,16 @@ class MyServerCallbacks: public BLEServerCallbacks {
     }
 };
 
-class MyCallbacks: public BLECharacteristicCallbacks
+class MyCallbacks: public NimBLECharacteristicCallbacks 
 {
-    void onWrite(BLECharacteristic *pCharacteristic)
+    void onRead(NimBLECharacteristic* pCharacteristic)
+    {
+        Serial.print(pCharacteristic->getUUID().toString().c_str());
+        Serial.print(": onRead(), value: ");
+        Serial.println(pCharacteristic->getValue().c_str());
+    };
+
+    void onWrite(NimBLECharacteristic *pCharacteristic)
     {
         // Forward data from Mobile to our peripheral
         uint8_t conf_data[MAX_MSG_LEN_PHONE] = {0};
@@ -117,15 +124,21 @@ class MyCallbacks: public BLECharacteristicCallbacks
 
         conf_length = pCharacteristic->getDataLength(); // getLength();
 
+        Serial.printf("MyCallbacks conf_length:%i\n", conf_length);
+
         if (conf_length <= 0)
             return;
 
         memcpy(conf_data, pCharacteristic->getValue() , conf_length);
 
     	readPhoneCommand(conf_data);
-    }
-};
+    };
 
+    void onNotify(NimBLECharacteristic* pCharacteristic)
+    {
+        Serial.println("Sending notification to clients");
+    };
+};
 
 #ifdef SX127X
 // RadioModule SX1278 
@@ -370,43 +383,40 @@ void esp32setup()
     NimBLEDevice::init(strBLEName);
 
 #ifdef ESP_PLATFORM
-    NimBLEDevice::setPower(ESP_PWR_LVL_N9); /** +9db */
+    NimBLEDevice::setPower(ESP_PWR_LVL_N0); /** +9db */
 #else
     NimBLEDevice::setPower(9); /** +9db */
 #endif
-
-    // Create the BLE Server
-    pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new MyServerCallbacks());
-
-    // Create the BLE Service
-    static BLEUUID serviceUUID((uint16_t)0xF0A0);
-    static BLEUUID rxdataUUID((uint16_t)0xF0A1);
-    static BLEUUID txdataUUID((uint16_t)0xF0A2);
 
 #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
-//#define SERVICE_UUID            "6E41"
-//#define CHARACTERISTIC_UUID_RX  "6E42"
-//#define CHARACTERISTIC_UUID_TX  "6E43"
+//#define SERVICE_UUID           "F0A0"
+//#define CHARACTERISTIC_UUID    "F0A1"
+//#define CHARACTERISTIC_UUID_RX "F0A1"
+//#define CHARACTERISTIC_UUID_TX "F0A1"
 
+    // Create the BLE Server
+    NimBLEServer* pServer = NimBLEDevice::createServer();
+    pServer->setCallbacks(new MyServerCallbacks());
+    pServer->advertiseOnDisconnect(false);
+
+    // Create the BLE Service
     NimBLEService *pService = pServer->createService(SERVICE_UUID);
 
     // Create a BLE Characteristic
     pTxCharacteristic = pService->createCharacteristic(
-                                            CHARACTERISTIC_UUID_TX,
-                                            NIMBLE_PROPERTY::NOTIFY
-                                        );
-                        
-    pTxCharacteristic->addDescriptor(new NimBLE2904());
+                        CHARACTERISTIC_UUID_TX,
+                        NIMBLE_PROPERTY::READ   |
+                        NIMBLE_PROPERTY::WRITE  |
+                        NIMBLE_PROPERTY::NOTIFY );
 
-    NimBLECharacteristic * pRxCharacteristic = pService->createCharacteristic(
-                                                CHARACTERISTIC_UUID_RX,
-                                                NIMBLE_PROPERTY::READ |
-                                                NIMBLE_PROPERTY::WRITE
-                                            );
+    NimBLECharacteristic* pRxCharacteristic = pService->createCharacteristic(
+                        CHARACTERISTIC_UUID_RX,
+                        NIMBLE_PROPERTY::READ   |
+                        NIMBLE_PROPERTY::WRITE  |
+                        NIMBLE_PROPERTY::NOTIFY );
 
     pRxCharacteristic->setCallbacks(new MyCallbacks());
 
@@ -414,12 +424,11 @@ void esp32setup()
     pService->start();
 
     // Start advertising
-    pServer->getAdvertising()->addServiceUUID(pService->getUUID());
-    //pServer->getAdvertising()->setScanResponse(true);
-    //pServer->getAdvertising()->setMinPreferred(0x06);  // functions that help with iPhone connections issue
-    //pServer->getAdvertising()->setMinPreferred(0x12);
-    pServer->getAdvertising()->start();
-    
+    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setScanResponse(false);
+    pAdvertising->start();
+
     Serial.println("Waiting a client connection to notify...");
     
     // BATT
