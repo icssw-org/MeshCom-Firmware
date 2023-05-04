@@ -470,6 +470,24 @@ void sendMessage(char *msg_text, int len)
         commandAction(msg_text, len, true);
         return;
     }
+
+    uint8_t ispos = 0;
+
+    if(msg_text[0] == ':')
+    {
+        ispos=1;
+    }
+
+    String strDestinationCall = "*";
+    String strMsg = msg_text+ispos;
+    int iCall = strMsg.indexOf(':');
+    if(iCall != -1)
+    {
+        strDestinationCall = strMsg.substring(0, iCall);
+        strDestinationCall.toUpperCase();
+        strMsg = strMsg.substring(iCall+1);
+    }
+
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
     struct aprsMessage aprsmsg;
@@ -482,8 +500,8 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.max_hop = 5;
     aprsmsg.msg_server = false;
     aprsmsg.msg_source_path = meshcom_settings.node_call;
-    aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = msg_text;
+    aprsmsg.msg_destination_path = strDestinationCall;
+    aprsmsg.msg_payload = strMsg;
 
     encodeAPRS(msg_buffer, aprsmsg);
 

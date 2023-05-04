@@ -166,12 +166,19 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // size message is int -> uint16_t buffer size
                         if(isPhoneReady == 1 || msg_type_b_lora == 0x3A)    // text message store&forward
                         {
-                            addBLEOutBuffer(RcvBuffer, size);
+                            // chedk destination to owncall or to all
+                            if(aprsmsg.msg_destination_path == meshcom_settings.node_call || aprsmsg.msg_destination_path == "*")
+                            {
+                                addBLEOutBuffer(RcvBuffer, size);
+                            }
                         }
 
                         if(msg_type_b_lora == 0x3A)
                         {
-                            sendDisplayText(aprsmsg, rssi, snr);
+                            if(aprsmsg.msg_destination_path == meshcom_settings.node_call || aprsmsg.msg_destination_path == "*")
+                            {
+                                sendDisplayText(aprsmsg, rssi, snr);
+                            }
 
                             /* nur am Gateway
                             print_buff[6]=aprsmsg.msg_id & 0xFF;
@@ -212,25 +219,29 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             sendDisplayPosition(aprsmsg, rssi, snr, (int)mv_to_percent(read_batt()));
                         }
 
-                        if(aprsmsg.max_hop > 0)
-                            aprsmsg.max_hop--;
+                        // resend only Packet to all and !owncall 
+                        if(aprsmsg.msg_destination_path != meshcom_settings.node_call)
+                        {
+                            if(aprsmsg.max_hop > 0)
+                                aprsmsg.max_hop--;
 
-                        aprsmsg.msg_source_path.concat(',');
-                        aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                            aprsmsg.msg_source_path.concat(',');
+                            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
 
-                        memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
+                            memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
 
-                        size = encodeAPRS(RcvBuffer, aprsmsg);
+                            size = encodeAPRS(RcvBuffer, aprsmsg);
 
-                        ringBuffer[iWrite][0]=size;
-                        memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
-                        iWrite++;
-                        if(iWrite >= MAX_RING)
-                            iWrite=0;
-                        
-                        Serial.println(" Packet resend to mesh");
+                            ringBuffer[iWrite][0]=size;
+                            memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
+                            iWrite++;
+                            if(iWrite >= MAX_RING)
+                                iWrite=0;
+                            
+                            Serial.println(" Packet resend to mesh");
 
-                        printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
+                            printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
+                        }
                     }
                 }   
 

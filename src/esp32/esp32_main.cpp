@@ -359,12 +359,16 @@ void esp32setup()
     Serial.println(F("All settings successfully changed!"));
 
     // Create the BLE Device
-    char strBLEName[50]={0};
-    sprintf(strBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);
+    char cBLEName[50]={0};
+    sprintf(cBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);
+    
+    const std::__cxx11::string strBLEName = cBLEName;
+
+    Serial.printf("BLE-Device started with BLE-Name <%s>\n", strBLEName.c_str());
 
     NimBLEDevice::init(strBLEName);
 
-    Serial.printf("BLE-Device started with BLE-Name <%s>\n", strBLEName);
+    Serial.printf("NIM<%s>\n", NimBLEDevice::toString().c_str());
 
 #ifdef ESP_PLATFORM
     NimBLEDevice::setPower(ESP_PWR_LVL_N3); /** +3db */
@@ -373,7 +377,7 @@ void esp32setup()
 #endif
 
     NimBLEDevice::setSecurityAuth(true, true, true);
-    NimBLEDevice::setSecurityPasskey(123456);
+    NimBLEDevice::setSecurityPasskey(PIN);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
 
 #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
@@ -417,7 +421,9 @@ void esp32setup()
     // Start advertising
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setScanResponse(false);
+    pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
+    pAdvertising->setMinPreferred(0x12);
     pAdvertising->start();
 
     Serial.println("Waiting a client connection to notify...");
