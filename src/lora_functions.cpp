@@ -164,7 +164,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         // add rcvMsg to BLE out Buff
                         // size message is int -> uint16_t buffer size
-                        if(isPhoneReady == 1)
+                        if(isPhoneReady == 1 || msg_type_b_lora == 0x3A)    // text message store&forward
                         {
                             addBLEOutBuffer(RcvBuffer, size);
                         }

@@ -576,10 +576,9 @@ void nrf52loop()
     checkSerialCommand();
 
     // check if we have messages for BLE to send
-    if (toPhoneWrite != toPhoneRead)
+    if (isPhoneReady == 1 && (toPhoneWrite != toPhoneRead))
     {
-        if(isPhoneReady == 1)
-            sendToPhone();   
+        sendToPhone();   
     }
 
     // posinfo

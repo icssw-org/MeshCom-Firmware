@@ -25,25 +25,25 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
 
 unsigned int msg_counter = 0;
 
-uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
+uint8_t RcvBuffer[UDP_TX_BUF_SIZE] = {0};
 
 // nur eigene msg_id
-uint8_t own_msg_id[MAX_RING][5];
+uint8_t own_msg_id[MAX_RING][5] = {0};
 int iWriteOwn=0;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
-unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];
+unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE] = {0};
 int iWrite=0;
 int iRead=0;
 
 bool hasMsgFromPhone = false;
 
 // BLE Ringbuffer to phone
-unsigned char BLEtoPhoneBuff[MAX_RING][UDP_TX_BUF_SIZE];
+unsigned char BLEtoPhoneBuff[MAX_RING][UDP_TX_BUF_SIZE] = {0};
 int toPhoneWrite=0;
 int toPhoneRead=0;
 
-uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
+uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4] = {0}; //Ringbuffer for UDP TX from LoRa RX, first byte is length
 uint8_t udpWrite = 0;   // counter for ringbuffer
 uint8_t udpRead = 0;    // counter for ringbuffer
 
@@ -484,11 +484,6 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
     aprsmsg.msg_payload = msg_text;
-    aprsmsg.msg_source_hw = MODUL_HARDWARE;
-    aprsmsg.msg_source_mod = 3;
-    aprsmsg.msg_fcs = 0;
-
-    aprsmsg.msg_fw_version = shortVERSION();
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -580,12 +575,7 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
     aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt, batt);
-    aprsmsg.msg_source_hw = MODUL_HARDWARE;
-    aprsmsg.msg_source_mod = 3;
-    aprsmsg.msg_fcs = 0;
-
-    aprsmsg.msg_fw_version = shortVERSION();
-
+    
     if(aprsmsg.msg_payload == "")
         return;
 
@@ -628,12 +618,7 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
     aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt, batt);
-    aprsmsg.msg_source_hw = MODUL_HARDWARE;
-    aprsmsg.msg_source_mod = 3;
-    aprsmsg.msg_fcs = 0;
-
-    aprsmsg.msg_fw_version = shortVERSION();
-
+    
     encodeAPRS(msg_buffer, aprsmsg);
 
     printBuffer_aprs((char*)"TX-WX >", aprsmsg);
@@ -685,12 +670,4 @@ String convertCallToShort(char callsign[10])
     sVar.toUpperCase();
 
     return sVar;
-}
-
-uint8_t shortVERSION()
-{
-    double dversion=0.0;
-    sscanf(SOURCE_VERSION, "%lf", &dversion);
-    int iversion = dversion * 100.0;
-    return (uint8_t)(iversion - 400);
 }

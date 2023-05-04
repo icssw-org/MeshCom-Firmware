@@ -107,15 +107,15 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     void onDisconnect(NimBLEServer* pServer)
     {
         deviceConnected = false;
-        NimBLEDevice::setPower(ESP_PWR_LVL_N0); /** +0db */
+        NimBLEDevice::setPower(ESP_PWR_LVL_N3); /** +3db */
         Serial.println("BLE disconnected");
     }
 
 	/***************** New - Security handled here ********************
 	****** Note: these are the same return values as defaults ********/
 	uint32_t onPassKeyRequest() {
-		Serial.println("Server PassKeyRequest");
-		return 000000;
+		Serial.printf("Server PassKeyRequest <%06i>\n", PIN);
+		return PIN;
 	}
 	/*******************************************************************/
 };
@@ -225,23 +225,6 @@ void esp32setup()
     dmac[4] = _GW_ID >> 8;
     dmac[5] = _GW_ID;
 
-    // clear the buffers
-    for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
-    {
-        RcvBuffer[i] = 0x00;
-    }
-
-    for(int ib=0; ib<MAX_RING; ib++)
-    {
-        memset(own_msg_id[ib], 0x00, 5);
-    }
-
-    //clear ringbuffer
-    for(int i=0; i<MAX_RING_UDP_OUT; i++)
-    {
-        memset(ringBufferLoraRX[i], 0, 4);
-    }
-
     #ifdef BOARD_HELTEC
         Wire.setPins(SDA_PIN, SCL_PIN);
     #endif
@@ -252,7 +235,6 @@ void esp32setup()
 
     Serial.begin(MONITOR_SPEED);
     while(!Serial);
-    Serial.println("SERIAL open");
 
     Serial.println("============");
     Serial.println("CLIENT SETUP");
@@ -379,10 +361,13 @@ void esp32setup()
     // Create the BLE Device
     char strBLEName[50]={0};
     sprintf(strBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);
+
     NimBLEDevice::init(strBLEName);
 
+    Serial.printf("BLE-Device started with BLE-Name <%s>\n", strBLEName);
+
 #ifdef ESP_PLATFORM
-    NimBLEDevice::setPower(ESP_PWR_LVL_N0); /** +0db */
+    NimBLEDevice::setPower(ESP_PWR_LVL_N3); /** +3db */
 #else
     NimBLEDevice::setPower(9); /** +9db */
 #endif
@@ -623,6 +608,12 @@ void esp32loop()
         hasMsgFromPhone = false;
     }
 
+    // check if we have messages for BLE to send
+    if (isPhoneReady == 1 && (toPhoneWrite != toPhoneRead))
+    {
+        sendToPhone();   
+    }
+
     // gps refresh
     if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
     {
@@ -648,13 +639,6 @@ void esp32loop()
         #endif
 
         posinfo_timer = millis();
-    }
-
-    // check if we have messages for BLE to send
-    if (toPhoneWrite != toPhoneRead)
-    {
-        if(isPhoneReady == 1)
-            sendToPhone();   
     }
 
     checkSerialCommand();

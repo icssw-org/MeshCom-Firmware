@@ -3,6 +3,14 @@
 #include <loop_functions.h>
 #include <debugconf.h>
 
+uint8_t shortVERSION()
+{
+    double dversion=0.0;
+    sscanf(SOURCE_VERSION, "%lf", &dversion);
+    int iversion = dversion * 100.0;
+    return (uint8_t)(iversion - 400);
+}
+
 void initAPRS(struct aprsMessage &aprsmsg)
 {
     aprsmsg.msg_len = 0;
@@ -15,9 +23,9 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_gateway_call = "";
     aprsmsg.msg_payload = "";
     aprsmsg.msg_fcs = 0;
-    aprsmsg.msg_source_hw = 0;
+    aprsmsg.msg_source_hw = MODUL_HARDWARE;
     aprsmsg.msg_source_mod = 3;
-    aprsmsg.msg_fw_version = 0;
+    aprsmsg.msg_fw_version = shortVERSION();
 }
 
 uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct aprsMessage &aprsmsg)

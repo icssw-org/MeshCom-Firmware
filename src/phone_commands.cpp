@@ -94,42 +94,31 @@ void sendToPhone()
 
     ble_busy_flag = true;
 
-    // we need to insert the first byte text msg flag
-    uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
-
-    uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0];   //len ist um ein byte zu kurz
-
-    toPhoneBuff[0] = 0x40;
-
-    memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
-
     if(g_ble_uart_is_connected && isPhoneReady == 1)
     {
+		// we need to insert the first byte text msg flag
+		uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
 
-	// send to phone
-	#if defined(ESP8266) || defined(ESP32)
-		blelen=blelen+2;
-		esp32_write_ble(toPhoneBuff, blelen);
-	#else
-        g_ble_uart.write(toPhoneBuff, blelen + 2);
-	#endif
+		uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0];   //len ist um ein byte zu kurz
 
-    }
+		toPhoneBuff[0] = 0x40;
 
-    toPhoneRead++;
-    if (toPhoneRead >= MAX_RING)
-        toPhoneRead = 0;
+		memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
 
-    if(g_ble_uart_is_connected && isPhoneReady == 1)
-    {
-        if (toPhoneWrite == toPhoneRead)
-        {
-            DEBUG_MSG_VAL("BLE", toPhoneRead,"TX (LAST) :");
-        }
-        else
-        {
-            DEBUG_MSG_VAL("BLE", toPhoneRead,"TX :");
-        }
+		// send to phone
+		#if defined(ESP8266) || defined(ESP32)
+			blelen=blelen+2;
+			esp32_write_ble(toPhoneBuff, blelen);
+		#else
+			g_ble_uart.write(toPhoneBuff, blelen + 2);
+		#endif
+
+		toPhoneRead++;
+		if (toPhoneRead >= MAX_RING)
+			toPhoneRead = 0;
+
+		if(bDEBUG)
+			Serial.printf("toPhoneWrite:%i toPhoneRead:%i \n", toPhoneWrite, toPhoneRead);
     }
     
     ble_busy_flag = false;
