@@ -2,13 +2,15 @@
 #include <aprs_functions.h>
 #include <loop_functions.h>
 #include <debugconf.h>
+#include <configuration.h>
 
 uint8_t shortVERSION()
 {
-    double dversion=0.0;
-    sscanf(SOURCE_VERSION, "%lf", &dversion);
-    int iversion = dversion * 100.0;
-    return (uint8_t)(iversion - 400);
+    char cfw[5]={0};
+    memcpy(cfw, SOURCE_VERSION+2, 2);
+    int iversion;
+    sscanf(cfw, "%d", &iversion);
+    return (uint8_t)iversion;
 }
 
 void initAPRS(struct aprsMessage &aprsmsg)

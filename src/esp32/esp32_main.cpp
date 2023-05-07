@@ -100,14 +100,12 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer)
     {
         deviceConnected = true;
-        NimBLEDevice::setPower(ESP_PWR_LVL_N9); /** +9db */
         Serial.println("BLE connected");
     };
 
     void onDisconnect(NimBLEServer* pServer)
     {
         deviceConnected = false;
-        NimBLEDevice::setPower(ESP_PWR_LVL_N3); /** +3db */
         Serial.println("BLE disconnected");
     }
 
@@ -195,7 +193,18 @@ String strText="";
 
 unsigned int  getMacAddr(void)
 {
-  return ESP.getEfuseMac() & 0xFFFFFFFF;
+    uint64_t dmac64 = ESP.getEfuseMac();
+
+    dmac[0] = dmac64 >> 40;
+    dmac[1] = dmac64 >> 32;
+    dmac[2] = dmac64 >> 24;
+    dmac[3] = dmac64 >> 16;
+    dmac[4] = dmac64 >> 8;
+    dmac[5] = dmac64;
+
+    unsigned int gw_id = dmac[3] << 24 | dmac[2] << 16 | dmac[1] << 8 | dmac[0];
+
+    return gw_id;
 }
 
 void showVoltage()
@@ -218,12 +227,7 @@ void esp32setup()
 
    _GW_ID = getMacAddr();
 
-    dmac[0] = 0x00;
-    dmac[1] = 0x00;
-    dmac[2] = _GW_ID >> 24;
-    dmac[3] = _GW_ID >> 16;
-    dmac[4] = _GW_ID >> 8;
-    dmac[5] = _GW_ID;
+
 
     #ifdef BOARD_HELTEC
         Wire.setPins(SDA_PIN, SCL_PIN);
@@ -239,6 +243,8 @@ void esp32setup()
     Serial.println("============");
     Serial.println("CLIENT SETUP");
     Serial.println("============");
+
+    Serial.printf("_GW_ID: %08X\n", _GW_ID);
 
     #if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
         setupGPS();
@@ -360,18 +366,21 @@ void esp32setup()
 
     // Create the BLE Device
     char cBLEName[50]={0};
-    sprintf(cBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call);
+    sprintf(cBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
+    //sprintf(cBLEName, "%s-%s%s-%s", g_ble_dev_name, NimBLEDevice::toString().substr(12,2), NimBLEDevice::toString().substr(15,2), meshcom_settings.node_call);
     
     const std::__cxx11::string strBLEName = cBLEName;
 
     Serial.printf("BLE-Device started with BLE-Name <%s>\n", strBLEName.c_str());
 
-    NimBLEDevice::init(strBLEName);
+    NimBLEDevice::init("MESHCOM");
 
     Serial.printf("NIM<%s>\n", NimBLEDevice::toString().c_str());
+    
+    NimBLEDevice::setDeviceName(strBLEName);
 
 #ifdef ESP_PLATFORM
-    NimBLEDevice::setPower(ESP_PWR_LVL_N3); /** +3db */
+    NimBLEDevice::setPower(ESP_PWR_LVL_N9); /** +9db */
 #else
     NimBLEDevice::setPower(9); /** +9db */
 #endif
@@ -395,21 +404,23 @@ void esp32setup()
     // Create a BLE Characteristic
     pTxCharacteristic = pService->createCharacteristic(
                         CHARACTERISTIC_UUID_TX,
-                        NIMBLE_PROPERTY::READ   |
                         NIMBLE_PROPERTY::WRITE  |
-                        /** Require a secure connection for read and write access */
-                        NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
+                        NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
                         NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
+                        /** Require a secure connection for read and write access */
+                        NIMBLE_PROPERTY::READ   |
+                        NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
                         NIMBLE_PROPERTY::READ_AUTHEN |
                         NIMBLE_PROPERTY::NOTIFY );
 
     NimBLECharacteristic* pRxCharacteristic = pService->createCharacteristic(
                         CHARACTERISTIC_UUID_RX,
-                        NIMBLE_PROPERTY::READ   |
                         NIMBLE_PROPERTY::WRITE  |
-                        /** Require a secure connection for read and write access */
-                        NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
+                        NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
                         NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
+                        /** Require a secure connection for read and write access */
+                        NIMBLE_PROPERTY::READ   |
+                        NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
                         NIMBLE_PROPERTY::READ_AUTHEN |
                         NIMBLE_PROPERTY::NOTIFY );
 
@@ -420,11 +431,10 @@ void esp32setup()
 
     // Start advertising
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->reset();
     pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setScanResponse(true);
-    pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
-    pAdvertising->setMinPreferred(0x12);
-    pAdvertising->start();
+    pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone
+    pAdvertising->start(0);
 
     Serial.println("Waiting a client connection to notify...");
     
@@ -587,7 +597,6 @@ void esp32loop()
     if (!deviceConnected && oldDeviceConnected) {
         delay(500); // give the bluetooth stack the chance to get things ready
         pServer->startAdvertising(); // restart advertising
-        Serial.println("start advertising");
         oldDeviceConnected = deviceConnected;
 
         g_ble_uart_is_connected = false;

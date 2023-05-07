@@ -480,12 +480,16 @@ void sendMessage(char *msg_text, int len)
 
     String strDestinationCall = "*";
     String strMsg = msg_text+ispos;
-    int iCall = strMsg.indexOf(':');
-    if(iCall != -1)
+    
+    if(strMsg.charAt(0) == '{')
     {
-        strDestinationCall = strMsg.substring(0, iCall);
-        strDestinationCall.toUpperCase();
-        strMsg = strMsg.substring(iCall+1);
+        int iCall = strMsg.indexOf('}');
+        if(iCall != -1 && iCall < 11)   // {OE1KBC-99}Textmessage
+        {
+            strDestinationCall = strMsg.substring(1, iCall);
+            strDestinationCall.toUpperCase();
+            strMsg = strMsg.substring(iCall+1);
+        }
     }
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
