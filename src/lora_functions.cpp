@@ -19,6 +19,7 @@
 #include "loop_functions.h"
 #include <loop_functions_extern.h>
 #include <batt_functions.h>
+#include <mheard_functions.h>
 
 int sendlng = 0;
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
@@ -121,6 +122,24 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 // print aprs message
                 printBuffer_aprs((char*)"RX-LoRa", aprsmsg);
 
+                ///////////////////////////////////////////////
+                // MHeard
+                struct mheardLine mheardLine;
+
+                initMheardLine(mheardLine);
+
+                mheardLine.mh_callsign = aprsmsg.msg_source_last;
+                mheardLine.mh_hw = aprsmsg.msg_source_hw;
+                mheardLine.mh_mod = aprsmsg.msg_source_mod;
+                mheardLine.mh_rssi = rssi;
+                mheardLine.mh_snr = snr;
+                mheardLine.mh_date = getDateString();
+                mheardLine.mh_time = getTimeString();
+                mheardLine.mh_payload_type = aprsmsg.payload_type;
+
+                updateMheard(mheardLine);
+                //
+                ///////////////////////////////////////////////
                 // we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
                 // MODE BYTE: LongSlow = 1, MediumSlow = 3
                 // and send the UDP packet (done in the method)
@@ -169,7 +188,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             // chedk destination to owncall or to all
                             if(aprsmsg.msg_destination_path == meshcom_settings.node_call || aprsmsg.msg_destination_path == "*")
                             {
-                                addBLEOutBuffer(RcvBuffer, size);
+                                if(aprsmsg.msg_payload.startsWith("{UTC}") == 0)
+                                    addBLEOutBuffer(RcvBuffer, size);
                             }
                         }
 
@@ -216,7 +236,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         else
                         if(msg_type_b_lora == 0x21)
                         {
-                            sendDisplayPosition(aprsmsg, rssi, snr, (int)mv_to_percent(read_batt()));
+                            sendDisplayPosition(aprsmsg, rssi, snr);
                         }
 
                         // resend only Packet to all and !owncall 

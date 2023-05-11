@@ -32,7 +32,7 @@ void init_flash(void)
     meshcom_settings.node_hum = preferences.getFloat("node_hum", 0.0);
     meshcom_settings.node_press = preferences.getFloat("node_press", 0.0);
 
-    strVar = preferences.getString("node_ssid", "XX0XXX");
+    strVar = preferences.getString("node_ssid", "none");
     sprintf(meshcom_settings.node_ssid, "%s", strVar.c_str());
     strVar = preferences.getString("node_pwd", "none");
     sprintf(meshcom_settings.node_pwd, "%s", strVar.c_str());

@@ -2,10 +2,15 @@
 
 #include "loop_functions.h"
 #include "command_functions.h"
+#include "time_functions.h"
+#include "batt_functions.h"
 
 bool bDEBUG = false;
 bool bPosDisplay = true;
 bool bDisplayOff = false;
+bool bDisplayVolt = false;
+bool bDisplayInfo = true;
+unsigned long DisplayOffWait = 0;
 
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE] = {0};
@@ -165,7 +170,7 @@ void sendDisplayHead(int batt)
     sendDisplay1306(false, true, 3, 63, print_text);
 }
 
-void sendDisplayMainline(int batt)
+void sendDisplayMainline()
 {
     if(bDisplayOff)
     {
@@ -175,13 +180,20 @@ void sendDisplayMainline(int batt)
 
     char print_text[500];
 
+    float batt = read_batt();
+
+    char cbatt[5];
+    sprintf(cbatt, "%3d%%", mv_to_percent(batt));
+    if(bDisplayVolt)
+        sprintf(cbatt, "%4.2f", batt/1000.0);
+
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
-        sprintf(print_text, "MC %-4.4s         %3d%%", SOURCE_VERSION, batt);
+        sprintf(print_text, "MC %-4.4s         %-4.4s", SOURCE_VERSION, cbatt);
     }
     else
     {
-        sprintf(print_text, "MC%-4.4s %02i:%02i:%02i %3d%%", SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, batt); // (int)mv_to_percent(read_batt()));
+        sprintf(print_text, "MC%-4.4s %02i:%02i:%02i %-4.4s", SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
     sendDisplay1306(true, false, 3, 11, print_text);
@@ -190,12 +202,46 @@ void sendDisplayMainline(int batt)
 
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
-    if(bDisplayOff)
+    if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
-        bDisplayOff=false;
+        char csetTime[30];
+        sprintf(csetTime, "%s", aprsmsg.msg_payload.c_str());
+
+        #if defined(ESP32)
+            setCurrentTime(csetTime+5);
+        #else
+            int16_t Year;
+            int16_t Month;
+            int16_t Day;
+            int16_t Hour;
+            int16_t Minute;
+            int16_t Second;
+            sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
+
+            meshcom_settings.node_date_year = (int)Year;
+            meshcom_settings.node_date_month = (int)Month;
+            meshcom_settings.node_date_day = (int)Day;
+
+            meshcom_settings.node_date_hour = (int)Hour;
+            meshcom_settings.node_date_minute = (int)Minute;
+            meshcom_settings.node_date_second = (int)Second;
+        #endif
+        
+        bPosDisplay=true;
+
+        return;
+    }
+    else
+    {
+        if(!bDisplayVolt)
+            bPosDisplay=false;
     }
 
-    bPosDisplay=false;
+    if(bDisplayOff)
+    {
+        DisplayOffWait=millis() + (30 * 1000); // seconds
+        bDisplayOff=false;
+    }
     
     int izeile=13;
     unsigned int itxt=0;
@@ -308,7 +354,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     }
 }
 
-void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, int batt)
+void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
     if(bDisplayOff)
     {
@@ -329,7 +375,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, 
 
     bool bClear=false;
 
-    sendDisplayMainline(batt);
+    sendDisplayMainline();
 
     sprintf(msg_text, "%s", aprsmsg.msg_source_path.c_str());
 
@@ -448,9 +494,26 @@ void printBuffer(uint8_t *buffer, int len)
   Serial.println("");
 }
 
+String getDateString()
+{
+    char currDate[11] = {0};
+    sprintf(currDate, "%04i-%02i-%02i", meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day);
+
+    return (String)currDate;
+}
+
+String getTimeString()
+{
+    char currTime[10] = {0};
+    sprintf(currTime, "%02i:%02i:%02i", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+
+    return (String)currTime;
+}
+
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-    Serial.printf("%s: %03i %c x%08X %02X %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X V:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
+    Serial.print(getTimeString());
+    Serial.printf(" %s: %03i %c x%08X %02X %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X V:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
         aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_fw_version);
 }
 
@@ -532,7 +595,7 @@ void sendMessage(char *msg_text, int len)
         iWriteOwn=0;
 }
 
-String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt, int batt)
+String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt)
 {
     if(lat == 0 or lon == 0)
     {
@@ -561,10 +624,18 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
         slon = (slon * 100.) + slonr;
     }
 
+    if(lon_c != 'W' && lon_c != 'E')
+        lon_c = 'E';
+
+    if(lat_c != 'N' && lat_c != 'S')
+        lat_c = 'N';
+
     if(bWeather)
         sprintf(msg_start, "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, slat, lat_c, meshcom_settings.node_symid, slon, lon_c);
     else
     {
+        int batt = read_batt();
+        
         char cbatt[5]={0};
         char calt[11]={0};
 
@@ -581,7 +652,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
     return msg_start;
 }
 
-void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int batt)
+void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt)
 {
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
@@ -596,7 +667,7 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
     aprsmsg.msg_server = false;
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt, batt);
+    aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt);
     
     if(aprsmsg.msg_payload == "")
         return;
@@ -622,7 +693,7 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt, int b
 
 }
 
-void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press, int batt)
+void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press)
 {
     // @141324z4812.06N/01555.87E_270/...g...t...r000p000P...h..b10257Weather in Neulengbach
 
@@ -639,7 +710,7 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.msg_server = false;
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt, batt);
+    aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt);
     
     encodeAPRS(msg_buffer, aprsmsg);
 

@@ -28,6 +28,7 @@
 #include <batt_functions.h>
 #include <lora_functions.h>
 #include <phone_commands.h>
+#include <mheard_functions.h>
 
 /*
     RAK4631 PIN DEFINITIONS
@@ -136,7 +137,6 @@ static RadioEvents_t RadioEvents;
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
-
 
 /**
  * BLE Spec
@@ -283,6 +283,9 @@ void nrf52setup()
     {
         memset(ringBufferLoraRX[i], 0, 4);
     }
+
+    // Initialize mheard list
+    initMheard();
 
 	// Initialize battery reading
 	init_batt();
@@ -584,7 +587,7 @@ void nrf52loop()
     // posinfo
     if ((posinfo_timer + (POSINFO_INTERVAL * 1000 * 60)) < millis())
     {
-        sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
+        sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
 
         #if defined(LPS33)
             sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
@@ -594,6 +597,15 @@ void nrf52loop()
         posinfo_timer = millis();
     }
 
+    if(DisplayOffWait > 0)
+    {
+        if (millis() > DisplayOffWait)
+        {
+            DisplayOffWait = 0;
+            bDisplayOff=true;
+        }
+    }
+    
     #if defined(LPS33)
 
     // TEMP/HUM

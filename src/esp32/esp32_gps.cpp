@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#ifdef ENABLE_GPS
+#if defined (ENABLE_GPS)
 
 #include "esp32_gps.h"
 #include <loop_functions.h>
@@ -14,12 +14,19 @@
     #define GPS_TX_PIN 12
     #define I2C_SDA    21
     #define I2C_SCL    22
+#elif defined(BOARD_HELTEC)
+    //For heltec these are the pins:
+    #define GPS_RX_PIN 36
+    #define GPS_TX_PIN 37
+    #define I2C_SDA    21
+    #define I2C_SCL    22
 #else
     #define GPS_RX_PIN 34
     #define GPS_TX_PIN 12
     #define I2C_SDA    21
     #define I2C_SCL    22
 #endif
+
 
 #include <HardwareSerial.h>
 #include <SparkFun_Ublox_Arduino_Library.h>

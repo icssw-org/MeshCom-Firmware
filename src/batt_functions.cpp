@@ -28,11 +28,16 @@
 #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 
 /** Analog input for battery level */
-#if defined NRF52_SERIES
+#if defined( NRF52_SERIES)
 	uint32_t vbat_pin = WB_A0;
-#else
+#elif defined(BOARD_TBEAM) || defined(BOARD_SX1268)
 	uint32_t vbat_pin = 14;
+#elif defined(BOARD_HELTEC)
+	uint32_t vbat_pin = 35;
+#else
+	uint32_t vbat_pin = 35;
 #endif
+
 /**
  * @brief Initialize the battery analog input
  *
@@ -51,6 +56,7 @@ void init_batt(void)
 	// Set the sampling time to 10us
 	analogSampleTime(10);
 #endif
+
 }
 
 /**
@@ -63,22 +69,58 @@ float read_batt(void)
 {
 //	return 0.0;
 
+	#if defined(NRF52_SERIES)
+		analogReference(AR_INTERNAL_3_0);
+	#endif
+
 	float raw;
 
 	// Get the raw 12-bit, 0..3000mV ADC value
-	raw = analogRead(vbat_pin);
+	uint32_t irawd[10] = {0};
+	uint32_t iraws = 0;
+	for(int its=0;its<10;its++)
+	{
+		irawd[its] = analogRead(vbat_pin);
+		iraws = iraws + irawd[its];
+		//Serial.printf("BATT irawd[%i]:%i\n", its, irawd[its]);
+		delay(20);
+	}
 
-	#if defined NRF52_SERIES
+	iraws = iraws / 10;
+
+	uint32_t iraw=0;
+	uint16_t irawc=0;
+	for(int its=0;its<10;its++)
+	{
+		if((float)irawd[its] > (float(iraws) * .95) && (float)irawd[its] < ((float)iraws * 1.05) )
+		{
+			irawc++;
+			iraw = iraw + irawd[its];
+			//Serial.printf("BATT2 irawd[%i]:%i\n", its, irawd[its]);
+		}
+	}
+
+	if(irawc == 0)
+		iraw = iraws;
+	else
+		iraw = iraw / irawc;
+
+	//Serial.printf("\nBATT iraw:%i\n", iraw);
+
+	#if defined( NRF52_SERIES)
+		// take it als mV
+		raw = (float)iraw * REAL_VBAT_MV_PER_LSB;
+	#elif defined(BOARD_TBEAM) || defined(BOARD_SX1268)
+		raw = (((float)iraw * 11.75) / 4095.0) * 4.2 * 1000.0;
+	#elif defined(BOARD_HELTEC)
+		raw = (((float)iraw * VBAT_DIVIDER_COMP) / 4095.0) * 4.2 * 1000.0;
 	#else
-		raw = raw * 10.0;
+		raw = (((float)iraw * VBAT_DIVIDER_COMP) / 4095.0) * 4.2 * 1000.0;
 	#endif
 
-	//Serial.printf("raw:%f\n", raw);
+	//Serial.printf("FLOW raw:%.2f mV\n", raw);
 
-	// Convert the raw value to compensated mv, taking the resistor-
-	// divider into account (providing the actual LIPO voltage)
-	// ADC range is 0..3000mV and resolution is 12-bit (0..4095)
-	return raw * REAL_VBAT_MV_PER_LSB;
+	return raw;
 }
 
 /**
@@ -106,21 +148,4 @@ uint8_t mv_to_percent(float mvolts)
 
 	mvolts -= 3600;
 	return 10 + (mvolts * 0.15F); // thats mvolts /6.66666666
-}
-
-/**
- * @brief Read the battery level as value
- * between 0 and 254. This is used in LoRaWan status requests
- * as the battery level
- *
- * @return uint8_t Battery level as value between 0 and 254
- */
-uint8_t get_lora_batt(void)
-{
-	uint16_t read_val = 0;
-	for (int i = 0; i < 10; i++)
-	{
-		read_val += read_batt();
-	}
-	return (mv_to_percent(read_val / 10) * 2.54);
 }

@@ -23,6 +23,8 @@ struct aprsMessage
     uint8_t max_hop;
     bool  msg_server;
     String msg_source_path;
+    String msg_source_call;
+    String msg_source_last;
     String msg_destination_path;
     String msg_payload;
     String msg_gateway_call;
@@ -40,6 +42,18 @@ struct aprsPosition
     char lon_c;
     int alt;
     int bat;
+};
+
+struct mheardLine
+{
+    String mh_callsign;
+    String mh_date;
+    String mh_time;
+    char mh_payload_type;
+    uint8_t mh_hw;
+    uint8_t mh_mod;
+    int16_t mh_rssi;
+    int8_t mh_snr;
 };
 
 #endif // _APRS_FUNCTIONS_H_

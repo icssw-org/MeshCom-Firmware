@@ -66,9 +66,24 @@ void sendConfigToPhone ()
 	memcpy(confBuff + latOffset + 8, &meshcom_settings.node_lon, 8);
 	memcpy(confBuff + latOffset + 16, &meshcom_settings.node_alt, 4);
 
+	// WiFissid
 	confBuff[ssid_offset] = ssid_len;
+	meshcom_settings.node_ssid[39]=0x00;
+	if(strlen(meshcom_settings.node_ssid) < 1 || strlen(meshcom_settings.node_ssid) > 40)
+	{
+		strcpy(meshcom_settings.node_ssid, "none");
+        save_settings();
+	}
 	memcpy(confBuff + ssid_offset + 1, &meshcom_settings.node_ssid, ssid_len);
+	
+	// WiFipasswword
 	confBuff[pwd_offset] = pwd_len;
+	meshcom_settings.node_pwd[39]=0x00;
+	if(strlen(meshcom_settings.node_pwd) < 1 || strlen(meshcom_settings.node_pwd) > 40)
+	{
+		strcpy(meshcom_settings.node_pwd, "none");
+        save_settings();
+	}
 	memcpy(confBuff + pwd_offset + 1, &meshcom_settings.node_pwd, pwd_len);
 
 	//printBuffer(confBuff, conf_len);
@@ -297,7 +312,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				/// TODO N/S und E/W Char muss man noch korrekt setzen
 				DEBUG_MSG("RADIO", "Sending Pos from Phone to Mesh");
 
-				sendPosition(d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude, (int)mv_to_percent(read_batt()));
+				sendPosition(d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude);
 
 				posinfo_timer = millis();	// damit die loop-Schleife nicht asynchron läuft
 			}

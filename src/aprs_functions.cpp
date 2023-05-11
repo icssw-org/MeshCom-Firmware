@@ -63,6 +63,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         // Source Path
         bool bSourceEndOk=false;
+        bool bSourceCall=true;
         for(ib=6; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == '>')
@@ -72,7 +73,22 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 break;
             }
             else
+            {
                 aprsmsg.msg_source_path.concat((char)RcvBuffer[ib]);
+                
+                if(RcvBuffer[ib] == ',')
+                {
+                    bSourceCall=false;
+                    aprsmsg.msg_source_last="";
+                }
+                else
+                    aprsmsg.msg_source_last.concat((char)RcvBuffer[ib]);
+
+                if(bSourceCall)
+                {
+                    aprsmsg.msg_source_call.concat((char)RcvBuffer[ib]);
+                }
+            }
         }
 
         if(!bSourceEndOk)
@@ -324,6 +340,10 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
         return 0;
 
     inext = inext + inext_payload;
+
+    // max posible payload (LoRa MSG max 255 byte)
+    if((inext + 6) > UDP_TX_BUF_SIZE)
+        inext = UDP_TX_BUF_SIZE - 6;
 
     msg_buffer[inext] = 0x00;
     inext++;

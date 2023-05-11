@@ -11,6 +11,9 @@
 extern bool bDEBUG;
 extern bool bPosDisplay;
 extern bool bDisplayOff;
+extern bool bDisplayVolt;
+extern bool bDisplayInfo;
+extern unsigned long DisplayOffWait;
 
 extern s_meshcom_settings meshcom_settings;
 

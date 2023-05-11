@@ -26,6 +26,8 @@
 #include <aprs_functions.h>
 #include <batt_functions.h>
 #include <lora_functions.h>
+#include <mheard_functions.h>
+#include <time_functions.h>
 
 #include <esp_adc_cal.h>
 
@@ -33,8 +35,6 @@
 #include <Adafruit_I2CDevice.h>
 #include <Adafruit_Sensor.h>
 #endif
-
-#define ADC_PIN 35  //ADC_PIN is the ADC pin the battery is connected to through a voltage divider
 
 /**
  * RadioLib Infos und Examples:
@@ -207,27 +207,14 @@ unsigned int  getMacAddr(void)
     return gw_id;
 }
 
-void showVoltage()
-{
-    #ifdef ADC_READ
-    if (millis() - timeStamp > 1000) {
-        timeStamp = millis();
-        uint16_t v2 = analogRead(ADC_PIN);
-        float battery_voltage = ((float)v2 / 4095.0) * 2.0 * 3.3 * (1100 / 1000.0);
-        String voltage = "Voltage :" + String(battery_voltage) + "V\n";
-        Serial.println(voltage);
-    }
-    #endif
-}
-
 void esp32setup()
 {
  	// Get LoRa parameter
 	init_flash();
 
+    init_batt();
+
    _GW_ID = getMacAddr();
-
-
 
     #ifdef BOARD_HELTEC
         Wire.setPins(SDA_PIN, SCL_PIN);
@@ -246,7 +233,13 @@ void esp32setup()
 
     Serial.printf("_GW_ID: %08X\n", _GW_ID);
 
-    #if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
+    // Initialize time
+    setupAceTime();
+
+    // Initialize mheard list
+    initMheard();
+
+    #if defined(ENABLE_GPS)
         setupGPS();
     #else
         Wire.begin();
@@ -367,7 +360,6 @@ void esp32setup()
     // Create the BLE Device
     char cBLEName[50]={0};
     sprintf(cBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
-    //sprintf(cBLEName, "%s-%s%s-%s", g_ble_dev_name, NimBLEDevice::toString().substr(12,2), NimBLEDevice::toString().substr(15,2), meshcom_settings.node_call);
     
     const std::__cxx11::string strBLEName = cBLEName;
 
@@ -438,36 +430,6 @@ void esp32setup()
 
     Serial.println("Waiting a client connection to notify...");
     
-    // BATT
-    #ifdef ADC_READ
-
-    adcAttachPin(ADC_PIN);
-    
-    analogRead(ADC_PIN);
-    
-    analogReadResolution(10); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
-
-    esp_adc_cal_characteristics_t adc_chars;
-    esp_adc_cal_value_t val_type = esp_adc_cal_characterize((adc_unit_t)ADC_UNIT_1, (adc_atten_t)ADC1_CHANNEL_6, (adc_bits_width_t)ADC_WIDTH_BIT_12, 1100, &adc_chars);
-    //Check type of calibration value used to characterize ADC
-    if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF)
-    {
-        Serial.printf("eFuse Vref:%u mV", adc_chars.vref);
-        vref = adc_chars.vref;
-    }
-    else
-    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP)
-    {
-        Serial.printf("Two Point --> coeff_a:%umV coeff_b:%umV\n", adc_chars.coeff_a, adc_chars.coeff_b);
-    }
-    else
-    {
-        Serial.println("Default Vref: 1100mV");
-    }
-   
-    Serial.println();
-    #endif
-
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;
     meshcom_settings.node_date_minute = 0;
@@ -521,6 +483,10 @@ void setInterruptFlag(void)
 
 void esp32loop()
 {
+    loopAceTime();
+
+    getCurrentTime();
+
     // check if the previous transmission finished
     if(transmittedFlag)
     {
@@ -646,7 +612,7 @@ void esp32loop()
             getGPS();
         #endif
 
-        sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, (int)mv_to_percent(read_batt()));
+        sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
 
         #if defined(LPS33)
         sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
@@ -654,6 +620,15 @@ void esp32loop()
         #endif
 
         posinfo_timer = millis();
+    }
+
+    if(DisplayOffWait > 0)
+    {
+        if (millis() > DisplayOffWait)
+        {
+            DisplayOffWait = 0;
+            bDisplayOff=true;
+        }
     }
 
     checkSerialCommand();

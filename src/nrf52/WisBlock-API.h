@@ -210,9 +210,11 @@ struct s_meshcom_settings
 
 	// Default is off
 	uint32_t send_repeat_time = 0;
+	
 	bool auto_join = false;
-	// Flag for LoRaWAN or LoRa P2P
-	bool lorawan_enable = true;
+
+	int node_hamnet_only = 0;
+
 };
 
 extern s_meshcom_settings meshcom_settings;
@@ -245,6 +247,7 @@ struct s_meshcomcompat_settings
 
 	// Flag if node joins automatically after reboot
 	bool auto_join = false;
+
     // CALLsign
 	char node_call[10] = {0x58, 0x58, 0x30, 0x58, 0x58, 0x58, 0x2D, 0x30, 0x30, 0x00};
 	char node_short[6] = {0x58, 0x58, 0x58, 0x34, 0x30, 0x00};
@@ -278,6 +281,7 @@ struct s_meshcomcompat_settings
 	// Send repeat time in milliseconds: 2 * 60 * 1000 => 2 minutes
 	uint32_t send_repeat_time = 0;
 
+	int node_hamnet_only = 0;
 };
 
 // Flash

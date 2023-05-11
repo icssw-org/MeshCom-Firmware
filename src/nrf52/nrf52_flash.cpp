@@ -97,6 +97,8 @@ void init_flash(void)
 		memcpy(meshcom_settings.node_ssid, old_struct.node_ssid, 40);
 		memcpy(meshcom_settings.node_pwd, old_struct.node_pwd, 40);
 
+		meshcom_settings.node_hamnet_only = old_struct.node_hamnet_only;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
