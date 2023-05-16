@@ -215,6 +215,10 @@ struct s_meshcom_settings
 
 	int node_hamnet_only = 0;
 
+	int node_sset = 0;
+
+	float node_maxv = 4.24;
+
 };
 
 extern s_meshcom_settings meshcom_settings;
@@ -282,6 +286,10 @@ struct s_meshcomcompat_settings
 	uint32_t send_repeat_time = 0;
 
 	int node_hamnet_only = 0;
+
+	int node_sset = 0;
+
+	float node_maxv = 4.24;
 };
 
 // Flash

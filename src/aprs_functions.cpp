@@ -100,6 +100,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         // Destination Path
         bool bDestinationEndOk=false;
+        bool bDestinationCall=true;
         for(ib=inext; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == aprsmsg.payload_type)
@@ -109,7 +110,19 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 break;
             }
             else
+            {
                 aprsmsg.msg_destination_path.concat((char)RcvBuffer[ib]);
+
+                if(RcvBuffer[ib] == ',')
+                {
+                    bDestinationCall=false;
+                }
+
+                if(bDestinationCall)
+                {
+                    aprsmsg.msg_destination_call.concat((char)RcvBuffer[ib]);
+                }
+            }
         }
 
         if(!bDestinationEndOk)
@@ -248,42 +261,56 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
+    aprspos.bat = 0;
+    aprspos.alt = 0;
+
     memset(decode_text, 0x00, sizeof(decode_text));
     ipt=0;
 
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+    // check Batt
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
     {
-        if(PayloadBuffer.charAt(itxt) == '/')
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'B' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            decode_text[ipt]=0x00;
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                {
+                    sscanf(decode_text, "%d", &aprspos.bat);
+                    break;
+                }
 
-            sscanf(decode_text, "%d", &aprspos.bat);
-            istarttext = itxt+3;    // "/A="
+                decode_text[ipt]=PayloadBuffer.charAt(id);
+                ipt++;
+            }
+
             break;
-        }
-        else
-        {
-            decode_text[ipt]=PayloadBuffer.charAt(itxt);
-            ipt++;
         }
     }
 
     memset(decode_text, 0x00, sizeof(decode_text));
     ipt=0;
 
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+    // check Altitute
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
     {
-        if(itxt == PayloadBuffer.length()-1)    // 0x00 Abschluss
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'A' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            decode_text[ipt]=0x00;
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                {
+                    sscanf(decode_text, "%d", &aprspos.alt);
+                    break;
+                }
 
-            sscanf(decode_text, "%d", &aprspos.alt);
+                decode_text[ipt]=PayloadBuffer.charAt(id);
+                ipt++;
+            }
+
             break;
-        }
-        else
-        {
-            decode_text[ipt]=PayloadBuffer.charAt(itxt);
-            ipt++;
         }
     }
 

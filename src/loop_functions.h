@@ -17,8 +17,12 @@
 #include <U8g2lib.h> // Click to install library: http://librarymanager/All#u8g2
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
-void sendDisplayHead(int batt);
-void sendDisplayMainline(int batt);
+void sendDisplayHead();
+void sendDisplayMainline(bool bSend);
+
+void initButtonPin();
+void checkButtonState();
+
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr);
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr);
 
@@ -36,9 +40,12 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
 void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt);
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press);
 void sendWX(char* text, float temp, float hum, float press);
+void SendAckMessage(String dest_call, unsigned int iAckId);
 
 String convertCallToShort(char callsign[10]);
 
 uint8_t shortVERSION();
+
+int conv_fuss(int alt_meter);
 
 #endif // _LOOP_FUNCTIONS_H_

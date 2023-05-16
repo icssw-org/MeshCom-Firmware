@@ -293,6 +293,20 @@ void nrf52setup()
 	// Get LoRa parameter
 	init_flash();
 
+    bDisplayVolt = meshcom_settings.node_sset & 0x0001;
+    bDisplayOff = meshcom_settings.node_sset & 0x0002;
+    bPosDisplay = meshcom_settings.node_sset & 0x0004;
+    bDEBUG = meshcom_settings.node_sset & 0x0008;
+
+    global_batt = 4200.0;
+
+    if(meshcom_settings.node_maxv > 0)
+    {
+        setMaxBatt(meshcom_settings.node_maxv * 1000.0F);
+    
+        global_batt = meshcom_settings.node_maxv * 1000.0F;
+    }
+
     //  Initialize the LoRa Module
     lora_rak4630_init();
 
@@ -511,7 +525,7 @@ void nrf52loop()
 {
     if(!bInitDisplay)
     {
-        sendDisplayHead(mv_to_percent(read_batt()));
+        sendDisplayHead();
 
         bInitDisplay=true;
     }
@@ -629,6 +643,21 @@ void nrf52loop()
     }
 
     #endif
+
+    // rebootAuto
+    if(rebootAuto > 0)
+    {
+        if (millis() > rebootAuto)
+        {
+            rebootAuto = 0;
+
+            #if defined NRF52_SERIES
+                NVIC_SystemReset();     // resets the device
+            #endif
+        }
+    }
+
+    global_batt = read_batt();
 
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);

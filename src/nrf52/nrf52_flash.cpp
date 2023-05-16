@@ -99,6 +99,10 @@ void init_flash(void)
 
 		meshcom_settings.node_hamnet_only = old_struct.node_hamnet_only;
 
+		meshcom_settings.node_sset = old_struct.node_sset;
+
+		meshcom_settings.node_maxv = old_struct.node_maxv;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
@@ -172,7 +176,11 @@ boolean save_settings(void)
 		}
 		lora_file.close();
 	}
+	
 	log_settings();
+
+    Serial.println("\nflash save...\n");
+
 	return result;
 }
 

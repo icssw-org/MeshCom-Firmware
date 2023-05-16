@@ -9,33 +9,93 @@
  *
  */
 #include <Arduino.h>
-//#include "WisBlock-API.h"
+#include <configuration.h>
 
-#if defined NRF52_SERIES || defined ESP32
-/** Millivolts per LSB 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096 */
-#define VBAT_MV_PER_LSB (0.73242188F)
-/** Compensation factor for the VBAT divider */
-#define VBAT_DIVIDER_COMP (1.73)
-#endif
-#ifdef ARDUINO_ARCH_RP2040
-/** Millivolts per LSB 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096 */
-#define VBAT_MV_PER_LSB (0.806F)
-/** Compensation factor for the VBAT divider */
-#define VBAT_DIVIDER_COMP (1.846F)
-#endif
+float global_batt = 0;
 
-/** Real milli Volts per LSB including compensation */
-#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
+extern bool is_receiving;
 
-/** Analog input for battery level */
-#if defined( NRF52_SERIES)
-	uint32_t vbat_pin = WB_A0;
-#elif defined(BOARD_TBEAM) || defined(BOARD_SX1268)
-	uint32_t vbat_pin = 14;
-#elif defined(BOARD_HELTEC)
-	uint32_t vbat_pin = 35;
+#if defined(NRF52_SERIES)
+
+uint32_t vbat_pin = WB_A0;
+
+#define NO_OF_SAMPLES   64          //Multisampling
+
 #else
-	uint32_t vbat_pin = 35;
+
+
+#include "esp_adc_cal.h"
+
+#define DEFAULT_VREF    1100        //Use adc2_vref_to_gpio() to obtain a better estimate
+#define NO_OF_SAMPLES   64          //Multisampling
+
+static esp_adc_cal_characteristics_t adc_chars[sizeof(esp_adc_cal_characteristics_t)];
+
+#ifdef SX126X_V3
+static const adc_channel_t channel = ADC_CHANNEL_0;     //GPIO34 if ADC1, GPIO14 if ADC2
+static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+#endif
+
+#if CONFIG_IDF_TARGET_ESP32
+static const adc_channel_t channel = ADC_CHANNEL_6;     //GPIO34 if ADC1, GPIO14 if ADC2
+static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+#elif CONFIG_IDF_TARGET_ESP32S2
+static const adc_channel_t channel = ADC_CHANNEL_6;     // GPIO7 if ADC1, GPIO17 if ADC2
+static const adc_bits_width_t width = ADC_WIDTH_BIT_13;
+#endif
+
+#if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
+static const adc_atten_t atten = ADC_ATTEN_DB_0;
+static const adc_unit_t unit = ADC_UNIT_2;
+#elif defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
+static const adc_atten_t atten = ADC_ATTEN_DB_0;
+static const adc_unit_t unit = ADC_UNIT_1;
+#else
+static const adc_atten_t atten = ADC_ATTEN_DB_0;
+static const adc_unit_t unit = ADC_UNIT_1;
+#endif
+
+
+static void check_efuse(void)
+{
+#ifdef SX126X_V3
+	// NOT TESTED
+#elif CONFIG_IDF_TARGET_ESP32
+    //Check if TP is burned into eFuse
+    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
+        Serial.printf("eFuse Two Point: Supported\n");
+    } else {
+        Serial.printf("eFuse Two Point: NOT supported\n");
+    }
+    //Check Vref is burned into eFuse
+    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK) {
+        Serial.printf("eFuse Vref: Supported\n");
+    } else {
+        Serial.printf("eFuse Vref: NOT supported\n");
+    }
+#elif CONFIG_IDF_TARGET_ESP32S2
+    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
+        Serial.printf("eFuse Two Point: Supported\n");
+    } else {
+        Serial.printf("Cannot retrieve eFuse Two Point calibration values. Default calibration values will be used.\n");
+    }
+#else
+#error "This example is configured for ESP32/ESP32S2."
+#endif
+}
+
+static void print_char_val_type(esp_adc_cal_value_t val_type)
+{
+    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
+        Serial.printf("Characterized using Two Point Value\n");
+    } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+        Serial.printf("Characterized using eFuse Vref\n");
+    } else {
+        Serial.printf("Characterized using Default Vref\n");
+    }
+}
+
+
 #endif
 
 /**
@@ -44,17 +104,37 @@
  */
 void init_batt(void)
 {
-#if defined NRF52_SERIES
-	// Set the analog reference to 3.0V (default = 3.6V)
-	analogReference(AR_INTERNAL_3_0);
-#endif
+	Serial.println("init_batt");
 
+/** Analog input for battery level */
+#if defined(NRF52_SERIES)
 	// Set the resolution to 12-bit (0..4095)
 	analogReadResolution(12); // Can be 8, 10, 12 or 14
 
-#if defined NRF52_SERIES
+	// Set the analog reference to 3.0V (default = 3.6V)
+	analogReference(AR_INTERNAL_3_0);
+
 	// Set the sampling time to 10us
 	analogSampleTime(10);
+#else
+	//only for Test check_efuse();
+
+    //Configure ADC
+    if (unit == ADC_UNIT_1)
+	{
+        adc1_config_width(width);
+        adc1_config_channel_atten((adc1_channel_t)channel, atten);
+    }
+	else
+	{
+        adc2_config_channel_atten((adc2_channel_t)channel, atten);
+    }
+
+    //Characterize ADC
+    //adc_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
+    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_chars);
+    
+	//only for test print_char_val_type(val_type);
 #endif
 
 }
@@ -67,58 +147,76 @@ void init_batt(void)
  */
 float read_batt(void)
 {
-//	return 0.0;
+	//Serial.println("read_batt");
+
+	is_receiving = true;
+
+	float raw = 0.0;
 
 	#if defined(NRF52_SERIES)
 		analogReference(AR_INTERNAL_3_0);
-	#endif
-
-	float raw;
-
-	// Get the raw 12-bit, 0..3000mV ADC value
-	uint32_t irawd[10] = {0};
-	uint32_t iraws = 0;
-	for(int its=0;its<10;its++)
-	{
-		irawd[its] = analogRead(vbat_pin);
-		iraws = iraws + irawd[its];
-		//Serial.printf("BATT irawd[%i]:%i\n", its, irawd[its]);
-		delay(20);
-	}
-
-	iraws = iraws / 10;
-
-	uint32_t iraw=0;
-	uint16_t irawc=0;
-	for(int its=0;its<10;its++)
-	{
-		if((float)irawd[its] > (float(iraws) * .95) && (float)irawd[its] < ((float)iraws * 1.05) )
+		
+		uint32_t adc_reading = 0;
+		//Multisampling
+		for (int i = 0; i < NO_OF_SAMPLES; i++)
 		{
-			irawc++;
-			iraw = iraw + irawd[its];
-			//Serial.printf("BATT2 irawd[%i]:%i\n", its, irawd[its]);
+			int raw = analogRead(vbat_pin);
+			adc_reading += raw;
 		}
+
+		adc_reading /= NO_OF_SAMPLES;
+
+		raw = (float)adc_reading;
+
+		//Serial.printf("Raw: %d\n", adc_reading);
+	#else
+
+	int imax=1;
+	int adc_value = 0;
+	int adc_reading = 0;
+
+	//Multisampling
+	for (int i = 0; i < NO_OF_SAMPLES; i++)
+	{
+		if (unit == ADC_UNIT_1)
+			adc_value = adc1_get_raw((adc1_channel_t)channel);
+		else
+			adc2_get_raw((adc2_channel_t)channel, width, &adc_value);
+
+		adc_reading += adc_value;
 	}
 
-	if(irawc == 0)
-		iraw = iraws;
-	else
-		iraw = iraw / irawc;
+	adc_reading /= NO_OF_SAMPLES;
 
-	//Serial.printf("\nBATT iraw:%i\n", iraw);
+	//Convert adc_reading to voltage in mV
+	uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
+	//Serial.printf("Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
+	
 
-	#if defined( NRF52_SERIES)
-		// take it als mV
-		raw = (float)iraw * REAL_VBAT_MV_PER_LSB;
-	#elif defined(BOARD_TBEAM) || defined(BOARD_SX1268)
-		raw = (((float)iraw * 11.75) / 4095.0) * 4.2 * 1000.0;
-	#elif defined(BOARD_HELTEC)
-		raw = (((float)iraw * VBAT_DIVIDER_COMP) / 4095.0) * 4.2 * 1000.0;
-	#else
-		raw = (((float)iraw * VBAT_DIVIDER_COMP) / 4095.0) * 4.2 * 1000.0;
+	raw = voltage;
+	
+	//Serial.printf("adc_reading:%i voltage:%i\n", adc_reading, voltage);
+
 	#endif
 
-	//Serial.printf("FLOW raw:%.2f mV\n", raw);
+	// take it als mV
+	#if defined( NRF52_SERIES)
+		raw = raw * 1.25717;
+	#elif defined(BOARD_TBEAM) || defined(BOARD_SX1268)
+		raw = raw * 10.7687;
+	#elif defined(BOARD_HELTEC)
+		raw = raw * 24.80;
+	#elif defined(BOARD_HELTEC_V3)
+		raw = raw * 4.9245;
+	#else
+		raw = raw * 24.80;
+	#endif
+
+	//Serial.printf("\nFLOW raw:%.2f mV\n", raw);
+
+	delay(50);
+
+	is_receiving = false;
 
 	return raw;
 }
@@ -130,22 +228,32 @@ float read_batt(void)
  * @param mvolts Milli volts measured from analog pin
  * @return uint8_t Battery level as percentage (0 to 100)
  */
+float max_batt = 4.24;
+
+unsigned long BattTimeWait = 0;
+
+void setMaxBatt(float u_max_batt)
+{
+	max_batt = u_max_batt;
+}
+
 uint8_t mv_to_percent(float mvolts)
 {
-	if (mvolts < 3300)
+	if (mvolts < max_batt * 0.785F)	// 80% (3300)
 		return 0;
 
-	if (mvolts < 3600)
+	if (mvolts < max_batt * 0.857F)	// (3600)
 	{
-		mvolts -= 3300;
+		mvolts -= max_batt * 0.785F;	// (3300)
 		return mvolts / 30;
 	}
 
-	if (mvolts > 4200)
+	if (mvolts > max_batt)	// 4200
 	{
 		return 100;
 	}
 
-	mvolts -= 3600;
+	mvolts -= max_batt * 0.857F;	// 3600
+	
 	return 10 + (mvolts * 0.15F); // thats mvolts /6.66666666
 }

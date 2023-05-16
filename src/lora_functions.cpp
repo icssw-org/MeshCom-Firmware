@@ -15,6 +15,12 @@
     extern int transmissionState;
 #endif
 
+#ifdef SX126X_V3
+    #include <RadioLib.h>
+    extern SX1262 radio;
+    extern int transmissionState;
+#endif
+
 #include "lora_functions.h"
 #include "loop_functions.h"
 #include <loop_functions_extern.h>
@@ -98,7 +104,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             //Serial.printf("%03i RCV:%s\n", size, RcvBuffer+6);
         }
         else
-        if(is_new_packet(RcvBuffer+1) && checkOwnTx(RcvBuffer+1) < 0)
+        if(is_new_packet(RcvBuffer+1))
         {
             // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -185,11 +191,74 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // size message is int -> uint16_t buffer size
                         if(isPhoneReady == 1 || msg_type_b_lora == 0x3A)    // text message store&forward
                         {
-                            // chedk destination to owncall or to all
-                            if(aprsmsg.msg_destination_path == meshcom_settings.node_call || aprsmsg.msg_destination_path == "*")
+                            /* AKTUELLE VERSION IMNKL: SSID
+                            // check destination to owncall or to all ohne SSID
+                            String strSource = String(meshcom_settings.node_call)+"-";
+                            String strDestination = aprsmsg.msg_destination_call+"-";
+
+                            int isp = strSource.indexOf('-');
+                            if(isp > 0)
+                                strSource = strSource.substring(0, isp);
+
+                            int idp = strDestination.indexOf('-');
+                            if(idp > 0)
+                                strDestination = strDestination.substring(0, idp);
+
+                            //Serial.printf("strDestination:%s strSource:%s\n", strDestination.c_str(), strSource.c_str());
+
+                            if(strDestination == strSource || aprsmsg.msg_destination_path == "*")
+                            */
+
+                            if(aprsmsg.msg_destination_call == meshcom_settings.node_call || aprsmsg.msg_destination_path == "*")
                             {
-                                if(aprsmsg.msg_payload.startsWith("{UTC}") == 0)
-                                    addBLEOutBuffer(RcvBuffer, size);
+                                Serial.println(meshcom_settings.node_call);
+
+                                // Check DM ACK
+                                if(aprsmsg.msg_destination_call == meshcom_settings.node_call)
+                                {
+                                    int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
+                                    int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
+    
+                                    Serial.printf("iAckPos:%i iEnqPos:%i\n", iAckPos, iEnqPos);
+    
+                                    if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
+                                    {
+                                        unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
+                                        msg_counter = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFF);
+
+                                        Serial.printf("msg_counter:%08X\n", msg_counter);
+
+                                        print_buff[0]=0x41;
+                                        print_buff[1]=msg_counter & 0xFF;
+                                        print_buff[2]=(msg_counter >> 8) & 0xFF;
+                                        print_buff[3]=(msg_counter >> 16) & 0xFF;
+                                        print_buff[4]=(msg_counter >> 24) & 0xFF;
+                                        print_buff[5]=0x01;  // ACK
+                                        print_buff[6]=0x00;
+                                        
+                                        addBLEOutBuffer(print_buff, 7);
+                                    }
+                                    else
+                                    if(iEnqPos > 0)
+                                    {
+                                        unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
+                                        
+                                        SendAckMessage(aprsmsg.msg_source_call, iAckId);
+
+                                        aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos-1);
+                                        
+                                        uint8_t tempRcvBuffer[255];
+
+                                        uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                                        addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                    }
+                                }
+                                else
+                                {
+                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) != 0)
+                                        addBLEOutBuffer(RcvBuffer, size);
+                                }
                             }
                         }
 
@@ -197,10 +266,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         {
                             if(aprsmsg.msg_destination_path == meshcom_settings.node_call || aprsmsg.msg_destination_path == "*")
                             {
-                                sendDisplayText(aprsmsg, rssi, snr);
+                                if(!(aprsmsg.msg_payload.indexOf(":ack") > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0))
+                                    sendDisplayText(aprsmsg, rssi, snr);
                             }
 
-                            /* nur am Gateway
+                            // nur am Gateway
+                            #if defined GATEWAY_TYPE
                             print_buff[6]=aprsmsg.msg_id & 0xFF;
                             print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
                             print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
@@ -231,7 +302,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 unsigned int mid=(print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
                                 addLoraRxBuffer(mid);
                             }
-                            */
+                            #endif
                         }
                         else
                         if(msg_type_b_lora == 0x21)
@@ -240,7 +311,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         }
 
                         // resend only Packet to all and !owncall 
-                        if(aprsmsg.msg_destination_path != meshcom_settings.node_call)
+                        if(aprsmsg.msg_destination_call != meshcom_settings.node_call)
                         {
                             if(aprsmsg.max_hop > 0)
                                 aprsmsg.max_hop--;
@@ -282,45 +353,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             //blinkLED();
         }
-        else
-        {
-            #if BLE_TEST > 0
-                char print_buff[20];
-                sprintf(print_buff, "MSG %08X ACK\n", aprsmsg.msg_id);
-                g_ble_uart.write(print_buff, strlen(print_buff));
-            #else
-                if(msg_type_b_lora == 0x3A) // nur Textmeldungen
-                {
-                    // ACK MSG 0x41 | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
-                    uint8_t print_buff[20];
-                    print_buff[0]=0x41;
-                    print_buff[1]=aprsmsg.msg_id & 0xFF;
-                    print_buff[2]=(aprsmsg.msg_id >> 8) & 0xFF;
-                    print_buff[3]=(aprsmsg.msg_id >> 16) & 0xFF;
-                    print_buff[4]=(aprsmsg.msg_id >> 24) & 0xFF;
-                    print_buff[5]=0x00;     // switch ack GW / Node currently fixed to 0x00 
-                    print_buff[6]=0x00;     // msg always 0x00 at the end
-
-                    int icheck = checkOwnTx(print_buff+1);
-
-                    if(icheck >= 0)
-                    {
-                        if(own_msg_id[icheck][4] == 0)
-                        {
-                            addBLEOutBuffer(print_buff, 7);
-                            Serial.printf("ACK !is_new_packet to Phone %02X %02X%02X%02X%02X %02X %02X\n", print_buff[0], print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[6]);
-                        }
-                    }
-                }
-            #endif
-        }
     }
 
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
+        cmd_counter = WAIT_AFTER_TXDONE;
+    #else
+        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+        cmd_counter = radio.random(15, 25);   // WAIT_AFTER_TXDONE; Test mit RADUM WAIT_AFTER_RX;
     #endif
 
-    cmd_counter = WAIT_AFTER_RX;
 
     //Serial.printf("Header off - SD cmd_counter:%i payload[0]:%02X\n", cmd_counter, payload[0]);
 
@@ -333,9 +375,12 @@ void OnRxTimeout(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
+        cmd_counter =  WAIT_AFTER_TXDONE;
+    #elif defined BOARD_HELTEC_V3
+        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+        cmd_counter =  radio.random(15, 25);   // WAIT_AFTER_TXDONE
     #endif
 
-    cmd_counter = WAIT_AFTER_RX;
 
     //Serial.printf("Header off - TO cmd_counter:%i\n", cmd_counter);
 
@@ -349,9 +394,11 @@ void OnRxError(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
+        cmd_counter =  WAIT_AFTER_TXDONE;
+    #else
+        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+        cmd_counter =  radio.random(15, 25);   // WAIT_AFTER_TXDONE; Test mit RADUM WAIT_AFTER_RX;
     #endif
-
-    cmd_counter = WAIT_AFTER_RX;
 
     //Serial.printf("Header off - ER md_counter:%i\n", cmd_counter);
 
@@ -415,6 +462,7 @@ void doTX()
             #if defined NRF52_SERIES
                 Radio.Send(lora_tx_buffer, sendlng);
             #else
+                // delay(radio.random(100, 500));
                 transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
             #endif
 
@@ -443,9 +491,12 @@ void OnTxDone(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
+        cmd_counter = WAIT_AFTER_TXDONE;
+    #else
+        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+        cmd_counter = radio.random(5, 15);
     #endif
 
-    cmd_counter = WAIT_AFTER_TXDONE;
     tx_is_active = false;
 }
 
@@ -455,8 +506,11 @@ void OnTxTimeout(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
+        cmd_counter = WAIT_AFTER_TXDONE;
+    #else
+        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+        cmd_counter = radio.random(5, 15);   // WAIT_AFTER_TXDONE; Test mit RADUM
     #endif
-    cmd_counter = WAIT_AFTER_TXDONE;
 
     tx_is_active = false;
 }
@@ -473,5 +527,5 @@ void OnPreambleDetect(void)
 void OnHeaderDetect(void)
 {
     is_receiving = true;
-    //Serial.printf("Header on - HD cmd_counter:%i\n", cmd_counter);
+    Serial.printf("Header on - HD cmd_counter:%i\n", cmd_counter);
 }

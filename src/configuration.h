@@ -6,7 +6,10 @@
 
 #include <Arduino.h>
 
-#define SOURCE_VERSION "4.12"
+#define SOURCE_TYPE "CL"
+//#define SOURCE_TYPE "GW"
+//#define GATEWAY_TYPE
+#define SOURCE_VERSION "4.15"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -18,6 +21,7 @@
 #define RAK4631 9
 #define HELTEC_V2_1 10
 #define HELTEC_V1 11
+#define HELTEC_V3 43
 #define EBYTE_E22 39
 
 // set hardware
@@ -29,7 +33,7 @@
 #ifdef BOARD_TBEAM
     #define MODUL_HARDWARE TBEAM
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-    #define ENABLE_GPS
+    //#define ENABLE_GPS
     #define SX127X
 #endif
 
@@ -49,8 +53,14 @@
 #ifdef 	BOARD_HELTEC
     #define MODUL_HARDWARE HELTEC_V2_1
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-    #define ENABLE_GPS
     #define SX127X
+#endif
+
+#ifdef 	BOARD_HELTEC_V3
+    #define MODUL_HARDWARE HELTEC_V3
+    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define SX126X_V3
+    #define RX_TIMEOUT_VALUE 0      // continous rx with 0
 #endif
 
 #ifdef 	BOARD_E22
@@ -162,7 +172,16 @@
 #endif
 
 #ifdef SX126X
-#define TX_OUTPUT_POWER 21  // SX1262 / SX1268 have up to +22dBm
+#define TX_OUTPUT_POWER 21  // SX1268 have up to +22dBm
+#endif
+
+#ifdef SX126X_V3
+#define TX_OUTPUT_POWER 21  // SX1268 have up to +22dBm
+#endif
+
+
+#ifdef SX1262
+#define TX_OUTPUT_POWER 21  // SX1262 have up to +22dBm
 #endif
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
@@ -191,7 +210,7 @@
 #define LORA_SF 11
 
 
-#ifdef BOARD_HELTEC
+#if defined(BOARD_HELTEC)
 /** 
  * static const uint8_t Vext = 21;
 static const uint8_t LED  = 25;
@@ -221,6 +240,44 @@ static const uint8_t SCK   = 5;
 #define LORA_CS SS
 #define SDA_PIN 4
 #define SCL_PIN 15
+
+#endif
+
+#if defined(BOARD_HELTEC_V3)
+
+#define LED_PIN 25
+
+#define RESET_OLED RST_OLED
+#define I2C_SDA SDA_OLED // I2C pins for this board
+#define I2C_SCL SCL_OLED
+
+#define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
+#define BUTTON_PIN 0
+
+#define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define ADC_MULTIPLIER 4.9245
+
+#define USE_SX1262
+
+#define LORA_DIO0 -1 // a No connect on the SX1262 module
+#define LORA_RESET 12
+#define LORA_DIO1 14 // SX1262 IRQ
+#define LORA_DIO2 13 // SX1262 BUSY
+#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
+
+#define RF95_SCK 9
+#define RF95_MISO 11
+#define RF95_MOSI 10
+#define RF95_NSS 8
+
+#define SX126X_CS RF95_NSS
+#define SX126X_IRQ LORA_DIO1
+#define SX126X_BUSY LORA_DIO2
+#define SX126X_RST LORA_RESET
+#define SX126X_E22
+
+#define SDA_PIN 17
+#define SCL_PIN 18
 
 #endif
 
@@ -254,6 +311,9 @@ static const uint8_t KEY_BUILTIN = 39;
 //#define LORA_CS  //already defined
 #define SDA_PIN 21
 #define SCL_PIN 22
+
+#define BUTTON_PIN 38
+
 #endif
 
 #ifdef BOARD_SX1268

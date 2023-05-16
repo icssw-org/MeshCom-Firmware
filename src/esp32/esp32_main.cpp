@@ -9,6 +9,7 @@
 // 20230326: Version 4.00: START
 
 #include <Arduino.h>
+#include <configuration.h>
 #include <RadioLib.h>
 
 #include <Wire.h>               
@@ -31,7 +32,7 @@
 
 #include <esp_adc_cal.h>
 
-#ifdef BOARD_HELTEC
+#if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
 #include <Adafruit_I2CDevice.h>
 #include <Adafruit_Sensor.h>
 #endif
@@ -59,7 +60,6 @@
 */
 
 bool bInitDisplay = true;
-
 /*
     Video: https://www.youtube.com/watch?v=oCMOYS71NIU
     Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
@@ -153,6 +153,16 @@ SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 
 #endif
 
+#ifdef SX126X_V3
+    // RadioModule SX1262
+    // cs - irq - reset - interrupt gpio
+    // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
+    // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
+
+    SX1262 radio = new Module(SX126X_CS, SX126X_IRQ, SX126X_RST, LORA_DIO2);
+
+#endif
+
 // Lora callback Function declarations
 void checkRX(void);
 
@@ -170,7 +180,7 @@ int transmissionState = RADIOLIB_ERR_UNKNOWN;
 // LoRa Events and Buffers
 
 /** Set the device name, max length is 10 characters */
-char g_ble_dev_name[10] = "CL";
+char g_ble_dev_name[10] = SOURCE_TYPE;
 
 int vref = 1100;                //Default value. We'll get a more accurate value from the efuses
 uint64_t timeStamp = 0;
@@ -209,21 +219,47 @@ unsigned int  getMacAddr(void)
 
 void esp32setup()
 {
- 	// Get LoRa parameter
+    // Initialize mheard list
+    initMheard();
+
+	// Initialize battery reading
+	init_batt();
+
+	// Get LoRa parameter
 	init_flash();
 
-    init_batt();
+    bDisplayVolt = meshcom_settings.node_sset & 0x0001;
+    bDisplayOff = meshcom_settings.node_sset & 0x0002;
+    bPosDisplay = meshcom_settings.node_sset & 0x0004;
+    bDEBUG = meshcom_settings.node_sset & 0x0008;
+
+    global_batt = 4200.0;
+
+    if(meshcom_settings.node_maxv > 0)
+    {
+        setMaxBatt(meshcom_settings.node_maxv * 1000.0F);
+    
+        global_batt = meshcom_settings.node_maxv * 1000.0F;
+    }
+
+    if(strcmp(meshcom_settings.node_ssid, "XX0XXX") == 0)
+    {
+        sprintf(meshcom_settings.node_ssid, (char*)"none");
+        sprintf(meshcom_settings.node_pwd, (char*)"none");
+    }
 
    _GW_ID = getMacAddr();
 
-    #ifdef BOARD_HELTEC
-        Wire.setPins(SDA_PIN, SCL_PIN);
-    #endif
-    
-    #ifdef BOARD_E22
-        Wire.setPins(SDA_PIN, SCL_PIN);
+    #ifdef BOARD_HELTEC_V3
+        SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     #endif
 
+    #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)  || defined(BOARD_E22)
+        Wire.setPins(I2C_SDA, I2C_SCL);
+    #endif
+
+    initButtonPin();
+    
     Serial.begin(MONITOR_SPEED);
     while(!Serial);
 
@@ -236,16 +272,12 @@ void esp32setup()
     // Initialize time
     setupAceTime();
 
-    // Initialize mheard list
-    initMheard();
-
     #if defined(ENABLE_GPS)
         setupGPS();
     #else
         Wire.begin();
     #endif
 
-    u8g2.begin();
 
 #ifdef BOARD_E22
     // if RESET Pin is connected
@@ -258,13 +290,35 @@ void esp32setup()
     radio.setRfSwitchPins(RXEN, TXEN);
 #endif
 
-    // initialize SX12xx with default settings
+    u8g2.begin();
+
+    u8g2.clearDisplay();
+    u8g2.setFont(u8g2_font_6x10_mf);
+    u8g2.firstPage();
+    do
+    {
+        u8g2.drawStr(5, 20, "MeshCom 4.0");
+        u8g2.drawStr(5, 40, "by icssw.org");
+        u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
+        u8g2.drawStr(5, 60, "...starting now");
+    } while (u8g2.nextPage());
+
+    delay(2000);
+
+    bool bRadio=false;
+
+     // initialize SX12xx with default settings
     Serial.print(F("LoRa Modem Initializing ... "));
+
     int state = radio.begin();
     
-    if (state == RADIOLIB_ERR_NONE) {
+    if (state == RADIOLIB_ERR_NONE)
+    {
         Serial.println(F("success!"));
-    } else {
+        bRadio=true;
+    }
+    else
+    {
         Serial.print(F("failed, code "));
         Serial.println(state);
         while (true);
@@ -273,88 +327,99 @@ void esp32setup()
 
     // you can also change the settings at runtime
     // and check if the configuration was changed successfully
-
-    // set carrier frequency 
-    if (radio.setFrequency(RF_FREQUENCY) == RADIOLIB_ERR_INVALID_FREQUENCY) {
-        Serial.println(F("Selected frequency is invalid for this module!"));
-        while (true);
-    }
-
-    // set bandwidth 
-    if (radio.setBandwidth(LORA_BANDWIDTH) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
-        Serial.println(F("Selected bandwidth is invalid for this module!"));
-        while (true);
-    }
-
-    // set spreading factor 
-    if (radio.setSpreadingFactor(LORA_SF) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR) {
-        Serial.println(F("Selected spreading factor is invalid for this module!"));
-        while (true);
-    }
-
-    // set coding rate 
-    if (radio.setCodingRate(LORA_CR) == RADIOLIB_ERR_INVALID_CODING_RATE) {
-        Serial.println(F("Selected coding rate is invalid for this module!"));
-        while (true);
-    }
-
-    // set LoRa sync word 
-    // NOTE: value 0x34 is reserved for LoRaWAN networks and should not be used
-    if (radio.setSyncWord(SYNC_WORD_SX127x) != RADIOLIB_ERR_NONE) {
-        Serial.println(F("Unable to set sync word!"));
-        while (true);
-    }
-
-    // set output power to 10 dBm (accepted range is -3 - 17 dBm)
-    // NOTE: 20 dBm value allows high power operation, but transmission
-    //       duty cycle MUST NOT exceed 1%
-    if (radio.setOutputPower(TX_OUTPUT_POWER) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
-        Serial.println(F("Selected output power is invalid for this module!"));
-        while (true);
-    }
-
-    // set over current protection limit (accepted range is 45 - 240 mA)
-    // NOTE: set value to 0 to disable overcurrent protection
-    if (radio.setCurrentLimit(CURRENT_LIMIT) == RADIOLIB_ERR_INVALID_CURRENT_LIMIT) {
-        Serial.println(F("Selected current limit is invalid for this module!"));
-        while (true);
-    }
-
-    // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
-    if (radio.setPreambleLength(LORA_PREAMBLE_LENGTH) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
-        Serial.println(F("Selected preamble length is invalid for this module!"));
-     while (true);
-    }
-
-    #ifdef SX127X
-    // set amplifier gain  (accepted range is 1 - 6, where 1 is maximum gain)
-    // NOTE: set value to 0 to enable automatic gain control
-    //       leave at 0 unless you know what you're doing
-    if (radio.setGain(0) == RADIOLIB_ERR_INVALID_GAIN)
+    if(bRadio)
     {
-        Serial.println(F("Selected gain is invalid for this module!"));
+        // set carrier frequency 
+        if (radio.setFrequency(RF_FREQUENCY) == RADIOLIB_ERR_INVALID_FREQUENCY) {
+            Serial.println(F("Selected frequency is invalid for this module!"));
+            while (true);
+        }
+
+        // set bandwidth 
+        if (radio.setBandwidth(LORA_BANDWIDTH) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
+            Serial.println(F("Selected bandwidth is invalid for this module!"));
+            while (true);
+        }
+
+        // set spreading factor 
+        if (radio.setSpreadingFactor(LORA_SF) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR) {
+            Serial.println(F("Selected spreading factor is invalid for this module!"));
+            while (true);
+        }
+
+        // set coding rate 
+        if (radio.setCodingRate(LORA_CR) == RADIOLIB_ERR_INVALID_CODING_RATE) {
+            Serial.println(F("Selected coding rate is invalid for this module!"));
+            while (true);
+        }
+
+        // set LoRa sync word 
+        // NOTE: value 0x34 is reserved for LoRaWAN networks and should not be used
+        if (radio.setSyncWord(SYNC_WORD_SX127x) != RADIOLIB_ERR_NONE) {
+            Serial.println(F("Unable to set sync word!"));
+            while (true);
+        }
+
+        // set output power to 10 dBm (accepted range is -3 - 17 dBm)
+        // NOTE: 20 dBm value allows high power operation, but transmission
+        //       duty cycle MUST NOT exceed 1%
+        if (radio.setOutputPower(TX_OUTPUT_POWER) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+            Serial.println(F("Selected output power is invalid for this module!"));
+            while (true);
+        }
+
+        // set over current protection limit (accepted range is 45 - 240 mA)
+        // NOTE: set value to 0 to disable overcurrent protection
+        if (radio.setCurrentLimit(CURRENT_LIMIT) == RADIOLIB_ERR_INVALID_CURRENT_LIMIT) {
+            Serial.println(F("Selected current limit is invalid for this module!"));
+            while (true);
+        }
+
+        // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
+        if (radio.setPreambleLength(LORA_PREAMBLE_LENGTH) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
+            Serial.println(F("Selected preamble length is invalid for this module!"));
         while (true);
-    }
+        }
 
-    // set the function that will be called
-    // when new packet is received
-    radio.setDio0Action(setInterruptFlag);
-    #endif
+        #ifdef SX127X
+        // set amplifier gain  (accepted range is 1 - 6, where 1 is maximum gain)
+        // NOTE: set value to 0 to enable automatic gain control
+        //       leave at 0 unless you know what you're doing
+        if (radio.setGain(0) == RADIOLIB_ERR_INVALID_GAIN)
+        {
+            Serial.println(F("Selected gain is invalid for this module!"));
+            while (true);
+        }
 
-    // setup for SX126x Radios
-    #ifdef SX126X
-    // interrupt pin
-    radio.setDio1Action(setInterruptFlag);
-    // if DIO2 controls the RF Switch you need to set it
-    // radio.setDio2AsRfSwitch(true);
-    // Important! To enable receive you need to switch the SX126x rf switch to RECEIVE 
+        // set the function that will be called
+        // when new packet is received
+        radio.setDio0Action(setInterruptFlag);
+        #endif
+
+        // setup for SX126x Radios
+        #ifdef SX126X
+        // interrupt pin
+            radio.setDio1Action(setInterruptFlag);
+        // if DIO2 controls the RF Switch you need to set it
+        // radio.setDio2AsRfSwitch(true);
+        // Important! To enable receive you need to switch the SX126x rf switch to RECEIVE 
+        
+        #endif
+
+        #ifdef SX126X_V3
+        // interrupt pin
+           radio.setDio1Action(setInterruptFlag);
+        // if DIO2 controls the RF Switch you need to set it
+        //  radio.setDio2AsRfSwitch(true);
+        // Important! To enable receive you need to switch the SX126x rf switch to RECEIVE 
     
-    #endif
+        #endif
 
-    // put module back to listen mode
-    radio.startReceive();
-    Serial.println("startReceive Start");
-
+        // put module back to listen mode
+        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+        Serial.println("startReceive Start");
+    }
+    
     Serial.println(F("All settings successfully changed!"));
 
     // Create the BLE Device
@@ -423,6 +488,7 @@ void esp32setup()
 
     // Start advertising
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->setName(strBLEName);
     pAdvertising->reset();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone
@@ -520,7 +586,7 @@ void esp32loop()
         radio.finishTransmit();
 
         // put module back to listen mode
-        radio.startReceive();
+        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
     }
 
     // LORA RECEIVE
@@ -531,7 +597,7 @@ void esp32loop()
             checkRX();
 
             // put module back to listen mode
-            radio.startReceive();
+            // radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
         }
     
         // reset flag
@@ -576,9 +642,18 @@ void esp32loop()
 
     if(bInitDisplay)
     {
-      sendDisplayHead((int)mv_to_percent(read_batt()));
+      sendDisplayHead();
 
       bInitDisplay=false;
+    }
+    else
+    {
+        if (meshcom_settings.node_date_second != DisplayTimeWait)
+        {
+            sendDisplayMainline(true); // extra Display
+
+            DisplayTimeWait = meshcom_settings.node_date_second;
+        }
     }
 
     // check if message from phone to send
@@ -631,7 +706,35 @@ void esp32loop()
         }
     }
 
+    // rebootAuto
+    if(rebootAuto > 0)
+    {
+        if (millis() > rebootAuto)
+        {
+            rebootAuto = 0;
+
+            #ifdef ESP32
+                ESP.restart();
+            #endif
+        }
+    }
+
+    checkButtonState();
+
     checkSerialCommand();
+
+    if(BattTimeWait == 0)
+        BattTimeWait = millis() - 31000;
+
+    if ((BattTimeWait + 30000) < millis())
+    {
+        if (tx_is_active == false && is_receiving == false)
+        {
+            global_batt = read_batt();
+
+            BattTimeWait = millis();
+        }
+    }
 
     delay(100);
 
@@ -642,7 +745,8 @@ void esp32loop()
 
 void checkRX(void)
 {
-    //Serial.println(F("[SX1278] Waiting for incoming transmission ... "));
+    if(bDEBUG)
+        Serial.println(F("[SX12XX] Waiting for incoming transmission ... "));
 
     // you can receive data as an Arduino String
     // NOTE: receive() is a blocking method!
@@ -661,6 +765,9 @@ void checkRX(void)
 
     if (state == RADIOLIB_ERR_NONE)
     {
+        if(bDEBUG)
+            Serial.println("RX Done");
+
         OnRxDone(payload, (uint16_t)ibytes, (int16_t)radio.getRSSI(), (int8_t)radio.getSNR());
     }
     else

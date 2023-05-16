@@ -38,6 +38,10 @@ void init_flash(void)
     sprintf(meshcom_settings.node_pwd, "%s", strVar.c_str());
 
     meshcom_settings.node_hamnet_only = preferences.getInt("node_honly", 0);
+
+    meshcom_settings.node_sset = preferences.getInt("node_sset", 0x0004);
+
+    meshcom_settings.node_maxv = preferences.getFloat("node_maxv", 4.24);
 }
 
 void save_settings(void)
@@ -73,5 +77,11 @@ void save_settings(void)
 
     preferences.putInt("node_honly", meshcom_settings.node_hamnet_only);
 
+    preferences.putInt("node_sset", meshcom_settings.node_sset);
+
+    preferences.putFloat("node_maxv", meshcom_settings.node_maxv);
+
     preferences.end();
+
+    Serial.println("flash save...");
 }

@@ -14,7 +14,7 @@
     #define GPS_TX_PIN 12
     #define I2C_SDA    21
     #define I2C_SCL    22
-#elif defined(BOARD_HELTEC)
+#elif defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
     //For heltec these are the pins:
     #define GPS_RX_PIN 36
     #define GPS_TX_PIN 37

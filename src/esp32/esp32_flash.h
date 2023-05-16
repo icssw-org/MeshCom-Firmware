@@ -40,6 +40,10 @@ struct s_meshcom_settings
 	float node_press = 0;
 
 	int node_hamnet_only = 0;
+
+	int node_sset = 0x0004;	// bDisplayPos = true
+
+	float node_maxv = 4.24;
 };
 
 

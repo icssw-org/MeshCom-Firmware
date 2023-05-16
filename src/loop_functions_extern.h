@@ -8,12 +8,16 @@
 // alle anderen Finger weg !
 // 20230326: Version 4.00: START
 
+extern unsigned long rebootAuto;
+
 extern bool bDEBUG;
 extern bool bPosDisplay;
 extern bool bDisplayOff;
 extern bool bDisplayVolt;
 extern bool bDisplayInfo;
 extern unsigned long DisplayOffWait;
+extern unsigned long DisplayTimeWait;
+extern unsigned long BattTimeWait;
 
 extern s_meshcom_settings meshcom_settings;
 
@@ -22,7 +26,7 @@ extern char msg_text[MAX_MSG_LEN_PHONE];
 
 extern unsigned int _GW_ID; // ID of our Node
 
-#ifdef BOARD_HELTEC
+#if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
     extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 #else
     extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
@@ -60,3 +64,6 @@ extern uint8_t isPhoneReady;      // flag we receive from phone when itis ready 
 extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long temphum_timer;      // we check periodically get TEMP/HUM
 extern unsigned long druck_timer;        // we check periodically get AIRPRESURE
+
+// batt
+extern float global_batt;

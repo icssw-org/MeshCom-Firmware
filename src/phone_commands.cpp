@@ -226,7 +226,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			// send config back to phone
 			sendConfigToPhone();
 
-			sendDisplayHead((int)mv_to_percent(read_batt()));
+			sendDisplayHead();
 
 			#if defined NRF52_SERIES
 				sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
@@ -322,6 +322,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 		case 0xA0: {
 			// length 1B - Msg ID 1B - Text
+
+			DEBUG_MSG("BLE", "Text from phone");
 
 			txt_msg_len_phone = msg_len - 2;	// now zero escape for lora TX
 
