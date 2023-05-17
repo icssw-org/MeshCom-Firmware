@@ -320,6 +320,23 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			break;
 		}
 
+		case 0x95: {
+
+			char aprs_pri_sec = conf_data[2];
+			char aprs_symbol = conf_data[3];
+
+			if(aprs_pri_sec == '/' || aprs_pri_sec == 92){
+
+				// Variablen entsprechend setzen beim APRS Encode
+				meshcom_settings.node_lat_c = aprs_pri_sec;
+				meshcom_settings.node_lon_c = aprs_symbol;
+
+				save_settings();
+				DEBUG_MSG_TXT("BLE", aprs_pri_sec, "APRS PRI_SEC Symbol");
+				DEBUG_MSG_TXT("BLE", aprs_symbol, "APRS Symbol");
+			}
+		}
+
 		case 0xA0: {
 			// length 1B - Msg ID 1B - Text
 
