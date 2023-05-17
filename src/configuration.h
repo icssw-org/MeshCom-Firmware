@@ -397,8 +397,8 @@ static const uint8_t SCK =  5;
 #define RXEN 14
 #define TXEN 13
 #define LED 2
-#define SDA_PIN 21
-#define SCL_PIN 22
+#define I2C_SDA 21
+#define I2C_SCL 22
 
 #endif
 
