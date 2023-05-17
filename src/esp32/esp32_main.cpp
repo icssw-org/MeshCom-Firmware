@@ -416,7 +416,7 @@ void esp32setup()
         #endif
 
         // put module back to listen mode
-        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+        radio.startReceive();
         Serial.println("startReceive Start");
     }
     
@@ -586,7 +586,7 @@ void esp32loop()
         radio.finishTransmit();
 
         // put module back to listen mode
-        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
+        radio.startReceive();
     }
 
     // LORA RECEIVE
@@ -595,9 +595,6 @@ void esp32loop()
         if (tx_is_active == false && is_receiving == false)
         {
             checkRX();
-
-            // put module back to listen mode
-            // radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
         }
     
         // reset flag
@@ -608,16 +605,24 @@ void esp32loop()
     // check if we have messages in ringbuffer to send
     if (iWrite != iRead)
     {
+        if(cmd_counter == 0)
+            cmd_counter == radio.random(3, 8) + 1;
+        
+        cmd_counter--;
+
         if(cmd_counter <= 0)
         {
             if (tx_is_active == false && is_receiving == false)
+            {
                 doTX();
+                cmd_counter = 0;
+            }
+            else
+            {
+                cmd_counter = 1;
+            }
         }
     }
-
-    cmd_counter--;
-    if(cmd_counter < 0)
-        cmd_counter=0;
 
     // BLE
     if (deviceConnected)

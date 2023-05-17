@@ -104,7 +104,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             //Serial.printf("%03i RCV:%s\n", size, RcvBuffer+6);
         }
         else
-        if(is_new_packet(RcvBuffer+1))
+        if(is_new_packet(RcvBuffer+1) && checkOwnTx(RcvBuffer+1) < 0)
         {
             // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -211,22 +211,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                             if(aprsmsg.msg_destination_call == meshcom_settings.node_call || aprsmsg.msg_destination_path == "*")
                             {
-                                Serial.println(meshcom_settings.node_call);
-
                                 // Check DM ACK
                                 if(aprsmsg.msg_destination_call == meshcom_settings.node_call)
                                 {
                                     int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
                                     int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
     
-                                    Serial.printf("iAckPos:%i iEnqPos:%i\n", iAckPos, iEnqPos);
-    
                                     if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
                                     {
                                         unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
                                         msg_counter = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFF);
-
-                                        Serial.printf("msg_counter:%08X\n", msg_counter);
 
                                         print_buff[0]=0x41;
                                         print_buff[1]=msg_counter & 0xFF;
@@ -329,9 +323,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(iWrite >= MAX_RING)
                                 iWrite=0;
                             
-                            Serial.println(" Packet resend to mesh");
-
-                            printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
+                            Serial.printf(" Packet resend to mesh");
                         }
                     }
                 }   
@@ -357,10 +349,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
-        cmd_counter = WAIT_AFTER_TXDONE;
     #else
-        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
-        cmd_counter = radio.random(15, 25);   // WAIT_AFTER_TXDONE; Test mit RADUM WAIT_AFTER_RX;
+        radio.startReceive();
     #endif
 
 
@@ -375,10 +365,8 @@ void OnRxTimeout(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
-        cmd_counter =  WAIT_AFTER_TXDONE;
     #elif defined BOARD_HELTEC_V3
-        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
-        cmd_counter =  radio.random(15, 25);   // WAIT_AFTER_TXDONE
+        radio.startReceive();
     #endif
 
 
@@ -394,10 +382,8 @@ void OnRxError(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
-        cmd_counter =  WAIT_AFTER_TXDONE;
     #else
-        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
-        cmd_counter =  radio.random(15, 25);   // WAIT_AFTER_TXDONE; Test mit RADUM WAIT_AFTER_RX;
+        radio.startReceive();
     #endif
 
     //Serial.printf("Header off - ER md_counter:%i\n", cmd_counter);
@@ -457,26 +443,36 @@ void doTX()
             if (iRead >= MAX_RING)
                 iRead = 0;
 
-            // you can transmit C-string or Arduino string up to
-            // 256 characters long
-            #if defined NRF52_SERIES
-                Radio.Send(lora_tx_buffer, sendlng);
-            #else
-                // delay(radio.random(100, 500));
-                transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
-            #endif
-
-            if (iWrite == iRead)
-            {
-                DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
-            }
-            else
-            {
-                DEBUG_MSG_VAL("RADIO", iRead, "TX :");
-            }
+            struct aprsMessage aprsmsg;
             
-            if(bDEBUG)
+            // print which message type we got
+            uint8_t msg_type_b_lora = 0x00;
+            
+            msg_type_b_lora = decodeAPRS(lora_tx_buffer, sendlng, aprsmsg);
+
+            if(msg_type_b_lora != 0x00)
+            {
+                // you can transmit C-string or Arduino string up to
+                // 256 characters long
+                #if defined NRF52_SERIES
+                    Radio.Send(lora_tx_buffer, sendlng);
+                #else
+                    // delay(radio.random(100, 500));
+                    transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
+                #endif
+
+                if (iWrite == iRead)
+                {
+                    DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
+                }
+                else
+                {
+                    DEBUG_MSG_VAL("RADIO", iRead, "TX :");
+                }
+
+                printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
                 Serial.println("");
+            }
         }
         else
         {
@@ -491,10 +487,8 @@ void OnTxDone(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
-        cmd_counter = WAIT_AFTER_TXDONE;
     #else
-        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
-        cmd_counter = radio.random(5, 15);
+        radio.startReceive();
     #endif
 
     tx_is_active = false;
@@ -506,10 +500,8 @@ void OnTxTimeout(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
-        cmd_counter = WAIT_AFTER_TXDONE;
     #else
-        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_NONE);
-        cmd_counter = radio.random(5, 15);   // WAIT_AFTER_TXDONE; Test mit RADUM
+        radio.startReceive();
     #endif
 
     tx_is_active = false;
@@ -527,5 +519,5 @@ void OnPreambleDetect(void)
 void OnHeaderDetect(void)
 {
     is_receiving = true;
-    Serial.printf("Header on - HD cmd_counter:%i\n", cmd_counter);
+    //Serial.printf("Header on - HD cmd_counter:%i\n", cmd_counter);
 }

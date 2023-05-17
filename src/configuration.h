@@ -95,16 +95,12 @@
 #define ETH_CS SS                     // use this to try with pin 26 CS
 #define MAX_DEVICE_ID 0xfFfFfFfFfFfF    // maximum mac address used to mask uint64_t from HW register
 
-#define WAIT_TX 30         // ticks waiting after Lora TX in doTX()
-
 #endif
 
 // Meshcom Params
 #define LONGNAME_MAXLEN 20 // maximum length of the longname
 #define TX_ENABLE 1        // switch to en/disable LoRa TX
 #define MAX_CAD_WAIT 10    // maximum retries on channel free detection when we want to TX lora
-#define WAIT_AFTER_RX 15      // ticks we wait after Lora RX for Lora TX
-#define WAIT_AFTER_TXDONE WAIT_TX // ticks waiting after Lora TxDone()
 #define MAX_CALL_LEN 20     // max length of Callsign
 
 
