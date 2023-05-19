@@ -29,7 +29,7 @@ extern bool g_ble_uart_is_connected;
 /**
  * @brief Method to send configuration to phone 
  * Config Format:
- * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT) - 1B SSID_Length - Wifi_SSID - 1B Wifi_PWD - Wifi_PWD
+ * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT) - 1B SSID_Length - Wifi_SSID - 1B Wifi_PWD - Wifi_PWD - 1B APRS_PRIM_SEC - 1B APRS_SYMBOL
  * SSID and PWD Buffers have as always a fixed length with trailing zeros. 
 */
 void sendConfigToPhone ()
@@ -39,11 +39,26 @@ void sendConfigToPhone ()
 
 	// assemble conf message
 	uint8_t call_len = sizeof(meshcom_settings.node_call);
-	uint8_t ssid_len = sizeof(meshcom_settings.node_ssid);
-	uint8_t pwd_len = sizeof(meshcom_settings.node_pwd);
+	uint8_t ssid_len = 0;
+	uint8_t pwd_len = 0;
+
+	// remove trailing zeros of the arrays
+	for(int i =0; i<(int)sizeof(meshcom_settings.node_ssid); i++){
+		if(meshcom_settings.node_ssid[i] == 0x00){
+			ssid_len = i;
+			break;
+		} 
+	}
+
+	for(int i =0; i<(int)sizeof(meshcom_settings.node_pwd); i++){
+		if(meshcom_settings.node_pwd[i] == 0x00){
+			pwd_len = i;
+			break;
+		} 
+	}
 
 	
-	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 1;	// currently fixed length - adapt if needed
+	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 4;	// +4 because of APRS Symbols
 	uint8_t confBuff [conf_len] = {0};
 	uint8_t call_offset = 2;
 	
@@ -53,8 +68,9 @@ void sendConfigToPhone ()
 	memcpy(confBuff + call_offset, meshcom_settings.node_call, call_len);
 
 	uint8_t latOffset = call_offset + call_len;
-	uint8_t ssid_offset = latOffset + 20; // first byte is ssid_length
-	uint8_t pwd_offset = ssid_offset + ssid_len + 1; // first byte is pwd_length
+	uint8_t ssid_offset = latOffset + 20;				// first byte is ssid_length
+	uint8_t pwd_offset = ssid_offset + ssid_len + 1;	// first byte is pwd_length
+	uint8_t aprs_symbols_offset = 0; 					// offset for aprs map symbols
 
 	//DEBUG_MSG_VAL("Wifi", ssid_len, "SSID Len");
 	//DEBUG_MSG_VAL("Wifi", pwd_len, "PWD Len");
@@ -85,6 +101,11 @@ void sendConfigToPhone ()
         save_settings();
 	}
 	memcpy(confBuff + pwd_offset + 1, &meshcom_settings.node_pwd, pwd_len);
+
+	// APRS SYMBOLS
+	aprs_symbols_offset = pwd_offset + pwd_len;
+	memcpy(confBuff + aprs_symbols_offset + 1, &meshcom_settings.node_symid, 1);
+	memcpy(confBuff + aprs_symbols_offset + 2, &meshcom_settings.node_symcd, 1);
 
 	//printBuffer(confBuff, conf_len);
 
@@ -151,6 +172,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 	 * 0x70 - Latitude
 	 * 0x80 - Longitude
 	 * 0x90 - Altitude
+	 * 0x95 - APRS Symbols
 	 * 0xA0 - Textmessage
      * Data:
      * Callsign: length Callsign 1B - Callsign
@@ -164,6 +186,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
      * Position Settings from phone are: length 1B | Msg ID 1B | 4B lat/lon/alt | 1B save_settings_flag
 	 * Save_flag is 0x0A for save and 0x0B for don't save
 	 * If phone send periodicaly position, we don't save them.
+	 * 
+	 * currently we save the settings when the last config arrives which is APRS SYMBOLS - adapt is needed!
      *  */ 
 
 
@@ -221,10 +245,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
-			save_settings();
-
-			// send config back to phone
-			sendConfigToPhone();
 
 			sendDisplayHead();
 
@@ -260,8 +280,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			{
 				meshcom_settings.node_lat = lat_phone;
 
-				// send config back to phone
-				sendConfigToPhone();
 			}
 
 			break;
@@ -284,8 +302,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			{
 				meshcom_settings.node_lon = long_phone;
 
-				// send config back to phone
-				sendConfigToPhone();
 			}
 
 			break;
@@ -301,10 +317,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			{
 				meshcom_settings.node_alt = altitude;
 
-				// if we have all three pos settings, save to flash
-				save_settings();
-				// send config back to phone
-				sendConfigToPhone();
 			}
 			else
 			{
@@ -318,6 +330,38 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			}
 
 			break;
+		}
+
+		case 0x95: {
+
+			char aprs_pri_sec = conf_data[2];
+			char aprs_symbol = conf_data[3];
+
+			DEBUG_MSG_VAL("BLE", aprs_pri_sec, "APRS PRI_SEC Symbol");
+			DEBUG_MSG_VAL("BLE", aprs_symbol, "APRS Symbol");
+
+			if(aprs_pri_sec == 0x2f || aprs_pri_sec == 0x5c){
+
+				// Variablen entsprechend setzen beim APRS Encode
+				meshcom_settings.node_symid = aprs_pri_sec;
+				meshcom_settings.node_symcd = aprs_symbol;
+
+				// currently the last config coming from phone, so we save settings here
+				save_settings();
+				delay(1000);
+				
+				// send config back to phone
+				sendConfigToPhone();
+
+				// reset node
+				delay(2000);
+				#if defined NRF52_SERIES
+					NVIC_SystemReset();
+				#else
+					ESP.restart();
+				#endif
+
+			}
 		}
 
 		case 0xA0: {
@@ -343,12 +387,11 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			DEBUG_MSG("BLE", "Wifi Setting from phone");
 			
-
 			uint8_t ssid_len = conf_data[2];
 			uint8_t pwd_len = conf_data[ssid_len + 3];
 
-			if(ssid_len > 0 && pwd_len > 0){
-
+			if(ssid_len > 0 && pwd_len > 0)
+			{
 				char ssid_arr [ssid_len +1] = {0};
 				char pwd_arr [pwd_len +1] = {0};
 
@@ -364,10 +407,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				sprintf(meshcom_settings.node_ssid, "%s", s_SSID.c_str());
 				sprintf(meshcom_settings.node_pwd, "%s", s_PWD.c_str());
 
-				save_settings();
-
 				Serial.println("Wifi Setting from phone set");
-
 			}
 			
 		}

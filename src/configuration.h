@@ -9,7 +9,7 @@
 #define SOURCE_TYPE "CL"
 //#define SOURCE_TYPE "GW"
 //#define GATEWAY_TYPE
-#define SOURCE_VERSION "4.15"
+#define SOURCE_VERSION "4.16"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -234,8 +234,8 @@ static const uint8_t SCK   = 5;
 #define LORA_DIO0 DIO0
 #define LORA_DIO1 DIO1
 #define LORA_CS SS
-#define SDA_PIN 4
-#define SCL_PIN 15
+#define I2C_SDA 4
+#define I2C_SCL 15
 
 #endif
 
@@ -397,8 +397,8 @@ static const uint8_t SCK =  5;
 #define RXEN 14
 #define TXEN 13
 #define LED 2
-#define SDA_PIN 21
-#define SCL_PIN 22
+#define I2C_SDA 21
+#define I2C_SCL 22
 
 #endif
 

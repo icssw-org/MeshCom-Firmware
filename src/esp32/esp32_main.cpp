@@ -60,6 +60,8 @@
 */
 
 bool bInitDisplay = true;
+
+bool bPosFirst = true;
 /*
     Video: https://www.youtube.com/watch?v=oCMOYS71NIU
     Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
@@ -437,7 +439,7 @@ void esp32setup()
     NimBLEDevice::setDeviceName(strBLEName);
 
 #ifdef ESP_PLATFORM
-    NimBLEDevice::setPower(ESP_PWR_LVL_N9); /** +9db */
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9); /** +9db */
 #else
     NimBLEDevice::setPower(9); /** +9db */
 #endif
@@ -603,25 +605,30 @@ void esp32loop()
 
     // LORA SEND
     // check if we have messages in ringbuffer to send
-    if (iWrite != iRead)
+	if (iWrite != iRead)
     {
-        if(cmd_counter == 0)
-            cmd_counter == radio.random(3, 8) + 1;
-        
-        cmd_counter--;
-
-        if(cmd_counter <= 0)
+        if (tx_is_active == false && is_receiving == false)
         {
-            if (tx_is_active == false && is_receiving == false)
+            if(cmd_counter == 0)
+            {
+                uint16_t rand = millis();
+                uint16_t r10 = rand / 10;
+                cmd_counter = (rand - r10*10) + 10;    // cmd_counter 20-29
+
+                //Serial.printf("rand:%i r10:%i cmd_counter:%i\n", rand, r10, cmd_counter);
+            }
+            
+            cmd_counter--;
+
+            if(cmd_counter <= 0)
             {
                 doTX();
+
                 cmd_counter = 0;
             }
-            else
-            {
-                cmd_counter = 1;
-            }
         }
+        else
+            cmd_counter = 0;
     }
 
     // BLE
@@ -647,9 +654,10 @@ void esp32loop()
 
     if(bInitDisplay)
     {
-      sendDisplayHead();
+        // start 1. Pos after 30 Sec
+        sendDisplayHead();
 
-      bInitDisplay=false;
+        bInitDisplay=false;
     }
     else
     {
@@ -676,7 +684,7 @@ void esp32loop()
     }
 
     // gps refresh
-    if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
+    if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis() || (millis() > 10000 && millis() < 30000))
     {
         #ifdef ENABLE_GPS
             getGPS();
@@ -686,8 +694,10 @@ void esp32loop()
     }
 
     // POSINFO_INTERVAL in Minuten
-    if ((posinfo_timer + (POSINFO_INTERVAL * 1000 * 60)) < millis())
+    if (((posinfo_timer + (POSINFO_INTERVAL * 1000 * 60)) < millis()) || (millis() > 10000 && millis() < 30000 && bPosFirst))
     {
+        bPosFirst = false;
+        
         #ifdef ENABLE_GPS
             getGPS();
         #endif

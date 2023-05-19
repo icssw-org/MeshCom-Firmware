@@ -42,6 +42,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     if(payload[0] == 0x41)
     {
+		Serial.print(getTimeString());
+        if(size == 7)
+		    Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
+        else
+		    Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
+
         if(is_new_packet(print_buff+1) || checkOwnTx(print_buff+6) > 0)
         {
             memcpy(print_buff, payload, 12);
@@ -65,7 +71,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 {
                     print_buff[5] = 0x41;
                     addBLEOutBuffer(print_buff+5, 7);
-                    Serial.printf("ACK to Phone  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                    Serial.printf("ACK to Phone  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[6], print_buff[7], print_buff[8], print_buff[9], print_buff[10], print_buff[11]);
                     
                     own_msg_id[icheck][4] = print_buff[10];
                 }
@@ -104,7 +110,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             //Serial.printf("%03i RCV:%s\n", size, RcvBuffer+6);
         }
         else
-        if(is_new_packet(RcvBuffer+1) && checkOwnTx(RcvBuffer+1) < 0)
+        if(is_new_packet(RcvBuffer+1) && checkOwnTx(RcvBuffer+1) < 0) // only new msg_id and now own msg_id
         {
             // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -239,7 +245,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         
                                         SendAckMessage(aprsmsg.msg_source_call, iAckId);
 
-                                        aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos-1);
+                                        aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
                                         
                                         uint8_t tempRcvBuffer[255];
 
@@ -450,7 +456,7 @@ void doTX()
             
             msg_type_b_lora = decodeAPRS(lora_tx_buffer, sendlng, aprsmsg);
 
-            if(msg_type_b_lora != 0x00)
+            if(msg_type_b_lora != 0x00) // 0x41 ACK
             {
                 // you can transmit C-string or Arduino string up to
                 // 256 characters long
@@ -470,8 +476,16 @@ void doTX()
                     DEBUG_MSG_VAL("RADIO", iRead, "TX :");
                 }
 
-                printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
-                Serial.println("");
+                if(lora_tx_buffer[0] == 0x41)
+                {
+                    Serial.print(getTimeString());
+                    Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[1], lora_tx_buffer[2], lora_tx_buffer[3], lora_tx_buffer[4], lora_tx_buffer[5], lora_tx_buffer[6]);
+                }   
+                else
+                {
+                    printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
+                    Serial.println("");
+                }
             }
         }
         else

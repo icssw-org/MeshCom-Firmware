@@ -698,7 +698,7 @@ void sendMessage(char *msg_text, int len)
 
     encodeAPRS(msg_buffer, aprsmsg);
 
-    printBuffer_aprs((char*)"TX-POS ", aprsmsg);
+    printBuffer_aprs((char*)"NEW-TXT", aprsmsg);
     Serial.println();
 
     // An APP als Anzeige retour senden
@@ -733,20 +733,22 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
-	double slat=lat*100.0;
-	double slon=lon*100.0;
+	double slat = 100.0;
+    slat = lat*slat;
+	double slon = 100.0;
+    slon=lon*slon;
 	
     if(bConvPos)
     {
-        double slatr=0;
-        double slonr=0;
+        double slatr=60.0;
+        double slonr=60.0;
         
         slat = (int)lat;
-        slatr = (lat - slat)*60.;
+        slatr = (lat - slat) * slatr;
         slat = (slat * 100.) + slatr;
         
         slon = (int)lon;
-        slonr = (lon - slon)*60.;
+        slonr = (lon - slon) * slonr;
         slon = (slon * 100.) + slonr;
     }
 
@@ -763,7 +765,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
         int proz = mv_to_percent(global_batt);
         
         char cbatt[8]={0};
-        char calt[11]={0};
+        char calt[15]={0};
 
         if(proz > 0)
             sprintf(cbatt, " /B=%03i", proz);
@@ -806,7 +808,7 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt)
 
     encodeAPRS(msg_buffer, aprsmsg);
 
-    printBuffer_aprs((char*)"TX-POS>", aprsmsg);
+    printBuffer_aprs((char*)"NEW-POS", aprsmsg);
     Serial.println();
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
@@ -850,7 +852,7 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     
     encodeAPRS(msg_buffer, aprsmsg);
 
-    printBuffer_aprs((char*)"TX-WX >", aprsmsg);
+    printBuffer_aprs((char*)"NEW-WX ", aprsmsg);
     Serial.println();
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
@@ -904,7 +906,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     
     encodeAPRS(msg_buffer, aprsmsg);
 
-    printBuffer_aprs((char*)"TX-ACK ", aprsmsg);
+    printBuffer_aprs((char*)"NEW-ACK", aprsmsg);
     Serial.println();
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
@@ -942,9 +944,20 @@ String convertCallToShort(char callsign[10])
     return sVar;
 }
 
+double cround4(float dvar)
+{
+    char cvar[20];
+    sprintf(cvar, "%.4lf", dvar);
+    double rvar;
+    sscanf(cvar, "%lf", &rvar);
+
+    return rvar;
+}
+
 int conv_fuss(int alt_meter)
 {
-    float fuss = alt_meter;
+    double fuss = alt_meter * 10;
     fuss = fuss * 3.28084;
-    return (int)fuss;
+    int ifuss = fuss + 5;
+    return ifuss / 10;
 }
