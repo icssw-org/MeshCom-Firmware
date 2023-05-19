@@ -112,8 +112,8 @@ void readGPS(void)
         //flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
         //flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
 
-        meshcom_settings.node_lat = flat;
-        meshcom_settings.node_lon = flon;
+        meshcom_settings.node_lat = cround4(flat);
+        meshcom_settings.node_lon = cround4(flon);
 
         if(direction_S_N == 0)
         {

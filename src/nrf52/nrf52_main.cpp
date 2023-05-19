@@ -138,6 +138,8 @@ static RadioEvents_t RadioEvents;
 bool g_meshcom_initialized;
 bool init_flash_done=false;
 
+bool bPosFirst = true;
+
 /**
  * BLE Spec
  * Messages to and from the phone need to have flag if it is a Text, Pos Msg or it is a configuration
@@ -292,6 +294,15 @@ void nrf52setup()
 
 	// Get LoRa parameter
 	init_flash();
+
+    meshcom_settings.node_date_hour = 0;
+    meshcom_settings.node_date_minute = 0;
+    meshcom_settings.node_date_second = 0;
+    meshcom_settings.node_date_hundredths = 0;
+
+    meshcom_settings.node_date_year = 0;
+    meshcom_settings.node_date_month = 0;
+    meshcom_settings.node_date_day = 0;
 
     bDisplayVolt = meshcom_settings.node_sset & 0x0001;
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
@@ -534,20 +545,31 @@ void nrf52loop()
    	//digitalWrite(LED_BLUE, LOW);
 
     // check if we have messages in ringbuffer to send
-    if (iWrite != iRead)
+	if (iWrite != iRead)
     {
-        //Serial.printf("cmd_counter:%i tx_is_active:%i is_receiving:%i\n", cmd_counter, tx_is_active, is_receiving);
-
-        if(cmd_counter <= 0)
+        if (tx_is_active == false && is_receiving == false)
         {
-            if (tx_is_active == false && is_receiving == false)
-                doTX();
-        }
-    }
+            if(cmd_counter == 0)
+            {
+                uint16_t rand = millis();
+                uint16_t r10 = rand / 10;
+                cmd_counter = (rand - r10*10) + 20;    // cmd_counter 20-29
 
-    cmd_counter--;
-    if(cmd_counter < 0)
-        cmd_counter=0;
+                //Serial.printf("rand:%i r10:%i cmd_counter:%i\n", rand, r10, cmd_counter);
+            }
+            
+            cmd_counter--;
+
+            if(cmd_counter <= 0)
+            {
+                doTX();
+
+                cmd_counter = 0;
+            }
+        }
+        else
+            cmd_counter = 0;
+    }
 
     // check if message from phone to send
     if(hasMsgFromPhone)
@@ -599,8 +621,10 @@ void nrf52loop()
     }
 
     // posinfo
-    if ((posinfo_timer + (POSINFO_INTERVAL * 1000 * 60)) < millis())
+    if (((posinfo_timer + (POSINFO_INTERVAL * 1000 * 30)) < millis()) || (millis() > 10000 && millis() < 30000 && bPosFirst))
     {
+        bPosFirst = false;
+
         sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
 
         #if defined(LPS33)
@@ -779,8 +803,8 @@ void getGPS(void)
         //flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
         //flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
 
-        meshcom_settings.node_lat = flat;
-        meshcom_settings.node_lon = flon;
+        meshcom_settings.node_lat = cround4(flat);
+        meshcom_settings.node_lon = cround4(flon);
 
         if(direction_S_N == 0)
         {

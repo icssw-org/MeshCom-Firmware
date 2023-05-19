@@ -46,6 +46,8 @@ String convertCallToShort(char callsign[10]);
 
 uint8_t shortVERSION();
 
+double cround4(float dvar);
+
 int conv_fuss(int alt_meter);
 
 #endif // _LOOP_FUNCTIONS_H_
