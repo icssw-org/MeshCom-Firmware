@@ -53,7 +53,7 @@
 // Wie mit fehlender DIO1 PinDefinition beim TLORA_OLED_V2 umgehen? Theoretisch wird DIO1 nur für LoRaWAN benötigt
 
 /**
- * LoRa Sync Word für Meshcom definieren! 2b = Meshtastic
+ * LoRa Sync Word für Meshcom definieren! 2b
  * SX127x Chips haben nur ein Byte als Syncowrd, SX126x haben zwei Byte
  * Alle Funktionen Setter, Getter, etc finden sich in den korrspondierenden Libraries
  * SX1278 zB: https://github.com/jgromes/RadioLib/blob/master/src/modules/SX127x/SX1278.h
@@ -84,7 +84,6 @@ bool bPosFirst = true;
 // Textmessage buffer from phone, hasMsgFromPhone flag indicates new message
 extern char textbuff_phone [MAX_MSG_LEN_PHONE];
 extern uint8_t txt_msg_len_phone;
-extern bool ble_busy_flag;
 
 NimBLEServer *pServer = NULL;
 NimBLECharacteristic* pTxCharacteristic;
@@ -607,28 +606,7 @@ void esp32loop()
     // check if we have messages in ringbuffer to send
 	if (iWrite != iRead)
     {
-        if (tx_is_active == false && is_receiving == false)
-        {
-            if(cmd_counter == 0)
-            {
-                uint16_t rand = millis();
-                uint16_t r10 = rand / 10;
-                cmd_counter = (rand - r10*10) + 10;    // cmd_counter 20-29
-
-                //Serial.printf("rand:%i r10:%i cmd_counter:%i\n", rand, r10, cmd_counter);
-            }
-            
-            cmd_counter--;
-
-            if(cmd_counter <= 0)
-            {
-                doTX();
-
-                cmd_counter = 0;
-            }
-        }
-        else
-            cmd_counter = 0;
+        doTX();
     }
 
     // BLE

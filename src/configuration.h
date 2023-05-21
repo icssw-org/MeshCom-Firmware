@@ -9,7 +9,7 @@
 #define SOURCE_TYPE "CL"
 //#define SOURCE_TYPE "GW"
 //#define GATEWAY_TYPE
-#define SOURCE_VERSION "4.16"
+#define SOURCE_VERSION "4.17"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -160,7 +160,7 @@
 // !!sofern richtig wird DIO1 nur für LoRaWAN benötigt. Das TloraV2 hat keinen DIO1 definiert, 
 // wird aber grundsätzlich in der Modem-Config benötigt!!!
 
-#define SYNC_WORD_SX127x 0x2b  // Meshtastic Sync Word!!
+#define SYNC_WORD_SX127x 0x2b  // MeshCom Sync Word!!
 
 
 #ifdef SX127X

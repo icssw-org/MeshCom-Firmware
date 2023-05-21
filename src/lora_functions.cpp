@@ -48,10 +48,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         else
 		    Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
 
+        memcpy(print_buff, payload, 12);
+
         if(is_new_packet(print_buff+1) || checkOwnTx(print_buff+6) > 0)
         {
-            memcpy(print_buff, payload, 12);
-
             // add rcvMsg to forward to LoRa TX
             if(is_new_packet(print_buff+1))
             {
@@ -243,6 +243,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     {
                                         unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
                                         
+                                        Serial.println("");
                                         SendAckMessage(aprsmsg.msg_source_call, iAckId);
 
                                         aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
@@ -360,7 +361,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     #endif
 
 
-    //Serial.printf("Header off - SD cmd_counter:%i payload[0]:%02X\n", cmd_counter, payload[0]);
+    //Serial.println("OnRxDone");
 
     is_receiving = false;
 }
@@ -371,12 +372,11 @@ void OnRxTimeout(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
-    #elif defined BOARD_HELTEC_V3
+    #elif
         radio.startReceive();
     #endif
 
-
-    //Serial.printf("Header off - TO cmd_counter:%i\n", cmd_counter);
+    Serial.println("OnRxTimeout");
 
     is_receiving = false;
 }
@@ -392,7 +392,7 @@ void OnRxError(void)
         radio.startReceive();
     #endif
 
-    //Serial.printf("Header off - ER md_counter:%i\n", cmd_counter);
+    Serial.println("OnRxError");
 
     is_receiving = false;
 }
@@ -435,20 +435,45 @@ int checkOwnTx(uint8_t compBuffer[4])
  */
 void doTX()
 {
+    // Check Ready to TX
+    // other TX or RX active
+    if (tx_is_active == true || is_receiving == true)
+    {
+        cmd_counter = 0;
+        return;
+    }
+
+    // Set TX-DELAY
+    if(cmd_counter == 0)
+    {
+        uint16_t rand = millis();
+        uint16_t r10 = rand / 10;
+        cmd_counter = (rand - r10*10) + 15;    // cmd_counter 15-24
+
+        //Serial.printf("rand:%i r10:%i cmd_counter:%i\n", rand, r10, cmd_counter);
+    }
+    
+    cmd_counter--;
+    if(cmd_counter > 0)
+        return; // Wait RX-DELAY done
+
     tx_is_active = true;
 
-    if (iWrite != iRead && iWrite < MAX_RING)
+    // next TX new TX-DELAY
+    cmd_counter = 0;
+
+    if (iWrite != iRead && iRead < MAX_RING)
     {
         sendlng = ringBuffer[iRead][0];
         memcpy(lora_tx_buffer, ringBuffer[iRead] + 1, sendlng);
 
+        iRead++;
+        if (iRead >= MAX_RING)
+            iRead = 0;
+
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
-            iRead++;
-            if (iRead >= MAX_RING)
-                iRead = 0;
-
             struct aprsMessage aprsmsg;
             
             // print which message type we got
@@ -505,6 +530,8 @@ void OnTxDone(void)
         radio.startReceive();
     #endif
 
+    //Serial.println("OnTXDone");
+
     tx_is_active = false;
 }
 
@@ -518,6 +545,8 @@ void OnTxTimeout(void)
         radio.startReceive();
     #endif
 
+    Serial.println("OnTXTimeout");
+
     tx_is_active = false;
 }
 
@@ -526,6 +555,7 @@ void OnTxTimeout(void)
  */
 void OnPreambleDetect(void)
 {
+    Serial.println("OnPreambleDetect");
 }
 
 /**@brief fires when a header is detected 
@@ -533,5 +563,6 @@ void OnPreambleDetect(void)
 void OnHeaderDetect(void)
 {
     is_receiving = true;
-    //Serial.printf("Header on - HD cmd_counter:%i\n", cmd_counter);
+    
+    //Serial.println("OnHeaderDetect");
 }

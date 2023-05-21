@@ -275,17 +275,22 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             int Hour;
             int Minute;
             int Second;
-            sscanf(csetTime+5, "%i-%i-%i %i:%i:%i", &Year, &Month, &Day, &Hour, &Minute, &Second);
 
-            meshcom_settings.node_date_year = Year;
-            meshcom_settings.node_date_month = Month;
-            meshcom_settings.node_date_day = Day;
+            sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
+            
+            meshcom_settings.node_date_year = (int)Year;
+            meshcom_settings.node_date_month = (int)Month;
+            meshcom_settings.node_date_day = (int)Day;
 
-            meshcom_settings.node_date_hour = Hour;
-            meshcom_settings.node_date_minute = Minute;
-            meshcom_settings.node_date_second = Second;
+            meshcom_settings.node_date_hour = (int)Hour;
+            meshcom_settings.node_date_minute = (int)Minute;
+            meshcom_settings.node_date_second = (int)Second;
+
         #endif
         
+        Serial.print(getTimeString());
+        Serial.print(" TIMESET: Time set ");
+
         bPosDisplay=true;
 
         return;
@@ -314,10 +319,17 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     unsigned int iwords=0;
     int ipos=0;
 
+    String strPath = aprsmsg.msg_source_path;
+    // DM
+    if(aprsmsg.msg_destination_path != "*")
+    {
+        strPath = aprsmsg.msg_source_call + ">" + aprsmsg.msg_destination_call;
+    }
+
     if(aprsmsg.msg_source_path.length() < (20-7))
-        sprintf(msg_text, "%s <%i>", aprsmsg.msg_source_path.c_str(), rssi);
+        sprintf(msg_text, "%s <%i>", strPath.c_str(), rssi);
     else
-        sprintf(msg_text, "%s", aprsmsg.msg_source_path.c_str());
+        sprintf(msg_text, "%s", strPath.c_str());
 
     msg_text[20]=0x00;
     sendDisplay1306(bClear, false, 3, izeile, msg_text);
@@ -907,7 +919,6 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     encodeAPRS(msg_buffer, aprsmsg);
 
     printBuffer_aprs((char*)"NEW-ACK", aprsmsg);
-    Serial.println();
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);

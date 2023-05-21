@@ -78,45 +78,17 @@
    A1        <->  P0.31/AIN7 (Arduino Analog A7
    SPI_CS    <->  P0.26 (Arduino GPIO number 26)
 
-    SX126x-Arduino library for RAK4630:
-    _hwConfig.CHIP_TYPE = SX1262;		   // Chip type, SX1261 or SX1262
-    _hwConfig.PIN_LORA_RESET = 38;		   // LORA RESET
-    _hwConfig.PIN_LORA_NSS = 42;		   // LORA SPI CS
-    _hwConfig.PIN_LORA_SCLK = 43;		   // LORA SPI CLK
-    _hwConfig.PIN_LORA_MISO = 45;		   // LORA SPI MISO
-    _hwConfig.PIN_LORA_DIO_1 = 47;		   // LORA DIO_1
-    _hwConfig.PIN_LORA_BUSY = 46;		   // LORA SPI BUSY
-    _hwConfig.PIN_LORA_MOSI = 44;		   // LORA SPI MOSI
-    _hwConfig.RADIO_TXEN = 39;			   // LORA ANTENNA TX ENABLE (e.g. eByte E22 module)
-    _hwConfig.RADIO_RXEN = 37;			   // LORA ANTENNA RX ENABLE (e.g. eByte E22 module)
-    _hwConfig.USE_DIO2_ANT_SWITCH = true;  // LORA DIO2 controls antenna
-    _hwConfig.USE_DIO3_TCXO = true;		   // LORA DIO3 controls oscillator voltage (e.g. eByte E22 module)
-    _hwConfig.USE_DIO3_ANT_SWITCH = false; // LORA DIO3 controls antenna (e.g. Insight SIP ISP4520 module)
-    _hwConfig.USE_RXEN_ANT_PWR = true;	   // RXEN is used as power for antenna switch
-
     */
 
 /*
-#define I2C_SCL_RAK1901 NRF_GPIO_PIN_MAP(0,14)
-#define I2C_SDA_RAK1901 NRF_GPIO_PIN_MAP(0,13)
+Sync Word Setting in MeshCom
+    MeshCom Syc Word is 0x2b
 
-#define I2C_SCL_RAK12011 NRF_GPIO_PIN_MAP(0,14)
-#define I2C_SDA_RAK12011 NRF_GPIO_PIN_MAP(0,13)
-#define INT_RAK12011 NRF_GPIO_PIN_MAP(1,02)
-*/
+    Output of the LoRa Sync Word Register 0x0740 in MeshCom:
 
-/*
-Sync Word Setting in Meshtastic
-    Meshtastic Syc Word is 0x2b
-
-    Output of the LoRa Sync Word Register 0x0740 in Meshtastic:
-
-    ??:??:?? 1 Set radio: final power level=22
-    SYNC WORD SET!
+    Set radio: power level=22
     Sync Word 1st byte = 24
     Sync Word 2nd byte = b4
-    ??:??:?? 1 SX126x init result 0
-    ??:??:?? 1 Current limit set to 140.000000
 
     In our Library it gets set at sx126x.h / radio.cpp
     Define: sx126x.h line 109:
@@ -547,28 +519,7 @@ void nrf52loop()
     // check if we have messages in ringbuffer to send
 	if (iWrite != iRead)
     {
-        if (tx_is_active == false && is_receiving == false)
-        {
-            if(cmd_counter == 0)
-            {
-                uint16_t rand = millis();
-                uint16_t r10 = rand / 10;
-                cmd_counter = (rand - r10*10) + 20;    // cmd_counter 20-29
-
-                //Serial.printf("rand:%i r10:%i cmd_counter:%i\n", rand, r10, cmd_counter);
-            }
-            
-            cmd_counter--;
-
-            if(cmd_counter <= 0)
-            {
-                doTX();
-
-                cmd_counter = 0;
-            }
-        }
-        else
-            cmd_counter = 0;
+        doTX();
     }
 
     // check if message from phone to send
