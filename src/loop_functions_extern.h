@@ -26,8 +26,10 @@ extern char msg_text[MAX_MSG_LEN_PHONE];
 
 extern unsigned int _GW_ID; // ID of our Node
 
-#if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
+#if defined(BOARD_HELTEC)
     extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
+#elif defined(BOARD_HELTEC_V3)
+    extern U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2;
 #else
     extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 #endif

@@ -89,6 +89,19 @@ void setCurrentTime(char strdateTime[20])
   systemClock.setNow(viennaTime.toEpochSeconds()+(60*60));  // UTC -> MESZ
 }
 
+// from meshcom settings
+void setCurrentTime(int16_t Year, int16_t Month, int16_t Day, int16_t Hour, int16_t Minute, int16_t Second)
+{
+  // Creating timezones is cheap, so we can create them on the fly as needed.
+  auto viennaTz = TimeZone::forZoneInfo(&kZoneAmerica_Los_Angeles,
+      &pacificProcessor);
+
+  // Set the SystemClock using these components.
+  auto viennaTime = ZonedDateTime::forComponents(
+      Year, Month, Day, Hour, Minute, Second, viennaTz);
+  systemClock.setNow(viennaTime.toEpochSeconds());
+}
+
 /*
 COROUTINE(print) {
   COROUTINE_LOOP() {

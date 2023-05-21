@@ -5,6 +5,7 @@
 #include "time_functions.h"
 #include "batt_functions.h"
 #include "udp_functions.h"
+#include "configuration.h"
 
 extern unsigned long rebootAuto;
 
