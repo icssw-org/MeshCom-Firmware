@@ -304,8 +304,6 @@ void esp32setup()
         u8g2.drawStr(5, 60, "...starting now");
     } while (u8g2.nextPage());
 
-    delay(2000);
-
     bool bRadio=false;
 
      // initialize SX12xx with default settings
@@ -630,10 +628,15 @@ void esp32loop()
         oldDeviceConnected = deviceConnected;
     }
 
-    if(bInitDisplay)
+    if(millis() > 5000 && bInitDisplay)
     {
-        // start 1. Pos after 30 Sec
+        bool bsDisplayOff = bDisplayOff;
+
+        bDisplayOff = false;
+
         sendDisplayHead();
+
+        bDisplayOff = bsDisplayOff;
 
         bInitDisplay=false;
     }

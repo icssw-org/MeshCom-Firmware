@@ -271,38 +271,54 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     sendDisplayText(aprsmsg, rssi, snr);
                             }
 
-                            // nur am Gateway
                             #if defined GATEWAY_TYPE
-                            print_buff[6]=aprsmsg.msg_id & 0xFF;
-                            print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
-                            print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
-                            print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
+								print_buff[6]=aprsmsg.msg_id & 0xFF;
+								print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
+								print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
+								print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
 
-                            // nur fremde Meldungen 
-                            if(!checkOwnTx(print_buff+6, 0) && !aprsmsg.msg_server)
-                            {
-                                // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
-                                msg_counter=millis();   // ACK mit neuer msg_id versenden
+								// nur bei Meldungen an fremde mit ACK
+								if(checkOwnTx(print_buff+6) >= 0)
+								{
+									// und an alle geht Wolke mit Hackerl an BLE senden
+									if(aprsmsg.msg_destination_path == "*")
+									{
+										print_buff[5]=0x41;
+										print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
+										print_buff[11]=0x00;     // msg always 0x00 at the end
+										addBLEOutBuffer(print_buff+5, 7);
+									}
+								}
+								else
+								{
+									//Check DM Message nicht vom GW ACK nur "*" an Alle
+									if(aprsmsg.msg_destination_path == "*")
+									{
+										// ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
+										msg_counter=millis();   // ACK mit neuer msg_id versenden
 
-                                print_buff[0]=0x41;
-                                print_buff[1]=msg_counter & 0xFF;
-                                print_buff[2]=(msg_counter >> 8) & 0xFF;
-                                print_buff[3]=(msg_counter >> 16) & 0xFF;
-                                print_buff[4]=(msg_counter >> 24) & 0xFF;
-                                print_buff[5]=0x05; // max hop
-                                print_buff[10]=0x00;     // switch ack GW / Node currently fixed to 0x00 
-                                print_buff[11]=0x00;     // msg always 0x00 at the end
-                                
-                                ringBuffer[iWrite][0]=12;
-                                memcpy(ringBuffer[iWrite]+1, print_buff, 12);
+										print_buff[0]=0x41;
+										print_buff[1]=msg_counter & 0xFF;
+										print_buff[2]=(msg_counter >> 8) & 0xFF;
+										print_buff[3]=(msg_counter >> 16) & 0xFF;
+										print_buff[4]=(msg_counter >> 24) & 0xFF;
+										print_buff[5]=0x85; // max hop
+										print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
+										print_buff[11]=0x00;     // msg always 0x00 at the end
+										
+										ringBuffer[iWrite][0]=12;
+										memcpy(ringBuffer[iWrite]+1, print_buff, 12);
 
-                                iWrite++;
-                                if(iWrite >= MAX_RING)
-                                    iWrite=0;
-        
-                                unsigned int mid=(print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
-                                addLoraRxBuffer(mid);
-                            }
+										iWrite++;
+										if(iWrite >= MAX_RING)
+											iWrite=0;
+
+										Serial.printf("ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+										
+										unsigned int mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
+										addLoraRxBuffer(mid);
+									}
+								}
                             #endif
                         }
                         else
@@ -372,7 +388,7 @@ void OnRxTimeout(void)
 {
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
-    #elif
+    #else
         radio.startReceive();
     #endif
 

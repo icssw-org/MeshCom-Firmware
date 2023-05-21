@@ -419,6 +419,17 @@ void nrf52setup()
     Wire.begin();
     u8g2.begin();
 
+    u8g2.clearDisplay();
+    u8g2.setFont(u8g2_font_6x10_mf);
+    u8g2.firstPage();
+    do
+    {
+        u8g2.drawStr(5, 20, "MeshCom 4.0");
+        u8g2.drawStr(5, 40, "by icssw.org");
+        u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
+        u8g2.drawStr(5, 60, "...starting now");
+    } while (u8g2.nextPage());
+
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;
     meshcom_settings.node_date_minute = 0;
@@ -506,11 +517,26 @@ void nrf52setup()
 
 void nrf52loop()
 {
-    if(!bInitDisplay)
+    if(millis() > 5000 && bInitDisplay)
     {
+        bool bsDisplayOff = bDisplayOff;
+
+        bDisplayOff = false;
+
         sendDisplayHead();
 
-        bInitDisplay=true;
+        bDisplayOff = bsDisplayOff;
+
+        bInitDisplay=false;
+    }
+    else
+    {
+        if (meshcom_settings.node_date_second != DisplayTimeWait)
+        {
+            sendDisplayMainline(true); // extra Display
+
+            DisplayTimeWait = meshcom_settings.node_date_second;
+        }
     }
 
    	//digitalWrite(LED_GREEN, LOW);

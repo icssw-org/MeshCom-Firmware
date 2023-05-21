@@ -4,6 +4,7 @@
 #include "command_functions.h"
 #include "time_functions.h"
 #include "batt_functions.h"
+#include "udp_functions.h"
 
 extern unsigned long rebootAuto;
 
@@ -61,8 +62,7 @@ int toPhoneWrite=0;
 int toPhoneRead=0;
 
 uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4] = {0}; //Ringbuffer for UDP TX from LoRa RX, first byte is length
-uint8_t udpWrite = 0;   // counter for ringbuffer
-uint8_t udpRead = 0;    // counter for ringbuffer
+uint8_t loraWrite = 0;   // counter for ringbuffer
 
 // LoRa RX/TX sequence control
 int cmd_counter = 2;      // ticker dependant on main cycle delay time
@@ -107,20 +107,20 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 void addLoraRxBuffer(unsigned int msg_id)
 {
     // byte 0-3 msg_id
-    ringBufferLoraRX[udpWrite][3] = msg_id >> 24;
-    ringBufferLoraRX[udpWrite][2] = msg_id >> 16;
-    ringBufferLoraRX[udpWrite][1] = msg_id >> 8;
-    ringBufferLoraRX[udpWrite][0] = msg_id;
+    ringBufferLoraRX[loraWrite][3] = msg_id >> 24;
+    ringBufferLoraRX[loraWrite][2] = msg_id >> 16;
+    ringBufferLoraRX[loraWrite][1] = msg_id >> 8;
+    ringBufferLoraRX[loraWrite][0] = msg_id;
 
     if(bDEBUG)
     {
-        Serial.printf("LoraRX Ringbuffer added element: %u\n", udpWrite);
-        printBuffer(ringBufferLoraRX[udpWrite], 4);
+        Serial.printf("LoraRX Ringbuffer added element: %u\n", loraWrite);
+        printBuffer(ringBufferLoraRX[loraWrite], 4);
     }
 
-    udpWrite++;
-    if (udpWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
-        udpWrite = 0;
+    loraWrite++;
+    if (loraWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
+        loraWrite = 0;
 }
 
 int pageLine[10][3] = {0};
@@ -717,6 +717,24 @@ void sendMessage(char *msg_text, int len)
     if(hasMsgFromPhone)
     {
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+
+        #if defined GATEWAY_TYPE
+            // gleich Wolke mit Hackler setzen
+            if(aprsmsg.msg_destination_path == "*")
+            {
+                unsigned int print_buff[8];
+
+                print_buff[0]=0x41;
+                print_buff[1]=aprsmsg.msg_id & 0xFF;
+                print_buff[2]=(aprsmsg.msg_id >> 8) & 0xFF;
+                print_buff[3]=(aprsmsg.msg_id >> 16) & 0xFF;
+                print_buff[4]=(aprsmsg.msg_id >> 24) & 0xFF;
+                print_buff[5]=0x01;     // switch ack GW / Node currently fixed to 0x00 
+                print_buff[6]=0x00;     // msg always 0x00 at the end
+                
+                addBLEOutBuffer(print_buff, 7);
+            }
+        #endif
     }
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
@@ -725,6 +743,11 @@ void sendMessage(char *msg_text, int len)
     if(iWrite >= MAX_RING)
         iWrite=0;
     
+    #if defined GATEWAY_TYPE
+		// UDP out
+		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    #endif
+
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
     own_msg_id[iWriteOwn][4]=0x00;
@@ -829,6 +852,10 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt)
     if(iWrite >= MAX_RING)
         iWrite=0;
 
+    #if defined GATEWAY_TYPE
+		// UDP out
+		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    #endif
     
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
@@ -874,6 +901,11 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     if(iWrite >= MAX_RING)
         iWrite=0;
     
+    #if defined GATEWAY_TYPE
+		// UDP out
+		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    #endif
+
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
     own_msg_id[iWriteOwn][4]=0x00;
@@ -926,6 +958,11 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     if(iWrite >= MAX_RING)
         iWrite=0;
     
+    #if defined GATEWAY_TYPE
+		// UDP out
+		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    #endif
+
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
     own_msg_id[iWriteOwn][4]=0x00;
