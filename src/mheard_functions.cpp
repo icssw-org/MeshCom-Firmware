@@ -114,7 +114,7 @@ void updateMheard(struct mheardLine &mheardLine)
 
 void showMHeard()
 {
-    Serial.printf(" ________________________________________________________________________________\n");
+    Serial.printf("/--------------------------------------------------------------------------------\\\n");
     Serial.printf("|MHeard call |    date    |   time   | typ | source hardware | mod | rssi |  snr |\n");
 
     mheardLine mheardLine;
@@ -153,5 +153,5 @@ void showMHeard()
         }
     }
 
-    Serial.printf("'--------------------------------------------------------------------------------'\n");
+    Serial.printf("\\--------------------------------------------------------------------------------/\n");
 }

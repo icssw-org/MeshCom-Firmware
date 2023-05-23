@@ -9,7 +9,7 @@
 #define SOURCE_TYPE "CL"
 //#define SOURCE_TYPE "GW"
 //#define GATEWAY_TYPE
-#define SOURCE_VERSION "4.17"
+#define SOURCE_VERSION "4.18"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -33,7 +33,7 @@
 #ifdef BOARD_TBEAM
     #define MODUL_HARDWARE TBEAM
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-    //#define ENABLE_GPS
+    #define ENABLE_GPS
     #define SX127X
 #endif
 

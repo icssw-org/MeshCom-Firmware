@@ -29,6 +29,7 @@
 #include <lora_functions.h>
 #include <phone_commands.h>
 #include <mheard_functions.h>
+#include <clock.h>
 
 /*
     RAK4631 PIN DEFINITIONS
@@ -202,7 +203,7 @@ void interruptHandle3()
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
-bool bInitDisplay = false;
+int iInitDisplay = 0;
 
 // Prototypes
 void blinkLED();                                     // blink GREEN
@@ -322,8 +323,19 @@ void nrf52setup()
     }
 
 
+    ////////////////////////////////////////////////////////////////////
+    // Initialize time
+	bool boResult;
+	
+	// initialize clock
+	boResult = MyClock.Init();
+	Serial.printf("Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
+
+    DisplayTimeWait=0;
+    //
+    ////////////////////////////////////////////////////////////////////
+
     //gps init
-    
     pinMode(WB_IO2, OUTPUT);
     digitalWrite(WB_IO2, 0);
     delay(1000);
@@ -517,27 +529,20 @@ void nrf52setup()
 
 void nrf52loop()
 {
-    if(millis() > 5000 && bInitDisplay)
-    {
-        bool bsDisplayOff = bDisplayOff;
+	//Clock::EEvent eEvent;
+	
+	// check clock event
+	//eEvent = MyClock.CheckEvent();
 
-        bDisplayOff = false;
+	MyClock.CheckEvent();
+	
+    meshcom_settings.node_date_year = MyClock.Year();
+    meshcom_settings.node_date_month = MyClock.Month();
+    meshcom_settings.node_date_day = MyClock.Day();
 
-        sendDisplayHead();
-
-        bDisplayOff = bsDisplayOff;
-
-        bInitDisplay=false;
-    }
-    else
-    {
-        if (meshcom_settings.node_date_second != DisplayTimeWait)
-        {
-            sendDisplayMainline(true); // extra Display
-
-            DisplayTimeWait = meshcom_settings.node_date_second;
-        }
-    }
+    meshcom_settings.node_date_hour = MyClock.Hour();
+    meshcom_settings.node_date_minute = MyClock.Minute();
+    meshcom_settings.node_date_second = MyClock.Second();
 
    	//digitalWrite(LED_GREEN, LOW);
    	//digitalWrite(LED_BLUE, LOW);
@@ -589,8 +594,6 @@ void nrf52loop()
         gKeyNum = 0;
     }
 
-    checkSerialCommand();
-
     // check if we have messages for BLE to send
     if (isPhoneReady == 1 && (toPhoneWrite != toPhoneRead))
     {
@@ -612,15 +615,6 @@ void nrf52loop()
         posinfo_timer = millis();
     }
 
-    if(DisplayOffWait > 0)
-    {
-        if (millis() > DisplayOffWait)
-        {
-            DisplayOffWait = 0;
-            bDisplayOff=true;
-        }
-    }
-    
     #if defined(LPS33)
 
     // TEMP/HUM
@@ -645,6 +639,51 @@ void nrf52loop()
 
     #endif
 
+    if(iInitDisplay < 6)
+    {
+        if(meshcom_settings.node_date_second != DisplayTimeWait)
+        {
+            iInitDisplay++;
+
+            DisplayTimeWait = meshcom_settings.node_date_second;
+        }
+    }
+    else
+    {
+        if(iInitDisplay != 99)
+        {
+            bool bsDisplayOff = bDisplayOff;
+
+            bDisplayOff = false;
+
+            sendDisplayHead();
+
+            bDisplayOff = bsDisplayOff;
+
+            iInitDisplay= 99;
+            
+            DisplayTimeWait=0;
+        }
+        else
+        {
+            if (meshcom_settings.node_date_second != DisplayTimeWait)
+            {
+                sendDisplayTime(); // Time only
+
+                DisplayTimeWait = meshcom_settings.node_date_second;
+            }
+        }
+    }
+
+    if(DisplayOffWait > 0)
+    {
+        if (millis() > DisplayOffWait)
+        {
+            DisplayOffWait = 0;
+            bDisplayOff=true;
+        }
+    }
+    
     // rebootAuto
     if(rebootAuto > 0)
     {
@@ -652,13 +691,29 @@ void nrf52loop()
         {
             rebootAuto = 0;
 
-            #if defined NRF52_SERIES
-                NVIC_SystemReset();     // resets the device
+            #ifdef ESP32
+                ESP.restart();
             #endif
         }
     }
 
-    global_batt = read_batt();
+    
+    checkButtonState();
+
+    checkSerialCommand();
+
+    if(BattTimeWait == 0)
+        BattTimeWait = millis() - 31000;
+
+    if ((BattTimeWait + 30000) < millis())
+    {
+        if (tx_is_active == false && is_receiving == false)
+        {
+            global_batt = read_batt();
+
+            BattTimeWait = millis();
+        }
+    }
 
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);

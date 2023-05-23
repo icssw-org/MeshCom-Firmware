@@ -11,7 +11,7 @@ extern char helper_string[256];
 char textbuff_phone [MAX_MSG_LEN_PHONE] = {0};
 uint8_t txt_msg_len_phone = 0;
 
-extern bool bInitDisplay;
+extern int iInitDisplay;
 
 // Client basic variables
 extern uint8_t dmac[6];
@@ -257,7 +257,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				Bluefruit.setName(helper_string);
 			#endif
 
-			bInitDisplay = false;
+			iInitDisplay = 99;
 
 			// restart_ADV = true;	//nicht notwendig
 

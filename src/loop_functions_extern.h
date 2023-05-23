@@ -16,7 +16,7 @@ extern bool bDisplayOff;
 extern bool bDisplayVolt;
 extern bool bDisplayInfo;
 extern unsigned long DisplayOffWait;
-extern unsigned long DisplayTimeWait;
+extern int DisplayTimeWait;
 extern unsigned long BattTimeWait;
 
 extern s_meshcom_settings meshcom_settings;

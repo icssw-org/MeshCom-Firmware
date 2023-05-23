@@ -28,7 +28,7 @@
 #include <batt_functions.h>
 #include <lora_functions.h>
 #include <mheard_functions.h>
-#include <time_functions.h>
+#include <clock.h>
 
 #include <esp_adc_cal.h>
 
@@ -59,7 +59,7 @@
  * SX1278 zB: https://github.com/jgromes/RadioLib/blob/master/src/modules/SX127x/SX1278.h
 */
 
-bool bInitDisplay = true;
+int iInitDisplay = 0;
 
 bool bPosFirst = true;
 /*
@@ -183,7 +183,6 @@ int transmissionState = RADIOLIB_ERR_UNKNOWN;
 /** Set the device name, max length is 10 characters */
 char g_ble_dev_name[10] = SOURCE_TYPE;
 
-int vref = 1100;                //Default value. We'll get a more accurate value from the efuses
 uint64_t timeStamp = 0;
 
 /** Flag if BLE UART is connected */
@@ -270,8 +269,17 @@ void esp32setup()
 
     Serial.printf("_GW_ID: %08X\n", _GW_ID);
 
+    ////////////////////////////////////////////////////////////////////
     // Initialize time
-    setupAceTime();
+	bool boResult;
+	
+	// initialize clock
+	boResult = MyClock.Init();
+	Serial.printf("Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
+
+    DisplayTimeWait=0;
+    //
+    ////////////////////////////////////////////////////////////////////
 
     #if defined(ENABLE_GPS)
         setupGPS();
@@ -548,9 +556,20 @@ void setInterruptFlag(void)
 
 void esp32loop()
 {
-    loopAceTime();
+	//Clock::EEvent eEvent;
+	
+	// check clock event
+	//eEvent = MyClock.CheckEvent();
 
-    getCurrentTime();
+	MyClock.CheckEvent();
+	
+    meshcom_settings.node_date_year = MyClock.Year();
+    meshcom_settings.node_date_month = MyClock.Month();
+    meshcom_settings.node_date_day = MyClock.Day();
+
+    meshcom_settings.node_date_hour = MyClock.Hour();
+    meshcom_settings.node_date_minute = MyClock.Minute();
+    meshcom_settings.node_date_second = MyClock.Second();
 
     // check if the previous transmission finished
     if(transmittedFlag)
@@ -628,28 +647,6 @@ void esp32loop()
         oldDeviceConnected = deviceConnected;
     }
 
-    if(millis() > 5000 && bInitDisplay)
-    {
-        bool bsDisplayOff = bDisplayOff;
-
-        bDisplayOff = false;
-
-        sendDisplayHead();
-
-        bDisplayOff = bsDisplayOff;
-
-        bInitDisplay=false;
-    }
-    else
-    {
-        if (meshcom_settings.node_date_second != DisplayTimeWait)
-        {
-            sendDisplayMainline(true); // extra Display
-
-            DisplayTimeWait = meshcom_settings.node_date_second;
-        }
-    }
-
     // check if message from phone to send
     if(hasMsgFromPhone)
     {
@@ -691,6 +688,42 @@ void esp32loop()
         #endif
 
         posinfo_timer = millis();
+    }
+
+    if(iInitDisplay < 6)
+    {
+        if(meshcom_settings.node_date_second != DisplayTimeWait)
+        {
+            iInitDisplay++;
+
+            DisplayTimeWait = meshcom_settings.node_date_second;
+        }
+    }
+    else
+    {
+        if(iInitDisplay != 99)
+        {
+            bool bsDisplayOff = bDisplayOff;
+
+            bDisplayOff = false;
+
+            sendDisplayHead();
+
+            bDisplayOff = bsDisplayOff;
+
+            iInitDisplay= 99;
+            
+            DisplayTimeWait=0;
+        }
+        else
+        {
+            if (meshcom_settings.node_date_second != DisplayTimeWait)
+            {
+                sendDisplayTime(); // Time only
+
+                DisplayTimeWait = meshcom_settings.node_date_second;
+            }
+        }
     }
 
     if(DisplayOffWait > 0)

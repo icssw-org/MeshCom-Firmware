@@ -3,7 +3,6 @@
 #include <loop_functions_extern.h>
 #include "batt_functions.h"
 #include <mheard_functions.h>
-#include <time_functions.h>
 
 unsigned long rebootAuto = 0;
 
@@ -71,31 +70,6 @@ void commandAction(char *msg_text, int len, bool ble)
 
         save_settings();
 
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setdate ", 8) == 0)
-    {
-        #if defined(ESP32)
-            setCurrentTime(msg_text+10);
-        #else
-            int Year;
-            int Month;
-            int Day;
-            int Hour;
-            int Minute;
-            int Second;
-            sscanf(msg_text+10, "%i-%i-%i %i:%i:%i", &Year, &Month, &Day, &Hour, &Minute, &Second);
-
-            meshcom_settings.node_date_year = (int)Year;
-            meshcom_settings.node_date_month = (int)Month;
-            meshcom_settings.node_date_day = (int)Day;
-
-            meshcom_settings.node_date_hour = (int)Hour;
-            meshcom_settings.node_date_minute = (int)Minute;
-            meshcom_settings.node_date_second = (int)Second;
-        #endif
-        
         return;
     }
     else

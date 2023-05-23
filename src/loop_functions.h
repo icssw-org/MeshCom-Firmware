@@ -18,7 +18,8 @@
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
 void sendDisplayHead();
-void sendDisplayMainline(bool bSend);
+void sendDisplayMainline();
+void sendDisplayTime();
 
 void initButtonPin();
 void checkButtonState();

@@ -2,7 +2,9 @@
 
 #include "loop_functions.h"
 #include "command_functions.h"
-#include "time_functions.h"
+
+#include "clock.h"
+
 #include "batt_functions.h"
 #include "udp_functions.h"
 #include "configuration.h"
@@ -19,7 +21,7 @@ bool bDisplayInfo = true;
 unsigned long DisplayOffWait = 0;
 
 int iDisplayType = 0;
-unsigned long DisplayTimeWait = 0;
+int DisplayTimeWait = 0;
 
 bool bButton_Press = false;
 bool bWaitButton_Released = false;
@@ -127,6 +129,7 @@ void addLoraRxBuffer(unsigned int msg_id)
 int pageLine[10][3] = {0};
 char pageText[10][30] = {0};
 int pageLineAnz=0;
+bool bSetDisplay = false;
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
@@ -147,6 +150,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     {
         if(pageLineAnz < 10 && strlen(text) < 30)
         {
+            //Serial.printf("pageLineAnz:%i text:%s\n", pageLineAnz, text);
+
             pageLine[pageLineAnz][0] = x;
             pageLine[pageLineAnz][1] = y;
             pageLine[pageLineAnz][2] = 20;
@@ -188,17 +193,20 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 
 void sendDisplayHead()
 {
+    bSetDisplay=true;
+
     if(bDisplayOff)
     {
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
+        bSetDisplay=false;
         return;
     }
 
     iDisplayType=9;
 
-    sendDisplayMainline(false); // no extra Display
+    char print_text[500];
 
-    char print_text[100];
+    sendDisplayMainline(); // no extra Display
 
     sprintf(print_text, "Call:  %s", meshcom_settings.node_call);
     sendDisplay1306(false, false, 3, 23, print_text);
@@ -214,12 +222,41 @@ void sendDisplayHead()
 
     sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);
     sendDisplay1306(false, true, 3, 63, print_text);
+
+    bSetDisplay=false;
 }
 
-void sendDisplayMainline(bool bSend)
+void sendDisplayTime()
 {
-    int SaveLineAnz=0;
+    #ifdef ESP32
+    
+    if(iDisplayType == 0)
+        return;
 
+    if(bSetDisplay)
+        return;
+
+    char print_text[500];
+    char cbatt[5];
+
+    if(bDisplayVolt)
+        sprintf(cbatt, "%4.2f", global_batt/1000.0);
+    else
+        sprintf(cbatt, "%3d%%", mv_to_percent(global_batt));
+
+    sprintf(print_text, "%-2.2s%-4.4s %02i:%02i:%02i %-4.4s", SOURCE_TYPE, SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+
+    memcpy(pageText[0], print_text, 20);
+
+    u8g2.setCursor(pageLine[0][0], pageLine[0][1]);
+    u8g2.print(print_text);
+    u8g2.sendBuffer();
+
+    #endif
+}
+
+void sendDisplayMainline()
+{
     if(bDisplayOff)
     {
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
@@ -229,15 +266,7 @@ void sendDisplayMainline(bool bSend)
     if(iDisplayType == 0)
         return;
 
-    if(bSend)
-    {
-        SaveLineAnz = pageLineAnz;
-
-        pageLineAnz=0;
-    }
-        
     char print_text[500];
-
     char cbatt[5];
 
     if(bDisplayVolt)
@@ -254,9 +283,7 @@ void sendDisplayMainline(bool bSend)
         sprintf(print_text, "%-2.2s%-4.4s %02i:%02i:%02i %-4.4s", SOURCE_TYPE, SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
-    sendDisplay1306(!bSend, false, 3, 10, print_text);
-    if(SaveLineAnz > 0)
-        pageLineAnz = SaveLineAnz;
+    sendDisplay1306(true, false, 3, 10, print_text);
     sendDisplay1306(false, true, 3, 12, (char*)"#L");
 }
 
@@ -267,28 +294,18 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         char csetTime[30];
         sprintf(csetTime, "%s", aprsmsg.msg_payload.c_str());
 
-        #if defined(ESP32)
-            setCurrentTime(csetTime+5);
-        #else
-            int Year;
-            int Month;
-            int Day;
-            int Hour;
-            int Minute;
-            int Second;
+        int Year;
+        int Month;
+        int Day;
+        int Hour;
+        int Minute;
+        int Second;
 
-            sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
-            
-            meshcom_settings.node_date_year = (int)Year;
-            meshcom_settings.node_date_month = (int)Month;
-            meshcom_settings.node_date_day = (int)Day;
-
-            meshcom_settings.node_date_hour = (int)Hour;
-            meshcom_settings.node_date_minute = (int)Minute;
-            meshcom_settings.node_date_second = (int)Second;
-
-        #endif
+        sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
         
+        MyClock.setCurrentTime(Year, Month, Day, Hour, Minute, Second);
+
+        Serial.println("");
         Serial.print(getTimeString());
         Serial.print(" TIMESET: Time set ");
 
@@ -309,6 +326,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     }
     
     iDisplayType = 0;
+
+    bSetDisplay=true;
+
 
     int izeile=12;
     unsigned int itxt=0;
@@ -426,6 +446,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         msg_text[20]=0x00;
         sendDisplay1306(bClear, bEnd, 3, izeile, msg_text);
     }
+
+    bSetDisplay=false;
+
 }
 
 // BUTTON
@@ -470,6 +493,8 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     iDisplayType=1;
 
+    bSetDisplay=true;
+
     char print_text[500];
     int ipt=0;
 
@@ -480,7 +505,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     bool bClear=false;
 
-    sendDisplayMainline(false); // no extra Display
+    sendDisplayMainline(); // no extra Display
 
     sprintf(msg_text, "%s", aprsmsg.msg_source_path.c_str());
 
@@ -599,6 +624,9 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             break;
         }
     }
+
+    bSetDisplay=false;
+
 }
 
 /** @brief Method to print our buffers
