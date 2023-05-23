@@ -5,6 +5,7 @@
 #include "esp32_gps.h"
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <clock.h>
 
 #define GPS_BAUDRATE 9600
 #define GPS_SERIAL_NUM 2
@@ -156,6 +157,9 @@ void readGPS(void)
         meshcom_settings.node_date_month = (date / 100) % 100;        
         meshcom_settings.node_date_day = date / 10000;
 
+        #if defined(ESP32)
+            MyClock.setCurrentTime(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+        #endif
         //Serial.printf("Time: %ld\n", time);
     }
 }

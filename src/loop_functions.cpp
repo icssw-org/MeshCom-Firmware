@@ -751,7 +751,7 @@ void sendMessage(char *msg_text, int len)
             // gleich Wolke mit Hackler setzen
             if(aprsmsg.msg_destination_path == "*")
             {
-                unsigned int print_buff[8];
+                uint8_t print_buff[8];
 
                 print_buff[0]=0x41;
                 print_buff[1]=aprsmsg.msg_id & 0xFF;
@@ -761,7 +761,7 @@ void sendMessage(char *msg_text, int len)
                 print_buff[5]=0x01;     // switch ack GW / Node currently fixed to 0x00 
                 print_buff[6]=0x00;     // msg always 0x00 at the end
                 
-                addBLEOutBuffer(print_buff, 7);
+                addBLEOutBuffer(print_buff, (uint16_t)7);
             }
         #endif
     }
