@@ -464,7 +464,7 @@ void doTX()
     {
         uint16_t rand = millis();
         uint16_t r10 = rand / 10;
-        cmd_counter = (rand - r10*10) + 15;    // cmd_counter 15-24
+        cmd_counter = (rand - r10*10) + 20;    // cmd_counter 20-29
 
         //Serial.printf("rand:%i r10:%i cmd_counter:%i\n", rand, r10, cmd_counter);
     }

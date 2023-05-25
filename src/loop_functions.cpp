@@ -36,7 +36,7 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
 #elif defined(BOARD_HELTEC_V3)
     U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2(U8G2_R0, 18, 17, 21);
 #else
-    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);  //RESET CLOCK DATA
 #endif
 
 #if defined(ESP8266) || defined(ESP32)
@@ -102,6 +102,26 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     toPhoneWrite++;
     if (toPhoneWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
         toPhoneWrite = 0;
+}
+
+void addBLECommandBack(char text[100])
+{
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+
+    struct aprsMessage aprsmsg;
+
+    initAPRS(aprsmsg);
+
+    aprsmsg.msg_len = 0;
+    aprsmsg.payload_type = ':';
+    aprsmsg.msg_id = millis();
+    aprsmsg.msg_destination_call="*";
+    aprsmsg.msg_source_path="response";
+    aprsmsg.msg_payload=text;
+
+    encodeAPRS(msg_buffer, aprsmsg);
+
+    addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
 }
 
 /**@brief Function adding messages into outgoing UDP ringbuffer
@@ -193,6 +213,9 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 
 void sendDisplayHead()
 {
+    if(bSetDisplay)
+        return;
+
     bSetDisplay=true;
 
     if(bDisplayOff)
@@ -228,13 +251,16 @@ void sendDisplayHead()
 
 void sendDisplayTime()
 {
-    #ifdef ESP32
-    
+    if(bDisplayOff)
+        return;
+
     if(iDisplayType == 0)
         return;
 
     if(bSetDisplay)
         return;
+
+    bSetDisplay = true;
 
     char print_text[500];
     char cbatt[5];
@@ -252,20 +278,11 @@ void sendDisplayTime()
     u8g2.print(print_text);
     u8g2.sendBuffer();
 
-    #endif
+    bSetDisplay = false;
 }
 
 void sendDisplayMainline()
 {
-    if(bDisplayOff)
-    {
-        sendDisplay1306(true, true, 0, 0, (char*)"#C");
-        return;
-    }
-
-    if(iDisplayType == 0)
-        return;
-
     char print_text[500];
     char cbatt[5];
 
@@ -319,6 +336,11 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             bPosDisplay=false;
     }
 
+    if(bSetDisplay)
+        return;
+
+    bSetDisplay=true;
+
     if(bDisplayOff)
     {
         DisplayOffWait=millis() + (30 * 1000); // seconds
@@ -326,9 +348,6 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     }
     
     iDisplayType = 0;
-
-    bSetDisplay=true;
-
 
     int izeile=12;
     unsigned int itxt=0;
@@ -482,18 +501,22 @@ void checkButtonState()
 
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
-    if(bDisplayOff)
-    {
-        sendDisplay1306(true, true, 0, 0, (char*)"#C");
-        return;
-    }
-
     if(!bPosDisplay)
         return;
 
-    iDisplayType=1;
+    if(bSetDisplay)
+        return;
 
     bSetDisplay=true;
+
+    if(bDisplayOff)
+    {
+        sendDisplay1306(true, true, 0, 0, (char*)"#C");
+        bSetDisplay=false;
+        return;
+    }
+
+    iDisplayType=1;
 
     char print_text[500];
     int ipt=0;

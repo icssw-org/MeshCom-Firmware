@@ -150,7 +150,7 @@ SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // cs - irq - reset - interrupt gpio
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
-    SX1268 radio = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_DIO0);
+    SX1268 radio = new Module(SX1268_CS, SX1268_IRQ, SX1268_RST, LORA_DIO2);
 
 #endif
 

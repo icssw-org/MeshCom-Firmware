@@ -16,6 +16,7 @@
 #define TLORA_V1 2
 #define TLORA_V2_1_1p6 3
 #define TBEAM 4
+#define TBEAM_1268 5
 #define TBEAM_0p7 6
 #define T_ECHO 7
 #define RAK4631 9
@@ -38,7 +39,7 @@
 #endif
 
 #ifdef BOARD_SX1268
-    #define MODUL_HARDWARE TBEAM
+    #define MODUL_HARDWARE TBEAM_1268
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define SX126X
@@ -313,10 +314,39 @@ static const uint8_t KEY_BUILTIN = 39;
 #endif
 
 #ifdef BOARD_SX1268
-#define LORA_DIO0 LORA_IO0
-#define LORA_DIO1 LORA_IO1
+
+#define LED_PIN 4
+
+#define RESET_OLED RST_OLED
+
+#define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
+#define BUTTON_PIN 38
+
+#define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define ADC_MULTIPLIER 4.9245
+
+#define USE_SX1262
+
+#define LORA_DIO0 26 // a No connect on the SX1262 module
+#define LORA_RESET 23
+#define LORA_DIO1 33 // SX1268 IRQ
+#define LORA_DIO2 32 // SX1268 BUSY
+#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
+
+#define RF95_SCK 5
+#define RF95_MISO 19
+#define RF95_MOSI 27
+#define RF95_NSS 18
+
+#define SX1268_CS RF95_NSS
+#define SX1268_IRQ LORA_DIO1
+#define SX1268_BUSY LORA_DIO2
+#define SX1268_RST LORA_RESET
+#define SX1268_E22
+
 #define SDA_PIN 21
 #define SCL_PIN 22
+
 #endif
 
 #ifdef BOARD_TLORA_OLV2
@@ -384,6 +414,9 @@ static const uint8_t SCK =  5;
 #define LORA_DIO0 LORA_IRQ
 #define LORA_DIO1 LORA_D1
 //#define LORA_CS  //already defined
+
+#define BUTTON_PIN 12
+
 #endif
 
 #ifdef BOARD_E22

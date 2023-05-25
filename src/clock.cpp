@@ -464,7 +464,7 @@ bool Clock::SetClock()
 {
 	// set new update cycle
 	u32Start_m = millis();
-	u32Next_m  = u32Start_m + ((60 - suClock_m.tm_sec) * 1000);
+	u32Next_m  = u32Start_m + 1000; //((60 - suClock_m.tm_sec) * 1000);
 #if defined(TEST)
 	Serial.printf("[clock] set clock %02u:%02u:%02u (%lu -> %lu)\n",
 	              suClock_m.tm_hour, suClock_m.tm_min, suClock_m.tm_sec,

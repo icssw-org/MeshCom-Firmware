@@ -6,7 +6,7 @@ char mheardBuffer[MAX_MHEARD][40]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 
-String HardWare[13] = {"none", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "-", "TBEAM_0p7", "T_ECHO", "-", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "EBYTE_E22"};
+String HardWare[13] = {"none", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "-", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "EBYTE_E22"};
 
 void initMheard()
 {
