@@ -132,7 +132,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40)
             {
                 // print aprs message
-                printBuffer_aprs((char*)"RX-LoRa", aprsmsg);
+                if(bDisplayInfo)
+                    printBuffer_aprs((char*)"RX-LoRa", aprsmsg);
 
                 ///////////////////////////////////////////////
                 // MHeard
@@ -175,8 +176,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 {
                     unsigned int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
 
-                    if(ring_msg_id != 0 && bDEBUG)
-                        printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, aprsmsg.msg_id);
+                    //if(ring_msg_id != 0 && bDEBUG)
+                    //    printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, aprsmsg.msg_id);
 
                     if(ring_msg_id == aprsmsg.msg_id)
                     {
@@ -346,12 +347,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(iWrite >= MAX_RING)
                                 iWrite=0;
                             
-                            Serial.printf(" Packet resend to mesh");
+                            if(bDisplayInfo)
+                                Serial.printf(" Packet resend to mesh");          
                         }
                     }
                 }   
 
-                Serial.println("");
+                if(bDisplayInfo)
+                    Serial.println("");
             }
             else
             {
@@ -464,7 +467,7 @@ void doTX()
     {
         uint16_t rand = millis();
         uint16_t r10 = rand / 10;
-        cmd_counter = (rand - r10*10) + 20;    // cmd_counter 20-29
+        cmd_counter = (rand - r10*10) + 35;    // cmd_counter 35-45
 
         //Serial.printf("rand:%i r10:%i cmd_counter:%i\n", rand, r10, cmd_counter);
     }
@@ -524,8 +527,11 @@ void doTX()
                 }   
                 else
                 {
-                    printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
-                    Serial.println("");
+                    if(bDisplayInfo)
+                    {
+                        printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
+                        Serial.println("");
+                    }
                 }
             }
         }

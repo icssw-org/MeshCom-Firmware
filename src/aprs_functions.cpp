@@ -1,6 +1,7 @@
 
 #include <aprs_functions.h>
 #include <loop_functions.h>
+#include <loop_functions_extern.h>
 #include <debugconf.h>
 #include <configuration.h>
 
@@ -18,8 +19,9 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_len = 0;
     aprsmsg.msg_id = 0;
     aprsmsg.payload_type = 0x00;
-    aprsmsg.max_hop = 0;
+    aprsmsg.max_hop = 5;
     aprsmsg.msg_server = false;
+    aprsmsg.msg_track = false;
     aprsmsg.msg_source_path = "";
     aprsmsg.msg_destination_path = "";
     aprsmsg.msg_gateway_call = "";
@@ -59,6 +61,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         if((RcvBuffer[5] & 0x80) == 0x80)
             aprsmsg.msg_server = true;
 
+        if((RcvBuffer[5] & 0x40) == 0x40)
+            aprsmsg.msg_track = true;
+
         uint16_t inext=0;
 
         // Source Path
@@ -94,6 +99,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         if(!bSourceEndOk)
         {
             Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - bSourceEndOk (>) missing!\n");
+            
+            if(bDEBUG)
+                printBuffer(RcvBuffer+6, rsize-6);
 
             return 0x00;
         }
@@ -101,7 +109,8 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         // Destination Path
         bool bDestinationEndOk=false;
         bool bDestinationCall=true;
-        for(ib=inext; ib < rsize; ib++)
+        uint16_t inextstart=inext;
+        for(ib=inextstart; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == aprsmsg.payload_type)
             {
@@ -129,11 +138,15 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         {
             Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - bDestinationEndOk (payload_type) missing!\n");
 
+            if(bDEBUG)
+                printBuffer(RcvBuffer+inextstart, rsize-inextstart);
+
             return 0x00;
         }
 
         // Payload
         bool bPayloadEndOk=false;
+        inextstart=inext;
         for(ib=inext; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == 0x00)
@@ -149,6 +162,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         if(!bPayloadEndOk)
         {
             Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - PayloadEnd (0x00) missing!\n");
+
+            if(bDEBUG)
+                printBuffer(RcvBuffer+inextstart, rsize-inextstart);
 
             return 0x00;
         }
@@ -206,6 +222,8 @@ void initAPRSPOS(struct aprsPosition &aprspos)
     aprspos.lon_c = 0x00;
     aprspos.alt = 0;
     aprspos.bat = 0;
+    aprspos.lat_d = 0.0;
+    aprspos.lon_d = 0.0;
 
 }
 
@@ -229,6 +247,7 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             decode_text[ipt]=0x00;
 
             sscanf(decode_text, "%lf", &aprspos.lat);
+
             aprspos.lat_c = PayloadBuffer.charAt(itxt);
             istarttext = itxt+2;    // Char-Symbol 1
             break;
@@ -335,6 +354,9 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessa
     if(aprsmsg.msg_server)
         msg_buffer[5] = msg_buffer[5] | 0x80;
 
+    if(aprsmsg.msg_track)
+        msg_buffer[5] = msg_buffer[5] | 0x40;
+
     sprintf(msg_start, "%s>%s%c", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type);
 
     uint16_t ilng=aprsmsg.msg_source_path.length() + 1 + aprsmsg.msg_destination_path.length() + 1;
@@ -404,4 +426,15 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     aprsmsg.msg_len = inext;
 
     return inext;
+}
+
+double conv_coord_to_dec(double coord)
+{
+    int ig = 0;
+	double dm = 0;
+
+    // GGMM.DDDD -> GG.DDDDDD
+    ig = coord / 100.0;
+    dm = (coord - (double)(ig * 100)) / 60.0;
+    return (double)ig + dm;
 }

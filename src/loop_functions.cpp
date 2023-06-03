@@ -9,6 +9,11 @@
 #include "udp_functions.h"
 #include "configuration.h"
 
+#include "TinyGPSplus.h"
+
+// TinyGPS
+extern TinyGPSPlus tinyGPSPLus;
+
 extern unsigned long rebootAuto;
 
 extern float global_batt;
@@ -19,12 +24,16 @@ bool bDisplayOff = false;
 bool bDisplayVolt = false;
 bool bDisplayInfo = true;
 unsigned long DisplayOffWait = 0;
+bool bDisplayTrack = false;
 
 int iDisplayType = 0;
 int DisplayTimeWait = 0;
 
 bool bButton_Press = false;
 bool bWaitButton_Released = false;
+bool bButtonCheck = false;
+
+int iInitDisplay = 0;
 
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE] = {0};
@@ -74,10 +83,25 @@ bool tx_is_active = false;  // flag to store we are transmitting  a lora packet.
 
 uint8_t isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
-// timers
-unsigned long posinfo_timer = 0;      // we check periodically to send GPS
-unsigned long temphum_timer = 0;      // we check periodically get TEMP/HUM
-unsigned long druck_timer = 0;        // we check periodically get AIRPRESURE
+// GPS SmartBeaconing variables
+unsigned long posinfo_interval = POSINFO_INTERVAL; // check interval
+int posinfo_distance = 0;
+double posinfo_direction = 0.0;
+int posinfo_distance_ring[10] = {0};
+int posinfo_ring_write = 0;
+double posinfo_lat = 0.0;
+double posinfo_lon = 0.0;
+double posinfo_last_lat = 0.0;
+double posinfo_last_lon = 0.0;
+double posinfo_last_direction = 0.0;
+bool posinfo_shot=false;
+int no_gps_reset_counter = 0;
+
+// Loop timers
+unsigned long posinfo_timer = 0;    // we check periodically to send GPS
+unsigned long temphum_timer = 0;    // we check periodically get TEMP/HUM
+unsigned long druck_timer = 0;      // we check periodically get AIRPRESURE
+unsigned long hb_timer = 0;         // we check periodically get AIRPRESURE
 
 /** @brief Function adding messages into outgoing BLE ringbuffer
  * BLE to PHONE Buffer
@@ -146,9 +170,19 @@ void addLoraRxBuffer(unsigned int msg_id)
         loraWrite = 0;
 }
 
-int pageLine[10][3] = {0};
-char pageText[10][30] = {0};
+int pageLine[7][3] = {0};
+char pageText[7][25] = {0};
 int pageLineAnz=0;
+
+#define PAGE_MAX 5
+
+int pageLastLine[PAGE_MAX][7][3] = {0};
+char pageLastText[PAGE_MAX][7][25] = {0};
+int pageLastLineAnz[PAGE_MAX] = {0};
+int pageLastPointer=0;
+int pagePointer=0;
+int pageHold=PAGE_MAX-1;
+
 bool bSetDisplay = false;
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
@@ -163,19 +197,27 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
         pageLineAnz=0;
     }
 
+    bool bNeu=true;
+
+	if(memcmp(text, "#N", 2) == 0)
+    {
+        bNeu=false;
+    }
+    else
 	if(memcmp(text, "#C", 2) == 0)
     {
+        bNeu=false;
     }
     else
     {
-        if(pageLineAnz < 10 && strlen(text) < 30)
+        if(pageLineAnz < 7 && strlen(text) < 25)
         {
             //Serial.printf("pageLineAnz:%i text:%s\n", pageLineAnz, text);
 
             pageLine[pageLineAnz][0] = x;
             pageLine[pageLineAnz][1] = y;
             pageLine[pageLineAnz][2] = 20;
-            memcpy(pageText[pageLineAnz], text, 20);
+            memcpy(pageText[pageLineAnz], text, 25);
             pageLineAnz++;
         }
         //u8g2.drawUTF8(x, y, text);
@@ -191,6 +233,16 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             {
                 for(int its=0;its<pageLineAnz;its++)
                 {
+                    // Save last Text (init)
+                    if(iDisplayType == 0 && bNeu)
+                    {
+                        pageLastLineAnz[pageLastPointer] = pageLineAnz;
+                        pageLastLine[pageLastPointer][its][0] = pageLine[its][0];
+                        pageLastLine[pageLastPointer][its][1] = pageLine[its][1];
+                        pageLastLine[pageLastPointer][its][2] = pageLine[its][2];
+                        memcpy(pageLastText[pageLastPointer][its], pageText[its], 25);
+                    }
+
                     char ptext[30] = {0};
                     pageText[its][pageLine[its][2]] = 0x00;
                     
@@ -205,13 +257,63 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                             u8g2.drawUTF8(pageLine[its][0], pageLine[its][1], ptext);
                     }
                 }
+
             }
 
         } while (u8g2.nextPage());
+
+        if(iDisplayType == 0 && bNeu)
+        {
+            pagePointer=pageLastPointer;
+
+            pageLastPointer++;
+            if(pageLastPointer > PAGE_MAX-1)
+                pageLastPointer=0;
+
+            pageLastLineAnz[pageLastPointer] = 0;   // nächsten Ringplatz frei machen
+        }
     }
 }
 
-void sendDisplayHead()
+void sendDisplayHead(bool bInit)
+{
+    if((bSetDisplay || pageHold > 0) && !bInit)
+        return;
+
+    bSetDisplay=true;
+
+    if(bDisplayOff)
+    {
+        sendDisplay1306(true, true, 0, 0, (char*)"#C");
+        bSetDisplay=false;
+        return;
+    }
+
+    iDisplayType=9;
+
+    char print_text[500];
+
+    sendDisplayMainline();
+
+    sprintf(print_text, "Call:  %s", meshcom_settings.node_call);
+    sendDisplay1306(false, false, 3, 22, print_text);
+
+    sprintf(print_text, "Short: %s", meshcom_settings.node_short);
+    sendDisplay1306(false, false, 3, 32, print_text);
+
+    sprintf(print_text, "MAC:   %08X", _GW_ID);
+    sendDisplay1306(false, false, 3, 42, print_text);
+
+    sprintf(print_text, "Modul: %i", MODUL_HARDWARE);
+    sendDisplay1306(false, false, 3, 52, print_text);
+
+    sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);
+    sendDisplay1306(false, true, 3, 62, print_text);
+
+    bSetDisplay=false;
+}
+
+void sendDisplayTrack()
 {
     if(bSetDisplay)
         return;
@@ -229,28 +331,39 @@ void sendDisplayHead()
 
     char print_text[500];
 
-    sendDisplayMainline(); // no extra Display
+    sendDisplayMainline();
 
-    sprintf(print_text, "Call:  %s", meshcom_settings.node_call);
-    sendDisplay1306(false, false, 3, 23, print_text);
+    sprintf(print_text, "LAT : %.4lf %c", meshcom_settings.node_lat, meshcom_settings.node_lat_c);
+    sendDisplay1306(false, false, 3, 22, print_text);
 
-    sprintf(print_text, "Short: %s", meshcom_settings.node_short);
-    sendDisplay1306(false, false, 3, 33, print_text);
+    sprintf(print_text, "LON : %.4lf %c", meshcom_settings.node_lon, meshcom_settings.node_lon_c);
+    sendDisplay1306(false, false, 3, 32, print_text);
 
-    sprintf(print_text, "MAC:   %08X", _GW_ID);
-    sendDisplay1306(false, false, 3, 43, print_text);
+    sprintf(print_text, "RATE: %5i sec", (int)posinfo_interval);
+    sendDisplay1306(false, false, 3, 42, print_text);
 
-    sprintf(print_text, "Modul: %i", MODUL_HARDWARE);
-    sendDisplay1306(false, false, 3, 53, print_text);
+    sprintf(print_text, "DIST: %5i m", posinfo_distance);
+    sendDisplay1306(false, false, 3, 52, print_text);
 
-    sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);
-    sendDisplay1306(false, true, 3, 63, print_text);
+    sprintf(print_text, "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
+    sendDisplay1306(false, true, 3, 62, print_text);
+
 
     bSetDisplay=false;
 }
 
 void sendDisplayTime()
 {
+    // Button Page 5 Sekunden halten
+    pageHold--;
+    if(pageHold < 0)
+    {
+        pageHold=0;
+        pagePointer=pageLastPointer-1;
+        if(pagePointer < 0)
+            pagePointer=PAGE_MAX-1;
+    }
+
     if(bDisplayOff)
         return;
 
@@ -274,9 +387,15 @@ void sendDisplayTime()
 
     memcpy(pageText[0], print_text, 20);
 
+    #ifdef BOARD_HELTEC_V3
+    u8g2.firstPage();
+    u8g2.drawStr(pageLine[0][0], pageLine[0][1], print_text);
+    u8g2.nextPage();
+    #else
     u8g2.setCursor(pageLine[0][0], pageLine[0][1]);
     u8g2.print(print_text);
     u8g2.sendBuffer();
+    #endif
 
     bSetDisplay = false;
 }
@@ -301,8 +420,72 @@ void sendDisplayMainline()
     }
 
     sendDisplay1306(true, false, 3, 10, print_text);
-    sendDisplay1306(false, true, 3, 12, (char*)"#L");
+    sendDisplay1306(false, false, 3, 12, (char*)"#L");
 }
+
+void mainStartTimeLoop()
+{
+    /////////////////////////////////////////////////////////////////////////////////////////////
+    // Start-Loop & Time-Loop
+    if(iInitDisplay < 4)
+    {
+        //Serial.printf("iInitDisplay %i meshcom_settings.node_date_second %i DisplayTimeWait %i\n", iInitDisplay, meshcom_settings.node_date_second, DisplayTimeWait);
+
+        if(meshcom_settings.node_date_second != DisplayTimeWait)
+        {
+            iInitDisplay++;
+
+            DisplayTimeWait = meshcom_settings.node_date_second;
+        }
+    }
+    else
+    if(iInitDisplay < 8)
+    {
+        if(iInitDisplay == 4)
+        {
+            bool bsDisplayOff = bDisplayOff;
+
+            bDisplayOff = false;
+
+            sendDisplayHead(true);
+
+            bDisplayOff = bsDisplayOff;
+
+            DisplayTimeWait=0;
+        }
+
+        if(meshcom_settings.node_date_second != DisplayTimeWait)
+        {
+            iInitDisplay++;
+
+            DisplayTimeWait = meshcom_settings.node_date_second;
+        }
+    }
+    else
+        if(iInitDisplay == 8)
+        {
+            sendDisplayHead(true);
+
+            DisplayTimeWait=0;
+
+            iInitDisplay = 9;
+        }
+        else
+        {
+            if (meshcom_settings.node_date_second != DisplayTimeWait)
+            {
+                if(bDisplayTrack)
+                    sendDisplayTrack(); // Show Track
+                else
+                    sendDisplayTime(); // Time only
+
+                DisplayTimeWait = meshcom_settings.node_date_second;
+            }
+        }
+    // End Start-Loop & Time-Loop
+    /////////////////////////////////////////////////////////////////////////////////////////////
+}
+
 
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
@@ -320,11 +503,14 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
         
-        MyClock.setCurrentTime(Year, Month, Day, Hour, Minute, Second);
+        MyClock.setCurrentTime(false, Year, Month, Day, Hour, Minute, Second);
 
-        Serial.println("");
-        Serial.print(getTimeString());
-        Serial.print(" TIMESET: Time set ");
+        if(bDisplayInfo)
+        {
+            Serial.println("");
+            Serial.print(getTimeString());
+            Serial.print(" TIMESET: Time set ");
+        }
 
         bPosDisplay=true;
 
@@ -336,7 +522,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             bPosDisplay=false;
     }
 
-    if(bSetDisplay)
+    if(bSetDisplay || pageHold > 0)
         return;
 
     bSetDisplay=true;
@@ -481,20 +667,62 @@ void initButtonPin()
 void checkButtonState()
 {
     #ifdef BUTTON_PIN
-        if(digitalRead(BUTTON_PIN) == 0)
+        if(bButtonCheck)
         {
-            bButton_Press = true;
-            return;
-        }
-        else
-        if(bButton_Press == true)
-        {
-            bDisplayOff=!bDisplayOff;
-            //Serial.printf("Display:%i\n", bDisplayOff);
-            if(!bDisplayOff)
-                sendDisplayHead();
+            if(digitalRead(BUTTON_PIN) == 0)
+            {
+                if(bDEBUG)
+                    Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);
 
-            bButton_Press = false;
+                if(bButton_Press == false)
+                {
+                    bButton_Press = true;
+
+                    if(pageLastLineAnz[pagePointer] == 0 || bDisplayTrack)
+                    {
+                        bDisplayTrack =false;
+                        
+                        pageHold=0;
+
+                        pagePointer = pageLastPointer - 1;
+                        if(pagePointer < 0)
+                            pagePointer = PAGE_MAX-1;
+
+                        bDisplayOff=!bDisplayOff;
+
+                        sendDisplayHead(false);
+
+                    }
+                    else
+                    {
+                        bDisplayOff=false;
+
+                        for(int its=0;its<pageLastLineAnz[pagePointer];its++)
+                        {
+                            // Save last Text (init)
+                            pageLineAnz = pageLastLineAnz[pagePointer];
+                            pageLine[its][0] = pageLastLine[pagePointer][its][0];
+                            pageLine[its][1] = pageLastLine[pagePointer][its][1];
+                            pageLine[its][2] = pageLastLine[pagePointer][its][2];
+                            memcpy(pageText[its], pageLastText[pagePointer][its], 25);
+                        }
+
+                        iDisplayType=0;
+
+                        sendDisplay1306(false, true, 0, 0, (char*)"#N");
+
+                        pagePointer--;
+                        if(pagePointer < 0)
+                            pagePointer=PAGE_MAX-1;
+
+                        pageHold=5;
+                    }
+                }
+
+                return;
+            }
+            else
+                bButton_Press = false;
         }
     #endif
 }
@@ -504,7 +732,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     if(!bPosDisplay)
         return;
 
-    if(bSetDisplay)
+    if(bSetDisplay || pageHold > 0 || bDisplayTrack)
         return;
 
     bSetDisplay=true;
@@ -525,18 +753,33 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     unsigned int itxt=0;
     int istarttext=0;
 
+    double lat=0.0;
+    double lon=0.0;
 
-    bool bClear=false;
+    int dir_to=0;
+    int dist_to=0;
 
-    sendDisplayMainline(); // no extra Display
+    aprsPosition aprspos;
+
+    initAPRSPOS(aprspos);
+
+    decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
+
+    // Display Distance, Direction
+    lat = conv_coord_to_dec(aprspos.lat);
+    lon = conv_coord_to_dec(aprspos.lon);
+
+    dir_to = tinyGPSPLus.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
+    dist_to = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
+
+    sendDisplayMainline();
 
     sprintf(msg_text, "%s", aprsmsg.msg_source_path.c_str());
 
     msg_text[20]=0x00;
-    sendDisplay1306(bClear, false, 3, izeile, msg_text);
+    sendDisplay1306(false, false, 3, izeile, msg_text);
 
     izeile=izeile+12;
-    bClear=false;
 
     ipt=0;
 
@@ -546,13 +789,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         {
             print_text[ipt]=0x00;
 
-            sprintf(msg_text, "LAT:  %s %c", print_text, aprsmsg.msg_payload.charAt(itxt));
+            sscanf(print_text, "%lf", &lat);
+
+            sprintf(msg_text, "LAT: %s%c%5i°", print_text, aprsmsg.msg_payload.charAt(itxt), dir_to);
             msg_text[20]=0x00;
-            sendDisplay1306(bClear, false, 3, izeile, msg_text);
+            sendDisplay1306(false, false, 3, izeile, msg_text);
 
             istarttext=itxt+2;
             izeile=izeile+12;
-            bClear=false;
             break;
         }
         else
@@ -570,13 +814,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         {
             print_text[ipt]=0x00;
 
-            sprintf(msg_text, "LON: %s %c", print_text, aprsmsg.msg_payload.charAt(itxt));
+            sscanf(print_text, "%lf", &lon);
+
+            sprintf(msg_text, "LON:%s%c%5ikm", print_text, aprsmsg.msg_payload.charAt(itxt), dist_to);
             msg_text[20]=0x00;
-            sendDisplay1306(bClear, false, 3, izeile, msg_text);
+            sendDisplay1306(false, false, 3, izeile, msg_text);
 
             istarttext=itxt+3;
             izeile=izeile+10;
-            bClear=false;
             break;
         }
         else
@@ -634,9 +879,9 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                     if(aprsmsg.msg_fw_version > 13)
                         alt = (int)((float)alt * 0.3048);
 
-                    sprintf(msg_text, "ALT: %im rssi:%i", alt, rssi);
+                    sprintf(msg_text, "ALT:%im rssi:%i", alt, rssi);
                     msg_text[20]=0x00;
-                    sendDisplay1306(bClear, true, 3, izeile, msg_text);
+                    sendDisplay1306(false, true, 3, izeile, msg_text);
                     break;
                 }
 
@@ -682,8 +927,9 @@ String getTimeString()
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
     Serial.print(getTimeString());
-    Serial.printf(" %s: %03i %c x%08X %02X %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X V:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop, aprsmsg.msg_server, aprsmsg.msg_source_path.c_str(),
-        aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(), aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_fw_version);
+    Serial.printf(" %s: %03i %c x%08X %02X %i %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X V:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+        aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
+        aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_fw_version);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -741,8 +987,6 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_id = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFFFF);
     
     aprsmsg.payload_type = ':';
-    aprsmsg.max_hop = 5;
-    aprsmsg.msg_server = false;
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = strDestinationCall;
     aprsmsg.msg_payload = strMsg;
@@ -849,13 +1093,11 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
         sprintf(msg_start, "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, slat, lat_c, meshcom_settings.node_symid, slon, lon_c);
     else
     {
-        int proz = mv_to_percent(global_batt);
-        
         char cbatt[8]={0};
         char calt[15]={0};
 
-        if(proz > 0)
-            sprintf(cbatt, " /B=%03i", proz);
+        if(mv_to_percent(global_batt) > 0)
+            sprintf(cbatt, " /B=%03d", mv_to_percent(global_batt));
 
         if(alt > 0)
         {
@@ -869,7 +1111,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
     return String(msg_start);
 }
 
-void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt)
+void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt)
 {
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
@@ -884,8 +1126,10 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt)
     aprsmsg.msg_id = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFFFF);
 
     aprsmsg.payload_type = '!';
-    aprsmsg.max_hop = 5;
-    aprsmsg.msg_server = false;
+    
+    if(intervall != POSINFO_INTERVAL)
+        aprsmsg.msg_track=true;
+
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
     aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt);
@@ -898,6 +1142,13 @@ void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt)
     printBuffer_aprs((char*)"NEW-POS", aprsmsg);
     Serial.println();
 
+    // An APP als Anzeige retour senden
+    if(hasMsgFromPhone)
+    {
+        addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+
+    }
+    
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     iWrite++;
@@ -935,8 +1186,6 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.msg_id = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFFFF);
 
     aprsmsg.payload_type = '@';
-    aprsmsg.max_hop = 5;
-    aprsmsg.msg_server = false;
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
     aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt);
@@ -989,8 +1238,6 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     aprsmsg.msg_id = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFF);
     
     aprsmsg.payload_type = ':';
-    aprsmsg.max_hop = 5;
-    aprsmsg.msg_server = false;
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = dest_call;
 
@@ -1023,6 +1270,89 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
         iWriteOwn=0;
 }
 
+int GetHeadingDifference(int heading1, int heading2)
+{   
+    int  difference = heading1 - heading2;
+    if(difference < 0)
+        difference = difference * -1;
+        
+    if (difference > 180)
+        return 360 - difference;
+    
+    return difference;
+}
+
+unsigned int setSMartBeaconing(double dlat, double dlon)
+{
+    extern TinyGPSPlus tinyGPSPLus;
+
+    unsigned int gps_send_rate = POSINFO_INTERVAL;  // seconds
+
+    if(posinfo_lat == 0.0)
+        posinfo_lat = dlat;
+    if(posinfo_lon == 0.0)
+        posinfo_lon = dlon;
+
+
+    posinfo_distance_ring[posinfo_ring_write] = tinyGPSPLus.distanceBetween(posinfo_lat, posinfo_lon, dlat, dlon);    // meters
+    posinfo_direction = tinyGPSPLus.courseTo(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // Grad
+
+    posinfo_ring_write++;
+    if(posinfo_ring_write > 9)
+    {
+        posinfo_ring_write=0;
+    }
+
+    posinfo_distance=0;
+    for(int ir=0;ir<10;ir++)
+    {
+        posinfo_distance += (int)posinfo_distance_ring[ir];
+    }
+
+    posinfo_lat = dlat;
+    posinfo_lon = dlon;
+
+    // get gps distance every 100 seconds
+    // gps_send_rate 30 minutes default
+    // bDisplayTrack = true Smartbeaconing used
+    if(posinfo_distance < 100 || !bDisplayTrack)  // seit letzter gemeldeter position
+        gps_send_rate = POSINFO_INTERVAL;
+    else
+    if(posinfo_distance < 120)  // zu fuss > 3 km/h  < 8 km/h
+        gps_send_rate = 60; // seconds
+    else
+    if(posinfo_distance < 420)  // rad < 15 km/h
+        gps_send_rate = 120; // seconds
+    else
+    if(posinfo_distance < 1100)  // auto stadt < 40 km/h
+        gps_send_rate = 180; // seconds
+    else
+        gps_send_rate = 300; // auto > 40 km/h
+
+    int direction_diff=0;
+
+    if(posinfo_distance > 150 && bDisplayTrack)  // meter
+    {
+        direction_diff=GetHeadingDifference((int)posinfo_last_direction, (int)posinfo_direction);
+
+        if(direction_diff > 15)
+        {
+            posinfo_shot=true;
+        }
+    }
+
+    if(posinfo_last_lat == 0.0 && posinfo_last_lon == 0.0)
+        posinfo_shot=true;
+
+    if(posinfo_shot)
+    {
+        Serial.print(getTimeString());
+        Serial.printf("posinfo shot set - direction_diff:%i last_lat:%.1lf last_lon:%.1lf\n", direction_diff, posinfo_last_lat, posinfo_last_lon);
+    }
+
+    return gps_send_rate;
+}
+
 String convertCallToShort(char callsign[10])
 {
     String sVar = "XXX";
@@ -1044,7 +1374,7 @@ String convertCallToShort(char callsign[10])
     return sVar;
 }
 
-double cround4(float dvar)
+double cround4(double dvar)
 {
     char cvar[20];
     sprintf(cvar, "%.4lf", dvar);
@@ -1061,3 +1391,4 @@ int conv_fuss(int alt_meter)
     int ifuss = fuss + 5;
     return ifuss / 10;
 }
+

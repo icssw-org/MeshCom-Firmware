@@ -41,7 +41,12 @@ struct s_meshcom_settings
 
 	int node_hamnet_only = 0;
 
-	int node_sset = 0x0004;	// bDisplayPos = true
+
+    #ifdef ESP32
+		int node_sset = 0x0014;	// bDisplayPos = true, bButtonCheck = true
+	#else
+		int node_sset = 0x0004;	// bDisplayPos = true
+	#endif
 
 	float node_maxv = 4.24;
 };

@@ -17,7 +17,6 @@ int commandCheck(char *msg, char *command, int len)
 void commandAction(char *msg_text, int len, bool ble)
 {
     char print_buff[600];
-    uint8_t buffer[600];
 
     // -info
     // -set-owner
@@ -97,7 +96,17 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setnoinfo", 9) == 0)
     {
+        Serial.println("\nsetnoinfo set");
+
         bDisplayInfo=false;
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setinfo", 7) == 0)
+    {
+        Serial.println("\nsetinfo set");
+
+        bDisplayInfo=true;
         return;
     }
     else
@@ -195,7 +204,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         save_settings();
 
-        sendDisplayHead();
+        sendDisplayHead(false);
 
         return;
     }
@@ -215,7 +224,79 @@ void commandAction(char *msg_text, int len, bool ble)
 
         save_settings();
 
-        sendDisplayHead();
+        sendDisplayHead(false);
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"button on", 9) == 0)
+    {
+        Serial.println("on");
+
+        bButtonCheck=true;
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0010;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"button on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"button off", 10) == 0)
+    {
+        bButtonCheck=false;
+        
+        Serial.println("off");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FDF;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"button off");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"track on", 8) == 0)
+    {
+        bDisplayTrack=true;
+        
+        Serial.println("track on");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0020;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"track on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"track off", 9) == 0)
+    {
+        bDisplayTrack=false;
+        
+        Serial.println("track off");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"track off");
+        }
+
+        save_settings();
 
         return;
     }
@@ -276,7 +357,7 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"sendpos", 7) == 0)
     {
-        sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
+        sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
 
         if(ble)
         {
@@ -493,13 +574,13 @@ void commandAction(char *msg_text, int len, bool ble)
                 printf("\n%s", print_buff);
             }
 
-            sendDisplayHead();
+            sendDisplayHead(false);
         }
         else
         if(bPos)
         {
-            sprintf(print_buff, "MeshCom %s %-4.4s\r\n...LAT: %.4lf %c\r\n...LON: %.4lf %c\r\n...ALT: %i\r\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_TYPE, SOURCE_VERSION,
-            meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
+            sprintf(print_buff, "MeshCom %s %-4.4s\r\n...LAT: %.4lf %c\r\n...LON: %.4lf %c\r\n...ALT: %i\r\n...RATE: %i\r\n...DIST: %im\r\n...DIRn:  %i°\r\n...DIRo:  %i°\r\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_TYPE, SOURCE_VERSION,
+            meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, (int)posinfo_interval, posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
             meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,
             meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 

@@ -168,7 +168,7 @@ public:
 	// @return true on success, false on error
 	bool SetClock();
 	
-    void setCurrentTime(int Year, int Month, int Day, int Hour, int Minute, int Second);
+    void setCurrentTime(bool bUTC, uint16_t Year, uint16_t Month, uint16_t Day, uint16_t Hour, uint16_t Minute, uint16_t Second);
 
 	// set snooze
 	// @param bo24Hours true if snooze for 24 hours, false for snooze time

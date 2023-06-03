@@ -32,6 +32,11 @@
 
 #include <esp_adc_cal.h>
 
+#if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
+#include <axp20x.h>
+extern AXP20X_Class axp;
+#endif
+
 #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
 #include <Adafruit_I2CDevice.h>
 #include <Adafruit_Sensor.h>
@@ -58,8 +63,6 @@
  * Alle Funktionen Setter, Getter, etc finden sich in den korrspondierenden Libraries
  * SX1278 zB: https://github.com/jgromes/RadioLib/blob/master/src/modules/SX127x/SX1278.h
 */
-
-int iInitDisplay = 0;
 
 bool bPosFirst = true;
 /*
@@ -150,7 +153,7 @@ SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // cs - irq - reset - interrupt gpio
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
-    SX1268 radio = new Module(SX1268_CS, SX1268_IRQ, SX1268_RST, LORA_DIO2);
+    SX1268 radio = new Module(SX1268_CS, SX1268_IRQ, SX1268_RST, SX1268_GPIO);
 
 #endif
 
@@ -232,6 +235,8 @@ void esp32setup()
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
     bPosDisplay = meshcom_settings.node_sset & 0x0004;
     bDEBUG = meshcom_settings.node_sset & 0x0008;
+    bButtonCheck = meshcom_settings.node_sset & 0x0010;
+    bDisplayTrack = meshcom_settings.node_sset & 0x0020;
 
     global_batt = 4200.0;
 
@@ -247,6 +252,15 @@ void esp32setup()
         sprintf(meshcom_settings.node_ssid, (char*)"none");
         sprintf(meshcom_settings.node_pwd, (char*)"none");
     }
+
+    #ifdef BOARD_TBEAM
+        if(meshcom_settings.node_sset == 0x0000)
+        {
+            bButtonCheck = true;
+            meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0020;
+            save_settings();
+        }
+    #endif
 
    _GW_ID = getMacAddr();
 
@@ -306,7 +320,12 @@ void esp32setup()
     u8g2.firstPage();
     do
     {
+        u8g2.setFont(u8g2_font_10x20_mf);
         u8g2.drawStr(5, 20, "MeshCom 4.0");
+        u8g2.setFont(u8g2_font_6x10_mf);
+        char cvers[10];
+        sprintf(cvers, "FW %s%s", SOURCE_TYPE, SOURCE_VERSION);
+        u8g2.drawStr(5, 30, cvers);
         u8g2.drawStr(5, 40, "by icssw.org");
         u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
         u8g2.drawStr(5, 60, "...starting now");
@@ -328,7 +347,8 @@ void esp32setup()
     {
         Serial.print(F("failed, code "));
         Serial.println(state);
-        while (true);
+        bRadio=false;
+        //while (true);
     }
 
 
@@ -662,25 +682,37 @@ void esp32loop()
     }
 
     // gps refresh
-    if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis() || (millis() > 10000 && millis() < 30000))
+    if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
     {
         #ifdef ENABLE_GPS
-            getGPS();
+            unsigned int igps = getGPS();
+            if(igps > 0)
+                posinfo_interval = igps;
+            else
+            {
+                no_gps_reset_counter++;
+                if(no_gps_reset_counter > 10)
+                {
+                    posinfo_interval = POSINFO_INTERVAL;
+                    no_gps_reset_counter = 0;
+                }
+            }
         #endif
 
         gps_refresh_timer = millis();
     }
 
-    // POSINFO_INTERVAL in Minuten
-    if (((posinfo_timer + (POSINFO_INTERVAL * 1000 * 60)) < millis()) || (millis() > 10000 && millis() < 30000 && bPosFirst))
+    // posinfo_interval in Seconds
+    if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 10000 && millis() < 30000 && bPosFirst) || posinfo_shot)
     {
         bPosFirst = false;
+        posinfo_shot=false;
         
-        #ifdef ENABLE_GPS
-            getGPS();
-        #endif
+        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
 
-        sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
+        posinfo_last_lat=posinfo_lat;
+        posinfo_last_lon=posinfo_lon;
+        posinfo_last_direction=posinfo_direction;
 
         #if defined(LPS33)
         sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
@@ -690,41 +722,7 @@ void esp32loop()
         posinfo_timer = millis();
     }
 
-    if(iInitDisplay < 6)
-    {
-        if(meshcom_settings.node_date_second != DisplayTimeWait)
-        {
-            iInitDisplay++;
-
-            DisplayTimeWait = meshcom_settings.node_date_second;
-        }
-    }
-    else
-    {
-        if(iInitDisplay != 99)
-        {
-            bool bsDisplayOff = bDisplayOff;
-
-            bDisplayOff = false;
-
-            sendDisplayHead();
-
-            bDisplayOff = bsDisplayOff;
-
-            iInitDisplay= 99;
-            
-            DisplayTimeWait=0;
-        }
-        else
-        {
-            if (meshcom_settings.node_date_second != DisplayTimeWait)
-            {
-                sendDisplayTime(); // Time only
-
-                DisplayTimeWait = meshcom_settings.node_date_second;
-            }
-        }
-    }
+    mainStartTimeLoop();
 
     if(DisplayOffWait > 0)
     {
@@ -753,13 +751,20 @@ void esp32loop()
     checkSerialCommand();
 
     if(BattTimeWait == 0)
-        BattTimeWait = millis() - 31000;
+        BattTimeWait = millis() - 10000;
 
-    if ((BattTimeWait + 30000) < millis())
+    //Serial.printf("BattTimeWait:%i millis():%i tx_is_active:%i is_receiving:%i\n", BattTimeWait, millis(), tx_is_active, is_receiving);
+
+    if ((BattTimeWait + 10000) < millis())
     {
         if (tx_is_active == false && is_receiving == false)
         {
-            global_batt = read_batt();
+            #if defined(BOARD_TBEAM)
+                global_batt = axp.getBattVoltage();
+                //Serial.printf("global_batt:%f\n", global_batt);
+            #else
+                global_batt = read_batt();
+            #endif
 
             BattTimeWait = millis();
         }

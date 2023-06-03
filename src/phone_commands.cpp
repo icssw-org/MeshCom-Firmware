@@ -246,7 +246,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
 
-			sendDisplayHead();
+			sendDisplayHead(false);
 
 			#if defined NRF52_SERIES
 				sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
@@ -324,7 +324,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				/// TODO N/S und E/W Char muss man noch korrekt setzen
 				DEBUG_MSG("RADIO", "Sending Pos from Phone to Mesh");
 
-				sendPosition(d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude);
+				sendPosition(0, d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude);
 
 				posinfo_timer = millis();	// damit die loop-Schleife nicht asynchron läuft
 			}

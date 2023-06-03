@@ -495,7 +495,7 @@ void Clock::SetAlarmDefaults()
 void Clock::SetClockDefaults()
 {
 	memset(&suClock_m, 0, sizeof(suClock_m));
-	suClock_m.tm_year = 2022 - 1900;
+	suClock_m.tm_year = 2023 - 1900;
 	suClock_m.tm_mon  = 0;
 	suClock_m.tm_mday = 1;
 	tsClock_m         = mktime(&suClock_m);
@@ -553,12 +553,15 @@ void Clock::Snooze(bool bo24Hours /*= false*/)
 	}
 }
 
-void Clock::setCurrentTime(int Year, int Month, int Day, int Hour, int Minute, int Second)
+void Clock::setCurrentTime(bool bUTC, uint16_t Year, uint16_t Month, uint16_t Day, uint16_t Hour, uint16_t Minute, uint16_t Second)
 {
+
+	//Serial.printf("Date %i-%i-%i %02i:%02i:%02i\n", Year, Month, Day, Hour, Minute, Second);
+
 	struct tm suNow;
 
 	suNow.tm_year = Year - 1900;
-	suNow.tm_mon = Month;
+	suNow.tm_mon = Month - 1;
 	suNow.tm_mday = Day;
 	suNow.tm_hour = Hour;
 	suNow.tm_min = Minute;
@@ -567,6 +570,10 @@ void Clock::setCurrentTime(int Year, int Month, int Day, int Hour, int Minute, i
 	time_t tsNow = mktime(&suNow);
 
 	tsNow = tsNow + (60 * 60);
+
+	if(bUTC)
+		tsNow = tsNow + (60 * 60);
+
 	
 	SetClock(tsNow, false);
 }

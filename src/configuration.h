@@ -9,7 +9,7 @@
 #define SOURCE_TYPE "CL"
 //#define SOURCE_TYPE "GW"
 //#define GATEWAY_TYPE
-#define SOURCE_VERSION "4.18"
+#define SOURCE_VERSION "4.21"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -113,7 +113,7 @@
 #define SEE_ALL_PACKETS 0                  // switch to filter multiple receives of same packets from neighbours rebroadcasted
 #define UDP_MSG_INDICATOR_LEN 4            // the first n bytes to recognize which incoming message we have (GATE, CONF)
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
-#define POSINFO_INTERVAL 30                // POSINFO interval in minutes
+#define POSINFO_INTERVAL 30 * 60           // POSINFO interval in seconds default 30 minutes
 #define GPS_REFRESH_INTERVAL 10            // GPS Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds
@@ -340,9 +340,8 @@ static const uint8_t KEY_BUILTIN = 39;
 
 #define SX1268_CS RF95_NSS
 #define SX1268_IRQ LORA_DIO1
-#define SX1268_BUSY LORA_DIO2
 #define SX1268_RST LORA_RESET
-#define SX1268_E22
+#define SX1268_GPIO LORA_DIO2
 
 #define SDA_PIN 21
 #define SCL_PIN 22
@@ -432,6 +431,11 @@ static const uint8_t SCK =  5;
 #define LED 2
 #define I2C_SDA 21
 #define I2C_SCL 22
+
+#define SX1268_CS LORA_CS
+#define SX1268_IRQ LORA_DIO1
+#define SX1268_RST LORA_RST
+#define SX1268_GPIO LORA_DIO0
 
 #endif
 

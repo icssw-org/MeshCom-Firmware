@@ -18,6 +18,8 @@ extern bool bDisplayInfo;
 extern unsigned long DisplayOffWait;
 extern int DisplayTimeWait;
 extern unsigned long BattTimeWait;
+extern bool bButtonCheck;
+extern bool bDisplayTrack;
 
 extern s_meshcom_settings meshcom_settings;
 
@@ -63,9 +65,23 @@ extern bool tx_is_active;   // flag to store we are transmitting  a lora packet.
 extern uint8_t isPhoneReady;      // flag we receive from phone when itis ready to receive data
 
 // timers
+extern unsigned long posinfo_interval; // check interval
+extern int posinfo_distance;
+extern double posinfo_direction;
+extern int posinfo_distance_ring[10];
+extern int posinfo_ring_write;
+extern double posinfo_lat;
+extern double posinfo_lon;
+extern double posinfo_last_lat;
+extern double posinfo_last_lon;
+extern double posinfo_last_direction;
+extern bool posinfo_shot;
+extern int no_gps_reset_counter;
+
 extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long temphum_timer;      // we check periodically get TEMP/HUM
 extern unsigned long druck_timer;        // we check periodically get AIRPRESURE
+extern unsigned long hb_timer;           // GW Server-Heartbeat-Timer
 
 // batt
 extern float global_batt;

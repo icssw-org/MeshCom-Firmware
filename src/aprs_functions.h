@@ -13,4 +13,6 @@ uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMes
 void initAPRSPOS(struct aprsPosition &aprsPosition);
 uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprsPosition);
 
+double conv_coord_to_dec(double coord);
+
 #endif

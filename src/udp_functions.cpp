@@ -411,7 +411,7 @@ void resetUDP()
 
   startUDP();
 
-  sendDisplayHead();
+  sendDisplayHead(false);
   
 }
 

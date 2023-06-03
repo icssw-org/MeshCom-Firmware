@@ -4,8 +4,9 @@
 #include <Arduino.h>
 
 void setupGPS(void);
-void readGPS(void);
-void getGPS(void);
+unsigned int readGPS(void);
+unsigned int getGPS(void);
 void direction_parse(String tmp);
+int GetHeadingDifference(int heading1, int heading2);
 
 #endif

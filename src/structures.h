@@ -20,8 +20,11 @@ struct aprsMessage
     uint16_t msg_len;
     char payload_type;
     unsigned int msg_id;
+
     uint8_t max_hop;
     bool  msg_server;
+    bool  msg_track;
+
     String msg_source_path;
     String msg_source_call;
     String msg_source_last;
@@ -43,6 +46,8 @@ struct aprsPosition
     char lon_c;
     int alt;
     int bat;
+    double lat_d;
+    double lon_d;
 };
 
 struct mheardLine

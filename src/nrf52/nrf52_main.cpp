@@ -14,7 +14,7 @@
 #include <debugconf.h>
 #include <time.h>
 
-#include <TinyGPS.h>
+#include <TinyGPSplus.h>
 
 #include "Adafruit_SHTC3.h"
 
@@ -141,12 +141,12 @@ uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
 String strText="";
 
 // TinyGPS
-TinyGPS gps;
+TinyGPSPlus tinyGPSPlus;
 
 int direction_S_N = 0;  //0--S, 1--N
 int direction_E_W = 0;  //0--E, 1--W
 
-void getGPS(void);
+unsigned int getGPS(void);
 
 // TEMP/HUM
 Adafruit_SHTC3 shtc3 = Adafruit_SHTC3();
@@ -202,8 +202,6 @@ void interruptHandle3()
 }
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-
-int iInitDisplay = 0;
 
 // Prototypes
 void blinkLED();                                     // blink GREEN
@@ -281,6 +279,8 @@ void nrf52setup()
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
     bPosDisplay = meshcom_settings.node_sset & 0x0004;
     bDEBUG = meshcom_settings.node_sset & 0x0008;
+    bButtonCheck = meshcom_settings.node_sset & 0x0010;
+    bDisplayTrack = meshcom_settings.node_sset & 0x0020;
 
     global_batt = 4200.0;
 
@@ -436,7 +436,12 @@ void nrf52setup()
     u8g2.firstPage();
     do
     {
+        u8g2.setFont(u8g2_font_10x20_mf);
         u8g2.drawStr(5, 20, "MeshCom 4.0");
+        u8g2.setFont(u8g2_font_6x10_mf);
+        char cvers[10];
+        sprintf(cvers, "FW %s%s", SOURCE_TYPE, SOURCE_VERSION);
+        u8g2.drawStr(5, 30, cvers);
         u8g2.drawStr(5, 40, "by icssw.org");
         u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
         u8g2.drawStr(5, 60, "...starting now");
@@ -577,9 +582,19 @@ void nrf52loop()
 
         if(iGPSCount > 10)
         {
-            getGPS();
+            unsigned int igps = getGPS();
 
-           	//digitalWrite(LED_GREEN, HIGH);
+            if(igps > 0)
+                posinfo_interval = igps;
+            else
+            {
+                no_gps_reset_counter++;
+                if(no_gps_reset_counter > 10)
+                {
+                    posinfo_interval = POSINFO_INTERVAL;
+                    no_gps_reset_counter = 0;
+                }
+            }
 
             iGPSCount=0;
         }
@@ -601,11 +616,17 @@ void nrf52loop()
     }
 
     // posinfo
-    if (((posinfo_timer + (POSINFO_INTERVAL * 1000 * 30)) < millis()) || (millis() > 10000 && millis() < 30000 && bPosFirst))
+    if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 10000 && millis() < 30000 && bPosFirst) || posinfo_shot)
     {
         bPosFirst = false;
+        posinfo_shot=false;
+        
+        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
 
-        sendPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
+        posinfo_last_lat=posinfo_lat;
+        posinfo_last_lon=posinfo_lon;
+        posinfo_last_direction=posinfo_direction;
+
 
         #if defined(LPS33)
             sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
@@ -639,41 +660,7 @@ void nrf52loop()
 
     #endif
 
-    if(iInitDisplay < 6)
-    {
-        if(meshcom_settings.node_date_second != DisplayTimeWait)
-        {
-            iInitDisplay++;
-
-            DisplayTimeWait = meshcom_settings.node_date_second;
-        }
-    }
-    else
-    {
-        if(iInitDisplay != 99)
-        {
-            bool bsDisplayOff = bDisplayOff;
-
-            bDisplayOff = false;
-
-            sendDisplayHead();
-
-            bDisplayOff = bsDisplayOff;
-
-            iInitDisplay= 99;
-            
-            DisplayTimeWait=0;
-        }
-        else
-        {
-            if (meshcom_settings.node_date_second != DisplayTimeWait)
-            {
-                sendDisplayTime(); // Time only
-
-                DisplayTimeWait = meshcom_settings.node_date_second;
-            }
-        }
-    }
+    mainStartTimeLoop();
 
     if(DisplayOffWait > 0)
     {
@@ -802,7 +789,7 @@ void direction_parse(String tmp)
 
 /**@brief Function for handling a LoRa tx timer timeout event.
  */
-void getGPS(void)
+unsigned int getGPS(void)
 { 
     String tmp_data = "";
 
@@ -820,7 +807,7 @@ void getGPS(void)
 
         tmp_data += c;
 
-        if (gps.encode(c))// Did a new valid sentence come in?
+        if (tinyGPSPlus.encode(c))// Did a new valid sentence come in?
           newData = true;
       }
     }
@@ -828,15 +815,13 @@ void getGPS(void)
     if (newData)
     {
         direction_parse(tmp_data);
-        float flat, flon;
+        double dlat, dlon;
         
-        unsigned long age;  
-        gps.f_get_position(&flat, &flon, &age);
-        //flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat;
-        //flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon;
+        dlat = tinyGPSPlus.location.lat();
+        dlon = tinyGPSPlus.location.lng();
 
-        meshcom_settings.node_lat = cround4(flat);
-        meshcom_settings.node_lon = cround4(flon);
+        meshcom_settings.node_lat = cround4(dlat);
+        meshcom_settings.node_lon = cround4(dlon);
 
         if(direction_S_N == 0)
         {
@@ -856,34 +841,21 @@ void getGPS(void)
         meshcom_settings.node_lon_c = 'W';
         }
 
-        meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)gps.f_altitude()) / 11;
+        meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)tinyGPSPlus.altitude.meters()) / 11;
 
-        unsigned long date, time;
-        gps.get_datetime(&date, &time, &meshcom_settings.node_age);
-
-        time = time + 2000000;  // MESZ
-        if(time > 24000000)
+        MyClock.setCurrentTime(true, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
+        
+        if(bDEBUG)
         {
-            date++;
-            time = time - 24000000;
+            Serial.printf("GPS: LAT:%lf LON:%lf %02d-%02d-%02d %02d:%02d:%02d\n", tinyGPSPlus.location.lat(), tinyGPSPlus.location.lng(), tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
+            //Serial.printf("INT: LAT:%lf LON:%lf %i-%02i-%02i %02i:%02i:%02i\n", meshcom_settings.node_lat, meshcom_settings.node_lon, meshcom_settings.node_date_year, meshcom_settings.node_date_month,  meshcom_settings.node_date_day,
+            //meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
         }
 
-        meshcom_settings.node_date_hour = time / 1000000;
-        meshcom_settings.node_date_minute = (time / 10000) % 100;
-        meshcom_settings.node_date_second = (time / 100) % 100;
-        meshcom_settings.node_date_hundredths = time % 100;
-
-        meshcom_settings.node_date_year = date % 100;
-        meshcom_settings.node_date_year += meshcom_settings.node_date_year > 80 ? 1900 : 2000;
-        meshcom_settings.node_date_month = (date / 100) % 100;        
-        meshcom_settings.node_date_day = date / 10000;
-
-        if(bDEBUG)
-            Serial.printf("\nTime: %ld", time);
+        return setSMartBeaconing(dlat, dlon);
     }
 
-    if(bDEBUG)
-        Serial.println();
+    return 0;   // no GPS
 }
 
 void checkSerialCommand(void)

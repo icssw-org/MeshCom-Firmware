@@ -17,9 +17,11 @@
 #include <U8g2lib.h> // Click to install library: http://librarymanager/All#u8g2
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
-void sendDisplayHead();
+void sendDisplayHead(bool bInit);
+void sendDisplayTrack();
 void sendDisplayMainline();
 void sendDisplayTime();
+void mainStartTimeLoop();
 
 void initButtonPin();
 void checkButtonState();
@@ -39,16 +41,18 @@ void addLoraRxBuffer(unsigned int msg_id);
 
 void sendMessage(char *msg_text, int len);
 String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt);
-void sendPosition(double lat, char lat_c, double lon, char lon_c, int alt);
+void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt);
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press);
 void sendWX(char* text, float temp, float hum, float press);
 void SendAckMessage(String dest_call, unsigned int iAckId);
+
+unsigned int setSMartBeaconing(double flat, double flon);
 
 String convertCallToShort(char callsign[10]);
 
 uint8_t shortVERSION();
 
-double cround4(float dvar);
+double cround4(double dvar);
 
 int conv_fuss(int alt_meter);
 
