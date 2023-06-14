@@ -22,9 +22,10 @@ bool bDEBUG = false;
 bool bPosDisplay = true;
 bool bDisplayOff = false;
 bool bDisplayVolt = false;
-bool bDisplayInfo = true;
+bool bDisplayInfo = false;
 unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
+bool bGPSON = false;
 
 int iDisplayType = 0;
 int DisplayTimeWait = 0;
@@ -94,6 +95,9 @@ double posinfo_lon = 0.0;
 double posinfo_last_lat = 0.0;
 double posinfo_last_lon = 0.0;
 double posinfo_last_direction = 0.0;
+uint32_t posinfo_satcount = 0;
+int posinfo_hdop = 0;
+bool posinfo_fix = false;
 bool posinfo_shot=false;
 int no_gps_reset_counter = 0;
 
@@ -161,8 +165,7 @@ void addLoraRxBuffer(unsigned int msg_id)
 
     if(bDEBUG)
     {
-        Serial.printf("LoraRX Ringbuffer added element: %u\n", loraWrite);
-        printBuffer(ringBufferLoraRX[loraWrite], 4);
+        Serial.printf("LoraRX Ringbuffer added element: %u %02X%02X%02X%02X", loraWrite, ringBufferLoraRX[loraWrite][3], ringBufferLoraRX[loraWrite][2], ringBufferLoraRX[loraWrite][1], ringBufferLoraRX[loraWrite][0]);
     }
 
     loraWrite++;
@@ -174,7 +177,7 @@ int pageLine[7][3] = {0};
 char pageText[7][25] = {0};
 int pageLineAnz=0;
 
-#define PAGE_MAX 5
+#define PAGE_MAX 6
 
 int pageLastLine[PAGE_MAX][7][3] = {0};
 char pageLastText[PAGE_MAX][7][25] = {0};
@@ -333,13 +336,13 @@ void sendDisplayTrack()
 
     sendDisplayMainline();
 
-    sprintf(print_text, "LAT : %.4lf %c", meshcom_settings.node_lat, meshcom_settings.node_lat_c);
+    sprintf(print_text, "LAT : %.4lf %c  %s", meshcom_settings.node_lat, meshcom_settings.node_lat_c, (posinfo_fix?"fix":""));
     sendDisplay1306(false, false, 3, 22, print_text);
 
-    sprintf(print_text, "LON : %.4lf %c", meshcom_settings.node_lon, meshcom_settings.node_lon_c);
+    sprintf(print_text, "LON : %.4lf %c %4i", meshcom_settings.node_lon, meshcom_settings.node_lon_c, (int)posinfo_satcount);
     sendDisplay1306(false, false, 3, 32, print_text);
 
-    sprintf(print_text, "RATE: %5i sec", (int)posinfo_interval);
+    sprintf(print_text, "RATE: %5i sec %4i", (int)posinfo_interval, posinfo_hdop);
     sendDisplay1306(false, false, 3, 42, print_text);
 
     sprintf(print_text, "DIST: %5i m", posinfo_distance);
@@ -660,7 +663,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 void initButtonPin()
 {
     #ifdef BUTTON_PIN
-        pinMode(BUTTON_PIN, INPUT);
+        pinMode(BUTTON_PIN, INPUT_PULLUP);
     #endif
 }
 
@@ -705,6 +708,17 @@ void checkButtonState()
                             pageLine[its][1] = pageLastLine[pagePointer][its][1];
                             pageLine[its][2] = pageLastLine[pagePointer][its][2];
                             memcpy(pageText[its], pageLastText[pagePointer][its], 25);
+                            if(its == 0)
+                            {
+                                for(int iss=0; iss < 20; iss++)
+                                {
+                                    if(pageText[its][iss] == 0x00)
+                                        pageText[its][iss] = 0x20;
+                                }
+                                pageText[its][18] = 0x20;
+                                pageText[its][19] = pagePointer | 0x30;
+                                pageText[its][20] = 0x00;
+                            }
                         }
 
                         iDisplayType=0;
@@ -1097,7 +1111,11 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
         char calt[15]={0};
 
         if(mv_to_percent(global_batt) > 0)
+        {
             sprintf(cbatt, " /B=%03d", mv_to_percent(global_batt));
+
+            //Serial.printf("cbatt:%s mv_to_percent(global_batt):%d global_batt:%.2f\n", cbatt, mv_to_percent(global_batt), global_batt);
+        }
 
         if(alt > 0)
         {
@@ -1142,13 +1160,6 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     printBuffer_aprs((char*)"NEW-POS", aprsmsg);
     Serial.println();
 
-    // An APP als Anzeige retour senden
-    if(hasMsgFromPhone)
-    {
-        addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
-
-    }
-    
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     iWrite++;
@@ -1167,6 +1178,29 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
 
+    // An APP als Anzeige retour senden
+    if(isPhoneReady == 1)
+    {
+        aprsPosition aprspos;
+
+        initAPRSPOS(aprspos);
+
+        decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
+
+        aprspos.alt = (int)((float)aprspos.alt * 0.3048);
+
+        aprspos.alt = aprspos.alt * 10; //work arround für APP
+
+        aprsmsg.msg_payload = PositionToAPRS(false, false, aprspos.lat/100.0, aprspos.lat_c, aprspos.lon/100.0, aprspos.lon_c, aprspos.alt);
+
+        if(aprsmsg.msg_payload == "")
+            return;
+
+        encodeAPRS(msg_buffer, aprsmsg);
+
+        addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+    }
+    
 }
 
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press)
@@ -1346,8 +1380,11 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
 
     if(posinfo_shot)
     {
-        Serial.print(getTimeString());
-        Serial.printf("posinfo shot set - direction_diff:%i last_lat:%.1lf last_lon:%.1lf\n", direction_diff, posinfo_last_lat, posinfo_last_lon);
+        if(bDEBUG)
+        {
+            Serial.print(getTimeString());
+            Serial.printf(" POSINFO one-shot set - direction_diff:%i last_lat:%.1lf last_lon:%.1lf\n", direction_diff, posinfo_last_lat, posinfo_last_lon);
+        }
     }
 
     return gps_send_rate;

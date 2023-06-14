@@ -31,6 +31,9 @@
 #include <mheard_functions.h>
 #include <clock.h>
 
+#include <SparkFun_Ublox_Arduino_Library.h>
+SFE_UBLOX_GPS myGPS;
+
 /*
     RAK4631 PIN DEFINITIONS
 
@@ -342,13 +345,50 @@ void nrf52setup()
     digitalWrite(WB_IO2, 1);
     delay(1000);
     
-    Serial1.begin(9600);
+    Serial.println("=====================================");
+
+    Serial.println("GPS: trying 38400 baud");
+    
+    Serial1.begin(38400);
     Serial1.setTimeout(500);
     while (!Serial1);
 
+    if(Serial1)
+    {
+        if (myGPS.begin(Serial1))
+        {
+            Serial.println("GPS: connected at 38400 baud");
+        }
+        else
+        {
+            Serial1.end();
 
-    Serial.println("=====================================");
-    Serial.println("GPS UART init ok!");
+            delay(100);
+            Serial.println("GPS: trying 9600 baud");
+
+            Serial1.begin(9600);
+            Serial1.setTimeout(500);
+            while (!Serial1);
+
+            if(Serial1)
+            {
+                if (myGPS.begin(Serial1))
+                {
+                    Serial.println("GPS: connected at 9600 baud");
+                }
+                else
+                {
+                    Serial.println("GPS: speed not found");
+                }
+            }
+            else
+                Serial.println("GPS: not connected");
+        }
+    }
+    else
+        Serial.println("GPS: not connected");
+
+    delay(100);
 
     // Try to initialize!
     #if defined(LPS33)
@@ -584,6 +624,13 @@ void nrf52loop()
         {
             unsigned int igps = getGPS();
 
+            if(bDEBUG)
+            {
+                Serial.printf("\r\nGPS: <posinterval:%i> <direction:%i> LAT:%lf LON:%lf %02d-%02d-%02d %02d:%02d:%02d\n", igps, posinfo_direction, tinyGPSPlus.location.lat(), tinyGPSPlus.location.lng(), tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
+                //Serial.printf("INT: LAT:%lf LON:%lf %i-%02i-%02i %02i:%02i:%02i\n", meshcom_settings.node_lat, meshcom_settings.node_lon, meshcom_settings.node_date_year, meshcom_settings.node_date_month,  meshcom_settings.node_date_day,
+                //meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
+            }
+
             if(igps > 0)
                 posinfo_interval = igps;
             else
@@ -593,6 +640,9 @@ void nrf52loop()
                 {
                     posinfo_interval = POSINFO_INTERVAL;
                     no_gps_reset_counter = 0;
+                    posinfo_fix = false;
+                    posinfo_satcount = 0;
+                    posinfo_hdop = 0;
                 }
             }
 
@@ -616,6 +666,8 @@ void nrf52loop()
     }
 
     // posinfo
+    //Serial.printf("posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
+
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 10000 && millis() < 30000 && bPosFirst) || posinfo_shot)
     {
         bPosFirst = false;
@@ -791,6 +843,9 @@ void direction_parse(String tmp)
  */
 unsigned int getGPS(void)
 { 
+    if(bDEBUG)
+        Serial.println("-----------check GPS-----------");
+
     String tmp_data = "";
 
     bool newData = false;
@@ -844,13 +899,10 @@ unsigned int getGPS(void)
         meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)tinyGPSPlus.altitude.meters()) / 11;
 
         MyClock.setCurrentTime(true, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
-        
-        if(bDEBUG)
-        {
-            Serial.printf("GPS: LAT:%lf LON:%lf %02d-%02d-%02d %02d:%02d:%02d\n", tinyGPSPlus.location.lat(), tinyGPSPlus.location.lng(), tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
-            //Serial.printf("INT: LAT:%lf LON:%lf %i-%02i-%02i %02i:%02i:%02i\n", meshcom_settings.node_lat, meshcom_settings.node_lon, meshcom_settings.node_date_year, meshcom_settings.node_date_month,  meshcom_settings.node_date_day,
-            //meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
-        }
+
+        posinfo_satcount = tinyGPSPlus.satellites.value();
+        posinfo_hdop = tinyGPSPlus.hdop.value();
+        posinfo_fix = true;
 
         return setSMartBeaconing(dlat, dlon);
     }

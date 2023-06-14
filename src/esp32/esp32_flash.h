@@ -43,7 +43,7 @@ struct s_meshcom_settings
 
 
     #ifdef ESP32
-		int node_sset = 0x0014;	// bDisplayPos = true, bButtonCheck = true
+		int node_sset = 0x0035;	// bDisplayPos = true, bButtonCheck = true, bGPSON = true
 	#else
 		int node_sset = 0x0004;	// bDisplayPos = true
 	#endif

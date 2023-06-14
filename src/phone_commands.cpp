@@ -117,6 +117,11 @@ void sendConfigToPhone ()
 	#endif
 
 	ble_busy_flag = false;
+
+	
+	// one shot GPS
+	posinfo_shot = true;
+
 }
 
 /**
@@ -154,7 +159,7 @@ void sendToPhone()
 			toPhoneRead = 0;
 
 		if(bDEBUG)
-			Serial.printf("toPhoneWrite:%i toPhoneRead:%i \n", toPhoneWrite, toPhoneRead);
+			Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7);
     }
     
     ble_busy_flag = false;

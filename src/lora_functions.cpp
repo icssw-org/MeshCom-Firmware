@@ -67,13 +67,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             if(icheck >= 0)
             {
-                if(own_msg_id[icheck][4] == 0)
+                if(own_msg_id[icheck][4] < 2)   // 00...not heard, 01...heard, 02...ACK
                 {
                     print_buff[5] = 0x41;
                     addBLEOutBuffer(print_buff+5, 7);
-                    Serial.printf("ACK to Phone  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[6], print_buff[7], print_buff[8], print_buff[9], print_buff[10], print_buff[11]);
+                    Serial.printf("ACK   to Phone  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[6], print_buff[7], print_buff[8], print_buff[9], print_buff[10], print_buff[11]);
                     
-                    own_msg_id[icheck][4] = print_buff[10];
+                    own_msg_id[icheck][4] = 0x02;   // 02...ACK
                 }
             }
             else
@@ -105,16 +105,37 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         size = aprsmsg.msg_len;
 
+        int icheck = checkOwnTx(RcvBuffer+1);
+
         if(msg_type_b_lora == 0x00)
         {
             //Serial.printf("%03i RCV:%s\n", size, RcvBuffer+6);
         }
         else
-        if(is_new_packet(RcvBuffer+1) && checkOwnTx(RcvBuffer+1) < 0) // only new msg_id and now own msg_id
+        if(icheck >= 0) // own msg_id
+        {
+            if(msg_type_b_lora == 0x3A && own_msg_id[icheck][4] == 0x00)   // 00...not heard, 01...heard, 02...ACK
+            {
+                print_buff[0]=0x41;
+                print_buff[1]=RcvBuffer[1];
+                print_buff[2]=RcvBuffer[2];
+                print_buff[3]=RcvBuffer[3];
+                print_buff[4]=RcvBuffer[4];
+                print_buff[5]=0x00;  // ONLY HEARD
+                print_buff[6]=0x00;
+                
+                addBLEOutBuffer(print_buff, 7);
+
+                if(bDisplayInfo)
+                    Serial.printf("HEARD from <%s> to Phone  %02X %02X%02X%02X%02X %02X %02X\n", aprsmsg.msg_source_path.c_str(), print_buff[0], print_buff[1], print_buff[2], print_buff[3], print_buff[4], print_buff[5], print_buff[6]);
+
+                own_msg_id[icheck][4]=0x01; // 0x01 HEARD
+            }
+        }
+        else
+        if(is_new_packet(RcvBuffer+1))
         {
             // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-
-
             switch (msg_type_b_lora)
             {
 
@@ -165,7 +186,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 lora_msg_len = UDP_TX_BUF_SIZE; // zur Sicherheit
 
                 if(bDEBUG)
-                    printf("src:%s msg_id: %04X msg_len: %i payload[5]=%i via=%d\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_id, lora_msg_len, aprsmsg.max_hop, aprsmsg.msg_server);
+                    printf("Check-Msg src:%s msg_id: %04X msg_len: %i payload[5]=%i via=%d\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_id, lora_msg_len, aprsmsg.max_hop, aprsmsg.msg_server);
 
                 // Wiederaussendung via LORA
                 // Ringbuffer filling
@@ -425,13 +446,13 @@ bool is_new_packet(uint8_t compBuffer[4])
             if (memcmp(compBuffer, ringBufferLoraRX[ib], 4) == 0)
             {
                 if(bDEBUG)
-                    Serial.printf("MSG: old one\n");
+                    Serial.printf("MSG: old one %02X%02X%02X%02X\n", compBuffer[0], compBuffer[1], compBuffer[2], compBuffer[3]);
                 return false;
             }
     }
 
     if(bDEBUG)
-        Serial.printf("new one\n");
+        Serial.printf("MSG: new one %02X%02X%02X%02X\n", compBuffer[0], compBuffer[1], compBuffer[2], compBuffer[3]);
 
     return true;
 }
@@ -467,7 +488,7 @@ void doTX()
     {
         uint16_t rand = millis();
         uint16_t r10 = rand / 10;
-        cmd_counter = (rand - r10*10) + 35;    // cmd_counter 35-45
+        cmd_counter = (rand - r10*10) + 15;    // cmd_counter 15-25
 
         //Serial.printf("rand:%i r10:%i cmd_counter:%i\n", rand, r10, cmd_counter);
     }

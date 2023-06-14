@@ -39,7 +39,11 @@ void init_flash(void)
 
     meshcom_settings.node_hamnet_only = preferences.getInt("node_honly", 0);
 
-    meshcom_settings.node_sset = preferences.getInt("node_sset", 0x0004);
+    #ifdef ESP32
+        meshcom_settings.node_sset = preferences.getInt("node_sset", 0x0035);	// bDisplayPos = true, bButtonCheck = true,  bGPSON = true
+	#else
+        meshcom_settings.node_sset = preferences.getInt("node_sset", 0x0004);
+	#endif
 
     meshcom_settings.node_maxv = preferences.getFloat("node_maxv", 4.24);
 }

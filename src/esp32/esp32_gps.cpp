@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "loop_functions_extern.h"
 
 #if defined (ENABLE_GPS)
 
@@ -14,34 +15,42 @@
 #if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
     #define GPS_RX_PIN 34
     #define GPS_TX_PIN 12
-    #define I2C_SDA    21
-    #define I2C_SCL    22
-#elif defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
+#elif defined(BOARD_HELTEC)
     //For heltec these are the pins:
-    #define GPS_RX_PIN 36
-    #define GPS_TX_PIN 37
-    #define I2C_SDA    21
-    #define I2C_SCL    22
+    #define GPS_RX_PIN 2
+    #define GPS_TX_PIN 17
+#elif defined(BOARD_HELTEC_V3)
+    //For heltec these are the pins:
+    #define GPS_RX_PIN 37
+    #define GPS_TX_PIN 36
+#elif defined(BOARD_TLORA_OLV216)
+    #define GPS_RX_PIN 13
+    #define GPS_TX_PIN 15
+#elif defined(BOARD_E22)
+    //For heltec these are the pins:
+    #define GPS_RX_PIN 16
+    #define GPS_TX_PIN 17
 #else
     #define GPS_RX_PIN 34
     #define GPS_TX_PIN 12
-    #define I2C_SDA    21
-    #define I2C_SCL    22
 #endif
 
 
 #include <HardwareSerial.h>
 #include <SparkFun_Ublox_Arduino_Library.h>
 
+HardwareSerial GPS(GPS_SERIAL_NUM);
+
 #include "TinyGPSplus.h"
 
+#if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
 #include "axp20x.h"
 AXP20X_Class axp;
+#endif
 
 // TinyGPS
 TinyGPSPlus tinyGPSPlus;
 
-HardwareSerial GPS(GPS_SERIAL_NUM);
 SFE_UBLOX_GPS myGPS;
 
 int direction_S_N = 0;  //0--S, 1--N
@@ -52,6 +61,8 @@ int state = 0; // steps through auto-baud, reset, etc states
 void setupGPS(void)
 {
     Wire.begin(I2C_SDA, I2C_SCL);
+
+    #if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
     if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
         Serial.println("AXP192 Begin PASS");
     } else {
@@ -62,7 +73,9 @@ void setupGPS(void)
     axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
     axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
     axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
-    Serial.println("All comms started");
+    Serial.println("All AXP192 started");
+    #endif
+
     delay(100);
 }
 
@@ -74,7 +87,8 @@ unsigned int readGPS(void)
 
     bool newData = false;
 
-    //Serial.printf("GPS check: %i\n", Serial1.available());
+    if(bDEBUG)
+        Serial.println("-----------check GPS-----------");
   
     // For one second we parse GPS data and report some key values
     //for (unsigned long start = millis(); millis() - start < 1000;)
@@ -92,8 +106,8 @@ unsigned int readGPS(void)
             break;
         }
 
-        //if(bDEBUG)
-        //  Serial.print(c);
+        if(bDEBUG)
+          Serial.print(c);
 
         tmp_data += c;
         
@@ -108,12 +122,10 @@ unsigned int readGPS(void)
     }
 
     if(bDEBUG)
-        Serial.printf("\nnewData:%i\n", newData);
+        Serial.printf("newData:%i Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
 
     if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 800)
     {
-        //Serial.printf("Fix:%d UPD:%d VAL:%d HDOP:%i\n", tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
-
         direction_parse(tmp_data);
 
         double dlat, dlon;
@@ -155,8 +167,18 @@ unsigned int readGPS(void)
         }
 
 
+        posinfo_satcount = tinyGPSPlus.satellites.value();
+        posinfo_hdop = tinyGPSPlus.hdop.value();
+        posinfo_fix = true;
+
         return setSMartBeaconing(dlat, dlon);
 
+    }
+    else
+    {
+        posinfo_fix = false;
+        posinfo_satcount = 0;
+        posinfo_hdop = 0;
     }
 
     return 0;
@@ -164,9 +186,16 @@ unsigned int readGPS(void)
 
 unsigned int getGPS(void)
 {
+    if(!bGPSON)
+        return POSINFO_INTERVAL;
+
     bool bMitHardReset = false;
-    //Serial.print("===== STATE ");
-    //Serial.println(state);
+    
+    if(bMitHardReset)
+    {
+        Serial.print("===== STATE ");
+        Serial.println(state);
+    }
 
     switch (state)
     {
@@ -174,16 +203,23 @@ unsigned int getGPS(void)
             do
             {
                 Serial.println("GPS: trying 38400 baud");
+                
                 GPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-                if (myGPS.begin(GPS)) break;
+
+                if (myGPS.begin(GPS))
+                {
+                    Serial.println("GPS: connected at 38400 baud");
+                    break;
+                }
 
                 delay(100);
                 Serial.println("GPS: trying 9600 baud");
                 GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
                 if (myGPS.begin(GPS)) {
-                    Serial.println("GPS: connected at 9600 baud, switching to 38400");
-                    myGPS.setSerialRate(38400);
-                    delay(100);
+                    Serial.println("GPS: connected at 9600 baud");
+                    break;
+                    //myGPS.setSerialRate(9600);
+                    //delay(100);
                 } else {
                     delay(2000); //Wait a bit before trying again to limit the Serial output flood
                 }
@@ -193,9 +229,9 @@ unsigned int getGPS(void)
             myGPS.setUART2Output(COM_TYPE_UBX); //Set the UART port to output UBX only
             myGPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART2);
             myGPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART2);
-            myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
-            myGPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART2);
             myGPS.disableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
+            myGPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART2);
+            myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
             myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART2);
             myGPS.saveConfiguration(); //Save the current settings to flash and BBR
 
@@ -248,11 +284,13 @@ unsigned int getGPS(void)
         case 3: // print version info
             if(bMitHardReset)
             {
+                /*
                 Serial.print("GPS protocol version: ");
                 Serial.print(myGPS.getProtocolVersionHigh());
                 Serial.print('.');
                 Serial.println(myGPS.getProtocolVersionLow());
                 Serial.println();
+                */
             
                 Serial.println("GPS running");
             }
@@ -264,28 +302,6 @@ unsigned int getGPS(void)
         if(GPS.available())
         {
             return readGPS();
-            /*
-            long latitude = myGPS.getLatitude();
-            Serial.print(F("Lat: "));
-            Serial.print(latitude);
-
-            long longitude = myGPS.getLongitude();
-            Serial.print(F(" Long: "));
-            Serial.print(longitude);
-            Serial.print(F(" (degrees * 10^-7)"));
-
-            long altitude = myGPS.getAltitude();
-            Serial.print(F(" Alt: "));
-            Serial.print(altitude);
-            Serial.print(F(" (mm)"));
-
-            byte SIV = myGPS.getSIV();
-            Serial.print(F(" SIV: "));
-            Serial.print(SIV);
-
-            Serial.println();
-            Serial.println();
-            */
         }
 
     }

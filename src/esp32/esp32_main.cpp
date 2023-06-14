@@ -42,6 +42,16 @@ extern AXP20X_Class axp;
 #include <Adafruit_Sensor.h>
 #endif
 
+#include <u8g2lib.h>
+
+#if defined(BOARD_HELTEC)
+    extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
+#elif defined(BOARD_HELTEC_V3)
+    extern U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2;
+#else
+    extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
+#endif
+
 /**
  * RadioLib Infos und Examples:
  * SX127x:
@@ -237,6 +247,7 @@ void esp32setup()
     bDEBUG = meshcom_settings.node_sset & 0x0008;
     bButtonCheck = meshcom_settings.node_sset & 0x0010;
     bDisplayTrack = meshcom_settings.node_sset & 0x0020;
+    bGPSON =  meshcom_settings.node_sset & 0x0040;
 
     global_batt = 4200.0;
 
@@ -257,7 +268,7 @@ void esp32setup()
         if(meshcom_settings.node_sset == 0x0000)
         {
             bButtonCheck = true;
-            meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0020;
+            meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0035;	// bDisplayPos = true, bButtonCheck = true, bGPSON = true
             save_settings();
         }
     #endif

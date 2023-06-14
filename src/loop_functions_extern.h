@@ -20,21 +20,18 @@ extern int DisplayTimeWait;
 extern unsigned long BattTimeWait;
 extern bool bButtonCheck;
 extern bool bDisplayTrack;
+extern bool bGPSON;
 
-extern s_meshcom_settings meshcom_settings;
+
+#if defined(ESP8266) || defined(ESP32)
+#else
+    extern s_meshcom_settings meshcom_settings;
+#endif
 
 // common variables
 extern char msg_text[MAX_MSG_LEN_PHONE];
 
 extern unsigned int _GW_ID; // ID of our Node
-
-#if defined(BOARD_HELTEC)
-    extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-#elif defined(BOARD_HELTEC_V3)
-    extern U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2;
-#else
-    extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-#endif
 
 extern unsigned int msg_counter;
 
@@ -75,6 +72,9 @@ extern double posinfo_lon;
 extern double posinfo_last_lat;
 extern double posinfo_last_lon;
 extern double posinfo_last_direction;
+extern uint32_t posinfo_satcount;
+extern int posinfo_hdop;
+extern bool posinfo_fix;
 extern bool posinfo_shot;
 extern int no_gps_reset_counter;
 

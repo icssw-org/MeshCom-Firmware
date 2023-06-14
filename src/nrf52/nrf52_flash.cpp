@@ -179,7 +179,7 @@ boolean save_settings(void)
 	
 	log_settings();
 
-    Serial.println("flash save...");
+    Serial.println("\r\nflash save...");
 
 	return result;
 }

@@ -49,12 +49,14 @@
     #define MODUL_HARDWARE TLORA_V2_1_1p6
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX127X
+    #define ENABLE_GPS
 #endif
 
 #ifdef 	BOARD_HELTEC
     #define MODUL_HARDWARE HELTEC_V2_1
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX127X
+    #define ENABLE_GPS
 #endif
 
 #ifdef 	BOARD_HELTEC_V3
@@ -62,12 +64,14 @@
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX126X_V3
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
+    #define ENABLE_GPS
 #endif
 
 #ifdef 	BOARD_E22
     #define MODUL_HARDWARE EBYTE_E22
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
+    #define ENABLE_GPS
 #endif
 
 // Common LoRa Parameters
@@ -231,6 +235,9 @@ static const uint8_t SCK   = 5;
 #define DISPLAY_HEIGHT 64
 #define DISPLAY_WIDTH  128
 */
+
+#define BUTTON_PIN 0
+
 #define LORA_RST  RST_LoRa
 #define LORA_DIO0 DIO0
 #define LORA_DIO1 DIO1
@@ -309,6 +316,9 @@ static const uint8_t KEY_BUILTIN = 39;
 #define SDA_PIN 21
 #define SCL_PIN 22
 
+#define I2C_SDA    SDA_PIN
+#define I2C_SCL    SCL_PIN
+
 #define BUTTON_PIN 38
 
 #endif
@@ -346,6 +356,9 @@ static const uint8_t KEY_BUILTIN = 39;
 #define SDA_PIN 21
 #define SCL_PIN 22
 
+#define I2C_SDA    SDA_PIN
+#define I2C_SCL    SCL_PIN
+
 #endif
 
 #ifdef BOARD_TLORA_OLV2
@@ -376,6 +389,9 @@ static const uint8_t SCK =  5;
 #define LORA_DIO0 LORA_IRQ
 //#define LORA_DIO1 LORA_IO1
 //#define LORA_CS  //already defined
+
+#define I2C_SDA    SDA_PIN
+#define I2C_SCL    SCL_PIN
 
 #endif
 
@@ -414,12 +430,17 @@ static const uint8_t SCK =  5;
 #define LORA_DIO1 LORA_D1
 //#define LORA_CS  //already defined
 
-#define BUTTON_PIN 12
+#define BUTTON_PIN 12   // GIO12
+
+#define I2C_SDA    21
+#define I2C_SCL    22
 
 #endif
 
 #ifdef BOARD_E22
 // Custom Board homemade E22-Ebyte Module + AZ Delivery ESP32 DevKitC v4
+
+#define BUTTON_PIN 12
 
 #define LORA_RST  27
 #define LORA_DIO0 26 // aka BUSY Pin
@@ -429,6 +450,7 @@ static const uint8_t SCK =  5;
 #define RXEN 14
 #define TXEN 13
 #define LED 2
+
 #define I2C_SDA 21
 #define I2C_SCL 22
 
