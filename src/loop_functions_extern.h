@@ -18,15 +18,12 @@ extern bool bDisplayInfo;
 extern unsigned long DisplayOffWait;
 extern int DisplayTimeWait;
 extern unsigned long BattTimeWait;
+extern unsigned long BMXTimeWait;
 extern bool bButtonCheck;
 extern bool bDisplayTrack;
 extern bool bGPSON;
-
-
-#if defined(ESP8266) || defined(ESP32)
-#else
-    extern s_meshcom_settings meshcom_settings;
-#endif
+extern bool bBMPON;
+extern bool bBMEON;
 
 // common variables
 extern char msg_text[MAX_MSG_LEN_PHONE];

@@ -9,7 +9,7 @@
 #define SOURCE_TYPE "CL"
 //#define SOURCE_TYPE "GW"
 //#define GATEWAY_TYPE
-#define SOURCE_VERSION "4.21"
+#define SOURCE_VERSION "4.22"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -29,12 +29,14 @@
 #ifdef BOARD_RAK4630
     #define MODUL_HARDWARE RAK4631
     #define RF_FREQUENCY 433175000 // 432900000   // Hz
+    #define ENABLE_BMX280
 #endif
 
 #ifdef BOARD_TBEAM
     #define MODUL_HARDWARE TBEAM
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define ENABLE_GPS
+    #define ENABLE_BMX280
     #define SX127X
 #endif
 
@@ -42,6 +44,7 @@
     #define MODUL_HARDWARE TBEAM_1268
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define ENABLE_GPS
+    #define ENABLE_BMX280
     #define SX126X
 #endif
 
@@ -50,6 +53,7 @@
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX127X
     #define ENABLE_GPS
+    #define ENABLE_BMX280
 #endif
 
 #ifdef 	BOARD_HELTEC
@@ -57,6 +61,7 @@
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX127X
     #define ENABLE_GPS
+    #define ENABLE_BMX280
 #endif
 
 #ifdef 	BOARD_HELTEC_V3
@@ -65,6 +70,7 @@
     #define SX126X_V3
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
     #define ENABLE_GPS
+    #define ENABLE_BMX280
 #endif
 
 #ifdef 	BOARD_E22
@@ -72,6 +78,7 @@
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
     #define ENABLE_GPS
+    #define ENABLE_BMX280
 #endif
 
 // Common LoRa Parameters

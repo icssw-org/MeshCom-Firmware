@@ -26,6 +26,8 @@ bool bDisplayInfo = false;
 unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
 bool bGPSON = false;
+bool bBMPON = false;
+bool bBMEON = false;
 
 int iDisplayType = 0;
 int DisplayTimeWait = 0;
@@ -47,11 +49,6 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
     U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2(U8G2_R0, 18, 17, 21);
 #else
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);  //RESET CLOCK DATA
-#endif
-
-#if defined(ESP8266) || defined(ESP32)
-#else
-    s_meshcom_settings meshcom_settings;
 #endif
 
 unsigned int msg_counter = 0;

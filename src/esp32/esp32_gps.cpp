@@ -1,5 +1,4 @@
 #include "configuration.h"
-#include "loop_functions_extern.h"
 
 #if defined (ENABLE_GPS)
 
@@ -7,7 +6,6 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <clock.h>
-#include <configuration.h>
 
 #define GPS_BAUDRATE 9600
 #define GPS_SERIAL_NUM 2

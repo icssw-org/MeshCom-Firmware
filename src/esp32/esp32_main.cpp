@@ -18,6 +18,10 @@
 #include <WiFi.h>
 
 #include "esp32_gps.h"
+#include "esp32_flash.h"
+
+// Sensors
+#include "bmx280.h"
 
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
@@ -248,6 +252,8 @@ void esp32setup()
     bButtonCheck = meshcom_settings.node_sset & 0x0010;
     bDisplayTrack = meshcom_settings.node_sset & 0x0020;
     bGPSON =  meshcom_settings.node_sset & 0x0040;
+    bBMPON =  meshcom_settings.node_sset & 0x0080;
+    bBMEON =  meshcom_settings.node_sset & 0x0100;
 
     global_batt = 4200.0;
 
@@ -312,6 +318,9 @@ void esp32setup()
         Wire.begin();
     #endif
 
+    #if defined(ENABLE_BMX280)
+        setupBMX280();
+    #endif
 
 #ifdef BOARD_E22
     // if RESET Pin is connected
@@ -766,7 +775,7 @@ void esp32loop()
 
     //Serial.printf("BattTimeWait:%i millis():%i tx_is_active:%i is_receiving:%i\n", BattTimeWait, millis(), tx_is_active, is_receiving);
 
-    if ((BattTimeWait + 10000) < millis())
+    if ((BattTimeWait + 10000) < millis())  // 10 sec
     {
         if (tx_is_active == false && is_receiving == false)
         {
@@ -778,6 +787,27 @@ void esp32loop()
             #endif
 
             BattTimeWait = millis();
+        }
+    }
+
+    if(bBMPON || bBMEON)
+    {
+        if(BMXTimeWait == 0)
+            BMXTimeWait = millis() - 10000;
+
+        if ((BMXTimeWait + 30000) < millis())   // 30 sec
+        {
+            // read BMP Sensor
+            #if defined(ENABLE_BMX280)
+                if(loopBMX280())
+                {
+                    meshcom_settings.node_press = getPress();
+                    meshcom_settings.node_temp = getTemp();
+                    meshcom_settings.node_hum = getHum();
+                    
+                    BMXTimeWait = millis(); // wait for next messurement
+                }
+            #endif
         }
     }
 

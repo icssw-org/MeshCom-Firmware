@@ -31,6 +31,8 @@
 #include <mheard_functions.h>
 #include <clock.h>
 
+#include <bmx280.h>
+
 #include <SparkFun_Ublox_Arduino_Library.h>
 SFE_UBLOX_GPS myGPS;
 
@@ -284,6 +286,9 @@ void nrf52setup()
     bDEBUG = meshcom_settings.node_sset & 0x0008;
     bButtonCheck = meshcom_settings.node_sset & 0x0010;
     bDisplayTrack = meshcom_settings.node_sset & 0x0020;
+    bGPSON =  meshcom_settings.node_sset & 0x0040;
+    bBMPON =  meshcom_settings.node_sset & 0x0080;
+    bBMEON =  meshcom_settings.node_sset & 0x0100;
 
     global_batt = 4200.0;
 
@@ -389,6 +394,10 @@ void nrf52setup()
         Serial.println("GPS: not connected");
 
     delay(100);
+
+    #if defined(ENABLE_BMX280)
+        setupBMX280();
+    #endif
 
     // Try to initialize!
     #if defined(LPS33)
@@ -752,6 +761,25 @@ void nrf52loop()
 
             BattTimeWait = millis();
         }
+    }
+
+    if(BMXTimeWait == 0)
+        BMXTimeWait = millis() - 10000;
+
+    if ((BMXTimeWait + 30000) < millis())   // 30 sec
+    {
+        // read BMX Sensor
+        #if defined(ENABLE_BMX280)
+            if(loopBMX280())
+            {
+                meshcom_settings.node_temp = getTemp();
+                meshcom_settings.node_hum = getHum();  //BMP280 - not supported
+                meshcom_settings.node_press = getPress();
+
+                BMXTimeWait = millis();
+            }
+
+        #endif
     }
 
     //  We are on FreeRTOS, give other tasks a chance to run

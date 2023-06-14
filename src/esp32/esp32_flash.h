@@ -1,6 +1,10 @@
+#ifndef _ESP32_FLASH_H_
+#define _ESP32_FLASH_H_
+
 #include <Arduino.h>
 
 #define MESHCOM_DATA_MARKER 0x55
+
 struct s_meshcom_settings
 {
 	uint8_t valid_mark_1 = 0xAA;				// Just a marker for the Flash
@@ -51,8 +55,10 @@ struct s_meshcom_settings
 	float node_maxv = 4.24;
 };
 
+extern s_meshcom_settings meshcom_settings;
 
 void save_settings(void);
 // Get LoRa parameter
 void init_flash(void);
 
+#endif

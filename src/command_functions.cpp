@@ -144,6 +144,7 @@ void commandAction(char *msg_text, int len, bool ble)
             Serial.printf("--pos      show lat/lon/alt/time info\r\n--weather  show temp/hum/press\r\n--sendpos  send pos info now\r\n--sendweather send weather info now\r\n--setlat   set latitude (44.12345)\r\n--setlon   set logitude (016.12345)\r\n--setalt   set altidude (9999)\r\n");
 
             Serial.printf("--debug    on/off\r\n--display  on/off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx  off\r\n");
         }
 
         return;
@@ -330,6 +331,61 @@ void commandAction(char *msg_text, int len, bool ble)
         if(ble)
         {
             addBLECommandBack((char*)"gps off");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"bmp on", 6) == 0)
+    {
+        bBMPON=true;
+        
+        Serial.println("bmp on");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0080;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"bmp on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"bme on", 6) == 0)
+    {
+        bBMEON=true;
+        
+        Serial.println("bme on");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x00100;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"bme on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"bmx off", 7) == 0)
+    {
+        bBMPON=false;
+        bBMEON=false;
+        
+        Serial.println("bmx off");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7F3F;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"bmx off");
         }
 
         save_settings();
@@ -616,10 +672,8 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         sprintf(print_buff, "MeshCom %s %-4.4s\r\n...LAT: %.4lf %c\r\n...LON: %.4lf %c\r\n...ALT: %i\r\n...SAT: %i - %s - HDOP %i\r\n...RATE: %i\r\n...DIST: %im\r\n...DIRn:  %i°\r\n...DIRo:  %i°\r\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_TYPE, SOURCE_VERSION,
         meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-        posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop,
-        (int)posinfo_interval, posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
-        meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,
-        meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+        (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
+        meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 
         if(ble)
         {
@@ -633,7 +687,7 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(bWeather)
     {
-        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...TEMP: %.2f °C\r\n...HUM: %.2f%% rH\r\n...PRESS: %.2f hPa\r\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...TEMP: %.1f °C\r\n...HUM: %.1f%% rH\r\n...PRESS: %.1f hPa\r\n", SOURCE_TYPE, SOURCE_VERSION,
         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
 
         if(ble)

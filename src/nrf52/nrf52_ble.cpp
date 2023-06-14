@@ -28,7 +28,6 @@ extern uint8_t txt_msg_len_phone;
 extern bool bInitDisplay;
 extern uint8_t dmac[6];
 
-
 // Create device name
 char helper_string[256] = {0};
 

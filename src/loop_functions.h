@@ -6,11 +6,10 @@
 #include <debugconf.h>
 #include <aprs_functions.h>
 
-#if defined(ESP8266) || defined(ESP32)
-    #include "esp32/esp32_flash.h"
-    extern s_meshcom_settings meshcom_settings;
+#ifdef ESP32
+    #include <esp32/esp32_flash.h>
 #else
-    #include <WisBlock-API.h>
+    #include <nrf52/WisBlock-API.h>
 #endif
 
 // OLED Display 1306 128 x 64 px
