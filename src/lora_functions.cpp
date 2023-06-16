@@ -192,8 +192,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 if (lora_msg_len > UDP_TX_BUF_SIZE)
                 lora_msg_len = UDP_TX_BUF_SIZE; // zur Sicherheit
 
-                if(bDEBUG)
-                    printf("Check-Msg src:%s msg_id: %04X msg_len: %i payload[5]=%i via=%d\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_id, lora_msg_len, aprsmsg.max_hop, aprsmsg.msg_server);
+                //if(bDEBUG)
+                //    printf("Check-Msg src:%s msg_id: %04X msg_len: %i payload[5]=%i via=%d\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_id, lora_msg_len, aprsmsg.max_hop, aprsmsg.msg_server);
 
                 // Wiederaussendung via LORA
                 // Ringbuffer filling
@@ -392,7 +392,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     printBuffer(RcvBuffer, size);
             }
 
-            if(bDEBUG)
+            if(bDisplayInfo)
                 Serial.println("");
 
             // set buffer to 0
@@ -453,14 +453,15 @@ bool is_new_packet(uint8_t compBuffer[4])
     {
             if (memcmp(compBuffer, ringBufferLoraRX[ib], 4) == 0)
             {
-                if(bDEBUG)
-                    Serial.printf("MSG: old one %02X%02X%02X%02X\n", compBuffer[0], compBuffer[1], compBuffer[2], compBuffer[3]);
+                //if(bDEBUG)
+                //    Serial.printf("MSG: old one %02X%02X%02X%02X\n", compBuffer[0], compBuffer[1], compBuffer[2], compBuffer[3]);
+
                 return false;
             }
     }
 
-    if(bDEBUG)
-        Serial.printf("MSG: new one %02X%02X%02X%02X\n", compBuffer[0], compBuffer[1], compBuffer[2], compBuffer[3]);
+    //if(bDEBUG)
+    //    Serial.printf("MSG: new one %02X%02X%02X%02X\n", compBuffer[0], compBuffer[1], compBuffer[2], compBuffer[3]);
 
     return true;
 }

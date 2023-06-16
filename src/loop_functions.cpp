@@ -163,10 +163,12 @@ void addLoraRxBuffer(unsigned int msg_id)
     ringBufferLoraRX[loraWrite][1] = msg_id >> 8;
     ringBufferLoraRX[loraWrite][0] = msg_id;
 
+    /*
     if(bDEBUG)
     {
         Serial.printf("LoraRX Ringbuffer added element: %u %02X%02X%02X%02X", loraWrite, ringBufferLoraRX[loraWrite][3], ringBufferLoraRX[loraWrite][2], ringBufferLoraRX[loraWrite][1], ringBufferLoraRX[loraWrite][0]);
     }
+    */
 
     loraWrite++;
     if (loraWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
