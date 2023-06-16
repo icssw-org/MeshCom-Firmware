@@ -22,6 +22,12 @@ float fTemp = 0.0;
 float fPress = 0.0;
 float fHum = 0.0;
 
+float fBaseAltidude = 0;
+float fBasePress = 0;
+
+const float STANDARD_SEA_LEVEL_PRESSURE = 1013.25;
+const float STANDARD_ALTITUDE = 180.0; // in meters, see note
+
 //class derived from BMx280MI that implements communication via an interface other than native I2C or SPI. 
 class BMx280Wire : public BMx280MI
 {
@@ -177,48 +183,73 @@ bool loopBMX280()
 
 	//important: measurement data is read from the sensor in function hasValue() only. 
 	//make sure to call get*() functions only after hasValue() has returned true. 
-  fTemp = bmx280.getTemperature();
-  fPress = bmx280.getPressure();
+  	if(bmx280.getTemperature() == (float)NAN)
+		fTemp = 0.0;
+	else
+  		fTemp = bmx280.getTemperature();
 
-  if(bDEBUG)
-  {
-    Serial.print("Pressure: "); Serial.println(fPress);
-    Serial.print("Pressure (64 bit): "); Serial.println(bmx280.getPressure64());
-    Serial.print("Temperature: "); Serial.println(fTemp);
-  }
+  	if(bmx280.getPressure() == (float)NAN)
+		fPress = 0.0;
+	else
+		fPress = bmx280.getPressure() / 100.0;
 
+	if(bDEBUG)
+	{
+		Serial.print("Pressure: "); Serial.println(fPress);
+		Serial.print("Pressure (64 bit): "); Serial.println(bmx280.getPressure64());
+		Serial.print("Temperature: "); Serial.println(fTemp);
+	}
 
 	if (bmx280.isBME280())
 	{
-    fHum = bmx280.getHumidity();
+	  	if(bmx280.getHumidity() == (float)NAN)
+			fHum = 0.0;
+		else
+			fHum = bmx280.getHumidity();
 
-    if(bDEBUG)
-    {
-		  Serial.print("Humidity: "); 
-		  Serial.println(fHum);
-    }
-    
+		if(bDEBUG)
+		{
+			Serial.print("Humidity: "); 
+			Serial.println(fHum);
+		}
 	}
-  else
-    fHum = 0.0;
+	else
+		fHum = 0.0;
 
-  return true;
+	return true;
 }
 
 float getTemp()
 {
-  return fTemp;
+	return fTemp;
 }
 
 float getPress()
 {
-  return fPress / 100.0;
+	return fPress;
 }
 
 float getHum()
 {
-  return fHum;
+	return fHum;
 }
 
+int getPressALT()
+{
+	if(fPress == 0.0 || fBasePress == 0.0)
+		return 0;
+		
+	double x=(double)fPress/(double)fBasePress;
+	x=(double)-7990*log(x);
+	x = x + fBaseAltidude;
+
+	return (int)lround(x);
+}
+
+float getPressASL()
+{
+	return fPress / powf(1 - ((0.0065 * fBaseAltidude) /
+        (fTemp + (0.0065 * STANDARD_ALTITUDE) + 273.15)), 5.257); // in hPa
+}
 
 #endif

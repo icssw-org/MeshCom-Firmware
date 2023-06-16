@@ -31,6 +31,7 @@
 #include <aprs_functions.h>
 #include <batt_functions.h>
 #include <lora_functions.h>
+#include <udp_functions.h>
 #include <mheard_functions.h>
 #include <clock.h>
 
@@ -254,6 +255,9 @@ void esp32setup()
     bGPSON =  meshcom_settings.node_sset & 0x0040;
     bBMPON =  meshcom_settings.node_sset & 0x0080;
     bBMEON =  meshcom_settings.node_sset & 0x0100;
+
+    bGATEWAY =  meshcom_settings.node_sset & 0x1000;
+    bEXTERN =  meshcom_settings.node_sset & 0x2000;
 
     global_batt = 4200.0;
 
@@ -549,6 +553,22 @@ void esp32setup()
     meshcom_settings.node_date_second = 0;
     meshcom_settings.node_date_hundredths = 0;
 
+    ///////////////////////////////////////////////////////
+    // WIFI
+    if(bGATEWAY || bEXTERN)
+    {
+        if(startWIFI())
+        {
+            if(bGATEWAY)
+                startMeshComUDP();
+
+            if(bEXTERN)
+                startExternUDP();
+        }
+    }
+    //
+    ///////////////////////////////////////////////////////
+
     Serial.println("==============");
     Serial.println("CLIENT STARTED");
     Serial.println("==============");
@@ -804,12 +824,39 @@ void esp32loop()
                     meshcom_settings.node_press = getPress();
                     meshcom_settings.node_temp = getTemp();
                     meshcom_settings.node_hum = getHum();
+                    meshcom_settings.node_press_alt = getPressALT();
+                    meshcom_settings.node_press_asl = getPressASL();
                     
                     BMXTimeWait = millis(); // wait for next messurement
                 }
             #endif
         }
     }
+
+    ////////////////////////////////////////////////
+    // WIFI Gateway functions
+    if(bGATEWAY)
+    {
+        getMeshComUDP();
+
+        sendMeshComUDP();
+
+        // heartbeat
+        if ((hb_timer + (HEARTBEAT_INTERVAL * 1000)) < millis())
+        {
+            //DEBUG_MSG("UDP", "Sending Heartbeat");
+            sendMeshComHeartbeat();
+
+            hb_timer = millis();
+        }
+    }
+
+    if(bEXTERN)
+    {
+        getExternUDP();
+    }
+    //
+    ////////////////////////////////////////////////
 
     delay(100);
 

@@ -26,6 +26,7 @@
 #include <loop_functions_extern.h>
 #include <batt_functions.h>
 #include <mheard_functions.h>
+#include <udp_functions.h>
 
 int sendlng = 0;
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
@@ -152,6 +153,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             // txtmessage, position
             if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40)
             {
+                #ifdef ESP32
+                // Extern Server
+                if(bEXTERN)
+                    sendExternUDP(RcvBuffer, size);
+                #endif
+
                 // print aprs message
                 if(bDisplayInfo)
                     printBuffer_aprs((char*)"RX-LoRa", aprsmsg);
@@ -293,7 +300,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     sendDisplayText(aprsmsg, rssi, snr);
                             }
 
-                            #if defined GATEWAY_TYPE
+                            if(bGATEWAY)
+                            {
 								print_buff[6]=aprsmsg.msg_id & 0xFF;
 								print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
 								print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
@@ -341,7 +349,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 										addLoraRxBuffer(mid);
 									}
 								}
-                            #endif
+                            }
                         }
                         else
                         if(msg_type_b_lora == 0x21)

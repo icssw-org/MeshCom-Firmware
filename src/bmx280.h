@@ -10,5 +10,7 @@ bool loopBMX280(void);
 float getTemp();
 float getPress();
 float getHum();
+int getPressALT();
+float getPressASL();
 
 #endif

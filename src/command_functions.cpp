@@ -94,17 +94,17 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setnoinfo", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"setinfo off", 11) == 0)
     {
-        Serial.println("\nsetnoinfo set");
+        Serial.println("\nsetinfo off");
 
         bDisplayInfo=false;
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setinfo", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"setinfo on", 10) == 0)
     {
-        Serial.println("\nsetinfo set");
+        Serial.println("\nsetinfo on");
 
         bDisplayInfo=true;
         return;
@@ -143,8 +143,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
             Serial.printf("--pos      show lat/lon/alt/time info\r\n--weather  show temp/hum/press\r\n--sendpos  send pos info now\r\n--sendweather send weather info now\r\n--setlat   set latitude (44.12345)\r\n--setlon   set logitude (016.12345)\r\n--setalt   set altidude (9999)\r\n");
 
-            Serial.printf("--debug    on/off\r\n--display  on/off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
-            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx  off\r\n");
+            Serial.printf("--debug    on/off\r\n--display  on/off\r\n--setinfo  on\r\n--setinfo  off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx  off\r\n--gateway on\r\n--gateway off\r\n--extern on\r\n--extern off\r\n--externip 99.99.99.99\r\n");
         }
 
         return;
@@ -393,6 +393,103 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"setpress", 8) == 0)
+    {
+        fBaseAltidude = (float)meshcom_settings.node_alt;
+        fBasePress = meshcom_settings.node_press;
+
+        Serial.printf("\r\nBase Press set to: %.1f at %.1f m\r\n", fBasePress, fBaseAltidude);
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"Base Press set");
+        }
+
+        return;
+    }
+    if(commandCheck(msg_text+2, (char*)"gateway on", 10) == 0)
+    {
+        bGATEWAY=true;
+        
+        Serial.println("gateway on");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x01000;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"gateway on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"gateway off", 11) == 0)
+    {
+        bGATEWAY=false;
+        
+        Serial.println("gateway off");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x6FFF;   // mask 0x1000
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"gateway off");
+        }
+
+        save_settings();
+
+        return;
+    }
+    if(commandCheck(msg_text+2, (char*)"extern on", 9) == 0)
+    {
+        bEXTERN=true;
+        
+        Serial.println("extern on");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x02000;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"extern on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"extern off", 10) == 0)
+    {
+        bEXTERN=false;
+        
+        Serial.println("extern off");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x5FFF;   // mask 0x2000
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"extern off");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"externip ", 9) == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        sprintf(meshcom_settings.node_extern, "%s", msg_text+11);
+
+        save_settings();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"debug on", 8) == 0)
     {
         bDEBUG=true;
@@ -430,12 +527,12 @@ void commandAction(char *msg_text, int len, bool ble)
         bPos=true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"weather", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"weather", 7) == 0 || commandCheck(msg_text+2, (char*)"wx", 2) == 0)
     {
         bWeather=true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"WX", 2) == 0)
+    if(commandCheck(msg_text+2, (char*)"sendwx", 6) == 0)
     {
         sendWX(msg_text, meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
 
@@ -512,9 +609,12 @@ void commandAction(char *msg_text, int len, bool ble)
 
         save_settings();
 
-        Serial.println("Auto. Reboot after 15 sec.");
+        if(strlen(meshcom_settings.node_pwd) > 4)
+        {
+            Serial.println("Auto. Reboot after 15 sec.");
 
-        rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+        }
 
         return;
     }
@@ -533,9 +633,12 @@ void commandAction(char *msg_text, int len, bool ble)
 
         save_settings();
 
-        Serial.println("Auto. Reboot after 15 sec.");
+        if(strlen(meshcom_settings.node_ssid) > 4)
+        {
+            Serial.println("Auto. Reboot after 15 sec.");
 
-        rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+        }
 
         return;
     }
@@ -634,6 +737,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
         meshcom_settings.node_alt=iVar;
 
+        Serial.printf("set alt to %i m\n", meshcom_settings.node_alt);
+
         if(ble)
         {
             addBLECommandBack((char*)"set");
@@ -653,8 +758,9 @@ void commandAction(char *msg_text, int len, bool ble)
 
     if(bInfo)
     {
-        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...Call:  <%s>\r\n...Short: <%s>\r\n...ID %08X\r\n...MODUL %i\r\n...BATT %.2f V\r\n...BATT %d %%\r\n...MAXB %.2f V\r\n...TIME %li ms\r\n...SSID %s\r\n...PWD %s\r\n", SOURCE_TYPE, SOURCE_VERSION,
-                meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, mv_to_percent(global_batt), meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd);
+        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...Call:  <%s>\r\n...Short: <%s>\r\n...ID %08X\r\n...NODE %i\r\n...BATT %.2f V\r\n...BATT %d %%\r\n...MAXB %.2f V\r\n...TIME %li ms\r\n...SSID %s\r\n...PWD  %s\r\n...GWAY %s\r\n...EXT  %s\r\n...EXT IP  %s\r\n", SOURCE_TYPE, SOURCE_VERSION,
+                meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, mv_to_percent(global_batt), meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
+                (bGATEWAY?"on":"off"), (bEXTERN?"on":"off"), meshcom_settings.node_extern);
 
         if(ble)
         {
@@ -687,8 +793,8 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(bWeather)
     {
-        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...TEMP: %.1f °C\r\n...HUM: %.1f%% rH\r\n...PRESS: %.1f hPa\r\n", SOURCE_TYPE, SOURCE_VERSION,
-        meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
+        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...TEMP: %.1f °C\r\n...HUM: %.1f%% rH\r\n...PRESS: %.1f hPa\r\n...PRESS: %.1f hPa sl\r\n...ALT asl: %i m\r\n", SOURCE_TYPE, SOURCE_VERSION,
+        meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
 
         if(ble)
         {

@@ -25,6 +25,12 @@ extern bool bGPSON;
 extern bool bBMPON;
 extern bool bBMEON;
 
+extern bool bGATEWAY;
+extern bool bEXTERN;
+
+extern float fBaseAltidude;
+extern float fBasePress;
+
 // common variables
 extern char msg_text[MAX_MSG_LEN_PHONE];
 

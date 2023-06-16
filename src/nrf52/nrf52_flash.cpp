@@ -105,6 +105,8 @@ void init_flash(void)
 
 		meshcom_settings.node_maxv = old_struct.node_maxv;
 
+		memcpy(meshcom_settings.node_extern, old_struct.node_extern, 40);
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

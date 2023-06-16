@@ -224,6 +224,8 @@ void initAPRSPOS(struct aprsPosition &aprspos)
     aprspos.bat = 0;
     aprspos.lat_d = 0.0;
     aprspos.lon_d = 0.0;
+    aprspos.aprs_group = '/';
+    aprspos.aprs_symbol = '&';
 
 }
 
@@ -249,7 +251,10 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             sscanf(decode_text, "%lf", &aprspos.lat);
 
             aprspos.lat_c = PayloadBuffer.charAt(itxt);
-            istarttext = itxt+2;    // Char-Symbol 1
+            itxt++;
+            aprspos.aprs_group = PayloadBuffer.charAt(itxt);
+
+            istarttext = itxt+1;    // Char-Symbol 1
             break;
         }
         else
@@ -270,7 +275,10 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 
             sscanf(decode_text, "%lf", &aprspos.lon);
             aprspos.lon_c = PayloadBuffer.charAt(itxt);
-            istarttext = itxt+2;    // Char-Symbol 2
+            itxt++;
+            aprspos.aprs_symbol = PayloadBuffer.charAt(itxt);
+
+            istarttext = itxt+1;    // Char-Symbol 2
             break;
         }
         else
@@ -332,6 +340,14 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             break;
         }
     }
+
+    aprspos.lat_d = (int)(aprspos.lat / 100.0);
+    double min = aprspos.lat - (aprspos.lat_d * 100.0);
+    aprspos.lat_d = aprspos.lat_d + (min / 60.0);
+
+    aprspos.lon_d = (int)(aprspos.lon / 100.0);
+    min = aprspos.lon - (aprspos.lon_d * 100.0);
+    aprspos.lon_d = aprspos.lon_d + (min / 60.0);
 
     return 0x01;
 }

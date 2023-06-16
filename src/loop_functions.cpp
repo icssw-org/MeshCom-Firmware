@@ -29,6 +29,9 @@ bool bGPSON = false;
 bool bBMPON = false;
 bool bBMEON = false;
 
+bool bGATEWAY = false;
+bool bEXTERN = false;
+
 int iDisplayType = 0;
 int DisplayTimeWait = 0;
 
@@ -1025,7 +1028,8 @@ void sendMessage(char *msg_text, int len)
     {
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
 
-        #if defined GATEWAY_TYPE
+        if(bGATEWAY)
+        {
             // gleich Wolke mit Hackler setzen
             if(aprsmsg.msg_destination_path == "*")
             {
@@ -1041,7 +1045,7 @@ void sendMessage(char *msg_text, int len)
                 
                 addBLEOutBuffer(print_buff, (uint16_t)7);
             }
-        #endif
+        }
     }
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
@@ -1050,9 +1054,12 @@ void sendMessage(char *msg_text, int len)
     if(iWrite >= MAX_RING)
         iWrite=0;
     
-    #if defined GATEWAY_TYPE
-		// UDP out
+    #ifdef ESP32
+    if(bGATEWAY)
+    {
+	    // UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    }
     #endif
 
     // store last message to compare later on
@@ -1163,9 +1170,12 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     if(iWrite >= MAX_RING)
         iWrite=0;
 
-    #if defined GATEWAY_TYPE
+    #ifdef ESP32
+    if(bGATEWAY)
+    {
 		// UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    }
     #endif
     
     // store last message to compare later on
@@ -1233,9 +1243,12 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     if(iWrite >= MAX_RING)
         iWrite=0;
     
-    #if defined GATEWAY_TYPE
+    #ifdef ESP32
+    if(bGATEWAY)
+    {
 		// UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    }
     #endif
 
     // store last message to compare later on
@@ -1288,9 +1301,12 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     if(iWrite >= MAX_RING)
         iWrite=0;
     
-    #if defined GATEWAY_TYPE
+    #ifdef ESP32
+    if(bGATEWAY)
+    {
 		// UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    }
     #endif
 
     // store last message to compare later on

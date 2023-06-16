@@ -13,12 +13,20 @@
 IPAddress node_ip = IPAddress(0,0,0,0);
 IPAddress node_hostip = IPAddress(0,0,0,0);
 
+IPAddress extern_node_ip = IPAddress(0,0,0,0);
+
 String s_node_ip = "";
 String s_node_hostip = "";
 
+String s_extern_node_ip = "";
+
 bool hasIPaddress = false;
+bool hasExternIPaddress = false;
 
 WiFiUDP Udp;
+
+WiFiUDP UdpExtern;
+
 unsigned char incomingPacket[UDP_TX_BUF_SIZE];  // buffer for incoming packets
 int packetSize=0;
 static uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
@@ -41,7 +49,7 @@ static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx,
 int waitRestartUDP = 0;
 int waitRestartUDPCounter = 5;
 
-void getUDP()
+void getMeshComUDP()
 {
   if(!hasIPaddress)
     return;
@@ -57,13 +65,13 @@ void getUDP()
     {
       incomingPacket[len] = 0;
 
-      getUDPpacket(incomingPacket, len);
+      getMeshComUDPpacket(incomingPacket, len);
     }
   }
 }
 
 // UDP functions
-void getUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int packetSize)
+void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int packetSize)
 {
     udp_is_busy = true;
     // if more than n values are 00 we might have received a faulty message
@@ -126,6 +134,12 @@ void getUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int packetSize)
 
           memcpy(convBuffer, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);
 
+          // send JSON to Extern IP
+          if(hasExternIPaddress)
+          {
+            sendExternUDP(convBuffer, (uint8_t)lora_tx_msg_len);
+          }
+          
           struct aprsMessage aprsmsg;
           
           // print which message type we got
@@ -141,8 +155,11 @@ void getUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int packetSize)
           addLoraRxBuffer(aprsmsg.msg_id);
           
           // print aprs message
-          printBuffer_aprs((char*)"RX-UDP ", aprsmsg);
-          Serial.println();
+          if(bDisplayInfo)
+          {
+            printBuffer_aprs((char*)"RX-UDP ", aprsmsg);
+            Serial.println();
+          }
 
           aprsmsg.msg_source_path.concat(',');
           aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
@@ -203,7 +220,7 @@ void getUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int packetSize)
     else
     {
       DEBUG_MSG("ERROR", "UDP Message has too much Zeros");
-      resetUDP();
+      resetMeshComUDP();
     }
 
     udp_is_busy = false;   //setting the busy flag
@@ -211,7 +228,7 @@ void getUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int packetSize)
 
 /**@brief UDP tx Routine
  */
-void sendUDP()
+void sendMeshComUDP()
 {
     if(!hasIPaddress)
       return;
@@ -221,7 +238,7 @@ void sendUDP()
         if(!udp_is_busy)
         {
             uint8_t msg_len = ringBufferUDPout[udpRead][0];
-            
+
             //DEBUG_MSG_VAL("UDP", udpRead, "UDP TX out:");
             //neth.printBuffer(ringBufferUDPout[udpRead] + 1, msg_len);
 
@@ -244,7 +261,7 @@ void sendUDP()
                     DEBUG_MSG("MAIN", "resetDHCP");
                     err_cnt_udp_tx = 0;
                     
-                    resetUDP();
+                    resetMeshComUDP();
                 }
             }
 
@@ -260,8 +277,11 @@ void sendUDP()
               uint8_t msg_type_b_lora = decodeAPRS(convBuffer, (uint8_t)msg_len, aprsmsg);
 
               // print aprs message
-              printBuffer_aprs((char*)"TX-UDP ", aprsmsg);
-              Serial.println("");
+              if(bDisplayInfo)
+              {
+                printBuffer_aprs((char*)"TX-UDP ", aprsmsg);
+                Serial.println("");
+              }
             }
 
             // zero out sent buffer
@@ -279,15 +299,15 @@ void sendUDP()
     }
 }
 
-void startUDP()
+bool startWIFI()
 {
   if(hasIPaddress)
-    return;
+    return false;
 
   if(strcmp(meshcom_settings.node_ssid, "none") == 0)
   {
     Serial.printf("WiFI no ssid<%s> not connected\n", meshcom_settings.node_ssid);
-    return;
+    return false;
   }
 
   WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
@@ -305,50 +325,49 @@ void startUDP()
     if(iWlanWait > 15)
     {
       Serial.printf("\nWiFI ssid<%s> connection error\n", meshcom_settings.node_ssid);
-      return;
+      return false;
     }
   }
 
   Serial.println();
 
-  if(iWlanWait < 10)
-  {
-
-    node_ip = WiFi.localIP();
-
-    s_node_ip = node_ip.toString();
-
-    if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
-    {
-      DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.8.143");
-      node_hostip = IPAddress(44, 143, 8, 143);
-      s_node_hostip = node_hostip.toString();
-
-      // MQTT Test-Server
-
-      //DEBUG_MSG("NTP", "Setting Hamnet NTP");
-      //timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
-    }
-    else
-    {
-      DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 89.185.97.38");
-      node_hostip = IPAddress(89, 185, 97, 38);
-      s_node_hostip = node_hostip.toString();
-    }
-
-    Udp.begin(LOCAL_PORT);
-
-    Serial.printf("WiFi now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
-
-    hasIPaddress=true;
-
-    sendHeartbeat();
-
-  }
-
+  return true;
 }
 
-void sendHeartbeat()
+void startMeshComUDP()
+{
+  node_ip = WiFi.localIP();
+
+  s_node_ip = node_ip.toString();
+
+  if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
+  {
+    DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.8.143");
+    node_hostip = IPAddress(44, 143, 8, 143);
+    s_node_hostip = node_hostip.toString();
+
+    // MeshCom Test-Server
+
+    //DEBUG_MSG("NTP", "Setting Hamnet NTP");
+    //timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+  }
+  else
+  {
+    DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 89.185.97.38");
+    node_hostip = IPAddress(89, 185, 97, 38);
+    s_node_hostip = node_hostip.toString();
+  }
+
+  Udp.begin(LOCAL_PORT);
+
+  Serial.printf("WiFi now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
+
+  hasIPaddress=true;
+
+  sendMeshComHeartbeat();
+}
+
+void sendMeshComHeartbeat()
 {
     if(!hasIPaddress)
     {
@@ -357,7 +376,10 @@ void sendHeartbeat()
       if(waitRestartUDP > 0)
         return;
 
-      startUDP();
+      if(!startWIFI())
+        return;
+
+      startMeshComUDP();
 
       if(!hasIPaddress)
       {
@@ -405,14 +427,185 @@ void sendHeartbeat()
     addUdpOutBuffer(hb_buffer, hb_buffer_size);
 }
 
-void resetUDP()
+void resetMeshComUDP()
 {
+  Udp.stop();
+
   WiFi.disconnect();
 
-  startUDP();
+  if(bGATEWAY)
+  {
+    startMeshComUDP();
 
-  sendDisplayHead(false);
+    sendDisplayHead(false);
+  }
+}
+
+// Extern JSON UDP
+void startExternUDP()
+{
+  if(!bEXTERN)
+    return;
+
+  extern_node_ip = WiFi.localIP();
+
+  s_extern_node_ip = extern_node_ip.toString();
+
+  UdpExtern.begin(EXTERN_PORT);
+
+  Serial.printf("WiFi now listening at IP %s, UDP port %d\n",  s_extern_node_ip.c_str(), EXTERN_PORT);
+
+  hasExternIPaddress=true;
+
+  sendExternHeartbeat();
+}
+
+void getExternUDP()
+{
+  if(!bEXTERN)
+    return;
+
+  if(!hasExternIPaddress)
+    return;
+
+  char val[100];
+  struct aprsMessage aprsmsg;
+
+  // check if we received a UDP packet
+  packetSize = UdpExtern.parsePacket();
   
+  if (packetSize > 0)
+  {
+    int len = UdpExtern.read(incomingPacket, UDP_TX_BUF_SIZE);
+
+    if (len > 0)
+    {
+      incomingPacket[len] = 0;
+
+      // Decode
+      // {"type":"msg","dst":"*","msg":"Meldungstext"}
+
+      initAPRS(aprsmsg);
+
+      aprsmsg.msg_source_path="HOME";
+      aprsmsg.msg_destination_path="*";
+      aprsmsg.msg_payload="none";
+
+      for(int ip=0; ip<len; ip++)
+      {
+        if(memcmp(incomingPacket+ip, "\"dst\":\"", 7) == 0)
+        {
+          for(int ipd=ip+7;ipd<len;ipd++)
+          {
+            if(incomingPacket[ipd] == '"')
+            {
+              incomingPacket[ipd] = 0x00;
+              sprintf(val, "%s", incomingPacket[ip+7]);
+              aprsmsg.msg_destination_path=val;
+            }
+          }
+        }
+        else
+        if(memcmp(incomingPacket+ip, "\"msg\":\"", 7) == 0)
+        {
+          for(int ipd=ip+7;ipd<len;ipd++)
+          {
+            if(incomingPacket[ipd] == '"')
+            {
+              incomingPacket[ipd] = 0x00;
+              sprintf(val, "%s", incomingPacket[ip+7]);
+              aprsmsg.msg_payload=val;
+            }
+          }
+        }
+      }
+
+      sprintf(val, ":{%s}%s", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+
+      sendMessage(val, strlen(val));
+
+    }
+  }
+}
+
+void sendExternUDP(uint8_t buffer[500], uint8_t buflen)
+{
+  if(!bEXTERN)
+    return;
+
+  if(!hasExternIPaddress)
+    return;
+
+  struct aprsMessage aprsmsg;
+  struct aprsPosition aprspos;
+
+  uint8_t msg_type_b_lora = decodeAPRS(buffer, (uint16_t)buflen, aprsmsg);
+
+  if(msg_type_b_lora == 0x00)
+  {
+    return;
+  }
+
+  char c_json[500];
+  uint8_t u_json[500];
+
+  // Position
+  if(msg_type_b_lora == 0x21)
+  {
+    decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
+
+    sprintf(c_json, "{\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%c\",\"aprs_symbol_group\":\"%c\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\"}",
+    aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, aprspos.aprs_symbol, aprspos.aprs_group, aprsmsg.msg_source_hw, aprsmsg.msg_id);
+
+    memcpy(u_json, c_json, strlen(c_json));
+  }
+  else
+  // Text
+  if(msg_type_b_lora == 0x3A)
+  {
+    sprintf(c_json, "{\"type\":\"msg\",\"src\":\"%s\",\"dst\":\"%s\",\"msg\":\"%s\",\"msg_id\":\"%08X\"}",
+    aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str(), aprsmsg.msg_id);
+
+    memcpy(u_json, c_json, strlen(c_json));
+  }
+  else
+    return;
+
+  IPAddress apip;
+  
+  String str_ip = meshcom_settings.node_extern;
+
+  //Serial.println(str_ip.c_str());
+
+  apip.fromString(str_ip);
+
+  //Serial.println(apip.toString());
+
+  UdpExtern.beginPacket(apip , EXTERN_PORT);
+
+  Serial.printf("c_json:%s %i\n", c_json, strlen(c_json));
+
+  if (!UdpExtern.write(u_json, strlen(c_json)))
+  {
+    resetMeshComUDP();
+  }
+
+  UdpExtern.endPacket();
+}
+
+void  sendExternHeartbeat()
+{
+
+}
+
+void resetExternUDP()
+{
+  UdpExtern.stop();
+
+  if(bEXTERN)
+  {
+    startExternUDP();
+  }
 }
 
 /**@brief Function to write our additional data into the UDP tx buffer

@@ -48,6 +48,8 @@ struct aprsPosition
     int bat;
     double lat_d;
     double lon_d;
+    char aprs_group;
+    char aprs_symbol;
 };
 
 struct mheardLine

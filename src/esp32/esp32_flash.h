@@ -53,6 +53,13 @@ struct s_meshcom_settings
 	#endif
 
 	float node_maxv = 4.24;
+
+	char node_extern[40] = {0};
+
+	// nicht im Flash
+	int node_press_alt = 0;
+	float node_press_asl = 0;
+
 };
 
 extern s_meshcom_settings meshcom_settings;

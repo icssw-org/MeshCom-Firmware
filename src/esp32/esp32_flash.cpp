@@ -46,6 +46,9 @@ void init_flash(void)
 	#endif
 
     meshcom_settings.node_maxv = preferences.getFloat("node_maxv", 4.24);
+
+    strVar = preferences.getString("node_extern", "none");
+    sprintf(meshcom_settings.node_extern, "%s", strVar.c_str());
 }
 
 void save_settings(void)
@@ -84,6 +87,9 @@ void save_settings(void)
     preferences.putInt("node_sset", meshcom_settings.node_sset);
 
     preferences.putFloat("node_maxv", meshcom_settings.node_maxv);
+
+    strVar = meshcom_settings.node_extern;
+    preferences.putString("node_extern", strVar); 
 
     preferences.end();
 
