@@ -163,10 +163,13 @@ void setupBMX280()
 
 bool loopBMX280()
 {
+	if(!bBMEON && !bBMPON)
+		return false;
+
 	//start a measurement
 	if (!bmx280.measure())
 	{
-    if(bDEBUG)
+    	if(bDEBUG)
 		  Serial.println("could not start measurement, is a measurement already running?");
 
 		return false;
@@ -174,12 +177,12 @@ bool loopBMX280()
 
 	//wait for the measurement to finish
 	if(!bmx280.hasValue())
-  {
-    if(bDEBUG)
-		  Serial.println("BMX Values not valid");
+	{
+		if(bDEBUG)
+			Serial.println("BMX Values not valid");
 
-    return false;
-  }
+		return false;
+	}
 
 	//important: measurement data is read from the sensor in function hasValue() only. 
 	//make sure to call get*() functions only after hasValue() has returned true. 

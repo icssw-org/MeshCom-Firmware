@@ -118,7 +118,6 @@ void sendConfigToPhone ()
 
 	ble_busy_flag = false;
 
-	
 	// one shot GPS
 	posinfo_shot = true;
 

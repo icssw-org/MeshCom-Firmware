@@ -32,6 +32,7 @@ String getDateString();
 String getTimeString();
 
 void printBuffer(uint8_t *buffer, int len);
+void printAsciiBuffer(uint8_t *buffer, int len);
 void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
@@ -39,7 +40,7 @@ void addBLECommandBack(char *text);
 void addLoraRxBuffer(unsigned int msg_id);
 
 void sendMessage(char *msg_text, int len);
-String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt);
+String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt);
 void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt);
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press);
 void sendWX(char* text, float temp, float hum, float press);

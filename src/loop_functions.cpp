@@ -922,6 +922,18 @@ void printBuffer(uint8_t *buffer, int len)
   Serial.println("");
 }
 
+void printAsciiBuffer(uint8_t *buffer, int len)
+{
+  for (int i = 0; i < len; i++)
+  {
+    if(buffer[i] == 0x00)
+        Serial.printf("#");
+    else
+        Serial.printf("%c", buffer[i]);
+  }
+  Serial.println("");
+}
+
 String getDateString()
 {
     char currDate[11] = {0};
@@ -1070,7 +1082,7 @@ void sendMessage(char *msg_text, int len)
         iWriteOwn=0;
 }
 
-String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, double lon, char lon_c, int alt)
+String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt)
 {
     if(lat == 0 or lon == 0)
     {
@@ -1111,7 +1123,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
         sprintf(msg_start, "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, slat, lat_c, meshcom_settings.node_symid, slon, lon_c);
     else
     {
-        char cbatt[8]={0};
+        char cbatt[15]={0};
         char calt[15]={0};
 
         if(mv_to_percent(global_batt) > 0)
@@ -1124,7 +1136,10 @@ String PositionToAPRS(bool bConvPos, bool bWeather, double lat, char lat_c, doub
         if(alt > 0)
         {
             // auf Fuss umrechnen
-            sprintf(calt, " /A=%06i", conv_fuss(alt));
+            if(bFuss)
+                sprintf(calt, " /A=%06i", conv_fuss(alt));
+            else
+                sprintf(calt, " /A=%05i", alt);
         }
 
         sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, cbatt, calt);
@@ -1154,7 +1169,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt);
+    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt);
     
     if(aprsmsg.msg_payload == "")
         return;
@@ -1188,23 +1203,6 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     // An APP als Anzeige retour senden
     if(isPhoneReady == 1)
     {
-        aprsPosition aprspos;
-
-        initAPRSPOS(aprspos);
-
-        decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
-
-        aprspos.alt = (int)((float)aprspos.alt * 0.3048);
-
-        aprspos.alt = aprspos.alt * 10; //work arround für APP
-
-        aprsmsg.msg_payload = PositionToAPRS(false, false, aprspos.lat/100.0, aprspos.lat_c, aprspos.lon/100.0, aprspos.lon_c, aprspos.alt);
-
-        if(aprsmsg.msg_payload == "")
-            return;
-
-        encodeAPRS(msg_buffer, aprsmsg);
-
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
     }
     
@@ -1229,7 +1227,7 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.payload_type = '@';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, lat, lat_c, lon, lon_c, alt);
+    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt);
     
     encodeAPRS(msg_buffer, aprsmsg);
 
