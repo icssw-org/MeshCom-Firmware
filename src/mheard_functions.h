@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <configuration.h>
-#include <structures.h>
+#include <aprs_structures.h>
 
 void initMheard();
 void initMheardLine(struct mheardLine &mheardLine);

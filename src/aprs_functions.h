@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <configuration.h>
-#include <structures.h>
+#include <aprs_structures.h>
 
 void initAPRS(struct aprsMessage &aprsMessage);
 uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t size, struct aprsMessage &aprsMessage);

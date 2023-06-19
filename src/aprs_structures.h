@@ -1,5 +1,5 @@
-#ifndef _STRUCTURES_H_
-#define _STRUCTURES_H_
+#ifndef _APRS_STRUCTURES_H_
+#define _APRS_STRUCTURES_H_
 
 // (C) 2023 OE1KBC Kurt Baumann, OE1KFR Rainer 
 // (C) 2016, 2017, 2018, 2018, 2019, 2020 OE1KBC Kurt Baumann
@@ -52,6 +52,13 @@ struct aprsPosition
     char aprs_symbol;
 };
 
+struct aprsWeather
+{
+    float press;
+    float hum;
+    float temp;
+};
+
 struct mheardLine
 {
     String mh_callsign;
@@ -64,4 +71,4 @@ struct mheardLine
     int8_t mh_snr;
 };
 
-#endif // _APRS_FUNCTIONS_H_
+#endif // _APRS_STRUCTURES_H_

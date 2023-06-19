@@ -7,9 +7,25 @@
 
 unsigned long rebootAuto = 0;
 
-int commandCheck(char *msg, char *command, int len)
+int casecmp(const char *s1, const char *s2)
 {
-    if(strncasecmp(msg, command, len) == 0)
+	while (*s1 != 0 && tolower(*s1) == tolower(*s2))
+    {
+		++s1;
+		++s2;
+	}
+
+	return
+	(*s2 == 0)
+	? (*s1 != 0)
+	: (*s1 == 0)
+		? -1
+		: (tolower(*s1) - tolower(*s2));
+}
+
+int commandCheck(char *msg, char *command)
+{
+    if(casecmp(msg, command) == 0)
         return 0;
 
     return -1;
@@ -45,7 +61,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
             getExtern(msg_uchar, strlen(msg_text));
         }
-        
+
         return;
     }
     #endif
@@ -63,7 +79,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
 
-    if(commandCheck(msg_text+2, (char*)"maxv ", 5) == 0)
+    if(commandCheck(msg_text+2, (char*)"maxv ") == 0)
     {
         sscanf(msg_text+7, "%f", &meshcom_settings.node_maxv);
 
@@ -79,7 +95,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"volt", 4) == 0)
+    if(commandCheck(msg_text+2, (char*)"volt") == 0)
     {
         bDisplayVolt = true;
 
@@ -95,7 +111,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"proz", 4) == 0)
+    if(commandCheck(msg_text+2, (char*)"proz") == 0)
     {
         bDisplayVolt = false;
 
@@ -111,7 +127,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setinfo off", 11) == 0)
+    if(commandCheck(msg_text+2, (char*)"setinfo off") == 0)
     {
         Serial.println("\nsetinfo off");
 
@@ -119,7 +135,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setinfo on", 10) == 0)
+    if(commandCheck(msg_text+2, (char*)"setinfo on") == 0)
     {
         Serial.println("\nsetinfo on");
 
@@ -127,7 +143,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"reboot", 6) == 0)
+    if(commandCheck(msg_text+2, (char*)"reboot") == 0)
     {
         if(ble)
         {
@@ -146,7 +162,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"help", 4) == 0)
+    if(commandCheck(msg_text+2, (char*)"help") == 0)
     {
 
         if(ble)
@@ -160,19 +176,19 @@ void commandAction(char *msg_text, int len, bool ble)
 
             Serial.printf("--pos      show lat/lon/alt/time info\r\n--weather  show temp/hum/press\r\n--sendpos  send pos info now\r\n--sendweather send weather info now\r\n--setlat   set latitude (44.12345)\r\n--setlon   set logitude (016.12345)\r\n--setalt   set altidude (9999)\r\n");
 
-            Serial.printf("--debug    on/off\r\n--loradebug    on/off\r\n--display  on/off\r\n--setinfo  on\r\n--setinfo  off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
-            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx  off\r\n--gateway on\r\n--gateway off\r\n--extudp on\r\n--extudp off\r\n--extser on\r\n--extser off\r\n--extudpip 99.99.99.99\r\n");
+            Serial.printf("--debug    on/off\r\n--loradebug    on/off\r\n--display  on/off\r\n--setinfo on\r\n--setinfo off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx off\r\n--gateway on\r\n--gateway off\r\n--extudp on\r\n--extudp off\r\n--extser on\r\n--extser off\r\n--extudpip 99.99.99.99\r\n");
         }
 
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"info", 4) == 0)
+    if(commandCheck(msg_text+2, (char*)"info") == 0)
     {
         bInfo=true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"all", 3) == 0)
+    if(commandCheck(msg_text+2, (char*)"all") == 0)
     {
         Serial.println("all on");
 
@@ -190,7 +206,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"msg", 3) == 0)
+    if(commandCheck(msg_text+2, (char*)"msg") == 0)
     {
         Serial.println("msg on");
 
@@ -208,7 +224,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"display on", 10) == 0)
+    if(commandCheck(msg_text+2, (char*)"display on") == 0)
     {
         bDisplayOff=false;
         bPosDisplay=true;
@@ -227,7 +243,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"display off", 11) == 0)
+    if(commandCheck(msg_text+2, (char*)"display off") == 0)
     {
         bDisplayOff=true;
         
@@ -247,7 +263,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"button on", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"button on") == 0)
     {
         Serial.println("on");
 
@@ -265,7 +281,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"button off", 10) == 0)
+    if(commandCheck(msg_text+2, (char*)"button off") == 0)
     {
         bButtonCheck=false;
         
@@ -283,7 +299,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"track on", 8) == 0)
+    if(commandCheck(msg_text+2, (char*)"track on") == 0)
     {
         bDisplayTrack=true;
         
@@ -301,7 +317,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"track off", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"track off") == 0)
     {
         bDisplayTrack=false;
         
@@ -319,7 +335,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"gps on", 6) == 0)
+    if(commandCheck(msg_text+2, (char*)"gps on") == 0)
     {
         bGPSON=true;
         
@@ -337,7 +353,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"gps off", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"gps off") == 0)
     {
         bGPSON=false;
         
@@ -355,7 +371,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"bmp on", 6) == 0)
+    if(commandCheck(msg_text+2, (char*)"bmp on") == 0)
     {
         bBMPON=true;
         
@@ -373,7 +389,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"bme on", 6) == 0)
+    if(commandCheck(msg_text+2, (char*)"bme on") == 0)
     {
         bBMEON=true;
         
@@ -391,7 +407,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"bmx off", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"bmx off") == 0)
     {
         bBMPON=false;
         bBMEON=false;
@@ -410,7 +426,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setpress", 8) == 0)
+    if(commandCheck(msg_text+2, (char*)"setpress") == 0)
     {
         fBaseAltidude = (float)meshcom_settings.node_alt;
         fBasePress = meshcom_settings.node_press;
@@ -424,7 +440,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         return;
     }
-    if(commandCheck(msg_text+2, (char*)"gateway on", 10) == 0)
+    if(commandCheck(msg_text+2, (char*)"gateway on") == 0)
     {
         bGATEWAY=true;
         
@@ -442,7 +458,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"gateway off", 11) == 0)
+    if(commandCheck(msg_text+2, (char*)"gateway off") == 0)
     {
         bGATEWAY=false;
         
@@ -459,7 +475,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         return;
     }
-    if(commandCheck(msg_text+2, (char*)"extudp on", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"extudp on") == 0)
     {
         bEXTUDP=true;
         
@@ -477,7 +493,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"extudp off", 10) == 0)
+    if(commandCheck(msg_text+2, (char*)"extudp off") == 0)
     {
         bEXTUDP=false;
         
@@ -495,7 +511,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"extser on", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"extser on") == 0)
     {
         bEXTSER=true;
         
@@ -513,7 +529,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"extser off", 10) == 0)
+    if(commandCheck(msg_text+2, (char*)"extser off") == 0)
     {
         bEXTSER=false;
         
@@ -531,7 +547,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"extudpip ", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"extudpip ") == 0)
     {
         // max. 40 char
         msg_text[50]=0x00;
@@ -543,7 +559,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"debug on", 8) == 0)
+    if(commandCheck(msg_text+2, (char*)"debug on") == 0)
     {
         bDEBUG=true;
 
@@ -559,7 +575,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"debug off", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"debug off") == 0)
     {
         bDEBUG=false;
 
@@ -574,7 +590,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         return;
     }
-    if(commandCheck(msg_text+2, (char*)"loradebug on", 12) == 0)
+    if(commandCheck(msg_text+2, (char*)"loradebug on") == 0)
     {
         bLORADEBUG=true;
 
@@ -590,7 +606,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"loradebug off", 13) == 0)
+    if(commandCheck(msg_text+2, (char*)"loradebug off") == 0)
     {
         bLORADEBUG=false;
 
@@ -606,17 +622,17 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"pos", 3) == 0)
+    if(commandCheck(msg_text+2, (char*)"pos") == 0)
     {
         bPos=true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"weather", 7) == 0 || commandCheck(msg_text+2, (char*)"wx", 2) == 0)
+    if(commandCheck(msg_text+2, (char*)"weather") == 0 || commandCheck(msg_text+2, (char*)"wx") == 0)
     {
         bWeather=true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"sendwx", 6) == 0)
+    if(commandCheck(msg_text+2, (char*)"sendwx") == 0)
     {
         sendWX(msg_text, meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
 
@@ -628,7 +644,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"sendpos", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"sendpos") == 0)
     {
         posinfo_shot=true;
         //sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
@@ -641,7 +657,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"sendweather", 11) == 0)
+    if(commandCheck(msg_text+2, (char*)"sendweather") == 0)
     {
         sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
          meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
@@ -654,7 +670,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setcall ", 8) == 0)
+    if(commandCheck(msg_text+2, (char*)"setcall ") == 0)
     {
         sprintf(_owner_c, "%s", msg_text+10);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
@@ -679,7 +695,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setssid ", 8) == 0)
+    if(commandCheck(msg_text+2, (char*)"setssid ") == 0)
     {
         // max. 40 char
         msg_text[50]=0x00;
@@ -703,7 +719,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setpwd ", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"setpwd ") == 0)
     {
         // max. 40 char
         msg_text[50]=0x00;
@@ -727,7 +743,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"sethamnet", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"sethamnet") == 0)
     {
         meshcom_settings.node_hamnet_only = 1;
         
@@ -743,7 +759,7 @@ void commandAction(char *msg_text, int len, bool ble)
         rebootAuto = millis() + 10 * 1000; // 10 Sekunden
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setinet", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"setinet") == 0)
     {
         meshcom_settings.node_hamnet_only = 0;
         
@@ -759,7 +775,7 @@ void commandAction(char *msg_text, int len, bool ble)
         rebootAuto = millis() + 10 * 1000; // 10 Sekunden
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setlat ", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"setlat ") == 0)
     {
         sprintf(_owner_c, "%s", msg_text+9);
         sscanf(_owner_c, "%lf", &fVar);
@@ -785,7 +801,7 @@ void commandAction(char *msg_text, int len, bool ble)
         bPos=true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setlon ", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"setlon ") == 0)
     {
         sprintf(_owner_c, "%s", msg_text+9);
         sscanf(_owner_c, "%lf", &fVar);
@@ -811,7 +827,7 @@ void commandAction(char *msg_text, int len, bool ble)
         bPos=true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setalt ", 7) == 0)
+    if(commandCheck(msg_text+2, (char*)"setalt ") == 0)
     {
         sprintf(_owner_c, "%s", msg_text+9);
         sscanf(_owner_c, "%d", &iVar);
@@ -833,7 +849,7 @@ void commandAction(char *msg_text, int len, bool ble)
         bPos=true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"mheard", 6) == 0 || commandCheck(msg_text+2, (char*)"mh", 2) == 0)
+    if(commandCheck(msg_text+2, (char*)"mheard") == 0 || commandCheck(msg_text+2, (char*)"mh") == 0)
     {
         showMHeard();
 
@@ -877,7 +893,7 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(bWeather)
     {
-        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...TEMP: %.1f °C\r\n...HUM: %.1f%% rH\r\n...PRESS: %.1f hPa\r\n...PRESS: %.1f hPa sl\r\n...ALT asl: %i m\r\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...TEMP: %.1f °C\r\n...HUM: %.1f%% rH\r\n...QFE: %.1f hPa\r\n...QNH: %.1f hPa\r\n...ALT asl: %i m\r\n", SOURCE_TYPE, SOURCE_VERSION,
         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
 
         if(ble)
