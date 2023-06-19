@@ -12,6 +12,8 @@ void OnRxError(void);
 bool is_new_packet(uint8_t compBuffer[4]);
 int checkOwnTx(uint8_t compBuffer[4]);
 
+void StartReceiveAgain();
+
 void doTX();
 void OnTxDone(void);
 void OnTxTimeout(void);

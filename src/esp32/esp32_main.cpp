@@ -185,16 +185,79 @@ SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 // Lora callback Function declarations
 void checkRX(void);
 
-void setInterruptFlag();     // LoRaRX Interrupt function
+// save transmission state between loops
+int transmissionState = RADIOLIB_ERR_UNKNOWN;
+bool bTransmit = false;
+bool bCheckReceiveAgain = false;
+
+// flag to indicate that a preamble was not detected
+volatile bool timeoutFlag = false;
+
+// flag to indicate that a preamble was detected
+volatile bool detectedFlag = false;
+
+// flag to indicate if we are currently receiving
+bool receiving = false;
+
+// flag to indicate if we are currently allowed to transmittig
+bool transmiting = false;
+
+// flag to indicate that a packet was detected or CAD timed out
+volatile bool scanFlag = false;
+
+// this function is called when a complete packet
+// is received by the module
+// IMPORTANT: this function MUST be 'void' type
+//            and MUST NOT have any arguments!
+#ifdef SX127X
+// this function is called when no preamble
+// is detected within timeout period
+// IMPORTANT: this function MUST be 'void' type
+//            and MUST NOT have any arguments!
+#if defined(ESP8266) || defined(ESP32)
+  ICACHE_RAM_ATTR
+#endif
+void setFlagTimeout(void)
+{
+    // we timed out, set the flag
+    timeoutFlag = true;
+    
+    //Serial.println("timeoutFlag");
+}
+
+// this function is called when LoRa preamble
+// is detected within timeout period
+// IMPORTANT: this function MUST be 'void' type
+//            and MUST NOT have any arguments!
+#if defined(ESP8266) || defined(ESP32)
+  ICACHE_RAM_ATTR
+#endif
+void setFlagDetected(void)
+{
+    // we got a preamble, set the flag
+    detectedFlag = true;
+}
+#else
+// this function is called when no preamble
+// is detected within timeout period
+// IMPORTANT: this function MUST be 'void' type
+//            and MUST NOT have any arguments!
+#if defined(ESP8266) || defined(ESP32)
+  ICACHE_RAM_ATTR
+#endif
+void setFlag(void)
+{
+    // something happened, set the flag
+    scanFlag = true;
+}
+#endif
+
 void enableRX(void);    // for Modules with RXEN / TXEN Pin
 void enableTX(void);    // for Modules with RXEN / TXEN Pin
 
 
 asm(".global _scanf_float");
 asm(".global _printf_float");
-
-// save transmission state between loops
-int transmissionState = RADIOLIB_ERR_UNKNOWN;
 
 // LoRa Events and Buffers
 
@@ -255,9 +318,10 @@ void esp32setup()
     bGPSON =  meshcom_settings.node_sset & 0x0040;
     bBMPON =  meshcom_settings.node_sset & 0x0080;
     bBMEON =  meshcom_settings.node_sset & 0x0100;
-
+    bLORADEBUG = meshcom_settings.node_sset & 0x0200;
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
-    bEXTERN =  meshcom_settings.node_sset & 0x2000;
+    bEXTUDP =  meshcom_settings.node_sset & 0x2000;
+    bEXTSER =  meshcom_settings.node_sset & 0x4000;
 
     global_batt = 4200.0;
 
@@ -364,12 +428,12 @@ void esp32setup()
     
     if (state == RADIOLIB_ERR_NONE)
     {
-        Serial.println(F("success!"));
+        Serial.println(F("LoRa-Chip success!"));
         bRadio=true;
     }
     else
     {
-        Serial.print(F("failed, code "));
+        Serial.print(F("LoRa-Chip failed, code "));
         Serial.println(state);
         bRadio=false;
         //while (true);
@@ -443,14 +507,46 @@ void esp32setup()
         }
 
         // set the function that will be called
-        // when new packet is received
-        radio.setDio0Action(setInterruptFlag);
+        // when LoRa preamble is not detected within CAD timeout period
+        // or when a packet is received
+        radio.setDio0Action(setFlagTimeout, RISING);
+
+        // set the function that will be called
+        // when LoRa preamble is detected
+        radio.setDio1Action(setFlagDetected, RISING);
+
+        // start scanning the channel
+        Serial.print(F("[SX1278] Starting scan for LoRa preamble ... "));
+        state = radio.startChannelScan();
+        if (state == RADIOLIB_ERR_NONE)
+        {
+            Serial.println(F("success!"));
+        }
+        else
+        {
+                Serial.print(F("failed, code "));
+                Serial.println(state);
+        }        
         #endif
 
         // setup for SX126x Radios
         #ifdef SX126X
         // interrupt pin
-            radio.setDio1Action(setInterruptFlag);
+            //radio.setDio1Action(setInterruptFlag);
+            radio.setDio1Action(setFlag);
+
+            // start scanning the channel
+            Serial.print(F("[SX126x] Starting scan for LoRa preamble ... "));
+            state = radio.startChannelScan();
+            if (state == RADIOLIB_ERR_NONE)
+            {
+                Serial.println(F("[SX126X] success!"));
+            }
+            else
+            {
+                Serial.print(F("[SX126X] failed, code "));
+                Serial.println(state);
+            }
         // if DIO2 controls the RF Switch you need to set it
         // radio.setDio2AsRfSwitch(true);
         // Important! To enable receive you need to switch the SX126x rf switch to RECEIVE 
@@ -459,16 +555,26 @@ void esp32setup()
 
         #ifdef SX126X_V3
         // interrupt pin
-           radio.setDio1Action(setInterruptFlag);
+            //radio.setDio1Action(setInterruptFlag);
+            radio.setDio1Action(setFlag);
+
+            // start scanning the channel
+            Serial.print(F("[SX1278] Starting scan for LoRa preamble ... "));
+            state = radio.startChannelScan();
+            if (state == RADIOLIB_ERR_NONE)
+            {
+                Serial.println(F("[SX1278] success!"));
+            }
+            else
+            {
+                Serial.print(F("[SX1278] failed, code "));
+                Serial.println(state);
+            }
         // if DIO2 controls the RF Switch you need to set it
         //  radio.setDio2AsRfSwitch(true);
         // Important! To enable receive you need to switch the SX126x rf switch to RECEIVE 
     
         #endif
-
-        // put module back to listen mode
-        radio.startReceive();
-        Serial.println("startReceive Start");
     }
     
     Serial.println(F("All settings successfully changed!"));
@@ -487,11 +593,7 @@ void esp32setup()
     
     NimBLEDevice::setDeviceName(strBLEName);
 
-#ifdef ESP_PLATFORM
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9); /** +9db */
-#else
-    NimBLEDevice::setPower(9); /** +9db */
-#endif
+    NimBLEDevice::setPower(ESP_PWR_LVL_N0); /** +9db ESP_PWR_LVL_P9*/
 
     NimBLEDevice::setSecurityAuth(true, true, true);
     NimBLEDevice::setSecurityPasskey(PIN);
@@ -555,14 +657,14 @@ void esp32setup()
 
     ///////////////////////////////////////////////////////
     // WIFI
-    if(bGATEWAY || bEXTERN)
+    if(bGATEWAY || bEXTUDP)
     {
         if(startWIFI())
         {
             if(bGATEWAY)
                 startMeshComUDP();
 
-            if(bEXTERN)
+            if(bEXTUDP)
                 startExternUDP();
         }
     }
@@ -581,42 +683,342 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
     pTxCharacteristic->notify();
 }
 
-// flag to indicate that a packet was received
-volatile bool receivedFlag = false;
-
-// flag to indicate that a packet was sent
-volatile bool transmittedFlag = false;
-
-// this function is called when a complete packet
-// is received by the module
-// IMPORTANT: this function MUST be 'void' type
-//            and MUST NOT have any arguments!
-#if defined(ESP8266) || defined(ESP32)
-  ICACHE_RAM_ATTR
-#endif
-void setInterruptFlag(void)
-{
-    if(tx_is_active)
-    {
-        if(bDEBUG)
-            Serial.println("transmit done");
-
-        // we sent a packet, set the flag
-        transmittedFlag = true;
-    }
-    else
-    {
-        if(bDEBUG)
-            Serial.println("receive ready");
-
-        // we got a packet, set the flag
-        receivedFlag = true;
-    }
-}
-
 void esp32loop()
 {
-	//Clock::EEvent eEvent;
+    #ifdef SX127X
+    // check if we need to restart channel activity detection
+    if(detectedFlag || timeoutFlag || bCheckReceiveAgain)
+    {
+        bool bActReceiving = false;
+
+        bool bStartReceivingAgain = false;
+
+        int state = RADIOLIB_ERR_NONE;
+
+        // check ongoing reception
+        if(receiving)
+        {
+            // DIO triggered while reception is ongoing
+            // that means we got a packet
+
+            // reset flags first
+            detectedFlag = false;
+            timeoutFlag = false;
+
+            // you can read received data as an Arduino String
+            /*
+            String str;
+            state = radio.readData(str);
+            */
+        
+            // you can also read received data as byte array
+            //    byte byteArr[8];
+            //    state = radio.readData(byteArr, 8);
+            
+            checkRX();
+
+            // reception is done now
+            receiving = false;
+
+            bActReceiving = true;
+        }
+
+        if(timeoutFlag && bTransmit)
+        {
+            timeoutFlag = false;
+            bTransmit = false;
+
+            if (transmissionState == RADIOLIB_ERR_NONE) {
+                // packet was successfully sent
+                if(bLORADEBUG)
+                    Serial.println(F("transmission finished!"));
+
+                // NOTE: when using interrupt-driven transmit method,
+                //       it is not possible to automatically measure
+                //       transmission data rate using getDataRate()
+
+                }
+                else
+                {
+                    if(bLORADEBUG)
+                    {
+                        Serial.print(F("failed, code "));
+                        Serial.println(transmissionState);
+                    }
+                }
+
+                // clean up after transmission is finished
+                // this will ensure transmitter is disabled,
+                // RF switch is powered down etc.
+                radio.finishTransmit();
+
+                // wait a second before transmitting again
+                delay(1000);
+
+                bStartReceivingAgain=true;
+
+        }
+
+        // check if we got a preamble
+        if(detectedFlag)
+        {
+            // LoRa preamble was detected
+            if(bLORADEBUG)
+                Serial.print(F("[SX1278] Preamble detected, starting reception ... "));
+
+            state = radio.startReceive(0, RADIOLIB_SX127X_RXSINGLE);
+            if (state == RADIOLIB_ERR_NONE)
+            {
+                if(bLORADEBUG)
+                    Serial.println(F("success!"));
+            }
+            else
+            {
+                if(bLORADEBUG)
+                {
+                    Serial.print(F("failed, code "));
+                    Serial.println(state);
+                }
+            }
+
+            // set the flag for ongoing reception
+            receiving = true;
+
+            bCheckReceiveAgain = false;
+        }
+        else
+        if(!receiving)
+        {
+            if(!bActReceiving)
+            {
+                // nothing was detected
+                // do not print anything, it just spams the console
+                if (iWrite != iRead)
+                {
+                    if(bCheckReceiveAgain)
+                    {
+                        // save transmission state between loops
+                        doTX();
+
+                        bTransmit = true;
+
+                        bCheckReceiveAgain = false;
+                    }
+                    else
+                    {
+                        int32_t preTxDelay = radio.random(2, 7);
+                        delay(preTxDelay * 200);
+
+                        if(bLORADEBUG)
+                            Serial.printf("preTxDelay:%i\n", preTxDelay);
+
+                        bCheckReceiveAgain=true;
+                    }
+                }
+            }
+        }
+
+        // if we're not receiving, start scanning again
+        if(!bTransmit)
+        {
+            if(!receiving || bStartReceivingAgain || bCheckReceiveAgain)
+            {
+                int state = radio.startChannelScan();
+                if (state == RADIOLIB_ERR_NONE)
+                {
+                    //if(bLORADEBUG)
+                    //    Serial.println(F("success!"));
+                }
+                else
+                {
+                    if(bLORADEBUG)
+                    {
+                        Serial.print(F("failed, code "));
+                        Serial.println(state);
+                    }
+                }        
+            }
+        }
+
+        // reset flags
+        timeoutFlag = false;
+        detectedFlag = false;
+    }
+    #else
+    // check if the flag is set
+    if(scanFlag)
+    {
+        bool bActReceiving = false;
+
+        bool bStartReceivingAgain=false;
+
+        int state = RADIOLIB_ERR_NONE;
+
+        // check ongoing reception
+        if(receiving)
+        {
+            // DIO triggered while reception is ongoing
+            // that means we got a packet
+
+            // reset flags first
+            scanFlag = false;
+
+            // you can read received data as an Arduino String
+            /*
+            String str;
+            state = radio.readData(str);
+            */
+        
+            // you can also read received data as byte array
+            //    byte byteArr[8];
+            //    state = radio.readData(byteArr, 8);
+            
+            checkRX();
+
+            // reception is done now
+            receiving = false;
+
+            bActReceiving = true;
+        }
+
+        if(bTransmit)
+        {
+            scanFlag = false;
+            bTransmit = false;
+
+            if (transmissionState == RADIOLIB_ERR_NONE) {
+                // packet was successfully sent
+                if(bLORADEBUG)
+                    Serial.println(F("transmission finished!"));
+
+                // NOTE: when using interrupt-driven transmit method,
+                //       it is not possible to automatically measure
+                //       transmission data rate using getDataRate()
+
+                }
+                else
+                {
+                    if(bLORADEBUG)
+                    {
+                        Serial.print(F("failed, code "));
+                        Serial.println(transmissionState);
+                    }
+                }
+
+                // clean up after transmission is finished
+                // this will ensure transmitter is disabled,
+                // RF switch is powered down etc.
+                radio.finishTransmit();
+
+                // wait a second before transmitting again
+                delay(1000);
+
+                bStartReceivingAgain=true;
+
+        }
+
+        // reset flag
+        scanFlag = false;
+
+        // check CAD result
+        state = radio.getChannelScanResult();
+
+        if (state == RADIOLIB_LORA_DETECTED)
+        {
+            // LoRa preamble was detected
+            if(bLORADEBUG)
+                Serial.print(F("[SX1278] Preamble detected, starting reception ... "));
+
+            state = radio.startReceive(0, RADIOLIB_SX127X_RXSINGLE);
+            if (state == RADIOLIB_ERR_NONE)
+            {
+                if(bLORADEBUG)
+                    Serial.println(F("success!"));
+            }
+            else
+            {
+                if(bLORADEBUG)
+                {
+                    Serial.print(F("failed, code "));
+                    Serial.println(state);
+                }
+            }
+
+            // set the flag for ongoing reception
+            receiving = true;
+        } 
+        else
+        if (state == RADIOLIB_CHANNEL_FREE)
+        {
+            // channel is free
+            if(bLORADEBUG && bDEBUG)
+                Serial.println(F("[SX1262] Channel is free!"));
+
+            if(!bActReceiving)
+            {
+                // nothing was detected
+                // do not print anything, it just spams the console
+                if (iWrite != iRead)
+                {
+                    if(bCheckReceiveAgain)
+                    {
+                        // save transmission state between loops
+                        doTX();
+
+                        bTransmit = true;
+
+                        bCheckReceiveAgain = false;
+                    }
+                    else
+                    {
+                        int32_t preTxDelay = radio.random(2, 7);
+                        delay(preTxDelay * 200);
+
+                        if(bLORADEBUG)
+                            Serial.printf("preTxDelay:%i\n", preTxDelay);
+
+                        bCheckReceiveAgain=true;
+                    }
+                }
+            }
+        }
+        else
+        {
+            // some other error occurred
+            if(bLORADEBUG)
+            {
+                Serial.print(F("[SX1262] Failed, code "));
+                Serial.println(state);
+            }
+        }
+
+        // if we're not receiving, start scanning again
+        if(!bTransmit)
+        {
+            if(!receiving || bStartReceivingAgain || bCheckReceiveAgain)
+            {
+                int state = radio.startChannelScan();
+                if (state == RADIOLIB_ERR_NONE)
+                {
+                    //if(bLORADEBUG)
+                    //    Serial.println(F("success!"));
+                }
+                else
+                {
+                    if(bLORADEBUG)
+                    {
+                        Serial.print(F("failed, code "));
+                        Serial.println(state);
+                    }
+                }        
+            }
+        }
+        
+        scanFlag = false;
+    }
+    #endif
+    
+    //Clock::EEvent eEvent;
 	
 	// check clock event
 	//eEvent = MyClock.CheckEvent();
@@ -631,60 +1033,6 @@ void esp32loop()
     meshcom_settings.node_date_minute = MyClock.Minute();
     meshcom_settings.node_date_second = MyClock.Second();
 
-    // check if the previous transmission finished
-    if(transmittedFlag)
-    {
-        // reset flag
-        transmittedFlag = false;
-
-        if (transmissionState == RADIOLIB_ERR_NONE)
-        {
-            // packet was successfully sent
-            if(bDEBUG)
-                Serial.println(F("transmission finished!"));
-
-            // NOTE: when using interrupt-driven transmit method,
-            //       it is not possible to automatically measure
-            //       transmission data rate using getDataRate()
-            OnTxDone();
-        }
-        else
-        {
-            Serial.print(F("TX failed, code "));
-            Serial.println(transmissionState);
-
-            OnTxTimeout();
-        }
-
-        transmissionState = RADIOLIB_ERR_UNKNOWN;
-
-        // clean up after transmission is finished
-        // this will ensure transmitter is disabled,
-        // RF switch is powered down etc.
-        radio.finishTransmit();
-
-        // put module back to listen mode
-        radio.startReceive();
-    }
-
-    // LORA RECEIVE
-    if(receivedFlag)
-    {
-        if (tx_is_active == false && is_receiving == false)
-        {
-            checkRX();
-        }
-    
-        // reset flag
-        receivedFlag = false;
-    }
-
-    // LORA SEND
-    // check if we have messages in ringbuffer to send
-	if (iWrite != iRead)
-    {
-        doTX();
-    }
 
     // BLE
     if (deviceConnected)
@@ -851,7 +1199,7 @@ void esp32loop()
         }
     }
 
-    if(bEXTERN)
+    if(bEXTUDP)
     {
         getExternUDP();
     }
@@ -867,9 +1215,6 @@ void esp32loop()
 
 void checkRX(void)
 {
-    if(bDEBUG)
-        Serial.println(F("[SX12XX] Waiting for incoming transmission ... "));
-
     // you can receive data as an Arduino String
     // NOTE: receive() is a blocking method!
     //       See example ReceiveInterrupt for details
@@ -877,7 +1222,7 @@ void checkRX(void)
 
     is_receiving=true;
 
-    uint8_t payload[UDP_TX_BUF_SIZE];
+    uint8_t payload[UDP_TX_BUF_SIZE+10];
 
     String str;
     
@@ -885,36 +1230,53 @@ void checkRX(void)
 
     int state = radio.readData(payload, ibytes);
 
-    if (state == RADIOLIB_ERR_NONE)
+    if (state == RADIOLIB_ERR_LORA_HEADER_DAMAGED || state == RADIOLIB_ERR_NONE)
     {
-        if(bDEBUG)
-            Serial.println("RX Done");
+        if(bLORADEBUG)
+        {
+            // packet was successfully received
+            Serial.println(F("[SX1278] Received packet!"));
+
+            // print data of the packet
+            /*
+            Serial.print(F("[SX1278] Data:\t\t"));
+            Serial.println(str);
+            */
+
+            // print RSSI (Received Signal Strength Indicator)
+            Serial.print(F("[SX1278] RSSI:\t\t"));
+            Serial.print(radio.getRSSI());
+            Serial.println(F(" dBm"));
+
+            // print SNR (Signal-to-Noise Ratio)
+            Serial.print(F("[SX1278] SNR:\t\t"));
+            Serial.print(radio.getSNR());
+            Serial.println(F(" dB"));
+
+            // print frequency error
+            Serial.print(F("[SX1278] Frequency error:\t"));
+            Serial.print(radio.getFrequencyError());
+            Serial.println(F(" Hz"));
+        }
 
         OnRxDone(payload, (uint16_t)ibytes, (int16_t)radio.getRSSI(), (int8_t)radio.getSNR());
     }
     else
-    if (state == RADIOLIB_ERR_RX_TIMEOUT)
-    {
-        if(bDEBUG)
-            Serial.println("RX timeout");
-
-        OnRxTimeout();
-    }
-    else
     if (state == RADIOLIB_ERR_CRC_MISMATCH)
     {
-        if(bDEBUG)
-            Serial.println("RX CRC mismatch");
+        // packet was received, but is malformed
+        Serial.println(F("[SX1278] CRC error!"));
 
-        OnRxError();
     }
     else
     {
-        if(bDEBUG)
-            Serial.println("RX Error");
+        // some other error occurred
+        Serial.print(F("[SX1278] Failed, code "));
+        Serial.println(state);
 
-        OnRxError();
     }
+
+    is_receiving=false;
 }
 
 void checkSerialCommand(void)
@@ -935,7 +1297,7 @@ void checkSerialCommand(void)
 
         strText += rd;
 
-        if(strText.startsWith(":") || strText.startsWith("-"))
+        if(strText.startsWith(":") || strText.startsWith("-") || strText.startsWith("{"))
         {
             if(strText.endsWith("\n") || strText.endsWith("\r"))
             {
@@ -966,6 +1328,9 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer, inext);
 
                 if(strText.startsWith("-"))
+                    commandAction(msg_buffer, inext, false);
+
+                if(strText.startsWith("{"))
                     commandAction(msg_buffer, inext, false);
 
                 strText="";

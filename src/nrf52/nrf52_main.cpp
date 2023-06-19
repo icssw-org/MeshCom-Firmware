@@ -289,6 +289,10 @@ void nrf52setup()
     bGPSON =  meshcom_settings.node_sset & 0x0040;
     bBMPON =  meshcom_settings.node_sset & 0x0080;
     bBMEON =  meshcom_settings.node_sset & 0x0100;
+    bLORADEBUG = meshcom_settings.node_sset & 0x0200;
+    bGATEWAY =  meshcom_settings.node_sset & 0x1000;
+    bEXTUDP =  meshcom_settings.node_sset & 0x2000;
+    bEXTSER =  meshcom_settings.node_sset & 0x4000;
 
     global_batt = 4200.0;
 
@@ -581,6 +585,8 @@ void nrf52setup()
     delay(100);
 }
 
+bool bCheckReceiveAgain = false;
+
 void nrf52loop()
 {
 	//Clock::EEvent eEvent;
@@ -602,9 +608,36 @@ void nrf52loop()
    	//digitalWrite(LED_BLUE, LOW);
 
     // check if we have messages in ringbuffer to send
-	if (iWrite != iRead)
+    if(is_receiving == false && tx_is_active == false)
     {
-        doTX();
+        // nothing was detected
+        // do not print anything, it just spams the console
+        if (iWrite != iRead)
+        {
+            if(bCheckReceiveAgain)
+            {
+                // save transmission state between loops
+                doTX();
+
+                bCheckReceiveAgain = false;
+            }
+            else
+            {
+                uint32_t preTxDelay = Radio.Random(); //( 2-7?)
+                char cpreTxtDelay[16];
+
+                sprintf(cpreTxtDelay, "%014li", preTxDelay);
+                
+                preTxDelay = cpreTxtDelay[13] - 0x30;
+
+                delay(preTxDelay * 200);
+
+                if(bLORADEBUG)
+                    Serial.printf("preTxDelay:%i\n", preTxDelay);
+
+                bCheckReceiveAgain=true;
+            }
+        }
     }
 
     // check if message from phone to send

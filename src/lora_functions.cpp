@@ -29,7 +29,7 @@
 #include <udp_functions.h>
 
 int sendlng = 0;
-uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE];  // lora tx buffer
+uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE+10];  // lora tx buffer
 uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
 
 //////////////////////////////////////////////////////////////////////////
@@ -154,9 +154,17 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40)
             {
                 #ifdef ESP32
+
                 // Extern Server
-                if(bEXTERN)
-                    sendExternUDP(RcvBuffer, size);
+                if(bEXTUDP)
+                    sendExtern(true, (char*)"lora", RcvBuffer, size);
+
+                if(bEXTSER)
+                    sendExtern(false, (char*)"lora", RcvBuffer, size);
+
+                if(bGATEWAY)
+                    addNodeData(RcvBuffer, size, rssi, snr);
+
                 #endif
 
                 // print aprs message
@@ -377,13 +385,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 iWrite=0;
                             
                             if(bDisplayInfo)
-                                Serial.printf(" Packet resend to mesh");          
+                                Serial.println(" This packet to mesh");
+                        }
+                        else
+                        {
+                            if(bDisplayInfo)
+                                Serial.println("");
                         }
                     }
                 }   
-
-                if(bDisplayInfo)
-                    Serial.println("");
             }
             else
             {
@@ -391,9 +401,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 if(bDEBUG)
                     printBuffer(RcvBuffer, size);
             }
-
-            if(bDisplayInfo)
-                Serial.println("");
 
             // set buffer to 0
             memset(RcvBuffer, 0, UDP_TX_BUF_SIZE);
@@ -405,7 +412,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
-        radio.startReceive();
+        StartReceiveAgain();
     #endif
 
 
@@ -421,7 +428,7 @@ void OnRxTimeout(void)
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
-        radio.startReceive();
+        StartReceiveAgain();
     #endif
 
     Serial.println("OnRxTimeout");
@@ -437,7 +444,7 @@ void OnRxError(void)
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
-        radio.startReceive();
+        StartReceiveAgain();
     #endif
 
     Serial.println("OnRxError");
@@ -484,28 +491,6 @@ int checkOwnTx(uint8_t compBuffer[4])
  */
 void doTX()
 {
-    // Check Ready to TX
-    // other TX or RX active
-    if (tx_is_active == true || is_receiving == true)
-    {
-        cmd_counter = 0;
-        return;
-    }
-
-    // Set TX-DELAY
-    if(cmd_counter == 0)
-    {
-        uint16_t rand = millis();
-        uint16_t r10 = rand / 10;
-        cmd_counter = (rand - r10*10) + 15;    // cmd_counter 15-25
-
-        //Serial.printf("rand:%i r10:%i cmd_counter:%i\n", rand, r10, cmd_counter);
-    }
-    
-    cmd_counter--;
-    if(cmd_counter > 0)
-        return; // Wait RX-DELAY done
-
     tx_is_active = true;
 
     // next TX new TX-DELAY
@@ -579,7 +564,7 @@ void OnTxDone(void)
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
-        radio.startReceive();
+        StartReceiveAgain();
     #endif
 
     //Serial.println("OnTXDone");
@@ -594,7 +579,7 @@ void OnTxTimeout(void)
     #if defined NRF52_SERIES
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
-        radio.startReceive();
+        StartReceiveAgain();
     #endif
 
     Serial.println("OnTXTimeout");
@@ -618,3 +603,44 @@ void OnHeaderDetect(void)
     
     //Serial.println("OnHeaderDetect");
 }
+
+#ifdef ESP32
+/**@brief start LoRa RX again
+ */
+extern volatile bool timeoutFlag;
+extern volatile bool detectedFlag;
+
+void StartReceiveAgain()
+{
+    int state = 0;
+
+    // put module back to listen mode
+    #ifdef SX127X
+        //radio.startReceive();
+    #else
+        // start scanning the channel again
+        if(bLORADEBUG)
+            Serial.print(F("[SX1262] Starting scan for LoRa preamble ... "));
+
+        state = radio.startChannelScan();
+
+        if (state == RADIOLIB_ERR_NONE)
+        {
+            if(bLORADEBUG)
+                Serial.println(F("success!"));
+        }
+        else
+        {
+            if(bLORADEBUG)
+            {
+                Serial.print(F("failed, code "));
+                Serial.println(state);
+            }
+        }
+    
+    timeoutFlag = false;
+    detectedFlag = false;
+
+    #endif
+}
+#endif

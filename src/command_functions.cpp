@@ -3,6 +3,7 @@
 #include <loop_functions_extern.h>
 #include "batt_functions.h"
 #include <mheard_functions.h>
+#include <udp_functions.h>
 
 unsigned long rebootAuto = 0;
 
@@ -32,6 +33,22 @@ void commandAction(char *msg_text, int len, bool ble)
     bool bInfo=false;
     bool bPos=false;
     bool bWeather=false;
+
+    #ifdef ESP32
+    if(memcmp(msg_text, "{", 1) == 0)
+    {
+        if(bEXTSER)
+        {
+            unsigned char msg_uchar[300];
+
+            memcpy(msg_uchar, msg_text, strlen(msg_text));
+
+            getExtern(msg_uchar, strlen(msg_text));
+        }
+        
+        return;
+    }
+    #endif
 
     if(memcmp(msg_text, "--", 2) != 0)
     {
@@ -143,8 +160,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
             Serial.printf("--pos      show lat/lon/alt/time info\r\n--weather  show temp/hum/press\r\n--sendpos  send pos info now\r\n--sendweather send weather info now\r\n--setlat   set latitude (44.12345)\r\n--setlon   set logitude (016.12345)\r\n--setalt   set altidude (9999)\r\n");
 
-            Serial.printf("--debug    on/off\r\n--display  on/off\r\n--setinfo  on\r\n--setinfo  off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
-            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx  off\r\n--gateway on\r\n--gateway off\r\n--extern on\r\n--extern off\r\n--externip 99.99.99.99\r\n");
+            Serial.printf("--debug    on/off\r\n--loradebug    on/off\r\n--display  on/off\r\n--setinfo  on\r\n--setinfo  off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx  off\r\n--gateway on\r\n--gateway off\r\n--extudp on\r\n--extudp off\r\n--extser on\r\n--extser off\r\n--extudpip 99.99.99.99\r\n");
         }
 
         return;
@@ -381,7 +398,7 @@ void commandAction(char *msg_text, int len, bool ble)
         
         Serial.println("bmx off");
 
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7F3F;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;
 
         if(ble)
         {
@@ -442,17 +459,17 @@ void commandAction(char *msg_text, int len, bool ble)
 
         return;
     }
-    if(commandCheck(msg_text+2, (char*)"extern on", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"extudp on", 9) == 0)
     {
-        bEXTERN=true;
+        bEXTUDP=true;
         
-        Serial.println("extern on");
+        Serial.println("extudp on");
 
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x02000;
 
         if(ble)
         {
-            addBLECommandBack((char*)"extern on");
+            addBLECommandBack((char*)"extudp on");
         }
 
         save_settings();
@@ -460,17 +477,17 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"extern off", 10) == 0)
+    if(commandCheck(msg_text+2, (char*)"extudp off", 10) == 0)
     {
-        bEXTERN=false;
+        bEXTUDP=false;
         
-        Serial.println("extern off");
+        Serial.println("extudp off");
 
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x5FFF;   // mask 0x2000
 
         if(ble)
         {
-            addBLECommandBack((char*)"extern off");
+            addBLECommandBack((char*)"extudp off");
         }
 
         save_settings();
@@ -478,7 +495,43 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"externip ", 9) == 0)
+    if(commandCheck(msg_text+2, (char*)"extser on", 9) == 0)
+    {
+        bEXTSER=true;
+        
+        Serial.println("extser on");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x04000;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"extser on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"extser off", 10) == 0)
+    {
+        bEXTSER=false;
+        
+        Serial.println("extser off");
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x3FFF;   // mask 0x4000
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"extser off");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"extudpip ", 9) == 0)
     {
         // max. 40 char
         msg_text[50]=0x00;
@@ -515,6 +568,37 @@ void commandAction(char *msg_text, int len, bool ble)
         if(ble)
         {
             addBLECommandBack((char*)"debug off");
+        }
+
+        save_settings();
+
+        return;
+    }
+    if(commandCheck(msg_text+2, (char*)"loradebug on", 12) == 0)
+    {
+        bLORADEBUG=true;
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0200;   //
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"loradebug on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"loradebug off", 13) == 0)
+    {
+        bLORADEBUG=false;
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7DFF;   //
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"loradebug off");
         }
 
         save_settings();
@@ -758,9 +842,9 @@ void commandAction(char *msg_text, int len, bool ble)
 
     if(bInfo)
     {
-        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...Call:  <%s>\r\n...Short: <%s>\r\n...ID %08X\r\n...NODE %i\r\n...BATT %.2f V\r\n...BATT %d %%\r\n...MAXB %.2f V\r\n...TIME %li ms\r\n...SSID %s\r\n...PWD  %s\r\n...GWAY %s\r\n...EXT  %s\r\n...EXT IP  %s\r\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...Call:  <%s>\r\n...Short: <%s>\r\n...ID %08X\r\n...NODE %i\r\n...BATT %.2f V\r\n...BATT %d %%\r\n...MAXB %.2f V\r\n...TIME %li ms\r\n...SSID %s\r\n...PWD  %s\r\n...GWAY %s\r\n...EXTUDP  %s\r\n...EXTSERUDP  %s\r\n...EXT IP  %s\r\n", SOURCE_TYPE, SOURCE_VERSION,
                 meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, mv_to_percent(global_batt), meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
-                (bGATEWAY?"on":"off"), (bEXTERN?"on":"off"), meshcom_settings.node_extern);
+                (bGATEWAY?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
 
         if(ble)
         {

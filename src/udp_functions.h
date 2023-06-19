@@ -18,9 +18,12 @@ void resetMeshComUDP();
 // Extern JSON UDP
 void startExternUDP();
 void getExternUDP();
-void sendExternUDP(uint8_t buffer[500], uint8_t buflen);
+void getExtern(unsigned char icomming[255], int len);
+void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen);
 void sendExternHeartbeat();
 void resetExternUDP();
+
+String getJSON(unsigned char incoming, int len, char *iname);
 
 void addNodeData(uint8_t msg_buffer[300], uint16_t size, int16_t rssi, int8_t snr);
 void addUdpOutBuffer(uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer

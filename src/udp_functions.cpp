@@ -9,6 +9,7 @@
 
 #include <udp_functions.h>
 #include <debugconf.h>
+#include <batt_functions.h>
 
 IPAddress node_ip = IPAddress(0,0,0,0);
 IPAddress node_hostip = IPAddress(0,0,0,0);
@@ -137,7 +138,11 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // send JSON to Extern IP
           if(hasExternIPaddress)
           {
-            sendExternUDP(convBuffer, (uint8_t)lora_tx_msg_len);
+            if(bEXTUDP)
+              sendExtern(true, (char*)"udp", convBuffer, (uint8_t)lora_tx_msg_len);
+
+            if(bEXTSER)
+              sendExtern(true, (char*)"udp", convBuffer, (uint8_t)lora_tx_msg_len);
           }
           
           struct aprsMessage aprsmsg;
@@ -444,7 +449,7 @@ void resetMeshComUDP()
 // Extern JSON UDP
 void startExternUDP()
 {
-  if(!bEXTERN)
+  if(!bEXTUDP)
     return;
 
   extern_node_ip = WiFi.localIP();
@@ -460,80 +465,173 @@ void startExternUDP()
   sendExternHeartbeat();
 }
 
-void getExternUDP()
+String getJSON(unsigned char incoming[300], int len, char *iname)
 {
-  if(!bEXTERN)
-    return;
+  if(incoming[0] != '{')
+    return "none";
 
-  if(!hasExternIPaddress)
-    return;
+  int is=0;
+  
+  char collect[len];
+  int ic=0;
+  memset(collect, 0x00, len);
 
+  char collect_value[len];
+  int icv=0;
+  memset(collect_value, 0x00, len);
+
+  // {"type": "msg", "dst": "OE5BYE-1", "msg": "Test 1 2 3"}
+
+  for(int ip=1; ip<len; ip++)
+  {
+    if((is == 0 || is == 2 || is == 3 || is == 5) && incoming[ip] == 0x20)
+    {
+
+    }
+    else
+    if(is == 0 && incoming[ip] == 0x22)
+    {
+      is = 1;
+    }
+    else
+    if(is == 1)
+    {
+      if(incoming[ip] == 0x22)
+      {
+        is = 2;
+      }
+      else
+      {
+        collect[ic]=incoming[ip];
+        ic++;
+      }
+    }
+    else
+    if(is == 2)
+    {
+      if(incoming[ip] == 0x2C) // ,
+      {
+        is = 0;
+      }
+      else
+      if(incoming[ip] == 0x3A) // :
+      {
+        if(strcmp(collect, iname) == 0)
+        {
+          is = 3;
+        }
+        else
+        {
+          ic=0;
+          memset(collect, 0x00, len);
+
+          is = 5;
+        }
+      }
+    }
+    else
+    if(is == 3)
+    {
+      if(incoming[ip] == 0x22)
+      {
+        is = 4;
+      }
+    }
+    else
+    if(is == 4)
+    {
+      if(incoming[ip] == 0x22)
+      {
+        return (String)collect_value;
+      }
+      else
+      {
+        collect_value[icv]=incoming[ip];
+        icv++;
+      }
+    }
+    else
+    if(is == 5)
+    {
+      if(incoming[ip] == 0x2C)
+      {
+        is = 0;
+      }
+    }
+  }
+
+  return "none";
+
+}
+
+void getExtern(unsigned char incoming[255], int len)
+{
   char val[100];
   struct aprsMessage aprsmsg;
 
-  // check if we received a UDP packet
-  packetSize = UdpExtern.parsePacket();
-  
-  if (packetSize > 0)
+  // Decode
+  // {"type":"msg","dst":"*","msg":"Meldungstext"}
+
+  initAPRS(aprsmsg);
+
+  aprsmsg.msg_source_path="HOME";
+  aprsmsg.msg_destination_path="*";
+  aprsmsg.msg_payload="none";
+
+  //Serial.printf("len:%i icomming:%s vgldst:%s vglmsg:%s\n", len, incoming, vgldst, vglmsg);
+
+  aprsmsg.msg_destination_path = getJSON(incoming, len, (char*)"dst");
+  aprsmsg.msg_payload = getJSON(incoming, len, (char*)"msg");
+
+  Serial.printf("aprsmsg.msg_destination_path:%s aprsmsg.msg_payload:%s\n", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
+
+  if(aprsmsg.msg_payload == "none")
   {
-    int len = UdpExtern.read(incomingPacket, UDP_TX_BUF_SIZE);
+    Serial.println("wrong JSON to send message");
+    return;
+  }
+  
+  sprintf(val, ":{%s}%s", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
 
-    if (len > 0)
+  sendMessage(val, strlen(val));
+}
+
+void getExternUDP()
+{
+  if(!bEXTUDP && !bEXTSER)
+    return;
+
+  if(!hasExternIPaddress && bEXTUDP)
+    return;
+
+  int len=0;
+
+  if(bEXTUDP)
+  {
+    // check if we received a UDP packet
+    packetSize = UdpExtern.parsePacket();
+    
+    if (packetSize > 0)
     {
-      incomingPacket[len] = 0;
-
-      // Decode
-      // {"type":"msg","dst":"*","msg":"Meldungstext"}
-
-      initAPRS(aprsmsg);
-
-      aprsmsg.msg_source_path="HOME";
-      aprsmsg.msg_destination_path="*";
-      aprsmsg.msg_payload="none";
-
-      for(int ip=0; ip<len; ip++)
-      {
-        if(memcmp(incomingPacket+ip, "\"dst\":\"", 7) == 0)
-        {
-          for(int ipd=ip+7;ipd<len;ipd++)
-          {
-            if(incomingPacket[ipd] == '"')
-            {
-              incomingPacket[ipd] = 0x00;
-              sprintf(val, "%s", incomingPacket[ip+7]);
-              aprsmsg.msg_destination_path=val;
-            }
-          }
-        }
-        else
-        if(memcmp(incomingPacket+ip, "\"msg\":\"", 7) == 0)
-        {
-          for(int ipd=ip+7;ipd<len;ipd++)
-          {
-            if(incomingPacket[ipd] == '"')
-            {
-              incomingPacket[ipd] = 0x00;
-              sprintf(val, "%s", incomingPacket[ip+7]);
-              aprsmsg.msg_payload=val;
-            }
-          }
-        }
-      }
-
-      sprintf(val, ":{%s}%s", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
-
-      sendMessage(val, strlen(val));
-
+      len = UdpExtern.read(incomingPacket, UDP_TX_BUF_SIZE);
     }
+  }
+
+  if (len > 0)
+  {
+    incomingPacket[len] = 0;
+
+    getExtern(incomingPacket, len);
+
   }
 }
 
-void sendExternUDP(uint8_t buffer[500], uint8_t buflen)
+void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
 {
-  if(!bEXTERN)
+  if(!bEXTUDP && !bEXTSER)
     return;
 
-  if(!hasExternIPaddress)
+  if(!hasExternIPaddress && bEXTUDP)
     return;
 
   struct aprsMessage aprsmsg;
@@ -547,6 +645,12 @@ void sendExternUDP(uint8_t buffer[500], uint8_t buflen)
   }
 
   char c_json[500];
+  char escape_symbol[3];
+  char escape_group[3];
+
+  memset(escape_symbol, 0x00, 3);
+  memset(escape_group, 0x00, 3);
+
   uint8_t u_json[500];
 
   // Position
@@ -554,8 +658,25 @@ void sendExternUDP(uint8_t buffer[500], uint8_t buflen)
   {
     decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
 
-    sprintf(c_json, "{\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%c\",\"aprs_symbol_group\":\"%c\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\"}",
-    aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, aprspos.aprs_symbol, aprspos.aprs_group, aprsmsg.msg_source_hw, aprsmsg.msg_id);
+    escape_symbol[0] = aprspos.aprs_symbol;
+    if(aprspos.aprs_symbol == 0x5c)
+      escape_symbol[1] = aprspos.aprs_symbol;
+    else
+      escape_symbol[1] = 0x00;
+
+
+    escape_group[0] = aprspos.aprs_group;
+    if(aprspos.aprs_group == 0x5c)
+      escape_group[1] = aprspos.aprs_group;
+    else
+      escape_group[1] = 0x00;
+
+    if(strcmp(src_type, "node") == 0)
+      sprintf(c_json, "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i}",
+      src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, mv_to_percent(global_batt));
+    else
+      sprintf(c_json, "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i,\"firmware\":\"%-4.4s\"}",
+      src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, mv_to_percent(global_batt), SOURCE_VERSION);
 
     memcpy(u_json, c_json, strlen(c_json));
   }
@@ -563,34 +684,41 @@ void sendExternUDP(uint8_t buffer[500], uint8_t buflen)
   // Text
   if(msg_type_b_lora == 0x3A)
   {
-    sprintf(c_json, "{\"type\":\"msg\",\"src\":\"%s\",\"dst\":\"%s\",\"msg\":\"%s\",\"msg_id\":\"%08X\"}",
-    aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str(), aprsmsg.msg_id);
+    sprintf(c_json, "{\"src_type\":\"%s\",\"type\":\"msg\",\"src\":\"%s\",\"dst\":\"%s\",\"msg\":\"%s\",\"msg_id\":\"%08X\"}",
+    src_type, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str(), aprsmsg.msg_id);
 
     memcpy(u_json, c_json, strlen(c_json));
   }
   else
     return;
 
-  IPAddress apip;
-  
-  String str_ip = meshcom_settings.node_extern;
-
-  //Serial.println(str_ip.c_str());
-
-  apip.fromString(str_ip);
-
-  //Serial.println(apip.toString());
-
-  UdpExtern.beginPacket(apip , EXTERN_PORT);
-
-  Serial.printf("c_json:%s %i\n", c_json, strlen(c_json));
-
-  if (!UdpExtern.write(u_json, strlen(c_json)))
+  if(bUDP)
   {
-    resetMeshComUDP();
-  }
+    IPAddress apip;
+    
+    String str_ip = meshcom_settings.node_extern;
 
-  UdpExtern.endPacket();
+    //Serial.println(str_ip.c_str());
+
+    apip.fromString(str_ip);
+
+    //Serial.println(apip.toString());
+
+    UdpExtern.beginPacket(apip , EXTERN_PORT);
+
+    Serial.printf("c_json:%s %i\n", c_json, strlen(c_json));
+
+    if (!UdpExtern.write(u_json, strlen(c_json)))
+    {
+      resetMeshComUDP();
+    }
+
+    UdpExtern.endPacket();
+  }
+  else
+  {
+    Serial.printf("%s\n", c_json);
+  }
 }
 
 void  sendExternHeartbeat()
@@ -602,7 +730,7 @@ void resetExternUDP()
 {
   UdpExtern.stop();
 
-  if(bEXTERN)
+  if(bEXTUDP)
   {
     startExternUDP();
   }

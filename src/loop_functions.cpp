@@ -19,6 +19,7 @@ extern unsigned long rebootAuto;
 extern float global_batt;
 
 bool bDEBUG = false;
+bool bLORADEBUG = false;
 bool bPosDisplay = true;
 bool bDisplayOff = false;
 bool bDisplayVolt = false;
@@ -30,7 +31,8 @@ bool bBMPON = false;
 bool bBMEON = false;
 
 bool bGATEWAY = false;
-bool bEXTERN = false;
+bool bEXTUDP = false;
+bool bEXTSER = false;
 
 int iDisplayType = 0;
 int DisplayTimeWait = 0;
@@ -1082,6 +1084,15 @@ void sendMessage(char *msg_text, int len)
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
+
+    #ifdef ESP32
+    // Extern Server
+    if(bEXTUDP)
+        sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
+
+    if(bEXTSER)
+        sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
+    #endif
 }
 
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt)
@@ -1207,7 +1218,15 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     {
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
     }
-    
+
+    #ifdef ESP32
+    // Extern Server
+    if(bEXTUDP)
+        sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
+
+    if(bEXTSER)
+        sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
+    #endif
 }
 
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press)

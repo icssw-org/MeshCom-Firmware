@@ -11,6 +11,7 @@
 extern unsigned long rebootAuto;
 
 extern bool bDEBUG;
+extern bool bLORADEBUG;
 extern bool bPosDisplay;
 extern bool bDisplayOff;
 extern bool bDisplayVolt;
@@ -26,7 +27,8 @@ extern bool bBMPON;
 extern bool bBMEON;
 
 extern bool bGATEWAY;
-extern bool bEXTERN;
+extern bool bEXTUDP;
+extern bool bEXTSER;
 
 extern float fBaseAltidude;
 extern float fBasePress;
