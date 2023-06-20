@@ -25,7 +25,11 @@ int casecmp(const char *s1, const char *s2)
 
 int commandCheck(char *msg, char *command)
 {
-    if(casecmp(msg, command) == 0)
+    char vmsg[100];
+    strcpy(vmsg, msg);
+    vmsg[strlen(command)] = 0x00;
+
+    if(casecmp(vmsg, command) == 0)
         return 0;
 
     return -1;
@@ -79,7 +83,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
 
-    if(commandCheck(msg_text+2, (char*)"maxv ") == 0)
+    if(commandCheck(msg_text+2, (char*)"maxv") == 0)
     {
         sscanf(msg_text+7, "%f", &meshcom_settings.node_maxv);
 
@@ -174,7 +178,7 @@ void commandAction(char *msg_text, int len, bool ble)
         {
             Serial.printf("MeshCom %s %-4.4s commands\r\n--info     show info\r\n--mheard   show MHeard\r\n--setcall  set callsign (OE0XXX-1)\r\n--setssid  WLAN SSID\r\n--setpwd   WLAN PASSWORD\r\n--reboot   Node reboot\r\n", SOURCE_TYPE, SOURCE_VERSION);
 
-            Serial.printf("--pos      show lat/lon/alt/time info\r\n--weather  show temp/hum/press\r\n--sendpos  send pos info now\r\n--sendweather send weather info now\r\n--setlat   set latitude (44.12345)\r\n--setlon   set logitude (016.12345)\r\n--setalt   set altidude (9999)\r\n");
+            Serial.printf("--pos      show lat/lon/alt/time info\r\n--weather  show temp/hum/press\r\n--sendpos  send pos info now\r\n--setlat   set latitude (44.12345)\r\n--setlon   set logitude (016.12345)\r\n--setalt   set altidude (9999)\r\n");
 
             Serial.printf("--debug    on/off\r\n--loradebug    on/off\r\n--display  on/off\r\n--setinfo on\r\n--setinfo off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
             Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx off\r\n--gateway on\r\n--gateway off\r\n--extudp on\r\n--extudp off\r\n--extser on\r\n--extser off\r\n--extudpip 99.99.99.99\r\n");
@@ -547,7 +551,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"extudpip ") == 0)
+    if(commandCheck(msg_text+2, (char*)"extudpip") == 0)
     {
         // max. 40 char
         msg_text[50]=0x00;
@@ -632,35 +636,10 @@ void commandAction(char *msg_text, int len, bool ble)
         bWeather=true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"sendwx") == 0)
-    {
-        sendWX(msg_text, meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"send");
-        }
-
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"sendpos") == 0)
     {
         posinfo_shot=true;
         //sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"send");
-        }
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"sendweather") == 0)
-    {
-        sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
 
         if(ble)
         {

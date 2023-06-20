@@ -325,6 +325,12 @@ void esp32setup()
 
     global_batt = 4200.0;
 
+    meshcom_settings.node_press = 0.0;
+    meshcom_settings.node_hum = 0.0;
+    meshcom_settings.node_temp = 0.0;
+    meshcom_settings.node_press_alt = 0;
+    meshcom_settings.node_press_asl = 0.0;
+
     if(meshcom_settings.node_maxv > 0)
     {
         setMaxBatt(meshcom_settings.node_maxv * 1000.0F);
@@ -1096,7 +1102,7 @@ void esp32loop()
         bPosFirst = false;
         posinfo_shot=false;
         
-        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
+        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         posinfo_last_lat=posinfo_lat;
         posinfo_last_lon=posinfo_lon;
@@ -1104,7 +1110,7 @@ void esp32loop()
 
         #if defined(LPS33)
         sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
+         meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, 0, 0.0);
         #endif
 
         posinfo_timer = millis();

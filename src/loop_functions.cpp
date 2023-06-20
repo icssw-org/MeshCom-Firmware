@@ -1036,8 +1036,11 @@ void sendMessage(char *msg_text, int len)
 
     encodeAPRS(msg_buffer, aprsmsg);
 
-    printBuffer_aprs((char*)"NEW-TXT", aprsmsg);
-    Serial.println();
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-TXT", aprsmsg);
+        Serial.println();
+    }
 
     // An APP als Anzeige retour senden
     if(hasMsgFromPhone)
@@ -1095,7 +1098,7 @@ void sendMessage(char *msg_text, int len)
     #endif
 }
 
-String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt)
+String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt,  float press, float hum, float temp, int qfe, float qnh)
 {
     if(lat == 0 or lon == 0)
     {
@@ -1138,6 +1141,11 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
     {
         char cbatt[15]={0};
         char calt[15]={0};
+        char cpress[15]={0};
+        char chum[15]={0};
+        char ctemp[15]={0};
+        char cqfe[15]={0};
+        char cqnh[15]={0};
 
         if(mv_to_percent(global_batt) > 0)
         {
@@ -1155,13 +1163,38 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
                 sprintf(calt, " /A=%05i", alt);
         }
 
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, cbatt, calt);
+        if(press > 0)
+        {
+            sprintf(cpress, " /P=%.1f", press);
+        }
+
+        if(hum > 0)
+        {
+            sprintf(chum, " /H=%.1f", hum);
+        }
+
+        if(temp > 0)
+        {
+            sprintf(ctemp, " /T=%.1f", temp);
+        }
+
+        if(qfe > 0)
+        {
+            sprintf(cqfe, " /F=%i", qfe);
+        }
+
+        if(qnh > 0)
+        {
+            sprintf(cqnh, " /Q=%.1f", qnh);
+        }
+
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, cbatt, calt, cpress, chum, ctemp, cqfe, cqnh);
     }
 
     return String(msg_start);
 }
 
-void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt)
+void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, int qfe, float qnh)
 {
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
@@ -1182,7 +1215,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt);
+    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
     
     if(aprsmsg.msg_payload == "")
         return;
@@ -1229,7 +1262,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     #endif
 }
 
-void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float temp, float hum, float press)
+void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, int qfe, float qnh)
 {
     // @141324z4812.06N/01555.87E_270/...g...t...r000p000P...h..b10257Weather in Neulengbach
 
@@ -1248,7 +1281,7 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.payload_type = '@';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt);
+    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
     
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -1278,16 +1311,6 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
         iWriteOwn=0;
 }
 
-
-void sendWX(char* text, float temp, float hum, float press)
-{
-    char msg_wx[200];
-
-    //sprintf(msg_wx, "%s, %.1f °C, %.1f hPa, %i %%", text, temp, press, (int)(hum));
-    sprintf(msg_wx, "%s, %.1f hPa, hum %i %%", text, press, (int)(hum));
-
-    sendMessage(msg_wx, strlen(msg_wx));
-}
 
 void SendAckMessage(String dest_call, unsigned int iAckId)
 {

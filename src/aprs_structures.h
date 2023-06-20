@@ -50,13 +50,13 @@ struct aprsPosition
     double lon_d;
     char aprs_group;
     char aprs_symbol;
-};
 
-struct aprsWeather
-{
+    // wx
     float press;
     float hum;
     float temp;
+    int qfe;
+    float qnh;
 };
 
 struct mheardLine

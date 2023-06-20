@@ -328,7 +328,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				/// TODO N/S und E/W Char muss man noch korrekt setzen
 				DEBUG_MSG("RADIO", "Sending Pos from Phone to Mesh");
 
-				sendPosition(0, d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude);
+				sendPosition(0, d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude, 0.0, 0.0, 0.0, 0, 0.0);
 
 				posinfo_timer = millis();	// damit die loop-Schleife nicht asynchron läuft
 			}

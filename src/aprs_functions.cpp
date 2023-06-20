@@ -236,6 +236,13 @@ void initAPRSPOS(struct aprsPosition &aprspos)
     aprspos.aprs_group = '/';
     aprspos.aprs_symbol = '&';
 
+    // WX
+    aprspos.press = 0.0;
+    aprspos.hum = 0.0;
+    aprspos.temp = 0.0;
+    aprspos.qfe = 0;
+    aprspos.qnh = 0.0;
+
 }
 
 uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
@@ -339,6 +346,116 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
                 {
                     sscanf(decode_text, "%d", &aprspos.alt);
+                    break;
+                }
+
+                decode_text[ipt]=PayloadBuffer.charAt(id);
+                ipt++;
+            }
+
+            break;
+        }
+    }
+
+    // check Press
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'P' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                {
+                    sscanf(decode_text, "%f", &aprspos.press);
+                    break;
+                }
+
+                decode_text[ipt]=PayloadBuffer.charAt(id);
+                ipt++;
+            }
+
+            break;
+        }
+    }
+
+    // check Hum
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'H' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                {
+                    sscanf(decode_text, "%f", &aprspos.hum);
+                    break;
+                }
+
+                decode_text[ipt]=PayloadBuffer.charAt(id);
+                ipt++;
+            }
+
+            break;
+        }
+    }
+
+    // check Temp
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'T' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                {
+                    sscanf(decode_text, "%f", &aprspos.temp);
+                    break;
+                }
+
+                decode_text[ipt]=PayloadBuffer.charAt(id);
+                ipt++;
+            }
+
+            break;
+        }
+    }
+
+    // check QFE
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'F' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                {
+                    sscanf(decode_text, "%d", &aprspos.qfe);
+                    break;
+                }
+
+                decode_text[ipt]=PayloadBuffer.charAt(id);
+                ipt++;
+            }
+
+            break;
+        }
+    }
+
+    // check QFE
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'Q' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                {
+                    sscanf(decode_text, "%f", &aprspos.qnh);
                     break;
                 }
 
