@@ -42,6 +42,7 @@ bool bWaitButton_Released = false;
 bool bButtonCheck = false;
 
 int iInitDisplay = 0;
+int iDisplayChange = 0;
 
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE] = {0};
@@ -359,6 +360,45 @@ void sendDisplayTrack()
     bSetDisplay=false;
 }
 
+void sendDisplayWX()
+{
+    if(bSetDisplay)
+        return;
+
+    bSetDisplay=true;
+
+    if(bDisplayOff)
+    {
+        sendDisplay1306(true, true, 0, 0, (char*)"#C");
+        bSetDisplay=false;
+        return;
+    }
+
+    iDisplayType=9;
+
+    char print_text[500];
+
+    sendDisplayMainline();
+
+    sprintf(print_text, "TEMP : %.1f °C", meshcom_settings.node_temp);
+    sendDisplay1306(false, false, 3, 22, print_text);
+
+    sprintf(print_text, "HUM  : %.1f %%", meshcom_settings.node_hum);
+    sendDisplay1306(false, false, 3, 32, print_text);
+
+    sprintf(print_text, "QFE  : %.1f hPa", meshcom_settings.node_press);
+    sendDisplay1306(false, false, 3, 42, print_text);
+
+    sprintf(print_text, "QNH  : %.1f hPa", meshcom_settings.node_press_asl);
+    sendDisplay1306(false, false, 3, 52, print_text);
+
+    sprintf(print_text, "ALT:%5im / %5im", meshcom_settings.node_alt, meshcom_settings.node_press_alt);
+    sendDisplay1306(false, true, 3, 62, print_text);
+
+
+    bSetDisplay=false;
+}
+
 void sendDisplayTime()
 {
     // Button Page 5 Sekunden halten
@@ -481,8 +521,20 @@ void mainStartTimeLoop()
         {
             if (meshcom_settings.node_date_second != DisplayTimeWait)
             {
+                if(bBMEON || bBMPON)
+                {
+                    iDisplayChange++;
+                    if(iDisplayChange > 9)
+                        iDisplayChange=1;
+                }
+
                 if(bDisplayTrack)
-                    sendDisplayTrack(); // Show Track
+                {
+                    if(iDisplayChange > 5)
+                        sendDisplayWX(); // Show WX
+                    else
+                        sendDisplayTrack(); // Show Track
+                }
                 else
                     sendDisplayTime(); // Time only
 
@@ -1222,8 +1274,11 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
     encodeAPRS(msg_buffer, aprsmsg);
 
-    printBuffer_aprs((char*)"NEW-POS", aprsmsg);
-    Serial.println();
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-POS", aprsmsg);
+        Serial.println();
+    }
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
@@ -1285,8 +1340,11 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     
     encodeAPRS(msg_buffer, aprsmsg);
 
-    printBuffer_aprs((char*)"NEW-WX ", aprsmsg);
-    Serial.println();
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-WX ", aprsmsg);
+        Serial.println();
+    }
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
 
@@ -1335,7 +1393,11 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     
     encodeAPRS(msg_buffer, aprsmsg);
 
-    printBuffer_aprs((char*)"NEW-ACK", aprsmsg);
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-ACK", aprsmsg);
+        Serial.println();
+    }
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);

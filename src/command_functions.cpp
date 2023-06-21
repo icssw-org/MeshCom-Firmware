@@ -269,8 +269,6 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"button on") == 0)
     {
-        Serial.println("on");
-
         bButtonCheck=true;
 
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0010;
@@ -289,8 +287,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bButtonCheck=false;
         
-        Serial.println("off");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
 
         if(ble)
@@ -307,8 +303,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bDisplayTrack=true;
         
-        Serial.println("track on");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0020;
 
         if(ble)
@@ -325,8 +319,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bDisplayTrack=false;
         
-        Serial.println("track off");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FDF;
 
         if(ble)
@@ -343,8 +335,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bGPSON=true;
         
-        Serial.println("gps on");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0040;
 
         if(ble)
@@ -361,8 +351,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bGPSON=false;
         
-        Serial.println("gps off");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FBF;
 
         if(ble)
@@ -379,8 +367,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bBMPON=true;
         
-        Serial.println("bmp on");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0080;
 
         if(ble)
@@ -397,8 +383,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bBMEON=true;
         
-        Serial.println("bme on");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x00100;
 
         if(ble)
@@ -416,8 +400,6 @@ void commandAction(char *msg_text, int len, bool ble)
         bBMPON=false;
         bBMEON=false;
         
-        Serial.println("bmx off");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;
 
         if(ble)
@@ -448,8 +430,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bGATEWAY=true;
         
-        Serial.println("gateway on");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x01000;
 
         if(ble)
@@ -466,8 +446,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bGATEWAY=false;
         
-        Serial.println("gateway off");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x6FFF;   // mask 0x1000
 
         if(ble)
@@ -483,8 +461,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bEXTUDP=true;
         
-        Serial.println("extudp on");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x02000;
 
         if(ble)
@@ -501,8 +477,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bEXTUDP=false;
         
-        Serial.println("extudp off");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x5FFF;   // mask 0x2000
 
         if(ble)
@@ -519,8 +493,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bEXTSER=true;
         
-        Serial.println("extser on");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x04000;
 
         if(ble)
@@ -537,8 +509,6 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bEXTSER=false;
         
-        Serial.println("extser off");
-
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x3FFF;   // mask 0x4000
 
         if(ble)

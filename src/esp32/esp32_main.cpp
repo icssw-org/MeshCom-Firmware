@@ -1179,7 +1179,7 @@ void esp32loop()
                     meshcom_settings.node_temp = getTemp();
                     meshcom_settings.node_hum = getHum();
                     meshcom_settings.node_press_alt = getPressALT();
-                    meshcom_settings.node_press_asl = getPressASL();
+                    meshcom_settings.node_press_asl = getPressASL(meshcom_settings.node_alt);
                     
                     BMXTimeWait = millis(); // wait for next messurement
                 }
@@ -1252,15 +1252,15 @@ void checkRX(void)
             // print RSSI (Received Signal Strength Indicator)
             Serial.print(F("[SX1278] RSSI:\t\t"));
             Serial.print(radio.getRSSI());
-            Serial.println(F(" dBm"));
+            Serial.print(F(" dBm / "));
 
             // print SNR (Signal-to-Noise Ratio)
-            Serial.print(F("[SX1278] SNR:\t\t"));
+            Serial.print(F("SNR:\t\t"));
             Serial.print(radio.getSNR());
-            Serial.println(F(" dB"));
+            Serial.print(F(" dB / "));
 
             // print frequency error
-            Serial.print(F("[SX1278] Frequency error:\t"));
+            Serial.print(F("Frequency error:\t"));
             Serial.print(radio.getFrequencyError());
             Serial.println(F(" Hz"));
         }

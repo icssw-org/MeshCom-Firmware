@@ -11,6 +11,6 @@ float getTemp();
 float getPress();
 float getHum();
 int getPressALT();
-float getPressASL();
+float getPressASL(int currect_alt);
 
 #endif

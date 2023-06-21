@@ -249,8 +249,16 @@ int getPressALT()
 	return (int)lround(x);
 }
 
-float getPressASL()
+float getPressASL(int current_alt)
 {
+	//willbe set withj --setpress
+	//fBaseAltidude = (float)meshcom_settings.node_alt;
+	//fBasePress = meshcom_settings.node_press;
+	
+	// 
+	if(fBaseAltidude == 0)
+		fBaseAltidude = (float)current_alt;
+
 	return fPress / powf(1 - ((0.0065 * fBaseAltidude) /
         (fTemp + (0.0065 * STANDARD_ALTITUDE) + 273.15)), 5.257); // in hPa
 }

@@ -18,6 +18,7 @@
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
 void sendDisplayHead(bool bInit);
 void sendDisplayTrack();
+void sendDisplayWX();
 void sendDisplayMainline();
 void sendDisplayTime();
 void mainStartTimeLoop();
