@@ -174,6 +174,8 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             return 0x00;
         }
 
+        //Serial.printf("rsize:%i inext:%i HW:%02X MOD:%02X FCS1:%02X FCS2:%02X fcs:%i\n", rsize, inext, RcvBuffer[inext], RcvBuffer[inext+1], RcvBuffer[inext+2], RcvBuffer[inext+3], (unsigned int)(RcvBuffer[inext+2] << 8) | RcvBuffer[inext+3]);
+
         aprsmsg.msg_source_hw = RcvBuffer[inext];
         inext++;
 
@@ -182,13 +184,11 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         aprsmsg.msg_fcs = (RcvBuffer[inext] << 8) | RcvBuffer[inext+1];
 
-        //Serial.printf("rsize:%i inext:%i RcvBuffer[inext]:%i RcvBuffer[inext+1]:%i\n", rsize, inext, RcvBuffer[inext], RcvBuffer[inext+1]);
-
         // Check FCS
         unsigned int FCS_SUMME=0;
         for(ib=0; ib<inext; ib++)
         {
-            FCS_SUMME += RcvBuffer[ib];
+            FCS_SUMME += (unsigned int)RcvBuffer[ib];
         }
 
         inext=inext+2;
@@ -196,7 +196,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         if(aprsmsg.msg_fcs != FCS_SUMME)
         {
             memcpy(temp,RcvBuffer,10);
-            Serial.printf("APRS decode - Packet (%i) discarded, wrong APRS-protocol - FCS <%i>:<%i> wrong! <%02X %02X%02X%02X%02X %02X %-30.20s>\n", rsize, aprsmsg.msg_fcs, FCS_SUMME, temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], RcvBuffer+6);
+            Serial.printf("APRS decode - Packet (%i) discarded, wrong FCS <%08X>:<%08X> wrong! <%02X %02X%02X%02X%02X %02X %-60.60s>\n", rsize, aprsmsg.msg_fcs, FCS_SUMME, temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], RcvBuffer+6);
 
             if(bDEBUG && rsize < 255)
                 printAsciiBuffer(RcvBuffer, rsize);
@@ -218,7 +218,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
     else
     {
         memcpy(temp,RcvBuffer,10);
-        Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol! <%02X %02X%02X%02X%02X %02X %-30.20s>\n", temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], RcvBuffer+6);
+        Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol! <%02X %02X%02X%02X%02X %02X %-60.60s>\n", temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], RcvBuffer+6);
 
             if(bLORADEBUG && rsize < 256)
                 printAsciiBuffer(RcvBuffer, rsize);
@@ -550,9 +550,10 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     inext++;
 
     unsigned int FCS_SUMME=0;
+
     for(int ifcs=0; ifcs<inext; ifcs++)
     {
-        FCS_SUMME += msg_buffer[ifcs];
+        FCS_SUMME += (unsigned int)msg_buffer[ifcs];
     }
     
     // FCS

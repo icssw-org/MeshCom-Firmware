@@ -7,7 +7,7 @@
 #include <Arduino.h>
 
 #define SOURCE_TYPE "MC"
-#define SOURCE_VERSION "4.23"
+#define SOURCE_VERSION "4.24"
 
 //Hardware Types
 #define TLORA_V2 1

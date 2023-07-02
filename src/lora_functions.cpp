@@ -43,11 +43,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     if(payload[0] == 0x41)
     {
-		Serial.print(getTimeString());
-        if(size == 7)
-		    Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
-        else
-		    Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
+        if(bLORADEBUG)
+        {
+            Serial.print(getTimeString());
+            if(size == 7)
+                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
+            else
+                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
+        }
 
         memcpy(print_buff, payload, 12);
 
@@ -72,7 +75,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 {
                     print_buff[5] = 0x41;
                     addBLEOutBuffer(print_buff+5, 7);
-                    Serial.printf("ACK   to Phone  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[6], print_buff[7], print_buff[8], print_buff[9], print_buff[10], print_buff[11]);
+
+                    if(bLORADEBUG)
+                        Serial.printf("ACK   to Phone  %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[6], print_buff[7], print_buff[8], print_buff[9], print_buff[10], print_buff[11]);
                     
                     own_msg_id[icheck][4] = 0x02;   // 02...ACK
                 }
@@ -90,7 +95,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     if(iWrite >= MAX_RING)
                     iWrite=0;
         
-                    Serial.printf("ACK forward  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                    if(bLORADEBUG)
+                        Serial.printf("ACK forward  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
                 }
             }
         }
@@ -371,6 +377,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(aprsmsg.max_hop > 0)
                                 aprsmsg.max_hop--;
 
+                            //aprsmsg.msg_source_path.concat(',');
+                            //aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                            aprsmsg.msg_source_path=aprsmsg.msg_source_call;
                             aprsmsg.msg_source_path.concat(',');
                             aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
 
@@ -431,7 +440,8 @@ void OnRxTimeout(void)
         StartReceiveAgain();
     #endif
 
-    Serial.println("OnRxTimeout");
+    if(bLORADEBUG)
+        Serial.println("OnRxTimeout");
 
     is_receiving = false;
 }
@@ -447,7 +457,8 @@ void OnRxError(void)
         StartReceiveAgain();
     #endif
 
-    Serial.println("OnRxError");
+    if(bLORADEBUG)
+        Serial.println("OnRxError");
 
     is_receiving = false;
 }
@@ -582,7 +593,8 @@ void OnTxTimeout(void)
         StartReceiveAgain();
     #endif
 
-    Serial.println("OnTXTimeout");
+    if(bLORADEBUG)
+        Serial.println("OnTXTimeout");
 
     tx_is_active = false;
 }

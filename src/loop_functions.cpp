@@ -425,12 +425,18 @@ void sendDisplayTime()
     char print_text[500];
     char cbatt[5];
 
+    char nodetype[5];
+
+    sprintf(nodetype, "%s", SOURCE_TYPE);
+    if(bGATEWAY)
+        sprintf(nodetype, "GW");
+
     if(bDisplayVolt)
         sprintf(cbatt, "%4.2f", global_batt/1000.0);
     else
         sprintf(cbatt, "%3d%%", mv_to_percent(global_batt));
 
-    sprintf(print_text, "%-2.2s%-4.4s %02i:%02i:%02i %-4.4s", SOURCE_TYPE, SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+    sprintf(print_text, "%-2.2s%-4.4s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
 
     memcpy(pageText[0], print_text, 20);
 
@@ -451,6 +457,11 @@ void sendDisplayMainline()
 {
     char print_text[500];
     char cbatt[5];
+    char nodetype[5];
+
+    sprintf(nodetype, "%s", SOURCE_TYPE);
+    if(bGATEWAY)
+        sprintf(nodetype, "GW");
 
     if(bDisplayVolt)
         sprintf(cbatt, "%4.2f", global_batt/1000.0);
@@ -459,11 +470,11 @@ void sendDisplayMainline()
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
-        sprintf(print_text, "%-2.2s %-4.4s         %-4.4s", SOURCE_TYPE, SOURCE_VERSION, cbatt);
+        sprintf(print_text, "%-2.2s %-4.4s         %-4.4s", nodetype, SOURCE_VERSION, cbatt);
     }
     else
     {
-        sprintf(print_text, "%-2.2s%-4.4s %02i:%02i:%02i %-4.4s", SOURCE_TYPE, SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        sprintf(print_text, "%-2.2s%-4.4s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
     sendDisplay1306(true, false, 3, 10, print_text);
@@ -844,7 +855,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     sendDisplayMainline();
 
-    sprintf(msg_text, "%s", aprsmsg.msg_source_path.c_str());
+    sprintf(msg_text, "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
 
     msg_text[20]=0x00;
     sendDisplay1306(false, false, 3, izeile, msg_text);
