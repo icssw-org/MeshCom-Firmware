@@ -30,6 +30,11 @@
     #define ENABLE_BMX280
 #endif
 
+#ifdef BOARD_T_ECHO
+    #define MODUL_HARDWARE T_ECHO
+    #define RF_FREQUENCY 433175000 // 432900000   // Hz
+#endif
+
 #ifdef BOARD_TBEAM
     #define MODUL_HARDWARE TBEAM
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
@@ -98,7 +103,7 @@
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
 #define RX_TIMEOUT_VALUE 0      // continous rx with 0
-#define TX_TIMEOUT_VALUE 2000
+#define TX_TIMEOUT_VALUE 3000
 
 // ETH Sield
 //#define ETH_CS WB_IO5                   // Resoldered CS Pin to WB_IO5
@@ -106,6 +111,23 @@
 #define MAX_DEVICE_ID 0xfFfFfFfFfFfF    // maximum mac address used to mask uint64_t from HW register
 
 #endif
+
+#ifdef LILYGO_T_ECHO
+
+// Define LoRa parameters
+#define TX_OUTPUT_POWER 22       // dBm
+#define LORA_BANDWIDTH 1         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
+#define LORA_SPREADING_FACTOR 11 // [SF7..SF12]
+#define LORA_CODINGRATE 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
+#define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+#define LORA_SYMBOL_TIMEOUT 0    // Symbols
+#define LORA_FIX_LENGTH_PAYLOAD_ON false
+#define LORA_IQ_INVERSION_ON false
+#define RX_TIMEOUT_VALUE 0      // continous rx with 0
+#define TX_TIMEOUT_VALUE 3000
+
+#endif
+
 
 // Meshcom Params
 #define LONGNAME_MAXLEN 20 // maximum length of the longname

@@ -377,11 +377,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(aprsmsg.max_hop > 0)
                                 aprsmsg.max_hop--;
 
-                            //aprsmsg.msg_source_path.concat(',');
-                            //aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                            /*long path*/
+                            aprsmsg.msg_source_path.concat(',');
+                            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                            
+                            /* short path
                             aprsmsg.msg_source_path=aprsmsg.msg_source_call;
                             aprsmsg.msg_source_path.concat(',');
                             aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                            */
 
                             memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
 
