@@ -113,7 +113,7 @@ void updateMheard(struct mheardLine &mheardLine)
 
         // send to Phone
         uint8_t bleBuffer[300] = {0};
-        bleBuffer[0] = 'H';
+        bleBuffer[0] = 0x91;
         memcpy(bleBuffer+1, mheardCalls[ipos], 10);
         memcpy(bleBuffer+11, mheardBuffer[ipos], strlen(mheardBuffer[ipos]));
 
