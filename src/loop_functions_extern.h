@@ -26,6 +26,8 @@ extern bool bGPSON;
 extern bool bBMPON;
 extern bool bBMEON;
 
+extern bool bSHORTPATH;
+
 extern bool bGATEWAY;
 extern bool bEXTUDP;
 extern bool bEXTSER;

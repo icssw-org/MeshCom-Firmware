@@ -34,6 +34,8 @@ bool bGATEWAY = false;
 bool bEXTUDP = false;
 bool bEXTSER = false;
 
+bool bSHORTPATH = false;
+
 int iDisplayType = 0;
 int DisplayTimeWait = 0;
 
@@ -123,10 +125,8 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
 
     if(bDEBUG)
-        Serial.printf("BLEtoPhone RingBuff added element: %u\n", toPhoneWrite);
-
-    if(bDEBUG)
     {
+        Serial.printf("BLEtoPhone RingBuff added element: %u\n", toPhoneWrite);
         printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1);
     }
 
@@ -957,7 +957,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                 {
                     sscanf(decode_text, "%d", &alt);
 
-                    if(aprsmsg.msg_fw_version > 13)
+                    if(aprsmsg.msg_source_fw_version > 13)
                         alt = (int)((float)alt * 0.3048);
 
                     sprintf(msg_text, "ALT:%im rssi:%i", alt, rssi);
@@ -1022,7 +1022,7 @@ void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
     Serial.print(getTimeString());
     Serial.printf(" %s: %03i %c x%08X %02X %i %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X V:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
-        aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_fw_version);
+        aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version);
 }
 
 ///////////////////////////////////////////////////////////////////////////

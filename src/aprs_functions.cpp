@@ -29,7 +29,8 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_fcs = 0;
     aprsmsg.msg_source_hw = MODUL_HARDWARE;
     aprsmsg.msg_source_mod = 3;
-    aprsmsg.msg_fw_version = shortVERSION();
+    aprsmsg.msg_source_fw_version = shortVERSION();
+    aprsmsg.msg_last_hw = MODUL_HARDWARE;
 }
 
 uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct aprsMessage &aprsmsg)
@@ -206,7 +207,13 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         if(inext < rsize)
         {
-            aprsmsg.msg_fw_version = RcvBuffer[inext];
+            aprsmsg.msg_source_fw_version = RcvBuffer[inext];
+            inext++;
+        }
+
+        if(inext < rsize)
+        {
+            aprsmsg.msg_last_hw = RcvBuffer[inext];
             inext++;
         }
 
@@ -537,8 +544,8 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     inext = inext + inext_payload;
 
     // max posible payload (LoRa MSG max 255 byte)
-    if((inext + 6) > UDP_TX_BUF_SIZE)
-        inext = UDP_TX_BUF_SIZE - 6;
+    if((inext + 8) > UDP_TX_BUF_SIZE)
+        inext = UDP_TX_BUF_SIZE - 8;
 
     msg_buffer[inext] = 0x00;
     inext++;
@@ -564,7 +571,13 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
 
     aprsmsg.msg_fcs = FCS_SUMME;
 
-    msg_buffer[inext] = aprsmsg.msg_fw_version;
+    msg_buffer[inext] = aprsmsg.msg_source_fw_version;
+    inext++;
+
+    msg_buffer[inext] = aprsmsg.msg_last_hw;
+    inext++;
+
+    msg_buffer[inext] = 0x7e;
     inext++;
 
     if(inext > UDP_TX_BUF_SIZE)

@@ -289,6 +289,7 @@ void nrf52setup()
     bGPSON =  meshcom_settings.node_sset & 0x0040;
     bBMPON =  meshcom_settings.node_sset & 0x0080;
     bBMEON =  meshcom_settings.node_sset & 0x0100;
+    bSHORTPATH = meshcom_settings.node_sset & 0x0400;
     bLORADEBUG = meshcom_settings.node_sset & 0x0200;
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;

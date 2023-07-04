@@ -74,7 +74,7 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         if(ble)
         {
-            sprintf(print_buff, "wrong command %s\r\n", msg_text);
+            sprintf(print_buff, "--wrong command %s\r\n", msg_text);
             addBLECommandBack(print_buff);
         }
         else
@@ -91,7 +91,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"set");
+            addBLECommandBack((char*)"--set");
         }
 
         save_settings();
@@ -107,7 +107,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"set");
+            addBLECommandBack((char*)"--set");
         }
 
         save_settings();
@@ -123,7 +123,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"set");
+            addBLECommandBack((char*)"--set");
         }
 
         save_settings();
@@ -147,11 +147,33 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"shortpath off") == 0)
+    {
+        Serial.println("\nshortpath off");
+
+        bSHORTPATH=false;
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"shortpath on") == 0)
+    {
+        Serial.println("\nshortpath on");
+
+        bSHORTPATH=true;
+
+        save_settings();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"reboot") == 0)
     {
         if(ble)
         {
-            addBLECommandBack((char*)"reboot now");
+            addBLECommandBack((char*)"--reboot now");
         }
 
         #ifdef ESP32
@@ -171,7 +193,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            sprintf(print_buff, "MeshCom %s %-4.4s commands\r\n--info show info\r\n--reboot  Node reboot\r\n--pos show lat/lon/alt/time info\r\n--sendpos send pos now\r\n", SOURCE_TYPE, SOURCE_VERSION);
+            sprintf(print_buff, "--MeshCom %s %-4.4s commands\r\n--info show info\r\n--reboot  Node reboot\r\n--pos show lat/lon/alt/time info\r\n--sendpos send pos now\r\n", SOURCE_TYPE, SOURCE_VERSION);
             addBLECommandBack(print_buff);
         }
         else
@@ -180,8 +202,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
             Serial.printf("--pos      show lat/lon/alt/time info\r\n--weather  show temp/hum/press\r\n--sendpos  send pos info now\r\n--setlat   set latitude (44.12345)\r\n--setlon   set logitude (016.12345)\r\n--setalt   set altidude (9999)\r\n");
 
-            Serial.printf("--debug    on/off\r\n--loradebug    on/off\r\n--display  on/off\r\n--setinfo on\r\n--setinfo off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
-            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx off\r\n--gateway on\r\n--gateway off\r\n--extudp on\r\n--extudp off\r\n--extser on\r\n--extser off\r\n--extudpip 99.99.99.99\r\n");
+            Serial.printf("--debug    on/off\r\n--loradebug    on/off\r\n--display on/off\r\n--setinfo on\r\n--setinfo off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx off\r\n--gateway on\r\n--gateway off\r\n--extudp  on\r\n--extudp  off\r\n--extser  on\r\n--extser  off\r\n--extudpip 99.99.99.99\r\n");
         }
 
         return;
@@ -202,7 +224,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"all on");
+            addBLECommandBack((char*)"--all on");
         }
 
         save_settings();
@@ -220,7 +242,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"msg on");
+            addBLECommandBack((char*)"--msg on");
         }
 
         save_settings();
@@ -237,7 +259,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"display on");
+            addBLECommandBack((char*)"--display on");
         }
 
         save_settings();
@@ -257,7 +279,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"display off");
+            addBLECommandBack((char*)"--display off");
         }
 
         save_settings();
@@ -275,7 +297,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"button on");
+            addBLECommandBack((char*)"--button on");
         }
 
         save_settings();
@@ -291,7 +313,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"button off");
+            addBLECommandBack((char*)"--button off");
         }
 
         save_settings();
@@ -307,7 +329,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"track on");
+            addBLECommandBack((char*)"--track on");
         }
 
         save_settings();
@@ -323,7 +345,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"track off");
+            addBLECommandBack((char*)"--track off");
         }
 
         save_settings();
@@ -339,7 +361,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"gps on");
+            addBLECommandBack((char*)"--gps on");
         }
 
         save_settings();
@@ -355,7 +377,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"gps off");
+            addBLECommandBack((char*)"--gps off");
         }
 
         save_settings();
@@ -371,7 +393,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"bmp on");
+            addBLECommandBack((char*)"--bmp on");
         }
 
         save_settings();
@@ -387,7 +409,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"bme on");
+            addBLECommandBack((char*)"--bme on");
         }
 
         save_settings();
@@ -404,7 +426,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"bmx off");
+            addBLECommandBack((char*)"--bmx off");
         }
 
         save_settings();
@@ -421,7 +443,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"Base Press set");
+            addBLECommandBack((char*)"--Base Press set");
         }
 
         return;
@@ -434,7 +456,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"gateway on");
+            addBLECommandBack((char*)"--gateway on");
         }
 
         save_settings();
@@ -450,7 +472,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"gateway off");
+            addBLECommandBack((char*)"--gateway off");
         }
 
         save_settings();
@@ -465,7 +487,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"extudp on");
+            addBLECommandBack((char*)"--extudp on");
         }
 
         save_settings();
@@ -481,7 +503,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"extudp off");
+            addBLECommandBack((char*)"--extudp off");
         }
 
         save_settings();
@@ -497,7 +519,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"extser on");
+            addBLECommandBack((char*)"--extser on");
         }
 
         save_settings();
@@ -513,7 +535,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"extser off");
+            addBLECommandBack((char*)"--extser off");
         }
 
         save_settings();
@@ -541,7 +563,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"debug on");
+            addBLECommandBack((char*)"--debug on");
         }
 
         save_settings();
@@ -557,7 +579,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"debug off");
+            addBLECommandBack((char*)"--debug off");
         }
 
         save_settings();
@@ -572,7 +594,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"loradebug on");
+            addBLECommandBack((char*)"--loradebug on");
         }
 
         save_settings();
@@ -588,7 +610,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"loradebug off");
+            addBLECommandBack((char*)"--loradebug off");
         }
 
         save_settings();
@@ -613,7 +635,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"send");
+            addBLECommandBack((char*)"--posted");
         }
 
         return;
@@ -632,11 +654,6 @@ void commandAction(char *msg_text, int len, bool ble)
 
         Serial.printf("Call:%s Short:%s set\n", meshcom_settings.node_call, meshcom_settings.node_short);
 
-        if(ble)
-        {
-            addBLECommandBack((char*)"set/reboot");
-        }
-
         save_settings();
 
         rebootAuto = millis() + 15 * 1000; // 15 Sekunden
@@ -653,7 +670,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"set/reboot");
+            addBLECommandBack((char*)"--set/reboot");
         }
 
         save_settings();
@@ -677,7 +694,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"set/reboot");
+            addBLECommandBack((char*)"--set/reboot");
         }
 
         save_settings();
@@ -698,7 +715,7 @@ void commandAction(char *msg_text, int len, bool ble)
         
         if(ble)
         {
-            addBLECommandBack((char*)"set/reboot");
+            addBLECommandBack((char*)"--set/reboot");
         }
 
         save_settings();
@@ -714,7 +731,7 @@ void commandAction(char *msg_text, int len, bool ble)
         
         if(ble)
         {
-            addBLECommandBack((char*)"set/reboot");
+            addBLECommandBack((char*)"--set/reboot");
         }
 
         save_settings();
@@ -742,7 +759,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"set");
+            addBLECommandBack((char*)"--set");
         }
 
         save_settings();
@@ -768,7 +785,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"set");
+            addBLECommandBack((char*)"--set");
         }
 
         save_settings();
@@ -790,7 +807,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"set");
+            addBLECommandBack((char*)"--set");
         }
 
         save_settings();
@@ -807,9 +824,9 @@ void commandAction(char *msg_text, int len, bool ble)
 
     if(bInfo)
     {
-        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...Call:  <%s>\r\n...Short: <%s>\r\n...ID %08X\r\n...NODE %i\r\n...BATT %.2f V\r\n...BATT %d %%\r\n...MAXB %.2f V\r\n...TIME %li ms\r\n...SSID %s\r\n...PWD  %s\r\n...GWAY %s\r\n...EXTUDP  %s\r\n...EXTSERUDP  %s\r\n...EXT IP  %s\r\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "--MeshCom %s %-4.4s\r\n...Call:  <%s>\r\n...Short: <%s>\r\n...ID %08X\r\n...NODE %i\r\n...BATT %.2f V\r\n...BATT %d %%\r\n...MAXV %.2f V\r\n...TIME %li ms\r\n...SSID %s\r\n...PWD  %s\r\n...GWAY %s\r\n...DEBUG  %s\r\n...LORADEBUG %s\r\n...EXTUDP  %s\r\n...EXTSERUDP  %s\r\n...EXT IP  %s\r\n", SOURCE_TYPE, SOURCE_VERSION,
                 meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, mv_to_percent(global_batt), meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
-                (bGATEWAY?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
+                (bGATEWAY?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
 
         if(ble)
         {
@@ -817,7 +834,7 @@ void commandAction(char *msg_text, int len, bool ble)
         }
         else
         {
-            printf("\n%s", print_buff);
+            printf("\n%s", print_buff+2);
         }
 
         sendDisplayHead(false);
@@ -825,7 +842,7 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(bPos)
     {
-        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...LAT: %.4lf %c\r\n...LON: %.4lf %c\r\n...ALT: %i\r\n...SAT: %i - %s - HDOP %i\r\n...RATE: %i\r\n...DIST: %im\r\n...DIRn:  %i°\r\n...DIRo:  %i°\r\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "--MeshCom %s %-4.4s\r\n...LAT: %.4lf %c\r\n...LON: %.4lf %c\r\n...ALT: %i\r\n...SAT: %i - %s - HDOP %i\r\n...RATE: %i\r\n...DIST: %im\r\n...DIRn:  %i°\r\n...DIRo:  %i°\r\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_TYPE, SOURCE_VERSION,
         meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
         (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
         meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
@@ -836,13 +853,13 @@ void commandAction(char *msg_text, int len, bool ble)
         }
         else
         {
-            printf("\n%s", print_buff);
+            printf("\n%s", print_buff+2);
         }
     }
     else
     if(bWeather)
     {
-        sprintf(print_buff, "MeshCom %s %-4.4s\r\n...TEMP: %.1f °C\r\n...HUM: %.1f%% rH\r\n...QFE: %.1f hPa\r\n...QNH: %.1f hPa\r\n...ALT asl: %i m\r\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "--MeshCom %s %-4.4s\r\n...TEMP: %.1f °C\r\n...HUM: %.1f%% rH\r\n...QFE: %.1f hPa\r\n...QNH: %.1f hPa\r\n...ALT asl: %i m\r\n", SOURCE_TYPE, SOURCE_VERSION,
         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
 
         if(ble)
@@ -851,9 +868,20 @@ void commandAction(char *msg_text, int len, bool ble)
         }
         else
         {
-            printf("\n%s", print_buff);
+            printf("\n%s", print_buff+2);
         }
     }
     else
-        printf("\nMeshCom %s %-4.4s ...wrong command %s\n", SOURCE_TYPE, SOURCE_VERSION, msg_text);
+    {
+        sprintf(print_buff, "\n--MeshCom %s %-4.4s ...wrong command %s\n", SOURCE_TYPE, SOURCE_VERSION, msg_text);
+
+        if(ble)
+        {
+            addBLECommandBack(print_buff);
+        }
+        else
+        {
+            printf("\n%s", print_buff+2);
+        }
+    }
 }

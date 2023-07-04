@@ -319,6 +319,7 @@ void esp32setup()
     bBMPON =  meshcom_settings.node_sset & 0x0080;
     bBMEON =  meshcom_settings.node_sset & 0x0100;
     bLORADEBUG = meshcom_settings.node_sset & 0x0200;
+    bSHORTPATH = meshcom_settings.node_sset & 0x0400;
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
     bEXTSER =  meshcom_settings.node_sset & 0x4000;
@@ -702,7 +703,7 @@ void esp32loop()
         int state = RADIOLIB_ERR_NONE;
 
         // check ongoing reception
-        if(receiving)
+        if(receiving && timeoutFlag)
         {
             // DIO triggered while reception is ongoing
             // that means we got a packet
@@ -711,16 +712,6 @@ void esp32loop()
             detectedFlag = false;
             timeoutFlag = false;
 
-            // you can read received data as an Arduino String
-            /*
-            String str;
-            state = radio.readData(str);
-            */
-        
-            // you can also read received data as byte array
-            //    byte byteArr[8];
-            //    state = radio.readData(byteArr, 8);
-            
             checkRX();
 
             // reception is done now
@@ -759,10 +750,11 @@ void esp32loop()
                 radio.finishTransmit();
 
                 // wait a second before transmitting again
-                delay(1000);
+                //TEST delay(1000);
 
-                bStartReceivingAgain=true;
-
+                bCheckReceiveAgain=true;
+                
+                //bStartReceivingAgain=true;
         }
 
         // check if we got a preamble
@@ -812,11 +804,11 @@ void esp32loop()
                     }
                     else
                     {
-                        int32_t preTxDelay = radio.random(2, 7);
-                        delay(preTxDelay * 200);
+                        int32_t preTxDelay = radio.random(1, 5);
+                        delay(preTxDelay * 250);
 
                         if(bLORADEBUG)
-                            Serial.printf("preTxDelay:%i\n", preTxDelay);
+                            Serial.printf("preTxDelay:%i ms\n", preTxDelay*350);
 
                         bCheckReceiveAgain=true;
                     }
@@ -1241,16 +1233,10 @@ void checkRX(void)
         if(bLORADEBUG)
         {
             // packet was successfully received
-            Serial.println(F("[SX1278] Received packet!"));
-
-            // print data of the packet
-            /*
-            Serial.print(F("[SX1278] Data:\t\t"));
-            Serial.println(str);
-            */
+            Serial.print(F("[SX1278] Received packet: "));
 
             // print RSSI (Received Signal Strength Indicator)
-            Serial.print(F("[SX1278] RSSI:\t\t"));
+            Serial.print(F("RSSI:\t\t"));
             Serial.print(radio.getRSSI());
             Serial.print(F(" dBm / "));
 

@@ -184,7 +184,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 initMheardLine(mheardLine);
 
                 mheardLine.mh_callsign = aprsmsg.msg_source_last;
-                mheardLine.mh_hw = aprsmsg.msg_source_hw;
+                mheardLine.mh_hw = aprsmsg.msg_last_hw;
                 mheardLine.mh_mod = aprsmsg.msg_source_mod;
                 mheardLine.mh_rssi = rssi;
                 mheardLine.mh_snr = snr;
@@ -377,15 +377,21 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(aprsmsg.max_hop > 0)
                                 aprsmsg.max_hop--;
 
-                            /*long path*/
-                            aprsmsg.msg_source_path.concat(',');
-                            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-                            
-                            /* short path
-                            aprsmsg.msg_source_path=aprsmsg.msg_source_call;
-                            aprsmsg.msg_source_path.concat(',');
-                            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-                            */
+                            if(bSHORTPATH)
+                            {
+                                /* short path */
+                                aprsmsg.msg_source_path=aprsmsg.msg_source_call;
+                                aprsmsg.msg_source_path.concat(',');
+                                aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                            }
+                            else
+                            {
+                                /*long path*/
+                                aprsmsg.msg_source_path.concat(',');
+                                aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                            }
+
+                            aprsmsg.msg_last_hw = MODUL_HARDWARE;   // Last Module-Hardware
 
                             memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
 
@@ -537,7 +543,6 @@ void doTX()
                 #if defined NRF52_SERIES
                     Radio.Send(lora_tx_buffer, sendlng);
                 #else
-                    // delay(radio.random(100, 500));
                     transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                 #endif
 

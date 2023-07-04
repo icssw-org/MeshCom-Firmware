@@ -6,7 +6,7 @@ char mheardBuffer[MAX_MHEARD][40]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 
-String HardWare[13] = {"none", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "-", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "EBYTE_E22"};
+String HardWare[13] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "-", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "EBYTE_E22"};
 
 void initMheard()
 {
@@ -110,6 +110,14 @@ void updateMheard(struct mheardLine &mheardLine)
         int8_t mh_snr;
         */
         sprintf(mheardBuffer[ipos], "%s@%s@%c@%i@%i@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw, mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr);
+
+        // send to Phone
+        uint8_t bleBuffer[300] = {0};
+        bleBuffer[0] = 'H';
+        memcpy(bleBuffer+1, mheardCalls[ipos], 10);
+        memcpy(bleBuffer+11, mheardBuffer[ipos], strlen(mheardBuffer[ipos]));
+
+        addBLEOutBuffer(bleBuffer, strlen(mheardBuffer[ipos])+1+10);
 }
 
 void showMHeard()
@@ -142,10 +150,13 @@ void showMHeard()
             else
                 Serial.printf("??? | ");
 
+            int ihw=mheardLine.mh_hw;
             if(mheardLine.mh_hw == 39)
-                Serial.printf("%-15.15s | ", HardWare[12].c_str());
-            else
-                Serial.printf("%-15.15s | ", HardWare[mheardLine.mh_hw].c_str());
+                ihw=12;
+            if(ihw < 0 || ihw > 12)
+                ihw=0;
+
+            Serial.printf("%-15.15s | ", HardWare[ihw].c_str());
 
             Serial.printf("%3i | ", mheardLine.mh_mod);
             Serial.printf("%4i | ", mheardLine.mh_rssi);

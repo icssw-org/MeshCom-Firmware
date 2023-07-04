@@ -35,7 +35,8 @@ struct aprsMessage
     unsigned int msg_fcs;
     uint8_t msg_source_hw;
     uint8_t msg_source_mod;
-    uint8_t msg_fw_version;
+    uint8_t msg_source_fw_version;
+    uint8_t msg_last_hw;
 };
 
 struct aprsPosition
