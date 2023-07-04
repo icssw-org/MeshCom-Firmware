@@ -153,6 +153,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
         bSHORTPATH=false;
 
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7BFF;
+
         save_settings();
 
         return;
@@ -163,6 +165,8 @@ void commandAction(char *msg_text, int len, bool ble)
         Serial.println("\nshortpath on");
 
         bSHORTPATH=true;
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0400;
 
         save_settings();
 
@@ -615,6 +619,30 @@ void commandAction(char *msg_text, int len, bool ble)
 
         save_settings();
 
+        
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"gpsdebug on") == 0)
+    {
+        bGPSDEBUG=true;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--gpsdebug on");
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"gpsdebug off") == 0)
+    {
+        bGPSDEBUG=false;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--gpsdebug off");
+        }
         return;
     }
     else

@@ -104,7 +104,7 @@ unsigned int readGPS(void)
             break;
         }
 
-        if(bDEBUG)
+        if(bGPSDEBUG)
           Serial.print(c);
 
         tmp_data += c;

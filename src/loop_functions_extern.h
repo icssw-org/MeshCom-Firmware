@@ -27,6 +27,7 @@ extern bool bBMPON;
 extern bool bBMEON;
 
 extern bool bSHORTPATH;
+extern bool bGPSDEBUG;
 
 extern bool bGATEWAY;
 extern bool bEXTUDP;
@@ -54,11 +55,11 @@ extern int iRead;
 extern bool hasMsgFromPhone;
 
 // BLE Ringbuffer to phone
-extern unsigned char BLEtoPhoneBuff[MAX_RING][UDP_TX_BUF_SIZE];
+extern unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE];
 extern int toPhoneWrite;
 extern int toPhoneRead;
 
-extern uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
+extern uint8_t ringBufferLoraRX[MAX_RING][4]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
 extern uint8_t udpWrite;   // counter for ringbuffer
 extern uint8_t udpRead;    // counter for ringbuffer
 

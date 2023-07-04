@@ -2,7 +2,7 @@
 #include <loop_functions.h>
 #include <debugconf.h>
 
-char mheardBuffer[MAX_MHEARD][40]; //Ringbuffer for MHeard Lines
+char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 
@@ -12,7 +12,7 @@ void initMheard()
 {
     for(int iset=0; iset<MAX_MHEARD; iset++)
     {
-        memset(mheardBuffer[iset], 0x00, 40);
+        memset(mheardBuffer[iset], 0x00, 60);
         memset(mheardCalls[iset], 0x00, 10);
     }
 
@@ -96,28 +96,28 @@ void updateMheard(struct mheardLine &mheardLine)
     {
         ipos=mheardWrite;
         mheardWrite++;
-        if(mheardWrite >= MAX_MHEARD)
+        if(mheardWrite > MAX_MHEARD)
             mheardWrite=0;
     }
 
-        strcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str());
-        /*
-        String mh_time;
-        String mh_callsign;
-        uint8_t mh_hw;
-        uint8_t mh_mod;
-        int16_t mh_rssi;
-        int8_t mh_snr;
-        */
-        sprintf(mheardBuffer[ipos], "%s@%s@%c@%i@%i@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw, mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr);
+    strcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str());
+    /*
+    String mh_time;
+    String mh_callsign;
+    uint8_t mh_hw;
+    uint8_t mh_mod;
+    int16_t mh_rssi;
+    int8_t mh_snr;
+    */
+    sprintf(mheardBuffer[ipos], "%s@%s@%c@%i@%i@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw, mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr);
 
-        // send to Phone
-        uint8_t bleBuffer[300] = {0};
-        bleBuffer[0] = 0x91;
-        memcpy(bleBuffer+1, mheardCalls[ipos], 10);
-        memcpy(bleBuffer+11, mheardBuffer[ipos], strlen(mheardBuffer[ipos]));
+    // send to Phone
+    uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
+    bleBuffer[0] = 0x91;
+    memcpy(bleBuffer+1, mheardCalls[ipos], 10);
+    memcpy(bleBuffer+11, mheardBuffer[ipos], strlen(mheardBuffer[ipos]));
 
-        addBLEOutBuffer(bleBuffer, strlen(mheardBuffer[ipos])+1+10);
+    addBLEOutBuffer(bleBuffer, strlen(mheardBuffer[ipos])+1+10);
 }
 
 void showMHeard()

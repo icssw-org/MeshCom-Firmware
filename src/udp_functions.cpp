@@ -33,7 +33,7 @@ int packetSize=0;
 static uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 // RINGBUFFER for outgoing UDP lora packets for lora TX
-uint8_t ringBufferUDPout[MAX_RING_UDP_OUT][UDP_TX_BUF_SIZE];
+uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE];
 uint8_t udpWrite=0;
 uint8_t udpRead=0;
 
@@ -293,7 +293,7 @@ void sendMeshComUDP()
             memset(ringBufferUDPout[udpRead], 0, UDP_TX_BUF_SIZE);
 
             udpRead++;
-            if (udpRead >= MAX_RING_UDP_OUT) 
+            if (udpRead >= MAX_RING_UDP) 
                 udpRead = 0;
 
         }
@@ -801,7 +801,7 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
     //neth.printBuffer(ringBufferUDPout[udpWrite], len + 1);
 
     udpWrite++;
-    if (udpWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
+    if (udpWrite >= MAX_RING_UDP) // if the buffer is full we start at index 0 -> take care of overwriting!
         udpWrite = 0;
 }
 

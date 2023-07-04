@@ -214,7 +214,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                 bool bMsg=false;
 
-                for(int iop=0;iop<MAX_RING_UDP_OUT;iop++)
+                for(int iop=0;iop<MAX_RING;iop++)
                 {
                     unsigned int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
 
@@ -477,7 +477,7 @@ void OnRxError(void)
  */
 bool is_new_packet(uint8_t compBuffer[4])
 {
-    for(int ib=0; ib < MAX_RING_UDP_OUT; ib++)
+    for(int ib=0; ib < MAX_RING; ib++)
     {
             if (memcmp(compBuffer, ringBufferLoraRX[ib], 4) == 0)
             {

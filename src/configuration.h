@@ -154,7 +154,7 @@
 #define BLEBLINK_INTERVAL 3000             // BLEBLINK interval in milliseconds
 #define MAX_MHEARD 50                      // max count of messages in mheard ringbuffer
 #define MAX_RING 50                        // max count of messages in ringbuffer
-#define MAX_RING_UDP_OUT 50                // size of Ringbuffer for UDP TX messages received from LoRa
+#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message
 #define MAX_ERR_UDP_TX 10                  // maximum of errors on sending KEEP messages via UDP (derived from Udp.endPacket())
 #define DHCP_REFRESH 1                     // Refreshtime of DHCP Address in minutes

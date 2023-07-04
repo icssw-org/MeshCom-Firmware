@@ -35,6 +35,7 @@ bool bEXTUDP = false;
 bool bEXTSER = false;
 
 bool bSHORTPATH = false;
+bool bGPSDEBUG = false;
 
 int iDisplayType = 0;
 int DisplayTimeWait = 0;
@@ -75,11 +76,11 @@ int iRead=0;
 bool hasMsgFromPhone = false;
 
 // BLE Ringbuffer to phone
-unsigned char BLEtoPhoneBuff[MAX_RING][UDP_TX_BUF_SIZE] = {0};
+unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE] = {0};
 int toPhoneWrite=0;
 int toPhoneRead=0;
 
-uint8_t ringBufferLoraRX[MAX_RING_UDP_OUT][4] = {0}; //Ringbuffer for UDP TX from LoRa RX, first byte is length
+uint8_t ringBufferLoraRX[MAX_RING][4] = {0}; //Ringbuffer for UDP TX from LoRa RX, first byte is length
 uint8_t loraWrite = 0;   // counter for ringbuffer
 
 // LoRa RX/TX sequence control
@@ -118,7 +119,7 @@ unsigned long hb_timer = 0;         // we check periodically get AIRPRESURE
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 {
     if (len > UDP_TX_BUF_SIZE)
-        len = UDP_TX_BUF_SIZE; // just for safety
+        len = UDP_TX_BUF_SIZE-1; // just for safety
 
     //first two bytes are always the message length
     BLEtoPhoneBuff[toPhoneWrite][0] = len;
@@ -126,12 +127,12 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 
     if(bDEBUG)
     {
-        Serial.printf("BLEtoPhone RingBuff added element: %u\n", toPhoneWrite);
+        Serial.printf("BLEtoPhone RingBuff added len=%i to element: %u\n", len, toPhoneWrite);
         printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1);
     }
 
     toPhoneWrite++;
-    if (toPhoneWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
+    if (toPhoneWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         toPhoneWrite = 0;
 }
 
@@ -174,7 +175,7 @@ void addLoraRxBuffer(unsigned int msg_id)
     */
 
     loraWrite++;
-    if (loraWrite >= MAX_RING_UDP_OUT) // if the buffer is full we start at index 0 -> take care of overwriting!
+    if (loraWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         loraWrite = 0;
 }
 
