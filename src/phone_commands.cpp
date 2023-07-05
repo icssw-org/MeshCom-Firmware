@@ -141,9 +141,7 @@ void sendToPhone()
 
 		uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0];   //len ist um ein byte zu kurz
 
-		toPhoneBuff[0] = 0x40;
-
-		memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
+		memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen-1);
 
 		// send to phone
 		#if defined(ESP8266) || defined(ESP32)
