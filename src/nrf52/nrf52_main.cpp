@@ -257,7 +257,7 @@ void nrf52setup()
     }
 
     //clear ringbuffer
-    for(int i=0; i<MAX_RING_UDP_OUT; i++)
+    for(int i=0; i<MAX_RING; i++)
     {
         memset(ringBufferLoraRX[i], 0, 4);
     }
