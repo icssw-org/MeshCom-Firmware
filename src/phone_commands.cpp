@@ -37,7 +37,7 @@ extern bool g_ble_uart_is_connected;
 void sendConfigToPhone ()
 {
 
-	ble_busy_flag = true;
+    ble_busy_flag = true;
 
 	// assemble conf message
 	uint8_t call_len = sizeof(meshcom_settings.node_call);
@@ -45,40 +45,36 @@ void sendConfigToPhone ()
 	uint8_t pwd_len = 0;
 
 	// remove trailing zeros of the arrays
-	for(int i =0; i<(int)sizeof(meshcom_settings.node_ssid); i++)
-	{
-		if(meshcom_settings.node_ssid[i] == 0x00)
-		{
+	for(int i =0; i<(int)sizeof(meshcom_settings.node_ssid); i++){
+		if(meshcom_settings.node_ssid[i] == 0x00){
 			ssid_len = i;
 			break;
 		} 
 	}
 
-	for(int i =0; i<(int)sizeof(meshcom_settings.node_pwd); i++)
-	{
-		if(meshcom_settings.node_pwd[i] == 0x00)
-		{
+	for(int i =0; i<(int)sizeof(meshcom_settings.node_pwd); i++){
+		if(meshcom_settings.node_pwd[i] == 0x00){
 			pwd_len = i;
 			break;
 		} 
 	}
 
-
-	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 9; // +9 because of APRS Symbols 2B, Settings 4B, 0x00 end
+	
+	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 9;	// +9 because of APRS Symbols 2B, Settings 4B, 0x00 end
 	uint8_t confBuff [conf_len] = {0};
 	uint8_t call_offset = 2;
-
+	
 
 	confBuff [0] = 0x80;
 	confBuff [1] = call_len;
 	memcpy(confBuff + call_offset, meshcom_settings.node_call, call_len);
 
 	uint8_t latOffset = call_offset + call_len;
-	uint8_t ssid_offset = latOffset + 20;    // first byte is ssid_length
-	uint8_t pwd_offset = ssid_offset + ssid_len + 1; // first byte is pwd_length
-	uint8_t aprs_symbols_offset = 0;      // offset for aprs map symbols
-	uint8_t gw_cl_offset = 0;       // settings masked
-	uint8_t endIndex = 0;        // last byte is 0x00
+	uint8_t ssid_offset = latOffset + 20;				// first byte is ssid_length
+	uint8_t pwd_offset = ssid_offset + ssid_len + 1;	// first byte is pwd_length
+	uint8_t aprs_symbols_offset = 0; 					// offset for aprs map symbols
+	uint8_t gw_cl_offset = 0;							// settings masked
+	uint8_t endIndex = 0;								// last byte is 0x00
 
 	//DEBUG_MSG_VAL("Wifi", ssid_len, "SSID Len");
 	//DEBUG_MSG_VAL("Wifi", pwd_len, "PWD Len");
@@ -96,17 +92,17 @@ void sendConfigToPhone ()
 	if(strlen(meshcom_settings.node_ssid) < 1 || strlen(meshcom_settings.node_ssid) > 40)
 	{
 		strcpy(meshcom_settings.node_ssid, "none");
-		save_settings();
+        save_settings();
 	}
 	memcpy(confBuff + ssid_offset + 1, &meshcom_settings.node_ssid, ssid_len);
-
+	
 	// WiFipasswword
 	confBuff[pwd_offset] = pwd_len;
 	meshcom_settings.node_pwd[39]=0x00;
 	if(strlen(meshcom_settings.node_pwd) < 1 || strlen(meshcom_settings.node_pwd) > 40)
 	{
 		strcpy(meshcom_settings.node_pwd, "none");
-		save_settings();
+        save_settings();
 	}
 	memcpy(confBuff + pwd_offset + 1, &meshcom_settings.node_pwd, pwd_len);
 
@@ -155,7 +151,7 @@ void sendToPhone()
 		// we need to insert the first byte text msg flag
 		uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
 
-		uint16_t blelen = BLEtoPhoneBuff[toPhoneRead][0];   //len ist um ein byte zu kurz
+		uint8_t blelen = BLEtoPhoneBuff[toPhoneRead][0];
 
 		if(BLEtoPhoneBuff[toPhoneRead][1] == 0x91)
 		{
@@ -200,6 +196,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 	 * 0x90 - Altitude
 	 * 0x95 - APRS Symbols
 	 * 0xA0 - Textmessage
+	 * 0xF0 - Save Settings to Flash
      * Data:
      * Callsign: length Callsign 1B - Callsign
      * Latitude: 4B Float
@@ -219,7 +216,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 	uint8_t msg_len = conf_data[0];
 	uint8_t msg_type = conf_data[1];
-	bool restart_ADV = false;
 	bool save_setting = false;		//flag to save when positions from phone. config or periodic positions
 	float lat_phone = 0.0;
 	float long_phone = 0.0;
@@ -284,8 +280,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			#endif
 
 			iInitDisplay = 99;
-
-			// restart_ADV = true;	//nicht notwendig
 
 			break;
 		}
@@ -372,22 +366,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				meshcom_settings.node_symid = aprs_pri_sec;
 				meshcom_settings.node_symcd = aprs_symbol;
 
-				// currently the last config coming from phone, so we save settings here
-				save_settings();
-				delay(1000);
-				
-				// send config back to phone
-				sendConfigToPhone();
-
-				// reset node
-				delay(2000);
-				#if defined NRF52_SERIES
-					NVIC_SystemReset();
-				#else
-					ESP.restart();
-				#endif
-
 			}
+			break;
 		}
 
 		case 0xA0: {
@@ -405,7 +385,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			//Serial.println();
 			// flag für main neue msg von phone
 			hasMsgFromPhone = true;
-
+			break;
 		}
 
 		case 0x55: {
@@ -435,18 +415,27 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 				Serial.println("Wifi Setting from phone set");
 			}
-			
+			break;
 		}
 
-	}
+		case 0xF0: {
+			Serial.println("Save Settings");
+			//Save Settings
 
-	// BLE mit neuem Call resetten
-	if(restart_ADV)
-	{
-		#if defined NRF52_SERIES
-			delay(1000);
-			NVIC_SystemReset(); //resets the device 
-			// restart_advertising(0);
-		#endif
+				save_settings();
+				delay(1000);
+				
+				// send config back to phone
+				sendConfigToPhone();
+
+				// reset node
+				delay(2000);
+				#if defined NRF52_SERIES
+					NVIC_SystemReset();
+				#else
+					ESP.restart();
+				#endif
+		}
+
 	}
 }
