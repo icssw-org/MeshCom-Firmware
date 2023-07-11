@@ -1,5 +1,4 @@
 // (C) 2023 OE1KBC Kurt Baumann, OE1KFR Rainer 
-// (C) 2016, 2017, 2018, 2018, 2019, 2020 OE1KBC Kurt Baumann
 //
 // This code is not for distribution and may not be published!
 // Vervielfältigung und Veröffentlichung des Codes sind nicht gestattet!
@@ -164,14 +163,6 @@ void getPRESSURE(void);
 
 #define POWER_ENABLE   WB_IO2
 
-#define EPD_MOSI     MOSI
-#define EPD_MISO     -1 // not used
-#define EPD_SCK      SCK
-#define EPD_CS       SS
-#define EPD_DC       WB_IO1
-#define SRAM_CS      -1 // not used
-#define EPD_RESET    -1 // not used
-#define EPD_BUSY     WB_IO4
 #define LEFT_BUTTON    WB_IO3
 #define MIDDLE_BUTTON  WB_IO5
 #define RIGHT_BUTTON   WB_IO6

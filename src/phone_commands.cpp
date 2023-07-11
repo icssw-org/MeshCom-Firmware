@@ -29,13 +29,15 @@ extern bool g_ble_uart_is_connected;
 /**
  * @brief Method to send configuration to phone 
  * Config Format:
- * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT) - 1B SSID_Length - Wifi_SSID - 1B Wifi_PWD - Wifi_PWD - 1B APRS_PRIM_SEC - 1B APRS_SYMBOL
+ * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT) - 1B SSID_Length - Wifi_SSID - 1B Wifi_PWD - Wifi_PWD 
+ * - 1B APRS_PRIM_SEC - 1B APRS_SYMBOL - 4B SettingsMask
+ * 
  * SSID and PWD Buffers have as always a fixed length with trailing zeros. 
 */
 void sendConfigToPhone ()
 {
 
-    ble_busy_flag = true;
+	ble_busy_flag = true;
 
 	// assemble conf message
 	uint8_t call_len = sizeof(meshcom_settings.node_call);
@@ -43,34 +45,40 @@ void sendConfigToPhone ()
 	uint8_t pwd_len = 0;
 
 	// remove trailing zeros of the arrays
-	for(int i =0; i<(int)sizeof(meshcom_settings.node_ssid); i++){
-		if(meshcom_settings.node_ssid[i] == 0x00){
+	for(int i =0; i<(int)sizeof(meshcom_settings.node_ssid); i++)
+	{
+		if(meshcom_settings.node_ssid[i] == 0x00)
+		{
 			ssid_len = i;
 			break;
 		} 
 	}
 
-	for(int i =0; i<(int)sizeof(meshcom_settings.node_pwd); i++){
-		if(meshcom_settings.node_pwd[i] == 0x00){
+	for(int i =0; i<(int)sizeof(meshcom_settings.node_pwd); i++)
+	{
+		if(meshcom_settings.node_pwd[i] == 0x00)
+		{
 			pwd_len = i;
 			break;
 		} 
 	}
 
-	
-	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 4;	// +4 because of APRS Symbols
+
+	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 9; // +9 because of APRS Symbols 2B, Settings 4B, 0x00 end
 	uint8_t confBuff [conf_len] = {0};
 	uint8_t call_offset = 2;
-	
+
 
 	confBuff [0] = 0x80;
 	confBuff [1] = call_len;
 	memcpy(confBuff + call_offset, meshcom_settings.node_call, call_len);
 
 	uint8_t latOffset = call_offset + call_len;
-	uint8_t ssid_offset = latOffset + 20;				// first byte is ssid_length
-	uint8_t pwd_offset = ssid_offset + ssid_len + 1;	// first byte is pwd_length
-	uint8_t aprs_symbols_offset = 0; 					// offset for aprs map symbols
+	uint8_t ssid_offset = latOffset + 20;    // first byte is ssid_length
+	uint8_t pwd_offset = ssid_offset + ssid_len + 1; // first byte is pwd_length
+	uint8_t aprs_symbols_offset = 0;      // offset for aprs map symbols
+	uint8_t gw_cl_offset = 0;       // settings masked
+	uint8_t endIndex = 0;        // last byte is 0x00
 
 	//DEBUG_MSG_VAL("Wifi", ssid_len, "SSID Len");
 	//DEBUG_MSG_VAL("Wifi", pwd_len, "PWD Len");
@@ -88,17 +96,17 @@ void sendConfigToPhone ()
 	if(strlen(meshcom_settings.node_ssid) < 1 || strlen(meshcom_settings.node_ssid) > 40)
 	{
 		strcpy(meshcom_settings.node_ssid, "none");
-        save_settings();
+		save_settings();
 	}
 	memcpy(confBuff + ssid_offset + 1, &meshcom_settings.node_ssid, ssid_len);
-	
+
 	// WiFipasswword
 	confBuff[pwd_offset] = pwd_len;
 	meshcom_settings.node_pwd[39]=0x00;
 	if(strlen(meshcom_settings.node_pwd) < 1 || strlen(meshcom_settings.node_pwd) > 40)
 	{
 		strcpy(meshcom_settings.node_pwd, "none");
-        save_settings();
+		save_settings();
 	}
 	memcpy(confBuff + pwd_offset + 1, &meshcom_settings.node_pwd, pwd_len);
 
@@ -106,6 +114,14 @@ void sendConfigToPhone ()
 	aprs_symbols_offset = pwd_offset + pwd_len;
 	memcpy(confBuff + aprs_symbols_offset + 1, &meshcom_settings.node_symid, 1);
 	memcpy(confBuff + aprs_symbols_offset + 2, &meshcom_settings.node_symcd, 1);
+
+	// Settings
+	gw_cl_offset = aprs_symbols_offset + 3;
+	memcpy(confBuff + gw_cl_offset, &meshcom_settings.node_sset, sizeof(meshcom_settings.node_sset));
+
+	// add 0x00 at end
+	endIndex = gw_cl_offset + sizeof(meshcom_settings.node_sset) + 1;
+	confBuff[endIndex] = 0x00;
 
 	//printBuffer(confBuff, conf_len);
 

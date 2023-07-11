@@ -1,8 +1,5 @@
 #include "configuration.h"
 
-#if defined NRF52_SERIES
-#endif
-
 #ifdef SX127X
     #include <RadioLib.h>
     extern SX1278 radio;
@@ -16,6 +13,12 @@
 #endif
 
 #ifdef SX126X_V3
+    #include <RadioLib.h>
+    extern SX1262 radio;
+    extern int transmissionState;
+#endif
+
+#ifdef BOARD_T_ECHO
     #include <RadioLib.h>
     extern SX1262 radio;
     extern int transmissionState;
@@ -184,7 +187,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 initMheardLine(mheardLine);
 
                 mheardLine.mh_callsign = aprsmsg.msg_source_last;
-                mheardLine.mh_hw = aprsmsg.msg_last_hw;
+                if(aprsmsg.msg_source_fw_version > 23)
+                    mheardLine.mh_hw = aprsmsg.msg_last_hw;
+                else
+                    mheardLine.mh_hw = 0;
                 mheardLine.mh_mod = aprsmsg.msg_source_mod;
                 mheardLine.mh_rssi = rssi;
                 mheardLine.mh_snr = snr;
@@ -428,7 +434,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         }
     }
 
-    #if defined NRF52_SERIES
+    #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
         StartReceiveAgain();
@@ -444,7 +450,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
  */
 void OnRxTimeout(void)
 {
-    #if defined NRF52_SERIES
+    #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
         StartReceiveAgain();
@@ -461,7 +467,7 @@ void OnRxTimeout(void)
 
 void OnRxError(void)
 {
-    #if defined NRF52_SERIES
+    #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
         StartReceiveAgain();
@@ -540,7 +546,7 @@ void doTX()
             {
                 // you can transmit C-string or Arduino string up to
                 // 256 characters long
-                #if defined NRF52_SERIES
+                #if defined BOARD_RAK4630
                     Radio.Send(lora_tx_buffer, sendlng);
                 #else
                     transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
@@ -581,7 +587,7 @@ void doTX()
  */
 void OnTxDone(void)
 {
-    #if defined NRF52_SERIES
+    #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
         StartReceiveAgain();
@@ -596,7 +602,7 @@ void OnTxDone(void)
  */
 void OnTxTimeout(void)
 {
-    #if defined NRF52_SERIES
+    #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
         StartReceiveAgain();
@@ -664,4 +670,8 @@ void StartReceiveAgain()
 
     #endif
 }
+#else
+    void StartReceiveAgain()
+    {
+    }
 #endif

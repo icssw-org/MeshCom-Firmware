@@ -1,29 +1,37 @@
 #include <Arduino.h>
-#include <TinyGPSPlus.h>
-#include <Wire.h>               
-#include "SSD1306Wire.h"
-#include <SPI.h>
+
+#if defined(BOARD_T_ECHO)
+#else
+  #include <SPI.h>
+#endif
+
 #include <configuration.h>
 
 #ifdef ESP32
   #include <esp32/esp32_main.h>
 #endif
 
-#ifdef RAK4630
+#if defined(BOARD_RAK4630)
   #include <nrf52/nrf52_main.h>
+#endif
+
+#if defined(BOARD_T_ECHO)
+  #include <nrf52_techo/nrf52_main.h>
 #endif
 
 void setup() {
 
-  Serial.begin(MONITOR_SPEED);
+#if defined(BOARD_T_ECHO)
+#else
   SPI.begin();
+#endif
 
-  #ifdef RAK4630
-    Serial.println("=====================================");
-    Serial.println("CLIENT STARTED");
-    Serial.println("=====================================");
+  #if defined(BOARD_RAK4630)
+    nrf52setup();
+  #endif
 
-   nrf52setup();
+  #if defined(BOARD_T_ECHO)
+    nrf52setup();
   #endif
 
   #ifdef ESP32
@@ -34,7 +42,11 @@ void setup() {
 
 void loop() {
 
-  #ifdef RAK4630
+  #if defined(BOARD_RAK4630)
+    nrf52loop();
+  #endif
+
+  #if defined(BOARD_T_ECHO)
     nrf52loop();
   #endif
 

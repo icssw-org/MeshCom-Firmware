@@ -15,14 +15,26 @@ float global_batt = 0;
 
 extern bool is_receiving;
 
-#if defined(NRF52_SERIES)
+#if defined(BOARD_RAK4630)
 
 uint32_t vbat_pin = WB_A0;
 
 #define NO_OF_SAMPLES   64          //Multisampling
 
-#else
+#endif
 
+#if defined(BOARD_T_ECHO)
+
+//uint32_t vbat_pin = WB_A0;
+uint32_t vbat_pin = 4;
+
+#define NO_OF_SAMPLES   64          //Multisampling
+
+#endif
+
+#if defined(BOARD_RAK4630) || defined(BOARD_T_ECHO)
+//nothing
+#else
 
 #include "esp_adc_cal.h"
 

@@ -594,17 +594,17 @@ void esp32setup()
 
     Serial.printf("BLE-Device started with BLE-Name <%s>\n", strBLEName.c_str());
 
-    NimBLEDevice::init("MESHCOM");
+    NimBLEDevice::init("NimBLE");
 
     Serial.printf("NIM<%s>\n", NimBLEDevice::toString().c_str());
     
     NimBLEDevice::setDeviceName(strBLEName);
 
-    NimBLEDevice::setPower(ESP_PWR_LVL_N0); /** +9db ESP_PWR_LVL_P9*/
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9); /** +9db ESP_PWR_LVL_P9*/
 
     NimBLEDevice::setSecurityAuth(true, true, true);
-    NimBLEDevice::setSecurityPasskey(PIN);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
+    NimBLEDevice::setSecurityPasskey(PIN);
 
 #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
@@ -649,6 +649,8 @@ void esp32setup()
     // Start advertising
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->setName(strBLEName);
+    pAdvertising->addTxPower();
+    pAdvertising->setManufacturerData(strBLEName);
     pAdvertising->reset();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone

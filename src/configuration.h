@@ -32,7 +32,17 @@
 
 #ifdef BOARD_T_ECHO
     #define MODUL_HARDWARE T_ECHO
-    #define RF_FREQUENCY 433175000 // 432900000   // Hz
+    #define TECHO_RF_FREQUENCY 433.175000F // 432900000   // Hz
+    #define TECHO_TX_OUTPUT_POWER 10      // dBm
+    #define TECHO_BANDWIDTH 250.0F         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
+    #define TECHO_SYNCWORD 0x242b
+    #define TECHO_SPREADING_FACTOR 11 // [SF7..SF12]
+    #define TECHO_CODINGRATE 6        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
+    #define TECHO_PREAMBLE_LENGTH 8  // Same for Tx and Rx
+    
+    //TODO
+    #define RX_TIMEOUT_VALUE 0      // continous rx with 0
+
 #endif
 
 #ifdef BOARD_TBEAM
@@ -112,23 +122,6 @@
 
 #endif
 
-#ifdef LILYGO_T_ECHO
-
-// Define LoRa parameters
-#define TX_OUTPUT_POWER 22       // dBm
-#define LORA_BANDWIDTH 1         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
-#define LORA_SPREADING_FACTOR 11 // [SF7..SF12]
-#define LORA_CODINGRATE 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
-#define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
-#define LORA_SYMBOL_TIMEOUT 0    // Symbols
-#define LORA_FIX_LENGTH_PAYLOAD_ON false
-#define LORA_IQ_INVERSION_ON false
-#define RX_TIMEOUT_VALUE 0      // continous rx with 0
-#define TX_TIMEOUT_VALUE 3000
-
-#endif
-
-
 // Meshcom Params
 #define LONGNAME_MAXLEN 20 // maximum length of the longname
 #define TX_ENABLE 1        // switch to en/disable LoRa TX
@@ -152,8 +145,8 @@
 #define ALIVEBLINK_INTERVAL 3000           // ALIVEBLINK interval in milliseconds
 #define ALIVERESET_INTERVAL 2 * 10 * 30    // 1/2 Stunde
 #define BLEBLINK_INTERVAL 3000             // BLEBLINK interval in milliseconds
-#define MAX_MHEARD 50                      // max count of messages in mheard ringbuffer
-#define MAX_RING 50                        // max count of messages in ringbuffer
+#define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer
+#define MAX_RING 30                        // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message
 #define MAX_ERR_UDP_TX 10                  // maximum of errors on sending KEEP messages via UDP (derived from Udp.endPacket())
