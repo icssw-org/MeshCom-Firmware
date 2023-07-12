@@ -187,10 +187,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 initMheardLine(mheardLine);
 
                 mheardLine.mh_callsign = aprsmsg.msg_source_last;
-                if(aprsmsg.msg_source_fw_version > 23)
-                    mheardLine.mh_hw = aprsmsg.msg_last_hw;
-                else
-                    mheardLine.mh_hw = 0;
+                mheardLine.mh_hw = aprsmsg.msg_last_hw;
                 mheardLine.mh_mod = aprsmsg.msg_source_mod;
                 mheardLine.mh_rssi = rssi;
                 mheardLine.mh_snr = snr;

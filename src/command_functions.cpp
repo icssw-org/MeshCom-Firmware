@@ -870,9 +870,11 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(bPos)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s\r\n...LAT: %.4lf %c\r\n...LON: %.4lf %c\r\n...ALT: %i\r\n...SAT: %i - %s - HDOP %i\r\n...RATE: %i\r\n...DIST: %im\r\n...DIRn:  %i°\r\n...DIRo:  %i°\r\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_TYPE, SOURCE_VERSION,
+        //Serial.printf("m:%ld t:%ld i:%ld n:%i\n", millis(), posinfo_timer, posinfo_interval*1000, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000));
+
+        sprintf(print_buff, "--MeshCom %s %-4.4s\r\n...LAT: %.4lf %c\r\n...LON: %.4lf %c\r\n...ALT: %i\r\n...SAT: %i - %s - HDOP %i\r\n...RATE: %i\r\n...NEXT: %i sec\r\n...DIST: %im\r\n...DIRn:  %i°\r\n...DIRo:  %i°\r\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_TYPE, SOURCE_VERSION,
         meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-        (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
+        (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
         meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 
         if(ble)

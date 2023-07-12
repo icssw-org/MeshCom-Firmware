@@ -326,6 +326,8 @@ void esp32setup()
 
     global_batt = 4200.0;
 
+    posinfo_interval = POSINFO_INTERVAL;
+
     meshcom_settings.node_press = 0.0;
     meshcom_settings.node_hum = 0.0;
     meshcom_settings.node_temp = 0.0;
@@ -588,7 +590,7 @@ void esp32setup()
 
     // Create the BLE Device
     char cBLEName[50]={0};
-    sprintf(cBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
+    sprintf(cBLEName, "%s%s-%02x%02x-%s", g_ble_dev_name, g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
     
     const std::__cxx11::string strBLEName = cBLEName;
 
