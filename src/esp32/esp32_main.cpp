@@ -648,10 +648,10 @@ void esp32setup()
 
     // Start advertising
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->reset();
     pAdvertising->setName(strBLEName);
     pAdvertising->addTxPower();
     pAdvertising->setManufacturerData(strBLEName);
-    pAdvertising->reset();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone
     pAdvertising->start(0);
