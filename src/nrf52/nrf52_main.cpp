@@ -288,6 +288,8 @@ void nrf52setup()
 
     global_batt = 4200.0;
 
+    posinfo_interval = POSINFO_INTERVAL;
+
     if(meshcom_settings.node_maxv > 0)
     {
         setMaxBatt(meshcom_settings.node_maxv * 1000.0F);
@@ -578,6 +580,7 @@ void nrf52setup()
 }
 
 bool bCheckReceiveAgain = false;
+int iWatchDogCount = 0;
 
 void nrf52loop()
 {
@@ -602,6 +605,8 @@ void nrf52loop()
     // check if we have messages in ringbuffer to send
     if(is_receiving == false && tx_is_active == false)
     {
+        iWatchDogCount = 0;
+
         // nothing was detected
         // do not print anything, it just spams the console
         if (iWrite != iRead)
@@ -629,6 +634,26 @@ void nrf52loop()
 
                 bCheckReceiveAgain=true;
             }
+        }
+    }
+    else
+    {
+        if (iWrite != iRead)
+        {
+            //if(bDisplayInfo)
+            //    Serial.printf("iWrite:%i iRead:%i iWatchDogCount:%i\n", iWrite, iRead, iWatchDogCount);
+
+            iWatchDogCount++;
+        }
+
+        if(iWatchDogCount > 50)
+        {
+            is_receiving = false;
+            tx_is_active = false;
+
+            iWatchDogCount = 0;
+
+            Radio.Rx(RX_TIMEOUT_VALUE);
         }
     }
 
