@@ -756,6 +756,8 @@ void esp32loop()
                 // wait a second before transmitting again
                 //TEST delay(1000);
 
+                tx_is_active = false;
+                
                 bCheckReceiveAgain=true;
                 
                 //bStartReceivingAgain=true;
@@ -1143,15 +1145,15 @@ void esp32loop()
     if(BattTimeWait == 0)
         BattTimeWait = millis() - 10000;
 
-    //Serial.printf("BattTimeWait:%i millis():%i tx_is_active:%i is_receiving:%i\n", BattTimeWait, millis(), tx_is_active, is_receiving);
 
     if ((BattTimeWait + 10000) < millis())  // 10 sec
     {
         if (tx_is_active == false && is_receiving == false)
         {
             #if defined(BOARD_TBEAM)
+            {
                 global_batt = axp.getBattVoltage();
-                //Serial.printf("global_batt:%f\n", global_batt);
+            }
             #else
                 global_batt = read_batt();
             #endif

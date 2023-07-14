@@ -236,8 +236,10 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 		if(conf_data[6] == 0x0B)  save_setting = false;
 	}
 
-	switch (msg_type){
+	//Serial.printf("msg_type:%02x\n", msg_type);
 
+	switch (msg_type)
+	{
 		case 0x10: {
 
 			if(conf_data[2] == 0x20 && conf_data[3] == 0x30){
@@ -360,7 +362,10 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			DEBUG_MSG_VAL("BLE", aprs_pri_sec, "APRS PRI_SEC Symbol");
 			DEBUG_MSG_VAL("BLE", aprs_symbol, "APRS Symbol");
 
-			if(aprs_pri_sec == 0x2f || aprs_pri_sec == 0x5c){
+			//Serial.printf("aprs_pri_sec:%c aprs_symbol:%c\n", aprs_pri_sec, aprs_symbol);
+
+			if(aprs_pri_sec == 0x2f || aprs_pri_sec == 0x5c)
+			{
 
 				// Variablen entsprechend setzen beim APRS Encode
 				meshcom_settings.node_symid = aprs_pri_sec;
