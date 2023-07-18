@@ -37,13 +37,13 @@ extern float fBaseAltidude;
 extern float fBasePress;
 
 // common variables
-extern char msg_text[MAX_MSG_LEN_PHONE];
+extern char msg_text[MAX_MSG_LEN_PHONE * 2];
 
 extern unsigned int _GW_ID; // ID of our Node
 
 extern unsigned int msg_counter;
 
-extern uint8_t RcvBuffer[UDP_TX_BUF_SIZE];
+extern uint8_t RcvBuffer[UDP_TX_BUF_SIZE * 2];
 
 extern uint8_t own_msg_id[MAX_RING][5];
 

@@ -135,7 +135,7 @@
 #define EXTERN_PORT 1799                   // Set the external server port.
 #define UDP_TX_BUF_SIZE 255                // BUffer size of outgoing buffer
 #define UDP_CONF_BUFF_SIZE UDP_TX_BUF_SIZE // Buffer to hold incoming config messages
-#define SEE_ALL_PACKETS 0                  // switch to filter multiple receives of same packets from neighbours rebroadcasted
+//#define SEE_ALL_PACKETS 0                  // switch to filter multiple receives of same packets from neighbours rebroadcasted
 #define UDP_MSG_INDICATOR_LEN 4            // the first n bytes to recognize which incoming message we have (GATE, CONF)
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
 #define POSINFO_INTERVAL 30 * 60           // POSINFO interval in seconds default 30 minutes
@@ -145,9 +145,11 @@
 #define ALIVEBLINK_INTERVAL 3000           // ALIVEBLINK interval in milliseconds
 #define ALIVERESET_INTERVAL 2 * 10 * 30    // 1/2 Stunde
 #define BLEBLINK_INTERVAL 3000             // BLEBLINK interval in milliseconds
-#define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer
-#define MAX_RING 30                        // max count of messages in ringbuffer
+
+#define MAX_MHEARD 50                      // max count of messages in mheard ringbuffer
+#define MAX_RING 50                        // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
+
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message
 #define MAX_ERR_UDP_TX 10                  // maximum of errors on sending KEEP messages via UDP (derived from Udp.endPacket())
 #define DHCP_REFRESH 1                     // Refreshtime of DHCP Address in minutes

@@ -48,7 +48,7 @@ int iInitDisplay = 0;
 int iDisplayChange = 0;
 
 // common variables
-char msg_text[MAX_MSG_LEN_PHONE] = {0};
+char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
 
 unsigned int _GW_ID = 0x12345678; // ID of our Node
 
@@ -62,7 +62,7 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
 
 unsigned int msg_counter = 0;
 
-uint8_t RcvBuffer[UDP_TX_BUF_SIZE] = {0};
+uint8_t RcvBuffer[UDP_TX_BUF_SIZE * 2] = {0};
 
 // nur eigene msg_id
 uint8_t own_msg_id[MAX_RING][5] = {0};
@@ -132,6 +132,9 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     }
 
     toPhoneWrite++;
+    
+    //Serial.printf("toPhoneWrite:%i\n", toPhoneWrite);
+
     if (toPhoneWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         toPhoneWrite = 0;
 }
@@ -175,6 +178,9 @@ void addLoraRxBuffer(unsigned int msg_id)
     */
 
     loraWrite++;
+
+    //Serial.printf("loraWrite:%i\n", loraWrite);
+
     if (loraWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         loraWrite = 0;
 }
@@ -851,6 +857,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     lon = conv_coord_to_dec(aprspos.lon);
 
     dir_to = tinyGPSPLus.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
+
     dist_to = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
 
     sendDisplayMainline();
@@ -1172,7 +1179,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
     char msg_start[100] = {0};
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-
+    // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E# /B=005 /A=000272 /P=1005.1 /H=42.5 /T=29.4 /Q=1005.7 HW:04 MOD:03 FCS:15DC FW:17 LH:09
 	double slat = 100.0;
     slat = lat*slat;
 	double slon = 100.0;

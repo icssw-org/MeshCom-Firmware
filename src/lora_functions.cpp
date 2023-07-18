@@ -196,6 +196,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_payload_type = aprsmsg.payload_type;
 
                 updateMheard(mheardLine);
+
                 //
                 ///////////////////////////////////////////////
                 // we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
@@ -400,6 +401,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                             size = encodeAPRS(RcvBuffer, aprsmsg);
 
+                            if(size + 1 > UDP_TX_BUF_SIZE)
+                                size = UDP_TX_BUF_SIZE - 1;
                             ringBuffer[iWrite][0]=size;
                             memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
                             iWrite++;
@@ -480,7 +483,7 @@ void OnRxError(void)
  */
 bool is_new_packet(uint8_t compBuffer[4])
 {
-    for(int ib=0; ib < MAX_RING; ib++)
+    for(int ib=0; ib<MAX_RING; ib++)
     {
             if (memcmp(compBuffer, ringBufferLoraRX[ib], 4) == 0)
             {

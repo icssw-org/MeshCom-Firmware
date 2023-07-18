@@ -271,7 +271,7 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 
     for(itxt=0; itxt<PayloadBuffer.length(); itxt++)
     {
-        if((PayloadBuffer.charAt(itxt) == 'N' || PayloadBuffer.charAt(itxt) == 'S'))
+        if(PayloadBuffer.charAt(itxt) == 'N' || PayloadBuffer.charAt(itxt) == 'S' || ipt > 10)
         {
             decode_text[ipt]=0x00;
 
@@ -286,8 +286,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
         else
         {
-            decode_text[ipt]=PayloadBuffer.charAt(itxt);
-            ipt++;
+            if(ipt < 11)
+            {
+                decode_text[ipt]=PayloadBuffer.charAt(itxt);
+                ipt++;
+            }
         }
     }
 
@@ -296,7 +299,7 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 
     for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
-        if((PayloadBuffer.charAt(itxt) == 'W' || PayloadBuffer.charAt(itxt) == 'E'))
+        if(PayloadBuffer.charAt(itxt) == 'W' || PayloadBuffer.charAt(itxt) == 'E' || ipt > 10)
         {
             decode_text[ipt]=0x00;
 
@@ -310,8 +313,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
         else
         {
-            decode_text[ipt]=PayloadBuffer.charAt(itxt);
-            ipt++;
+            if(ipt < 11)
+            {
+                decode_text[ipt]=PayloadBuffer.charAt(itxt);
+                ipt++;
+            }
         }
     }
 
@@ -329,14 +335,17 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
             {
                 // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
                 {
                     sscanf(decode_text, "%d", &aprspos.bat);
                     break;
                 }
 
-                decode_text[ipt]=PayloadBuffer.charAt(id);
-                ipt++;
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
             }
 
             break;
@@ -354,14 +363,17 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
             {
                 // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
                 {
                     sscanf(decode_text, "%d", &aprspos.alt);
                     break;
                 }
 
-                decode_text[ipt]=PayloadBuffer.charAt(id);
-                ipt++;
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
             }
 
             break;
@@ -376,14 +388,17 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
             {
                 // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
                 {
                     sscanf(decode_text, "%f", &aprspos.press);
                     break;
                 }
 
-                decode_text[ipt]=PayloadBuffer.charAt(id);
-                ipt++;
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
             }
 
             break;
@@ -398,14 +413,17 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
             {
                 // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
                 {
                     sscanf(decode_text, "%f", &aprspos.hum);
                     break;
                 }
 
-                decode_text[ipt]=PayloadBuffer.charAt(id);
-                ipt++;
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
             }
 
             break;
@@ -420,14 +438,17 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
             {
                 // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
                 {
                     sscanf(decode_text, "%f", &aprspos.temp);
                     break;
                 }
 
-                decode_text[ipt]=PayloadBuffer.charAt(id);
-                ipt++;
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
             }
 
             break;
@@ -442,14 +463,17 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
             {
                 // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
                 {
                     sscanf(decode_text, "%d", &aprspos.qfe);
                     break;
                 }
 
-                decode_text[ipt]=PayloadBuffer.charAt(id);
-                ipt++;
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
             }
 
             break;
@@ -464,14 +488,17 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
             {
                 // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length())
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
                 {
                     sscanf(decode_text, "%f", &aprspos.qnh);
                     break;
                 }
 
-                decode_text[ipt]=PayloadBuffer.charAt(id);
-                ipt++;
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
             }
 
             break;
@@ -489,9 +516,9 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     return 0x01;
 }
 
-uint16_t encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
+uint16_t encodeStartAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprsmsg)
 {
-    char msg_start[MAX_MSG_LEN_PHONE];
+    char msg_start[UDP_TX_BUF_SIZE];
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
 
@@ -514,6 +541,9 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessa
 
     uint16_t ilng=aprsmsg.msg_source_path.length() + 1 + aprsmsg.msg_destination_path.length() + 1;
     
+    if(ilng >= UDP_TX_BUF_SIZE)
+        ilng = UDP_TX_BUF_SIZE - 1;
+
     memcpy(msg_buffer+6, msg_start, ilng);
 
     return ilng+6;
@@ -521,16 +551,23 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessa
 
 uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
 {
-    char msg_start[MAX_MSG_LEN_PHONE];
+    uint16_t ilng=aprsmsg.msg_payload.length();
+
+    char msg_start[ilng+1];
+    
+
+    memset(msg_start, 0x00, ilng+1);
 
     sprintf(msg_start, "%s", aprsmsg.msg_payload.c_str());
-
-    uint16_t ilng=aprsmsg.msg_payload.length();
     
+    if(ilng >= UDP_TX_BUF_SIZE)
+        ilng = UDP_TX_BUF_SIZE - 1;
     memcpy(msg_buffer, msg_start, ilng);
     
     return ilng;
 }
+
+//10:30:29 RX-LoRa: 105 ! xAE48D54D 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.52E# /B=005 /A=000161 /P=1004.9 /H=40.2 /T=28.9 /Q=1005.4 HW:04 MOD:03 FCS:15D5 FW:17 LH:09
 
 uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprsmsg)
 {
@@ -544,7 +581,7 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     inext = inext + inext_payload;
 
     // max posible payload (LoRa MSG max 255 byte)
-    if((inext + 8) > UDP_TX_BUF_SIZE)
+    if((inext + 8) >= UDP_TX_BUF_SIZE)
         inext = UDP_TX_BUF_SIZE - 8;
 
     msg_buffer[inext] = 0x00;

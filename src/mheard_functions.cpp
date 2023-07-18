@@ -96,7 +96,10 @@ void updateMheard(struct mheardLine &mheardLine)
     {
         ipos=mheardWrite;
         mheardWrite++;
-        if(mheardWrite > MAX_MHEARD)
+        
+        //Serial.printf("mheardWrite:%i\n", mheardWrite);
+
+        if(mheardWrite >= MAX_MHEARD)
             mheardWrite=0;
     }
 
