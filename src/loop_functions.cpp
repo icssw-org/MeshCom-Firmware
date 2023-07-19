@@ -741,6 +741,8 @@ void initButtonPin()
     #endif
 }
 
+int checkButtoExtraLong = 0;
+
 void checkButtonState()
 {
     #ifdef BUTTON_PIN
@@ -748,6 +750,17 @@ void checkButtonState()
         {
             if(digitalRead(BUTTON_PIN) == 0)
             {
+                checkButtoExtraLong++;
+                if(checkButtoExtraLong > 30)
+                {
+                    checkButtoExtraLong=0;
+                    bButtonCheck=false;
+                    meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
+                    save_settings();
+                    Serial.println("BUTTON not connected (set BUTTON to off)");
+                    return;
+                }
+
                 if(bDEBUG)
                     Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);
 

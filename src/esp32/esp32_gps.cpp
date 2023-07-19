@@ -182,6 +182,8 @@ unsigned int readGPS(void)
     return 0;
 }
 
+int maxStateCount=1;
+
 unsigned int getGPS(void)
 {
     if(!bGPSON)
@@ -200,7 +202,7 @@ unsigned int getGPS(void)
         case 0: // auto-baud connection, then switch to 38400 and save config
             do
             {
-                Serial.println("GPS: trying 38400 baud");
+                Serial.printf("GPS: trying 38400 baud <%i>\n", maxStateCount);
                 
                 GPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 
@@ -211,7 +213,8 @@ unsigned int getGPS(void)
                 }
 
                 delay(100);
-                Serial.println("GPS: trying 9600 baud");
+
+                Serial.printf("GPS: trying 9600 baud <%i>\n", maxStateCount);
                 GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
                 if (myGPS.begin(GPS)) {
                     Serial.println("GPS: connected at 9600 baud");
@@ -219,23 +222,41 @@ unsigned int getGPS(void)
                     //myGPS.setSerialRate(9600);
                     //delay(100);
                 } else {
-                    delay(2000); //Wait a bit before trying again to limit the Serial output flood
+                    delay(500); //Wait a bit before trying again to limit the Serial output flood
+                    maxStateCount++;
+
+                    if(maxStateCount > 5)
+                    {
+                        maxStateCount = 1;
+                        state = 0;
+
+                        bGPSON=false;
+                        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FBF;
+                        save_settings();
+
+                        Serial.println("GPS serial not connected (set GPS to off)");
+        
+                        break;
+                    }
                 }
             }
             while(1);
 
-            myGPS.setUART2Output(COM_TYPE_UBX); //Set the UART port to output UBX only
-            myGPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART2);
-            myGPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART2);
-            myGPS.disableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
-            myGPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART2);
-            myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
-            myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART2);
-            myGPS.saveConfiguration(); //Save the current settings to flash and BBR
+            if(bGPSON)
+            {
+                myGPS.setUART2Output(COM_TYPE_UBX); //Set the UART port to output UBX only
+                myGPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART2);
+                myGPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART2);
+                myGPS.disableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
+                myGPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART2);
+                myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
+                myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART2);
+                myGPS.saveConfiguration(); //Save the current settings to flash and BBR
 
-            Serial.println("GPS serial connected, saved config");
-            
-            state++;
+                Serial.println("GPS serial connected, saved config");
+                
+                state++;
+            }
             
             break;
             

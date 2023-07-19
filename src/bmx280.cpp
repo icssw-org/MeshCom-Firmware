@@ -179,7 +179,7 @@ bool loopBMX280()
 	if(!bmx280.hasValue())
 	{
 		if(bDEBUG)
-			Serial.println("BMX Values not valid");
+			Serial.println("BME/BMP Values not valid");
 
 		return false;
 	}

@@ -421,7 +421,7 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"bmx off") == 0)
+    if(commandCheck(msg_text+2, (char*)"bmx off") == 0 || commandCheck(msg_text+2, (char*)"bme off") == 0 || commandCheck(msg_text+2, (char*)"bmp off") == 0)
     {
         bBMPON=false;
         bBMEON=false;
@@ -430,7 +430,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--bmx off");
+            addBLECommandBack((char*)"--bmp/bme off");
         }
 
         save_settings();
