@@ -588,11 +588,14 @@ void esp32setup()
     
     Serial.println(F("All settings successfully changed!"));
 
-    // Create the BLE Device
+  // Create the BLE Device
     char cBLEName[50]={0};
-    sprintf(cBLEName, "%s%s-%02x%02x-%s", g_ble_dev_name, g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
+    sprintf(cBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
+    char cManufData[50]={0};
+    sprintf(cManufData, "%s%s-%02x%02x-%s", g_ble_dev_name, g_ble_dev_name,  dmac[1], dmac[0], meshcom_settings.node_call);
     
     const std::__cxx11::string strBLEName = cBLEName;
+    const std::__cxx11::string strBLEManufData = cManufData;
 
     Serial.printf("BLE-Device started with BLE-Name <%s>\n", strBLEName.c_str());
 
@@ -651,13 +654,12 @@ void esp32setup()
     // Start advertising
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
-    pAdvertising->setName(strBLEName);
-    pAdvertising->addTxPower();
-    pAdvertising->setManufacturerData(strBLEName);
+    pAdvertising->setName(strBLEName);  //BLE Local Name
+    pAdvertising->setManufacturerData(strBLEManufData);
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone
     pAdvertising->start(0);
-
+    
     Serial.println("Waiting a client connection to notify...");
     
     // reset GPS-Time parameter
