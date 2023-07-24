@@ -7,6 +7,9 @@
 
 unsigned long rebootAuto = 0;
 
+extern int state; // only for gps reset
+extern bool bMitHardReset;
+
 int casecmp(const char *s1, const char *s2)
 {
 	while (*s1 != 0 && tolower(*s1) == tolower(*s2))
@@ -206,7 +209,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
             Serial.printf("--pos      show lat/lon/alt/time info\r\n--weather  show temp/hum/press\r\n--sendpos  send pos info now\r\n--setlat   set latitude (44.12345)\r\n--setlon   set logitude (016.12345)\r\n--setalt   set altidude (9999)\r\n--symid  set prim/sec Sym-Table\r\n--symcd  set table column\r\n");
 
-            Serial.printf("--debug    on/off\r\n--loradebug    on/off\r\n--display on/off\r\n--setinfo on\r\n--setinfo off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n");
+            Serial.printf("--debug    on/off\r\n--loradebug    on/off\r\n--display on/off\r\n--setinfo on\r\n--setinfo off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n--gps     reset Factory reset\r\n");
             Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx off\r\n--gateway on\r\n--gateway off\r\n--extudp  on\r\n--extudp  off\r\n--extser  on\r\n--extser  off\r\n--extudpip 99.99.99.99\r\n");
         }
 
@@ -389,6 +392,23 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"gps reset") == 0)
+    {
+        bGPSON=true;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--gps on");
+            addBLECommandBack((char*)"--gps reset");
+        }
+
+        bMitHardReset=true;
+
+        state = 1;
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"bmp on") == 0)
     {
         bBMPON=true;
@@ -430,7 +450,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--bmp/bme off");
+            addBLECommandBack((char*)"--bmx off");
         }
 
         save_settings();
@@ -670,7 +690,7 @@ void commandAction(char *msg_text, int len, bool ble)
             save_settings();
         }
 
-        //sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
+        sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         if(ble)
         {

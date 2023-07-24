@@ -31,6 +31,7 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_source_mod = 3;
     aprsmsg.msg_source_fw_version = shortVERSION();
     aprsmsg.msg_last_hw = MODUL_HARDWARE;
+    aprsmsg.msg_source_last = "";
 }
 
 uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct aprsMessage &aprsmsg)

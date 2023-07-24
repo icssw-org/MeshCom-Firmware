@@ -56,6 +56,10 @@ int direction_E_W = 0;  //0--E, 1--W
 
 int state = 0; // steps through auto-baud, reset, etc states
 
+bool bMitHardReset = false;
+    
+int maxStateCount=1;
+
 void setupGPS(void)
 {
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -85,7 +89,7 @@ unsigned int readGPS(void)
 
     bool newData = false;
 
-    if(bDEBUG)
+    if(bGPSDEBUG)
         Serial.println("-----------check GPS-----------");
   
     // For one second we parse GPS data and report some key values
@@ -119,8 +123,8 @@ unsigned int readGPS(void)
           bgrun=false;
     }
 
-    if(bDEBUG)
-        Serial.printf("newData:%i Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
+    if(bGPSDEBUG)
+        Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, tinyGPSPlus.satellites.value(), tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
 
     if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 800)
     {
@@ -156,7 +160,7 @@ unsigned int readGPS(void)
 
         MyClock.setCurrentTime(true, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
         
-        if(bDEBUG)
+        if(bGPSDEBUG)
         {
             Serial.printf("GPS: LAT:%lf LON:%lf %02d-%02d-%02d %02d:%02d:%02d\n", tinyGPSPlus.location.lat(), tinyGPSPlus.location.lng(), tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
             
@@ -182,15 +186,11 @@ unsigned int readGPS(void)
     return 0;
 }
 
-int maxStateCount=1;
-
 unsigned int getGPS(void)
 {
     if(!bGPSON)
         return POSINFO_INTERVAL;
 
-    bool bMitHardReset = false;
-    
     if(bMitHardReset)
     {
         Serial.print("===== STATE ");
@@ -209,6 +209,7 @@ unsigned int getGPS(void)
                 if (myGPS.begin(GPS))
                 {
                     Serial.println("GPS: connected at 38400 baud");
+                    maxStateCount=1;
                     break;
                 }
 
@@ -218,10 +219,11 @@ unsigned int getGPS(void)
                 GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
                 if (myGPS.begin(GPS)) {
                     Serial.println("GPS: connected at 9600 baud");
+                    maxStateCount=1;
                     break;
-                    //myGPS.setSerialRate(9600);
-                    //delay(100);
-                } else {
+                }
+                else
+                {
                     delay(500); //Wait a bit before trying again to limit the Serial output flood
                     maxStateCount++;
 
@@ -245,10 +247,10 @@ unsigned int getGPS(void)
             if(bGPSON)
             {
                 myGPS.setUART2Output(COM_TYPE_UBX); //Set the UART port to output UBX only
-                myGPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART2);
-                myGPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART2);
-                myGPS.disableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
-                myGPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART2);
+                myGPS.enableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART2);
+                myGPS.enableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART2);
+                myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
+                myGPS.enableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART2);
                 myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
                 myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART2);
                 myGPS.saveConfiguration(); //Save the current settings to flash and BBR
@@ -269,10 +271,13 @@ unsigned int getGPS(void)
                 GPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
                 if (myGPS.begin(GPS)) {
                     Serial.println("Success.");
-                    state++;
-                } else {
+                }
+                else
+                {
                     Serial.println("*** GPS did not respond at 38400 baud, starting over.");
                     state = 0;
+                    bMitHardReset=false;
+                    break;
                 }
             }
         
@@ -289,10 +294,11 @@ unsigned int getGPS(void)
                 GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
                 if (myGPS.begin(GPS)) {
                     Serial.println("Success.");
-                    state++;
                 } else {
                     Serial.println("*** GPS did not come back at 9600 baud, starting over.");
                     state = 0;
+                    bMitHardReset=false;
+                    break;
                 }
             }
         
@@ -315,6 +321,7 @@ unsigned int getGPS(void)
             }
             
             state++;
+            bMitHardReset=false;
         
         case 4: // print position info
         

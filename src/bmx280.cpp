@@ -25,6 +25,8 @@ float fHum = 0.0;
 float fBaseAltidude = 0;
 float fBasePress = 0;
 
+int maxValideCount=0;
+
 const float STANDARD_SEA_LEVEL_PRESSURE = 1013.25;
 const float STANDARD_ALTITUDE = 180.0; // in meters, see note
 
@@ -180,6 +182,16 @@ bool loopBMX280()
 	{
 		if(bDEBUG)
 			Serial.println("BME/BMP Values not valid");
+
+		maxValideCount++;
+
+		if(maxValideCount > 10)
+		{
+			bBMEON=false;
+			bBMPON=false;
+
+			maxValideCount=0;
+		}
 
 		return false;
 	}
