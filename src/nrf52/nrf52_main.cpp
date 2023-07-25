@@ -35,6 +35,13 @@
 #include <SparkFun_Ublox_Arduino_Library.h>
 SFE_UBLOX_GPS myGPS;
 
+// UBLOX Modul auf Factory-Set zurück setzen
+// derzeit nur im esp32_gps realisiert
+// nrf52 fehlt diese Funktion noch
+// Diese Variablen werden durch das Command --gps reset gesetzt und solten im GPS Modul abgehandelt werden
+int state; // only for gps reset
+bool bMitHardReset = false;  // only for gps reset
+
 /*
     RAK4631 PIN DEFINITIONS
 
