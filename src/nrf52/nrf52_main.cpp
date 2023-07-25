@@ -39,7 +39,7 @@ SFE_UBLOX_GPS myGPS;
 // derzeit nur im esp32_gps realisiert
 // nrf52 fehlt diese Funktion noch
 // Diese Variablen werden durch das Command --gps reset gesetzt und solten im GPS Modul abgehandelt werden
-int state; // only for gps reset
+int state = 0; // only for gps reset
 bool bMitHardReset = false;  // only for gps reset
 
 /*
