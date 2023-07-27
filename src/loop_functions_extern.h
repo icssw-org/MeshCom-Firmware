@@ -19,6 +19,7 @@ extern bool bDisplayInfo;
 extern unsigned long DisplayOffWait;
 extern int DisplayTimeWait;
 extern unsigned long BattTimeWait;
+extern unsigned long BattTimeAPP;
 extern unsigned long BMXTimeWait;
 extern bool bButtonCheck;
 extern bool bDisplayTrack;

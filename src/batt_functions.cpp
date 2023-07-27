@@ -1,17 +1,10 @@
-/**
- * @file bat.cpp
- * @author Bernd Giesecke (bernd.giesecke@rakwireless.com)
- * @brief Battery reading functions
- * @version 0.1
- * @date 2021-04-24
- *
- * @copyright Copyright (c) 2021
- *
- */
 #include <Arduino.h>
 #include <configuration.h>
 
 float global_batt = 0;
+
+unsigned long BattTimeWait = 0;
+unsigned long BattTimeAPP = 0;
 
 extern bool is_receiving;
 
@@ -241,8 +234,6 @@ float read_batt(void)
  * @return uint8_t Battery level as percentage (0 to 100)
  */
 float max_batt = 4.24;
-
-unsigned long BattTimeWait = 0;
 
 void setMaxBatt(float u_max_batt)
 {

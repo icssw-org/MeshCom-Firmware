@@ -133,6 +133,8 @@ void sendConfigToPhone ()
 	// one shot GPS
 	posinfo_shot = true;
 
+	BattTimeAPP=0;	// Batt Status zum Phone senden
+
 }
 
 /**

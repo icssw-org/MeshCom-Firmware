@@ -820,6 +820,23 @@ void nrf52loop()
         }
     }
 
+    if (isPhoneReady == 1)
+    {
+        if(BattTimeAPP == 0)
+            BattTimeAPP = millis() - 180000;
+
+
+        if ((BattTimeAPP + 180000) < millis())  // 60*3 sec
+        {
+            char cbatt[15];
+            sprintf(cbatt, "--BAT %4.2f %03i", global_batt/1000.0, mv_to_percent(global_batt));
+
+            addBLECommandBack(cbatt);
+        }
+    }
+    else
+        BattTimeAPP=0;
+
     if(BMXTimeWait == 0)
         BMXTimeWait = millis() - 10000;
 
