@@ -218,6 +218,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 	uint8_t msg_len = conf_data[0];
 	uint8_t msg_type = conf_data[1];
+	uint8_t msg_payload_len = conf_data[2];
+
 	bool save_setting = false;		//flag to save when positions from phone. config or periodic positions
 	float lat_phone = 0.0;
 	float long_phone = 0.0;
@@ -258,11 +260,14 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			DEBUG_MSG("BLE", "Callsing Setting from phone");
 
-			char call_arr[(uint8_t)conf_data[2] + 1];
-			call_arr[(uint8_t)conf_data[2]] = '\0';
+			char call_arr[msg_payload_len + 1];
 
-			for (int i = 0; i < (uint8_t)conf_data[2]; i++)
+			for (int i = 0; i < msg_payload_len; i++)
+			{
 				call_arr[i] = conf_data[i + 3];
+				call_arr[i+1] = 0x00;
+			}
+
 
 			String sVar = call_arr;
 			sVar.toUpperCase();
@@ -271,8 +276,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
-
-			sendDisplayHead(false);
+			//Führt zu Reconnect sendDisplayHead(false);
 
 			#if defined NRF52_SERIES
 				sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
