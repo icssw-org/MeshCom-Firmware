@@ -1176,6 +1176,8 @@ void esp32loop()
             sprintf(cbatt, "--BAT %4.2f %03i", global_batt/1000.0, mv_to_percent(global_batt));
 
             addBLECommandBack(cbatt);
+
+            BattTimeAPP = millis();
         }
     }
     else
