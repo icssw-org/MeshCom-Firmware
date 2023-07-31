@@ -17,6 +17,7 @@
 #define TBEAM_1268 5
 #define TBEAM_0p7 6
 #define T_ECHO 7
+#define T_DECK 8
 #define RAK4631 9
 #define HELTEC_V2_1 10
 #define HELTEC_V1 11

@@ -35,6 +35,8 @@ int sendlng = 0;
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE+10];  // lora tx buffer
 uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
 
+unsigned long last_trasnmit_timer = 0;
+
 //////////////////////////////////////////////////////////////////////////
 // LoRa RX functions
 
@@ -365,6 +367,23 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 										
 										unsigned int mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
 										addLoraRxBuffer(mid);
+
+										msg_counter=millis();   // ACK mit neuer msg_id versenden
+
+										print_buff[1]=msg_counter & 0xFF;
+										print_buff[2]=(msg_counter >> 8) & 0xFF;
+										print_buff[3]=(msg_counter >> 16) & 0xFF;
+										print_buff[4]=(msg_counter >> 24) & 0xFF;
+
+										memcpy(ringBuffer[iWrite]+1, print_buff, 12);
+
+										iWrite++;
+										if(iWrite >= MAX_RING)
+											iWrite=0;
+
+										mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
+                                        
+										addLoraRxBuffer(mid);
 									}
 								}
                             }
@@ -516,6 +535,23 @@ int checkOwnTx(uint8_t compBuffer[4])
 
 /**@brief our Lora TX sequence
  */
+bool checkNextTX()
+{
+    if ((last_trasnmit_timer + 1000) > millis())
+    {
+        return false;
+    }
+
+    //Serial.printf("tx now ok iread:%i iwrite:%i\n", iRead, iWrite);
+
+    return true;
+}
+
+void endTX()
+{
+    last_trasnmit_timer = millis();
+}
+
 void doTX()
 {
     tx_is_active = true;
@@ -588,6 +624,8 @@ void doTX()
 void OnTxDone(void)
 {
     #if defined BOARD_RAK4630
+        endTX();
+        
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
         StartReceiveAgain();
@@ -603,6 +641,8 @@ void OnTxDone(void)
 void OnTxTimeout(void)
 {
     #if defined BOARD_RAK4630
+        endTX();
+
         Radio.Rx(RX_TIMEOUT_VALUE);
     #else
         StartReceiveAgain();

@@ -77,11 +77,11 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         if(ble)
         {
-            sprintf(print_buff, "--wrong command %s\r\n", msg_text);
+            sprintf(print_buff, "--wrong command %s\n", msg_text);
             addBLECommandBack(print_buff);
         }
         else
-            Serial.printf("\r\nMeshCom %-4.4s Client\r\n...wrong command %s\n", SOURCE_VERSION, msg_text);
+            Serial.printf("\nMeshCom %-4.4s Client\n...wrong command %s\n", SOURCE_VERSION, msg_text);
 
         return;
     }
@@ -200,17 +200,17 @@ void commandAction(char *msg_text, int len, bool ble)
 
         if(ble)
         {
-            sprintf(print_buff, "--MeshCom %s %-4.4s commands\r\n--info show info\r\n--reboot  Node reboot\r\n--pos show lat/lon/alt/time info\r\n--sendpos send pos now\r\n", SOURCE_TYPE, SOURCE_VERSION);
+            sprintf(print_buff, "--MeshCom %s %-4.4s commands\n--info show info\n--reboot  Node reboot\n--pos show lat/lon/alt/time info\n--sendpos send pos now\n", SOURCE_TYPE, SOURCE_VERSION);
             addBLECommandBack(print_buff);
         }
         else
         {
-            Serial.printf("MeshCom %s %-4.4s commands\r\n--info     show info\r\n--mheard   show MHeard\r\n--setcall  set callsign (OE0XXX-1)\r\n--setssid  WLAN SSID\r\n--setpwd   WLAN PASSWORD\r\n--reboot   Node reboot\r\n", SOURCE_TYPE, SOURCE_VERSION);
+            Serial.printf("MeshCom %s %-4.4s commands\n--info     show info\n--mheard   show MHeard\n--setcall  set callsign (OE0XXX-1)\n--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION);
 
-            Serial.printf("--pos      show lat/lon/alt/time info\r\n--weather  show temp/hum/press\r\n--sendpos  send pos info now\r\n--setlat   set latitude (44.12345)\r\n--setlon   set logitude (016.12345)\r\n--setalt   set altidude (9999)\r\n--symid  set prim/sec Sym-Table\r\n--symcd  set table column\r\n");
+            Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude (44.12345)\n--setlon   set logitude (016.12345)\n--setalt   set altidude (9999)\n--symid  set prim/sec Sym-Table\n--symcd  set table column\n");
 
-            Serial.printf("--debug    on/off\r\n--loradebug    on/off\r\n--display on/off\r\n--setinfo on\r\n--setinfo off\r\n--volt    show battery voltage\r\n--proz    show battery proz.\r\n--maxv    100% battery voltage\r\n--track   on/off SmartBeaconing\r\n--gps     on/off use GPS-CHIP\r\n--gps     reset Factory reset\r\n");
-            Serial.printf("--bmp on  use BMP280-CHIP\r\n--bme on  use BME280-CHIP\r\n--bmx off\r\n--gateway on\r\n--gateway off\r\n--extudp  on\r\n--extudp  off\r\n--extser  on\r\n--extser  off\r\n--extudpip 99.99.99.99\r\n");
+            Serial.printf("--debug    on/off\n--loradebug    on/off\n--display on/off\n--setinfo on\n--setinfo off\n--volt    show battery voltage\n--proz    show battery proz.\n--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps     on/off use GPS-CHIP\n--gps     reset Factory reset\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--bmx off\n--gateway on\n--gateway off\n--extudp  on\n--extudp  off\n--extser  on\n--extser  off\n--extudpip 99.99.99.99\n");
         }
 
         return;
@@ -463,7 +463,7 @@ void commandAction(char *msg_text, int len, bool ble)
         fBaseAltidude = (float)meshcom_settings.node_alt;
         fBasePress = meshcom_settings.node_press;
 
-        Serial.printf("\r\nBase Press set to: %.1f at %.1f m\r\n", fBasePress, fBaseAltidude);
+        Serial.printf("\nBase Press set to: %.1f at %.1f m\n", fBasePress, fBaseAltidude);
 
         if(ble)
         {
@@ -899,7 +899,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
     if(bInfo)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s\r\n...Call:  <%s>\r\n...Short: <%s>\r\n...ID %08X\r\n...NODE %i\r\n...BATT %.2f V\r\n...BATT %d %%\r\n...MAXV %.2f V\r\n...TIME %li ms\r\n...SSID %s\r\n...PWD  %s\r\n...GWAY %s\r\n...DEBUG  %s\r\n...LORADEBUG %s\r\n...EXTUDP  %s\r\n...EXTSERUDP  %s\r\n...EXT IP  %s\r\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GWAY %s\n...DEBUG  %s\n...LORADEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n", SOURCE_TYPE, SOURCE_VERSION,
                 meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, mv_to_percent(global_batt), meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
                 (bGATEWAY?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
 
@@ -919,7 +919,7 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         //Serial.printf("m:%ld t:%ld i:%ld n:%i\n", millis(), posinfo_timer, posinfo_interval*1000, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000));
 
-        sprintf(print_buff, "--MeshCom %s %-4.4s\r\n...LAT: %.4lf %c\r\n...LON: %.4lf %c\r\n...ALT: %i\r\n...SAT: %i - %s - HDOP %i\r\n...RATE: %i\r\n...NEXT: %i sec\r\n...DIST: %im\r\n...DIRn:  %i°\r\n...DIRo:  %i°\r\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\r\n...SYMB: %c %c\r\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %i\n...RATE: %i\n...NEXT: %i sec\n...DIST: %im\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n...SYMB: %c %c\n", SOURCE_TYPE, SOURCE_VERSION,
         meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
         (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
         meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second,
@@ -937,7 +937,7 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(bWeather)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s\r\n...TEMP: %.1f °C\r\n...HUM: %.1f%% rH\r\n...QFE: %.1f hPa\r\n...QNH: %.1f hPa\r\n...ALT asl: %i m\r\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...TEMP: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n", SOURCE_TYPE, SOURCE_VERSION,
         meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
 
         if(ble)

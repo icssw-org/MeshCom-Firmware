@@ -618,28 +618,31 @@ void nrf52loop()
         // do not print anything, it just spams the console
         if (iWrite != iRead)
         {
-            if(bCheckReceiveAgain)
+            if(checkNextTX())
             {
-                // save transmission state between loops
-                doTX();
+                if(bCheckReceiveAgain)
+                {
+                    // save transmission state between loops
+                    doTX();
 
-                bCheckReceiveAgain = false;
-            }
-            else
-            {
-                uint32_t preTxDelay = Radio.Random(); //( 2-7?)
-                char cpreTxtDelay[16];
+                    bCheckReceiveAgain = false;
+                }
+                else
+                {
+                    uint32_t preTxDelay = Radio.Random(); //( 2-7?)
+                    char cpreTxtDelay[16];
 
-                sprintf(cpreTxtDelay, "%014li", preTxDelay);
-                
-                preTxDelay = cpreTxtDelay[13] - 0x30;
+                    sprintf(cpreTxtDelay, "%014li", preTxDelay);
+                    
+                    preTxDelay = cpreTxtDelay[13] - 0x30;
 
-                delay(preTxDelay * 200);
+                    delay(preTxDelay * 200);
 
-                if(bLORADEBUG)
-                    Serial.printf("preTxDelay:%i\n", preTxDelay);
+                    if(bLORADEBUG)
+                        Serial.printf("preTxDelay:%i\n", preTxDelay);
 
-                bCheckReceiveAgain=true;
+                    bCheckReceiveAgain=true;
+                }
             }
         }
     }
@@ -692,7 +695,7 @@ void nrf52loop()
 
             if(bDEBUG)
             {
-                Serial.printf("\r\nGPS: <posinterval:%i> <direction:%i> LAT:%lf LON:%lf %02d-%02d-%02d %02d:%02d:%02d\n", igps, posinfo_direction, tinyGPSPlus.location.lat(), tinyGPSPlus.location.lng(), tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
+                Serial.printf("\nGPS: <posinterval:%i> <direction:%i> LAT:%lf LON:%lf %02d-%02d-%02d %02d:%02d:%02d\n", igps, posinfo_direction, tinyGPSPlus.location.lat(), tinyGPSPlus.location.lng(), tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
                 //Serial.printf("INT: LAT:%lf LON:%lf %i-%02i-%02i %02i:%02i:%02i\n", meshcom_settings.node_lat, meshcom_settings.node_lon, meshcom_settings.node_date_year, meshcom_settings.node_date_month,  meshcom_settings.node_date_day,
                 //meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
             }

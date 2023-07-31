@@ -502,7 +502,13 @@ void esp32setup()
         // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
         if (radio.setPreambleLength(LORA_PREAMBLE_LENGTH) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
             Serial.println(F("Selected preamble length is invalid for this module!"));
-        while (true);
+            while (true);
+        }
+
+        // disable CRC
+        if (radio.setCRC(true) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
+            Serial.println(F("Selected CRC is invalid for this module!"));
+            while (true);
         }
 
         #ifdef SX127X
@@ -755,14 +761,13 @@ void esp32loop()
                 // RF switch is powered down etc.
                 radio.finishTransmit();
 
-                // wait a second before transmitting again
-                //TEST delay(1000);
+                endTX();
 
                 tx_is_active = false;
                 
                 bCheckReceiveAgain=true;
-                
-                //bStartReceivingAgain=true;
+    
+//bStartReceivingAgain=true;
         }
 
         // check if we got a preamble
@@ -801,24 +806,27 @@ void esp32loop()
                 // do not print anything, it just spams the console
                 if (iWrite != iRead)
                 {
-                    if(bCheckReceiveAgain)
+                    if(checkNextTX())
                     {
-                        // save transmission state between loops
-                        doTX();
+                        if(bCheckReceiveAgain)
+                        {
+                            // save transmission state between loops
+                            doTX();
 
-                        bTransmit = true;
+                            bTransmit = true;
 
-                        bCheckReceiveAgain = false;
-                    }
-                    else
-                    {
-                        int32_t preTxDelay = radio.random(1, 5);
-                        delay(preTxDelay * 250);
+                            bCheckReceiveAgain = false;
+                        }
+                        else
+                        {
+                            int32_t preTxDelay = radio.random(1, 5);
+                            delay(preTxDelay * 250);
 
-                        if(bLORADEBUG)
-                            Serial.printf("preTxDelay:%i ms\n", preTxDelay*350);
+                            if(bLORADEBUG)
+                                Serial.printf("preTxDelay:%i ms\n", preTxDelay*350);
 
-                        bCheckReceiveAgain=true;
+                            bCheckReceiveAgain=true;
+                        }
                     }
                 }
             }
@@ -916,8 +924,7 @@ void esp32loop()
                 // RF switch is powered down etc.
                 radio.finishTransmit();
 
-                // wait a second before transmitting again
-                delay(1000);
+                endTX();
 
                 bStartReceivingAgain=true;
 

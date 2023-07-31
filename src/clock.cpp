@@ -431,7 +431,7 @@ bool Clock::SetAlarmRelative(const int iHourRel /*= 0*/, const int iMinRel /*= 1
 bool Clock::SetClock(const struct tm suNow)
 {
 #if defined(TEST)
-	Serial.printf("[clock] new date/time: %04u/%02u/%02u %2u:%02u:%02u\r\n",
+	Serial.printf("[clock] new date/time: %04u/%02u/%02u %2u:%02u:%02u\n",
                       1900 + suNow.tm_year, 1 + suNow.tm_mon, suNow.tm_mday,
 		      suNow.tm_hour, suNow.tm_min, suNow.tm_sec);
 #endif
@@ -449,7 +449,7 @@ bool Clock::SetClock(const time_t tsNow, const bool boUseUTC /*= true*/)
 	(boUseUTC) ? gmtime_r(&tsClock_m, &suClock_m)
 	           : localtime_r(&tsClock_m, &suClock_m);
 #if defined(TEST)
-	Serial.printf("[clock] new date/time: %04u/%02u/%02u %2u:%02u:%02u\r\n",
+	Serial.printf("[clock] new date/time: %04u/%02u/%02u %2u:%02u:%02u\n",
                       1900 + suClock_m.tm_year, 1 + suClock_m.tm_mon,
 		      suClock_m.tm_mday, suClock_m.tm_hour,
 		      suClock_m.tm_min,  suClock_m.tm_sec);

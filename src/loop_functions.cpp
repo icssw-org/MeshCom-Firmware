@@ -56,8 +56,10 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, 16, 15, 4);
 #elif defined(BOARD_HELTEC_V3)
     U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2(U8G2_R0, 18, 17, 21);
-#else
+#elif defined(BOARD_RAK4630)
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);  //RESET CLOCK DATA
+#else
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/ SCL, /* data=*/ SDA, /* reset=*/ U8X8_PIN_NONE);  //RESET CLOCK DATA
 #endif
 
 unsigned int msg_counter = 0;
