@@ -195,6 +195,7 @@ volatile bool timeoutFlag = false;
 
 // flag to indicate that a preamble was detected
 volatile bool detectedFlag = false;
+int iCountdetectedFlag = 0;
 
 // flag to indicate if we are currently receiving
 bool receiving = false;
@@ -234,8 +235,8 @@ void setFlagTimeout(void)
 #endif
 void setFlagDetected(void)
 {
-    // we got a preamble, set the flag
-    detectedFlag = true;
+        // we got a preamble, set the flag
+        detectedFlag = true;
 }
 #else
 // this function is called when no preamble
@@ -773,29 +774,38 @@ void esp32loop()
         // check if we got a preamble
         if(detectedFlag)
         {
-            // LoRa preamble was detected
-            if(bLORADEBUG)
-                Serial.print(F("[SX1278] Preamble detected, starting reception ... "));
-
-            state = radio.startReceive(0, RADIOLIB_SX127X_RXSINGLE);
-            if (state == RADIOLIB_ERR_NONE)
+            iCountdetectedFlag++;
+            if(iCountdetectedFlag > 1)
             {
-                if(bLORADEBUG)
-                    Serial.println(F("success!"));
+                receiving = false;
+                iCountdetectedFlag=0;
             }
             else
             {
+                // LoRa preamble was detected
                 if(bLORADEBUG)
+                    Serial.print(F("[SX1278] Preamble detected, starting reception ... "));
+
+                state = radio.startReceive(0, RADIOLIB_SX127X_RXSINGLE);
+                if (state == RADIOLIB_ERR_NONE)
                 {
-                    Serial.print(F("failed, code "));
-                    Serial.println(state);
+                    if(bLORADEBUG)
+                        Serial.println(F("success!"));
                 }
+                else
+                {
+                    if(bLORADEBUG)
+                    {
+                        Serial.print(F("failed, code "));
+                        Serial.println(state);
+                    }
+                }
+
+                // set the flag for ongoing reception
+                receiving = true;
+
+                bCheckReceiveAgain = false;
             }
-
-            // set the flag for ongoing reception
-            receiving = true;
-
-            bCheckReceiveAgain = false;
         }
         else
         if(!receiving)
@@ -806,7 +816,7 @@ void esp32loop()
                 // do not print anything, it just spams the console
                 if (iWrite != iRead)
                 {
-                    if(checkNextTX())
+                   //if(checkNextTX())
                     {
                         if(bCheckReceiveAgain)
                         {

@@ -292,7 +292,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     {
                                         unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
                                         
-                                        Serial.println("");
+                                        if(bDisplayInfo)
+                                            Serial.println("");
+                                            
                                         SendAckMessage(aprsmsg.msg_source_call, iAckId);
 
                                         aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
@@ -539,10 +541,14 @@ bool checkNextTX()
 {
     if ((last_trasnmit_timer + 1000) > millis())
     {
+        if(bLORADEBUG)
+            Serial.printf("tx not ok iread:%i iwrite:%i last_trasnmit_timer:%ld millis:%ld\n", iRead, iWrite, last_trasnmit_timer, millis());
+        
         return false;
     }
-
-    //Serial.printf("tx now ok iread:%i iwrite:%i\n", iRead, iWrite);
+    
+    if(bLORADEBUG)
+        Serial.printf("tx now ok iread:%i iwrite:%i last_trasnmit_timer:%ld millis:%ld\n", iRead, iWrite, last_trasnmit_timer, millis());
 
     return true;
 }
@@ -550,6 +556,9 @@ bool checkNextTX()
 void endTX()
 {
     last_trasnmit_timer = millis();
+
+    if(bLORADEBUG)
+        Serial.printf("end tx iread:%i iwrite:%i last_trasnmit_timer:%ld\n", iRead, iWrite, last_trasnmit_timer);
 }
 
 void doTX()
