@@ -533,7 +533,7 @@ void esp32setup()
 
         // start scanning the channel
         Serial.print(F("[SX1278] Starting scan for LoRa preamble ... "));
-        state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+        state = radio.startChannelScan();
         if (state == RADIOLIB_ERR_NONE)
         {
             Serial.println(F("success!"));
@@ -762,6 +762,8 @@ void esp32loop()
                 // RF switch is powered down etc.
                 radio.finishTransmit();
 
+                radio.startChannelScan();
+
                 endTX();
 
                 tx_is_active = false;
@@ -847,7 +849,7 @@ void esp32loop()
         {
             if(!receiving || bStartReceivingAgain || bCheckReceiveAgain)
             {
-                int state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+                int state = radio.startChannelScan();
                 if (state == RADIOLIB_ERR_NONE)
                 {
                     //if(bLORADEBUG)
