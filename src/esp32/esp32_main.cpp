@@ -533,7 +533,7 @@ void esp32setup()
 
         // start scanning the channel
         Serial.print(F("[SX1278] Starting scan for LoRa preamble ... "));
-        state = radio.startChannelScan();
+        state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
         if (state == RADIOLIB_ERR_NONE)
         {
             Serial.println(F("success!"));
@@ -553,7 +553,7 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[SX126x] Starting scan for LoRa preamble ... "));
-            state = radio.startChannelScan();
+            state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("[SX126X] success!"));
@@ -576,7 +576,7 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[SX1278] Starting scan for LoRa preamble ... "));
-            state = radio.startChannelScan();
+            state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("[SX1278] success!"));
@@ -847,7 +847,7 @@ void esp32loop()
         {
             if(!receiving || bStartReceivingAgain || bCheckReceiveAgain)
             {
-                int state = radio.startChannelScan();
+                int state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
                 if (state == RADIOLIB_ERR_NONE)
                 {
                     //if(bLORADEBUG)
@@ -934,6 +934,8 @@ void esp32loop()
                 // RF switch is powered down etc.
                 radio.finishTransmit();
 
+                radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+
                 endTX();
 
                 bStartReceivingAgain=true;
@@ -979,6 +981,8 @@ void esp32loop()
 
             if(!bActReceiving)
             {
+                //Serial.printf("iWrite%i iread:%i\n", iWrite, iRead);
+                
                 // nothing was detected
                 // do not print anything, it just spams the console
                 if (iWrite != iRead)
@@ -1020,7 +1024,7 @@ void esp32loop()
         {
             if(!receiving || bStartReceivingAgain || bCheckReceiveAgain)
             {
-                int state = radio.startChannelScan();
+                int state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
                 if (state == RADIOLIB_ERR_NONE)
                 {
                     //if(bLORADEBUG)
