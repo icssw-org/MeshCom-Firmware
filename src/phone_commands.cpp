@@ -299,11 +299,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			memcpy(&lat_phone, conf_data + 2, sizeof(lat_phone));
 			d_lat = (double)lat_phone;
 			
-			if(bDEBUG)
-			{
-				Serial.println(lat_phone);
-			}
-
 			if (save_setting)
 			{
 				meshcom_settings.node_lat = lat_phone;
@@ -321,11 +316,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			memcpy(&long_phone, conf_data + 2, sizeof(long_phone));
 			d_lon = (double)long_phone;
 		
-			if(bDEBUG)
-			{
-				Serial.println(long_phone);
-			}
-
 			if (save_setting)
 			{
 				meshcom_settings.node_lon = long_phone;
@@ -351,10 +341,10 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				// send to mesh - phone sends pos perdiocaly
 				/// TODO N/S und E/W Char muss man noch korrekt setzen
 				DEBUG_MSG("RADIO", "Sending Pos from Phone to Mesh");
+				
+				posinfo_shot = true;
 
-				sendPosition(0, d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude, 0.0, 0.0, 0.0, 0, 0.0);
-
-				posinfo_timer = millis();	// damit die loop-Schleife nicht asynchron läuft
+				//Führt zu Reconnect sendPosition(0, d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude, 0.0, 0.0, 0.0, 0, 0.0);
 			}
 
 			break;

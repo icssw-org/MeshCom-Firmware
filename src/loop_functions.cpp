@@ -1281,6 +1281,9 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
 
 void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, int qfe, float qnh)
 {
+    //if(bDEBUG)
+    //    Serial.printf("intervall:%i lat:%.4lf <%c> lon:%.4lf <%c> alt:%i press:%.1f hum:%.1f temp:%.1f qfe:%i qnh:%.1f\n", intervall, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
+    
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
     struct aprsMessage aprsmsg;

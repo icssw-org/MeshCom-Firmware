@@ -5,6 +5,9 @@
 #include <mheard_functions.h>
 #include <udp_functions.h>
 
+// Sensors
+#include "bmx280.h"
+
 unsigned long rebootAuto = 0;
 
 extern int state; // only for gps reset
@@ -422,6 +425,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
         save_settings();
 
+        setupBMX280();
+        
         return;
     }
     else
@@ -437,6 +442,8 @@ void commandAction(char *msg_text, int len, bool ble)
         }
 
         save_settings();
+
+        setupBMX280();
 
         return;
     }
