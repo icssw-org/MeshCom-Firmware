@@ -76,7 +76,7 @@ void decodeMHeard(char mh_buffer[], struct mheardLine &mheardLine)
     }
 }
 
-void updateMheard(struct mheardLine &mheardLine)
+void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 {
     int ipos=-1;
     for(int iset=0; iset<MAX_MHEARD; iset++)
@@ -120,7 +120,8 @@ void updateMheard(struct mheardLine &mheardLine)
     memcpy(bleBuffer+1, mheardCalls[ipos], 10);
     memcpy(bleBuffer+11, mheardBuffer[ipos], strlen(mheardBuffer[ipos]));
 
-    addBLEOutBuffer(bleBuffer, strlen(mheardBuffer[ipos])+1+10);
+    if(isPhoneReady == 1)
+        addBLEOutBuffer(bleBuffer, strlen(mheardBuffer[ipos])+1+10);
 }
 
 void showMHeard()

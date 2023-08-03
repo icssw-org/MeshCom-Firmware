@@ -7,7 +7,7 @@
 
 void initMheard();
 void initMheardLine(struct mheardLine &mheardLine);
-void updateMheard(struct mheardLine &mheardLine);
+void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady);
 void decodeMHeard(char mh_buffer[], struct mheardLine &mheardLine);
 void showMHeard();
 

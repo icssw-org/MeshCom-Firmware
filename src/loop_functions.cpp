@@ -129,7 +129,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 
     if(bDEBUG)
     {
-        Serial.printf("BLEtoPhone RingBuff added len=%i to element: %u\n", len, toPhoneWrite);
+        Serial.printf("<%02X>BLEtoPhone RingBuff added len=%i to element: %u\n", buffer[0], len, toPhoneWrite);
         printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1);
     }
 

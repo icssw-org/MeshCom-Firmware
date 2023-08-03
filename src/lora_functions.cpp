@@ -197,7 +197,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_time = getTimeString();
                 mheardLine.mh_payload_type = aprsmsg.payload_type;
 
-                updateMheard(mheardLine);
+                updateMheard(mheardLine, isPhoneReady);
 
                 //
                 ///////////////////////////////////////////////
@@ -694,6 +694,7 @@ void StartReceiveAgain()
     #ifdef SX127X
         //radio.startReceive();
     #else
+    /*
         // start scanning the channel again
         if(bLORADEBUG)
             Serial.print(F("[SX1262] Starting scan for LoRa preamble ... "));
@@ -716,7 +717,7 @@ void StartReceiveAgain()
     
     timeoutFlag = false;
     detectedFlag = false;
-
+*/
     #endif
 }
 #else
