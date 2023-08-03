@@ -457,8 +457,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
-    #else
-        StartReceiveAgain();
     #endif
 
 
@@ -473,8 +471,6 @@ void OnRxTimeout(void)
 {
     #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
-    #else
-        StartReceiveAgain();
     #endif
 
     if(bLORADEBUG)
@@ -490,8 +486,6 @@ void OnRxError(void)
 {
     #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
-    #else
-        StartReceiveAgain();
     #endif
 
     if(bLORADEBUG)
@@ -636,8 +630,6 @@ void OnTxDone(void)
         endTX();
         
         Radio.Rx(RX_TIMEOUT_VALUE);
-    #else
-        StartReceiveAgain();
     #endif
 
     //Serial.println("OnTXDone");
@@ -653,8 +645,6 @@ void OnTxTimeout(void)
         endTX();
 
         Radio.Rx(RX_TIMEOUT_VALUE);
-    #else
-        StartReceiveAgain();
     #endif
 
     if(bLORADEBUG)
@@ -679,49 +669,3 @@ void OnHeaderDetect(void)
     
     //Serial.println("OnHeaderDetect");
 }
-
-#ifdef ESP32
-/**@brief start LoRa RX again
- */
-extern volatile bool timeoutFlag;
-extern volatile bool detectedFlag;
-
-void StartReceiveAgain()
-{
-    int state = 0;
-
-    // put module back to listen mode
-    #ifdef SX127X
-        //radio.startReceive();
-    #else
-    /*
-        // start scanning the channel again
-        if(bLORADEBUG)
-            Serial.print(F("[SX1262] Starting scan for LoRa preamble ... "));
-
-        state = radio.startChannelScan();
-
-        if (state == RADIOLIB_ERR_NONE)
-        {
-            if(bLORADEBUG)
-                Serial.println(F("success!"));
-        }
-        else
-        {
-            if(bLORADEBUG)
-            {
-                Serial.print(F("failed, code "));
-                Serial.println(state);
-            }
-        }
-    
-    timeoutFlag = false;
-    detectedFlag = false;
-*/
-    #endif
-}
-#else
-    void StartReceiveAgain()
-    {
-    }
-#endif

@@ -106,9 +106,6 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
       char gate[] = "GATE";
       char beat[] = "BEAT";
 
-      if(bDEBUG)
-        Serial.printf("UDP received indicator_b:%-4.4s\n", indicator_b);
-
       if (memcmp(indicator_b, gate, UDP_MSG_INDICATOR_LEN) == 0)
       {
         DEBUG_MSG("UDP", "Received a LoRa packet to transmit");
