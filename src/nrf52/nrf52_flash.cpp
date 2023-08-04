@@ -107,6 +107,9 @@ void init_flash(void)
 
 		memcpy(meshcom_settings.node_extern, old_struct.node_extern, 40);
 
+		meshcom_settings.node_msgid = old_struct.node_msgid;
+		meshcom_settings.node_ackid = old_struct.node_ackid;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

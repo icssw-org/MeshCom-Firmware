@@ -1100,7 +1100,7 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
-    aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_msgid & 0xFF);
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
     
     aprsmsg.payload_type = ':';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
@@ -1111,22 +1111,14 @@ void sendMessage(char *msg_text, int len)
     // ACK request anhängen
     if(bDM)
     {
-        aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_ackid & 0xFF);
-
         char cAckId[4] = {0};
-        sprintf(cAckId, "%03i", meshcom_settings.node_ackid);
+        sprintf(cAckId, "%03i", meshcom_settings.node_msgid);
         aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
+    }
 
-        meshcom_settings.node_ackid++;
-        if(meshcom_settings.node_ackid > 255)
-            meshcom_settings.node_ackid=0;
-    }
-    else
-    {
-        meshcom_settings.node_msgid++;
-        if(meshcom_settings.node_msgid > 255)
-            meshcom_settings.node_msgid=0;
-    }
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 999)
+        meshcom_settings.node_msgid=0;
 
     // Flash rewrite
     save_settings();
@@ -1305,7 +1297,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
-    aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_msgid & 0xFF);
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
 
     aprsmsg.payload_type = '!';
     
@@ -1391,7 +1383,7 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
     
     meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 255)
+    if(meshcom_settings.node_msgid > 999)
         meshcom_settings.node_msgid=0;
     // Flash rewrite
     save_settings();
@@ -1437,7 +1429,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
-    aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_msgid & 0xFF);
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
     
     aprsmsg.payload_type = ':';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
@@ -1448,7 +1440,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     aprsmsg.msg_payload = cackmsg;
 
     meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 255)
+    if(meshcom_settings.node_msgid > 999)
         meshcom_settings.node_msgid=0;
     // Flash rewrite
     save_settings();

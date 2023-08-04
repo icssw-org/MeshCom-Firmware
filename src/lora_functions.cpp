@@ -275,7 +275,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
                                     {
                                         unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
-                                        msg_counter = ((_GW_ID & 0xFFFFFF) << 8) | (iAckId & 0xFF);
+                                        msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
 
                                         print_buff[0]=0x41;
                                         print_buff[1]=msg_counter & 0xFF;
@@ -563,6 +563,7 @@ bool doTX()
     if(cmd_counter > 0)
     {
         cmd_counter--;
+        Serial.printf("\ncmd_counter=%i\n", cmd_counter);
         return false;
     }
 
@@ -597,9 +598,10 @@ bool doTX()
                 {
                     if(aprsmsg.msg_payload.indexOf(":ack") > 0)
                     {
-                        cmd_counter=5;
+                        cmd_counter=2;
                         iRead=save_read;
                         tx_waiting=true;
+                        Serial.println("cmd_counter=2");
                         return false;
                     }
                 }
