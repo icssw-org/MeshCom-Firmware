@@ -67,6 +67,7 @@ extern uint8_t udpRead;    // counter for ringbuffer
 extern int cmd_counter; // ticker dependant on main cycle delay time
 extern bool is_receiving;   // flag to store we are receiving a lora packet.
 extern bool tx_is_active;   // flag to store we are transmitting  a lora packet.
+extern bool tx_waiting;
 
 extern uint8_t isPhoneReady;      // flag we receive from phone when itis ready to receive data
 

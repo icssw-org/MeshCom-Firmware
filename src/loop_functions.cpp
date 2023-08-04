@@ -86,9 +86,10 @@ uint8_t ringBufferLoraRX[MAX_RING][4] = {0}; //Ringbuffer for UDP TX from LoRa R
 uint8_t loraWrite = 0;   // counter for ringbuffer
 
 // LoRa RX/TX sequence control
-int cmd_counter = 2;      // ticker dependant on main cycle delay time
+int cmd_counter = 0;      // ticker dependant on main cycle delay time
 bool is_receiving = false;  // flag to store we are receiving a lora packet.
 bool tx_is_active = false;  // flag to store we are transmitting  a lora packet.
+bool tx_waiting = false;
 
 uint8_t isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
@@ -1083,6 +1084,7 @@ void sendMessage(char *msg_text, int len)
         {
             strDestinationCall = strMsg.substring(1, iCall);
             strDestinationCall.toUpperCase();
+            strDestinationCall.trim();
             strMsg = strMsg.substring(iCall+1);
 
             bDM=true;
@@ -1098,8 +1100,7 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
-    unsigned int iAckId = millis();
-    aprsmsg.msg_id = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFFFF);
+    aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_msgid & 0xFF);
     
     aprsmsg.payload_type = ':';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
@@ -1110,14 +1111,25 @@ void sendMessage(char *msg_text, int len)
     // ACK request anhängen
     if(bDM)
     {
-        unsigned int iAckId = millis();
-        aprsmsg.msg_id = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFF);
+        aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_ackid & 0xFF);
 
-        iAckId = aprsmsg.msg_id & 0xFF;
         char cAckId[4] = {0};
-        sprintf(cAckId, "%03i", iAckId);
+        sprintf(cAckId, "%03i", meshcom_settings.node_ackid);
         aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
+
+        meshcom_settings.node_ackid++;
+        if(meshcom_settings.node_ackid > 255)
+            meshcom_settings.node_ackid=0;
     }
+    else
+    {
+        meshcom_settings.node_msgid++;
+        if(meshcom_settings.node_msgid > 255)
+            meshcom_settings.node_msgid=0;
+    }
+
+    // Flash rewrite
+    save_settings();
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -1293,8 +1305,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
-    unsigned int iAckId = millis();
-    aprsmsg.msg_id = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFFFF);
+    aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_msgid & 0xFF);
 
     aprsmsg.payload_type = '!';
     
@@ -1307,6 +1318,12 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     
     if(aprsmsg.msg_payload == "")
         return;
+
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 255)
+        meshcom_settings.node_msgid=0;
+    // Flash rewrite
+    save_settings();
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -1366,14 +1383,19 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
-    unsigned int iAckId = millis();
-    aprsmsg.msg_id = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFFFF);
+    aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_msgid & 0xFF);
 
     aprsmsg.payload_type = '@';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
     aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
     
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 255)
+        meshcom_settings.node_msgid=0;
+    // Flash rewrite
+    save_settings();
+
     encodeAPRS(msg_buffer, aprsmsg);
 
     if(bDisplayInfo)
@@ -1415,7 +1437,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
-    aprsmsg.msg_id = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFF);
+    aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_msgid & 0xFF);
     
     aprsmsg.payload_type = ':';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
@@ -1424,6 +1446,12 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     char cackmsg[20];
     sprintf(cackmsg, "%-9.9s:ack%03i", dest_call.c_str(), iAckId);
     aprsmsg.msg_payload = cackmsg;
+
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 255)
+        meshcom_settings.node_msgid=0;
+    // Flash rewrite
+    save_settings();
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
     

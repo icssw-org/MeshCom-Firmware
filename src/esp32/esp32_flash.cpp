@@ -49,6 +49,9 @@ void init_flash(void)
 
     strVar = preferences.getString("node_extern", "none");
     sprintf(meshcom_settings.node_extern, "%s", strVar.c_str());
+
+    meshcom_settings.node_msgid = preferences.getInt("node_msgid", 0);
+    meshcom_settings.node_ackid = preferences.getInt("node_ackid", 0);
 }
 
 void save_settings(void)
@@ -90,6 +93,9 @@ void save_settings(void)
 
     strVar = meshcom_settings.node_extern;
     preferences.putString("node_extern", strVar); 
+
+    preferences.putInt("node_msgid", meshcom_settings.node_msgid);
+    preferences.putInt("node_ackid", meshcom_settings.node_ackid);
 
     preferences.end();
 

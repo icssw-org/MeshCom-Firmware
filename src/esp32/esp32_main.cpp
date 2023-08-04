@@ -793,9 +793,10 @@ void esp32loop()
             if (iWrite != iRead)
             {
                 // save transmission state between loops
-                doTX();
-
-                bTransmit = true;
+                if(doTX())
+                    bTransmit = true;
+                else
+                    radio.startChannelScan();
             }
             else
             {

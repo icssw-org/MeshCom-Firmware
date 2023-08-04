@@ -275,7 +275,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
                                     {
                                         unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
-                                        msg_counter = ((_GW_ID & 0xFFFF) << 16) | (iAckId & 0xFF);
+                                        msg_counter = ((_GW_ID & 0xFFFFFF) << 8) | (iAckId & 0xFF);
 
                                         print_buff[0]=0x41;
                                         print_buff[1]=msg_counter & 0xFF;
@@ -555,17 +555,23 @@ void endTX()
         Serial.printf("end tx iread:%i iwrite:%i last_trasnmit_timer:%ld\n", iRead, iWrite, last_trasnmit_timer);
 }
 
-void doTX()
+bool doTX()
 {
     tx_is_active = true;
 
     // next TX new TX-DELAY
-    cmd_counter = 0;
+    if(cmd_counter > 0)
+    {
+        cmd_counter--;
+        return false;
+    }
 
     if (iWrite != iRead && iRead < MAX_RING)
     {
         sendlng = ringBuffer[iRead][0];
         memcpy(lora_tx_buffer, ringBuffer[iRead] + 1, sendlng);
+
+        int save_read=iRead;
 
         iRead++;
         if (iRead >= MAX_RING)
@@ -583,6 +589,21 @@ void doTX()
 
             if(msg_type_b_lora != 0x00) // 0x41 ACK
             {
+                if(tx_waiting)
+                {
+                    tx_waiting=false;
+                }
+                else
+                {
+                    if(aprsmsg.msg_payload.indexOf(":ack") > 0)
+                    {
+                        cmd_counter=5;
+                        iRead=save_read;
+                        tx_waiting=true;
+                        return false;
+                    }
+                }
+
                 // you can transmit C-string or Arduino string up to
                 // 256 characters long
                 #if defined BOARD_RAK4630
@@ -613,6 +634,8 @@ void doTX()
                         Serial.println("");
                     }
                 }
+
+                return true;
             }
         }
         else
@@ -620,6 +643,8 @@ void doTX()
             DEBUG_MSG("RADIO", "TX DISABLED");
         }
     }
+
+    return false;
 }
 
 /**@brief Function to be executed on Radio Tx Done event

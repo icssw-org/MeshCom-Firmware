@@ -51,6 +51,9 @@ struct s_meshcom_settings
 
 	char node_extern[40] = {0};
 
+	int node_msgid = 0;
+	int node_ackid = 0;
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
