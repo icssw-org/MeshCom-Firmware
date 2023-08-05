@@ -586,9 +586,6 @@ void nrf52setup()
     delay(100);
 }
 
-bool bCheckReceiveAgain = false;
-int iWatchDogCount = 0;
-
 void nrf52loop()
 {
 	//Clock::EEvent eEvent;
@@ -610,60 +607,17 @@ void nrf52loop()
    	//digitalWrite(LED_BLUE, LOW);
 
     // check if we have messages in ringbuffer to send
+    //Serial.printf("is_receiving:%i tx_is_active:%i iWrite:%i iRead:%i \n", is_receiving, tx_is_active, iWrite, iRead);
+    
     if(is_receiving == false && tx_is_active == false)
     {
-        iWatchDogCount = 0;
-
+        // channel is free
         // nothing was detected
         // do not print anything, it just spams the console
         if (iWrite != iRead)
         {
-            if(checkNextTX())
-            {
-                if(bCheckReceiveAgain)
-                {
-                    // save transmission state between loops
-                    doTX();
-
-                    bCheckReceiveAgain = false;
-                }
-                else
-                {
-                    uint32_t preTxDelay = Radio.Random(); //( 2-7?)
-                    char cpreTxtDelay[16];
-
-                    sprintf(cpreTxtDelay, "%014li", preTxDelay);
-                    
-                    preTxDelay = cpreTxtDelay[13] - 0x30;
-
-                    delay(preTxDelay * 200);
-
-                    if(bLORADEBUG)
-                        Serial.printf("preTxDelay:%i\n", preTxDelay);
-
-                    bCheckReceiveAgain=true;
-                }
-            }
-        }
-    }
-    else
-    {
-        if (iWrite != iRead)
-        {
-            //if(bDisplayInfo)
-            //    Serial.printf("iWrite:%i iRead:%i iWatchDogCount:%i\n", iWrite, iRead, iWatchDogCount);
-
-            iWatchDogCount++;
-        }
-
-        if(iWatchDogCount > 50)
-        {
-            is_receiving = false;
-            tx_is_active = false;
-
-            iWatchDogCount = 0;
-
-            Radio.Rx(RX_TIMEOUT_VALUE);
+            // save transmission state between loops
+            doTX();
         }
     }
 

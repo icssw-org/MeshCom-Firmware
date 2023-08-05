@@ -775,8 +775,6 @@ void esp32loop()
                 // RF switch is powered down etc.
                 radio.finishTransmit();
 
-                endTX();
-
                 radio.startChannelScan();
         }
         else
@@ -894,8 +892,6 @@ void esp32loop()
                 // this will ensure transmitter is disabled,
                 // RF switch is powered down etc.
                 radio.finishTransmit();
-
-                endTX();
 
                 radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
         }

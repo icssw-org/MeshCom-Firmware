@@ -545,34 +545,8 @@ int checkOwnTx(uint8_t compBuffer[4])
 
 /**@brief our Lora TX sequence
  */
-bool checkNextTX()
-{
-    if ((last_trasnmit_timer + 1000) > millis())
-    {
-        if(bLORADEBUG)
-            Serial.printf("tx not ok iread:%i iwrite:%i last_trasnmit_timer:%ld millis:%ld\n", iRead, iWrite, last_trasnmit_timer, millis());
-        
-        return false;
-    }
-    
-    if(bLORADEBUG)
-        Serial.printf("tx now ok iread:%i iwrite:%i last_trasnmit_timer:%ld millis:%ld\n", iRead, iWrite, last_trasnmit_timer, millis());
-
-    return true;
-}
-
-void endTX()
-{
-    last_trasnmit_timer = millis();
-
-    if(bLORADEBUG)
-        Serial.printf("end tx iread:%i iwrite:%i last_trasnmit_timer:%ld\n", iRead, iWrite, last_trasnmit_timer);
-}
-
 bool doTX()
 {
-    tx_is_active = true;
-
     // next TX new TX-DELAY
     if(cmd_counter > 0)
     {
@@ -627,6 +601,8 @@ bool doTX()
                     }
                 }
 
+                tx_is_active = true;
+                
                 // you can transmit C-string or Arduino string up to
                 // 256 characters long
                 #if defined BOARD_RAK4630
@@ -675,8 +651,6 @@ bool doTX()
 void OnTxDone(void)
 {
     #if defined BOARD_RAK4630
-        endTX();
-        
         Radio.Rx(RX_TIMEOUT_VALUE);
     #endif
 
@@ -690,8 +664,6 @@ void OnTxDone(void)
 void OnTxTimeout(void)
 {
     #if defined BOARD_RAK4630
-        endTX();
-
         Radio.Rx(RX_TIMEOUT_VALUE);
     #endif
 
@@ -713,6 +685,10 @@ void OnPreambleDetect(void)
  */
 void OnHeaderDetect(void)
 {
+    // Suche nach freiem Kanal unterbrechen
+    tx_waiting=false;
+    cmd_counter=0;
+
     is_receiving = true;
     
     //Serial.println("OnHeaderDetect");

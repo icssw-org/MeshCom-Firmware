@@ -14,9 +14,7 @@ int checkOwnTx(uint8_t compBuffer[4]);
 
 void StartReceiveAgain();
 
-bool checkNextTX();
 bool doTX();
-void endTX();
 void OnTxDone(void);
 void OnTxTimeout(void);
 void OnPreambleDetect(void);
