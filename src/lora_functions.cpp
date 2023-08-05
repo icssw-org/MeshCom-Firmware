@@ -577,6 +577,10 @@ bool doTX()
     if(cmd_counter > 0)
     {
         cmd_counter--;
+        
+        if(bLORADEBUG)
+            Serial.printf("cmd_counter > 0:%i \n", cmd_counter);
+
         return false;
     }
 
@@ -613,6 +617,10 @@ bool doTX()
                     //if(aprsmsg.msg_payload.indexOf(":ack") > 0)
                     {
                         cmd_counter=7;
+                        
+                        if(bLORADEBUG)
+                            Serial.printf("cmd_counter = 7:%i \n", cmd_counter);
+
                         iRead=save_read;
                         tx_waiting=true;
                         return false;

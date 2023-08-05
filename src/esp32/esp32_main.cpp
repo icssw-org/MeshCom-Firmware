@@ -705,6 +705,8 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
+    bDisplayInfo=true;
+
     if(iReceiveTimeOutTime > 0)
     {
         // Timeout 3.5sec
@@ -831,10 +833,10 @@ void esp32loop()
                         radio.startChannelScan();
                 }
                 else
-                {
                     radio.startChannelScan();
-                }
             }
+            else
+                radio.startChannelScan();
         }
 
         timeoutFlag = false;
@@ -908,6 +910,9 @@ void esp32loop()
 
                 if (state == RADIOLIB_LORA_DETECTED)
                 {
+                        cmd_counter = 0;
+                        tx_waiting=false;   // erneut auf 7 folgende freie CAD warten
+
                         // LoRa preamble was detected
                         if(bLORADEBUG)
                             Serial.print(F("[SX1278] Preamble detected, starting reception ... "));
@@ -941,17 +946,26 @@ void esp32loop()
 
                     // nothing was detected
                     // do not print anything, it just spams the console
-                    if (iWrite != iRead)
+                    // sind wir noch in einem Transmit? oder Receive?
+                    if(!bTransmiting && !bReceiving)
                     {
-                        // save transmission state between loops
-                        doTX();
+                        if (iWrite != iRead)
+                        {
+                            // save transmission state between loops
+                            if(doTX())
+                                bTransmiting = true;
+                            else
+                                radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
 
-                        bTransmiting = true;
+                            bTransmiting = true;
+                        }
+                        else
+                        {
+                            radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+                        }
                     }
                     else
-                    {
-                        radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
-                    }
+                       radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
                 }
                 else
                 {
