@@ -705,8 +705,6 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
-    bDisplayInfo=true;
-
     if(iReceiveTimeOutTime > 0)
     {
         // Timeout 3.5sec
