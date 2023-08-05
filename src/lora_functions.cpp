@@ -309,7 +309,21 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 else
                                 {
                                     if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) != 0)
-                                        addBLEOutBuffer(RcvBuffer, size);
+                                    {
+                                        // APP Offline setzen
+                                        if(isPhoneReady == 0)
+                                        {
+                                            aprsmsg.max_hop = aprsmsg.max_hop | 0x20;
+
+                                            uint8_t tempRcvBuffer[255];
+
+                                            uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                                            addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                        }
+                                        else
+                                            addBLEOutBuffer(RcvBuffer, size);
+                                    }
                                 }
                             }
                         }
@@ -563,7 +577,6 @@ bool doTX()
     if(cmd_counter > 0)
     {
         cmd_counter--;
-        Serial.printf("\ncmd_counter=%i\n", cmd_counter);
         return false;
     }
 
@@ -596,12 +609,12 @@ bool doTX()
                 }
                 else
                 {
-                    if(aprsmsg.msg_payload.indexOf(":ack") > 0)
+                    //vor jeden senden 7 aufeinander folgende CAD abwarten
+                    //if(aprsmsg.msg_payload.indexOf(":ack") > 0)
                     {
-                        cmd_counter=2;
+                        cmd_counter=7;
                         iRead=save_read;
                         tx_waiting=true;
-                        Serial.println("cmd_counter=2");
                         return false;
                     }
                 }

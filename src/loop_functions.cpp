@@ -157,6 +157,8 @@ void addBLECommandBack(char text[100])
     aprsmsg.msg_source_path="response";
     aprsmsg.msg_payload=text;
 
+    aprsmsg.msg_app_offline = true; // Rückmeldungen niemals annocen
+
     encodeAPRS(msg_buffer, aprsmsg);
 
     addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);

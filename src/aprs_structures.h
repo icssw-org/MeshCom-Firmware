@@ -24,6 +24,7 @@ struct aprsMessage
     uint8_t max_hop;
     bool  msg_server;
     bool  msg_track;
+    bool  msg_app_offline;
 
     String msg_source_path;
     String msg_source_call;
