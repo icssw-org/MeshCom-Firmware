@@ -110,6 +110,10 @@ void init_flash(void)
 		meshcom_settings.node_msgid = old_struct.node_msgid;
 		meshcom_settings.node_ackid = old_struct.node_ackid;
 
+		meshcom_settings.node_power = old_struct.node_power;
+		meshcom_settings.node_freq = old_struct.node_freq;
+		meshcom_settings.node_bw = old_struct.node_bw;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

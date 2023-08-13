@@ -1164,13 +1164,11 @@ void sendMessage(char *msg_text, int len)
     if(iWrite >= MAX_RING)
         iWrite=0;
     
-    #ifdef ESP32
     if(bGATEWAY)
     {
 	    // UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
     }
-    #endif
 
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
@@ -1180,12 +1178,12 @@ void sendMessage(char *msg_text, int len)
         iWriteOwn=0;
 
     #ifdef ESP32
-    // Extern Server
-    if(bEXTUDP)
-        sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
+        // Extern Server
+        if(bEXTUDP)
+            sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
 
-    if(bEXTSER)
-        sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
+        if(bEXTSER)
+            sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
     #endif
 }
 
@@ -1200,7 +1198,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
     char msg_start[100] = {0};
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-    // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E# /B=005 /A=000272 /P=1005.1 /H=42.5 /T=29.4 /Q=1005.7 HW:04 MOD:03 FCS:15DC FW:17 LH:09
+    // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E#/B=005/A=000272/P=1005.1/H=42.5/T=29.4/Q=1005.7 HW:04 MOD:03 FCS:15DC FW:17 LH:09
 	double slat = 100.0;
     slat = lat*slat;
 	double slon = 100.0;
@@ -1240,7 +1238,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
 
         if(mv_to_percent(global_batt) > 0)
         {
-            sprintf(cbatt, " /B=%03d", mv_to_percent(global_batt));
+            sprintf(cbatt, "/B=%03d", mv_to_percent(global_batt));
 
             //Serial.printf("cbatt:%s mv_to_percent(global_batt):%d global_batt:%.2f\n", cbatt, mv_to_percent(global_batt), global_batt);
         }
@@ -1249,34 +1247,34 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
         {
             // auf Fuss umrechnen
             if(bFuss)
-                sprintf(calt, " /A=%06i", conv_fuss(alt));
+                sprintf(calt, "/A=%06i", conv_fuss(alt));
             else
-                sprintf(calt, " /A=%05i", alt);
+                sprintf(calt, "/A=%05i", alt);
         }
 
         if(press > 0)
         {
-            sprintf(cpress, " /P=%.1f", press);
+            sprintf(cpress, "/P=%.1f", press);
         }
 
         if(hum > 0)
         {
-            sprintf(chum, " /H=%.1f", hum);
+            sprintf(chum, "/H=%.1f", hum);
         }
 
         if(temp > 0)
         {
-            sprintf(ctemp, " /T=%.1f", temp);
+            sprintf(ctemp, "/T=%.1f", temp);
         }
 
         if(qfe > 0)
         {
-            sprintf(cqfe, " /F=%i", qfe);
+            sprintf(cqfe, "/F=%i", qfe);
         }
 
         if(qnh > 0)
         {
-            sprintf(cqnh, " /Q=%.1f", qnh);
+            sprintf(cqnh, "/Q=%.1f", qnh);
         }
 
         sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, cbatt, calt, cpress, chum, ctemp, cqfe, cqnh);
@@ -1333,13 +1331,11 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     if(iWrite >= MAX_RING)
         iWrite=0;
 
-    #ifdef ESP32
     if(bGATEWAY)
     {
 		// UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
     }
-    #endif
     
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
@@ -1355,12 +1351,12 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     }
 
     #ifdef ESP32
-    // Extern Server
-    if(bEXTUDP)
-        sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
+        // Extern Server
+        if(bEXTUDP)
+            sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
 
-    if(bEXTSER)
-        sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
+        if(bEXTSER)
+            sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
     #endif
 }
 
@@ -1405,13 +1401,11 @@ void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float 
     if(iWrite >= MAX_RING)
         iWrite=0;
     
-    #ifdef ESP32
     if(bGATEWAY)
     {
 		// UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
     }
-    #endif
 
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
@@ -1463,13 +1457,11 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     if(iWrite >= MAX_RING)
         iWrite=0;
     
-    #ifdef ESP32
     if(bGATEWAY)
     {
 		// UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
     }
-    #endif
 
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);

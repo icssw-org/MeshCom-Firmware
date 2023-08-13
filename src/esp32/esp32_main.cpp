@@ -250,6 +250,8 @@ void setFlag(void)
 {
     // something happened, set the flag
     scanFlag = true;
+
+    //Serial.println("scanFlag");
 }
 #endif
 
@@ -454,14 +456,30 @@ void esp32setup()
     // and check if the configuration was changed successfully
     if(bRadio)
     {
-        // set carrier frequency 
-        if (radio.setFrequency(RF_FREQUENCY) == RADIOLIB_ERR_INVALID_FREQUENCY) {
+        // set carrier frequency
+        float rf_freq = RF_FREQUENCY;
+        if(meshcom_settings.node_freq > 0)
+            rf_freq = meshcom_settings.node_freq;
+        if(!((rf_freq >= (430.0 + (LORA_BANDWIDTH/2)) && rf_freq <= (439.000 - (LORA_BANDWIDTH/2))) || (rf_freq >= (869.4 + (LORA_BANDWIDTH/2)) && rf_freq <= (869.65 - (LORA_BANDWIDTH/2)))))
+            rf_freq = RF_FREQUENCY;
+
+        Serial.printf("LoRa RF_FREQUENCY: %.3f MHz\n", rf_freq);
+
+        if (radio.setFrequency(rf_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
             Serial.println(F("Selected frequency is invalid for this module!"));
             while (true);
         }
 
         // set bandwidth 
-        if (radio.setBandwidth(LORA_BANDWIDTH) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
+        float rf_bw = LORA_BANDWIDTH;
+        if(meshcom_settings.node_bw > 0)
+            rf_bw = meshcom_settings.node_bw;
+        if(rf_bw != 125 && rf_bw != 250)
+            rf_bw = LORA_BANDWIDTH;
+
+        Serial.printf("LoRa RF_BANDWIDTH: %.0f kHz\n", rf_bw);
+
+        if (radio.setBandwidth(rf_bw) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
             Serial.println(F("Selected bandwidth is invalid for this module!"));
             while (true);
         }
@@ -488,7 +506,18 @@ void esp32setup()
         // set output power to 10 dBm (accepted range is -3 - 17 dBm)
         // NOTE: 20 dBm value allows high power operation, but transmission
         //       duty cycle MUST NOT exceed 1%
-        if (radio.setOutputPower(TX_OUTPUT_POWER) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+        
+        int8_t tx_power = TX_OUTPUT_POWER;
+        
+        if(meshcom_settings.node_power > 0)
+            tx_power=meshcom_settings.node_power;   //set by command
+
+        if(tx_power > TX_POWER_MAX)
+            tx_power= TX_POWER_MAX;
+
+        Serial.printf("LoRa RF_POWER: %d dBm\n", tx_power);
+
+        if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
             Serial.println(F("Selected output power is invalid for this module!"));
             while (true);
         }
@@ -547,8 +576,7 @@ void esp32setup()
 
         // setup for SX126x Radios
         #ifdef SX126X
-        // interrupt pin
-            //radio.setDio1Action(setInterruptFlag);
+            // interrupt pin
             radio.setDio1Action(setFlag);
 
             // start scanning the channel
@@ -570,8 +598,7 @@ void esp32setup()
         #endif
 
         #ifdef SX126X_V3
-        // interrupt pin
-            //radio.setDio1Action(setInterruptFlag);
+            // interrupt pin
             radio.setDio1Action(setFlag);
 
             // start scanning the channel

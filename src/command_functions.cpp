@@ -49,8 +49,9 @@ void commandAction(char *msg_text, int len, bool ble)
     // -set-owner
 
     char _owner_c[MAX_CALL_LEN];
-    double fVar=0.0;
+    double dVar=0.0;
     int iVar;
+    float fVar=0.0;
     String sVar;
 
     // copying the contents of the
@@ -186,8 +187,9 @@ void commandAction(char *msg_text, int len, bool ble)
             addBLECommandBack((char*)"--reboot now");
         }
 
+        delay(2000);
+        
         #ifdef ESP32
-            delay(2000);
             ESP.restart();
         #endif
         
@@ -209,10 +211,9 @@ void commandAction(char *msg_text, int len, bool ble)
         else
         {
             Serial.printf("MeshCom %s %-4.4s commands\n--info     show info\n--mheard   show MHeard\n--setcall  set callsign (OE0XXX-1)\n--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION);
-
-            Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude (44.12345)\n--setlon   set logitude (016.12345)\n--setalt   set altidude (9999)\n--symid  set prim/sec Sym-Table\n--symcd  set table column\n");
-
+            Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345°\n--setlon   set logitude 016.12345°\n--setalt   set altidude 9999m\n--symid  set prim/sec Sym-Table\n--symcd  set table column\n");
             Serial.printf("--debug    on/off\n--loradebug    on/off\n--display on/off\n--setinfo on\n--setinfo off\n--volt    show battery voltage\n--proz    show battery proz.\n--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps     on/off use GPS-CHIP\n--gps     reset Factory reset\n");
+            Serial.printf("--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw  999 LoRa TX-bandwith kHz\n--lora   Show LoRa setting\n");
             Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--bmx off\n--gateway on\n--gateway off\n--extudp  on\n--extudp  off\n--extser  on\n--extser  off\n--extudpip 99.99.99.99\n");
         }
 
@@ -826,17 +827,17 @@ void commandAction(char *msg_text, int len, bool ble)
     if(commandCheck(msg_text+2, (char*)"setlat ") == 0)
     {
         sprintf(_owner_c, "%s", msg_text+9);
-        sscanf(_owner_c, "%lf", &fVar);
+        sscanf(_owner_c, "%lf", &dVar);
 
-        //printf("_owner_c:%s fVar:%f\n", _owner_c, fVar);
+        //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
         meshcom_settings.node_lat_c='N';
-        meshcom_settings.node_lat=fVar;
+        meshcom_settings.node_lat=dVar;
 
         if(fVar < 0)
         {
             meshcom_settings.node_lat_c='S';
-            meshcom_settings.node_lat=fabs(fVar);
+            meshcom_settings.node_lat=fabs(dVar);
         }
 
         if(ble)
@@ -852,17 +853,17 @@ void commandAction(char *msg_text, int len, bool ble)
     if(commandCheck(msg_text+2, (char*)"setlon ") == 0)
     {
         sprintf(_owner_c, "%s", msg_text+9);
-        sscanf(_owner_c, "%lf", &fVar);
+        sscanf(_owner_c, "%lf", &dVar);
 
-        meshcom_settings.node_lon=fVar;
+        meshcom_settings.node_lon=dVar;
 
         meshcom_settings.node_lon_c='E';
-        meshcom_settings.node_lon=fVar;
+        meshcom_settings.node_lon=dVar;
 
         if(fVar < 0)
         {
             meshcom_settings.node_lon_c='W';
-            meshcom_settings.node_lon=fabs(fVar);
+            meshcom_settings.node_lon=fabs(dVar);
         }
 
         if(ble)
@@ -895,6 +896,137 @@ void commandAction(char *msg_text, int len, bool ble)
         save_settings();
 
         bPos=true;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"txpower ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+10);
+        sscanf(_owner_c, "%d", &iVar);
+
+        if(iVar < 0 || iVar > TX_POWER_MAX)
+        {
+            Serial.printf("txpower %i dBm not between 0 and max %i dBm\n", iVar, TX_POWER_MAX);
+        }
+        else
+        {
+            meshcom_settings.node_power=iVar;
+
+            Serial.printf("set txpower to %i dBm\n", meshcom_settings.node_power);
+
+            if(ble)
+            {
+                addBLECommandBack((char*)"--set");
+            }
+
+            save_settings();
+
+            delay(2000);
+
+            #ifdef ESP32
+                ESP.restart();
+            #endif
+            
+            #if defined NRF52_SERIES
+                NVIC_SystemReset();     // resets the device
+            #endif
+        }
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"txfreq ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+9);
+        sscanf(_owner_c, "%f", &fVar);
+
+        if(!((fVar >= (430.0 + (LORA_BANDWIDTH/2)) && fVar <= (439.000 - (LORA_BANDWIDTH/2))) || (fVar >= (869.4 + (LORA_BANDWIDTH/2)) && fVar <= (869.65 - (LORA_BANDWIDTH/2)))))
+        {
+            Serial.printf("txfrequency %.3f MHz not within Band\n", fVar);
+        }
+        else
+        {
+            meshcom_settings.node_freq=fVar;
+
+            Serial.printf("set txfrequency to %.3f MHz\n", meshcom_settings.node_freq);
+
+            if(ble)
+            {
+                addBLECommandBack((char*)"--set");
+            }
+
+            save_settings();
+
+            delay(2000);
+
+            #ifdef ESP32
+                ESP.restart();
+            #endif
+            
+            #if defined NRF52_SERIES
+                NVIC_SystemReset();     // resets the device
+            #endif
+        }
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"txbw ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+7);
+        sscanf(_owner_c, "%f", &fVar);
+
+        if(fVar != 125 && fVar != 250)
+        {
+            Serial.printf("txbw %.0f MHz not 125 or 250 kHz\n", fVar);
+        }
+        else
+        {
+            meshcom_settings.node_freq=fVar;
+
+            Serial.printf("set txbw to %f kHz\n", meshcom_settings.node_bw);
+
+            if(ble)
+            {
+                addBLECommandBack((char*)"--set");
+            }
+
+            save_settings();
+
+            delay(2000);
+
+            #ifdef ESP32
+                ESP.restart();
+            #endif
+            
+            #if defined NRF52_SERIES
+                NVIC_SystemReset();     // resets the device
+            #endif
+        }
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"lora") == 0)
+    {
+        float freq = meshcom_settings.node_freq;
+        if(freq <= 0)
+            freq = RF_FREQUENCY;
+
+        int power = meshcom_settings.node_power;
+        if(power <= 0)
+            power = TX_OUTPUT_POWER;
+
+        float bw = meshcom_settings.node_bw;
+        if(bw <= 0)
+            bw = LORA_BANDWIDTH;
+
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...LoRa RF-Frequ: <%.3f MHz>\n...LoRa RF-Power: <%i dBm>\n...LoRa RF-bw:    <%.0f>\n", SOURCE_TYPE, SOURCE_VERSION,
+                freq, power, bw);
+
+        if(ble)
+        {
+            addBLECommandBack(print_buff);
+        }
+        else
+        {
+            printf("\n%s", print_buff+2);
+        }
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"mheard") == 0 || commandCheck(msg_text+2, (char*)"mh") == 0)

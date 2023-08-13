@@ -54,6 +54,10 @@ struct s_meshcom_settings
 	int node_msgid = 0;
 	int node_ackid = 0;
 
+	int node_power = 0;
+	float node_freq = 0;
+	float node_bw = 0;
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;

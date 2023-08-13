@@ -7,7 +7,7 @@
 #include <Arduino.h>
 
 #define SOURCE_TYPE "MC"
-#define SOURCE_VERSION "4.24"
+#define SOURCE_VERSION "4.25"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -40,6 +40,7 @@
     #define TECHO_SPREADING_FACTOR 11 // [SF7..SF12]
     #define TECHO_CODINGRATE 6        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
     #define TECHO_PREAMBLE_LENGTH 8  // Same for Tx and Rx
+    #define TECHO_POWER_MAX 22  // max 22dBm
     
     //TODO
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
@@ -52,6 +53,7 @@
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define SX127X
+    #define TX_POWER_MAX 17  // max 17 dBm
 #endif
 
 #ifdef BOARD_SX1268
@@ -60,6 +62,7 @@
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define SX126X
+    #define TX_POWER_MAX 21  // max 21dBm
 #endif
 
 #ifdef BOARD_TLORA_OLV216
@@ -68,6 +71,7 @@
     #define SX127X
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define TX_POWER_MAX 17  // max 17dBm
 #endif
 
 #ifdef 	BOARD_HELTEC
@@ -76,6 +80,7 @@
     #define SX127X
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define TX_POWER_MAX 19  // max 19dBm
 #endif
 
 #ifdef 	BOARD_HELTEC_V3
@@ -85,6 +90,7 @@
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define TX_POWER_MAX 21  // max 21dBm
 #endif
 
 #ifdef 	BOARD_E22
@@ -93,6 +99,7 @@
     #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define TX_POWER_MAX 21  // max 21dBm
 #endif
 
 // Common LoRa Parameters
@@ -302,7 +309,6 @@ static const uint8_t SCK   = 5;
 #define SX126X_IRQ LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RST LORA_RESET
-#define SX126X_E22
 
 #define SDA_PIN 17
 #define SCL_PIN 18

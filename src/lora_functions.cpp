@@ -110,6 +110,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     {
         memcpy(RcvBuffer, payload, size);
 
+        int icheck = checkOwnTx(RcvBuffer+1);
+
         struct aprsMessage aprsmsg;
         
         // print which message type we got
@@ -117,7 +119,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         size = aprsmsg.msg_len;
 
-        int icheck = checkOwnTx(RcvBuffer+1);
 
         if(msg_type_b_lora == 0x00)
         {
@@ -165,18 +166,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40)
             {
                 #ifdef ESP32
+                    // Extern Server
+                    if(bEXTUDP)
+                        sendExtern(true, (char*)"lora", RcvBuffer, size);
 
-                // Extern Server
-                if(bEXTUDP)
-                    sendExtern(true, (char*)"lora", RcvBuffer, size);
-
-                if(bEXTSER)
-                    sendExtern(false, (char*)"lora", RcvBuffer, size);
+                    if(bEXTSER)
+                        sendExtern(false, (char*)"lora", RcvBuffer, size);
+                #endif
 
                 if(bGATEWAY)
                     addNodeData(RcvBuffer, size, rssi, snr);
-
-                #endif
 
                 // print aprs message
                 if(bDisplayInfo)
