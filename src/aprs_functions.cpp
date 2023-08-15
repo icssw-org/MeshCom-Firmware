@@ -201,12 +201,16 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         if(aprsmsg.msg_fcs != FCS_SUMME)
         {
-            memcpy(temp,RcvBuffer,10);
-            Serial.printf("APRS decode - Packet (%i) discarded, wrong FCS <%08X>:<%08X> wrong! <%02X %02X%02X%02X%02X %02X %-60.60s>\n", rsize, aprsmsg.msg_fcs, FCS_SUMME, temp[0], temp[4], temp[3], temp[2], temp[1], temp[5], RcvBuffer+6);
+            // Check ob es nicht das eigene packet ist
+            if(aprsmsg.msg_source_last != meshcom_settings.node_call)
+            {
+                memcpy(temp,RcvBuffer,10);
+                Serial.printf("APRS decode - Packet (%i) discarded, wrong FCS <%08X>:<%08X> wrong! <%02X %02X%02X%02X%02X %02X %-60.60s>\n", rsize, aprsmsg.msg_fcs, FCS_SUMME, temp[0], temp[4], temp[3], temp[2], temp[1], temp[5], RcvBuffer+6);
 
-            if(bDEBUG && rsize < 255)
-                printAsciiBuffer(RcvBuffer, rsize);
-
+                if(bDEBUG && rsize < 255)
+                    printAsciiBuffer(RcvBuffer, rsize);
+            }
+            
             return 0x00;
         }
 

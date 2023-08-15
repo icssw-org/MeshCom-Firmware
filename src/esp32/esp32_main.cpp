@@ -37,9 +37,28 @@
 
 #include <esp_adc_cal.h>
 
-#if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
-#include <axp20x.h>
-extern AXP20X_Class axp;
+#if defined(XPOWERS_CHIP_AXP192)
+// Defined using AXP192
+#define XPOWERS_CHIP_AXP192
+
+//#include <axp20x.h>
+//extern AXP20X_Class axp;
+#include "XPowersLib.h"
+
+extern XPowersPMU PMU;
+
+#endif
+
+#if defined(XPOWERS_CHIP_AXP2101)
+// Defined using AXP192
+#define XPOWERS_CHIP_AXP12101
+
+//#include <axp20x.h>
+//extern AXP20X_Class axp;
+#include "XPowersLib.h"
+
+extern XPowersPMU PMU;
+
 #endif
 
 #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
@@ -323,6 +342,7 @@ void esp32setup()
     bBMEON =  meshcom_settings.node_sset & 0x0100;
     bLORADEBUG = meshcom_settings.node_sset & 0x0200;
     bSHORTPATH = meshcom_settings.node_sset & 0x0400;
+    bBLElong = meshcom_settings.node_sset & 0x0800;
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
     bEXTSER =  meshcom_settings.node_sset & 0x4000;
@@ -350,7 +370,7 @@ void esp32setup()
         sprintf(meshcom_settings.node_pwd, (char*)"none");
     }
 
-    #ifdef BOARD_TBEAM
+    #ifdef MODUL_FW_TBEAM
         if(meshcom_settings.node_sset == 0x0000)
         {
             bButtonCheck = true;
@@ -365,15 +385,33 @@ void esp32setup()
         SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     #endif
 
+    bool bSETGPS_POWER=false;
+
+    #if defined(ENABLE_GPS)
+        bSETGPS_POWER=true;
+    #endif
+
+    #if defined(MODUL_FW_TBEAM)
+        setupGPS(bSETGPS_POWER);
+    #else
+        Wire.begin(I2C_SDA, I2C_SCL);
+    #endif
+
+    #if defined(ENABLE_BMX280)
+        setupBMX280();
+    #endif
+/*
     #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)  || defined(BOARD_E22)
         Wire.setPins(I2C_SDA, I2C_SCL);
     #endif
-
+*/
     initButtonPin();
     
     Serial.begin(MONITOR_SPEED);
     while(!Serial);
 
+    Serial.println("");
+    Serial.println("");
     Serial.println("============");
     Serial.println("CLIENT SETUP");
     Serial.println("============");
@@ -391,16 +429,6 @@ void esp32setup()
     DisplayTimeWait=0;
     //
     ////////////////////////////////////////////////////////////////////
-
-    #if defined(ENABLE_GPS)
-        setupGPS();
-    #else
-        Wire.begin();
-    #endif
-
-    #if defined(ENABLE_BMX280)
-        setupBMX280();
-    #endif
 
 #ifdef BOARD_E22
     // if RESET Pin is connected
@@ -691,7 +719,12 @@ void esp32setup()
     pAdvertising->setName(strBLEName);  //BLE Local Name
     pAdvertising->setManufacturerData(strBLEManufData);
     pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone
+
+    if(bBLElong)
+        pAdvertising->setScanResponse(true);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
+    else
+        pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
+
     pAdvertising->start(0);
     
     Serial.println("Waiting a client connection to notify...");
@@ -1135,9 +1168,10 @@ void esp32loop()
     {
         if (tx_is_active == false && is_receiving == false)
         {
-            #if defined(BOARD_TBEAM)
+            #if defined(MODUL_FW_TBEAM)
             {
-                global_batt = axp.getBattVoltage();
+                //global_batt = axp.getBattVoltage();
+                global_batt = PMU.getBattVoltage();
             }
             #else
                 global_batt = read_batt();

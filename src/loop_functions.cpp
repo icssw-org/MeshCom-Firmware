@@ -37,6 +37,8 @@ bool bEXTSER = false;
 bool bSHORTPATH = false;
 bool bGPSDEBUG = false;
 
+bool bBLElong = false;
+
 int iDisplayType = 0;
 int DisplayTimeWait = 0;
 

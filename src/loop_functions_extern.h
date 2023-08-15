@@ -30,6 +30,8 @@ extern bool bBMEON;
 extern bool bSHORTPATH;
 extern bool bGPSDEBUG;
 
+extern bool bBLElong;
+
 extern bool bGATEWAY;
 extern bool bEXTUDP;
 extern bool bEXTSER;

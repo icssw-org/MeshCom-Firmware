@@ -1036,3 +1036,8 @@ void checkSerialCommand(void)
         }
     }
 }
+
+void addNodeData(uint8_t msg_buffer[300], uint16_t size, int16_t rssi, int8_t snr)
+{
+    Serial.println("ERROR - Gateway not supported RAK Modules");
+}

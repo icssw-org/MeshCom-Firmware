@@ -413,6 +413,46 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"bleshort") == 0)
+    {
+        bGPSON=true;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--bleshort");
+        }
+
+        bBLElong=false;
+        
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x77FF;
+
+        save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"blelong") == 0)
+    {
+        bGPSON=true;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--blelong");
+        }
+
+        bBLElong=true;
+        
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0800;
+
+        save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"bmp on") == 0)
     {
         bBMPON=true;
@@ -1038,9 +1078,9 @@ void commandAction(char *msg_text, int len, bool ble)
 
     if(bInfo)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GWAY %s\n...DEBUG  %s\n...LORADEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GWAY %s\n...DEBUG  %s\n...LORADEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...BLE : %s\n", SOURCE_TYPE, SOURCE_VERSION,
                 meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, mv_to_percent(global_batt), meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
-                (bGATEWAY?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
+                (bGATEWAY?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, (bBLElong?"long":"short"));
 
         if(ble)
         {
