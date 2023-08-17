@@ -211,10 +211,16 @@ void commandAction(char *msg_text, int len, bool ble)
         else
         {
             Serial.printf("MeshCom %s %-4.4s commands\n--info     show info\n--mheard   show MHeard\n--setcall  set callsign (OE0XXX-1)\n--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION);
-            Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345°\n--setlon   set logitude 016.12345°\n--setalt   set altidude 9999m\n--symid  set prim/sec Sym-Table\n--symcd  set table column\n");
-            Serial.printf("--debug    on/off\n--loradebug    on/off\n--display on/off\n--setinfo on\n--setinfo off\n--volt    show battery voltage\n--proz    show battery proz.\n--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps     on/off use GPS-CHIP\n--gps     reset Factory reset\n");
-            Serial.printf("--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw  999 LoRa TX-bandwith kHz\n--lora   Show LoRa setting\n");
-            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--bmx off\n--gateway on\n--gateway off\n--extudp  on\n--extudp  off\n--extser  on\n--extser  off\n--extudpip 99.99.99.99\n");
+            delay(150);
+            Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
+            delay(150);
+            Serial.printf("--symid  set prim/sec Sym-Table\n--symcd  set table column\n");
+            delay(150);
+            Serial.printf("--debug    on/off\n--loradebug on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n");
+            delay(150);
+            Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
+            delay(150);
+            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--bmx BME/BMP off\n--gateway on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
         }
 
         return;
@@ -1116,6 +1122,33 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"lora") == 0)
     {
+        #ifdef BOARD_RAK4630
+        float freq = meshcom_settings.node_freq;
+        if(freq <= 0)
+            freq = RF_FREQUENCY;
+        
+        freq = freq / 1000000.;
+
+        int power = meshcom_settings.node_power;
+        if(power <= 0)
+            power = TX_OUTPUT_POWER;
+
+        float bw = meshcom_settings.node_bw;
+        if(bw == 0)
+            bw = LORA_BANDWIDTH;
+
+        if(bw == 0)
+            bw = 125.0;
+        else
+        if(bw == 1)
+            bw = 250.0;
+        else
+        if(bw == 2)
+            bw = 500.0;
+
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...LoRa RF-Frequ: <%.3f MHz>\n...LoRa RF-Power: <%i dBm>\n...LoRa RF-BW:    <%.0f>\n", SOURCE_TYPE, SOURCE_VERSION,
+                freq, power, bw);
+        #else
         float freq = meshcom_settings.node_freq;
         if(freq <= 0)
             freq = RF_FREQUENCY;
@@ -1138,6 +1171,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
         sprintf(print_buff, "--MeshCom %s %-4.4s\n...LoRa RF-Frequ: <%.3f MHz>\n...LoRa RF-Power: <%i dBm>\n...LoRa RF-BW:    <%.0f>\n...LoRa RF-SF:    <%i>\n...LoRa RF-CR:    <%i>\n", SOURCE_TYPE, SOURCE_VERSION,
                 freq, power, bw, sf, cr);
+        #endif
 
         if(ble)
         {
