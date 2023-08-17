@@ -19,7 +19,8 @@
   #include <nrf52_techo/nrf52_main.h>
 #endif
 
-void setup() {
+void setup()
+{
 
 #if defined(BOARD_T_ECHO)
 #else

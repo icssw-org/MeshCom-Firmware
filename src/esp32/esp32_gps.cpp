@@ -147,23 +147,14 @@ void setupGPS(bool bGPSON)
     PMU.enableDC3();    // ESP32
     PMU.enableLDO2();   // LORA RADIO 3.3V
     
-    if(bGPSON)
-        PMU.enableLDO3();   // GPS 3.3V
-    else
-        PMU.disableLDO3();   // GPS 3.3V
+    PMU.enableLDO3();   // GPS 3.3V
     
     PMU.enableExternalPin();
     
     PMU.enableLDOio();
 
-    // set battery temperature sensing pin off to save power
-    PMU.disableTSPinMeasure();
-
-    // Enable internal ADC detection
     PMU.enableBattDetection();
-    PMU.enableVbusVoltageMeasure();
     PMU.enableBattVoltageMeasure();
-    PMU.enableSystemVoltageMeasure();
 
     //disable all axp chip interrupt
     PMU.disableIRQ(XPOWERS_AXP192_ALL_IRQ);
@@ -200,7 +191,6 @@ void setupGPS(bool bGPSON)
 
     vol = PMU.getSysPowerDownVoltage();
     Serial.printf("->  getSysPowerDownVoltage:%u\n", vol);
-
 
     // DC1 IMAX=2A
     // 1500~3400mV,100mV/step,20steps
@@ -277,10 +267,7 @@ void setupGPS(bool bGPSON)
     PMU.enableALDO1();
     PMU.enableALDO2();  // LORA
 
-    if(bGPSON)
-        PMU.enableALDO3();  // GPS
-    else
-        PMU.disableALDO3();  // NO GPS
+    PMU.enableALDO3();  // GPS
 
     PMU.enableALDO4();
     PMU.enableBLDO1();

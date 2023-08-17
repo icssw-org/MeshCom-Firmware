@@ -113,6 +113,8 @@ void init_flash(void)
 		meshcom_settings.node_power = old_struct.node_power;
 		meshcom_settings.node_freq = old_struct.node_freq;
 		meshcom_settings.node_bw = old_struct.node_bw;
+		meshcom_settings.node_sf = old_struct.node_sf;
+		meshcom_settings.node_cr = old_struct.node_cr;
 
 		save_settings();
 		// delay(1000);

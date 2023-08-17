@@ -104,6 +104,8 @@ void save_settings(void)
     preferences.putInt("node_power", meshcom_settings.node_power);
     preferences.putInt("node_freq", meshcom_settings.node_freq);
     preferences.putFloat("node_bw", meshcom_settings.node_bw);
+    preferences.putInt("node_sf", meshcom_settings.node_sf);
+    preferences.putInt("node_cr", meshcom_settings.node_cr);
 
     preferences.end();
 

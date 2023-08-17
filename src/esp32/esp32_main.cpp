@@ -187,6 +187,8 @@ SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // cs - irq - reset - interrupt gpio
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
+    //SX1268 radio = new Module(SX1268_CS, SX1268_IRQ, SX1268_RST, SX1268_GPIO);
+    //WROOM
     SX1268 radio = new Module(SX1268_CS, SX1268_IRQ, SX1268_RST, SX1268_GPIO);
 
 #endif
@@ -512,14 +514,31 @@ void esp32setup()
             while (true);
         }
 
+
         // set spreading factor 
-        if (radio.setSpreadingFactor(LORA_SF) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR) {
+        int rf_sf = LORA_SF;
+        if(meshcom_settings.node_sf > 0)
+            rf_sf = meshcom_settings.node_sf;
+        if(rf_sf < 6 ||  rf_sf > 12)
+            rf_sf = LORA_SF;
+
+        Serial.printf("LoRa RF_SF: %i\n", rf_sf);
+
+        if (radio.setSpreadingFactor(rf_sf) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR) {
             Serial.println(F("Selected spreading factor is invalid for this module!"));
             while (true);
         }
 
         // set coding rate 
-        if (radio.setCodingRate(LORA_CR) == RADIOLIB_ERR_INVALID_CODING_RATE) {
+        int rf_cr = LORA_CR;
+        if(meshcom_settings.node_cr > 0)
+            rf_cr = meshcom_settings.node_cr;
+        if(rf_cr < 5 ||  rf_cr > 8)
+            rf_cr = LORA_CR;
+
+        Serial.printf("LoRa RF_CR: 4/%i\n", rf_cr);
+
+        if (radio.setCodingRate(rf_cr) == RADIOLIB_ERR_INVALID_CODING_RATE) {
             Serial.println(F("Selected coding rate is invalid for this module!"));
             while (true);
         }

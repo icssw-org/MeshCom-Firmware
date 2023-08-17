@@ -960,15 +960,9 @@ void commandAction(char *msg_text, int len, bool ble)
 
             save_settings();
 
-            delay(2000);
+            Serial.println("Auto. Reboot after 15 sec.");
 
-            #ifdef ESP32
-                ESP.restart();
-            #endif
-            
-            #if defined NRF52_SERIES
-                NVIC_SystemReset();     // resets the device
-            #endif
+            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
     }
     else
@@ -994,15 +988,9 @@ void commandAction(char *msg_text, int len, bool ble)
 
             save_settings();
 
-            delay(2000);
+            Serial.println("Auto. Reboot after 15 sec.");
 
-            #ifdef ESP32
-                ESP.restart();
-            #endif
-            
-            #if defined NRF52_SERIES
-                NVIC_SystemReset();     // resets the device
-            #endif
+            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
     }
     else
@@ -1028,16 +1016,102 @@ void commandAction(char *msg_text, int len, bool ble)
 
             save_settings();
 
-            delay(2000);
+            Serial.println("Auto. Reboot after 15 sec.");
 
-            #ifdef ESP32
-                ESP.restart();
-            #endif
-            
-            #if defined NRF52_SERIES
-                NVIC_SystemReset();     // resets the device
-            #endif
+            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"txsf ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+7);
+        sscanf(_owner_c, "%d", &iVar);
+
+        if(iVar < 6 || iVar > 12)
+        {
+            Serial.printf("txsf %i only 6 to 12\n", iVar);
+        }
+        else
+        {
+            meshcom_settings.node_sf=iVar;
+
+            Serial.printf("set txsf to %i\n", meshcom_settings.node_sf);
+
+            if(ble)
+            {
+                addBLECommandBack((char*)"--set");
+            }
+
+            save_settings();
+
+            Serial.println("Auto. Reboot after 15 sec.");
+
+            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+        }
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"txcr ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+7);
+        sscanf(_owner_c, "%d", &iVar);
+
+        if(iVar < 4 || iVar > 6)
+        {
+            Serial.printf("txcr %i only 4 to 6\n", iVar);
+        }
+        else
+        {
+            meshcom_settings.node_cr=iVar;
+
+            Serial.printf("set txcr to %i\n", meshcom_settings.node_cr);
+
+            if(ble)
+            {
+                addBLECommandBack((char*)"--set");
+            }
+
+            save_settings();
+
+            Serial.println("Auto. Reboot after 15 sec.");
+
+            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+        }
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"tx_medium") == 0)
+    {
+        meshcom_settings.node_bw=250.0;
+        meshcom_settings.node_sf=11;
+        meshcom_settings.node_cr=6;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--set");
+        }
+
+        save_settings();
+
+        Serial.println("Auto. Reboot after 15 sec.");
+
+        rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"tx_slow") == 0)
+    {
+        meshcom_settings.node_bw=125.0;
+        meshcom_settings.node_sf=12;
+        meshcom_settings.node_cr=8;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--set");
+        }
+
+        save_settings();
+
+        Serial.println("Auto. Reboot after 15 sec.");
+
+        rebootAuto = millis() + 15 * 1000; // 15 Sekunden
     }
     else
     if(commandCheck(msg_text+2, (char*)"lora") == 0)
@@ -1054,8 +1128,16 @@ void commandAction(char *msg_text, int len, bool ble)
         if(bw <= 0)
             bw = LORA_BANDWIDTH;
 
-        sprintf(print_buff, "--MeshCom %s %-4.4s\n...LoRa RF-Frequ: <%.3f MHz>\n...LoRa RF-Power: <%i dBm>\n...LoRa RF-bw:    <%.0f>\n", SOURCE_TYPE, SOURCE_VERSION,
-                freq, power, bw);
+        int sf = meshcom_settings.node_sf;
+        if(sf <= 0)
+            sf = LORA_SF;
+
+        int cr = meshcom_settings.node_cr;
+        if(cr <= 0)
+            cr = LORA_CR;
+
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...LoRa RF-Frequ: <%.3f MHz>\n...LoRa RF-Power: <%i dBm>\n...LoRa RF-BW:    <%.0f>\n...LoRa RF-SF:    <%i>\n...LoRa RF-CR:    <%i>\n", SOURCE_TYPE, SOURCE_VERSION,
+                freq, power, bw, sf, cr);
 
         if(ble)
         {

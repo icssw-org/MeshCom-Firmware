@@ -227,6 +227,8 @@ struct s_meshcom_settings
 	int node_power = 0;
 	float node_freq = 0;
 	float node_bw = 0;
+	int node_sf = 0;
+	int node_cr = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;
@@ -311,6 +313,8 @@ struct s_meshcomcompat_settings
 	int node_power = 0;
 	float node_freq = 0;
 	float node_bw = 0;
+	int node_sf = 0;
+	int node_cr = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;
