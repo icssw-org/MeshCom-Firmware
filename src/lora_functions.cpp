@@ -6,6 +6,13 @@
     extern int transmissionState;
 #endif
 
+#ifdef BOARD_E220
+    #include <RadioLib.h>
+    // RadioModule derived from SX1262 
+    extern LLCC68 radio;
+    extern int transmissionState;
+#endif
+
 #ifdef SX126X
     #include <RadioLib.h>
     extern SX1268 radio;

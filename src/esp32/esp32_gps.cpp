@@ -6,9 +6,7 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <clock.h>
-
-#define GPS_BAUDRATE 9600
-#define GPS_SERIAL_NUM 2
+#include <TinyGPSplus.h>
 
 #if defined(MODUL_FW_TBEAM)
     #define GPS_RX_PIN 34
@@ -35,38 +33,38 @@
 
 
 #include <HardwareSerial.h>
-#include <SparkFun_Ublox_Arduino_Library.h>
+
+#define GPS_BAUDRATE 9600
+#define GPS_SERIAL_NUM 1
 
 HardwareSerial GPS(GPS_SERIAL_NUM);
-
-#include "TinyGPSplus.h"
 
 #if defined(XPOWERS_CHIP_AXP192)
 // Defined using AXP192
 #define XPOWERS_CHIP_AXP192
 
-//#include <axp20x.h>
-//extern AXP20X_Class axp;
-#include "XPowersLib.h"
+#include "XPowersAXP192.tpp"
+#include "XPowersLibInterface.hpp"
 
-XPowersPMU PMU;
+XPowersLibInterface *PMU = NULL;
 
 #endif
 
 #if defined(XPOWERS_CHIP_AXP2101)
 // Defined using AXP192
-#define XPOWERS_CHIP_AXP12101
+#define XPOWERS_CHIP_AXP2101
 
-//#include <axp20x.h>
-//extern AXP20X_Class axp;
-#include "XPowersLib.h"
+#include "XPowersAXP2101.tpp"
+#include "XPowersLibInterface.hpp"
 
-XPowersPMU PMU;
+XPowersLibInterface *PMU = NULL;
 
 #endif
 
 // TinyGPS
 TinyGPSPlus tinyGPSPlus;
+
+#include "SparkFun_Ublox_Arduino_Library.h"
 
 SFE_UBLOX_GPS myGPS;
 
@@ -95,196 +93,155 @@ void setupGPS(bool bGPSON)
     axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
     Serial.println("All AXP192 started");
     */
+    
+    Serial.println("XPOWERS_CHIP_AXP192");
 
-    bool result = PMU.begin(Wire, AXP192_SLAVE_ADDRESS, I2C_SDA, I2C_SCL);
+    TwoWire *w = NULL;
 
-    if (result == false)
+    // Use macro to distinguish which wire is used by PMU
+    #ifdef PMU_USE_WIRE1
+        w = &Wire1;
+    #else
+        w = &Wire;
+    #endif
+
+    PMU = new XPowersAXP192(*w);
+
+    if (!PMU->init())
     {
-        Serial.println("PMU is not online...\nPLEASE check Firmware");
+        Serial.println("Failed to find AXP192 power management");
+        delete PMU;
+        PMU = NULL;
+    }
+    else
+    {
+        Serial.println("AXP192 PMU init succeeded, using AXP192 PMU");
     }
 
-    Serial.printf("AXP-Chip ID:0x%x\n", PMU.getChipID());
+/*
+| CHIP       | AXP173            | AXP192            | AXP202            | AXP2101                                |
+| ---------- | ----------------- | ----------------- | ----------------- | -------------------------------------- |
+| DC1        | 0.7V-3.5V /1.2A   | 0.7V-3.5V  /1.2A  | X                 | 1.5-3.4V                        /2A    |
+| DC2        | 0.7-2.275V/0.6A   | 0.7-2.275V /1.6A  | 0.7-2.275V /1.6A  | 0.5-1.2V,1.22-1.54V             /2A    |
+| DC3        | X                 | 0.7-3.5V   /0.7A  | 0.7-3.5V   /1.2A  | 0.5-1.2V,1.22-1.54V,1.6-3.4V    /2A    |
+| DC4        | X                 | x                 | x                 | 0.5-1.2V,1.22-1.84V             /1.5A   |
+| DC5        | X                 | x                 | x                 | 1.2V,1.4-3.7V                   /1A    |
+| LDO1(VRTC) | 3.3V       /30mA  | 3.3V       /30mA  | 3.3V       /30mA  | 1.8V                            /30mA  |
+| LDO2       | 1.8V-3.3V  /200mA | 1.8V-3.3V  /200mA | 1.8V-3.3V  /200mA | x                                      |
+| LDO3       | 1.8V-3.3V  /200mA | 1.8-3.3V   /200mA | 0.7-3.5V   /200mA | x                                      |
+| LDO4       | 0.7-3.5V   /500mA | X                 | 1.8V-3.3V  /200mA | x                                      |
+| LDO5/IO0   | X                 | 1.8-3.3V   /50mA  | 1.8-3.3V   /50mA  | x                                      |
+| ALDO1      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| ALDO2      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| ALDO3      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| ALDO4      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| BLDO1      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| BLDO2      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| DLDO1      | x                 | x                 | x                 | 0.5-3.3V/ 0.5-1.4V              /300mA |
+| DLDO1      | x                 | x                 | x                 | 0.5-3.3V/ 0.5-1.4V              /300mA |
+| CPUSLDO    | x                 | x                 | x                 | 0.5-1.4V                        /30mA  |
+|            |                   |                   |                   |                                        |
+*/
+    if(PMU != NULL)
+    {
+        Serial.printf("AXP-Chip ID:0x%x\n", PMU->getChipID());
 
-    // Set the minimum system operating voltage inside the PMU,
-    // below this value will shut down the PMU
-    // Range: 2600~3300mV
-    PMU.setSysPowerDownVoltage(2700);
+        // lora radio power channel
+        PMU->setPowerChannelVoltage(XPOWERS_LDO2, 3300);
+        PMU->enablePowerOutput(XPOWERS_LDO2);
 
-    // Set the minimum common working voltage of the PMU VBUS input,
-    // below this value will turn off the PMU
-    PMU.setVbusVoltageLimit(XPOWERS_AXP192_VBUS_VOL_LIM_4V5);
+        // oled module power channel,
+        // disable it will cause abnormal communication between boot and AXP power supply,
+        // do not turn it off
+        PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
+        // enable oled power
+        PMU->enablePowerOutput(XPOWERS_DCDC1);
 
-    // Turn off USB input current limit
-    PMU.setVbusCurrentLimit(XPOWERS_AXP192_VBUS_CUR_LIM_OFF);
+        // gnss module power channel -  now turned on in setGpsPower
+        PMU->setPowerChannelVoltage(XPOWERS_LDO3, 3300);
+        // PMU->enablePowerOutput(XPOWERS_LDO3);
 
-    // DC1 700~3500mV, IMAX=1.2A
-    PMU.setDC1Voltage(3300);    // OLED
-    Serial.printf("DC1  :%s   Voltage:%u mV \n",  PMU.isEnableDC1()  ? "+" : "-", PMU.getDC1Voltage());
+        // protected oled power source
+        PMU->setProtectedChannel(XPOWERS_DCDC1);
+        // protected esp32 power source
+        PMU->setProtectedChannel(XPOWERS_DCDC3);
 
-    // DC2 700~2750 mV, IMAX=1.6A;
-    //PMU.setDC2Voltage(700);
-    //Serial.printf("DC2  :%s   Voltage:%u mV \n",  PMU.isEnableDC2()  ? "+" : "-", PMU.getDC2Voltage());
+        // disable not use channel
+        PMU->disablePowerOutput(XPOWERS_DCDC2);
 
-    // DC3 700~3500 mV,IMAX=0.7A;
-    PMU.setDC3Voltage(3300);    // ESP32
-    Serial.printf("DC3  :%s   Voltage:%u mV \n",  PMU.isEnableDC3()  ? "+" : "-", PMU.getDC3Voltage());
+        // disable all axp chip interrupt
+        PMU->disableIRQ(XPOWERS_AXP192_ALL_IRQ);
 
+        // Set constant current charging current
+        PMU->setChargerConstantCurr(XPOWERS_AXP192_CHG_CUR_450MA);
 
-    //LDO2 1800~3300 mV, 100mV/step, IMAX=200mA
-    PMU.setLDO2Voltage(3300);   // LORA
-
-    //LDO3 1800~3300 mV, 100mV/step, IMAX=200mA
-    PMU.setLDO3Voltage(3300);   // GPS
-
-    //LDOio 1800~3300 mV, 100mV/step, IMAX=50mA
-    PMU.setLDOioVoltage(3300);
-
-
-    // Enable power output channel
-    PMU.disableDC2();   // not used
-
-    PMU.enableDC1();    // OLED
-    PMU.enableDC3();    // ESP32
-    PMU.enableLDO2();   // LORA RADIO 3.3V
+        // Set up the charging voltage
+        PMU->setChargeTargetVoltage(XPOWERS_AXP192_CHG_VOL_4V2);
+        
+        Serial.println("All AXP192 started");
+    }
     
-    PMU.enableLDO3();   // GPS 3.3V
-    
-    PMU.enableExternalPin();
-    
-    PMU.enableLDOio();
-
-    PMU.enableBattDetection();
-    PMU.enableBattVoltageMeasure();
-
-    //disable all axp chip interrupt
-    PMU.disableIRQ(XPOWERS_AXP192_ALL_IRQ);
-
-    Serial.println("All AXP192 started");
     #endif
 
     #if defined(XPOWERS_CHIP_AXP2101)
 
-    bool result = PMU.begin(Wire, AXP2101_SLAVE_ADDRESS, I2C_SDA, I2C_SCL);
+    TwoWire *w = NULL;
 
-    if (result == false)
+    // Use macro to distinguish which wire is used by PMU
+    #ifdef PMU_USE_WIRE1
+        w = &Wire1;
+    #else
+        w = &Wire;
+    #endif
+
+    PMU = new XPowersAXP2101(*w);
+
+    if (!PMU->init())
     {
-        Serial.println("PMU is not online...\nPLEASE check Firmware");
+        Serial.println("Failed to find AXP2101 power management");
+        delete PMU;
+        PMU = NULL;
+    }
+    else
+    {
+        Serial.println("AXP2101 PMU init succeeded, using AXP2101 PMU");
     }
 
-    Serial.printf("AXP-Chip ID:0x%x\n", PMU.getChipID());
+    if(PMU != NULL)
+    {
+        Serial.printf("AXP-Chip ID:0x%x\n", PMU->getChipID());
 
-    // Set the minimum common working voltage of the PMU VBUS input,
-    // below this value will turn off the PMU
-    PMU.setVbusVoltageLimit(XPOWERS_AXP2101_VBUS_VOL_LIM_4V36);
+        // Unuse power channel
+        PMU->disablePowerOutput(XPOWERS_DCDC2);
+        PMU->disablePowerOutput(XPOWERS_DCDC3);
+        PMU->disablePowerOutput(XPOWERS_DCDC4);
+        PMU->disablePowerOutput(XPOWERS_DCDC5);
+        PMU->disablePowerOutput(XPOWERS_ALDO1);
+        PMU->disablePowerOutput(XPOWERS_ALDO4);
+        PMU->disablePowerOutput(XPOWERS_BLDO1);
+        PMU->disablePowerOutput(XPOWERS_BLDO2);
+        PMU->disablePowerOutput(XPOWERS_DLDO1);
+        PMU->disablePowerOutput(XPOWERS_DLDO2);
 
-    // Set the maximum current of the PMU VBUS input,
-    // higher than this value will turn off the PMU
-    PMU.setVbusCurrentLimit(XPOWERS_AXP2101_VBUS_CUR_LIM_1500MA);
+        // GNSS RTC PowerVDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
+        PMU->enablePowerOutput(XPOWERS_VBACKUP);
 
+        // ESP32 VDD 3300mV
+        //  ! No need to set, automatically open , Don't close it
+        //  PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
+        //  PMU->setProtectedChannel(XPOWERS_DCDC1);
 
-    // Get the VSYS shutdown voltage
-    uint16_t vol = PMU.getSysPowerDownVoltage();
-    Serial.printf("->  getSysPowerDownVoltage:%u\n", vol);
+        // LoRa VDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO2);
 
-    // Set VSY off voltage as 2600mV , Adjustment range 2600mV ~ 3300mV
-    PMU.setSysPowerDownVoltage(2600);
-
-    vol = PMU.getSysPowerDownVoltage();
-    Serial.printf("->  getSysPowerDownVoltage:%u\n", vol);
-
-    // DC1 IMAX=2A
-    // 1500~3400mV,100mV/step,20steps
-    PMU.setDC1Voltage(3300);
-    Serial.printf("DC1  : %s   Voltage:%u mV \n",  PMU.isEnableDC1()  ? "+" : "-", PMU.getDC1Voltage());
-
-    // DC2 IMAX=2A
-    // 500~1200mV  10mV/step,71steps
-    // 1220~1540mV 20mV/step,17steps
-    PMU.setDC2Voltage(1000);
-    Serial.printf("DC2  : %s   Voltage:%u mV \n",  PMU.isEnableDC2()  ? "+" : "-", PMU.getDC2Voltage());
-
-    // DC3 IMAX = 2A
-    // 500~1200mV,10mV/step,71steps
-    // 1220~1540mV,20mV/step,17steps
-    // 1600~3400mV,100mV/step,19steps
-    PMU.setDC3Voltage(3300);
-    Serial.printf("DC3  : %s   Voltage:%u mV \n",  PMU.isEnableDC3()  ? "+" : "-", PMU.getDC3Voltage());
-
-    // DCDC4 IMAX=1.5A
-    // 500~1200mV,10mV/step,71steps
-    // 1220~1840mV,20mV/step,32steps
-    PMU.setDC4Voltage(1000);
-    Serial.printf("DC4  : %s   Voltage:%u mV \n",  PMU.isEnableDC4()  ? "+" : "-", PMU.getDC4Voltage());
-
-    // DC5 IMAX=2A
-    // 1200mV
-    // 1400~3700mV,100mV/step,24steps
-    PMU.setDC5Voltage(3300);
-    Serial.printf("DC5  : %s   Voltage:%u mV \n",  PMU.isEnableDC5()  ? "+" : "-", PMU.getDC5Voltage());
-
-    //ALDO1 IMAX=300mA
-    //500~3500mV, 100mV/step,31steps
-    PMU.setALDO1Voltage(3300);
-
-    //ALDO2 IMAX=300mA
-    //500~3500mV, 100mV/step,31steps
-    PMU.setALDO2Voltage(3300);
-
-    //ALDO3 IMAX=300mA
-    //500~3500mV, 100mV/step,31steps
-    PMU.setALDO3Voltage(3300);
-
-    //ALDO4 IMAX=300mA
-    //500~3500mV, 100mV/step,31steps
-    PMU.setALDO4Voltage(3300);
-
-    //BLDO1 IMAX=300mA
-    //500~3500mV, 100mV/step,31steps
-    PMU.setBLDO1Voltage(3300);
-
-    //BLDO2 IMAX=300mA
-    //500~3500mV, 100mV/step,31steps
-    PMU.setBLDO2Voltage(3300);
-
-    //CPUSLDO IMAX=30mA
-    //500~1400mV,50mV/step,19steps
-    PMU.setCPUSLDOVoltage(1000);
-
-    //DLDO1 IMAX=300mA
-    //500~3400mV, 100mV/step,29steps
-    PMU.setDLDO1Voltage(3300);
-
-    //DLDO2 IMAX=300mA
-    //500~1400mV, 50mV/step,2steps
-    PMU.setDLDO2Voltage(3300);
-
-
-    // PMU.enableDC1();
-    PMU.enableDC2();
-    PMU.enableDC3();
-    PMU.enableDC4();
-    PMU.enableDC5();
-    PMU.enableALDO1();
-    PMU.enableALDO2();  // LORA
-
-    PMU.enableALDO3();  // GPS
-
-    PMU.enableALDO4();
-    PMU.enableBLDO1();
-    PMU.enableBLDO2();
-    PMU.enableCPUSLDO();
-    PMU.enableDLDO1();
-    PMU.enableDLDO2();
-
-    PMU.setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_500MA);
-
-    PMU.enableBattDetection();
-    PMU.enableBattVoltageMeasure();
-
-    //disable all axp chip interrupt
-    PMU.disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
-
-    Serial.println("All AXP2101 started");
+        // GNSS VDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO3);
+    
+        Serial.println("All AXP2101 started");
+    }
     #endif
 
     delay(100);
@@ -395,6 +352,18 @@ unsigned int readGPS(void)
     return 0;
 }
 
+/*
+pinMode(PIN_GPS_EN, OUTPUT);
+setGPSPower(true);
+
+    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
+    pinMode(PIN_GPS_RESET, OUTPUT);
+    delay(10);
+    digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+
+digitalWrite(PIN_GPS_EN, on ? 1 : 0);
+
+*/
 unsigned int getGPS(void)
 {
     if(!bGPSON)
@@ -406,28 +375,44 @@ unsigned int getGPS(void)
         Serial.println(state);
     }
 
+    if(bGPSON)
+    {
+        /*
+        #if defined(XPOWERS_CHIP_AXP192)
+        PMU->enablePowerOutput(XPOWERS_LDO3);
+        #endif
+
+        #if defined(XPOWERS_CHIP_AXP2101)
+        PMU->enablePowerOutput(XPOWERS_ALDO3);
+        #endif
+
+        delay(300);
+        */
+    }
+
     switch (state)
     {
         case 0: // auto-baud connection, then switch to 38400 and save config
             do
             {
-                Serial.printf("GPS: trying 38400 baud <%i>\n", maxStateCount);
+                Serial.printf("GPS: trying 9600 baud <%i>\n", maxStateCount);
                 
-                GPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 
                 if (myGPS.begin(GPS))
                 {
-                    Serial.println("GPS: connected at 38400 baud");
+                    Serial.println("GPS: connected at 9600 baud");
                     maxStateCount=1;
                     break;
                 }
 
                 delay(100);
 
-                Serial.printf("GPS: trying 9600 baud <%i>\n", maxStateCount);
-                GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-                if (myGPS.begin(GPS)) {
-                    Serial.println("GPS: connected at 9600 baud");
+                Serial.printf("GPS: trying 38400 baud <%i>\n", maxStateCount);
+                GPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                if (myGPS.begin(GPS))
+                {
+                    Serial.println("GPS: connected at 38400 baud");
                     maxStateCount=1;
                     break;
                 }
@@ -442,6 +427,19 @@ unsigned int getGPS(void)
                         state = 0;
 
                         bGPSON=false;
+
+                        /*
+                        #if defined(XPOWERS_CHIP_AXP192)
+                        PMU->disablePowerOutput(XPOWERS_LDO3);
+                        #endif
+
+                        #if defined(XPOWERS_CHIP_AXP2101)
+                        PMU->disablePowerOutput(XPOWERS_ALDO3);
+                        #endif
+
+                        delay(300);
+                        */
+
                         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FBF;
                         save_settings();
 
@@ -477,19 +475,19 @@ unsigned int getGPS(void)
                 Serial.println("Issuing hardReset (cold start)");
                 myGPS.hardReset();
                 delay(3000);
-                GPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
                 if (myGPS.begin(GPS)) {
                     Serial.println("Success.");
                 }
                 else
                 {
-                    Serial.println("*** GPS did not respond at 38400 baud, starting over.");
-                    state = 0;
-                    bMitHardReset=false;
+                    Serial.println("*** GPS did not respond at 9600 baud, starting over.");
+                    state = 2;
+                    //bMitHardReset=false;
                     break;
                 }
             }
-        
+
             state++;
 
             break;

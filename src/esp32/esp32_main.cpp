@@ -41,23 +41,19 @@
 // Defined using AXP192
 #define XPOWERS_CHIP_AXP192
 
-//#include <axp20x.h>
-//extern AXP20X_Class axp;
-#include "XPowersLib.h"
-
-extern XPowersPMU PMU;
+#include "XPowersAXP192.tpp"
+#include "XPowersLibInterface.hpp"
+extern XPowersLibInterface *PMU;
 
 #endif
 
 #if defined(XPOWERS_CHIP_AXP2101)
 // Defined using AXP192
-#define XPOWERS_CHIP_AXP12101
+#define XPOWERS_CHIP_AXP2101
 
-//#include <axp20x.h>
-//extern AXP20X_Class axp;
-#include "XPowersLib.h"
-
-extern XPowersPMU PMU;
+#include "XPowersAXP2101.tpp"
+#include "XPowersLibInterface.hpp"
+extern XPowersLibInterface *PMU;
 
 #endif
 
@@ -177,9 +173,14 @@ class MyCallbacks: public NimBLECharacteristicCallbacks
 
 #ifdef SX127X
 // RadioModule SX1278 
-SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
+SX1276 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 // SyncWord - 1byte for SX127x, 2 bytes for SX126x
 // Check which chip is used !!!
+#endif
+
+#ifdef BOARD_E220
+// RadioModule derived from SX1262 
+LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 #endif
 
 #ifdef SX126X
@@ -187,8 +188,7 @@ SX1278 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // cs - irq - reset - interrupt gpio
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
-    //SX1268 radio = new Module(SX1268_CS, SX1268_IRQ, SX1268_RST, SX1268_GPIO);
-    //WROOM
+
     SX1268 radio = new Module(SX1268_CS, SX1268_IRQ, SX1268_RST, SX1268_GPIO);
 
 #endif
@@ -231,7 +231,7 @@ volatile bool scanFlag = false;
 // is received by the module
 // IMPORTANT: this function MUST be 'void' type
 //            and MUST NOT have any arguments!
-#ifdef SX127X
+#if defined(SX127X)
 // this function is called when no preamble
 // is detected within timeout period
 // IMPORTANT: this function MUST be 'void' type
@@ -387,6 +387,15 @@ void esp32setup()
         SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     #endif
 
+    Serial.begin(MONITOR_SPEED);
+    while(!Serial);
+
+    Serial.println("");
+    Serial.println("");
+    Serial.println("============");
+    Serial.println("CLIENT SETUP");
+    Serial.println("============");
+
     bool bSETGPS_POWER=false;
 
     #if defined(ENABLE_GPS)
@@ -409,15 +418,6 @@ void esp32setup()
 */
     initButtonPin();
     
-    Serial.begin(MONITOR_SPEED);
-    while(!Serial);
-
-    Serial.println("");
-    Serial.println("");
-    Serial.println("============");
-    Serial.println("CLIENT SETUP");
-    Serial.println("============");
-
     Serial.printf("_GW_ID: %08X\n", _GW_ID);
 
     ////////////////////////////////////////////////////////////////////
@@ -432,11 +432,11 @@ void esp32setup()
     //
     ////////////////////////////////////////////////////////////////////
 
-#ifdef BOARD_E22
+#if defined(BOARD_E22) || defined(BOARD_E220)
     // if RESET Pin is connected
     pinMode(LORA_RST, PULLUP);
     digitalWrite(LORA_RST, LOW);
-    delay(100);
+    delay(200);
     digitalWrite(LORA_RST, HIGH);
 
     // we have TXEN and RXEN Pin connected
@@ -466,7 +466,13 @@ void esp32setup()
      // initialize SX12xx with default settings
     Serial.print(F("LoRa Modem Initializing ... "));
 
-    int state = radio.begin();
+    int state = RADIOLIB_ERR_UNKNOWN;
+    
+    #if defined(BOARD_E220)
+        state = radio.begin(434.0F, 125.0F, 9, 7, SYNC_WORD_SX127x, 10, LORA_PREAMBLE_LENGTH, /*float tcxoVoltage = 0*/ 0, /*bool useRegulatorLDO = false*/ false);
+    #else
+        state = radio.begin();
+    #endif
     
     if (state == RADIOLIB_ERR_NONE)
     {
@@ -478,9 +484,11 @@ void esp32setup()
         Serial.print(F("LoRa-Chip failed, code "));
         Serial.println(state);
         bRadio=false;
-        //while (true);
     }
 
+    #if defined(BOARD_E220)
+        bRadio = false; // no detailed setting
+    #endif
 
     // you can also change the settings at runtime
     // and check if the configuration was changed successfully
@@ -588,7 +596,7 @@ void esp32setup()
             while (true);
         }
 
-        #ifdef SX127X
+        #if defined(SX127X)
         // set amplifier gain  (accepted range is 1 - 6, where 1 is maximum gain)
         // NOTE: set value to 0 to enable automatic gain control
         //       leave at 0 unless you know what you're doing
@@ -622,7 +630,7 @@ void esp32setup()
         #endif
 
         // setup for SX126x Radios
-        #ifdef SX126X
+        #if defined(SX126X)
             // interrupt pin
             radio.setDio1Action(setFlag);
 
@@ -667,6 +675,30 @@ void esp32setup()
         #endif
     }
     
+    // setup for SX126x Radios
+    #if defined(BOARD_E220)
+
+        // interrupt pin
+        radio.setDio1Action(setFlag);
+
+        // start scanning the channel
+        Serial.print(F("[SX126x] Starting scan for LoRa preamble ... "));
+        state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+        if (state == RADIOLIB_ERR_NONE)
+        {
+            Serial.println(F("[SX126X] success!"));
+        }
+        else
+        {
+            Serial.print(F("[SX126X] failed, code "));
+            Serial.println(state);
+        }
+    // if DIO2 controls the RF Switch you need to set it
+    // radio.setDio2AsRfSwitch(true);
+    // Important! To enable receive you need to switch the SX126x rf switch to RECEIVE 
+    
+    #endif
+
     Serial.println(F("All settings successfully changed!"));
 
   // Create the BLE Device
@@ -792,7 +824,7 @@ void esp32loop()
             bReceiving = false;
             iReceiveTimeOutTime=0;
 
-        	#ifdef SX127X
+            #if defined(SX127X)
                 radio.startChannelScan();
             #else
                 radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
@@ -800,7 +832,7 @@ void esp32loop()
         }
     }
 
-    #ifdef SX127X
+    #if defined(SX127X)
     if(detectedFlag || timeoutFlag)
     {
         int state = RADIOLIB_ERR_NONE;
@@ -1189,8 +1221,7 @@ void esp32loop()
         {
             #if defined(MODUL_FW_TBEAM)
             {
-                //global_batt = axp.getBattVoltage();
-                global_batt = PMU.getBattVoltage();
+                global_batt = PMU->getBattVoltage();
             }
             #else
                 global_batt = read_batt();

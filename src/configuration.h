@@ -24,6 +24,7 @@
 #define TBEAM_AXP2101 12
 #define HELTEC_V3 43
 #define EBYTE_E22 39
+#define EBYTE_E220 40
 
 // set hardware
 #ifdef BOARD_RAK4630
@@ -120,6 +121,14 @@
     #define MODUL_HARDWARE EBYTE_E22
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
+    #define ENABLE_GPS
+    #define ENABLE_BMX280
+    #define TX_POWER_MAX 21  // max 21dBm
+#endif
+
+#ifdef 	BOARD_E220
+    #define MODUL_HARDWARE EBYTE_E220
+    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define TX_POWER_MAX 21  // max 21dBm
@@ -237,6 +246,10 @@
 
 #ifdef SX1262
 #define TX_OUTPUT_POWER 21  // SX1262 have up to +22dBm
+#endif
+
+#ifdef BOARD_E220
+#define TX_OUTPUT_POWER 10
 #endif
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
@@ -549,6 +562,25 @@ static const uint8_t SCK =  5;
 #define SX1268_IRQ LORA_DIO1
 #define SX1268_RST LORA_RST
 #define SX1268_GPIO LORA_DIO0
+
+#endif
+
+#ifdef BOARD_E220
+// Custom Board homemade E22-Ebyte Module + AZ Delivery ESP32 DevKitC v4
+
+#define BUTTON_PIN 12
+
+#define LORA_RST  27
+#define LORA_DIO0 26 // aka BUSY Pin
+#define LORA_DIO1 33
+#define LORA_DIO2 32
+#define LORA_CS 5
+#define RXEN 14
+#define TXEN 13
+#define LED 2
+
+#define I2C_SDA 21
+#define I2C_SCL 22
 
 #endif
 

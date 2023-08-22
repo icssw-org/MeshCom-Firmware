@@ -56,6 +56,8 @@ void init_flash(void)
     meshcom_settings.node_power = preferences.getInt("node_power", 0);
     meshcom_settings.node_freq = preferences.getFloat("node_freq", 0);
     meshcom_settings.node_bw = preferences.getFloat("node_bw", 0);
+    meshcom_settings.node_sf = preferences.getInt("node_sf", 0);
+    meshcom_settings.node_cr = preferences.getInt("node_cr", 0);
 }
 
 void save_settings(void)
@@ -102,7 +104,7 @@ void save_settings(void)
     preferences.putInt("node_ackid", meshcom_settings.node_ackid);
 
     preferences.putInt("node_power", meshcom_settings.node_power);
-    preferences.putInt("node_freq", meshcom_settings.node_freq);
+    preferences.putFloat("node_freq", meshcom_settings.node_freq);
     preferences.putFloat("node_bw", meshcom_settings.node_bw);
     preferences.putInt("node_sf", meshcom_settings.node_sf);
     preferences.putInt("node_cr", meshcom_settings.node_cr);
