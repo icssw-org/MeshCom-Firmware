@@ -2,7 +2,7 @@
 
 #if defined (ENABLE_GPS)
 
-#include "esp32_gps.h"
+#include "esp32_GPS.h"
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <clock.h>
@@ -32,12 +32,12 @@
 #endif
 
 
-#include <HardwareSerial.h>
+#include "SoftwareSerial.h"
+
 
 #define GPS_BAUDRATE 9600
-#define GPS_SERIAL_NUM 1
 
-HardwareSerial GPS(GPS_SERIAL_NUM);
+SoftwareSerial GPS(GPS_RX_PIN, GPS_TX_PIN);
 
 #if defined(XPOWERS_CHIP_AXP192)
 // Defined using AXP192
@@ -79,6 +79,30 @@ int maxStateCount=1;
 
 void setupGPS(bool bGPSON)
 {
+/*
+| CHIP       | AXP173            | AXP192            | AXP202            | AXP2101                                |
+| ---------- | ----------------- | ----------------- | ----------------- | -------------------------------------- |
+| DC1        | 0.7V-3.5V /1.2A   | 0.7V-3.5V  /1.2A  | X                 | 1.5-3.4V                        /2A    |
+| DC2        | 0.7-2.275V/0.6A   | 0.7-2.275V /1.6A  | 0.7-2.275V /1.6A  | 0.5-1.2V,1.22-1.54V             /2A    |
+| DC3        | X                 | 0.7-3.5V   /0.7A  | 0.7-3.5V   /1.2A  | 0.5-1.2V,1.22-1.54V,1.6-3.4V    /2A    |
+| DC4        | X                 | x                 | x                 | 0.5-1.2V,1.22-1.84V             /1.5A   |
+| DC5        | X                 | x                 | x                 | 1.2V,1.4-3.7V                   /1A    |
+| LDO1(VRTC) | 3.3V       /30mA  | 3.3V       /30mA  | 3.3V       /30mA  | 1.8V                            /30mA  |
+| LDO2       | 1.8V-3.3V  /200mA | 1.8V-3.3V  /200mA | 1.8V-3.3V  /200mA | x                                      |
+| LDO3       | 1.8V-3.3V  /200mA | 1.8-3.3V   /200mA | 0.7-3.5V   /200mA | x                                      |
+| LDO4       | 0.7-3.5V   /500mA | X                 | 1.8V-3.3V  /200mA | x                                      |
+| LDO5/IO0   | X                 | 1.8-3.3V   /50mA  | 1.8-3.3V   /50mA  | x                                      |
+| ALDO1      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| ALDO2      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| ALDO3      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| ALDO4      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| BLDO1      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| BLDO2      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
+| DLDO1      | x                 | x                 | x                 | 0.5-3.3V/ 0.5-1.4V              /300mA |
+| DLDO1      | x                 | x                 | x                 | 0.5-3.3V/ 0.5-1.4V              /300mA |
+| CPUSLDO    | x                 | x                 | x                 | 0.5-1.4V                        /30mA  |
+|            |                   |                   |                   |                                        |
+*/
     #if defined(XPOWERS_CHIP_AXP192)
     /* OLD
     if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
@@ -118,30 +142,6 @@ void setupGPS(bool bGPSON)
         Serial.println("AXP192 PMU init succeeded, using AXP192 PMU");
     }
 
-/*
-| CHIP       | AXP173            | AXP192            | AXP202            | AXP2101                                |
-| ---------- | ----------------- | ----------------- | ----------------- | -------------------------------------- |
-| DC1        | 0.7V-3.5V /1.2A   | 0.7V-3.5V  /1.2A  | X                 | 1.5-3.4V                        /2A    |
-| DC2        | 0.7-2.275V/0.6A   | 0.7-2.275V /1.6A  | 0.7-2.275V /1.6A  | 0.5-1.2V,1.22-1.54V             /2A    |
-| DC3        | X                 | 0.7-3.5V   /0.7A  | 0.7-3.5V   /1.2A  | 0.5-1.2V,1.22-1.54V,1.6-3.4V    /2A    |
-| DC4        | X                 | x                 | x                 | 0.5-1.2V,1.22-1.84V             /1.5A   |
-| DC5        | X                 | x                 | x                 | 1.2V,1.4-3.7V                   /1A    |
-| LDO1(VRTC) | 3.3V       /30mA  | 3.3V       /30mA  | 3.3V       /30mA  | 1.8V                            /30mA  |
-| LDO2       | 1.8V-3.3V  /200mA | 1.8V-3.3V  /200mA | 1.8V-3.3V  /200mA | x                                      |
-| LDO3       | 1.8V-3.3V  /200mA | 1.8-3.3V   /200mA | 0.7-3.5V   /200mA | x                                      |
-| LDO4       | 0.7-3.5V   /500mA | X                 | 1.8V-3.3V  /200mA | x                                      |
-| LDO5/IO0   | X                 | 1.8-3.3V   /50mA  | 1.8-3.3V   /50mA  | x                                      |
-| ALDO1      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
-| ALDO2      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
-| ALDO3      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
-| ALDO4      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
-| BLDO1      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
-| BLDO2      | x                 | x                 | x                 | 0.5-3.5V                        /300mA |
-| DLDO1      | x                 | x                 | x                 | 0.5-3.3V/ 0.5-1.4V              /300mA |
-| DLDO1      | x                 | x                 | x                 | 0.5-3.3V/ 0.5-1.4V              /300mA |
-| CPUSLDO    | x                 | x                 | x                 | 0.5-1.4V                        /30mA  |
-|            |                   |                   |                   |                                        |
-*/
     if(PMU != NULL)
     {
         Serial.printf("AXP-Chip ID:0x%x\n", PMU->getChipID());
@@ -178,6 +178,16 @@ void setupGPS(bool bGPSON)
         // Set up the charging voltage
         PMU->setChargeTargetVoltage(XPOWERS_AXP192_CHG_VOL_4V2);
         
+        PMU->clearIrqStatus();
+
+        // TBeam1.1 /T-Beam S3-Core has no external TS detection,
+        // it needs to be disabled, otherwise it will cause abnormal charging
+        PMU->disableTSPinMeasure();
+
+        // PMU->enableSystemVoltageMeasure();
+        PMU->enableVbusVoltageMeasure();
+        PMU->enableBattVoltageMeasure();
+
         Serial.println("All AXP192 started");
     }
     
@@ -239,9 +249,84 @@ void setupGPS(bool bGPSON)
         // GNSS VDD 3300mV
         PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
         PMU->enablePowerOutput(XPOWERS_ALDO3);
-    
-        Serial.println("All AXP2101 started");
+
+        // disable all axp chip interrupt
+        PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
+
+        // Set the constant current charging current of AXP2101, temporarily use 500mA by default
+        PMU->setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_500MA);
+
+        // Set up the charging voltage
+        PMU->setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V2);
+
+        PMU->clearIrqStatus();
+
+        // TBeam1.1 /T-Beam S3-Core has no external TS detection,
+        // it needs to be disabled, otherwise it will cause abnormal charging
+        PMU->disableTSPinMeasure();
+
+        // PMU->enableSystemVoltageMeasure();
+        PMU->enableVbusVoltageMeasure();
+        PMU->enableBattVoltageMeasure();
+
+    Serial.printf("=======================================================================\n");
+    if (PMU->isChannelAvailable(XPOWERS_DCDC1)) {
+        Serial.printf("DC1  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC1) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_DCDC1));
     }
+    if (PMU->isChannelAvailable(XPOWERS_DCDC2)) {
+        Serial.printf("DC2  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC2) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_DCDC2));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_DCDC3)) {
+        Serial.printf("DC3  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC3) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_DCDC3));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_DCDC4)) {
+        Serial.printf("DC4  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC4) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_DCDC4));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_LDO2)) {
+        Serial.printf("LDO2 : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_LDO2) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_LDO2));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_LDO3)) {
+        Serial.printf("LDO3 : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_LDO3) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_LDO3));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_ALDO1)) {
+        Serial.printf("ALDO1: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO1) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_ALDO1));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_ALDO2)) {
+        Serial.printf("ALDO2: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO2) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_ALDO2));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_ALDO3)) {
+        Serial.printf("ALDO3: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO3) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_ALDO3));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_ALDO4)) {
+        Serial.printf("ALDO4: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO4) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_ALDO4));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_BLDO1)) {
+        Serial.printf("BLDO1: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_BLDO1) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_BLDO1));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_BLDO2)) {
+        Serial.printf("BLDO2: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_BLDO2) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_BLDO2));
+    }
+    if (PMU->isChannelAvailable(XPOWERS_VBACKUP)) {
+        Serial.printf("VBACK: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_VBACKUP) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_VBACKUP));
+    }
+    Serial.printf("=======================================================================\n");
+
+    Serial.println("All AXP2101 started");
+    }
+
     #endif
 
     delay(100);
@@ -364,6 +449,17 @@ setGPSPower(true);
 digitalWrite(PIN_GPS_EN, on ? 1 : 0);
 
 */
+
+/*
+// send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
+// Factory Reset
+byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
+                        0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
+GPS.write(_message_reset, sizeof(_message_reset));
+
+delay(1000);
+*/
+
 unsigned int getGPS(void)
 {
     if(!bGPSON)
@@ -396,8 +492,8 @@ unsigned int getGPS(void)
             do
             {
                 Serial.printf("GPS: trying 9600 baud <%i>\n", maxStateCount);
-                
-                GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+
+                GPS.begin(9600);//, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 
                 if (myGPS.begin(GPS))
                 {
@@ -409,7 +505,8 @@ unsigned int getGPS(void)
                 delay(100);
 
                 Serial.printf("GPS: trying 38400 baud <%i>\n", maxStateCount);
-                GPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                GPS.begin(38400);//, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                
                 if (myGPS.begin(GPS))
                 {
                     Serial.println("GPS: connected at 38400 baud");
@@ -418,7 +515,8 @@ unsigned int getGPS(void)
                 }
                 else
                 {
-                    delay(500); //Wait a bit before trying again to limit the Serial output flood
+    
+                    delay(200); //Wait a bit before trying again to limit the Serial output flood
                     maxStateCount++;
 
                     if(maxStateCount > 5)
@@ -454,13 +552,21 @@ unsigned int getGPS(void)
             if(bGPSON)
             {
                 myGPS.setUART2Output(COM_TYPE_UBX); //Set the UART port to output UBX only
+                delay(100);
                 myGPS.enableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART2);
+                delay(100);
                 myGPS.enableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART2);
+                delay(100);
                 myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
+                delay(100);
                 myGPS.enableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART2);
+                delay(100);
                 myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART2);
+                delay(100);
                 myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART2);
+                delay(100);
                 myGPS.saveConfiguration(); //Save the current settings to flash and BBR
+                delay(100);
 
                 Serial.println("GPS serial connected, saved config");
                 
@@ -473,10 +579,13 @@ unsigned int getGPS(void)
             if(bMitHardReset)
             {
                 Serial.println("Issuing hardReset (cold start)");
+
                 myGPS.hardReset();
                 delay(3000);
-                GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-                if (myGPS.begin(GPS)) {
+                GPS.begin(9600);//, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+
+                if (myGPS.begin(GPS))
+                {
                     Serial.println("Success.");
                 }
                 else
@@ -496,10 +605,13 @@ unsigned int getGPS(void)
             if(bMitHardReset)
             {
                 Serial.println("Issuing factoryReset");
+
                 myGPS.factoryReset();
                 delay(3000); // takes more than one second... a loop to resync would be best
-                GPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-                if (myGPS.begin(GPS)) {
+                GPS.begin(9600);//, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+
+                if (myGPS.begin(GPS))
+                {
                     Serial.println("Success.");
                 } else {
                     Serial.println("*** GPS did not come back at 9600 baud, starting over.");
