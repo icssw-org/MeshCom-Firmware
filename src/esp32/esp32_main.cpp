@@ -570,6 +570,9 @@ void esp32setup()
         if(tx_power > TX_POWER_MAX)
             tx_power= TX_POWER_MAX;
 
+        if(tx_power < TX_POWER_MIN)
+            tx_power= TX_POWER_MIN;
+
         Serial.printf("LoRa RF_POWER: %d dBm\n", tx_power);
 
         if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {

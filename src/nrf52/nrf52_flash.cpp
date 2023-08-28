@@ -116,6 +116,8 @@ void init_flash(void)
 		meshcom_settings.node_sf = old_struct.node_sf;
 		meshcom_settings.node_cr = old_struct.node_cr;
 
+		memcpy(meshcom_settings.node_atxt, old_struct.node_atxt, 40);
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

@@ -4,6 +4,7 @@
 #include "batt_functions.h"
 #include <mheard_functions.h>
 #include <udp_functions.h>
+#include "i2c_scanner.h"
 
 // Sensors
 #include "bmx280.h"
@@ -48,7 +49,7 @@ void commandAction(char *msg_text, int len, bool ble)
     // -info
     // -set-owner
 
-    char _owner_c[MAX_CALL_LEN];
+    char _owner_c[50];
     double dVar=0.0;
     int iVar;
     float fVar=0.0;
@@ -214,7 +215,7 @@ void commandAction(char *msg_text, int len, bool ble)
             delay(150);
             Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
             delay(150);
-            Serial.printf("--symid  set prim/sec Sym-Table\n--symcd  set table column\n");
+            Serial.printf("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--atxt   set APRS Textinfo\n--showI2C\n");
             delay(150);
             Serial.printf("--debug    on/off\n--loradebug on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n");
             delay(150);
@@ -365,6 +366,8 @@ void commandAction(char *msg_text, int len, bool ble)
             addBLECommandBack((char*)"--track off");
         }
 
+        posinfo_interval = POSINFO_INTERVAL;
+
         save_settings();
 
         return;
@@ -396,6 +399,17 @@ void commandAction(char *msg_text, int len, bool ble)
         {
             addBLECommandBack((char*)"--gps off");
         }
+
+        bDisplayTrack=false;
+        
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FDF;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--track off");
+        }
+
+        posinfo_interval = POSINFO_INTERVAL;
 
         save_settings();
 
@@ -770,6 +784,19 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"atxt ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+7);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        sVar = _owner_c;
+        sprintf(meshcom_settings.node_atxt, "%s", sVar.c_str());
+
+        save_settings();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"setcall ") == 0)
     {
         sprintf(_owner_c, "%s", msg_text+10);
@@ -949,9 +976,9 @@ void commandAction(char *msg_text, int len, bool ble)
         sprintf(_owner_c, "%s", msg_text+10);
         sscanf(_owner_c, "%d", &iVar);
 
-        if(iVar < 0 || iVar > TX_POWER_MAX)
+        if(iVar < TX_POWER_MIN || iVar > TX_POWER_MAX)
         {
-            Serial.printf("txpower %i dBm not between 0 and max %i dBm\n", iVar, TX_POWER_MAX);
+            Serial.printf("txpower %i dBm not between %i and max %i dBm\n", iVar, TX_POWER_MIN, TX_POWER_MAX);
         }
         else
         {
@@ -961,7 +988,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
             if(ble)
             {
-                addBLECommandBack((char*)"--set");
+                addBLECommandBack((char*)msg_text);
             }
 
             save_settings();
@@ -970,6 +997,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"txfreq ") == 0)
@@ -989,7 +1018,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
             if(ble)
             {
-                addBLECommandBack((char*)"--set");
+                addBLECommandBack((char*)msg_text);
             }
 
             save_settings();
@@ -998,6 +1027,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"txbw ") == 0)
@@ -1017,7 +1048,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
             if(ble)
             {
-                addBLECommandBack((char*)"--set");
+                addBLECommandBack((char*)msg_text);
             }
 
             save_settings();
@@ -1026,6 +1057,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"txsf ") == 0)
@@ -1045,7 +1078,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
             if(ble)
             {
-                addBLECommandBack((char*)"--set");
+                addBLECommandBack((char*)msg_text);
             }
 
             save_settings();
@@ -1054,6 +1087,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"txcr ") == 0)
@@ -1073,7 +1108,7 @@ void commandAction(char *msg_text, int len, bool ble)
 
             if(ble)
             {
-                addBLECommandBack((char*)"--set");
+                addBLECommandBack((char*)msg_text);
             }
 
             save_settings();
@@ -1082,6 +1117,8 @@ void commandAction(char *msg_text, int len, bool ble)
 
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"tx_medium") == 0)
@@ -1189,14 +1226,41 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         showMHeard();
 
+        if(ble)
+        {
+            addBLECommandBack(print_buff);
+        }
+        else
+        {
+            printf("\n%s", print_buff+2);
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"showi2c") == 0)
+    {
+        String stri2c = scanI2C();
+
+        sprintf(print_buff, "%s", stri2c.c_str());
+
+        if(ble)
+        {
+            addBLECommandBack(print_buff);
+        }
+        else
+        {
+            printf("\n%s", print_buff+2);
+        }
+
         return;
     }
 
     if(bInfo)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s\n...Call:  <%s>\n...Short: <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GWAY %s\n...GPS    %s\n...DEBUG  %s\n...LORADEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...BLE : %s\n", SOURCE_TYPE, SOURCE_VERSION,
-                meshcom_settings.node_call, meshcom_settings.node_short, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, mv_to_percent(global_batt), meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
-                (bGATEWAY?"on":"off"), (bGPSON?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, (bBLElong?"long":"short"));
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...Call:  <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GWAY %s\n...GPS    %s\n...DEBUG  %s\n...LORADEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...BLE : %s\n...ATXT: %s\n", SOURCE_TYPE, SOURCE_VERSION,
+                meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, mv_to_percent(global_batt), meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
+                (bGATEWAY?"on":"off"), (bGPSON?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, (bBLElong?"long":"short"), meshcom_settings.node_atxt);
 
         if(ble)
         {

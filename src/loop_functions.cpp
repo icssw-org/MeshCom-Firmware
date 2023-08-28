@@ -1230,6 +1230,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
         sprintf(msg_start, "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, slat, lat_c, meshcom_settings.node_symid, slon, lon_c);
     else
     {
+        char catxt[50]={0};
         char cbatt[15]={0};
         char calt[15]={0};
         char cpress[15]={0};
@@ -1237,6 +1238,11 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
         char ctemp[15]={0};
         char cqfe[15]={0};
         char cqnh[15]={0};
+
+        if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
+        {
+            sprintf(catxt, "%s ", meshcom_settings.node_atxt);
+        }
 
         if(mv_to_percent(global_batt) > 0)
         {
@@ -1279,7 +1285,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
             sprintf(cqnh, "/Q=%.1f", qnh);
         }
 
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, cbatt, calt, cpress, chum, ctemp, cqfe, cqnh);
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, cqfe, cqnh);
     }
 
     return String(msg_start);

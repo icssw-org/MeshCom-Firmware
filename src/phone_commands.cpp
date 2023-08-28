@@ -26,11 +26,13 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len);
 
 extern bool g_ble_uart_is_connected;
 
+extern uint8_t shortVERSION();
+
 /**
  * @brief Method to send configuration to phone 
  * Config Format:
  * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT) - 1B SSID_Length - Wifi_SSID - 1B Wifi_PWD - Wifi_PWD 
- * - 1B APRS_PRIM_SEC - 1B APRS_SYMBOL - 4B SettingsMask
+ * - 1B APRS_PRIM_SEC - 1B APRS_SYMBOL - 4B SettingsMask - 1B HW-ID - 1B MOD-ID - 1B FW-Vers - 1B TX Pwr - 4B Frequency
  * 
  * SSID and PWD Buffers have as always a fixed length with trailing zeros. 
 */
@@ -60,7 +62,7 @@ void sendConfigToPhone ()
 	}
 
 	
-	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 9;	// +9 because of APRS Symbols 2B, Settings 4B, 0x00 end
+	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 17;	// +9 because of APRS Symbols 2B, Settings 4B, till FRQ and 0x00 end
 	uint8_t confBuff [conf_len] = {0};
 	uint8_t call_offset = 2;
 	
@@ -115,8 +117,47 @@ void sendConfigToPhone ()
 	gw_cl_offset = aprs_symbols_offset + 3;
 	memcpy(confBuff + gw_cl_offset, &meshcom_settings.node_sset, sizeof(meshcom_settings.node_sset));
 
+	// HW-ID, MOD-ID, FW-Version (short version only 1B 4.x)
+	uint8_t hw_offset = gw_cl_offset + sizeof(meshcom_settings.node_sset);
+	uint8_t hw_id = MODUL_HARDWARE;
+	memcpy(confBuff + hw_offset, &hw_id, sizeof(hw_id));
+
+	// Mod-ID is currently fixed to 3 -> SF11CR46BW250
+	uint8_t mod_id = 3;
+	uint8_t mod_offset = hw_offset + sizeof(hw_id);
+	memcpy(confBuff + mod_offset, &mod_id, sizeof(mod_id));
+
+	// FW-Version (short version only 1B 4.x)
+	uint8_t fw_vers = shortVERSION();
+	uint8_t fw_vers_offset = mod_offset + sizeof(mod_id);
+	memcpy(confBuff + fw_vers_offset, &fw_vers, sizeof(fw_vers));
+
+	// TX Power
+	char tx_pwr = (char) meshcom_settings.node_power;	// setting is INT values are from -5 to +30
+	uint8_t tx_pwr_offset = fw_vers_offset + sizeof(tx_pwr);
+	memcpy(confBuff + tx_pwr_offset, &tx_pwr, sizeof(tx_pwr));
+
+	// Frequency 
+	uint8_t frq_offset = tx_pwr_offset + sizeof(tx_pwr);
+	// if the frequency is set to 0 it wasn't saved/set to flash so far -> default QRG
+	float frq = 0.0;
+
+	if(meshcom_settings.node_freq == 0){
+		#ifdef BOARD_RAK4630
+			frq = (float) RF_FREQUENCY;
+			frq = frq / 1000000.0;
+		#else
+			frq = RF_FREQUENCY;
+		#endif
+		
+	} else {
+		frq = meshcom_settings.node_freq;
+	}
+	memcpy(confBuff + frq_offset, &frq, sizeof(frq));
+
+
 	// add 0x00 at end
-	endIndex = gw_cl_offset + sizeof(meshcom_settings.node_sset) + 1;
+	endIndex = frq_offset + sizeof(frq) + 1;
 	confBuff[endIndex] = 0x00;
 
 	//printBuffer(confBuff, conf_len);

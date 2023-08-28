@@ -548,9 +548,22 @@ void nrf52setup()
     );
 
     // Set Radio TX configuration
+    int8_t tx_power = TX_OUTPUT_POWER;
+    
+    if(meshcom_settings.node_power > 0)
+        tx_power=meshcom_settings.node_power;   //set by command
+
+    if(tx_power > TX_POWER_MAX)
+        tx_power= TX_POWER_MAX;
+
+    if(tx_power < TX_POWER_MIN)
+        tx_power= TX_POWER_MIN;
+
+    Serial.printf("LoRa RF_POWER: %d dBm\n", tx_power);
+
     Radio.SetTxConfig(
         MODEM_LORA,
-        TX_OUTPUT_POWER,
+        tx_power,
         0, // fsk only
         LORA_BANDWIDTH,
         LORA_SPREADING_FACTOR,
@@ -756,6 +769,10 @@ void nrf52loop()
             #ifdef ESP32
                 ESP.restart();
             #endif
+            
+            #if defined NRF52_SERIES
+                NVIC_SystemReset();     // resets the device
+            #endif
         }
     }
 
@@ -904,7 +921,7 @@ void direction_parse(String tmp)
  */
 unsigned int getGPS(void)
 { 
-    if(bDEBUG)
+    if(bGPSDEBUG)
         Serial.println("-----------check GPS-----------");
 
     String tmp_data = "";
@@ -918,7 +935,7 @@ unsigned int getGPS(void)
       {
         char c = Serial1.read();
         
-        if(bDEBUG)
+        if(bGPSDEBUG)
             Serial.write(c);
 
         tmp_data += c;

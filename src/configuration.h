@@ -32,6 +32,7 @@
     #define RF_FREQUENCY 433175000 // 432900000   // Hz
     #define ENABLE_BMX280
     #define TX_POWER_MAX 22  // max 22 dBm
+    #define TX_POWER_MIN 1
 #endif
 
 #ifdef BOARD_T_ECHO
@@ -44,6 +45,7 @@
     #define TECHO_CODINGRATE 6        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
     #define TECHO_PREAMBLE_LENGTH 8  // Same for Tx and Rx
     #define TECHO_POWER_MAX 22  // max 22dBm
+    #define TX_POWER_MIN 1
     
     //TODO
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
@@ -58,6 +60,7 @@
     #define ENABLE_BMX280
     #define SX127X
     #define TX_POWER_MAX 17  // max 17 dBm
+    #define TX_POWER_MIN 1
     
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
@@ -70,7 +73,8 @@
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define SX126X
-    #define TX_POWER_MAX 21  // max 21dBm
+    #define TX_POWER_MAX 22  // max 22dBm
+    #define TX_POWER_MIN 1
 
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
@@ -83,7 +87,8 @@
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define SX127X
-    #define TX_POWER_MAX 21  // max 21dBm
+    #define TX_POWER_MAX 17  // max 17dBm
+    #define TX_POWER_MIN 1
 
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP2101
@@ -96,6 +101,7 @@
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define TX_POWER_MAX 17  // max 17dBm
+    #define TX_POWER_MIN 1
 #endif
 
 #ifdef 	BOARD_HELTEC
@@ -104,7 +110,8 @@
     #define SX127X
     #define ENABLE_GPS
     #define ENABLE_BMX280
-    #define TX_POWER_MAX 19  // max 19dBm
+    #define TX_POWER_MAX 17  // max 17dBm
+    #define TX_POWER_MIN 1
 #endif
 
 #ifdef 	BOARD_HELTEC_V3
@@ -114,7 +121,8 @@
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
     #define ENABLE_GPS
     #define ENABLE_BMX280
-    #define TX_POWER_MAX 21  // max 21dBm
+    #define TX_POWER_MAX 22  // max 22dBm
+    #define TX_POWER_MIN 1
 #endif
 
 #ifdef 	BOARD_E22
@@ -123,7 +131,8 @@
     #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
     #define ENABLE_GPS
     #define ENABLE_BMX280
-    #define TX_POWER_MAX 21  // max 21dBm
+    #define TX_POWER_MAX 22  // max 22dBm
+    #define TX_POWER_MIN 1
 #endif
 
 #ifdef 	BOARD_E220
@@ -131,7 +140,8 @@
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define ENABLE_BMX280
-    #define TX_POWER_MAX 21  // max 21dBm
+    #define TX_POWER_MAX 22  // max 22dBm
+    #define TX_POWER_MIN 1
 #endif
 
 // Common LoRa Parameters
@@ -236,16 +246,16 @@
 #endif
 
 #ifdef SX126X
-#define TX_OUTPUT_POWER 21  // SX1268 have up to +22dBm
+#define TX_OUTPUT_POWER 22  // SX1268 have up to +22dBm
 #endif
 
 #ifdef SX126X_V3
-#define TX_OUTPUT_POWER 21  // SX1268 have up to +22dBm
+#define TX_OUTPUT_POWER 22  // SX1268 have up to +22dBm
 #endif
 
 
 #ifdef SX1262
-#define TX_OUTPUT_POWER 21  // SX1262 have up to +22dBm
+#define TX_OUTPUT_POWER 22  // SX1262 have up to +22dBm
 #endif
 
 #ifdef BOARD_E220

@@ -58,6 +58,10 @@ void init_flash(void)
     meshcom_settings.node_bw = preferences.getFloat("node_bw", 0);
     meshcom_settings.node_sf = preferences.getInt("node_sf", 0);
     meshcom_settings.node_cr = preferences.getInt("node_cr", 0);
+
+    strVar = preferences.getString("node_atxt");
+    sprintf(meshcom_settings.node_atxt, "%s", strVar.c_str());
+
 }
 
 void save_settings(void)
@@ -108,6 +112,9 @@ void save_settings(void)
     preferences.putFloat("node_bw", meshcom_settings.node_bw);
     preferences.putInt("node_sf", meshcom_settings.node_sf);
     preferences.putInt("node_cr", meshcom_settings.node_cr);
+
+    strVar = meshcom_settings.node_atxt;
+    preferences.putString("node_atxt", strVar); 
 
     preferences.end();
 
