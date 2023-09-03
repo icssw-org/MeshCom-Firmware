@@ -144,6 +144,7 @@ void commandAction(char *msg_text, int len, bool ble)
         Serial.println("\nsetinfo off");
 
         bDisplayInfo=false;
+
         return;
     }
     else
@@ -152,6 +153,7 @@ void commandAction(char *msg_text, int len, bool ble)
         Serial.println("\nsetinfo on");
 
         bDisplayInfo=true;
+
         return;
     }
     else
@@ -879,6 +881,8 @@ void commandAction(char *msg_text, int len, bool ble)
         bInfo=true;
 
         rebootAuto = millis() + 10 * 1000; // 10 Sekunden
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"setinet") == 0)
@@ -895,6 +899,8 @@ void commandAction(char *msg_text, int len, bool ble)
         bInfo=true;
 
         rebootAuto = millis() + 10 * 1000; // 10 Sekunden
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"setlat ") == 0)
@@ -907,7 +913,7 @@ void commandAction(char *msg_text, int len, bool ble)
         meshcom_settings.node_lat_c='N';
         meshcom_settings.node_lat=dVar;
 
-        if(fVar < 0)
+        if(dVar < 0)
         {
             meshcom_settings.node_lat_c='S';
             meshcom_settings.node_lat=fabs(dVar);
@@ -933,7 +939,7 @@ void commandAction(char *msg_text, int len, bool ble)
         meshcom_settings.node_lon_c='E';
         meshcom_settings.node_lon=dVar;
 
-        if(fVar < 0)
+        if(dVar < 0)
         {
             meshcom_settings.node_lon_c='W';
             meshcom_settings.node_lon=fabs(dVar);
@@ -1137,6 +1143,8 @@ void commandAction(char *msg_text, int len, bool ble)
         Serial.println("Auto. Reboot after 15 sec.");
 
         rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"tx_slow") == 0)
@@ -1155,6 +1163,8 @@ void commandAction(char *msg_text, int len, bool ble)
         Serial.println("Auto. Reboot after 15 sec.");
 
         rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"lora") == 0)

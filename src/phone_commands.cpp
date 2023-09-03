@@ -84,8 +84,18 @@ void sendConfigToPhone ()
 	//DEBUG_MSG_TXT("Wifi", meshcom_settings.node_ssid, "Wifi SSID to phone");
 	//DEBUG_MSG_TXT("Wifi", meshcom_settings.node_pwd, "Wifi PWD");
 
-	memcpy(confBuff + latOffset, &meshcom_settings.node_lat, 8);
-	memcpy(confBuff + latOffset + 8, &meshcom_settings.node_lon, 8);
+	d_lat=meshcom_settings.node_lat;
+	if(meshcom_settings.node_lat_c == 'S')
+		d_lat=meshcom_settings.node_lat * -1.0;
+
+	memcpy(confBuff + latOffset, &d_lat, 8);
+
+	d_lon=meshcom_settings.node_lon;
+	if(meshcom_settings.node_lon_c == 'W')
+		d_lon=meshcom_settings.node_lon * -1.0;
+
+	memcpy(confBuff + latOffset + 8, &d_lon, 8);
+	
 	memcpy(confBuff + latOffset + 16, &meshcom_settings.node_alt, 4);
 
 	// WiFissid
@@ -338,12 +348,19 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			DEBUG_MSG("BLE", "Latitude Setting from phone");
 			memcpy(&lat_phone, conf_data + 2, sizeof(lat_phone));
+			
 			d_lat = (double)lat_phone;
 			
 			if (save_setting)
 			{
-				meshcom_settings.node_lat = lat_phone;
+				meshcom_settings.node_lat_c='N';
+				meshcom_settings.node_lat=d_lat;
 
+				if(d_lat < 0)
+				{
+					meshcom_settings.node_lat_c='S';
+					meshcom_settings.node_lat=fabs(d_lat);
+				}
 			}
 
 			break;
@@ -359,8 +376,14 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 		
 			if (save_setting)
 			{
-				meshcom_settings.node_lon = long_phone;
+				meshcom_settings.node_lon_c='E';
+				meshcom_settings.node_lon=d_lon;
 
+				if(d_lon < 0)
+				{
+					meshcom_settings.node_lon_c='W';
+					meshcom_settings.node_lon=fabs(d_lon);
+				}
 			}
 
 			break;

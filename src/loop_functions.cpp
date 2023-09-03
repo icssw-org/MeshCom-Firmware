@@ -450,6 +450,16 @@ void sendDisplayTime()
     else
         sprintf(cbatt, "%3d%%", mv_to_percent(global_batt));
 
+ #if defined(XPOWERS_CHIP_AXP192)
+    if(global_batt == 0.0)
+        sprintf(cbatt, " USB");
+ #endif
+
+ #if defined(XPOWERS_CHIP_AXP2101)
+    if(global_batt == 0.0)
+        sprintf(cbatt, " USB");
+ #endif
+
     sprintf(print_text, "%-2.2s%-4.4s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
 
     memcpy(pageText[0], print_text, 20);
@@ -481,6 +491,16 @@ void sendDisplayMainline()
         sprintf(cbatt, "%4.2f", global_batt/1000.0);
     else
         sprintf(cbatt, "%3d%%", mv_to_percent(global_batt));
+
+ #if defined(XPOWERS_CHIP_AXP192)
+    if(global_batt == 0.0)
+        sprintf(cbatt, " USB");
+ #endif
+
+ #if defined(XPOWERS_CHIP_AXP2101)
+    if(global_batt == 0.0)
+        sprintf(cbatt, " USB");
+ #endif
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
@@ -1142,7 +1162,7 @@ void sendMessage(char *msg_text, int len)
 
         if(bGATEWAY)
         {
-            // gleich Wolke mit Hackler setzen
+            // gleich Wolke mit Hackerl setzen
             if(aprsmsg.msg_destination_path == "*")
             {
                 uint8_t print_buff[8];

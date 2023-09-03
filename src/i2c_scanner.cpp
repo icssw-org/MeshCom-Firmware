@@ -14,7 +14,6 @@ String strInfo = "";
     uint8_t error, address;
     int nDevices = 0;
 
-    String strInfo = "";
     char cInfo[100] = {0};
 
     sprintf(cInfo, "--[I2C] ... Scanner\n");
@@ -31,7 +30,12 @@ String strInfo = "";
         error = Wire.endTransmission();
         if (error == 0)
         {
-            sprintf(cInfo, "[I2C] ... device found at address 0x%02X\n", address);
+            String strDev="";
+            if(address == 0x34)strDev="AXP192/2101";
+            if(address == 0x3C)strDev="OLED";
+            if(address == 0x76)strDev="BME280/BMP280";
+            if(address == 0x77)strDev="BME280/BMP280";
+            sprintf(cInfo, "[I2C] ... device found at address 0x%02X %s\n", address, strDev.c_str());
             strInfo.concat(cInfo);
 
             nDevices++;
