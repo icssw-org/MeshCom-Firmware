@@ -12,6 +12,8 @@ extern unsigned long rebootAuto;
 
 extern bool bDEBUG;
 extern bool bLORADEBUG;
+extern bool bWXDEBUG;
+
 extern bool bPosDisplay;
 extern bool bDisplayOff;
 extern bool bDisplayVolt;
@@ -27,6 +29,8 @@ extern bool bGPSON;
 extern bool bBMPON;
 extern bool bBMEON;
 
+extern bool bONEWIRE;
+
 extern bool bSHORTPATH;
 extern bool bGPSDEBUG;
 
@@ -38,6 +42,8 @@ extern bool bEXTSER;
 
 extern float fBaseAltidude;
 extern float fBasePress;
+
+extern unsigned long onewireTimeWait;
 
 // common variables
 extern char msg_text[MAX_MSG_LEN_PHONE * 2];

@@ -20,6 +20,8 @@ extern float global_batt;
 
 bool bDEBUG = false;
 bool bLORADEBUG = false;
+bool bWXDEBUG = false;
+
 bool bPosDisplay = true;
 bool bDisplayOff = false;
 bool bDisplayVolt = false;
@@ -29,6 +31,8 @@ bool bDisplayTrack = false;
 bool bGPSON = false;
 bool bBMPON = false;
 bool bBMEON = false;
+
+bool bONEWIRE = false;
 
 bool bGATEWAY = false;
 bool bEXTUDP = false;
@@ -1209,7 +1213,7 @@ void sendMessage(char *msg_text, int len)
     #endif
 }
 
-String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt,  float press, float hum, float temp, int qfe, float qnh)
+String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt,  float press, float hum, float temp, float temp2, int qfe, float qnh)
 {
     if(lat == 0 or lon == 0)
     {
@@ -1256,6 +1260,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
         char cpress[15]={0};
         char chum[15]={0};
         char ctemp[15]={0};
+        char ctemp2[15]={0};
         char cqfe[15]={0};
         char cqnh[15]={0};
 
@@ -1295,6 +1300,11 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
             sprintf(ctemp, "/T=%.1f", temp);
         }
 
+        if(temp2 > 0)
+        {
+            sprintf(ctemp2, "/O=%.1f", temp2);
+        }
+
         if(qfe > 0)
         {
             sprintf(cqfe, "/F=%i", qfe);
@@ -1305,13 +1315,13 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
             sprintf(cqnh, "/Q=%.1f", qnh);
         }
 
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, cqfe, cqnh);
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh);
     }
 
     return String(msg_start);
 }
 
-void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, int qfe, float qnh)
+void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, int qfe, float qnh)
 {
     //if(bDEBUG)
     //    Serial.printf("intervall:%i lat:%.4lf <%c> lon:%.4lf <%c> alt:%i press:%.1f hum:%.1f temp:%.1f qfe:%i qnh:%.1f\n", intervall, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
@@ -1334,7 +1344,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
+    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, qfe, qnh);
     
     if(aprsmsg.msg_payload == "")
         return;

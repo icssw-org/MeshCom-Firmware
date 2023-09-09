@@ -123,7 +123,7 @@ BMx280Wire bmx280(0x00);
 
 void setupBMX280()
 {
-	if(bDEBUG)	
+	if(bWXDEBUG)	
 		Serial.printf("bBMPON:%i bBMEON:%i\n", bBMPON, bBMEON);
 
   if(bBMPON)
@@ -171,7 +171,7 @@ bool loopBMX280()
 	//start a measurement
 	if (!bmx280.measure())
 	{
-    	if(bDEBUG)
+    	if(bWXDEBUG)
 		  Serial.println("could not start measurement, is a measurement already running?");
 
 		return false;
@@ -180,7 +180,7 @@ bool loopBMX280()
 	//wait for the measurement to finish
 	if(!bmx280.hasValue())
 	{
-		if(bDEBUG)
+		if(bWXDEBUG)
 			Serial.println("BME/BMP Values not valid");
 
 		maxValideCount++;
@@ -208,7 +208,7 @@ bool loopBMX280()
 	else
 		fPress = bmx280.getPressure() / 100.0;
 
-	if(bDEBUG)
+	if(bWXDEBUG)
 	{
 		Serial.print("Pressure: "); Serial.println(fPress);
 		Serial.print("Pressure (64 bit): "); Serial.println(bmx280.getPressure64());
@@ -222,7 +222,7 @@ bool loopBMX280()
 		else
 			fHum = bmx280.getHumidity();
 
-		if(bDEBUG)
+		if(bWXDEBUG)
 		{
 			Serial.print("Humidity: "); 
 			Serial.println(fHum);

@@ -35,6 +35,8 @@
 #include <mheard_functions.h>
 #include <clock.h>
 
+#include <onewire_functions.h>
+
 #include <esp_adc_cal.h>
 
 #if defined(XPOWERS_CHIP_AXP192)
@@ -349,6 +351,8 @@ void esp32setup()
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
     bEXTSER =  meshcom_settings.node_sset & 0x4000;
 
+    bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
+
     global_batt = 4200.0;
 
     posinfo_interval = POSINFO_INTERVAL;
@@ -381,7 +385,10 @@ void esp32setup()
         }
     #endif
 
-   _GW_ID = getMacAddr();
+	// Initialize temp sensor
+    init_onewire();
+
+    _GW_ID = getMacAddr();
 
     #ifdef BOARD_HELTEC_V3
         SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
@@ -498,7 +505,10 @@ void esp32setup()
         float rf_freq = RF_FREQUENCY;
         if(meshcom_settings.node_freq > 0)
             rf_freq = meshcom_settings.node_freq;
-        if(!((rf_freq >= (430.0 + (LORA_BANDWIDTH/2)) && rf_freq <= (439.000 - (LORA_BANDWIDTH/2))) || (rf_freq >= (869.4 + (LORA_BANDWIDTH/2)) && rf_freq <= (869.65 - (LORA_BANDWIDTH/2)))))
+
+        float dec_bandwith = (LORA_BANDWIDTH/2.0)/100.0;
+
+        if(!((rf_freq >= (430.0 + dec_bandwith) && rf_freq <= (439.000 - dec_bandwith)) || (rf_freq >= (869.4 + dec_bandwith) && rf_freq <= (869.65 - dec_bandwith))))
             rf_freq = RF_FREQUENCY;
 
         Serial.printf("LoRa RF_FREQUENCY: %.3f MHz\n", rf_freq);
@@ -564,7 +574,9 @@ void esp32setup()
         
         int8_t tx_power = TX_OUTPUT_POWER;
         
-        if(meshcom_settings.node_power > 0)
+        if(meshcom_settings.node_power <= 0)
+            meshcom_settings.node_power = TX_OUTPUT_POWER;
+        else
             tx_power=meshcom_settings.node_power;   //set by command
 
         if(tx_power > TX_POWER_MAX)
@@ -1109,7 +1121,6 @@ void esp32loop()
     meshcom_settings.node_date_minute = MyClock.Minute();
     meshcom_settings.node_date_second = MyClock.Second();
 
-
     // BLE
     if (deviceConnected)
     {
@@ -1172,7 +1183,7 @@ void esp32loop()
         bPosFirst = false;
         posinfo_shot=false;
         
-        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         posinfo_last_lat=posinfo_lat;
         posinfo_last_lon=posinfo_lon;
@@ -1231,6 +1242,20 @@ void esp32loop()
             #endif
 
             BattTimeWait = millis();
+        }
+    }
+
+    if(onewireTimeWait == 0)
+        onewireTimeWait = millis() - 10000;
+
+
+    if ((onewireTimeWait + 10000) < millis())  // 10 sec
+    {
+        //if (tx_is_active == false && is_receiving == false)
+        {
+            loop_onewire();
+
+            onewireTimeWait = millis();
         }
     }
 

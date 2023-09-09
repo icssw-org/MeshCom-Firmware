@@ -62,6 +62,11 @@ void init_flash(void)
     strVar = preferences.getString("node_atxt");
     sprintf(meshcom_settings.node_atxt, "%s", strVar.c_str());
 
+    meshcom_settings.node_sset2 = preferences.getInt("node_sset2", 0x0000);
+    meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 16);
+
+    meshcom_settings.node_temp2 = preferences.getFloat("node_temp2", 0.0);
+
 }
 
 void save_settings(void)
@@ -115,6 +120,11 @@ void save_settings(void)
 
     strVar = meshcom_settings.node_atxt;
     preferences.putString("node_atxt", strVar); 
+
+    preferences.putInt("node_sset2", meshcom_settings.node_sset2);
+    preferences.putInt("node_owgpio", meshcom_settings.node_owgpio);
+
+    preferences.putFloat("node_temp2", meshcom_settings.node_temp2);
 
     preferences.end();
 

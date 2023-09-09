@@ -31,6 +31,7 @@
 #include <clock.h>
 
 #include <bmx280.h>
+#include <onewire_functions.h>
 
 #include <SparkFun_Ublox_Arduino_Library.h>
 SFE_UBLOX_GPS myGPS;
@@ -293,6 +294,8 @@ void nrf52setup()
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
     bEXTSER =  meshcom_settings.node_sset & 0x4000;
 
+    bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
+
     global_batt = 4200.0;
 
     posinfo_interval = POSINFO_INTERVAL;
@@ -303,6 +306,9 @@ void nrf52setup()
     
         global_batt = meshcom_settings.node_maxv * 1000.0F;
     }
+
+	// Initialize temp sensor
+    init_onewire();
 
     //  Initialize the LoRa Module
     lora_rak4630_init();
@@ -653,36 +659,39 @@ void nrf52loop()
 
     if(gKeyNum == 2)
     {
-        // GPS FIX
-        iGPSCount++;
-
-        if(iGPSCount > 10)
+        if(bGPSON)
         {
-            unsigned int igps = getGPS();
+            // GPS FIX
+            iGPSCount++;
 
-            if(bDEBUG)
+            if(iGPSCount > 10)
             {
-                Serial.printf("\nGPS: <posinterval:%i> <direction:%i> LAT:%lf LON:%lf %02d-%02d-%02d %02d:%02d:%02d\n", igps, posinfo_direction, tinyGPSPlus.location.lat(), tinyGPSPlus.location.lng(), tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
-                //Serial.printf("INT: LAT:%lf LON:%lf %i-%02i-%02i %02i:%02i:%02i\n", meshcom_settings.node_lat, meshcom_settings.node_lon, meshcom_settings.node_date_year, meshcom_settings.node_date_month,  meshcom_settings.node_date_day,
-                //meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
-            }
+                unsigned int igps = getGPS();
 
-            if(igps > 0)
-                posinfo_interval = igps;
-            else
-            {
-                no_gps_reset_counter++;
-                if(no_gps_reset_counter > 10)
+                if(bGPSDEBUG)
                 {
-                    posinfo_interval = POSINFO_INTERVAL;
-                    no_gps_reset_counter = 0;
-                    posinfo_fix = false;
-                    posinfo_satcount = 0;
-                    posinfo_hdop = 0;
+                    Serial.printf("\nGPS: <posinterval:%i> <direction:%i> LAT:%lf LON:%lf %02d-%02d-%02d %02d:%02d:%02d\n", igps, posinfo_direction, tinyGPSPlus.location.lat(), tinyGPSPlus.location.lng(), tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
+                    //Serial.printf("INT: LAT:%lf LON:%lf %i-%02i-%02i %02i:%02i:%02i\n", meshcom_settings.node_lat, meshcom_settings.node_lon, meshcom_settings.node_date_year, meshcom_settings.node_date_month,  meshcom_settings.node_date_day,
+                    //meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
                 }
-            }
 
-            iGPSCount=0;
+                if(igps > 0)
+                    posinfo_interval = igps;
+                else
+                {
+                    no_gps_reset_counter++;
+                    if(no_gps_reset_counter > 10)
+                    {
+                        posinfo_interval = POSINFO_INTERVAL;
+                        no_gps_reset_counter = 0;
+                        posinfo_fix = false;
+                        posinfo_satcount = 0;
+                        posinfo_hdop = 0;
+                    }
+                }
+
+                iGPSCount=0;
+            }
         }
 
         gKeyNum = 0;
@@ -709,7 +718,7 @@ void nrf52loop()
         bPosFirst = false;
         posinfo_shot=false;
         
-        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         posinfo_last_lat=posinfo_lat;
         posinfo_last_lon=posinfo_lon;
@@ -747,6 +756,20 @@ void nrf52loop()
     }
 
     #endif
+
+    if(onewireTimeWait == 0)
+        onewireTimeWait = millis() - 10000;
+
+
+    if ((onewireTimeWait + 10000) < millis())  // 10 sec
+    {
+        //if (tx_is_active == false && is_receiving == false)
+        {
+            loop_onewire();
+
+            onewireTimeWait = millis();
+        }
+    }
 
     mainStartTimeLoop();
 
@@ -920,7 +943,7 @@ void direction_parse(String tmp)
 /**@brief Function for handling a LoRa tx timer timeout event.
  */
 unsigned int getGPS(void)
-{ 
+{
     if(bGPSDEBUG)
         Serial.println("-----------check GPS-----------");
 

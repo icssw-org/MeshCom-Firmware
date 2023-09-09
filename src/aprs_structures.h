@@ -57,6 +57,7 @@ struct aprsPosition
     float press;
     float hum;
     float temp;
+    float temp2;
     int qfe;
     float qnh;
 };

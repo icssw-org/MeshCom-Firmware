@@ -232,6 +232,11 @@ struct s_meshcom_settings
 
 	char node_atxt[40] = {0};
 
+	int node_sset2 = 0x0000;
+	int node_owgpio = 16;
+
+	float node_temp2 = 0;
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
@@ -319,6 +324,11 @@ struct s_meshcomcompat_settings
 	int node_cr = 0;
 
 	char node_atxt[40] = {0};
+
+	int node_sset2 = 0x0000;
+	int node_owgpio = 16;
+
+	float node_temp2 = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;

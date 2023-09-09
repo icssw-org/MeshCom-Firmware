@@ -214,16 +214,18 @@ void commandAction(char *msg_text, int len, bool ble)
         else
         {
             Serial.printf("MeshCom %s %-4.4s commands\n--info     show info\n--mheard   show MHeard\n--setcall  set callsign (OE0XXX-1)\n--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION);
-            delay(150);
+            delay(100);
             Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
-            delay(150);
+            delay(100);
             Serial.printf("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--atxt   set APRS Textinfo\n--showI2C\n");
-            delay(150);
-            Serial.printf("--debug    on/off\n--loradebug on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n");
-            delay(150);
+            delay(100);
+            Serial.printf("--debug    on/off\n--loradebug on/off\n--gpsdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n");
+            delay(100);
+            Serial.printf("--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n");
+            delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
-            delay(150);
-            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--bmx BME/BMP off\n--gateway on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
+            delay(100);
+            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--bmx BME/BMP off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--gateway on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
         }
 
         return;
@@ -528,6 +530,52 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"onewire on") == 0)
+    {
+        bONEWIRE=true;
+        
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0001;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--onewire on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"onewire off") == 0)
+    {
+        bONEWIRE=false;
+        
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFE;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--onewire off");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"onewire gpio") == 0)
+    {
+        sscanf(msg_text+13, "%i", &meshcom_settings.node_owgpio);
+        
+        if(ble)
+        {
+            addBLECommandBack((char*)"--onewire gpio set");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"setpress") == 0)
     {
         fBaseAltidude = (float)meshcom_settings.node_alt;
@@ -713,6 +761,30 @@ void commandAction(char *msg_text, int len, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"wxdebug on") == 0)
+    {
+        bWXDEBUG=true;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--wxdebug on");
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"wxdebug off") == 0)
+    {
+        bWXDEBUG=false;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--wxdebug off");
+        }
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"gpsdebug on") == 0)
     {
         bGPSDEBUG=true;
@@ -760,7 +832,7 @@ void commandAction(char *msg_text, int len, bool ble)
             save_settings();
         }
 
-        sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+        sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         if(ble)
         {
@@ -1012,7 +1084,8 @@ void commandAction(char *msg_text, int len, bool ble)
         sprintf(_owner_c, "%s", msg_text+9);
         sscanf(_owner_c, "%f", &fVar);
 
-        if(!((fVar >= (430.0 + (LORA_BANDWIDTH/2)) && fVar <= (439.000 - (LORA_BANDWIDTH/2))) || (fVar >= (869.4 + (LORA_BANDWIDTH/2)) && fVar <= (869.65 - (LORA_BANDWIDTH/2)))))
+        float dec_bandwith = (LORA_BANDWIDTH/2.0)/100.0;
+        if(!((fVar >= (430.0 + dec_bandwith) && fVar <= (439.000 - dec_bandwith)) || (fVar >= (869.4 + dec_bandwith) && fVar <= (869.65 - dec_bandwith))))
         {
             Serial.printf("txfrequency %.3f MHz not within Band\n", fVar);
         }
@@ -1048,7 +1121,7 @@ void commandAction(char *msg_text, int len, bool ble)
         }
         else
         {
-            meshcom_settings.node_freq=fVar;
+            meshcom_settings.node_bw=fVar;
 
             Serial.printf("set txbw to %f kHz\n", meshcom_settings.node_bw);
 
@@ -1268,9 +1341,9 @@ void commandAction(char *msg_text, int len, bool ble)
 
     if(bInfo)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s\n...Call:  <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GWAY %s\n...GPS    %s\n...DEBUG  %s\n...LORADEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...BLE : %s\n...ATXT: %s\n", SOURCE_TYPE, SOURCE_VERSION,
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...Call:  <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GWAY %s\n...GPS    %s\n...BME    %s\n...ONEWIRE %s ..GPIO <%i>\n...DEBUG  %s\n...LORADEBUG %s\n...WXDEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...BLE : %s\n...ATXT: %s\n", SOURCE_TYPE, SOURCE_VERSION,
                 meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, mv_to_percent(global_batt), meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
-                (bGATEWAY?"on":"off"), (bGPSON?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, (bBLElong?"long":"short"), meshcom_settings.node_atxt);
+                (bGATEWAY?"on":"off"), (bGPSON?"on":"off"), (bBMEON?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, (bBLElong?"long":"short"), meshcom_settings.node_atxt);
 
         if(ble)
         {
@@ -1306,8 +1379,8 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(bWeather)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s\n...TEMP: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n", SOURCE_TYPE, SOURCE_VERSION,
-        meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
+        sprintf(print_buff, "--MeshCom %s %-4.4s\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n", SOURCE_TYPE, SOURCE_VERSION,
+        meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
 
         if(ble)
         {
