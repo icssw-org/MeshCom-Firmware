@@ -2,6 +2,7 @@
 #include <configuration.h>
 
 float global_batt = 0;
+int global_proz = 0;
 
 unsigned long BattTimeWait = 0;
 unsigned long BattTimeAPP = 0;
@@ -109,7 +110,7 @@ static void print_char_val_type(esp_adc_cal_value_t val_type)
  */
 void init_batt(void)
 {
-	Serial.println("init_batt");
+    Serial.println("[INIT]...init_batt");
 
 /** Analog input for battery level */
 #if defined(NRF52_SERIES)

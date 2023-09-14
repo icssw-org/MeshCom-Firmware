@@ -13,6 +13,9 @@ uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMes
 void initAPRSPOS(struct aprsPosition &aprsPosition);
 uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprsPosition);
 
+uint16_t encodeLoRaAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char strSourceCall[10], double lat, char lat_c, double lon, char lon_c, int alt);
+uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10], double lat, char lat_c, double lon, char lon_c, int alt);
+
 double conv_coord_to_dec(double coord);
 
 #endif

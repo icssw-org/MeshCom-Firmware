@@ -11,6 +11,8 @@ s_meshcom_settings meshcom_settings;
 // Get LoRa parameter
 void init_flash(void)
 {
+    Serial.println("[INIT]...init_flash");
+    
     preferences.begin("Credentials", false);
 
     String strVar = preferences.getString("node_call");
@@ -63,7 +65,7 @@ void init_flash(void)
     sprintf(meshcom_settings.node_atxt, "%s", strVar.c_str());
 
     meshcom_settings.node_sset2 = preferences.getInt("node_sset2", 0x0000);
-    meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 16);
+    meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 36);
 
     meshcom_settings.node_temp2 = preferences.getFloat("node_temp2", 0.0);
 

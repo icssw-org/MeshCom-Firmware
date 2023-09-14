@@ -41,7 +41,8 @@ void setup()
 
 }
 
-void loop() {
+void loop()
+{
 
   #if defined(BOARD_RAK4630)
     nrf52loop();

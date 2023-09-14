@@ -10,6 +10,8 @@
 
 extern unsigned long rebootAuto;
 
+extern bool bSetLoRaAPRS;
+
 extern bool bDEBUG;
 extern bool bLORADEBUG;
 extern bool bWXDEBUG;
@@ -44,6 +46,7 @@ extern float fBaseAltidude;
 extern float fBasePress;
 
 extern unsigned long onewireTimeWait;
+extern unsigned long lastHeardTime;
 
 // common variables
 extern char msg_text[MAX_MSG_LEN_PHONE * 2];
@@ -103,3 +106,4 @@ extern unsigned long hb_timer;           // GW Server-Heartbeat-Timer
 
 // batt
 extern float global_batt;
+extern int global_proz;

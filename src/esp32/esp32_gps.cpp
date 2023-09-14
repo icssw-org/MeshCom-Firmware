@@ -32,12 +32,19 @@
 #endif
 
 
-#include "SoftwareSerial.h"
-
-
 #define GPS_BAUDRATE 9600
 
+//    #define GPS_SERIAL_NUM 2
+//    HardwareSerial GPS(GPS_SERIAL_NUM);
+
+#if defined(NO_XPOWERS_CHIP_AXP192)  
+    #include "axp20x.h"
+    AXP20X_Class axp;
+#endif
+
+#include "SoftwareSerial.h"
 SoftwareSerial GPS(GPS_RX_PIN, GPS_TX_PIN);
+
 
 #if defined(XPOWERS_CHIP_AXP192)
 // Defined using AXP192
@@ -103,6 +110,29 @@ void setupGPS(bool bGPSON)
 | CPUSLDO    | x                 | x                 | x                 | 0.5-1.4V                        /30mA  |
 |            |                   |                   |                   |                                        |
 */
+    #if defined(NO_XPOWERS_CHIP_AXP192)
+
+    Wire.begin(I2C_SDA, I2C_SCL);
+
+    if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS))
+    {
+        Serial.println("AXP192 Begin PASS");
+    }
+    else
+    {
+        Serial.println("AXP192 Begin FAIL");
+    }
+    axp.setPowerOutPut(AXP192_LDO2, AXP202_ON);
+    axp.setPowerOutPut(AXP192_LDO3, AXP202_ON);
+    axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
+    axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
+    axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
+    Serial.println("All AXP192 started");
+        
+    Serial.println("[INIT]...NO_XPOWERS_CHIP");
+
+    #endif
+
     #if defined(XPOWERS_CHIP_AXP192)
     /* OLD
     if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
@@ -118,7 +148,7 @@ void setupGPS(bool bGPSON)
     Serial.println("All AXP192 started");
     */
     
-    Serial.println("XPOWERS_CHIP_AXP192");
+    Serial.println("[INIT]...XPOWERS_CHIP_AXP192");
 
     TwoWire *w = NULL;
 
@@ -184,7 +214,7 @@ void setupGPS(bool bGPSON)
         // it needs to be disabled, otherwise it will cause abnormal charging
         PMU->disableTSPinMeasure();
 
-        // PMU->enableSystemVoltageMeasure();
+        PMU->enableSystemVoltageMeasure();
         PMU->enableVbusVoltageMeasure();
         PMU->enableBattVoltageMeasure();
 
@@ -194,6 +224,8 @@ void setupGPS(bool bGPSON)
     #endif
 
     #if defined(XPOWERS_CHIP_AXP2101)
+
+    Serial.println("[INIT]...XPOWERS_CHIP_AXP2101");
 
     TwoWire *w = NULL;
 

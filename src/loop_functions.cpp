@@ -17,6 +17,9 @@ extern TinyGPSPlus tinyGPSPLus;
 extern unsigned long rebootAuto;
 
 extern float global_batt;
+extern int global_proz;
+
+bool bSetLoRaAPRS = false;
 
 bool bDEBUG = false;
 bool bLORADEBUG = false;
@@ -52,6 +55,8 @@ bool bButtonCheck = false;
 
 int iInitDisplay = 0;
 int iDisplayChange = 0;
+
+unsigned long lastHeardTime = 0;
 
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
@@ -452,7 +457,7 @@ void sendDisplayTime()
     if(bDisplayVolt)
         sprintf(cbatt, "%4.2f", global_batt/1000.0);
     else
-        sprintf(cbatt, "%3d%%", mv_to_percent(global_batt));
+        sprintf(cbatt, "%3d%%", global_proz);
 
  #if defined(XPOWERS_CHIP_AXP192)
     if(global_batt == 0.0)
@@ -494,7 +499,7 @@ void sendDisplayMainline()
     if(bDisplayVolt)
         sprintf(cbatt, "%4.2f", global_batt/1000.0);
     else
-        sprintf(cbatt, "%3d%%", mv_to_percent(global_batt));
+        sprintf(cbatt, "%3d%%", global_proz);
 
  #if defined(XPOWERS_CHIP_AXP192)
     if(global_batt == 0.0)
@@ -1269,11 +1274,9 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
             sprintf(catxt, "%s ", meshcom_settings.node_atxt);
         }
 
-        if(mv_to_percent(global_batt) > 0)
+        if(global_proz > 0)
         {
-            sprintf(cbatt, "/B=%03d", mv_to_percent(global_batt));
-
-            //Serial.printf("cbatt:%s mv_to_percent(global_batt):%d global_batt:%.2f\n", cbatt, mv_to_percent(global_batt), global_batt);
+            sprintf(cbatt, "/B=%03d", global_proz);
         }
 
         if(alt > 0)
@@ -1325,77 +1328,110 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 {
     //if(bDEBUG)
     //    Serial.printf("intervall:%i lat:%.4lf <%c> lon:%.4lf <%c> alt:%i press:%.1f hum:%.1f temp:%.1f qfe:%i qnh:%.1f\n", intervall, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
-    
+
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
-    struct aprsMessage aprsmsg;
+    bool bSendViaAPRS = bDisplayTrack;
 
-    initAPRS(aprsmsg);
+    if(posinfo_interval == 1800)    // wenn TRACK auf 30min steht
+        bSendViaAPRS = false;
 
-    aprsmsg.msg_len = 0;
+    if(lastHeardTime + 5000 > millis()) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auf jeden Fall über LoRaAPRS probieren
+        bSendViaAPRS = true;
 
-    // MSG ID zusammen setzen    
-    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
-
-    aprsmsg.payload_type = '!';
-    
-    if(intervall != POSINFO_INTERVAL)
-        aprsmsg.msg_track=true;
-
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
-    aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, qfe, qnh);
-    
-    if(aprsmsg.msg_payload == "")
-        return;
-
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 255)
-        meshcom_settings.node_msgid=0;
-    // Flash rewrite
-    save_settings();
-
-    encodeAPRS(msg_buffer, aprsmsg);
-
-    if(bDisplayInfo)
-    {
-        printBuffer_aprs((char*)"NEW-POS", aprsmsg);
-        Serial.println();
-    }
-
-    ringBuffer[iWrite][0]=aprsmsg.msg_len;
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
-    iWrite++;
-    if(iWrite >= MAX_RING)
-        iWrite=0;
-
-    if(bGATEWAY)
-    {
-		// UDP out
-		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
-    }
-    
-    // store last message to compare later on
-    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
-    own_msg_id[iWriteOwn][4]=0x00;
-    iWriteOwn++;
-    if(iWriteOwn >= MAX_RING)
-        iWriteOwn=0;
-
-    // An APP als Anzeige retour senden
-    if(isPhoneReady == 1)
-    {
-        addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
-    }
-
-    #ifdef ESP32
-        // Extern Server
-        if(bEXTUDP)
-            sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
-
-        if(bEXTSER)
-            sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
+    #ifdef BOARD_TLORA_OLV216
+        bSendViaAPRS = false;
     #endif
+
+    if(bSendViaAPRS)
+    {
+        //int ilng = encodeLoRaAPRS(msg_buffer, meshcom_settings.node_call, lat, lat_c, lon, lon_c, alt);
+        int ilng = encodeLoRaAPRScompressed(msg_buffer, meshcom_settings.node_call, lat, lat_c, lon, lon_c, alt);
+
+        if(bDisplayInfo)
+        {
+            Serial.print(getTimeString());
+            Serial.printf(" LO-APRS:%s\n", msg_buffer+3);
+        }
+
+        ringBuffer[iWrite][0]=ilng;
+        memcpy(ringBuffer[iWrite]+1, msg_buffer, ilng);
+        iWrite++;
+        if(iWrite >= MAX_RING)
+            iWrite=0;
+    }
+    else
+    {
+        struct aprsMessage aprsmsg;
+
+        initAPRS(aprsmsg);
+
+        aprsmsg.msg_len = 0;
+
+        // MSG ID zusammen setzen    
+        aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
+
+        aprsmsg.payload_type = '!';
+        
+        if(intervall != POSINFO_INTERVAL)
+            aprsmsg.msg_track=true;
+
+        aprsmsg.msg_source_path = meshcom_settings.node_call;
+        aprsmsg.msg_destination_path = "*";
+        aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, qfe, qnh);
+        
+        if(aprsmsg.msg_payload == "")
+            return;
+
+        meshcom_settings.node_msgid++;
+        if(meshcom_settings.node_msgid > 255)
+            meshcom_settings.node_msgid=0;
+        // Flash rewrite
+        save_settings();
+
+        encodeAPRS(msg_buffer, aprsmsg);
+
+        if(bDisplayInfo)
+        {
+            printBuffer_aprs((char*)"NEW-POS", aprsmsg);
+            Serial.println();
+        }
+
+        ringBuffer[iWrite][0]=aprsmsg.msg_len;
+        memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
+        iWrite++;
+        if(iWrite >= MAX_RING)
+            iWrite=0;
+
+        if(bGATEWAY)
+        {
+            // UDP out
+            addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+        }
+        
+        // store last message to compare later on
+        memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+        own_msg_id[iWriteOwn][4]=0x00;
+        iWriteOwn++;
+        if(iWriteOwn >= MAX_RING)
+            iWriteOwn=0;
+
+        // An APP als Anzeige retour senden
+        if(isPhoneReady == 1)
+        {
+            addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+        }
+
+        #ifdef ESP32
+            // Extern Server
+            if(bEXTUDP)
+                sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
+
+            if(bEXTSER)
+                sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
+        #endif
+    }
+
 }
 
 void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, int qfe, float qnh)
@@ -1561,12 +1597,12 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         gps_send_rate = 60; // seconds
     else
     if(posinfo_distance < 420)  // rad < 15 km/h
-        gps_send_rate = 120; // seconds
+        gps_send_rate = 60; // seconds
     else
     if(posinfo_distance < 1100)  // auto stadt < 40 km/h
-        gps_send_rate = 180; // seconds
+        gps_send_rate = 120; // seconds
     else
-        gps_send_rate = 300; // auto > 40 km/h
+        gps_send_rate = 180; // auto > 40 km/h
 
     int direction_diff=0;
 

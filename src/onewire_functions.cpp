@@ -1,3 +1,5 @@
+#ifndef BOARD_TLORA_OLV216
+
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
 
@@ -5,9 +7,9 @@
 
 #include <OneWire.h>
 
-OneWire ds(meshcom_settings.node_owgpio);  // on pin 16
-
 unsigned long onewireTimeWait = 0;
+
+OneWire ds;
 
 void PrintBytes(const uint8_t* addr, uint8_t count, bool newline=false)
 {
@@ -21,11 +23,19 @@ void PrintBytes(const uint8_t* addr, uint8_t count, bool newline=false)
 
 void init_onewire(void)
 {
+    Serial.printf("[INIT]...init_onewire - GPIO:%i\n", meshcom_settings.node_owgpio);
+
+    if(meshcom_settings.node_owgpio > 0)
+        ds.begin(meshcom_settings.node_owgpio);  // default on pin 36
+   
 }
 
 void loop_onewire()
 {
     if(!bONEWIRE)
+        return;
+
+    if(meshcom_settings.node_owgpio == 0)
         return;
 
     byte i;
@@ -164,3 +174,4 @@ void loop_onewire()
 
     meshcom_settings.node_temp2 = celsius;
 }
+#endif

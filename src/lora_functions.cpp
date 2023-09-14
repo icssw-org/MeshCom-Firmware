@@ -37,6 +37,7 @@
 #include <batt_functions.h>
 #include <mheard_functions.h>
 #include <udp_functions.h>
+#include <lora_setchip.h>
 
 int sendlng = 0;
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE+10];  // lora tx buffer
@@ -204,6 +205,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_payload_type = aprsmsg.payload_type;
 
                 updateMheard(mheardLine, isPhoneReady);
+
+                // last heard LoRa MeshCom-Packet
+                lastHeardTime = millis();
 
                 //
                 ///////////////////////////////////////////////
@@ -417,7 +421,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         }
 
                         // resend only Packet to all and !owncall 
-                        if(aprsmsg.msg_destination_call != meshcom_settings.node_call)
+                        if(aprsmsg.msg_destination_call != meshcom_settings.node_call && !bSetLoRaAPRS)
                         {
                             if(aprsmsg.max_hop > 0)
                                 aprsmsg.max_hop--;
@@ -568,6 +572,8 @@ bool doTX()
     {
         sendlng = ringBuffer[iRead][0];
         memcpy(lora_tx_buffer, ringBuffer[iRead] + 1, sendlng);
+        
+        lora_tx_buffer[sendlng]=0x00;
 
         int save_read=iRead;
 
@@ -578,36 +584,19 @@ bool doTX()
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
-            struct aprsMessage aprsmsg;
-            
-            // print which message type we got
-            uint8_t msg_type_b_lora = 0x00;
-            
-            msg_type_b_lora = decodeAPRS(lora_tx_buffer, sendlng, aprsmsg);
-
-            if(msg_type_b_lora != 0x00) // 0x41 ACK
+#ifdef ESP32
+#ifndef BOARD_TLORA_OLV216
+            if(lora_tx_buffer[0] == '<' && bDisplayTrack)
             {
-                if(tx_waiting)
-                {
-                    tx_waiting=false;
-                }
-                else
-                {
-                    //vor jeden senden 7 aufeinander folgende CAD abwarten
-                    //if(aprsmsg.msg_payload.indexOf(":ack") > 0)
-                    {
-                        cmd_counter=7;
-                        
-                        if(bLORADEBUG)
-                            Serial.printf("cmd_counter = 7:%i \n", cmd_counter);
-
-                        iRead=save_read;
-                        tx_waiting=true;
-                        return false;
-                    }
-                }
+                tx_waiting=false;
 
                 tx_is_active = true;
+
+                if(!lora_setchip_aprs())
+                {
+                    iRead=save_read;
+                    return false;
+                }
                 
                 // you can transmit C-string or Arduino string up to
                 // 256 characters long
@@ -617,30 +606,84 @@ bool doTX()
                     transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                 #endif
 
-                if (iWrite == iRead)
-                {
-                    DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
-                }
-                else
-                {
-                    DEBUG_MSG_VAL("RADIO", iRead, "TX :");
-                }
-
-                if(lora_tx_buffer[0] == 0x41)
+                if(bDisplayInfo)
                 {
                     Serial.print(getTimeString());
-                    Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[1], lora_tx_buffer[2], lora_tx_buffer[3], lora_tx_buffer[4], lora_tx_buffer[5], lora_tx_buffer[6]);
-                }   
-                else
-                {
-                    if(bDisplayInfo)
-                    {
-                        printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
-                        Serial.println("");
-                    }
+                    Serial.printf(" TX-APRS:%s\n", lora_tx_buffer+3);
                 }
 
+                bSetLoRaAPRS = true;
+
                 return true;
+            }
+            else
+#endif
+#endif
+            {
+                struct aprsMessage aprsmsg;
+                
+                // print which message type we got
+                uint8_t msg_type_b_lora = 0x00;
+                
+                msg_type_b_lora = decodeAPRS(lora_tx_buffer, sendlng, aprsmsg);
+
+                if(msg_type_b_lora != 0x00) // 0x41 ACK
+                {
+                    if(tx_waiting)
+                    {
+                        tx_waiting=false;
+                    }
+                    else
+                    {
+                        //vor jeden senden 7 aufeinander folgende CAD abwarten
+                        //if(aprsmsg.msg_payload.indexOf(":ack") > 0)
+                        {
+                            cmd_counter=7;
+                            
+                            if(bLORADEBUG)
+                                Serial.printf("cmd_counter = 7:%i \n", cmd_counter);
+
+                            iRead=save_read;
+                            tx_waiting=true;
+                            return false;
+                        }
+                    }
+
+                    tx_is_active = true;
+                    
+                    // you can transmit C-string or Arduino string up to
+                    // 256 characters long
+                    #if defined BOARD_RAK4630
+                        Radio.Send(lora_tx_buffer, sendlng);
+                    #else
+                        transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
+                    #endif
+
+                    if (iWrite == iRead)
+                    {
+                        DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
+                    }
+                    else
+                    {
+                        DEBUG_MSG_VAL("RADIO", iRead, "TX :");
+                    }
+
+                    if(lora_tx_buffer[0] == 0x41)
+                    {
+                        Serial.print(getTimeString());
+                        Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[1], lora_tx_buffer[2], lora_tx_buffer[3], lora_tx_buffer[4], lora_tx_buffer[5], lora_tx_buffer[6]);
+                    }   
+                    else
+                    {
+                        if(bDisplayInfo)
+                        {
+                            printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
+                            Serial.println("");
+                        }
+                    }
+
+                    return true;
+                }
             }
         }
         else

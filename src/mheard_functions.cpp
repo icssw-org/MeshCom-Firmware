@@ -10,6 +10,8 @@ String HardWare[13] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBE
 
 void initMheard()
 {
+    Serial.println("[INIT]...initMheard");
+
     for(int iset=0; iset<MAX_MHEARD; iset++)
     {
         memset(mheardBuffer[iset], 0x00, 60);

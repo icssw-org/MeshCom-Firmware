@@ -136,6 +136,8 @@ void setupBMX280()
 
 	bmx280.address_ = bmx_i2c_address;	//initialize the BMx280Wire classes private member address_ to the i2c address provided
 
+    Serial.printf("[INIT]...setupBMX280 - I2C:%02X\n", bmx_i2c_address);
+
 	//begin() checks the Interface, reads the sensor ID (to differentiate between BMP280 and BME280)
 	//and reads compensation parameters.
 	if (!bmx280.begin())

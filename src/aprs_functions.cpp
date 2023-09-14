@@ -49,6 +49,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
     if(RcvBuffer[0] == 0x41)    // ACK
         return 0x41;
 
+    if(RcvBuffer[0] == 0x3C)    // loRaAPRS Packet
+        return 0x00;
+
     if(rsize < 16)
     {
         Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - size <%i> to short!\n", rsize);
@@ -664,6 +667,158 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     aprsmsg.msg_len = inext;
 
     return inext;
+}
+
+// OE1KBC-17>APLT00-1,WIDE1-1,qAS,OE3CGG-10:!4807.01N/01619.20E[(T-ECHO by F4AVI)
+uint16_t encodeLoRaAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10], double lat, char lat_c, double lon, char lon_c, int alt)
+{
+    char msg_start[UDP_TX_BUF_SIZE];
+
+    uint16_t ilng = 0;
+
+	double slat = 100.0;
+    slat = lat*slat;
+	double slon = 100.0;
+    slon=lon*slon;
+	
+    double slatr=60.0;
+    double slonr=60.0;
+    
+    slat = (int)lat;
+    slatr = (lat - slat) * slatr;
+    slat = (slat * 100.) + slatr;
+    
+    slon = (int)lon;
+    slonr = (lon - slon) * slonr;
+    slon = (slon * 100.) + slonr;
+
+    if(lon_c != 'W' && lon_c != 'E')
+        lon_c = 'E';
+
+    if(lat_c != 'N' && lat_c != 'S')
+        lat_c = 'N';
+
+
+    // Create buffer
+    msg_buffer[0]='<';
+    
+    msg_buffer[1]=0xFF;
+    msg_buffer[2]=0x01;
+
+    String msgtext="(via MeshCom)";
+    if(meshcom_settings.node_atxt[0] != 0x00)
+        msgtext = meshcom_settings.node_atxt;
+
+    sprintf(msg_start, "%s>APLT00-1,WIDE1-1:!%07.2lf%c%c%08.2lf%c%c%s", cSourceCall, slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, msgtext.c_str());
+
+    ilng = strlen(msg_start) + 3;
+
+    if(ilng >= UDP_TX_BUF_SIZE)
+        ilng = UDP_TX_BUF_SIZE - 1;
+
+    memcpy(msg_buffer + 3, msg_start, ilng - 3);
+
+    msg_buffer[ilng] = 0x00;
+
+    return ilng;
+}
+
+uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10], double lat, char lat_c, double lon, char lon_c, int alt)
+{
+    char msg_start[UDP_TX_BUF_SIZE];
+
+    uint16_t ilng = 0;
+
+    if(lon_c != 'W' && lon_c != 'E')
+        lon_c = 'E';
+
+    if(lat_c != 'N' && lat_c != 'S')
+        lat_c = 'N';
+
+    double dlat = lat;
+    if(lat_c == 'S')
+        dlat = dlat * -1.0;
+
+    double dlon = lon;
+    if(lon_c == 'W')
+        dlon = dlon * -1.0;
+
+    long lgeo = 0;
+    uint8_t l1, l2, l3, l4;
+    char clat[4];
+    char clon[4];
+
+    for(int ig=1;ig<3;ig++)
+    {
+        if(ig == 1)
+        {
+            lgeo = 380926.0 * (90.0 - dlat);
+            //Serial.printf("dlat %lf lgeo %ld ", dlat, lgeo);
+        }
+        else
+        {
+            lgeo = 190463.0 * (180.0 + dlon);
+            //Serial.printf("dlat %lf lgeo %ld ", dlon, lgeo);
+        }
+
+
+        l1 = (double)lgeo / 753571.0;
+        lgeo = lgeo - (long)(l1 * 753571);
+
+        //Serial.printf("l1 %i > rest %ld ", l1, lgeo);
+
+        l2 = (double)lgeo / 8281.0;
+        lgeo = lgeo - (long)(l2 * 8281);
+
+        //Serial.printf("l2 %i > rest %ld ", l2, lgeo);
+
+        l3 = (double)lgeo / 91.0;
+
+        //Serial.printf("l3 %i > rest %ld ", l3, lgeo);
+
+        l4 = lgeo - (long)(l3 * 91);
+
+        //Serial.printf("l4 %i\n", l4);
+
+        if(ig == 1)
+        {
+            clat[0] = (char)(l1+33);
+            clat[1] = (char)(l2+33);
+            clat[2] = (char)(l3+33);
+            clat[3] = (char)(l4+33);
+        }
+        else
+        {
+            clon[0] = (char)(l1+33);
+            clon[1] = (char)(l2+33);
+            clon[2] = (char)(l3+33);
+            clon[3] = (char)(l4+33);
+        }
+    }
+
+
+    // Create buffer
+    msg_buffer[0]='<';
+    
+    msg_buffer[1]=0xFF;
+    msg_buffer[2]=0x01;
+
+    String msgtext="(MeshCom)";
+    if(meshcom_settings.node_atxt[0] != 0x00)
+        msgtext = meshcom_settings.node_atxt;
+
+    sprintf(msg_start, "%s>APLT00-1,WIDE1-1:=%c%c%c%c%c%c%c%c%c%c P[%s", cSourceCall, meshcom_settings.node_symid, clat[0], clat[1], clat[2], clat[3], clon[0], clon[1], clon[2], clon[3], meshcom_settings.node_symcd, msgtext.c_str());
+
+    ilng = strlen(msg_start) + 3;
+
+    if(ilng >= UDP_TX_BUF_SIZE)
+        ilng = UDP_TX_BUF_SIZE - 1;
+
+    memcpy(msg_buffer + 3, msg_start, ilng - 3);
+
+    msg_buffer[ilng] = 0x00;
+
+    return ilng;
 }
 
 double conv_coord_to_dec(double coord)

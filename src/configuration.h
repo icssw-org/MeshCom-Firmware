@@ -1,5 +1,5 @@
 /*
-    definitions
+definitions
 */
 
 #pragma once
@@ -7,7 +7,8 @@
 #include <Arduino.h>
 
 #define SOURCE_TYPE "MC"
-#define SOURCE_VERSION "4.26"
+#define SOURCE_VERSION "4.27"
+#define SOURCE_VERSION_SUB "c"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -77,7 +78,7 @@
     #define TX_POWER_MIN 1
 
     // Defined using AXP192
-    #define XPOWERS_CHIP_AXP192
+    #define NO_XPOWERS_CHIP_AXP192
 #endif
 
 #ifdef BOARD_AXP2101
@@ -219,6 +220,8 @@
 
 #define BLE_TEST 0
 
+#define SYNC_WORD_SX127x 0x2b  // MeshCom Sync Word!!
+
 #ifdef ESP32
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
@@ -238,7 +241,6 @@
 // !!sofern richtig wird DIO1 nur für LoRaWAN benötigt. Das TloraV2 hat keinen DIO1 definiert, 
 // wird aber grundsätzlich in der Modem-Config benötigt!!!
 
-#define SYNC_WORD_SX127x 0x2b  // MeshCom Sync Word!!
 
 
 #ifdef SX127X
