@@ -244,6 +244,31 @@ void nrf52setup()
     pinMode(LED_GREEN, OUTPUT);
     pinMode(LED_BLUE, OUTPUT);
 
+    //  Initialize the Serial Port for debug output
+    time_t timeout = millis();
+    Serial.begin(MONITOR_SPEED);
+    while (!Serial)
+    {
+        if ((millis() - timeout) < 2000)
+        {
+            delay(100);
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    //gps init
+    pinMode(WB_IO2, OUTPUT);
+    digitalWrite(WB_IO2, 0);
+    delay(1000);
+    digitalWrite(WB_IO2, 1);
+    delay(1000);
+
+    Serial.println("=====================================");
+    Serial.println("START CLIENT");
+
     // clear the buffers
     for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
     {
@@ -295,6 +320,7 @@ void nrf52setup()
     bEXTSER =  meshcom_settings.node_sset & 0x4000;
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
+    bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
 
     global_batt = 4200.0;
 
@@ -326,22 +352,6 @@ void nrf52setup()
     }
 
 
-    //  Initialize the Serial Port for debug output
-    time_t timeout = millis();
-    Serial.begin(MONITOR_SPEED);
-    while (!Serial)
-    {
-        if ((millis() - timeout) < 2000)
-        {
-            delay(100);
-        }
-        else
-        {
-            break;
-        }
-    }
-
-
     ////////////////////////////////////////////////////////////////////
     // Initialize time
 	bool boResult;
@@ -354,102 +364,106 @@ void nrf52setup()
     //
     ////////////////////////////////////////////////////////////////////
 
-    //gps init
-    pinMode(WB_IO2, OUTPUT);
-    digitalWrite(WB_IO2, 0);
-    delay(1000);
-    digitalWrite(WB_IO2, 1);
-    delay(1000);
-    
-    Serial.println("=====================================");
-
-    Serial.println("GPS: trying 38400 baud");
-    
-    Serial1.begin(38400);
-    Serial1.setTimeout(500);
-    while (!Serial1);
-
-    if(Serial1)
+    if(bGPSON)
     {
-        if (myGPS.begin(Serial1))
+        //gps init
+        pinMode(WB_IO2, OUTPUT);
+        digitalWrite(WB_IO2, 0);
+        delay(1000);
+        digitalWrite(WB_IO2, 1);
+        delay(1000);
+        
+        Serial.println("=====================================");
+
+        Serial.println("GPS: trying 38400 baud");
+        
+        Serial1.begin(38400);
+        Serial1.setTimeout(500);
+        while (!Serial1);
+
+        if(Serial1)
         {
-            Serial.println("GPS: connected at 38400 baud");
-        }
-        else
-        {
-            Serial1.end();
-
-            delay(100);
-            Serial.println("GPS: trying 9600 baud");
-
-            Serial1.begin(9600);
-            Serial1.setTimeout(500);
-            while (!Serial1);
-
-            if(Serial1)
+            if (myGPS.begin(Serial1))
             {
-                if (myGPS.begin(Serial1))
-                {
-                    Serial.println("GPS: connected at 9600 baud");
-                }
-                else
-                {
-                    Serial.println("GPS: speed not found");
-                }
+                Serial.println("GPS: connected at 38400 baud");
             }
             else
-                Serial.println("GPS: not connected");
+            {
+                Serial1.end();
+
+                delay(100);
+                Serial.println("GPS: trying 9600 baud");
+
+                Serial1.begin(9600);
+                Serial1.setTimeout(500);
+                while (!Serial1);
+
+                if(Serial1)
+                {
+                    if (myGPS.begin(Serial1))
+                    {
+                        Serial.println("GPS: connected at 9600 baud");
+                    }
+                    else
+                    {
+                        Serial.println("GPS: speed not found");
+                    }
+                }
+                else
+                    Serial.println("GPS: not connected");
+            }
         }
+        else
+            Serial.println("GPS: not connected");
+
+        delay(100);
     }
-    else
-        Serial.println("GPS: not connected");
 
-    delay(100);
-
-    #if defined(ENABLE_BMX280)
-        setupBMX280();
-    #endif
+    setupBMX280();
 
     // Try to initialize!
     #if defined(LPS33)
-    
-    Serial.println("Adafruit LPS33 check");
 
-    if (!g_lps22hb.begin_I2C(0x5d)) 
+    if(bLPS33)
     {
-        Serial.println("Failed to find LPS33 chip");
-        //while (1) 
-        { 
-          //  delay(10); 
-        }
-    }
-    else
-    {
-        Serial.println("LPS33 sensor found");
+        Serial.println("Adafruit LPS33 check");
 
-        g_lps22hb.setDataRate(LPS22_RATE_10_HZ);
-
-        /*
-        Serial.print("Data rate set to: ");
-
-        switch (g_lps22hb.getDataRate()) 
+        if (!g_lps22hb.begin_I2C(0x5d)) 
         {
-            case LPS22_RATE_ONE_SHOT: Serial.println("One Shot / Power Down"); 
-                break;
-            case LPS22_RATE_1_HZ: Serial.println("1 Hz"); 
-                break;
-            case LPS22_RATE_10_HZ: Serial.println("10 Hz"); 
-                break;
-            case LPS22_RATE_25_HZ: Serial.println("25 Hz"); 
-                break;
-            case LPS22_RATE_50_HZ: Serial.println("50 Hz"); 
-                break;
+            Serial.println("Failed to find LPS33 chip");
+            //while (1) 
+            { 
+            //  delay(10); 
+            }
         }
-        */
+        else
+        {
+            Serial.println("LPS33 sensor found");
+
+            g_lps22hb.setDataRate(LPS22_RATE_10_HZ);
+
+            /*
+            Serial.print("Data rate set to: ");
+
+            switch (g_lps22hb.getDataRate()) 
+            {
+                case LPS22_RATE_ONE_SHOT: Serial.println("One Shot / Power Down"); 
+                    break;
+                case LPS22_RATE_1_HZ: Serial.println("1 Hz"); 
+                    break;
+                case LPS22_RATE_10_HZ: Serial.println("10 Hz"); 
+                    break;
+                case LPS22_RATE_25_HZ: Serial.println("25 Hz"); 
+                    break;
+                case LPS22_RATE_50_HZ: Serial.println("50 Hz"); 
+                    break;
+            }
+            */
+        }
     }
     #endif // LPS33
 
-    #if defined(SHT3)
+    #if defined(SHTC3)
 
     Serial.println("Adafruit SHTC3 check");
     if (!shtc3.begin()) {
@@ -458,7 +472,7 @@ void nrf52setup()
     }
     Serial.println("SHTC3 sensor found");
 
-    #endif // SHT3
+    #endif // SHTC3
 
     //////////////////////////////////////////////////////
     // BLE INIT
@@ -482,6 +496,7 @@ void nrf52setup()
 	// Take the semaphore so the loop will go to sleep until an event happens
 	xSemaphoreTake(g_task_sem, 10);
 #endif
+
 #ifdef ARDUINO_ARCH_RP2040
 	// RAK11310 does not have BLE, switch off blue LED
 	digitalWrite(LED_BLUE, LOW);
@@ -489,6 +504,7 @@ void nrf52setup()
 
 
     Wire.begin();
+
     u8g2.begin();
 
     u8g2.clearDisplay();
@@ -499,8 +515,8 @@ void nrf52setup()
         u8g2.setFont(u8g2_font_10x20_mf);
         u8g2.drawStr(5, 20, "MeshCom 4.0");
         u8g2.setFont(u8g2_font_6x10_mf);
-        char cvers[10];
-        sprintf(cvers, "FW %s%s", SOURCE_TYPE, SOURCE_VERSION);
+        char cvers[20];
+        sprintf(cvers, "FW %s%s/%s", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
         u8g2.drawStr(5, 30, cvers);
         u8g2.drawStr(5, 40, "by icssw.org");
         u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
@@ -650,6 +666,8 @@ void nrf52loop()
 
     if(gKeyNum == 1)
     {
+        //Serial.println("gKeyNum == 1");
+
         //getTEMP();
 
         //getPRESSURE();
@@ -659,6 +677,8 @@ void nrf52loop()
 
     if(gKeyNum == 2)
     {
+        //Serial.println("gKeyNum == 2");
+
         if(bGPSON)
         {
             // GPS FIX
@@ -667,13 +687,6 @@ void nrf52loop()
             if(iGPSCount > 10)
             {
                 unsigned int igps = getGPS();
-
-                if(bGPSDEBUG)
-                {
-                    Serial.printf("\nGPS: <posinterval:%i> <direction:%i> LAT:%lf LON:%lf %02d-%02d-%02d %02d:%02d:%02d\n", igps, posinfo_direction, tinyGPSPlus.location.lat(), tinyGPSPlus.location.lng(), tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
-                    //Serial.printf("INT: LAT:%lf LON:%lf %i-%02i-%02i %02i:%02i:%02i\n", meshcom_settings.node_lat, meshcom_settings.node_lon, meshcom_settings.node_date_year, meshcom_settings.node_date_month,  meshcom_settings.node_date_day,
-                    //meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
-                }
 
                 if(igps > 0)
                     posinfo_interval = igps;
@@ -725,15 +738,15 @@ void nrf52loop()
         posinfo_last_direction=posinfo_direction;
 
 
-        #if defined(LPS33)
+        /*
             sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
              meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
-        #endif
+        */
 
         posinfo_timer = millis();
     }
 
-    #if defined(LPS33)
+    #if defined(SHTC3)
 
     // TEMP/HUM
     if (((temphum_timer + TEMPHUM_INTERVAL) < millis()))
@@ -745,16 +758,18 @@ void nrf52loop()
 
     #endif
 
-    #if defined(SHT3)
+    #if defined(LPS33)
 
-    // DRUCK
-    if (((druck_timer + DRUCK_INTERVAL) < millis()))
+    if(bLPS33)
     {
-        getPRESSURE();
+        // DRUCK
+        if (((druck_timer + DRUCK_INTERVAL) < millis()))
+        {
+            getPRESSURE();
 
-        druck_timer = millis();
+            druck_timer = millis();
+        }
     }
-
     #endif
 
     if(onewireTimeWait == 0)
@@ -812,6 +827,7 @@ void nrf52loop()
         if (tx_is_active == false && is_receiving == false)
         {
             global_batt = read_batt();
+            global_proz = mv_to_percent(global_batt);
 
             BattTimeWait = millis();
         }
@@ -826,7 +842,7 @@ void nrf52loop()
         if ((BattTimeAPP + 180000) < millis())  // 60*3 sec
         {
             char cbatt[15];
-            sprintf(cbatt, "--BAT %4.2f %03i", global_batt/1000.0, mv_to_percent(global_batt));
+            sprintf(cbatt, "--BAT %4.2f %03i", global_batt/1000.0, global_proz);
 
             addBLECommandBack(cbatt);
             
@@ -842,17 +858,14 @@ void nrf52loop()
     if ((BMXTimeWait + 30000) < millis())   // 30 sec
     {
         // read BMX Sensor
-        #if defined(ENABLE_BMX280)
-            if(loopBMX280())
-            {
-                meshcom_settings.node_temp = getTemp();
-                meshcom_settings.node_hum = getHum();  //BMP280 - not supported
-                meshcom_settings.node_press = getPress();
+        if(loopBMX280())
+        {
+            meshcom_settings.node_temp = getTemp();
+            meshcom_settings.node_hum = getHum();  //BMP280 - not supported
+            meshcom_settings.node_press = getPress();
 
-                BMXTimeWait = millis();
-            }
-
-        #endif
+            BMXTimeWait = millis();
+        }
     }
 
     //  We are on FreeRTOS, give other tasks a chance to run
@@ -886,10 +899,12 @@ void getTEMP(void)
 
     shtc3.getEvent(&humidity, &temp); // populate temp and humidity objects with fresh data
 
-    /*
-    Serial.print("Temperature: "); Serial.print(temp.temperature); Serial.println(" degrees C");
-    Serial.print("Humidity: "); Serial.print(humidity.relative_humidity); Serial.println("% rH");
-    */
+    if(bWXDEBUG)
+    {
+        Serial.print("Temperature: "); Serial.print(temp.temperature); Serial.println(" degrees C");
+        Serial.print("Humidity: "); Serial.print(humidity.relative_humidity); Serial.println("% rH");
+    }
+
     meshcom_settings.node_temp = temp.temperature;
     meshcom_settings.node_hum = humidity.relative_humidity;
 }
@@ -903,18 +918,21 @@ void getPRESSURE(void)
     
     g_lps22hb.getEvent(&pressure, &temp);
 
-    /*
-    Serial.print("Temperature: ");Serial.print(temp.temperature);Serial.println(" degrees C");
-    Serial.print("Pressure: ");Serial.print(pressure.pressure);Serial.println(" hPa");
-    Serial.println("");
-    */
+    if(bWXDEBUG)
+    {
+        Serial.print("Temperature: ");Serial.print(temp.temperature);Serial.println(" degrees C");
+        Serial.print("Pressure: ");Serial.print(pressure.pressure);Serial.println(" hPa");
+        Serial.println("");
+    }
     
     double home_alt=meshcom_settings.node_alt;    // Höhe des Standorts
     double temperature_gradient = 0.0065;           // Standard-Temperaturgradient
     double temperatureK = temp.temperature + 273.15;     // Temperatur in Kelvin
     
     // barometrische Höhenformel
-    meshcom_settings.node_press = pressure.pressure * pow((temperatureK / (temperatureK + home_alt * temperature_gradient)) , -5.255);
+    //meshcom_settings.node_press = pressure.pressure * pow((temperatureK / (temperatureK + home_alt * temperature_gradient)) , -5.255);
+    meshcom_settings.node_press = pressure.pressure;
+    meshcom_settings.node_temp = temp.temperature;
 }
 
 /**@brief Function for analytical direction.
@@ -1004,6 +1022,14 @@ unsigned int getGPS(void)
         posinfo_satcount = tinyGPSPlus.satellites.value();
         posinfo_hdop = tinyGPSPlus.hdop.value();
         posinfo_fix = true;
+
+        if(bGPSDEBUG)
+        {
+            Serial.printf("INT: LAT:%lf%c LON:%lf%c ALT:%i (%i-%02i-%02i %02i:%02i:%02i)\n", meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
+            meshcom_settings.node_date_year, meshcom_settings.node_date_month,  meshcom_settings.node_date_day,
+            meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
+        }
+
 
         return setSMartBeaconing(dlat, dlon);
     }

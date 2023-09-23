@@ -33,6 +33,8 @@ extern bool bBMEON;
 
 extern bool bONEWIRE;
 
+extern bool bLPS33;
+
 extern bool bSHORTPATH;
 extern bool bGPSDEBUG;
 

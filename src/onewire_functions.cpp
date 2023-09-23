@@ -1,4 +1,4 @@
-#ifndef BOARD_TLORA_OLV216
+//#ifndef BOARD_TLORA_OLV216
 
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
@@ -23,6 +23,9 @@ void PrintBytes(const uint8_t* addr, uint8_t count, bool newline=false)
 
 void init_onewire(void)
 {
+    if(!bONEWIRE)
+        return;
+
     Serial.printf("[INIT]...init_onewire - GPIO:%i\n", meshcom_settings.node_owgpio);
 
     if(meshcom_settings.node_owgpio > 0)
@@ -174,4 +177,4 @@ void loop_onewire()
 
     meshcom_settings.node_temp2 = celsius;
 }
-#endif
+//#endif

@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "MC"
 #define SOURCE_VERSION "4.27"
-#define SOURCE_VERSION_SUB "c"
+#define SOURCE_VERSION_SUB "g"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -31,9 +31,9 @@ definitions
 #ifdef BOARD_RAK4630
     #define MODUL_HARDWARE RAK4631
     #define RF_FREQUENCY 433175000 // 432900000   // Hz
-    #define ENABLE_BMX280
     #define TX_POWER_MAX 22  // max 22 dBm
     #define TX_POWER_MIN 1
+    #define ENABLE_BMX280
 #endif
 
 #ifdef BOARD_T_ECHO
@@ -78,7 +78,7 @@ definitions
     #define TX_POWER_MIN 1
 
     // Defined using AXP192
-    #define NO_XPOWERS_CHIP_AXP192
+    #define XPOWERS_CHIP_AXP192
 #endif
 
 #ifdef BOARD_AXP2101
@@ -151,7 +151,7 @@ definitions
 
 #ifdef RAK4630
 
-//#define LPS33     // Druckmesser
+#define LPS33     // Druckmesser
 //#define SHTC3     // Temperatur
 
 // Define RAK LoRa parameters
@@ -213,10 +213,6 @@ definitions
 // BLE Settings
 #define MAX_MSG_LEN_PHONE 300
 #define PAIRING_PIN "000000"    // Pairing PIN for BLE Connection
-
-
-//#define LPS33
-//#define SHT3
 
 #define BLE_TEST 0
 

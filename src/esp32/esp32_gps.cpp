@@ -37,11 +37,6 @@
 //    #define GPS_SERIAL_NUM 2
 //    HardwareSerial GPS(GPS_SERIAL_NUM);
 
-#if defined(NO_XPOWERS_CHIP_AXP192)  
-    #include "axp20x.h"
-    AXP20X_Class axp;
-#endif
-
 #include "SoftwareSerial.h"
 SoftwareSerial GPS(GPS_RX_PIN, GPS_TX_PIN);
 
@@ -55,6 +50,9 @@ SoftwareSerial GPS(GPS_RX_PIN, GPS_TX_PIN);
 
 XPowersLibInterface *PMU = NULL;
 
+#include "axp20x.h"
+AXP20X_Class *axp = NULL;
+
 #endif
 
 #if defined(XPOWERS_CHIP_AXP2101)
@@ -65,6 +63,9 @@ XPowersLibInterface *PMU = NULL;
 #include "XPowersLibInterface.hpp"
 
 XPowersLibInterface *PMU = NULL;
+
+#include "axp20x.h"
+AXP20X_Class *axp = NULL;
 
 #endif
 
@@ -110,29 +111,6 @@ void setupGPS(bool bGPSON)
 | CPUSLDO    | x                 | x                 | x                 | 0.5-1.4V                        /30mA  |
 |            |                   |                   |                   |                                        |
 */
-    #if defined(NO_XPOWERS_CHIP_AXP192)
-
-    Wire.begin(I2C_SDA, I2C_SCL);
-
-    if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS))
-    {
-        Serial.println("AXP192 Begin PASS");
-    }
-    else
-    {
-        Serial.println("AXP192 Begin FAIL");
-    }
-    axp.setPowerOutPut(AXP192_LDO2, AXP202_ON);
-    axp.setPowerOutPut(AXP192_LDO3, AXP202_ON);
-    axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
-    axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
-    axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
-    Serial.println("All AXP192 started");
-        
-    Serial.println("[INIT]...NO_XPOWERS_CHIP");
-
-    #endif
-
     #if defined(XPOWERS_CHIP_AXP192)
     /* OLD
     if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS)) {
@@ -163,18 +141,43 @@ void setupGPS(bool bGPSON)
 
     if (!PMU->init())
     {
-        Serial.println("Failed to find AXP192 power management");
-        delete PMU;
+        Serial.println("[INIT]...Failed to find AXP192 power management");
+        //delete PMU;
         PMU = NULL;
+
+        Serial.println("[INIT]...AXP192 axp vor Wire.begin");
+
+        Wire.begin(I2C_SDA, I2C_SCL);
+
+        Serial.println("[INIT]...AXP192 axp Wire.begin");
+
+        if (!axp->begin(Wire, AXP192_SLAVE_ADDRESS))
+        {
+            axp->setPowerOutPut(AXP192_LDO2, AXP202_ON);
+            axp->setPowerOutPut(AXP192_LDO3, AXP202_ON);
+            axp->setPowerOutPut(AXP192_DCDC2, AXP202_ON);
+            axp->setPowerOutPut(AXP192_EXTEN, AXP202_ON);
+            axp->setPowerOutPut(AXP192_DCDC1, AXP202_ON);
+                
+            Serial.println("[INIT]...AXP192 axp init succeeded, using AXP192 axp");
+        }
+        else
+        {
+            Serial.println("[INIT]...AXP192 Begin FAIL");
+
+            axp = NULL;
+        }
     }
     else
     {
-        Serial.println("AXP192 PMU init succeeded, using AXP192 PMU");
+        Serial.println("[INIT]...AXP192 PMU init succeeded, using AXP192 PMU");
+
+        axp = NULL;
     }
 
     if(PMU != NULL)
     {
-        Serial.printf("AXP-Chip ID:0x%x\n", PMU->getChipID());
+        Serial.printf("[INIT]...AXP-Chip ID:0x%x\n", PMU->getChipID());
 
         // lora radio power channel
         PMU->setPowerChannelVoltage(XPOWERS_LDO2, 3300);
@@ -218,7 +221,7 @@ void setupGPS(bool bGPSON)
         PMU->enableVbusVoltageMeasure();
         PMU->enableBattVoltageMeasure();
 
-        Serial.println("All AXP192 started");
+        Serial.println("[INIT]...All AXP192 started");
     }
     
     #endif
@@ -240,18 +243,18 @@ void setupGPS(bool bGPSON)
 
     if (!PMU->init())
     {
-        Serial.println("Failed to find AXP2101 power management");
+        Serial.println("[INIT]...Failed to find AXP2101 power management");
         delete PMU;
         PMU = NULL;
     }
     else
     {
-        Serial.println("AXP2101 PMU init succeeded, using AXP2101 PMU");
+        Serial.println("[INIT]...AXP2101 PMU init succeeded, using AXP2101 PMU");
     }
 
     if(PMU != NULL)
     {
-        Serial.printf("AXP-Chip ID:0x%x\n", PMU->getChipID());
+        Serial.printf("[INIT]...AXP-Chip ID:0x%x\n", PMU->getChipID());
 
         // Unuse power channel
         PMU->disablePowerOutput(XPOWERS_DCDC2);
@@ -356,7 +359,7 @@ void setupGPS(bool bGPSON)
     }
     Serial.printf("=======================================================================\n");
 
-    Serial.println("All AXP2101 started");
+    Serial.println("[INIT]...All AXP2101 started");
     }
 
     #endif

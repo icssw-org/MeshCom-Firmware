@@ -37,6 +37,8 @@ bool bBMEON = false;
 
 bool bONEWIRE = false;
 
+bool bLPS33 = false;
+
 bool bGATEWAY = false;
 bool bEXTUDP = false;
 bool bEXTSER = false;
@@ -808,6 +810,8 @@ void checkButtonState()
                     {
                         bDisplayTrack =false;
                         
+                        addBLECommandBack((char*)"--track off");
+
                         pageHold=0;
 
                         pagePointer = pageLastPointer - 1;
@@ -1433,62 +1437,6 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     }
 
 }
-
-void sendWeather(double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, int qfe, float qnh)
-{
-    // @141324z4812.06N/01555.87E_270/...g...t...r000p000P...h..b10257Weather in Neulengbach
-
-    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
-
-    struct aprsMessage aprsmsg;
-
-    initAPRS(aprsmsg);
-
-    aprsmsg.msg_len = 0;
-
-    // MSG ID zusammen setzen    
-    aprsmsg.msg_id = ((_GW_ID & 0xFFFFFF) << 8) | (meshcom_settings.node_msgid & 0xFF);
-
-    aprsmsg.payload_type = '@';
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
-    aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
-    
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 999)
-        meshcom_settings.node_msgid=0;
-    // Flash rewrite
-    save_settings();
-
-    encodeAPRS(msg_buffer, aprsmsg);
-
-    if(bDisplayInfo)
-    {
-        printBuffer_aprs((char*)"NEW-WX ", aprsmsg);
-        Serial.println();
-    }
-
-    ringBuffer[iWrite][0]=aprsmsg.msg_len;
-
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
-    iWrite++;
-    if(iWrite >= MAX_RING)
-        iWrite=0;
-    
-    if(bGATEWAY)
-    {
-		// UDP out
-		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
-    }
-
-    // store last message to compare later on
-    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
-    own_msg_id[iWriteOwn][4]=0x00;
-    iWriteOwn++;
-    if(iWriteOwn >= MAX_RING)
-        iWriteOwn=0;
-}
-
 
 void SendAckMessage(String dest_call, unsigned int iAckId)
 {

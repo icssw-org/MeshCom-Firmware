@@ -34,18 +34,13 @@
 #include <udp_functions.h>
 #include <mheard_functions.h>
 #include <clock.h>
+#include <onewire_functions.h>
 
 #ifndef BOARD_TLORA_OLV216
-    #include <onewire_functions.h>
     #include <lora_setchip.h>
 #endif
 
 #include <esp_adc_cal.h>
-
-#if defined(NO_XPOWERS_CHIP_AXP192)
-    #include "axp20x.h"
-    extern AXP20X_Class axp;
-#endif
 
 #if defined(XPOWERS_CHIP_AXP192)
 // Defined using AXP192
@@ -55,6 +50,8 @@
 #include "XPowersLibInterface.hpp"
 extern XPowersLibInterface *PMU;
 
+#include "axp20x.h"
+extern AXP20X_Class *axp;
 #endif
 
 #if defined(XPOWERS_CHIP_AXP2101)
@@ -64,6 +61,9 @@ extern XPowersLibInterface *PMU;
 #include "XPowersAXP2101.tpp"
 #include "XPowersLibInterface.hpp"
 extern XPowersLibInterface *PMU;
+
+#include "axp20x.h"
+extern AXP20X_Class *axp;
 
 #endif
 
@@ -398,10 +398,10 @@ void esp32setup()
     #endif
 
 	// Initialize temp sensor
-    #ifndef BOARD_TLORA_OLV216
+    //#ifndef BOARD_TLORA_OLV216
         if(bONEWIRE)
             init_onewire();
-    #endif
+    //#endif
 
     _GW_ID = getMacAddr();
 
@@ -1217,7 +1217,7 @@ void esp32loop()
     }
 
     // posinfo_interval in Seconds
-    if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 10000 && millis() < 30000 && bPosFirst) || posinfo_shot)
+    if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
     {
         bPosFirst = false;
         posinfo_shot=false;
@@ -1274,13 +1274,24 @@ void esp32loop()
     {
         if (tx_is_active == false && is_receiving == false)
         {
-            #if defined(NO_XPOWERS_CHIP_AXP192)
-                global_batt = axp.getBattVoltage();
-                global_proz = mv_to_percent(global_batt);
-            #else
             #if defined(MODUL_FW_TBEAM)
-                global_batt = (float)PMU->getBattVoltage();
-                global_proz = (int)PMU->getBatteryPercent();
+                if(PMU != NULL)
+                {
+                    global_batt = (float)PMU->getBattVoltage();
+                    global_proz = (int)PMU->getBatteryPercent();
+                }
+                else
+                if(axp != NULL)
+                {
+                    global_batt = axp->getBattVoltage();
+                    global_proz = mv_to_percent(global_batt);
+                }
+                else
+                {
+                    global_batt = 0;
+                    global_proz = 0;
+                }
+
                 if(bDEBUG)
                     Serial.printf("PMU.volt %.1f PMU.proz %i\n", global_batt, global_proz);
             #else
@@ -1289,13 +1300,12 @@ void esp32loop()
                 if(bDEBUG)
                     Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
             #endif
-            #endif
 
             BattTimeWait = millis();
         }
     }
 
-#ifndef BOARD_TLORA_OLV216
+//#ifndef BOARD_TLORA_OLV216
     if(bONEWIRE)
     {
         if(onewireTimeWait == 0)
@@ -1312,7 +1322,7 @@ void esp32loop()
             }
         }
     }
-#endif
+//#endif
 
     if (isPhoneReady == 1)
     {
