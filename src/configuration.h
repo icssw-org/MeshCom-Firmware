@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "MC"
 #define SOURCE_VERSION "4.27"
-#define SOURCE_VERSION_SUB "g"
+#define SOURCE_VERSION_SUB "i"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -34,6 +34,7 @@ definitions
     #define TX_POWER_MAX 22  // max 22 dBm
     #define TX_POWER_MIN 1
     #define ENABLE_BMX280
+    //#define BUTTON_PIN WB_IO1  // not working in combination with GPS module
 #endif
 
 #ifdef BOARD_T_ECHO

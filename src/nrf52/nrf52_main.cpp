@@ -259,15 +259,21 @@ void nrf52setup()
         }
     }
 
+    Serial.println("=====================================");
+    Serial.println("START CLIENT");
+
+    // init nach Reboot
+    init_loop_function();
+
+    // user button init
+    initButtonPin();
+
     //gps init
     pinMode(WB_IO2, OUTPUT);
     digitalWrite(WB_IO2, 0);
     delay(1000);
     digitalWrite(WB_IO2, 1);
     delay(1000);
-
-    Serial.println("=====================================");
-    Serial.println("START CLIENT");
 
     // clear the buffers
     for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
@@ -925,9 +931,9 @@ void getPRESSURE(void)
         Serial.println("");
     }
     
-    double home_alt=meshcom_settings.node_alt;    // Höhe des Standorts
-    double temperature_gradient = 0.0065;           // Standard-Temperaturgradient
-    double temperatureK = temp.temperature + 273.15;     // Temperatur in Kelvin
+    //double home_alt=meshcom_settings.node_alt;    // Höhe des Standorts
+    //double temperature_gradient = 0.0065;           // Standard-Temperaturgradient
+    //double temperatureK = temp.temperature + 273.15;     // Temperatur in Kelvin
     
     // barometrische Höhenformel
     //meshcom_settings.node_press = pressure.pressure * pow((temperatureK / (temperatureK + home_alt * temperature_gradient)) , -5.255);
@@ -1086,7 +1092,7 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer+1, inext-1);
 
                 if(strText.startsWith("-"))
-                    commandAction(msg_buffer, inext, false);
+                    commandAction(msg_buffer, false);
 
                 strText="";
             }

@@ -239,8 +239,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
     }
     else
     {
-        memcpy(temp,RcvBuffer,10);
-        Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol! <%02X %02X%02X%02X%02X %02X %-60.60s>\n", temp[0], temp[4], temp[3], temp[2], temp[1], temp[5], RcvBuffer+6);
+        memcpy(temp, RcvBuffer, 10);
+        if(temp[0] != 0x80)
+            Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol! <%02X %02X%02X%02X%02X %02X %-60.60s>\n", temp[0], temp[4], temp[3], temp[2], temp[1], temp[5], RcvBuffer+6);
 
             if(bLORADEBUG && rsize < 256)
                 printAsciiBuffer(RcvBuffer, rsize);

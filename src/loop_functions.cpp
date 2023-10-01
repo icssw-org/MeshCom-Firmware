@@ -51,7 +51,6 @@ bool bBLElong = false;
 int iDisplayType = 0;
 int DisplayTimeWait = 0;
 
-bool bButton_Press = false;
 bool bWaitButton_Released = false;
 bool bButtonCheck = false;
 
@@ -155,7 +154,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
         toPhoneWrite = 0;
 }
 
-void addBLECommandBack(char text[100])
+void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
 {
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
@@ -170,7 +169,7 @@ void addBLECommandBack(char text[100])
     aprsmsg.msg_source_path="response";
     aprsmsg.msg_payload=text;
 
-    aprsmsg.msg_app_offline = true; // Rückmeldungen niemals annocen
+    aprsmsg.msg_app_offline = true; // Rückmeldungen niemals annoucen
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -771,6 +770,14 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
 }
 
+void init_loop_function()
+{
+    posinfo_last_direction = 0.0;
+    posinfo_satcount = 0;
+    posinfo_hdop = 0;
+    posinfo_fix = false;
+}
+
 // BUTTON
 void initButtonPin()
 {
@@ -780,6 +787,9 @@ void initButtonPin()
 }
 
 int checkButtoExtraLong = 0;
+int checkButtonTime = 0;
+int iPress = 0;
+bool bPressed=false;
 
 void checkButtonState()
 {
@@ -789,7 +799,7 @@ void checkButtonState()
             if(digitalRead(BUTTON_PIN) == 0)
             {
                 checkButtoExtraLong++;
-                if(checkButtoExtraLong > 30)
+                if(checkButtoExtraLong > 80)
                 {
                     checkButtoExtraLong=0;
                     bButtonCheck=false;
@@ -802,68 +812,108 @@ void checkButtonState()
                 if(bDEBUG)
                     Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);
 
-                if(bButton_Press == false)
+                if(!bPressed)
                 {
-                    bButton_Press = true;
+                    bPressed = true;
 
-                    if(pageLastLineAnz[pagePointer] == 0 || bDisplayTrack)
-                    {
-                        bDisplayTrack =false;
-                        
-                        addBLECommandBack((char*)"--track off");
+                    iPress++;
 
-                        pageHold=0;
+                    if(iPress == 1)
+                        checkButtonTime = 8;
 
-                        pagePointer = pageLastPointer - 1;
-                        if(pagePointer < 0)
-                            pagePointer = PAGE_MAX-1;
-
-                        bDisplayOff=!bDisplayOff;
-
-                        sendDisplayHead(false);
-
-                    }
-                    else
-                    {
-                        bDisplayOff=false;
-
-                        for(int its=0;its<pageLastLineAnz[pagePointer];its++)
-                        {
-                            // Save last Text (init)
-                            pageLineAnz = pageLastLineAnz[pagePointer];
-                            pageLine[its][0] = pageLastLine[pagePointer][its][0];
-                            pageLine[its][1] = pageLastLine[pagePointer][its][1];
-                            pageLine[its][2] = pageLastLine[pagePointer][its][2];
-                            memcpy(pageText[its], pageLastText[pagePointer][its], 25);
-                            if(its == 0)
-                            {
-                                for(int iss=0; iss < 20; iss++)
-                                {
-                                    if(pageText[its][iss] == 0x00)
-                                        pageText[its][iss] = 0x20;
-                                }
-                                pageText[its][19] = pagePointer | 0x30;
-                                pageText[its][20] = 0x00;
-                            }
-                        }
-
-                        iDisplayType=0;
-
-                        sendDisplay1306(false, true, 0, 0, (char*)"#N");
-
-                        pagePointer--;
-                        if(pagePointer < 0)
-                            pagePointer=PAGE_MAX-1;
-
-                        pageHold=5;
-                    }
+                    if(bDEBUG)
+                        Serial.printf("checkButtonTime:%i iPress:%i\n", checkButtonTime, iPress);
                 }
 
                 return;
             }
             else
-                bButton_Press = false;
+            {
+                checkButtoExtraLong = 0;
+
+                bPressed = false;
+
+                checkButtonTime--;
+                if(checkButtonTime < 0)
+                {
+                    checkButtonTime = 0;
+
+                    if(iPress == 2)
+                    {
+                        if(bDEBUG)
+                            Serial.println("BUTTON double press");
+
+                        if(bDisplayTrack)
+                            commandAction((char*)"--sendtrack", false);
+                        else
+                            commandAction((char*)"--sendpos", false);
+
+                    }
+                    else
+                    if(iPress == 1)
+                    {
+                        if(bDEBUG)
+                            Serial.println("BUTTON singel press");
+
+                        if(pageLastLineAnz[pagePointer] == 0 || bDisplayTrack)
+                        {
+                            bDisplayTrack =false;
+                            
+                            addBLECommandBack((char*)"--track off");
+
+                            pageHold=0;
+
+                            pagePointer = pageLastPointer - 1;
+                            if(pagePointer < 0)
+                                pagePointer = PAGE_MAX-1;
+
+                            bDisplayOff=!bDisplayOff;
+
+                            sendDisplayHead(false);
+
+                        }
+                        else
+                        {
+                            bDisplayOff=false;
+
+                            for(int its=0;its<pageLastLineAnz[pagePointer];its++)
+                            {
+                                // Save last Text (init)
+                                pageLineAnz = pageLastLineAnz[pagePointer];
+                                pageLine[its][0] = pageLastLine[pagePointer][its][0];
+                                pageLine[its][1] = pageLastLine[pagePointer][its][1];
+                                pageLine[its][2] = pageLastLine[pagePointer][its][2];
+                                memcpy(pageText[its], pageLastText[pagePointer][its], 25);
+                                if(its == 0)
+                                {
+                                    for(int iss=0; iss < 20; iss++)
+                                    {
+                                        if(pageText[its][iss] == 0x00)
+                                            pageText[its][iss] = 0x20;
+                                    }
+                                    pageText[its][19] = pagePointer | 0x30;
+                                    pageText[its][20] = 0x00;
+                                }
+                            }
+
+                            iDisplayType=0;
+
+                            sendDisplay1306(false, true, 0, 0, (char*)"#N");
+
+                            pagePointer--;
+                            if(pagePointer < 0)
+                                pagePointer=PAGE_MAX-1;
+
+                            pageHold=5;
+                        }
+                    }
+
+                    iPress = 0;
+                }
+            }
         }
+
+
     #endif
 }
 
@@ -1098,7 +1148,7 @@ void sendMessage(char *msg_text, int len)
 
     if(memcmp(msg_text, "--", 1) == 0)
     {
-        commandAction(msg_text, len, true);
+        commandAction(msg_text, true);
         return;
     }
 
@@ -1330,9 +1380,6 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
 
 void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, int qfe, float qnh)
 {
-    //if(bDEBUG)
-    //    Serial.printf("intervall:%i lat:%.4lf <%c> lon:%.4lf <%c> alt:%i press:%.1f hum:%.1f temp:%.1f qfe:%i qnh:%.1f\n", intervall, lat, lat_c, lon, lon_c, alt, press, hum, temp, qfe, qnh);
-
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
     bool bSendViaAPRS = bDisplayTrack;
@@ -1340,12 +1387,24 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     if(posinfo_interval == 1800)    // wenn TRACK auf 30min steht
         bSendViaAPRS = false;
 
-    if(lastHeardTime + 5000 > millis()) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auf jeden Fall über LoRaAPRS probieren
+    if(lastHeardTime + 15000 < millis()) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auf jeden Fall über LoRaAPRS probieren
         bSendViaAPRS = true;
 
     #ifdef BOARD_TLORA_OLV216
         bSendViaAPRS = false;
     #endif
+
+    // set default
+    if(meshcom_settings.node_symid != '/' && meshcom_settings.node_symid != '\'')
+    {
+        meshcom_settings.node_symid = '/';
+        meshcom_settings.node_symcd = '#';
+    }
+    else
+    {
+        if(meshcom_settings.node_symcd < '!' || meshcom_settings.node_symcd > '}')
+            meshcom_settings.node_symcd = '#';
+    }
 
     if(bSendViaAPRS)
     {

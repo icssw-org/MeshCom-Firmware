@@ -23,6 +23,7 @@ void sendDisplayMainline();
 void sendDisplayTime();
 void mainStartTimeLoop();
 
+void init_loop_function();
 void initButtonPin();
 void checkButtonState();
 

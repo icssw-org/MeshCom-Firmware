@@ -42,7 +42,7 @@ int commandCheck(char *msg, char *command)
     return -1;
 }
 
-void commandAction(char *msg_text, int len, bool ble)
+void commandAction(char *msg_text, bool ble)
 {
     char print_buff[600];
 
@@ -225,7 +225,9 @@ void commandAction(char *msg_text, int len, bool ble)
             delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
             delay(100);
-            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--bmx BME/BMP off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--gateway on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--bmx BME/BMP off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
+            delay(100);
+            Serial.printf("--gateway on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
         }
 
         return;
@@ -381,6 +383,8 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         bGPSON=true;
         
+        init_loop_function();
+
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0040;
 
         if(ble)
@@ -396,6 +400,8 @@ void commandAction(char *msg_text, int len, bool ble)
     if(commandCheck(msg_text+2, (char*)"gps off") == 0)
     {
         bGPSON=false;
+        
+        init_loop_function();
         
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FBF;
 
@@ -882,16 +888,16 @@ void commandAction(char *msg_text, int len, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"sendtrack") == 0)
     {
-        if(meshcom_settings.node_symid == 0x00)
+        // set default
+        if(meshcom_settings.node_symid != '/' && meshcom_settings.node_symid != '\'')
         {
-            meshcom_settings.node_symid='/';
-            save_settings();
+            meshcom_settings.node_symid = '/';
+            meshcom_settings.node_symcd = '#';
         }
-
-        if(meshcom_settings.node_symcd == 0x00)
+        else
         {
-            meshcom_settings.node_symcd='#';
-            save_settings();
+            if(meshcom_settings.node_symcd < '!' || meshcom_settings.node_symcd > '}')
+                meshcom_settings.node_symcd = '#';
         }
 
         bool bSendViaAPRS = true;
@@ -1427,9 +1433,9 @@ void commandAction(char *msg_text, int len, bool ble)
 
     if(bInfo)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s/%-1.1s\n...Call:  <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GWAY %s\n...BME    %s\n...ONEWIRE %s ..GPIO <%i>\n...DEBUG  %s\n...LORADEBUG %s\n...WXDEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...BLE : %s\n...ATXT: %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+        sprintf(print_buff, "--MeshCom %s %-4.4s/%-1.1s\n...Call:  <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GATEWAY %s\n...BUTTON  %s\n...DEBUG  %s\n...LORADEBUG %s\n...WXDEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                 meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
-                (bGATEWAY?"on":"off"), (bBMEON?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, (bBLElong?"long":"short"), meshcom_settings.node_atxt);
+                (bGATEWAY?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_atxt, meshcom_settings.node_extern, (bBLElong?"long":"short"));
 
         if(ble)
         {
@@ -1447,11 +1453,10 @@ void commandAction(char *msg_text, int len, bool ble)
     {
         //Serial.printf("m:%ld t:%ld i:%ld n:%i\n", millis(), posinfo_timer, posinfo_interval*1000, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000));
 
-        sprintf(print_buff, "--MeshCom %s %-4.4s/%-1.1s\n...GPS: %s\n...Track: %s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %i\n...RATE: %i\n...NEXT: %i sec\n...DIST: %im\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n...SYMB: %c %c\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
-        (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"), meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
+        sprintf(print_buff, "--MeshCom %s %-4.4s/%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %i\n...RATE: %i\n...NEXT: %i sec\n...DIST: %im\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+        meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
         (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
-        meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second,
-        meshcom_settings.node_symid, meshcom_settings.node_symcd);
+        meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 
         if(ble)
         {
@@ -1460,13 +1465,14 @@ void commandAction(char *msg_text, int len, bool ble)
         else
         {
             printf("\n\n%s", print_buff+2);
+            printf("...SYMB: %c %c\n...GPS: %s\n...Track: %s\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"));
         }
     }
     else
     if(bWeather)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s/%-1.1s\n...LPS33: %s\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
-        (bLPS33?"on":"off"), meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
+        sprintf(print_buff, "--MeshCom %s %-4.4s/%-1.1s\n...BME(P)280: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+        (bBMEON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
 
         if(ble)
         {

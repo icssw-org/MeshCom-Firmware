@@ -338,6 +338,9 @@ void esp32setup()
     Serial.println("CLIENT SETUP");
     Serial.println("============");
 
+    // init nach Reboot
+    init_loop_function();
+
     // Initialize mheard list
     initMheard();
 
@@ -1445,7 +1448,8 @@ void checkRX(void)
     if (state == RADIOLIB_ERR_CRC_MISMATCH)
     {
         // packet was received, but is malformed
-        Serial.println(F("[SX12xx] CRC error!"));
+        if(bLORADEBUG)
+            Serial.println(F("[SX12xx] CRC error!"));
 
     }
     else
@@ -1508,10 +1512,10 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer, inext);
 
                 if(strText.startsWith("-"))
-                    commandAction(msg_buffer, inext, false);
+                    commandAction(msg_buffer, false);
 
                 if(strText.startsWith("{"))
-                    commandAction(msg_buffer, inext, false);
+                    commandAction(msg_buffer, false);
 
                 strText="";
             }
