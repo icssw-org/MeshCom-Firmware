@@ -587,7 +587,7 @@ bool doTX()
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
-#ifdef ESP32
+
 #ifndef BOARD_TLORA_OLV216
             if(lora_tx_buffer[0] == '<' && bDisplayTrack)
             {
@@ -621,7 +621,7 @@ bool doTX()
             }
             else
 #endif
-#endif
+
             {
                 struct aprsMessage aprsmsg;
                 
@@ -703,7 +703,16 @@ bool doTX()
 void OnTxDone(void)
 {
     #if defined BOARD_RAK4630
+
+        // reset MeshCom
+        if(bSetLoRaAPRS)
+        {
+            lora_setchip_meshcom();
+            bSetLoRaAPRS = false;
+        }
+
         Radio.Rx(RX_TIMEOUT_VALUE);
+
     #endif
 
     //Serial.println("OnTXDone");
@@ -716,7 +725,16 @@ void OnTxDone(void)
 void OnTxTimeout(void)
 {
     #if defined BOARD_RAK4630
+
+        // reset MeshCom
+        if(bSetLoRaAPRS)
+        {
+            lora_setchip_meshcom();
+            bSetLoRaAPRS = false;
+        }
+
         Radio.Rx(RX_TIMEOUT_VALUE);
+
     #endif
 
     if(bLORADEBUG)

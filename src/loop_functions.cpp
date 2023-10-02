@@ -453,7 +453,7 @@ void sendDisplayTime()
 
     sprintf(nodetype, "%s", SOURCE_TYPE);
     if(bGATEWAY)
-        sprintf(nodetype, "GW");
+        sprintf(nodetype, "G");
 
     if(bDisplayVolt)
         sprintf(cbatt, "%4.2f", global_batt/1000.0);
@@ -470,7 +470,7 @@ void sendDisplayTime()
         sprintf(cbatt, " USB");
  #endif
 
-    sprintf(print_text, "%-2.2s%-4.4s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+    sprintf(print_text, "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
 
     memcpy(pageText[0], print_text, 20);
 
@@ -495,7 +495,7 @@ void sendDisplayMainline()
 
     sprintf(nodetype, "%s", SOURCE_TYPE);
     if(bGATEWAY)
-        sprintf(nodetype, "GW");
+        sprintf(nodetype, "G");
 
     if(bDisplayVolt)
         sprintf(cbatt, "%4.2f", global_batt/1000.0);
@@ -514,11 +514,11 @@ void sendDisplayMainline()
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
-        sprintf(print_text, "%-2.2s %-4.4s         %-4.4s", nodetype, SOURCE_VERSION, cbatt);
+        sprintf(print_text, "%-1.1s %-4.4s%-1.1s         %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
     }
     else
     {
-        sprintf(print_text, "%-2.2s%-4.4s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        sprintf(print_text, "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
     sendDisplay1306(true, false, 3, 10, print_text);

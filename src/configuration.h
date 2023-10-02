@@ -6,9 +6,9 @@ definitions
 
 #include <Arduino.h>
 
-#define SOURCE_TYPE "MC"
+#define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.27"
-#define SOURCE_VERSION_SUB "i"
+#define SOURCE_VERSION_SUB "j"
 
 //Hardware Types
 #define TLORA_V2 1

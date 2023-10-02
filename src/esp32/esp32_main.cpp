@@ -510,25 +510,6 @@ void esp32setup()
     // and check if the configuration was changed successfully
     if(bRadio)
     {
-        // set carrier frequency
-        float rf_freq = RF_FREQUENCY;
-        if(meshcom_settings.node_freq <= 0)
-            meshcom_settings.node_freq = RF_FREQUENCY;
-        else
-            rf_freq = meshcom_settings.node_freq;
-
-        float dec_bandwith = (LORA_BANDWIDTH/2.0)/100.0;
-
-        if(!((rf_freq >= (430.0 + dec_bandwith) && rf_freq <= (439.000 - dec_bandwith)) || (rf_freq >= (869.4 + dec_bandwith) && rf_freq <= (869.65 - dec_bandwith))))
-            rf_freq = RF_FREQUENCY;
-
-        Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", rf_freq);
-
-        if (radio.setFrequency(rf_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
-            Serial.println(F("Selected frequency is invalid for this module!"));
-            while (true);
-        }
-
         // set bandwidth 
         float rf_bw = LORA_BANDWIDTH;
         if(meshcom_settings.node_bw <= 0)
@@ -540,6 +521,26 @@ void esp32setup()
             rf_bw = LORA_BANDWIDTH;
 
         Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", rf_bw);
+
+        // set carrier frequency
+        float rf_freq = RF_FREQUENCY;
+        if(meshcom_settings.node_freq <= 0)
+            meshcom_settings.node_freq = RF_FREQUENCY;
+        else
+            rf_freq = meshcom_settings.node_freq;
+
+        float dec_bandwith = (rf_bw/2.0)/100.0;
+
+        if(!((rf_freq >= (430.0 + dec_bandwith) && rf_freq <= (439.000 - dec_bandwith)) || (rf_freq >= (869.4 + dec_bandwith) && rf_freq <= (869.65 - dec_bandwith))))
+            rf_freq = RF_FREQUENCY;
+
+        Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", rf_freq);
+
+        if (radio.setFrequency(rf_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
+            Serial.println(F("Selected frequency is invalid for this module!"));
+            while (true);
+        }
+
 
         if (radio.setBandwidth(rf_bw) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
             Serial.println(F("Selected bandwidth is invalid for this module!"));

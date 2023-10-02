@@ -32,7 +32,7 @@ extern uint8_t shortVERSION();
  * @brief Method to send configuration to phone 
  * Config Format:
  * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT) - 1B SSID_Length - Wifi_SSID - 1B Wifi_PWD - Wifi_PWD 
- * - 1B APRS_PRIM_SEC - 1B APRS_SYMBOL - 4B SettingsMask - 1B HW-ID - 1B MOD-ID - 1B FW-Vers - 1B TX Pwr - 4B Frequency
+ * - 1B APRS_PRIM_SEC - 1B APRS_SYMBOL - 4B SettingsMask - 1B HW-ID - 1B MOD-ID - 1B FW-Vers - 1B TX Pwr - 4B Frequency - 1B Comment Length - Comment - 0x00
  * 
  * SSID and PWD Buffers have as always a fixed length with trailing zeros. 
 */
@@ -45,6 +45,7 @@ void sendConfigToPhone ()
 	uint8_t call_len = sizeof(meshcom_settings.node_call);
 	uint8_t ssid_len = 0;
 	uint8_t pwd_len = 0;
+	uint8_t comment_len = 0;
 
 	// remove trailing zeros of the arrays
 	for(int i =0; i<(int)sizeof(meshcom_settings.node_ssid); i++){
@@ -61,8 +62,15 @@ void sendConfigToPhone ()
 		} 
 	}
 
+	for(int i =0; i<(int)sizeof(meshcom_settings.node_atxt); i++){
+		if(meshcom_settings.node_atxt[i] == 0x00){
+			comment_len = i;
+			break;
+		} 
+	}
+
 	
-	uint8_t conf_len = call_len + 22 + ssid_len + pwd_len + 17;	// +9 because of APRS Symbols 2B, Settings 4B, till FRQ and 0x00 end
+	uint8_t conf_len = call_len + ssid_len + pwd_len + comment_len + 40;	// +9 because of APRS Symbols 2B, Settings 4B, till FRQ and 0x00 end
 	uint8_t confBuff [conf_len] = {0};
 	uint8_t call_offset = 2;
 	
@@ -122,6 +130,7 @@ void sendConfigToPhone ()
 	aprs_symbols_offset = pwd_offset + pwd_len;
 	memcpy(confBuff + aprs_symbols_offset + 1, &meshcom_settings.node_symid, 1);
 	memcpy(confBuff + aprs_symbols_offset + 2, &meshcom_settings.node_symcd, 1);
+	Serial.printf("Sym ID: %c Sym CD: %c\n", meshcom_settings.node_symid, meshcom_settings.node_symcd);
 
 	// Settings
 	gw_cl_offset = aprs_symbols_offset + 3;
@@ -166,8 +175,15 @@ void sendConfigToPhone ()
 	memcpy(confBuff + frq_offset, &frq, sizeof(frq));
 
 
+	// add meshcom_settings.node_atxt to confBuff
+	uint8_t comment_offset = frq_offset + sizeof(frq);
+	confBuff[comment_offset] = comment_len;
+	// copy comment
+	memcpy(confBuff + comment_offset + 1, &meshcom_settings.node_atxt, comment_len);
+
+
 	// add 0x00 at end
-	endIndex = frq_offset + sizeof(frq) + 1;
+	endIndex = comment_offset + comment_len + 1;
 	confBuff[endIndex] = 0x00;
 
 	//printBuffer(confBuff, conf_len);
@@ -421,6 +437,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			DEBUG_MSG_VAL("BLE", aprs_pri_sec, "APRS PRI_SEC Symbol");
 			DEBUG_MSG_VAL("BLE", aprs_symbol, "APRS Symbol");
+			Serial.printf("aprs_pri_sec:%c aprs_symbol:%c\n", aprs_pri_sec, aprs_symbol);
 
 			//Serial.printf("aprs_pri_sec:%c aprs_symbol:%c\n", aprs_pri_sec, aprs_symbol);
 

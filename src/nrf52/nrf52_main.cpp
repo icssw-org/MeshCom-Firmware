@@ -554,6 +554,8 @@ void nrf52setup()
     DEBUG_MSG("RADIO", "Setting new LoRa Sync Word");
     Radio.SetPublicNetwork(true);
 
+    Serial.printf("[LoRa]...RF_FREQUENCY: %i kHz\n", RF_FREQUENCY);
+
     //  Set the LoRa Frequency
     Radio.SetChannel(RF_FREQUENCY);
 
@@ -578,7 +580,9 @@ void nrf52setup()
     // Set Radio TX configuration
     int8_t tx_power = TX_OUTPUT_POWER;
     
-    if(meshcom_settings.node_power > 0)
+    if(meshcom_settings.node_power <= 0)
+        meshcom_settings.node_power = TX_OUTPUT_POWER;
+    else
         tx_power=meshcom_settings.node_power;   //set by command
 
     if(tx_power > TX_POWER_MAX)
@@ -587,7 +591,7 @@ void nrf52setup()
     if(tx_power < TX_POWER_MIN)
         tx_power= TX_POWER_MIN;
 
-    Serial.printf("LoRa RF_POWER: %d dBm\n", tx_power);
+    Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
 
     Radio.SetTxConfig(
         MODEM_LORA,
@@ -954,13 +958,13 @@ void direction_parse(String tmp)
         direction_E_W = 1;
     }
     
-    if (tmp.indexOf(",S,") != -1)
+    if (tmp.indexOf(",N,") != -1)
     {
-        direction_S_N = 0;
+        direction_S_N = 1;
     }
     else
     {
-        direction_S_N = 1;
+        direction_S_N = 0;
     }
 }
 
@@ -1005,20 +1009,20 @@ unsigned int getGPS(void)
 
         if(direction_S_N == 0)
         {
-        meshcom_settings.node_lat_c = 'S';
+            meshcom_settings.node_lat_c = 'S';
         }
         else
         {
-        meshcom_settings.node_lat_c = 'N';
+            meshcom_settings.node_lat_c = 'N';
         }
 
         if(direction_E_W == 0)
         {
-        meshcom_settings.node_lon_c = 'E';
+            meshcom_settings.node_lon_c = 'E';
         }
         else
         {
-        meshcom_settings.node_lon_c = 'W';
+            meshcom_settings.node_lon_c = 'W';
         }
 
         meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)tinyGPSPlus.altitude.meters()) / 11;
