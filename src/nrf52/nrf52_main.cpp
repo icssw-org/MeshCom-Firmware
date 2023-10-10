@@ -231,6 +231,11 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src[5]; // | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
 
+void RadioInit()
+{
+    Radio.Init(&RadioEvents);
+}
+
 void nrf52setup()
 {
 #if defined NRF52_SERIES || defined ESP32
@@ -327,6 +332,8 @@ void nrf52setup()
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
+    bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
+    bMESH = !(meshcom_settings.node_sset2 & 0x0020);
 
     global_batt = 4200.0;
 
@@ -546,9 +553,8 @@ void nrf52setup()
     //RadioEvents.PreAmpDetect = OnPreambleDetect;
     RadioEvents.HeaderDetect = OnHeaderDetect;
     
-
     //  Initialize the LoRa Transceiver
-    Radio.Init(&RadioEvents);
+    RadioInit();
 
     // Sets the Syncword new that we can set the MESHCOM SWORD
     DEBUG_MSG("RADIO", "Setting new LoRa Sync Word");
@@ -689,33 +695,25 @@ void nrf52loop()
     {
         //Serial.println("gKeyNum == 2");
 
+        #ifdef ENABLE_GPS
+
         if(bGPSON)
         {
-            // GPS FIX
-            iGPSCount++;
-
-            if(iGPSCount > 10)
+            unsigned int igps = getGPS();
+            if(igps > 0)
+                posinfo_interval = igps;
+            else
             {
-                unsigned int igps = getGPS();
-
-                if(igps > 0)
-                    posinfo_interval = igps;
-                else
+                no_gps_reset_counter++;
+                if(no_gps_reset_counter > 10)
                 {
-                    no_gps_reset_counter++;
-                    if(no_gps_reset_counter > 10)
-                    {
-                        posinfo_interval = POSINFO_INTERVAL;
-                        no_gps_reset_counter = 0;
-                        posinfo_fix = false;
-                        posinfo_satcount = 0;
-                        posinfo_hdop = 0;
-                    }
+                    posinfo_interval = POSINFO_INTERVAL;
+                    no_gps_reset_counter = 0;
                 }
-
-                iGPSCount=0;
             }
         }
+
+        #endif
 
         gKeyNum = 0;
     }
@@ -736,7 +734,8 @@ void nrf52loop()
     // posinfo
     //Serial.printf("posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
 
-    if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 10000 && millis() < 30000 && bPosFirst) || posinfo_shot)
+    // posinfo_interval in Seconds
+    if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
     {
         bPosFirst = false;
         posinfo_shot=false;
@@ -747,13 +746,13 @@ void nrf52loop()
         posinfo_last_lon=posinfo_lon;
         posinfo_last_direction=posinfo_direction;
 
-
-        /*
-            sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-             meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press);
-        */
-
         posinfo_timer = millis();
+
+        if(pos_shot)
+        {
+            commandAction((char*)"--pos", true);
+            pos_shot = false;
+        }
     }
 
     #if defined(SHTC3)
@@ -778,6 +777,12 @@ void nrf52loop()
             getPRESSURE();
 
             druck_timer = millis();
+
+            if(wx_shot)
+            {
+                commandAction((char*)"--wx", true);
+                wx_shot = false;
+            }
         }
     }
     #endif
@@ -1041,7 +1046,17 @@ unsigned int getGPS(void)
         }
 
 
+        posinfo_satcount = tinyGPSPlus.satellites.value();
+        posinfo_hdop = tinyGPSPlus.hdop.value();
+        posinfo_fix = true;
+
         return setSMartBeaconing(dlat, dlon);
+    }
+    else
+    {
+        posinfo_fix = false;
+        posinfo_satcount = 0;
+        posinfo_hdop = 0;
     }
 
     return 0;   // no GPS

@@ -32,7 +32,8 @@ extern uint8_t shortVERSION();
  * @brief Method to send configuration to phone 
  * Config Format:
  * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT) - 1B SSID_Length - Wifi_SSID - 1B Wifi_PWD - Wifi_PWD 
- * - 1B APRS_PRIM_SEC - 1B APRS_SYMBOL - 4B SettingsMask - 1B HW-ID - 1B MOD-ID - 1B FW-Vers - 1B TX Pwr - 4B Frequency - 1B Comment Length - Comment - 0x00
+ * - 1B APRS_PRIM_SEC - 1B APRS_SYMBOL - 4B SettingsMask - 1B HW-ID - 1B MOD-ID - 1B FW-Vers - 1B TX Pwr - 4B Frequency - 1B Comment Length - Comment 
+ * - 4B Settingsbyte2 - 0x00
  * 
  * SSID and PWD Buffers have as always a fixed length with trailing zeros. 
 */
@@ -68,9 +69,10 @@ void sendConfigToPhone ()
 			break;
 		} 
 	}
+	Serial.println("Comment Len: " + String(comment_len) + " Comment: " + String(meshcom_settings.node_atxt) + " Comment StrLen: " + String(strlen(meshcom_settings.node_atxt)));
 
 	
-	uint8_t conf_len = call_len + ssid_len + pwd_len + comment_len + 40;	// +9 because of APRS Symbols 2B, Settings 4B, till FRQ and 0x00 end
+	uint8_t conf_len = call_len + ssid_len + pwd_len + comment_len + 44;	// +9 because of APRS Symbols 2B, Settings 4B, till FRQ and 0x00 end
 	uint8_t confBuff [conf_len] = {0};
 	uint8_t call_offset = 2;
 	
@@ -136,7 +138,7 @@ void sendConfigToPhone ()
 	gw_cl_offset = aprs_symbols_offset + 3;
 	memcpy(confBuff + gw_cl_offset, &meshcom_settings.node_sset, sizeof(meshcom_settings.node_sset));
 
-	// HW-ID, MOD-ID, FW-Version (short version only 1B 4.x)
+	// HW-ID, MOD-ID, FW-Version (FW Vers. deprecated!)
 	uint8_t hw_offset = gw_cl_offset + sizeof(meshcom_settings.node_sset);
 	uint8_t hw_id = MODUL_HARDWARE;
 	memcpy(confBuff + hw_offset, &hw_id, sizeof(hw_id));
@@ -178,12 +180,24 @@ void sendConfigToPhone ()
 	// add meshcom_settings.node_atxt to confBuff
 	uint8_t comment_offset = frq_offset + sizeof(frq);
 	confBuff[comment_offset] = comment_len;
-	// copy comment
-	memcpy(confBuff + comment_offset + 1, &meshcom_settings.node_atxt, comment_len);
+
+	if(comment_len != 0){
+		// copy comment
+		memcpy(confBuff + comment_offset + 1, &meshcom_settings.node_atxt, comment_len);
+	} else {
+		// no comment
+		confBuff[comment_offset] = 0x00;
+	}
+	
+	
+	// second settings byte
+	gw_cl_offset = 0;
+	gw_cl_offset = comment_offset + comment_len + 1;
+	memcpy(confBuff + gw_cl_offset, &meshcom_settings.node_sset2, sizeof(meshcom_settings.node_sset2));
 
 
 	// add 0x00 at end
-	endIndex = comment_offset + comment_len + 1;
+	endIndex = gw_cl_offset + sizeof(meshcom_settings.node_sset2);
 	confBuff[endIndex] = 0x00;
 
 	//printBuffer(confBuff, conf_len);
@@ -199,6 +213,10 @@ void sendConfigToPhone ()
 
 	// one shot GPS
 	posinfo_shot = true;
+
+	pos_shot = true;
+
+	wx_shot = true;
 
 	BattTimeAPP=0;	// Batt Status zum Phone senden
 
@@ -222,11 +240,19 @@ void sendToPhone()
 
 		uint8_t blelen = BLEtoPhoneBuff[toPhoneRead][0];
 
+		//Mheard
 		if(BLEtoPhoneBuff[toPhoneRead][1] == 0x91)
 		{
 			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen-1);
-		}
+		} else 
+		// Data Message (JSON)
+		if(BLEtoPhoneBuff[toPhoneRead][1] == 0x44)
+		{
+			
+			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
+		} 
 		else
+		// Text Message
 		{
 			toPhoneBuff[0] = 0x40;
 			memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen-1);
@@ -338,6 +364,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			String sVar = call_arr;
 			sVar.toUpperCase();
+			sVar.trim();
 
 			sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
 
@@ -424,6 +451,9 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				
 				posinfo_shot = true;
 
+				pos_shot = true;
+				
+				wx_shot = true;
 				//Führt zu Reconnect sendPosition(0, d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude, 0.0, 0.0, 0.0, 0, 0.0);
 			}
 

@@ -7,8 +7,8 @@ definitions
 #include <Arduino.h>
 
 #define SOURCE_TYPE "C"
-#define SOURCE_VERSION "4.27"
-#define SOURCE_VERSION_SUB "j"
+#define SOURCE_VERSION "4.28"
+#define SOURCE_VERSION_SUB ""
 
 //Hardware Types
 #define TLORA_V2 1
@@ -25,16 +25,18 @@ definitions
 #define TBEAM_AXP2101 12
 #define HELTEC_V3 43
 #define EBYTE_E22 39
-#define EBYTE_E220 40
 
 // set hardware
 #ifdef BOARD_RAK4630
     #define MODUL_HARDWARE RAK4631
     #define RF_FREQUENCY 433175000 // 432900000   // Hz
+    #define LORA_APRS_FREQUENCY 433775000 // 432900000   // Hz
     #define TX_POWER_MAX 22  // max 22 dBm
     #define TX_POWER_MIN 1
     #define ENABLE_BMX280
     //#define BUTTON_PIN WB_IO1  // not working in combination with GPS module
+    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define ENABLE_GPS
 #endif
 
 #ifdef BOARD_T_ECHO
@@ -51,6 +53,7 @@ definitions
     
     //TODO
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
+    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 
 #endif
 
@@ -58,6 +61,7 @@ definitions
     #define MODUL_HARDWARE TBEAM
     #define MODUL_FW_TBEAM TBEAM
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define SX127X
@@ -66,12 +70,14 @@ definitions
     
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
+    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 #endif
 
 #ifdef BOARD_SX1268
     #define MODUL_HARDWARE TBEAM_1268
     #define MODUL_FW_TBEAM  TBEAM_1268
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define SX126X
@@ -80,12 +86,14 @@ definitions
 
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
+    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 #endif
 
 #ifdef BOARD_AXP2101
     #define MODUL_HARDWARE TBEAM_AXP2101
     #define MODUL_FW_TBEAM TBEAM_AXP2101
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define SX127X
@@ -94,61 +102,57 @@ definitions
 
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP2101
+    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 #endif
 
 #ifdef BOARD_TLORA_OLV216
     #define MODUL_HARDWARE TLORA_V2_1_1p6
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define SX127X
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
+    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 #endif
 
 #ifdef 	BOARD_HELTEC
     #define MODUL_HARDWARE HELTEC_V2_1
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define SX127X
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
+    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 #endif
 
 #ifdef 	BOARD_HELTEC_V3
     #define MODUL_HARDWARE HELTEC_V3
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define SX126X_V3
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
+    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 #endif
 
 #ifdef 	BOARD_E22
     #define MODUL_HARDWARE EBYTE_E22
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
+    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 #endif
-
-#ifdef 	BOARD_E220
-    #define MODUL_HARDWARE EBYTE_E220
-    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-    #define ENABLE_GPS
-    #define ENABLE_BMX280
-    #define TX_POWER_MAX 22  // max 22dBm
-    #define TX_POWER_MIN 1
-#endif
-
-// Common LoRa Parameters
-#define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
-
 
 #ifdef RAK4630
 
@@ -157,10 +161,17 @@ definitions
 
 // Define RAK LoRa parameters
 #define TX_OUTPUT_POWER 22       // dBm
+
+#define LORA_APRS_BANDWIDTH 0         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
+#define LORA_APRS_SPREADING_FACTOR 12 // [SF7..SF12]
+#define LORA_APRS_CODINGRATE 1        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
+#define LORA_APRS_PREAMBLE_LENGTH 8  // Same for Tx and Rx
+
 #define LORA_BANDWIDTH 1         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
 #define LORA_SPREADING_FACTOR 11 // [SF7..SF12]
 #define LORA_CODINGRATE 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
 #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+
 #define LORA_SYMBOL_TIMEOUT 0    // Symbols
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
@@ -255,10 +266,6 @@ definitions
 
 #ifdef SX1262
 #define TX_OUTPUT_POWER 22  // SX1262 have up to +22dBm
-#endif
-
-#ifdef BOARD_E220
-#define TX_OUTPUT_POWER 10
 #endif
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
@@ -571,25 +578,6 @@ static const uint8_t SCK =  5;
 #define SX1268_IRQ LORA_DIO1
 #define SX1268_RST LORA_RST
 #define SX1268_GPIO LORA_DIO0
-
-#endif
-
-#ifdef BOARD_E220
-// Custom Board homemade E22-Ebyte Module + AZ Delivery ESP32 DevKitC v4
-
-#define BUTTON_PIN 12
-
-#define LORA_RST  27
-#define LORA_DIO0 26 // aka BUSY Pin
-#define LORA_DIO1 33
-#define LORA_DIO2 32
-#define LORA_CS 5
-#define RXEN 14
-#define TXEN 13
-#define LED 2
-
-#define I2C_SDA 21
-#define I2C_SCL 22
 
 #endif
 

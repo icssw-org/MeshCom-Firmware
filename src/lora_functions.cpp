@@ -423,7 +423,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             }
 
                             // resend only Packet to all and !owncall 
-                            if(aprsmsg.msg_destination_call != meshcom_settings.node_call && !bSetLoRaAPRS)
+                            if(aprsmsg.msg_destination_call != meshcom_settings.node_call && !bSetLoRaAPRS && bMESH)
                             {
                                 if(aprsmsg.max_hop > 0)
                                     aprsmsg.max_hop--;
@@ -702,6 +702,9 @@ bool doTX()
  */
 void OnTxDone(void)
 {
+    if(bLORADEBUG)
+        Serial.println("OnTXDone");
+
     #if defined BOARD_RAK4630
 
         // reset MeshCom
@@ -714,8 +717,6 @@ void OnTxDone(void)
         Radio.Rx(RX_TIMEOUT_VALUE);
 
     #endif
-
-    //Serial.println("OnTXDone");
 
     tx_is_active = false;
 }
@@ -724,6 +725,9 @@ void OnTxDone(void)
  */
 void OnTxTimeout(void)
 {
+    if(bLORADEBUG)
+        Serial.println("OnTXTimeout");
+
     #if defined BOARD_RAK4630
 
         // reset MeshCom
@@ -736,9 +740,6 @@ void OnTxTimeout(void)
         Radio.Rx(RX_TIMEOUT_VALUE);
 
     #endif
-
-    if(bLORADEBUG)
-        Serial.println("OnTXTimeout");
 
     tx_is_active = false;
 }

@@ -41,6 +41,7 @@ extern bool bGPSDEBUG;
 extern bool bBLElong;
 
 extern bool bGATEWAY;
+extern bool bMESH;
 extern bool bEXTUDP;
 extern bool bEXTSER;
 
@@ -99,6 +100,8 @@ extern uint32_t posinfo_satcount;
 extern int posinfo_hdop;
 extern bool posinfo_fix;
 extern bool posinfo_shot;
+extern bool pos_shot;
+extern bool wx_shot;
 extern int no_gps_reset_counter;
 
 extern unsigned long posinfo_timer;      // we check periodically to send GPS

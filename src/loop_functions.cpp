@@ -40,6 +40,7 @@ bool bONEWIRE = false;
 bool bLPS33 = false;
 
 bool bGATEWAY = false;
+bool bMESH = false;
 bool bEXTUDP = false;
 bool bEXTSER = false;
 
@@ -120,6 +121,8 @@ uint32_t posinfo_satcount = 0;
 int posinfo_hdop = 0;
 bool posinfo_fix = false;
 bool posinfo_shot=false;
+bool pos_shot=false;
+bool wx_shot=false;
 int no_gps_reset_counter = 0;
 
 // Loop timers

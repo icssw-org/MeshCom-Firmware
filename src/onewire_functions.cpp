@@ -1,4 +1,4 @@
-//#ifndef BOARD_TLORA_OLV216
+//#ifndef BOARD_RAK4630
 
 #include "loop_functions.h"
 #include "loop_functions_extern.h"

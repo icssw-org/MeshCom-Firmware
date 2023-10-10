@@ -159,10 +159,10 @@ void setupBMX280()
 		bmx280.writeOversamplingHumidity(BMx280MI::OSRS_H_x16);
 
   if(bBMEON)
-    Serial.printf("BME280 startet\n");
+    Serial.printf("[INIT]...BME280 startet\n");
 
   if(bBMPON)
-    Serial.printf("BMP280 startet\n");
+    Serial.printf("[INIT]...BMP280 startet\n");
 }
 
 bool loopBMX280()

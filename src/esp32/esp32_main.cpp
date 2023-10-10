@@ -367,6 +367,9 @@ void esp32setup()
     bEXTSER =  meshcom_settings.node_sset & 0x4000;
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
+    bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
+    bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
+    bMESH = !(meshcom_settings.node_sset2 & 0x0020);
 
     global_batt = 4200.0;
 
@@ -739,9 +742,9 @@ void esp32setup()
 
   // Create the BLE Device
     char cBLEName[50]={0};
-    sprintf(cBLEName, "%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
+    sprintf(cBLEName, "M%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
     char cManufData[50]={0};
-    sprintf(cManufData, "%s%s-%02x%02x-%s", g_ble_dev_name, g_ble_dev_name,  dmac[1], dmac[0], meshcom_settings.node_call);
+    sprintf(cManufData, "MCM%s-%02x%02x-%s", g_ble_dev_name,  dmac[1], dmac[0], meshcom_settings.node_call);
     
     const std::__cxx11::string strBLEName = cBLEName;
     const std::__cxx11::string strBLEManufData = cManufData;
@@ -1232,12 +1235,13 @@ void esp32loop()
         posinfo_last_lon=posinfo_lon;
         posinfo_last_direction=posinfo_direction;
 
-        #if defined(LPS33)
-        sendWeather(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
-         meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, 0, 0.0);
-        #endif
-
         posinfo_timer = millis();
+
+        if(pos_shot)
+        {
+            commandAction((char*)"--pos", true);
+            pos_shot = false;
+        }
     }
 
     mainStartTimeLoop();
@@ -1323,6 +1327,12 @@ void esp32loop()
                 loop_onewire();
 
                 onewireTimeWait = millis();
+
+                if(wx_shot)
+                {
+                    commandAction((char*)"--wx", true);
+                    wx_shot = false;
+                }
             }
         }
     }
@@ -1366,6 +1376,12 @@ void esp32loop()
                     meshcom_settings.node_press_asl = getPressASL(meshcom_settings.node_alt);
                     
                     BMXTimeWait = millis(); // wait for next messurement
+
+                    if(wx_shot)
+                    {
+                        commandAction((char*)"--wx", true);
+                        wx_shot = false;
+                    }
                 }
             #endif
         }
