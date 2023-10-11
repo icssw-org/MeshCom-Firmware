@@ -6,7 +6,8 @@ char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 
-String HardWare[13] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "-", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "EBYTE_E22"};
+#define max_hardware 14
+String HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "-", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "EBYTE_E22", "HELTEC_V3"};
 
 void initMheard()
 {
@@ -159,10 +160,15 @@ void showMHeard()
             int ihw=mheardLine.mh_hw;
             if(mheardLine.mh_hw == 39)
                 ihw=12;
-            if(ihw < 0 || ihw > 12)
+            if(mheardLine.mh_hw == 43)
+                ihw=13;
+            if(ihw < 0 || ihw >= max_hardware)
                 ihw=0;
 
-            Serial.printf("%-15.15s | ", HardWare[ihw].c_str());
+            if(ihw == 0)
+                Serial.printf("%-11.11s/%03i | ", HardWare[ihw].c_str(), mheardLine.mh_hw);
+            else
+                Serial.printf("%-15.15s | ", HardWare[ihw].c_str());
 
             Serial.printf("%3i | ", mheardLine.mh_mod);
             Serial.printf("%4i | ", mheardLine.mh_rssi);

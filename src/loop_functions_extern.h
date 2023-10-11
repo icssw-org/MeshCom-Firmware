@@ -14,6 +14,7 @@ extern bool bSetLoRaAPRS;
 
 extern bool bDEBUG;
 extern bool bLORADEBUG;
+extern bool bBLEDEBUG;
 extern bool bWXDEBUG;
 
 extern bool bPosDisplay;

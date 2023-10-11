@@ -154,6 +154,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             // last heard LoRa MeshCom-Packet
             lastHeardTime = millis();
 
+            // print aprs message
+            if(bDisplayInfo)
+            {
+                printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
+                Serial.println();
+            }
+
             //
             ///////////////////////////////////////////////
 
@@ -565,8 +572,8 @@ bool doTX()
     {
         cmd_counter--;
         
-        if(bLORADEBUG)
-            Serial.printf("cmd_counter > 0:%i \n", cmd_counter);
+        //if(bLORADEBUG)
+        //    Serial.printf("cmd_counter > 0:%i \n", cmd_counter);
 
         return false;
     }
@@ -643,8 +650,8 @@ bool doTX()
                         {
                             cmd_counter=7;
                             
-                            if(bLORADEBUG)
-                                Serial.printf("cmd_counter = 7:%i \n", cmd_counter);
+                            //if(bLORADEBUG)
+                            //    Serial.printf("cmd_counter = 7:%i \n", cmd_counter);
 
                             iRead=save_read;
                             tx_waiting=true;

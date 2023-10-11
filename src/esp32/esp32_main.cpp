@@ -378,6 +378,7 @@ void esp32setup()
     meshcom_settings.node_press = 0.0;
     meshcom_settings.node_hum = 0.0;
     meshcom_settings.node_temp = 0.0;
+    meshcom_settings.node_temp2 = 0.0;
     meshcom_settings.node_press_alt = 0;
     meshcom_settings.node_press_asl = 0.0;
 
@@ -926,7 +927,7 @@ void esp32loop()
                 radio.finishTransmit();
 
             #ifndef BOARD_TLORA_OLV216
-                // reset MeshCom
+                // reset MeshCom now
                 if(bSetLoRaAPRS)
                 {
                     lora_setchip_meshcom();
@@ -1202,7 +1203,7 @@ void esp32loop()
         sendToPhone();   
     }
 
-    // gps refresh
+    // gps refresh every 10 sec
     if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
     {
         #ifdef ENABLE_GPS

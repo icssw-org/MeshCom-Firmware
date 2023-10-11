@@ -36,7 +36,10 @@ void init_onewire(void)
 void loop_onewire()
 {
     if(!bONEWIRE)
+    {
+        meshcom_settings.node_temp2 = 0;
         return;
+    }
 
     if(meshcom_settings.node_owgpio == 0)
         return;

@@ -23,6 +23,7 @@ bool bSetLoRaAPRS = false;
 
 bool bDEBUG = false;
 bool bLORADEBUG = false;
+bool bBLEDEBUG = false;
 bool bWXDEBUG = false;
 
 bool bPosDisplay = true;
@@ -1151,6 +1152,9 @@ void sendMessage(char *msg_text, int len)
 
     if(memcmp(msg_text, "--", 1) == 0)
     {
+        if(bDisplayInfo)
+            Serial.printf("COMMAND:%s\n", msg_text);
+
         commandAction(msg_text, true);
         return;
     }
@@ -1603,8 +1607,8 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     if(posinfo_distance < 100 || !bDisplayTrack)  // seit letzter gemeldeter position
         gps_send_rate = POSINFO_INTERVAL;
     else
-    if(posinfo_distance < 120)  // zu fuss > 3 km/h  < 8 km/h
-        gps_send_rate = 60; // seconds
+    if(posinfo_distance < 200)  // zu fuss > 3 km/h  < 8 km/h
+        gps_send_rate = 30; // seconds
     else
     if(posinfo_distance < 420)  // rad < 15 km/h
         gps_send_rate = 60; // seconds
@@ -1631,7 +1635,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
 
     if(posinfo_shot)
     {
-        if(bDEBUG)
+        if(bGPSDEBUG)
         {
             Serial.print(getTimeString());
             Serial.printf(" POSINFO one-shot set - direction_diff:%i last_lat:%.1lf last_lon:%.1lf\n", direction_diff, posinfo_last_lat, posinfo_last_lon);

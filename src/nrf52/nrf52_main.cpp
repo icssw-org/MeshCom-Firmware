@@ -214,11 +214,13 @@ void blinkLED2();                                    // blink BLUE
 void checkSerialCommand(void);
 
 
+unsigned long gps_refresh_timer = 0;
+
 // Client basic variables
 uint8_t dmac[6];
 
 /** Set the device name, max length is 10 characters */
-    char g_ble_dev_name[10] = "CL";
+    char g_ble_dev_name[10] = "MC";
 
 void getMacAddr(uint8_t *dmac)
 {
@@ -336,6 +338,13 @@ void nrf52setup()
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
 
     global_batt = 4200.0;
+
+    meshcom_settings.node_press = 0.0;
+    meshcom_settings.node_hum = 0.0;
+    meshcom_settings.node_temp = 0.0;
+    meshcom_settings.node_temp2 = 0.0;
+    meshcom_settings.node_press_alt = 0;
+    meshcom_settings.node_press_asl = 0.0;
 
     posinfo_interval = POSINFO_INTERVAL;
 
@@ -699,17 +708,23 @@ void nrf52loop()
 
         if(bGPSON)
         {
-            unsigned int igps = getGPS();
-            if(igps > 0)
-                posinfo_interval = igps;
-            else
+            // gps refresh every 10 sec
+            if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
             {
-                no_gps_reset_counter++;
-                if(no_gps_reset_counter > 10)
+                unsigned int igps = getGPS();
+                if(igps > 0)
+                    posinfo_interval = igps;
+                else
                 {
-                    posinfo_interval = POSINFO_INTERVAL;
-                    no_gps_reset_counter = 0;
+                    no_gps_reset_counter++;
+                    if(no_gps_reset_counter > 10)
+                    {
+                        posinfo_interval = POSINFO_INTERVAL;
+                        no_gps_reset_counter = 0;
+                    }
                 }
+
+                gps_refresh_timer = millis();
             }
         }
 
@@ -785,6 +800,7 @@ void nrf52loop()
             }
         }
     }
+
     #endif
 
     if(onewireTimeWait == 0)
@@ -946,15 +962,23 @@ void getPRESSURE(void)
     
     // barometrische Höhenformel
     //meshcom_settings.node_press = pressure.pressure * pow((temperatureK / (temperatureK + home_alt * temperature_gradient)) , -5.255);
-    meshcom_settings.node_press = pressure.pressure;
-    meshcom_settings.node_temp = temp.temperature;
+    if(bLPS33)
+    {
+        meshcom_settings.node_press = pressure.pressure;
+        meshcom_settings.node_temp = temp.temperature;
+    }
+    else
+    {
+        meshcom_settings.node_press = 0;
+        meshcom_settings.node_temp = 0;
+    }
 }
 
 /**@brief Function for analytical direction.
  */
 void direction_parse(String tmp)
 {
-    if (tmp.indexOf(",E,") != -1)
+    if (tmp.indexOf(",E,") != -1 && tmp.indexOf(",W,") > 0)
     {
         direction_E_W = 0;
     }
@@ -963,7 +987,7 @@ void direction_parse(String tmp)
         direction_E_W = 1;
     }
     
-    if (tmp.indexOf(",N,") != -1)
+    if (tmp.indexOf(",N,") != -1 && tmp.indexOf(",S,") > 0)
     {
         direction_S_N = 1;
     }

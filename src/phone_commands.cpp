@@ -69,7 +69,9 @@ void sendConfigToPhone ()
 			break;
 		} 
 	}
-	Serial.println("Comment Len: " + String(comment_len) + " Comment: " + String(meshcom_settings.node_atxt) + " Comment StrLen: " + String(strlen(meshcom_settings.node_atxt)));
+
+	if(bBLEDEBUG)
+		Serial.println("Comment Len: " + String(comment_len) + " Comment: " + String(meshcom_settings.node_atxt) + " Comment StrLen: " + String(strlen(meshcom_settings.node_atxt)));
 
 	
 	uint8_t conf_len = call_len + ssid_len + pwd_len + comment_len + 44;	// +9 because of APRS Symbols 2B, Settings 4B, till FRQ and 0x00 end
@@ -132,7 +134,9 @@ void sendConfigToPhone ()
 	aprs_symbols_offset = pwd_offset + pwd_len;
 	memcpy(confBuff + aprs_symbols_offset + 1, &meshcom_settings.node_symid, 1);
 	memcpy(confBuff + aprs_symbols_offset + 2, &meshcom_settings.node_symcd, 1);
-	Serial.printf("Sym ID: %c Sym CD: %c\n", meshcom_settings.node_symid, meshcom_settings.node_symcd);
+
+	if(bBLEDEBUG)
+		Serial.printf("Sym ID: %c Sym CD: %c\n", meshcom_settings.node_symid, meshcom_settings.node_symcd);
 
 	// Settings
 	gw_cl_offset = aprs_symbols_offset + 3;
@@ -270,7 +274,7 @@ void sendToPhone()
 		if (toPhoneRead >= MAX_RING)
 			toPhoneRead = 0;
 
-		if(bDEBUG)
+		if(bBLEDEBUG)
 			Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7);
     }
     
@@ -319,7 +323,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 	DEBUG_MSG_VAL("BLE", msg_len, "Msg from Device Length");
 
-	if(bDEBUG)
+	if(bBLEDEBUG)
 	{
 		printBuffer(conf_data, msg_len);
 		Serial.println();
@@ -375,8 +379,11 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			#if defined NRF52_SERIES
 				sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
 				
-				Serial.print("helper_string:");
-				Serial.println(helper_string);
+				if(bBLEDEBUG)
+				{
+					Serial.print("helper_string:");
+					Serial.println(helper_string);
+				}
 
 				Bluefruit.setName(helper_string);
 			#endif
@@ -465,11 +472,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			char aprs_pri_sec = conf_data[2];
 			char aprs_symbol = conf_data[3];
 
-			DEBUG_MSG_VAL("BLE", aprs_pri_sec, "APRS PRI_SEC Symbol");
-			DEBUG_MSG_VAL("BLE", aprs_symbol, "APRS Symbol");
-			Serial.printf("aprs_pri_sec:%c aprs_symbol:%c\n", aprs_pri_sec, aprs_symbol);
-
-			//Serial.printf("aprs_pri_sec:%c aprs_symbol:%c\n", aprs_pri_sec, aprs_symbol);
+			if(bBLEDEBUG)
+				Serial.printf("aprs_pri_sec:%c aprs_symbol:%c\n", aprs_pri_sec, aprs_symbol);
 
 			if(aprs_pri_sec == 0x2f || aprs_pri_sec == 0x5c)
 			{
@@ -493,8 +497,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			memcpy(textbuff_phone, conf_data + 2, txt_msg_len_phone);
 			textbuff_phone[txt_msg_len_phone]=0x00;
 
-			//Serial.printBuffer(textbuff_phone, txt_msg_len_phone);
-			//Serial.println();
 			// flag für main neue msg von phone
 			hasMsgFromPhone = true;
 			break;
@@ -525,13 +527,17 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				sprintf(meshcom_settings.node_ssid, "%s", s_SSID.c_str());
 				sprintf(meshcom_settings.node_pwd, "%s", s_PWD.c_str());
 
-				Serial.println("Wifi Setting from phone set");
+				if(bBLEDEBUG)
+					Serial.println("Wifi Setting from phone set");
 			}
 			break;
 		}
 
 		case 0xF0: {
-			Serial.println("Save Settings");
+			
+			if(bBLEDEBUG)
+				Serial.println("Save Settings");
+			
 			//Save Settings
 
 				save_settings();

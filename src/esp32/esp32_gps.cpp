@@ -694,7 +694,7 @@ unsigned int getGPS(void)
  */
 void direction_parse(String tmp)
 {
-    if (tmp.indexOf(",E,") != -1)
+    if (tmp.indexOf(",E,") != -1 && tmp.indexOf(",W,") > 0)
     {
         direction_E_W = 0;
     }
@@ -703,13 +703,13 @@ void direction_parse(String tmp)
         direction_E_W = 1;
     }
     
-    if (tmp.indexOf(",S,") != -1)
+    if (tmp.indexOf(",N,") != -1 && tmp.indexOf(",S,") > 0)
     {
-        direction_S_N = 0;
+        direction_S_N = 1;
     }
     else
     {
-        direction_S_N = 1;
+        direction_S_N = 0;
     }
 }
 
