@@ -978,22 +978,22 @@ void getPRESSURE(void)
  */
 void direction_parse(String tmp)
 {
-    if (tmp.indexOf(",E,") != -1 && tmp.indexOf(",W,") > 0)
+    if (tmp.indexOf(",E,") < 0 && tmp.indexOf(",W,") > 0)
     {
-        direction_E_W = 0;
+        direction_E_W = 0;  // WEST
     }
     else
     {
-        direction_E_W = 1;
+        direction_E_W = 1;  // EAST
     }
     
-    if (tmp.indexOf(",N,") != -1 && tmp.indexOf(",S,") > 0)
+    if (tmp.indexOf(",N,") < 0 && tmp.indexOf(",S,") > 0)
     {
-        direction_S_N = 1;
+        direction_S_N = 1;  // SOUTH
     }
     else
     {
-        direction_S_N = 0;
+        direction_S_N = 0;  // NORTH
     }
 }
 
@@ -1036,7 +1036,7 @@ unsigned int getGPS(void)
         meshcom_settings.node_lat = cround4(dlat);
         meshcom_settings.node_lon = cround4(dlon);
 
-        if(direction_S_N == 0)
+        if(direction_S_N == 1)
         {
             meshcom_settings.node_lat_c = 'S';
         }
@@ -1045,7 +1045,7 @@ unsigned int getGPS(void)
             meshcom_settings.node_lat_c = 'N';
         }
 
-        if(direction_E_W == 0)
+        if(direction_E_W == 1)
         {
             meshcom_settings.node_lon_c = 'E';
         }
