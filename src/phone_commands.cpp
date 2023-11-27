@@ -401,16 +401,13 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			
 			d_lat = (double)lat_phone;
 			
-			if (save_setting)
-			{
-				meshcom_settings.node_lat_c='N';
-				meshcom_settings.node_lat=d_lat;
+			meshcom_settings.node_lat_c='N';
+			meshcom_settings.node_lat=d_lat;
 
-				if(d_lat < 0)
-				{
-					meshcom_settings.node_lat_c='S';
-					meshcom_settings.node_lat=fabs(d_lat);
-				}
+			if(d_lat < 0)
+			{
+				meshcom_settings.node_lat_c='S';
+				meshcom_settings.node_lat=fabs(d_lat);
 			}
 
 			break;
@@ -424,16 +421,13 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			memcpy(&long_phone, conf_data + 2, sizeof(long_phone));
 			d_lon = (double)long_phone;
 		
-			if (save_setting)
-			{
-				meshcom_settings.node_lon_c='E';
-				meshcom_settings.node_lon=d_lon;
+			meshcom_settings.node_lon_c='E';
+			meshcom_settings.node_lon=d_lon;
 
-				if(d_lon < 0)
-				{
-					meshcom_settings.node_lon_c='W';
-					meshcom_settings.node_lon=fabs(d_lon);
-				}
+			if(d_lon < 0)
+			{
+				meshcom_settings.node_lon_c='W';
+				meshcom_settings.node_lon=fabs(d_lon);
 			}
 
 			break;
@@ -445,12 +439,9 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			memcpy(&altitude, conf_data + 2, sizeof(altitude));
 			DEBUG_MSG_VAL("BLE", altitude, "Altitude from phone:");
 
-			if (save_setting)
-			{
-				meshcom_settings.node_alt = altitude;
+			meshcom_settings.node_alt = altitude;
 
-			}
-			else
+			if (!save_setting)
 			{
 				// send to mesh - phone sends pos perdiocaly
 				/// TODO N/S und E/W Char muss man noch korrekt setzen

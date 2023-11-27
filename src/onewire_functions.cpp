@@ -30,6 +30,13 @@ void init_onewire(void)
 
     if(meshcom_settings.node_owgpio > 0)
         ds.begin(meshcom_settings.node_owgpio);  // default on pin 36
+    else
+    {
+        #ifdef OneWire_GPIO
+            meshcom_settings.node_owgpio = OneWire_GPIO;
+            ds.begin(meshcom_settings.node_owgpio);
+        #endif
+    }
    
 }
 
@@ -166,7 +173,8 @@ void loop_onewire()
         //// default is 12 bit resolution, 750 ms conversion time
     }
 
-    celsius = (float)raw / 16.0;
+    celsius = (float)raw;
+    celsius = celsius / 16.0;
     fahrenheit = celsius * 1.8 + 32.0;
 
     if(bWXDEBUG)

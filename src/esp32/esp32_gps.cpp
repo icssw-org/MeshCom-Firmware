@@ -12,9 +12,9 @@
     #define GPS_RX_PIN 34
     #define GPS_TX_PIN 12
 #elif defined(BOARD_HELTEC)
-    //For heltec these are the pins:
-    #define GPS_RX_PIN 2
-    #define GPS_TX_PIN 17
+    //For heltec these are the pins: 
+    #define GPS_RX_PIN 23
+    #define GPS_TX_PIN 3
 #elif defined(BOARD_HELTEC_V3)
     //For heltec these are the pins:
     #define GPS_RX_PIN 37
@@ -528,7 +528,7 @@ unsigned int getGPS(void)
             {
                 Serial.printf("GPS: trying 9600 baud <%i>\n", maxStateCount);
 
-                GPS.begin(9600);//, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                GPS.begin(9600);
 
                 if (myGPS.begin(GPS))
                 {
@@ -540,7 +540,7 @@ unsigned int getGPS(void)
                 delay(100);
 
                 Serial.printf("GPS: trying 38400 baud <%i>\n", maxStateCount);
-                GPS.begin(38400);//, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                GPS.begin(38400);
                 
                 if (myGPS.begin(GPS))
                 {
@@ -617,7 +617,7 @@ unsigned int getGPS(void)
 
                 myGPS.hardReset();
                 delay(3000);
-                GPS.begin(9600);//, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                GPS.begin(9600);
 
                 if (myGPS.begin(GPS))
                 {
@@ -643,7 +643,7 @@ unsigned int getGPS(void)
 
                 myGPS.factoryReset();
                 delay(3000); // takes more than one second... a loop to resync would be best
-                GPS.begin(9600);//, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                GPS.begin(9600);
 
                 if (myGPS.begin(GPS))
                 {

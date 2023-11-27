@@ -144,7 +144,7 @@ void RadioInit();
         LORA_SYMBOL_TIMEOUT,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         0,    //  Fixed payload length: N/A
-        true, //  CRC enabled
+        false, //  CRC enabled
         0,    //  Frequency hopping disabled
         0,    //  Hop period: N/A
         LORA_IQ_INVERSION_ON,

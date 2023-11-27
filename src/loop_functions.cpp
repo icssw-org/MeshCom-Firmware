@@ -1610,13 +1610,13 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     if(posinfo_distance < 200)  // zu fuss > 3 km/h  < 8 km/h
         gps_send_rate = 30; // seconds
     else
-    if(posinfo_distance < 420)  // rad < 15 km/h
+    if(posinfo_distance < 800)  // rad < 40 km/h
         gps_send_rate = 60; // seconds
     else
-    if(posinfo_distance < 1100)  // auto stadt < 40 km/h
+    if(posinfo_distance < 3000)  // auto stadt < 80 km/h
         gps_send_rate = 120; // seconds
     else
-        gps_send_rate = 180; // auto > 40 km/h
+        gps_send_rate = 180; // auto > 80 km/h
 
     int direction_diff=0;
 

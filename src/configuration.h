@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.28"
-#define SOURCE_VERSION_SUB "a"
+#define SOURCE_VERSION_SUB "c"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -325,8 +325,10 @@ static const uint8_t SCK   = 5;
 #define LORA_DIO0 DIO0
 #define LORA_DIO1 DIO1
 #define LORA_CS SS
-#define I2C_SDA 4
-#define I2C_SCL 15
+
+#define I2C_SDA 4       // getestet OE5HWN
+#define I2C_SCL 15      // getestet OE5HWN
+#define OneWire_GPIO 17 // getestet OE5HWN
 
 #endif
 
