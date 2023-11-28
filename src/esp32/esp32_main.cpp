@@ -1400,13 +1400,13 @@ void esp32loop()
         }
     }
 
-    // read every 5 seconds the bme680 sensor calculated from millis()
+    // read every n seconds the bme680 sensor calculated from millis()
     if(bme680_found)
     {
-        if ((bme680_timer + 10000) < millis())
+        if ((bme680_timer + 30000) < millis())
         {
             // calculate delay
-            int delay = bme680_get_endTime() - millis();
+            uint32_t delay = bme680_get_endTime() - millis();
             
             if (delay <= 0)
             {

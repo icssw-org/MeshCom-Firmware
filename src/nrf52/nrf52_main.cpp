@@ -169,6 +169,14 @@ Adafruit_LPS22 g_lps22hb;
 
 void getPRESSURE(void);
 
+// BME680
+extern bool bme680_found;
+extern void bme680_init();
+extern uint32_t bme680_get_endTime();
+extern void bme680_get();
+unsigned long bme680_timer = millis();
+
+
 #define POWER_ENABLE   WB_IO2
 
 #define LEFT_BUTTON    WB_IO3
@@ -524,8 +532,11 @@ void nrf52setup()
 	digitalWrite(LED_BLUE, LOW);
 #endif
 
-
+    // I2C init
     Wire.begin();
+
+    // BME680 init TODO: get switch from commands to enable or not.
+    bme680_init();
 
     u8g2.begin();
 
@@ -896,6 +907,24 @@ void nrf52loop()
             meshcom_settings.node_press = getPress();
 
             BMXTimeWait = millis();
+        }
+    }
+
+    // read every n seconds the bme680 sensor calculated from millis()
+    if(bme680_found)
+    {
+        if ((bme680_timer + 30000) < millis())
+        {
+            
+            // calculate delay
+            int delay = bme680_get_endTime() - millis();
+            
+            if (delay <= 0)
+            {
+                bme680_get();
+
+                bme680_timer = millis();
+            }
         }
     }
 

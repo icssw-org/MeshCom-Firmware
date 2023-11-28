@@ -1,4 +1,5 @@
 #include <Adafruit_BME680.h> 
+#include <Adafruit_Sensor.h>
 #include "esp32/esp32_flash.h"
 
 Adafruit_BME680 bme;
@@ -11,18 +12,7 @@ Adafruit_BME680 bme;
 #endif
 
 extern bool bme680_found;
-
-const float MIN_TEMP = 0.0;
-const float MAX_TEMP = 100.0;
-const float MIN_HUMIDITY = 0.0;
-const float MAX_HUMIDITY = 100.0;
-const float MIN_PRESSURE = 800.0;
-const float MAX_PRESSURE = 1200.0;
-const float MIN_GAS = 10000.0;
-const float MAX_GAS = 50000.0;
-
-// prototypes
-float calculate_IAQ(float temp, float humidity, float pressure, float gas_resistance);
+extern bool bWXDEBUG;
 
 
 
@@ -79,14 +69,14 @@ void bme680_init()
 }
 
 
-
-unsigned long bme680_get_endTime()
+// get the time when the sensor reading will be completed
+uint32_t bme680_get_endTime()
 {
   return bme.beginReading();
 }
 
 
-
+// get the sensor reading
 void bme680_get()
 {
   
@@ -94,38 +84,35 @@ void bme680_get()
     Serial.println(F("Failed to complete reading :("));
     return;
   }
-  meshcom_settings.node_temp = bme.temperature;
+
+  meshcom_settings.node_temp = bme.temperature - 1.3; // heater biases temp reading - TODO: implement better compensation
   meshcom_settings.node_hum = bme.humidity;
   meshcom_settings.node_press = bme.pressure / 100.0;
   meshcom_settings.node_press_alt = bme.readAltitude(SEALEVELPRESSURE_HPA);
   meshcom_settings.node_gas_res = bme.gas_resistance / 1000.0;
 
-  if (Serial)
-  {
-    Serial.print(F("Reading completed at "));
-    Serial.println(millis());
 
+  if (Serial && bWXDEBUG)
+  {
     Serial.print(F("Temperature = "));
-    Serial.print(bme.temperature);
+    Serial.print(meshcom_settings.node_temp);
     Serial.println(F(" *C"));
 
     Serial.print(F("Pressure = "));
-    Serial.print(bme.pressure / 100.0);
+    Serial.print(meshcom_settings.node_press);
     Serial.println(F(" hPa"));
 
     Serial.print(F("Humidity = "));
-    Serial.print(bme.humidity);
+    Serial.print(meshcom_settings.node_hum);
     Serial.println(F(" %"));
 
     Serial.print(F("Gas = "));
-    Serial.print(bme.gas_resistance / 1000.0);
+    Serial.print(meshcom_settings.node_gas_res);
     Serial.println(F(" KOhms"));
 
     Serial.print(F("Approx. Altitude = "));
-    Serial.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
+    Serial.print(meshcom_settings.node_press_alt);
     Serial.println(F(" m"));
-
-    calculate_IAQ(bme.temperature, bme.humidity, bme.pressure, bme.gas_resistance);
     
     Serial.println();
   }
@@ -133,22 +120,3 @@ void bme680_get()
 
 
 
-float calculate_IAQ(float temp, float humidity, float pressure, float gas_resistance) {
-    // Normalisiere die Werte
-    float normalized_temp = (temp - MIN_TEMP) / (MAX_TEMP - MIN_TEMP);
-    float normalized_humidity = (humidity - MIN_HUMIDITY) / (MAX_HUMIDITY - MIN_HUMIDITY);
-    float normalized_pressure = (pressure - MIN_PRESSURE) / (MAX_PRESSURE - MIN_PRESSURE);
-    float normalized_gas_resistance = (gas_resistance - MIN_GAS) / (MAX_GAS - MIN_GAS);
-    
-    // Gewichtungen der Parameter anpassen (empirisch oder aufgrund von Forschung)
-    float weight_temp = 0.3;
-    float weight_humidity = 0.2;
-    float weight_pressure = 0.3;
-    float weight_gas_resistance = 0.2;
-    
-    // Berechne den IAQ basierend auf gewichteten und normalisierten Werten
-    float iaq = (normalized_temp * weight_temp) + (normalized_humidity * weight_humidity) + (normalized_pressure * weight_pressure) + (normalized_gas_resistance * weight_gas_resistance);
-    
-    Serial.printf("IAQ: %f\n", iaq);
-    return iaq;
-}
