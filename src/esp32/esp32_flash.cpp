@@ -69,6 +69,9 @@ void init_flash(void)
 
     meshcom_settings.node_temp2 = preferences.getFloat("node_temp2", 0.0);
 
+    // BME680
+    meshcom_settings.node_gas_res = preferences.getFloat("node_gas_res", 0.0);
+
 }
 
 void save_settings(void)
@@ -127,6 +130,9 @@ void save_settings(void)
     preferences.putInt("node_owgpio", meshcom_settings.node_owgpio);
 
     preferences.putFloat("node_temp2", meshcom_settings.node_temp2);
+
+    // BME680
+    preferences.putFloat("node_gas_res", meshcom_settings.node_gas_res);
 
     preferences.end();
 

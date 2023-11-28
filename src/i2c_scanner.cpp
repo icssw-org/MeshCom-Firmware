@@ -33,8 +33,8 @@ String strInfo = "";
             String strDev="";
             if(address == 0x34)strDev="AXP192/2101";
             if(address == 0x3C)strDev="OLED";
-            if(address == 0x76)strDev="BME280/BMP280";
-            if(address == 0x77)strDev="BME280/BMP280";
+            if(address == 0x76)strDev="BME280/BMP280/BME680";
+            if(address == 0x77)strDev="BME280/BMP280/BME680";
             sprintf(cInfo, "[I2C] ... device found at address 0x%02X %s\n", address, strDev.c_str());
             strInfo.concat(cInfo);
 

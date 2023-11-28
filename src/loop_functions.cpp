@@ -40,6 +40,9 @@ bool bONEWIRE = false;
 
 bool bLPS33 = false;
 
+bool bme680_found = false;
+bool bme680_enabled = false;
+
 bool bGATEWAY = false;
 bool bMESH = false;
 bool bEXTUDP = false;
