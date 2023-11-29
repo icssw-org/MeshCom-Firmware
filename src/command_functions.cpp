@@ -93,6 +93,20 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
 
+    if(commandCheck(msg_text+2, (char*)"utcoff") == 0)
+    {
+        sscanf(msg_text+9, "%f", &meshcom_settings.node_utcoff);
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--set");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"maxv") == 0)
     {
         sscanf(msg_text+7, "%f", &meshcom_settings.node_maxv);
@@ -223,7 +237,7 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n");
             delay(100);
-            Serial.printf("--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n");
+            Serial.printf("--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n");
             delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
             delay(100);
@@ -1502,8 +1516,8 @@ void commandAction(char *msg_text, bool ble)
 
     if(bInfo)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s>\n...ID %08X\n...NODE %i\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GATEWAY %s\n...MESH    %s\n...BUTTON  %s\n...DEBUG  %s\n...LORADEBUG %s\n...GPSDEBUG  %s\n...WXDEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
-                meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
+        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s>\n...ID %08X\n...NODE %i\n...UTC  %f\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GATEWAY %s\n...MESH    %s\n...BUTTON  %s\n...DEBUG  %s\n...LORADEBUG %s\n...GPSDEBUG  %s\n...WXDEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+                meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
                 (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"));
 
         if(ble)
@@ -1554,7 +1568,7 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            printf("\n\nMeshCom %s %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %i\n...RATE: %i\n...NEXT: %i sec\n...DIST: %im\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %i.%02i.%02i %02i:%02i:%02i MESZ\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+            printf("\n\nMeshCom %s %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %i\n...RATE: %i\n...NEXT: %i sec\n...DIST: %im\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %i.%02i.%02i %02i:%02i:%02i CET\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
             meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
             (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
             meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);

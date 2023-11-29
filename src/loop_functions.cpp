@@ -1362,12 +1362,12 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
             sprintf(chum, "/H=%.1f", hum);
         }
 
-        if(temp > 0)
+        if(temp != 0)
         {
             sprintf(ctemp, "/T=%.1f", temp);
         }
 
-        if(temp2 > 0)
+        if(temp2 != 0)
         {
             sprintf(ctemp2, "/O=%.1f", temp2);
         }
