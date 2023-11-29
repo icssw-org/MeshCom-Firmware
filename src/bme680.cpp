@@ -1,6 +1,10 @@
 #include <Adafruit_BME680.h> 
 #include <Adafruit_Sensor.h>
+#ifdef NRF52_SERIES
+#include <WisBlock-API.h>
+#else
 #include "esp32/esp32_flash.h"
+#endif
 
 Adafruit_BME680 bme;
 
@@ -13,7 +17,6 @@ Adafruit_BME680 bme;
 
 extern bool bme680_found;
 extern bool bWXDEBUG;
-
 
 
 void bme680_init()

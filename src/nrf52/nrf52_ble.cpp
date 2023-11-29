@@ -77,6 +77,7 @@ void init_ble(void)
 	Bluefruit.Security.setPIN(PAIRING_PIN);
 
 	// Set max power. Accepted values are: (min) -40, -20, -16, -12, -8, -4, 0, 2, 3, 4, 5, 6, 7, 8 (max)
+	// RAK4631 - nRF52840 max 4dBm
 	Bluefruit.setTxPower(0);
 
 #if NO_BLE_LED > 0
@@ -120,10 +121,10 @@ void init_ble(void)
 
 	ble_dis.setHardwareRev("52840");
 
-	ble_dis.begin();
-
-	// Start the DFU service
+	// Start the DFU service first - needed for the OTA update
 	ble_dfu.begin();
+
+	ble_dis.begin();
 
 	// Permission / Pairing
 	g_ble_uart.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
@@ -133,6 +134,10 @@ void init_ble(void)
 
 	// Initialize the LoRa setting service
 	BLEService sett_service = init_settings_characteristic();
+
+	// Secondary Scan Response packet (optional)
+  	// Since there is no room for 'Name' in Advertising packet
+	Bluefruit.ScanResponse.addName();
 
 	// Advertising packet
 	Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE); //
