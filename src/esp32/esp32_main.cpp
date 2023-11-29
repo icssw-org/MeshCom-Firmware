@@ -327,6 +327,14 @@ unsigned int  getMacAddr(void)
     return gw_id;
 }
 
+// BME680
+extern bool bme680_found;
+extern void bme680_init();
+extern unsigned long bme680_get_endTime();
+extern void bme680_get();
+unsigned long bme680_timer = millis();
+
+
 void esp32setup()
 {
     Serial.begin(MONITOR_SPEED);
@@ -431,6 +439,10 @@ void esp32setup()
     #if defined(ENABLE_BMX280)
         setupBMX280();
     #endif
+
+    // BME680 TODO: implement Flash handling and switch on/off etc!!
+    bme680_init();
+
 /*
     #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)  || defined(BOARD_E22)
         Wire.setPins(I2C_SDA, I2C_SCL);
@@ -1385,6 +1397,23 @@ void esp32loop()
                     }
                 }
             #endif
+        }
+    }
+
+    // read every n seconds the bme680 sensor calculated from millis()
+    if(bme680_found)
+    {
+        if ((bme680_timer + 30000) < millis())
+        {
+            // calculate delay
+            uint32_t delay = bme680_get_endTime() - millis();
+            
+            if (delay <= 0)
+            {
+                bme680_get();
+
+                bme680_timer = millis();
+            }
         }
     }
 
