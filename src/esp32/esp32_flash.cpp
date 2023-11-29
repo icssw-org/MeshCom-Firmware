@@ -69,6 +69,7 @@ void init_flash(void)
 
     meshcom_settings.node_temp2 = preferences.getFloat("node_temp2", 0.0);
 
+    meshcom_settings.node_utcoff = preferences.getFloat("node_utcoff", -1.0);
 }
 
 void save_settings(void)
@@ -127,6 +128,8 @@ void save_settings(void)
     preferences.putInt("node_owgpio", meshcom_settings.node_owgpio);
 
     preferences.putFloat("node_temp2", meshcom_settings.node_temp2);
+    
+    preferences.putFloat("node_utcoff", meshcom_settings.node_utcoff);
 
     preferences.end();
 

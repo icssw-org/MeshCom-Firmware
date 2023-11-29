@@ -553,7 +553,7 @@ void Clock::Snooze(bool bo24Hours /*= false*/)
 	}
 }
 
-void Clock::setCurrentTime(bool bUTC, uint16_t Year, uint16_t Month, uint16_t Day, uint16_t Hour, uint16_t Minute, uint16_t Second)
+void Clock::setCurrentTime(float fUTC, uint16_t Year, uint16_t Month, uint16_t Day, uint16_t Hour, uint16_t Minute, uint16_t Second)
 {
 
 	//Serial.printf("Date %i-%i-%i %02i:%02i:%02i\n", Year, Month, Day, Hour, Minute, Second);
@@ -571,8 +571,7 @@ void Clock::setCurrentTime(bool bUTC, uint16_t Year, uint16_t Month, uint16_t Da
 
 	tsNow = tsNow + (60 * 60);
 
-	if(bUTC)
-		tsNow = tsNow + (60 * 60);
+	tsNow = tsNow + ((fUTC * -1.0 * 60.0) * 60.0);
 
 	
 	SetClock(tsNow, false);
