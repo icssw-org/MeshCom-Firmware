@@ -71,7 +71,7 @@ void init_flash(void)
 
     meshcom_settings.node_utcoff = preferences.getFloat("node_utcof", -1.0);
 
-    // BME680
+    // BME680/CMCU-811
     meshcom_settings.node_gas_res = preferences.getFloat("node_gas", 0.0);
 
 }

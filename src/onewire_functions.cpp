@@ -156,8 +156,6 @@ void loop_onewire()
     // be stored to an "int16_t" type, which is always 16 bits
     // even when compiled on a 32 bit processor.
     
-    //int16_t raw = (data[1] << 8) | data[0];
-    
     byte MSB = data[1];
     byte LSB = data[0];
 
