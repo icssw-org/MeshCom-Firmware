@@ -31,6 +31,8 @@
 #include <clock.h>
 
 #include <bmx280.h>
+#include "bme680.h"
+
 #include <onewire_functions.h>
 
 #include <SparkFun_Ublox_Arduino_Library.h>
@@ -170,10 +172,6 @@ Adafruit_LPS22 g_lps22hb;
 void getPRESSURE(void);
 
 // BME680
-extern bool bme680_found;
-extern void bme680_init();
-extern uint32_t bme680_get_endTime();
-extern void bme680_get();
 unsigned long bme680_timer = millis();
 
 
@@ -449,8 +447,6 @@ void nrf52setup()
         delay(100);
     }
 
-    setupBMX280();
-
     // Try to initialize!
     #if defined(LPS33)
 
@@ -535,8 +531,10 @@ void nrf52setup()
     // I2C init
     Wire.begin();
 
-    // BME680 init TODO: get switch from commands to enable or not.
-    bme680_init();
+    setupBMX280();
+
+    // BME680 TODO: implement Flash handling and switch on/off etc!!
+    setupBME680();
 
     u8g2.begin();
 
@@ -911,17 +909,16 @@ void nrf52loop()
     }
 
     // read every n seconds the bme680 sensor calculated from millis()
-    if(bme680_found)
+    if(bBME680ON && bme680_found)
     {
         if ((bme680_timer + 30000) < millis())
         {
-            
             // calculate delay
-            int delay = bme680_get_endTime() - millis();
+            uint32_t delay = bme680_get_endTime() - millis();
             
             if (delay <= 0)
             {
-                bme680_get();
+                getBME680();
 
                 bme680_timer = millis();
             }

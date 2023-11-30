@@ -35,6 +35,7 @@ bool bDisplayTrack = false;
 bool bGPSON = false;
 bool bBMPON = false;
 bool bBMEON = false;
+bool bBME680ON = false;
 
 bool bONEWIRE = false;
 

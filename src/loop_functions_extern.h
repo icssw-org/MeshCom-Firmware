@@ -31,10 +31,14 @@ extern bool bDisplayTrack;
 extern bool bGPSON;
 extern bool bBMPON;
 extern bool bBMEON;
+extern bool bBME680ON;
 
 extern bool bONEWIRE;
 
 extern bool bLPS33;
+
+extern bool bme680_found;
+extern bool bme680_enabled;
 
 extern bool bSHORTPATH;
 extern bool bGPSDEBUG;

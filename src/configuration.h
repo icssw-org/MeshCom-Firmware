@@ -34,6 +34,7 @@ definitions
     #define TX_POWER_MAX 22  // max 22 dBm
     #define TX_POWER_MIN 1
     #define ENABLE_BMX280
+    #define ENABLE_BMX680
     //#define BUTTON_PIN WB_IO1  // not working in combination with GPS module
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
     #define ENABLE_GPS

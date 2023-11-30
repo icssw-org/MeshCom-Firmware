@@ -9,6 +9,10 @@
 // Sensors
 #include "bmx280.h"
 
+#if defined(ENABLE_BMX680)
+#include "bme680.h"
+#endif
+
 unsigned long rebootAuto = 0;
 
 extern int state; // only for gps reset
@@ -241,7 +245,7 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
             delay(100);
-            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--bmx BME/BMP off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--bmx BME/BMP/680 off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
             delay(100);
             Serial.printf("--gateway on/off\n--mesh    on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
         }
@@ -535,12 +539,34 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"bmx off") == 0 || commandCheck(msg_text+2, (char*)"bme off") == 0 || commandCheck(msg_text+2, (char*)"bmp off") == 0)
+    if(commandCheck(msg_text+2, (char*)"680 on") == 0)
+    {
+        bBME680ON=true;
+        
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0004;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--680 on");
+        }
+
+        save_settings();
+
+        #if defined(ENABLE_BMX680)
+        setupBME680();
+        #endif
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"bmx off") == 0 || commandCheck(msg_text+2, (char*)"bme off") == 0 || commandCheck(msg_text+2, (char*)"bmp off") == 0 || commandCheck(msg_text+2, (char*)"680 off") == 0)
     {
         bBMPON=false;
         bBMEON=false;
+        bBME680ON=false;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFB;
 
         if(ble)
         {
@@ -1597,8 +1623,8 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BME(P)280: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
-            (bBMEON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
+            printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BME(P)280: %s\n...BME680: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+            (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
         }
     }
     else

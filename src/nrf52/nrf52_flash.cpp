@@ -122,6 +122,8 @@ void init_flash(void)
 		meshcom_settings.node_owgpio = old_struct.node_owgpio;
 		meshcom_settings.node_temp2 = old_struct.node_temp2;
 
+    	meshcom_settings.node_utcoff = old_struct.node_utcoff;
+
 		// BME680
     	meshcom_settings.node_gas_res = old_struct.node_gas_res;
 

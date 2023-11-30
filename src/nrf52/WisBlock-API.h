@@ -237,6 +237,8 @@ struct s_meshcom_settings
 
 	float node_temp2 = 0;
 
+	float node_utcoff = 0;
+
 	// BME680
 	float node_gas_res = 0;
 
@@ -332,6 +334,8 @@ struct s_meshcomcompat_settings
 	int node_owgpio = 16;
 
 	float node_temp2 = 0;
+
+	float node_utcoff = 0;
 
 	// BME680
 	float node_gas_res = 0;

@@ -1,3 +1,8 @@
+#include "configuration.h"
+#include "loop_functions_extern.h"
+
+#if defined (ENABLE_BMX680)
+
 #include <Adafruit_BME680.h> 
 #include <Adafruit_Sensor.h>
 #ifdef NRF52_SERIES
@@ -5,6 +10,8 @@
 #else
 #include "esp32/esp32_flash.h"
 #endif
+
+#include "bme680.h"
 
 Adafruit_BME680 bme;
 
@@ -15,13 +22,16 @@ Adafruit_BME680 bme;
 #define I2C_ADDRESS_BME680_2 0x77
 #endif
 
-extern bool bme680_found;
-extern bool bWXDEBUG;
-
-
-void bme680_init()
+void setupBME680()
 {
   // TODO: avoid conflicts with BME/BMP280
+
+	if(bWXDEBUG)	
+		Serial.printf("bBME680ON:%i\n", bBME680ON);
+
+
+  if(!bBME680ON)
+    return;
 
   uint8_t foundAddr = 0; // 1 = 0x76, 2 = 0x77, 3 = both
 
@@ -75,14 +85,20 @@ void bme680_init()
 // get the time when the sensor reading will be completed
 uint32_t bme680_get_endTime()
 {
+  if(!bBME680ON)
+    return 0;
+
   return bme.beginReading();
 }
 
 
 // get the sensor reading
-void bme680_get()
+void getBME680()
 {
   
+  if(!bBME680ON)
+    return;
+
   if (!bme.endReading()) {
     Serial.println(F("Failed to complete reading :("));
     return;
@@ -121,5 +137,4 @@ void bme680_get()
   }
 }
 
-
-
+#endif

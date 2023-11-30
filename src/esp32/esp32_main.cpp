@@ -22,6 +22,7 @@
 
 // Sensors
 #include "bmx280.h"
+//#include "bme680.h"
 
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
@@ -328,11 +329,7 @@ unsigned int  getMacAddr(void)
 }
 
 // BME680
-extern bool bme680_found;
-extern void bme680_init();
-extern unsigned long bme680_get_endTime();
-extern void bme680_get();
-unsigned long bme680_timer = millis();
+//unsigned long bme680_timer = millis();
 
 
 void esp32setup()
@@ -376,8 +373,21 @@ void esp32setup()
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
+    bBME680ON =  meshcom_settings.node_sset2 & 0x0004;
     bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
+
+    if(bBMPON)
+    {
+        bBMEON=false;
+        bBME680ON=false;
+    }
+    else
+    if(bBMEON)
+    {
+        bBMPON=false;
+        bBME680ON=false;
+    }
 
     global_batt = 4200.0;
 
@@ -441,7 +451,9 @@ void esp32setup()
     #endif
 
     // BME680 TODO: implement Flash handling and switch on/off etc!!
-    bme680_init();
+    #if defined(ENABLE_BMX680)
+        setupBME680();
+    #endif
 
 /*
     #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)  || defined(BOARD_E22)
@@ -770,7 +782,7 @@ void esp32setup()
     
     NimBLEDevice::setDeviceName(strBLEName);
 
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9); /** +9db ESP_PWR_LVL_P9*/
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9); // +9db ESP_PWR_LVL_P9
 
     NimBLEDevice::setSecurityAuth(true, true, true);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
@@ -794,7 +806,7 @@ void esp32setup()
                         NIMBLE_PROPERTY::WRITE  |
                         NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
                         NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
-                        /** Require a secure connection for read and write access */
+                        // Require a secure connection for read and write access
                         NIMBLE_PROPERTY::READ   |
                         NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
                         NIMBLE_PROPERTY::READ_AUTHEN |
@@ -805,7 +817,7 @@ void esp32setup()
                         NIMBLE_PROPERTY::WRITE  |
                         NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
                         NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
-                        /** Require a secure connection for read and write access */
+                        // Require a secure connection for read and write access
                         NIMBLE_PROPERTY::READ   |
                         NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
                         NIMBLE_PROPERTY::READ_AUTHEN |
@@ -829,7 +841,7 @@ void esp32setup()
         pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
 
     pAdvertising->start(0);
-    
+   
     Serial.println("Waiting a client connection to notify...");
     
     // reset GPS-Time parameter
@@ -1401,7 +1413,8 @@ void esp32loop()
     }
 
     // read every n seconds the bme680 sensor calculated from millis()
-    if(bme680_found)
+    /*
+    if(bBME680ON && bme680_found)
     {
         if ((bme680_timer + 30000) < millis())
         {
@@ -1410,12 +1423,13 @@ void esp32loop()
             
             if (delay <= 0)
             {
-                bme680_get();
+                getBME680();
 
                 bme680_timer = millis();
             }
         }
     }
+    */
 
     ////////////////////////////////////////////////
     // WIFI Gateway functions

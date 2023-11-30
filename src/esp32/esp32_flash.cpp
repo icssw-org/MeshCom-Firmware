@@ -69,11 +69,11 @@ void init_flash(void)
 
     meshcom_settings.node_temp2 = preferences.getFloat("node_temp2", 0.0);
 
+    meshcom_settings.node_utcoff = preferences.getFloat("node_utcof", -1.0);
 
     // BME680
-    meshcom_settings.node_gas_res = preferences.getFloat("node_gas_res", 0.0);
+    meshcom_settings.node_gas_res = preferences.getFloat("node_gas", 0.0);
 
-    meshcom_settings.node_utcoff = preferences.getFloat("node_utcoff", -1.0);
 }
 
 void save_settings(void)
@@ -133,10 +133,10 @@ void save_settings(void)
 
     preferences.putFloat("node_temp2", meshcom_settings.node_temp2);
     
-    preferences.putFloat("node_utcoff", meshcom_settings.node_utcoff);
+    preferences.putFloat("node_utcof", meshcom_settings.node_utcoff);
 
     // BME680
-    preferences.putFloat("node_gas_res", meshcom_settings.node_gas_res);
+    preferences.putFloat("node_gas", meshcom_settings.node_gas_res);
 
     preferences.end();
 
