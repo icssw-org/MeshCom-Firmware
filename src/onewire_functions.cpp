@@ -142,6 +142,8 @@ void loop_onewire()
         }
     }
 
+    ds.reset_search();
+
     if(bWXDEBUG)
     {
         Serial.print(" CRC=");
@@ -153,7 +155,16 @@ void loop_onewire()
     // because the result is a 16 bit signed integer, it should
     // be stored to an "int16_t" type, which is always 16 bits
     // even when compiled on a 32 bit processor.
-    int16_t raw = (data[1] << 8) | data[0];
+    
+    //int16_t raw = (data[1] << 8) | data[0];
+    
+    byte MSB = data[1];
+    byte LSB = data[0];
+
+    float tempRead = (int16_t)((MSB << 8) | LSB); //using two's compliment
+    float TemperatureSum = tempRead / 16.0;
+  
+  /*
     if (type_s)
     {
         raw = raw << 3; // 9 bit resolution default
@@ -172,9 +183,8 @@ void loop_onewire()
         else if (cfg == 0x40) raw = raw & ~1; // 11 bit res, 375 ms
         //// default is 12 bit resolution, 750 ms conversion time
     }
-
-    celsius = (float)raw;
-    celsius = celsius / 16.0;
+*/
+    celsius = TemperatureSum;
     fahrenheit = celsius * 1.8 + 32.0;
 
     if(bWXDEBUG)
