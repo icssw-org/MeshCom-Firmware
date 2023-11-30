@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 
+#if defined (ENABLE_BMX280)
+
 void setupBMX280(void);
 
 bool loopBMX280(void);
@@ -12,5 +14,7 @@ float getPress();
 float getHum();
 int getPressALT();
 float getPressASL(int currect_alt);
+
+#endif
 
 #endif

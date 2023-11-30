@@ -22,7 +22,8 @@
 
 // Sensors
 #include "bmx280.h"
-//#include "bme680.h"
+#include "bme680.h"
+#include "mcu811.h"
 
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
@@ -329,7 +330,9 @@ unsigned int  getMacAddr(void)
 }
 
 // BME680
-//unsigned long bme680_timer = millis();
+#if defined(ENABLE_BMX680)
+unsigned long bme680_timer = millis();
+#endif
 
 
 void esp32setup()
@@ -374,6 +377,7 @@ void esp32setup()
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
     bBME680ON =  meshcom_settings.node_sset2 & 0x0004;
+    bMCU811ON =  meshcom_settings.node_sset2 & 0x0008;
     bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
 
@@ -448,6 +452,7 @@ void esp32setup()
 
     #if defined(ENABLE_BMX280)
         setupBMX280();
+        setupMCU811();
     #endif
 
     // BME680 TODO: implement Flash handling and switch on/off etc!!
@@ -1412,8 +1417,31 @@ void esp32loop()
         }
     }
 
+    if(bMCU811ON)
+    {
+        if(MCU811TimeWait == 0)
+            MCU811TimeWait = millis() - 10000;
+
+        if ((MCU811TimeWait + 30000) < millis())   // 30 sec
+        {
+            // read MCU-811 Sensor
+            if(loopMCU811())
+            {
+                meshcom_settings.node_gas_res = geteCO2();
+                
+                MCU811TimeWait = millis(); // wait for next messurement
+
+                if(wx_shot)
+                {
+                    commandAction((char*)"--wx", true);
+                    wx_shot = false;
+                }
+            }
+        }
+    }
+
     // read every n seconds the bme680 sensor calculated from millis()
-    /*
+    #if defined(ENABLE_BMX680)
     if(bBME680ON && bme680_found)
     {
         if ((bme680_timer + 30000) < millis())
@@ -1429,8 +1457,8 @@ void esp32loop()
             }
         }
     }
-    */
-
+    #endif
+    
     ////////////////////////////////////////////////
     // WIFI Gateway functions
     if(bGATEWAY)
