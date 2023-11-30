@@ -83,7 +83,7 @@ void setupBME680()
 
 
 // get the time when the sensor reading will be completed
-uint32_t bme680_get_endTime()
+int bme680_get_endTime()
 {
   if(!bBME680ON)
     return 0;

@@ -172,7 +172,7 @@ Adafruit_LPS22 g_lps22hb;
 void getPRESSURE(void);
 
 // BME680
-unsigned long bme680_timer = millis();
+unsigned long bme680_timer = 0;
 
 
 #define POWER_ENABLE   WB_IO2
@@ -244,6 +244,7 @@ void RadioInit()
     Radio.Init(&RadioEvents);
 }
 
+///////////////////////////////////////////
 void nrf52setup()
 {
 #if defined NRF52_SERIES || defined ESP32
@@ -342,6 +343,8 @@ void nrf52setup()
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
     bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
+    bBME680ON = meshcom_settings.node_sset2 & 0x0004;
+
 
     global_batt = 4200.0;
 
@@ -361,8 +364,16 @@ void nrf52setup()
         global_batt = meshcom_settings.node_maxv * 1000.0F;
     }
 
-	// Initialize temp sensor
-    init_onewire();
+	// Initialize onewire sensor
+    // check pin number in flash
+    if(meshcom_settings.node_owgpio > 7 || meshcom_settings.node_owgpio < 0){
+        meshcom_settings.node_owgpio = 0;
+        save_settings();
+    } 
+    if(meshcom_settings.node_owgpio != 0 && bONEWIRE){
+        init_onewire();
+    }
+        
 
     //  Initialize the LoRa Module
     lora_rak4630_init();
@@ -914,8 +925,8 @@ void nrf52loop()
         if ((bme680_timer + 30000) < millis())
         {
             // calculate delay
-            uint32_t delay = bme680_get_endTime() - millis();
-            
+            int delay = bme680_get_endTime() - millis();
+
             if (delay <= 0)
             {
                 getBME680();

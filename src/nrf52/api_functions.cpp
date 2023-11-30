@@ -23,12 +23,12 @@ uint16_t g_sw_ver_1 = 4; // major version increase on API change / not backwards
 #ifdef SW_VERSION_2
 uint16_t g_sw_ver_2 = SW_VERSION_2; // minor version increase on API change / backward compatible
 #else
-uint16_t g_sw_ver_2 = 0; // minor version increase on API change / backward compatible
+uint16_t g_sw_ver_2 = 29 ; // minor version increase on API change / backward compatible
 #endif
 #ifdef SW_VERSION_3
 uint16_t g_sw_ver_3 = SW_VERSION_3; // patch version increase on bugfix, no affect on API
 #else
-uint16_t g_sw_ver_3 = 2; // patch version increase on bugfix, no affect on API
+uint16_t g_sw_ver_3 = 0; // patch version increase on bugfix, no affect on API
 #endif
 
 /**
