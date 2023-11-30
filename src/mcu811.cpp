@@ -96,13 +96,21 @@ bool loopMCU811()
         {
             Serial.print("CO2temp: ");
             Serial.print(ftCO2);
-
             Serial.print(" °C, eCO2: ");
-            feCO2 = ccs.geteCO2();
-            Serial.print(feCO2);
+        }
 
+        feCO2 = ccs.geteCO2();
+
+        if(bWXDEBUG)
+        {
+            Serial.print(feCO2);
             Serial.print(" ppm, TVOC: ");      
-            fTVOC = ccs.getTVOC();
+        }
+
+        fTVOC = ccs.getTVOC();
+        
+        if(bWXDEBUG)
+        {
             Serial.println(fTVOC);
         }
     }
