@@ -920,6 +920,7 @@ void nrf52loop()
     }
 
     // read every n seconds the bme680 sensor calculated from millis()
+    #if defined(ENABLE_BMX680)
     if(bBME680ON && bme680_found)
     {
         if ((bme680_timer + 30000) < millis())
@@ -935,6 +936,7 @@ void nrf52loop()
             }
         }
     }
+    #endif
 
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);

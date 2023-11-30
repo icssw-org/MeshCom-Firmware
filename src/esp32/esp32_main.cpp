@@ -1447,7 +1447,7 @@ void esp32loop()
         if ((bme680_timer + 30000) < millis())
         {
             // calculate delay
-            uint32_t delay = bme680_get_endTime() - millis();
+            int delay = bme680_get_endTime() - millis();
             
             if (delay <= 0)
             {

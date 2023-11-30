@@ -506,6 +506,13 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"bmp on") == 0)
     {
+        // BMx280 and BME680 share same addresses - only one can be used
+        if(bBME680ON)
+        {
+            Serial.println("BME680 and BMx280 can't be used together!");
+            return; 
+        }
+
         bBMPON=true;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0080;
@@ -524,6 +531,13 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"bme on") == 0)
     {
+        // BMx280 and BME680 share same addresses - only one can be used
+        if(bBME680ON)
+        {
+            Serial.println("BME680 and BMx280 can't be used together!");
+            return; 
+        }
+
         bBMEON=true;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x00100;
@@ -542,6 +556,13 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"680 on") == 0)
     {
+        // BMx280 and BME680 share same addresses - only one can be used
+        if(bBMPON || bBMEON)
+        {
+            Serial.println("BME680 and BMx280 can't be used together!");
+            return; 
+        }
+
         bBME680ON=true;
         
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0004;
@@ -673,10 +694,16 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
+            // TODO: send the pin number back
             addBLECommandBack((char*)"--onewire gpio set");
         }
 
         save_settings();
+
+        // TODO: check on ESP32 if we need a reboot here, specially if it was not enabled before or the pin was changed
+        #ifdef NRF52_SERIES
+            NVIC_SystemReset();     // resets the device
+        #endif
 
         return;
     }

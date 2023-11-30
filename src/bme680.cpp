@@ -24,11 +24,16 @@ Adafruit_BME680 bme;
 
 void setupBME680()
 {
-  // TODO: avoid conflicts with BME/BMP280
 
 	if(bWXDEBUG)	
 		Serial.printf("bBME680ON:%i\n", bBME680ON);
 
+  // Don't mix BME28x and BME680 they share same addresses
+  if(bBMEON || bBMPON)
+  {
+    Serial.println("BME680 and BMx280 can't be used together!");
+    return; 
+  }
 
   if(!bBME680ON)
     return;
@@ -113,6 +118,7 @@ void getBME680()
 
   if (Serial && bWXDEBUG)
   {
+    Serial.print("BME680: ");
     Serial.print(F("Temperature = "));
     Serial.print(meshcom_settings.node_temp);
     Serial.println(F(" *C"));
