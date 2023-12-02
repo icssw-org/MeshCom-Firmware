@@ -17,19 +17,18 @@ Adafruit_BME680 bme;
 
 #define SEALEVELPRESSURE_HPA (1013.25)
 
-#ifndef I2C_ADDRESS_BME
+// BME680 I2C addresses
 #define I2C_ADDRESS_BME680_1 0x76
 #define I2C_ADDRESS_BME680_2 0x77
-#endif
+
 
 const float STANDARD_ALTITUDE = 180.0;
 float fBaseAltidude680 = 0;
-float fBasePress680 = 0;
-float fTemp680 = 0.0;
-float fPress680 = 0.0;
+//float fBasePress680 = 0;  // currently not used
+
 
 //coompensate approx. altitude from pressure
-const float COMPENSATE_ALTITUDE = -9.0; // mBar to zero ASL
+const float COMPENSATE_ALTITUDE = -8.0; // mBar to zero ASL
 
 float getPressASL(int current_alt);
 
