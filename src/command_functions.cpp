@@ -506,6 +506,13 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"bmp on") == 0)
     {
+        // BMx280 and BME680 share same addresses - only one can be used
+        if(bBME680ON)
+        {
+            Serial.println("BME680 and BMx280 can't be used together!");
+            return; 
+        }
+
         bBMPON=true;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0080;
@@ -524,6 +531,13 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"bme on") == 0)
     {
+        // BMx280 and BME680 share same addresses - only one can be used
+        if(bBME680ON)
+        {
+            Serial.println("BME680 and BMx280 can't be used together!");
+            return; 
+        }
+
         bBMEON=true;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x00100;
@@ -542,6 +556,13 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"680 on") == 0)
     {
+        // BMx280 and BME680 share same addresses - only one can be used
+        if(bBMPON || bBMEON)
+        {
+            Serial.println("BME680 and BMx280 can't be used together!");
+            return; 
+        }
+
         bBME680ON=true;
         
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0004;
@@ -669,14 +690,28 @@ void commandAction(char *msg_text, bool ble)
     {
         sscanf(msg_text+15, "%d", &meshcom_settings.node_owgpio);
 
+        // Pin 2 is used for powering peripherals on RAK4630
+        #ifdef BOARD_RAK4630
+        if(meshcom_settings.node_owgpio == 2){
+            Serial.println("GPIO 2 not supported on RAK4630");
+            return;
+        }
+        #endif
+
         Serial.printf("\nonewire gpio:%i\n", meshcom_settings.node_owgpio);
 
         if(ble)
         {
+            // TODO: send the pin number back to the app
             addBLECommandBack((char*)"--onewire gpio set");
         }
 
         save_settings();
+
+        // TODO: check on ESP32 if we need a reboot here, specially if it was not enabled before or the pin was changed
+        #ifdef NRF52_SERIES
+            NVIC_SystemReset();     // resets the device
+        #endif
 
         return;
     }
@@ -1648,6 +1683,7 @@ void commandAction(char *msg_text, bool ble)
         {
             printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BME(P)280: %s\n...BME680: %s\n...MCU811: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...eCO2: %.0f ppm\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
             (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res);
+
         }
     }
     else

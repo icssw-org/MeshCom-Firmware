@@ -15,20 +15,35 @@
 
 Adafruit_BME680 bme;
 
-#define SEALEVELPRESSURE_HPA (1013.2)
+#define SEALEVELPRESSURE_HPA (1013.25)
 
-#ifndef I2C_ADDRESS_BME
+// BME680 I2C addresses
 #define I2C_ADDRESS_BME680_1 0x76
 #define I2C_ADDRESS_BME680_2 0x77
-#endif
+
+
+const float STANDARD_ALTITUDE = 180.0;
+float fBaseAltidude680 = 0;
+//float fBasePress680 = 0;  // currently not used
+
+
+//coompensate approx. altitude from pressure
+const float COMPENSATE_ALTITUDE = -8.0; // mBar to zero ASL
+
+float getPressASL(int current_alt);
 
 void setupBME680()
 {
-  // TODO: avoid conflicts with BME/BMP280
 
 	if(bWXDEBUG)	
 		Serial.printf("bBME680ON:%i\n", bBME680ON);
 
+  // Don't mix BME28x and BME680 they share same addresses
+  if(bBMEON || bBMPON)
+  {
+    Serial.println("BME680 and BMx280 can't be used together!");
+    return; 
+  }
 
   if(!bBME680ON)
     return;
@@ -83,7 +98,7 @@ void setupBME680()
 
 
 // get the time when the sensor reading will be completed
-uint32_t bme680_get_endTime()
+int bme680_get_endTime()
 {
   if(!bBME680ON)
     return 0;
@@ -104,15 +119,19 @@ void getBME680()
     return;
   }
 
-  meshcom_settings.node_temp = bme.temperature - 1.3; // heater biases temp reading - TODO: implement better compensation
+  meshcom_settings.node_temp = bme.temperature - 1.1; // heater biases temp reading - TODO: implement better compensation
   meshcom_settings.node_hum = bme.humidity;
   meshcom_settings.node_press = bme.pressure / 100.0;
-  meshcom_settings.node_press_alt = bme.readAltitude(SEALEVELPRESSURE_HPA);
+  int bme_alt = bme.readAltitude(SEALEVELPRESSURE_HPA + COMPENSATE_ALTITUDE);
+  meshcom_settings.node_press_asl = getPressASL680(bme_alt);
+  //Serial.printf("asl: %f\n", meshcom_settings.node_press_asl);
+  meshcom_settings.node_press_alt = bme_alt;
   meshcom_settings.node_gas_res = bme.gas_resistance / 1000.0;
 
 
   if (Serial && bWXDEBUG)
   {
+    Serial.print("BME680: ");
     Serial.print(F("Temperature = "));
     Serial.print(meshcom_settings.node_temp);
     Serial.println(F(" *C"));
@@ -130,11 +149,24 @@ void getBME680()
     Serial.println(F(" KOhms"));
 
     Serial.print(F("Approx. Altitude = "));
-    Serial.print(meshcom_settings.node_press_alt);
+    Serial.print(bme_alt);
     Serial.println(F(" m"));
     
     Serial.println();
   }
+}
+
+float getPressASL680(int current_alt)
+{
+	//willbe set withj --setpress
+	//fBaseAltidude = (float)meshcom_settings.node_alt;
+	//fBasePress = meshcom_settings.node_press;
+	//
+	if(fBaseAltidude680 == 0)
+		fBaseAltidude680 = (float)current_alt;
+
+	return meshcom_settings.node_press / powf(1 - ((0.0065 * fBaseAltidude680) /
+        (meshcom_settings.node_temp + (0.0065 * STANDARD_ALTITUDE) + 273.15)), 5.257); // in hPa
 }
 
 #endif

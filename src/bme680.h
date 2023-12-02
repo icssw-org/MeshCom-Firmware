@@ -7,9 +7,11 @@
 
 void setupBME680(void);
 
-uint32_t bme680_get_endTime();
+int bme680_get_endTime();
 
 void getBME680();
+
+float getPressASL680(int current_alt);
 
 #endif
 

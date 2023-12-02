@@ -125,6 +125,7 @@ definitions
     #define SX127X
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define ENABLE_BMX680
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
@@ -150,7 +151,7 @@ definitions
     #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
     #define ENABLE_GPS
     #define ENABLE_BMX280
-    //#define ENABLE_BMX680
+    #define ENABLE_BMX680
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
