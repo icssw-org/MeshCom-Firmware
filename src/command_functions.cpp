@@ -690,11 +690,19 @@ void commandAction(char *msg_text, bool ble)
     {
         sscanf(msg_text+15, "%d", &meshcom_settings.node_owgpio);
 
+        // Pin 2 is used for powering peripherals on RAK4630
+        #ifdef BOARD_RAK4630
+        if(meshcom_settings.node_owgpio == 2){
+            Serial.println("GPIO 2 not supported on RAK4630");
+            return;
+        }
+        #endif
+
         Serial.printf("\nonewire gpio:%i\n", meshcom_settings.node_owgpio);
 
         if(ble)
         {
-            // TODO: send the pin number back
+            // TODO: send the pin number back to the app
             addBLECommandBack((char*)"--onewire gpio set");
         }
 

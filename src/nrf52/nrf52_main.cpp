@@ -775,8 +775,8 @@ void nrf52loop()
         bPosFirst = false;
         posinfo_shot=false;
         
-        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl, meshcom_settings.node_gas_res);
-
+        //sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl, meshcom_settings.node_gas_res);
+        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
         posinfo_last_lat=posinfo_lat;
         posinfo_last_lon=posinfo_lon;
         posinfo_last_direction=posinfo_direction;
