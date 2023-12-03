@@ -1260,10 +1260,7 @@ void esp32loop()
         bPosFirst = false;
         posinfo_shot=false;
         
-        if(bWXDEBUG)
-            Serial.printf("[LOOP]..eCO2 %f\n", meshcom_settings.node_gas_res);
-
-        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         posinfo_last_lat=posinfo_lat;
         posinfo_last_lon=posinfo_lon;
@@ -1409,8 +1406,6 @@ void esp32loop()
                     meshcom_settings.node_press_alt = getPressALT();
                     meshcom_settings.node_press_asl = getPressASL(meshcom_settings.node_alt);
                     
-                    BMXTimeWait = millis(); // wait for next messurement
-
                     if(wx_shot)
                     {
                         commandAction((char*)"--wx", true);
@@ -1418,6 +1413,8 @@ void esp32loop()
                     }
                 }
             #endif
+
+            BMXTimeWait = millis(); // wait for next messurement
         }
     }
 
@@ -1426,21 +1423,21 @@ void esp32loop()
         if(MCU811TimeWait == 0)
             MCU811TimeWait = millis() - 10000;
 
-        if ((MCU811TimeWait + 30000) < millis())   // 30 sec
+        if ((MCU811TimeWait + 60000) < millis())   // 60 sec
         {
             // read MCU-811 Sensor
             if(loopMCU811())
             {
-                meshcom_settings.node_gas_res = geteCO2();
+                meshcom_settings.node_co2 = geteCO2();
                 
-                MCU811TimeWait = millis(); // wait for next messurement
-
                 if(wx_shot)
                 {
                     commandAction((char*)"--wx", true);
                     wx_shot = false;
                 }
             }
+
+            MCU811TimeWait = millis(); // wait for next messurement
         }
     }
 
@@ -1448,18 +1445,28 @@ void esp32loop()
     #if defined(ENABLE_BMX680)
     if(bBME680ON && bme680_found)
     {
-        if ((bme680_timer + 30000) < millis())
+        if ((bme680_timer + 60000) < millis())
         {
-            // calculate delay
-            int delay = bme680_get_endTime() - millis();
-            
-            if (delay <= 0)
-            {
-                getBME680();
+            #if defined(ENABLE_BMX280)
+                // calculate delay
+                int delay = bme680_get_endTime() - millis();
+                
+                if (delay <= 0)
+                {
+                    getBME680();
 
-                bme680_timer = millis();
-            }
+                }
+
+                if(wx_shot)
+                {
+                    commandAction((char*)"--wx", true);
+                    wx_shot = false;
+                }
+            #endif
+
+            bme680_timer = millis();
         }
+
     }
     #endif
     

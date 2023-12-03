@@ -60,6 +60,8 @@ struct aprsPosition
     float temp2;
     int qfe;
     float qnh;
+    float gasres;
+    float co2;
 };
 
 struct mheardLine

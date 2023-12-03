@@ -1284,7 +1284,7 @@ void sendMessage(char *msg_text, int len)
     #endif
 }
 
-String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh)
+String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
 {
     if(lat == 0 or lon == 0)
     {
@@ -1335,6 +1335,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
         char cqfe[15]={0};
         char cqnh[15]={0};
         char cgasres[15]={0};
+        char cco2[15]={0};
 
         if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
         {
@@ -1380,23 +1381,28 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
             sprintf(cqfe, "/F=%i", qfe);
         }
 
-        if(qnh > 0 && !bMCU811ON)
+        if(qnh > 0 && !bMCU811ON && !bBME680ON)
         {
             sprintf(cqnh, "/Q=%.1f", qnh);
         }
 
-        if(gasres > 0 && bMCU811ON)
+        if(gasres > 0 && bBME680ON)
         {
-            sprintf(cgasres, "/G=%.0f/V=2", gasres);
+            sprintf(cgasres, "/G=%.0f/V=3", gasres);
         }
 
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres);
+        if(co2 > 0 && bMCU811ON)
+        {
+            sprintf(cco2, "/C=%.0f/V=2", co2);
+        }
+
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2);
     }
 
     return String(msg_start);
 }
 
-void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh)
+void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
 {
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
@@ -1459,7 +1465,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
         aprsmsg.msg_source_path = meshcom_settings.node_call;
         aprsmsg.msg_destination_path = "*";
-        aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, qfe, qnh);
+        aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, co2, qfe, qnh);
         
         if(aprsmsg.msg_payload == "")
             return;

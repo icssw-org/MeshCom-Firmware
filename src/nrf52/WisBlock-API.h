@@ -242,6 +242,9 @@ struct s_meshcom_settings
 	// BME680
 	float node_gas_res = 0;
 
+	// CMCU-811
+	float node_co2 = 0;
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
@@ -339,6 +342,9 @@ struct s_meshcomcompat_settings
 
 	// BME680
 	float node_gas_res = 0;
+
+	// CMCU-811
+	float node_co2 = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;

@@ -69,8 +69,11 @@ struct s_meshcom_settings
 
 	float node_utcoff = 0;
 
-	// BME680/CMCU-811
+	// BME680
 	float node_gas_res = 0;
+
+	// CMCU-811
+	float node_co2 = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;

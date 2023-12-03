@@ -127,6 +127,9 @@ void init_flash(void)
 		// BME680
     	meshcom_settings.node_gas_res = old_struct.node_gas_res;
 
+		// MCU-811
+    	meshcom_settings.node_co2 = old_struct.node_co2;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
