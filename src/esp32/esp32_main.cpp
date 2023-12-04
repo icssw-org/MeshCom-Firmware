@@ -332,6 +332,7 @@ unsigned int  getMacAddr(void)
 // BME680
 #if defined(ENABLE_BMX680)
 unsigned long bme680_timer = millis();
+int delay_bme680 = 0;
 #endif
 
 
@@ -1445,13 +1446,11 @@ void esp32loop()
     #if defined(ENABLE_BMX680)
     if(bBME680ON && bme680_found)
     {
-        if ((bme680_timer + 60000) < millis())
+        if ((bme680_timer + 60000) < millis() || delay_bme680 <= 0)
         {
             #if defined(ENABLE_BMX280)
-                // calculate delay
-                int delay = bme680_get_endTime() - millis();
                 
-                if (delay <= 0)
+                if (delay_bme680 <= 0)
                 {
                     getBME680();
 
@@ -1462,11 +1461,13 @@ void esp32loop()
                     commandAction((char*)"--wx", true);
                     wx_shot = false;
                 }
+
+                // calculate delay
+                delay_bme680 = bme680_get_endTime() - millis();
             #endif
 
             bme680_timer = millis();
         }
-
     }
     #endif
     

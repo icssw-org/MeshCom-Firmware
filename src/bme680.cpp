@@ -28,7 +28,7 @@ float fBaseAltidude680 = 0;
 
 
 //coompensate approx. altitude from pressure
-const float COMPENSATE_ALTITUDE = -8.0; // mBar to zero ASL
+const float COMPENSATE_ALTITUDE = -0.0; // mBar to zero ASL
 
 float getPressASL(int current_alt);
 
@@ -124,7 +124,6 @@ void getBME680()
   meshcom_settings.node_press = bme.pressure / 100.0;
   int bme_alt = bme.readAltitude(SEALEVELPRESSURE_HPA + COMPENSATE_ALTITUDE);
   meshcom_settings.node_press_asl = getPressASL680(bme_alt);
-  //Serial.printf("asl: %f\n", meshcom_settings.node_press_asl);
   meshcom_settings.node_press_alt = bme_alt;
   meshcom_settings.node_gas_res = bme.gas_resistance / 1000.0;
 

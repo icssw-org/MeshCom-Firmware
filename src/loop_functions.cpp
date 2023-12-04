@@ -1388,7 +1388,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
 
         if(gasres > 0 && bBME680ON)
         {
-            sprintf(cgasres, "/G=%.0f/V=3", gasres);
+            sprintf(cgasres, "/G=%.1f/V=3", gasres);
         }
 
         if(co2 > 0 && bMCU811ON)

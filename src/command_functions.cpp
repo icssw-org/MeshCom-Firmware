@@ -104,7 +104,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set");
+            addBLECommandBack(msg_text);
         }
 
         save_settings();
@@ -120,7 +120,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set");
+            addBLECommandBack(msg_text);
         }
 
         save_settings();
@@ -702,14 +702,14 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            // TODO: send the pin number back to the app
-            addBLECommandBack((char*)"--onewire gpio set");
+            addBLECommandBack(msg_text);
         }
 
         save_settings();
 
         // TODO: check on ESP32 if we need a reboot here, specially if it was not enabled before or the pin was changed
         #ifdef NRF52_SERIES
+            delay(2000);
             NVIC_SystemReset();     // resets the device
         #endif
 
@@ -1662,8 +1662,8 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            sprintf(print_buff, "W{\"BMEON\":%s, \"LPS33ON\":%s, \"OWON\":%s, \"OWPIN\":%i, \"TEMP\":%.1f, \"TOUT\":%.1f, \"HUM\":%.1f, \"QFE\":%.1f, \"QNH\":%.1f, \"ALT\":%i}",
-            (bBMEON?"true":"false"), (bLPS33?"true":"false"), (bONEWIRE?"true":"false"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt);
+            sprintf(print_buff, "W{\"BMEON\":%s, \"LPS33ON\":%s, \"OWON\":%s, \"OWPIN\":%i, \"TEMP\":%.1f, \"TOUT\":%.1f, \"HUM\":%.1f, \"QFE\":%.1f, \"QNH\":%.1f, \"ALT\":%i, \"GAS\":%.1f, \"eCO2\":%.0f}",
+            (bBMEON?"true":"false"), (bLPS33?"true":"false"), (bONEWIRE?"true":"false"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
 
             if(bWXDEBUG)
                 Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
@@ -1678,7 +1678,7 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BME(P)280: %s\n...BME680: %s\n...MCU811: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f ppm\n...eCO2: %.0f ppm\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+            printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BME(P)280: %s\n...BME680: %s\n...MCU811: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
             (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
 
         }
