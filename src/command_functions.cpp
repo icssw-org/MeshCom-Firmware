@@ -696,6 +696,15 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
+        #ifdef NRF52_SERIES
+            delay(2000);
+            NVIC_SystemReset();     // resets the device
+        #endif
+        #ifdef ESP32
+            delay(2000);
+            ESP.restart();
+        #endif
+
         return;
     }
     else
@@ -732,14 +741,18 @@ void commandAction(char *msg_text, bool ble)
         if(ble)
         {
             // TODO: send the pin number back to the app
-            addBLECommandBack((char*)"--onewire gpio set");
+            addBLECommandBack(msg_text);
         }
 
         save_settings();
 
-        // TODO: check on ESP32 if we need a reboot here, specially if it was not enabled before or the pin was changed
         #ifdef NRF52_SERIES
+            delay(2000);
             NVIC_SystemReset();     // resets the device
+        #endif
+        #ifdef ESP32
+            delay(2000);
+            ESP.restart();
         #endif
 
         return;
@@ -1691,8 +1704,8 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            sprintf(print_buff, "W{\"BMEON\":%s, \"BME680ON\":%s, \"MCU811ON\":%s, \"LPS33ON\":%s, \"OWON\":%s, \"OWPIN\":%i, \"TEMP\":%.1f, \"TOUT\":%.1f, \"HUM\":%.1f, \"QFE\":%.1f, \"QNH\":%.1f, \"ALT\":%i, \"GAS\":%.1f, \"CO2\":%.0f}",
-            (bBMEON?"true":"false"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bLPS33?"true":"false"), (bONEWIRE?"true":"false"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
+            sprintf(print_buff, "W{\"BMEON\":%s, \"BME680ON\":%s, \"MCU811ON\":%s, \"LPS33ON\":%s, \"OWON\":%s, \"OWPIN\":%i, \"TEMP\":%.1f, \"TOUT\":%.1f, \"HUM\":%.1f, \"PRES\":%.1f, \"QNH\":%.1f, \"ALT\":%i, \"GAS\":%.1f, \"CO2\":%.0f}",
+            (bBMEON?"true":"false"), (bBME680ON?"true":"false"), (bMCU811ON?"true":"false"), (bLPS33?"true":"false"), (bONEWIRE?"true":"false"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
 
             if(bWXDEBUG)
                 Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);

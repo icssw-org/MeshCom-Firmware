@@ -525,7 +525,7 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
-    // check QFE
+    // check QNH
     for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'Q' && PayloadBuffer.charAt(itxt+2) == '=')

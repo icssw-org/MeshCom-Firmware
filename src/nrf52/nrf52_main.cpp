@@ -172,7 +172,10 @@ Adafruit_LPS22 g_lps22hb;
 void getPRESSURE(void);
 
 // BME680
-unsigned long bme680_timer = 0;
+#if defined(ENABLE_BMX680)
+unsigned long bme680_timer = millis();
+int delay_bme680 = 0;
+#endif
 
 
 #define POWER_ENABLE   WB_IO2
@@ -544,7 +547,7 @@ void nrf52setup()
 
     setupBMX280();
 
-    // BME680 TODO: implement Flash handling and switch on/off etc!!
+    // BME680 init
     setupBME680();
 
     u8g2.begin();
@@ -935,24 +938,28 @@ void nrf52loop()
     #if defined(ENABLE_BMX680)
     if(bBME680ON && bme680_found)
     {
-        if ((bme680_timer + 60000) < millis())
+        if ((bme680_timer + 60000) < millis() || delay_bme680 <= 0)
         {
-            // calculate delay
-            int delay = bme680_get_endTime() - millis();
+            #if defined(ENABLE_BMX280)
+                
+                if (delay_bme680 <= 0)
+                {
+                    getBME680();
 
-            if (delay <= 0)
-            {
-                getBME680();
-            }
+                }
 
-            if(wx_shot)
-            {
-                commandAction((char*)"--wx", true);
-                wx_shot = false;
-            }
+                if(wx_shot)
+                {
+                    commandAction((char*)"--wx", true);
+                    wx_shot = false;
+                }
+
+                // calculate delay
+                delay_bme680 = bme680_get_endTime() - millis();
+            #endif
+
+            bme680_timer = millis();
         }
-
-        bme680_timer = millis();
     }
     #endif
 

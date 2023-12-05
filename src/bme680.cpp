@@ -24,13 +24,16 @@ Adafruit_BME680 bme;
 
 const float STANDARD_ALTITUDE = 180.0;
 float fBaseAltidude680 = 0;
+float fpress680 = 0;
 //float fBasePress680 = 0;  // currently not used
 
 
 //coompensate approx. altitude from pressure
-const float COMPENSATE_ALTITUDE = -8.0; // mBar to zero ASL
+const float COMPENSATE_ALTITUDE = -0.0; // mBar to zero ASL
 
 float getPressASL(int current_alt);
+int getPressALT680();
+
 
 void setupBME680()
 {
@@ -121,10 +124,9 @@ void getBME680()
 
   meshcom_settings.node_temp = bme.temperature - 1.1; // heater biases temp reading - TODO: implement better compensation
   meshcom_settings.node_hum = bme.humidity;
-  meshcom_settings.node_press = bme.pressure / 100.0;
+  meshcom_settings.node_press = fBasePress = bme.pressure / 100.0;
   int bme_alt = bme.readAltitude(SEALEVELPRESSURE_HPA + COMPENSATE_ALTITUDE);
-  meshcom_settings.node_press_asl = getPressASL680(bme_alt);
-  //Serial.printf("asl: %f\n", meshcom_settings.node_press_asl);
+  meshcom_settings.node_press_asl = getPressASL680(meshcom_settings.node_alt);
   meshcom_settings.node_press_alt = bme_alt;
   meshcom_settings.node_gas_res = bme.gas_resistance / 1000.0;
 
@@ -154,6 +156,18 @@ void getBME680()
     
     Serial.println();
   }
+}
+
+int getPressALT680()
+{
+	if(fpress680 == 0.0 || fBasePress == 0.0)
+		return 0;
+		
+	double x=(double)fpress680/(double)fBasePress;
+	x=(double)-7990*log(x);
+	x = x + fBaseAltidude;
+
+	return (int)lround(x);
 }
 
 float getPressASL680(int current_alt)
