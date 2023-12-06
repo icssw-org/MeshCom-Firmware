@@ -104,7 +104,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -120,7 +120,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -136,7 +136,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -152,7 +152,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -740,8 +740,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            // TODO: send the pin number back to the app
-            addBLECommandBack(msg_text);
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -768,7 +767,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--Base Press set");
+            addBLECommandBack((char*)msg_text);
         }
 
         return;
@@ -1161,7 +1160,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack(msg_text);
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -1198,7 +1197,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set/reboot");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -1243,7 +1242,7 @@ void commandAction(char *msg_text, bool ble)
         
         if(ble)
         {
-            addBLECommandBack((char*)"--set/reboot");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -1261,7 +1260,7 @@ void commandAction(char *msg_text, bool ble)
         
         if(ble)
         {
-            addBLECommandBack((char*)"--set/reboot");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -1291,7 +1290,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -1317,7 +1316,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
@@ -1339,7 +1338,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--set");
+            addBLECommandBack((char*)msg_text);
         }
 
         save_settings();
