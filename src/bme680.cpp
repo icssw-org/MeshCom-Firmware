@@ -129,7 +129,7 @@ void getBME680()
   meshcom_settings.node_press_asl = getPressASL680(meshcom_settings.node_alt);
   meshcom_settings.node_press_alt = bme_alt;
   meshcom_settings.node_gas_res = bme.gas_resistance / 1000.0;
-
+  // QFE not ready implemented
 
   if (Serial && bWXDEBUG)
   {
