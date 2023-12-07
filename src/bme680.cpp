@@ -23,6 +23,7 @@ Adafruit_BME680 bme;
 
 
 const float STANDARD_ALTITUDE = 180.0;
+const float COMPENSATE_TEMP = 0.0; // Temp Offset currently not implemented
 float fBaseAltidude680 = 0;
 float fpress680 = 0;
 //float fBasePress680 = 0;  // currently not used
@@ -122,7 +123,7 @@ void getBME680()
     return;
   }
 
-  meshcom_settings.node_temp = bme.temperature - 1.1; // heater biases temp reading - TODO: implement better compensation
+  meshcom_settings.node_temp = bme.temperature - COMPENSATE_TEMP; // Temp Offset currently not implemented
   meshcom_settings.node_hum = bme.humidity;
   meshcom_settings.node_press = fBasePress = bme.pressure / 100.0;
   int bme_alt = bme.readAltitude(SEALEVELPRESSURE_HPA + COMPENSATE_ALTITUDE);
