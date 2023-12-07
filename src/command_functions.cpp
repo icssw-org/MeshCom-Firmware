@@ -1670,8 +1670,16 @@ void commandAction(char *msg_text, bool ble)
     {
         if(ble)
         {
+            double d_lat = meshcom_settings.node_lat;
+            if (meshcom_settings.node_lat_c == 'S')
+                d_lat = meshcom_settings.node_lat * -1.0;
+
+            double d_lon = meshcom_settings.node_lon;
+            if (meshcom_settings.node_lon_c == 'W')
+                d_lon = meshcom_settings.node_lon * -1.0;
+
             sprintf(print_buff, "G{\"LAT\":%.4lf, \"LON\":%.4lf, \"ALT\":%i, \"SAT\":%i, \"SFIX\":%s, \"HDOP\":%i, \"RATE\":%i, \"NEXT\":%i, \"DIST\":%i, \"DIRn\":%i, \"DIRo\":%i, \"DATE\":\"%i.%02i.%02i %02i:%02i:%02i\", \"UTCOFF\":%.1f, \"GPSON\":%s, \"TRACKON\":%s}",
-            meshcom_settings.node_lat, meshcom_settings.node_lon, meshcom_settings.node_alt,(int)posinfo_satcount, (posinfo_fix?"true":"false"), posinfo_hdop, (int)posinfo_interval, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000),
+            d_lat, d_lon, meshcom_settings.node_alt,(int)posinfo_satcount, (posinfo_fix?"true":"false"), posinfo_hdop, (int)posinfo_interval, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000),
             posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
             meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, meshcom_settings.node_utcoff,
             (bGPSON?"true":"false"), (bDisplayTrack?"true":"false"));
