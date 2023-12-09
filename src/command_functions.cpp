@@ -519,14 +519,12 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--bmp on");
+            bWeather = true;
         }
 
         save_settings();
 
         setupBMX280();
-        
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"bme on") == 0)
@@ -544,14 +542,12 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--bme on");
+            bWeather = true;
         }
 
         save_settings();
 
         setupBMX280();
-
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"680 on") == 0)
@@ -569,7 +565,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--680 on");
+            bWeather = true;
         }
 
         save_settings();
@@ -577,8 +573,6 @@ void commandAction(char *msg_text, bool ble)
         #if defined(ENABLE_BMX680)
         setupBME680();
         #endif
-
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"811 on") == 0)
@@ -589,14 +583,12 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--811 on");
+            bWeather = true;
         }
 
         save_settings();
 
         setupMCU811();
-
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"bmx off") == 0 || commandCheck(msg_text+2, (char*)"bme off") == 0 || commandCheck(msg_text+2, (char*)"bmp off") == 0)
@@ -608,12 +600,10 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--bmx off");
+            bWeather = true;
         }
 
         save_settings();
-
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"680 off") == 0)
@@ -624,12 +614,10 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--680 off");
+            bWeather = true;
         }
 
         save_settings();
-
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"811 off") == 0)
@@ -640,12 +628,10 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--811 off");
+            bWeather = true;
         }
 
         save_settings();
-
-        return;
     }
     else
 #if defined(LPS33)
@@ -657,12 +643,10 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--lps33 on");
+            bWeather = true;
         }
 
         save_settings();
-
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"lps33 off") == 0)
@@ -673,12 +657,10 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--lps33 off");
+            bWeather = true;
         }
 
         save_settings();
-
-        return;
     }
     else
 #endif
@@ -691,7 +673,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--onewire on");
+            bWeather = true;
         }
 
         save_settings();
@@ -704,8 +686,6 @@ void commandAction(char *msg_text, bool ble)
             delay(2000);
             ESP.restart();
         #endif
-
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"onewire off") == 0)
@@ -716,12 +696,10 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--onewire off");
+            bWeather = true;
         }
 
         save_settings();
-
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"onewire gpio") == 0)
@@ -738,10 +716,12 @@ void commandAction(char *msg_text, bool ble)
 
         Serial.printf("\nonewire gpio:%i\n", meshcom_settings.node_owgpio);
 
+        /*
         if(ble)
         {
-            addBLECommandBack((char*)msg_text);
+            bWeather = true;
         }
+        */
 
         save_settings();
 
@@ -753,8 +733,6 @@ void commandAction(char *msg_text, bool ble)
             delay(2000);
             ESP.restart();
         #endif
-
-        return;
     }
     else
 //#endif
@@ -1706,6 +1684,19 @@ void commandAction(char *msg_text, bool ble)
         }
     }
     else
+    {
+        sprintf(print_buff, "\n--MeshCom %s %-4.4s%s ...wrong command %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
+
+        if(ble)
+        {
+            addBLECommandBack(print_buff);
+        }
+        else
+        {
+            printf("\n\n%s", print_buff+2);
+        }
+    }
+
     if(bWeather)
     {
 
@@ -1730,19 +1721,6 @@ void commandAction(char *msg_text, bool ble)
             printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BME(P)280: %s\n...BME680: %s\n...MCU811: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
             (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
 
-        }
-    }
-    else
-    {
-        sprintf(print_buff, "\n--MeshCom %s %-4.4s%s ...wrong command %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
-
-        if(ble)
-        {
-            addBLECommandBack(print_buff);
-        }
-        else
-        {
-            printf("\n\n%s", print_buff+2);
         }
     }
 }

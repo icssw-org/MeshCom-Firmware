@@ -232,7 +232,7 @@ struct s_meshcom_settings
 
 	char node_atxt[40] = {0};
 
-	int node_sset2 = 0x0000;
+	int node_sset2 = 0;
 	int node_owgpio = 16;
 
 	float node_temp2 = 0;
