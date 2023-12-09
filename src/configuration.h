@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.29"
-#define SOURCE_VERSION_SUB "a"
+#define SOURCE_VERSION_SUB "b"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -65,6 +65,7 @@ definitions
     #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define ENABLE_BMX680
     #define SX127X
     #define TX_POWER_MAX 17  // max 17 dBm
     #define TX_POWER_MIN 1
@@ -81,6 +82,7 @@ definitions
     #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define ENABLE_BMX680
     #define SX126X
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
@@ -97,6 +99,7 @@ definitions
     #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define ENABLE_BMX680
     #define SX127X
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
@@ -113,6 +116,7 @@ definitions
     #define SX127X
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define ENABLE_BMX680
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
@@ -139,6 +143,7 @@ definitions
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
     #define ENABLE_GPS
     #define ENABLE_BMX280
+    #define ENABLE_BMX680
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx

@@ -625,8 +625,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         int Second;
 
         sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
-        
-        MyClock.setCurrentTime(false, Year, Month, Day, Hour, Minute, Second);
+    
+        MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
 
         if(bDisplayInfo)
         {

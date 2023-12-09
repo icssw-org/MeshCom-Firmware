@@ -9,8 +9,6 @@ String scanI2C()
 
 String strInfo = "";
 
-#if defined(ESP32)
-
     uint8_t error, address;
     int nDevices = 0;
 
@@ -19,7 +17,9 @@ String strInfo = "";
     sprintf(cInfo, "--[I2C] ... Scanner\n");
     strInfo.concat(cInfo);
 
-    Wire.begin(I2C_SDA, I2C_SCL);
+    #if defined(ESP32)
+        Wire.begin(I2C_SDA, I2C_SCL);
+    #endif
 
     for (address = 1; address < 127; address++)
     {
@@ -52,8 +52,6 @@ String strInfo = "";
         sprintf(cInfo, "[I2C] ... No devices found\n");
         strInfo.concat(cInfo);
     }
-
-#endif
 
     return strInfo;
 
