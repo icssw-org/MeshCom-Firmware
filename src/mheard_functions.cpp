@@ -6,8 +6,8 @@ char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 
-#define max_hardware 14
-String HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "-", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "EBYTE_E22", "HELTEC_V3"};
+#define max_hardware 15
+String HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "T_DECK", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "TBEAM_AXP2101", "EBYTE_E22", "HELTEC_V3"};
 
 void initMheard()
 {
@@ -159,9 +159,9 @@ void showMHeard()
 
             int ihw=mheardLine.mh_hw;
             if(mheardLine.mh_hw == 39)
-                ihw=12;
-            if(mheardLine.mh_hw == 43)
                 ihw=13;
+            if(mheardLine.mh_hw == 43)
+                ihw=14;
             if(ihw < 0 || ihw >= max_hardware)
                 ihw=0;
 
