@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.29"
-#define SOURCE_VERSION_SUB "b"
+#define SOURCE_VERSION_SUB "c"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -23,8 +23,8 @@ definitions
 #define HELTEC_V2_1 10
 #define HELTEC_V1 11
 #define TBEAM_AXP2101 12
-#define HELTEC_V3 43
 #define EBYTE_E22 39
+#define HELTEC_V3 43
 
 // set hardware
 #ifdef BOARD_RAK4630
