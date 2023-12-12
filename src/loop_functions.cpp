@@ -65,6 +65,7 @@ int iInitDisplay = 0;
 int iDisplayChange = 0;
 
 unsigned long lastHeardTime = 0;
+unsigned long posfixinterall = 0;
 
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
@@ -1407,12 +1408,23 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
     bool bSendViaAPRS = bDisplayTrack;
+    bool bSendViaMesh = !bDisplayTrack;
 
-    if(posinfo_interval == 1800)    // wenn TRACK auf 30min steht
-        bSendViaAPRS = false;
+    if(lastHeardTime + 15000 < millis() && intervall == POSINFO_INTERVAL) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auch via MeshCom
+    {
+        bSendViaMesh = true;
 
-    if(lastHeardTime + 15000 < millis()) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auf jeden Fall über LoRaAPRS probieren
-        bSendViaAPRS = true;
+        // Zeitmessung
+        posfixinterall = millis();
+    }
+
+    if(((posfixinterall + (POSINFO_INTERVAL * 1000)) < millis()))
+    {
+        bSendViaMesh = true;
+
+        // Zeitmessung
+        posfixinterall = millis();
+    }
 
     #ifdef BOARD_TLORA_OLV216
         bSendViaAPRS = false;
@@ -1446,8 +1458,47 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
         iWrite++;
         if(iWrite >= MAX_RING)
             iWrite=0;
+
+        // An APP als Anzeige retour senden
+        if(isPhoneReady == 1)
+        {
+            struct aprsMessage aprsmsg;
+
+            initAPRS(aprsmsg);
+
+            aprsmsg.msg_len = 0;
+
+            // MSG ID zusammen setzen    
+            // not used in APP aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
+
+            aprsmsg.payload_type = '!';
+            
+            if(intervall != POSINFO_INTERVAL)
+                aprsmsg.msg_track=true;
+
+            aprsmsg.msg_source_path = meshcom_settings.node_call;
+            aprsmsg.msg_destination_path = "*";
+            aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, co2, qfe, qnh);
+            
+            if(aprsmsg.msg_payload == "")
+                return;
+
+            /* not used in APP
+            meshcom_settings.node_msgid++;
+            if(meshcom_settings.node_msgid > 255)
+                meshcom_settings.node_msgid=0;
+            // Flash rewrite
+            save_settings();
+            */
+
+            encodeAPRS(msg_buffer, aprsmsg);
+            
+            addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+        }
+
     }
-    else
+    
+    if(bSendViaMesh)
     {
         struct aprsMessage aprsmsg;
 

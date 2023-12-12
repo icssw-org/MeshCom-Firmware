@@ -94,6 +94,7 @@ extern uint8_t isPhoneReady;      // flag we receive from phone when itis ready 
 
 // timers
 extern unsigned long posinfo_interval; // check interval
+extern unsigned long posfixinterall;
 extern int posinfo_distance;
 extern double posinfo_direction;
 extern int posinfo_distance_ring[10];
