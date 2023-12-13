@@ -1054,18 +1054,6 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"sendpos") == 0)
     {
-        if(meshcom_settings.node_symid == 0x00)
-        {
-            meshcom_settings.node_symid='/';
-            save_settings();
-        }
-
-        if(meshcom_settings.node_symcd == 0x00)
-        {
-            meshcom_settings.node_symcd='#';
-            save_settings();
-        }
-
         sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         if(ble)
@@ -1078,45 +1066,11 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"sendtrack") == 0)
     {
-        // set default
-        if(meshcom_settings.node_symid != '/' && meshcom_settings.node_symid != '\'')
+        sendPosition(0xFFFF, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+
+        if(ble)
         {
-            meshcom_settings.node_symid = '/';
-            meshcom_settings.node_symcd = '#';
-        }
-        else
-        {
-            if(meshcom_settings.node_symcd < '!' || meshcom_settings.node_symcd > '}')
-                meshcom_settings.node_symcd = '#';
-        }
-
-        bool bSendViaAPRS = true;
-
-        #ifdef BOARD_TLORA_OLV216
-            bSendViaAPRS = false;
-        #endif
-
-        if(bSendViaAPRS)
-        {
-            int ilng = encodeLoRaAPRScompressed(msg_buffer, meshcom_settings.node_call, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
-
-            if(bDisplayInfo)
-            {
-                Serial.print(getTimeString());
-                Serial.printf(" LO-APRS:%s\n", msg_buffer+3);
-            }
-
-
-            ringBuffer[iWrite][0]=ilng;
-            memcpy(ringBuffer[iWrite]+1, msg_buffer, ilng);
-            iWrite++;
-            if(iWrite >= MAX_RING)
-                iWrite=0;
-
-            if(ble)
-            {
-                addBLECommandBack((char*)"--posted");
-            }
+            addBLECommandBack((char*)"--posted");
         }
 
         return;

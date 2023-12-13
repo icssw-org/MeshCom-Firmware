@@ -1410,7 +1410,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     bool bSendViaAPRS = bDisplayTrack;
     bool bSendViaMesh = !bDisplayTrack;
 
-    if(lastHeardTime + 15000 < millis() && intervall == POSINFO_INTERVAL) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auch via MeshCom
+    if(lastHeardTime + 15000 < millis() && (intervall == POSINFO_INTERVAL || intervall == 0)) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auch via MeshCom
     {
         bSendViaMesh = true;
 
@@ -1435,11 +1435,16 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     {
         meshcom_settings.node_symid = '/';
         meshcom_settings.node_symcd = '#';
+
+        save_settings();
     }
     else
     {
         if(meshcom_settings.node_symcd < '!' || meshcom_settings.node_symcd > '}')
+        {
             meshcom_settings.node_symcd = '#';
+            save_settings();
+        }
     }
 
     if(bSendViaAPRS)
