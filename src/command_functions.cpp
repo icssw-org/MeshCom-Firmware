@@ -69,6 +69,7 @@ void commandAction(char *msg_text, bool ble)
     bool bInfo=false;
     bool bPos=false;
     bool bWeather=false;
+    bool bReturn=false;
 
     #ifdef ESP32
     if(memcmp(msg_text, "{", 1) == 0)
@@ -98,6 +99,8 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+
+    //Serial.printf("\nMeshCom %-4.4s%-1.1s Client\n...command %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
 
     if(commandCheck(msg_text+2, (char*)"utcoff") == 0)
     {
@@ -519,9 +522,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0080;
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
 
@@ -542,9 +545,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x00100;
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
 
@@ -565,9 +568,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0004;
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
 
@@ -583,9 +586,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0008;
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
 
@@ -600,9 +603,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;   // BME280/BMP280 off
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
     }
@@ -614,9 +617,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFA; // BME680 off
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
     }
@@ -628,9 +631,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FF7; // MCU811 off
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
     }
@@ -643,9 +646,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0002;
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
     }
@@ -657,9 +660,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFD;
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
     }
@@ -673,9 +676,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0001;
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
 
@@ -696,9 +699,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFE;
 
         if(ble)
-        {
             bWeather = true;
-        }
+        else
+            bReturn = true;
 
         save_settings();
     }
@@ -730,10 +733,13 @@ void commandAction(char *msg_text, bool ble)
             delay(2000);
             NVIC_SystemReset();     // resets the device
         #endif
+
         #ifdef ESP32
             delay(2000);
             ESP.restart();
         #endif
+
+        return;
     }
     else
 //#endif
@@ -751,6 +757,7 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+    else
     if(commandCheck(msg_text+2, (char*)"gateway on") == 0)
     {
         bGATEWAY=true;
@@ -782,6 +789,7 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+    else
     if(commandCheck(msg_text+2, (char*)"mesh on") == 0)
     {
         bMESH=true;
@@ -813,6 +821,7 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+    else
     if(commandCheck(msg_text+2, (char*)"extudp on") == 0)
     {
         bEXTUDP=true;
@@ -920,6 +929,7 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+    else
     if(commandCheck(msg_text+2, (char*)"loradebug on") == 0)
     {
         bLORADEBUG=true;
@@ -1045,18 +1055,6 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"sendpos") == 0)
     {
-        if(meshcom_settings.node_symid == 0x00)
-        {
-            meshcom_settings.node_symid='/';
-            save_settings();
-        }
-
-        if(meshcom_settings.node_symcd == 0x00)
-        {
-            meshcom_settings.node_symcd='#';
-            save_settings();
-        }
-
         sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         if(ble)
@@ -1069,45 +1067,11 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"sendtrack") == 0)
     {
-        // set default
-        if(meshcom_settings.node_symid != '/' && meshcom_settings.node_symid != '\'')
+        sendPosition(0xFFFF, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+
+        if(ble)
         {
-            meshcom_settings.node_symid = '/';
-            meshcom_settings.node_symcd = '#';
-        }
-        else
-        {
-            if(meshcom_settings.node_symcd < '!' || meshcom_settings.node_symcd > '}')
-                meshcom_settings.node_symcd = '#';
-        }
-
-        bool bSendViaAPRS = true;
-
-        #ifdef BOARD_TLORA_OLV216
-            bSendViaAPRS = false;
-        #endif
-
-        if(bSendViaAPRS)
-        {
-            int ilng = encodeLoRaAPRScompressed(msg_buffer, meshcom_settings.node_call, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt);
-
-            if(bDisplayInfo)
-            {
-                Serial.print(getTimeString());
-                Serial.printf(" LO-APRS:%s\n", msg_buffer+3);
-            }
-
-
-            ringBuffer[iWrite][0]=ilng;
-            memcpy(ringBuffer[iWrite]+1, msg_buffer, ilng);
-            iWrite++;
-            if(iWrite >= MAX_RING)
-                iWrite=0;
-
-            if(ble)
-            {
-                addBLECommandBack((char*)"--posted");
-            }
+            addBLECommandBack((char*)"--posted");
         }
 
         return;
@@ -1615,6 +1579,35 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
 
+    if(bWeather)
+    {
+
+        if(ble)
+        {
+            sprintf(print_buff, "W{\"BMEON\":%s, \"BME680ON\":%s, \"MCU811ON\":%s, \"LPS33ON\":%s, \"OWON\":%s, \"OWPIN\":%i, \"TEMP\":%.1f, \"TOUT\":%.1f, \"HUM\":%.1f, \"PRES\":%.1f, \"QNH\":%.1f, \"ALT\":%i, \"GAS\":%.1f, \"CO2\":%.0f}",
+            (bBMEON?"true":"false"), (bBME680ON?"true":"false"), (bMCU811ON?"true":"false"), (bLPS33?"true":"false"), (bONEWIRE?"true":"false"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
+
+            if(bWXDEBUG)
+                Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
+
+            // clear buffer
+            memset(msg_buffer, 0, MAX_MSG_LEN_PHONE); 
+
+            // set data message flag and tx ble
+            msg_buffer[0] = 0x44;
+            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
+            addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        }
+        else
+        {
+            printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BME(P)280: %s\n...BME680: %s\n...MCU811: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+            (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
+
+        }
+
+        return;
+    }
+    else
     if(bInfo)
     {
         sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s>\n...ID %08X\n...NODE %i\n...UTC  %f\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GATEWAY %s\n...MESH    %s\n...BUTTON  %s\n...DEBUG  %s\n...LORADEBUG %s\n...GPSDEBUG  %s\n...WXDEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
@@ -1643,6 +1636,8 @@ void commandAction(char *msg_text, bool ble)
         }
 
         sendDisplayHead(false);
+
+        return;
     }
     else
     if(bPos)
@@ -1707,6 +1702,13 @@ void commandAction(char *msg_text, bool ble)
             meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
             printf("...SYMB: %c %c\n...GPS: %s\n...Track: %s\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"));
         }
+
+        return;
+    }
+    else
+    if(bReturn)
+    {
+
     }
     else
     {
@@ -1719,33 +1721,6 @@ void commandAction(char *msg_text, bool ble)
         else
         {
             printf("\n\n%s", print_buff+2);
-        }
-    }
-
-    if(bWeather)
-    {
-
-        if(ble)
-        {
-            sprintf(print_buff, "W{\"BMEON\":%s, \"BME680ON\":%s, \"MCU811ON\":%s, \"LPS33ON\":%s, \"OWON\":%s, \"OWPIN\":%i, \"TEMP\":%.1f, \"TOUT\":%.1f, \"HUM\":%.1f, \"PRES\":%.1f, \"QNH\":%.1f, \"ALT\":%i, \"GAS\":%.1f, \"CO2\":%.0f}",
-            (bBMEON?"true":"false"), (bBME680ON?"true":"false"), (bMCU811ON?"true":"false"), (bLPS33?"true":"false"), (bONEWIRE?"true":"false"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
-
-            if(bWXDEBUG)
-                Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
-
-            // clear buffer
-            memset(msg_buffer, 0, MAX_MSG_LEN_PHONE); 
-
-            // set data message flag and tx ble
-            msg_buffer[0] = 0x44;
-            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
-        }
-        else
-        {
-            printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BME(P)280: %s\n...BME680: %s\n...MCU811: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
-            (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
-
         }
     }
 }

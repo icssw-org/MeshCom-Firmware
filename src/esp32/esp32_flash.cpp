@@ -41,11 +41,7 @@ void init_flash(void)
 
     meshcom_settings.node_hamnet_only = preferences.getInt("node_honly", 0);
 
-    #ifdef ESP32
-        meshcom_settings.node_sset = preferences.getInt("node_sset", 0x0035);	// bDisplayPos = true, bButtonCheck = true,  bGPSON = true
-	#else
-        meshcom_settings.node_sset = preferences.getInt("node_sset", 0x0004);
-	#endif
+    meshcom_settings.node_sset = preferences.getInt("node_sset", 0x0004);
 
     meshcom_settings.node_maxv = preferences.getFloat("node_maxv", 4.24);
 
@@ -65,11 +61,11 @@ void init_flash(void)
     sprintf(meshcom_settings.node_atxt, "%s", strVar.c_str());
 
     meshcom_settings.node_sset2 = preferences.getInt("node_sset2", 0x0000);
-    meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 36);
+    meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 0);
 
     meshcom_settings.node_temp2 = preferences.getFloat("node_temp2", 0.0);
 
-    meshcom_settings.node_utcoff = preferences.getFloat("node_utcof", -1.0);
+    meshcom_settings.node_utcoff = preferences.getFloat("node_utcof", 1.0); // UTC Zone Europe
 
     // BME680
     meshcom_settings.node_gas_res = preferences.getFloat("node_gas", 0.0);
