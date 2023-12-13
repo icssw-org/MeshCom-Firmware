@@ -5,6 +5,7 @@
 #include <mheard_functions.h>
 #include <udp_functions.h>
 #include "i2c_scanner.h"
+#include <ArduinoJson.h>    
 
 // Sensors
 #include "bmx280.h"
@@ -1656,14 +1657,38 @@ void commandAction(char *msg_text, bool ble)
             if (meshcom_settings.node_lon_c == 'W')
                 d_lon = meshcom_settings.node_lon * -1.0;
 
-            sprintf(print_buff, "G{\"LAT\":%.4lf, \"LON\":%.4lf, \"ALT\":%i, \"SAT\":%i, \"SFIX\":%s, \"HDOP\":%i, \"RATE\":%i, \"NEXT\":%i, \"DIST\":%i, \"DIRn\":%i, \"DIRo\":%i, \"DATE\":\"%i.%02i.%02i %02i:%02i:%02i\", \"UTCOFF\":%.1f, \"GPSON\":%s, \"TRACKON\":%s}",
-            d_lat, d_lon, meshcom_settings.node_alt,(int)posinfo_satcount, (posinfo_fix?"true":"false"), posinfo_hdop, (int)posinfo_interval, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000),
-            posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
-            meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, meshcom_settings.node_utcoff,
-            (bGPSON?"true":"false"), (bDisplayTrack?"true":"false"));
 
+            /*sprintf(print_buff, "G{\"LAT\":%.4lf, \"LON\":%.4lf, \"ALT\":%i, \"SAT\":%i, \"SFIX\":%s, \"HDOP\":%i, \"RATE\":%i, \"NEXT\":%i, \"DIST\":%i, \"DIRn\":%i, \"DIRo\":%i, \"DATE\":\"%i.%02i.%02i %02i:%02i:%02i\", \"UTCOFF\":%.1f, \"GPSON\":%s, \"TRACKON\":%s}",
+                    d_lat, d_lon, meshcom_settings.node_alt, (int)posinfo_satcount, (posinfo_fix ? "true" : "false"), posinfo_hdop, (int)posinfo_interval, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000),
+                    posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
+                    meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, meshcom_settings.node_utcoff,
+                    (bGPSON ? "true" : "false"), (bDisplayTrack ? "true" : "false"));*/
 
-            if(bWXDEBUG)
+            
+            StaticJsonDocument<384> doc;
+
+            doc["LAT"] = d_lat;
+            doc["LON"] = d_lon;
+            doc["ALT"] = meshcom_settings.node_alt;
+            doc["SAT"] = (int)posinfo_satcount;
+            doc["SFIX"] = posinfo_fix;
+            doc["HDOP"] = posinfo_hdop;
+            doc["RATE"] = (int)posinfo_interval;
+            doc["NEXT"] = (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000);
+            doc["DIST"] = posinfo_distance;
+            doc["DIRn"] = (int)posinfo_direction;
+            doc["DIRo"] = (int)posinfo_last_direction;
+            doc["DATE"] = getDateString() + " " + getTimeString();
+            doc["UTCOFF"] = meshcom_settings.node_utcoff;
+            doc["GPSON"] = bGPSON;
+            doc["TRACKON"] = bDisplayTrack;
+
+            serializeJson(doc, print_buff +1, 384);
+            // insert G fro GPS Indicator
+            print_buff[0] = 'G';
+            Serial.printf("Items in Doc: %i", doc.size());
+
+            if (bWXDEBUG)
                 Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
 
             // clear buffer

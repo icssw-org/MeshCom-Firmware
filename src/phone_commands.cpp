@@ -241,7 +241,7 @@ void sendToPhone()
     {
 		// we need to insert the first byte text msg flag
 		uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
-
+		// when the message is longer than 255 bytes we need to split it up
 		uint8_t blelen = BLEtoPhoneBuff[toPhoneRead][0];
 
 		//Mheard
@@ -254,17 +254,52 @@ void sendToPhone()
 		{
 			
 			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
+			/*Serial.printf("Msg Len orig:%i\n", blelen);
+			// Max Length is 247 bytes. At least with iOS or ble library.
+			char st = char('0');
+			for(int i = (blelen); i < 245; i++)
+			{
+				toPhoneBuff[blelen] = st;
+				blelen++;
+				st++;
+				if(st > '9')
+					st = '0';
+			}
+			// overwrite the length in the first byte
+			//toPhoneBuff[0] = blelen;
+			Serial.printf("Msg Len new:%i\n", blelen);
+			// add 0x00 at the end
+			toPhoneBuff[blelen-1] = 0x0A;*/
+
 		} 
 		else
 		// Text Message
 		{
 			toPhoneBuff[0] = 0x40;
 			memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen-1);
+			/*Serial.printf("Msg Len orig:%i\n", blelen);
+			// Max Length is 247 bytes. At least with iOS or ble library.
+			char st = char('0');
+			for(int i = (blelen ); i < 245; i++)
+			{
+				toPhoneBuff[blelen] = st;
+				blelen++;
+				st++;
+				if(st > '9')
+					st = '0';
+			}
+			// overwrite the length in the first byte
+			//toPhoneBuff[0] = blelen;
+			Serial.printf("Msg Len new:%i\n", blelen);
+			// add 0x00 at the end
+			// Out of no reason, the last two bytes are not arriving at the phone. Test:
+			toPhoneBuff[blelen-1] = 0x0A;*/
 		}
 
 		// send to phone
+		// why do we need to add 2 bytes??
 		#if defined(ESP8266) || defined(ESP32)
-			blelen=blelen+2;
+			blelen=blelen + 2;
 			esp32_write_ble(toPhoneBuff, blelen);
 		#else
 			g_ble_uart.write(toPhoneBuff, blelen + 2);
