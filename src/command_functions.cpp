@@ -1562,7 +1562,11 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"showi2c") == 0)
     {
-        String stri2c = scanI2C();
+        String stri2c = "not available";
+
+        #if not defined(BOARD_HELTEC_V3)
+            stri2c = scanI2C();
+        #endif
 
         sprintf(print_buff, "%s", stri2c.c_str());
 
@@ -1609,9 +1613,11 @@ void commandAction(char *msg_text, bool ble)
     else
     if(bInfo)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s>\n...ID %08X\n...NODE %i\n...UTC  %f\n...BATT %.2f V\n...BATT %d %%\n...MAXV %.2f V\n...TIME %li ms\n...SSID %s\n...PWD  %s\n...GATEWAY %s\n...MESH    %s\n...BUTTON  %s\n...DEBUG  %s\n...LORADEBUG %s\n...GPSDEBUG  %s\n...WXDEBUG %s\n...EXTUDP  %s\n...EXTSERUDP  %s\n...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...SSID %s ...PWD  %s ...GATEWAY %s\n...MESH %s ...BUTTON  %s ...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s\n...WXDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...FREQ %.4f TXPWR %i dBm\n",
+                SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                 meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
-                (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"));
+                (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"),
+                meshcom_settings.node_freq, meshcom_settings.node_power);
 
         if(ble)
         {
@@ -1658,7 +1664,7 @@ void commandAction(char *msg_text, bool ble)
             (bGPSON?"true":"false"), (bDisplayTrack?"true":"false"));
 
 
-            if(bWXDEBUG)
+            if(bWXDEBUG || bBLEDEBUG)
                 Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
 
             // clear buffer
