@@ -462,11 +462,11 @@ void esp32setup()
         setupBME680();
     #endif
 
-/*
-    #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)  || defined(BOARD_E22)
-        Wire.setPins(I2C_SDA, I2C_SCL);
-    #endif
-*/
+
+    //#if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)  || defined(BOARD_E22)
+    //    Wire.setPins(I2C_SDA, I2C_SCL);
+    //#endif
+
     initButtonPin();
     
     Serial.printf("[INIT]..._GW_ID: %08X\n", _GW_ID);
@@ -811,23 +811,31 @@ void esp32setup()
     pTxCharacteristic = pService->createCharacteristic(
                         CHARACTERISTIC_UUID_TX,
                         NIMBLE_PROPERTY::WRITE  |
+#if not defined(BOARD_HELTEC_V3)
+                        // Require a secure connection for read and write access
                         NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
                         NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
-                        // Require a secure connection for read and write access
+#endif
                         NIMBLE_PROPERTY::READ   |
+#if not defined(BOARD_HELTEC_V3)
                         NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
                         NIMBLE_PROPERTY::READ_AUTHEN |
+#endif
                         NIMBLE_PROPERTY::NOTIFY );
 
     NimBLECharacteristic* pRxCharacteristic = pService->createCharacteristic(
                         CHARACTERISTIC_UUID_RX,
                         NIMBLE_PROPERTY::WRITE  |
+#if not defined(BOARD_HELTEC_V3)
+                        // Require a secure connection for read and write access
                         NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
                         NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
-                        // Require a secure connection for read and write access
+#endif
                         NIMBLE_PROPERTY::READ   |
+#if not defined(BOARD_HELTEC_V3)
                         NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
                         NIMBLE_PROPERTY::READ_AUTHEN |
+#endif
                         NIMBLE_PROPERTY::NOTIFY );
 
     pRxCharacteristic->setCallbacks(new MyCallbacks());
@@ -881,6 +889,9 @@ void esp32setup()
 
 void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 {
+    if(bBLEDEBUG)
+        Serial.println("[LOOP] WRITE BLE");
+
     pTxCharacteristic->setValue(confBuff, conf_len);
     pTxCharacteristic->notify();
 }
@@ -1199,6 +1210,11 @@ void esp32loop()
     meshcom_settings.node_date_minute = MyClock.Minute();
     meshcom_settings.node_date_second = MyClock.Second();
 
+    bool bLoopActive = false;
+
+    if(bLoopActive)
+        Serial.printf("[LOOP] 1\n");
+
     // BLE
     if (deviceConnected)
     {
@@ -1206,33 +1222,51 @@ void esp32loop()
 	}
 
     // disconnecting
-    if (!deviceConnected && oldDeviceConnected) {
-        delay(500); // give the bluetooth stack the chance to get things ready
+    if (!deviceConnected && oldDeviceConnected)
+    {
+        delay(2000); // give the bluetooth stack the chance to get things ready
         pServer->startAdvertising(); // restart advertising
         oldDeviceConnected = deviceConnected;
 
         g_ble_uart_is_connected = false;
         isPhoneReady = 0;
     }
+
+    if(bLoopActive)
+        Serial.printf("[LOOP] 1-1\n");
+
     // connecting
     if (deviceConnected && !oldDeviceConnected) {
 		// do stuff here on connecting
         oldDeviceConnected = deviceConnected;
     }
 
+    if(bLoopActive)
+        Serial.printf("[LOOP] 1-2\n");
+
     // check if message from phone to send
     if(hasMsgFromPhone)
     {
+        if(bBLEDEBUG)
+            Serial.printf("[LOOP] hasMsgFromPhone\n");
         sendMessage(textbuff_phone, txt_msg_len_phone);
 
         hasMsgFromPhone = false;
     }
 
+    if(bLoopActive)
+        Serial.printf("[LOOP] 1-3\n");
+
     // check if we have messages for BLE to send
     if (isPhoneReady == 1 && (toPhoneWrite != toPhoneRead))
     {
-        sendToPhone();   
+        if(bBLEDEBUG)
+            Serial.printf("[LOOP] sendToPhone\n");
+        sendToPhone();
     }
+
+    if(bLoopActive)
+        Serial.printf("[LOOP] 2\n");
 
     // gps refresh every 10 sec
     if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
@@ -1254,6 +1288,9 @@ void esp32loop()
 
         gps_refresh_timer = millis();
     }
+
+    if(bLoopActive)
+        Serial.printf("[LOOP] 3\n");
 
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
@@ -1287,6 +1324,9 @@ void esp32loop()
         }
     }
 
+    if(bLoopActive)
+        Serial.printf("[LOOP] 4\n");
+
     // rebootAuto
     if(rebootAuto > 0)
     {
@@ -1302,7 +1342,13 @@ void esp32loop()
 
     checkButtonState();
 
+    if(bLoopActive)
+        Serial.printf("[LOOP] 5\n");
+
     checkSerialCommand();
+
+    if(bLoopActive)
+        Serial.printf("[LOOP] 6\n");
 
     if(BattTimeWait == 0)
         BattTimeWait = millis() - 10000;
@@ -1370,6 +1416,9 @@ void esp32loop()
     }
 //#endif
 
+    if(bLoopActive)
+        Serial.printf("[LOOP] 7\n");
+
     if (isPhoneReady == 1)
     {
         if(BattTimeAPP == 0)
@@ -1419,6 +1468,9 @@ void esp32loop()
         }
     }
 
+    if(bLoopActive)
+        Serial.printf("[LOOP] 8\n");
+
     if(bMCU811ON)
     {
         if(MCU811TimeWait == 0)
@@ -1441,6 +1493,9 @@ void esp32loop()
             MCU811TimeWait = millis(); // wait for next messurement
         }
     }
+
+    if(bLoopActive)
+        Serial.printf("[LOOP] 9\n");
 
     // read every n seconds the bme680 sensor calculated from millis()
     #if defined(ENABLE_BMX680)
@@ -1471,6 +1526,9 @@ void esp32loop()
     }
     #endif
     
+    if(bLoopActive)
+        Serial.printf("[LOOP] A\n");
+
     ////////////////////////////////////////////////
     // WIFI Gateway functions
     if(bGATEWAY)
@@ -1495,6 +1553,9 @@ void esp32loop()
     }
     //
     ////////////////////////////////////////////////
+
+    if(bLoopActive)
+        Serial.printf("[LOOP] B\n");
 
     delay(100);
 

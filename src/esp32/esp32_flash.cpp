@@ -61,10 +61,10 @@ void init_flash(void)
     sprintf(meshcom_settings.node_atxt, "%s", strVar.c_str());
 
     meshcom_settings.node_sset2 = preferences.getInt("node_sset2", 0x0000);
-    meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 0);
+    meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 36);
 
     meshcom_settings.node_temp2 = preferences.getFloat("node_temp2", 0.0);
-
+/*
     meshcom_settings.node_utcoff = preferences.getFloat("node_utcof", 1.0); // UTC Zone Europe
 
     // BME680
@@ -72,6 +72,7 @@ void init_flash(void)
 
     // CMCU-811
     meshcom_settings.node_co2 = preferences.getFloat("node_co2", 0.0);
+*/
 }
 
 void save_settings(void)
@@ -130,7 +131,7 @@ void save_settings(void)
     preferences.putInt("node_owgpio", meshcom_settings.node_owgpio);
 
     preferences.putFloat("node_temp2", meshcom_settings.node_temp2);
-    
+
     preferences.putFloat("node_utcof", meshcom_settings.node_utcoff);
 
     // BME680
