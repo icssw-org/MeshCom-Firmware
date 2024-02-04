@@ -1700,6 +1700,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         if(direction_diff > 15)
         {
             posinfo_shot=true;
+            pos_shot = true;
         }
     }
 

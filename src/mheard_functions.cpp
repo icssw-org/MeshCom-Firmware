@@ -1,6 +1,7 @@
 #include <aprs_functions.h>
 #include <loop_functions.h>
 #include <debugconf.h>
+#include <ArduinoJson.h>
 
 char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
@@ -117,14 +118,30 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     */
     sprintf(mheardBuffer[ipos], "%s@%s@%c@%i@%i@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw, mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr);
 
+    // generate JSON
+    JsonDocument mhdoc;
+
+    mhdoc["TYP"] = "MH";
+    mhdoc["CALL"] = mheardLine.mh_callsign.c_str();
+    mhdoc["DATE"] = mheardLine.mh_date.c_str();
+    mhdoc["TIME"] = mheardLine.mh_time.c_str();
+    mhdoc["PLT"] = (uint8_t)mheardLine.mh_payload_type;
+    mhdoc["HW"] = mheardLine.mh_hw;
+    mhdoc["MOD"] = mheardLine.mh_mod;
+    mhdoc["RSSI"] = mheardLine.mh_rssi;
+    mhdoc["SNR"] = mheardLine.mh_snr;
+
     // send to Phone
     uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
-    bleBuffer[0] = 0x91;
-    memcpy(bleBuffer+1, mheardCalls[ipos], 10);
-    memcpy(bleBuffer+11, mheardBuffer[ipos], strlen(mheardBuffer[ipos]));
+    bleBuffer[0] = 0x44;
+    serializeJson(mhdoc, bleBuffer+1, measureJson(mhdoc)+1);
+
+    //memcpy(bleBuffer+1, mheardCalls[ipos], 10);
+    //memcpy(bleBuffer+11, mheardBuffer[ipos], strlen(mheardBuffer[ipos]));
 
     if(isPhoneReady == 1)
-        addBLEOutBuffer(bleBuffer, strlen(mheardBuffer[ipos])+1+10);
+        //addBLEOutBuffer(bleBuffer, strlen(mheardBuffer[ipos])+1+10);
+        addBLEOutBuffer(bleBuffer, measureJson(mhdoc)+1);
 }
 
 void showMHeard()

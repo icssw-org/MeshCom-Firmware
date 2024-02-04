@@ -4,6 +4,7 @@
 #include <debugconf.h>
 #include <configuration.h>
 #include <batt_functions.h>
+//#include <command_functions.h>
 
 // Create device name
 extern char helper_string[256];
@@ -218,11 +219,12 @@ void sendConfigToPhone ()
 	// one shot GPS
 	posinfo_shot = true;
 
-	pos_shot = true;
+	// is done in main loop now
+	//pos_shot = true;
 
-	wx_shot = true;
+	//wx_shot = true;
 
-	BattTimeAPP=0;	// Batt Status zum Phone senden
+	//BattTimeAPP=0;	// Batt Status zum Phone senden
 
 }
 
@@ -241,7 +243,7 @@ void sendToPhone()
     {
 		// we need to insert the first byte text msg flag
 		uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
-
+		// MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
 		uint8_t blelen = BLEtoPhoneBuff[toPhoneRead][0];
 
 		//Mheard
@@ -254,17 +256,21 @@ void sendToPhone()
 		{
 			
 			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
+
+			
 		} 
 		else
 		// Text Message
 		{
 			toPhoneBuff[0] = 0x40;
 			memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen-1);
+
 		}
 
 		// send to phone
+		// why do we need to add 2 bytes??
 		#if defined(ESP8266) || defined(ESP32)
-			blelen=blelen+2;
+			blelen=blelen + 2;
 			esp32_write_ble(toPhoneBuff, blelen);
 		#else
 			g_ble_uart.write(toPhoneBuff, blelen + 2);
@@ -344,8 +350,12 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 		case 0x10: {
 
 			if(conf_data[2] == 0x20 && conf_data[3] == 0x30){
-				DEBUG_MSG("BLE", "Hello Msg from phone");
+
 				sendConfigToPhone();
+
+				if(bBLEDEBUG)
+					Serial.println("BLE Hello Msg from phone");
+				
 				isPhoneReady = 1;
 			}
 
@@ -480,9 +490,18 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 		case 0xA0: {
 			// length 1B - Msg ID 1B - Text
 
-			DEBUG_MSG("BLE", "Text from phone");
-
 			txt_msg_len_phone = msg_len - 2;	// now zero escape for lora TX
+
+			if(ble_busy_flag && bBLEDEBUG)
+				Serial.println("BLE is busy. Waiting...");
+
+			while(ble_busy_flag)
+			{
+				delay(5);
+			}
+
+			if (bBLEDEBUG)
+				Serial.printf("Text from phone: %s\n", conf_data + 2);
 
 			// kopieren der message in buffer fuer main
 			memcpy(textbuff_phone, conf_data + 2, txt_msg_len_phone);
@@ -520,6 +539,9 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 				if(bBLEDEBUG)
 					Serial.println("Wifi Setting from phone set");
+				
+				// Node will reset after saving settings. Settings back are coming on ble reconnect.
+
 			}
 			break;
 		}

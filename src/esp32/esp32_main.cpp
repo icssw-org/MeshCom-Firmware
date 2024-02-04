@@ -133,6 +133,13 @@ bool oldDeviceConnected = false;
 
 uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Kennwort
 
+// Queue for sending config jsons to phone
+unsigned long json_config_timer = millis(); // Timer for sending initial JSON config to phone
+bool config_to_phone_done = false;
+const uint8_t json_configs_cnt = 7;
+const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset"};
+uint8_t config_cmds_index = 0;
+
 // Bluetooth UUIDs are standardized. For more info: https://www.bluetooth.com/specifications/assigned-numbers/
 // Nordic UUID DB is here: https://github.com/NordicSemiconductor/bluetooth-numbers-database
 
@@ -141,6 +148,8 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer)
     {
         deviceConnected = true;
+        config_to_phone_done = false;
+        config_cmds_index = 0;
         Serial.println("BLE connected");
     };
 
@@ -457,7 +466,7 @@ void esp32setup()
         setupMCU811();
     #endif
 
-    // BME680 TODO: implement Flash handling and switch on/off etc!!
+    // BME680
     #if defined(ENABLE_BMX680)
         setupBME680();
     #endif
@@ -1416,8 +1425,9 @@ void esp32loop()
     }
 //#endif
 
-    if(bLoopActive)
-        Serial.printf("[LOOP] 7\n");
+    // beginning with App v4.13 app updates the batt when info tab active
+    /*
+    
 
     if (isPhoneReady == 1)
     {
@@ -1436,8 +1446,10 @@ void esp32loop()
         }
     }
     else
-        BattTimeAPP=0;
+        BattTimeAPP=0;*/
 
+    if(bLoopActive)
+        Serial.printf("[LOOP] 7\n");
 
     if(bBMPON || bBMEON)
     {
@@ -1555,7 +1567,20 @@ void esp32loop()
     ////////////////////////////////////////////////
 
     if(bLoopActive)
-        Serial.printf("[LOOP] B\n");
+            Serial.printf("[LOOP] B\n");
+
+    // send JSON config to phone after BLE connection
+    if (deviceConnected == 1 && (json_config_timer + 1000) < millis() && !config_to_phone_done)
+    {
+        json_config_timer = millis();
+
+        sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
+        
+        if(config_cmds_index == json_configs_cnt-1)
+            config_to_phone_done = true;
+
+        config_cmds_index++;
+    }
 
     delay(100);
 
