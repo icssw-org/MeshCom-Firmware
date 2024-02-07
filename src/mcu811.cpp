@@ -30,7 +30,7 @@ bool setupMCU811()
 {  
     if(!bMCU811ON)
     {
-        meshcom_settings.node_gas_res=0.0;
+        meshcom_settings.node_co2=0.0;
         return false;
     }
 
@@ -90,7 +90,12 @@ bool loopMCU811()
 
     ftCO2 = ccs.calculateTemperature();
     
-    if(ccs.readData())
+    uint8_t i = ccs.readData();
+
+    if(bWXDEBUG)
+        Serial.printf("ftCO2:%f retcod:%i\n", ftCO2, i);
+    
+    if(i > 0)
     {
         if(bWXDEBUG)
         {
