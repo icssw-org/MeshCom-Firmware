@@ -287,6 +287,65 @@ void sendToPhone()
     ble_busy_flag = false;
 }
 
+/**
+ * @brief Method to send incoming LoRa messages to BLE connected device
+ * 
+*/
+void sendComToPhone()
+{
+    if(ble_busy_flag)
+        return;
+
+    ble_busy_flag = true;
+
+    if(g_ble_uart_is_connected && isPhoneReady == 1)
+    {
+		// we need to insert the first byte text msg flag
+		uint8_t ComToPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
+		// MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
+		uint8_t blelen = BLEComToPhoneBuff[ComToPhoneRead][0];
+
+		//Mheard
+		if(BLEComToPhoneBuff[ComToPhoneRead][1] == 0x91)
+		{
+			memcpy(ComToPhoneBuff, BLEComToPhoneBuff[ComToPhoneRead]+1, blelen-1);
+		} else 
+		// Data Message (JSON)
+		if(BLEComToPhoneBuff[ComToPhoneRead][1] == 0x44)
+		{
+			
+			memcpy(ComToPhoneBuff, BLEComToPhoneBuff[ComToPhoneRead]+1, blelen);
+
+			
+		} 
+		else
+		// Text Message
+		{
+			ComToPhoneBuff[0] = 0x40;
+			memcpy(ComToPhoneBuff+1, BLEComToPhoneBuff[ComToPhoneRead]+1, blelen-1);
+
+		}
+
+		// send to phone
+		// why do we need to add 2 bytes??
+		#if defined(ESP8266) || defined(ESP32)
+			blelen=blelen + 2;
+			esp32_write_ble(ComToPhoneBuff, blelen);
+		#else
+			g_ble_uart.write(ComToPhoneBuff, blelen + 2);
+		#endif
+
+		ComToPhoneRead++;
+		if (ComToPhoneRead >= MAX_RING)
+			ComToPhoneRead = 0;
+
+		if(bBLEDEBUG)
+			Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7);
+    }
+    
+    ble_busy_flag = false;
+}
+
 void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 {
 	/**

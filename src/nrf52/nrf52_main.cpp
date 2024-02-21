@@ -128,8 +128,8 @@ bool init_flash_done=false;
 bool bPosFirst = true;
 
 // Queue for sending config jsons to phone
-unsigned long json_config_timer = millis(); // Timer for sending initial JSON config to phone
-bool config_to_phone_done = false;
+uint8_t iPhoneState = 0;
+bool config_to_phone_prepare = false;
 const uint8_t json_configs_cnt = 7;
 const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset"};
 uint8_t config_cmds_index = 0;
@@ -772,10 +772,39 @@ void nrf52loop()
         gKeyNum = 0;
     }
 
-    // check if we have messages for BLE to send
-    if (isPhoneReady == 1 && (toPhoneWrite != toPhoneRead))
+    if (isPhoneReady == 1)
     {
-        sendToPhone();   
+        if (config_to_phone_prepare)
+        {
+            for(int config_cmds_index=0; config_cmds_index < json_configs_cnt; config_cmds_index++)
+            {
+                sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
+            }
+
+            config_to_phone_prepare = false;
+        }
+        else
+            if (iPhoneState > 3)   // only every 3 times of mainloop send to phone
+            {
+                // prepare JSON config to phone after BLE connection
+                // send JSON config to phone after BLE connection
+                if (ComToPhoneWrite != ComToPhoneRead)
+                {
+                    sendComToPhone();   
+                }
+                else
+                {
+                    // check if we have messages for BLE to send
+                    if (toPhoneWrite != toPhoneRead)
+                    {
+                        sendToPhone();   
+                    }
+                }
+
+                iPhoneState = 0;
+            }
+            else
+                iPhoneState++;
     }
 
     // posinfo
@@ -971,21 +1000,6 @@ void nrf52loop()
         }
     }
     #endif
-
-    // send JSON config to phone after BLE connection
-    if (isPhoneReady == 1 && (json_config_timer + 1000) < millis() && !config_to_phone_done)
-    {
-        Serial.println("Sending JSON config to phone: ");
-        Serial.println(config_cmds[config_cmds_index]);
-        json_config_timer = millis();
-
-        commandAction((char*)config_cmds[config_cmds_index], true);
-        
-        if(config_cmds_index == json_configs_cnt-1)
-            config_to_phone_done = true;
-
-        config_cmds_index++;
-    }
 
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);

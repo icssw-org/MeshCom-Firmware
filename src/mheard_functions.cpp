@@ -33,6 +33,7 @@ void initMheardLine(struct mheardLine &mheardLine)
     mheardLine.mh_mod = 0;
     mheardLine.mh_rssi = 0;
     mheardLine.mh_snr = 0;
+    mheardLine.mh_dist = 0.0;
 }
 
 void decodeMHeard(char mh_buffer[], struct mheardLine &mheardLine)
@@ -54,6 +55,7 @@ void decodeMHeard(char mh_buffer[], struct mheardLine &mheardLine)
                 case 5: mheardLine.mh_mod = strdec.toInt(); break;
                 case 6: mheardLine.mh_rssi = strdec.toInt(); break;
                 case 7: mheardLine.mh_snr = strdec.toInt(); break;
+                case 8: mheardLine.mh_dist = strdec.toFloat(); break;
                 default: break;
             }
 
@@ -72,6 +74,7 @@ void decodeMHeard(char mh_buffer[], struct mheardLine &mheardLine)
                 case 5:
                 case 6:
                 case 7:
+                case 8:
                     strdec.concat(mh_buffer[iset]);
                     break;
                 default: break;
@@ -116,7 +119,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     int16_t mh_rssi;
     int8_t mh_snr;
     */
-    sprintf(mheardBuffer[ipos], "%s@%s@%c@%i@%i@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw, mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr);
+    sprintf(mheardBuffer[ipos], "%s@%s@%c@%i@%i@%i@%i@%.0lf@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw, mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist);
 
     // generate JSON
     JsonDocument mhdoc;
@@ -130,6 +133,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     mhdoc["MOD"] = mheardLine.mh_mod;
     mhdoc["RSSI"] = mheardLine.mh_rssi;
     mhdoc["SNR"] = mheardLine.mh_snr;
+    mhdoc["DIST"] = mheardLine.mh_dist;
 
     // send to Phone
     uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
@@ -146,8 +150,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
 void showMHeard()
 {
-    Serial.printf("/--------------------------------------------------------------------------------\\\n");
-    Serial.printf("|MHeard call |    date    |   time   | typ | source hardware | mod | rssi |  snr |\n");
+    Serial.printf("/---------------------------------------------------------------------------------------\\\n");
+    Serial.printf("|MHeard call |    date    |   time   | typ | source hardware | mod | rssi |  snr | dist |\n");
 
     mheardLine mheardLine;
 
@@ -155,7 +159,7 @@ void showMHeard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            Serial.printf("|------------|------------|----------|-----|-----------------|-----|------|------|\n");
+            Serial.printf("|------------|------------|----------|-----|-----------------|-----|------|------|------|\n");
 
             Serial.printf("| %-10.10s | ", mheardCalls[iset]);
             
@@ -189,9 +193,10 @@ void showMHeard()
 
             Serial.printf("%3i | ", mheardLine.mh_mod);
             Serial.printf("%4i | ", mheardLine.mh_rssi);
-            Serial.printf("%4i |\n", mheardLine.mh_snr);
+            Serial.printf("%4i |", mheardLine.mh_snr);
+            Serial.printf("%5.0lf |\n", mheardLine.mh_dist);
         }
     }
 
-    Serial.printf("\\--------------------------------------------------------------------------------/\n");
+    Serial.printf("\\---------------------------------------------------------------------------------------/\n");
 }

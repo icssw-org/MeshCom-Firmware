@@ -134,8 +134,7 @@ bool oldDeviceConnected = false;
 uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Kennwort
 
 // Queue for sending config jsons to phone
-unsigned long json_config_timer = millis(); // Timer for sending initial JSON config to phone
-bool config_to_phone_done = false;
+bool config_to_phone_prepare = false;
 const uint8_t json_configs_cnt = 7;
 const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset"};
 uint8_t config_cmds_index = 0;
@@ -148,8 +147,7 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer)
     {
         deviceConnected = true;
-        config_to_phone_done = false;
-        config_cmds_index = 0;
+        config_to_phone_prepare = true;
         Serial.println("BLE connected");
     };
 
@@ -1266,12 +1264,39 @@ void esp32loop()
     if(bLoopActive)
         Serial.printf("[LOOP] 1-3\n");
 
-    // check if we have messages for BLE to send
-    if (isPhoneReady == 1 && (toPhoneWrite != toPhoneRead))
+    if (isPhoneReady == 1)
     {
-        if(bBLEDEBUG)
-            Serial.printf("[LOOP] sendToPhone\n");
-        sendToPhone();
+        if (config_to_phone_prepare)
+        {
+            for(int config_cmds_index=0; config_cmds_index < json_configs_cnt; config_cmds_index++)
+            {
+                sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
+            }
+
+            config_to_phone_prepare = false;
+        }
+        else
+            if (iPhoneState > 3)   // only every 3 times of mainloop send to phone
+            {
+                // prepare JSON config to phone after BLE connection
+                // send JSON config to phone after BLE connection
+                if (ComToPhoneWrite != ComToPhoneRead)
+                {
+                    sendComToPhone();   
+                }
+                else
+                {
+                    // check if we have messages for BLE to send
+                    if (toPhoneWrite != toPhoneRead)
+                    {
+                        sendToPhone();   
+                    }
+                }
+
+                iPhoneState = 0;
+            }
+            else
+                iPhoneState++;
     }
 
     if(bLoopActive)
@@ -1568,19 +1593,6 @@ void esp32loop()
 
     if(bLoopActive)
             Serial.printf("[LOOP] B\n");
-
-    // send JSON config to phone after BLE connection
-    if (deviceConnected == 1 && (json_config_timer + 1000) < millis() && !config_to_phone_done)
-    {
-        json_config_timer = millis();
-
-        sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
-        
-        if(config_cmds_index == json_configs_cnt-1)
-            config_to_phone_done = true;
-
-        config_cmds_index++;
-    }
 
     delay(100);
 
