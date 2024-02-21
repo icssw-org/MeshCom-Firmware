@@ -38,6 +38,7 @@ void printAsciiBuffer(uint8_t *buffer, int len);
 void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
+void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLECommandBack(char *text);
 void addLoraRxBuffer(unsigned int msg_id);
 

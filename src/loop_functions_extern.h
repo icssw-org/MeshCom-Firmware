@@ -81,6 +81,11 @@ extern unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE];
 extern int toPhoneWrite;
 extern int toPhoneRead;
 
+// BLE Commands Ringbuffer to phone
+extern unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE];
+extern int ComToPhoneWrite;
+extern int ComToPhoneRead;
+
 extern uint8_t ringBufferLoraRX[MAX_RING][4]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
 extern uint8_t udpWrite;   // counter for ringbuffer
 extern uint8_t udpRead;    // counter for ringbuffer

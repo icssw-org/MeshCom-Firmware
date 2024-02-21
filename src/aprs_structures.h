@@ -74,6 +74,7 @@ struct mheardLine
     uint8_t mh_mod;
     int16_t mh_rssi;
     int8_t mh_snr;
+    double mh_dist;
 };
 
 #endif // _APRS_STRUCTURES_H_

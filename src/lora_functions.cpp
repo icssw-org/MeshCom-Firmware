@@ -39,6 +39,11 @@
 #include <udp_functions.h>
 #include <lora_setchip.h>
 
+#include "TinyGPSplus.h"
+
+// TinyGPS
+extern TinyGPSPlus tinyGPSPLus;
+
 int sendlng = 0;
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE+10];  // lora tx buffer
 uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
@@ -136,29 +141,51 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         {
             ///////////////////////////////////////////////
             // MHeard
-            struct mheardLine mheardLine;
-
-            initMheardLine(mheardLine);
-
-            mheardLine.mh_callsign = aprsmsg.msg_source_last;
-            mheardLine.mh_hw = aprsmsg.msg_last_hw;
-            mheardLine.mh_mod = aprsmsg.msg_source_mod;
-            mheardLine.mh_rssi = rssi;
-            mheardLine.mh_snr = snr;
-            mheardLine.mh_date = getDateString();
-            mheardLine.mh_time = getTimeString();
-            mheardLine.mh_payload_type = aprsmsg.payload_type;
-
-            updateMheard(mheardLine, isPhoneReady);
-
-            // last heard LoRa MeshCom-Packet
-            lastHeardTime = millis();
-
-            // print aprs message
-            if(bDisplayInfo)
+            if(aprsmsg.msg_source_last != meshcom_settings.node_call)
             {
-                printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
-                Serial.println();
+                struct mheardLine mheardLine;
+
+                initMheardLine(mheardLine);
+
+                mheardLine.mh_callsign = aprsmsg.msg_source_last;
+                mheardLine.mh_hw = aprsmsg.msg_last_hw;
+                mheardLine.mh_mod = aprsmsg.msg_source_mod;
+                mheardLine.mh_rssi = rssi;
+                mheardLine.mh_snr = snr;
+                mheardLine.mh_date = getDateString();
+                mheardLine.mh_time = getTimeString();
+                mheardLine.mh_payload_type = aprsmsg.payload_type;
+                mheardLine.mh_dist = 0;
+                
+                if(msg_type_b_lora == 0x21) // Position
+                {
+                    struct aprsPosition aprspos;
+
+                    if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
+                    {
+                        // Display Distance, Direction
+                        double lat = conv_coord_to_dec(aprspos.lat);
+                        if(aprspos.lat_c == 'S')
+                            lat = lat * -1.0;
+                        double lon = conv_coord_to_dec(aprspos.lon);
+                        if(aprspos.lon_c == 'W')
+                            lon = lon * -1.0;
+
+                        mheardLine.mh_dist = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+                    }
+                }
+
+                updateMheard(mheardLine, isPhoneReady);
+
+                // last heard LoRa MeshCom-Packet
+                lastHeardTime = millis();
+
+                // print aprs message
+                if(bDisplayInfo)
+                {
+                    printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
+                    Serial.println();
+                }
             }
 
             //

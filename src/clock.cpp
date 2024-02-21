@@ -571,11 +571,12 @@ void Clock::setCurrentTime(float fUTC, uint16_t Year, uint16_t Month, uint16_t D
 
 	//tsNow = tsNow + (60 * 60);
 
-	tsNow = tsNow + ((fUTC * 60.0) * 60.0);
+	tsNow = tsNow + (fUTC * 60.0 * 60.0);
 
 	
 	SetClock(tsNow, false);
 }
+
 
 //----------------------------------------------------------------------------
 // global variable for access

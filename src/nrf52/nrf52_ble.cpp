@@ -27,8 +27,7 @@ extern char textbuff_phone [MAX_MSG_LEN_PHONE];
 extern uint8_t txt_msg_len_phone;
 extern bool bInitDisplay;
 extern uint8_t dmac[6];
-extern uint8_t config_cmds_index;
-extern bool config_to_phone_done;
+extern bool config_to_phone_prepare;
 
 // Create device name
 char helper_string[256] = {0};
@@ -189,6 +188,8 @@ void connect_callback(uint16_t conn_handle)
 	(void)conn_handle;
 	Bluefruit.setTxPower(4);
 	DEBUG_MSG("BLE", "Connected");
+	isPhoneReady = 1;
+	config_to_phone_prepare = true;
 	g_ble_uart_is_connected = true;
 
 }
@@ -204,8 +205,6 @@ void disconnect_callback(uint16_t conn_handle, uint8_t reason)
 	(void)reason;
 	g_ble_uart_is_connected = false;
 	isPhoneReady = 0;
-	config_cmds_index = 0;
-	config_to_phone_done = false;
 	Bluefruit.setTxPower(0);
 	DEBUG_MSG("BLE", "Disconnected");
 }

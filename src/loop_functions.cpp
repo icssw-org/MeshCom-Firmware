@@ -102,6 +102,11 @@ unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE] = {0};
 int toPhoneWrite=0;
 int toPhoneRead=0;
 
+// BLE Commando-Ringbuffer to phone
+unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE] = {0};
+int ComToPhoneWrite=0;
+int ComToPhoneRead=0;
+
 uint8_t ringBufferLoraRX[MAX_RING][4] = {0}; //Ringbuffer for UDP TX from LoRa RX, first byte is length
 uint8_t loraWrite = 0;   // counter for ringbuffer
 
@@ -138,17 +143,43 @@ unsigned long temphum_timer = 0;    // we check periodically get TEMP/HUM
 unsigned long druck_timer = 0;      // we check periodically get AIRPRESURE
 unsigned long hb_timer = 0;         // we check periodically get AIRPRESURE
 
+// Function that gets current epoch time
+unsigned long getUnixClock()
+{
+	struct tm timeinfo;
+
+    timeinfo.tm_year = meshcom_settings.node_date_year;
+    timeinfo.tm_mon = meshcom_settings.node_date_month;
+    timeinfo.tm_mday = meshcom_settings.node_date_day;
+
+    timeinfo.tm_hour = meshcom_settings.node_date_hour;
+    timeinfo.tm_min = meshcom_settings.node_date_minute;
+    timeinfo.tm_sec = meshcom_settings.node_date_second;
+
+	time_t tsNow = mktime(&timeinfo);
+
+	return tsNow;
+}
+
 /** @brief Function adding messages into outgoing BLE ringbuffer
  * BLE to PHONE Buffer
  */
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 {
     if (len > UDP_TX_BUF_SIZE)
-        len = UDP_TX_BUF_SIZE-1; // just for safety
+        len = UDP_TX_BUF_SIZE-4; // just for safety
 
     //first two bytes are always the message length
-    BLEtoPhoneBuff[toPhoneWrite][0] = len;
+    BLEtoPhoneBuff[toPhoneWrite][0] = len + 4;
     memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
+
+    unsigned long unix_time = getUnixClock();
+    uint8_t tbuffer[5];
+    tbuffer[0] = (unix_time >> 24) & 0xFF;
+    tbuffer[1] = (unix_time >> 16) & 0xFF;
+    tbuffer[2] = (unix_time >> 8) & 0xFF;
+    tbuffer[3] = (unix_time) & 0xFF;
+    memcpy(BLEtoPhoneBuff[toPhoneWrite] + 5, tbuffer, 4);
 
     if(bDEBUG)
     {
@@ -162,6 +193,32 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 
     if (toPhoneWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         toPhoneWrite = 0;
+}
+
+/** @brief Function adding messages into outgoing BLE ringbuffer
+ * BLE to PHONE Buffer
+ */
+void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
+{
+    if (len > UDP_TX_BUF_SIZE)
+        len = UDP_TX_BUF_SIZE-1; // just for safety
+
+    //first two bytes are always the message length
+    BLEComToPhoneBuff[ComToPhoneWrite][0] = len;
+    memcpy(BLEComToPhoneBuff[ComToPhoneWrite] + 1, buffer, len);
+
+    if(bDEBUG)
+    {
+        Serial.printf("<%02X>BLEComToPhone RingBuff added len=%i to element: %u\n", buffer[0], len, ComToPhoneWrite);
+        printBuffer(BLEComToPhoneBuff[ComToPhoneWrite], len + 1);
+    }
+
+    ComToPhoneWrite++;
+    
+    //Serial.printf("toPhoneWrite:%i\n", toPhoneWrite);
+
+    if (ComToPhoneWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
+        ComToPhoneWrite = 0;
 }
 
 void addBLECommandBack(char text[UDP_TX_BUF_SIZE])

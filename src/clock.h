@@ -181,6 +181,7 @@ public:
 	// return current year
 	// @return year (1970..2099)
 	const int Year() { return suClock_m.tm_year + 1900; }
+
 };
 
 extern Clock MyClock;

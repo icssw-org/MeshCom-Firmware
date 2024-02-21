@@ -1710,7 +1710,7 @@ void commandAction(char *msg_text, bool ble)
             // set data message flag and tx ble
             msg_buffer[0] = 0x44;
             memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
         }
         else
         {
@@ -1771,7 +1771,7 @@ void commandAction(char *msg_text, bool ble)
             // set data message flag and tx ble
             msg_buffer[0] = 0x44;
             memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
         }
         else
         {
@@ -1833,7 +1833,7 @@ void commandAction(char *msg_text, bool ble)
         // set data message flag and tx ble
         msg_buffer[0] = 0x44;
         memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
 
         return;
     }
@@ -1863,7 +1863,7 @@ void commandAction(char *msg_text, bool ble)
         // set data message flag and tx ble
         msg_buffer[0] = 0x44;
         memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
         
         return;
     }
@@ -1947,7 +1947,7 @@ void sendGpsJson()
     // set data message flag and tx ble
     msg_buffer[0] = 0x44;
     memcpy(msg_buffer + 1, print_buff, strlen(print_buff));
-    addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
 }
 
 
@@ -2013,7 +2013,7 @@ void sendNodeSetting()
         // set data message flag and tx ble
         msg_buffer[0] = 0x44;
         memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
 }
 
 
@@ -2049,6 +2049,6 @@ void sendAPRSset()
     // set data message flag and tx ble
     msg_buffer[0] = 0x44;
     memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
 
 }
