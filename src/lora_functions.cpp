@@ -39,6 +39,13 @@
 #include <udp_functions.h>
 #include <lora_setchip.h>
 
+extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
+extern double mheardLat[MAX_MHEARD];
+extern double mheardLon[MAX_MHEARD];
+
+double lat=0;
+double lon=0;
+
 #include "TinyGPSplus.h"
 
 // TinyGPS
@@ -157,23 +164,49 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_payload_type = aprsmsg.payload_type;
                 mheardLine.mh_dist = 0;
                 
-                if(msg_type_b_lora == 0x21) // Position
+                // check MHeard exists already
+                int ipos=-1;
+                for(int iset=0; iset<MAX_MHEARD; iset++)
                 {
-                    struct aprsPosition aprspos;
-
-                    if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
+                    if(mheardCalls[iset][0] != 0x00)
                     {
-                        // Display Distance, Direction
-                        double lat = conv_coord_to_dec(aprspos.lat);
-                        if(aprspos.lat_c == 'S')
-                            lat = lat * -1.0;
-                        double lon = conv_coord_to_dec(aprspos.lon);
-                        if(aprspos.lon_c == 'W')
-                            lon = lon * -1.0;
-
-                        mheardLine.mh_dist = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+                        if(strcmp(mheardCalls[iset], aprsmsg.msg_source_last.c_str()) == 0)
+                        {
+                            ipos=iset;
+                            lat = mheardLat[ipos];
+                            lon = mheardLon[ipos];
+                            break;
+                        }
                     }
                 }
+
+                if(aprsmsg.msg_source_call == aprsmsg.msg_source_last)
+                {
+                    if(msg_type_b_lora == 0x21) // Position
+                    {
+                        struct aprsPosition aprspos;
+
+                        if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
+                        {
+                            // Display Distance, Direction
+                            lat = conv_coord_to_dec(aprspos.lat);
+                            if(aprspos.lat_c == 'S')
+                                lat = lat * -1.0;
+                            lon = conv_coord_to_dec(aprspos.lon);
+                            if(aprspos.lon_c == 'W')
+                                lon = lon * -1.0;
+
+                            if(ipos >= 0)
+                            {
+                                mheardLat[ipos]=lat;
+                                mheardLon[ipos]=lon;
+                            }
+                        }
+                    }
+                }
+
+                if(lat != 0.0 && lon != 0.0)
+                    mheardLine.mh_dist = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
 
                 updateMheard(mheardLine, isPhoneReady);
 

@@ -138,6 +138,7 @@ bool config_to_phone_prepare = false;
 const uint8_t json_configs_cnt = 7;
 const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset"};
 uint8_t config_cmds_index = 0;
+uint8_t iPhoneState=0;
 
 // Bluetooth UUIDs are standardized. For more info: https://www.bluetooth.com/specifications/assigned-numbers/
 // Nordic UUID DB is here: https://github.com/NordicSemiconductor/bluetooth-numbers-database
