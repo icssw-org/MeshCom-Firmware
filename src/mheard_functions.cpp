@@ -5,6 +5,9 @@
 
 char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
+double mheardLat[MAX_MHEARD];
+double mheardLon[MAX_MHEARD];
+
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 
 #define max_hardware 15
@@ -194,6 +197,7 @@ void showMHeard()
             Serial.printf("%3i | ", mheardLine.mh_mod);
             Serial.printf("%4i | ", mheardLine.mh_rssi);
             Serial.printf("%4i |", mheardLine.mh_snr);
+            //Serial.printf("%5.0lf | %.4lf %.4lf\n", mheardLine.mh_dist, mheardLat[iset], mheardLon[iset]);
             Serial.printf("%5.0lf |\n", mheardLine.mh_dist);
         }
     }
