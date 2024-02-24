@@ -170,7 +170,6 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
         len = UDP_TX_BUF_SIZE-4; // just for safety
 
     //first two bytes are always the message length
-    BLEtoPhoneBuff[toPhoneWrite][0] = len + 4;
     memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
 
     unsigned long unix_time = getUnixClock();
@@ -179,12 +178,14 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     tbuffer[1] = (unix_time >> 16) & 0xFF;
     tbuffer[2] = (unix_time >> 8) & 0xFF;
     tbuffer[3] = (unix_time) & 0xFF;
-    memcpy(BLEtoPhoneBuff[toPhoneWrite] + 5, tbuffer, 4);
+    memcpy(BLEtoPhoneBuff[toPhoneWrite] + len + 1, tbuffer, 4);
+
+    BLEtoPhoneBuff[toPhoneWrite][0] = len + 4;
 
     if(bDEBUG)
     {
         Serial.printf("<%02X>BLEtoPhone RingBuff added len=%i to element: %u\n", buffer[0], len, toPhoneWrite);
-        printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1);
+        printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1 + 4);
     }
 
     toPhoneWrite++;
