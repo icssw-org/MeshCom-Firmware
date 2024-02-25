@@ -143,11 +143,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     bleBuffer[0] = 0x44;
     serializeJson(mhdoc, bleBuffer+1, measureJson(mhdoc)+1);
 
-    //memcpy(bleBuffer+1, mheardCalls[ipos], 10);
-    //memcpy(bleBuffer+11, mheardBuffer[ipos], strlen(mheardBuffer[ipos]));
-
     if(isPhoneReady == 1)
-        //addBLEOutBuffer(bleBuffer, strlen(mheardBuffer[ipos])+1+10);
         addBLEOutBuffer(bleBuffer, measureJson(mhdoc)+1);
 }
 

@@ -250,14 +250,12 @@ void sendToPhone()
 		if(BLEtoPhoneBuff[toPhoneRead][1] == 0x91)
 		{
 			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen-1);
-		} else 
+		}
+		else 
 		// Data Message (JSON)
 		if(BLEtoPhoneBuff[toPhoneRead][1] == 0x44)
-		{
-			
-			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
-
-			
+		{		
+			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen);	
 		} 
 		else
 		// Text Message

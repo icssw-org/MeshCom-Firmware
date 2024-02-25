@@ -172,15 +172,20 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     //first two bytes are always the message length
     memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
 
-    unsigned long unix_time = getUnixClock();
-    uint8_t tbuffer[5];
-    tbuffer[0] = (unix_time >> 24) & 0xFF;
-    tbuffer[1] = (unix_time >> 16) & 0xFF;
-    tbuffer[2] = (unix_time >> 8) & 0xFF;
-    tbuffer[3] = (unix_time) & 0xFF;
-    memcpy(BLEtoPhoneBuff[toPhoneWrite] + len + 1, tbuffer, 4);
+    if(buffer[0] != 'D')
+    {
+        unsigned long unix_time = getUnixClock();
+        uint8_t tbuffer[5];
+        tbuffer[0] = (unix_time >> 24) & 0xFF;
+        tbuffer[1] = (unix_time >> 16) & 0xFF;
+        tbuffer[2] = (unix_time >> 8) & 0xFF;
+        tbuffer[3] = (unix_time) & 0xFF;
+        memcpy(BLEtoPhoneBuff[toPhoneWrite] + len + 1, tbuffer, 4);
 
-    BLEtoPhoneBuff[toPhoneWrite][0] = len + 4;
+        BLEtoPhoneBuff[toPhoneWrite][0] = len + 4;
+    }
+    else
+        BLEtoPhoneBuff[toPhoneWrite][0] = len;
 
     if(bDEBUG)
     {
@@ -1269,9 +1274,12 @@ void sendMessage(char *msg_text, int len)
     // ACK request anhängen
     if(bDM)
     {
-        char cAckId[4] = {0};
-        sprintf(cAckId, "%03i", meshcom_settings.node_msgid);
-        aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
+        if(strcmp(aprsmsg.msg_destination_path.c_str(), "WLNK-1") != 0)
+        {
+            char cAckId[4] = {0};
+            sprintf(cAckId, "%03i", meshcom_settings.node_msgid);
+            aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
+        }
     }
 
     meshcom_settings.node_msgid++;
@@ -1651,7 +1659,10 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     aprsmsg.msg_destination_path = dest_call;
 
     char cackmsg[20];
-    sprintf(cackmsg, "%-9.9s:ack%03i", dest_call.c_str(), iAckId);
+    if(strcmp(dest_call.c_str(), "WLNK-1") == 0)
+        sprintf(cackmsg, "ack%04i", iAckId);
+    else
+        sprintf(cackmsg, "%-9.9s:ack%03i", dest_call.c_str(), iAckId);
     aprsmsg.msg_payload = cackmsg;
 
     meshcom_settings.node_msgid++;
