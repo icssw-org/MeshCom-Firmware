@@ -1696,12 +1696,6 @@ void commandAction(char *msg_text, bool ble)
 
             serializeJson(wdoc, print_buff, measureJson(wdoc));
 
-            if(bWXDEBUG){
-                Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
-                Serial.printf("\nJSON wdoc Content Len: %i\n", measureJson(wdoc));
-            }
-                
-
             // clear buffer
             memset(msg_buffer, 0, MAX_MSG_LEN_PHONE); 
 
@@ -1722,10 +1716,10 @@ void commandAction(char *msg_text, bool ble)
     else
     if(bInfo)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...SSID %s ...PWD  %s ...GATEWAY %s\n...MESH %s ...BUTTON  %s ...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s\n...WXDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...FREQ %.4f TXPWR %i dBm\n",
+        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...SSID %s ...PWD  %s ...GATEWAY %s ...MESH %s ...BUTTON  %s\n...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...FREQ %.4f TXPWR %i dBm\n",
                 SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                 meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
-                (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"),
+                (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"),
                 meshcom_settings.node_freq, meshcom_settings.node_power);
 
         if(ble)
@@ -1753,11 +1747,6 @@ void commandAction(char *msg_text, bool ble)
             idoc["BATV"] = global_batt/1000.0;
 
             serializeJson(idoc, print_buff, measureJson(idoc));
-
-            if(bBLEDEBUG){
-                Serial.printf("%s\n", print_buff);
-                Serial.printf("\nJSON idoc Content Len: %i\n", measureJson(idoc));
-            }
 
             // clear buffer
             memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
@@ -1816,11 +1805,6 @@ void commandAction(char *msg_text, bool ble)
 
         // no flag needed anymore - json comes as is
 
-        if(bWXDEBUG){
-            Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
-            Serial.printf("\nJSON sensdoc Content Len: %i\n", measureJson(sensdoc));
-        }
-
         // clear buffer
         memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
 
@@ -1845,11 +1829,6 @@ void commandAction(char *msg_text, bool ble)
         memset(print_buff, 0, sizeof(print_buff));
 
         serializeJson(swdoc, print_buff, measureJson(swdoc));
-
-        if(bBLEDEBUG){
-            Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
-            Serial.printf("\nJSON swdoc Content Len: %i\n", measureJson(swdoc));
-        }
 
         // clear buffer
         memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
@@ -1926,12 +1905,6 @@ void sendGpsJson()
 
     serializeJson(pdoc, print_buff, measureJson(pdoc));
 
-    if (bWXDEBUG)
-    {
-        Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
-        Serial.printf("\nJSON pdoc Content Len: %i\n", measureJson(pdoc));
-    }
-
     // clear buffer
     memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
 
@@ -1993,11 +1966,6 @@ void sendNodeSetting()
 
         serializeJson(nsetdoc, print_buff, measureJson(nsetdoc));
 
-        if(bBLEDEBUG){
-            Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
-            Serial.printf("\nJSON nsetdoc Content Len: %i\n", measureJson(nsetdoc));
-        }
-
         // clear buffer
         memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
 
@@ -2028,11 +1996,6 @@ void sendAPRSset()
     memset(print_buff, 0, sizeof(print_buff));
 
     serializeJson(aprsdoc, print_buff, measureJson(aprsdoc));
-
-    if(bBLEDEBUG){
-        Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
-        Serial.printf("\nJSON aprsdoc Content Len: %i\n", measureJson(aprsdoc));
-    }
 
     // clear buffer
     memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);

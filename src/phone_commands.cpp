@@ -279,7 +279,7 @@ void sendToPhone()
 			toPhoneRead = 0;
 
 		if(bBLEDEBUG)
-			Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7);
+			Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7); //TODO
     }
     
     ble_busy_flag = false;
@@ -519,7 +519,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				pos_shot = true;
 				
 				wx_shot = true;
-				//Führt zu Reconnect sendPosition(0, d_lat, meshcom_settings.node_lat_c, d_lon, meshcom_settings.node_lon_c, altitude, 0.0, 0.0, 0.0, 0, 0.0);
 			}
 
 			break;
