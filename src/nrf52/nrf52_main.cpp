@@ -130,6 +130,7 @@ bool bPosFirst = true;
 // Queue for sending config jsons to phone
 uint8_t iPhoneState = 0;
 bool config_to_phone_prepare = false;
+unsigned long config_to_phone_prepare_timer = 0;
 const uint8_t json_configs_cnt = 7;
 const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset"};
 uint8_t config_cmds_index = 0;
@@ -781,10 +782,17 @@ void nrf52loop()
                 sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
             }
 
+            config_to_phone_prepare_timer=millis();
+
             config_to_phone_prepare = false;
         }
         else
-            if (iPhoneState > 3)   // only every 3 times of mainloop send to phone
+        {
+            // wait after BLE Connect 3 sec.
+            if(millis() < config_to_phone_prepare_timer + 3000)
+                iPhoneState = 0;
+
+            if (iPhoneState > 6)   // only every 6 times of mainloop send to phone  RAK 2 x ESP
             {
                 // prepare JSON config to phone after BLE connection
                 // send JSON config to phone after BLE connection
@@ -805,6 +813,7 @@ void nrf52loop()
             }
             else
                 iPhoneState++;
+        }
     }
 
     // posinfo
