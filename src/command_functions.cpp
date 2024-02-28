@@ -1693,10 +1693,8 @@ void commandAction(char *msg_text, bool ble)
 
             // reset print buffer
             memset(print_buff, 0, sizeof(print_buff));
-            // set weather flag
-            print_buff[0] = 'W';
 
-            serializeJson(wdoc, print_buff +1, measureJson(wdoc));
+            serializeJson(wdoc, print_buff, measureJson(wdoc));
 
             if(bWXDEBUG){
                 Serial.printf("\n\n<%i>%s\n", strlen(print_buff), print_buff);
@@ -1754,11 +1752,7 @@ void commandAction(char *msg_text, bool ble)
             idoc["BATP"] = global_proz;
             idoc["BATV"] = global_batt/1000.0;
 
-
-            // set Info flag
-            print_buff[0] = 'I';
-
-            serializeJson(idoc, print_buff +1, measureJson(idoc));
+            serializeJson(idoc, print_buff, measureJson(idoc));
 
             if(bBLEDEBUG){
                 Serial.printf("%s\n", print_buff);
@@ -1930,10 +1924,7 @@ void sendGpsJson()
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));
 
-    serializeJson(pdoc, print_buff + 1, measureJson(pdoc));
-
-    // set gps flag
-    print_buff[0] = 'G';
+    serializeJson(pdoc, print_buff, measureJson(pdoc));
 
     if (bWXDEBUG)
     {
