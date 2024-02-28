@@ -1263,7 +1263,7 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
-    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
     aprsmsg.payload_type = ':';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
@@ -1539,8 +1539,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
             aprsmsg.msg_len = 0;
 
-            // MSG ID zusammen setzen    
-            // not used in APP aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
+            // MSG ID not used in APP
 
             aprsmsg.payload_type = '!';
             
@@ -1553,14 +1552,6 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             
             if(aprsmsg.msg_payload == "")
                 return;
-
-            /* not used in APP
-            meshcom_settings.node_msgid++;
-            if(meshcom_settings.node_msgid > 255)
-                meshcom_settings.node_msgid=0;
-            // Flash rewrite
-            save_settings();
-            */
 
             encodeAPRS(msg_buffer, aprsmsg);
             
@@ -1593,8 +1584,9 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             return;
 
         meshcom_settings.node_msgid++;
-        if(meshcom_settings.node_msgid > 255)
+        if(meshcom_settings.node_msgid > 999)
             meshcom_settings.node_msgid=0;
+            
         // Flash rewrite
         save_settings();
 
