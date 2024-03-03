@@ -146,19 +146,20 @@ unsigned long hb_timer = 0;         // we check periodically get AIRPRESURE
 // Function that gets current epoch time
 unsigned long getUnixClock()
 {
-	struct tm timeinfo;
+	struct tm timeinfo = {0};
 
-    timeinfo.tm_year = meshcom_settings.node_date_year;
-    timeinfo.tm_mon = meshcom_settings.node_date_month;
+    timeinfo.tm_year = meshcom_settings.node_date_year-1900;
+    timeinfo.tm_mon = meshcom_settings.node_date_month-1;
     timeinfo.tm_mday = meshcom_settings.node_date_day;
 
     timeinfo.tm_hour = meshcom_settings.node_date_hour;
     timeinfo.tm_min = meshcom_settings.node_date_minute;
     timeinfo.tm_sec = meshcom_settings.node_date_second;
 
-	time_t tsNow = mktime(&timeinfo);
+    //Serial.printf("Date: %i.%i.%i %i:%i:%i\n",timeinfo.tm_year, timeinfo.tm_mon, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
-	return tsNow;
+	return (unsigned long)mktime(&timeinfo);
+
 }
 
 /** @brief Function adding messages into outgoing BLE ringbuffer
@@ -175,6 +176,9 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     if(buffer[0] != 'D')
     {
         unsigned long unix_time = getUnixClock();
+        
+        //Serial.printf("UNIX TME:%lu\n", unix_time);
+
         uint8_t tbuffer[5];
         tbuffer[0] = (unix_time >> 24) & 0xFF;
         tbuffer[1] = (unix_time >> 16) & 0xFF;

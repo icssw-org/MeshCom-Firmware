@@ -406,6 +406,8 @@ void commandAction(char *msg_text, bool ble)
     {
         bDisplayTrack=true;
         
+        track_to_meshcom_timer=0;   // damit auch alle 5 minuten zu MeshCom gesendet wird wenn TRACK ON
+
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0020;
 
         if(ble)
@@ -424,7 +426,7 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"track off") == 0)
     {
         bDisplayTrack=false;
-        
+
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FDF;
 
         if(ble)
