@@ -258,10 +258,10 @@ void sendToPhone()
 			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen);	
 		} 
 		else
-		// Text Message
+		// Text Message and Position
 		{
 			toPhoneBuff[0] = 0x40;
-			memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen-1);
+			memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
 
 		}
 

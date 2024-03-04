@@ -150,6 +150,8 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     {
         deviceConnected = true;
         config_to_phone_prepare = true;
+        // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
+        commandAction((char*)"--conffin", true);
         Serial.println("BLE connected");
     };
 
@@ -1459,29 +1461,6 @@ void esp32loop()
         }
     }
 //#endif
-
-    // beginning with App v4.13 app updates the batt when info tab active
-    /*
-    
-
-    if (isPhoneReady == 1)
-    {
-        if(BattTimeAPP == 0)
-            BattTimeAPP = millis() - 180000;
-
-
-        if ((BattTimeAPP + 180000) < millis())  // 60*3 sec
-        {
-            char cbatt[15];
-            sprintf(cbatt, "--BAT %4.2f %03i", global_batt/1000.0, global_proz);
-
-            addBLECommandBack(cbatt);
-
-            BattTimeAPP = millis();
-        }
-    }
-    else
-        BattTimeAPP=0;*/
 
     if(bLoopActive)
         Serial.printf("[LOOP] 7\n");

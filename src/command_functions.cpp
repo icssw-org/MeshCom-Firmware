@@ -24,6 +24,7 @@ uint16_t json_len = 0;
 void sendNodeSetting();
 void sendGpsJson();
 void sendAPRSset();
+void sendConfigFinish();
 
 
 int casecmp(const char *s1, const char *s2)
@@ -1663,6 +1664,11 @@ void commandAction(char *msg_text, bool ble)
         sendAPRSset();
         return;
     }
+    if(commandCheck(msg_text+2, (char*)"conffin") == 0)
+    {
+        sendConfigFinish();
+        return;
+    }
 
 
 
@@ -1695,10 +1701,8 @@ void commandAction(char *msg_text, bool ble)
 
             // reset print buffer
             memset(print_buff, 0, sizeof(print_buff));
-            // set weather flag
-            print_buff[0] = 'W';
 
-            serializeJson(wdoc, print_buff +1, measureJson(wdoc));
+            serializeJson(wdoc, print_buff, measureJson(wdoc));
 
             // clear buffer
             memset(msg_buffer, 0, MAX_MSG_LEN_PHONE); 
@@ -1750,11 +1754,7 @@ void commandAction(char *msg_text, bool ble)
             idoc["BATP"] = global_proz;
             idoc["BATV"] = global_batt/1000.0;
 
-
-            // set Info flag
-            print_buff[0] = 'I';
-
-            serializeJson(idoc, print_buff +1, measureJson(idoc));
+            serializeJson(idoc, print_buff, measureJson(idoc));
 
             // clear buffer
             memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
@@ -1911,10 +1911,7 @@ void sendGpsJson()
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));
 
-    serializeJson(pdoc, print_buff + 1, measureJson(pdoc));
-
-    // set gps flag
-    print_buff[0] = 'G';
+    serializeJson(pdoc, print_buff, measureJson(pdoc));
 
     // clear buffer
     memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
@@ -1931,61 +1928,71 @@ void sendGpsJson()
 void sendNodeSetting()
 {
     // {"TYP":"SN","GW":false,"DISP":true,"BTN":false,"MSH":true,"GPS":false,"TRACK":false,"UTCOF":28.2730,"TXP":22,"MQRG":433.175,"MSF":11,"MCR":6,"MBW":250}
+    float node_qrg = meshcom_settings.node_freq;
 
-    if ( meshcom_settings.node_freq == 0){
-            meshcom_settings.node_freq = RF_FREQUENCY;
-        }
-        if ( meshcom_settings.node_sf == 0){
-            #ifndef ESP32   // SF is 11 both on ESP32 and RAK
-            meshcom_settings.node_sf = LORA_SPREADING_FACTOR;
-            #else
-            meshcom_settings.node_sf = LORA_SF;
-            #endif
-        }
-        if ( meshcom_settings.node_cr == 0){
-            #ifndef ESP32
-            meshcom_settings.node_cr = LORA_CODINGRATE;
-            #else
-            meshcom_settings.node_cr = LORA_CR;
-            #endif
-        }
-        if ( meshcom_settings.node_bw == 0){
-            meshcom_settings.node_bw = LORA_BANDWIDTH;
-        }
-        if ( meshcom_settings.node_power == 0){
-            meshcom_settings.node_power = TX_OUTPUT_POWER;
-        }
+    if (node_qrg < 1.0)
+    {
+        node_qrg = RF_FREQUENCY;
+    }
+    if (meshcom_settings.node_sf == 0)
+    {
+#ifndef ESP32 // SF is 11 both on ESP32 and RAK
+        meshcom_settings.node_sf = LORA_SPREADING_FACTOR;
+#else
+        meshcom_settings.node_sf = LORA_SF;
+#endif
+    }
+    if (meshcom_settings.node_cr == 0)
+    {
+#ifndef ESP32
+        meshcom_settings.node_cr = LORA_CODINGRATE;
+#else
+        meshcom_settings.node_cr = LORA_CR;
+#endif
+    }
+    if (meshcom_settings.node_bw == 0)
+    {
+        meshcom_settings.node_bw = LORA_BANDWIDTH;
+    }
+    if (meshcom_settings.node_power == 0)
+    {
+        meshcom_settings.node_power = TX_OUTPUT_POWER;
+    }
 
-        JsonDocument nsetdoc;
+    // if we are on nrf52 we need to change frequency reading to MHz
+    #ifdef BOARD_RAK4630
+        node_qrg = node_qrg / 1000000.0;
+    #endif
 
-        nsetdoc["TYP"] = "SN";
-        nsetdoc["GW"] = bGATEWAY;
-        nsetdoc["DISP"] =  bDisplayOff;
-        nsetdoc["BTN"] = bButtonCheck;
-        nsetdoc["MSH"] = bMESH;
-        nsetdoc["GPS"] = bGPSON;
-        nsetdoc["TRACK"] = bDisplayTrack;
-        nsetdoc["UTCOF"] = meshcom_settings.node_utcoff;
-        nsetdoc["TXP"] = meshcom_settings.node_power;
-        nsetdoc["MQRG"] = meshcom_settings.node_freq;
-        nsetdoc["MSF"] = meshcom_settings.node_sf;
-        nsetdoc["MCR"] = meshcom_settings.node_cr;
-        nsetdoc["MBW"] = meshcom_settings.node_bw;
+    JsonDocument nsetdoc;
 
-        // reset print buffer
-        memset(print_buff, 0, sizeof(print_buff));
+    nsetdoc["TYP"] = "SN";
+    nsetdoc["GW"] = bGATEWAY;
+    nsetdoc["DISP"] =  bDisplayOff;
+    nsetdoc["BTN"] = bButtonCheck;
+    nsetdoc["MSH"] = bMESH;
+    nsetdoc["GPS"] = bGPSON;
+    nsetdoc["TRACK"] = bDisplayTrack;
+    nsetdoc["UTCOF"] = meshcom_settings.node_utcoff;
+    nsetdoc["TXP"] = meshcom_settings.node_power;
+    nsetdoc["MQRG"] = node_qrg;
+    nsetdoc["MSF"] = meshcom_settings.node_sf;
+    nsetdoc["MCR"] = meshcom_settings.node_cr;
+    nsetdoc["MBW"] = meshcom_settings.node_bw;
 
-        serializeJson(nsetdoc, print_buff, measureJson(nsetdoc));
+    // reset print buffer
+    memset(print_buff, 0, sizeof(print_buff));
 
-        // clear buffer
-        memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+    serializeJson(nsetdoc, print_buff, measureJson(nsetdoc));
 
-        // set data message flag and tx ble
-        msg_buffer[0] = 0x44;
-        memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    // clear buffer
+    memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+
+    // set data message flag and tx ble
+    msg_buffer[0] = 0x44;
+    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
+    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
 }
-
 
 // sends APRS settings to the phone
 void sendAPRSset()
@@ -2016,4 +2023,26 @@ void sendAPRSset()
     memcpy(msg_buffer +1, print_buff, strlen(print_buff));
     addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
 
+}
+
+// when all Jsons for configuration are sent to the phone, we send a finish message
+void sendConfigFinish()
+{
+    // {"TYP":"CONFFIN"}
+    JsonDocument cdoc;
+
+    cdoc["TYP"] = "CONFFIN";
+
+    // reset print buffer
+    memset(print_buff, 0, sizeof(print_buff));
+
+    serializeJson(cdoc, print_buff, measureJson(cdoc));
+
+    // clear buffer
+    memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+
+    // set data message flag and tx ble
+    msg_buffer[0] = 0x44;
+    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
+    addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
 }

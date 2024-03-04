@@ -16,6 +16,7 @@
 #include <phone_commands.h>
 #include <debugconf.h>
 #include <configuration.h>
+#include <command_functions.h>
 
 extern uint8_t isPhoneReady;
 extern bool ble_busy_flag;
@@ -188,6 +189,8 @@ void connect_callback(uint16_t conn_handle)
 	(void)conn_handle;
 	Bluefruit.setTxPower(4);
 	DEBUG_MSG("BLE", "Connected");
+	// set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
+    commandAction((char*)"--conffin", true);
 	isPhoneReady = 1;
 	config_to_phone_prepare = true;
 	g_ble_uart_is_connected = true;

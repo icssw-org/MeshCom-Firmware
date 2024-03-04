@@ -148,8 +148,9 @@ unsigned long getUnixClock()
 {
 	struct tm timeinfo = {0};
 
-    timeinfo.tm_year = meshcom_settings.node_date_year-1900;
-    timeinfo.tm_mon = meshcom_settings.node_date_month-1;
+
+    timeinfo.tm_year = meshcom_settings.node_date_year - 1900;
+    timeinfo.tm_mon = meshcom_settings.node_date_month - 1;
     timeinfo.tm_mday = meshcom_settings.node_date_day;
 
     timeinfo.tm_hour = meshcom_settings.node_date_hour;
