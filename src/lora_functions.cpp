@@ -55,7 +55,7 @@ int sendlng = 0;
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE+10];  // lora tx buffer
 uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
 
-unsigned long last_trasnmit_timer = 0;
+unsigned long track_to_meshcom_timer = 0;
 
 //////////////////////////////////////////////////////////////////////////
 // LoRa RX functions
@@ -661,6 +661,20 @@ bool doTX()
                 tx_waiting=false;
 
                 tx_is_active = true;
+
+                // you can transmit C-string or Arduino string up to
+                // 256 characters long
+                // Position zumindest alle funf Minuten auch zu MeshCom senden
+                if(millis() > track_to_meshcom_timer + 1000 * 60 * 5)
+                {
+                    #if defined BOARD_RAK4630
+                        Radio.Send(lora_tx_buffer, sendlng);
+                    #else
+                        transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
+                    #endif
+
+                    track_to_meshcom_timer = millis();
+                }
 
                 if(!lora_setchip_aprs())
                 {

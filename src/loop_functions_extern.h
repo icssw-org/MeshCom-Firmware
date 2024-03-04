@@ -58,6 +58,8 @@ extern float fBasePress;
 extern unsigned long onewireTimeWait;
 extern unsigned long lastHeardTime;
 
+extern unsigned long track_to_meshcom_timer;
+
 // common variables
 extern char msg_text[MAX_MSG_LEN_PHONE * 2];
 
