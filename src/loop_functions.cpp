@@ -157,9 +157,13 @@ unsigned long getUnixClock()
     timeinfo.tm_min = meshcom_settings.node_date_minute;
     timeinfo.tm_sec = meshcom_settings.node_date_second;
 
-    //Serial.printf("Date: %i.%i.%i %i:%i:%i\n",timeinfo.tm_year, timeinfo.tm_mon, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+    unsigned long ut = (unsigned long)mktime(&timeinfo);
+    unsigned long ot = (unsigned long)(meshcom_settings.node_utcoff * 3600.0); // utcoff in sec
 
-	return (unsigned long)mktime(&timeinfo);
+    //Serial.printf("Date: %i.%i.%i %i:%i:%i %lu %f %lu\n",timeinfo.tm_year, timeinfo.tm_mon, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, ut, meshcom_settings.node_utcoff, ot);
+
+
+	return ut - ot;
 
 }
 
