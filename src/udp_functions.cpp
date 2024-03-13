@@ -1,15 +1,23 @@
 #include <configuration.h>
 
-#ifdef ESP32
-
 #include <Arduino.h>
-// WIFI
-#include <WiFi.h>
-#include <WiFiClient.h>
 
 #include <udp_functions.h>
 #include <debugconf.h>
 #include <batt_functions.h>
+
+static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
+
+// RINGBUFFER for outgoing UDP lora packets for lora TX
+uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE];
+uint8_t udpWrite=0;
+uint8_t udpRead=0;
+
+#ifdef ESP32
+
+// WIFI
+#include <WiFi.h>
+#include <WiFiClient.h>
 
 IPAddress node_ip = IPAddress(0,0,0,0);
 IPAddress node_hostip = IPAddress(0,0,0,0);
@@ -32,11 +40,6 @@ unsigned char incomingPacket[UDP_TX_BUF_SIZE];  // buffer for incoming packets
 int packetSize=0;
 static uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
-// RINGBUFFER for outgoing UDP lora packets for lora TX
-uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE];
-uint8_t udpWrite=0;
-uint8_t udpRead=0;
-
 bool udp_is_busy = false;
 int lora_tx_msg_len = 0;
 
@@ -44,8 +47,6 @@ unsigned long last_upd_timer = 0; // last time we got a HB
 bool had_initial_udp_conn = false;  // indicator that we had already a udp connection
 
 uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
-
-static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 int waitRestartUDP = 0;
 int waitRestartUDPCounter = 5;
@@ -733,6 +734,8 @@ void resetExternUDP()
   }
 }
 
+#endif
+
 /**@brief Function to write our additional data into the UDP tx buffer
  * we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
  * MODE BYTE: LongSlow = 1, MediumSlow = 3
@@ -740,8 +743,13 @@ void resetExternUDP()
  */
 void addNodeData(uint8_t msg_buffer[300], uint16_t size, int16_t rssi, int8_t snr)
 {
+
+    #ifdef ESP32
+    
     if(!hasIPaddress)
       return;
+      
+    #endif
 
     uint8_t longname_len = strlen(meshcom_settings.node_call);
 
@@ -801,5 +809,3 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
     if (udpWrite >= MAX_RING_UDP) // if the buffer is full we start at index 0 -> take care of overwriting!
         udpWrite = 0;
 }
-
-#endif

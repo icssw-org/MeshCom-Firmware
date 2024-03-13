@@ -1767,6 +1767,15 @@ void commandAction(char *msg_text, bool ble)
         else
         {
             printf("\n%s", print_buff+2);
+
+            #if defined NRF52_SERIES
+                Serial.println("");
+                Serial.printf("...IP address : %s\n", meshcom_settings.node_ip);
+                Serial.printf("...GW address : %s\n", meshcom_settings.node_gw);
+                Serial.printf("...DNS address: %s\n", meshcom_settings.node_dns);
+                Serial.printf("...SUBNET-MASK: %s\n", meshcom_settings.node_subnet);
+                Serial.println("");
+            #endif
         }
 
         sendDisplayHead(false);

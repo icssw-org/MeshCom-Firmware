@@ -19,13 +19,38 @@
 
 #include "Adafruit_LPS2X.h"
 
-// MeshCom Common (ers32/nrf52) Funktions
+// MeshCom nrf52 functions
+#include <RAK13800_W5100S.h>
+#include <WisBlock-API.h>
+
+#include <nrf_eth.h>
+
+// Ethernet Object
+NrfETH neth;
+
+// timers
+uint32_t dhcp_timer = 0;         // dhcp refresh timer
+
+// RINGBUFFER for outgoing UDP lora packets for lora TX
+extern uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
+extern uint8_t udpWrite;   // counter for ringbuffer
+extern uint8_t udpRead;    // counter for ringbuffer
+
+static uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
+
+// ETH Prototypes
+void sendHeartbeat();                                // heartbeat to server
+void sendUDP();                                      // UDP tx routine
+
+
+// MeshCom Common (esp32/nrf52) functions
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <command_functions.h>
 #include <aprs_functions.h>
 #include <batt_functions.h>
 #include <lora_functions.h>
+#include <udp_functions.h>
 #include <phone_commands.h>
 #include <mheard_functions.h>
 #include <clock.h>
@@ -287,7 +312,7 @@ void nrf52setup()
     }
 
     Serial.println("=====================================");
-    Serial.println("START CLIENT");
+    Serial.println("[INIT] START CLIENT");
 
     // init nach Reboot
     init_loop_function();
@@ -525,6 +550,12 @@ void nrf52setup()
     #endif // SHTC3
 
     //////////////////////////////////////////////////////
+    // ETHERNET INIT
+    Serial.println("[init] ETH DHCP init");
+    
+    neth.initethDHCP();
+
+    //////////////////////////////////////////////////////
     // BLE INIT
 
     g_enable_ble=true;
@@ -535,7 +566,7 @@ void nrf52setup()
 		// Init BLE
 		init_ble();
 
-        Serial.println("Adafruit BLE init");
+        Serial.println("[init] BLE init");
 	}
 	else
 	{
@@ -677,6 +708,15 @@ void nrf52setup()
     Serial.println("=====================================");
 
     delay(100);
+
+    if (bGATEWAY)
+    {
+        sendHeartbeat();
+
+        Serial.println("=====================================");
+        Serial.printf("GATEWAY 4.0 RUNNING %s\n", neth.hasIPaddress?"ETH connect":"ETH no connect");
+        Serial.println("=====================================");
+    }
 }
 
 void nrf52loop()
@@ -817,7 +857,8 @@ void nrf52loop()
     }
 
     // posinfo
-    //Serial.printf("posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
+    //Serial.print(getTimeString());
+    //Serial.printf(" posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
 
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
@@ -837,6 +878,45 @@ void nrf52loop()
         {
             commandAction((char*)"--pos", true);
             pos_shot = false;
+        }
+    }
+
+    // send UDP message from ringBufferOut if there is one to tx
+    if(bGATEWAY)
+    {
+        if(neth.hasIPaddress)
+            sendUDP();
+        else
+        {
+            Serial.print(getTimeString());
+            Serial.println(" [MAIN] initethDHCP");
+
+            neth.initethDHCP();
+        }
+
+
+        // check HB response (we also check successful sending KEEP. check if they work together!)
+        if((neth.last_upd_timer + (MAX_HB_RX_TIME * 1000)) < millis())
+        {
+            // avoid TX and UDP 
+            neth.hasIPaddress = false;
+            cmd_counter = 50;
+
+            Serial.print(getTimeString());
+            Serial.println(" [MAIN] resetDHCP");
+
+            neth.resetDHCP();
+            neth.last_upd_timer = millis();
+        }
+        
+        // DHCP refresh
+        if ((dhcp_timer + (DHCP_REFRESH * 60000)) < millis())
+        {
+            Serial.print(getTimeString());
+            Serial.println(" [MAIN] checkDHCP");
+
+            dhcp_timer = millis();
+            neth.checkDHCP();
         }
     }
 
@@ -991,6 +1071,20 @@ void nrf52loop()
         }
     }
     #endif
+
+    // heartbeat
+    if (bGATEWAY)
+    {
+        if ((hb_timer + (HEARTBEAT_INTERVAL * 1000)) < millis())
+        {
+            Serial.print(getTimeString());
+            Serial.printf(" [UDP] sending Heartbeat\n");
+
+            sendHeartbeat();
+
+            hb_timer = millis();
+        }
+    }
 
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
@@ -1245,7 +1339,125 @@ void checkSerialCommand(void)
     }
 }
 
-void addNodeData(uint8_t msg_buffer[300], uint16_t size, int16_t rssi, int8_t snr)
+/**@brief UDP tx Routine
+ */
+void sendUDP()
 {
-    Serial.println("ERROR - Gateway not supported RAK Modules");
+    if(udpWrite != udpRead)
+    {
+        if(!neth.udp_is_busy)
+        {
+            uint8_t msg_len = ringBufferUDPout[udpRead][0];
+            
+            
+            if(msg_len != 23)
+            {
+                //Serial.printf("UDP TX out:%i len:%i\n", udpRead, msg_len);
+                //DEBUG_MSG_VAL("UDP", udpRead, "UDP TX out:");
+                //printBuffer(ringBufferUDPout[udpRead] + 1, msg_len);
+            }
+            
+
+            // send it over UDP
+            if (!neth.sendUDP(ringBufferUDPout[udpRead] + 1, msg_len))
+            {
+                Serial.printf("Sending UDP Packet failed <%i>!\n", msg_len);
+
+                DEBUG_MSG("ERROR", "Sending UDP Packet failed!");
+
+                err_cnt_udp_tx++;
+                // if we have too much errors sending, reset UDP
+                if (err_cnt_udp_tx >= MAX_ERR_UDP_TX)
+                {
+                    // avoid TX and UDP
+                    neth.hasIPaddress = false;
+
+                    Serial.print(getTimeString());
+                    Serial.printf(" [MAIN] resetDHCP\n");
+
+                    err_cnt_udp_tx = 0;
+                    neth.resetDHCP();
+                }
+            }
+            else
+            {
+                memcpy(convBuffer, ringBufferUDPout[udpRead] + 1 + 18, msg_len);
+
+                //Serial.printf("convBuffer[0] %02X\n", convBuffer[0]);
+
+                if(convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40)
+                {
+                    struct aprsMessage aprsmsg;
+                    
+                    // print which message type we got
+                    decodeAPRS(convBuffer, (uint8_t)msg_len, aprsmsg);
+
+                    // print aprs message
+                    if(bDisplayInfo)
+                    {
+                        printBuffer_aprs((char*)"TX-UDP ", aprsmsg);
+                        Serial.println("");
+                    }
+                }
+            }
+
+            // zero out sent buffer
+            memset(ringBufferUDPout[udpRead], 0, UDP_TX_BUF_SIZE);
+
+            udpRead++;
+            if (udpRead >= MAX_RING_UDP) 
+                udpRead = 0;
+
+        }
+        else
+        {
+            DEBUG_MSG("UDP", "UDP busy. Sending asap");
+        }
+    }
+}
+
+
+/**@brief Function to send our heartbeat
+ * longanme0x000xAABBCCDDKEEPGW0110x00
+ *               GW_ID
+ */
+void sendHeartbeat()
+{
+    if (!neth.hasIPaddress)
+        return;
+
+    String keep = "KEEP";
+    String cfw = SOURCE_VERSION;
+    String firmware = "GW"+cfw;
+
+    uint8_t longname_len = strlen(meshcom_settings.node_call);
+    uint16_t hb_buffer_size = longname_len + 1 + sizeof(_GW_ID) + keep.length() + firmware.length();;
+    uint8_t hb_buffer[hb_buffer_size];
+
+    // Serial.print("\nHB buffer size: ");
+    // Serial.println(hb_buffer_size);
+
+    char longname_c[longname_len + 1];
+    strcpy(longname_c, neth._longname.c_str());
+    longname_c[longname_len] = 0x00;
+
+    char keep_c[keep.length()];
+    strcpy(keep_c, keep.c_str());
+
+    char firmware_c[firmware.length()];
+    strcpy(firmware_c, firmware.c_str());
+
+    // copying all together
+    memcpy(&hb_buffer, &meshcom_settings.node_call, longname_len + 1);
+    memcpy(&hb_buffer[longname_len + 1], &_GW_ID, sizeof(_GW_ID));
+    memcpy(&hb_buffer[longname_len + 1 + sizeof(neth._GW_ID)], &keep_c, sizeof(keep_c));
+    memcpy(&hb_buffer[longname_len + 1 + sizeof(neth._GW_ID) + sizeof(keep_c)], &firmware_c, sizeof(firmware_c));
+    
+    // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
+    //also avoid UDP tx when UDP is getting a packet
+    // add HB message to the ringbuffer
+    //DEBUG_MSG("UDP", "HB Buffer");
+    //neth.printBuffer(hb_buffer, hb_buffer_size);
+    addUdpOutBuffer(hb_buffer, hb_buffer_size);
+
 }
