@@ -550,12 +550,6 @@ void nrf52setup()
     #endif // SHTC3
 
     //////////////////////////////////////////////////////
-    // ETHERNET INIT
-    Serial.println("[init] ETH DHCP init");
-    
-    neth.initethDHCP();
-
-    //////////////////////////////////////////////////////
     // BLE INIT
 
     g_enable_ble=true;
@@ -711,11 +705,31 @@ void nrf52setup()
 
     if (bGATEWAY)
     {
-        sendHeartbeat();
+        //////////////////////////////////////////////////////
+        // ETHERNET INIT
+        Serial.println("[init] ETH DHCP init");
+    
+        neth.initethDHCP();
 
-        Serial.println("=====================================");
-        Serial.printf("GATEWAY 4.0 RUNNING %s\n", neth.hasIPaddress?"ETH connect":"ETH no connect");
-        Serial.println("=====================================");
+        if(neth.hasETHHardware)
+        {
+            sendHeartbeat();
+
+            Serial.println("=====================================");
+            Serial.printf("GATEWAY 4.0 RUNNING %s\n", neth.hasIPaddress?"ETH connect":"ETH no connect");
+            Serial.println("=====================================");
+        }
+        else
+        {
+            bGATEWAY=false;
+
+            meshcom_settings.node_sset = meshcom_settings.node_sset & 0x6FFF;   // mask 0x1000
+
+            addBLECommandBack((char*)"--gateway off");
+
+            save_settings();
+        }
+        
     }
 }
 
@@ -881,20 +895,25 @@ void nrf52loop()
         }
     }
 
-    // send UDP message from ringBufferOut if there is one to tx
+    // get UDP & send UDP message from ringBufferOut if there is one to tx
     if(bGATEWAY)
     {
-        if(neth.hasIPaddress)
+        // check if we received a UDP packet
+        if (neth.hasIPaddress)
+        {
+            if(neth.checkUDP() >= 0)
+                neth.getUDP();
+
             sendUDP();
+        }
         else
         {
-            Serial.print(getTimeString());
-            Serial.println(" [MAIN] initethDHCP");
-
-            neth.initethDHCP();
+            neth.last_upd_timer = 0; // ETH new
         }
 
-
+        meshcom_settings.node_hasIPaddress = neth.hasIPaddress;
+        meshcom_settings.node_last_upd_timer = neth.last_upd_timer;
+        
         // check HB response (we also check successful sending KEEP. check if they work together!)
         if((neth.last_upd_timer + (MAX_HB_RX_TIME * 1000)) < millis())
         {
@@ -903,17 +922,20 @@ void nrf52loop()
             cmd_counter = 50;
 
             Serial.print(getTimeString());
-            Serial.println(" [MAIN] resetDHCP");
+            Serial.println(" [MAIN] initethDHCP");
 
-            neth.resetDHCP();
-            neth.last_upd_timer = millis();
+            neth.initethDHCP();
+
         }
         
         // DHCP refresh
         if ((dhcp_timer + (DHCP_REFRESH * 60000)) < millis())
         {
-            Serial.print(getTimeString());
-            Serial.println(" [MAIN] checkDHCP");
+            if(bDEBUG)
+            {
+                Serial.print(getTimeString());
+                Serial.println(" [MAIN] checkDHCP");
+            }
 
             dhcp_timer = millis();
             neth.checkDHCP();
@@ -1077,8 +1099,11 @@ void nrf52loop()
     {
         if ((hb_timer + (HEARTBEAT_INTERVAL * 1000)) < millis())
         {
-            Serial.print(getTimeString());
-            Serial.printf(" [UDP] sending Heartbeat\n");
+            if(bDEBUG)
+            {
+                Serial.print(getTimeString());
+                Serial.printf(" [UDP] sending Heartbeat\n");
+            }
 
             sendHeartbeat();
 

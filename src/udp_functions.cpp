@@ -129,6 +129,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
         if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
         {
+          last_upd_timer = millis();
+          
           DEBUG_MSG_VAL("UDP", iWrite, "Lora Ringbuf added El.:");
 
           memcpy(convBuffer, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);

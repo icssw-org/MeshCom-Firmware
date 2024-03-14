@@ -54,11 +54,11 @@ void NrfETH::initethfixIP(bool bDisplay)
   // check if HW present and if we have a connected cable -> if so start UDP
   if (Ethernet.hardwareStatus() == EthernetNoHardware) // Check for Ethernet hardware present.
   {
-    Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
-    while (true)
-    {
-      delay(1); // Do nothing, just love you.
-    }
+      Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
+  
+      hasETHHardware=false;
+
+      return;
   }
 
   int iWaitStatus = 5;
@@ -95,6 +95,8 @@ void NrfETH::initethfixIP(bool bDisplay)
 
   hasIPaddress = true;
 
+  last_upd_timer = millis();
+
   // start the UDP service
   startUDP();
 
@@ -118,6 +120,9 @@ void NrfETH::initethDHCP()
 
   initethfixIP(false);
 
+  if(!hasETHHardware)
+    return;
+
   // get DHCP IP config, returns 0 if success
   if(startDHCP() == 0)
   {
@@ -130,7 +135,6 @@ void NrfETH::initethDHCP()
     //timeClient.setTimeOffset(TIME_OFFSET * 60);
     if (updateNTP() == true)
       DEBUG_MSG("NTP", "Updated");
-
   }
   else 
   {
@@ -244,7 +248,9 @@ int NrfETH::getUDP()
       if (memcmp(indicator_b, gate, UDP_MSG_INDICATOR_LEN) == 0)
       {
 
-        DEBUG_MSG("UDP", "Received a LoRa packet to transmit");
+        //Serial.printf("[GATE] Received a LoRa packet to transmit\n");
+
+        last_upd_timer = millis();
 
         // Ringbuffer filling
         lora_tx_msg_len = packetSize - UDP_MSG_INDICATOR_LEN;
@@ -264,7 +270,11 @@ int NrfETH::getUDP()
 
         if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
         {
-          //Serial.printf("Ringbuffer added element: %u\n", iWrite);
+          if(bDEBUG)
+          {
+            Serial.print(getTimeString());
+            Serial.printf("Ringbuffer added element: %u\n", iWrite);
+          }
           
           struct aprsMessage aprsmsg;
           
@@ -273,8 +283,11 @@ int NrfETH::getUDP()
 
           if(msg_type_b_lora > 0)
           {
-            printBuffer_aprs((char*)"RX-UDP ", aprsmsg);
-            Serial.println();
+            if(bDisplayInfo)
+            {
+              printBuffer_aprs((char*)"RX-UDP ", aprsmsg);
+              Serial.println();
+            }
 
             if(msg_type_b == 0x3A)
               sendDisplayText(aprsmsg, 99, 0);
@@ -309,7 +322,13 @@ int NrfETH::getUDP()
       else if (memcmp(indicator_b, conf, UDP_MSG_INDICATOR_LEN) == 0)
       {
 
-        DEBUG_MSG("UDP", "Received a configuration message");
+        if(bDEBUG)
+        {
+          Serial.print(getTimeString());
+          Serial.printf("[CONF] received from server\n");
+        }
+
+        last_upd_timer = millis();
 
         had_initial_udp_conn = true;
 
@@ -388,41 +407,45 @@ int NrfETH::getUDP()
           }
           else
           {
-            DEBUG_MSG("ERROR", "Incoming config message not known! Discarding!");
+            Serial.printf("[ERROR] Incoming config message not known! Discarding!\n");
           }
         }
         else
         {
-          DEBUG_MSG("ERROR", "Incoming config message error! Discarding!");
+            Serial.printf("[ERROR] Incoming config message not known! Discarding!\n");
         }
 
         // zero out the inc buffer
         memset(inc_udp_buffer, 0, UDP_TX_BUF_SIZE);
         return 0;
       }
-      // Heartbeat from Server
       else if (memcmp(indicator_b, beat, UDP_MSG_INDICATOR_LEN) == 0)
       {
 
         // we got an heartbeat from server which we use to check connection (saving time we got it)
-        DEBUG_MSG("BEAT", "Heartbeat from server received");
+        if(bDEBUG)
+        {
+          Serial.print(getTimeString());
+          Serial.printf("[BEAT] Heartbeat from server\n");
+        }
+
+        last_upd_timer = millis();
         
         /**
          * TODO check HB accordingly to format not only BEAT at beginning
          * 15:16:08  <UDP_ETH> UDP Packet received with length: 22
           42 45 41 54 00 09 4F 45 31 4B 46 52 2D 47 57 01 05 4B 46 52 36 35
         */
-        last_upd_timer = millis();
       }
       else
       {
-        DEBUG_MSG("ERROR", "Received udp message without indicator");
+        Serial.printf("[ERROR] Received udp message without indicator\n");
         last_upd_timer = millis();
       }
     } 
     else
     {
-      DEBUG_MSG("ERROR", "UDP Message has too much Zeros");
+      Serial.printf("[ERROR] UDP Message has too much Zeros\n");
       resetDHCP();
     }
   }
@@ -495,6 +518,7 @@ void NrfETH::getMyMac()
 
   memcpy(macaddr +1, &result, sizeof(result) -3);
 
+  /*
   Serial.print("MAC ADDR: ");
 
   for (int i = 0; i < 6; i++)
@@ -502,6 +526,7 @@ void NrfETH::getMyMac()
     Serial.printf("%02X:", macaddr[i]);
   }
   Serial.println("");
+  */
 
   // setting now the GW-ID
   DEBUG_MSG("Radio", "Setting GW-ID");
@@ -629,11 +654,11 @@ int NrfETH::startDHCP()
     Serial.println("Failed to configure Ethernet using DHCP");
     if (Ethernet.hardwareStatus() == EthernetNoHardware) // Check for Ethernet hardware present.
     {
-      while (true)
-      {
-        Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
-        delay(1); // Do nothing, just love you.
-      }
+      Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
+
+      hasETHHardware=false;
+      
+      return 1;
     }
     
     int iWaitStatus=5;
@@ -670,7 +695,7 @@ int NrfETH::startDHCP()
     sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
     sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[3], Ethernet.dnsServerIP()[3]);
     sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2], Ethernet.subnetMask()[3]);
-
+    
     hasIPaddress = true;
 
     return 0;

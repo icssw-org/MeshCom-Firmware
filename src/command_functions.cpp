@@ -279,7 +279,7 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"info") == 0)
+    if(commandCheck(msg_text+2, (char*)"info") == 0 || commandCheck(msg_text+2, (char*)"i") == 0)
     {
         bInfo=true;
     }
@@ -1610,15 +1610,6 @@ void commandAction(char *msg_text, bool ble)
     {
         showMHeard();
 
-        if(ble)
-        {
-            addBLECommandBack(print_buff);
-        }
-        else
-        {
-            printf("\n%s", print_buff+2);
-        }
-
         return;
     }
     else
@@ -1774,7 +1765,7 @@ void commandAction(char *msg_text, bool ble)
                 Serial.printf("...GW address : %s\n", meshcom_settings.node_gw);
                 Serial.printf("...DNS address: %s\n", meshcom_settings.node_dns);
                 Serial.printf("...SUBNET-MASK: %s\n", meshcom_settings.node_subnet);
-                Serial.println("");
+                Serial.printf("...Timer      : %ld hasIpAddress:%s\n", millis() - meshcom_settings.node_last_upd_timer, (meshcom_settings.node_hasIPaddress?"yes":"no"));
             #endif
         }
 

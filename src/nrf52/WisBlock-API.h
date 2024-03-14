@@ -253,6 +253,8 @@ struct s_meshcom_settings
 	char node_dns[40] = {0};
 	char node_gw[40] = {0};
 	char node_subnet[40] = {0};
+	bool node_hasIPaddress = false;
+	unsigned long node_last_upd_timer = 0;
 };
 
 extern s_meshcom_settings meshcom_settings;

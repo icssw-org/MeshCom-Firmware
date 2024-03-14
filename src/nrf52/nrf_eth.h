@@ -23,6 +23,8 @@ class NrfETH {
 
     bool hasIPaddress = false;
 
+    bool hasETHHardware = true;
+
     IPAddress remoteIP;
     
     bool hasETHlink();
