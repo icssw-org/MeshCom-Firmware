@@ -611,10 +611,11 @@ void mainStartTimeLoop()
 {
     /////////////////////////////////////////////////////////////////////////////////////////////
     // Start-Loop & Time-Loop
+
+    // Serial.printf("iInitDisplay %i meshcom_settings.node_date_second %i DisplayTimeWait %i\n", iInitDisplay, meshcom_settings.node_date_second, DisplayTimeWait);
+
     if(iInitDisplay < 4)
     {
-        //Serial.printf("iInitDisplay %i meshcom_settings.node_date_second %i DisplayTimeWait %i\n", iInitDisplay, meshcom_settings.node_date_second, DisplayTimeWait);
-
         if(meshcom_settings.node_date_second != DisplayTimeWait)
         {
             iInitDisplay++;
