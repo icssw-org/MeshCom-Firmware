@@ -4,6 +4,8 @@
 #include <debugconf.h>
 #include <configuration.h>
 #include <batt_functions.h>
+#include <time.h>
+
 //#include <command_functions.h>
 
 // Create device name
@@ -351,6 +353,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
      * length 1B - Msg ID 1B - Data
 	 * Msg ID:
 	 * 0x10 - Hello Message (followed by 0x20, 0x30)
+	 * 0x20 - Timestamp from phone 
 	 * 0x50 - Callsign
 	 * 0x55 - Wifi SSID and PW
 	 * 0x70 - Latitude
@@ -416,6 +419,34 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				isPhoneReady = 1;
 			}
 
+			break;
+		}
+
+		case 0x20: {
+
+			DEBUG_MSG("BLE", "Timestamp from phone received");
+
+			// 4B Timestamp
+			uint32_t timestamp = 0;
+			memcpy(&timestamp, conf_data + 2, sizeof(timestamp));
+			// add the utc offset set in node
+			timestamp += meshcom_settings.node_utcoff * 3600;
+			// set the meshcom settings variables for the timestamp
+			struct tm timeinfo = {0};
+			gmtime_r((time_t*)&timestamp, &timeinfo);
+			meshcom_settings.node_date_year = timeinfo.tm_year + 1900;
+			meshcom_settings.node_date_month = timeinfo.tm_mon + 1;
+			meshcom_settings.node_date_day = timeinfo.tm_mday;
+			meshcom_settings.node_date_hour = timeinfo.tm_hour;
+			meshcom_settings.node_date_minute = timeinfo.tm_min;
+			meshcom_settings.node_date_second = timeinfo.tm_sec;
+			meshcom_settings.node_date_hundredths = 0;
+
+			if (bBLEDEBUG) {
+				Serial.printf("Timestamp from phone: %u\n", timestamp);
+				Serial.printf("Date: %02d.%02d.%04d %02d:%02d:%02d\n", meshcom_settings.node_date_day, meshcom_settings.node_date_month, meshcom_settings.node_date_year, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+			}
+			
 			break;
 		}
 
