@@ -30,6 +30,7 @@ String s_node_hostip = "";
 String s_extern_node_ip = "";
 
 bool hasIPaddress = false;
+
 bool hasExternIPaddress = false;
 
 WiFiUDP Udp;
@@ -53,6 +54,8 @@ int waitRestartUDPCounter = 5;
 
 void getMeshComUDP()
 {
+  meshcom_settings.node_hasIPaddress = hasIPaddress;
+  
   if(!hasIPaddress)
     return;
 
@@ -261,6 +264,7 @@ void sendMeshComUDP()
                 {
                     // avoid TX and UDP
                     hasIPaddress = false;
+                    meshcom_settings.node_hasIPaddress = hasIPaddress;
                     //cmd_counter = 50;
 
                     DEBUG_MSG("MAIN", "resetDHCP");
@@ -343,6 +347,11 @@ void startMeshComUDP()
 {
   node_ip = WiFi.localIP();
 
+  sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
+  sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
+  sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[3], WiFi.dnsIP()[3]);
+  sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", WiFi.subnetMask()[0], WiFi.subnetMask()[1], WiFi.subnetMask()[2], WiFi.subnetMask()[3]);
+
   s_node_ip = node_ip.toString();
 
   if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
@@ -368,6 +377,7 @@ void startMeshComUDP()
   Serial.printf("WiFi now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
 
   hasIPaddress=true;
+  meshcom_settings.node_hasIPaddress = hasIPaddress;
 
   sendMeshComHeartbeat();
 }

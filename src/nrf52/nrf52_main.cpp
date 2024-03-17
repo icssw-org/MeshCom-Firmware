@@ -836,6 +836,8 @@ void nrf52loop()
                 sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
             }
 
+            sendMheard();
+
             config_to_phone_prepare_timer=millis();
 
             config_to_phone_prepare = false;
