@@ -1715,9 +1715,9 @@ void commandAction(char *msg_text, bool ble)
     else
     if(bInfo)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...SSID %s ...PWD  %s ...GATEWAY %s ...MESH %s ...BUTTON  %s\n...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...FREQ %.4f TXPWR %i dBm\n",
+        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...GATEWAY %s ...MESH %s ...BUTTON  %s\n...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...FREQ %.4f TXPWR %i dBm\n",
                 SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
-                meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), meshcom_settings.node_ssid, meshcom_settings.node_pwd,
+                meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
                 (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"),
                 meshcom_settings.node_freq, meshcom_settings.node_power);
 
@@ -1763,14 +1763,18 @@ void commandAction(char *msg_text, bool ble)
         {
             printf("\n%s", print_buff+2);
 
-            #if defined NRF52_SERIES
-                Serial.println("");
-                Serial.printf("...IP address : %s\n", meshcom_settings.node_ip);
-                Serial.printf("...GW address : %s\n", meshcom_settings.node_gw);
-                Serial.printf("...DNS address: %s\n", meshcom_settings.node_dns);
-                Serial.printf("...SUBNET-MASK: %s\n", meshcom_settings.node_subnet);
-                Serial.printf("...Timer      : %ld hasIpAddress:%s\n", millis() - meshcom_settings.node_last_upd_timer, (meshcom_settings.node_hasIPaddress?"yes":"no"));
-            #endif
+            Serial.println("");
+            Serial.printf("...SSID        : %s\n", meshcom_settings.node_ssid);
+            Serial.printf("...PASSWORD    : %s\n", meshcom_settings.node_pwd);
+            Serial.printf("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
+            if(meshcom_settings.node_hasIPaddress)
+            {
+                Serial.printf("...IP address  : %s\n", meshcom_settings.node_ip);
+                Serial.printf("...GW address  : %s\n", meshcom_settings.node_gw);
+                Serial.printf("...DNS address : %s\n", meshcom_settings.node_dns);
+                Serial.printf("...SUBNET-MASK : %s\n", meshcom_settings.node_subnet);
+                Serial.printf("...UDP-HBeat   : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
+            }
         }
 
         sendDisplayHead(false);
@@ -1908,9 +1912,6 @@ void sendGpsJson()
     pdoc["DIRn"] = (int)posinfo_direction;
     pdoc["DIRo"] = (int)posinfo_last_direction;
     pdoc["DATE"] = getDateString() + " " + getTimeString();
-    /*pdoc["UTCOFF"] = meshcom_settings.node_utcoff;
-    pdoc["GPSON"] = bGPSON;
-    pdoc["TRACKON"] = bDisplayTrack;*/
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));

@@ -612,7 +612,8 @@ void mainStartTimeLoop()
     /////////////////////////////////////////////////////////////////////////////////////////////
     // Start-Loop & Time-Loop
 
-    // Serial.printf("iInitDisplay %i meshcom_settings.node_date_second %i DisplayTimeWait %i\n", iInitDisplay, meshcom_settings.node_date_second, DisplayTimeWait);
+    //if(iInitDisplay > 0)
+    //    Serial.printf("iInitDisplay %i meshcom_settings.node_date_second %i DisplayTimeWait %i\n", iInitDisplay, meshcom_settings.node_date_second, DisplayTimeWait);
 
     if(iInitDisplay < 4)
     {
@@ -674,9 +675,15 @@ void mainStartTimeLoop()
                         sendDisplayTrack(); // Show Track
                 }
                 else
+                {
                     sendDisplayTime(); // Time only
+                }
 
                 DisplayTimeWait = meshcom_settings.node_date_second;
+            }
+            else
+            {
+                bPosDisplay=true;
             }
         }
     // End Start-Loop & Time-Loop
@@ -1436,41 +1443,57 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
         if(press > 0)
         {
             sprintf(cpress, "/P=%.1f", press);
+            if(memcmp(cpress, "/P=nan", 6) == 0)
+                return "";
         }
 
         if(hum > 0)
         {
             sprintf(chum, "/H=%.1f", hum);
+            if(memcmp(cpress, "/H=nan", 6) == 0)
+                return "";
         }
 
         if(temp != 0)
         {
             sprintf(ctemp, "/T=%.1f", temp);
+            if(memcmp(cpress, "/T=nan", 6) == 0)
+                return "";
         }
 
         if(temp2 != 0)
         {
             sprintf(ctemp2, "/O=%.1f", temp2);
+            if(memcmp(cpress, "/O=nan", 6) == 0)
+                return "";
         }
 
         if(qfe > 0)
         {
             sprintf(cqfe, "/F=%i", qfe);
+            if(memcmp(cpress, "/F=nan", 6) == 0)
+                return "";
         }
 
         if(qnh > 0 && !bMCU811ON && !bBME680ON)
         {
             sprintf(cqnh, "/Q=%.1f", qnh);
+            if(memcmp(cpress, "/Q=nan", 6) == 0)
+                return "";
         }
 
         if(gasres > 0 && bBME680ON)
         {
             sprintf(cgasres, "/G=%.1f/V=3", gasres);
+            if(memcmp(cpress, "/G=nan", 6) == 0)
+                return "";
         }
 
         if(co2 > 0 && bMCU811ON)
         {
             sprintf(cco2, "/C=%.0f/V=2", co2);
+            if(memcmp(cpress, "/C=nan", 6) == 0)
+                return "";
         }
 
         sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2);

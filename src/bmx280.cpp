@@ -142,7 +142,7 @@ void setupBMX280()
 	//and reads compensation parameters.
 	if (!bmx280.begin())
 	{
-		Serial.println("begin() failed. check your BMx280 Interface and I2C Address.");
+		Serial.println("[INIT]...begin() failed. check your BMx280 Interface and I2C Address.");
 	}
 
 	//reset sensor to default parameters.

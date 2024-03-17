@@ -5,6 +5,7 @@
 #include <configuration.h>
 #include <batt_functions.h>
 #include <time.h>
+#include <clock.h>
 
 //#include <command_functions.h>
 
@@ -434,6 +435,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			// set the meshcom settings variables for the timestamp
 			struct tm timeinfo = {0};
 			gmtime_r((time_t*)&timestamp, &timeinfo);
+
+			/*
 			meshcom_settings.node_date_year = timeinfo.tm_year + 1900;
 			meshcom_settings.node_date_month = timeinfo.tm_mon + 1;
 			meshcom_settings.node_date_day = timeinfo.tm_mday;
@@ -441,6 +444,9 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			meshcom_settings.node_date_minute = timeinfo.tm_min;
 			meshcom_settings.node_date_second = timeinfo.tm_sec;
 			meshcom_settings.node_date_hundredths = 0;
+			*/
+
+			MyClock.setCurrentTime(0, timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
 			if (bBLEDEBUG) {
 				Serial.printf("Timestamp from phone: %u\n", timestamp);
