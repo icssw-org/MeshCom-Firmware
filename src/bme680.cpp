@@ -43,9 +43,9 @@ void setupBME680()
 		Serial.printf("bBME680ON:%i\n", bBME680ON);
 
   // Don't mix BME28x and BME680 they share same addresses
-  if(bBMEON || bBMPON)
+  if(bBMEON && bBMPON)
   {
-    Serial.println("BME680 and BMx280 can't be used together!");
+    Serial.println("[INIT]...BME680 and BMx280 can't be used together!");
     return; 
   }
 
@@ -59,23 +59,23 @@ void setupBME680()
   int error = Wire.endTransmission();
 
   if (error == 0) {
-    Serial.println("BME680 sensor found at 0x76");
+    Serial.println("[INIT]...BME680 sensor found at 0x76");
     foundAddr = 1;
   } else {
-    Serial.println("BME680 sensor not found at 0x76");
+    Serial.println("[INIT]...BME680 sensor not found at 0x76");
   }
   Wire.beginTransmission(I2C_ADDRESS_BME680_2);
   error = Wire.endTransmission();
   if (error == 0) {
-    Serial.println("BME680 sensor found at 0x77");
+    Serial.println("[INIT]...BME680 sensor found at 0x77");
     foundAddr += 2;
   } else {
-    Serial.println("BME680 sensor not found at 0x77");
+    Serial.println("[INIT]...BME680 sensor not found at 0x77");
   }
 
   // if none found or there is another sensor on the other address return for now!!! TODO: fix this
   if (foundAddr == 0 || foundAddr == 3) {
-    Serial.println("Could not find BME680 sensor or Address conflict!");
+    Serial.println("[INIT]...Could not find BME680 sensor or Address conflict!");
     return;
   } else {
     bme680_found = true;

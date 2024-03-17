@@ -147,6 +147,80 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
         addBLEOutBuffer(bleBuffer, measureJson(mhdoc)+1);
 }
 
+String getValue(String data, char separator, int index)
+{
+    int found = 0;
+    int strIndex[] = { 0, -1 };
+    int maxIndex = data.length() - 1;
+
+    for (int i = 0; i <= maxIndex && found <= index; i++) {
+        if (data.charAt(i) == separator || i == maxIndex) {
+            found++;
+            strIndex[0] = strIndex[1] + 1;
+            strIndex[1] = (i == maxIndex) ? i+1 : i;
+        }
+    }
+    return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
+}
+void sendMheard()
+{
+    struct mheardLine mheardLine;
+
+    for(int iset=0; iset<MAX_MHEARD; iset++)
+    {
+        if(mheardCalls[iset][0] != 0x00)
+        {
+
+            initMheardLine(mheardLine);
+
+            mheardLine.mh_callsign = mheardCalls[iset];
+            String mhstringdec = mheardBuffer[iset];
+
+            mheardLine.mh_date = getValue(mhstringdec, '@', 0);
+            mheardLine.mh_time = getValue(mhstringdec, '@', 1);
+
+            String xval = getValue(mhstringdec, '@', 2);
+            mheardLine.mh_payload_type = xval.charAt(0);
+
+            xval = getValue(mhstringdec, '@', 3);
+            mheardLine.mh_hw = xval.toInt();
+
+            xval = getValue(mhstringdec, '@', 4);
+            mheardLine.mh_mod = xval.toInt();
+
+            xval = getValue(mhstringdec, '@', 5);
+            mheardLine.mh_rssi = xval.toInt();
+
+            xval = getValue(mhstringdec, '@', 6);
+            mheardLine.mh_snr = xval.toInt();
+
+            xval = getValue(mhstringdec, '@', 7);
+            mheardLine.mh_dist = xval.toFloat();
+
+            // generate JSON
+            JsonDocument mhdoc;
+
+            mhdoc["TYP"] = "MH";
+            mhdoc["CALL"] = mheardLine.mh_callsign.c_str();
+            mhdoc["DATE"] = mheardLine.mh_date.c_str();
+            mhdoc["TIME"] = mheardLine.mh_time.c_str();
+            mhdoc["PLT"] = (uint8_t)mheardLine.mh_payload_type;
+            mhdoc["HW"] = mheardLine.mh_hw;
+            mhdoc["MOD"] = mheardLine.mh_mod;
+            mhdoc["RSSI"] = mheardLine.mh_rssi;
+            mhdoc["SNR"] = mheardLine.mh_snr;
+            mhdoc["DIST"] = mheardLine.mh_dist;
+
+            // send to Phone
+            uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
+            bleBuffer[0] = 0x44;
+            serializeJson(mhdoc, bleBuffer+1, measureJson(mhdoc)+1);
+
+            addBLEComToOutBuffer(bleBuffer, measureJson(mhdoc)+1);
+        }
+    }
+}
+
 void showMHeard()
 {
     Serial.printf("/---------------------------------------------------------------------------------------\\\n");

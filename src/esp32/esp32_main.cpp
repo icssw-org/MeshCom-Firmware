@@ -792,11 +792,11 @@ void esp32setup()
     const std::__cxx11::string strBLEName = cBLEName;
     const std::__cxx11::string strBLEManufData = cManufData;
 
-    Serial.printf("BLE-Device started with BLE-Name <%s>\n", strBLEName.c_str());
+    Serial.printf("[INIT]...BLE-Device started with BLE-Name <%s>\n", strBLEName.c_str());
 
     NimBLEDevice::init("NimBLE");
 
-    Serial.printf("NIM<%s>\n", NimBLEDevice::toString().c_str());
+    Serial.printf("[INIT]...NIM<%s>\n", NimBLEDevice::toString().c_str());
     
     NimBLEDevice::setDeviceName(strBLEName);
 
@@ -868,7 +868,7 @@ void esp32setup()
 
     pAdvertising->start(0);
    
-    Serial.println("Waiting a client connection to notify...");
+    Serial.println("[INIT]...Waiting a client connection to notify...");
     
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;
@@ -909,6 +909,11 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
+    bool bLoopActive = false;
+
+    if(bLoopActive)
+        Serial.println("loop 00");
+
     if(iReceiveTimeOutTime > 0)
     {
         // Timeout 3.5sec
@@ -924,6 +929,9 @@ void esp32loop()
             #endif
         }
     }
+
+    if(bLoopActive)
+        Serial.println("loop 01");
 
     #if defined(SX127X)
     if(detectedFlag || timeoutFlag)
@@ -1206,6 +1214,9 @@ void esp32loop()
     }
     #endif
     
+    if(bLoopActive)
+        Serial.println("loop 02");
+
     //Clock::EEvent eEvent;
 	
 	// check clock event
@@ -1220,8 +1231,6 @@ void esp32loop()
     meshcom_settings.node_date_hour = MyClock.Hour();
     meshcom_settings.node_date_minute = MyClock.Minute();
     meshcom_settings.node_date_second = MyClock.Second();
-
-    bool bLoopActive = false;
 
     if(bLoopActive)
         Serial.printf("[LOOP] 1\n");
@@ -1276,6 +1285,8 @@ void esp32loop()
             {
                 sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
             }
+
+            sendMheard();
 
             config_to_phone_prepare_timer = millis();
             
@@ -1571,6 +1582,9 @@ void esp32loop()
 
             hb_timer = millis();
         }
+
+        meshcom_settings.node_last_upd_timer = hb_timer;
+
     }
 
     if(bEXTUDP)
