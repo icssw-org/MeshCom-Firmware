@@ -5,6 +5,7 @@
 #include <udp_functions.h>
 #include <debugconf.h>
 #include <batt_functions.h>
+#include <command_functions.h>
 
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
@@ -351,6 +352,12 @@ void startMeshComUDP()
   sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
   sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[3], WiFi.dnsIP()[3]);
   sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", WiFi.subnetMask()[0], WiFi.subnetMask()[1], WiFi.subnetMask()[2], WiFi.subnetMask()[3]);
+
+  // update phone status
+  if(isPhoneReady == 1)
+  {
+    commandAction((char*)"--wifiset", true);
+  }
 
   s_node_ip = node_ip.toString();
 

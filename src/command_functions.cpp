@@ -1836,6 +1836,10 @@ void commandAction(char *msg_text, bool ble)
         swdoc["TYP"] = "SW";
         swdoc["SSID"] = meshcom_settings.node_ssid;
         swdoc["PW"] = meshcom_settings.node_pwd;
+        swdoc["IP"] = meshcom_settings.node_ip;
+        swdoc["GW"] = meshcom_settings.node_gw;
+        swdoc["DNS"] = meshcom_settings.node_dns;
+        swdoc["SUB"] = meshcom_settings.node_subnet;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
