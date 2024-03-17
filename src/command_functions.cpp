@@ -1744,6 +1744,10 @@ void commandAction(char *msg_text, bool ble)
             idoc["BLE"] = (bBLElong ? "long" : "short");
             idoc["BATP"] = global_proz;
             idoc["BATV"] = global_batt/1000.0;
+            //idoc["IP"] = meshcom_settings.node_ip;
+            //idoc["GW"] = meshcom_settings.node_gw;
+            //idoc["DNS"] = meshcom_settings.node_dns;
+            //idoc["SUBNET"] = meshcom_settings.node_subnet;
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 
