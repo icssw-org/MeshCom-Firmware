@@ -446,7 +446,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				Serial.printf("Timestamp from phone: %u\n", timestamp);
 				Serial.printf("Date: %02d.%02d.%04d %02d:%02d:%02d\n", meshcom_settings.node_date_day, meshcom_settings.node_date_month, meshcom_settings.node_date_year, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 			}
-			
+
 			break;
 		}
 
@@ -542,7 +542,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			if (!save_setting)
 			{
 				// send to mesh - phone sends pos perdiocaly
-				/// TODO N/S und E/W Char muss man noch korrekt setzen
 				DEBUG_MSG("RADIO", "Sending Pos from Phone to Mesh");
 				
 				posinfo_shot = true;
@@ -550,6 +549,9 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				pos_shot = true;
 				
 				wx_shot = true;
+			} else {
+				// save settings
+				save_settings();
 			}
 
 			break;
@@ -640,19 +642,19 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			
 			//Save Settings
 
-				save_settings();
-				delay(1000);
-				
-				// send config back to phone
-				sendConfigToPhone();
+			save_settings();
+			delay(1000);
+			
+			// send config back to phone
+			sendConfigToPhone();
 
-				// reset node
-				delay(2000);
-				#if defined NRF52_SERIES
-					NVIC_SystemReset();
-				#else
-					ESP.restart();
-				#endif
+			// reset node
+			delay(2000);
+			#if defined NRF52_SERIES
+				NVIC_SystemReset();
+			#else
+				ESP.restart();
+			#endif
 		}
 
 	}
