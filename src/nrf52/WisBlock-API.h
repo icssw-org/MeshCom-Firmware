@@ -248,6 +248,13 @@ struct s_meshcom_settings
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
+
+	char node_ip[40] = {0};
+	char node_dns[40] = {0};
+	char node_gw[40] = {0};
+	char node_subnet[40] = {0};
+	bool node_hasIPaddress = false;
+	unsigned long node_last_upd_timer = 0;
 };
 
 extern s_meshcom_settings meshcom_settings;
