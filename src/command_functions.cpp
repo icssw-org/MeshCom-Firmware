@@ -1744,10 +1744,6 @@ void commandAction(char *msg_text, bool ble)
             idoc["BLE"] = (bBLElong ? "long" : "short");
             idoc["BATP"] = global_proz;
             idoc["BATV"] = global_batt/1000.0;
-            //idoc["IP"] = meshcom_settings.node_ip;
-            //idoc["GW"] = meshcom_settings.node_gw;
-            //idoc["DNS"] = meshcom_settings.node_dns;
-            //idoc["SUBNET"] = meshcom_settings.node_subnet;
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 
@@ -1840,6 +1836,10 @@ void commandAction(char *msg_text, bool ble)
         swdoc["TYP"] = "SW";
         swdoc["SSID"] = meshcom_settings.node_ssid;
         swdoc["PW"] = meshcom_settings.node_pwd;
+        swdoc["IP"] = meshcom_settings.node_ip;
+        swdoc["GW"] = meshcom_settings.node_gw;
+        swdoc["DNS"] = meshcom_settings.node_dns;
+        swdoc["SUB"] = meshcom_settings.node_subnet;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
