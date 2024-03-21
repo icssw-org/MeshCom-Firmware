@@ -55,23 +55,29 @@ Meldungselemente
 - HW	Hardware-ID	8-Bit (siehe Tabelle)
 
 MeshCom Hardware
-- 1	TLORA_V2
-- 2	TLORA_V1
-- 3	TLORA_V2_1_1p6
-- 4 TBEAM
-- 6	TBEAM_0p7
-- 7	T_ECHO
-- 9	RAK4631
-- 10	HELTEC_V2_1
-- 11	HELTEC_V1
-- 39	DIY_v1
 
-MeshCom LoRa Modulationen
-- 0	LONG_FAST	
-- 1	LONG_SLOW	0.275 kbps
-- 2	VERY_LONG_SLOW	0.183 kbps
-- 3	MEDIUM_SLOW	
-- 4	MEDIUM_FAST	5.469 kbps
-- 5	SHORT_SLOW	
-- 6	SHORT_FAST	21.875 kbps
-- 7	LONG_MODERATE
+Hardware-ID	HW-Type	MCU-Type	LoRa-Type	HW-Kurzbezeichnung	HW-Version
+1	TTGO ESP32-Paxcounter	ESP32	SX1278	TLORA	V2
+2	TTGO ESP32-Paxcounter	ESP32	SX1278	TLORA	V1
+3	TTGO ESP32-Paxcounter	ESP32	SX1278	TLORA	V2 1.6
+4	TTGO T-Beam	ESP32	SX1278	T-BEAM	1.1
+5	TTGO T-Beam	ESP32	SX1268	T-BEAM-1268	1.1 1268
+6	TTGO T-Beam	ESP32	SX1262	T-BEAM-0.7	0.7
+7	T-Echo LoRa SX1262	nRF	SX1262	T-ECHO	
+8	T-Deck	ESP32-S3	SX1262	T-DECK	
+9	Wisblock RAK4631	nRF	Wisblock nRF	RAK4631	
+10	WiFi LoRa 32 v2	ESP32	SX1262	HELTEC-V2-1	V2
+11	WiFi LoRa 32 v1	ESP32	SX1276	HELTEC-V1	V1
+12	TTGO T-Beam	ESP32	SX1278	TBEAM-AXP2101	
+39	Ebyte Lora E22	ESP32	SX1278	EBYTE-E22	
+43	WiFi LoRa 32 v3	ESP32-S3	SX1262	HELTEC-V3	V3
+
+MeshCom Modulationen
+
+0	Erweiterter Bereich	10-20	schnell	
+1	Erweiterter Bereich	10-20	langsam (robust)	0.275 kbps
+2	Zusätzlich erweiterter Bereich	20-40	langsam (robust)	0.183 kbps
+3	Normaler Bereich	5-10	langsam (robust)	
+4	Normaler Bereich	5-10	schnell	5.469 kbps
+5	Lokaler Bereich	0-5	langsam (robust)	
+6	Lokaler Bereich	0-5	schnell	21.875 kbps
