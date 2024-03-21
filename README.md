@@ -28,10 +28,8 @@ Meldungen:
    - :|!MMMMMMMM|!HH|OE0XXX-99,OE3XXX-12,OE3YYY-12|>*|:|Text-Meldung|!00|!HW|!MOD|FCS#
 - Positionsmeldungen:
    - !|!MMMMMMMM|!HH|OE0XXX-99|>*|!|4800.00|N|/|01600.00|E|#| BBB /A=HHHH|!00|!HW|!MOD|FCS#
-
-Legende:
-
-| … dient nur zur Darstellung der Trennungen hier im Text
+- Legende:
+  - | … dient nur zur Darstellung der Trennungen hier im Text
 
 Meldungselemente
 - Medlungskennung : ! @ ... Text-, Positions-, Wetter-Meldung
