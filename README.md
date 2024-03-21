@@ -23,11 +23,11 @@ Verwendung finden:
 
 Meldungen:
 - Textmeldungen:
-:|!MMMMMMMM|!HH|OE0XXX-99|>*|:|Text-Meldung|!00|!HW|!MOD|FCS#
+  - :|!MMMMMMMM|!HH|OE0XXX-99|>*|:|Text-Meldung|!00|!HW|!MOD|FCS#
 - Textmeldungen mit Path aus Mesh:
-:|!MMMMMMMM|!HH|OE0XXX-99,OE3XXX-12,OE3YYY-12|>*|:|Text-Meldung|!00|!HW|!MOD|FCS#
+   - :|!MMMMMMMM|!HH|OE0XXX-99,OE3XXX-12,OE3YYY-12|>*|:|Text-Meldung|!00|!HW|!MOD|FCS#
 - Positionsmeldungen:
-!|!MMMMMMMM|!HH|OE0XXX-99|>*|!|4800.00|N|/|01600.00|E|#| BBB /A=HHHH|!00|!HW|!MOD|FCS#
+   - !|!MMMMMMMM|!HH|OE0XXX-99|>*|!|4800.00|N|/|01600.00|E|#| BBB /A=HHHH|!00|!HW|!MOD|FCS#
 
 Legende:
 
@@ -56,28 +56,28 @@ Meldungselemente
 
 MeshCom Hardware
 
-Hardware-ID	HW-Type	MCU-Type	LoRa-Type	HW-Kurzbezeichnung	HW-Version
-1	TTGO ESP32-Paxcounter	ESP32	SX1278	TLORA	V2
-2	TTGO ESP32-Paxcounter	ESP32	SX1278	TLORA	V1
-3	TTGO ESP32-Paxcounter	ESP32	SX1278	TLORA	V2 1.6
-4	TTGO T-Beam	ESP32	SX1278	T-BEAM	1.1
-5	TTGO T-Beam	ESP32	SX1268	T-BEAM-1268	1.1 1268
-6	TTGO T-Beam	ESP32	SX1262	T-BEAM-0.7	0.7
-7	T-Echo LoRa SX1262	nRF	SX1262	T-ECHO	
-8	T-Deck	ESP32-S3	SX1262	T-DECK	
-9	Wisblock RAK4631	nRF	Wisblock nRF	RAK4631	
-10	WiFi LoRa 32 v2	ESP32	SX1262	HELTEC-V2-1	V2
-11	WiFi LoRa 32 v1	ESP32	SX1276	HELTEC-V1	V1
-12	TTGO T-Beam	ESP32	SX1278	TBEAM-AXP2101	
-39	Ebyte Lora E22	ESP32	SX1278	EBYTE-E22	
-43	WiFi LoRa 32 v3	ESP32-S3	SX1262	HELTEC-V3	V3
+- Hardware-ID	HW-Type	MCU-Type	LoRa-Type	HW-Kurzbezeichnung	HW-Version
+- 1	TTGO ESP32-Paxcounter	ESP32	SX1278	TLORA	V2
+- 2	TTGO ESP32-Paxcounter	ESP32	SX1278	TLORA	V1
+- 3	TTGO ESP32-Paxcounter	ESP32	SX1278	TLORA	V2 1.6
+- 4	TTGO T-Beam	ESP32	SX1278	T-BEAM	1.1
+- 5	TTGO T-Beam	ESP32	SX1268	T-BEAM-1268	1.1 1268
+- 6	TTGO T-Beam	ESP32	SX1262	T-BEAM-0.7	0.7
+- 7	T-Echo LoRa SX1262	nRF	SX1262	T-ECHO	
+- 8	T-Deck	ESP32-S3	SX1262	T-DECK	
+- 9	Wisblock RAK4631	nRF	Wisblock nRF	RAK4631	
+- 10	WiFi LoRa 32 v2	ESP32	SX1262	HELTEC-V2-1	V2
+- 11	WiFi LoRa 32 v1	ESP32	SX1276	HELTEC-V1	V1
+- 12	TTGO T-Beam	ESP32	SX1278	TBEAM-AXP2101	
+- 39	Ebyte Lora E22	ESP32	SX1278	EBYTE-E22	
+- 43	WiFi LoRa 32 v3	ESP32-S3	SX1262	HELTEC-V3	V3
 
 MeshCom Modulationen
 
-0	Erweiterter Bereich	10-20	schnell	
-1	Erweiterter Bereich	10-20	langsam (robust)	0.275 kbps
-2	Zusätzlich erweiterter Bereich	20-40	langsam (robust)	0.183 kbps
-3	Normaler Bereich	5-10	langsam (robust)	
-4	Normaler Bereich	5-10	schnell	5.469 kbps
-5	Lokaler Bereich	0-5	langsam (robust)	
-6	Lokaler Bereich	0-5	schnell	21.875 kbps
+- 0	Erweiterter Bereich	10-20	schnell	
+- 1	Erweiterter Bereich	10-20	langsam (robust)	0.275 kbps
+- 2	Zusätzlich erweiterter Bereich	20-40	langsam (robust)	0.183 kbps
+- 3	Normaler Bereich	5-10	langsam (robust)	
+- 4	Normaler Bereich	5-10	schnell	5.469 kbps
+- 5	Lokaler Bereich	0-5	langsam (robust)	
+- 6	Lokaler Bereich	0-5	schnell	21.875 kbps
