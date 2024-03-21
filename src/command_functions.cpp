@@ -85,6 +85,9 @@ void commandAction(char *msg_text, bool ble)
     bool bWifiSetting=false;
     bool bNodeSetting=false;
 
+    if(bBLEDEBUG)
+        Serial.printf("commandAction [%s] ble:%i\n", msg_text, ble);
+
     #ifdef ESP32
     if(memcmp(msg_text, "{", 1) == 0)
     {
@@ -120,6 +123,9 @@ void commandAction(char *msg_text, bool ble)
     {
         sscanf(msg_text+9, "%f", &meshcom_settings.node_utcoff);
         // TODO: adapt node_time accordingly!
+
+        if(bBLEDEBUG)
+            Serial.printf("[COMMAND]utcoff:%f\n", meshcom_settings.node_utcoff);
 
         if(ble)
         {
