@@ -22,7 +22,7 @@ MeshCom 4.0 verwendet für die Payload-Daten das AX.25 Protokoll, wie es für AP
 - LoRa-Modulation INDEX - see table below
 - Frame Check Sequence – The FCS is a sequence of 16 bits used to check the integrity of a received frame.
 
-Messages:
+## Messages:
 - Text messages:
    - :|!MMMMMMMM|!HH|OE0XXX-99|>*|:|Text message|!00|!HW|!MOD|FCS#
 - Text messages with Path from Mesh:
@@ -54,7 +54,7 @@ Message elements
   - GGGGGGGG Gateway ID (only for MeshCom 2.0 compatibility) 32-bit LSB->MSB
   - HW hardware ID 8-bit (see table)
 
-MeshCom hardware ID
+### MeshCom hardware ID
 
 - Hardware ID HW type MCU type LoRa type HW short name HW version
 - 1 TTGO ESP32 Paxcounter ESP32 SX1278 TLORA V2
@@ -72,7 +72,7 @@ MeshCom hardware ID
 - 39 Ebyte Lora E22 ESP32 SX1278 EBYTE-E22
 - 43 WiFi LoRa 32 v3 ESP32-S3 SX1262 HELTEC-V3 V3
 
-MeshCom LoRa modulations index
+### MeshCom LoRa modulations index
 
 - 0 Extended range 10-20 fast
 - 1 Extended range 10-20 slow (robust) 0.275 kbps
