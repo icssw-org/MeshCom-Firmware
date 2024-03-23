@@ -32,7 +32,7 @@ MeshCom 4.0 verwendet für die Payload-Daten das AX.25 Protokoll, wie es für AP
 - Legend:
    - | ... only serves to show the separations here in the text
 
-Message elements
+#### Message elements
 - Medlution ID: ! @ ... text, position, weather message
 - MMMMMMMM Message ID 32-bit LSB->MSB
 - HH MAX-HOP 8-bit bit mask 0x07
