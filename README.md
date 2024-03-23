@@ -7,7 +7,7 @@ The technical approach is based on the use of LORA radio modules which transmit 
 MeshCom 4.0 uses the APRS PROTOCOL REFERENCE for the source, destination, Digipeater and payload data as defined for APRS. (aprs101.pdf APRS PROTOCOL REFERENCE Version 1.0 2000, Page 12)
 MeshCom 4.0 verwendet für die Payload-Daten das AX.25 Protokoll, wie es für APRS definiert ist. (aprs101.pdf APRS PROTOCOL REFERENCE Version 1.0 2000, Seite 12)
 
-Terms:
+## Terms:
 - Identifier — APRS data type identifier
 - Message ID – 32-bit LSB->MSB unique value
 - MAX-HOP – max. 7 (mask 0x07) default 5 is used which allows another 4 transfers.
