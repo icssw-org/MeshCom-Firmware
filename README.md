@@ -84,7 +84,6 @@ MeshCom 4.0 verwendet für die Payload-Daten das AX.25 Protokoll, wie es für AP
 
 ## Preparations for platform.io VSCode plugin
 - Install the needed frameworks under Platforms:
-    Espressif 32 
-    Nordic nRF52
+    Espressif 32 and Nordic nRF52 Version 9.6.0 (for now)
 - For adding the correct Board defintions for RAK Wireless RAK4631 follow these instructions:
     https://github.com/RAKWireless/WisBlock/blob/master/PlatformIO/README.md
