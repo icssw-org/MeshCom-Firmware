@@ -83,7 +83,42 @@ MeshCom 4.0 verwendet für die Payload-Daten das AX.25 Protokoll, wie es für AP
 - 6 Local range 0-5 fast 21,875 kbps
 
 ## Preparations for platform.io VSCode plugin
-- Install the needed frameworks under Platforms:
-    Espressif 32 and Nordic nRF52 Version 9.6.0 (for now)
+- Install the needed frameworks under Platforms: 
+  + Espressif 32
+  + Nordic nRF52 Version 9.6.0 (for now)
 - For adding the correct Board defintions for RAK Wireless RAK4631 follow these instructions:
     https://github.com/RAKWireless/WisBlock/blob/master/PlatformIO/README.md
+
+## Flashing Firmware
+Usually it is done via the upload button in VSCode directly. 
+### ESP32 Via Command Line:
+- For this task the esptool is needed. You can either use the one from platform.io which is located at the `.platformio/tool-esptoolpy/esptool.py` in addition with the python venv, which is at: `.platformio/penv/bin/python`. The hidden `.platformio` directory is located in your User-Directory.<br/>
+Otherwise if not already installed, install a recent python version. Then you need to get the esptool via Pip: `pip install esptool` <br/>
+- The firmware.bin, bootloader.bin and partition.bin file is written after compiling to the hidden `.pio/build` directory of the MeshCom-Firmware repo directory.<br/>
+
+If you only update the firmware, you only want the corresponding file to flash.<br> Adresses where to flash each one of the files:<br/>
+
+| Address | File |
+| --- | ----------- |
+| 0x1000 | bootloader.bin |
+| 0x8000 | partitions.bin |
+| 0x10000 | firmware.bin |
+
+Mac: `python esptool.py -p /dev/tty.usbserial-<NUMBER> write_flash 0x10000 <PATH-TO-BIN-FILE>/firmware.bin`<br/>
+Linux: same but serial device under `/dev` can be `ttyUSB0` or similar.<br/>
+Windows: serial device is usually some COM<br/>
+Ready build firmware can also be flashed via the online tool (Chrome, Edge, Opera):<br/>
+https://oe1kfr.com/esptool/<br/>
+
+#### Erasing the NVS: 
+If you want to wipe the settings stored on the node:<br/>
+`python esptool.py --port <SERIAL-PORT> erase_region 0x009000 0x005000`
+### RAK4631 via CLI:
+To do so, you need the Adafruit nrfutil. Installation and Usage:<br/>
+https://github.com/adafruit/Adafruit_nRF52_nrfutil<br/>
+
+#### Via UF2 File:
+When you double click the button on the module it mounts a USB Device where you can copy an .uf2 file onto the module. To generate that file you need the following Python script:<br/>
+https://github.com/microsoft/uf2/blob/master/utils/uf2conv.py<br/>
+
+`./uf2conv.py <PATH_TO-HEX-FILE> -c -o firmware.uf2 -f 0xADA52840`
