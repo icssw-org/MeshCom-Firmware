@@ -11,6 +11,7 @@ MeshCom is indeed an exciting project of the Institute of Citizen Science for Sp
 -	Nodes will automatically send STATUS and POSITION messages
 -	NODES with optional Sensors will send WX-Data or TELEMETRY Data periodically
 -	Messages will be diplayed on small OLED Display or via BT connected smartphone or tablet device or via USB connected serial console
+
 The main goal is to have a selfbuilding and selfhealing Mesh-Network, that can be enhanced by other components of the Amateur Radio Service, like HAMNET (IP-Network), centralised or distributed Meshcom servers. This will increase coverage to all continents and enable interconnection to other modes and services (APRS, WINLINK, DMR, TETRA-SDS, SOTA-WATCH, POCSAG,VARA-AC, …) building an unified communication plattform.
 Particulary useful is Meshcom for Emergency Communication (EMCOM) in case of disaster or Blackout.
 In all usecases terms  and rules of Amateur Radio Service (strictly non commercial, experimental) should be respected.
@@ -29,7 +30,7 @@ SF: 11
 Bandwith: 250kHz
 CR: 4/6
 
-## APPRS-Protokoll: 
+## APRS-Protokoll: 
 Document: http://www.aprs.org/doc/APRS101.PDF
 Address: Call-SSID, Source, Target, DIGI1-5
 Telemetry: data, formula, units,…
