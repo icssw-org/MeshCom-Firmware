@@ -2,7 +2,7 @@
 
 #if defined (ENABLE_GPS)
 
-#include "esp32_GPS.h"
+#include "esp32_gps.h"
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <clock.h>
