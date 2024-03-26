@@ -60,7 +60,7 @@
 #if defined(USE_EEPROM) && (USE_EEPROM > 0)
 #  include <EEPROM.h>
 #endif
-#include "Clock.h"
+#include "clock.h"
 
 //---| globals |----------------------------------------------------------------
 /*static*/ const char* Clock::Months[] = {
