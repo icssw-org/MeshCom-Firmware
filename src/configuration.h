@@ -7,8 +7,8 @@ definitions
 #include <Arduino.h>
 
 #define SOURCE_TYPE "C"
-#define SOURCE_VERSION "4.30"
-#define SOURCE_VERSION_SUB "b"
+#define SOURCE_VERSION "4.31"
+#define SOURCE_VERSION_SUB "a"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -89,23 +89,6 @@ definitions
 
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
-#endif
-
-#ifdef BOARD_AXP2101
-    #define MODUL_HARDWARE TBEAM_AXP2101
-    #define MODUL_FW_TBEAM TBEAM_AXP2101
-    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-    #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
-    #define ENABLE_GPS
-    #define ENABLE_BMX280
-    #define ENABLE_BMX680
-    #define SX127X
-    #define TX_POWER_MAX 17  // max 17dBm
-    #define TX_POWER_MIN 1
-
-    // Defined using AXP192
-    #define XPOWERS_CHIP_AXP2101
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 #endif
 
@@ -405,44 +388,7 @@ static const uint8_t KEY_BUILTIN = 39;
 #define LORA_DIO0 LORA_IO0
 #define LORA_DIO1 LORA_IO1
 //#define LORA_CS  //already defined
-#define SDA_PIN 21
-#define SCL_PIN 22
 
-#define I2C_SDA    SDA_PIN
-#define I2C_SCL    SCL_PIN
-
-#define BUTTON_PIN 38
-
-#endif
-
-#ifdef BOARD_AXP2101
-/**
- * #define LED_BUILTIN LED_BUILTIN
-static const uint8_t TX = 1;
-static const uint8_t RX = 3;
-static const uint8_t SDA = 21;
-static const uint8_t SCL = 22;
- 
-static const uint8_t SS    = 18;
-static const uint8_t MOSI  = 27;
-static const uint8_t MISO  = 19;
-static const uint8_t SCK   = 5;
-static const uint8_t KEY_BUILTIN = 39;
-// SPI LoRa Radio
-#define LORA_SCK 5      // GPIO5  - SX1276 SCK
-#define LORA_MISO 19    // GPIO19 - SX1276 MISO
-#define LORA_MOSI 27    // GPIO27 - SX1276 MOSI
-#define LORA_CS 18      // GPIO18 - SX1276 CS
-#define LORA_RST 23     // GPIO23 - SX1276 RST
-#define LORA_IRQ 26     // GPIO26 - SX1276 IO0
-#define LORA_IO0 LORA_IRQ  // alias
-#define LORA_IO1 33     // GPIO33 - SX1276 IO1 -> wired on pcb AND connected to header pin LORA1
-#define LORA_IO2 32     // GPIO32 - SX1276 IO2 -> wired on pcb AND connected to header pin LORA2
-*/
-//#define LORA_RST  //already defined
-#define LORA_DIO0 LORA_IO0
-#define LORA_DIO1 LORA_IO1
-//#define LORA_CS  //already defined
 #define SDA_PIN 21
 #define SCL_PIN 22
 

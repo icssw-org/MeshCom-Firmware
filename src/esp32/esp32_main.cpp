@@ -44,28 +44,12 @@
 
 #include <esp_adc_cal.h>
 
-#if defined(XPOWERS_CHIP_AXP192)
-// Defined using AXP192
-#define XPOWERS_CHIP_AXP192
+#if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
 
 #include "XPowersAXP192.tpp"
-#include "XPowersLibInterface.hpp"
-extern XPowersLibInterface *PMU;
-
-#include "axp20x.h"
-extern AXP20X_Class *axp;
-#endif
-
-#if defined(XPOWERS_CHIP_AXP2101)
-// Defined using AXP192
-#define XPOWERS_CHIP_AXP2101
-
 #include "XPowersAXP2101.tpp"
 #include "XPowersLibInterface.hpp"
 extern XPowersLibInterface *PMU;
-
-#include "axp20x.h"
-extern AXP20X_Class *axp;
 
 #endif
 
@@ -1422,12 +1406,13 @@ void esp32loop()
                 {
                     global_batt = (float)PMU->getBattVoltage();
                     global_proz = (int)PMU->getBatteryPercent();
-                }
-                else
-                if(axp != NULL)
-                {
-                    global_batt = axp->getBattVoltage();
-                    global_proz = mv_to_percent(global_batt);
+
+                    // no BATT
+                    if(global_proz < 0)
+                    {
+                        global_batt = (float)PMU->getVbusVoltage();
+                        global_proz=100.0;
+                    }
                 }
                 else
                 {
