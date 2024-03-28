@@ -6,6 +6,7 @@
 #include <udp_functions.h>
 #include "i2c_scanner.h"
 #include <ArduinoJson.h>
+#include "configuration.h"
 
 // Sensors
 #include "bmx280.h"
@@ -1723,14 +1724,14 @@ void commandAction(char *msg_text, bool ble)
     {
         sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...GATEWAY %s ...MESH %s ...BUTTON  %s\n...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...FREQ %.4f TXPWR %i dBm\n",
                 SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
-                meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
+                meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
                 (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"),
                 meshcom_settings.node_freq, meshcom_settings.node_power);
 
         if(ble)
         {
             /*sprintf(print_buff, "I{\"FWVER\":\"%s %-4.4s%-1.1s\", \"CALL\":\"%s\", \"ID\":\"%08X\", \"HWID\":%i, \"MAXV\": %.2f, \"ATXT\":\"%s\", \"BLE\":\"%s\"}",
-                SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call, _GW_ID, MODUL_HARDWARE, meshcom_settings.node_maxv, meshcom_settings.node_atxt, (bBLElong ? "long" : "short"));*/
+                SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_maxv, meshcom_settings.node_atxt, (bBLElong ? "long" : "short"));*/
 
             // reset print buffer
             memset(print_buff, 0, sizeof(print_buff));
@@ -1744,7 +1745,7 @@ void commandAction(char *msg_text, bool ble)
             idoc["FWVER"] = fwver;
             idoc["CALL"] = meshcom_settings.node_call;
             idoc["ID"] = _GW_ID;
-            idoc["HWID"] = MODUL_HARDWARE;
+            idoc["HWID"] = BOARD_HARDWARE;
             idoc["MAXV"] = meshcom_settings.node_maxv;
             idoc["ATXT"] = meshcom_settings.node_atxt;
             idoc["BLE"] = (bBLElong ? "long" : "short");
@@ -1766,8 +1767,10 @@ void commandAction(char *msg_text, bool ble)
             printf("\n%s", print_buff+2);
 
             Serial.println("");
-            Serial.printf("...SSID        : %s\n", meshcom_settings.node_ssid);
-            Serial.printf("...PASSWORD    : %s\n", meshcom_settings.node_pwd);
+            #ifndef BOARD_RAK4630
+                Serial.printf("...SSID        : %s\n", meshcom_settings.node_ssid);
+                Serial.printf("...PASSWORD    : %s\n", meshcom_settings.node_pwd);
+            #endif
             Serial.printf("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             if(meshcom_settings.node_hasIPaddress)
             {

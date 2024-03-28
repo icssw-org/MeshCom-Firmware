@@ -14,6 +14,8 @@
 // TinyGPS
 extern TinyGPSPlus tinyGPSPLus;
 
+int BOARD_HARDWARE = MODUL_HARDWARE;
+
 extern unsigned long rebootAuto;
 
 extern float global_batt;
@@ -418,7 +420,7 @@ void sendDisplayHead(bool bInit)
     sprintf(print_text, "MAC:   %08X", _GW_ID);
     sendDisplay1306(false, false, 3, 42, print_text);
 
-    sprintf(print_text, "Modul: %i", MODUL_HARDWARE);
+    sprintf(print_text, "Modul: %i", BOARD_HARDWARE);
     sendDisplay1306(false, false, 3, 52, print_text);
 
     sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);

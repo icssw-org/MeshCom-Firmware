@@ -8,6 +8,8 @@
 // alle anderen Finger weg !
 // 20230326: Version 4.00: START
 
+extern int BOARD_HARDWARE;
+
 extern unsigned long rebootAuto;
 
 extern bool bSetLoRaAPRS;

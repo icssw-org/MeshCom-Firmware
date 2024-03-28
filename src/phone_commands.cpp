@@ -148,7 +148,7 @@ void sendConfigToPhone ()
 
 	// HW-ID, MOD-ID, FW-Version (FW Vers. deprecated!)
 	uint8_t hw_offset = gw_cl_offset + sizeof(meshcom_settings.node_sset);
-	uint8_t hw_id = MODUL_HARDWARE;
+	uint8_t hw_id = BOARD_HARDWARE;
 	memcpy(confBuff + hw_offset, &hw_id, sizeof(hw_id));
 
 	// Mod-ID is currently fixed to 3 -> SF11CR46BW250

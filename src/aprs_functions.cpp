@@ -25,16 +25,17 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_app_offline = false;
     aprsmsg.msg_source_path = "";
     aprsmsg.msg_destination_path = "";
+    aprsmsg.msg_destination_call = "";
     aprsmsg.msg_gateway_call = "";
     aprsmsg.msg_payload = "";
     aprsmsg.msg_fcs = 0;
-    aprsmsg.msg_source_hw = MODUL_HARDWARE;
+    aprsmsg.msg_source_hw = BOARD_HARDWARE;
     aprsmsg.msg_source_mod = 3; // MeshCom SF 11 CR 4/6 BW 250 ... medium
     if(meshcom_settings.node_sf == 12 && meshcom_settings.node_cr == 8 && meshcom_settings.node_bw == 125.0)
         aprsmsg.msg_source_mod = 4; // MeshCom SF 12 CR 4/8 BW 125 ... slow
 
     aprsmsg.msg_source_fw_version = shortVERSION();
-    aprsmsg.msg_last_hw = MODUL_HARDWARE;
+    aprsmsg.msg_last_hw = BOARD_HARDWARE;
     aprsmsg.msg_source_last = "";
 }
 
