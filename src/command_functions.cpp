@@ -821,7 +821,6 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--gateway on");
             bNodeSetting = true;
         }
         else
@@ -840,7 +839,6 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--gateway off");
             bNodeSetting = true;
         }
         else
@@ -859,7 +857,6 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--mesh on");
             bNodeSetting = true; 
         }
         else
@@ -878,7 +875,6 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--mesh off");
             bNodeSetting = true;
         }
         else

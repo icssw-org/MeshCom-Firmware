@@ -12,6 +12,7 @@
 #include <time.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <command_functions.h>
 
 EthernetUDP Udp;
 
@@ -104,6 +105,12 @@ void NrfETH::initethfixIP(bool bDisplay)
   timeClient.begin();
   //timeClient.setTimeOffset(TIME_OFFSET * 60);
   if (updateNTP() == true) DEBUG_MSG("NTP", "Updated");
+
+  // update phone status
+  if (isPhoneReady == 1)
+  {
+    commandAction((char *)"--wifiset", true);
+  }
 }
 
 
@@ -695,8 +702,14 @@ int NrfETH::startDHCP()
     sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
     sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[3], Ethernet.dnsServerIP()[3]);
     sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2], Ethernet.subnetMask()[3]);
-    
+
     hasIPaddress = true;
+
+    // update phone status
+    if (isPhoneReady == 1)
+    {
+      commandAction((char *)"--wifiset", true);
+    }
 
     return 0;
   }
