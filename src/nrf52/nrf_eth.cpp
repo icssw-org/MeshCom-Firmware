@@ -12,6 +12,7 @@
 #include <time.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <command_functions.h>
 
 EthernetUDP Udp;
 
@@ -102,8 +103,14 @@ void NrfETH::initethfixIP(bool bDisplay)
 
   //start ntpclient
   timeClient.begin();
-  //timeClient.setTimeOffset(TIME_OFFSET * 60);
+
   if (updateNTP() == true) DEBUG_MSG("NTP", "Updated");
+
+  // update phone status
+  if (isPhoneReady == 1)
+  {
+    commandAction((char *)"--wifiset", true);
+  }
 }
 
 
@@ -192,6 +199,10 @@ int NrfETH::checkUDP()
  */
 int NrfETH::getUDP()
 {
+  char destination_call[20] = {0};
+
+  uint8_t print_buff[30];
+
   udp_is_busy = true;   //setting the busy flag
 
   int packetSize = Udp.parsePacket(); // If there's data available, read a packet.
@@ -252,13 +263,14 @@ int NrfETH::getUDP()
 
         last_upd_timer = millis();
 
-        // Ringbuffer filling
         lora_tx_msg_len = packetSize - UDP_MSG_INDICATOR_LEN;
         if (lora_tx_msg_len > UDP_TX_BUF_SIZE)
           lora_tx_msg_len = UDP_TX_BUF_SIZE; // zur Sicherheit
 
+        memcpy(RcvBuffer, inc_udp_buffer+UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);
+
         // printout message type
-        uint8_t msg_type_b = inc_udp_buffer[UDP_MSG_INDICATOR_LEN];
+        uint8_t msg_type_b = RcvBuffer[0];
 
         switch (msg_type_b)
         {
@@ -279,7 +291,7 @@ int NrfETH::getUDP()
           struct aprsMessage aprsmsg;
           
           // print which message type we got
-          uint8_t msg_type_b_lora = decodeAPRS(inc_udp_buffer+UDP_MSG_INDICATOR_LEN, lora_tx_msg_len, aprsmsg);
+          uint8_t msg_type_b_lora = decodeAPRS(RcvBuffer, lora_tx_msg_len, aprsmsg);
 
           if(msg_type_b_lora > 0)
           {
@@ -290,27 +302,118 @@ int NrfETH::getUDP()
             }
 
             if(msg_type_b == 0x3A)
-              sendDisplayText(aprsmsg, 99, 0);
+            {
+              sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
 
+              if(strcmp(destination_call, meshcom_settings.node_call) == 0)
+              {
+                  int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
+                  int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
+                  
+                  if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
+                  {
+                      unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
+                      msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
+
+                      print_buff[0]=0x41;
+                      print_buff[1]=msg_counter & 0xFF;
+                      print_buff[2]=(msg_counter >> 8) & 0xFF;
+                      print_buff[3]=(msg_counter >> 16) & 0xFF;
+                      print_buff[4]=(msg_counter >> 24) & 0xFF;
+                      print_buff[5]=0x01;  // ACK
+                      print_buff[6]=0x00;
+                      
+                      addBLEOutBuffer(print_buff, 7);
+                  }
+                  else
+                  if(iEnqPos > 0)
+                  {
+                      unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
+                      
+                      if(bDisplayInfo)
+                          Serial.println("");
+                          
+                      SendAckMessage(aprsmsg.msg_source_call, iAckId);
+
+                      aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
+                      
+                      uint8_t tempRcvBuffer[255];
+
+                      aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+
+                      uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                      addBLEOutBuffer(tempRcvBuffer, tempsize);
+                  }
+                  else
+                  {
+                      sendDisplayText(aprsmsg, 99, 0);
+
+                      addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
+                  }
+              }
+              else
+              {
+                  if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
+                  {
+                      sendDisplayText(aprsmsg, 99, 0);
+                  }
+                  else
+                  if(strcmp(destination_call, "*") == 0)
+                  {
+                      sendDisplayText(aprsmsg, 99, 0);
+
+                      // APP Offline
+                      if(isPhoneReady == 0)
+                      {
+                          aprsmsg.max_hop = aprsmsg.max_hop | 0x20;
+
+                          uint8_t tempRcvBuffer[255];
+
+                          aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+
+                          uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                          addBLEOutBuffer(tempRcvBuffer, tempsize);
+                      }
+                      else
+                      {
+                          addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
+                      }
+                  }
+              }
+            }
+            else
             if(msg_type_b == 0x21)
+            {
               sendDisplayPosition(aprsmsg, 99, 0);
 
-            addLoraRxBuffer(aprsmsg.msg_id);
+              if(isPhoneReady > 0)
+                addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
+            }
 
-            aprsmsg.msg_source_path.concat(',');
-            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+            // resend only Packet to all and !owncall 
+            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && bMESH)
+            {
+              addLoraRxBuffer(aprsmsg.msg_id);
 
-            aprsmsg.msg_server = true;
+              aprsmsg.msg_source_path.concat(',');
+              aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
 
-            encodeAPRS(inc_udp_buffer, aprsmsg);
+              aprsmsg.msg_server = true;
 
-            // first byte is always the len of the msg
-            ringBuffer[iWrite][0] = aprsmsg.msg_len;
-            memcpy(ringBuffer[iWrite] + 1, inc_udp_buffer, aprsmsg.msg_len);
+              aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
 
-            iWrite++;
-            if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-              iWrite = 0;
+              encodeAPRS(inc_udp_buffer, aprsmsg);
+
+              // first byte is always the len of the msg
+              // UDP messages send to LoRa TX
+              ringBuffer[iWrite][0] = aprsmsg.msg_len;
+              memcpy(ringBuffer[iWrite] + 1, inc_udp_buffer, aprsmsg.msg_len);
+              iWrite++;
+              if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
+                iWrite = 0;
+            }
           }
         }
 
@@ -462,6 +565,7 @@ int NrfETH::getUDP()
 void NrfETH::fillUDP_RING_BUFFER(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_buf_size)
 {
   // first byte is always the len of the msg
+  // UDP messages send to LoRa TX
   ringBuffer[iWrite][0] = rx_buf_size;
   memcpy(ringBuffer[iWrite] + 1, buffer, rx_buf_size);
 
@@ -693,11 +797,17 @@ int NrfETH::startDHCP()
 
     sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2], Ethernet.localIP()[3]);
     sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
-    sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[3], Ethernet.dnsServerIP()[3]);
+    sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
     sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2], Ethernet.subnetMask()[3]);
     
     hasIPaddress = true;
 
+    // update phone status
+    if (isPhoneReady == 1)
+    {
+      commandAction((char *)"--wifiset", true);
+    }
+    
     return 0;
   }
   else

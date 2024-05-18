@@ -15,6 +15,10 @@ void startMeshComUDP();
 void sendMeshComHeartbeat();
 void resetMeshComUDP();
 
+// WebServer
+void startWebserver();
+void loopWebserver();
+
 // Extern JSON UDP
 void startExternUDP();
 void getExternUDP();
@@ -27,5 +31,6 @@ String getJSON(unsigned char incoming, int len, char *iname);
 
 void addNodeData(uint8_t msg_buffer[300], uint16_t size, int16_t rssi, int8_t snr);
 void addUdpOutBuffer(uint8_t *buffer, uint16_t len); // function adds outgoing udp messages in the udp_out_ringbuffer
+void sendKEEP();
 
 #endif

@@ -73,6 +73,57 @@ void init_flash(void)
     // CMCU-811
     meshcom_settings.node_co2 = preferences.getFloat("node_co2", 0.0);
 
+	// MCP23017
+    meshcom_settings.node_mcp17io = preferences.getInt("node_mcp17", 0);
+    meshcom_settings.node_mcp17out = preferences.getInt("node_mcp17o", 0);
+    meshcom_settings.node_mcp17in = preferences.getInt("node_mcp17i", 0);
+
+    strVar = preferences.getString("node_mcp170");
+    sprintf(meshcom_settings.node_mcp17t[0], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp171");
+    sprintf(meshcom_settings.node_mcp17t[1], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp172");
+    sprintf(meshcom_settings.node_mcp17t[2], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp173");
+    sprintf(meshcom_settings.node_mcp17t[3], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp174");
+    sprintf(meshcom_settings.node_mcp17t[4], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp175");
+    sprintf(meshcom_settings.node_mcp17t[5], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp176");
+    sprintf(meshcom_settings.node_mcp17t[6], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp177");
+    sprintf(meshcom_settings.node_mcp17t[7], "%s", strVar.c_str());
+
+    strVar = preferences.getString("node_mcp178");
+    sprintf(meshcom_settings.node_mcp17t[8], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp179");
+    sprintf(meshcom_settings.node_mcp17t[9], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp1710");
+    sprintf(meshcom_settings.node_mcp17t[10], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp1711");
+    sprintf(meshcom_settings.node_mcp17t[11], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp1712");
+    sprintf(meshcom_settings.node_mcp17t[12], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp1713");
+    sprintf(meshcom_settings.node_mcp17t[13], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp1714");
+    sprintf(meshcom_settings.node_mcp17t[14], "%s", strVar.c_str());
+    strVar = preferences.getString("node_mcp1715");
+    sprintf(meshcom_settings.node_mcp17t[15], "%s", strVar.c_str());
+
+	// GM Fields
+    meshcom_settings.node_gch = preferences.getInt("node_gch");
+    meshcom_settings.node_gcb[0] = preferences.getInt("node_gcb0");
+    meshcom_settings.node_gcb[1] = preferences.getInt("node_gcb1");
+    meshcom_settings.node_gcb[2] = preferences.getInt("node_gcb2");
+    meshcom_settings.node_gcb[3] = preferences.getInt("node_gcb3");
+    meshcom_settings.node_gcb[4] = preferences.getInt("node_gcb4");
+
+    meshcom_settings.node_country = preferences.getInt("node_ctry");    // 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
+
+    meshcom_settings.node_track_freq = preferences.getFloat("node_track", 0);
+
 }
 
 void save_settings(void)
@@ -139,6 +190,57 @@ void save_settings(void)
 
     // CMCU-811
     preferences.putFloat("node_co2", meshcom_settings.node_co2);
+
+    // MCP23017
+    preferences.putInt("node_mcp17", meshcom_settings.node_mcp17io);
+    preferences.putInt("node_mcp17o", meshcom_settings.node_mcp17out);
+    preferences.putInt("node_mcp17i", meshcom_settings.node_mcp17in);
+    
+    strVar = meshcom_settings.node_mcp17t[0];
+    preferences.putString("node_mcp170", strVar); 
+    strVar = meshcom_settings.node_mcp17t[1];
+    preferences.putString("node_mcp171", strVar); 
+    strVar = meshcom_settings.node_mcp17t[2];
+    preferences.putString("node_mcp172", strVar); 
+    strVar = meshcom_settings.node_mcp17t[3];
+    preferences.putString("node_mcp173", strVar); 
+    strVar = meshcom_settings.node_mcp17t[4];
+    preferences.putString("node_mcp174", strVar); 
+    strVar = meshcom_settings.node_mcp17t[5];
+    preferences.putString("node_mcp175", strVar); 
+    strVar = meshcom_settings.node_mcp17t[6];
+    preferences.putString("node_mcp176", strVar); 
+    strVar = meshcom_settings.node_mcp17t[7];
+    preferences.putString("node_mcp177", strVar); 
+
+    strVar = meshcom_settings.node_mcp17t[8];
+    preferences.putString("node_mcp178", strVar); 
+    strVar = meshcom_settings.node_mcp17t[9];
+    preferences.putString("node_mcp179", strVar); 
+    strVar = meshcom_settings.node_mcp17t[10];
+    preferences.putString("node_mcp1710", strVar); 
+    strVar = meshcom_settings.node_mcp17t[11];
+    preferences.putString("node_mcp1711", strVar); 
+    strVar = meshcom_settings.node_mcp17t[12];
+    preferences.putString("node_mcp1712", strVar); 
+    strVar = meshcom_settings.node_mcp17t[13];
+    preferences.putString("node_mcp1713", strVar); 
+    strVar = meshcom_settings.node_mcp17t[14];
+    preferences.putString("node_mcp1714", strVar); 
+    strVar = meshcom_settings.node_mcp17t[15];
+    preferences.putString("node_mcp1715", strVar); 
+
+	// GM Fields
+    preferences.putInt("node_gch", meshcom_settings.node_gch);
+    preferences.putInt("node_gcb0", meshcom_settings.node_gcb[0]);
+    preferences.putInt("node_gcb1", meshcom_settings.node_gcb[1]);
+    preferences.putInt("node_gcb2", meshcom_settings.node_gcb[2]);
+    preferences.putInt("node_gcb3", meshcom_settings.node_gcb[3]);
+    preferences.putInt("node_gcb4", meshcom_settings.node_gcb[4]);
+
+    preferences.putInt("node_ctry", meshcom_settings.node_country);    // 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
+
+    preferences.putFloat("node_track", meshcom_settings.node_track_freq);
 
     preferences.end();
 

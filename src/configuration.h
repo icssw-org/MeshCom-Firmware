@@ -7,8 +7,8 @@ definitions
 #include <Arduino.h>
 
 #define SOURCE_TYPE "C"
-#define SOURCE_VERSION "4.31"
-#define SOURCE_VERSION_SUB "a"
+#define SOURCE_VERSION "4.32"
+#define SOURCE_VERSION_SUB "e"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -35,7 +35,8 @@ definitions
     #define TX_POWER_MIN 1
     #define ENABLE_BMX280
     #define ENABLE_BMX680
-    //#define BUTTON_PIN WB_IO1  // not working in combination with GPS module
+    // not yet implemented    #define ENABLE_MCP23017
+    #define BUTTON_PIN WB_IO6        // only in combination with RAK13002
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
     #define ENABLE_GPS
 #endif
@@ -66,6 +67,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
     #define SX127X
     #define TX_POWER_MAX 17  // max 17 dBm
     #define TX_POWER_MIN 1
@@ -83,6 +85,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
     #define SX126X
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
@@ -100,6 +103,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
@@ -113,6 +117,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
@@ -127,6 +132,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
@@ -140,6 +146,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
@@ -159,8 +166,8 @@ definitions
 #define LORA_APRS_PREAMBLE_LENGTH 8  // Same for Tx and Rx
 
 #define LORA_BANDWIDTH 1         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
-#define LORA_SPREADING_FACTOR 11 // [SF7..SF12]
-#define LORA_CODINGRATE 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
+#define LORA_SF 11 // [SF7..SF12]
+#define LORA_CR 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
 #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
 
 #define LORA_SYMBOL_TIMEOUT 0    // Symbols
@@ -200,8 +207,9 @@ definitions
 #define ALIVERESET_INTERVAL 2 * 10 * 30    // 1/2 Stunde
 #define BLEBLINK_INTERVAL 3000             // BLEBLINK interval in milliseconds
 
-#define MAX_MHEARD 50                      // max count of messages in mheard ringbuffer
-#define MAX_RING 50                        // max count of messages in ringbuffer
+#define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer
+#define MAX_RING 40                        // max count of messages in ringbuffer
+#define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message

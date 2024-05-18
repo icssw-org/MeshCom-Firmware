@@ -18,6 +18,7 @@ extern bool bDEBUG;
 extern bool bLORADEBUG;
 extern bool bBLEDEBUG;
 extern bool bWXDEBUG;
+extern bool bIODEBUG;
 
 extern bool bPosDisplay;
 extern bool bDisplayOff;
@@ -37,6 +38,9 @@ extern bool bBMEON;
 extern bool bBME680ON;
 extern bool bMCU811ON;
 
+extern bool bTCA9548A;
+extern bool bMCP23017;
+
 extern bool bONEWIRE;
 
 extern bool bLPS33;
@@ -51,6 +55,8 @@ extern bool bBLElong;
 
 extern bool bGATEWAY;
 extern bool bMESH;
+extern bool bWEBSERVER;
+extern bool bWIFIAP;
 extern bool bEXTUDP;
 extern bool bEXTSER;
 
@@ -77,6 +83,10 @@ extern uint8_t own_msg_id[MAX_RING][5];
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];
 extern int iWrite;
 extern int iRead;
+
+extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE];
+extern int RAWLoRaWrite;
+extern int RAWLoRaRead;
 
 extern bool hasMsgFromPhone;
 
@@ -129,3 +139,7 @@ extern unsigned long hb_timer;           // GW Server-Heartbeat-Timer
 // batt
 extern float global_batt;
 extern int global_proz;
+
+extern char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
+extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
+extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Update Time

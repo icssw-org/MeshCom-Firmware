@@ -13,7 +13,6 @@
 #include <RadioLib.h>
 
 #include <Wire.h>               
-#include "SSD1306Wire.h"
 #include <SPI.h>
 #include <WiFi.h>
 
@@ -24,6 +23,7 @@
 #include "bmx280.h"
 #include "bme680.h"
 #include "mcu811.h"
+#include "io_functions.h"
 
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
@@ -34,9 +34,11 @@
 #include <batt_functions.h>
 #include <lora_functions.h>
 #include <udp_functions.h>
+#include <web_functions.h>
 #include <mheard_functions.h>
 #include <clock.h>
 #include <onewire_functions.h>
+#include <lora_setchip.h>
 
 #ifndef BOARD_TLORA_OLV216
     #include <lora_setchip.h>
@@ -59,6 +61,8 @@ extern XPowersLibInterface *PMU;
     extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 #elif defined(BOARD_HELTEC_V3)
     extern U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2;
+#elif defined(BOARD_RAK4630)
+    extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 #else
     extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 #endif
@@ -376,6 +380,14 @@ void esp32setup()
     bMCU811ON =  meshcom_settings.node_sset2 & 0x0008;
     bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
+    bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
+    bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
+
+    // if Node is in WifiAP Mode -> no Gateway posible
+    if(bWIFIAP && bGATEWAY)
+    {
+        bGATEWAY=false;
+    }
 
     if(bBMPON)
     {
@@ -423,12 +435,6 @@ void esp32setup()
         }
     #endif
 
-	// Initialize temp sensor
-    //#ifndef BOARD_TLORA_OLV216
-        if(bONEWIRE)
-            init_onewire();
-    //#endif
-
     _GW_ID = getMacAddr();
 
     #ifdef BOARD_HELTEC_V3
@@ -456,6 +462,15 @@ void esp32setup()
     #if defined(ENABLE_BMX680)
         setupBME680();
     #endif
+
+    // MCP23017
+    #if defined(ENABLE_MCP23017)
+        setupMCP23017();
+    #endif
+
+	// Initialize temp sensor
+    if(bONEWIRE)
+        init_onewire();
 
 
     //#if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)  || defined(BOARD_E22)
@@ -540,74 +555,33 @@ void esp32setup()
     // and check if the configuration was changed successfully
     if(bRadio)
     {
-        // set bandwidth 
-        float rf_bw = LORA_BANDWIDTH;
-        if(meshcom_settings.node_bw <= 0)
-            meshcom_settings.node_bw = LORA_BANDWIDTH;
-        else
-            rf_bw = meshcom_settings.node_bw;
-
-        if(rf_bw != 125 && rf_bw != 250)
-            rf_bw = LORA_BANDWIDTH;
-
-        Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", rf_bw);
+        lora_setcountry(meshcom_settings.node_country);
 
         // set carrier frequency
-        float rf_freq = RF_FREQUENCY;
-        if(meshcom_settings.node_freq <= 0)
-            meshcom_settings.node_freq = RF_FREQUENCY;
-        else
-            rf_freq = meshcom_settings.node_freq;
-
-        float dec_bandwith = (rf_bw/2.0)/100.0;
-
-        if(!((rf_freq >= (430.0 + dec_bandwith) && rf_freq <= (439.000 - dec_bandwith)) || (rf_freq >= (869.4 + dec_bandwith) && rf_freq <= (869.65 - dec_bandwith))))
-            rf_freq = RF_FREQUENCY;
-
-        Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", rf_freq);
-
-        if (radio.setFrequency(rf_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
+        Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", meshcom_settings.node_freq);
+        if (radio.setFrequency(meshcom_settings.node_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
             Serial.println(F("Selected frequency is invalid for this module!"));
             while (true);
         }
 
-
-        if (radio.setBandwidth(rf_bw) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
+        // set bandwidth 
+        Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", meshcom_settings.node_bw);
+        if (radio.setBandwidth(meshcom_settings.node_bw) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
             Serial.println(F("Selected bandwidth is invalid for this module!"));
             while (true);
         }
 
 
         // set spreading factor 
-        int rf_sf = LORA_SF;
-        if(meshcom_settings.node_sf <= 0)
-            meshcom_settings.node_sf = LORA_SF;
-        else
-            rf_sf = meshcom_settings.node_sf;
-
-        if(rf_sf < 6 ||  rf_sf > 12)
-            rf_sf = LORA_SF;
-
-        Serial.printf("[LoRa]...RF_SF: %i\n", rf_sf);
-
-        if (radio.setSpreadingFactor(rf_sf) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR) {
+        Serial.printf("[LoRa]...RF_SF: %i\n", meshcom_settings.node_sf);
+        if (radio.setSpreadingFactor(meshcom_settings.node_sf) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR) {
             Serial.println(F("Selected spreading factor is invalid for this module!"));
             while (true);
         }
 
         // set coding rate 
-        int rf_cr = LORA_CR;
-        if(meshcom_settings.node_cr <= 0)
-            meshcom_settings.node_cr = LORA_CR;
-        else
-            rf_cr = meshcom_settings.node_cr;
-
-        if(rf_cr < 5 ||  rf_cr > 8)
-            rf_cr = LORA_CR;
-
-        Serial.printf("[LoRa]...RF_CR: 4/%i\n", rf_cr);
-
-        if (radio.setCodingRate(rf_cr) == RADIOLIB_ERR_INVALID_CODING_RATE) {
+        Serial.printf("[LoRa]...RF_CR: 4/%i\n", meshcom_settings.node_cr);
+        if (radio.setCodingRate(meshcom_settings.node_cr) == RADIOLIB_ERR_INVALID_CODING_RATE) {
             Serial.println(F("Selected coding rate is invalid for this module!"));
             while (true);
         }
@@ -862,12 +836,21 @@ void esp32setup()
 
     ///////////////////////////////////////////////////////
     // WIFI
-    if(bGATEWAY || bEXTUDP)
+    if(bGATEWAY || bEXTUDP || bWEBSERVER)
     {
         if(startWIFI())
         {
-            if(bGATEWAY)
-                startMeshComUDP();
+            if(bGATEWAY || bWEBSERVER)
+            {
+                // get Wifi DHCP, start WIfI
+                sendMeshComHeartbeat();
+            }
+
+
+            if(bWEBSERVER)
+            {
+                startWebserver();
+            }
 
             if(bEXTUDP)
                 startExternUDP();
@@ -1219,6 +1202,8 @@ void esp32loop()
     if(bLoopActive)
         Serial.printf("[LOOP] 1\n");
 
+    checkButtonState();
+
     // BLE
     if (deviceConnected)
     {
@@ -1260,6 +1245,8 @@ void esp32loop()
 
     if(bLoopActive)
         Serial.printf("[LOOP] 1-3\n");
+
+    checkButtonState();
 
     if (isPhoneReady == 1)
     {
@@ -1312,6 +1299,12 @@ void esp32loop()
     // gps refresh every 10 sec
     if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
     {
+        // get i/o state
+        if(loopMCP23017())
+        {
+        }
+
+
         #ifdef ENABLE_GPS
             unsigned int igps = getGPS();
             if(igps > 0)
@@ -1332,6 +1325,8 @@ void esp32loop()
 
     if(bLoopActive)
         Serial.printf("[LOOP] 3\n");
+
+    checkButtonState();
 
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
@@ -1433,6 +1428,8 @@ void esp32loop()
         }
     }
 
+    checkButtonState();
+
 //#ifndef BOARD_TLORA_OLV216
     if(bONEWIRE)
     {
@@ -1493,6 +1490,8 @@ void esp32loop()
     if(bLoopActive)
         Serial.printf("[LOOP] 8\n");
 
+    checkButtonState();
+
     if(bMCU811ON)
     {
         if(MCU811TimeWait == 0)
@@ -1551,6 +1550,8 @@ void esp32loop()
     if(bLoopActive)
         Serial.printf("[LOOP] A\n");
 
+    checkButtonState();
+
     ////////////////////////////////////////////////
     // WIFI Gateway functions
     if(bGATEWAY)
@@ -1572,10 +1573,20 @@ void esp32loop()
 
     }
 
+    checkButtonState();
+
     if(bEXTUDP)
     {
         getExternUDP();
     }
+
+    checkButtonState();
+
+    if(bWEBSERVER)
+    {
+        loopWebserver();
+    }
+
     //
     ////////////////////////////////////////////////
 
@@ -1595,6 +1606,9 @@ void checkRX(void)
     // NOTE: receive() is a blocking method!
     //       See example ReceiveInterrupt for details
     //       on non-blocking reception method.
+
+    if(is_receiving)    // receive in action
+        return;
 
     is_receiving=true;
 

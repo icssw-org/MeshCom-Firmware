@@ -245,6 +245,21 @@ struct s_meshcom_settings
 	// CMCU-811
 	float node_co2 = 0;
 
+	// MCP23017
+	int node_mcp17io = 0;
+	char node_mcp17t[16][16] = {0};
+	int node_mcp17out = 0;
+	int node_mcp17in = 0;
+
+	// GC Fields
+	int node_gch = 0;
+	int node_gcb[5] = {0};
+
+	// internatioal fields
+	int node_country = 0;	// 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
+
+	float node_track_freq = 0;
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
@@ -352,6 +367,21 @@ struct s_meshcomcompat_settings
 
 	// CMCU-811
 	float node_co2 = 0;
+
+	// MCP23017
+	int node_mcp17io = 0;
+	char node_mcp17t[16][16] = {0};
+	int node_mcp17out = 0;
+	int node_mcp17in = 0;
+
+	// GC Fields
+	int node_gch = 0;
+	int node_gcb[5] = {0};
+
+	// internatioal fields
+	int node_country = 0;	// 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
+
+	float node_track_freq = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;

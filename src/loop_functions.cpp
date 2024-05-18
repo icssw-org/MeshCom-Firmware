@@ -27,6 +27,7 @@ bool bDEBUG = false;
 bool bLORADEBUG = false;
 bool bBLEDEBUG = false;
 bool bWXDEBUG = false;
+bool bIODEBUG = false;
 
 bool bPosDisplay = true;
 bool bDisplayOff = false;
@@ -40,6 +41,9 @@ bool bBMEON = false;
 bool bBME680ON = false;
 bool bMCU811ON = false;
 
+bool bTCA9548A=false;
+bool bMCP23017=false;
+
 bool bONEWIRE = false;
 
 bool bLPS33 = false;
@@ -49,6 +53,8 @@ bool bme680_enabled = false;
 
 bool bGATEWAY = false;
 bool bMESH = false;
+bool bWEBSERVER = false;
+bool bWIFIAP = false;
 bool bEXTUDP = false;
 bool bEXTSER = false;
 
@@ -81,14 +87,15 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
 #elif defined(BOARD_RAK4630)
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);  //RESET CLOCK DATA
 #else
-    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/ SCL, /* data=*/ SDA, /* reset=*/ U8X8_PIN_NONE);  //RESET CLOCK DATA
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 #endif
 
 unsigned int msg_counter = 0;
 
+// Buffer to hold temp info-frames
 uint8_t RcvBuffer[UDP_TX_BUF_SIZE * 2] = {0};
 
-// nur eigene msg_id
+// RINGBUFFER to hold own msg_id
 uint8_t own_msg_id[MAX_RING][5] = {0};
 int iWriteOwn=0;
 
@@ -97,20 +104,26 @@ unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE] = {0};
 int iWrite=0;
 int iRead=0;
 
-bool hasMsgFromPhone = false;
+// RINGBUFFER for incomming LoRa RX msg_id
+uint8_t ringBufferLoraRX[MAX_RING][4] = {0};
+uint8_t loraWrite = 0;   // counter for ringbuffer
 
-// BLE Ringbuffer to phone
+// RINGBUFFER RAW LoRa RX
+unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE] = {0};
+int RAWLoRaWrite=0;
+int RAWLoRaRead=0;
+
+// RINGBUFFER BLE to phone
 unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE] = {0};
 int toPhoneWrite=0;
 int toPhoneRead=0;
 
-// BLE Commando-Ringbuffer to phone
+// RINGBUFFER BLE Commandos to phone
 unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE] = {0};
 int ComToPhoneWrite=0;
 int ComToPhoneRead=0;
 
-uint8_t ringBufferLoraRX[MAX_RING][4] = {0}; //Ringbuffer for UDP TX from LoRa RX, first byte is length
-uint8_t loraWrite = 0;   // counter for ringbuffer
+bool hasMsgFromPhone = false;
 
 // LoRa RX/TX sequence control
 int cmd_counter = 0;      // ticker dependant on main cycle delay time
@@ -166,7 +179,6 @@ unsigned long getUnixClock()
 
 
 	return ut - ot;
-
 }
 
 /** @brief Function adding messages into outgoing BLE ringbuffer
@@ -284,6 +296,17 @@ void addLoraRxBuffer(unsigned int msg_id)
 
     if (loraWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         loraWrite = 0;
+}
+
+int checkOwnTx(uint8_t compBuffer[4])
+{
+    for(int ilo=0; ilo<MAX_RING; ilo++)
+    {
+        if(memcmp(own_msg_id[ilo], compBuffer, 4) == 0)
+            return ilo;
+    }
+
+    return -1;
 }
 
 int pageLine[7][3] = {0};
@@ -908,10 +931,10 @@ void checkButtonState()
                 {
                     bPressed = true;
 
-                    iPress++;
+                    if(iPress < 3)
+                        iPress++;
 
-                    if(iPress == 1)
-                        checkButtonTime = 8;
+                    checkButtonTime = 20;
 
                     if(bDEBUG)
                         Serial.printf("checkButtonTime:%i iPress:%i\n", checkButtonTime, iPress);
@@ -926,10 +949,27 @@ void checkButtonState()
                 bPressed = false;
 
                 checkButtonTime--;
+
                 if(checkButtonTime < 0)
                 {
-                    checkButtonTime = 0;
+                    if(iPress == 3)
+                    {
+                        if(bDEBUG)
+                            Serial.println("BUTTON triple press");
 
+                        bDisplayTrack=!bDisplayTrack;
+
+                        if(bDisplayTrack)
+                            commandAction((char*)"--track on", false);
+                        else
+                            commandAction((char*)"--track off", false);
+
+                        bDisplayOff=false;
+
+                        sendDisplayHead(false);
+
+                    }
+                    else
                     if(iPress == 2)
                     {
                         if(bDEBUG)
@@ -939,20 +979,15 @@ void checkButtonState()
                             commandAction((char*)"--sendtrack", false);
                         else
                             commandAction((char*)"--sendpos", false);
-
                     }
                     else
-                    if(iPress == 1)
+                    if(iPress == 1 && !bDisplayTrack)
                     {
                         if(bDEBUG)
-                            Serial.println("BUTTON singel press");
+                            Serial.printf("BUTTON singel press %i %i\n", pageLastLineAnz[pagePointer], bDisplayTrack);
 
-                        if(pageLastLineAnz[pagePointer] == 0 || bDisplayTrack)
+                        if(pageLastLineAnz[pagePointer] == 0)
                         {
-                            bDisplayTrack =false;
-                            
-                            addBLECommandBack((char*)"--track off");
-
                             pageHold=0;
 
                             pagePointer = pageLastPointer - 1;
@@ -999,6 +1034,8 @@ void checkButtonState()
                             pageHold=5;
                         }
                     }
+
+                    checkButtonTime = 0;
 
                     iPress = 0;
                 }
@@ -1219,12 +1256,32 @@ String getTimeString()
     return (String)currTime;
 }
 
+String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
+{
+    char internal_message[UDP_TX_BUF_SIZE];
+
+    int ilpayload=aprsmsg.msg_payload.length();
+    if(ilpayload > 30)
+        ilpayload=30;
+
+    sprintf(internal_message, "%s %s:%08X %02X %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
+        aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track,
+        aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
+        aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(),
+        aprsmsg.payload_type, aprsmsg.msg_payload.substring(0, ilpayload).c_str());
+
+    
+    internal_message[UDP_TX_BUF_SIZE-1]=0x00;
+    
+    return (String)internal_message;
+}
+
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
     Serial.print(getTimeString());
-    Serial.printf(" %s: %03i %c x%08X %02X %i %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X FW:%02X LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+    Serial.printf(" %s: %03i %c x%08X %02X %i %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X FW:%02i:%c LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
-        aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_last_hw);
+        aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1341,6 +1398,14 @@ void sendMessage(char *msg_text, int len)
         }
     }
 
+    // store last message to compare later on
+    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+    own_msg_id[iWriteOwn][4]=0x00;
+    iWriteOwn++;
+    if(iWriteOwn >= MAX_RING)
+        iWriteOwn=0;
+
+    // local messages send to LoRa TX
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     iWrite++;
@@ -1353,13 +1418,6 @@ void sendMessage(char *msg_text, int len)
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
     }
 
-    // store last message to compare later on
-    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
-    own_msg_id[iWriteOwn][4]=0x00;
-    iWriteOwn++;
-    if(iWriteOwn >= MAX_RING)
-        iWriteOwn=0;
-
     #ifdef ESP32
         // Extern Server
         if(bEXTUDP)
@@ -1370,9 +1428,18 @@ void sendMessage(char *msg_text, int len)
     #endif
 }
 
-String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
+String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, char lat_c, double plon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
 {
-    if(lat == 0 or lon == 0)
+    double lat=plat;
+    if(plat < 0.0)
+        lat = plat * -1.0;
+
+    double lon=plon;
+    if(plon < 0.0)
+        lon = plon * -1.0;
+
+
+    if(lat == 0.0 or lon == 0.0)
     {
         DEBUG_MSG("APRS", "Error PositionToAPRS");
         return "";
@@ -1382,6 +1449,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
     // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E#/B=005/A=000272/P=1005.1/H=42.5/T=29.4/Q=1005.7 HW:04 MOD:03 FCS:15DC FW:17 LH:09
+
 	double slat = 100.0;
     slat = lat*slat;
 	double slon = 100.0;
@@ -1559,6 +1627,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             Serial.printf(" LO-APRS:%s\n", msg_buffer+3);
         }
 
+        // local LoRa-APRS position-messages send to LoRa TX
         ringBuffer[iWrite][0]=ilng;
         memcpy(ringBuffer[iWrite]+1, msg_buffer, ilng);
         iWrite++;
@@ -1633,6 +1702,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             Serial.println();
         }
 
+        // local position-messages send to LoRa TX
         ringBuffer[iWrite][0]=aprsmsg.msg_len;
         memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
         iWrite++;
@@ -1708,6 +1778,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
         Serial.println();
     }
 
+    // ACK-Message send to LoRa TX
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     iWrite++;

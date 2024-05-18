@@ -11,4 +11,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady);
 void decodeMHeard(char mh_buffer[], struct mheardLine &mheardLine);
 void showMHeard();
 void sendMheard();
+
+String getHardwareLong(uint8_t hwid);
+char* getPayloadType(char ptype);
+
 #endif

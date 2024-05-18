@@ -15,6 +15,8 @@
 // OLED Display 1306 128 x 64 px
 #include <U8g2lib.h> // Click to install library: http://librarymanager/All#u8g2
 
+unsigned long getUnixClock();
+
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
 void sendDisplayHead(bool bInit);
 void sendDisplayTrack();
@@ -36,11 +38,14 @@ String getTimeString();
 void printBuffer(uint8_t *buffer, int len);
 void printAsciiBuffer(uint8_t *buffer, int len);
 void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
+String charBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLECommandBack(char *text);
 void addLoraRxBuffer(unsigned int msg_id);
+
+int checkOwnTx(uint8_t compBuffer[4]);
 
 void sendMessage(char *msg_text, int len);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);

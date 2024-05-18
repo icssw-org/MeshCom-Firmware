@@ -2,11 +2,13 @@
 #include <loop_functions.h>
 #include <debugconf.h>
 #include <ArduinoJson.h>
+#include <mheard_functions.h>
 
 char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 double mheardLat[MAX_MHEARD];
 double mheardLon[MAX_MHEARD];
+unsigned long mheardEpoch[MAX_MHEARD];
 
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 
@@ -21,6 +23,9 @@ void initMheard()
     {
         memset(mheardBuffer[iset], 0x00, 60);
         memset(mheardCalls[iset], 0x00, 10);
+        mheardLat[iset]=0;
+        mheardLon[iset]=0;
+        mheardEpoch[iset]=0;
     }
 
     mheardWrite=0;
@@ -114,6 +119,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     }
 
     strcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str());
+    
+    mheardEpoch[ipos] = getUnixClock();
     /*
     String mh_time;
     String mh_callsign;
@@ -122,7 +129,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     int16_t mh_rssi;
     int8_t mh_snr;
     */
-    sprintf(mheardBuffer[ipos], "%s@%s@%c@%i@%i@%i@%i@%.0lf@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw, mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist);
+    sprintf(mheardBuffer[ipos], "%s@%s@%c@%i@%i@%i@%i@%.1lf@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw, mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist);
 
     // generate JSON
     JsonDocument mhdoc;
@@ -162,6 +169,7 @@ String getValue(String data, char separator, int index)
     }
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
+
 void sendMheard()
 {
     struct mheardLine mheardLine;
@@ -170,53 +178,55 @@ void sendMheard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
+            if(mheardEpoch[iset]+60*60*24 > getUnixClock())
+            {
+                initMheardLine(mheardLine);
 
-            initMheardLine(mheardLine);
+                mheardLine.mh_callsign = mheardCalls[iset];
+                String mhstringdec = mheardBuffer[iset];
 
-            mheardLine.mh_callsign = mheardCalls[iset];
-            String mhstringdec = mheardBuffer[iset];
+                mheardLine.mh_date = getValue(mhstringdec, '@', 0);
+                mheardLine.mh_time = getValue(mhstringdec, '@', 1);
 
-            mheardLine.mh_date = getValue(mhstringdec, '@', 0);
-            mheardLine.mh_time = getValue(mhstringdec, '@', 1);
+                String xval = getValue(mhstringdec, '@', 2);
+                mheardLine.mh_payload_type = xval.charAt(0);
 
-            String xval = getValue(mhstringdec, '@', 2);
-            mheardLine.mh_payload_type = xval.charAt(0);
+                xval = getValue(mhstringdec, '@', 3);
+                mheardLine.mh_hw = xval.toInt();
 
-            xval = getValue(mhstringdec, '@', 3);
-            mheardLine.mh_hw = xval.toInt();
+                xval = getValue(mhstringdec, '@', 4);
+                mheardLine.mh_mod = xval.toInt();
 
-            xval = getValue(mhstringdec, '@', 4);
-            mheardLine.mh_mod = xval.toInt();
+                xval = getValue(mhstringdec, '@', 5);
+                mheardLine.mh_rssi = xval.toInt();
 
-            xval = getValue(mhstringdec, '@', 5);
-            mheardLine.mh_rssi = xval.toInt();
+                xval = getValue(mhstringdec, '@', 6);
+                mheardLine.mh_snr = xval.toInt();
 
-            xval = getValue(mhstringdec, '@', 6);
-            mheardLine.mh_snr = xval.toInt();
+                xval = getValue(mhstringdec, '@', 7);
+                mheardLine.mh_dist = xval.toFloat();
 
-            xval = getValue(mhstringdec, '@', 7);
-            mheardLine.mh_dist = xval.toFloat();
+                // generate JSON
+                JsonDocument mhdoc;
 
-            // generate JSON
-            JsonDocument mhdoc;
+                mhdoc["TYP"] = "MH";
+                mhdoc["CALL"] = mheardLine.mh_callsign.c_str();
+                mhdoc["DATE"] = mheardLine.mh_date.c_str();
+                mhdoc["TIME"] = mheardLine.mh_time.c_str();
+                mhdoc["PLT"] = (uint8_t)mheardLine.mh_payload_type;
+                mhdoc["HW"] = mheardLine.mh_hw;
+                mhdoc["MOD"] = mheardLine.mh_mod;
+                mhdoc["RSSI"] = mheardLine.mh_rssi;
+                mhdoc["SNR"] = mheardLine.mh_snr;
+                mhdoc["DIST"] = mheardLine.mh_dist;
 
-            mhdoc["TYP"] = "MH";
-            mhdoc["CALL"] = mheardLine.mh_callsign.c_str();
-            mhdoc["DATE"] = mheardLine.mh_date.c_str();
-            mhdoc["TIME"] = mheardLine.mh_time.c_str();
-            mhdoc["PLT"] = (uint8_t)mheardLine.mh_payload_type;
-            mhdoc["HW"] = mheardLine.mh_hw;
-            mhdoc["MOD"] = mheardLine.mh_mod;
-            mhdoc["RSSI"] = mheardLine.mh_rssi;
-            mhdoc["SNR"] = mheardLine.mh_snr;
-            mhdoc["DIST"] = mheardLine.mh_dist;
+                // send to Phone
+                uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
+                bleBuffer[0] = 0x44;
+                serializeJson(mhdoc, bleBuffer+1, measureJson(mhdoc)+1);
 
-            // send to Phone
-            uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
-            bleBuffer[0] = 0x44;
-            serializeJson(mhdoc, bleBuffer+1, measureJson(mhdoc)+1);
-
-            addBLEComToOutBuffer(bleBuffer, measureJson(mhdoc)+1);
+                addBLEComToOutBuffer(bleBuffer, measureJson(mhdoc)+1);
+            }
         }
     }
 }
@@ -232,45 +242,56 @@ void showMHeard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            Serial.printf("|------------|------------|----------|-----|-----------------|-----|------|------|------|\n");
+            if(mheardEpoch[iset]+60*60*24 > getUnixClock())
+            {
+                Serial.printf("|------------|------------|----------|-----|-----------------|-----|------|------|------|\n");
 
-            Serial.printf("| %-10.10s | ", mheardCalls[iset]);
-            
-            decodeMHeard(mheardBuffer[iset], mheardLine);
+                Serial.printf("| %-10.10s | ", mheardCalls[iset]);
+                
+                decodeMHeard(mheardBuffer[iset], mheardLine);
 
-            Serial.printf("%-10.10s | ", mheardLine.mh_date.c_str());
-            Serial.printf("%-8.8s | ", mheardLine.mh_time.c_str());
-            if(mheardLine.mh_payload_type == ':')
-                Serial.printf("TXT | ");
-            else
-            if(mheardLine.mh_payload_type == '!')
-                Serial.printf("POS | ");
-            else
-            if(mheardLine.mh_payload_type == '@')
-                Serial.printf("WX  | ");
-            else
-                Serial.printf("??? | ");
+                Serial.printf("%-10.10s | ", mheardLine.mh_date.c_str());
+                Serial.printf("%-8.8s | ", mheardLine.mh_time.c_str());
 
-            int ihw=mheardLine.mh_hw;
-            if(mheardLine.mh_hw == 39)
-                ihw=13;
-            if(mheardLine.mh_hw == 43)
-                ihw=14;
-            if(ihw < 0 || ihw >= max_hardware)
-                ihw=0;
+                Serial.printf("%-3.3s | ", getPayloadType(mheardLine.mh_payload_type));
 
-            if(ihw == 0)
-                Serial.printf("%-11.11s/%03i | ", HardWare[ihw].c_str(), mheardLine.mh_hw);
-            else
-                Serial.printf("%-15.15s | ", HardWare[ihw].c_str());
+                Serial.printf("%-11.11s/%03i | ", getHardwareLong(mheardLine.mh_hw).c_str(), mheardLine.mh_hw);
 
-            Serial.printf("%3i | ", mheardLine.mh_mod);
-            Serial.printf("%4i | ", mheardLine.mh_rssi);
-            Serial.printf("%4i |", mheardLine.mh_snr);
-            //Serial.printf("%5.0lf | %.4lf %.4lf\n", mheardLine.mh_dist, mheardLat[iset], mheardLon[iset]);
-            Serial.printf("%5.0lf |\n", mheardLine.mh_dist);
+                Serial.printf("%3i | ", mheardLine.mh_mod);
+                Serial.printf("%4i | ", mheardLine.mh_rssi);
+                Serial.printf("%4i |", mheardLine.mh_snr);
+                //Serial.printf("%5.0lf | %.4lf %.4lf\n", mheardLine.mh_dist, mheardLat[iset], mheardLon[iset]);
+                Serial.printf("%5.1lf |\n", mheardLine.mh_dist);
+            }
         }
     }
 
     Serial.printf("\\---------------------------------------------------------------------------------------/\n");
+}
+
+char* getPayloadType(char ptype)
+{
+    if(ptype == ':')
+        return (char*)"TXT";
+    else
+    if(ptype == '!')
+        return (char*)"POS";
+    else
+    if(ptype == '@')
+        return (char*)"WX";
+
+    return (char*)"???";
+}
+
+String getHardwareLong(uint8_t hwid)
+{
+    int ihw=hwid;
+    if(ihw == 39)
+        ihw=13;
+    if(ihw == 43)
+        ihw=14;
+    if(ihw < 0 || ihw >= max_hardware)
+        ihw=0;
+
+    return HardWare[ihw];
 }

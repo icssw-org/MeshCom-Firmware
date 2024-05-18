@@ -39,11 +39,12 @@ extern uint8_t udpRead;    // counter for ringbuffer
 static uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 // ETH Prototypes
-void sendHeartbeat();                                // heartbeat to server
 void sendUDP();                                      // UDP tx routine
+void sendHeartbeat();
 
 
 // MeshCom Common (esp32/nrf52) functions
+#include <lora_setchip.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <command_functions.h>
@@ -51,6 +52,7 @@ void sendUDP();                                      // UDP tx routine
 #include <batt_functions.h>
 #include <lora_functions.h>
 #include <udp_functions.h>
+#include <web_functions.h>
 #include <phone_commands.h>
 #include <mheard_functions.h>
 #include <clock.h>
@@ -379,10 +381,21 @@ void nrf52setup()
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
+    bBME680ON = meshcom_settings.node_sset2 & 0x0004;
+    bMCU811ON =  meshcom_settings.node_sset2 & 0x0008;
     bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
-    bBME680ON = meshcom_settings.node_sset2 & 0x0004;
+    bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
+    bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
 
+
+    // if Node is in WifiAP Mode -> no Gateway posible
+    if(bWIFIAP && bGATEWAY)
+    {
+        bGATEWAY=false;
+        bEXTSER=false;
+        bEXTUDP=false;
+    }
 
     global_batt = 4200.0;
 
@@ -620,6 +633,8 @@ void nrf52setup()
     //RadioEvents.PreAmpDetect = OnPreambleDetect;
     RadioEvents.HeaderDetect = OnHeaderDetect;
     
+    lora_setcountry(meshcom_settings.node_country);
+
     //  Initialize the LoRa Transceiver
     RadioInit();
 
@@ -627,17 +642,30 @@ void nrf52setup()
     DEBUG_MSG("RADIO", "Setting new LoRa Sync Word");
     Radio.SetPublicNetwork(true);
 
-    Serial.printf("[LoRa]...RF_FREQUENCY: %i kHz\n", RF_FREQUENCY);
+    // set bandwidth 
+    Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", getBW());
+
+    // set spreading factor 
+    Serial.printf("[LoRa]...RF_SF: %i\n",  getSF());
+
+    // coding rate
+    Serial.printf("[LoRa]...RF_CR: 4/%i\n", getCR());
+
+
+    // set carrier frequency
+    uint32_t ifreq=meshcom_settings.node_freq/10;
+    ifreq=ifreq*10;
+    Serial.printf("[LoRa]...RF_FREQUENCY: %.4f MHz\n", meshcom_settings.node_freq/1000000.);
 
     //  Set the LoRa Frequency
-    Radio.SetChannel(RF_FREQUENCY);
+    Radio.SetChannel(ifreq);
 
     //  Configure the LoRa Transceiver for receiving messages
     Radio.SetRxConfig(
         MODEM_LORA,
-        LORA_BANDWIDTH,
-        LORA_SPREADING_FACTOR,
-        LORA_CODINGRATE,
+        (uint32_t)meshcom_settings.node_bw,
+        (uint32_t)meshcom_settings.node_sf,
+        (uint8_t)meshcom_settings.node_cr,
         0, //  AFC bandwidth: Unused with LoRa
         LORA_PREAMBLE_LENGTH,
         LORA_SYMBOL_TIMEOUT,
@@ -651,28 +679,15 @@ void nrf52setup()
     );
 
     // Set Radio TX configuration
-    int8_t tx_power = TX_OUTPUT_POWER;
-    
-    if(meshcom_settings.node_power <= 0)
-        meshcom_settings.node_power = TX_OUTPUT_POWER;
-    else
-        tx_power=meshcom_settings.node_power;   //set by command
-
-    if(tx_power > TX_POWER_MAX)
-        tx_power= TX_POWER_MAX;
-
-    if(tx_power < TX_POWER_MIN)
-        tx_power= TX_POWER_MIN;
-
-    Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
+    Serial.printf("[LoRa]...RF_POWER: %i dBm\n", getPower());
 
     Radio.SetTxConfig(
         MODEM_LORA,
-        tx_power,
+        getPower(),
         0, // fsk only
-        LORA_BANDWIDTH,
-        LORA_SPREADING_FACTOR,
-        LORA_CODINGRATE,
+        (uint32_t)meshcom_settings.node_bw,
+        (uint32_t)meshcom_settings.node_sf,
+        (uint8_t)meshcom_settings.node_cr,
         LORA_PREAMBLE_LENGTH,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         true, // CRC ON
@@ -703,7 +718,7 @@ void nrf52setup()
 
     delay(100);
 
-    if (bGATEWAY)
+    if (bGATEWAY || bWEBSERVER)
     {
         //////////////////////////////////////////////////////
         // ETHERNET INIT
@@ -718,6 +733,11 @@ void nrf52setup()
             Serial.println("=====================================");
             Serial.printf("GATEWAY 4.0 RUNNING %s\n", neth.hasIPaddress?"ETH connect":"ETH no connect");
             Serial.println("=====================================");
+
+            if(bWEBSERVER)
+            {
+                startWebserver();
+            }
         }
         else
         {
@@ -756,6 +776,8 @@ void nrf52loop()
     // check if we have messages in ringbuffer to send
     //Serial.printf("is_receiving:%i tx_is_active:%i iWrite:%i iRead:%i \n", is_receiving, tx_is_active, iWrite, iRead);
     
+    checkButtonState();
+
     if(is_receiving == false && tx_is_active == false)
     {
         // channel is free
@@ -875,6 +897,8 @@ void nrf52loop()
     // posinfo
     //Serial.print(getTimeString());
     //Serial.printf(" posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
+
+    checkButtonState();
 
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
@@ -997,6 +1021,8 @@ void nrf52loop()
         }
     }
 
+    checkButtonState();
+
     mainStartTimeLoop();
 
     if(DisplayOffWait > 0)
@@ -1024,9 +1050,6 @@ void nrf52loop()
             #endif
         }
     }
-
-    
-    checkButtonState();
 
     checkSerialCommand();
 
@@ -1096,6 +1119,8 @@ void nrf52loop()
     }
     #endif
 
+    checkButtonState();
+
     // heartbeat
     if (bGATEWAY)
     {
@@ -1111,6 +1136,13 @@ void nrf52loop()
 
             hb_timer = millis();
         }
+    }
+
+    checkButtonState();
+
+    if(bWEBSERVER)
+    {
+        loopWebserver();
     }
 
     //  We are on FreeRTOS, give other tasks a chance to run
@@ -1443,7 +1475,6 @@ void sendUDP()
     }
 }
 
-
 /**@brief Function to send our heartbeat
  * longanme0x000xAABBCCDDKEEPGW0110x00
  *               GW_ID
@@ -1453,38 +1484,6 @@ void sendHeartbeat()
     if (!neth.hasIPaddress)
         return;
 
-    String keep = "KEEP";
-    String cfw = SOURCE_VERSION;
-    String firmware = "GW"+cfw;
-
-    uint8_t longname_len = strlen(meshcom_settings.node_call);
-    uint16_t hb_buffer_size = longname_len + 1 + sizeof(_GW_ID) + keep.length() + firmware.length();;
-    uint8_t hb_buffer[hb_buffer_size];
-
-    // Serial.print("\nHB buffer size: ");
-    // Serial.println(hb_buffer_size);
-
-    char longname_c[longname_len + 1];
-    strcpy(longname_c, neth._longname.c_str());
-    longname_c[longname_len] = 0x00;
-
-    char keep_c[keep.length()];
-    strcpy(keep_c, keep.c_str());
-
-    char firmware_c[firmware.length()];
-    strcpy(firmware_c, firmware.c_str());
-
-    // copying all together
-    memcpy(&hb_buffer, &meshcom_settings.node_call, longname_len + 1);
-    memcpy(&hb_buffer[longname_len + 1], &_GW_ID, sizeof(_GW_ID));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(neth._GW_ID)], &keep_c, sizeof(keep_c));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(neth._GW_ID) + sizeof(keep_c)], &firmware_c, sizeof(firmware_c));
-    
-    // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
-    //also avoid UDP tx when UDP is getting a packet
-    // add HB message to the ringbuffer
-    //DEBUG_MSG("UDP", "HB Buffer");
-    //neth.printBuffer(hb_buffer, hb_buffer_size);
-    addUdpOutBuffer(hb_buffer, hb_buffer_size);
+    sendKEEP();
 
 }

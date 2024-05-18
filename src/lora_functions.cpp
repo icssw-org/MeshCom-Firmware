@@ -60,11 +60,11 @@ unsigned long track_to_meshcom_timer = 0;
 //////////////////////////////////////////////////////////////////////////
 // LoRa RX functions
 
-/** @brief Function to be executed on Radio Rx Done event
- */
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
     uint8_t print_buff[30];
+
+    //Serial.printf("Start OnRxDone:<%-20.20s> %i\n", payload, size);
 
     if(payload[0] == 0x41)
     {
@@ -109,7 +109,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             }
             else
             {
-                if(print_buff[5] > 0x01 && print_buff[5] < 0x07)
+                if(print_buff[5] > 0x00)
                 {
                     print_buff[5]--;
 
@@ -139,13 +139,25 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         size = aprsmsg.msg_len;
 
-
         if(msg_type_b_lora == 0x00)
         {
             //Serial.printf("%03i RCV:%s\n", size, RcvBuffer+6);
         }
         else
         {
+            // LoRx RX to RAW-Buffer
+            memcpy(ringbufferRAWLoraRX[RAWLoRaWrite], charBuffer_aprs((char*)"RX", aprsmsg).c_str(), UDP_TX_BUF_SIZE-1);
+            RAWLoRaWrite++;
+            if(RAWLoRaWrite >= MAX_LOG)
+                RAWLoRaWrite=0;
+
+            if(RAWLoRaRead == RAWLoRaWrite)
+            {
+                RAWLoRaRead++;
+                if(RAWLoRaRead >= MAX_LOG)
+                    RAWLoRaRead=0;
+            }
+
             ///////////////////////////////////////////////
             // MHeard
             if(aprsmsg.msg_source_last != meshcom_settings.node_call)
@@ -273,9 +285,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             sendExtern(false, (char*)"lora", RcvBuffer, size);
                     #endif
 
-                    if(bGATEWAY)
-                        addNodeData(RcvBuffer, size, rssi, snr);
-
                     // print aprs message
                     if(bDisplayInfo)
                         printBuffer_aprs((char*)"RX-LoRa", aprsmsg);
@@ -323,12 +332,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                             // add rcvMsg to BLE out Buff
                             // size message is int -> uint16_t buffer size
+
+                            char destination_call[20];
+                            sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+
                             if(msg_type_b_lora == 0x3A)    // text message store&forward
                             {
-                                if(!(aprsmsg.msg_payload.indexOf(":ack") > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0))
-                                    sendDisplayText(aprsmsg, rssi, snr);
-
-                                if(strcmp(aprsmsg.msg_destination_call.c_str(), meshcom_settings.node_call) == 0)
+                                if(strcmp(destination_call, meshcom_settings.node_call) == 0)
                                 {
                                     int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
                                     int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
@@ -349,11 +359,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         addBLEOutBuffer(print_buff, 7);
                                     }
                                     else
-                                    if(iEnqPos <= 0)
-                                    {
-                                        addBLEOutBuffer(RcvBuffer, size);
-                                    }
-                                    else
                                     if(iEnqPos > 0)
                                     {
                                         unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
@@ -371,24 +376,41 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                         addBLEOutBuffer(tempRcvBuffer, tempsize);
                                     }
+                                    else
+                                    {
+                                        sendDisplayText(aprsmsg, rssi, snr);
+
+                                        addBLEOutBuffer(RcvBuffer, size);
+                                    }
                                 }
                                 else
                                 {
-                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) != 0)
+                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
                                     {
-                                        // APP Offline
-                                        if(isPhoneReady == 0)
+                                        sendDisplayText(aprsmsg, rssi, snr);
+                                    }
+                                    else
+                                    {
+                                        if(strcmp(destination_call, "*") == 0)
                                         {
-                                            aprsmsg.max_hop = aprsmsg.max_hop | 0x20;
+                                            sendDisplayText(aprsmsg, rssi, snr);
 
-                                            uint8_t tempRcvBuffer[255];
+                                            // APP Offline
+                                            if(isPhoneReady == 0)
+                                            {
+                                                aprsmsg.max_hop = aprsmsg.max_hop | 0x20;
 
-                                            uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+                                                uint8_t tempRcvBuffer[255];
 
-                                            addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                                uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                                                addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                            }
+                                            else
+                                            {
+                                                addBLEOutBuffer(RcvBuffer, size);
+                                            }
                                         }
-                                        else
-                                            addBLEOutBuffer(RcvBuffer, size);
                                     }
 
                                     if(bGATEWAY)
@@ -464,6 +486,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(msg_type_b_lora == 0x21)
                             {
                                 sendDisplayPosition(aprsmsg, rssi, snr);
+
+                                if(isPhoneReady > 0)
+                                    addBLEOutBuffer(RcvBuffer, size);
                             }
 
                             bool bNoMesh = false;
@@ -475,41 +500,46 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 bNoMesh = true;
 
                             // resend only Packet to all and !owncall 
-                            if(strcmp(aprsmsg.msg_destination_call.c_str(), meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && !bNoMesh)
+                            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && !bNoMesh)
                             {
+                                // MESH only max. hops (default 5)
                                 if(aprsmsg.max_hop > 0)
+                                {
                                     aprsmsg.max_hop--;
 
-                                if(bSHORTPATH)
-                                {
-                                    /* short path */
-                                    aprsmsg.msg_source_path=aprsmsg.msg_source_call;
-                                    aprsmsg.msg_source_path.concat(',');
-                                    aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-                                }
-                                else
-                                {
-                                    /*long path*/
-                                    aprsmsg.msg_source_path.concat(',');
-                                    aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-                                }
-
-                                aprsmsg.msg_last_hw = BOARD_HARDWARE;   // Last Module-Hardware
-
-                                memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
-
-                                size = encodeAPRS(RcvBuffer, aprsmsg);
-
-                                if(size + 1 > UDP_TX_BUF_SIZE)
-                                    size = UDP_TX_BUF_SIZE - 1;
-                                ringBuffer[iWrite][0]=size;
-                                memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
-                                iWrite++;
-                                if(iWrite >= MAX_RING)
-                                    iWrite=0;
+                                    aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
                                 
-                                if(bDisplayInfo)
-                                    Serial.println(" This packet to mesh");
+                                    if(bSHORTPATH)
+                                    {
+                                        /* short path */
+                                        aprsmsg.msg_source_path=aprsmsg.msg_source_call;    //call last sending node
+                                        aprsmsg.msg_source_path.concat(',');
+                                        aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                                    }
+                                    else
+                                    {
+                                        /*long path*/
+                                        aprsmsg.msg_source_path.concat(',');
+                                        aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                                    }
+
+                                    aprsmsg.msg_last_hw = BOARD_HARDWARE;   // hardware  last sending node
+
+                                    memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
+
+                                    size = encodeAPRS(RcvBuffer, aprsmsg);
+
+                                    if(size + 1 > UDP_TX_BUF_SIZE)
+                                        size = UDP_TX_BUF_SIZE - 1;
+                                    ringBuffer[iWrite][0]=size;
+                                    memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
+                                    iWrite++;
+                                    if(iWrite >= MAX_RING)
+                                        iWrite=0;
+                                    
+                                    if(bDisplayInfo)
+                                        Serial.println(" This packet to mesh");
+                                }
                             }
                             else
                             {
@@ -517,7 +547,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     Serial.println("");
                             }
                         }
-                    }   
+                    }
+
+                    // GATEWAY action after MESH
+                    if(bGATEWAY)
+                        addNodeData(RcvBuffer, size, rssi, snr);
+
+   
                 }
                 else
                 {
@@ -539,7 +575,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     #endif
 
 
-    //Serial.println("OnRxDone");
+    if(bLORADEBUG)
+        Serial.println("OnRxDone");
 
     is_receiving = false;
 }
@@ -592,17 +629,6 @@ bool is_new_packet(uint8_t compBuffer[4])
     //    Serial.printf("MSG: new one %02X%02X%02X%02X\n", compBuffer[0], compBuffer[1], compBuffer[2], compBuffer[3]);
 
     return true;
-}
-
-int checkOwnTx(uint8_t compBuffer[4])
-{
-    for(int ilo=0; ilo<MAX_RING; ilo++)
-    {
-        if(memcmp(own_msg_id[ilo], compBuffer, 4) == 0)
-            return ilo;
-    }
-
-    return -1;
 }
 
 //////////////////////////////////////////////////////////////////////////

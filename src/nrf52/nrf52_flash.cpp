@@ -130,6 +130,41 @@ void init_flash(void)
 		// MCU-811
     	meshcom_settings.node_co2 = old_struct.node_co2;
 
+		// MCP23017
+    	meshcom_settings.node_mcp17io = old_struct.node_mcp17io;
+    	meshcom_settings.node_mcp17out = old_struct.node_mcp17out;
+    	meshcom_settings.node_mcp17in = old_struct.node_mcp17in;
+
+		memcpy(meshcom_settings.node_mcp17t[0], old_struct.node_mcp17t[0], 16);
+		memcpy(meshcom_settings.node_mcp17t[1], old_struct.node_mcp17t[1], 16);
+		memcpy(meshcom_settings.node_mcp17t[2], old_struct.node_mcp17t[2], 16);
+		memcpy(meshcom_settings.node_mcp17t[3], old_struct.node_mcp17t[3], 16);
+		memcpy(meshcom_settings.node_mcp17t[4], old_struct.node_mcp17t[4], 16);
+		memcpy(meshcom_settings.node_mcp17t[5], old_struct.node_mcp17t[5], 16);
+		memcpy(meshcom_settings.node_mcp17t[6], old_struct.node_mcp17t[6], 16);
+		memcpy(meshcom_settings.node_mcp17t[7], old_struct.node_mcp17t[7], 16);
+
+		memcpy(meshcom_settings.node_mcp17t[8], old_struct.node_mcp17t[8], 16);
+		memcpy(meshcom_settings.node_mcp17t[9], old_struct.node_mcp17t[9], 16);
+		memcpy(meshcom_settings.node_mcp17t[10], old_struct.node_mcp17t[10], 16);
+		memcpy(meshcom_settings.node_mcp17t[11], old_struct.node_mcp17t[11], 16);
+		memcpy(meshcom_settings.node_mcp17t[12], old_struct.node_mcp17t[12], 16);
+		memcpy(meshcom_settings.node_mcp17t[13], old_struct.node_mcp17t[13], 16);
+		memcpy(meshcom_settings.node_mcp17t[14], old_struct.node_mcp17t[14], 16);
+		memcpy(meshcom_settings.node_mcp17t[15], old_struct.node_mcp17t[15], 16);
+
+		// GC fields
+    	meshcom_settings.node_gch = old_struct.node_gch;
+    	meshcom_settings.node_gcb[0] = old_struct.node_gcb[0];
+    	meshcom_settings.node_gcb[1] = old_struct.node_gcb[1];
+    	meshcom_settings.node_gcb[2] = old_struct.node_gcb[2];
+    	meshcom_settings.node_gcb[3] = old_struct.node_gcb[3];
+    	meshcom_settings.node_gcb[4] = old_struct.node_gcb[4];
+
+    	meshcom_settings.node_country = old_struct.node_country;
+
+		meshcom_settings.node_track_freq = old_struct.node_track_freq;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

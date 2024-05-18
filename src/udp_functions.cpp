@@ -115,7 +115,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
       {
         DEBUG_MSG("UDP", "Received a LoRa packet to transmit");
 
-        // Ringbuffer filling
+        // Buffer filling
         lora_tx_msg_len = packetSize - UDP_MSG_INDICATOR_LEN;
         if (lora_tx_msg_len > UDP_TX_BUF_SIZE)
           lora_tx_msg_len = UDP_TX_BUF_SIZE; // zur Sicherheit
@@ -175,6 +175,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
           aprsmsg.msg_server = true;
 
+          aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+
           memset(convBuffer, 0x00, UDP_TX_BUF_SIZE);
 
           uint8_t size = encodeAPRS(convBuffer, aprsmsg);
@@ -183,9 +185,9 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
               size = UDP_TX_BUF_SIZE;
 
           // first byte is always the len of the msg
+          // UDP messages send to LoRa TX
           ringBuffer[iWrite][0] = size;
           memcpy(ringBuffer[iWrite] + 1, convBuffer, size);
-
           iWrite++;
           if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
             iWrite = 0;
@@ -320,6 +322,13 @@ bool startWIFI()
     return false;
   }
 
+  if(bWIFIAP)
+  {
+    WiFi.softAP(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
+
+    return true;
+  }
+
   WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
 
   int iWlanWait = 0;
@@ -346,12 +355,24 @@ bool startWIFI()
 
 void startMeshComUDP()
 {
-  node_ip = WiFi.localIP();
+  if(bWIFIAP)
+  {
+    WiFi.softAPConfig(IPAddress(10,10,10,1), IPAddress(10,10,10,1), IPAddress(255,255,255,0));
 
-  sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
-  sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
-  sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[3], WiFi.dnsIP()[3]);
-  sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", WiFi.subnetMask()[0], WiFi.subnetMask()[1], WiFi.subnetMask()[2], WiFi.subnetMask()[3]);
+    node_ip = WiFi.softAPIP();
+
+    sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
+    sprintf(meshcom_settings.node_subnet, "255.255.255.0");
+  }
+  else
+  {
+    node_ip = WiFi.localIP();
+
+    sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
+    sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
+    sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[2], WiFi.dnsIP()[3]);
+    sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", WiFi.subnetMask()[0], WiFi.subnetMask()[1], WiFi.subnetMask()[2], WiFi.subnetMask()[3]);
+  }
 
   // update phone status
   if(isPhoneReady == 1)
@@ -361,22 +382,27 @@ void startMeshComUDP()
 
   s_node_ip = node_ip.toString();
 
-  if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
+  // no gateway activity
+  if(!bWIFIAP)
   {
-    DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.8.143");
-    node_hostip = IPAddress(44, 143, 8, 143);
-    s_node_hostip = node_hostip.toString();
 
-    // MeshCom Test-Server
+    if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
+    {
+      DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.8.143");
+      node_hostip = IPAddress(44, 143, 8, 143);
+      s_node_hostip = node_hostip.toString();
 
-    //DEBUG_MSG("NTP", "Setting Hamnet NTP");
-    //timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
-  }
-  else
-  {
-    DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 89.185.97.38");
-    node_hostip = IPAddress(89, 185, 97, 38);
-    s_node_hostip = node_hostip.toString();
+      // MeshCom Test-Server
+
+      //DEBUG_MSG("NTP", "Setting Hamnet NTP");
+      //timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+    }
+    else
+    {
+      DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 89.185.97.38");
+      node_hostip = IPAddress(89, 185, 97, 38);
+      s_node_hostip = node_hostip.toString();
+    }
   }
 
   Udp.begin(LOCAL_PORT);
@@ -386,7 +412,9 @@ void startMeshComUDP()
   hasIPaddress=true;
   meshcom_settings.node_hasIPaddress = hasIPaddress;
 
-  sendMeshComHeartbeat();
+  // no gateway activity
+  if(!bWIFIAP)
+    sendMeshComHeartbeat();
 }
 
 void sendMeshComHeartbeat()
@@ -418,35 +446,10 @@ void sendMeshComHeartbeat()
       waitRestartUDPCounter = 1;
     }
 
-    String keep = "KEEP";
-    String cfw = SOURCE_VERSION;
-    String firmware = "GW"+cfw;
-
-    uint8_t longname_len = strlen(meshcom_settings.node_call);
-    uint16_t hb_buffer_size = longname_len + 1 + sizeof(_GW_ID) + keep.length() + firmware.length();;
-    uint8_t hb_buffer[hb_buffer_size];
-
-    // Serial.print("\nHB buffer size: ");
-    // Serial.println(hb_buffer_size);
-
-    char keep_c[keep.length()];
-    strcpy(keep_c, keep.c_str());
-
-    char firmware_c[firmware.length()];
-    strcpy(firmware_c, firmware.c_str());
-
-    // copying all together
-    memcpy(&hb_buffer, meshcom_settings.node_call, longname_len + 1);
-    memcpy(&hb_buffer[longname_len + 1], &_GW_ID, sizeof(_GW_ID));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID)], &keep_c, sizeof(keep_c));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID) + sizeof(keep_c)], &firmware_c, sizeof(firmware_c));
-
-    // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
-    //also avoid UDP tx when UDP is getting a packet
-    // add HB message to the ringbuffer
-    //DEBUG_MSG("UDP", "HB Buffer");
-    //neth.printBuffer(hb_buffer, hb_buffer_size);
-    addUdpOutBuffer(hb_buffer, hb_buffer_size);
+    if(bGATEWAY)
+    {
+      sendKEEP();
+    }
 }
 
 void resetMeshComUDP()
@@ -455,7 +458,7 @@ void resetMeshComUDP()
 
   WiFi.disconnect();
 
-  if(bGATEWAY)
+  if(bGATEWAY || bWEBSERVER)
   {
     startMeshComUDP();
 
@@ -816,7 +819,8 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
     if (len > UDP_TX_BUF_SIZE)
         len = UDP_TX_BUF_SIZE; // just for safety
 
-    //first byte is always the message length
+    // first byte is always the message length
+    // LoRa/Internal messages send to UDP TX
     ringBufferUDPout[udpWrite][0] = len;
     memcpy(ringBufferUDPout[udpWrite] + 1, buffer, len + 1);
 
@@ -827,4 +831,58 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
     udpWrite++;
     if (udpWrite >= MAX_RING_UDP) // if the buffer is full we start at index 0 -> take care of overwriting!
         udpWrite = 0;
+}
+
+void sendKEEP()
+{
+    String keep = "KEEP";
+    String cfw = SOURCE_VERSION;
+    cfw += SOURCE_VERSION_SUB;
+    String firmware = "GW"+cfw;
+    String grc_ids = "";
+    
+    grc_ids.concat(meshcom_settings.node_gch);
+    grc_ids.concat(";");
+    for(int igrc=0; igrc<5; igrc++)
+    {
+        if(meshcom_settings.node_gcb[igrc] > 0)
+        {
+            grc_ids.concat(meshcom_settings.node_gcb[igrc]);
+            grc_ids.concat(";");
+        }
+    }
+
+    uint8_t longname_len = strlen(meshcom_settings.node_call);
+    uint16_t hb_buffer_size = longname_len + 1 + sizeof(_GW_ID) + keep.length() + firmware.length() + grc_ids.length();
+    uint8_t hb_buffer[hb_buffer_size];
+
+    // Serial.print("\nHB buffer size: ");
+    // Serial.println(hb_buffer_size);
+
+    char longname_c[longname_len + 1];
+    strcpy(longname_c, meshcom_settings.node_call);
+    longname_c[longname_len] = 0x00;
+
+    char keep_c[keep.length()];
+    strcpy(keep_c, keep.c_str());
+
+    char firmware_c[firmware.length()];
+    strcpy(firmware_c, firmware.c_str());
+
+    char grc_ids_c[grc_ids.length()];
+    strcpy(grc_ids_c, grc_ids.c_str());
+
+    // copying all together
+    memcpy(&hb_buffer, &meshcom_settings.node_call, longname_len + 1);
+    memcpy(&hb_buffer[longname_len + 1], &_GW_ID, sizeof(_GW_ID));
+    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID)], &keep_c, sizeof(keep_c));
+    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID) + sizeof(keep_c)], &firmware_c, sizeof(firmware_c));
+    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID) + sizeof(keep_c) + sizeof(firmware_c)], &grc_ids_c, sizeof(grc_ids_c));
+    
+    // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
+    //also avoid UDP tx when UDP is getting a packet
+    // add HB message to the ringbuffer
+    //DEBUG_MSG("UDP", "HB Buffer");
+    //neth.printBuffer(hb_buffer, hb_buffer_size);
+    addUdpOutBuffer(hb_buffer, hb_buffer_size);
 }

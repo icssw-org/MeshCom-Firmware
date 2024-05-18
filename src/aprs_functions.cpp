@@ -2,8 +2,16 @@
 #include <aprs_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <lora_setchip.h>
 #include <debugconf.h>
 #include <configuration.h>
+
+char shortSUBVERSION()
+{
+    char csfw[5]={0};
+    memcpy(csfw, SOURCE_VERSION_SUB, 1);
+    return csfw[0];
+}
 
 uint8_t shortVERSION()
 {
@@ -31,10 +39,15 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_fcs = 0;
     aprsmsg.msg_source_hw = BOARD_HARDWARE;
     aprsmsg.msg_source_mod = 3; // MeshCom SF 11 CR 4/6 BW 250 ... medium
-    if(meshcom_settings.node_sf == 12 && meshcom_settings.node_cr == 8 && meshcom_settings.node_bw == 125.0)
+    
+    if(meshcom_settings.node_sf == 12 && getCR() == 8 && getBW() == 125.0)
         aprsmsg.msg_source_mod = 4; // MeshCom SF 12 CR 4/8 BW 125 ... slow
+    
+    if(meshcom_settings.node_sf == 11 && getCR() == 5 && getBW() == 250.0)
+        aprsmsg.msg_source_mod = 5; // MeshCom SF 11 CR 4/5 BW 250 ... fast
 
     aprsmsg.msg_source_fw_version = shortVERSION();
+    aprsmsg.msg_source_fw_sub_version = shortSUBVERSION();
     aprsmsg.msg_last_hw = BOARD_HARDWARE;
     aprsmsg.msg_source_last = "";
 }
@@ -230,6 +243,26 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         if(inext < rsize)
         {
             aprsmsg.msg_last_hw = RcvBuffer[inext];
+            inext++;
+        }
+
+        if(RcvBuffer[inext] == 0x7e)
+        {
+            aprsmsg.msg_source_fw_sub_version = '#';
+            inext++;
+        }
+        else
+        {
+            if(RcvBuffer[inext] == 0x00)
+                aprsmsg.msg_source_fw_sub_version = '#';
+            else
+                aprsmsg.msg_source_fw_sub_version = RcvBuffer[inext];
+            inext++;
+
+        }
+
+        if(RcvBuffer[inext] == 0x7e)
+        {
             inext++;
         }
 
@@ -711,6 +744,12 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     inext++;
 
     msg_buffer[inext] = aprsmsg.msg_last_hw;
+    inext++;
+
+    if(aprsmsg.msg_source_fw_sub_version == 0x00)
+        msg_buffer[inext] = 0x23;   // #
+    else
+        msg_buffer[inext] = aprsmsg.msg_source_fw_sub_version;
     inext++;
 
     msg_buffer[inext] = 0x7e;
