@@ -6,15 +6,12 @@
 MatchState regex_call;
 
 //char* regex_call_match = (char*)"^[A-Z]{1,2}|[0-9][A-Z])[0-9][A-Z]{1,3}(-[0-9]{1,2}|$";
-char* regex_call_match = (char*)"^[0-9A-Z]?[A-Z]?[0-9]+[A-Z][A-Z]?[A-Z]?[%-]?[1-9]?[0-9]?$";
+char* regex_call_match = (char*)"^[0-9A-Z]?[A-Z]?[0-9]+[A-Z][A-Z]?[A-Z]?[%-]?[0-9]?[0-9]?$";
 
 int ret_call;
 
-bool checkRegexCall(char* callsign_in)
+bool checkRegexCall(String callsign)
 {
-	String callsign = callsign_in;
-	callsign.toUpperCase();
-
 	if(callsign == "*")
 		return true;
 	

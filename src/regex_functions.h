@@ -5,6 +5,6 @@
 #include <configuration.h>
 #include <debugconf.h>
 
-bool checkRegexCall(char callsign[25]);
+bool checkRegexCall(String strCallSign);
 
 #endif

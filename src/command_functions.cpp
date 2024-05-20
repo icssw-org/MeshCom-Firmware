@@ -1888,13 +1888,15 @@ void commandAction(char *msg_text, bool ble)
     {
         sprintf(_owner_c, "%s", msg_text+8);
 
-        if(checkRegexCall(_owner_c))
+        String strCallSign = _owner_c;
+    
+        if(checkRegexCall(strCallSign))
         {
-            Serial.printf("\n%s match\n", _owner_c);
+            Serial.printf("\n%s match\n", strCallSign.c_str());
         }
         else
         {
-            Serial.printf("\n%s no match\n", _owner_c);
+            Serial.printf("\n%s no match\n", strCallSign.c_str());
         }
 
         return;
@@ -1995,13 +1997,6 @@ void commandAction(char *msg_text, bool ble)
             rf_freq_info=rf_freq_info/1000000;
         #endif
 
-        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...GATEWAY %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s\n...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
-                SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
-                meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
-                (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"),
-                (bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"),
-                getCountry(meshcom_settings.node_country).c_str() , rf_freq_info, getPower());
-
         if(ble)
         {
             // reset print buffer
@@ -2022,6 +2017,12 @@ void commandAction(char *msg_text, bool ble)
             idoc["BLE"] = (bBLElong ? "long" : "short");
             idoc["BATP"] = global_proz;
             idoc["BATV"] = global_batt/1000.0;
+            idoc["GCH"] = meshcom_settings.node_gch;
+            idoc["GCB0"] = meshcom_settings.node_gcb[0];
+            idoc["GCB1"] = meshcom_settings.node_gcb[1];
+            idoc["GCB2"] = meshcom_settings.node_gcb[2];
+            idoc["GCB3"] = meshcom_settings.node_gcb[3];
+            idoc["GCB4"] = meshcom_settings.node_gcb[4];
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 
@@ -2035,9 +2036,27 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            printf("\n%s", print_buff+2);
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...GATEWAY %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s\n",
+                    SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+                    meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
+                    (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"));
+
+            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
+                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"),
+                    (bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"),
+                    getCountry(meshcom_settings.node_country).c_str() , rf_freq_info, getPower());
+
+            if(meshcom_settings.node_gch > 0)
+                Serial.printf("\n...GC main %4i\n", meshcom_settings.node_gch);
+
+            for(int ig=0;ig<5;ig++)
+            {
+                if(meshcom_settings.node_gcb[ig] > 0)
+                    Serial.printf("...GC [%2i] %4i\n", ig+1, meshcom_settings.node_gcb[ig]);
+            }
 
             Serial.println("");
+
             #ifndef BOARD_RAK4630
                 Serial.printf("...WIFI-AP     : %s\n", (bWIFIAP?"yes":"no"));
                 Serial.printf("...SSID        : %s\n", meshcom_settings.node_ssid);

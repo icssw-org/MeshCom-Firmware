@@ -1319,14 +1319,15 @@ void sendMessage(char *msg_text, int len)
     if(strMsg.charAt(0) == '{')
     {
         int iCall = strMsg.indexOf('}');
-        if(iCall != -1 && iCall < 11)   // {OE1KBC-99}Textmessage
+        if(iCall != -1 && iCall < 11)   // {OE1KBC-99}Textmessage or Group-Call {2321}
         {
             strDestinationCall = strMsg.substring(1, iCall);
             strDestinationCall.toUpperCase();
             strDestinationCall.trim();
             strMsg = strMsg.substring(iCall+1);
 
-            bDM=true;
+            if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
+                bDM=true;
         }
     }
 
@@ -1347,15 +1348,12 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_payload = strMsg;
 
     
-    // ACK request anhängen
+    // ACK request anhängen noly DM Call
     if(bDM)
     {
-        if(strcmp(aprsmsg.msg_destination_path.c_str(), "WLNK-1") != 0)
-        {
-            char cAckId[4] = {0};
-            sprintf(cAckId, "%03i", meshcom_settings.node_msgid);
-            aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
-        }
+        char cAckId[4] = {0};
+        sprintf(cAckId, "%03i", meshcom_settings.node_msgid);
+        aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
     }
 
     meshcom_settings.node_msgid++;
@@ -1381,7 +1379,7 @@ void sendMessage(char *msg_text, int len)
         if(bGATEWAY)
         {
             // gleich Wolke mit Hackerl setzen
-            if(aprsmsg.msg_destination_path == "*")
+            if(aprsmsg.msg_destination_path == "*" || CheckGroup(strDestinationCall))
             {
                 uint8_t print_buff[8];
 

@@ -33,7 +33,7 @@ bool rf_crc = true;
 uint16_t rf_preamble_length = LORA_PREAMBLE_LENGTH;
 
 //0...EU  1...UK, 3...EA, 10...US, ..... 18...868, 19...915, 20...MAN
-String strCountry[21] = {"EU", "UK", "none", "EA", "none", "none", "none", "none", "none", "none", "US", "none", "none", "none", "none", "none", "none", "none", "868", "915", "MAN"};
+String strCountry[21] = {"EU", "UK", "none", "EA", "none", "none", "none", "none", "none", "none", "US", "VR2", "none", "none", "none", "none", "none", "none", "868", "915", "MAN"};
 
 String getCountry(int iCtry)
 {
@@ -162,6 +162,23 @@ void lora_setcountry(int iCtry)
                 meshcom_settings.node_cr = 2;
             #else
                 meshcom_settings.node_freq = 433.175;
+                meshcom_settings.node_bw = 250.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = 11;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+            
+            break;
+
+        case 11:  // VR2 ... 
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_freq = 435775000;
+                meshcom_settings.node_bw = 1;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_freq = 435.775;
                 meshcom_settings.node_bw = 250.0;
                 meshcom_settings.node_cr = 6;
             #endif

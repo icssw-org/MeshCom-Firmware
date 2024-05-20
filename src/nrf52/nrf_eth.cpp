@@ -216,16 +216,6 @@ int NrfETH::getUDP()
     // read the packet
     Udp.read(inc_udp_buffer, UDP_TX_BUF_SIZE); // Read the packet into packetBufffer.
 
-    // print values from message
-    // HEARTBEAT keine Ausgabe
-    /*
-    if(packetSize != 22)
-    {
-      Serial.println("UDP Get Buff:");
-      printBuffer(inc_udp_buffer, packetSize);
-    }
-    */
-
     // if more than n values are 00 we might have received a faulty message
     uint8_t zerocount = 0;
 
@@ -359,7 +349,7 @@ int NrfETH::getUDP()
                       sendDisplayText(aprsmsg, 99, 0);
                   }
                   else
-                  if(strcmp(destination_call, "*") == 0)
+                  if(strcmp(destination_call, "*") == 0 || CheckGroup(destination_call) > 0)
                   {
                       sendDisplayText(aprsmsg, 99, 0);
 

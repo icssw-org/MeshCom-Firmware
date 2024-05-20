@@ -391,7 +391,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     }
                                     else
                                     {
-                                        if(strcmp(destination_call, "*") == 0)
+                                        if(strcmp(destination_call, "*") == 0 || CheckOwnGroup(destination_call))
                                         {
                                             sendDisplayText(aprsmsg, rssi, snr);
 
@@ -434,8 +434,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         }
                                         else
                                         {
-                                            //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA"
-                                            if(aprsmsg.msg_destination_path == "*" || aprsmsg.msg_destination_path == "WLNK-1" || aprsmsg.msg_destination_path == "APRS2SOTA")
+                                            //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
+                                            if(aprsmsg.msg_destination_path == "*" || aprsmsg.msg_destination_path == "WLNK-1" || aprsmsg.msg_destination_path == "APRS2SOTA" || CheckGroup(aprsmsg.msg_destination_path) > 0)
                                             {
                                                 // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
                                                 msg_counter=millis();   // ACK mit neuer msg_id versenden
@@ -491,16 +491,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     addBLEOutBuffer(RcvBuffer, size);
                             }
 
-                            bool bNoMesh = false;
+                            bool bMeshDestination = true;
 
                             // messages to WLNK-1 or APRS2SOTA no need to MESH via a gateWay
                             if(bGATEWAY && (aprsmsg.msg_destination_path.c_str(), "WLNK-1") == 0)
-                                bNoMesh = true;
+                                bMeshDestination = false;
                             if(bGATEWAY && (aprsmsg.msg_destination_path.c_str(), "APRS2SOTA") == 0)
-                                bNoMesh = true;
+                                bMeshDestination = false;
 
                             // resend only Packet to all and !owncall 
-                            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && !bNoMesh)
+                            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && bMeshDestination)
                             {
                                 // MESH only max. hops (default 5)
                                 if(aprsmsg.max_hop > 0)

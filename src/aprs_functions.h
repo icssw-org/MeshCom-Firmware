@@ -18,4 +18,7 @@ uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSou
 
 double conv_coord_to_dec(double coord);
 
+int CheckGroup(String callsign);
+bool CheckOwnGroup(String callsign);
+
 #endif

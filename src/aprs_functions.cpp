@@ -1,8 +1,8 @@
-
 #include <aprs_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <lora_setchip.h>
+#include <regex_functions.h>
 #include <debugconf.h>
 #include <configuration.h>
 
@@ -20,6 +20,50 @@ uint8_t shortVERSION()
     int iversion;
     sscanf(cfw, "%d", &iversion);
     return (uint8_t)iversion;
+}
+
+int CheckGroup(String callsign)
+{
+	if(callsign.length() <= 0 || callsign.length() > 4)
+		return 0;
+	
+	for(int ic=0;ic<(int)callsign.length();ic++)
+	{
+		if(callsign.charAt(ic) == 0x00)
+			break;
+		if(callsign.charAt(ic) < 0x30 || callsign.charAt(ic) > 0x39)
+			return 0;
+	}
+
+	int ig=callsign.toInt();
+
+	if(ig <= 0 || ig > 9999)
+		return 0;
+	
+	return ig;
+}
+
+bool CheckOwnGroup(String callsign)
+{
+    // no Group-Check
+    if(meshcom_settings.node_gch <= 0)
+        return true;
+
+    int checkgroup = CheckGroup(callsign);
+
+    if(checkgroup < 0)
+        return false;
+
+    if(meshcom_settings.node_gch == checkgroup)
+        return true;
+
+    for(int ig=0;ig<5;ig++)
+    {
+        if(meshcom_settings.node_gcb[ig] == checkgroup)
+            return true;
+    }
+
+    return false;
 }
 
 void initAPRS(struct aprsMessage &aprsmsg)
@@ -97,6 +141,8 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         uint16_t inext=0;
 
+        bool bCallsignOk=true;
+
         // Source Path
         bool bSourceEndOk=false;
         bool bSourceCall=true;
@@ -115,10 +161,22 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 if(RcvBuffer[ib] == ',')
                 {
                     bSourceCall=false;
+
+                    if(aprsmsg.msg_source_last.length() > 0)
+                    {
+                        if(!checkRegexCall(aprsmsg.msg_source_last))
+                        {
+                            Serial.printf("APRS decode - Source-CallSign Error [%s]\n", aprsmsg.msg_source_last.c_str());
+                            bCallsignOk=false;
+                        }
+                    }
+
                     aprsmsg.msg_source_last="";
                 }
                 else
+                {
                     aprsmsg.msg_source_last.concat((char)RcvBuffer[ib]);
+                }
 
                 if(bSourceCall)
                 {
@@ -137,10 +195,23 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             return 0x00;
         }
 
+        if(!checkRegexCall(aprsmsg.msg_source_call))
+        {
+            Serial.printf("APRS decode - Source-CallSign Error [%s]\n", aprsmsg.msg_source_call.c_str());
+            bCallsignOk=false;
+        }
+
+        if(!bCallsignOk)
+        {
+            return 0x00;
+        }
+
         // Destination Path
         bool bDestinationEndOk=false;
         bool bDestinationCall=true;
         uint16_t inextstart=inext;
+        String msg_dest_last="";
+
         for(ib=inextstart; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == aprsmsg.payload_type)
@@ -156,6 +227,24 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 if(RcvBuffer[ib] == ',')
                 {
                     bDestinationCall=false;
+
+                    if(msg_dest_last.length() > 0)
+                    {
+                        if(!CheckGroup(msg_dest_last))
+                        {
+                            if(!checkRegexCall(msg_dest_last))
+                            {
+                                Serial.printf("APRS decode - Destination-CallSign Error [%s]\n", msg_dest_last.c_str());
+                                bCallsignOk=false;
+                            }
+                        }
+                    }
+
+                    msg_dest_last="";
+                }
+                else
+                {
+                    msg_dest_last.concat((char)RcvBuffer[ib]);
                 }
 
                 if(bDestinationCall)
@@ -172,6 +261,20 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             if(bDEBUG && rsize < 255)
                 printAsciiBuffer(RcvBuffer, rsize);
 
+            return 0x00;
+        }
+
+        if(!CheckGroup(msg_dest_last))
+        {
+            if(!checkRegexCall(aprsmsg.msg_destination_call))
+            {
+                Serial.printf("APRS decode - Destination-CallSign Error [%s]\n", aprsmsg.msg_destination_call.c_str());
+                bCallsignOk=false;
+            }
+        }
+
+        if(!bCallsignOk)
+        {
             return 0x00;
         }
 
