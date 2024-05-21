@@ -545,6 +545,23 @@ void loopWebserver()
                 commandAction((char*)"--save", bPhoneReady);
             }
             else
+            if (web_header.indexOf("GET /action_page.php?txpower=") >= 0)
+            {
+                idx_text=web_header.indexOf("=") + 1;
+                idx_text_end=web_header.indexOf(" HTTP");
+
+                String message="";
+
+                if(idx_text_end <= 0)
+                    message = hex2ascii(web_header.substring(idx_text));
+                else
+                    message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                sprintf(message_text, "--txpower %s", message.c_str());
+                
+                commandAction(message_text, bPhoneReady);
+            }
+            else
             if (web_header.indexOf("GET /action_page.php?utcoff=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
@@ -884,6 +901,15 @@ void loopWebserver()
                     }
                 }
                 web_client.println("&nbsp;<input type=\"submit\" value=\"set\">");
+                web_client.println("</td></tr>\n");
+                web_client.println("</form>");
+
+                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<tr><td>\n");
+                web_client.println("<label for=\"fname\"><b>TX-Power dBm:</b></label>");
+                web_client.println("</td><td>\n");
+                web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"3\" id=\"txpower\" name=\"txpower\">\n", getPower());
+                web_client.println("<input type=\"submit\" value=\"set\">");
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 

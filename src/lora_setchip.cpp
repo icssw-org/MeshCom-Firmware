@@ -127,6 +127,8 @@ int8_t getPower()
     int power = meshcom_settings.node_power;
     if(power <= 0)
         power = TX_OUTPUT_POWER;
+    if(power > TX_OUTPUT_POWER)
+        power = TX_OUTPUT_POWER;
 
     return power;
 }

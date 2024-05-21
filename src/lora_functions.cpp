@@ -499,12 +499,20 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(bGATEWAY && (aprsmsg.msg_destination_path.c_str(), "APRS2SOTA") == 0)
                                 bMeshDestination = false;
 
+                            // GATEWAY action before MESH
+                            // and not MESHed from another Gateways
+                            if(bGATEWAY && !aprsmsg.msg_server) 
+                                addNodeData(RcvBuffer, size, rssi, snr);
+
                             // resend only Packet to all and !owncall 
                             if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && bMeshDestination)
                             {
                                 // MESH only max. hops (default 5)
                                 if(aprsmsg.max_hop > 0)
                                 {
+                                    if(bGATEWAY)
+                                        aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server
+
                                     aprsmsg.max_hop--;
 
                                     aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
@@ -548,12 +556,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             }
                         }
                     }
-
-                    // GATEWAY action after MESH
-                    if(bGATEWAY)
-                        addNodeData(RcvBuffer, size, rssi, snr);
-
-   
                 }
                 else
                 {
