@@ -40,9 +40,8 @@ bool bBMPON = false;
 bool bBMEON = false;
 bool bBME680ON = false;
 bool bMCU811ON = false;
-
+bool bINA226ON = false;
 bool bTCA9548A=false;
-bool bMCP23017=false;
 
 bool bONEWIRE = false;
 

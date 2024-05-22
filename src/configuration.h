@@ -35,7 +35,8 @@ definitions
     #define TX_POWER_MIN 1
     #define ENABLE_BMX280
     #define ENABLE_BMX680
-    // not yet implemented    #define ENABLE_MCP23017
+    #define ENABLE_INA226
+    #define ENABLE_MCP23017
     #define BUTTON_PIN WB_IO6        // only in combination with RAK13002
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
     #define ENABLE_GPS
@@ -68,6 +69,7 @@ definitions
     #define ENABLE_BMX280
     #define ENABLE_BMX680
     #define ENABLE_MCP23017
+    #define ENABLE_INA226
     #define SX127X
     #define TX_POWER_MAX 17  // max 17 dBm
     #define TX_POWER_MIN 1
@@ -86,6 +88,7 @@ definitions
     #define ENABLE_BMX280
     #define ENABLE_BMX680
     #define ENABLE_MCP23017
+    #define ENABLE_INA226
     #define SX126X
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
@@ -104,6 +107,7 @@ definitions
     #define ENABLE_BMX280
     #define ENABLE_BMX680
     #define ENABLE_MCP23017
+    #define ENABLE_INA226
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
@@ -118,6 +122,7 @@ definitions
     #define ENABLE_BMX280
     #define ENABLE_BMX680
     #define ENABLE_MCP23017
+    #define ENABLE_INA226
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
@@ -133,6 +138,7 @@ definitions
     #define ENABLE_BMX280
     #define ENABLE_BMX680
     #define ENABLE_MCP23017
+    #define ENABLE_INA226
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
@@ -147,6 +153,7 @@ definitions
     #define ENABLE_BMX280
     #define ENABLE_BMX680
     #define ENABLE_MCP23017
+    #define ENABLE_INA226
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
     #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx

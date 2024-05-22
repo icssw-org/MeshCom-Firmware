@@ -30,6 +30,7 @@ extern unsigned long BattTimeWait;
 extern unsigned long BattTimeAPP;
 extern unsigned long BMXTimeWait;
 extern unsigned long MCU811TimeWait;
+extern unsigned long INA226TimeWait;
 extern bool bButtonCheck;
 extern bool bDisplayTrack;
 extern bool bGPSON;
@@ -37,6 +38,7 @@ extern bool bBMPON;
 extern bool bBMEON;
 extern bool bBME680ON;
 extern bool bMCU811ON;
+extern bool bINA226ON;
 
 extern bool bTCA9548A;
 extern bool bMCP23017;

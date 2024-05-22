@@ -59,6 +59,9 @@ void sendHeartbeat();
 
 #include <bmx280.h>
 #include "bme680.h"
+#include "mcu811.h"
+#include "io_functions.h"
+#include "ina226_functions.h"
 
 #include <onewire_functions.h>
 
@@ -387,6 +390,7 @@ void nrf52setup()
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
+    bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
 
 
     // if Node is in WifiAP Mode -> no Gateway posible
@@ -593,10 +597,25 @@ void nrf52setup()
     // I2C init
     Wire.begin();
 
-    setupBMX280();
+    #if defined(ENABLE_BMX280)
+        setupBMX280();
+        setupMCU811();
+    #endif
 
-    // BME680 init
-    setupBME680();
+    // BME680
+    #if defined(ENABLE_BMX680)
+        setupBME680();
+    #endif
+
+    // MCP23017
+    #if defined(ENABLE_MCP23017)
+        setupMCP23017();
+    #endif
+
+    // INA226
+    #if defined(ENABLE_INA226)
+        setupINA226();
+    #endif
 
     u8g2.begin();
 
@@ -1096,23 +1115,20 @@ void nrf52loop()
     {
         if ((bme680_timer + 60000) < millis() || delay_bme680 <= 0)
         {
-            #if defined(ENABLE_BMX280)
-                
-                if (delay_bme680 <= 0)
-                {
-                    getBME680();
+            if (delay_bme680 <= 0)
+            {
+                getBME680();
 
-                }
+            }
 
-                if(wx_shot)
-                {
-                    commandAction((char*)"--wx", true);
-                    wx_shot = false;
-                }
+            if(wx_shot)
+            {
+                commandAction((char*)"--wx", true);
+                wx_shot = false;
+            }
 
-                // calculate delay
-                delay_bme680 = bme680_get_endTime() - millis();
-            #endif
+            // calculate delay
+            delay_bme680 = bme680_get_endTime() - millis();
 
             bme680_timer = millis();
         }
@@ -1120,6 +1136,106 @@ void nrf52loop()
     #endif
 
     checkButtonState();
+
+    // read BMP Sensor
+    #if defined(ENABLE_BMX280)
+    if(bBMPON || bBMEON)
+    {
+        if(BMXTimeWait == 0)
+            BMXTimeWait = millis() - 10000;
+
+        if ((BMXTimeWait + 30000) < millis())   // 30 sec
+        {
+                if(loopBMX280())
+                {
+                    meshcom_settings.node_press = getPress();
+                    meshcom_settings.node_temp = getTemp();
+                    meshcom_settings.node_hum = getHum();
+                    meshcom_settings.node_press_alt = getPressALT();
+                    meshcom_settings.node_press_asl = getPressASL(meshcom_settings.node_alt);
+                    
+                    if(wx_shot)
+                    {
+                        commandAction((char*)"--wx", true);
+                        wx_shot = false;
+                    }
+                }
+
+            BMXTimeWait = millis(); // wait for next messurement
+        }
+    }
+    #endif
+
+    if(bMCU811ON)
+    {
+        if(MCU811TimeWait == 0)
+            MCU811TimeWait = millis() - 10000;
+
+        if ((MCU811TimeWait + 60000) < millis())   // 60 sec
+        {
+            // read MCU-811 Sensor
+            if(loopMCU811())
+            {
+                meshcom_settings.node_co2 = geteCO2();
+                
+                if(wx_shot)
+                {
+                    commandAction((char*)"--wx", true);
+                    wx_shot = false;
+                }
+            }
+
+            MCU811TimeWait = millis(); // wait for next messurement
+        }
+    }
+
+    #if defined(ENABLE_INA226)
+    if(bINA226ON)
+    {
+        if(INA226TimeWait == 0)
+            INA226TimeWait = millis() - 10000;
+
+        if ((INA226TimeWait + 60000) < millis())   // 60 sec
+        {
+            // read MCU-811 Sensor
+            if(loopINA226())
+            {
+                meshcom_settings.node_vbus = getvBUS();
+                meshcom_settings.node_vshunt = getvSHUNT();
+                meshcom_settings.node_vcurrent = getvCURRENT();
+                meshcom_settings.node_vpower = getvPOWER();
+            }
+
+            INA226TimeWait = millis(); // wait for next messurement
+        }
+    }
+    #endif
+
+    // read every n seconds the bme680 sensor calculated from millis()
+    #if defined(ENABLE_BMX680)
+    if(bBME680ON && bme680_found)
+    {
+        if ((bme680_timer + 60000) < millis() || delay_bme680 <= 0)
+        {
+            if (delay_bme680 <= 0)
+            {
+                getBME680();
+
+            }
+
+            if(wx_shot)
+            {
+                commandAction((char*)"--wx", true);
+                wx_shot = false;
+            }
+
+            // calculate delay
+            delay_bme680 = bme680_get_endTime() - millis();
+
+            bme680_timer = millis();
+        }
+    }
+    #endif
 
     // heartbeat
     if (bGATEWAY)

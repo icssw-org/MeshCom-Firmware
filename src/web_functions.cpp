@@ -247,6 +247,16 @@ void loopWebserver()
                 commandAction((char*)"--onewire off", bPhoneReady);
             }
             else
+            if (web_header.indexOf("GET /ina226/on") >= 0)
+            {
+                commandAction((char*)"--226 on", bPhoneReady);
+            }
+            else
+            if (web_header.indexOf("GET /ina226/off") >= 0)
+            {
+                commandAction((char*)"--226 off", bPhoneReady);
+            }
+            else
             if (web_header.indexOf("GET /volt/on") >= 0)
             {
                 commandAction((char*)"--volt", bPhoneReady);
@@ -1295,6 +1305,16 @@ void loopWebserver()
                     web_client.printf("<tr><td><b>SUB-MASK</b></td><td>%s</td></tr>\n", meshcom_settings.node_subnet);
                 }
 
+                if(bINA226ON)
+                {
+                    web_client.println("<tr><td>&nbsp;</td><td>&nbsp;</td></tr>");
+                    web_client.println("<tr><td>INA226</td><td>&nbsp;</td></tr>");
+                    web_client.printf("<tr><td><b>vBUS</b></td><td>%.2f V</td></tr>\n", meshcom_settings.node_vbus);
+                    web_client.printf("<tr><td><b>vSHUNT</b></td><td>%.2f mV</td></tr>\n", meshcom_settings.node_vshunt);
+                    web_client.printf("<tr><td><b>vCURRENT</b></td><td>%.1f mA</td></tr>\n", meshcom_settings.node_vcurrent);
+                    web_client.printf("<tr><td><b>vPOWER</b></td><td>%.1f mW</td></tr>\n", meshcom_settings.node_vpower);
+                }
+
                 web_client.println("</table>");
             }
 
@@ -1422,8 +1442,15 @@ void loopWebserver()
                     web_client.println("<td><a href=\"/volt/on\"><button class=\"button\"><b>VOLT</b></button></a></td>");
                 }
 
-                // REBOOT
-                web_client.println("<td><a href=\"/reboot\"><button class=\"button\"><b>REBOOT</b></button></a></td></tr>");
+                // INA226
+                if (bINA226ON)
+                {
+                    web_client.println("<td><a href=\"/ina226/off\"><button class=\"button button2\"<b>INA226</b></button></a></td>");
+                }
+                else
+                {
+                    web_client.println("<td><a href=\"/ina226/on\"><button class=\"button\"><b>INA226</b></button></a></td></tr>");
+                }
             }
 
             web_client.println("<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>");
@@ -1464,7 +1491,11 @@ void loopWebserver()
             web_client.println("<td><a href=\"/logprint\"><button class=\"button\"><b>RX-LOG</b></button></a></td>");       //page 6
             web_client.println("<td><a href=\"/sendpos\"><button class=\"button\"><b>SENDPOS</b></button></a></td></tr>");
 
-            web_client.println("<tr><td><a href=\"/mcpstatus\"><button class=\"button\"><b>MCP-STATUS</b></button></a></td>");       //page 7
+            if(bMCP23017)
+                web_client.println("<tr><td><a href=\"/mcpstatus\"><button class=\"button\"><b>MCP-STATUS</b></button></a></td>");       //page 7
+
+            // REBOOT
+            web_client.println("<td><a href=\"/reboot\"><button class=\"button\"><b>REBOOT</b></button></a></td></tr>");
 
             web_client.println("</table>");
 

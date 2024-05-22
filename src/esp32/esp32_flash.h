@@ -94,6 +94,10 @@ struct s_meshcom_settings
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
+	float node_vbus = 0;
+	float node_vshunt = 0;
+	float node_vcurrent = 0;
+	float node_vpower = 0;
 
 	char node_ip[40] = {0};
 	char node_dns[40] = {0};

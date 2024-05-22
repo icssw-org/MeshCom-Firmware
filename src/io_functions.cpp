@@ -17,11 +17,14 @@ Adafruit_MCP23X17 mcp;
 
 uint8_t status_0 = 0xFF;
 
+bool bMCP23017=false;
+
 void setupMCP23017()
 {
     if (!mcp.begin_I2C(0x20))
     {
         Serial.println("[INIT]...Failed to start I/O MCP23017 0x20. Please check your wiring.");
+        bMCP23017=false;
         return;
     }
 

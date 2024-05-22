@@ -24,6 +24,7 @@
 #include "bme680.h"
 #include "mcu811.h"
 #include "io_functions.h"
+#include "ina226_functions.h"
 
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
@@ -382,6 +383,7 @@ void esp32setup()
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
+    bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
 
     // if Node is in WifiAP Mode -> no Gateway posible
     if(bWIFIAP && bGATEWAY)
@@ -466,6 +468,11 @@ void esp32setup()
     // MCP23017
     #if defined(ENABLE_MCP23017)
         setupMCP23017();
+    #endif
+
+    // INA226
+    #if defined(ENABLE_INA226)
+        setupINA226();
     #endif
 
 	// Initialize temp sensor
@@ -1458,6 +1465,8 @@ void esp32loop()
     if(bLoopActive)
         Serial.printf("[LOOP] 7\n");
 
+    // read BMP Sensor
+    #if defined(ENABLE_BMX280)
     if(bBMPON || bBMEON)
     {
         if(BMXTimeWait == 0)
@@ -1465,8 +1474,6 @@ void esp32loop()
 
         if ((BMXTimeWait + 30000) < millis())   // 30 sec
         {
-            // read BMP Sensor
-            #if defined(ENABLE_BMX280)
                 if(loopBMX280())
                 {
                     meshcom_settings.node_press = getPress();
@@ -1481,11 +1488,11 @@ void esp32loop()
                         wx_shot = false;
                     }
                 }
-            #endif
 
             BMXTimeWait = millis(); // wait for next messurement
         }
     }
+    #endif
 
     if(bLoopActive)
         Serial.printf("[LOOP] 8\n");
@@ -1514,6 +1521,28 @@ void esp32loop()
             MCU811TimeWait = millis(); // wait for next messurement
         }
     }
+
+    #if defined(ENABLE_INA226)
+    if(bINA226ON)
+    {
+        if(INA226TimeWait == 0)
+            INA226TimeWait = millis() - 10000;
+
+        if ((INA226TimeWait + 60000) < millis())   // 60 sec
+        {
+            // read MCU-811 Sensor
+            if(loopINA226())
+            {
+                meshcom_settings.node_vbus = getvBUS();
+                meshcom_settings.node_vshunt = getvSHUNT();
+                meshcom_settings.node_vcurrent = getvCURRENT();
+                meshcom_settings.node_vpower = getvPOWER();
+            }
+
+            INA226TimeWait = millis(); // wait for next messurement
+        }
+    }
+    #endif
 
     if(bLoopActive)
         Serial.printf("[LOOP] 9\n");
