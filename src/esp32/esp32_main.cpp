@@ -341,6 +341,8 @@ void esp32setup()
     Serial.begin(MONITOR_SPEED);
     while(!Serial);
 
+    delay(1500);
+
     Serial.println("");
     Serial.println("");
     Serial.println("============");
@@ -637,12 +639,6 @@ void esp32setup()
             while (true);
         }
 
-        // disable CRC
-        if (radio.setCRC(true) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
-            Serial.println(F("Selected CRC is invalid for this module!"));
-            while (true);
-        }
-
         #if defined(SX127X)
         // set amplifier gain  (accepted range is 1 - 6, where 1 is maximum gain)
         // NOTE: set value to 0 to enable automatic gain control
@@ -674,6 +670,13 @@ void esp32setup()
                 Serial.print(F("failed, code "));
                 Serial.println(state);
         }        
+
+        // enable CRC
+        if (radio.setCRC(true) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
+            Serial.println(F("Selected CRC is invalid for this module!"));
+            while (true);
+       }
+
         #endif
 
         // setup for SX126x Radios
@@ -683,20 +686,25 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[SX126x] Starting scan for LoRa preamble ... "));
-            state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+            state = radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("[SX126X] success!"));
             }
             else
             {
-                Serial.print(F("[SX126X] failed, code "));
+                Serial.print(F("[SX126X] failed, code <1>"));
                 Serial.println(state);
             }
         // if DIO2 controls the RF Switch you need to set it
         // radio.setDio2AsRfSwitch(true);
         // Important! To enable receive you need to switch the SX126x rf switch to RECEIVE 
         
+            // enable CRC
+            if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
+                Serial.println(F("Selected CRC is invalid for this module!"));
+                while (true);
+            }
         #endif
 
         #ifdef SX126X_V3
@@ -705,21 +713,26 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[SX126X] Starting scan for LoRa preamble ... "));
-            state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+            state = radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("[SX126X] success!"));
             }
             else
             {
-                Serial.print(F("[SX126X] failed, code "));
+                Serial.print(F("[SX126X] failed, code <3> "));
                 Serial.println(state);
             }
         // if DIO2 controls the RF Switch you need to set it
         //  radio.setDio2AsRfSwitch(true);
         // Important! To enable receive you need to switch the SX126x rf switch to RECEIVE 
     
-        #endif
+            // enablee CRC
+            if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
+                Serial.println(F("Selected CRC is invalid for this module!"));
+                while (true);
+            }
+    #endif
     }
     
     // setup for SX126x Radios
@@ -730,14 +743,14 @@ void esp32setup()
 
         // start scanning the channel
         Serial.print(F("[SX126x] Starting scan for LoRa preamble ... "));
-        state = radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+        state = radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
         if (state == RADIOLIB_ERR_NONE)
         {
             Serial.println(F("[SX126X] success!"));
         }
         else
         {
-            Serial.print(F("[SX126X] failed, code "));
+            Serial.print(F("[SX126X] failed, code <3> "));
             Serial.println(state);
         }
     // if DIO2 controls the RF Switch you need to set it
@@ -890,17 +903,30 @@ void esp32loop()
 
     if(iReceiveTimeOutTime > 0)
     {
-        // Timeout 3.5sec
-        if((iReceiveTimeOutTime + 3500) < millis())
+        // Timeout RECEIVE_TIMEOUT
+        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
         {
             bReceiving = false;
+
             iReceiveTimeOutTime=0;
 
             #if defined(SX127X)
                 radio.startChannelScan();
             #else
-                radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+                radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
             #endif
+
+            // LoRa preamble was detected
+            if(bLORADEBUG)
+            {
+                #if defined(SX127X)            
+                    Serial.printf("[SX127x]");
+                #else
+                    Serial.printf("[SX12xx]");
+                #endif
+
+                Serial.printf(" Receive Timeout, starting listen ... \n");
+            }
         }
     }
 
@@ -911,6 +937,9 @@ void esp32loop()
     if(detectedFlag || timeoutFlag)
     {
         int state = RADIOLIB_ERR_NONE;
+
+        //if(!timeoutFlag)
+        //    Serial.printf(" Receive detectedFlag:%i timeoutFlag:%i bReceiving:%i... \n", detectedFlag, timeoutFlag, bReceiving);
 
         // check ongoing reception
         if(bReceiving)
@@ -923,10 +952,10 @@ void esp32loop()
 
             checkRX();
 
+            iReceiveTimeOutTime = 0;
+
             // reception is done now
             bReceiving = false;
-
-            iReceiveTimeOutTime = 0;
 
             radio.startChannelScan();
         }
@@ -951,7 +980,7 @@ void esp32loop()
                 {
                     if(bLORADEBUG)
                     {
-                        Serial.print(F("failed, code "));
+                        Serial.print(F("failed, code <3> "));
                         Serial.println(transmissionState);
                     }
                 }
@@ -975,7 +1004,7 @@ void esp32loop()
                 radio.startChannelScan();
         }
         else
-        if(detectedFlag)
+        if(detectedFlag && !bReceiving)
         {
             // sind wir noch in einem Transmit?
             if(!bTransmiting)
@@ -997,14 +1026,14 @@ void esp32loop()
                 {
                     if(bLORADEBUG)
                     {
-                        Serial.print(F("failed, code "));
+                        Serial.print(F("failed, code <3> "));
                         Serial.println(state);
                     }
                 }
 
                 // set the flag for ongoing reception
 
-                iReceiveTimeOutTime = millis(); // auf 3.5sec Timeout warten
+                iReceiveTimeOutTime = millis(); // auf RECEIVE_TIMEOUT warten
 
                 bReceiving = true;
             }
@@ -1041,23 +1070,27 @@ void esp32loop()
     {
         int state = RADIOLIB_ERR_NONE;
 
+        iReceiveTimeOutTime = 0;
+
         // check ongoing reception
         if(bReceiving)
         {
             // DIO triggered while reception is ongoing
             // that means we got a packet
 
+            iReceiveTimeOutTime = 0;
+
             // reset flags first
             scanFlag = false;
 
             checkRX();
 
-            // reception is done now
-            bReceiving = false;
-
             iReceiveTimeOutTime = 0;
 
-            radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+            radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+
+            // reception is done now
+            bReceiving = false;
         }
         else
         if(bTransmiting)
@@ -1065,22 +1098,24 @@ void esp32loop()
             scanFlag = false;
             bTransmiting = false;
 
-            if (transmissionState == RADIOLIB_ERR_NONE)
+            if(tx_is_active)
             {
-                // packet was successfully sent
-                if(bLORADEBUG)
-                    Serial.println(F("transmission finished!"));
+                if (transmissionState == RADIOLIB_ERR_NONE)
+                {
+                    // packet was successfully sent
+                    if(bLORADEBUG)
+                        Serial.println(F("transmission finished!"));
 
-                // NOTE: when using interrupt-driven transmit method,
-                //       it is not possible to automatically measure
-                //       transmission data rate using getDataRate()
+                    // NOTE: when using interrupt-driven transmit method,
+                    //       it is not possible to automatically measure
+                    //       transmission data rate using getDataRate()
 
                 }
                 else
                 {
                     if(bLORADEBUG)
                     {
-                        Serial.print(F("failed, code "));
+                        Serial.print(F("failed, code <3> "));
                         Serial.println(transmissionState);
                     }
                 }
@@ -1090,18 +1125,19 @@ void esp32loop()
                 // RF switch is powered down etc.
                 radio.finishTransmit();
 
-            #ifndef BOARD_TLORA_OLV216
-                // reset MeshCom
+                #ifndef BOARD_TLORA_OLV216
+                    // reset MeshCom
                 if(bSetLoRaAPRS)
                 {
                     lora_setchip_meshcom();
                     bSetLoRaAPRS = false;
                 }
-            #endif
+                #endif
+            }
 
-                tx_is_active = false;
+            tx_is_active = false;
 
-                radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+            radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
         }
         else
         {
@@ -1134,7 +1170,7 @@ void esp32loop()
                             }
                         }
 
-                        iReceiveTimeOutTime = millis(); // auf 3.5sec Timeout warten
+                        iReceiveTimeOutTime = millis(); // auf RECEIVE_TIMEOUT Timeout warten
 
                         // set the flag for ongoing reception
                         bReceiving = true;
@@ -1157,17 +1193,17 @@ void esp32loop()
                             if(doTX())
                                 bTransmiting = true;
                             else
-                                radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+                                radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
 
                             bTransmiting = true;
                         }
                         else
                         {
-                            radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+                            radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
                         }
                     }
                     else
-                       radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+                       radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
                 }
                 else
                 {
@@ -1178,7 +1214,7 @@ void esp32loop()
                         Serial.println(state);
                     }
 
-                    radio.startChannelScan(RADIOLIB_SX126X_CAD_ON_4_SYMB, 25, 10);
+                    radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
                 }
             }
         }
@@ -1685,7 +1721,7 @@ void checkRX(void)
     else
     {
         // some other error occurred
-        Serial.print(F("[SX12xx] Failed, code "));
+        Serial.print(F("[SX12xx] Failed, code <2>"));
         Serial.println(state);
 
     }

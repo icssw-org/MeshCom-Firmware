@@ -224,6 +224,11 @@ definitions
 #define DHCP_REFRESH 1                     // Refreshtime of DHCP Address in minutes
 #define MAX_HB_RX_TIME 30                  // time we wait for an HB from server in seconds
 
+#define RECEIVE_TIMEOUT 3500               // [SX126x] 3.5sec
+#define RADIOLIB_SX126X_CAD 0x07           // 0x00...length off    0x07...32-bit detect
+#define RADIOLIB_SX126X_DETMIN  10         // default 10
+#define RADIOLIB_SX126X_DETPEAK 25         // default 25
+
 // NTP
 #define NTP_UPDATE_TIME 240     // NTP update interval in Minutes
 #define TIME_OFFSET 60          // utc timeoffset in minutes
