@@ -177,7 +177,7 @@ definitions
 #define LORA_BANDWIDTH 1         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
 #define LORA_SF 11 // [SF7..SF12]
 #define LORA_CR 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
-#define LORA_PREAMBLE_LENGTH LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
+#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define LORA_SYMBOL_TIMEOUT 0    // Symbols
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
