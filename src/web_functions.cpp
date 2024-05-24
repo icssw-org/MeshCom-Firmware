@@ -1123,17 +1123,20 @@ void loopWebserver()
                         // Textmessage
                         if(msg_type_b_lora == 0x3A)
                         {
-                            if(bDEBUG)
-                                Serial.printf("aprsmsg.msg_source_call.c_str():%s, aprsmsg.msg_gateway_call.c_str():%s, aprsmsg.msg_destination_call.c_str():%s, aprsmsg.msg_payload.c_str():%s\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_payload.c_str());
+                            if(aprsmsg.msg_payload.indexOf(":ack") < 1)
+                            {
+                                if(bDEBUG)
+                                    Serial.printf("aprsmsg.msg_source_call.c_str():%s, aprsmsg.msg_gateway_call.c_str():%s, aprsmsg.msg_destination_call.c_str():%s, aprsmsg.msg_payload.c_str():%s\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_payload.c_str());
 
-                            String msgtxt = aprsmsg.msg_payload;
-                            if(msgtxt.indexOf('{') > 0)
-                            msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{')-1);
+                                String msgtxt = aprsmsg.msg_payload;
+                                if(msgtxt.indexOf('{') > 0)
+                                msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{')-1);
 
-                            if(strcmp(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()) == 0)
-                                web_client.printf("<tr><td class=\"td2\"></td><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small><b>%s</b></td></tr>\n", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str(), msgtxt.c_str());
-                            else
-                                web_client.printf("<tr><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small><b>%s</b></td><td class=\"td2\"></td></tr>\n", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str(), msgtxt.c_str());
+                                if(strcmp(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()) == 0)
+                                    web_client.printf("<tr><td class=\"td2\"></td><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small><b>%s</b></td></tr>\n", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str(), msgtxt.c_str());
+                                else
+                                    web_client.printf("<tr><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small><b>%s</b></td><td class=\"td2\"></td></tr>\n", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str(), msgtxt.c_str());
+                            }
                         }
                     }
 

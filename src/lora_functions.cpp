@@ -79,7 +79,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         memcpy(print_buff, payload, 12);
 
-        if(is_new_packet(print_buff+1) || checkOwnTx(print_buff+6) > 0)
+        int icheck = checkOwnTx(print_buff+6);
+
+        if(is_new_packet(print_buff+1) || icheck > 0)
         {
             // add rcvMsg to forward to LoRa TX
             if(is_new_packet(print_buff+1))
@@ -91,8 +93,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
 
             //Serial.printf("ACK from LoRa %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
-
-            int icheck = checkOwnTx(print_buff+6);
 
             if(icheck >= 0)
             {
@@ -373,6 +373,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         uint8_t tempRcvBuffer[255];
 
                                         uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                                        sendDisplayText(aprsmsg, rssi, snr);
 
                                         addBLEOutBuffer(tempRcvBuffer, tempsize);
                                     }

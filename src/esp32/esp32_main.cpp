@@ -263,8 +263,8 @@ void setFlagTimeout(void)
 #endif
 void setFlagDetected(void)
 {
-        // we got a preamble, set the flag
-        detectedFlag = true;
+    // we got a preamble, set the flag
+    detectedFlag = true;
 }
 #else
 // this function is called when no preamble
@@ -686,7 +686,7 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[SX126x] Starting scan for LoRa preamble ... "));
-            state = radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+            state = radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("[SX126X] success!"));
@@ -713,7 +713,7 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[SX126X] Starting scan for LoRa preamble ... "));
-            state = radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+            state = radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("[SX126X] success!"));
@@ -743,7 +743,7 @@ void esp32setup()
 
         // start scanning the channel
         Serial.print(F("[SX126x] Starting scan for LoRa preamble ... "));
-        state = radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+        state = radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
         if (state == RADIOLIB_ERR_NONE)
         {
             Serial.println(F("[SX126X] success!"));
@@ -913,7 +913,7 @@ void esp32loop()
             #if defined(SX127X)
                 radio.startChannelScan();
             #else
-                radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+                radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
             #endif
 
             // LoRa preamble was detected
@@ -942,7 +942,7 @@ void esp32loop()
         //    Serial.printf(" Receive detectedFlag:%i timeoutFlag:%i bReceiving:%i... \n", detectedFlag, timeoutFlag, bReceiving);
 
         // check ongoing reception
-        if(bReceiving)
+        if(bReceiving && timeoutFlag)
         {
             // DIO triggered while reception is ongoing
             // that means we got a packet
@@ -1004,7 +1004,7 @@ void esp32loop()
                 radio.startChannelScan();
         }
         else
-        if(detectedFlag && !bReceiving)
+        if(detectedFlag)
         {
             // sind wir noch in einem Transmit?
             if(!bTransmiting)
@@ -1070,6 +1070,9 @@ void esp32loop()
     {
         int state = RADIOLIB_ERR_NONE;
 
+        // reset flags first
+        scanFlag = false;
+
         iReceiveTimeOutTime = 0;
 
         // check ongoing reception
@@ -1080,22 +1083,19 @@ void esp32loop()
 
             iReceiveTimeOutTime = 0;
 
-            // reset flags first
-            scanFlag = false;
-
             checkRX();
 
             iReceiveTimeOutTime = 0;
 
-            radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
-
             // reception is done now
             bReceiving = false;
+
+            radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+
         }
         else
         if(bTransmiting)
         {
-            scanFlag = false;
             bTransmiting = false;
 
             if(tx_is_active)
@@ -1137,7 +1137,7 @@ void esp32loop()
 
             tx_is_active = false;
 
-            radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+            radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
         }
         else
         {
@@ -1155,7 +1155,7 @@ void esp32loop()
                         if(bLORADEBUG)
                             Serial.print(F("[SX12xx] Preamble detected, starting reception ... "));
 
-                        state = radio.startReceive(0, RADIOLIB_SX127X_RXSINGLE);
+                        state = radio.startReceive(); //0, RADIOLIB_SX127X_RXSINGLE);
                         if (state == RADIOLIB_ERR_NONE)
                         {
                             if(bLORADEBUG)
@@ -1193,17 +1193,17 @@ void esp32loop()
                             if(doTX())
                                 bTransmiting = true;
                             else
-                                radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+                                radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
 
                             bTransmiting = true;
                         }
                         else
                         {
-                            radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+                            radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
                         }
                     }
                     else
-                       radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+                       radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
                 }
                 else
                 {
@@ -1214,13 +1214,10 @@ void esp32loop()
                         Serial.println(state);
                     }
 
-                    radio.startChannelScan(RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+                    radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
                 }
             }
         }
-        
-        scanFlag = false;
-        detectedFlag = false;
     }
     #endif
     
