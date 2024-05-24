@@ -26,6 +26,8 @@ definitions
 #define EBYTE_E22 39
 #define HELTEC_V3 43
 
+#define DEFAULT_PREAMPLE_LENGTH 8
+
 // set hardware
 #ifdef BOARD_RAK4630
     #define MODUL_HARDWARE RAK4631
@@ -38,7 +40,7 @@ definitions
     #define ENABLE_INA226
     #define ENABLE_MCP23017
     #define BUTTON_PIN WB_IO6        // only in combination with RAK13002
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
     #define ENABLE_GPS
 #endif
 
@@ -56,7 +58,7 @@ definitions
     
     //TODO
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH // Same for Tx and Rx
 
 #endif
 
@@ -76,7 +78,7 @@ definitions
     
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH2  // Same for Tx and Rx
 #endif
 
 #ifdef BOARD_SX1268
@@ -95,7 +97,7 @@ definitions
 
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef BOARD_TLORA_OLV216
@@ -110,7 +112,7 @@ definitions
     #define ENABLE_INA226
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef 	BOARD_HELTEC
@@ -125,7 +127,7 @@ definitions
     #define ENABLE_INA226
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef 	BOARD_HELTEC_V3
@@ -141,7 +143,7 @@ definitions
     #define ENABLE_INA226
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef 	BOARD_E22
@@ -156,7 +158,7 @@ definitions
     #define ENABLE_INA226
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef RAK4630
@@ -175,7 +177,7 @@ definitions
 #define LORA_BANDWIDTH 1         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
 #define LORA_SF 11 // [SF7..SF12]
 #define LORA_CR 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
-#define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+#define LORA_PREAMBLE_LENGTH LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define LORA_SYMBOL_TIMEOUT 0    // Symbols
 #define LORA_FIX_LENGTH_PAYLOAD_ON false

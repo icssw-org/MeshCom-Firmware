@@ -1635,9 +1635,10 @@ void commandAction(char *msg_text, bool ble)
 
             if(ble)
             {
-                addBLECommandBack((char*)msg_text);
                 bNodeSetting = true;
             }
+            else
+                bReturn=true;
 
             lora_setcountry(iVar);
             

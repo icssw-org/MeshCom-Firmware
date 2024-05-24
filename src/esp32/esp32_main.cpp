@@ -211,7 +211,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 #endif
 
 // Lora callback Function declarations
-void checkRX(void);
+int checkRX(void);
 
 // save transmission state between loops
 int transmissionState = RADIOLIB_ERR_UNKNOWN;
@@ -686,7 +686,7 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[SX126x] Starting scan for LoRa preamble ... "));
-            state = radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+            state = radio.startChannelScan();
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("[SX126X] success!"));
@@ -713,7 +713,7 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[SX126X] Starting scan for LoRa preamble ... "));
-            state = radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+            state = radio.startChannelScan();
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("[SX126X] success!"));
@@ -743,7 +743,7 @@ void esp32setup()
 
         // start scanning the channel
         Serial.print(F("[SX126x] Starting scan for LoRa preamble ... "));
-        state = radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+        state = radio.startChannelScan();
         if (state == RADIOLIB_ERR_NONE)
         {
             Serial.println(F("[SX126X] success!"));
@@ -910,11 +910,7 @@ void esp32loop()
 
             iReceiveTimeOutTime=0;
 
-            #if defined(SX127X)
-                radio.startChannelScan();
-            #else
-                radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
-            #endif
+            radio.startChannelScan();
 
             // LoRa preamble was detected
             if(bLORADEBUG)
@@ -950,14 +946,17 @@ void esp32loop()
             // reset flags first
             scanFlag = false;
 
-            checkRX();
-
-            iReceiveTimeOutTime = 0;
+            if(checkRX() == RADIOLIB_ERR_CRC_MISMATCH)
+                iReceiveTimeOutTime = millis();
+            else
+            {
+                iReceiveTimeOutTime = 0;
+    
+                radio.startChannelScan();
+            }
 
             // reception is done now
             bReceiving = false;
-
-            radio.startChannelScan();
         }
         else
         if(bTransmiting)
@@ -1083,21 +1082,21 @@ void esp32loop()
 
             iReceiveTimeOutTime = 0;
 
-            checkRX();
-
-            iReceiveTimeOutTime = 0;
+            if(checkRX() == RADIOLIB_ERR_CRC_MISMATCH)
+                iReceiveTimeOutTime = millis();
+            else
+            {
+                iReceiveTimeOutTime = 0;
+    
+                radio.startChannelScan();
+            }
 
             // reception is done now
             bReceiving = false;
-
-            radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
-
         }
         else
         if(bTransmiting)
         {
-            bTransmiting = false;
-
             if(tx_is_active)
             {
                 if (transmissionState == RADIOLIB_ERR_NONE)
@@ -1127,95 +1126,92 @@ void esp32loop()
 
                 #ifndef BOARD_TLORA_OLV216
                     // reset MeshCom
-                if(bSetLoRaAPRS)
-                {
-                    lora_setchip_meshcom();
-                    bSetLoRaAPRS = false;
-                }
+                    if(bSetLoRaAPRS)
+                    {
+                        lora_setchip_meshcom();
+                        bSetLoRaAPRS = false;
+                    }
                 #endif
+
+                bTransmiting = false;
+
             }
 
             tx_is_active = false;
 
-            radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+            radio.startChannelScan();
         }
         else
         {
-            if(!bTransmiting && !bReceiving)
+            // check CAD result
+            state = radio.getChannelScanResult();
+
+            if (state == RADIOLIB_LORA_DETECTED)
             {
-                // check CAD result
-                state = radio.getChannelScanResult();
+                    cmd_counter = 0;
+                    tx_waiting=false;   // erneut auf 7 folgende freie CAD warten
 
-                if (state == RADIOLIB_LORA_DETECTED)
-                {
-                        cmd_counter = 0;
-                        tx_waiting=false;   // erneut auf 7 folgende freie CAD warten
+                    // LoRa preamble was detected
+                    if(bLORADEBUG)
+                        Serial.print(F("[SX12xx] Preamble detected, starting reception ... "));
 
-                        // LoRa preamble was detected
+                    state = radio.startReceive(); //0, RADIOLIB_SX127X_RXSINGLE);
+                    if (state == RADIOLIB_ERR_NONE)
+                    {
                         if(bLORADEBUG)
-                            Serial.print(F("[SX12xx] Preamble detected, starting reception ... "));
-
-                        state = radio.startReceive(); //0, RADIOLIB_SX127X_RXSINGLE);
-                        if (state == RADIOLIB_ERR_NONE)
-                        {
-                            if(bLORADEBUG)
-                                Serial.println(F("success!"));
-                        }
-                        else
-                        {
-                            if(bLORADEBUG)
-                            {
-                                Serial.print(F("failed, code "));
-                                Serial.println(state);
-                            }
-                        }
+                            Serial.println(F("success!"));
 
                         iReceiveTimeOutTime = millis(); // auf RECEIVE_TIMEOUT Timeout warten
 
                         // set the flag for ongoing reception
                         bReceiving = true;
-                }
-                else
-                if (state == RADIOLIB_CHANNEL_FREE)
-                {
-                    // channel is free
-                    if(bLORADEBUG && bDEBUG)
-                        Serial.println(F("[SX1262] Channel is free!"));
-
-                    // nothing was detected
-                    // do not print anything, it just spams the console
-                    // sind wir noch in einem Transmit? oder Receive?
-                    if(!bTransmiting && !bReceiving)
-                    {
-                        if (iWrite != iRead)
-                        {
-                            // save transmission state between loops
-                            if(doTX())
-                                bTransmiting = true;
-                            else
-                                radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
-
-                            bTransmiting = true;
-                        }
-                        else
-                        {
-                            radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
-                        }
                     }
                     else
-                       radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+                    {
+                        if(bLORADEBUG)
+                        {
+                            Serial.print(F("failed, code "));
+                            Serial.println(state);
+
+                            radio.startChannelScan();
+                        }
+                    }
+            }
+            else
+            if (state == RADIOLIB_CHANNEL_FREE)
+            {
+                // channel is free
+                if(bLORADEBUG && bDEBUG)
+                    Serial.println(F("[SX1262] Channel is free!"));
+
+                // nothing was detected
+                // do not print anything, it just spams the console
+                // sind wir noch in einem Transmit? oder Receive?
+                if (iWrite != iRead)
+                {
+                    // save transmission state between loops
+                    if(doTX())
+                        bTransmiting = true;
+                    else
+                        radio.startChannelScan();
+
+                    bTransmiting = true;
                 }
                 else
                 {
-                    // some other error occurred
-                    if(bLORADEBUG)
-                    {
-                        Serial.print(F("[SX1262] channel not free Failed, code "));
-                        Serial.println(state);
-                    }
-
-                    radio.startChannelScan(); //RADIOLIB_SX126X_CAD, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN);
+                    radio.startChannelScan();
                 }
+            }
+            else
+            {
+                // some other error occurred
+                if(bLORADEBUG)
+                {
+                    Serial.print(F("[SX1262] channel not free Failed, code "));
+                    Serial.println(state);
+                }
+
+                radio.startChannelScan();
             }
         }
     }
@@ -1662,7 +1658,7 @@ void esp32loop()
 
 
 
-void checkRX(void)
+int checkRX(void)
 {
     // you can receive data as an Arduino String
     // NOTE: receive() is a blocking method!
@@ -1670,7 +1666,7 @@ void checkRX(void)
     //       on non-blocking reception method.
 
     if(is_receiving)    // receive in action
-        return;
+        return -1;
 
     is_receiving=true;
 
@@ -1713,17 +1709,17 @@ void checkRX(void)
         // packet was received, but is malformed
         if(bLORADEBUG)
             Serial.println(F("[SX12xx] CRC error!"));
-
     }
     else
     {
         // some other error occurred
         Serial.print(F("[SX12xx] Failed, code <2>"));
         Serial.println(state);
-
     }
 
     is_receiving=false;
+
+    return state;
 }
 
 void checkSerialCommand(void)
