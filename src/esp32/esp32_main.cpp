@@ -1072,6 +1072,9 @@ void esp32loop()
         // reset flags first
         scanFlag = false;
 
+        if(bLORADEBUG && bDEBUG)
+            Serial.printf("bReceiving:%i bTransmiting:%i tx_is_active:%i\n", bReceiving, bTransmiting, tx_is_active);
+
         iReceiveTimeOutTime = 0;
 
         // check ongoing reception
@@ -1132,10 +1135,9 @@ void esp32loop()
                         bSetLoRaAPRS = false;
                     }
                 #endif
-
-                bTransmiting = false;
-
             }
+
+            bTransmiting = false;
 
             tx_is_active = false;
 
@@ -1194,8 +1196,6 @@ void esp32loop()
                         bTransmiting = true;
                     else
                         radio.startChannelScan();
-
-                    bTransmiting = true;
                 }
                 else
                 {
