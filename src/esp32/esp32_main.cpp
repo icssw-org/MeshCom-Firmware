@@ -25,6 +25,7 @@
 #include "mcu811.h"
 #include "io_functions.h"
 #include "ina226_functions.h"
+#include "rtc_functions.h"
 
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
@@ -377,6 +378,7 @@ void esp32setup()
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
+    bRTCON =  meshcom_settings.node_sset2 & 0x0200;
 
     // if Node is in WifiAP Mode -> no Gateway posible
     if(bWIFIAP && bGATEWAY)
@@ -466,6 +468,11 @@ void esp32setup()
     // INA226
     #if defined(ENABLE_INA226)
         setupINA226();
+    #endif
+
+    // RTC
+    #if defined(ENABLE_RTC)
+        setupRTC();
     #endif
 
 	// Initialize temp sensor
@@ -1055,20 +1062,35 @@ void esp32loop()
     if(bLoopActive)
         Serial.println("loop 02");
 
-    //Clock::EEvent eEvent;
-	
-	// check clock event
-	//eEvent = MyClock.CheckEvent();
+    // get RTC Now
+    if(bRTCON)
+    {
+        loopRTC();
 
-	MyClock.CheckEvent();
-	
-    meshcom_settings.node_date_year = MyClock.Year();
-    meshcom_settings.node_date_month = MyClock.Month();
-    meshcom_settings.node_date_day = MyClock.Day();
+        DateTime utc = getRTCNow();
 
-    meshcom_settings.node_date_hour = MyClock.Hour();
-    meshcom_settings.node_date_minute = MyClock.Minute();
-    meshcom_settings.node_date_second = MyClock.Second();
+        DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
+
+        meshcom_settings.node_date_year = now.year();
+        meshcom_settings.node_date_month = now.month();
+        meshcom_settings.node_date_day = now.day();
+
+        meshcom_settings.node_date_hour = now.hour();
+        meshcom_settings.node_date_minute = now.minute();
+        meshcom_settings.node_date_second = now.second();
+    }
+    else
+    {
+        MyClock.CheckEvent();
+        
+        meshcom_settings.node_date_year = MyClock.Year();
+        meshcom_settings.node_date_month = MyClock.Month();
+        meshcom_settings.node_date_day = MyClock.Day();
+
+        meshcom_settings.node_date_hour = MyClock.Hour();
+        meshcom_settings.node_date_minute = MyClock.Minute();
+        meshcom_settings.node_date_second = MyClock.Second();
+    }
 
     if(bLoopActive)
         Serial.printf("[LOOP] 1\n");

@@ -39,6 +39,7 @@ extern bool bBMEON;
 extern bool bBME680ON;
 extern bool bMCU811ON;
 extern bool bINA226ON;
+extern bool bRTCON;
 
 extern bool bTCA9548A;
 extern bool bMCP23017;

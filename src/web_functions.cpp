@@ -15,6 +15,8 @@
 
 #include <lora_setchip.h>
 
+#include <rtc_functions.h>
+
 #ifdef ESP32
     // WIFI
     #include <WiFi.h>
@@ -255,6 +257,16 @@ void loopWebserver()
             if (web_header.indexOf("GET /ina226/off") >= 0)
             {
                 commandAction((char*)"--226 off", bPhoneReady);
+            }
+            else
+            if (web_header.indexOf("GET /rtc/on") >= 0)
+            {
+                commandAction((char*)"--rtc on", bPhoneReady);
+            }
+            else
+            if (web_header.indexOf("GET /rtc/off") >= 0)
+            {
+                commandAction((char*)"--rtc off", bPhoneReady);
             }
             else
             if (web_header.indexOf("GET /volt/on") >= 0)
@@ -587,6 +599,21 @@ void loopWebserver()
                 sprintf(message_text, "--utcoff %s", message.c_str());
                 
                 commandAction(message_text, bPhoneReady);
+            }
+            else
+            if (web_header.indexOf("GET /action_page.php?utcdate=") >= 0)
+            {
+                idx_text=web_header.indexOf("=") + 1;
+                idx_text_end=web_header.indexOf(" HTTP");
+
+                String message="";
+
+                if(idx_text_end <= 0)
+                    message = hex2ascii(web_header.substring(idx_text));
+                else
+                    message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                setRTCNow(message);
             }
             else
             if (web_header.indexOf("GET /action_page.php?aprstext=") >= 0)
@@ -928,6 +955,15 @@ void loopWebserver()
                 web_client.println("<label for=\"fname\"><b>UTC-Offset:</b></label>");
                 web_client.println("</td><td>\n");
                 web_client.printf("<input type=\"text\" value=\"%.1f\" maxlength=\"5\" size=\"4\" id=\"utcoff\" name=\"utcoff\">\n", meshcom_settings.node_utcoff);
+                web_client.println("<input type=\"submit\" value=\"set\">");
+                web_client.println("</td></tr>\n");
+                web_client.println("</form>");
+
+                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<tr><td>\n");
+                web_client.println("<label for=\"fname\"><b>UTC-Date/Time:</b></label>");
+                web_client.println("</td><td>\n");
+                web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"19\" size=\"19\" id=\"utcdate\" name=\"utcdate\">\n", getStringRTCNow().c_str());
                 web_client.println("<input type=\"submit\" value=\"set\">");
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
@@ -1318,6 +1354,13 @@ void loopWebserver()
                     web_client.printf("<tr><td><b>vPOWER</b></td><td>%.1f mW</td></tr>\n", meshcom_settings.node_vpower);
                 }
 
+                if(bRTCON)
+                {
+                    web_client.println("<tr><td>&nbsp;</td><td>&nbsp;</td></tr>");
+                    web_client.println("<tr><td><b>RTC</b></td><td>&nbsp;</td></tr>");
+                    web_client.printf("<tr><td><b>UTC-Date/Time</b></td><td>%s</td></tr>\n", getStringRTCNow().c_str());
+                }
+
                 web_client.println("</table>");
             }
 
@@ -1453,6 +1496,16 @@ void loopWebserver()
                 else
                 {
                     web_client.println("<td><a href=\"/ina226/on\"><button class=\"button\"><b>INA226</b></button></a></td></tr>");
+                }
+
+                // RTC
+                if (bRTCON)
+                {
+                    web_client.println("<td><a href=\"/rtc/off\"><button class=\"button button2\"<b>RTC</b></button></a></td>");
+                }
+                else
+                {
+                    web_client.println("<td><a href=\"/rtc/on\"><button class=\"button\"><b>RTC</b></button></a></td></tr>");
                 }
             }
 

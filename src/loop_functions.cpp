@@ -41,6 +41,7 @@ bool bBMEON = false;
 bool bBME680ON = false;
 bool bMCU811ON = false;
 bool bINA226ON = false;
+bool bRTCON = false;
 bool bTCA9548A=false;
 
 bool bONEWIRE = false;
@@ -719,19 +720,22 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
-        char csetTime[30];
-        sprintf(csetTime, "%s", aprsmsg.msg_payload.c_str());
+        if(bRTCON)
+        {
+            char csetTime[30];
+            sprintf(csetTime, "%s", aprsmsg.msg_payload.c_str());
 
-        int Year;
-        int Month;
-        int Day;
-        int Hour;
-        int Minute;
-        int Second;
+            int Year;
+            int Month;
+            int Day;
+            int Hour;
+            int Minute;
+            int Second;
 
-        sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
-    
-        MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+            sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
+        
+            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+        }
 
         if(bDisplayInfo)
         {
