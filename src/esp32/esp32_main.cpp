@@ -236,10 +236,20 @@ volatile bool scanFlag = false;
 void setFlagReceive(void)
 {
     if(bEnableInterruptReceive)
+    {
         receiveFlag = true;
 
-    if(bLORADEBUG)
-        Serial.println("receiveFlag");
+        if(bLORADEBUG)
+            Serial.println("receiveFlag");
+    }
+
+    if(bEnableInterruptTransmit)
+    {
+        transmittedFlag = true;
+
+        if(bLORADEBUG)
+            Serial.println("transmittedFlag");
+    }
 }
 
 #if defined(ESP8266) || defined(ESP32)
@@ -247,11 +257,21 @@ void setFlagReceive(void)
 #endif
 void setFlagSent(void)
 {
+    if(bEnableInterruptReceive)
+    {
+        receiveFlag = true;
+
+        if(bLORADEBUG)
+            Serial.println("receiveFlag");
+    }
+
     if(bEnableInterruptTransmit)
+    {
         transmittedFlag = true;
 
-    if(bLORADEBUG)
-        Serial.println("transmittedFlag");
+        if(bLORADEBUG)
+            Serial.println("transmittedFlag");
+    }
 }
 
 void enableRX(void);    // for Modules with RXEN / TXEN Pin
@@ -495,7 +515,7 @@ void esp32setup()
         u8g2.drawStr(5, 20, "MeshCom 4.0");
         u8g2.setFont(u8g2_font_6x10_mf);
         char cvers[10];
-        sprintf(cvers, "FW %s%s/%-1.1s", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
+        sprintf(cvers, "FW %s%s/%-1.1s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         u8g2.drawStr(5, 30, cvers);
         u8g2.drawStr(5, 40, "by icssw.org");
         u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
@@ -623,9 +643,12 @@ void esp32setup()
         // set the function that will be called
         // when LoRa preamble is not detected within CAD timeout period
         // or when a packet is received
+        
+        radio.setPacketReceivedAction(setFlagReceive);
         radio.setPacketSentAction(setFlagSent);
 
-        radio.setPacketReceivedAction(setFlagReceive);
+        radio.setDio0Action(setFlagReceive, RISING);
+        radio.setDio1Action(setFlagSent, RISING);
 
         // set the function that will be called
         // when LoRa preamble is detected
@@ -658,7 +681,10 @@ void esp32setup()
         // set the function that will be called
         // when LoRa preamble is not detected within CAD timeout period
         // or when a packet is received
-        radio.setDio1Action(setFlag);
+        radio.setPacketReceivedAction(setFlagReceive);
+        radio.setPacketSentAction(setFlagSent);
+
+        radio.setDio1Action(setFlagSent);
 
         // set the function that will be called
         // when LoRa preamble is detected
@@ -687,9 +713,10 @@ void esp32setup()
 
         #ifdef SX126X_V3
             // interrupt pin
+            radio.setPacketReceivedAction(setFlagReceive);
             radio.setPacketSentAction(setFlagSent);
 
-            radio.setPacketReceivedAction(setFlagReceive);
+            radio.setDio1Action(setFlagSent);
 
             // start scanning the channel
             Serial.print(F("[SX126x] Starting to listen ... "));
