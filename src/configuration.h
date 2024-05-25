@@ -78,7 +78,7 @@ definitions
     
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
-    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH2  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef BOARD_SX1268
