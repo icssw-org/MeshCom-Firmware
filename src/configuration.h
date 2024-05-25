@@ -26,8 +26,7 @@ definitions
 #define EBYTE_E22 39
 #define HELTEC_V3 43
 
-#define DEFAULT_PREAMPLE_LENGTH 8
-
+#define DEFAULT_PREAMPLE_LENGTH 32
 // set hardware
 #ifdef BOARD_RAK4630
     #define MODUL_HARDWARE RAK4631

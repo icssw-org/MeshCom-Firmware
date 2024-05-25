@@ -32,8 +32,8 @@
 bool rf_crc = true;
 uint16_t rf_preamble_length = LORA_PREAMBLE_LENGTH;
 
-//0...EU  1...UK, 3...EA, 10...US, ..... 18...868, 19...915, 20...MAN
-String strCountry[21] = {"EU", "UK", "none", "EA", "none", "none", "none", "none", "none", "none", "US", "VR2", "none", "none", "none", "none", "none", "none", "868", "915", "MAN"};
+//0...EU  1...UK, 3...EA, 8...EU8, 10...US, ..... 18...868, 19...915, 20...MAN
+String strCountry[21] = {"EU", "UK", "none", "EA", "none", "none", "none", "none", "EU8", "none", "US", "VR2", "none", "none", "none", "none", "none", "none", "868", "915", "MAN"};
 
 String getCountry(int iCtry)
 {
@@ -155,6 +155,29 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
             
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
+            break;
+
+        case 8:  // EU Preabble 8 ... 
+            meshcom_settings.node_freq = RF_FREQUENCY;
+
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_bw = 1;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_bw = 250.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = LORA_SF;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+
+            meshcom_settings.node_preamplebits = 8;
+
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
             break;
 
         case 10:  // US ... 
@@ -172,6 +195,8 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
             
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
             break;
 
         case 11:  // VR2 ... 
@@ -189,6 +214,8 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
             
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
             break;
 
         case 18:  // 868 ... 
@@ -206,6 +233,8 @@ void lora_setcountry(int iCtry)
             meshcom_settings.node_sf = LORA_SF;
 
             meshcom_settings.node_track_freq = 999;
+
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
 
             break;
 
@@ -225,6 +254,8 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
             
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
             break;
 
         case 20:  // MAN ... manual
@@ -261,6 +292,8 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
 
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
             break;
 
         default:    // EU
@@ -278,6 +311,8 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
             
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
             break;
     }
 
@@ -311,7 +346,7 @@ void RadioInit();
         (uint32_t)meshcom_settings.node_sf,
         (uint8_t)meshcom_settings.node_cr,
         0, //  AFC bandwidth: Unused with LoRa
-        LORA_PREAMBLE_LENGTH,
+        (uint16_t)meshcom_settings.node_preamplebits,
         LORA_SYMBOL_TIMEOUT,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         0,    //  Fixed payload length: N/A
@@ -333,7 +368,7 @@ void RadioInit();
         (uint32_t)meshcom_settings.node_bw,
         (uint32_t)meshcom_settings.node_sf,
         (uint8_t)meshcom_settings.node_cr,
-        LORA_PREAMBLE_LENGTH,
+        (uint8_t)meshcom_settings.node_preamplebits,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         true, // CRC ON
         0,    // fsk only frequ hop
@@ -352,7 +387,7 @@ void RadioInit();
     float rf_bw = meshcom_settings.node_bw;
     int rf_sf = meshcom_settings.node_sf;
     int rf_cr = meshcom_settings.node_cr;
-    uint16_t rf_preamble_length = LORA_PREAMBLE_LENGTH;
+    uint16_t rf_preamble_length = meshcom_settings.node_preamplebits;
     bool rf_crc = true;
     return lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, SYNC_WORD_SX127x, rf_preamble_length, rf_crc);
 #endif

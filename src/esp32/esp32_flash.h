@@ -89,6 +89,7 @@ struct s_meshcom_settings
 	int node_country = 0;	// 0...EU  1...UK, 2...IT, 3...EA, 10...US, ..... 18...868, 19...915
 
 	float node_track_freq = 0;
+	int node_preamplebits = 0;
 
 
 	// nicht im Flash

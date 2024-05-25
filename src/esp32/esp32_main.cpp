@@ -1012,7 +1012,7 @@ void esp32loop()
     }
 
     // Check transmit now
-    if(iReceiveTimeOutTime == 0)
+    if(iReceiveTimeOutTime == 0 && !bEnableInterruptTransmit)
     {
         // channel is free
         // nothing was detected
@@ -1028,6 +1028,26 @@ void esp32loop()
             if(doTX())
             {
                 bEnableInterruptTransmit = true;
+            }
+            else
+            {
+                if(bLORADEBUG)
+                    Serial.print(F("[SX12xx] Starting to listen again... "));
+
+                int state = radio.startReceive();
+                if (state == RADIOLIB_ERR_NONE)
+                {
+                    if(bLORADEBUG)
+                        Serial.println(F("success!"));
+                }
+                else
+                {
+                    if(bLORADEBUG)
+                    {
+                        Serial.print(F("failed, code "));
+                        Serial.println(state);
+                    }
+                }        
             }
         }
     }

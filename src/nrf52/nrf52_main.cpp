@@ -628,7 +628,7 @@ void nrf52setup()
         u8g2.drawStr(5, 20, "MeshCom 4.0");
         u8g2.setFont(u8g2_font_6x10_mf);
         char cvers[20];
-        sprintf(cvers, "FW %s%s/%s", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
+        sprintf(cvers, "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         u8g2.drawStr(5, 30, cvers);
         u8g2.drawStr(5, 40, "by icssw.org");
         u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");

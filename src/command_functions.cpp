@@ -1044,6 +1044,7 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"loradebug on") == 0)
     {
         bLORADEBUG=true;
+        bDisplayInfo=true;
 
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0200;   //
 
@@ -1060,6 +1061,7 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"loradebug off") == 0)
     {
         bLORADEBUG=false;
+        bDisplayInfo=false;
 
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7DFF;   //
 
@@ -2058,6 +2060,7 @@ void commandAction(char *msg_text, bool ble)
             idoc["GCB2"] = meshcom_settings.node_gcb[2];
             idoc["GCB3"] = meshcom_settings.node_gcb[3];
             idoc["GCB4"] = meshcom_settings.node_gcb[4];
+            idoc["CTRY"] = getCountry(meshcom_settings.node_country).c_str();
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 
