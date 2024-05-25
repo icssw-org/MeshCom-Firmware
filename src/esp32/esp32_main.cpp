@@ -233,23 +233,25 @@ volatile bool scanFlag = false;
 #if defined(ESP8266) || defined(ESP32)
   ICACHE_RAM_ATTR
 #endif
-void setFlag(void)
+void setFlagReceive(void)
 {
     if(bEnableInterruptReceive)
-    {
         receiveFlag = true;
-    
-        if(bLORADEBUG)
-            Serial.println("receiveFlag");
-    }
 
+    if(bLORADEBUG)
+        Serial.println("receiveFlag");
+}
+
+#if defined(ESP8266) || defined(ESP32)
+  ICACHE_RAM_ATTR
+#endif
+void setFlagSent(void)
+{
     if(bEnableInterruptTransmit)
-    {
         transmittedFlag = true;
-    
-        if(bLORADEBUG)
-            Serial.println("transmittedFlag");
-    }
+
+    if(bLORADEBUG)
+        Serial.println("transmittedFlag");
 }
 
 void enableRX(void);    // for Modules with RXEN / TXEN Pin
@@ -621,7 +623,9 @@ void esp32setup()
         // set the function that will be called
         // when LoRa preamble is not detected within CAD timeout period
         // or when a packet is received
-        radio.setDio0Action(setFlag, RISING);
+        radio.setPacketSentAction(setFlagSent);
+
+        radio.setPacketReceivedAction(setFlagReceive);
 
         // set the function that will be called
         // when LoRa preamble is detected
@@ -683,7 +687,9 @@ void esp32setup()
 
         #ifdef SX126X_V3
             // interrupt pin
-            radio.setDio1Action(setFlag);
+            radio.setPacketSentAction(setFlagSent);
+
+            radio.setPacketReceivedAction(setFlagReceive);
 
             // start scanning the channel
             Serial.print(F("[SX126x] Starting to listen ... "));
