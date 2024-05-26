@@ -398,6 +398,8 @@ void esp32setup()
         bBME680ON=false;
     }
 
+    bDisplayInfo = bLORADEBUG;
+
     global_batt = 4200.0;
 
     posinfo_interval = POSINFO_INTERVAL;

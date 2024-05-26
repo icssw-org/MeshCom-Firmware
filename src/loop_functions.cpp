@@ -720,7 +720,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
-        if(bRTCON)
+        if(!bRTCON)
         {
             char csetTime[30];
             sprintf(csetTime, "%s", aprsmsg.msg_payload.c_str());
@@ -735,16 +735,16 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
         
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-        }
 
-        if(bDisplayInfo)
-        {
-            Serial.println("");
-            Serial.print(getTimeString());
-            Serial.print(" TIMESET: Time set ");
-        }
+            if(bDisplayInfo)
+            {
+                Serial.println("");
+                Serial.print(getTimeString());
+                Serial.println(" TIMESET: Time set ");
+            }
 
-        bPosDisplay=true;
+            bPosDisplay=true;
+        }
 
         return;
     }

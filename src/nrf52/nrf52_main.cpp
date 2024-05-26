@@ -393,6 +393,8 @@ void nrf52setup()
     bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
 
 
+    bDisplayInfo = bLORADEBUG;
+
     // if Node is in WifiAP Mode -> no Gateway posible
     if(bWIFIAP && bGATEWAY)
     {

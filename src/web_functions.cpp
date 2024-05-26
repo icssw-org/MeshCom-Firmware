@@ -959,14 +959,17 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
-                web_client.println("<tr><td>\n");
-                web_client.println("<label for=\"fname\"><b>UTC-Date/Time:</b></label>");
-                web_client.println("</td><td>\n");
-                web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"19\" size=\"19\" id=\"utcdate\" name=\"utcdate\">\n", getStringRTCNow().c_str());
-                web_client.println("<input type=\"submit\" value=\"set\">");
-                web_client.println("</td></tr>\n");
-                web_client.println("</form>");
+                if(bRTCON)
+                {
+                    web_client.println("<form action=\"/action_page.php\">");
+                    web_client.println("<tr><td>\n");
+                    web_client.println("<label for=\"fname\"><b>UTC-Date/Time:</b></label>");
+                    web_client.println("</td><td>\n");
+                    web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"19\" size=\"19\" id=\"utcdate\" name=\"utcdate\">\n", getStringRTCNow().c_str());
+                    web_client.println("<input type=\"submit\" value=\"set\">");
+                    web_client.println("</td></tr>\n");
+                    web_client.println("</form>");
+                }
 
                 web_client.println("<form action=\"/action_page.php\">");
                 web_client.println("<tr><td>\n");
