@@ -66,12 +66,14 @@ bool CheckOwnGroup(String callsign)
     return false;
 }
 
-void initAPRS(struct aprsMessage &aprsmsg)
+void initAPRS(struct aprsMessage &aprsmsg, char msgType)
 {
     aprsmsg.msg_len = 0;
     aprsmsg.msg_id = 0;
-    aprsmsg.payload_type = 0x00;
-    aprsmsg.max_hop = 5;
+    aprsmsg.payload_type = msgType;
+    aprsmsg.max_hop = 1;    // other
+    if(msgType == ':')
+        aprsmsg.max_hop = 3;    // TEXT
     aprsmsg.msg_server = false;
     aprsmsg.msg_track = false;
     aprsmsg.msg_app_offline = false;
@@ -100,7 +102,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 {
     uint8_t temp[11];
 
-    initAPRS(aprsmsg);
+    initAPRS(aprsmsg, 0x00);    // decode init
 
     aprsmsg.msg_len = rsize;
 

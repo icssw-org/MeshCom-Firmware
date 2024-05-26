@@ -400,7 +400,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                             // APP Offline
                                             if(isPhoneReady == 0)
                                             {
-                                                aprsmsg.max_hop = aprsmsg.max_hop | 0x20;
+                                                aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline = true
 
                                                 uint8_t tempRcvBuffer[255];
 
@@ -509,7 +509,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             // resend only Packet to all and !owncall 
                             if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && bMeshDestination)
                             {
-                                // MESH only max. hops (default 5)
+                                // MESH only max. hops (default 3...TEXT 1...POS)
                                 if(aprsmsg.max_hop > 0)
                                 {
                                     if(bGATEWAY)

@@ -60,7 +60,7 @@ void loop_onewire()
 
     byte i;
     byte present = 0;
-    byte type_s;
+    //byte type_s;
     byte data[9];
     byte addr[8];
     float celsius, fahrenheit;
@@ -104,17 +104,17 @@ void loop_onewire()
         case 0x10:
             if(bWXDEBUG)
                 Serial.println("  Chip = DS18S20");  // or old DS1820
-            type_s = 1;
+            //type_s = 1;
             break;
         case 0x28:
             if(bWXDEBUG)
                 Serial.println("  Chip = DS18B20");
-            type_s = 0;
+            //type_s = 0;
             break;
         case 0x22:
             if(bWXDEBUG)
                 Serial.println("  Chip = DS1822");
-            type_s = 0;
+            //type_s = 0;
             break;
         default:
             if(bWXDEBUG)

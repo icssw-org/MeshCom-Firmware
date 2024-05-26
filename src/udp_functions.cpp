@@ -592,7 +592,7 @@ void getExtern(unsigned char incoming[255], int len)
   // Decode
   // {"type":"msg","dst":"*","msg":"Meldungstext"}
 
-  initAPRS(aprsmsg);
+  initAPRS(aprsmsg, ':');
 
   aprsmsg.msg_source_path="HOME";
   aprsmsg.msg_destination_path="*";

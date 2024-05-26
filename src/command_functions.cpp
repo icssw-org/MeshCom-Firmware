@@ -2075,6 +2075,9 @@ void commandAction(char *msg_text, bool ble)
             char fwver[20];
             sprintf(fwver, "%s %s %s", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
 
+            char ctrycode[5];
+            sprintf(ctrycode, "%s", getCountry(meshcom_settings.node_country).c_str());
+
             idoc["TYP"] = "I";
             idoc["FWVER"] = fwver;
             idoc["CALL"] = meshcom_settings.node_call;
@@ -2091,7 +2094,7 @@ void commandAction(char *msg_text, bool ble)
             idoc["GCB2"] = meshcom_settings.node_gcb[2];
             idoc["GCB3"] = meshcom_settings.node_gcb[3];
             idoc["GCB4"] = meshcom_settings.node_gcb[4];
-            idoc["CTRY"] = getCountry(meshcom_settings.node_country).c_str();
+            idoc["CTRY"] = ctrycode;
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 

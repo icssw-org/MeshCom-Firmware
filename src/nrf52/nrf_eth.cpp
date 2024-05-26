@@ -356,7 +356,7 @@ int NrfETH::getUDP()
                       // APP Offline
                       if(isPhoneReady == 0)
                       {
-                          aprsmsg.max_hop = aprsmsg.max_hop | 0x20;
+                          aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
 
                           uint8_t tempRcvBuffer[255];
 

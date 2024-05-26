@@ -256,7 +256,7 @@ void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
 
     struct aprsMessage aprsmsg;
 
-    initAPRS(aprsmsg);
+    initAPRS(aprsmsg, ':');
 
     aprsmsg.msg_len = 0;
     aprsmsg.payload_type = ':';
@@ -1338,14 +1338,13 @@ void sendMessage(char *msg_text, int len)
 
     struct aprsMessage aprsmsg;
 
-    initAPRS(aprsmsg);
+    initAPRS(aprsmsg, ':');
 
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
-    aprsmsg.payload_type = ':';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = strDestinationCall;
     aprsmsg.msg_payload = strMsg;
@@ -1640,14 +1639,12 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
         {
             struct aprsMessage aprsmsg;
 
-            initAPRS(aprsmsg);
+            initAPRS(aprsmsg, '!');
 
             aprsmsg.msg_len = 0;
 
             // MSG ID not used in APP
 
-            aprsmsg.payload_type = '!';
-            
             if(intervall != POSINFO_INTERVAL)
                 aprsmsg.msg_track=true;
 
@@ -1669,15 +1666,13 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     {
         struct aprsMessage aprsmsg;
 
-        initAPRS(aprsmsg);
+        initAPRS(aprsmsg, '!');
 
         aprsmsg.msg_len = 0;
 
         // MSG ID zusammen setzen    
         aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
 
-        aprsmsg.payload_type = '!';
-        
         if(intervall != POSINFO_INTERVAL)
             aprsmsg.msg_track=true;
 
@@ -1745,14 +1740,13 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
 {
     struct aprsMessage aprsmsg;
 
-    initAPRS(aprsmsg);
+    initAPRS(aprsmsg, ':');
 
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
     
-    aprsmsg.payload_type = ':';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = dest_call;
 

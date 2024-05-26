@@ -442,7 +442,7 @@ void RadioInit();
         LORA_SYMBOL_TIMEOUT,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         0,    //  Fixed payload length: N/A
-        false, //  CRC enabled
+        true, //  CRC enabled
         0,    //  Frequency hopping disabled
         0,    //  Hop period: N/A
         LORA_IQ_INVERSION_ON,
@@ -545,11 +545,36 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     }
 
     // CRC
+    #if defined(SX127X)
     if (radio.setCRC(rf_crc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
     {
         Serial.println(F("Selected CRC is invalid for this module!"));
         return false;
     }
+    #endif
+
+    #if defined(SX126X_V3)
+
+    uint8_t icrc = 0;
+    if(rf_crc)
+        icrc = 2;
+
+    if (radio.setCRC(icrc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
+        Serial.println(F("Selected CRC is invalid for this module!"));
+        while (true);
+    }
+    #endif
+
+    #if defined(SX126X)
+    uint8_t icrc = 0;
+    if(rf_crc)
+        icrc = 2;
+
+    if (radio.setCRC(icrc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
+        Serial.println(F("Selected CRC is invalid for this module!"));
+        while (true);
+    }
+    #endif
 
     delay(500);
 
