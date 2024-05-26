@@ -1063,21 +1063,25 @@ void esp32loop()
         Serial.println("loop 02");
 
     // get RTC Now
+    // RTC hat Vorrang zu Zeit via MeshCom-Server
     if(bRTCON)
     {
         loopRTC();
 
-        DateTime utc = getRTCNow();
+        if(!bGPSON) // GPS hat Vorang zur RTC
+        {
+            DateTime utc = getRTCNow();
 
-        DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
+            DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
 
-        meshcom_settings.node_date_year = now.year();
-        meshcom_settings.node_date_month = now.month();
-        meshcom_settings.node_date_day = now.day();
+            meshcom_settings.node_date_year = now.year();
+            meshcom_settings.node_date_month = now.month();
+            meshcom_settings.node_date_day = now.day();
 
-        meshcom_settings.node_date_hour = now.hour();
-        meshcom_settings.node_date_minute = now.minute();
-        meshcom_settings.node_date_second = now.second();
+            meshcom_settings.node_date_hour = now.hour();
+            meshcom_settings.node_date_minute = now.minute();
+            meshcom_settings.node_date_second = now.second();
+        }
     }
     else
     {
