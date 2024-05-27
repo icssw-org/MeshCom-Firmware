@@ -71,9 +71,9 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
     aprsmsg.msg_len = 0;
     aprsmsg.msg_id = 0;
     aprsmsg.payload_type = msgType;
-    aprsmsg.max_hop = 1;    // other
+    aprsmsg.max_hop = meshcom_settings.max_hop_pos;    // other
     if(msgType == ':')
-        aprsmsg.max_hop = 3;    // TEXT
+        aprsmsg.max_hop = meshcom_settings.max_hop_text;    // TEXT
     aprsmsg.msg_server = false;
     aprsmsg.msg_track = false;
     aprsmsg.msg_app_offline = false;
@@ -96,6 +96,7 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
     aprsmsg.msg_source_fw_sub_version = shortSUBVERSION();
     aprsmsg.msg_last_hw = BOARD_HARDWARE;
     aprsmsg.msg_source_last = "";
+    aprsmsg.msg_last_path_cnt = 0;
 }
 
 uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct aprsMessage &aprsmsg)
@@ -148,6 +149,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         // Source Path
         bool bSourceEndOk=false;
         bool bSourceCall=true;
+        
+        aprsmsg.msg_last_path_cnt=1;
+
         for(ib=6; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == '>')
@@ -162,6 +166,8 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 
                 if(RcvBuffer[ib] == ',')
                 {
+                    aprsmsg.msg_last_path_cnt++;
+                    
                     bSourceCall=false;
 
                     if(aprsmsg.msg_source_last.length() > 0)

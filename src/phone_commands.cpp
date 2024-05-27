@@ -6,6 +6,7 @@
 #include <batt_functions.h>
 #include <time.h>
 #include <clock.h>
+#include <rtc_functions.h>
 
 //#include <command_functions.h>
 
@@ -429,17 +430,23 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			// 4B Timestamp
 			uint32_t timestamp = 0;
 			memcpy(&timestamp, conf_data + 2, sizeof(timestamp));
-			// add the utc offset set in node
-			timestamp += meshcom_settings.node_utcoff * 3600;
 			// set the meshcom settings variables for the timestamp
 			struct tm timeinfo = {0};
 			gmtime_r((time_t*)&timestamp, &timeinfo);
 			// set the clock
-			MyClock.setCurrentTime(0, timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+			if(bRTCON)
+			{
+				setRTCNow(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+			}
+			else
+			{
+				MyClock.setCurrentTime(meshcom_settings.node_utcoff, timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+			}
 
-			if (bBLEDEBUG) {
-				Serial.printf("Timestamp from phone: %u\n", timestamp);
-				Serial.printf("Date: %02d.%02d.%04d %02d:%02d:%02d\n", meshcom_settings.node_date_day, meshcom_settings.node_date_month, meshcom_settings.node_date_year, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+			if (bBLEDEBUG)
+			{
+				Serial.printf("Timestamp from phone <UTC>: %u\n", timestamp);
+				Serial.printf("Date <UTC>: %02d.%02d.%04d %02d:%02d:%02d\n", meshcom_settings.node_date_day, meshcom_settings.node_date_month, meshcom_settings.node_date_year, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 			}
 
 			break;

@@ -821,7 +821,8 @@ void loopWebserver()
             web_client.println("</style></head>");
             
             // Web Page Heading
-            web_client.printf("<body><h3>MeshCom 4.0 &nbsp;&nbsp;%s</h3>\n", meshcom_settings.node_call);
+            web_client.printf("<body><h3>MeshCom 4.0 &nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT</h3>\n", meshcom_settings.node_call,
+                meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
             
             // POS
             if(web_page_state == 1)
@@ -1323,6 +1324,8 @@ void loopWebserver()
                 
                 web_client.printf("<tr><td></td><td>LORADEBUG %s ...GPSDEBUG  %s</td></tr><tr><td></td><td>WXDEBUG %s ... BLEDEBUG %s</td></tr><tr><td><b>APRS-TXT</b></td><td>%s</td></tr>\n",
                     (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"), meshcom_settings.node_atxt);
+
+                web_client.printf("<tr><td><b>MESH-Settings</b></td><td>max_hop_text %i</td></tr><tr><td></td><td>max_hop_pos %i</td></tr>\n", meshcom_settings.max_hop_text, meshcom_settings.max_hop_pos);
 
                 web_client.printf("<tr><td><b>COUNTRY</b></td><td>%s</td></tr><tr><td><b>FREQ</b></td><td>%.4f MHz</td></tr><tr><td><b>BW</b></td><td>%.0f kHz</td></tr><tr><td><b>SF</b></td><td>%i</td></tr><tr><td><b>CR</b></td><td>4/%i</td></tr><tr><td><b>TXPWR</b></td><td>%i dBm</td></tr>\n",
                     getCountry(meshcom_settings.node_country).c_str(), getFreq(), getBW(), getSF(), getCR(), getPower());

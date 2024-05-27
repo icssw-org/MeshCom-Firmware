@@ -79,6 +79,8 @@ void getMeshComUDP()
 // UDP functions
 void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int packetSize)
 {
+    char destination_call[20] = {0};
+
     udp_is_busy = true;
     // if more than n values are 00 we might have received a faulty message
     uint8_t zerocount = 0;
@@ -154,9 +156,6 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // print which message type we got
           uint8_t msg_type_b_lora = decodeAPRS(convBuffer, (uint8_t)lora_tx_msg_len, aprsmsg);
 
-          if(msg_type_b == 0x3A)
-            sendDisplayText(aprsmsg, 99, 0);
-
           if(msg_type_b == 0x21)
             sendDisplayPosition(aprsmsg, 99, 0);
 
@@ -183,6 +182,44 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
           if(size > UDP_TX_BUF_SIZE)
               size = UDP_TX_BUF_SIZE;
+
+          if(msg_type_b == 0x3A)
+          {
+            sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+
+            if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
+            {
+                sendDisplayText(aprsmsg, 99, 0);
+            }
+            else
+            if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
+            {
+                sendDisplayText(aprsmsg, 99, 0);
+            }
+            else
+            if(strcmp(destination_call, "*") == 0 || CheckGroup(destination_call) > 0)
+            {
+                sendDisplayText(aprsmsg, 99, 0);
+
+                // APP Offline
+                if(isPhoneReady == 0)
+                {
+                    aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
+
+                    uint8_t tempRcvBuffer[255];
+
+                    aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+
+                    uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                    addBLEOutBuffer(tempRcvBuffer, tempsize);
+                }
+                else
+                {
+                    addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
+                }
+            }
+          }
 
           // first byte is always the len of the msg
           // UDP messages send to LoRa TX

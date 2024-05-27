@@ -232,6 +232,9 @@ definitions
 #define DHCP_REFRESH 1                     // Refreshtime of DHCP Address in minutes
 #define MAX_HB_RX_TIME 30                  // time we wait for an HB from server in seconds
 
+#define MAX_HOP_TEXT_DEFAULT 4             // max hop set on text-message
+#define MAX_HOP_POS_DEFAULT 2              // max hop set on pos-message
+
 #define RECEIVE_TIMEOUT 4500               // [SX126x] 4.5sec
 #define RADIOLIB_SX126X_CAD 0x07           // 0x00...length off    0x07...32-bit detect
 #define RADIOLIB_SX126X_DETMIN  10         // default 10

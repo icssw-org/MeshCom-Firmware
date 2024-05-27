@@ -718,6 +718,14 @@ void mainStartTimeLoop()
 
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
+    if(aprsmsg.msg_payload.startsWith("{SET}") > 0)
+    {
+            char cset[30];
+            sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
+            sscanf(cset+5, "%d;%d;", &meshcom_settings.max_hop_text, &meshcom_settings.max_hop_pos);
+        return;
+    }
+
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
         if(!bRTCON)

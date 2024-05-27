@@ -400,6 +400,9 @@ void esp32setup()
 
     bDisplayInfo = bLORADEBUG;
 
+    meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
+    meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
+
     global_batt = 4200.0;
 
     posinfo_interval = POSINFO_INTERVAL;

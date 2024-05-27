@@ -98,6 +98,13 @@ void setRTCNow(String strDate)
     now = rtc.now();
 }
 
+void setRTCNow(int year, int month, int day, int hour, int minute, int second)
+{
+    rtc.adjust(DateTime(year, month, day, hour, minute, second));
+
+    now = rtc.now();
+}
+
 DateTime getRTCNow()
 {
     return now;

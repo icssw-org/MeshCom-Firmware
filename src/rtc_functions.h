@@ -9,6 +9,7 @@ bool setupRTC();
 bool loopRTC();
 
 void setRTCNow(String strDate);
+void setRTCNow(int year, int month, int day, int hour, int minute, int second);
 
 String getStringRTCNow();
 DateTime getRTCNow();

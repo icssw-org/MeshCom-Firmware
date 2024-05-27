@@ -275,6 +275,9 @@ struct s_meshcom_settings
 	char node_subnet[40] = {0};
 	bool node_hasIPaddress = false;
 	unsigned long node_last_upd_timer = 0;
+
+	int max_hop_text = 0;
+	int max_hop_pos = 0;
 };
 
 extern s_meshcom_settings meshcom_settings;

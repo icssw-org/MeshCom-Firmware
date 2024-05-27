@@ -62,6 +62,7 @@ void sendHeartbeat();
 #include "mcu811.h"
 #include "io_functions.h"
 #include "ina226_functions.h"
+#include "rtc_functions.h"
 
 #include <onewire_functions.h>
 
@@ -391,9 +392,13 @@ void nrf52setup()
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
+    bRTCON =  meshcom_settings.node_sset2 & 0x0200;
 
 
     bDisplayInfo = bLORADEBUG;
+
+    meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
+    meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
 
     // if Node is in WifiAP Mode -> no Gateway posible
     if(bWIFIAP && bGATEWAY)
@@ -619,6 +624,11 @@ void nrf52setup()
         setupINA226();
     #endif
 
+    // RTC
+    #if defined(ENABLE_RTC)
+        setupRTC();
+    #endif
+
     u8g2.begin();
 
     u8g2.clearDisplay();
@@ -776,23 +786,39 @@ void nrf52setup()
 
 void nrf52loop()
 {
-	//Clock::EEvent eEvent;
-	
-	// check clock event
-	//eEvent = MyClock.CheckEvent();
+    // get RTC Now
+    // RTC hat Vorrang zu Zeit via MeshCom-Server
+    if(bRTCON)
+    {
+        loopRTC();
 
-	MyClock.CheckEvent();
-	
-    meshcom_settings.node_date_year = MyClock.Year();
-    meshcom_settings.node_date_month = MyClock.Month();
-    meshcom_settings.node_date_day = MyClock.Day();
+        if(!bGPSON) // GPS hat Vorang zur RTC
+        {
+            DateTime utc = getRTCNow();
 
-    meshcom_settings.node_date_hour = MyClock.Hour();
-    meshcom_settings.node_date_minute = MyClock.Minute();
-    meshcom_settings.node_date_second = MyClock.Second();
+            DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
 
-   	//digitalWrite(LED_GREEN, LOW);
-   	//digitalWrite(LED_BLUE, LOW);
+            meshcom_settings.node_date_year = now.year();
+            meshcom_settings.node_date_month = now.month();
+            meshcom_settings.node_date_day = now.day();
+
+            meshcom_settings.node_date_hour = now.hour();
+            meshcom_settings.node_date_minute = now.minute();
+            meshcom_settings.node_date_second = now.second();
+        }
+    }
+    else
+    {
+        MyClock.CheckEvent();
+        
+        meshcom_settings.node_date_year = MyClock.Year();
+        meshcom_settings.node_date_month = MyClock.Month();
+        meshcom_settings.node_date_day = MyClock.Day();
+
+        meshcom_settings.node_date_hour = MyClock.Hour();
+        meshcom_settings.node_date_minute = MyClock.Minute();
+        meshcom_settings.node_date_second = MyClock.Second();
+    }
 
     // check if we have messages in ringbuffer to send
     //Serial.printf("is_receiving:%i tx_is_active:%i iWrite:%i iRead:%i \n", is_receiving, tx_is_active, iWrite, iRead);

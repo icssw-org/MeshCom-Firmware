@@ -387,6 +387,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 }
                                 else
                                 {
+                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
+                                    {
+                                        sendDisplayText(aprsmsg, rssi, snr);
+                                    }
+                                    else
                                     if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
                                     {
                                         sendDisplayText(aprsmsg, rssi, snr);
@@ -500,6 +505,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 bMeshDestination = false;
                             if(bGATEWAY && (aprsmsg.msg_destination_path.c_str(), "APRS2SOTA") == 0)
                                 bMeshDestination = false;
+
+                            // more then 4 callsigns within source_path no need to MESH via a gateWay
+                            if(bGATEWAY)
+                            {
+                                if(aprsmsg.payload_type == ':' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_text+1)    // TEXT
+                                    bMeshDestination = false;
+                                if(aprsmsg.payload_type == '!' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_pos+1)    // POS
+                                    bMeshDestination = false;
+                            }
 
                             // GATEWAY action before MESH
                             // and not MESHed from another Gateways

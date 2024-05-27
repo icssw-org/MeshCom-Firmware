@@ -39,6 +39,7 @@ struct aprsMessage
     uint8_t msg_source_fw_version;
     char msg_source_fw_sub_version;
     uint8_t msg_last_hw;
+    uint8_t msg_last_path_cnt;
 };
 
 struct aprsPosition

@@ -344,6 +344,11 @@ int NrfETH::getUDP()
               }
               else
               {
+                  if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
+                  {
+                      sendDisplayText(aprsmsg, 99, 0);
+                  }
+                  else
                   if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
                   {
                       sendDisplayText(aprsmsg, 99, 0);
