@@ -77,6 +77,7 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
     aprsmsg.msg_server = false;
     aprsmsg.msg_track = false;
     aprsmsg.msg_app_offline = false;
+    aprsmsg.msg_mesh = false;
     aprsmsg.msg_source_path = "";
     aprsmsg.msg_destination_path = "";
     aprsmsg.msg_destination_call = "";
@@ -141,6 +142,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         if((RcvBuffer[5] & 0x20) == 0x20)
             aprsmsg.msg_app_offline = true;
+
+        if((RcvBuffer[5] & 0x10) == 0x10)
+            aprsmsg.msg_mesh = true;
 
         uint16_t inext=0;
 
@@ -779,6 +783,9 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage
 
     if(aprsmsg.msg_app_offline)
         msg_buffer[5] = msg_buffer[5] | 0x20;
+
+    if(bMESH)
+        msg_buffer[5] = msg_buffer[5] | 0x10;
 
     sprintf(msg_start, "%s>%s%c", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type);
 

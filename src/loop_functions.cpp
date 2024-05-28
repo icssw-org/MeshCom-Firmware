@@ -1275,8 +1275,8 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
     if(ilpayload > 30)
         ilpayload=30;
 
-    sprintf(internal_message, "%s %s:%08X %02X %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
-        aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track,
+    sprintf(internal_message, "%s %s:%08X %02X %i %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
+        aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh,
         aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
         aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(),
         aprsmsg.payload_type, aprsmsg.msg_payload.substring(0, ilpayload).c_str());
@@ -1290,8 +1290,8 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
     Serial.print(getTimeString());
-    Serial.printf(" %s: %03i %c x%08X %02X %i %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X FW:%02i:%c LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
-        aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
+    Serial.printf(" %s: %03i %c x%08X %02X %i %i %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X FW:%02i:%c LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+        aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
         aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
 

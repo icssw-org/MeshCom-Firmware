@@ -407,13 +407,17 @@ void loopWebserver()
                 web_page_state=6;
                 bRefresh=true;
             }
-            else
-            //GET /action_page.php?message=ok HTTP/1.1
-            if (web_header.indexOf("GET /action_page.php?sendcall=") >= 0)
+
+            idx_text_end=web_header.indexOf(" HTTP/1.1");
+
+            web_header = web_header.substring(0, idx_text_end);
+
+            // Check Parameter
+            // GET /message?sendcall=ok&sendmassage=xx HTTP/1.1
+            if (web_header.indexOf("?sendcall=") >= 0)
             {
-                idx_text=web_header.indexOf("call=") + 5;
+                idx_text=web_header.indexOf("?sendcall=") + 10;
                 idx_text_call_end=web_header.indexOf("&");
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 int iend=idx_text_end;
                 if(idx_text_call_end > 0)
@@ -425,13 +429,10 @@ void loopWebserver()
                 message_call.trim();
                 message_call.toUpperCase();
 
-                //Serial.printf("message_call:<%s>\n", message_call.c_str());
-
-                //GET /action_page.php?message=ok HTTP/1.1
+                //?message=ok HTTP/1.1
                 if (web_header.indexOf("&sendmessage=") > 0)
                 {
-                    idx_text=web_header.indexOf("message=") + 8;
-                    idx_text_end=web_header.indexOf(" HTTP");
+                    idx_text=web_header.indexOf("&sendmessage=") + 13;
 
                     //CALL
                     String message="";
@@ -441,35 +442,36 @@ void loopWebserver()
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end+1));
 
-
-                    if(message_call.length() > 0)
-                        sprintf(message_text, ":{%s}%s", message_call.c_str(), message.c_str());
-                    else
-                        sprintf(message_text, ":%s", message.c_str());
-                    
-                    
-                    int iml=strlen(message_text);
-                    if(iml>150)
+                    if(message.length() > 0)
                     {
-                        iml=150;
-                        message_text[iml]=0x00;
+                        if(message_call.length() > 0)
+                            sprintf(message_text, ":{%s}%s", message_call.c_str(), message.c_str());
+                        else
+                            sprintf(message_text, ":%s", message.c_str());
+                        
+                        
+                        int iml=strlen(message_text);
+                        if(iml>150)
+                        {
+                            iml=150;
+                            message_text[iml]=0x00;
+                        }
+
+                        hasMsgFromPhone=true;
+
+                        sendMessage(message_text, iml);
+
+                        hasMsgFromPhone=false;
                     }
-
-                    hasMsgFromPhone=true;
-
-                    sendMessage(message_text, iml);
-
-                    hasMsgFromPhone=false;
 
                     message_call="";
                 }
             }
             else
-            //GET /action_page.php?message=ok HTTP/1.1
-            if (web_header.indexOf("GET /action_page.php?nodecall=") >= 0)
+            //?message=ok HTTP/1.1
+            if (web_header.indexOf("?nodecall=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -483,10 +485,9 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?owgpio=") >= 0)
+            if (web_header.indexOf("?owgpio=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -500,10 +501,9 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?maxv=") >= 0)
+            if (web_header.indexOf("?maxv=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -517,10 +517,9 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?homegroup=") >= 0)
+            if (web_header.indexOf("?homegroup=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -534,7 +533,7 @@ void loopWebserver()
                 commandAction((char*)"--save", bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?listento0=") >= 0)
+            if (web_header.indexOf("?listento0=") >= 0)
             {
                 String strListen = web_header.substring(web_header.indexOf("?listento0=")+9, web_header.indexOf(" HTTP"));
                 strListen += "&";
@@ -567,10 +566,9 @@ void loopWebserver()
                 commandAction((char*)"--save", bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?txpower=") >= 0)
+            if (web_header.indexOf("?txpower=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -584,10 +582,9 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?utcoff=") >= 0)
+            if (web_header.indexOf("?utcoff=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -601,10 +598,9 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?utcdate=") >= 0)
+            if (web_header.indexOf("?utcdate=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -616,10 +612,9 @@ void loopWebserver()
                 setRTCNow(message);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?aprstext=") >= 0)
+            if (web_header.indexOf("?aprstext=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -633,11 +628,10 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?latidude=") >= 0)
+            if (web_header.indexOf("?latidude=") >= 0)
             {
                 idx_text=web_header.indexOf("latidude=") + 9;
                 idx_text_call_end=web_header.indexOf("&longitude");
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -656,7 +650,6 @@ void loopWebserver()
                 {
                     idx_text=web_header.indexOf("longitude=") + 10;
                     idx_text_call_end=web_header.indexOf("&altitude");
-                    idx_text_end=web_header.indexOf(" HTTP");
 
                     String message="";
 
@@ -677,7 +670,6 @@ void loopWebserver()
                 if (web_header.indexOf("&altitude=") >= 0)
                 {
                     idx_text=web_header.indexOf("altitude=") + 9;
-                    idx_text_end=web_header.indexOf(" HTTP");
 
                     String message="";
 
@@ -692,10 +684,9 @@ void loopWebserver()
                 }
             }
             else
-            if (web_header.indexOf("GET /action_page.php?country=") >= 0)
+            if (web_header.indexOf("?country=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -709,7 +700,7 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?aprsgroup=") >= 0)
+            if (web_header.indexOf("?aprsgroup=") >= 0)
             {
                 if(web_header.indexOf("=1") > 0)
                     sprintf(message_text, "--symid /");
@@ -719,10 +710,9 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            if (web_header.indexOf("GET /action_page.php?aprssymbol=") >= 0)
+            if (web_header.indexOf("?aprssymbol=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -736,11 +726,10 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            //GET /action_page.php?message=ok HTTP/1.1
-            if (web_header.indexOf("GET /action_page.php?command=") >= 0)
+            //?message=ok HTTP/1.1
+            if (web_header.indexOf("?command=") >= 0)
             {
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -754,17 +743,16 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            //GET /action_page.php?message=ok HTTP/1.1
-            if (web_header.indexOf("GET /action_page.php?mcp") >= 0)
+            //?message=ok HTTP/1.1
+            if (web_header.indexOf("?mcp") >= 0)
             {
-                int ipos=web_header.indexOf("GET /action_page.php?mcp");
+                int ipos=web_header.indexOf("?mcp");
                 
                 int idx = web_header.substring(ipos+25, ipos+26).toInt();
                 if(web_header.substring(ipos+24, ipos+25) == "B")
                     idx=idx+8;
 
                 idx_text=web_header.indexOf("=") + 1;
-                idx_text_end=web_header.indexOf(" HTTP");
 
                 String message="";
 
@@ -852,7 +840,7 @@ void loopWebserver()
             {
                 web_client.println("<table class=\"table\">");
 
-                web_client.printf("<tr><th>LHeard call</th><th>date</th><th>time</th><th>LHEARD hardware</th><th>mod</th><th>rssi</th><th>snr</th><th>dist</th></tr>\n");
+                web_client.printf("<tr><th>LHeard call</th><th>date</th><th>time</th><th>LHEARD hardware</th><th>mod</th><th>rssi</th><th>snr</th><th>dist</th><th>pl</th><th>m</th></tr>\n");
 
                 mheardLine mheardLine;
 
@@ -873,7 +861,9 @@ void loopWebserver()
                             web_client.printf("<td>%3i</td>", mheardLine.mh_mod);
                             web_client.printf("<td>%4i</td>", mheardLine.mh_rssi);
                             web_client.printf("<td>%4i</td>", mheardLine.mh_snr);
-                            web_client.printf("<td>%5.1lf</td></tr>\n", mheardLine.mh_dist);
+                            web_client.printf("<td>%5.1lf</td>", mheardLine.mh_dist);
+                            web_client.printf("<td>%i</td>", mheardLine.mh_path_len);
+                            web_client.printf("<td>%i</td></tr>\n", mheardLine.mh_mesh);
                         }
                     }
                 }
@@ -910,7 +900,7 @@ void loopWebserver()
                 web_client.println("<col style=\"width: 75%;\">");
                 web_client.println("</colgroup>\n");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>NODE Call</b></label>");
                 web_client.println("</td><td>\n");
@@ -919,7 +909,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>COUNTRY:</b></label>");
                 web_client.println("</td><td>\n");
@@ -942,7 +932,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>TX-Power dBm:</b></label>");
                 web_client.println("</td><td>\n");
@@ -951,7 +941,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>UTC-Offset:</b></label>");
                 web_client.println("</td><td>\n");
@@ -962,7 +952,7 @@ void loopWebserver()
 
                 if(bRTCON)
                 {
-                    web_client.println("<form action=\"/action_page.php\">");
+                    web_client.println("<form action=\"/#\">");
                     web_client.println("<tr><td>\n");
                     web_client.println("<label for=\"fname\"><b>UTC-Date/Time:</b></label>");
                     web_client.println("</td><td>\n");
@@ -972,7 +962,7 @@ void loopWebserver()
                     web_client.println("</form>");
                 }
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>POS-LAT (+/-):</b></label>");
                 web_client.println("</td><td>\n");
@@ -999,7 +989,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>APRS-Text:</b></label>");
                 web_client.println("</td><td>\n");
@@ -1008,7 +998,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>APRS-GROUP:</b></label>");
                 web_client.println("</td><td>\n");
@@ -1021,7 +1011,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>APRS-SYMBOL:</b></label>");
                 web_client.println("</td><td>\n");
@@ -1030,7 +1020,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>ONEWIRE-PIN:</b></label>");
                 web_client.println("</td><td>\n");
@@ -1039,7 +1029,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>MAXV:</b></label>");
                 web_client.println("</td><td>\n");
@@ -1048,7 +1038,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>HOME-GROUP:</b></label>");
                 web_client.println("</td><td>\n");
@@ -1057,7 +1047,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>LISTEN-TO:</b></label>");
                 web_client.println("</td><td>\n");
@@ -1070,7 +1060,7 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>COMMAND:</b></label>");
                 web_client.println("</td><td>\n");
@@ -1170,7 +1160,7 @@ void loopWebserver()
 
                                 String msgtxt = aprsmsg.msg_payload;
                                 if(msgtxt.indexOf('{') > 0)
-                                msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{')-1);
+                                    msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{')-1);
 
                                 if(strcmp(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()) == 0)
                                     web_client.printf("<tr><td class=\"td2\"></td><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small><b>%s</b></td></tr>\n", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str(), msgtxt.c_str());
@@ -1196,7 +1186,7 @@ void loopWebserver()
                 web_client.println("<col style=\"width: 75%;\">");
                 web_client.println("</colgroup>\n");
 
-                web_client.println("<form action=\"/action_page.php\">");
+                web_client.println("<form action=\"?\">");
 
                 web_client.println("<tr><td>");
                 web_client.println("<label for=\"fname\"><b>DM Call (or empty):</b></label>");
@@ -1282,7 +1272,7 @@ void loopWebserver()
 
                     web_client.printf("<tr><td>[%c%i]</td>", cAB, iAB);
                     web_client.printf("<td><a href=\"/mcptype/%s/%c%i\"><button class=\"button button2\"<b>%s</b></button></a></td>", (bOut?"OUT":"IN"), cAB, iAB, (bOut?"OUT":"IN"));
-                    web_client.println("<form action=\"/action_page.php\">");
+                    web_client.println("<form action=\"/#\">");
                     web_client.printf("<td><input type=\"text\" value=\"%s\" maxlength=\"16\" size=\"16\" id=\"mcp%c%i\" name=\"mcp%c%i\">\n", meshcom_settings.node_mcp17t[io], cAB, iAB, cAB, iAB);
                     web_client.println("<input type=\"submit\" value=\"set\"></td>");
                     web_client.println("</form>");
@@ -1592,11 +1582,61 @@ void loopWebserver()
 }
 
 // HTTP functions
-String hex2ascii(String string)
+String hex2ascii(String ustring)
 {
-    string.replace("+", " ");
+    ustring.replace("+", " ");
 
-    string.replace("%F0%9F%91%8D", "");
+    /*
+    string.replace("%F0%9F%98%80", ":-)");
+    string.replace("%F0%9F%91%8D", "(Y)");
+    string.replace("%F0%9F%98%AC", ";-#");
+    */
+
+    char pbuff[200];
+    char nbuff[200];
+    char dbuff[3];
+    int ihex=0;
+
+    sprintf(pbuff, "%s", ustring.c_str());
+
+    int in=0;
+    int il=0;
+
+    memset(nbuff, 0x00, 200);
+
+    for(int ip=0; ip<(int)ustring.length(); ip++)
+    {
+        if(il > 0)
+        {
+            il--;
+        }
+        else
+        if(memcmp(pbuff+ip, "%F0%", 4) == 0)
+        {
+            nbuff[in] = 0xF0;
+            in++;
+
+            for(int ih=0;ih<3;ih++)
+            {
+                memset(dbuff, 0x00, 3);
+                memcpy(dbuff, pbuff+ip+4+(3*ih), 2);
+                sscanf(dbuff, "%X", &ihex);
+
+                nbuff[in] = ihex;
+                in++;
+            }
+
+            il=11;
+        }
+        else
+        {
+            nbuff[in] = pbuff[ip];
+            in++;
+        }
+
+    }
+    
+    String string = nbuff;
 
     string.replace("%C2%A3", "£");
     string.replace("%C2%B0", "°");

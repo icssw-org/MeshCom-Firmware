@@ -175,6 +175,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_time = getTimeString();
                 mheardLine.mh_payload_type = aprsmsg.payload_type;
                 mheardLine.mh_dist = 0;
+                mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
+                mheardLine.mh_mesh = aprsmsg.msg_mesh;
                 
                 // check MHeard exists already
                 int ipos=-1;
@@ -763,7 +765,7 @@ bool doTX()
                     }
 
                     tx_is_active = true;
-                    
+
                     // you can transmit C-string or Arduino string up to
                     // 256 characters long
                     #if defined BOARD_RAK4630
@@ -783,8 +785,11 @@ bool doTX()
 
                     if(lora_tx_buffer[0] == 0x41)
                     {
-                        Serial.print(getTimeString());
-                        Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[1], lora_tx_buffer[2], lora_tx_buffer[3], lora_tx_buffer[4], lora_tx_buffer[5], lora_tx_buffer[6]);
+                        if(bDisplayInfo)
+                        {
+                            Serial.print(getTimeString());
+                            Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[1], lora_tx_buffer[2], lora_tx_buffer[3], lora_tx_buffer[4], lora_tx_buffer[5], lora_tx_buffer[6]);
+                        }
                     }   
                     else
                     {
