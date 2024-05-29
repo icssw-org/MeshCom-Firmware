@@ -1837,49 +1837,9 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"tx_medium") == 0)
-    {
-        meshcom_settings.node_bw=250.0;
-        meshcom_settings.node_sf=11;
-        meshcom_settings.node_cr=6;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--set");
-        }
-
-        save_settings();
-
-        Serial.println("Auto. Reboot after 15 sec.");
-
-        rebootAuto = millis() + 15 * 1000; // 15 Sekunden
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"tx_slow") == 0)
-    {
-        meshcom_settings.node_bw=125.0;
-        meshcom_settings.node_sf=12;
-        meshcom_settings.node_cr=8;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--set");
-        }
-
-        save_settings();
-
-        Serial.println("Auto. Reboot after 15 sec.");
-
-        rebootAuto = millis() + 15 * 1000; // 15 Sekunden
-
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"lora") == 0)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...LoRa RF-Frequ: <%.4f MHz>\n...LoRa RF-Power: <%i dBm>\n...LoRa RF-BW:    <%.0f>\n...LoRa RF-SF:    <%i>\n...LoRa RF-CR:    <4/%i>\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...LoRa RF-Frequ: <%.4f MHz>\n...LoRa RF-Power: <%i dBm>\n...LoRa RF-BW:    <%.0f kHz>\n...LoRa RF-SF:    <%i>\n...LoRa RF-CR:    <4/%i>\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                 getFreq(), getPower(), getBW(), getSF(), getCR());
 
         if(ble)
@@ -1919,6 +1879,55 @@ void commandAction(char *msg_text, bool ble)
         {
             printf("\n%s", print_buff+2);
         }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setgrc") == 0)
+    {
+        sprintf(_owner_c, "%s;", msg_text+9);
+
+        int igrc=1;
+        String strdec = "";
+        
+        meshcom_settings.node_gch=0;
+        for(int iset=0;iset<5;iset++)
+            meshcom_settings.node_gcb[iset]=0;
+
+        for(int iset=0; iset<(int)strlen(_owner_c); iset++)
+        {
+            if(_owner_c[iset] == ';')
+            {
+                switch (igrc)
+                {
+                    case 1: meshcom_settings.node_gch = strdec.toInt(); break;
+                    case 2:
+                    case 3:
+                    case 4:
+                    case 5:
+                    case 6:
+                         meshcom_settings.node_gcb[igrc-2] = strdec.toInt(); break;
+                    default: break;
+                }
+
+                strdec="";
+
+                igrc++;
+            }
+            else
+            {
+                strdec.concat(_owner_c[iset]);
+            }
+        }
+
+        if(ble)
+        {
+            bInfo = true;
+        }
+        else
+            bReturn = true;
+
+        save_settings();
 
         return;
     }
@@ -2059,12 +2068,6 @@ void commandAction(char *msg_text, bool ble)
     else
     if(bInfo)
     {
-        float rf_freq_info=meshcom_settings.node_freq;
-
-        #ifdef BOARD_RAK4630
-            rf_freq_info=rf_freq_info/1000000;
-        #endif
-
         if(ble)
         {
             // reset print buffer
@@ -2108,6 +2111,12 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
+            float rf_freq_info=meshcom_settings.node_freq;
+
+            #ifdef BOARD_RAK4630
+                rf_freq_info=rf_freq_info/1000000;
+            #endif
+
             Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...GATEWAY %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
@@ -2148,9 +2157,9 @@ void commandAction(char *msg_text, bool ble)
                 if(!bWIFIAP)
                     Serial.printf("...UDP-HBeat   : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
             }
+    
+            sendDisplayHead(false);
         }
-
-        sendDisplayHead(false);
 
         return;
     }

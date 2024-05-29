@@ -7,8 +7,8 @@ definitions
 #include <Arduino.h>
 
 #define SOURCE_TYPE "C"
-#define SOURCE_VERSION "4.32"
-#define SOURCE_VERSION_SUB "f"
+#define SOURCE_VERSION "4.33"
+#define SOURCE_VERSION_SUB "a"
 
 //Hardware Types
 #define TLORA_V2 1

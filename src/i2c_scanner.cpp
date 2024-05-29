@@ -37,6 +37,8 @@ String strInfo = "";
             if(address == 0x34)strDev="AXP192/2101";
             if(address == 0x3C)strDev="OLED";
             if(address == 0x40)strDev="INA226";
+            if(address == 0x57)strDev="[RTC DS3231 EPROM]";
+            if(address == 0x68)strDev="RTC DS3231";
             if(address == 0x70)strDev="TCA9548A/0";
             if(address == 0x71)strDev="TCA9548A/1";
             if(address == 0x76)strDev="BME280/BMP280/BME680";
