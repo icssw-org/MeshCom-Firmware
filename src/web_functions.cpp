@@ -848,7 +848,7 @@ void loopWebserver()
                 {
                     if(mheardCalls[iset][0] != 0x00)
                     {
-                        if(mheardEpoch[iset]+60*60*24 > getUnixClock())
+                        if((mheardEpoch[iset]+60*60*6) > getUnixClock())
                         {
                             web_client.printf("<tr><td>%-10.10s</td>", mheardCalls[iset]);
                             
