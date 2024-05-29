@@ -1668,7 +1668,7 @@ void commandAction(char *msg_text, bool ble)
 
             if(ble)
             {
-                bNodeSetting = true;
+                bInfo = true;
             }
             else
                 bReturn=true;
