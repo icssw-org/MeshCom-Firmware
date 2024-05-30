@@ -1929,7 +1929,6 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"seset") == 0)
@@ -2138,10 +2137,20 @@ void commandAction(char *msg_text, bool ble)
 
             Serial.println("");
 
+            if(bINA226ON)
+            {
+                Serial.printf("INA226\n");
+                Serial.printf("...vBUS     %.2f V\n", meshcom_settings.node_vbus);
+                Serial.printf("...vSHUNT   %.2f mV\n", meshcom_settings.node_vshunt);
+                Serial.printf("...vCURRENT %.1f mA\n", meshcom_settings.node_vcurrent);
+                Serial.printf("...vPOWER   %.1f mW\n", meshcom_settings.node_vpower);
+                Serial.println("");
+            }
+
             #ifndef BOARD_RAK4630
-                Serial.printf("...WIFI-AP     : %s\n", (bWIFIAP?"yes":"no"));
-                Serial.printf("...SSID        : %s\n", meshcom_settings.node_ssid);
-                Serial.printf("...PASSWORD    : %s\n", meshcom_settings.node_pwd);
+                Serial.printf("...WIFI-AP  %s\n", (bWIFIAP?"yes":"no"));
+                Serial.printf("...SSID     %s\n", meshcom_settings.node_ssid);
+                Serial.printf("...PASSWORD %s\n", meshcom_settings.node_pwd);
             #endif
             Serial.printf("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             if(meshcom_settings.node_hasIPaddress)
