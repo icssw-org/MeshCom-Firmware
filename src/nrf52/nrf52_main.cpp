@@ -153,6 +153,9 @@ asm(".global _printf_float");
 // LoRa Events and Buffers
 static RadioEvents_t RadioEvents;
 
+// flag to indicate if we are after receiving
+unsigned long iReceiveTimeOutTime = 0;
+
 bool g_meshcom_initialized;
 bool init_flash_done=false;
 
@@ -786,6 +789,37 @@ void nrf52setup()
 
 void nrf52loop()
 {
+    // check if we have messages in ringbuffer to send
+    //Serial.printf("is_receiving:%i tx_is_active:%i iWrite:%i iRead:%i \n", is_receiving, tx_is_active, iWrite, iRead);
+
+
+    if(iReceiveTimeOutTime > 0)
+    {
+        // Timeout RECEIVE_TIMEOUT
+        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
+        {
+            iReceiveTimeOutTime=0;
+
+            // LoRa preamble was detected
+            if(bLORADEBUG)
+            {
+                Serial.printf("[SX12xx] Receive Timeout, starting sending again ... \n");
+            }
+        }
+    }
+
+    if(iReceiveTimeOutTime == 0 && is_receiving == false && tx_is_active == false)
+    {
+        // channel is free
+        // nothing was detected
+        // do not print anything, it just spams the console
+        if (iWrite != iRead)
+        {
+            // save transmission state between loops
+            doTX();
+        }
+    }
+
     // get RTC Now
     // RTC hat Vorrang zu Zeit via MeshCom-Server
     if(bRTCON)
@@ -820,22 +854,7 @@ void nrf52loop()
         meshcom_settings.node_date_second = MyClock.Second();
     }
 
-    // check if we have messages in ringbuffer to send
-    //Serial.printf("is_receiving:%i tx_is_active:%i iWrite:%i iRead:%i \n", is_receiving, tx_is_active, iWrite, iRead);
-    
     checkButtonState();
-
-    if(is_receiving == false && tx_is_active == false)
-    {
-        // channel is free
-        // nothing was detected
-        // do not print anything, it just spams the console
-        if (iWrite != iRead)
-        {
-            // save transmission state between loops
-            doTX();
-        }
-    }
 
     // check if message from phone to send
     if(hasMsgFromPhone)
@@ -847,6 +866,8 @@ void nrf52loop()
 
     if(gKeyNum == 1)
     {
+        Serial.println("Left button pressed");
+
         //Serial.println("gKeyNum == 1");
 
         //getTEMP();

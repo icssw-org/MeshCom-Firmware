@@ -954,8 +954,6 @@ void esp32loop()
 
             checkRX();
 
-            iReceiveTimeOutTime = millis();
-
             bEnableInterruptReceive = true;
         }
         else

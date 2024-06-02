@@ -1604,6 +1604,7 @@ String hex2ascii(String ustring)
 
     memset(nbuff, 0x00, 200);
 
+    // %F0%XX%XX%XX
     for(int ip=0; ip<(int)ustring.length(); ip++)
     {
         if(il > 0)
@@ -1628,6 +1629,41 @@ String hex2ascii(String ustring)
 
             il=11;
         }
+        if(memcmp(pbuff+ip, "%EF%", 4) == 0)
+        {
+            nbuff[in] = 0xEF;
+            in++;
+
+            for(int ih=0;ih<2;ih++)
+            {
+                memset(dbuff, 0x00, 3);
+                memcpy(dbuff, pbuff+ip+4+(3*ih), 2);
+                sscanf(dbuff, "%X", &ihex);
+
+                nbuff[in] = ihex;
+                in++;
+            }
+
+            il=8;
+        }
+        else
+        if(memcmp(pbuff+ip, "%E2%", 4) == 0)
+        {
+            nbuff[in] = 0xE2;
+            in++;
+
+            for(int ih=0;ih<2;ih++)
+            {
+                memset(dbuff, 0x00, 3);
+                memcpy(dbuff, pbuff+ip+4+(3*ih), 2);
+                sscanf(dbuff, "%X", &ihex);
+
+                nbuff[in] = ihex;
+                in++;
+            }
+
+            il=8;
+        }
         else
         {
             nbuff[in] = pbuff[ip];
@@ -1635,7 +1671,7 @@ String hex2ascii(String ustring)
         }
 
     }
-    
+
     String string = nbuff;
 
     string.replace("%C2%A3", "£");

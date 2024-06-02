@@ -39,6 +39,9 @@
 #include <udp_functions.h>
 #include <lora_setchip.h>
 
+// flag to indicate if we are after receiving
+extern unsigned long iReceiveTimeOutTime;
+
 extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern double mheardLat[MAX_MHEARD];
 extern double mheardLon[MAX_MHEARD];
@@ -597,6 +600,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     if(bLORADEBUG)
         Serial.println("OnRxDone");
+
+    iReceiveTimeOutTime = millis();
 
     is_receiving = false;
 }

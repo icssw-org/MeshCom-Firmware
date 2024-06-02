@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.33"
-#define SOURCE_VERSION_SUB "a"
+#define SOURCE_VERSION_SUB "b"
 
 //Hardware Types
 #define TLORA_V2 1

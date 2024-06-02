@@ -1456,7 +1456,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
     char msg_start[100] = {0};
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-    // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E#/B=005/A=000272/P=1005.1/H=42.5/T=29.4/Q=1005.7 HW:04 MOD:03 FCS:15DC FW:17 LH:09
+    // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E#/B=005/A=000272/P=1005.1/H=42.5/T=29.4/Q=1005.7/R=232;2321; HW:04 MOD:03 FCS:15DC FW:17 LH:09
 
 	double slat = 100.0;
     slat = lat*slat;
@@ -1498,6 +1498,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         char cqnh[15]={0};
         char cgasres[15]={0};
         char cco2[15]={0};
+        char cgrc[32]={0};
 
         if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
         {
@@ -1574,7 +1575,33 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
                 return "";
         }
 
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2);
+        /////////////////////////////////////////////////////////////////
+        // send Group-Call settings zu MesCom-Server
+        String strGRC="";
+
+        char cGC[5];
+        sprintf(cGC, "%i;", meshcom_settings.node_gch);
+
+        if(meshcom_settings.node_gch > 0)
+            strGRC=cGC;
+
+        for(int igrc=0;igrc<5;igrc++)
+        {
+            if(meshcom_settings.node_gcb[igrc] > 0)
+            {
+                sprintf(cGC, "%i;", meshcom_settings.node_gcb[igrc]);
+                strGRC.concat(cGC);
+            }
+        }
+
+        if(strGRC.length() > 0)
+        {
+            sprintf(cgrc, "/R=%s", strGRC.c_str());
+        }
+        //
+        /////////////////////////////////////////////////////////////////
+
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc);
     }
 
     return String(msg_start);
