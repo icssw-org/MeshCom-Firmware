@@ -222,7 +222,7 @@ definitions
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
 #define POSINFO_INTERVAL 30 * 60           // POSINFO interval in seconds default 30 minutes
 #define GPS_REFRESH_INTERVAL 10            // GPS Refresh in seconds
-#define SOFTSER_REFRESH_INTERVAL 2         // SOFTSER Refresh in seconds
+#define SOFTSER_REFRESH_INTERVAL 3         // SOFTSER Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds
 #define ALIVEBLINK_INTERVAL 3000           // ALIVEBLINK interval in milliseconds

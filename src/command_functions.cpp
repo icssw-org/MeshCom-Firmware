@@ -279,7 +279,7 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--atxt   set APRS Textinfo\n--showI2C\n");
             delay(100);
-            Serial.printf("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n");
+            Serial.printf("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n");
             delay(100);
             Serial.printf("--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n");
             delay(100);
@@ -1189,6 +1189,30 @@ void commandAction(char *msg_text, bool ble)
     }
 
 #if defined(ENABLE_SOFTSER)
+    else
+    if(commandCheck(msg_text+2, (char*)"softserdebug on") == 0)
+    {
+        bSOFTSERDEBUG=true;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--softserdebug on");
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"softserdebug off") == 0)
+    {
+        bSOFTSERDEBUG=false;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"-softserdebug off");
+        }
+
+        return;
+    }
     else
     if(commandCheck(msg_text+2, (char*)"softser on") == 0)
     {
@@ -2181,7 +2205,7 @@ void commandAction(char *msg_text, bool ble)
                     Serial.printf("...GC [%2i] %4i\n", ig+1, meshcom_settings.node_gcb[ig]);
             }
 
-            if(meshcom_settings.node_ss_baud > 0)
+            if(bSOFTSERON && meshcom_settings.node_ss_baud > 0)
             {
                 Serial.printf("\n...SS RX   %2i\n", meshcom_settings.node_ss_rx_pin);
                 Serial.printf("...SS TX   %2i\n", meshcom_settings.node_ss_tx_pin);

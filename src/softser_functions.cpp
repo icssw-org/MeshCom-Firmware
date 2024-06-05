@@ -1,10 +1,10 @@
-#if defined(ENABLE_SOFTSER)
-
 #include "configuration.h"
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
 
 #include <Arduino.h>
+
+#if defined(ENABLE_SOFTSER)
 
 #include <softser_functions.h>
 
@@ -27,6 +27,8 @@ bool setupSOFTSER()
     SOFTSER.begin((uint32_t)meshcom_settings.node_ss_baud, EspSoftwareSerial::SWSERIAL_8N1, (int8_t)meshcom_settings.node_ss_rx_pin, (int8_t)meshcom_settings.node_ss_tx_pin);
 
     Serial.printf("[INIT]...SOFTSER RX:%i TX:%i BAUD:%i\n", meshcom_settings.node_ss_rx_pin, meshcom_settings.node_ss_tx_pin, meshcom_settings.node_ss_baud);
+
+    return true;
 }
 
 bool loopSOFTSER()
@@ -41,15 +43,16 @@ bool loopSOFTSER()
         return false;
     }
 
-    if(bSOFTSERDEBUG)
-        Serial.println("readSOFTSER");
-    
     String tmp_data = "";
 
     bool newData = false;
 
     if(bSOFTSERDEBUG)
-        Serial.println("-----------check SOFTSER-----------");
+    {
+        Serial.print("-----------check SOFTSER ");
+        Serial.print(getTimeString());
+        Serial.println(" -----------");
+    }
   
     // For one second we parse SOFTSER data and report
     //for (unsigned long start = millis(); millis() - start < 1000;)
@@ -67,7 +70,7 @@ bool loopSOFTSER()
             break;
         }
 
-        if(bSOFTSERDEBUG)
+        if(bSOFTSERDEBUG && bDEBUG)
           Serial.print(c);
 
         tmp_data += c;
@@ -80,8 +83,7 @@ bool loopSOFTSER()
 
     if(bSOFTSERDEBUG)
     {
-        Serial.print(getTimeString());
-        Serial.printf("newSOFTSER:<%s>\n", tmp_data.c_str());
+        Serial.printf("%s\n", tmp_data.c_str());
     }
 
     return true;
