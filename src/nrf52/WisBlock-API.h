@@ -261,6 +261,10 @@ struct s_meshcom_settings
 	float node_track_freq = 0;
 	int node_preamplebits = 0;
 
+	int node_ss_rx_pin = 0;
+	int node_ss_tx_pin = 0;
+	int node_ss_baud = 0;
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
@@ -390,6 +394,11 @@ struct s_meshcomcompat_settings
 	int node_country = 0;	// 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
 
 	float node_track_freq = 0;
+	int node_preamplebits = 0;
+
+	int node_ss_rx_pin = 0;
+	int node_ss_tx_pin = 0;
+	int node_ss_baud = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;

@@ -42,7 +42,9 @@ bool bBME680ON = false;
 bool bMCU811ON = false;
 bool bINA226ON = false;
 bool bRTCON = false;
-bool bTCA9548A=false;
+bool bSOFTSERON = false;
+
+bool bTCA9548A = false;
 
 bool bONEWIRE = false;
 
@@ -60,6 +62,7 @@ bool bEXTSER = false;
 
 bool bSHORTPATH = false;
 bool bGPSDEBUG = false;
+bool bSOFTSERDEBUG = false;
 
 bool bBLElong = false;
 

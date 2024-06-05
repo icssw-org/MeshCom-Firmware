@@ -16,6 +16,7 @@
 #include "io_functions.h"
 #include "ina226_functions.h"
 #include "rtc_functions.h"
+#include "softser_functions.h"
 
 #if defined(ENABLE_BMX680)
 #include "bme680.h"
@@ -284,7 +285,7 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
             delay(100);
-            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--226 on  use INA226\n--RTC on  use RTC\n--bmx BME/BMP/680 off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--226 on  use INA226\n--RTC on  use RTC\n--SS on  use SS\n--bmx BME/BMP/680 off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
             delay(100);
             Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off\n--webserver on/off\n--mesh    on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
         }
@@ -1186,6 +1187,51 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+
+#if defined(ENABLE_SOFTSER)
+    else
+    if(commandCheck(msg_text+2, (char*)"softser on") == 0)
+    {
+        bSOFTSERON=true;
+
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0400;
+
+        if(ble)
+            bSensSetting = true;
+        else
+            bReturn = true;
+
+        save_settings();
+
+        setupSOFTSER();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"softser off") == 0)
+    {
+        bSOFTSERON=false;
+
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x3FFF;
+
+        if(ble)
+            bSensSetting = true;
+        else
+            bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"softser send") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+15);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+
+        sendSOFTSER(_owner_c);
+
+        return;
+    }
+#endif
+
     else
     if(commandCheck(msg_text+2, (char*)"pos") == 0)
     {
@@ -2116,13 +2162,13 @@ void commandAction(char *msg_text, bool ble)
                 rf_freq_info=rf_freq_info/1000000;
             #endif
 
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...GATEWAY %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s\n",
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...GATEWAY %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s ... SS %s\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
-                    (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"));
+                    (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"));
 
-            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
-                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"),
+            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
+                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),
                     (bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"),
                     getCountry(meshcom_settings.node_country).c_str() , rf_freq_info, getPower());
 
@@ -2133,6 +2179,13 @@ void commandAction(char *msg_text, bool ble)
             {
                 if(meshcom_settings.node_gcb[ig] > 0)
                     Serial.printf("...GC [%2i] %4i\n", ig+1, meshcom_settings.node_gcb[ig]);
+            }
+
+            if(meshcom_settings.node_ss_baud > 0)
+            {
+                Serial.printf("\n...SS RX   %2i\n", meshcom_settings.node_ss_rx_pin);
+                Serial.printf("...SS TX   %2i\n", meshcom_settings.node_ss_tx_pin);
+                Serial.printf("...SS BAUD %i\n", meshcom_settings.node_ss_baud);
             }
 
             Serial.println("");
@@ -2203,6 +2256,7 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["811"] = bMCU811ON;
         sensdoc["226"] = bINA226ON;
         sensdoc["RTC"] = bRTCON;
+        sensdoc["SS"] = bSOFTSERON;
         sensdoc["LPS33"] = bLPS33;
         sensdoc["OW"] = bONEWIRE;
         sensdoc["OWPIN"] = meshcom_settings.node_owgpio;

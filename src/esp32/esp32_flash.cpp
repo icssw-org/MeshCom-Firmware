@@ -123,6 +123,11 @@ void init_flash(void)
     meshcom_settings.node_country = preferences.getInt("node_ctry");    // 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
 
     meshcom_settings.node_track_freq = preferences.getFloat("node_track", 0);
+    meshcom_settings.node_preamplebits = preferences.getInt("node_pream", 32);
+
+    meshcom_settings.node_ss_rx_pin = preferences.getInt("node_ss_rx", 0);
+    meshcom_settings.node_ss_tx_pin = preferences.getInt("node_ss_tx", 0);
+    meshcom_settings.node_ss_baud = preferences.getInt("node_ss_bd", 0);
 
 }
 
@@ -241,6 +246,11 @@ void save_settings(void)
     preferences.putInt("node_ctry", meshcom_settings.node_country);    // 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
 
     preferences.putFloat("node_track", meshcom_settings.node_track_freq);
+    preferences.putInt("node_pream", meshcom_settings.node_preamplebits);
+
+    preferences.putInt("node_ss_rx", meshcom_settings.node_ss_rx_pin);
+    preferences.putInt("node_ss_tx", meshcom_settings.node_ss_tx_pin);
+    preferences.putInt("node_ss_bd", meshcom_settings.node_ss_baud);
 
     preferences.end();
 

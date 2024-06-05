@@ -91,6 +91,9 @@ struct s_meshcom_settings
 	float node_track_freq = 0;
 	int node_preamplebits = 0;
 
+	int node_ss_rx_pin = 0;
+	int node_ss_tx_pin = 0;
+	int node_ss_baud = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;

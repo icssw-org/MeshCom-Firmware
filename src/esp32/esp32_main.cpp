@@ -26,6 +26,7 @@
 #include "io_functions.h"
 #include "ina226_functions.h"
 #include "rtc_functions.h"
+#include "softser_functions.h"
 
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
@@ -296,6 +297,7 @@ bool g_ble_uart_is_connected = false;
 uint8_t dmac[6] = {0};
 
 unsigned long gps_refresh_timer = 0;
+unsigned long softser_refresh_time = 0;
 
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
 void checkSerialCommand(void);
@@ -379,6 +381,7 @@ void esp32setup()
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
     bRTCON =  meshcom_settings.node_sset2 & 0x0200;
+    bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
     // if Node is in WifiAP Mode -> no Gateway posible
     if(bWIFIAP && bGATEWAY)
@@ -478,6 +481,11 @@ void esp32setup()
     // RTC
     #if defined(ENABLE_RTC)
         setupRTC();
+    #endif
+
+    // SOFTSER
+    #if defined(ENABLE_SOFTSER)
+        setupSOFTSER();
     #endif
 
 	// Initialize temp sensor
@@ -1098,6 +1106,19 @@ void esp32loop()
         meshcom_settings.node_date_minute = MyClock.Minute();
         meshcom_settings.node_date_second = MyClock.Second();
     }
+
+    // SOFTSER
+    #if defined(ENABLE_SOFTSER)
+        if(bSOFTSERON)
+        {
+            if ((softser_refresh_time + (SOFTSER_REFRESH_INTERVAL * 1000)) < millis())
+            {
+                loopSOFTSER();
+
+                softser_refresh_time = millis();
+            }
+        }
+    #endif
 
     if(bLoopActive)
         Serial.printf("[LOOP] 1\n");

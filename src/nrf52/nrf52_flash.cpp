@@ -164,6 +164,11 @@ void init_flash(void)
     	meshcom_settings.node_country = old_struct.node_country;
 
 		meshcom_settings.node_track_freq = old_struct.node_track_freq;
+		meshcom_settings.node_preamplebits = old_struct.node_preamplebits;
+
+		meshcom_settings.node_ss_rx_pin = old_struct.node_ss_rx_pin;
+		meshcom_settings.node_ss_tx_pin = old_struct.node_ss_tx_pin;
+		meshcom_settings.node_ss_baud = old_struct.node_ss_baud;
 
 		save_settings();
 		// delay(1000);

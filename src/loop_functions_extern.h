@@ -40,6 +40,7 @@ extern bool bBME680ON;
 extern bool bMCU811ON;
 extern bool bINA226ON;
 extern bool bRTCON;
+extern bool bSOFTSERON;
 
 extern bool bTCA9548A;
 extern bool bMCP23017;
@@ -53,6 +54,7 @@ extern bool bme680_enabled;
 
 extern bool bSHORTPATH;
 extern bool bGPSDEBUG;
+extern bool bSOFTSERDEBUG;
 
 extern bool bBLElong;
 

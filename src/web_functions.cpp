@@ -269,6 +269,16 @@ void loopWebserver()
                 commandAction((char*)"--rtc off", bPhoneReady);
             }
             else
+            if (web_header.indexOf("GET /softser/on") >= 0)
+            {
+                commandAction((char*)"--softser on", bPhoneReady);
+            }
+            else
+            if (web_header.indexOf("GET /softser/off") >= 0)
+            {
+                commandAction((char*)"--softser off", bPhoneReady);
+            }
+            else
             if (web_header.indexOf("GET /volt/on") >= 0)
             {
                 commandAction((char*)"--volt", bPhoneReady);
@@ -564,6 +574,66 @@ void loopWebserver()
                 }
 
                 commandAction((char*)"--save", bPhoneReady);
+            }
+            else
+            if (web_header.indexOf("?ss0=") >= 0)
+            {
+                String strListen = web_header.substring(web_header.indexOf("?ss0=")+3, web_header.indexOf(" HTTP"));
+                strListen += "&";
+                char cListen[80];
+                sprintf(cListen, "%s", strListen.c_str());
+
+                // Read each command pair 
+                char* command = strtok(cListen, "&");
+                while (command != 0)
+                {
+                    //Serial.printf("command:%s\n", command);
+                    
+                    // Split the command in two values
+                    char* separator = strchr(command, '=');
+                    if (separator != 0)
+                    {
+                        // Actually split the string in 2: replace '=' with 0
+                        *separator = 0;
+                        int lindex = atoi(command);
+                        ++separator;
+                        int lgroup = atoi(separator);
+
+                        if(lindex == 0)
+                            meshcom_settings.node_ss_rx_pin = lgroup;
+                        else
+                        if(lindex == 1)
+                            meshcom_settings.node_ss_tx_pin = lgroup;
+                        else
+                        if(lindex == 2)
+                            meshcom_settings.node_ss_baud = lgroup;
+                    }
+                    
+                    // Find the next command in input string
+                    command = strtok(0, "&");
+                }
+
+                commandAction((char*)"--save", bPhoneReady);
+
+                commandAction((char*)"--softser on", bPhoneReady);
+            }
+            else
+            if (web_header.indexOf("?sstext=") >= 0)
+            {
+                idx_text=web_header.indexOf("=") + 1;
+
+                String message="";
+
+                if(idx_text_end <= 0)
+                    message = hex2ascii(web_header.substring(idx_text));
+                else
+                    message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                sprintf(message_text, "--softser send %s", message.c_str());
+
+                Serial.printf("message_text:<%s>\n", message_text);
+                
+                commandAction(message_text, bPhoneReady);
             }
             else
             if (web_header.indexOf("?txpower=") >= 0)
@@ -1060,6 +1130,29 @@ void loopWebserver()
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
 
+                if(bSOFTSERON)
+                {
+                    web_client.println("<form action=\"/#\">");
+                    web_client.println("<tr><td>\n");
+                    web_client.println("<label for=\"fname\"><b>SS RX/TX/BAUD:</b></label>");
+                    web_client.println("</td><td>\n");
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"4\" id=\"ssrx\" name=\"ss0\">\n", meshcom_settings.node_ss_rx_pin);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"4\" id=\"sstx\" name=\"1\">\n", meshcom_settings.node_ss_tx_pin);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"5\" id=\"ssbd\" name=\"2\">\n", meshcom_settings.node_ss_baud);
+                    web_client.println("<input type=\"submit\" value=\"set\">");
+                    web_client.println("</td></tr>\n");
+                    web_client.println("</form>");
+
+                    web_client.println("<form action=\"/#\">");
+                    web_client.println("<tr><td>\n");
+                    web_client.println("<label for=\"fname\"><b>SS Send-Text:</b></label>");
+                    web_client.println("</td><td>\n");
+                    web_client.println("<input type=\"text\" maxlength=\"50\" size=\"30\" id=\"sstext\" name=\"sstext\">");
+                    web_client.println("<input type=\"submit\" value=\"send\">");
+                    web_client.println("</td></tr>\n");
+                    web_client.println("</form>");
+                }
+
                 web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>COMMAND:</b></label>");
@@ -1501,7 +1594,17 @@ void loopWebserver()
                 }
                 else
                 {
-                    web_client.println("<td><a href=\"/rtc/on\"><button class=\"button\"><b>RTC</b></button></a></td></tr>");
+                    web_client.println("<td><a href=\"/rtc/on\"><button class=\"button\"><b>RTC</b></button></a></td>");
+                }
+
+                // SOFTSER
+                if (bSOFTSERON)
+                {
+                    web_client.println("<td><a href=\"/softser/off\"><button class=\"button button2\"<b>SOFTSER</b></button></a></td></tr>");
+                }
+                else
+                {
+                    web_client.println("<td><a href=\"/softser/on\"><button class=\"button\"><b>SOFTSER</b></button></a></td></tr>");
                 }
             }
 
