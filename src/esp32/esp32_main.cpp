@@ -383,6 +383,13 @@ void esp32setup()
     bRTCON =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
+    // if Node not set --> WifiAP Mode on
+    if(meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
+    {
+        bWIFIAP = true;
+        bWEBSERVER = true;
+    }
+
     // if Node is in WifiAP Mode -> no Gateway posible
     if(bWIFIAP && bGATEWAY)
     {
@@ -409,6 +416,9 @@ void esp32setup()
     global_batt = 4200.0;
 
     posinfo_interval = POSINFO_INTERVAL;
+
+    if(meshcom_settings.node_postime > 0)
+        posinfo_interval = meshcom_settings.node_postime;
 
     meshcom_settings.node_press = 0.0;
     meshcom_settings.node_hum = 0.0;
@@ -788,11 +798,11 @@ void esp32setup()
 
     Serial.println(F("[SX12xx] All settings successfully changed!"));
 
-  // Create the BLE Device
-    char cBLEName[50]={0};
+    // Create the BLE Device & WiFiAP
     sprintf(cBLEName, "M%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
     char cManufData[50]={0};
     sprintf(cManufData, "MCM%s-%02x%02x-%s", g_ble_dev_name,  dmac[1], dmac[0], meshcom_settings.node_call);
+    
     
     const std::__cxx11::string strBLEName = cBLEName;
     const std::__cxx11::string strBLEManufData = cManufData;
@@ -1224,7 +1234,6 @@ void esp32loop()
         if(loopMCP23017())
         {
         }
-
 
         #ifdef ENABLE_GPS
             unsigned int igps = getGPS();

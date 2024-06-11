@@ -46,24 +46,26 @@ int CheckGroup(String callsign)
 bool CheckOwnGroup(String callsign)
 {
     // no Group-Check
-    if(meshcom_settings.node_gch <= 0)
-        return true;
-
     int checkgroup = CheckGroup(callsign);
 
     if(checkgroup < 0)
         return false;
 
-    if(meshcom_settings.node_gch == checkgroup)
-        return true;
+    bool bHasGroup=false;
 
-    for(int ig=0;ig<5;ig++)
+    for(int ig=0;ig<6;ig++)
     {
+        if(meshcom_settings.node_gcb[ig] > 0)
+            bHasGroup=true;
+
         if(meshcom_settings.node_gcb[ig] == checkgroup)
             return true;
     }
 
-    return false;
+    if(bHasGroup)
+        return false;
+
+    return true;
 }
 
 void initAPRS(struct aprsMessage &aprsmsg, char msgType)

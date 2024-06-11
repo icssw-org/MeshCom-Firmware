@@ -47,11 +47,16 @@ bool loopSOFTSER()
 
     bool newData = false;
 
+    strSOFTSER_BUF="";
+
+    strSOFTSER_BUF.concat("-----------check SOFTSER ");
+    strSOFTSER_BUF.concat(getTimeString());
+    strSOFTSER_BUF.concat(" -----------");
+    strSOFTSER_BUF.concat("\r");
+
     if(bSOFTSERDEBUG)
     {
-        Serial.print("-----------check SOFTSER ");
-        Serial.print(getTimeString());
-        Serial.println(" -----------");
+        Serial.println(strSOFTSER_BUF);
     }
   
     // For one second we parse SOFTSER data and report
@@ -74,12 +79,15 @@ bool loopSOFTSER()
           Serial.print(c);
 
         tmp_data += c;
-        
+
       }
     
       if((millis() - start) > 1000)
           bgrun=false;
     }
+
+    strSOFTSER_BUF.concat(tmp_data);
+    strSOFTSER_BUF.concat("\r\n");
 
     if(bSOFTSERDEBUG)
     {
@@ -101,7 +109,7 @@ bool sendSOFTSER(char cText[100])
         return false;
     }
 
-    Serial.printf("writeSOFTSER <%s>\n", cText);
+    Serial.printf("writeSOFTSER\n<%s>\n", cText);
 
     SOFTSER.write(cText);
 

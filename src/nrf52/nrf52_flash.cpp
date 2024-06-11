@@ -154,12 +154,12 @@ void init_flash(void)
 		memcpy(meshcom_settings.node_mcp17t[15], old_struct.node_mcp17t[15], 16);
 
 		// GC fields
-    	meshcom_settings.node_gch = old_struct.node_gch;
     	meshcom_settings.node_gcb[0] = old_struct.node_gcb[0];
     	meshcom_settings.node_gcb[1] = old_struct.node_gcb[1];
     	meshcom_settings.node_gcb[2] = old_struct.node_gcb[2];
     	meshcom_settings.node_gcb[3] = old_struct.node_gcb[3];
     	meshcom_settings.node_gcb[4] = old_struct.node_gcb[4];
+    	meshcom_settings.node_gcb[5] = old_struct.node_gcb[5];
 
     	meshcom_settings.node_country = old_struct.node_country;
 
@@ -169,6 +169,8 @@ void init_flash(void)
 		meshcom_settings.node_ss_rx_pin = old_struct.node_ss_rx_pin;
 		meshcom_settings.node_ss_tx_pin = old_struct.node_ss_tx_pin;
 		meshcom_settings.node_ss_baud = old_struct.node_ss_baud;
+
+		meshcom_settings.node_postime = old_struct.node_postime;
 
 		save_settings();
 		// delay(1000);

@@ -252,8 +252,7 @@ struct s_meshcom_settings
 	int node_mcp17in = 0;
 
 	// GC Fields
-	int node_gch = 0;
-	int node_gcb[5] = {0};
+	int node_gcb[6] = {0};
 
 	// internatioal fields
 	int node_country = 0;	// 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
@@ -264,6 +263,8 @@ struct s_meshcom_settings
 	int node_ss_rx_pin = 0;
 	int node_ss_tx_pin = 0;
 	int node_ss_baud = 0;
+
+	int node_postime = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;
@@ -387,8 +388,7 @@ struct s_meshcomcompat_settings
 	int node_mcp17in = 0;
 
 	// GC Fields
-	int node_gch = 0;
-	int node_gcb[5] = {0};
+	int node_gcb[6] = {0};
 
 	// internatioal fields
 	int node_country = 0;	// 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
@@ -399,6 +399,8 @@ struct s_meshcomcompat_settings
 	int node_ss_rx_pin = 0;
 	int node_ss_tx_pin = 0;
 	int node_ss_baud = 0;
+
+	int node_postime = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;

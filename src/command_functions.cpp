@@ -33,7 +33,6 @@ void sendGpsJson();
 void sendAPRSset();
 void sendConfigFinish();
 
-
 int casecmp(const char *s1, const char *s2)
 {
 	while (*s1 != 0 && tolower(*s1) == tolower(*s2))
@@ -167,6 +166,20 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"postime") == 0)
+    {
+        sscanf(msg_text+10, "%d", &meshcom_settings.node_postime);
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"volt") == 0)
     {
         bDisplayVolt = true;
@@ -273,7 +286,7 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            Serial.printf("MeshCom %s %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--setwifiap on/off WLAN AP\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
+            Serial.printf("MeshCom %s %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--wifiap on/off WLAN AP\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
             delay(100);
             Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
             delay(100);
@@ -1393,9 +1406,11 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setwifiap on") == 0)
+    if(commandCheck(msg_text+2, (char*)"wifiap on") == 0)
     {
         bWIFIAP=true;
+
+        bGATEWAY=false;
         
         meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0080;
 
@@ -1409,7 +1424,7 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setwifiap off") == 0)
+    if(commandCheck(msg_text+2, (char*)"wifiap off") == 0)
     {
         bWIFIAP=false;
         
@@ -1960,25 +1975,14 @@ void commandAction(char *msg_text, bool ble)
         int igrc=1;
         String strdec = "";
         
-        meshcom_settings.node_gch=0;
-        for(int iset=0;iset<5;iset++)
+        for(int iset=0;iset<6;iset++)
             meshcom_settings.node_gcb[iset]=0;
 
         for(int iset=0; iset<(int)strlen(_owner_c); iset++)
         {
             if(_owner_c[iset] == ';')
             {
-                switch (igrc)
-                {
-                    case 1: meshcom_settings.node_gch = strdec.toInt(); break;
-                    case 2:
-                    case 3:
-                    case 4:
-                    case 5:
-                    case 6:
-                         meshcom_settings.node_gcb[igrc-2] = strdec.toInt(); break;
-                    default: break;
-                }
+                meshcom_settings.node_gcb[igrc-1] = strdec.toInt(); break;
 
                 strdec="";
 
@@ -2160,12 +2164,12 @@ void commandAction(char *msg_text, bool ble)
             idoc["BLE"] = (bBLElong ? "long" : "short");
             idoc["BATP"] = global_proz;
             idoc["BATV"] = global_batt/1000.0;
-            idoc["GCH"] = meshcom_settings.node_gch;
             idoc["GCB0"] = meshcom_settings.node_gcb[0];
             idoc["GCB1"] = meshcom_settings.node_gcb[1];
             idoc["GCB2"] = meshcom_settings.node_gcb[2];
             idoc["GCB3"] = meshcom_settings.node_gcb[3];
             idoc["GCB4"] = meshcom_settings.node_gcb[4];
+            idoc["GCB5"] = meshcom_settings.node_gcb[5];
             idoc["CTRY"] = ctrycode;
 
             serializeJson(idoc, print_buff, measureJson(idoc));
@@ -2196,10 +2200,7 @@ void commandAction(char *msg_text, bool ble)
                     (bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"),
                     getCountry(meshcom_settings.node_country).c_str() , rf_freq_info, getPower());
 
-            if(meshcom_settings.node_gch > 0)
-                Serial.printf("\n...GC main %4i\n", meshcom_settings.node_gch);
-
-            for(int ig=0;ig<5;ig++)
+            for(int ig=0;ig<6;ig++)
             {
                 if(meshcom_settings.node_gcb[ig] > 0)
                     Serial.printf("...GC [%2i] %4i\n", ig+1, meshcom_settings.node_gcb[ig]);
@@ -2226,8 +2227,16 @@ void commandAction(char *msg_text, bool ble)
 
             #ifndef BOARD_RAK4630
                 Serial.printf("...WIFI-AP  %s\n", (bWIFIAP?"yes":"no"));
-                Serial.printf("...SSID     %s\n", meshcom_settings.node_ssid);
-                Serial.printf("...PASSWORD %s\n", meshcom_settings.node_pwd);
+                if(bWIFIAP)
+                {
+                    Serial.printf("...SSID     %s\n", cBLEName);
+                    Serial.printf("...PASSWORD <>\n");
+                }
+                else
+                {
+                    Serial.printf("...SSID     %s\n", meshcom_settings.node_ssid);
+                    Serial.printf("...PASSWORD %s\n", meshcom_settings.node_pwd);
+                }
             #endif
             Serial.printf("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             if(meshcom_settings.node_hasIPaddress)
@@ -2309,8 +2318,16 @@ void commandAction(char *msg_text, bool ble)
         JsonDocument swdoc;
 
         swdoc["TYP"] = "SW";
-        swdoc["SSID"] = meshcom_settings.node_ssid;
-        swdoc["PW"] = meshcom_settings.node_pwd;
+        if(bWIFIAP)
+        {
+            swdoc["SSID"] = cBLEName;
+            swdoc["PW"] = "";
+        }
+        else
+        {
+            swdoc["SSID"] = meshcom_settings.node_ssid;
+            swdoc["PW"] = meshcom_settings.node_pwd;
+        }
         swdoc["IP"] = meshcom_settings.node_ip;
         swdoc["GW"] = meshcom_settings.node_gw;
         swdoc["AP"] = bWIFIAP;

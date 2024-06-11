@@ -353,18 +353,21 @@ bool startWIFI()
   if(hasIPaddress)
     return false;
 
-  if(strcmp(meshcom_settings.node_ssid, "none") == 0)
-  {
-    Serial.printf("WiFI no ssid<%s> not connected\n", meshcom_settings.node_ssid);
-    return false;
-  }
-
   if(bWIFIAP)
   {
-    WiFi.softAP(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
+    WiFi.softAP(cBLEName);
 
     return true;
   }
+  else
+  {
+    if(strcmp(meshcom_settings.node_ssid, "none") == 0)
+    {
+      Serial.printf("WiFI no ssid<%s> not connected\n", meshcom_settings.node_ssid);
+      return false;
+    }
+  }
+
 
   WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
 
@@ -422,7 +425,6 @@ void startMeshComUDP()
   // no gateway activity
   if(!bWIFIAP)
   {
-
     if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
     {
       DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.8.143");
@@ -878,9 +880,7 @@ void sendKEEP()
     String firmware = "GW"+cfw;
     String grc_ids = "";
     
-    grc_ids.concat(meshcom_settings.node_gch);
-    grc_ids.concat(";");
-    for(int igrc=0; igrc<5; igrc++)
+    for(int igrc=0; igrc<6; igrc++)
     {
         if(meshcom_settings.node_gcb[igrc] > 0)
         {

@@ -381,6 +381,12 @@ void loopWebserver()
                 bRefresh=true;
             }
             else
+            if (web_header.indexOf("GET /ssrefresh") >= 0)
+            {
+                web_page_state=8;
+                bRefresh=true;
+            }
+            else
             if (web_header.indexOf("GET /message") >= 0)
             {
                 web_page_state=5;
@@ -389,6 +395,11 @@ void loopWebserver()
             if (web_header.indexOf("GET /mcpstatus") >= 0)
             {
                 web_page_state=7;
+            }
+            else
+            if (web_header.indexOf("GET /softser") >= 0)
+            {
+                web_page_state=8;
             }
             else
             if (web_header.indexOf("GET /mclear") >= 0)
@@ -401,6 +412,12 @@ void loopWebserver()
             {
                 web_page_state=6;
                 RAWLoRaRead=RAWLoRaWrite;
+            }
+            else
+            if (web_header.indexOf("GET /ssclear") >= 0)
+            {
+                web_page_state=8;
+                strSOFTSER_BUF="";
             }
             else
             if (web_header.indexOf("GET /mhclear") >= 0)
@@ -527,22 +544,6 @@ void loopWebserver()
                 commandAction(message_text, bPhoneReady);
             }
             else
-            if (web_header.indexOf("?homegroup=") >= 0)
-            {
-                idx_text=web_header.indexOf("=") + 1;
-
-                String message="";
-
-                if(idx_text_end <= 0)
-                    message = hex2ascii(web_header.substring(idx_text));
-                else
-                    message = hex2ascii(web_header.substring(idx_text, idx_text_end));
-
-                meshcom_settings.node_gch = message.toInt();
-
-                commandAction((char*)"--save", bPhoneReady);
-            }
-            else
             if (web_header.indexOf("?listento0=") >= 0)
             {
                 String strListen = web_header.substring(web_header.indexOf("?listento0=")+9, web_header.indexOf(" HTTP"));
@@ -629,9 +630,9 @@ void loopWebserver()
                 else
                     message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                sprintf(message_text, "--softser send %s", message.c_str());
+                sprintf(message_text, "--softser send %s\r", message.c_str());
 
-                Serial.printf("message_text:<%s>\n", message_text);
+                Serial.printf("message_text:\n<%s>\n", message_text);
                 
                 commandAction(message_text, bPhoneReady);
             }
@@ -868,7 +869,7 @@ void loopWebserver()
             web_client.println("text-decoration: none; margin: 2px; cursor: pointer; border-radius: 8px;}");
             web_client.println(".button2 {background-color:  #a2182f; color: white;}");
 
-            web_client.println(".table {background-color: #FCEDF0; width: max(25%, min(801px, 100%));}");
+            web_client.println(".table {background-color: #FCEDF0; width: max(25%, min(801px, 100%));margin-bottom: 0px;}");
             web_client.println(".table, th, td {border: 1px solid white; border-collapse: collapse;}");
             web_client.println(".table2 {background-color: white;}");
             web_client.println(".tableconsole {font-family: Lucida Console; font-size: 14px;}");
@@ -879,9 +880,22 @@ void loopWebserver()
             web_client.println("</style></head>");
             
             // Web Page Heading
-            web_client.printf("<body><h3>MeshCom 4.0 &nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT</h3>\n", meshcom_settings.node_call,
+            web_client.printf("<body><h3 style=\"margin-bottom: 0px;\">MeshCom 4.0 &nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT</h3>\n", meshcom_settings.node_call,
                 meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
-            
+
+            web_client.println("<table class=\"table\">");
+            web_client.println("<colgroup>");
+            web_client.println("<col style=\"width: 25%;\">");
+            web_client.println("<col style=\"width: 25%;\">");
+            web_client.println("<col style=\"width: 25%;\">");
+            web_client.println("<col style=\"width: 25%;\">");
+            web_client.println("</colgroup><tr>\n");
+            web_client.println("<td><a href=\"#anchor_top\"><button class=\"button button2\"<b>JUMP</b></button></a></td>");
+            web_client.println("<td><a href=\"#anchor_button\"><button class=\"button button2\"<b>COMMANDS</b></button></a></td>");
+            if(web_page_state == 5)
+                web_client.println("<td><a href=\"#anchor_button\"><button class=\"button button2\"<b>TEXT</b></button></a></td>");
+            web_client.println("</tr></table>");
+
             // POS
             if(web_page_state == 1)
             {
@@ -1110,15 +1124,6 @@ void loopWebserver()
 
                 web_client.println("<form action=\"/#\">");
                 web_client.println("<tr><td>\n");
-                web_client.println("<label for=\"fname\"><b>HOME-GROUP:</b></label>");
-                web_client.println("</td><td>\n");
-                web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"homegroup\" name=\"homegroup\">\n", meshcom_settings.node_gch);
-                web_client.println("<input type=\"submit\" value=\"send\">");
-                web_client.println("</td></tr>\n");
-                web_client.println("</form>");
-
-                web_client.println("<form action=\"/#\">");
-                web_client.println("<tr><td>\n");
                 web_client.println("<label for=\"fname\"><b>LISTEN-TO:</b></label>");
                 web_client.println("</td><td>\n");
                 web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento0\" name=\"listento0\">\n", meshcom_settings.node_gcb[0]);
@@ -1126,6 +1131,7 @@ void loopWebserver()
                 web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento2\" name=\"2\">\n", meshcom_settings.node_gcb[2]);
                 web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento3\" name=\"3\">\n", meshcom_settings.node_gcb[3]);
                 web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento4\" name=\"4\">\n", meshcom_settings.node_gcb[4]);
+                web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento5\" name=\"5\">\n", meshcom_settings.node_gcb[5]);
                 web_client.println("<input type=\"submit\" value=\"send\">");
                 web_client.println("</td></tr>\n");
                 web_client.println("</form>");
@@ -1142,15 +1148,6 @@ void loopWebserver()
                     web_client.println("<input type=\"submit\" value=\"set\">");
                     web_client.println("</td></tr>\n");
                     web_client.println("</form>");
-
-                    web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
-                    web_client.println("<label for=\"fname\"><b>SS Send-Text:</b></label>");
-                    web_client.println("</td><td>\n");
-                    web_client.println("<input type=\"text\" maxlength=\"50\" size=\"30\" id=\"sstext\" name=\"sstext\">");
-                    web_client.println("<input type=\"submit\" value=\"send\">");
-                    web_client.println("</td></tr>\n");
-                    web_client.println("</form>");
                 }
 
                 web_client.println("<form action=\"/#\">");
@@ -1160,7 +1157,7 @@ void loopWebserver()
                 web_client.println("<input type=\"text\" maxlength=\"50\" size=\"30\" id=\"command\" name=\"command\">");
                 web_client.println("<input type=\"submit\" value=\"send\">");
                 web_client.println("</td></tr>\n");
-                web_client.println("</form></table><br/>");
+                web_client.println("</form></table>");
             }
             else
             // MESSAGE
@@ -1270,8 +1267,6 @@ void loopWebserver()
 
                 web_client.println("</table>");
 
-                web_client.println("<br />");
-
                 web_client.println("<table class=\"table\">");
 
                 web_client.println("<colgroup>");
@@ -1292,7 +1287,7 @@ void loopWebserver()
                 web_client.println("</td></tr><tr><td></td><td>");
                 web_client.println("<input type=\"submit\" value=\"send\">");
                 web_client.println("</td></tr>");
-                web_client.println("</form><br />");
+                web_client.println("</form>");
 
                 web_client.println("</table>");
             }
@@ -1389,6 +1384,43 @@ void loopWebserver()
                 web_client.println("</table>");
             }
             else
+            // SOFTSER
+            if(web_page_state == 8)
+            {
+                web_client.println("<table class=\"table\">");
+
+                web_client.println("<colgroup>");
+                web_client.println("<col style=\"width: 100%;\">");
+                web_client.println("</colgroup>\n");
+
+                web_client.println("<tr><th>last message</th></tr>");
+
+                // SOFTSER-Message
+                web_client.printf("<tr><td><textarea cols='80' rows='15'>%s</textarea></td></tr>\n", strSOFTSER_BUF.c_str());
+
+                web_client.println("</table>");
+
+                web_client.println("<table class=\"table\">");
+
+                web_client.println("<colgroup>");
+                web_client.println("<col style=\"width: 25%;\">");
+                web_client.println("<col style=\"width: 75%;\">");
+                web_client.println("</colgroup>\n");
+
+                web_client.println("<form action=\"?\">");
+
+                web_client.println("<tr><td>");
+                web_client.println("<label for=\"fname\"><b>Message:</b></label>");
+                web_client.println("</td><td>");
+                web_client.println("<textarea id=\"sstext\" name=\"sstext\" maxlength=\"50\" rows=\3\" cols=\"40\"></textarea>");
+                web_client.println("</td></tr><tr><td></td><td>");
+                web_client.println("<input type=\"submit\" value=\"send\">");
+                web_client.println("</td></tr>");
+                web_client.println("</form>");
+
+                web_client.println("</table>");
+            }
+            else
             // INFO
             {
                 web_client.println("<table class=\"table\">");
@@ -1416,7 +1448,14 @@ void loopWebserver()
                 web_client.println("<tr><td>&nbsp;</td><td>&nbsp;</td></tr>");
 
                 #ifndef BOARD_RAK4630
-                    web_client.printf("<tr><td><b>SSID</b></td><td>%s</td></tr>\n", meshcom_settings.node_ssid);
+                    if(bWIFIAP)
+                    {
+                        web_client.printf("<tr><td><b>SSID</b></td><td>%s</td></tr>\n", cBLEName);
+                    }
+                    else
+                    {
+                        web_client.printf("<tr><td><b>SSID</b></td><td>%s</td></tr>\n", meshcom_settings.node_ssid);
+                    }
                     //web_client.printf("<tr><td><b>PASSWORD</b></td><td>%s</td></tr>\n", meshcom_settings.node_pwd);
                     web_client.printf("<tr><td><b>WIFI-AP</b></td><td>%s</td></tr>\n", (bWIFIAP?"yes":"no"));
                 #endif
@@ -1608,11 +1647,10 @@ void loopWebserver()
                 }
             }
 
-            web_client.println("<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>");
+            web_client.println("<p style=\"margin: 0px;\" id=\"anchor_button\">&nbsp;</p>");
 
             if(web_page_state == 2) //MHEARD TAB
             {
-                web_client.println("<tr><td>&nbsp;</td><td></td>");
                 web_client.println("<td><a href=\"/mhclear\"><button class=\"button\"><b>M.CLEAR</b></button></a></td>");
                 web_client.println("<td><a href=\"/mhrefresh\"><button class=\"button\"><b>REFRESH</b></button></a></td>");
                 web_client.println("</tr>");
@@ -1620,7 +1658,6 @@ void loopWebserver()
 
             if(web_page_state == 5) //Message TAB
             {
-                web_client.println("<tr><td>&nbsp;</td><td></td>");
                 web_client.println("<td><a href=\"/mclear\"><button class=\"button\"><b>M.CLEAR</b></button></a></td>");
                 web_client.println("<td><a href=\"/refresh\"><button class=\"button\"><b>REFRESH</b></button></a></td>");
                 web_client.println("</tr>");
@@ -1628,9 +1665,15 @@ void loopWebserver()
 
             if(web_page_state == 6) //LOG TAB
             {
-                web_client.println("<tr><td>&nbsp;</td><td></td>");
                 web_client.println("<td><a href=\"/logclear\"><button class=\"button\"><b>L.CLEAR</b></button></a></td>");
                 web_client.println("<td><a href=\"/logrefresh\"><button class=\"button\"><b>REFRESH</b></button></a></td>");
+                web_client.println("</tr>");
+            }
+
+            if(web_page_state == 8) //SOFTSER TAB
+            {
+                web_client.println("<td><a href=\"/ssclear\"><button class=\"button\"><b>S.CLEAR</b></button></a></td>");
+                web_client.println("<td><a href=\"/ssrefresh\"><button class=\"button\"><b>REFRESH</b></button></a></td>");
                 web_client.println("</tr>");
             }
 
@@ -1648,6 +1691,9 @@ void loopWebserver()
 
             if(bMCP23017)
                 web_client.println("<tr><td><a href=\"/mcpstatus\"><button class=\"button\"><b>MCP-STATUS</b></button></a></td>");       //page 7
+
+            if(bSOFTSERON)
+                web_client.println("<td><a href=\"/softser\"><button class=\"button\"><b>SOFTSER</b></button></a></td>");   // page 8
 
             // REBOOT
             web_client.println("<td><a href=\"/reboot\"><button class=\"button\"><b>REBOOT</b></button></a></td></tr>");

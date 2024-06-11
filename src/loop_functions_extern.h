@@ -148,3 +148,6 @@ extern int global_proz;
 extern char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Update Time
+
+extern char cBLEName[50];
+extern String strSOFTSER_BUF;

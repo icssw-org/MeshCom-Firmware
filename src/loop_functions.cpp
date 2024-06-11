@@ -78,6 +78,9 @@ int iDisplayChange = 0;
 unsigned long lastHeardTime = 0;
 unsigned long posfixinterall = 0;
 
+char cBLEName[50]={0};
+String strSOFTSER_BUF;
+
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
 
@@ -449,7 +452,11 @@ void sendDisplayHead(bool bInit)
     sprintf(print_text, "Modul: %i", BOARD_HARDWARE);
     sendDisplay1306(false, false, 3, 52, print_text);
 
-    sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);
+    if(bWIFIAP)
+        sprintf(print_text, "ssid:  %-15.15s", cBLEName);
+    else
+        sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);
+
     sendDisplay1306(false, true, 3, 62, print_text);
 
     bSetDisplay=false;
@@ -1582,13 +1589,8 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         // send Group-Call settings zu MesCom-Server
         String strGRC="";
 
-        char cGC[5];
-        sprintf(cGC, "%i;", meshcom_settings.node_gch);
-
-        if(meshcom_settings.node_gch > 0)
-            strGRC=cGC;
-
-        for(int igrc=0;igrc<5;igrc++)
+        char cGC[6];
+        for(int igrc=0;igrc<6;igrc++)
         {
             if(meshcom_settings.node_gcb[igrc] > 0)
             {
@@ -1673,7 +1675,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             iWrite=0;
 
         // An APP als Anzeige retour senden
-        if(isPhoneReady == 1)
+        if(isPhoneReady == 1 || bGATEWAY)
         {
             struct aprsMessage aprsmsg;
 
@@ -1695,10 +1697,25 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
             encodeAPRS(msg_buffer, aprsmsg);
             
-            addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+            if(isPhoneReady == 1)
+            {
+                addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+            }
+
+            if(bGATEWAY)
+            {
+                if(bDisplayInfo)
+                {
+                    Serial.print(getTimeString());
+                    Serial.printf(" NEW-UDP:%s\n", msg_buffer+3);
+                }
+
+                // UDP out
+                addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+            }
         }
 
-    }
+}
     
     if(bSendViaMesh)
     {
@@ -1878,7 +1895,12 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     // gps_send_rate 30 minutes default
     // bDisplayTrack = true Smartbeaconing used
     if(posinfo_distance < 100 || !bDisplayTrack)  // seit letzter gemeldeter position
-        gps_send_rate = POSINFO_INTERVAL;
+    {
+        if(meshcom_settings.node_postime > 0)
+            gps_send_rate = meshcom_settings.node_postime;
+        else
+            gps_send_rate = POSINFO_INTERVAL;
+    }
     else
     if(posinfo_distance < 200)  // zu fuss > 3 km/h  < 8 km/h
         gps_send_rate = 30; // seconds

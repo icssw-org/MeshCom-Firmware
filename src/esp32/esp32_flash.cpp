@@ -113,12 +113,12 @@ void init_flash(void)
     sprintf(meshcom_settings.node_mcp17t[15], "%s", strVar.c_str());
 
 	// GM Fields
-    meshcom_settings.node_gch = preferences.getInt("node_gch");
     meshcom_settings.node_gcb[0] = preferences.getInt("node_gcb0");
     meshcom_settings.node_gcb[1] = preferences.getInt("node_gcb1");
     meshcom_settings.node_gcb[2] = preferences.getInt("node_gcb2");
     meshcom_settings.node_gcb[3] = preferences.getInt("node_gcb3");
     meshcom_settings.node_gcb[4] = preferences.getInt("node_gcb4");
+    meshcom_settings.node_gcb[5] = preferences.getInt("node_gcb5");
 
     meshcom_settings.node_country = preferences.getInt("node_ctry");    // 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
 
@@ -129,6 +129,7 @@ void init_flash(void)
     meshcom_settings.node_ss_tx_pin = preferences.getInt("node_ss_tx", 0);
     meshcom_settings.node_ss_baud = preferences.getInt("node_ss_bd", 0);
 
+    meshcom_settings.node_postime = preferences.getInt("node_postime", 0);
 }
 
 void save_settings(void)
@@ -236,12 +237,12 @@ void save_settings(void)
     preferences.putString("node_mcp1715", strVar); 
 
 	// GM Fields
-    preferences.putInt("node_gch", meshcom_settings.node_gch);
     preferences.putInt("node_gcb0", meshcom_settings.node_gcb[0]);
     preferences.putInt("node_gcb1", meshcom_settings.node_gcb[1]);
     preferences.putInt("node_gcb2", meshcom_settings.node_gcb[2]);
     preferences.putInt("node_gcb3", meshcom_settings.node_gcb[3]);
     preferences.putInt("node_gcb4", meshcom_settings.node_gcb[4]);
+    preferences.putInt("node_gcb5", meshcom_settings.node_gcb[5]);
 
     preferences.putInt("node_ctry", meshcom_settings.node_country);    // 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
 
@@ -251,6 +252,8 @@ void save_settings(void)
     preferences.putInt("node_ss_rx", meshcom_settings.node_ss_rx_pin);
     preferences.putInt("node_ss_tx", meshcom_settings.node_ss_tx_pin);
     preferences.putInt("node_ss_bd", meshcom_settings.node_ss_baud);
+
+    preferences.putInt("node_postime", meshcom_settings.node_postime);
 
     preferences.end();
 
