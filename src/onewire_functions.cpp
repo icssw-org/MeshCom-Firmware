@@ -1,5 +1,3 @@
-//#ifndef BOARD_RAK4630
-
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
 
@@ -26,18 +24,27 @@ void init_onewire(void)
     if(!bONEWIRE)
         return;
 
-    Serial.printf("[INIT]...init_onewire - GPIO:%i\n", meshcom_settings.node_owgpio);
+    #ifdef BOARD_TBEAM
+        if(meshcom_settings.node_owgpio == 16)
+        {
+            meshcom_settings.node_owgpio = 0;
+            bONEWIRE = false;
+        }
+    #endif
+
+    Serial.printf("[INIT]...ONEWIRE - GPIO:%i\n", meshcom_settings.node_owgpio);
 
     if(meshcom_settings.node_owgpio > 0)
         ds.begin(meshcom_settings.node_owgpio);  // default on pin 36
     else
     {
+        meshcom_settings.node_owgpio=0;
+
         #ifdef OneWire_GPIO
             meshcom_settings.node_owgpio = OneWire_GPIO;
             ds.begin(meshcom_settings.node_owgpio);
         #endif
     }
-   
 }
 
 void loop_onewire()
@@ -53,7 +60,7 @@ void loop_onewire()
 
     byte i;
     byte present = 0;
-    byte type_s;
+    //byte type_s;
     byte data[9];
     byte addr[8];
     float celsius, fahrenheit;
@@ -97,17 +104,17 @@ void loop_onewire()
         case 0x10:
             if(bWXDEBUG)
                 Serial.println("  Chip = DS18S20");  // or old DS1820
-            type_s = 1;
+            //type_s = 1;
             break;
         case 0x28:
             if(bWXDEBUG)
                 Serial.println("  Chip = DS18B20");
-            type_s = 0;
+            //type_s = 0;
             break;
         case 0x22:
             if(bWXDEBUG)
                 Serial.println("  Chip = DS1822");
-            type_s = 0;
+            //type_s = 0;
             break;
         default:
             if(bWXDEBUG)
@@ -196,4 +203,3 @@ void loop_onewire()
 
     meshcom_settings.node_temp2 = celsius;
 }
-//#endif

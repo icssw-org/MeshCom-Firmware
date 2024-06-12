@@ -97,7 +97,7 @@ void setupGPS(bool bGPSON)
 
     TwoWire *w = NULL;
 
-    #ifdef PMU_USE_WIRE1
+    #ifdef PMU_USE_WIRE1    // use on ESP S3
         w = &Wire1;
     #else
         w = &Wire;
@@ -158,16 +158,18 @@ void setupGPS(bool bGPSON)
     {
         Serial.printf("[INIT]...AXP192 chip\n");
 
-        PMU->setProtectedChannel(XPOWERS_DCDC3);
+        //TODO PMU->setProtectedChannel(XPOWERS_DCDC3);
 
         //LoRa
         PMU->setPowerChannelVoltage(XPOWERS_LDO2, 3300);
-        // GPS
-        PMU->setPowerChannelVoltage(XPOWERS_LDO3, 3300);
+        PMU->enablePowerOutput(XPOWERS_LDO2);
+
         // OLED
         PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
+        PMU->enablePowerOutput(XPOWERS_DCDC1);
 
-        PMU->enablePowerOutput(XPOWERS_LDO2);
+        // GPS
+        PMU->setPowerChannelVoltage(XPOWERS_LDO3, 3300);
         PMU->enablePowerOutput(XPOWERS_LDO3);
 
         // protected OLED
@@ -175,25 +177,16 @@ void setupGPS(bool bGPSON)
         // protected ESP32
         PMU->setProtectedChannel(XPOWERS_DCDC3);
 
-        // enable OLED power
-        PMU->enablePowerOutput(XPOWERS_DCDC1);
-
         // disable not used
         PMU->disablePowerOutput(XPOWERS_DCDC2);
 
         PMU->disableIRQ(XPOWERS_AXP192_ALL_IRQ);
 
-        PMU->enableIRQ(
-        XPOWERS_AXP192_VBUS_REMOVE_IRQ |
-        XPOWERS_AXP192_VBUS_INSERT_IRQ |
-        XPOWERS_AXP192_BAT_CHG_DONE_IRQ |
-        XPOWERS_AXP192_BAT_CHG_START_IRQ |
-        XPOWERS_AXP192_BAT_REMOVE_IRQ |
-        XPOWERS_AXP192_BAT_INSERT_IRQ |
-        XPOWERS_AXP192_PKEY_SHORT_IRQ 
-        );
+        // Set constant current charging current
+        PMU->setChargerConstantCurr(XPOWERS_AXP192_CHG_CUR_450MA);
 
-        // is protected PMU->disablePowerOutput(XPOWERS_DCDC3);
+        // Set up the charging voltage
+        PMU->setChargeTargetVoltage(XPOWERS_AXP192_CHG_VOL_4V2);
 
         Serial.println("[INIT]...AXP192 PMU init succeeded, using AXP192 PMU");
     }
@@ -451,7 +444,12 @@ delay(1000);
 unsigned int getGPS(void)
 {
     if(!bGPSON)
+    {
+        if(meshcom_settings.node_postime > 0)
+            return meshcom_settings.node_postime;
+
         return POSINFO_INTERVAL;
+    }
 
     if(bMitHardReset)
     {

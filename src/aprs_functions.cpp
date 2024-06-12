@@ -1,9 +1,17 @@
-
 #include <aprs_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <lora_setchip.h>
+#include <regex_functions.h>
 #include <debugconf.h>
 #include <configuration.h>
+
+char shortSUBVERSION()
+{
+    char csfw[5]={0};
+    memcpy(csfw, SOURCE_VERSION_SUB, 1);
+    return csfw[0];
+}
 
 uint8_t shortVERSION()
 {
@@ -14,15 +22,64 @@ uint8_t shortVERSION()
     return (uint8_t)iversion;
 }
 
-void initAPRS(struct aprsMessage &aprsmsg)
+int CheckGroup(String callsign)
+{
+	if(callsign.length() <= 0 || callsign.length() > 4)
+		return 0;
+	
+	for(int ic=0;ic<(int)callsign.length();ic++)
+	{
+		if(callsign.charAt(ic) == 0x00)
+			break;
+		if(callsign.charAt(ic) < 0x30 || callsign.charAt(ic) > 0x39)
+			return 0;
+	}
+
+	int ig=callsign.toInt();
+
+	if(ig <= 0 || ig > 9999)
+		return 0;
+	
+	return ig;
+}
+
+bool CheckOwnGroup(String callsign)
+{
+    // no Group-Check
+    int checkgroup = CheckGroup(callsign);
+
+    if(checkgroup < 0)
+        return false;
+
+    bool bHasGroup=false;
+
+    for(int ig=0;ig<6;ig++)
+    {
+        if(meshcom_settings.node_gcb[ig] > 0)
+            bHasGroup=true;
+
+        if(meshcom_settings.node_gcb[ig] == checkgroup)
+            return true;
+    }
+
+    if(bHasGroup)
+        return false;
+
+    return true;
+}
+
+void initAPRS(struct aprsMessage &aprsmsg, char msgType)
 {
     aprsmsg.msg_len = 0;
     aprsmsg.msg_id = 0;
-    aprsmsg.payload_type = 0x00;
-    aprsmsg.max_hop = 5;
+    aprsmsg.payload_type = msgType;
+    aprsmsg.max_hop = meshcom_settings.max_hop_pos;    // other
+    if(msgType == ':')
+        aprsmsg.max_hop = meshcom_settings.max_hop_text;    // TEXT
     aprsmsg.msg_server = false;
     aprsmsg.msg_track = false;
     aprsmsg.msg_app_offline = false;
+    aprsmsg.msg_mesh = false;
     aprsmsg.msg_source_path = "";
     aprsmsg.msg_destination_path = "";
     aprsmsg.msg_destination_call = "";
@@ -31,19 +88,25 @@ void initAPRS(struct aprsMessage &aprsmsg)
     aprsmsg.msg_fcs = 0;
     aprsmsg.msg_source_hw = BOARD_HARDWARE;
     aprsmsg.msg_source_mod = 3; // MeshCom SF 11 CR 4/6 BW 250 ... medium
-    if(meshcom_settings.node_sf == 12 && meshcom_settings.node_cr == 8 && meshcom_settings.node_bw == 125.0)
+    
+    if(meshcom_settings.node_sf == 12 && getCR() == 8 && getBW() == 125.0)
         aprsmsg.msg_source_mod = 4; // MeshCom SF 12 CR 4/8 BW 125 ... slow
+    
+    if(meshcom_settings.node_sf == 11 && getCR() == 5 && getBW() == 250.0)
+        aprsmsg.msg_source_mod = 5; // MeshCom SF 11 CR 4/5 BW 250 ... fast
 
     aprsmsg.msg_source_fw_version = shortVERSION();
+    aprsmsg.msg_source_fw_sub_version = shortSUBVERSION();
     aprsmsg.msg_last_hw = BOARD_HARDWARE;
     aprsmsg.msg_source_last = "";
+    aprsmsg.msg_last_path_cnt = 0;
 }
 
 uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct aprsMessage &aprsmsg)
 {
     uint8_t temp[11];
 
-    initAPRS(aprsmsg);
+    initAPRS(aprsmsg, 0x00);    // decode init
 
     aprsmsg.msg_len = rsize;
 
@@ -82,11 +145,19 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         if((RcvBuffer[5] & 0x20) == 0x20)
             aprsmsg.msg_app_offline = true;
 
+        if((RcvBuffer[5] & 0x10) == 0x10)
+            aprsmsg.msg_mesh = true;
+
         uint16_t inext=0;
+
+        bool bCallsignOk=true;
 
         // Source Path
         bool bSourceEndOk=false;
         bool bSourceCall=true;
+        
+        aprsmsg.msg_last_path_cnt=1;
+
         for(ib=6; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == '>')
@@ -101,11 +172,25 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 
                 if(RcvBuffer[ib] == ',')
                 {
+                    aprsmsg.msg_last_path_cnt++;
+                    
                     bSourceCall=false;
+
+                    if(aprsmsg.msg_source_last.length() > 0)
+                    {
+                        if(!checkRegexCall(aprsmsg.msg_source_last))
+                        {
+                            Serial.printf("APRS decode - Source-CallSign Error [%s]\n", aprsmsg.msg_source_last.c_str());
+                            bCallsignOk=false;
+                        }
+                    }
+
                     aprsmsg.msg_source_last="";
                 }
                 else
+                {
                     aprsmsg.msg_source_last.concat((char)RcvBuffer[ib]);
+                }
 
                 if(bSourceCall)
                 {
@@ -124,10 +209,23 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             return 0x00;
         }
 
+        if(!checkRegexCall(aprsmsg.msg_source_call))
+        {
+            Serial.printf("APRS decode - Source-CallSign Error [%s]\n", aprsmsg.msg_source_call.c_str());
+            bCallsignOk=false;
+        }
+
+        if(!bCallsignOk)
+        {
+            return 0x00;
+        }
+
         // Destination Path
         bool bDestinationEndOk=false;
         bool bDestinationCall=true;
         uint16_t inextstart=inext;
+        String msg_dest_last="";
+
         for(ib=inextstart; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == aprsmsg.payload_type)
@@ -143,6 +241,24 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 if(RcvBuffer[ib] == ',')
                 {
                     bDestinationCall=false;
+
+                    if(msg_dest_last.length() > 0)
+                    {
+                        if(!CheckGroup(msg_dest_last))
+                        {
+                            if(!checkRegexCall(msg_dest_last))
+                            {
+                                Serial.printf("APRS decode - Destination-CallSign Error [%s]\n", msg_dest_last.c_str());
+                                bCallsignOk=false;
+                            }
+                        }
+                    }
+
+                    msg_dest_last="";
+                }
+                else
+                {
+                    msg_dest_last.concat((char)RcvBuffer[ib]);
                 }
 
                 if(bDestinationCall)
@@ -159,6 +275,20 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             if(bDEBUG && rsize < 255)
                 printAsciiBuffer(RcvBuffer, rsize);
 
+            return 0x00;
+        }
+
+        if(!CheckGroup(msg_dest_last))
+        {
+            if(!checkRegexCall(aprsmsg.msg_destination_call))
+            {
+                Serial.printf("APRS decode - Destination-CallSign Error [%s]\n", aprsmsg.msg_destination_call.c_str());
+                bCallsignOk=false;
+            }
+        }
+
+        if(!bCallsignOk)
+        {
             return 0x00;
         }
 
@@ -230,6 +360,26 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         if(inext < rsize)
         {
             aprsmsg.msg_last_hw = RcvBuffer[inext];
+            inext++;
+        }
+
+        if(RcvBuffer[inext] == 0x7e)
+        {
+            aprsmsg.msg_source_fw_sub_version = '#';
+            inext++;
+        }
+        else
+        {
+            if(RcvBuffer[inext] == 0x00)
+                aprsmsg.msg_source_fw_sub_version = '#';
+            else
+                aprsmsg.msg_source_fw_sub_version = RcvBuffer[inext];
+            inext++;
+
+        }
+
+        if(RcvBuffer[inext] == 0x7e)
+        {
             inext++;
         }
 
@@ -636,6 +786,9 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage
     if(aprsmsg.msg_app_offline)
         msg_buffer[5] = msg_buffer[5] | 0x20;
 
+    if(bMESH)
+        msg_buffer[5] = msg_buffer[5] | 0x10;
+
     sprintf(msg_start, "%s>%s%c", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type);
 
     uint16_t ilng=aprsmsg.msg_source_path.length() + 1 + aprsmsg.msg_destination_path.length() + 1;
@@ -666,7 +819,7 @@ uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMes
     return ilng;
 }
 
-//10:30:29 RX-LoRa: 105 ! xAE48D54D 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.52E#/B=005/A=000161/P=1004.9/H=40.2/T=28.9/Q=1005.4 HW:04 MOD:03 FCS:15D5 FW:17 LH:09
+//10:30:29 RX-LoRa: 105 ! xAE48D54D 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.52E#/B=005/A=000161/P=1004.9/H=40.2/T=28.9/Q=1005.4/G232;2321 HW:04 MOD:03 FCS:15D5 FW:17 LH:09
 
 uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &aprsmsg)
 {
@@ -711,6 +864,12 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     inext++;
 
     msg_buffer[inext] = aprsmsg.msg_last_hw;
+    inext++;
+
+    if(aprsmsg.msg_source_fw_sub_version == 0x00)
+        msg_buffer[inext] = 0x23;   // #
+    else
+        msg_buffer[inext] = aprsmsg.msg_source_fw_sub_version;
     inext++;
 
     msg_buffer[inext] = 0x7e;

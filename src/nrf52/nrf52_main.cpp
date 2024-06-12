@@ -39,11 +39,12 @@ extern uint8_t udpRead;    // counter for ringbuffer
 static uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 // ETH Prototypes
-void sendHeartbeat();                                // heartbeat to server
 void sendUDP();                                      // UDP tx routine
+void sendHeartbeat();
 
 
 // MeshCom Common (esp32/nrf52) functions
+#include <lora_setchip.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <command_functions.h>
@@ -51,12 +52,17 @@ void sendUDP();                                      // UDP tx routine
 #include <batt_functions.h>
 #include <lora_functions.h>
 #include <udp_functions.h>
+#include <web_functions.h>
 #include <phone_commands.h>
 #include <mheard_functions.h>
 #include <clock.h>
 
 #include <bmx280.h>
 #include "bme680.h"
+#include "mcu811.h"
+#include "io_functions.h"
+#include "ina226_functions.h"
+#include "rtc_functions.h"
 
 #include <onewire_functions.h>
 
@@ -146,6 +152,9 @@ asm(".global _printf_float");
 
 // LoRa Events and Buffers
 static RadioEvents_t RadioEvents;
+
+// flag to indicate if we are after receiving
+unsigned long iReceiveTimeOutTime = 0;
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
@@ -379,10 +388,28 @@ void nrf52setup()
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
+    bBME680ON = meshcom_settings.node_sset2 & 0x0004;
+    bMCU811ON =  meshcom_settings.node_sset2 & 0x0008;
     bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
-    bBME680ON = meshcom_settings.node_sset2 & 0x0004;
+    bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
+    bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
+    bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
+    bRTCON =  meshcom_settings.node_sset2 & 0x0200;
 
+
+    bDisplayInfo = bLORADEBUG;
+
+    meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
+    meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
+
+    // if Node is in WifiAP Mode -> no Gateway posible
+    if(bWIFIAP && bGATEWAY)
+    {
+        bGATEWAY=false;
+        bEXTSER=false;
+        bEXTUDP=false;
+    }
 
     global_batt = 4200.0;
 
@@ -580,10 +607,30 @@ void nrf52setup()
     // I2C init
     Wire.begin();
 
-    setupBMX280();
+    #if defined(ENABLE_BMX280)
+        setupBMX280();
+        setupMCU811();
+    #endif
 
-    // BME680 init
-    setupBME680();
+    // BME680
+    #if defined(ENABLE_BMX680)
+        setupBME680();
+    #endif
+
+    // MCP23017
+    #if defined(ENABLE_MCP23017)
+        setupMCP23017();
+    #endif
+
+    // INA226
+    #if defined(ENABLE_INA226)
+        setupINA226();
+    #endif
+
+    // RTC
+    #if defined(ENABLE_RTC)
+        setupRTC();
+    #endif
 
     u8g2.begin();
 
@@ -596,7 +643,7 @@ void nrf52setup()
         u8g2.drawStr(5, 20, "MeshCom 4.0");
         u8g2.setFont(u8g2_font_6x10_mf);
         char cvers[20];
-        sprintf(cvers, "FW %s%s/%s", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
+        sprintf(cvers, "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         u8g2.drawStr(5, 30, cvers);
         u8g2.drawStr(5, 40, "by icssw.org");
         u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
@@ -620,6 +667,8 @@ void nrf52setup()
     //RadioEvents.PreAmpDetect = OnPreambleDetect;
     RadioEvents.HeaderDetect = OnHeaderDetect;
     
+    lora_setcountry(meshcom_settings.node_country);
+
     //  Initialize the LoRa Transceiver
     RadioInit();
 
@@ -627,17 +676,30 @@ void nrf52setup()
     DEBUG_MSG("RADIO", "Setting new LoRa Sync Word");
     Radio.SetPublicNetwork(true);
 
-    Serial.printf("[LoRa]...RF_FREQUENCY: %i kHz\n", RF_FREQUENCY);
+    // set bandwidth 
+    Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", getBW());
+
+    // set spreading factor 
+    Serial.printf("[LoRa]...RF_SF: %i\n",  getSF());
+
+    // coding rate
+    Serial.printf("[LoRa]...RF_CR: 4/%i\n", getCR());
+
+
+    // set carrier frequency
+    uint32_t ifreq=meshcom_settings.node_freq/10;
+    ifreq=ifreq*10;
+    Serial.printf("[LoRa]...RF_FREQUENCY: %.4f MHz\n", meshcom_settings.node_freq/1000000.);
 
     //  Set the LoRa Frequency
-    Radio.SetChannel(RF_FREQUENCY);
+    Radio.SetChannel(ifreq);
 
     //  Configure the LoRa Transceiver for receiving messages
     Radio.SetRxConfig(
         MODEM_LORA,
-        LORA_BANDWIDTH,
-        LORA_SPREADING_FACTOR,
-        LORA_CODINGRATE,
+        (uint32_t)meshcom_settings.node_bw,
+        (uint32_t)meshcom_settings.node_sf,
+        (uint8_t)meshcom_settings.node_cr,
         0, //  AFC bandwidth: Unused with LoRa
         LORA_PREAMBLE_LENGTH,
         LORA_SYMBOL_TIMEOUT,
@@ -651,28 +713,15 @@ void nrf52setup()
     );
 
     // Set Radio TX configuration
-    int8_t tx_power = TX_OUTPUT_POWER;
-    
-    if(meshcom_settings.node_power <= 0)
-        meshcom_settings.node_power = TX_OUTPUT_POWER;
-    else
-        tx_power=meshcom_settings.node_power;   //set by command
-
-    if(tx_power > TX_POWER_MAX)
-        tx_power= TX_POWER_MAX;
-
-    if(tx_power < TX_POWER_MIN)
-        tx_power= TX_POWER_MIN;
-
-    Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
+    Serial.printf("[LoRa]...RF_POWER: %i dBm\n", getPower());
 
     Radio.SetTxConfig(
         MODEM_LORA,
-        tx_power,
+        getPower(),
         0, // fsk only
-        LORA_BANDWIDTH,
-        LORA_SPREADING_FACTOR,
-        LORA_CODINGRATE,
+        (uint32_t)meshcom_settings.node_bw,
+        (uint32_t)meshcom_settings.node_sf,
+        (uint8_t)meshcom_settings.node_cr,
         LORA_PREAMBLE_LENGTH,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         true, // CRC ON
@@ -703,7 +752,7 @@ void nrf52setup()
 
     delay(100);
 
-    if (bGATEWAY)
+    if (bGATEWAY || bWEBSERVER)
     {
         //////////////////////////////////////////////////////
         // ETHERNET INIT
@@ -718,6 +767,11 @@ void nrf52setup()
             Serial.println("=====================================");
             Serial.printf("GATEWAY 4.0 RUNNING %s\n", neth.hasIPaddress?"ETH connect":"ETH no connect");
             Serial.println("=====================================");
+
+            if(bWEBSERVER)
+            {
+                startWebserver();
+            }
         }
         else
         {
@@ -735,28 +789,26 @@ void nrf52setup()
 
 void nrf52loop()
 {
-	//Clock::EEvent eEvent;
-	
-	// check clock event
-	//eEvent = MyClock.CheckEvent();
-
-	MyClock.CheckEvent();
-	
-    meshcom_settings.node_date_year = MyClock.Year();
-    meshcom_settings.node_date_month = MyClock.Month();
-    meshcom_settings.node_date_day = MyClock.Day();
-
-    meshcom_settings.node_date_hour = MyClock.Hour();
-    meshcom_settings.node_date_minute = MyClock.Minute();
-    meshcom_settings.node_date_second = MyClock.Second();
-
-   	//digitalWrite(LED_GREEN, LOW);
-   	//digitalWrite(LED_BLUE, LOW);
-
     // check if we have messages in ringbuffer to send
     //Serial.printf("is_receiving:%i tx_is_active:%i iWrite:%i iRead:%i \n", is_receiving, tx_is_active, iWrite, iRead);
-    
-    if(is_receiving == false && tx_is_active == false)
+
+
+    if(iReceiveTimeOutTime > 0)
+    {
+        // Timeout RECEIVE_TIMEOUT
+        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
+        {
+            iReceiveTimeOutTime=0;
+
+            // LoRa preamble was detected
+            if(bLORADEBUG)
+            {
+                Serial.printf("[SX12xx] Receive Timeout, starting sending again ... \n");
+            }
+        }
+    }
+
+    if(iReceiveTimeOutTime == 0 && is_receiving == false && tx_is_active == false)
     {
         // channel is free
         // nothing was detected
@@ -768,6 +820,42 @@ void nrf52loop()
         }
     }
 
+    // get RTC Now
+    // RTC hat Vorrang zu Zeit via MeshCom-Server
+    if(bRTCON)
+    {
+        loopRTC();
+
+        if(!bGPSON) // GPS hat Vorang zur RTC
+        {
+            DateTime utc = getRTCNow();
+
+            DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
+
+            meshcom_settings.node_date_year = now.year();
+            meshcom_settings.node_date_month = now.month();
+            meshcom_settings.node_date_day = now.day();
+
+            meshcom_settings.node_date_hour = now.hour();
+            meshcom_settings.node_date_minute = now.minute();
+            meshcom_settings.node_date_second = now.second();
+        }
+    }
+    else
+    {
+        MyClock.CheckEvent();
+        
+        meshcom_settings.node_date_year = MyClock.Year();
+        meshcom_settings.node_date_month = MyClock.Month();
+        meshcom_settings.node_date_day = MyClock.Day();
+
+        meshcom_settings.node_date_hour = MyClock.Hour();
+        meshcom_settings.node_date_minute = MyClock.Minute();
+        meshcom_settings.node_date_second = MyClock.Second();
+    }
+
+    checkButtonState();
+
     // check if message from phone to send
     if(hasMsgFromPhone)
     {
@@ -778,6 +866,8 @@ void nrf52loop()
 
     if(gKeyNum == 1)
     {
+        Serial.println("Left button pressed");
+
         //Serial.println("gKeyNum == 1");
 
         //getTEMP();
@@ -875,6 +965,8 @@ void nrf52loop()
     // posinfo
     //Serial.print(getTimeString());
     //Serial.printf(" posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
+
+    checkButtonState();
 
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
@@ -997,6 +1089,8 @@ void nrf52loop()
         }
     }
 
+    checkButtonState();
+
     mainStartTimeLoop();
 
     if(DisplayOffWait > 0)
@@ -1024,9 +1118,6 @@ void nrf52loop()
             #endif
         }
     }
-
-    
-    checkButtonState();
 
     checkSerialCommand();
 
@@ -1073,23 +1164,122 @@ void nrf52loop()
     {
         if ((bme680_timer + 60000) < millis() || delay_bme680 <= 0)
         {
-            #if defined(ENABLE_BMX280)
-                
-                if (delay_bme680 <= 0)
-                {
-                    getBME680();
+            if (delay_bme680 <= 0)
+            {
+                getBME680();
 
+            }
+
+            if(wx_shot)
+            {
+                commandAction((char*)"--wx", true);
+                wx_shot = false;
+            }
+
+            // calculate delay
+            delay_bme680 = bme680_get_endTime() - millis();
+
+            bme680_timer = millis();
+        }
+    }
+    #endif
+
+    checkButtonState();
+
+    // read BMP Sensor
+    #if defined(ENABLE_BMX280)
+    if(bBMPON || bBMEON)
+    {
+        if(BMXTimeWait == 0)
+            BMXTimeWait = millis() - 10000;
+
+        if ((BMXTimeWait + 30000) < millis())   // 30 sec
+        {
+                if(loopBMX280())
+                {
+                    meshcom_settings.node_press = getPress();
+                    meshcom_settings.node_temp = getTemp();
+                    meshcom_settings.node_hum = getHum();
+                    meshcom_settings.node_press_alt = getPressALT();
+                    meshcom_settings.node_press_asl = getPressASL(meshcom_settings.node_alt);
+                    
+                    if(wx_shot)
+                    {
+                        commandAction((char*)"--wx", true);
+                        wx_shot = false;
+                    }
                 }
 
+            BMXTimeWait = millis(); // wait for next messurement
+        }
+    }
+    #endif
+
+    if(bMCU811ON)
+    {
+        if(MCU811TimeWait == 0)
+            MCU811TimeWait = millis() - 10000;
+
+        if ((MCU811TimeWait + 60000) < millis())   // 60 sec
+        {
+            // read MCU-811 Sensor
+            if(loopMCU811())
+            {
+                meshcom_settings.node_co2 = geteCO2();
+                
                 if(wx_shot)
                 {
                     commandAction((char*)"--wx", true);
                     wx_shot = false;
                 }
+            }
 
-                // calculate delay
-                delay_bme680 = bme680_get_endTime() - millis();
-            #endif
+            MCU811TimeWait = millis(); // wait for next messurement
+        }
+    }
+
+    #if defined(ENABLE_INA226)
+    if(bINA226ON)
+    {
+        if(INA226TimeWait == 0)
+            INA226TimeWait = millis() - 10000;
+
+        if ((INA226TimeWait + 60000) < millis())   // 60 sec
+        {
+            // read MCU-811 Sensor
+            if(loopINA226())
+            {
+                meshcom_settings.node_vbus = getvBUS();
+                meshcom_settings.node_vshunt = getvSHUNT();
+                meshcom_settings.node_vcurrent = getvCURRENT();
+                meshcom_settings.node_vpower = getvPOWER();
+            }
+
+            INA226TimeWait = millis(); // wait for next messurement
+        }
+    }
+    #endif
+
+    // read every n seconds the bme680 sensor calculated from millis()
+    #if defined(ENABLE_BMX680)
+    if(bBME680ON && bme680_found)
+    {
+        if ((bme680_timer + 60000) < millis() || delay_bme680 <= 0)
+        {
+            if (delay_bme680 <= 0)
+            {
+                getBME680();
+
+            }
+
+            if(wx_shot)
+            {
+                commandAction((char*)"--wx", true);
+                wx_shot = false;
+            }
+
+            // calculate delay
+            delay_bme680 = bme680_get_endTime() - millis();
 
             bme680_timer = millis();
         }
@@ -1111,6 +1301,13 @@ void nrf52loop()
 
             hb_timer = millis();
         }
+    }
+
+    checkButtonState();
+
+    if(bWEBSERVER)
+    {
+        loopWebserver();
     }
 
     //  We are on FreeRTOS, give other tasks a chance to run
@@ -1443,7 +1640,6 @@ void sendUDP()
     }
 }
 
-
 /**@brief Function to send our heartbeat
  * longanme0x000xAABBCCDDKEEPGW0110x00
  *               GW_ID
@@ -1453,38 +1649,6 @@ void sendHeartbeat()
     if (!neth.hasIPaddress)
         return;
 
-    String keep = "KEEP";
-    String cfw = SOURCE_VERSION;
-    String firmware = "GW"+cfw;
-
-    uint8_t longname_len = strlen(meshcom_settings.node_call);
-    uint16_t hb_buffer_size = longname_len + 1 + sizeof(_GW_ID) + keep.length() + firmware.length();;
-    uint8_t hb_buffer[hb_buffer_size];
-
-    // Serial.print("\nHB buffer size: ");
-    // Serial.println(hb_buffer_size);
-
-    char longname_c[longname_len + 1];
-    strcpy(longname_c, neth._longname.c_str());
-    longname_c[longname_len] = 0x00;
-
-    char keep_c[keep.length()];
-    strcpy(keep_c, keep.c_str());
-
-    char firmware_c[firmware.length()];
-    strcpy(firmware_c, firmware.c_str());
-
-    // copying all together
-    memcpy(&hb_buffer, &meshcom_settings.node_call, longname_len + 1);
-    memcpy(&hb_buffer[longname_len + 1], &_GW_ID, sizeof(_GW_ID));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(neth._GW_ID)], &keep_c, sizeof(keep_c));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(neth._GW_ID) + sizeof(keep_c)], &firmware_c, sizeof(firmware_c));
-    
-    // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
-    //also avoid UDP tx when UDP is getting a packet
-    // add HB message to the ringbuffer
-    //DEBUG_MSG("UDP", "HB Buffer");
-    //neth.printBuffer(hb_buffer, hb_buffer_size);
-    addUdpOutBuffer(hb_buffer, hb_buffer_size);
+    sendKEEP();
 
 }

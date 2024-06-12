@@ -39,6 +39,9 @@
 #include <udp_functions.h>
 #include <lora_setchip.h>
 
+// flag to indicate if we are after receiving
+extern unsigned long iReceiveTimeOutTime;
+
 extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern double mheardLat[MAX_MHEARD];
 extern double mheardLon[MAX_MHEARD];
@@ -60,11 +63,11 @@ unsigned long track_to_meshcom_timer = 0;
 //////////////////////////////////////////////////////////////////////////
 // LoRa RX functions
 
-/** @brief Function to be executed on Radio Rx Done event
- */
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
     uint8_t print_buff[30];
+
+    //Serial.printf("Start OnRxDone:<%-20.20s> %i\n", payload, size);
 
     if(payload[0] == 0x41)
     {
@@ -79,7 +82,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         memcpy(print_buff, payload, 12);
 
-        if(is_new_packet(print_buff+1) || checkOwnTx(print_buff+6) > 0)
+        int icheck = checkOwnTx(print_buff+6);
+
+        if(is_new_packet(print_buff+1) || icheck > 0)
         {
             // add rcvMsg to forward to LoRa TX
             if(is_new_packet(print_buff+1))
@@ -91,8 +96,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
 
             //Serial.printf("ACK from LoRa %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
-
-            int icheck = checkOwnTx(print_buff+6);
 
             if(icheck >= 0)
             {
@@ -109,7 +112,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             }
             else
             {
-                if(print_buff[5] > 0x01 && print_buff[5] < 0x07)
+                if(print_buff[5] > 0x00 && bMESH)
                 {
                     print_buff[5]--;
 
@@ -139,13 +142,25 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         size = aprsmsg.msg_len;
 
-
         if(msg_type_b_lora == 0x00)
         {
             //Serial.printf("%03i RCV:%s\n", size, RcvBuffer+6);
         }
         else
         {
+            // LoRx RX to RAW-Buffer
+            memcpy(ringbufferRAWLoraRX[RAWLoRaWrite], charBuffer_aprs((char*)"RX", aprsmsg).c_str(), UDP_TX_BUF_SIZE-1);
+            RAWLoRaWrite++;
+            if(RAWLoRaWrite >= MAX_LOG)
+                RAWLoRaWrite=0;
+
+            if(RAWLoRaRead == RAWLoRaWrite)
+            {
+                RAWLoRaRead++;
+                if(RAWLoRaRead >= MAX_LOG)
+                    RAWLoRaRead=0;
+            }
+
             ///////////////////////////////////////////////
             // MHeard
             if(aprsmsg.msg_source_last != meshcom_settings.node_call)
@@ -163,6 +178,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_time = getTimeString();
                 mheardLine.mh_payload_type = aprsmsg.payload_type;
                 mheardLine.mh_dist = 0;
+                mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
+                mheardLine.mh_mesh = aprsmsg.msg_mesh;
                 
                 // check MHeard exists already
                 int ipos=-1;
@@ -214,7 +231,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 lastHeardTime = millis();
 
                 // print aprs message
-                if(bLORADEBUG)
+                if(bLORADEBUG && bDisplayInfo)
                 {
                     printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
                     Serial.println();
@@ -273,9 +290,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             sendExtern(false, (char*)"lora", RcvBuffer, size);
                     #endif
 
-                    if(bGATEWAY)
-                        addNodeData(RcvBuffer, size, rssi, snr);
-
                     // print aprs message
                     if(bDisplayInfo)
                         printBuffer_aprs((char*)"RX-LoRa", aprsmsg);
@@ -323,12 +337,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                             // add rcvMsg to BLE out Buff
                             // size message is int -> uint16_t buffer size
+
+                            char destination_call[20];
+                            sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+
                             if(msg_type_b_lora == 0x3A)    // text message store&forward
                             {
-                                if(!(aprsmsg.msg_payload.indexOf(":ack") > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0))
-                                    sendDisplayText(aprsmsg, rssi, snr);
-
-                                if(strcmp(aprsmsg.msg_destination_call.c_str(), meshcom_settings.node_call) == 0)
+                                if(strcmp(destination_call, meshcom_settings.node_call) == 0)
                                 {
                                     int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
                                     int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
@@ -349,11 +364,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         addBLEOutBuffer(print_buff, 7);
                                     }
                                     else
-                                    if(iEnqPos <= 0)
-                                    {
-                                        addBLEOutBuffer(RcvBuffer, size);
-                                    }
-                                    else
                                     if(iEnqPos > 0)
                                     {
                                         unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
@@ -369,26 +379,50 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                         uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
+                                        sendDisplayText(aprsmsg, rssi, snr);
+
                                         addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                    }
+                                    else
+                                    {
+                                        sendDisplayText(aprsmsg, rssi, snr);
+
+                                        addBLEOutBuffer(RcvBuffer, size);
                                     }
                                 }
                                 else
                                 {
-                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) != 0)
+                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
                                     {
-                                        // APP Offline
-                                        if(isPhoneReady == 0)
+                                        sendDisplayText(aprsmsg, rssi, snr);
+                                    }
+                                    else
+                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
+                                    {
+                                        sendDisplayText(aprsmsg, rssi, snr);
+                                    }
+                                    else
+                                    {
+                                        if(strcmp(destination_call, "*") == 0 || CheckOwnGroup(destination_call))
                                         {
-                                            aprsmsg.max_hop = aprsmsg.max_hop | 0x20;
+                                            sendDisplayText(aprsmsg, rssi, snr);
 
-                                            uint8_t tempRcvBuffer[255];
+                                            // APP Offline
+                                            if(isPhoneReady == 0)
+                                            {
+                                                aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline = true
 
-                                            uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+                                                uint8_t tempRcvBuffer[255];
 
-                                            addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                                uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                                                addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                            }
+                                            else
+                                            {
+                                                addBLEOutBuffer(RcvBuffer, size);
+                                            }
                                         }
-                                        else
-                                            addBLEOutBuffer(RcvBuffer, size);
                                     }
 
                                     if(bGATEWAY)
@@ -412,8 +446,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         }
                                         else
                                         {
-                                            //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA"
-                                            if(aprsmsg.msg_destination_path == "*" || aprsmsg.msg_destination_path == "WLNK-1" || aprsmsg.msg_destination_path == "APRS2SOTA")
+                                            //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
+                                            if(aprsmsg.msg_destination_path == "*" || aprsmsg.msg_destination_path == "WLNK-1" || aprsmsg.msg_destination_path == "APRS2SOTA" || CheckGroup(aprsmsg.msg_destination_path) > 0)
                                             {
                                                 // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
                                                 msg_counter=millis();   // ACK mit neuer msg_id versenden
@@ -464,52 +498,77 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(msg_type_b_lora == 0x21)
                             {
                                 sendDisplayPosition(aprsmsg, rssi, snr);
+
+                                if(isPhoneReady > 0)
+                                    addBLEOutBuffer(RcvBuffer, size);
                             }
 
-                            bool bNoMesh = false;
+                            bool bMeshDestination = true;
 
                             // messages to WLNK-1 or APRS2SOTA no need to MESH via a gateWay
                             if(bGATEWAY && (aprsmsg.msg_destination_path.c_str(), "WLNK-1") == 0)
-                                bNoMesh = true;
+                                bMeshDestination = false;
                             if(bGATEWAY && (aprsmsg.msg_destination_path.c_str(), "APRS2SOTA") == 0)
-                                bNoMesh = true;
+                                bMeshDestination = false;
+
+                            // more then 4 callsigns within source_path no need to MESH via a gateWay
+                            if(bGATEWAY)
+                            {
+                                if(aprsmsg.payload_type == ':' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_text+1)    // TEXT
+                                    bMeshDestination = false;
+                                if(aprsmsg.payload_type == '!' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_pos+1)    // POS
+                                    bMeshDestination = false;
+                            }
+
+                            // GATEWAY action before MESH
+                            // and not MESHed from another Gateways
+                            if(bGATEWAY && !aprsmsg.msg_server) 
+                                addNodeData(RcvBuffer, size, rssi, snr);
 
                             // resend only Packet to all and !owncall 
-                            if(strcmp(aprsmsg.msg_destination_call.c_str(), meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && !bNoMesh)
+                            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && bMeshDestination)
                             {
+                                // MESH only max. hops (default 3...TEXT 1...POS)
                                 if(aprsmsg.max_hop > 0)
+                                {
+                                    if(bGATEWAY)
+                                        aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server
+
                                     aprsmsg.max_hop--;
 
-                                if(bSHORTPATH)
-                                {
-                                    /* short path */
-                                    aprsmsg.msg_source_path=aprsmsg.msg_source_call;
-                                    aprsmsg.msg_source_path.concat(',');
-                                    aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-                                }
-                                else
-                                {
-                                    /*long path*/
-                                    aprsmsg.msg_source_path.concat(',');
-                                    aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-                                }
-
-                                aprsmsg.msg_last_hw = BOARD_HARDWARE;   // Last Module-Hardware
-
-                                memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
-
-                                size = encodeAPRS(RcvBuffer, aprsmsg);
-
-                                if(size + 1 > UDP_TX_BUF_SIZE)
-                                    size = UDP_TX_BUF_SIZE - 1;
-                                ringBuffer[iWrite][0]=size;
-                                memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
-                                iWrite++;
-                                if(iWrite >= MAX_RING)
-                                    iWrite=0;
+                                    aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
                                 
-                                if(bDisplayInfo)
-                                    Serial.println(" This packet to mesh");
+                                    if(bSHORTPATH)
+                                    {
+                                        /* short path */
+                                        aprsmsg.msg_source_path=aprsmsg.msg_source_call;    //call last sending node
+                                        aprsmsg.msg_source_path.concat(',');
+                                        aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                                    }
+                                    else
+                                    {
+                                        /*long path*/
+                                        aprsmsg.msg_source_path.concat(',');
+                                        aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                                    }
+
+                                    aprsmsg.msg_last_hw = BOARD_HARDWARE;   // hardware  last sending node
+
+                                    memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
+
+                                    size = encodeAPRS(RcvBuffer, aprsmsg);
+
+                                    if(size + 1 > UDP_TX_BUF_SIZE)
+                                        size = UDP_TX_BUF_SIZE - 1;
+                                    ringBuffer[iWrite][0]=size;
+                                    memcpy(ringBuffer[iWrite]+1, RcvBuffer, size);
+                                    iWrite++;
+                                    if(iWrite >= MAX_RING)
+                                        iWrite=0;
+                                    
+                                    if(bDisplayInfo)
+                                        Serial.println(" This packet to mesh");
+                                }
                             }
                             else
                             {
@@ -517,7 +576,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     Serial.println("");
                             }
                         }
-                    }   
+                    }
                 }
                 else
                 {
@@ -539,7 +598,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     #endif
 
 
-    //Serial.println("OnRxDone");
+    if(bLORADEBUG)
+        Serial.println("OnRxDone");
+
+    iReceiveTimeOutTime = millis();
 
     is_receiving = false;
 }
@@ -592,17 +654,6 @@ bool is_new_packet(uint8_t compBuffer[4])
     //    Serial.printf("MSG: new one %02X%02X%02X%02X\n", compBuffer[0], compBuffer[1], compBuffer[2], compBuffer[3]);
 
     return true;
-}
-
-int checkOwnTx(uint8_t compBuffer[4])
-{
-    for(int ilo=0; ilo<MAX_RING; ilo++)
-    {
-        if(memcmp(own_msg_id[ilo], compBuffer, 4) == 0)
-            return ilo;
-    }
-
-    return -1;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -719,7 +770,7 @@ bool doTX()
                     }
 
                     tx_is_active = true;
-                    
+
                     // you can transmit C-string or Arduino string up to
                     // 256 characters long
                     #if defined BOARD_RAK4630
@@ -739,8 +790,11 @@ bool doTX()
 
                     if(lora_tx_buffer[0] == 0x41)
                     {
-                        Serial.print(getTimeString());
-                        Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[1], lora_tx_buffer[2], lora_tx_buffer[3], lora_tx_buffer[4], lora_tx_buffer[5], lora_tx_buffer[6]);
+                        if(bDisplayInfo)
+                        {
+                            Serial.print(getTimeString());
+                            Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[1], lora_tx_buffer[2], lora_tx_buffer[3], lora_tx_buffer[4], lora_tx_buffer[5], lora_tx_buffer[6]);
+                        }
                     }   
                     else
                     {

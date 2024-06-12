@@ -1,4 +1,4 @@
-#ifndef BOARD_TLORA_OLV216
+//#ifndef BOARD_TLORA_OLV216
 
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
@@ -29,6 +29,314 @@
     extern int transmissionState;
 #endif
 
+bool rf_crc = true;
+uint16_t rf_preamble_length = LORA_PREAMBLE_LENGTH;
+
+//0...EU  1...UK, 3...EA, 8...EU8, 10...US, ..... 18...868, 19...915, 20...MAN
+String strCountry[21] = {"EU", "UK", "none", "EA", "none", "none", "none", "none", "EU8", "UK8", "US", "VR2", "none", "none", "none", "none", "none", "none", "868", "915", "MAN"};
+
+String getCountry(int iCtry)
+{
+    if(iCtry < 0 || iCtry > 19)
+    {
+        return "none";
+    }
+
+    return strCountry[iCtry];
+}
+
+int getCountryID(String strCtry)
+{
+    for(int ic=0;ic<22;ic++)
+    {
+        if(strCountry[ic] == strCtry)
+            return ic;
+    }
+
+    return -1;
+}
+
+float getFreq()
+{
+    float freq = meshcom_settings.node_freq;
+    if(freq <= 0)
+        freq = RF_FREQUENCY;
+
+    #ifdef BOARD_RAK4630
+        freq=freq/1000000;
+    #endif
+
+    return freq;
+}
+
+float getBW()
+{
+    float bw = meshcom_settings.node_bw;
+
+    #if defined BOARD_RAK4630
+        if(bw == 0)
+            bw = 125.0;
+        else
+        if(bw == 1)
+            bw = 250.0;
+        else
+        if(bw == 2)
+            bw = 500.0;
+    #else
+        if(bw == 0)
+            bw = LORA_BANDWIDTH;
+    #endif
+
+    return bw;
+}
+
+int getSF()
+{
+    int sf = meshcom_settings.node_sf;
+    if(sf == 0)
+        sf = LORA_SF;
+
+    return sf;
+}
+
+int getCR()
+{
+    int rf_cr_info = meshcom_settings.node_cr;
+    if(rf_cr_info == 0)
+        rf_cr_info = LORA_CR;
+
+    #ifdef BOARD_RAK4630
+        if(meshcom_settings.node_cr == 1)
+            rf_cr_info=5;
+        else
+        if(meshcom_settings.node_cr == 2)
+            rf_cr_info=6;
+        else
+        if(meshcom_settings.node_cr == 3)
+            rf_cr_info=7;
+        else
+        if(meshcom_settings.node_cr == 4)
+            rf_cr_info=8;
+    #endif
+    
+    return rf_cr_info;
+}
+
+int8_t getPower()
+{
+    int power = meshcom_settings.node_power;
+    if(power <= 0)
+        power = TX_OUTPUT_POWER;
+    if(power > TX_OUTPUT_POWER)
+        power = TX_OUTPUT_POWER;
+
+    return power;
+}
+
+void lora_setcountry(int iCtry)
+{
+    float dec_bandwith = 0;
+
+    switch (iCtry)
+    {
+        case 1:  // UK ... 
+            
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_freq = 439912500;
+                meshcom_settings.node_bw = 0;
+                meshcom_settings.node_cr = 1;
+            #else
+                meshcom_settings.node_freq = 439.9125;
+                meshcom_settings.node_bw = 125.0;
+                meshcom_settings.node_cr = 5;
+            #endif
+
+            meshcom_settings.node_sf = 10;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+            
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
+            break;
+
+        case 8:  // EU Preabble 8 ... 
+            meshcom_settings.node_freq = RF_FREQUENCY;
+
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_bw = 1;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_bw = 250.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = LORA_SF;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+
+            meshcom_settings.node_preamplebits = 8;
+
+            break;
+
+        case 9:  // UK8 ... 
+            
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_freq = 439912500;
+                meshcom_settings.node_bw = 0;
+                meshcom_settings.node_cr = 1;
+            #else
+                meshcom_settings.node_freq = 439.9125;
+                meshcom_settings.node_bw = 125.0;
+                meshcom_settings.node_cr = 5;
+            #endif
+
+            meshcom_settings.node_sf = 10;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+            
+            meshcom_settings.node_preamplebits = 8;
+
+            break;
+
+        case 10:  // US ... 
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_freq = 433175000;
+                meshcom_settings.node_bw = 1;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_freq = 433.175;
+                meshcom_settings.node_bw = 250.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = 11;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+            
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
+            break;
+
+        case 11:  // VR2 ... 
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_freq = 435775000;
+                meshcom_settings.node_bw = 1;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_freq = 435.775;
+                meshcom_settings.node_bw = 250.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = 11;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+            
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
+            break;
+
+        case 18:  // 868 ... 
+
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_freq = 869525000;
+                meshcom_settings.node_bw = 1;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_freq = 869.525;
+                meshcom_settings.node_bw = 250.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = LORA_SF;
+
+            meshcom_settings.node_track_freq = 999;
+
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
+            break;
+
+        case 19:  // 906 ... 
+
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_freq = 906875000;
+                meshcom_settings.node_bw = 1;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_freq = 906.875;
+                meshcom_settings.node_bw = 250.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = LORA_SF;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+            
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
+            break;
+
+        case 20:  // MAN ... manual
+
+            // bandwith        
+            if(meshcom_settings.node_bw <= 0)
+                meshcom_settings.node_bw = LORA_BANDWIDTH;
+
+            if(meshcom_settings.node_bw != 125 && meshcom_settings.node_bw != 250)
+                meshcom_settings.node_bw = LORA_BANDWIDTH;
+
+            // frequency
+            if(meshcom_settings.node_freq <= 0)
+                meshcom_settings.node_freq = RF_FREQUENCY;
+
+            dec_bandwith = (meshcom_settings.node_bw/2.0)/100.0;
+
+            if(!((meshcom_settings.node_freq >= (430.0 + dec_bandwith) && meshcom_settings.node_freq <= (439.000 - dec_bandwith)) || (meshcom_settings.node_freq >= (869.4 + dec_bandwith) && meshcom_settings.node_freq <= (869.65 - dec_bandwith))))
+                meshcom_settings.node_freq = RF_FREQUENCY;
+
+            // set spreading factor 
+            if(meshcom_settings.node_sf <= 0)
+                meshcom_settings.node_sf = LORA_SF;
+
+            if(meshcom_settings.node_sf < 6 ||  meshcom_settings.node_sf > 12)
+                meshcom_settings.node_sf = LORA_SF;
+
+            // set coding rate 
+            if(meshcom_settings.node_cr <= 0)
+                meshcom_settings.node_cr = LORA_CR;
+
+            if(meshcom_settings.node_cr < 5 ||  meshcom_settings.node_cr > 8)
+                meshcom_settings.node_cr = LORA_CR;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
+            break;
+
+        default:    // EU
+            meshcom_settings.node_freq = RF_FREQUENCY;
+
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_bw = 1;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_bw = 250.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = LORA_SF;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+            
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
+            break;
+    }
+
+    save_settings();
+}
+
 bool lora_setchip_meshcom()
 {
 #if defined BOARD_RAK4630
@@ -41,19 +349,22 @@ void RadioInit();
     Radio.SetPublicNetwork(true);
 
     if(bLORADEBUG)
-        Serial.printf("[LoRa]...RF_FREQUENCY: %i kHz\n", RF_FREQUENCY);
+        Serial.printf("[LoRa]...RF_FREQUENCY: %.4f kHz\n", getFreq());
+
+    uint32_t ifreq=meshcom_settings.node_freq/10;
+    ifreq=ifreq*10;
 
     //  Set the LoRa Frequency
-    Radio.SetChannel(RF_FREQUENCY);
+    Radio.SetChannel(ifreq);
 
     //  Configure the LoRa Transceiver for receiving messages
     Radio.SetRxConfig(
         MODEM_LORA,
-        LORA_BANDWIDTH,
-        LORA_SPREADING_FACTOR,
-        LORA_CODINGRATE,
+        (uint32_t)meshcom_settings.node_bw,
+        (uint32_t)meshcom_settings.node_sf,
+        (uint8_t)meshcom_settings.node_cr,
         0, //  AFC bandwidth: Unused with LoRa
-        LORA_PREAMBLE_LENGTH,
+        (uint16_t)meshcom_settings.node_preamplebits,
         LORA_SYMBOL_TIMEOUT,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         0,    //  Fixed payload length: N/A
@@ -65,30 +376,17 @@ void RadioInit();
     );
 
     // Set Radio TX configuration
-    int8_t tx_power = TX_OUTPUT_POWER;
-    
-    if(meshcom_settings.node_power <= 0)
-        meshcom_settings.node_power = TX_OUTPUT_POWER;
-    else
-        tx_power=meshcom_settings.node_power;   //set by command
-
-    if(tx_power > TX_POWER_MAX)
-        tx_power= TX_POWER_MAX;
-
-    if(tx_power < TX_POWER_MIN)
-        tx_power= TX_POWER_MIN;
-
     if(bLORADEBUG)
-        Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
+        Serial.printf("[LoRa]...RF_POWER: %d dBm\n", getPower());
 
     Radio.SetTxConfig(
         MODEM_LORA,
-        tx_power,
+        getPower(),
         0, // fsk only
-        LORA_BANDWIDTH,
-        LORA_SPREADING_FACTOR,
-        LORA_CODINGRATE,
-        LORA_PREAMBLE_LENGTH,
+        (uint32_t)meshcom_settings.node_bw,
+        (uint32_t)meshcom_settings.node_sf,
+        (uint8_t)meshcom_settings.node_cr,
+        (uint8_t)meshcom_settings.node_preamplebits,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         true, // CRC ON
         0,    // fsk only frequ hop
@@ -107,7 +405,7 @@ void RadioInit();
     float rf_bw = meshcom_settings.node_bw;
     int rf_sf = meshcom_settings.node_sf;
     int rf_cr = meshcom_settings.node_cr;
-    uint16_t rf_preamble_length = LORA_PREAMBLE_LENGTH;
+    uint16_t rf_preamble_length = meshcom_settings.node_preamplebits;
     bool rf_crc = true;
     return lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, SYNC_WORD_SX127x, rf_preamble_length, rf_crc);
 #endif
@@ -128,10 +426,10 @@ void RadioInit();
     Radio.SetPublicNetwork(false);
 
     if(bLORADEBUG)
-        Serial.printf("[LoRa]...RF_FREQUENCY: %i kHz\n", LORA_APRS_FREQUENCY);
+        Serial.printf("[LoRa]...RF_FREQUENCY: %.4f kHz\n", LORA_APRS_FREQUENCY/1000000.);
 
     //  Set the LoRa Frequency
-    Radio.SetChannel(LORA_APRS_FREQUENCY);
+    Radio.SetChannel((uint32_t)LORA_APRS_FREQUENCY);
 
     //  Configure the LoRa Transceiver for receiving messages
     Radio.SetRxConfig(
@@ -144,7 +442,7 @@ void RadioInit();
         LORA_SYMBOL_TIMEOUT,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         0,    //  Fixed payload length: N/A
-        false, //  CRC enabled
+        true, //  CRC enabled
         0,    //  Frequency hopping disabled
         0,    //  Hop period: N/A
         LORA_IQ_INVERSION_ON,
@@ -152,25 +450,12 @@ void RadioInit();
     );
 
     // Set Radio TX configuration
-    int8_t tx_power = TX_OUTPUT_POWER;
-    
-    if(meshcom_settings.node_power <= 0)
-        meshcom_settings.node_power = TX_OUTPUT_POWER;
-    else
-        tx_power=meshcom_settings.node_power;   //set by command
-
-    if(tx_power > TX_POWER_MAX)
-        tx_power= TX_POWER_MAX;
-
-    if(tx_power < TX_POWER_MIN)
-        tx_power= TX_POWER_MIN;
-
     if(bLORADEBUG)
-        Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
+        Serial.printf("[LoRa]...RF_POWER: %d dBm\n", getPower());
 
     Radio.SetTxConfig(
         MODEM_LORA,
-        tx_power,
+        getPower(),
         0, // fsk only
         LORA_APRS_BANDWIDTH,
         LORA_APRS_SPREADING_FACTOR,
@@ -260,11 +545,36 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     }
 
     // CRC
+    #if defined(SX127X)
     if (radio.setCRC(rf_crc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
     {
         Serial.println(F("Selected CRC is invalid for this module!"));
         return false;
     }
+    #endif
+
+    #if defined(SX126X_V3)
+
+    uint8_t icrc = 0;
+    if(rf_crc)
+        icrc = 2;
+
+    if (radio.setCRC(icrc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
+        Serial.println(F("Selected CRC is invalid for this module!"));
+        while (true);
+    }
+    #endif
+
+    #if defined(SX126X)
+    uint8_t icrc = 0;
+    if(rf_crc)
+        icrc = 2;
+
+    if (radio.setCRC(icrc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
+        Serial.println(F("Selected CRC is invalid for this module!"));
+        while (true);
+    }
+    #endif
 
     delay(500);
 
@@ -273,4 +583,4 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     return true;
 }
 
-#endif
+//#endif

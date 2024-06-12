@@ -7,8 +7,8 @@ definitions
 #include <Arduino.h>
 
 #define SOURCE_TYPE "C"
-#define SOURCE_VERSION "4.31"
-#define SOURCE_VERSION_SUB "a"
+#define SOURCE_VERSION "4.33"
+#define SOURCE_VERSION_SUB "c"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -26,6 +26,7 @@ definitions
 #define EBYTE_E22 39
 #define HELTEC_V3 43
 
+#define DEFAULT_PREAMPLE_LENGTH 32
 // set hardware
 #ifdef BOARD_RAK4630
     #define MODUL_HARDWARE RAK4631
@@ -35,8 +36,11 @@ definitions
     #define TX_POWER_MIN 1
     #define ENABLE_BMX280
     #define ENABLE_BMX680
-    //#define BUTTON_PIN WB_IO1  // not working in combination with GPS module
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define ENABLE_INA226
+    #define ENABLE_RTC
+    #define ENABLE_MCP23017
+    #define BUTTON_PIN WB_IO6        // only in combination with RAK13002
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
     #define ENABLE_GPS
 #endif
 
@@ -54,7 +58,7 @@ definitions
     
     //TODO
     #define RX_TIMEOUT_VALUE 0      // continous rx with 0
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH // Same for Tx and Rx
 
 #endif
 
@@ -66,13 +70,17 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
+    #define ENABLE_INA226
+    #define ENABLE_RTC
+    #define ENABLE_SOFTSER
     #define SX127X
     #define TX_POWER_MAX 17  // max 17 dBm
     #define TX_POWER_MIN 1
     
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef BOARD_SX1268
@@ -83,13 +91,17 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
+    #define ENABLE_INA226
+    #define ENABLE_RTC
+    #define ENABLE_SOFTSER
     #define SX126X
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
 
     // Defined using AXP192
     #define XPOWERS_CHIP_AXP192
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef BOARD_TLORA_OLV216
@@ -100,9 +112,13 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
+    #define ENABLE_INA226
+    #define ENABLE_RTC
+    #define ENABLE_SOFTSER
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef 	BOARD_HELTEC
@@ -113,9 +129,13 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
+    #define ENABLE_INA226
+    #define ENABLE_RTC
+    #define ENABLE_SOFTSER
     #define TX_POWER_MAX 17  // max 17dBm
     #define TX_POWER_MIN 1
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef 	BOARD_HELTEC_V3
@@ -127,9 +147,13 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
+    #define ENABLE_INA226
+    #define ENABLE_RTC
+    #define ENABLE_SOFTSER
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef 	BOARD_E22
@@ -140,9 +164,13 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MCP23017
+    #define ENABLE_INA226
+    #define ENABLE_RTC
+    #define ENABLE_SOFTSER
     #define TX_POWER_MAX 22  // max 22dBm
     #define TX_POWER_MIN 1
-    #define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 #ifdef RAK4630
@@ -159,9 +187,9 @@ definitions
 #define LORA_APRS_PREAMBLE_LENGTH 8  // Same for Tx and Rx
 
 #define LORA_BANDWIDTH 1         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
-#define LORA_SPREADING_FACTOR 11 // [SF7..SF12]
-#define LORA_CODINGRATE 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
-#define LORA_PREAMBLE_LENGTH 32  // Same for Tx and Rx
+#define LORA_SF 11 // [SF7..SF12]
+#define LORA_CR 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
+#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define LORA_SYMBOL_TIMEOUT 0    // Symbols
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
@@ -192,22 +220,32 @@ definitions
 //#define SEE_ALL_PACKETS 0                  // switch to filter multiple receives of same packets from neighbours rebroadcasted
 #define UDP_MSG_INDICATOR_LEN 4            // the first n bytes to recognize which incoming message we have (GATE, CONF)
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
-#define POSINFO_INTERVAL 20 * 60           // POSINFO interval in seconds default 20 minutes
+#define POSINFO_INTERVAL 30 * 60           // POSINFO interval in seconds default 30 minutes
 #define GPS_REFRESH_INTERVAL 10            // GPS Refresh in seconds
+#define SOFTSER_REFRESH_INTERVAL 3         // SOFTSER Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds
 #define ALIVEBLINK_INTERVAL 3000           // ALIVEBLINK interval in milliseconds
 #define ALIVERESET_INTERVAL 2 * 10 * 30    // 1/2 Stunde
 #define BLEBLINK_INTERVAL 3000             // BLEBLINK interval in milliseconds
 
-#define MAX_MHEARD 50                      // max count of messages in mheard ringbuffer
-#define MAX_RING 50                        // max count of messages in ringbuffer
+#define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer
+#define MAX_RING 40                        // max count of messages in ringbuffer
+#define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message
 #define MAX_ERR_UDP_TX 10                  // maximum of errors on sending KEEP messages via UDP (derived from Udp.endPacket())
 #define DHCP_REFRESH 1                     // Refreshtime of DHCP Address in minutes
 #define MAX_HB_RX_TIME 30                  // time we wait for an HB from server in seconds
+
+#define MAX_HOP_TEXT_DEFAULT 4             // max hop set on text-message
+#define MAX_HOP_POS_DEFAULT 2              // max hop set on pos-message
+
+#define RECEIVE_TIMEOUT 4500               // [SX126x] 4.5sec
+#define RADIOLIB_SX126X_CAD 0x07           // 0x00...length off    0x07...32-bit detect
+#define RADIOLIB_SX126X_DETMIN  10         // default 10
+#define RADIOLIB_SX126X_DETPEAK 25         // default 25
 
 // NTP
 #define NTP_UPDATE_TIME 240     // NTP update interval in Minutes

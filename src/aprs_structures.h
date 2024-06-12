@@ -25,6 +25,7 @@ struct aprsMessage
     bool  msg_server;
     bool  msg_track;
     bool  msg_app_offline;
+    bool  msg_mesh;
 
     String msg_source_path;
     String msg_source_call;
@@ -37,7 +38,9 @@ struct aprsMessage
     uint8_t msg_source_hw;
     uint8_t msg_source_mod;
     uint8_t msg_source_fw_version;
+    char msg_source_fw_sub_version;
     uint8_t msg_last_hw;
+    uint8_t msg_last_path_cnt;
 };
 
 struct aprsPosition
@@ -75,6 +78,8 @@ struct mheardLine
     int16_t mh_rssi;
     int8_t mh_snr;
     double mh_dist;
+    uint8_t mh_path_len;
+    uint8_t mh_mesh;
 };
 
 #endif // _APRS_STRUCTURES_H_

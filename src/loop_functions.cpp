@@ -27,6 +27,7 @@ bool bDEBUG = false;
 bool bLORADEBUG = false;
 bool bBLEDEBUG = false;
 bool bWXDEBUG = false;
+bool bIODEBUG = false;
 
 bool bPosDisplay = true;
 bool bDisplayOff = false;
@@ -39,6 +40,11 @@ bool bBMPON = false;
 bool bBMEON = false;
 bool bBME680ON = false;
 bool bMCU811ON = false;
+bool bINA226ON = false;
+bool bRTCON = false;
+bool bSOFTSERON = false;
+
+bool bTCA9548A = false;
 
 bool bONEWIRE = false;
 
@@ -49,11 +55,14 @@ bool bme680_enabled = false;
 
 bool bGATEWAY = false;
 bool bMESH = false;
+bool bWEBSERVER = false;
+bool bWIFIAP = false;
 bool bEXTUDP = false;
 bool bEXTSER = false;
 
 bool bSHORTPATH = false;
 bool bGPSDEBUG = false;
+bool bSOFTSERDEBUG = false;
 
 bool bBLElong = false;
 
@@ -69,6 +78,9 @@ int iDisplayChange = 0;
 unsigned long lastHeardTime = 0;
 unsigned long posfixinterall = 0;
 
+char cBLEName[50]={0};
+String strSOFTSER_BUF;
+
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
 
@@ -81,14 +93,15 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
 #elif defined(BOARD_RAK4630)
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);  //RESET CLOCK DATA
 #else
-    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/ SCL, /* data=*/ SDA, /* reset=*/ U8X8_PIN_NONE);  //RESET CLOCK DATA
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 #endif
 
 unsigned int msg_counter = 0;
 
+// Buffer to hold temp info-frames
 uint8_t RcvBuffer[UDP_TX_BUF_SIZE * 2] = {0};
 
-// nur eigene msg_id
+// RINGBUFFER to hold own msg_id
 uint8_t own_msg_id[MAX_RING][5] = {0};
 int iWriteOwn=0;
 
@@ -97,20 +110,26 @@ unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE] = {0};
 int iWrite=0;
 int iRead=0;
 
-bool hasMsgFromPhone = false;
+// RINGBUFFER for incomming LoRa RX msg_id
+uint8_t ringBufferLoraRX[MAX_RING][4] = {0};
+uint8_t loraWrite = 0;   // counter for ringbuffer
 
-// BLE Ringbuffer to phone
+// RINGBUFFER RAW LoRa RX
+unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE] = {0};
+int RAWLoRaWrite=0;
+int RAWLoRaRead=0;
+
+// RINGBUFFER BLE to phone
 unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE] = {0};
 int toPhoneWrite=0;
 int toPhoneRead=0;
 
-// BLE Commando-Ringbuffer to phone
+// RINGBUFFER BLE Commandos to phone
 unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE] = {0};
 int ComToPhoneWrite=0;
 int ComToPhoneRead=0;
 
-uint8_t ringBufferLoraRX[MAX_RING][4] = {0}; //Ringbuffer for UDP TX from LoRa RX, first byte is length
-uint8_t loraWrite = 0;   // counter for ringbuffer
+bool hasMsgFromPhone = false;
 
 // LoRa RX/TX sequence control
 int cmd_counter = 0;      // ticker dependant on main cycle delay time
@@ -166,7 +185,6 @@ unsigned long getUnixClock()
 
 
 	return ut - ot;
-
 }
 
 /** @brief Function adding messages into outgoing BLE ringbuffer
@@ -244,7 +262,7 @@ void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
 
     struct aprsMessage aprsmsg;
 
-    initAPRS(aprsmsg);
+    initAPRS(aprsmsg, ':');
 
     aprsmsg.msg_len = 0;
     aprsmsg.payload_type = ':';
@@ -284,6 +302,17 @@ void addLoraRxBuffer(unsigned int msg_id)
 
     if (loraWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         loraWrite = 0;
+}
+
+int checkOwnTx(uint8_t compBuffer[4])
+{
+    for(int ilo=0; ilo<MAX_RING; ilo++)
+    {
+        if(memcmp(own_msg_id[ilo], compBuffer, 4) == 0)
+            return ilo;
+    }
+
+    return -1;
 }
 
 int pageLine[7][3] = {0};
@@ -423,7 +452,11 @@ void sendDisplayHead(bool bInit)
     sprintf(print_text, "Modul: %i", BOARD_HARDWARE);
     sendDisplay1306(false, false, 3, 52, print_text);
 
-    sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);
+    if(bWIFIAP)
+        sprintf(print_text, "ssid:  %-15.15s", cBLEName);
+    else
+        sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);
+
     sendDisplay1306(false, true, 3, 62, print_text);
 
     bSetDisplay=false;
@@ -695,30 +728,41 @@ void mainStartTimeLoop()
 
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
+    if(aprsmsg.msg_payload.startsWith("{SET}") > 0)
+    {
+            char cset[30];
+            sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
+            sscanf(cset+5, "%d;%d;", &meshcom_settings.max_hop_text, &meshcom_settings.max_hop_pos);
+        return;
+    }
+
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
-        char csetTime[30];
-        sprintf(csetTime, "%s", aprsmsg.msg_payload.c_str());
-
-        int Year;
-        int Month;
-        int Day;
-        int Hour;
-        int Minute;
-        int Second;
-
-        sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
-    
-        MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-
-        if(bDisplayInfo)
+        if(!bRTCON)
         {
-            Serial.println("");
-            Serial.print(getTimeString());
-            Serial.print(" TIMESET: Time set ");
-        }
+            char csetTime[30];
+            sprintf(csetTime, "%s", aprsmsg.msg_payload.c_str());
 
-        bPosDisplay=true;
+            int Year;
+            int Month;
+            int Day;
+            int Hour;
+            int Minute;
+            int Second;
+
+            sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
+        
+            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+
+            if(bDisplayInfo)
+            {
+                Serial.println("");
+                Serial.print(getTimeString());
+                Serial.println(" TIMESET: Time set ");
+            }
+
+            bPosDisplay=true;
+        }
 
         return;
     }
@@ -908,10 +952,10 @@ void checkButtonState()
                 {
                     bPressed = true;
 
-                    iPress++;
+                    if(iPress < 3)
+                        iPress++;
 
-                    if(iPress == 1)
-                        checkButtonTime = 8;
+                    checkButtonTime = 20;
 
                     if(bDEBUG)
                         Serial.printf("checkButtonTime:%i iPress:%i\n", checkButtonTime, iPress);
@@ -926,10 +970,27 @@ void checkButtonState()
                 bPressed = false;
 
                 checkButtonTime--;
+
                 if(checkButtonTime < 0)
                 {
-                    checkButtonTime = 0;
+                    if(iPress == 3)
+                    {
+                        if(bDEBUG)
+                            Serial.println("BUTTON triple press");
 
+                        bDisplayTrack=!bDisplayTrack;
+
+                        if(bDisplayTrack)
+                            commandAction((char*)"--track on", false);
+                        else
+                            commandAction((char*)"--track off", false);
+
+                        bDisplayOff=false;
+
+                        sendDisplayHead(false);
+
+                    }
+                    else
                     if(iPress == 2)
                     {
                         if(bDEBUG)
@@ -939,20 +1000,15 @@ void checkButtonState()
                             commandAction((char*)"--sendtrack", false);
                         else
                             commandAction((char*)"--sendpos", false);
-
                     }
                     else
-                    if(iPress == 1)
+                    if(iPress == 1 && !bDisplayTrack)
                     {
                         if(bDEBUG)
-                            Serial.println("BUTTON singel press");
+                            Serial.printf("BUTTON singel press %i %i\n", pageLastLineAnz[pagePointer], bDisplayTrack);
 
-                        if(pageLastLineAnz[pagePointer] == 0 || bDisplayTrack)
+                        if(pageLastLineAnz[pagePointer] == 0)
                         {
-                            bDisplayTrack =false;
-                            
-                            addBLECommandBack((char*)"--track off");
-
                             pageHold=0;
 
                             pagePointer = pageLastPointer - 1;
@@ -999,6 +1055,8 @@ void checkButtonState()
                             pageHold=5;
                         }
                     }
+
+                    checkButtonTime = 0;
 
                     iPress = 0;
                 }
@@ -1219,12 +1277,32 @@ String getTimeString()
     return (String)currTime;
 }
 
+String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
+{
+    char internal_message[UDP_TX_BUF_SIZE];
+
+    int ilpayload=aprsmsg.msg_payload.length();
+    if(ilpayload > 30)
+        ilpayload=30;
+
+    sprintf(internal_message, "%s %s:%08X %02X %i %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
+        aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh,
+        aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
+        aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(),
+        aprsmsg.payload_type, aprsmsg.msg_payload.substring(0, ilpayload).c_str());
+
+    
+    internal_message[UDP_TX_BUF_SIZE-1]=0x00;
+    
+    return (String)internal_message;
+}
+
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
     Serial.print(getTimeString());
-    Serial.printf(" %s: %03i %c x%08X %02X %i %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X FW:%02X LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
-        aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
-        aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_last_hw);
+    Serial.printf(" %s: %03i %c x%08X %02X %i %i %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X FW:%02i:%c LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+        aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
+        aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1262,14 +1340,15 @@ void sendMessage(char *msg_text, int len)
     if(strMsg.charAt(0) == '{')
     {
         int iCall = strMsg.indexOf('}');
-        if(iCall != -1 && iCall < 11)   // {OE1KBC-99}Textmessage
+        if(iCall != -1 && iCall < 11)   // {OE1KBC-99}Textmessage or Group-Call {2321}
         {
             strDestinationCall = strMsg.substring(1, iCall);
             strDestinationCall.toUpperCase();
             strDestinationCall.trim();
             strMsg = strMsg.substring(iCall+1);
 
-            bDM=true;
+            if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
+                bDM=true;
         }
     }
 
@@ -1277,28 +1356,24 @@ void sendMessage(char *msg_text, int len)
 
     struct aprsMessage aprsmsg;
 
-    initAPRS(aprsmsg);
+    initAPRS(aprsmsg, ':');
 
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
-    aprsmsg.payload_type = ':';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = strDestinationCall;
     aprsmsg.msg_payload = strMsg;
 
     
-    // ACK request anhängen
+    // ACK request anhängen noly DM Call
     if(bDM)
     {
-        if(strcmp(aprsmsg.msg_destination_path.c_str(), "WLNK-1") != 0)
-        {
-            char cAckId[4] = {0};
-            sprintf(cAckId, "%03i", meshcom_settings.node_msgid);
-            aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
-        }
+        char cAckId[4] = {0};
+        sprintf(cAckId, "%03i", meshcom_settings.node_msgid);
+        aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
     }
 
     meshcom_settings.node_msgid++;
@@ -1324,7 +1399,7 @@ void sendMessage(char *msg_text, int len)
         if(bGATEWAY)
         {
             // gleich Wolke mit Hackerl setzen
-            if(aprsmsg.msg_destination_path == "*")
+            if(aprsmsg.msg_destination_path == "*" || CheckGroup(strDestinationCall))
             {
                 uint8_t print_buff[8];
 
@@ -1341,6 +1416,14 @@ void sendMessage(char *msg_text, int len)
         }
     }
 
+    // store last message to compare later on
+    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+    own_msg_id[iWriteOwn][4]=0x00;
+    iWriteOwn++;
+    if(iWriteOwn >= MAX_RING)
+        iWriteOwn=0;
+
+    // local messages send to LoRa TX
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     iWrite++;
@@ -1353,13 +1436,6 @@ void sendMessage(char *msg_text, int len)
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
     }
 
-    // store last message to compare later on
-    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
-    own_msg_id[iWriteOwn][4]=0x00;
-    iWriteOwn++;
-    if(iWriteOwn >= MAX_RING)
-        iWriteOwn=0;
-
     #ifdef ESP32
         // Extern Server
         if(bEXTUDP)
@@ -1370,9 +1446,18 @@ void sendMessage(char *msg_text, int len)
     #endif
 }
 
-String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
+String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, char lat_c, double plon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
 {
-    if(lat == 0 or lon == 0)
+    double lat=plat;
+    if(plat < 0.0)
+        lat = plat * -1.0;
+
+    double lon=plon;
+    if(plon < 0.0)
+        lon = plon * -1.0;
+
+
+    if(lat == 0.0 or lon == 0.0)
     {
         DEBUG_MSG("APRS", "Error PositionToAPRS");
         return "";
@@ -1381,7 +1466,8 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
     char msg_start[100] = {0};
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-    // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E#/B=005/A=000272/P=1005.1/H=42.5/T=29.4/Q=1005.7 HW:04 MOD:03 FCS:15DC FW:17 LH:09
+    // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E#/B=005/A=000272/P=1005.1/H=42.5/T=29.4/Q=1005.7/R=232;2321; HW:04 MOD:03 FCS:15DC FW:17 LH:09
+
 	double slat = 100.0;
     slat = lat*slat;
 	double slon = 100.0;
@@ -1422,6 +1508,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
         char cqnh[15]={0};
         char cgasres[15]={0};
         char cco2[15]={0};
+        char cgrc[32]={0};
 
         if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
         {
@@ -1498,7 +1585,28 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
                 return "";
         }
 
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2);
+        /////////////////////////////////////////////////////////////////
+        // send Group-Call settings zu MesCom-Server
+        String strGRC="";
+
+        char cGC[6];
+        for(int igrc=0;igrc<6;igrc++)
+        {
+            if(meshcom_settings.node_gcb[igrc] > 0)
+            {
+                sprintf(cGC, "%i;", meshcom_settings.node_gcb[igrc]);
+                strGRC.concat(cGC);
+            }
+        }
+
+        if(strGRC.length() > 0)
+        {
+            sprintf(cgrc, "/R=%s", strGRC.c_str());
+        }
+        //
+        /////////////////////////////////////////////////////////////////
+
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc);
     }
 
     return String(msg_start);
@@ -1559,6 +1667,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             Serial.printf(" LO-APRS:%s\n", msg_buffer+3);
         }
 
+        // local LoRa-APRS position-messages send to LoRa TX
         ringBuffer[iWrite][0]=ilng;
         memcpy(ringBuffer[iWrite]+1, msg_buffer, ilng);
         iWrite++;
@@ -1566,18 +1675,16 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             iWrite=0;
 
         // An APP als Anzeige retour senden
-        if(isPhoneReady == 1)
+        if(isPhoneReady == 1 || bGATEWAY)
         {
             struct aprsMessage aprsmsg;
 
-            initAPRS(aprsmsg);
+            initAPRS(aprsmsg, '!');
 
             aprsmsg.msg_len = 0;
 
             // MSG ID not used in APP
 
-            aprsmsg.payload_type = '!';
-            
             if(intervall != POSINFO_INTERVAL)
                 aprsmsg.msg_track=true;
 
@@ -1590,24 +1697,37 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
             encodeAPRS(msg_buffer, aprsmsg);
             
-            addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+            if(isPhoneReady == 1)
+            {
+                addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+            }
+
+            if(bGATEWAY)
+            {
+                if(bDisplayInfo)
+                {
+                    Serial.print(getTimeString());
+                    Serial.printf(" NEW-UDP:%s\n", msg_buffer+3);
+                }
+
+                // UDP out
+                addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+            }
         }
 
-    }
+}
     
     if(bSendViaMesh)
     {
         struct aprsMessage aprsmsg;
 
-        initAPRS(aprsmsg);
+        initAPRS(aprsmsg, '!');
 
         aprsmsg.msg_len = 0;
 
         // MSG ID zusammen setzen    
         aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
 
-        aprsmsg.payload_type = '!';
-        
         if(intervall != POSINFO_INTERVAL)
             aprsmsg.msg_track=true;
 
@@ -1633,6 +1753,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             Serial.println();
         }
 
+        // local position-messages send to LoRa TX
         ringBuffer[iWrite][0]=aprsmsg.msg_len;
         memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
         iWrite++;
@@ -1674,14 +1795,13 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
 {
     struct aprsMessage aprsmsg;
 
-    initAPRS(aprsmsg);
+    initAPRS(aprsmsg, ':');
 
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
     
-    aprsmsg.payload_type = ':';
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = dest_call;
 
@@ -1708,6 +1828,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
         Serial.println();
     }
 
+    // ACK-Message send to LoRa TX
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     iWrite++;
@@ -1774,7 +1895,12 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     // gps_send_rate 30 minutes default
     // bDisplayTrack = true Smartbeaconing used
     if(posinfo_distance < 100 || !bDisplayTrack)  // seit letzter gemeldeter position
-        gps_send_rate = POSINFO_INTERVAL;
+    {
+        if(meshcom_settings.node_postime > 0)
+            gps_send_rate = meshcom_settings.node_postime;
+        else
+            gps_send_rate = POSINFO_INTERVAL;
+    }
     else
     if(posinfo_distance < 200)  // zu fuss > 3 km/h  < 8 km/h
         gps_send_rate = 30; // seconds
