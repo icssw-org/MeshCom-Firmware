@@ -159,7 +159,7 @@ If you want to wipe the settings stored on the node:<br/>
 To do so, you need the Adafruit nrfutil. Installation and Usage:<br/>
 https://github.com/adafruit/Adafruit_nRF52_nrfutil<br/>
 
-#### Via UF2 File:
+### RAK4631 via UF2 File:
 When you double click the button on the module it mounts a USB Device where you can copy an .uf2 file onto the module. To generate that file you need the following Python script:<br/>
 https://github.com/microsoft/uf2/blob/master/utils/uf2conv.py<br/>
 
