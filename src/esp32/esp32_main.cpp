@@ -1536,7 +1536,17 @@ void esp32loop()
 
     if(bWEBSERVER)
     {
+        startWebserver();
+
         loopWebserver();
+
+        if ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 60)) < millis())   // HEARTBEAT_INTERVAL to minutes
+        {
+            // restart WEB-Client
+            stopWebserver();
+
+            web_timer = millis();
+        }
     }
 
     //

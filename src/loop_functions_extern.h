@@ -140,6 +140,7 @@ extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long temphum_timer;      // we check periodically get TEMP/HUM
 extern unsigned long druck_timer;        // we check periodically get AIRPRESURE
 extern unsigned long hb_timer;           // GW Server-Heartbeat-Timer
+extern unsigned long web_timer;          // Refreshtime WEbServer
 
 // batt
 extern float global_batt;

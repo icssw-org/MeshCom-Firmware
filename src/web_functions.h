@@ -4,6 +4,7 @@
 // WebServer
 void startWebserver();
 void loopWebserver();
+void stopWebserver();
 
 String hex2ascii(String string);
 

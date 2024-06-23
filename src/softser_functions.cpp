@@ -12,6 +12,8 @@
 
 SoftwareSerial SOFTSER;
 
+bool bOneShot=false;
+
 bool setupSOFTSER()
 {  
     if(!bSOFTSERON)
@@ -25,6 +27,7 @@ bool setupSOFTSER()
     }
 
     SOFTSER.begin((uint32_t)meshcom_settings.node_ss_baud, EspSoftwareSerial::SWSERIAL_8N1, (int8_t)meshcom_settings.node_ss_rx_pin, (int8_t)meshcom_settings.node_ss_tx_pin);
+    SOFTSER.setTimeout(50);
 
     Serial.printf("[INIT]...SOFTSER RX:%i TX:%i BAUD:%i\n", meshcom_settings.node_ss_rx_pin, meshcom_settings.node_ss_tx_pin, meshcom_settings.node_ss_baud);
 
@@ -32,6 +35,71 @@ bool setupSOFTSER()
 }
 
 bool loopSOFTSER()
+{
+    if(!bSOFTSERON || bOneShot)
+    {
+        return false;
+    }
+
+    if(meshcom_settings.node_ss_baud == 0)
+    {
+        return false;
+    }
+
+    String tmp_data = "";
+
+    bool newData = false;
+
+    strSOFTSER_BUF="";
+
+    strSOFTSER_BUF.concat("-----------check SOFTSER ");
+    strSOFTSER_BUF.concat(getTimeString());
+    strSOFTSER_BUF.concat(" -----------");
+    strSOFTSER_BUF.concat("\r");
+
+    if(bSOFTSERDEBUG)
+    {
+        Serial.println(strSOFTSER_BUF);
+    }
+
+    // For one second we parse SOFTSER data and report
+    //for (unsigned long start = millis(); millis() - start < 1000;)
+    bool bgrun=true;
+    unsigned long start = millis();
+    while(bgrun)
+    {
+        while (SOFTSER.available())
+        {
+            char c = SOFTSER.read();
+
+            if(c == 0x00)
+            {
+                bgrun=false;
+                break;
+            }
+
+            if(bSOFTSERDEBUG && bDEBUG)
+            Serial.print(c);
+
+            tmp_data += c;
+        }
+        
+        if((millis() - start) > 2000)
+            bgrun=false;
+    }
+
+    strSOFTSER_BUF.concat(tmp_data);
+    strSOFTSER_BUF.concat("\r\n");
+
+    if(bSOFTSERDEBUG)
+    {
+        Serial.printf("%s\n", tmp_data.c_str());
+    }
+
+    return true;
+}
+
+bool getSOFTSER()
 {
     if(!bSOFTSERON)
     {
@@ -58,32 +126,32 @@ bool loopSOFTSER()
     {
         Serial.println(strSOFTSER_BUF);
     }
-  
+
     // For one second we parse SOFTSER data and report
     //for (unsigned long start = millis(); millis() - start < 1000;)
     bool bgrun=true;
     unsigned long start = millis();
+
     while(bgrun)
     {
-      while (SOFTSER.available())
-      {
-        char c = SOFTSER.read();
-
-        if(c == 0x00)
+        while (SOFTSER.available())
         {
-            bgrun=false;
-            break;
+            char c = SOFTSER.read();
+
+            if(c == 0x00)
+            {
+                bgrun=false;
+                break;
+            }
+
+            if(bSOFTSERDEBUG && bDEBUG)
+            Serial.print(c);
+
+            tmp_data += c;
         }
-
-        if(bSOFTSERDEBUG && bDEBUG)
-          Serial.print(c);
-
-        tmp_data += c;
-
-      }
-    
-      if((millis() - start) > 1000)
-          bgrun=false;
+        
+        if((millis() - start) > 2000)
+            bgrun=false;
     }
 
     strSOFTSER_BUF.concat(tmp_data);
@@ -109,9 +177,24 @@ bool sendSOFTSER(char cText[100])
         return false;
     }
 
-    Serial.printf("writeSOFTSER\n<%s>\n", cText);
+    if(bSOFTSERDEBUG)
+        Serial.printf("writeSOFTSER\n<%s>\n", cText);
 
-    SOFTSER.write(cText);
+    char cSend[100];
+    
+    sprintf(cSend, "\r", cText);
+
+    SOFTSER.write(cSend);
+
+    delay(500);
+
+    sprintf(cSend, "%s\r", cText);
+
+    SOFTSER.write(cSend);
+
+    getSOFTSER();
+    
+    bOneShot=true;
 
     return true;
 }

@@ -162,7 +162,8 @@ int no_gps_reset_counter = 0;
 unsigned long posinfo_timer = 0;    // we check periodically to send GPS
 unsigned long temphum_timer = 0;    // we check periodically get TEMP/HUM
 unsigned long druck_timer = 0;      // we check periodically get AIRPRESURE
-unsigned long hb_timer = 0;         // we check periodically get AIRPRESURE
+unsigned long hb_timer = 0;
+unsigned long web_timer = 0;
 
 // Function that gets current epoch time
 unsigned long getUnixClock()

@@ -876,8 +876,9 @@ void sendKEEP()
 {
     String keep = "KEEP";
     String cfw = SOURCE_VERSION;
-    cfw += SOURCE_VERSION_SUB;
-    String firmware = "GW"+cfw;
+    cfw.concat(SOURCE_VERSION_SUB);
+    String firmware = "GW";
+    firmware.concat(cfw);
     String grc_ids = "";
     
     for(int igrc=0; igrc<6; igrc++)
