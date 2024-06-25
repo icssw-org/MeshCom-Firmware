@@ -1451,7 +1451,7 @@ void esp32loop()
         if(INA226TimeWait == 0)
             INA226TimeWait = millis() - 10000;
 
-        if ((INA226TimeWait + 60000) < millis())   // 60 sec
+        if ((INA226TimeWait + 15000) < millis())   // 15 sec
         {
             // read MCU-811 Sensor
             if(loopINA226())

@@ -1692,8 +1692,8 @@ void loopWebserver()
                 web_client.println("<td><a href=\"/wx\"><button class=\"button\"><b>WX</b></button></a></td>");                //page 3
                 web_client.println("<td><a href=\"/mheard\"><button class=\"button\"><b>MHEARD</b></button></a></td></tr>");   //page 2
 
-                web_client.println("<tr><td><a href=\"/setup/#anchor_button\"><button class=\"button\"><b>SETUP</b></button></a></td>");      //page 4
-                web_client.println("<td><a href=\"/message/#anchor_button\"><button class=\"button\"><b>MESSAGE</b></button></a></td>");      //page 5
+                web_client.println("<tr><td><a href=\"/setup\"><button class=\"button\"><b>SETUP</b></button></a></td>");      //page 4
+                web_client.println("<td><a href=\"/message\"><button class=\"button\"><b>MESSAGE</b></button></a></td>");      //page 5
                 
                 web_client.println("<td><a href=\"/logprint\"><button class=\"button\"><b>RX-LOG</b></button></a></td>");       //page 6
                 web_client.println("<td><a href=\"/sendpos\"><button class=\"button\"><b>SENDPOS</b></button></a></td></tr>");
