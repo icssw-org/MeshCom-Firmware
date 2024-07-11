@@ -187,7 +187,7 @@ int NrfETH::checkUDP()
 {
   if(Udp.check() < 0)
   {
-    DEBUG_MSG("ERROR", "getUDP");
+    Serial.println("[UDP ERROR] getUDP");
     return -1;
   }
 
@@ -208,8 +208,9 @@ int NrfETH::getUDP()
   int packetSize = Udp.parsePacket(); // If there's data available, read a packet.
 
   // HEARTBEAT keine Ausgabe
-  if(packetSize != 22 && packetSize > 0)
-    DEBUG_MSG("UDP_ETH", "UDP Packet received with length: %i", packetSize);
+  //if(packetSize != 22 && packetSize > 0 && bDEBUG)
+  if(packetSize > 0 && bDEBUG)
+    Serial.printf("[UDP_ETH] UDP Packet received with length: %i\n", packetSize);
 
   if (packetSize <= UDP_TX_BUF_SIZE && packetSize > 0)
   {
@@ -850,7 +851,7 @@ void NrfETH::startUDP()
 
   if (local_addr[0] == 44 || meshcom_settings.node_hamnet_only)
   {
-    DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.8.143");
+    Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
     udp_dest_addr = IPAddress(44, 143, 8, 143);
 
     // meshCom 4.0 Test-Server
@@ -862,7 +863,7 @@ void NrfETH::startUDP()
   }
   else
   {
-    DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 89.185.97.38");
+    Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
     //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
     udp_dest_addr = IPAddress(89, 185, 97, 38);
     //udp_dest_addr = IPAddress(213, 47, 219, 169);

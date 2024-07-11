@@ -89,8 +89,6 @@ void startWebserver()
 void stopWebserver()
 {
     bweb_server_running = false;
-
-    web_server.stopAll();
 }
 
 void loopWebserver()
@@ -1382,7 +1380,12 @@ void loopWebserver()
                                 web_client.printf("<td>%s</td><td><a href=\"/mcp/on/%c%i\"><button class=\"button\"<b>ON</b></button></a></td></tr>\n",  (bOutValue?"ON  ":"OFF "), cAB, iAB);
                         }
                         else
-                            web_client.printf("<td>%s</td><td></td></tr>\n",  (bInValue?"HIGH":"LOW "));
+                        {
+                            if(meshcom_settings.node_mcp17t[io][0] == 0x00)
+                                web_client.printf("<td>%s</td><td></td></tr>\n",  (bInValue?"HIGH":"LOW "));
+                            else
+                                web_client.printf("<td><b>%s</b></td><td></td></tr>\n",  (bInValue?"HIGH":"LOW "));
+                        }
 
                         t_io >>= 1;
                         t_out >>= 1;
@@ -1485,7 +1488,7 @@ void loopWebserver()
                     {
                         web_client.println("<tr><td>&nbsp;</td><td>&nbsp;</td></tr>");
                         web_client.println("<tr><td>INA226</td><td>&nbsp;</td></tr>");
-                        web_client.printf("<tr><td><b>vBUS</b></td><td>%.2f V</td></tr>\n", meshcom_settings.node_vbus);
+                        web_client.printf("<tr><td><b>vBUS</b></td><td><b>%.2f V</b></td></tr>\n", meshcom_settings.node_vbus);
                         web_client.printf("<tr><td><b>vSHUNT</b></td><td>%.2f mV</td></tr>\n", meshcom_settings.node_vshunt);
                         web_client.printf("<tr><td><b>vCURRENT</b></td><td>%.1f mA</td></tr>\n", meshcom_settings.node_vcurrent);
                         web_client.printf("<tr><td><b>vPOWER</b></td><td>%.1f mW</td></tr>\n", meshcom_settings.node_vpower);
@@ -1638,7 +1641,7 @@ void loopWebserver()
                     // RTC
                     if (bRTCON)
                     {
-                        web_client.println("<td><a href=\"/rtc/off\"><button class=\"button button2\"<b>RTC</b></button></a></td>");
+                        web_client.println("<tr><td><a href=\"/rtc/off\"><button class=\"button button2\"<b>RTC</b></button></a></td>");
                     }
                     else
                     {
