@@ -20,16 +20,11 @@ float vPOWER=0.0;
 
 bool setupINA226()
 {  
-    if(!bINA226ON)
-    {
-        return false;
-    }
-
     Wire.begin();
 
     if (!INA0.begin() )
     {
-        Serial.println("[INIT]...Failed to start sensor INA226 0x40. Please check your wiring.");
+        Serial.println("[INIT]...INA226 not found");
         return false;
     }
 
@@ -37,6 +32,8 @@ bool setupINA226()
     INA0.setAverage(INA226_1024_SAMPLES);
 
     Serial.println("[INIT]...INA226 set");
+
+    bINA226ON = true;
 
     return true;
 }

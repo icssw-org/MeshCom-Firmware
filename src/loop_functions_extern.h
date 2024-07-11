@@ -40,6 +40,7 @@ extern bool bBME680ON;
 extern bool bMCU811ON;
 extern bool bINA226ON;
 extern bool bRTCON;
+extern bool bSMALLDISPLAY;
 extern bool bSOFTSERON;
 
 extern bool bTCA9548A;

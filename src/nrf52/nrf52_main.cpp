@@ -394,8 +394,9 @@ void nrf52setup()
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
-    bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
-    bRTCON =  meshcom_settings.node_sset2 & 0x0200;
+    // =  meshcom_settings.node_sset2 & 0x0100;
+    bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
+    bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
 
     bDisplayInfo = bLORADEBUG;

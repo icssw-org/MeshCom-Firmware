@@ -42,6 +42,7 @@ bool bBME680ON = false;
 bool bMCU811ON = false;
 bool bINA226ON = false;
 bool bRTCON = false;
+bool bSMALLDISPLAY = false;
 bool bSOFTSERON = false;
 
 bool bTCA9548A = false;
@@ -1121,7 +1122,9 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     msg_text[20]=0x00;
     sendDisplay1306(false, false, 3, izeile, msg_text);
 
-    izeile=izeile+12;
+    int izeileoffset = 12;
+
+    izeile=izeile+izeileoffset;
 
     ipt=0;
 
@@ -1138,7 +1141,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             sendDisplay1306(false, false, 3, izeile, msg_text);
 
             istarttext=itxt+2;
-            izeile=izeile+12;
+            izeile=izeile+izeileoffset;
             break;
         }
         else
@@ -1163,7 +1166,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             sendDisplay1306(false, false, 3, izeile, msg_text);
 
             istarttext=itxt+3;
-            izeile=izeile+10;
+            izeile=izeile+izeileoffset; //war 10
             break;
         }
         else

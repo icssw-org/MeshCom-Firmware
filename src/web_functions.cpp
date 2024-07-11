@@ -271,14 +271,14 @@ void loopWebserver()
                     commandAction((char*)"--226 off", bPhoneReady);
                 }
                 else
-                if (web_header.indexOf("GET /rtc/on") >= 0)
+                if (web_header.indexOf("GET /smalldisplay/on") >= 0)
                 {
-                    commandAction((char*)"--rtc on", bPhoneReady);
+                    commandAction((char*)"--smalldisplay on", bPhoneReady);
                 }
                 else
-                if (web_header.indexOf("GET /rtc/off") >= 0)
+                if (web_header.indexOf("GET /smalldisplay/off") >= 0)
                 {
-                    commandAction((char*)"--rtc off", bPhoneReady);
+                    commandAction((char*)"--smalldisplay off", bPhoneReady);
                 }
                 else
                 if (web_header.indexOf("GET /softser/on") >= 0)
@@ -1638,14 +1638,14 @@ void loopWebserver()
                         web_client.println("<td><a href=\"/ina226/on\"><button class=\"button\"><b>INA226</b></button></a></td></tr>");
                     }
 
-                    // RTC
-                    if (bRTCON)
+                    // SMALLDISPLAY
+                    if (bSMALLDISPLAY)
                     {
-                        web_client.println("<tr><td><a href=\"/rtc/off\"><button class=\"button button2\"<b>RTC</b></button></a></td>");
+                        web_client.println("<tr><td><a href=\"/smalldisplay/off\"><button class=\"button button2\"<b>SMALL</b></button></a></td>");
                     }
                     else
                     {
-                        web_client.println("<td><a href=\"/rtc/on\"><button class=\"button\"><b>RTC</b></button></a></td>");
+                        web_client.println("<td><a href=\"/smalldisplay/on\"><button class=\"button\"><b>SMALL</b></button></a></td>");
                     }
 
                     // SOFTSER
