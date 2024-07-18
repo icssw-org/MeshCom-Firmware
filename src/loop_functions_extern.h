@@ -152,4 +152,12 @@ extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Update Time
 
 extern char cBLEName[50];
+
+// SOFTSER global variables
 extern String strSOFTSER_BUF;
+extern bool bSOFTSER_APP;
+
+extern String strSOFTSERAPP_ID;
+extern String strSOFTSERAPP_PEGEL;
+extern String strSOFTSERAPP_TEMP;
+extern String strSOFTSERAPP_BATT;

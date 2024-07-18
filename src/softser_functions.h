@@ -7,7 +7,8 @@
 #if defined(ENABLE_SOFTSER)
 
 bool setupSOFTSER();
-bool loopSOFTSER();
+bool loopSOFTSER(int ID, int iFunction);
+bool appSOFTSER(int ID);
 bool sendSOFTSER(char cText[100]);
 
 #endif

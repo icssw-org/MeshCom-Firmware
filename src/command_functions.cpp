@@ -1230,6 +1230,13 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+    else
+    if(commandCheck(msg_text+2, (char*)"softser app") == 0)
+    {
+        bSOFTSER_APP = true;
+        
+        return;
+    }
 #endif
 
     else
