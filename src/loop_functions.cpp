@@ -1525,12 +1525,14 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
 
         bool bSOFTSERAPPPOS=false;
 
-        if(bSOFTSERON && !strSOFTSERAPP_ID.isEmpty())
+        #if defined(ENABLE_SOFTSER)
+        if(bSOFTSERON && strSOFTSERAPP_ID.length() > 0)
         {
             bSOFTSERAPPPOS=true;
             sprintf(catxt, "%s ", strSOFTSERAPP_ID.c_str());
         }
         else
+        #endif
         {
             if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
             {
@@ -1612,26 +1614,28 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
                 return "";
         }
 
+        #if defined(ENABLE_SOFTSER)
         if(bSOFTSERAPPPOS)
         {
             sprintf(cversion, "%s", "/V=4");
 
-            if(!strSOFTSERAPP_PEGEL.isEmpty())
+            if(strSOFTSERAPP_PEGEL.length() > 0)
             {
                 sprintf(csfpegel, "/1=%s", strSOFTSERAPP_PEGEL.c_str());
             }
 
-            if(!strSOFTSERAPP_TEMP.isEmpty())
+            if(strSOFTSERAPP_TEMP.length() > 0)
             {
                 sprintf(csftemp, "/2=%s", strSOFTSERAPP_TEMP.c_str());
             }
 
-            if(!strSOFTSERAPP_BATT.isEmpty())
+            if(strSOFTSERAPP_BATT.length() > 0)
             {
                 sprintf(csfbatt, "/3=%s", strSOFTSERAPP_BATT.c_str());
             }
         }
         else
+        #endif
         {
             /////////////////////////////////////////////////////////////////
             // send Group-Call settings zu MesCom-Server

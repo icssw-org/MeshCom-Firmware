@@ -56,7 +56,7 @@ bool loopSOFTSER(int ID, int iFunction)
             sprintf(cText, "/cl/data/get/%s", strSOFTSER_BUF.substring(6, 20).c_str());
         }
 
-        strSOFTSER_BUF.clear();
+        strSOFTSER_BUF = "";
 
         Serial.println(cText);
         
@@ -127,7 +127,7 @@ bool appSOFTSER(int ID)
                     Serial.printf("Pegel....%s cm\n", strSOFTSERAPP_PEGEL.c_str());
                 }
                 else
-                    strSOFTSERAPP_PEGEL.clear();
+                    strSOFTSERAPP_PEGEL = "";
             }
 
             if(strSOFTSER_BUF.indexOf("Wassertemperatur") > 0)
@@ -143,7 +143,7 @@ bool appSOFTSER(int ID)
                     Serial.printf("Temp.....%s °C\n", strSOFTSERAPP_TEMP.c_str());
                 }
                 else
-                    strSOFTSERAPP_TEMP.clear();
+                    strSOFTSERAPP_TEMP = "";
             }
 
             if(strSOFTSER_BUF.indexOf("Batteriespannung") > 0)
@@ -159,21 +159,21 @@ bool appSOFTSER(int ID)
                     Serial.printf("BATT.....%s V\n", strSOFTSERAPP_BATT.c_str());
                 }
                 else
-                    strSOFTSERAPP_BATT.clear();
+                    strSOFTSERAPP_BATT = "";
             }
 
             sendAPPPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c);
         
-            strSOFTSER_BUF.clear();
+            strSOFTSER_BUF = "";
         }
         else
         {
-            strSOFTSER_BUF.clear();
+            strSOFTSER_BUF = "";
         }
     }
     else
     {
-        strSOFTSER_BUF.clear();
+        strSOFTSER_BUF = "";
     }
 
     return true;
@@ -196,7 +196,7 @@ bool getSOFTSER()
 
     bool newData = false;
 
-    strSOFTSER_BUF.clear();
+    strSOFTSER_BUF = "";
 
     // For one second we parse SOFTSER data and report
     //for (unsigned long start = millis(); millis() - start < 1000;)

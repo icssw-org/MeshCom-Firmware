@@ -63,6 +63,7 @@ void sendHeartbeat();
 #include "io_functions.h"
 #include "ina226_functions.h"
 #include "rtc_functions.h"
+#include "softser_functions.h"
 
 #include <onewire_functions.h>
 
@@ -268,6 +269,7 @@ void checkSerialCommand(void);
 
 
 unsigned long gps_refresh_timer = 0;
+unsigned long softser_refresh_time = 0;
 
 // Client basic variables
 uint8_t dmac[6];
@@ -854,6 +856,26 @@ void nrf52loop()
         meshcom_settings.node_date_minute = MyClock.Minute();
         meshcom_settings.node_date_second = MyClock.Second();
     }
+
+    // SOFTSER
+    #if defined(ENABLE_SOFTSER)
+        if(bSOFTSERON)
+        {
+            if (bSOFTSER_APP || ((softser_refresh_time + ((SOFTSER_REFRESH_INTERVAL * 1000) - 3000)) < millis()))
+            {
+                // start SOFTSER APP
+                loopSOFTSER(SOFTSER_APP_ID, 0);
+
+                softser_refresh_time = millis();
+
+                bSOFTSER_APP = false;
+            }
+            else
+            {
+                appSOFTSER(SOFTSER_APP_ID);
+            }
+        }
+    #endif
 
     checkButtonState();
 
