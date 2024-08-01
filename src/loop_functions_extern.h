@@ -60,6 +60,7 @@ extern bool bSOFTSERDEBUG;
 extern bool bBLElong;
 
 extern bool bGATEWAY;
+extern bool bGATEWAY_NOPOS;
 extern bool bMESH;
 extern bool bWEBSERVER;
 extern bool bWIFIAP;
@@ -161,3 +162,6 @@ extern String strSOFTSERAPP_ID;
 extern String strSOFTSERAPP_PEGEL;
 extern String strSOFTSERAPP_TEMP;
 extern String strSOFTSERAPP_BATT;
+
+extern String strSOFTSERAPP_FIXPEGEL;
+extern String strSOFTSERAPP_FIXTEMP;

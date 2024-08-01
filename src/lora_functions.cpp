@@ -392,6 +392,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 }
                                 else
                                 {
+                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{MCP}", 5) == 0)
+                                    {
+                                        sendDisplayText(aprsmsg, rssi, snr);
+                                    }
+                                    else
                                     if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
                                     {
                                         sendDisplayText(aprsmsg, rssi, snr);

@@ -37,7 +37,7 @@ String strCountry[21] = {"EU", "UK", "none", "EA", "none", "none", "none", "none
 
 String getCountry(int iCtry)
 {
-    if(iCtry < 0 || iCtry > 19)
+    if(iCtry < 0 || iCtry > 20)
     {
         return "none";
     }

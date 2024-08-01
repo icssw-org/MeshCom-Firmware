@@ -379,7 +379,7 @@ void esp32setup()
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
-    // =  meshcom_settings.node_sset2 & 0x0100;
+    bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
     bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
@@ -1347,7 +1347,7 @@ void esp32loop()
                     global_proz = (int)PMU->getBatteryPercent();
 
                     // no BATT
-                    if(global_proz < 0)
+                    if(global_proz <= 0)
                     {
                         global_batt = (float)PMU->getVbusVoltage();
                         global_proz=100.0;

@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.33"
-#define SOURCE_VERSION_SUB "c"
+#define SOURCE_VERSION_SUB "d"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -38,6 +38,7 @@ definitions
     #define ENABLE_BMX680
     #define ENABLE_INA226
     #define ENABLE_RTC
+    #define ENABLE_SOFTSER
     #define ENABLE_MCP23017
     #define BUTTON_PIN WB_IO6        // only in combination with RAK13002
     #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx

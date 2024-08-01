@@ -396,7 +396,7 @@ void nrf52setup()
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
-    // =  meshcom_settings.node_sset2 & 0x0100;
+    bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
     bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
@@ -633,6 +633,11 @@ void nrf52setup()
     // RTC
     #if defined(ENABLE_RTC)
         setupRTC();
+    #endif
+
+    // SOFTSER
+    #if defined(ENABLE_SOFTSER)
+        setupSOFTSER();
     #endif
 
     u8g2.begin();

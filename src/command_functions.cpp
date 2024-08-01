@@ -16,6 +16,8 @@
 #include "io_functions.h"
 #include "softser_functions.h"
 
+//TEST #include "compress_functions.h"
+
 #if defined(ENABLE_BMX680)
 #include "bme680.h"
 #endif
@@ -124,6 +126,20 @@ void commandAction(char *msg_text, bool ble)
 
     //Serial.printf("\nMeshCom %-4.4s%-1.1s Client\n...command %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
 
+    /* TEST
+    if(commandCheck(msg_text+2, (char*)"compress ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+11);
+        _owner_c[49] = 0x00;
+
+        String text=_owner_c;
+
+        text_compress(text);
+        
+        return;
+    }
+    else
+    */
     if(commandCheck(msg_text+2, (char*)"utcoff") == 0)
     {
         sscanf(msg_text+9, "%f", &meshcom_settings.node_utcoff);
@@ -298,7 +314,9 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--SMALL on  use small Display\n--SS on  use SS\n--bmx BME/BMP/680 off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
             delay(100);
-            Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off\n--webserver on/off\n--mesh    on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
+            Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--mesh    on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
+            delay(100);
+            Serial.printf("--softser on/off/send/app/baud/fixpegel/fixtemp\n");
         }
 
         return;
@@ -787,7 +805,7 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
     }
     else
-    if(commandCheck(msg_text+2, (char*)"onewire gpio") == 0)
+    if(commandCheck(msg_text+2, (char*)"onewire gpio ") == 0)
     {
         sscanf(msg_text+15, "%d", &meshcom_settings.node_owgpio);
 
@@ -869,6 +887,28 @@ void commandAction(char *msg_text, bool ble)
             bReturn = true;
 
         save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"gateway pos") == 0)
+    {
+        bGATEWAY_NOPOS=false;
+        
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7EFF;
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"gateway nopos") == 0)
+    {
+        bGATEWAY_NOPOS=true;
+        
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0100;
+
+        save_settings();
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
@@ -1237,8 +1277,49 @@ void commandAction(char *msg_text, bool ble)
         
         return;
     }
+    else
+    if(commandCheck(msg_text+2, (char*)"softser baud ") == 0)
+    {
+        sscanf(msg_text+15, "%d", &meshcom_settings.node_ss_baud);
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"softser fixpegel ") == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        strSOFTSERAPP_FIXPEGEL=msg_text+19;
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"softser fixtemp ") == 0)
+    {
+        // max. 40 char
+        msg_text[22]=0x00;
+
+        strSOFTSERAPP_FIXTEMP=msg_text+18;
+
+        return;
+    }
 #endif
 
+    else
+    if(commandCheck(msg_text+2, (char*)"passwd ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+9);
+        _owner_c[14] = 0x00;    // max. 14 chars
+
+        sprintf(meshcom_settings.node_passwd, "%s", _owner_c);
+
+        save_settings();
+
+        return;
+    }
     else
     if(commandCheck(msg_text+2, (char*)"pos") == 0)
     {
@@ -2160,10 +2241,10 @@ void commandAction(char *msg_text, bool ble)
                 rf_freq_info=rf_freq_info/1000000;
             #endif
 
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...GATEWAY %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s ... SS %s\n",
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.2f V\n...TIME %li ms\n...GATEWAY %s %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s ... SS %s\n...PASSWD %s\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
-                    (bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"));
+                    (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...DISP: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),

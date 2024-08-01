@@ -55,6 +55,7 @@ bool bme680_found = false;
 bool bme680_enabled = false;
 
 bool bGATEWAY = false;
+bool bGATEWAY_NOPOS = false;
 bool bMESH = false;
 bool bWEBSERVER = false;
 bool bWIFIAP = false;
@@ -733,6 +734,93 @@ void mainStartTimeLoop()
 
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
+    // Fernwirken
+    // {MCP}xA0yaazppppp
+    // ppppp ... password (PWLFD)
+    // S1 ... A0 switch A0-7 B0-7
+    // aa ... ON or OF
+    if(aprsmsg.msg_payload.startsWith("{MCP}") || aprsmsg.msg_payload.startsWith("{mcp}"))
+    {
+            char cset[30];
+            memset(cset, 0x00, sizeof(cset));
+
+            sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
+            char cpasswd[6];
+            memcpy(cpasswd, cset+5+2+2+3, 5);
+
+            char clfd[10];
+            memset(clfd, 0x00, sizeof(clfd));
+            sprintf(clfd, "%03i", (int)(aprsmsg.msg_id & 0x3FF));
+
+            // check pwd
+            bool bpass=true;
+            for(int ip=0;ip<5;ip++)
+            {
+                if(cpasswd[ip] != 0x00 && bpass)
+                {
+                    bool bp=false;
+                    for(int ic=0;ic<15;ic++)
+                    {
+                        if(meshcom_settings.node_passwd[ic] == cpasswd[ip])
+                            bp=true;
+                    }
+
+                    bpass = bp;
+                }
+            }
+
+            if(bpass)
+            {
+                if(!(cset[5] == clfd[0] && cset[8] == clfd[1] && cset[11] == clfd[2]))
+                {
+                    bpass=false;
+                    Serial.printf("[MCP] wrong lfd:%s\n", clfd);
+                }
+            }
+
+            if(bpass)
+            {
+                int iswitch = 0;
+                bool bON = false;
+                if(cset[6] == 'A' || cset[6] == 'B' || cset[6] == 'a' || cset[6] == 'b')
+                {
+                    iswitch=cset[7]-0x30;
+                    if(iswitch >= 0 and iswitch < 8)
+                    {
+                        if(memcmp(cset+9, "ON", 2) == 0 || memcmp(cset+9, "on", 2) == 0)
+                            bON = true;
+
+                        Serial.printf("[MCP] key:%-5.5s command: %c%i %s\n", cpasswd, cset[6], iswitch, (bON?"on":"off"));
+
+                        bool bPhoneReady = false;
+                        if (isPhoneReady == 1)
+                            bPhoneReady = true;
+
+                        char cBefehl[30];
+                        if(bON)
+                            sprintf(cBefehl, "--setout %c%i off", cset[6], iswitch);
+                        else
+                            sprintf(cBefehl, "--setout %c%i on", cset[6], iswitch);
+
+                        commandAction(cBefehl, bPhoneReady);
+                    }
+                    else
+                    {
+                        Serial.println("[MCP] wrong switch number");
+                    }
+                }
+                else
+                {
+                    Serial.println("[MCP] no command recognized");
+                }
+            }
+            else
+            {
+                Serial.println("[MCP] wrong keyword");
+            }
+        return;
+    }
+    else
     if(aprsmsg.msg_payload.startsWith("{SET}") > 0)
     {
             char cset[30];
@@ -740,7 +828,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             sscanf(cset+5, "%d;%d;", &meshcom_settings.max_hop_text, &meshcom_settings.max_hop_pos);
         return;
     }
-
+    else
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
         if(!bRTCON)
@@ -1354,8 +1442,23 @@ void sendMessage(char *msg_text, int len)
             strDestinationCall.trim();
             strMsg = strMsg.substring(iCall+1);
 
-            if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
-                bDM=true;
+            if(strMsg.startsWith("{mcp}") || strMsg.startsWith("{MCP}")) // Fernwirken
+            {
+                char cId[4] = {0};
+                sprintf(cId, "%03i", meshcom_settings.node_msgid);
+                String newMsg = "{mcp}";
+                newMsg.concat(cId[0]);
+                newMsg.concat(strMsg.substring(5, 7).c_str());
+                newMsg.concat(cId[1]);
+                newMsg.concat(strMsg.substring(7, 9).c_str());
+                newMsg.concat(cId[2]);
+                newMsg.concat(strMsg.substring(9).c_str());
+
+                strMsg = newMsg;
+            }
+            else
+                if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
+                    bDM=true;
         }
     }
 
@@ -1619,17 +1722,23 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         {
             sprintf(cversion, "%s", "/V=4");
 
-            if(strSOFTSERAPP_PEGEL.length() > 0)
+            if(strSOFTSERAPP_PEGEL.length() > 1 || strSOFTSERAPP_FIXPEGEL.length() > 1)
             {
-                sprintf(csfpegel, "/1=%s", strSOFTSERAPP_PEGEL.c_str());
+                if(strSOFTSERAPP_FIXPEGEL.length() < 1)
+                    sprintf(csfpegel, "/1=%s", strSOFTSERAPP_PEGEL.c_str());
+                else
+                    sprintf(csfpegel, "/1=%s", strSOFTSERAPP_FIXPEGEL.c_str());
             }
 
-            if(strSOFTSERAPP_TEMP.length() > 0)
+            if(strSOFTSERAPP_TEMP.length() > 1 || strSOFTSERAPP_FIXTEMP.length() > 1)
             {
-                sprintf(csftemp, "/2=%s", strSOFTSERAPP_TEMP.c_str());
+                if(strSOFTSERAPP_FIXTEMP.length() < 1)
+                    sprintf(csftemp, "/2=%s", strSOFTSERAPP_TEMP.c_str());
+                else
+                    sprintf(csftemp, "/2=%s", strSOFTSERAPP_FIXTEMP.c_str());
             }
 
-            if(strSOFTSERAPP_BATT.length() > 0)
+            if(strSOFTSERAPP_BATT.length() > 1)
             {
                 sprintf(csfbatt, "/3=%s", strSOFTSERAPP_BATT.c_str());
             }

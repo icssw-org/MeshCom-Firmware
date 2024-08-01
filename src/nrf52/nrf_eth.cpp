@@ -273,12 +273,6 @@ int NrfETH::getUDP()
 
         if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
         {
-          if(bDEBUG)
-          {
-            Serial.print(getTimeString());
-            Serial.printf("Ringbuffer added element: %u\n", iWrite);
-          }
-          
           struct aprsMessage aprsmsg;
           
           // print which message type we got
@@ -292,7 +286,9 @@ int NrfETH::getUDP()
               Serial.println();
             }
 
-            if(msg_type_b == 0x3A)
+            bool bUDPtoLoraSend = true;
+
+            if(msg_type_b == 0x3A)  // type:message
             {
               sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
 
@@ -380,16 +376,19 @@ int NrfETH::getUDP()
               }
             }
             else
-            if(msg_type_b == 0x21)
+            if(msg_type_b == 0x21)  // type:position
             {
               sendDisplayPosition(aprsmsg, 99, 0);
 
               if(isPhoneReady > 0)
                 addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
+
+              if(bGATEWAY_NOPOS)
+                bUDPtoLoraSend=false;
             }
 
-            // resend only Packet to all and !owncall 
-            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && bMESH)
+            // resend only Packet to all and !owncall
+            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && bUDPtoLoraSend)
             {
               addLoraRxBuffer(aprsmsg.msg_id);
 
@@ -404,6 +403,12 @@ int NrfETH::getUDP()
 
               // first byte is always the len of the msg
               // UDP messages send to LoRa TX
+              if(bDEBUG)
+              {
+                Serial.print(getTimeString());
+                Serial.printf("Ringbuffer added element: %u\n", iWrite);
+              }
+              
               ringBuffer[iWrite][0] = aprsmsg.msg_len;
               memcpy(ringBuffer[iWrite] + 1, inc_udp_buffer, aprsmsg.msg_len);
               iWrite++;

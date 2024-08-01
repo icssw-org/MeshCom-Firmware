@@ -281,6 +281,16 @@ void loopWebserver()
                     commandAction((char*)"--smalldisplay off", bPhoneReady);
                 }
                 else
+                if (web_header.indexOf("GET /nopos/on") >= 0)
+                {
+                    commandAction((char*)"--gateway nopos", bPhoneReady);
+                }
+                else
+                if (web_header.indexOf("GET /nopos/off") >= 0)
+                {
+                    commandAction((char*)"--gateway pos", bPhoneReady);
+                }
+                else
                 if (web_header.indexOf("GET /softser/on") >= 0)
                 {
                     commandAction((char*)"--softser on", bPhoneReady);
@@ -643,6 +653,22 @@ void loopWebserver()
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
                     sprintf(message_text, "--softser send %s\r", message.c_str());
+
+                    commandAction(message_text, bPhoneReady);
+                }
+                else
+                if (web_header.indexOf("?passwd=") >= 0)
+                {
+                    idx_text=web_header.indexOf("=") + 1;
+
+                    String message="";
+
+                    if(idx_text_end <= 0)
+                        message = hex2ascii(web_header.substring(idx_text));
+                    else
+                        message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                    sprintf(message_text, "--passwd %s\r", message.c_str());
 
                     commandAction(message_text, bPhoneReady);
                 }
@@ -1157,6 +1183,18 @@ void loopWebserver()
                         web_client.println("</form>");
                     }
 
+                    if(bMCP23017)
+                    {
+                        web_client.println("<form action=\"/#\">");
+                        web_client.println("<tr><td>\n");
+                        web_client.println("<label for=\"fname\"><b>MCP PASSWD:</b></label>");
+                        web_client.println("</td><td>\n");
+                        web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"14\" size=\"8\" id=\"passwd\" name=\"passwd\">\n", meshcom_settings.node_passwd);
+                        web_client.println("<input type=\"submit\" value=\"set\">");
+                        web_client.println("</td></tr>\n");
+                        web_client.println("</form>");
+                    }
+
                     web_client.println("<form action=\"/#\">");
                     web_client.println("<tr><td>\n");
                     web_client.println("<label for=\"fname\"><b>COMMAND:</b></label>");
@@ -1375,9 +1413,9 @@ void loopWebserver()
                         if(bOut)
                         {
                             if(bOutValue)
-                                web_client.printf("<td>%s</td><td><a href=\"/mcp/off/%c%i\"><button class=\"button button2\"<b>OFF</b></button></a></td></tr>\n",  (bOutValue?"ON  ":"OFF "), cAB, iAB);
+                                web_client.printf("<td>%s</td><td><a href=\"/mcp/off/%c%i\"><button class=\"button button2\"<b>ON</b></button></a></td></tr>\n",  (bOutValue?"OFF ":"ON  "), cAB, iAB);
                             else
-                                web_client.printf("<td>%s</td><td><a href=\"/mcp/on/%c%i\"><button class=\"button\"<b>ON</b></button></a></td></tr>\n",  (bOutValue?"ON  ":"OFF "), cAB, iAB);
+                                web_client.printf("<td>%s</td><td><a href=\"/mcp/on/%c%i\"><button class=\"button button2\"<b>OFF</b></button></a></td></tr>\n",  (bOutValue?"OFF ":"ON  "), cAB, iAB);
                         }
                         else
                         {
@@ -1445,8 +1483,8 @@ void loopWebserver()
                     web_client.printf("<tr><td style=\"width:40px\"><b>Firmware</b></td><td>MeshCom %s %-4.4s%-1.1s</td><tr><td><b>Call</b></td><td>%s ...%s</td></tr><tr><td><b>UTC-OFF</b></td><td>%.1f</td></tr>\n",
                         SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,meshcom_settings.node_call, getHardwareLong(BOARD_HARDWARE).c_str(), meshcom_settings.node_utcoff);
                     
-                    web_client.printf("<tr><td><b>BATT</b></td><td>%.2f V %d %% max %.2f V</td></tr><tr><td><b>Setting</b></td><td>GATEWAY %s ...MESH %s</td></tr><tr><td></td><td>BUTTON  %s ...DEBUG %s</td></tr>\n",
-                        global_batt/1000.0, global_proz, meshcom_settings.node_maxv,(bGATEWAY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"));
+                    web_client.printf("<tr><td><b>BATT</b></td><td>%.2f V %d %% max %.2f V</td></tr><tr><td><b>Setting</b></td><td>GATEWAY %s %s ...MESH %s</td></tr><tr><td></td><td>BUTTON  %s ...DEBUG %s</td></tr>\n",
+                        global_batt/1000.0, global_proz, meshcom_settings.node_maxv, (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"));
                     
                     
                     web_client.printf("<tr><td></td><td>LORADEBUG %s ...GPSDEBUG  %s</td></tr><tr><td></td><td>WXDEBUG %s ... BLEDEBUG %s</td></tr><tr><td><b>APRS-TXT</b></td><td>%s</td></tr>\n",
@@ -1638,10 +1676,20 @@ void loopWebserver()
                         web_client.println("<td><a href=\"/ina226/on\"><button class=\"button\"><b>INA226</b></button></a></td></tr>");
                     }
 
+                    // GATEWAY_NOPOS
+                    if (bGATEWAY_NOPOS)
+                    {
+                        web_client.println("<tr><td><a href=\"/nopos/off\"><button class=\"button button2\"<b>GW NOPOS</b></button></a></td>");
+                    }
+                    else
+                    {
+                        web_client.println("<tr><td><a href=\"/nopos/on\"><button class=\"button\"><b>GW NOPOS</b></button></a></td>");
+                    }
+
                     // SMALLDISPLAY
                     if (bSMALLDISPLAY)
                     {
-                        web_client.println("<tr><td><a href=\"/smalldisplay/off\"><button class=\"button button2\"<b>SMALL</b></button></a></td>");
+                        web_client.println("<td><a href=\"/smalldisplay/off\"><button class=\"button button2\"<b>SMALL</b></button></a></td>");
                     }
                     else
                     {
