@@ -40,7 +40,8 @@ definitions
     #define ENABLE_RTC
     #define ENABLE_SOFTSER
     #define ENABLE_MCP23017
-    #define BUTTON_PIN WB_IO6        // only in combination with RAK13002
+    #define BUTTON_PIN WB_IO6       // only in combination with RAK13002
+    #define OneWire_GPIO WB_IO1     // only in combination with RAK13002
     #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
     #define ENABLE_GPS
 #endif

@@ -60,11 +60,13 @@ float getFreq()
 {
     float freq = meshcom_settings.node_freq;
     if(freq <= 0)
+    {
         freq = RF_FREQUENCY;
 
-    #ifdef BOARD_RAK4630
-        freq=freq/1000000;
-    #endif
+        #ifdef BOARD_RAK4630
+            freq=freq/1000000;
+        #endif
+    }
 
     return freq;
 }
@@ -351,8 +353,8 @@ void RadioInit();
     if(bLORADEBUG)
         Serial.printf("[LoRa]...RF_FREQUENCY: %.4f kHz\n", getFreq());
 
-    uint32_t ifreq=meshcom_settings.node_freq/10;
-    ifreq=ifreq*10;
+    uint32_t ifreq=(getFreq()*1000.)+0.5;
+    ifreq = ifreq * 1000;
 
     //  Set the LoRa Frequency
     Radio.SetChannel(ifreq);

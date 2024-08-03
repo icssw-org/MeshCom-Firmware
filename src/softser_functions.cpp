@@ -179,7 +179,7 @@ bool appSOFTSER(int ID)
             if(strSOFTSERAPP_FIXPEGEL.length() > 0)
                 Serial.printf("TEMP(F)..%s °C\n", strSOFTSERAPP_FIXTEMP.c_str());
 
-            sendAPPPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c);
+            sendAPPPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_temp2);
         
             strSOFTSER_BUF = "";
         }

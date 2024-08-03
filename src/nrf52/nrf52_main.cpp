@@ -437,10 +437,10 @@ void nrf52setup()
     if(meshcom_settings.node_owgpio > 7 || meshcom_settings.node_owgpio < 0){
         meshcom_settings.node_owgpio = 0;
         save_settings();
-    } 
-    if(meshcom_settings.node_owgpio != 0 && bONEWIRE){
-        init_onewire();
     }
+
+    if(bONEWIRE)
+        init_onewire();
         
 
     //  Initialize the LoRa Module
@@ -695,9 +695,10 @@ void nrf52setup()
 
 
     // set carrier frequency
-    uint32_t ifreq=meshcom_settings.node_freq/10;
-    ifreq=ifreq*10;
-    Serial.printf("[LoRa]...RF_FREQUENCY: %.4f MHz\n", meshcom_settings.node_freq/1000000.);
+    uint32_t ifreq=(getFreq()*1000.)+0.5;
+    ifreq = ifreq * 1000;
+
+    Serial.printf("[LoRa]...RF_FREQUENCY: %.4f %ld MHz\n", getFreq(), ifreq);
 
     //  Set the LoRa Frequency
     Radio.SetChannel(ifreq);
@@ -994,8 +995,6 @@ void nrf52loop()
     //Serial.print(getTimeString());
     //Serial.printf(" posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
 
-    checkButtonState();
-
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
     {
@@ -1164,6 +1163,29 @@ void nrf52loop()
     }
     
 
+    if(bONEWIRE)
+    {
+        if(onewireTimeWait == 0)
+            onewireTimeWait = millis() - 10000;
+
+
+        if ((onewireTimeWait + 10000) < millis())  // 10 sec
+        {
+            //if (tx_is_active == false && is_receiving == false)
+            {
+                loop_onewire();
+
+                onewireTimeWait = millis();
+
+                if(wx_shot)
+                {
+                    commandAction((char*)"--wx", true);
+                    wx_shot = false;
+                }
+            }
+        }
+    }
+
     if(BMXTimeWait == 0)
         BMXTimeWait = millis() - 10000;
 
@@ -1211,8 +1233,6 @@ void nrf52loop()
         }
     }
     #endif
-
-    checkButtonState();
 
     // read BMP Sensor
     #if defined(ENABLE_BMX280)

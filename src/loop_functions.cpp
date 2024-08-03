@@ -1678,7 +1678,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
                 return "";
         }
 
-        if(temp2 != 0)
+        if(temp2 != 0 && !bSOFTSERAPPPOS)
         {
             sprintf(ctemp2, "/O=%.1f", temp2);
             if(memcmp(cpress, "/O=nan", 6) == 0)
@@ -1741,6 +1741,13 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
             if(strSOFTSERAPP_BATT.length() > 1)
             {
                 sprintf(csfbatt, "/3=%s", strSOFTSERAPP_BATT.c_str());
+            }
+
+            if(bONEWIRE)
+            {
+                sprintf(ctemp2, "/O=%.1f", temp2);
+                if(memcmp(cpress, "/O=nan", 6) == 0)
+                    memset(ctemp2, 0x00, sizeof(ctemp2));
             }
         }
         else
@@ -1954,7 +1961,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
 }
 
-void sendAPPPosition(double lat, char lat_c, double lon, char lon_c)
+void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2)
 {
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
@@ -1969,7 +1976,7 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c)
 
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, 0, 0, 0, 0, temp2, 0, 0, 0, 0);
     
     if(aprsmsg.msg_payload == "")
         return;
