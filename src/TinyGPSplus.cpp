@@ -27,7 +27,7 @@ Added Neo-M8N support by Andreas Spiess
 
 #ifdef ESP32
 
-#include "TinyGPS++.h"
+#include "TinyGPSplus.h"
 
 #include <string.h>
 #include <ctype.h>

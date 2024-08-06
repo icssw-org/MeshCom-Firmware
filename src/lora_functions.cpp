@@ -74,11 +74,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         if(bLORADEBUG)
         {
             Serial.print(getTimeString());
-            if(size == 7)
+            if(size == 7){
                 Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
-            else
+	    }
+	    else {
                 Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
-        }
+	    }
+	}
 
         memcpy(print_buff, payload, 12);
 
