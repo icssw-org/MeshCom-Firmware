@@ -1864,9 +1864,13 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
+            Serial.printf("set txfrequency to %.4f MHz\n", fVar);
+
             meshcom_settings.node_freq=fVar;
 
-            Serial.printf("set txfrequency to %.3f MHz\n", meshcom_settings.node_freq);
+            #ifdef BOARD_RAK4630
+                 meshcom_settings.node_freq= meshcom_settings.node_freq*1000000;
+            #endif
 
             if(ble)
             {
@@ -2033,7 +2037,7 @@ void commandAction(char *msg_text, bool ble)
         {
             if(_owner_c[iset] == ';')
             {
-                meshcom_settings.node_gcb[igrc-1] = strdec.toInt(); break;
+                meshcom_settings.node_gcb[igrc-1] = strdec.toInt();
 
                 strdec="";
 
