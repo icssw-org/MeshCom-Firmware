@@ -261,3 +261,49 @@ uint8_t mv_to_percent(float mvolts)
 	
 	return 10 + (mvolts * 0.15F); // thats mvolts /6.66666666
 }
+#if defined(BOARD_HELTEC_V3)
+/**
+ * @brief Controls the VEXT pin to enable or disable external power.
+ *
+ * This function sets the VEXT pin as an output pin and sets its state based on
+ * the given parameter. If the state is true, the VEXT pin is set to LOW to
+ * enable external power. If the state is false, the VEXT pin is set to INPUT to
+ * disable external power.
+ *
+ * @param state The state of the VEXT pin (true = enable, false = disable).
+ */
+void heltec_ve(bool state) {
+  if (state) {
+    pinMode(VEXT, OUTPUT);
+    digitalWrite(VEXT, LOW);
+  } else {
+    // pulled up, no need to drive it
+    pinMode(VEXT, INPUT);
+  }
+}
+
+void heltec_deep_sleep() {
+  #ifdef WiFi_h
+    WiFi.disconnect(true);
+  #endif
+  heltec_ve(false);
+  // Turn off LED
+  pinMode(LED_PIN, INPUT);
+  // Set all pins to input to save power
+  pinMode(MISO, INPUT);
+  pinMode(MOSI, INPUT);
+  pinMode(SCK, INPUT);
+  pinMode(SDA_OLED, INPUT);
+  pinMode(SCL_OLED, INPUT);
+  pinMode(RST_OLED, INPUT);
+  pinMode(LORA_RESET, INPUT);
+  pinMode(LORA_DIO1, INPUT);
+  pinMode(LORA_DIO2, INPUT);
+  pinMode(SDA_PIN, INPUT);
+  pinMode(SCL_PIN, INPUT);
+  // Set button wakeup
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, LOW);
+  // and off to bed we go
+  esp_deep_sleep_start();
+}
+#endif

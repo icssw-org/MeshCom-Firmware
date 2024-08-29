@@ -363,7 +363,7 @@ static const uint8_t SCK   = 5;
 
 #if defined(BOARD_HELTEC_V3)
 
-#define LED_PIN 25
+#define LED_PIN 35
 
 #define RESET_OLED RST_OLED
 #define I2C_SDA SDA_OLED // I2C pins for this board
@@ -374,6 +374,8 @@ static const uint8_t SCK   = 5;
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_MULTIPLIER 4.9245
+// External power control
+#define VEXT      36
 
 #define USE_SX1262
 

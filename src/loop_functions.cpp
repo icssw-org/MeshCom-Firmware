@@ -939,10 +939,18 @@ void checkButtonState()
                 {
                     checkButtoExtraLong=0;
                     bButtonCheck=false;
+#if defined(BOARD_HELTEC_V3)
+		    // wait until button is released
+		    while(digitalRead(BUTTON_PIN) == 0);
+
+		    Serial.println("DEEP SLEEP...");
+		    heltec_deep_sleep();
+#elif		    
                     meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
                     save_settings();
                     Serial.println("BUTTON not connected (set BUTTON to off)");
                     return;
+#endif		    
                 }
 
                 if(bDEBUG)
