@@ -945,7 +945,7 @@ void checkButtonState()
 
 		    Serial.println("DEEP SLEEP...");
 		    heltec_deep_sleep();
-#elif		    
+#else		    
                     meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
                     save_settings();
                     Serial.println("BUTTON not connected (set BUTTON to off)");
