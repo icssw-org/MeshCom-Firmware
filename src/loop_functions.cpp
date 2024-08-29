@@ -42,6 +42,7 @@ bool bBME680ON = false;
 bool bMCU811ON = false;
 bool bINA226ON = false;
 bool bRTCON = false;
+bool bSMALLDISPLAY = false;
 bool bSOFTSERON = false;
 
 bool bTCA9548A = false;
@@ -54,6 +55,7 @@ bool bme680_found = false;
 bool bme680_enabled = false;
 
 bool bGATEWAY = false;
+bool bGATEWAY_NOPOS = false;
 bool bMESH = false;
 bool bWEBSERVER = false;
 bool bWIFIAP = false;
@@ -79,7 +81,10 @@ unsigned long lastHeardTime = 0;
 unsigned long posfixinterall = 0;
 
 char cBLEName[50]={0};
+
+// SOFTSER global variables
 String strSOFTSER_BUF;
+bool bSOFTSER_APP = false;
 
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
@@ -162,7 +167,8 @@ int no_gps_reset_counter = 0;
 unsigned long posinfo_timer = 0;    // we check periodically to send GPS
 unsigned long temphum_timer = 0;    // we check periodically get TEMP/HUM
 unsigned long druck_timer = 0;      // we check periodically get AIRPRESURE
-unsigned long hb_timer = 0;         // we check periodically get AIRPRESURE
+unsigned long hb_timer = 0;
+unsigned long web_timer = 0;
 
 // Function that gets current epoch time
 unsigned long getUnixClock()
@@ -728,6 +734,93 @@ void mainStartTimeLoop()
 
 void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
+    // Fernwirken
+    // {MCP}xA0yaazppppp
+    // ppppp ... password (PWLFD)
+    // S1 ... A0 switch A0-7 B0-7
+    // aa ... ON or OF
+    if(aprsmsg.msg_payload.startsWith("{MCP}") || aprsmsg.msg_payload.startsWith("{mcp}"))
+    {
+            char cset[30];
+            memset(cset, 0x00, sizeof(cset));
+
+            sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
+            char cpasswd[6];
+            memcpy(cpasswd, cset+5+2+2+3, 5);
+
+            char clfd[10];
+            memset(clfd, 0x00, sizeof(clfd));
+            sprintf(clfd, "%03i", (int)(aprsmsg.msg_id & 0x3FF));
+
+            // check pwd
+            bool bpass=true;
+            for(int ip=0;ip<5;ip++)
+            {
+                if(cpasswd[ip] != 0x00 && bpass)
+                {
+                    bool bp=false;
+                    for(int ic=0;ic<15;ic++)
+                    {
+                        if(meshcom_settings.node_passwd[ic] == cpasswd[ip])
+                            bp=true;
+                    }
+
+                    bpass = bp;
+                }
+            }
+
+            if(bpass)
+            {
+                if(!(cset[5] == clfd[0] && cset[8] == clfd[1] && cset[11] == clfd[2]))
+                {
+                    bpass=false;
+                    Serial.printf("[MCP] wrong lfd:%s\n", clfd);
+                }
+            }
+
+            if(bpass)
+            {
+                int iswitch = 0;
+                bool bON = false;
+                if(cset[6] == 'A' || cset[6] == 'B' || cset[6] == 'a' || cset[6] == 'b')
+                {
+                    iswitch=cset[7]-0x30;
+                    if(iswitch >= 0 and iswitch < 8)
+                    {
+                        if(memcmp(cset+9, "ON", 2) == 0 || memcmp(cset+9, "on", 2) == 0)
+                            bON = true;
+
+                        Serial.printf("[MCP] key:%-5.5s command: %c%i %s\n", cpasswd, cset[6], iswitch, (bON?"on":"off"));
+
+                        bool bPhoneReady = false;
+                        if (isPhoneReady == 1)
+                            bPhoneReady = true;
+
+                        char cBefehl[30];
+                        if(bON)
+                            sprintf(cBefehl, "--setout %c%i off", cset[6], iswitch);
+                        else
+                            sprintf(cBefehl, "--setout %c%i on", cset[6], iswitch);
+
+                        commandAction(cBefehl, bPhoneReady);
+                    }
+                    else
+                    {
+                        Serial.println("[MCP] wrong switch number");
+                    }
+                }
+                else
+                {
+                    Serial.println("[MCP] no command recognized");
+                }
+            }
+            else
+            {
+                Serial.println("[MCP] wrong keyword");
+            }
+        return;
+    }
+    else
     if(aprsmsg.msg_payload.startsWith("{SET}") > 0)
     {
             char cset[30];
@@ -735,7 +828,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             sscanf(cset+5, "%d;%d;", &meshcom_settings.max_hop_text, &meshcom_settings.max_hop_pos);
         return;
     }
-
+    else
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
         if(!bRTCON)
@@ -1120,7 +1213,9 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     msg_text[20]=0x00;
     sendDisplay1306(false, false, 3, izeile, msg_text);
 
-    izeile=izeile+12;
+    int izeileoffset = 12;
+
+    izeile=izeile+izeileoffset;
 
     ipt=0;
 
@@ -1137,7 +1232,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             sendDisplay1306(false, false, 3, izeile, msg_text);
 
             istarttext=itxt+2;
-            izeile=izeile+12;
+            izeile=izeile+izeileoffset;
             break;
         }
         else
@@ -1162,7 +1257,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             sendDisplay1306(false, false, 3, izeile, msg_text);
 
             istarttext=itxt+3;
-            izeile=izeile+10;
+            izeile=izeile+izeileoffset; //war 10
             break;
         }
         else
@@ -1347,8 +1442,23 @@ void sendMessage(char *msg_text, int len)
             strDestinationCall.trim();
             strMsg = strMsg.substring(iCall+1);
 
-            if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
-                bDM=true;
+            if(strMsg.startsWith("{mcp}") || strMsg.startsWith("{MCP}")) // Fernwirken
+            {
+                char cId[4] = {0};
+                sprintf(cId, "%03i", meshcom_settings.node_msgid);
+                String newMsg = "{mcp}";
+                newMsg.concat(cId[0]);
+                newMsg.concat(strMsg.substring(5, 7).c_str());
+                newMsg.concat(cId[1]);
+                newMsg.concat(strMsg.substring(7, 9).c_str());
+                newMsg.concat(cId[2]);
+                newMsg.concat(strMsg.substring(9).c_str());
+
+                strMsg = newMsg;
+            }
+            else
+                if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
+                    bDM=true;
         }
     }
 
@@ -1463,7 +1573,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         return "";
     }
 
-    char msg_start[100] = {0};
+    char msg_start[150] = {0};
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
     // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E#/B=005/A=000272/P=1005.1/H=42.5/T=29.4/Q=1005.7/R=232;2321; HW:04 MOD:03 FCS:15DC FW:17 LH:09
@@ -1497,6 +1607,8 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         sprintf(msg_start, "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, slat, lat_c, meshcom_settings.node_symid, slon, lon_c);
     else
     {
+        char cversion[5]={0};
+
         char catxt[50]={0};
         char cbatt[15]={0};
         char calt[15]={0};
@@ -1510,12 +1622,28 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         char cco2[15]={0};
         char cgrc[32]={0};
 
-        if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
+        char csfpegel[15]={0};
+        char csftemp[15]={0};
+        char csfbatt[15]={0};
+
+        bool bSOFTSERAPPPOS=false;
+
+        #if defined(ENABLE_SOFTSER)
+        if(bSOFTSERON && strSOFTSERAPP_ID.length() > 0)
         {
-            sprintf(catxt, "%s ", meshcom_settings.node_atxt);
+            bSOFTSERAPPPOS=true;
+            sprintf(catxt, "%s ", strSOFTSERAPP_ID.c_str());
+        }
+        else
+        #endif
+        {
+            if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
+            {
+                sprintf(catxt, "%s ", meshcom_settings.node_atxt);
+            }
         }
 
-        if(global_proz > 0)
+        if(global_proz > 0 && !bSOFTSERAPPPOS)
         {
             sprintf(cbatt, "/B=%03d", global_proz);
         }
@@ -1550,7 +1678,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
                 return "";
         }
 
-        if(temp2 != 0)
+        if(temp2 != 0 && !bSOFTSERAPPPOS)
         {
             sprintf(ctemp2, "/O=%.1f", temp2);
             if(memcmp(cpress, "/O=nan", 6) == 0)
@@ -1573,40 +1701,82 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
 
         if(gasres > 0 && bBME680ON)
         {
-            sprintf(cgasres, "/G=%.1f/V=3", gasres);
+            sprintf(cversion, "%s", "/V=3");
+
+            sprintf(cgasres, "/G=%.1f", gasres);
             if(memcmp(cpress, "/G=nan", 6) == 0)
                 return "";
         }
 
         if(co2 > 0 && bMCU811ON)
         {
-            sprintf(cco2, "/C=%.0f/V=2", co2);
+            sprintf(cversion, "%s", "/V=2");
+
+            sprintf(cco2, "/C=%.0f", co2);
             if(memcmp(cpress, "/C=nan", 6) == 0)
                 return "";
         }
 
-        /////////////////////////////////////////////////////////////////
-        // send Group-Call settings zu MesCom-Server
-        String strGRC="";
-
-        char cGC[6];
-        for(int igrc=0;igrc<6;igrc++)
+        #if defined(ENABLE_SOFTSER)
+        if(bSOFTSERAPPPOS)
         {
-            if(meshcom_settings.node_gcb[igrc] > 0)
+            sprintf(cversion, "%s", "/V=4");
+
+            if(strSOFTSERAPP_PEGEL.length() > 1 || strSOFTSERAPP_FIXPEGEL.length() > 1)
             {
-                sprintf(cGC, "%i;", meshcom_settings.node_gcb[igrc]);
-                strGRC.concat(cGC);
+                if(strSOFTSERAPP_FIXPEGEL.length() < 1)
+                    sprintf(csfpegel, "/1=%s", strSOFTSERAPP_PEGEL.c_str());
+                else
+                    sprintf(csfpegel, "/1=%s", strSOFTSERAPP_FIXPEGEL.c_str());
+            }
+
+            if(strSOFTSERAPP_TEMP.length() > 1 || strSOFTSERAPP_FIXTEMP.length() > 1)
+            {
+                if(strSOFTSERAPP_FIXTEMP.length() < 1)
+                    sprintf(csftemp, "/2=%s", strSOFTSERAPP_TEMP.c_str());
+                else
+                    sprintf(csftemp, "/2=%s", strSOFTSERAPP_FIXTEMP.c_str());
+            }
+
+            if(strSOFTSERAPP_BATT.length() > 1)
+            {
+                sprintf(csfbatt, "/3=%s", strSOFTSERAPP_BATT.c_str());
+            }
+
+            if(bONEWIRE)
+            {
+                sprintf(ctemp2, "/O=%.1f", temp2);
+                if(memcmp(cpress, "/O=nan", 6) == 0)
+                    memset(ctemp2, 0x00, sizeof(ctemp2));
             }
         }
-
-        if(strGRC.length() > 0)
+        else
+        #endif
         {
-            sprintf(cgrc, "/R=%s", strGRC.c_str());
-        }
-        //
-        /////////////////////////////////////////////////////////////////
+            /////////////////////////////////////////////////////////////////
+            // send Group-Call settings zu MesCom-Server
+            String strGRC="";
 
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc);
+            char cGC[6];
+            for(int igrc=0;igrc<6;igrc++)
+            {
+                if(meshcom_settings.node_gcb[igrc] > 0)
+                {
+                    sprintf(cGC, "%i;", meshcom_settings.node_gcb[igrc]);
+                    strGRC.concat(cGC);
+                }
+            }
+
+            if(strGRC.length() > 0)
+            {
+                sprintf(cgrc, "/R=%s", strGRC.c_str());
+            }
+            //
+            /////////////////////////////////////////////////////////////////
+        }
+
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc, csfpegel, csftemp, csfbatt, cversion);
+
     }
 
     return String(msg_start);
@@ -1715,7 +1885,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             }
         }
 
-}
+    }
     
     if(bSendViaMesh)
     {
@@ -1788,6 +1958,63 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
                 sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
         #endif
     }
+
+}
+
+void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2)
+{
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+
+    struct aprsMessage aprsmsg;
+
+    initAPRS(aprsmsg, '!');
+
+    aprsmsg.msg_len = 0;
+
+    // MSG ID zusammen setzen    
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
+
+    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    aprsmsg.msg_destination_path = "*";
+    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, 0, 0, 0, 0, temp2, 0, 0, 0, 0);
+    
+    if(aprsmsg.msg_payload == "")
+        return;
+
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 999)
+        meshcom_settings.node_msgid=0;
+        
+    // Flash rewrite
+    save_settings();
+
+    encodeAPRS(msg_buffer, aprsmsg);
+
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-POS", aprsmsg);
+        Serial.println();
+    }
+
+    // local position-messages send to LoRa TX
+    ringBuffer[iWrite][0]=aprsmsg.msg_len;
+    memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
+    iWrite++;
+    if(iWrite >= MAX_RING)
+        iWrite=0;
+
+    if(bGATEWAY)
+    {
+        // UDP out
+        addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    }
+    
+    // store last message to compare later on
+    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
+    own_msg_id[iWriteOwn][4]=0x00;
+    iWriteOwn++;
+    if(iWriteOwn >= MAX_RING)
+        iWriteOwn=0;
 
 }
 

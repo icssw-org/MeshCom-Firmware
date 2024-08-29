@@ -63,6 +63,7 @@ void sendHeartbeat();
 #include "io_functions.h"
 #include "ina226_functions.h"
 #include "rtc_functions.h"
+#include "softser_functions.h"
 
 #include <onewire_functions.h>
 
@@ -268,6 +269,7 @@ void checkSerialCommand(void);
 
 
 unsigned long gps_refresh_timer = 0;
+unsigned long softser_refresh_time = 0;
 
 // Client basic variables
 uint8_t dmac[6];
@@ -394,8 +396,9 @@ void nrf52setup()
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
-    bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
-    bRTCON =  meshcom_settings.node_sset2 & 0x0200;
+    bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
+    bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
+    bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
 
     bDisplayInfo = bLORADEBUG;
@@ -434,10 +437,10 @@ void nrf52setup()
     if(meshcom_settings.node_owgpio > 7 || meshcom_settings.node_owgpio < 0){
         meshcom_settings.node_owgpio = 0;
         save_settings();
-    } 
-    if(meshcom_settings.node_owgpio != 0 && bONEWIRE){
-        init_onewire();
     }
+
+    if(bONEWIRE)
+        init_onewire();
         
 
     //  Initialize the LoRa Module
@@ -632,6 +635,11 @@ void nrf52setup()
         setupRTC();
     #endif
 
+    // SOFTSER
+    #if defined(ENABLE_SOFTSER)
+        setupSOFTSER();
+    #endif
+
     u8g2.begin();
 
     u8g2.clearDisplay();
@@ -687,9 +695,10 @@ void nrf52setup()
 
 
     // set carrier frequency
-    uint32_t ifreq=meshcom_settings.node_freq/10;
-    ifreq=ifreq*10;
-    Serial.printf("[LoRa]...RF_FREQUENCY: %.4f MHz\n", meshcom_settings.node_freq/1000000.);
+    uint32_t ifreq=(getFreq()*1000.)+0.5;
+    ifreq = ifreq * 1000;
+
+    Serial.printf("[LoRa]...RF_FREQUENCY: %.4f %ld MHz\n", getFreq(), ifreq);
 
     //  Set the LoRa Frequency
     Radio.SetChannel(ifreq);
@@ -854,6 +863,26 @@ void nrf52loop()
         meshcom_settings.node_date_second = MyClock.Second();
     }
 
+    // SOFTSER
+    #if defined(ENABLE_SOFTSER)
+        if(bSOFTSERON)
+        {
+            if (bSOFTSER_APP || ((softser_refresh_time + ((SOFTSER_REFRESH_INTERVAL * 1000) - 3000)) < millis()))
+            {
+                // start SOFTSER APP
+                loopSOFTSER(SOFTSER_APP_ID, 0);
+
+                softser_refresh_time = millis();
+
+                bSOFTSER_APP = false;
+            }
+            else
+            {
+                appSOFTSER(SOFTSER_APP_ID);
+            }
+        }
+    #endif
+
     checkButtonState();
 
     // check if message from phone to send
@@ -965,8 +994,6 @@ void nrf52loop()
     // posinfo
     //Serial.print(getTimeString());
     //Serial.printf(" posinfo_timer:%ld posinfo_interval:%ld timer:%ld millis:%ld\n", posinfo_timer, posinfo_interval, (posinfo_timer + (posinfo_interval * 1000)), millis());
-
-    checkButtonState();
 
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
@@ -1136,6 +1163,29 @@ void nrf52loop()
     }
     
 
+    if(bONEWIRE)
+    {
+        if(onewireTimeWait == 0)
+            onewireTimeWait = millis() - 10000;
+
+
+        if ((onewireTimeWait + 10000) < millis())  // 10 sec
+        {
+            //if (tx_is_active == false && is_receiving == false)
+            {
+                loop_onewire();
+
+                onewireTimeWait = millis();
+
+                if(wx_shot)
+                {
+                    commandAction((char*)"--wx", true);
+                    wx_shot = false;
+                }
+            }
+        }
+    }
+
     if(BMXTimeWait == 0)
         BMXTimeWait = millis() - 10000;
 
@@ -1183,8 +1233,6 @@ void nrf52loop()
         }
     }
     #endif
-
-    checkButtonState();
 
     // read BMP Sensor
     #if defined(ENABLE_BMX280)

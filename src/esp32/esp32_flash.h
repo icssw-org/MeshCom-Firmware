@@ -96,6 +96,8 @@ struct s_meshcom_settings
 
 	int node_postime = 0;
 
+	char node_passwd[15] = {0};
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;

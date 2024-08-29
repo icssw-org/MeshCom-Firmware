@@ -130,6 +130,9 @@ void init_flash(void)
     meshcom_settings.node_ss_baud = preferences.getInt("node_ss_bd", 0);
 
     meshcom_settings.node_postime = preferences.getInt("node_postime", 0);
+
+    strVar = preferences.getString("node_passwd");
+    sprintf(meshcom_settings.node_passwd, "%s", strVar.c_str());
 }
 
 void save_settings(void)
@@ -254,6 +257,9 @@ void save_settings(void)
     preferences.putInt("node_ss_bd", meshcom_settings.node_ss_baud);
 
     preferences.putInt("node_postime", meshcom_settings.node_postime);
+
+    strVar = meshcom_settings.node_passwd;
+    preferences.putString("node_passwd", strVar); 
 
     preferences.end();
 

@@ -137,8 +137,6 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
         {
           last_upd_timer = millis();
           
-          DEBUG_MSG_VAL("UDP", iWrite, "Lora Ringbuf added El.:");
-
           memcpy(convBuffer, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);
 
           // send JSON to Extern IP
@@ -156,11 +154,20 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // print which message type we got
           uint8_t msg_type_b_lora = decodeAPRS(convBuffer, (uint8_t)lora_tx_msg_len, aprsmsg);
 
+          sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+
+          bool bUDPtoLoraSend = true;
+
           if(msg_type_b == 0x21)
+          {
             sendDisplayPosition(aprsmsg, 99, 0);
 
-          // add rcvMsg to forward to LoRa TX
-          addLoraRxBuffer(aprsmsg.msg_id);
+            // add rcvMsg to forward to LoRa TX
+            addLoraRxBuffer(aprsmsg.msg_id);
+
+            if(bGATEWAY_NOPOS)
+              bUDPtoLoraSend=false;
+          }
           
           // print aprs message
           if(bDisplayInfo)
@@ -185,8 +192,6 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
           if(msg_type_b == 0x3A)
           {
-            sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
-
             if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
             {
                 sendDisplayText(aprsmsg, 99, 0);
@@ -223,19 +228,22 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
           // first byte is always the len of the msg
           // UDP messages send to LoRa TX
-          ringBuffer[iWrite][0] = size;
-          memcpy(ringBuffer[iWrite] + 1, convBuffer, size);
-          iWrite++;
-          if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-            iWrite = 0;
-
-          // add rcvMsg to BLE out Buff
-          // size message is int -> uint16_t buffer size
-          if(isPhoneReady == 1)
+            // resend only Packet to all and !owncall
+          if(strcmp(destination_call, meshcom_settings.node_call) != 0 && bUDPtoLoraSend)
           {
-              addBLEOutBuffer(convBuffer, size);
-          }
+            ringBuffer[iWrite][0] = size;
+            memcpy(ringBuffer[iWrite] + 1, convBuffer, size);
+            iWrite++;
+            if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
+              iWrite = 0;
 
+            // add rcvMsg to BLE out Buff
+            // size message is int -> uint16_t buffer size
+            if(isPhoneReady == 1)
+            {
+                addBLEOutBuffer(convBuffer, size);
+            }
+          }
         }
 
         // zero out the inc buffer  
@@ -876,8 +884,9 @@ void sendKEEP()
 {
     String keep = "KEEP";
     String cfw = SOURCE_VERSION;
-    cfw += SOURCE_VERSION_SUB;
-    String firmware = "GW"+cfw;
+    cfw.concat(SOURCE_VERSION_SUB);
+    String firmware = "GW";
+    firmware.concat(cfw);
     String grc_ids = "";
     
     for(int igrc=0; igrc<6; igrc++)

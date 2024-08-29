@@ -23,7 +23,7 @@ void setupMCP23017()
 {
     if (!mcp.begin_I2C(0x20))
     {
-        Serial.println("[INIT]...Failed to start I/O MCP23017 0x20. Please check your wiring.");
+        Serial.println("[INIT]...MCP23017 not found");
         bMCP23017=false;
         return;
     }

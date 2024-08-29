@@ -379,8 +379,8 @@ void esp32setup()
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
-    bINA226ON =  meshcom_settings.node_sset2 & 0x0100;
-    bRTCON =  meshcom_settings.node_sset2 & 0x0200;
+    bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
+    bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
     // if Node not set --> WifiAP Mode on
@@ -1121,11 +1121,18 @@ void esp32loop()
     #if defined(ENABLE_SOFTSER)
         if(bSOFTSERON)
         {
-            if ((softser_refresh_time + (SOFTSER_REFRESH_INTERVAL * 1000)) < millis())
+            if (bSOFTSER_APP || ((softser_refresh_time + ((SOFTSER_REFRESH_INTERVAL * 1000) - 3000)) < millis()))
             {
-                loopSOFTSER();
+                // start SOFTSER APP
+                loopSOFTSER(SOFTSER_APP_ID, 0);
 
                 softser_refresh_time = millis();
+
+                bSOFTSER_APP = false;
+            }
+            else
+            {
+                appSOFTSER(SOFTSER_APP_ID);
             }
         }
     #endif
@@ -1264,19 +1271,26 @@ void esp32loop()
         bPosFirst = false;
         posinfo_shot=false;
         
-        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+        if(bSOFTSERON && SOFTSER_APP_ID == 1)
+        {
+            // no normal positons sent
+        }
+        else
+        {
+            sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
-        posinfo_last_lat=posinfo_lat;
-        posinfo_last_lon=posinfo_lon;
-        posinfo_last_direction=posinfo_direction;
+            posinfo_last_lat=posinfo_lat;
+            posinfo_last_lon=posinfo_lon;
+            posinfo_last_direction=posinfo_direction;
+
+            if(pos_shot)
+            {
+                commandAction((char*)"--pos", true);
+                pos_shot = false;
+            }
+        }
 
         posinfo_timer = millis();
-
-        if(pos_shot)
-        {
-            commandAction((char*)"--pos", true);
-            pos_shot = false;
-        }
     }
 
     mainStartTimeLoop();
@@ -1333,7 +1347,7 @@ void esp32loop()
                     global_proz = (int)PMU->getBatteryPercent();
 
                     // no BATT
-                    if(global_proz < 0)
+                    if(global_proz <= 0)
                     {
                         global_batt = (float)PMU->getVbusVoltage();
                         global_proz=100.0;
@@ -1451,7 +1465,7 @@ void esp32loop()
         if(INA226TimeWait == 0)
             INA226TimeWait = millis() - 10000;
 
-        if ((INA226TimeWait + 60000) < millis())   // 60 sec
+        if ((INA226TimeWait + 15000) < millis())   // 15 sec
         {
             // read MCU-811 Sensor
             if(loopINA226())
@@ -1536,7 +1550,17 @@ void esp32loop()
 
     if(bWEBSERVER)
     {
+        startWebserver();
+
         loopWebserver();
+
+        if ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 60)) < millis())   // HEARTBEAT_INTERVAL to minutes
+        {
+            // restart WEB-Client
+            stopWebserver();
+
+            web_timer = millis();
+        }
     }
 
     //

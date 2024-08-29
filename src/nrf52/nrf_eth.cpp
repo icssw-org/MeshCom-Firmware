@@ -187,7 +187,7 @@ int NrfETH::checkUDP()
 {
   if(Udp.check() < 0)
   {
-    DEBUG_MSG("ERROR", "getUDP");
+    Serial.println("[UDP ERROR] getUDP");
     return -1;
   }
 
@@ -208,8 +208,9 @@ int NrfETH::getUDP()
   int packetSize = Udp.parsePacket(); // If there's data available, read a packet.
 
   // HEARTBEAT keine Ausgabe
-  if(packetSize != 22 && packetSize > 0)
-    DEBUG_MSG("UDP_ETH", "UDP Packet received with length: %i", packetSize);
+  //if(packetSize != 22 && packetSize > 0 && bDEBUG)
+  if(packetSize > 0 && bDEBUG)
+    Serial.printf("[UDP_ETH] UDP Packet received with length: %i\n", packetSize);
 
   if (packetSize <= UDP_TX_BUF_SIZE && packetSize > 0)
   {
@@ -272,12 +273,6 @@ int NrfETH::getUDP()
 
         if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
         {
-          if(bDEBUG)
-          {
-            Serial.print(getTimeString());
-            Serial.printf("Ringbuffer added element: %u\n", iWrite);
-          }
-          
           struct aprsMessage aprsmsg;
           
           // print which message type we got
@@ -291,7 +286,9 @@ int NrfETH::getUDP()
               Serial.println();
             }
 
-            if(msg_type_b == 0x3A)
+            bool bUDPtoLoraSend = true;
+
+            if(msg_type_b == 0x3A)  // type:message
             {
               sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
 
@@ -379,16 +376,19 @@ int NrfETH::getUDP()
               }
             }
             else
-            if(msg_type_b == 0x21)
+            if(msg_type_b == 0x21)  // type:position
             {
               sendDisplayPosition(aprsmsg, 99, 0);
 
               if(isPhoneReady > 0)
                 addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
+
+              if(bGATEWAY_NOPOS)
+                bUDPtoLoraSend=false;
             }
 
-            // resend only Packet to all and !owncall 
-            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && bMESH)
+            // resend only Packet to all and !owncall
+            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && bUDPtoLoraSend)
             {
               addLoraRxBuffer(aprsmsg.msg_id);
 
@@ -403,6 +403,12 @@ int NrfETH::getUDP()
 
               // first byte is always the len of the msg
               // UDP messages send to LoRa TX
+              if(bDEBUG)
+              {
+                Serial.print(getTimeString());
+                Serial.printf("Ringbuffer added element: %u\n", iWrite);
+              }
+              
               ringBuffer[iWrite][0] = aprsmsg.msg_len;
               memcpy(ringBuffer[iWrite] + 1, inc_udp_buffer, aprsmsg.msg_len);
               iWrite++;
@@ -850,7 +856,7 @@ void NrfETH::startUDP()
 
   if (local_addr[0] == 44 || meshcom_settings.node_hamnet_only)
   {
-    DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.8.143");
+    Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
     udp_dest_addr = IPAddress(44, 143, 8, 143);
 
     // meshCom 4.0 Test-Server
@@ -862,7 +868,7 @@ void NrfETH::startUDP()
   }
   else
   {
-    DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 89.185.97.38");
+    Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
     //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
     udp_dest_addr = IPAddress(89, 185, 97, 38);
     //udp_dest_addr = IPAddress(213, 47, 219, 169);

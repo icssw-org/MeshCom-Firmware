@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.33"
-#define SOURCE_VERSION_SUB "c"
+#define SOURCE_VERSION_SUB "e"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -38,8 +38,10 @@ definitions
     #define ENABLE_BMX680
     #define ENABLE_INA226
     #define ENABLE_RTC
+    #define ENABLE_SOFTSER
     #define ENABLE_MCP23017
-    #define BUTTON_PIN WB_IO6        // only in combination with RAK13002
+    #define BUTTON_PIN WB_IO6       // only in combination with RAK13002
+    #define OneWire_GPIO WB_IO1     // only in combination with RAK13002
     #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
     #define ENABLE_GPS
 #endif
@@ -222,7 +224,6 @@ definitions
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
 #define POSINFO_INTERVAL 30 * 60           // POSINFO interval in seconds default 30 minutes
 #define GPS_REFRESH_INTERVAL 10            // GPS Refresh in seconds
-#define SOFTSER_REFRESH_INTERVAL 3         // SOFTSER Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds
 #define ALIVEBLINK_INTERVAL 3000           // ALIVEBLINK interval in milliseconds
@@ -246,6 +247,10 @@ definitions
 #define RADIOLIB_SX126X_CAD 0x07           // 0x00...length off    0x07...32-bit detect
 #define RADIOLIB_SX126X_DETMIN  10         // default 10
 #define RADIOLIB_SX126X_DETPEAK 25         // default 25
+
+// SOFTSERIEL
+#define SOFTSER_REFRESH_INTERVAL 5*60      // SOFTSER Refresh in seconds
+#define SOFTSER_APP_ID 1                   // SOFTSER ID...0 -> no active APP,  1 -> Pegelmesser
 
 // NTP
 #define NTP_UPDATE_TIME 240     // NTP update interval in Minutes

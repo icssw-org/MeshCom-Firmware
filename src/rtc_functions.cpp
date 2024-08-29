@@ -14,14 +14,9 @@ DateTime now;
 
 bool setupRTC()
 {  
-    if(!bRTCON)
-    {
-        return false;
-    }
-
     Wire.begin();
 
-    if (! rtc.begin())
+    if (!rtc.begin())
     {
         Serial.println("[INIT]...RTC not found");
         Serial.flush();
@@ -47,6 +42,8 @@ bool setupRTC()
     // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
 
     Serial.println("[INIT]...RTC set");
+
+    bRTCON = true;
 
     return true;
 }

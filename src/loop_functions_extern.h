@@ -40,6 +40,7 @@ extern bool bBME680ON;
 extern bool bMCU811ON;
 extern bool bINA226ON;
 extern bool bRTCON;
+extern bool bSMALLDISPLAY;
 extern bool bSOFTSERON;
 
 extern bool bTCA9548A;
@@ -59,6 +60,7 @@ extern bool bSOFTSERDEBUG;
 extern bool bBLElong;
 
 extern bool bGATEWAY;
+extern bool bGATEWAY_NOPOS;
 extern bool bMESH;
 extern bool bWEBSERVER;
 extern bool bWIFIAP;
@@ -140,6 +142,7 @@ extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long temphum_timer;      // we check periodically get TEMP/HUM
 extern unsigned long druck_timer;        // we check periodically get AIRPRESURE
 extern unsigned long hb_timer;           // GW Server-Heartbeat-Timer
+extern unsigned long web_timer;          // Refreshtime WEbServer
 
 // batt
 extern float global_batt;
@@ -150,4 +153,15 @@ extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Update Time
 
 extern char cBLEName[50];
+
+// SOFTSER global variables
 extern String strSOFTSER_BUF;
+extern bool bSOFTSER_APP;
+
+extern String strSOFTSERAPP_ID;
+extern String strSOFTSERAPP_PEGEL;
+extern String strSOFTSERAPP_TEMP;
+extern String strSOFTSERAPP_BATT;
+
+extern String strSOFTSERAPP_FIXPEGEL;
+extern String strSOFTSERAPP_FIXTEMP;

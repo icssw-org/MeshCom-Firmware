@@ -17,8 +17,8 @@
     #define GPS_TX_PIN 3
 #elif defined(BOARD_HELTEC_V3)
     //For heltec these are the pins:
-    #define GPS_RX_PIN 37
-    #define GPS_TX_PIN 36
+    #define GPS_RX_PIN 47
+    #define GPS_TX_PIN 48
 #elif defined(BOARD_TLORA_OLV216)
     #define GPS_RX_PIN 13
     #define GPS_TX_PIN 15
