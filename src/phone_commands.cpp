@@ -34,6 +34,7 @@ extern bool g_ble_uart_is_connected;
 extern uint8_t shortVERSION();
 
 /**
+ * DEPRECATED - NOT USED ANYMORE
  * @brief Method to send configuration to phone 
  * Config Format:
  * LENGTH 2B - FLAG 1B - LENCALL 1B - Callsign - LAT 8B(Double) - LON 8B(Double) - ALT 4B(INT) - 1B SSID_Length - Wifi_SSID - 1B Wifi_PWD - Wifi_PWD 
@@ -412,7 +413,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			if(conf_data[2] == 0x20 && conf_data[3] == 0x30){
 
-				sendConfigToPhone();
+				//sendConfigToPhone(); // config data comes now via JSONs from main loop and commandfunctions
 
 				if(bBLEDEBUG)
 					Serial.println("BLE Hello Msg from phone");
@@ -645,10 +646,10 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			//Save Settings
 
 			save_settings();
-			delay(1000);
+			//delay(1000);
 			
 			// send config back to phone
-			sendConfigToPhone();
+			//sendConfigToPhone();	// config data comes now via JSONs from main loop and commandfunctions
 
 			// reset node
 			delay(2000);
@@ -658,6 +659,5 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				ESP.restart();
 			#endif
 		}
-
 	}
 }
