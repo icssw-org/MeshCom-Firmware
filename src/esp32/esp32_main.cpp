@@ -43,6 +43,18 @@
 #include <onewire_functions.h>
 #include <lora_setchip.h>
 
+#ifdef BOARD_E290
+#include "heltec-eink-modules.h"
+
+extern EInkDisplay_VisionMasterE290 e290_display;
+
+#include "Fonts/FreeSans9pt7b.h"
+#include "Fonts/FreeSansBold12pt7b.h"
+#include "Fonts/FreeSans12pt7b.h"
+#include "Fonts/FreeSans18pt7b.h"
+
+#endif
+
 #ifndef BOARD_TLORA_OLV216
     #include <lora_setchip.h>
 #endif
@@ -58,6 +70,9 @@ extern XPowersLibInterface *PMU;
 
 #endif
 
+#ifdef BOARD_E290
+#else
+
 #include <U8g2lib.h>
 
 #if defined(BOARD_HELTEC)
@@ -66,8 +81,12 @@ extern XPowersLibInterface *PMU;
     extern U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2;
 #elif defined(BOARD_RAK4630)
     extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
+#elif defined(BOARD_E290)
+    extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 #else
     extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
+#endif
+
 #endif
 
 /**
@@ -208,7 +227,19 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
+    //  begin(sck, miso, mosi, ss).
     SX1262 radio = new Module(SX126X_CS, SX126X_IRQ, SX126X_RST, LORA_DIO2);
+
+#endif
+
+#ifdef SX1262_E290
+    // RadioModule SX1262
+    // cs - irq - reset - interrupt gpio
+    // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
+    // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
+
+    //  begin(sck, miso, mosi, ss).
+    SX1262 radio = new Module(PIN_LORA_NSS, PIN_LORA_DIO_1, PIN_LORA_NRST, PIN_LORA_BUSY);
 
 #endif
 
@@ -333,7 +364,7 @@ int delay_bme680 = 0;
 void esp32setup()
 {
     Serial.begin(MONITOR_SPEED);
-    while(!Serial);
+    //while(!Serial);
 
     delay(1500);
 
@@ -348,9 +379,6 @@ void esp32setup()
 
     // Initialize mheard list
     initMheard();
-
-	// Initialize battery reading
-	init_batt();
 
 	// Get LoRa parameter
 	init_flash();
@@ -413,7 +441,11 @@ void esp32setup()
     meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
     meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
 
-    global_batt = 4200.0;
+    // Initialize battery reading
+	init_batt();
+
+
+    global_batt = 4125.0;
 
     posinfo_interval = POSINFO_INTERVAL;
 
@@ -534,6 +566,42 @@ void esp32setup()
     radio.setRfSwitchPins(RXEN, TXEN);
 #endif
 
+    char cvers[10];
+    sprintf(cvers, "%s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+
+    #ifdef BOARD_E290
+    
+    e290_display.clear();
+    e290_display.fastmodeOn();
+
+    e290_display.landscape();
+
+    e290_display.setRotation(270);
+
+    e290_display.fillCircle(10, 10,
+        10,                             // Radius: 10px
+        BLACK                           // Color: black
+        );
+
+    e290_display.setFont( &FreeSansBold12pt7b );
+    e290_display.setCursor(20, 50);
+    e290_display.printf("MeshCom %s\n", cvers);
+    e290_display.setCursor(65, 80);
+    e290_display.setFont( &FreeSans12pt7b );
+    e290_display.println("HELTEC E290");
+
+    e290_display.setFont( &FreeSans9pt7b );
+    e290_display.setCursor(30, 18);
+    e290_display.println("...starting now");
+    e290_display.setCursor(80, 100);
+    e290_display.println("@by icssw.org");
+    e290_display.setCursor(65, 120);
+    e290_display.println("OE1KBC, OE1KFR");
+
+    e290_display.update();
+
+    #else
+
     u8g2.begin();
 
     u8g2.clearDisplay();
@@ -544,17 +612,19 @@ void esp32setup()
         u8g2.setFont(u8g2_font_10x20_mf);
         u8g2.drawStr(5, 20, "MeshCom 4.0");
         u8g2.setFont(u8g2_font_6x10_mf);
-        char cvers[10];
-        sprintf(cvers, "FW %s%s/%-1.1s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         u8g2.drawStr(5, 30, cvers);
         u8g2.drawStr(5, 40, "by icssw.org");
         u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
         u8g2.drawStr(5, 60, "...starting now");
     } while (u8g2.nextPage());
 
+    #endif
+
     bool bRadio=false;
 
-     // initialize SX12xx with default settings
+    //TEST #ifndef BOARD_E290
+
+    // initialize SX12xx with default settings
     Serial.print(F("[INIT]...LoRa Modem Initializing ... "));
 
     int state = RADIOLIB_ERR_UNKNOWN;
@@ -741,7 +811,7 @@ void esp32setup()
         }
         #endif
 
-        #ifdef SX126X_V3
+        #if defined(SX126X_V3) || defined(SX1262_E290)
             // interrupt pin
             radio.setPacketReceivedAction(setFlagReceive);
             radio.setPacketSentAction(setFlagSent);
@@ -797,6 +867,13 @@ void esp32setup()
     }
 
     Serial.println(F("[SX12xx] All settings successfully changed!"));
+
+    //#endif
+
+    if(meshcom_settings.node_call[0] == 0x00)
+    {
+        sprintf(meshcom_settings.node_call, "%s", (char*)"XX0XXX-0");
+    }
 
     // Create the BLE Device & WiFiAP
     sprintf(cBLEName, "M%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);

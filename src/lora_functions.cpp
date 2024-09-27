@@ -19,7 +19,7 @@
     extern int transmissionState;
 #endif
 
-#ifdef SX126X_V3
+#if defined(SX126X_V3) || defined(SX1262_E290)
     #include <RadioLib.h>
     extern SX1262 radio;
     extern int transmissionState;
@@ -887,5 +887,6 @@ void OnHeaderDetect(void)
 
     is_receiving = true;
     
-    //Serial.println("OnHeaderDetect");
+    if(bLORADEBUG)
+        Serial.println("OnHeaderDetect");
 }

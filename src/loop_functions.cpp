@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include "Arduino.h"
 
 #include "loop_functions.h"
 #include "command_functions.h"
@@ -91,6 +92,23 @@ char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
 
 unsigned int _GW_ID = 0x12345678; // ID of our Node
 
+#ifdef BOARD_E290
+#include "heltec-eink-modules.h"
+
+EInkDisplay_VisionMasterE290 e290_display;
+
+#include "Fonts/FreeMonoBold9pt7b.h"
+#include "Fonts/FreeMonoBold12pt7b.h"
+
+#include "Fonts/FreeSans9pt7b.h"
+#include "Fonts/FreeSans12pt7b.h"
+
+int dzeile[6] = {16, 44, 64, 84, 104, 124};
+
+#else
+
+int dzeile[6] = {10, 24, 34, 44, 54, 64};
+
 #if defined(BOARD_HELTEC)
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, 16, 15, 4);
 #elif defined(BOARD_HELTEC_V3)
@@ -99,6 +117,8 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);  //RESET CLOCK DATA
 #else
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+#endif
+
 #endif
 
 unsigned int msg_counter = 0;
@@ -323,12 +343,16 @@ int checkOwnTx(uint8_t compBuffer[4])
 
 int pageLine[7][3] = {0};
 char pageText[7][25] = {0};
+char pageTextLong1[25] = {0};
+char pageTextLong2[200] = {0};
 int pageLineAnz=0;
 
 #define PAGE_MAX 6
 
 int pageLastLine[PAGE_MAX][7][3] = {0};
 char pageLastText[PAGE_MAX][7][25] = {0};
+char pageLastTextLong1[PAGE_MAX][25] = {0};
+char pageLastTextLong2[PAGE_MAX][200] = {0};
 int pageLastLineAnz[PAGE_MAX] = {0};
 int pageLastPointer=0;
 int pagePointer=0;
@@ -338,14 +362,18 @@ bool bSetDisplay = false;
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
-	if(bClear)
+	if(bClear || (x == 0 && y== 0))
     {
-        u8g2.setFont(u8g2_font_6x10_mf);
+        #ifdef BOARD_E290
+            e290_display.clearMemory();
+            e290_display.fastmodeOn();
+            e290_display.setFont(&FreeMonoBold12pt7b);
+        #else
+            u8g2.setFont(u8g2_font_6x10_mf);
+        #endif
 
-        //u8g2.clearDisplay();
-        //u8g2.clearBuffer();					// clear the internal memory
-
-        pageLineAnz=0;
+    	if(bClear)
+            pageLineAnz=0;
     }
 
     bool bNeu=true;
@@ -371,12 +399,69 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             memcpy(pageText[pageLineAnz], text, 25);
             pageLineAnz++;
         }
-        //u8g2.drawUTF8(x, y, text);
     }
 
     if(bTransfer)
     {
         //Serial.println("Transfer");
+        #ifdef BOARD_E290
+            if(pageLineAnz > 0)
+            {
+                for(int its=0;its<pageLineAnz;its++)
+                {
+                    // Save last Text (init)
+                    if(iDisplayType == 0 && bNeu)
+                    {
+                        pageLastLineAnz[pageLastPointer] = pageLineAnz;
+                        pageLastLine[pageLastPointer][its][0] = pageLine[its][0];
+                        pageLastLine[pageLastPointer][its][1] = pageLine[its][1];
+                        pageLastLine[pageLastPointer][its][2] = pageLine[its][2];
+                        memcpy(pageLastText[pageLastPointer][its], pageText[its], 25);
+                    }
+
+                    char ptext[30] = {0};
+                    pageText[its][pageLine[its][2]] = 0x00;
+                    
+                    if(memcmp(pageText[its], "#S", 2) == 0)
+                    {
+                        // only transfer
+                        if(!bNeu)
+                        {
+                            e290_display.setCursor(0, dzeile[1]);
+                            e290_display.setFont(&FreeSans9pt7b);
+
+                            e290_display.println(pageTextLong1);
+
+                            e290_display.setCursor(0, dzeile[2]);
+                            e290_display.println(pageTextLong2);
+                        }
+                    }
+                    else
+                    if(memcmp(pageText[its], "#L", 2) == 0)
+                    {
+                        e290_display.drawLine(0, 22, 320, 22, BLACK);
+
+                        //u8g2.drawHLine(pageLine[its][0], pageLine[its][1], 120);
+                    }
+                    else
+                    {
+                        sprintf(ptext, "%s", pageText[its]);
+                        if(pageLine[its][1] >= 0)
+                        {
+                            e290_display.setCursor(pageLine[its][0], pageLine[its][1]);
+                            e290_display.println(ptext);
+
+                            //u8g2.drawUTF8(pageLine[its][0], pageLine[its][1], ptext);
+                        }
+                    }
+                }
+
+            	if(memcmp(text, "#S", 2) != 0)
+                    e290_display.update();
+            }
+            
+        #else
+        
         u8g2.firstPage();
         do
         {
@@ -412,6 +497,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             }
 
         } while (u8g2.nextPage());
+        
+        #endif
 
         if(iDisplayType == 0 && bNeu)
         {
@@ -447,23 +534,23 @@ void sendDisplayHead(bool bInit)
     sendDisplayMainline();
 
     sprintf(print_text, "Call:  %s", meshcom_settings.node_call);
-    sendDisplay1306(false, false, 3, 22, print_text);
+    sendDisplay1306(false, false, 3, dzeile[1], print_text);
 
     sprintf(print_text, "Short: %s", meshcom_settings.node_short);
-    sendDisplay1306(false, false, 3, 32, print_text);
+    sendDisplay1306(false, false, 3, dzeile[2], print_text);
 
     sprintf(print_text, "MAC:   %08X", _GW_ID);
-    sendDisplay1306(false, false, 3, 42, print_text);
+    sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
     sprintf(print_text, "Modul: %i", BOARD_HARDWARE);
-    sendDisplay1306(false, false, 3, 52, print_text);
+    sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
     if(bWIFIAP)
         sprintf(print_text, "ssid:  %-15.15s", cBLEName);
     else
         sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);
 
-    sendDisplay1306(false, true, 3, 62, print_text);
+    sendDisplay1306(false, true, 3, dzeile[5], print_text);
 
     bSetDisplay=false;
 }
@@ -489,19 +576,19 @@ void sendDisplayTrack()
     sendDisplayMainline();
 
     sprintf(print_text, "LAT : %.4lf %c  %s", meshcom_settings.node_lat, meshcom_settings.node_lat_c, (posinfo_fix?"fix":""));
-    sendDisplay1306(false, false, 3, 22, print_text);
+    sendDisplay1306(false, false, 3, dzeile[1], print_text);
 
     sprintf(print_text, "LON : %.4lf %c %4i", meshcom_settings.node_lon, meshcom_settings.node_lon_c, (int)posinfo_satcount);
-    sendDisplay1306(false, false, 3, 32, print_text);
+    sendDisplay1306(false, false, 3, dzeile[2], print_text);
 
     sprintf(print_text, "RATE: %5i sec %4i", (int)posinfo_interval, posinfo_hdop);
-    sendDisplay1306(false, false, 3, 42, print_text);
+    sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
     sprintf(print_text, "DIST: %5i m", posinfo_distance);
-    sendDisplay1306(false, false, 3, 52, print_text);
+    sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
     sprintf(print_text, "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
-    sendDisplay1306(false, true, 3, 62, print_text);
+    sendDisplay1306(false, true, 3, dzeile[5], print_text);
 
 
     bSetDisplay=false;
@@ -528,19 +615,19 @@ void sendDisplayWX()
     sendDisplayMainline();
 
     sprintf(print_text, "TEMP : %.1f °C", meshcom_settings.node_temp);
-    sendDisplay1306(false, false, 3, 22, print_text);
+    sendDisplay1306(false, false, 3, dzeile[1], print_text);
 
     sprintf(print_text, "HUM  : %.1f %%", meshcom_settings.node_hum);
-    sendDisplay1306(false, false, 3, 32, print_text);
+    sendDisplay1306(false, false, 3, dzeile[2], print_text);
 
     sprintf(print_text, "QFE  : %.1f hPa", meshcom_settings.node_press);
-    sendDisplay1306(false, false, 3, 42, print_text);
+    sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
     sprintf(print_text, "QNH  : %.1f hPa", meshcom_settings.node_press_asl);
-    sendDisplay1306(false, false, 3, 52, print_text);
+    sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
     sprintf(print_text, "ALT:%5im / %5im", meshcom_settings.node_alt, meshcom_settings.node_press_alt);
-    sendDisplay1306(false, true, 3, 62, print_text);
+    sendDisplay1306(false, true, 3, dzeile[5], print_text);
 
 
     bSetDisplay=false;
@@ -557,6 +644,10 @@ void sendDisplayTime()
         if(pagePointer < 0)
             pagePointer=PAGE_MAX-1;
     }
+
+    #ifdef BOARD_E290
+        return;
+    #endif
 
     if(bDisplayOff)
         return;
@@ -597,14 +688,19 @@ void sendDisplayTime()
 
     memcpy(pageText[0], print_text, 20);
 
-    #ifdef BOARD_HELTEC_V3
-    u8g2.firstPage();
-    u8g2.drawStr(pageLine[0][0], pageLine[0][1], print_text);
-    u8g2.nextPage();
+    #ifdef BOARD_E290
     #else
-    u8g2.setCursor(pageLine[0][0], pageLine[0][1]);
-    u8g2.print(print_text);
-    u8g2.sendBuffer();
+
+        #ifdef BOARD_HELTEC_V3
+        u8g2.firstPage();
+        u8g2.drawStr(pageLine[0][0], pageLine[0][1], print_text);
+        u8g2.nextPage();
+        #else
+        u8g2.setCursor(pageLine[0][0], pageLine[0][1]);
+        u8g2.print(print_text);
+        u8g2.sendBuffer();
+        #endif
+    
     #endif
 
     bSetDisplay = false;
@@ -617,6 +713,7 @@ void sendDisplayMainline()
     char nodetype[5];
 
     sprintf(nodetype, "%s", SOURCE_TYPE);
+
     if(bGATEWAY)
         sprintf(nodetype, "G");
 
@@ -635,6 +732,11 @@ void sendDisplayMainline()
         sprintf(cbatt, " USB");
  #endif
 
+ #if defined(BOARD_E290)
+    if(global_batt > 4300.0)
+        sprintf(cbatt, " USB");
+ #endif
+
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
         sprintf(print_text, "%-1.1s %-4.4s%-1.1s         %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
@@ -644,7 +746,7 @@ void sendDisplayMainline()
         sprintf(print_text, "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
-    sendDisplay1306(true, false, 3, 10, print_text);
+    sendDisplay1306(true, false, 3, dzeile[0], print_text);
     sendDisplay1306(false, false, 3, 12, (char*)"#L");
 }
 
@@ -739,6 +841,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // ppppp ... password (PWLFD)
     // S1 ... A0 switch A0-7 B0-7
     // aa ... ON or OF
+   
     if(aprsmsg.msg_payload.startsWith("{MCP}") || aprsmsg.msg_payload.startsWith("{mcp}"))
     {
             char cset[30];
@@ -878,6 +981,44 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     
     iDisplayType = 0;
 
+    sendDisplayMainline();
+
+    #ifdef BOARD_E290
+
+    sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
+
+    e290_display.setCursor(0, dzeile[1]);
+    e290_display.setFont(&FreeSans9pt7b);
+
+    String strPath = aprsmsg.msg_source_path;
+    // DM
+    if(aprsmsg.msg_destination_path != "*")
+    {
+        strPath = aprsmsg.msg_source_call + ">" + aprsmsg.msg_destination_call;
+    }
+
+    if(aprsmsg.msg_source_path.length() < (20-7))
+        sprintf(msg_text, "%s <%i>", strPath.c_str(), rssi);
+    else
+        sprintf(msg_text, "%s", strPath.c_str());
+
+    msg_text[20]=0x00;
+    e290_display.println(msg_text);
+
+    e290_display.setCursor(0, dzeile[2]);
+
+    String strAscii = "";//aprsmsg.msg_payload;
+
+    strAscii = utf8ascii(aprsmsg.msg_payload);
+
+    e290_display.println(strAscii);
+
+    strcpy(pageLastTextLong1[pagePointer], msg_text);
+    strcpy(pageLastTextLong2[pagePointer], strAscii.c_str());
+
+    e290_display.update();
+    #else
+    
     int izeile=12;
     unsigned int itxt=0;
 
@@ -995,6 +1136,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         sendDisplay1306(bClear, bEnd, 3, izeile, msg_text);
     }
 
+    #endif
+
     bSetDisplay=false;
 
 }
@@ -1011,7 +1154,11 @@ void init_loop_function()
 void initButtonPin()
 {
     #ifdef BUTTON_PIN
-        pinMode(BUTTON_PIN, INPUT_PULLUP);
+        #ifdef BOARD_E290
+            pinMode(BUTTON_PIN, INPUT); // pullup placed on hardware
+        #else
+            pinMode(BUTTON_PIN, INPUT_PULLUP);
+        #endif
     #endif
 }
 
@@ -1023,6 +1170,9 @@ bool bPressed=false;
 void checkButtonState()
 {
     #ifdef BUTTON_PIN
+    
+    //Serial.printf("BUTTON_PIN:%i bButtonCheck:%i\n", digitalRead(BUTTON_PIN), bButtonCheck);
+
         if(bButtonCheck)
         {
             if(digitalRead(BUTTON_PIN) == 0)
@@ -1102,25 +1252,28 @@ void checkButtonState()
 
                         if(pageLastLineAnz[pagePointer] == 0)
                         {
-                            pageHold=0;
-
                             pagePointer = pageLastPointer - 1;
                             if(pagePointer < 0)
                                 pagePointer = PAGE_MAX-1;
 
-                            bDisplayOff=!bDisplayOff;
-
-                            sendDisplayHead(false);
+                            #ifdef BOARD_E290
+                                sendDisplayMainline();
+                                e290_display.update();
+                            #else
+    q                           pageHold=0;
+                                bDisplayOff=!bDisplayOff;
+                                sendDisplayHead(false);
+                            #endif
 
                         }
                         else
                         {
                             bDisplayOff=false;
 
-                            for(int its=0;its<pageLastLineAnz[pagePointer];its++)
+                            pageLineAnz = pageLastLineAnz[pagePointer];
+                            for(int its=0;its<pageLineAnz;its++)
                             {
                                 // Save last Text (init)
-                                pageLineAnz = pageLastLineAnz[pagePointer];
                                 pageLine[its][0] = pageLastLine[pagePointer][its][0];
                                 pageLine[its][1] = pageLastLine[pagePointer][its][1];
                                 pageLine[its][2] = pageLastLine[pagePointer][its][2];
@@ -1137,7 +1290,12 @@ void checkButtonState()
                                 }
                             }
 
-                            iDisplayType=0;
+                            iDisplayType=9;
+
+                            strcpy(pageTextLong1, pageLastTextLong1[pagePointer]);
+                            strcpy(pageTextLong2, pageLastTextLong2[pagePointer]);
+
+                            //Serial.printf("pageLineAnz:%i pagePointer:%i <%i %i %i> pageText<%s><%s><%s><%s>\n", pageLineAnz, pagePointer, pageLine[2][0], pageLine[2][1], pageLine[2][2], pageText[0], pageText[1], pageText[2], pageTextLong2);
 
                             sendDisplay1306(false, true, 0, 0, (char*)"#N");
 
@@ -1162,6 +1320,8 @@ void checkButtonState()
 
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
+    //Serial.printf("bPosDisplay:%i bSetDisplay:%i pageHold:%i bDisplayTrack:%i\n", bPosDisplay, bSetDisplay, pageHold, bDisplayTrack);
+
     if(!bPosDisplay)
         return;
 
@@ -1177,18 +1337,47 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
     }
 
+    #ifdef BOARD_E290
+
+    struct mheardLine mheardLine;
+
+    bool bMhFound=false;
+    for(int iset=0; iset<MAX_MHEARD; iset++)
+    {
+        if(mheardCalls[iset][0] != 0x00)
+        {
+            //Serial.printf("source <%s> mh <%s>\n", aprsmsg.msg_source_call.c_str(), mheardCalls[iset]);
+
+            if(strcmp(aprsmsg.msg_source_call.c_str(), mheardCalls[iset]) == 0)
+            {
+                bMhFound=true;
+            }
+        }
+    }
+
+    if(!bMhFound)
+    {
+        bSetDisplay=false;
+        return;
+    }
+
+    #endif
+
+
     iDisplayType=1;
 
     char print_text[500];
     int ipt=0;
 
-    int izeile=23;
+    int izeile=1;
+
     unsigned int itxt=0;
     int istarttext=0;
 
     double lat=0.0;
     double lon=0.0;
 
+    float d_dir_to = 0;
     int dir_to=0;
     int dist_to=0;
 
@@ -1202,20 +1391,23 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     lat = conv_coord_to_dec(aprspos.lat);
     lon = conv_coord_to_dec(aprspos.lon);
 
-    dir_to = tinyGPSPLus.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
+    d_dir_to = tinyGPSPLus.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
+    dir_to = d_dir_to;
 
     dist_to = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
 
     sendDisplayMainline();
 
+    #ifdef BOARD_E290
+        sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
+    #endif
+
     sprintf(msg_text, "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
 
     msg_text[20]=0x00;
-    sendDisplay1306(false, false, 3, izeile, msg_text);
+    sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
 
-    int izeileoffset = 12;
-
-    izeile=izeile+izeileoffset;
+    izeile=izeile+1;
 
     ipt=0;
 
@@ -1227,12 +1419,12 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             sscanf(print_text, "%lf", &lat);
 
-            sprintf(msg_text, "LAT: %s%c%5i°", print_text, aprsmsg.msg_payload.charAt(itxt), dir_to);
+            sprintf(msg_text, "LAT: %s%c%5ikm", print_text, aprsmsg.msg_payload.charAt(itxt), dist_to);
             msg_text[20]=0x00;
-            sendDisplay1306(false, false, 3, izeile, msg_text);
+            sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
 
             istarttext=itxt+2;
-            izeile=izeile+izeileoffset;
+            izeile=izeile+1;
             break;
         }
         else
@@ -1252,12 +1444,12 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             sscanf(print_text, "%lf", &lon);
 
-            sprintf(msg_text, "LON:%s%c%5ikm", print_text, aprsmsg.msg_payload.charAt(itxt), dist_to);
+            sprintf(msg_text, "LON:%s%c%5i°", print_text, aprsmsg.msg_payload.charAt(itxt), dir_to);
             msg_text[20]=0x00;
-            sendDisplay1306(false, false, 3, izeile, msg_text);
+            sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
 
             istarttext=itxt+3;
-            izeile=izeile+izeileoffset; //war 10
+            izeile=izeile+1;
             break;
         }
         else
@@ -1300,6 +1492,19 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     memset(decode_text, 0x00, sizeof(decode_text));
     ipt=0;
 
+    #ifdef BOARD_E290
+
+    // dir_to
+    e290_display.drawCircle(275, 107,
+        20,                             // Radius: 10px
+        BLACK                           // Color: black
+        );
+
+    DrawDirection(d_dir_to, 275, 107, 20);
+
+
+    #endif
+
     // check Altitute
     for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
     {
@@ -1315,9 +1520,20 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                     if(aprsmsg.msg_source_fw_version > 13)
                         alt = (int)((float)alt * 0.3048);
 
-                    sprintf(msg_text, "ALT:%im rssi:%i", alt, rssi);
-                    msg_text[20]=0x00;
-                    sendDisplay1306(false, true, 3, izeile, msg_text);
+                    #ifdef BOARD_E290
+                        DrawRssi(3, 117, rssi);
+
+                        sprintf(msg_text, "ALT:%im", alt);
+                        msg_text[20]=0x00;
+                        sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+
+
+                    #else
+                        sprintf(msg_text, "ALT:%im rssi:%i", alt, rssi);
+                        msg_text[20]=0x00;
+                        sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+                    #endif
+
                     break;
                 }
 
@@ -1328,10 +1544,38 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             break;
         }
     }
-
+    
     bSetDisplay=false;
 
 }
+
+#ifdef BOARD_E290
+void DrawDirection(float angle, int cx, int cy, int radius)
+{
+    float displacedAngle = angle - 90;
+    int x = cx + ((float)cos(degreesToRadians(displacedAngle)) * (radius - 3)); //convert angle to radians for x and y coordinates
+    int y = cy + ((float)sin(degreesToRadians(displacedAngle)) * (radius - 3));
+    
+    e290_display.drawLine(cx, cy, x, y, BLACK); //draw a line from center point back to the point
+}
+
+double degreesToRadians(double degrees)
+{
+    return (degrees * PI) / 180;
+}
+
+void DrawRssi(int cx, int cy, int16_t rssi)
+{
+    int irssi = (125 + rssi) * 2;
+    
+    //Serial.printf("rssi:%i irssi:%i\n", rssi, irssi);
+
+    e290_display.fillRect(cx + 45, cy, irssi, 5, BLACK);
+
+    e290_display.setCursor(cx, cy + 10);
+    e290_display.printf("%i", rssi);
+}
+#endif
 
 /** @brief Method to print our buffers
  */
@@ -2207,3 +2451,110 @@ int conv_fuss(int alt_meter)
     return ifuss / 10;
 }
 
+// ****** UTF8-Decoder: convert UTF8-string to extended ASCII *******
+byte c1;  // Last character buffer
+
+// Convert a single Character from UTF8 to Extended ASCII
+// Return "0" if a byte has to be ignored
+byte utf8ascii(byte ascii)
+{
+    if ( ascii<128 )   // Standard ASCII-set 0..0x7F handling  
+    {   c1=0;
+        return( ascii );
+    }
+
+    // get previous input
+    byte last = c1;   // get last char
+    c1=ascii;         // remember actual character
+
+    switch (last)     // conversion depending on first UTF8-character
+    {
+        case 0xC3:
+            if(ascii == 0xA4)   // ä
+                return  (0x94);
+            else
+            if(ascii == 0xB6)   // ö
+                return  (0x92);
+            else
+            if(ascii == 0xBC)   // ü
+                return  (0x81);
+            else
+            if(ascii == 0x84)   // Ä
+                return  (0x8E);
+            else
+            if(ascii == 0x96)   // Ö
+                return  (0x99);
+            else
+            if(ascii == 0x9C)   // Ü
+                return  (0x9A);
+            else
+            if(ascii == 0x9F)   // ß
+                return  (0xE1);
+            else
+                return (0);
+            break;
+        case 0xC2:
+            if(ascii == 0xB0)   // °
+                return  (0xF8);
+            break;
+        case 0x82:
+            if(ascii==0xAC)
+                return(0x80);       // special case Euro-symbol
+    }
+
+    return  (0);                                     // otherwise: return zero, if character has to be ignored
+}
+
+// convert String object from UTF8 String to Extended ASCII
+String utf8ascii(String s)
+{      
+        String r="";
+        char c;
+        for (int i=0; i<s.length(); i++)
+        {
+                c = utf8ascii(s.charAt(i));
+                if (c!=0)
+                {
+                    if(c == 0x94)
+                        r+="ae";
+                    else
+                    if(c == 0x92)
+                        r+="oe";
+                    else
+                    if(c == 0x81)
+                        r+="ue";
+                    else
+                    if(c == 0x8E)
+                        r+="Ae";
+                    else
+                    if(c == 0x99)
+                        r+="Oe";
+                    else
+                    if(c == 0x9A)
+                        r+="Ue";
+                    else
+                    if(c == 0xE1)
+                        r+="ss";
+                    else
+                    if(c == 0x80)
+                        r+="*";
+                    else
+                       r+=c;
+                }
+        }
+        return r;
+}
+
+// In Place conversion UTF8-string to Extended ASCII (ASCII is shorter!)
+void utf8ascii(char* s)
+{      
+        int k=0;
+        char c;
+        for (int i=0; i<strlen(s); i++)
+        {
+                c = utf8ascii(s[i]);
+                if (c!=0)
+                        s[k++]=c;
+        }
+        s[k]=0;
+}

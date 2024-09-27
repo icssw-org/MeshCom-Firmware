@@ -165,3 +165,5 @@ extern String strSOFTSERAPP_BATT;
 
 extern String strSOFTSERAPP_FIXPEGEL;
 extern String strSOFTSERAPP_FIXTEMP;
+
+extern byte c1;

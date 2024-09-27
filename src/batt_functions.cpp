@@ -26,6 +26,14 @@ uint32_t vbat_pin = 4;
 
 #endif
 
+#if defined(BOARD_E290)
+
+uint32_t vbat_pin = BATTERY_PIN;
+
+#define NO_OF_SAMPLES   64          //Multisampling
+
+#endif
+
 #if defined(BOARD_RAK4630) || defined(BOARD_T_ECHO)
 //nothing
 #else
@@ -37,7 +45,7 @@ uint32_t vbat_pin = 4;
 
 static esp_adc_cal_characteristics_t adc_chars[sizeof(esp_adc_cal_characteristics_t)];
 
-#ifdef SX126X_V3
+#if defined(SX126X_V3) || defined(SX1262_E290)
 static const adc_channel_t channel = ADC_CHANNEL_0;     //GPIO34 if ADC1, GPIO14 if ADC2
 static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
 #endif
@@ -68,7 +76,7 @@ static const adc_unit_t unit = ADC_UNIT_1;
 
 static void check_efuse(void)
 {
-#ifdef SX126X_V3
+#if defined(SX126X_V3) || defined(SX1262_E290)
 	// NOT TESTED
 #elif CONFIG_IDF_TARGET_ESP32
     //Check if TP is burned into eFuse
@@ -108,6 +116,22 @@ static void print_char_val_type(esp_adc_cal_value_t val_type)
 
 #endif
 
+void VextON(void)
+{
+	pinMode(18,OUTPUT);
+	digitalWrite(18, HIGH);
+	pinMode(46,OUTPUT);
+	digitalWrite(46, HIGH);
+}
+
+void VextOFF(void)  // Vext default OFF
+{
+	pinMode(18,OUTPUT);
+	digitalWrite(18, LOW);
+	pinMode(46,OUTPUT);
+	digitalWrite(46, LOW);
+}
+
 /**
  * @brief Initialize the battery analog input
  *
@@ -126,6 +150,13 @@ void init_batt(void)
 
 	// Set the sampling time to 10us
 	analogSampleTime(10);
+
+#elif defined(BOARD_E290)
+
+	VextON();
+
+	analogReadResolution(12); // Can be 8, 10, 12 or 14
+
 #else
 	//only for Test check_efuse();
 
@@ -164,6 +195,7 @@ float read_batt(void)
 	float raw = 0.0;
 
 	#if defined(NRF52_SERIES)
+
 		analogReference(AR_INTERNAL_3_0);
 		
 		uint32_t adc_reading = 0;
@@ -179,6 +211,15 @@ float read_batt(void)
 		raw = (float)adc_reading;
 
 		//Serial.printf("Raw: %d\n", adc_reading);
+
+	#elif defined(BOARD_E290)
+
+   		uint16_t battery_levl = analogRead(vbat_pin);
+		
+		//Serial.printf("ADC analog value = <%i>\n", battery_levl);
+	
+		raw = (float)battery_levl;
+
 	#else
 
 	int imax=1;
@@ -200,12 +241,13 @@ float read_batt(void)
 
 	//Convert adc_reading to voltage in mV
 	uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
-	//Serial.printf("Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
+
+	Serial.printf("Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
 	
 
 	raw = voltage;
 	
-	//Serial.printf("adc_reading:%i voltage:%i\n", adc_reading, voltage);
+	Serial.printf("adc_reading:%i voltage:%i\n", adc_reading, voltage);
 
 	#endif
 
@@ -218,11 +260,15 @@ float read_batt(void)
 		raw = raw * 24.80;
 	#elif defined(BOARD_HELTEC_V3)
 		raw = raw * 4.9245;
+	#elif defined(BOARD_TLORA_OLV216)
+		raw = adc_reading + 5;
+	#elif defined(BOARD_E290)
+		raw = raw * 4.13173653;
 	#else
 		raw = raw * 24.80;
 	#endif
 
-	//Serial.printf("\nFLOW raw:%.2f mV\n", raw);
+	//Serial.printf("FLOW raw:%.2f mV\n", raw);
 
 	delay(50);
 
