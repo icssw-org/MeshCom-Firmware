@@ -1260,7 +1260,7 @@ void checkButtonState()
                                 sendDisplayMainline();
                                 e290_display.update();
                             #else
-    q                           pageHold=0;
+                                pageHold=0;
                                 bDisplayOff=!bDisplayOff;
                                 sendDisplayHead(false);
                             #endif
@@ -2510,7 +2510,7 @@ String utf8ascii(String s)
 {      
         String r="";
         char c;
-        for (int i=0; i<s.length(); i++)
+        for (int i=0; i<(int)s.length(); i++)
         {
                 c = utf8ascii(s.charAt(i));
                 if (c!=0)
@@ -2550,7 +2550,7 @@ void utf8ascii(char* s)
 {      
         int k=0;
         char c;
-        for (int i=0; i<strlen(s); i++)
+        for (int i=0; i<(int)strlen(s); i++)
         {
                 c = utf8ascii(s[i]);
                 if (c!=0)
