@@ -1627,6 +1627,9 @@ void esp32loop()
 
     if(bWEBSERVER)
     {
+        if(!meshcom_settings.node_hasIPaddress)
+            startWIFI();
+
         startWebserver();
 
         loopWebserver();

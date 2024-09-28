@@ -925,6 +925,7 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
     {
         bWEBSERVER=true;
+        bWIFIAP=false;
         
         meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0040;
 

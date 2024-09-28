@@ -363,7 +363,11 @@ bool startWIFI()
 
   if(bWIFIAP)
   {
+    WiFi.disconnect(true);
+    delay(100);
+    WiFi.mode(WIFI_AP);
     WiFi.softAP(cBLEName);
+    Serial.printf("WiFI AP mode ssid<%s> connected\n", cBLEName);
 
     return true;
   }
@@ -371,32 +375,39 @@ bool startWIFI()
   {
     if(strcmp(meshcom_settings.node_ssid, "none") == 0)
     {
-      Serial.printf("WiFI no ssid<%s> not connected\n", meshcom_settings.node_ssid);
+      Serial.printf("WiFI no ssid<%s> pwd<%s> not connected\n", meshcom_settings.node_ssid, meshcom_settings.node_pwd);
       return false;
     }
   }
 
-
+#ifdef BOARD_HELTEC_V3
+  WiFi.disconnect(true);
+	delay(100);
+	WiFi.mode(WIFI_STA);
+	WiFi.setAutoReconnect(true);
+	WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
+	delay(100);
+#else
   WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
-
+#endif
   int iWlanWait = 0;
 
   Serial.print("Wait WiFI connect ");
 
-  while(WiFi.status() != WL_CONNECTED && iWlanWait < 20)
+  while(WiFi.status() != WL_CONNECTED && iWlanWait < 30)
   {
     delay(500);
     Serial.print(".");
     iWlanWait++;
 
-    if(iWlanWait > 15)
+    if(iWlanWait > 25)
     {
       Serial.printf("\nWiFI ssid<%s> connection error\n", meshcom_settings.node_ssid);
       return false;
     }
   }
 
-  Serial.println();
+  Serial.println("WIFI connect OK");
 
   return true;
 }

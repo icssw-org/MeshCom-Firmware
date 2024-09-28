@@ -68,6 +68,9 @@ void startWebserver()
     if(bweb_server_running)
         return;
 
+    if(!meshcom_settings.node_hasIPaddress)
+        return;
+
 #ifdef ESP32
     // Set up mDNS responder:
     // - first argument is the domain name, in this example
