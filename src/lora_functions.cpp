@@ -49,7 +49,7 @@ extern double mheardLon[MAX_MHEARD];
 double lat=0;
 double lon=0;
 
-#include "TinyGPSplus.h"
+#include "TinyGPSPlus.h"
 
 // TinyGPS
 extern TinyGPSPlus tinyGPSPLus;
