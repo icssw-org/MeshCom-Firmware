@@ -687,6 +687,8 @@ void sendDisplayTime()
     sprintf(print_text, "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
 
     memcpy(pageText[0], print_text, 20);
+    pageLine[0][0] = 3;
+    pageLine[0][1] = dzeile[0];
 
     #ifdef BOARD_E290
     #else
@@ -1019,7 +1021,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     e290_display.update();
     #else
     
-    int izeile=12;
+    int izeile=0;
     unsigned int itxt=0;
 
     bool bClear=true;
@@ -1042,9 +1044,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         sprintf(msg_text, "%s", strPath.c_str());
 
     msg_text[20]=0x00;
-    sendDisplay1306(bClear, false, 3, izeile, msg_text);
+    sendDisplay1306(bClear, false, 3, dzeile[izeile], msg_text);
 
-    izeile=23;
+    izeile++;
     bClear=false;
 
     for(itxt=0; itxt<aprsmsg.msg_payload.length(); itxt++)
@@ -1090,20 +1092,20 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             line_text[20]=0x00;
             sprintf(msg_text, "%s", line_text);
 
-            if(izeile > 60)
+            if(izeile > 5)
                 bEnd=true;
 
             if(bEnd && itxt < iwords)
                 sprintf(msg_text, "%-17.17s...", line_text);
 
             msg_text[20]=0x00;
-            sendDisplay1306(bClear, bEnd, 3, izeile, msg_text);
+            sendDisplay1306(bClear, bEnd, 3, dzeile[izeile], msg_text);
 
-            izeile=izeile+10;
+            izeile++;
             
             memset(line_text, 0x00, 21);
 
-            if(izeile > 63)
+            if(izeile > 5)
             {
                 break;
             }
@@ -1125,15 +1127,15 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     if(strlen(line_text) > 0)
     {
-        if(izeile > 61)
-            izeile=61;
+        if(izeile > 5)
+            izeile=5;
 
         bEnd=true;
         line_text[20]=0x00;
         sprintf(msg_text, "%s", line_text);
         //Serial.printf("1306-02:%s len:%i izeile:%i\n", msg_text, strlen(msg_text), izeile);
         msg_text[20]=0x00;
-        sendDisplay1306(bClear, bEnd, 3, izeile, msg_text);
+        sendDisplay1306(bClear, bEnd, 3, dzeile[izeile], msg_text);
     }
 
     #endif
@@ -1290,7 +1292,11 @@ void checkButtonState()
                                 }
                             }
 
-                            iDisplayType=9;
+                            #ifdef BOARD_E290
+                                iDisplayType=9;
+                            #else
+                                iDisplayType=0;
+                            #endif
 
                             strcpy(pageTextLong1, pageLastTextLong1[pagePointer]);
                             strcpy(pageTextLong2, pageLastTextLong2[pagePointer]);
