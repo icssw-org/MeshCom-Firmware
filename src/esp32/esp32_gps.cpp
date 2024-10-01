@@ -6,7 +6,7 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <clock.h>
-#include <TinyGPSplus.h>
+#include <TinyGPSPlus.h>
 
 #if defined(MODUL_FW_TBEAM)
     #define GPS_RX_PIN 34

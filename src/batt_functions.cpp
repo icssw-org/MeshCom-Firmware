@@ -284,7 +284,7 @@ float read_batt(void)
  * @param mvolts Milli volts measured from analog pin
  * @return uint8_t Battery level as percentage (0 to 100)
  */
-float max_batt = 4.24;
+float max_batt = 4.125;
 
 void setMaxBatt(float u_max_batt)
 {

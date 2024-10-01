@@ -972,6 +972,8 @@ void esp32setup()
     // WIFI
     if(bGATEWAY || bEXTUDP || bWEBSERVER)
     {
+        delay(500);
+
         if(startWIFI())
         {
             if(bGATEWAY || bWEBSERVER)
@@ -983,6 +985,8 @@ void esp32setup()
 
             if(bWEBSERVER)
             {
+                delay(500);
+                
                 startWebserver();
             }
 

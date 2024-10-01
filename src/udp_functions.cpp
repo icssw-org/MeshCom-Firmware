@@ -382,11 +382,11 @@ bool startWIFI()
 
 #ifdef BOARD_HELTEC_V3
   WiFi.disconnect(true);
-	delay(100);
+	delay(200);
 	WiFi.mode(WIFI_STA);
 	WiFi.setAutoReconnect(true);
 	WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
-	delay(100);
+	delay(500);
 #else
   WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
 #endif
@@ -396,7 +396,7 @@ bool startWIFI()
 
   while(WiFi.status() != WL_CONNECTED && iWlanWait < 30)
   {
-    delay(500);
+    delay(300);
     Serial.print(".");
     iWlanWait++;
 

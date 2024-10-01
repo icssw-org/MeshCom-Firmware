@@ -10,7 +10,7 @@
 #include "udp_functions.h"
 #include "configuration.h"
 
-#include "TinyGPSplus.h"
+#include "TinyGPSPplus.h"
 
 // TinyGPS
 extern TinyGPSPlus tinyGPSPLus;

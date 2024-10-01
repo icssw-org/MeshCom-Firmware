@@ -217,7 +217,7 @@ struct s_meshcom_settings
 
 	int node_sset = 0;
 
-	float node_maxv = 4.24;
+	float node_maxv = 4.125;
 
 	char node_extern[40] = {0};
 
@@ -355,7 +355,7 @@ struct s_meshcomcompat_settings
 
 	int node_sset = 0;
 
-	float node_maxv = 4.24;
+	float node_maxv = 4.125;
 
 	char node_extern[40] = {0};
 
