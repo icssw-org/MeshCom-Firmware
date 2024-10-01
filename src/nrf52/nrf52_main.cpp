@@ -13,7 +13,7 @@
 #include <debugconf.h>
 #include <time.h>
 
-#include <TinyGPSplus.h>
+#include <TinyGPSPlus.h>
 
 #include "Adafruit_SHTC3.h"
 
