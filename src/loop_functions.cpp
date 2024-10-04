@@ -10,7 +10,7 @@
 #include "udp_functions.h"
 #include "configuration.h"
 
-#include "TinyGPSPplus.h"
+#include "TinyGPSPlus.h"
 
 // TinyGPS
 extern TinyGPSPlus tinyGPSPLus;
@@ -1343,6 +1343,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
     }
 
+/*
     #ifdef BOARD_E290
 
     struct mheardLine mheardLine;
@@ -1368,7 +1369,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     }
 
     #endif
-
+*/
 
     iDisplayType=1;
 

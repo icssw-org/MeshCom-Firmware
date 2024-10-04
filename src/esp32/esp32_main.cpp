@@ -872,7 +872,7 @@ void esp32setup()
 
     if(meshcom_settings.node_call[0] == 0x00)
     {
-        sprintf(meshcom_settings.node_call, "%s", (char*)"XX0XXX-0");
+        sprintf(meshcom_settings.node_call, "%s", (char*)"XX0XXX-00");
     }
 
     // Create the BLE Device & WiFiAP
@@ -959,7 +959,7 @@ void esp32setup()
         pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
 
     pAdvertising->start(0);
-   
+ 
     Serial.println("[INIT]...Waiting a client connection to notify...");
     
     // reset GPS-Time parameter
