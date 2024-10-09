@@ -382,13 +382,31 @@ bool startWIFI()
     }
   }
 
-#ifdef BOARD_HELTEC_V3
-  WiFi.disconnect(true);
+#ifdef ESP32
+  //WiFi.disconnect(true);
 	delay(500);
-	
+
+  // Scan for AP with best RSSI
+	int nrAps = WiFi.scanNetworks();
+  int best_rssi = -200;
+  int best_idx = 0;
+  for (int i = 0; i < nrAps; ++i)
+  {
+     if(strcmp(WiFi.SSID(i).c_str(), meshcom_settings.node_ssid) == 0)
+     {
+        Serial.printf("SSID: %s CHAN: %d BSSID: %012x RSSI:%i\n", WiFi.SSID(i), WiFi.channel(i),WiFi.BSSID(i), WiFi.RSSI(i));
+        if(WiFi.RSSI(i) > best_rssi)
+        {
+          best_rssi = WiFi.RSSI(i);
+          best_idx = i;
+        }
+     }
+  }
+  Serial.printf("-> connecting to BSSID: %012x CHAN: %i\n",WiFi.BSSID(best_idx),WiFi.channel(best_idx));
+
   WiFi.mode(WIFI_STA);
-  
-	WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
+
+	WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
 	delay(500);
 
   Serial.printf("WiFi.power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
