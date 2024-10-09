@@ -383,7 +383,7 @@ bool startWIFI()
   }
 
 #ifdef ESP32
-  //WiFi.disconnect(true);
+  WiFi.disconnect(true);
 	delay(500);
 
   // Scan for AP with best RSSI
