@@ -314,7 +314,7 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
             delay(100);
-            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--SMALL on  use small Display\n--SS on  use SS\n--bmx BME/BMP/680 off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--SMALL on  use small Display\n--mhonly on/off  show POS from MH-Nodes only\n--SS on  use SS\n--bmx BME/BMP/680 off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
             delay(100);
             Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--mesh    on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
             delay(100);
@@ -690,6 +690,20 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
     }
     else
+    if(commandCheck(msg_text+2, (char*)"mhonly on") == 0)
+    {
+        bMHONLY=true;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0001;
+
+        if(ble)
+            bSensSetting = true;
+        else
+            bReturn = true;
+
+        save_settings();
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"bmx off") == 0 || commandCheck(msg_text+2, (char*)"bme off") == 0 || commandCheck(msg_text+2, (char*)"bmp off") == 0)
     {
         bBMPON=false;
@@ -738,6 +752,20 @@ void commandAction(char *msg_text, bool ble)
         bSMALLDISPLAY=false;
         
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7DFF;
+        
+        if(ble)
+            bSensSetting = true;
+        else
+            bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"mhonly off") == 0)
+    {
+        bMHONLY=false;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FFE;
         
         if(ble)
             bSensSetting = true;
@@ -2251,10 +2279,10 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...GATEWAY %s %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s ... SS %s\n...PASSWD %s\n",
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...GATEWAY %s %s ...MHONLY %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s ... SS %s\n...PASSWD %s\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
-                    (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
+                    (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMHONLY?"on":"off"), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...DISP: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),
@@ -2349,6 +2377,7 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["680"] = bBME680ON;
         sensdoc["811"] = bMCU811ON;
         sensdoc["SMALL"] = bSMALLDISPLAY;
+        sensdoc["MHONLY"] = bMHONLY;
         sensdoc["SS"] = bSOFTSERON;
         sensdoc["LPS33"] = bLPS33;
         sensdoc["OW"] = bONEWIRE;

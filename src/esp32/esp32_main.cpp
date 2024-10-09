@@ -328,7 +328,7 @@ bool g_ble_uart_is_connected = false;
 uint8_t dmac[6] = {0};
 
 unsigned long gps_refresh_timer = 0;
-unsigned long softser_refresh_time = 0;
+unsigned long softser_refresh_timer = 0;
 
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
 void checkSerialCommand(void);
@@ -410,6 +410,8 @@ void esp32setup()
     bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
     bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
+
+    bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
 
     // if Node not set --> WifiAP Mode on
     if(meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
@@ -1202,12 +1204,12 @@ void esp32loop()
     #if defined(ENABLE_SOFTSER)
         if(bSOFTSERON)
         {
-            if (bSOFTSER_APP || ((softser_refresh_time + ((SOFTSER_REFRESH_INTERVAL * 1000) - 3000)) < millis()))
+            if (bSOFTSER_APP || ((softser_refresh_timer + ((SOFTSER_REFRESH_INTERVAL * 1000) - 3000)) < millis()))
             {
                 // start SOFTSER APP
                 loopSOFTSER(SOFTSER_APP_ID, 0);
 
-                softser_refresh_time = millis();
+                softser_refresh_timer = millis();
 
                 bSOFTSER_APP = false;
             }
@@ -1631,20 +1633,20 @@ void esp32loop()
 
     if(bWEBSERVER)
     {
-        if(!meshcom_settings.node_hasIPaddress)
-            startWIFI();
-
-        startWebserver();
-
-        loopWebserver();
-
-        if ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 60)) < millis())   // HEARTBEAT_INTERVAL to minutes
+        if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 60)) < millis()))   // HEARTBEAT_INTERVAL to minutes
         {
             // restart WEB-Client
             stopWebserver();
 
             web_timer = millis();
+
+            if(!meshcom_settings.node_hasIPaddress)
+                startWIFI();
         }
+
+        startWebserver();
+
+        loopWebserver();
     }
 
     //

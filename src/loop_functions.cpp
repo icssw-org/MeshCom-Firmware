@@ -45,6 +45,7 @@ bool bINA226ON = false;
 bool bRTCON = false;
 bool bSMALLDISPLAY = false;
 bool bSOFTSERON = false;
+bool bMHONLY = false;
 
 bool bTCA9548A = false;
 
@@ -1190,8 +1191,8 @@ void checkButtonState()
                     return;
                 }
 
-                if(bDEBUG)
-                    Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);
+                //if(bDEBUG)
+                //    Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);
 
                 if(!bPressed)
                 {
@@ -1343,33 +1344,6 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
     }
 
-/*
-    #ifdef BOARD_E290
-
-    struct mheardLine mheardLine;
-
-    bool bMhFound=false;
-    for(int iset=0; iset<MAX_MHEARD; iset++)
-    {
-        if(mheardCalls[iset][0] != 0x00)
-        {
-            //Serial.printf("source <%s> mh <%s>\n", aprsmsg.msg_source_call.c_str(), mheardCalls[iset]);
-
-            if(strcmp(aprsmsg.msg_source_call.c_str(), mheardCalls[iset]) == 0)
-            {
-                bMhFound=true;
-            }
-        }
-    }
-
-    if(!bMhFound)
-    {
-        bSetDisplay=false;
-        return;
-    }
-
-    #endif
-*/
 
     iDisplayType=1;
 
@@ -1394,6 +1368,32 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
 
+    //display positions from myheard nodes only
+    if(bMHONLY)
+    {
+        struct mheardLine mheardLine;
+
+        bool bMhFound=false;
+        for(int iset=0; iset<MAX_MHEARD; iset++)
+        {
+            if(mheardCalls[iset][0] != 0x00)
+            {
+                //Serial.printf("source <%s> mh <%s>\n", aprsmsg.msg_source_call.c_str(), mheardCalls[iset]);
+
+                if(strcmp(aprsmsg.msg_source_call.c_str(), mheardCalls[iset]) == 0)
+                {
+                    bMhFound=true;
+                }
+            }
+        }
+
+        if(!bMhFound)
+        {
+            bSetDisplay=false;
+            return;
+        }
+    }
+
     // Display Distance, Direction
     lat = conv_coord_to_dec(aprspos.lat);
     lon = conv_coord_to_dec(aprspos.lon);
@@ -1403,13 +1403,50 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     dist_to = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
 
+    if(aprspos.softser3 > 0)
+    {
+        unsigned int year;
+        unsigned int month;
+        unsigned int day;
+        unsigned int hour;
+        unsigned int minute;
+        unsigned int second;
+
+        char ctime_buf[30];
+
+        sprintf(ctime_buf, "%s", aprspos.pos_atxt.substring(11, 23).c_str());
+
+        sscanf(ctime_buf, "%02u%02u%02u%02u%02u%02u", &year, &month, &day, &hour, &minute, &second);
+
+        year = year + 2000;
+
+        meshcom_settings.node_date_year = year;
+        meshcom_settings.node_date_month = month;
+        meshcom_settings.node_date_day = day;
+        meshcom_settings.node_date_hour = hour + meshcom_settings.node_utcoff;
+        if(meshcom_settings.node_date_hour > 24)
+        {
+            meshcom_settings.node_date_hour=meshcom_settings.node_date_hour-24;
+            meshcom_settings.node_date_day++;
+
+        }
+        meshcom_settings.node_date_minute = minute;
+        meshcom_settings.node_date_second = second;
+
+        MyClock.setCurrentTime(meshcom_settings.node_utcoff, year, month, day, hour, minute, second);
+    }
+
     sendDisplayMainline();
 
     #ifdef BOARD_E290
         sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
     #endif
 
-    sprintf(msg_text, "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
+    if(aprspos.softser3 > 0)
+        sprintf(msg_text, "#%s", aprspos.pos_atxt.substring(0, 17).c_str());
+    else
+        sprintf(msg_text, "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
+
 
     msg_text[20]=0x00;
     sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
@@ -1513,42 +1550,78 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #endif
 
     // check Altitute
-    for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
+    if(aprspos.softser3 > 0)
     {
-        if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == 'A' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
+        for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
         {
-            for(unsigned int id=itxt+3;id<=aprsmsg.msg_payload.length();id++)
+            if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == '3' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
             {
-                // ENDE
-                if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
+                for(unsigned int id=itxt+3;id<=aprsmsg.msg_payload.length();id++)
                 {
-                    sscanf(decode_text, "%d", &alt);
+                    // ENDE
+                    if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
+                    {
+                        #ifdef BOARD_E290
+                            DrawRssi(3, 117, rssi);
+                        #endif
 
-                    if(aprsmsg.msg_source_fw_version > 13)
-                        alt = (int)((float)alt * 0.3048);
+                        sprintf(msg_text, "%.0fcm %.1fC %.1fV", aprspos.softser1, aprspos.softser2, aprspos.softser3);
+                        msg_text[20]=0x00;
+                        sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
 
-                    #ifdef BOARD_E290
-                        DrawRssi(3, 117, rssi);
+                        char cDateTime[50];
+                        sprintf(cDateTime, "%04i-%02i-%02iT%02i:%02i:%02i", meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 
+                        Serial.printf("\n<StationData stationId=\"%s\">\n", aprspos.pos_atxt.substring(0 , 9).c_str());
+                        Serial.printf("<ChannelData channelId\"0060\" unit=\"cm\"><VT t=%s>%.0f</VT></ChannelData>\n", cDateTime, aprspos.softser1);
+                        Serial.printf("<ChannelData channelId\"0065\" unit=\"°C\"><VT t=%s>%.1f</VT></ChannelData>\n", cDateTime, aprspos.softser2);
+                        Serial.printf("<ChannelData channelId\"0050\" unit=\"V\"><VT t=%s>%.1f</VT></ChannelData>\n", cDateTime, aprspos.softser3);
+                        Serial.printf("</StationData>\n\n");
+
+                        break;
+                    }
+
+                    decode_text[ipt]=aprsmsg.msg_payload.charAt(id);
+                    ipt++;
+                }
+
+                break;
+            }
+        }
+    }
+    else
+    {
+        for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
+        {
+            if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == 'A' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
+            {
+                for(unsigned int id=itxt+3;id<=aprsmsg.msg_payload.length();id++)
+                {
+                    // ENDE
+                    if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
+                    {
+                        sscanf(decode_text, "%d", &alt);
+
+                        if(aprsmsg.msg_source_fw_version > 13)
+                            alt = (int)((float)alt * 0.3048);
+
+                        #ifdef BOARD_E290
+                            DrawRssi(3, 117, rssi);
+                        #endif
+                    
                         sprintf(msg_text, "ALT:%im", alt);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
 
+                        break;
+                    }
 
-                    #else
-                        sprintf(msg_text, "ALT:%im rssi:%i", alt, rssi);
-                        msg_text[20]=0x00;
-                        sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
-                    #endif
-
-                    break;
+                    decode_text[ipt]=aprsmsg.msg_payload.charAt(id);
+                    ipt++;
                 }
 
-                decode_text[ipt]=aprsmsg.msg_payload.charAt(id);
-                ipt++;
+                break;
             }
-
-            break;
         }
     }
     
@@ -1573,11 +1646,11 @@ double degreesToRadians(double degrees)
 
 void DrawRssi(int cx, int cy, int16_t rssi)
 {
-    int irssi = (125 + rssi) * 2;
+    int irssi = (110 + rssi) * 2;
     
     //Serial.printf("rssi:%i irssi:%i\n", rssi, irssi);
 
-    e290_display.fillRect(cx + 45, cy, irssi, 5, BLACK);
+    e290_display.fillRect(cx + 60, cy, irssi, 5, BLACK);
 
     e290_display.setCursor(cx, cy + 10);
     e290_display.printf("%i", rssi);
@@ -1883,7 +1956,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         if(bSOFTSERON && strSOFTSERAPP_ID.length() > 0)
         {
             bSOFTSERAPPPOS=true;
-            sprintf(catxt, "%s ", strSOFTSERAPP_ID.c_str());
+            sprintf(catxt, "%s:%02i%02i%02i%02i%02i%02i ", strSOFTSERAPP_ID.c_str(), meshcom_settings.node_date_year - 2000, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
         }
         else
         #endif

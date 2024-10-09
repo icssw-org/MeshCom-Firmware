@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
+#include <clock.h>
 
 #include <Arduino.h>
 
@@ -63,6 +64,22 @@ bool loopSOFTSER(int ID, int iFunction)
         if(iFunction == 1)
         {
             sprintf(cText, "/cl/data/get/%s", strSOFTSER_BUF.substring(6, 20).c_str());
+
+            uint16_t year;
+            uint16_t month;
+            uint16_t day;
+            uint16_t hour;
+            uint16_t minute;
+            uint16_t second;
+
+            char ctime_buf[30];
+
+            sprintf(ctime_buf, "%s", strSOFTSER_BUF.substring(6, 20).c_str());
+
+            sscanf(ctime_buf, "%04d%02d%02d%02d%02d%02d", &year, &month, &day, &hour, &minute, &second);
+
+            MyClock.setCurrentTime(meshcom_settings.node_utcoff, year, month, day, hour, minute, second);
+
         }
 
         strSOFTSER_BUF = "";
@@ -81,8 +98,8 @@ String strSOFTSERAPP_PEGEL;
 String strSOFTSERAPP_TEMP;
 String strSOFTSERAPP_BATT;
 
-String strSOFTSERAPP_FIXPEGEL = "550";
-String strSOFTSERAPP_FIXTEMP = "20.0";
+String strSOFTSERAPP_FIXPEGEL = "";
+String strSOFTSERAPP_FIXTEMP = "";
 
 bool appSOFTSER(int ID)
 {
@@ -119,7 +136,7 @@ bool appSOFTSER(int ID)
 
             if(strSOFTSER_BUF.indexOf("stationId=") > 0)
             {
-            strtemp = strSOFTSER_BUF.substring(strSOFTSER_BUF.indexOf("stationId="));
+                strtemp = strSOFTSER_BUF.substring(strSOFTSER_BUF.indexOf("stationId="));
 
                 strSOFTSERAPP_ID = strtemp.substring(11, 21);
                 

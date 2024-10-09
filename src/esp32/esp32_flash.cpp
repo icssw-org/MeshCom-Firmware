@@ -133,6 +133,8 @@ void init_flash(void)
 
     strVar = preferences.getString("node_passwd");
     sprintf(meshcom_settings.node_passwd, "%s", strVar.c_str());
+
+    meshcom_settings.node_sset3 = preferences.getInt("node_sset3", 0x0000);
 }
 
 void save_settings(void)
@@ -260,6 +262,8 @@ void save_settings(void)
 
     strVar = meshcom_settings.node_passwd;
     preferences.putString("node_passwd", strVar); 
+
+    preferences.putInt("node_sset3", meshcom_settings.node_sset3);
 
     preferences.end();
 

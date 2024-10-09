@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.34"
-#define SOURCE_VERSION_SUB "a"
+#define SOURCE_VERSION_SUB "b"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -398,8 +398,8 @@ static const uint8_t SCK   = 5;
 #define LED_PIN 25
 
 #define RESET_OLED RST_OLED
-#define I2C_SDA SDA_OLED // I2C pins for this board
-#define I2C_SCL SCL_OLED
+#define I2C_SDA 17 // I2C pins for this board
+#define I2C_SCL 18
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0

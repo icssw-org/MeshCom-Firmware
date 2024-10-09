@@ -99,6 +99,9 @@ void loopWebserver()
     if(!bweb_server_running)
         return;
 
+    if(!meshcom_settings.node_hasIPaddress)
+        return;
+
     web_client = web_server.available(); // Create a client connection.
 
     // HTML Page formating
@@ -276,12 +279,12 @@ void loopWebserver()
                 else
                 if (web_header.indexOf("GET /smalldisplay/on") >= 0)
                 {
-                    commandAction((char*)"--smalldisplay on", bPhoneReady);
+                    commandAction((char*)"--small on", bPhoneReady);
                 }
                 else
                 if (web_header.indexOf("GET /smalldisplay/off") >= 0)
                 {
-                    commandAction((char*)"--smalldisplay off", bPhoneReady);
+                    commandAction((char*)"--small off", bPhoneReady);
                 }
                 else
                 if (web_header.indexOf("GET /nopos/on") >= 0)

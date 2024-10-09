@@ -411,6 +411,8 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
 void initAPRSPOS(struct aprsPosition &aprspos)
 {
+    aprspos.pos_atxt = "";
+
     aprspos.lat = 0.0;
     aprspos.lat_c = 0x00;
     aprspos.lon = 0.0;
@@ -431,6 +433,11 @@ void initAPRSPOS(struct aprsPosition &aprspos)
     aprspos.qnh = 0.0;
     aprspos.gasres = 0.0;
     aprspos.co2 = 0.0;
+
+    // softser
+    aprspos.softser1 = 0.0;
+    aprspos.softser2 = 0.0;
+    aprspos.softser3 = 0.0;
 
 }
 
@@ -499,6 +506,24 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
+    ipt=0;
+
+    // check ATXT
+    for(unsigned int id=istarttext;id<=PayloadBuffer.length();id++)
+    {
+        // ENDE
+        if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 25)
+        {
+            break;
+        }
+
+        if(ipt < 25)
+        {
+            aprspos.pos_atxt.concat(PayloadBuffer.charAt(id));
+            ipt++;
+        }
+    }
+
     aprspos.bat = 0;
     aprspos.alt = 0;
 
@@ -558,6 +583,9 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
     // check Press
     for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
     {
@@ -582,6 +610,9 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             break;
         }
     }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
 
     // check Hum
     for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
@@ -608,6 +639,9 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
     // check Temp
     for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
     {
@@ -632,6 +666,9 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             break;
         }
     }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
 
     // check Temp2
     for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
@@ -658,6 +695,9 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
     // check QFE
     for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
     {
@@ -682,6 +722,9 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             break;
         }
     }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
 
     // check QNH
     for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
@@ -708,6 +751,9 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
     // check GASRES
     for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
     {
@@ -733,6 +779,9 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
     // check CO2
     for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
     {
@@ -744,6 +793,90 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
                 {
                     sscanf(decode_text, "%f", &aprspos.co2);
+                    break;
+                }
+
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
+            }
+
+            break;
+        }
+    }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
+    // check softser1
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == '1' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
+                {
+                    sscanf(decode_text, "%f", &aprspos.softser1);
+                    break;
+                }
+
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
+            }
+
+            break;
+        }
+    }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
+    // check softser2
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == '2' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
+                {
+                    sscanf(decode_text, "%f", &aprspos.softser2);
+                    break;
+                }
+
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
+            }
+
+            break;
+        }
+    }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
+    // check softser3
+    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == '3' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
+                {
+                    sscanf(decode_text, "%f", &aprspos.softser3);
                     break;
                 }
 
