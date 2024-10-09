@@ -1488,7 +1488,17 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             sscanf(print_text, "%lf", &lon);
 
-            sprintf(msg_text, "LON:%s%c%5i°", print_text, aprsmsg.msg_payload.charAt(itxt), dir_to);
+            char cdir_to[3];
+            float von_dir_to[10]     = {0.0, 22.5, 67.5, 112.5, 157.5, 202.5, 247.5, 292.5, 337.5, 360.0};
+            char von_c_dir_to[10][4] = {"",  "N",  "NE",  "E",  "SE",  "S",   "SW",   "W",   "NW",  "N"} ;
+
+            for(int idir=0; idir<9; idir++)
+            {
+                if(dir_to >= von_dir_to[idir] && dir_to <= von_dir_to[idir+1])
+                    sprintf(cdir_to, "%s", von_c_dir_to[idir+1]);
+            }
+
+            sprintf(msg_text, "LON:%s%c%5i%s", print_text, aprsmsg.msg_payload.charAt(itxt), dir_to, cdir_to);
             msg_text[20]=0x00;
             sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
 
@@ -1544,7 +1554,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         BLACK                           // Color: black
         );
 
+    // dir_to
+    e290_display.drawCircle(275, 107,
+        19,                             // Radius: 10px
+        BLACK                           // Color: black
+        );
+
     DrawDirection(d_dir_to, 275, 107, 20);
+    DrawDirection(d_dir_to, 274, 108, 20);
 
 
     #endif
