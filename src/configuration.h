@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.34"
-#define SOURCE_VERSION_SUB "b"
+#define SOURCE_VERSION_SUB "c"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -151,7 +151,7 @@ definitions
     #define ENABLE_BMX280
     #define ENABLE_BMX680
     #define ENABLE_MCP23017
-    #define ENABLE_INA226
+    //I2C fault #define ENABLE_INA226
     #define ENABLE_RTC
     #define ENABLE_SOFTSER
     #define TX_POWER_MAX 22  // max 22dBm
@@ -571,6 +571,7 @@ static const uint8_t SCK =  5;
 //#define LORA_CS  //already defined
 
 #define BUTTON_PIN 12   // GIO12
+#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
 #define I2C_SDA    21
 #define I2C_SCL    22

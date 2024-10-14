@@ -302,8 +302,13 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            Serial.printf("MeshCom %s %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--wifiap on/off WLAN AP\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
+            Serial.printf("MeshCom %s %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
             delay(100);
+
+#ifndef BOARD_RAK4630
+            Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
+            delay(100);
+#endif
             Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
             delay(100);
             Serial.printf("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--atxt   set APRS Textinfo\n--showI2C\n");
@@ -314,9 +319,11 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
             delay(100);
-            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--SMALL on  use small Display\n--mhonly on/off  show POS from MH-Nodes only\n--SS on  use SS\n--bmx BME/BMP/680 off\n--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--SMALL on  use small Display\n--mhonly on/off  show POS from MH-Nodes only\n--SS on  use SS\n--bmx BME/BMP/680 off\n");
             delay(100);
-            Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--mesh    on/off\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
+            Serial.printf("--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
+            delay(100);
+            Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--mesh    on/off\n");
             delay(100);
             Serial.printf("--softser on/off/send/app/baud/fixpegel/fixtemp\n");
         }
@@ -1021,6 +1028,8 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
     }
     else
+
+#ifndef BOARD_RAK4630
     if(commandCheck(msg_text+2, (char*)"extudp on") == 0)
     {
         bEXTUDP=true;
@@ -1097,6 +1106,8 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+#endif
+
     if(commandCheck(msg_text+2, (char*)"debug on") == 0)
     {
         bDEBUG=true;
@@ -1449,6 +1460,8 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+
+#ifndef BOARD_RAK4630
     if(commandCheck(msg_text+2, (char*)"setssid ") == 0)
     {
         // max. 40 char
@@ -1531,6 +1544,8 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
     }
     else
+    #endif
+
     if(commandCheck(msg_text+2, (char*)"sethamnet") == 0)
     {
         meshcom_settings.node_hamnet_only = 1;
@@ -2284,9 +2299,14 @@ void commandAction(char *msg_text, bool ble)
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
                     (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMHONLY?"on":"off"), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
-            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n...ATXT: %s\n...BLE : %s\n...DISP: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
-                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),
-                    (bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"), (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern, meshcom_settings.node_atxt, (bBLElong?"long":"short"), (bSMALLDISPLAY?"small":"normal"),
+            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n",
+                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
+            
+#ifndef BOARD_RAK4630
+            Serial.printf("...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n", (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
+#endif
+            Serial.printf("...ATXT: %s\n...BLE : %s\n...DISP: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
+                    meshcom_settings.node_atxt, (bBLElong?"long":"short"), (bSMALLDISPLAY?"small":"normal"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower());
 
             for(int ig=0;ig<6;ig++)

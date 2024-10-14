@@ -65,18 +65,18 @@ bool loopSOFTSER(int ID, int iFunction)
         {
             sprintf(cText, "/cl/data/get/%s", strSOFTSER_BUF.substring(6, 20).c_str());
 
-            uint16_t year;
-            uint16_t month;
-            uint16_t day;
-            uint16_t hour;
-            uint16_t minute;
-            uint16_t second;
+            unsigned int year;
+            unsigned int month;
+            unsigned int day;
+            unsigned int hour;
+            unsigned int minute;
+            unsigned int second;
 
             char ctime_buf[30];
 
             sprintf(ctime_buf, "%s", strSOFTSER_BUF.substring(6, 20).c_str());
 
-            sscanf(ctime_buf, "%04d%02d%02d%02d%02d%02d", &year, &month, &day, &hour, &minute, &second);
+            sscanf(ctime_buf, "%04u%02u%02u%02u%02u%02u", &year, &month, &day, &hour, &minute, &second);
 
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, year, month, day, hour, minute, second);
 

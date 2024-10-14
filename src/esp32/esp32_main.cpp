@@ -81,8 +81,8 @@ extern XPowersLibInterface *PMU;
     extern U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2;
 #elif defined(BOARD_RAK4630)
     extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
-#elif defined(BOARD_E290)
-    extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
+#elif defined(BOARD_TLORA_OLV216)
+    extern U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2;
 #else
     extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 #endif
@@ -1419,7 +1419,7 @@ void esp32loop()
 
     //Serial.printf("BattTimeWait:%i millis():%i tx:%i rx:%i\n", BattTimeWait, millis(), tx_is_active, is_receiving);
 
-    if ((BattTimeWait + 10000) < millis())  // 10 sec
+    if ((BattTimeWait + 20000) < millis())  // 20 sec
     {
         if (tx_is_active == false && is_receiving == false)
         {

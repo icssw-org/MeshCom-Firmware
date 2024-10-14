@@ -34,6 +34,12 @@ uint32_t vbat_pin = BATTERY_PIN;
 
 #endif
 
+#if defined(BOARD_TLORA_OLV216)
+
+uint32_t vbat_pin = BATTERY_PIN;
+
+#endif
+
 #if defined(BOARD_RAK4630) || defined(BOARD_T_ECHO)
 //nothing
 #else
@@ -212,6 +218,15 @@ float read_batt(void)
 
 		//Serial.printf("Raw: %d\n", adc_reading);
 
+	#elif defined(BOARD_TLORA_OLV216)
+
+		pinMode(23, OUTPUT);
+  		pinMode(vbat_pin, INPUT);
+  
+   		raw = (float)(analogRead(vbat_pin)) / 4095*2*3.3*1.1;
+		
+		// Serial.printf("ADC analog value = <%f>\n", raw);
+
 	#elif defined(BOARD_E290)
 
    		uint16_t battery_levl = analogRead(vbat_pin);
@@ -261,7 +276,7 @@ float read_batt(void)
 	#elif defined(BOARD_HELTEC_V3)
 		raw = raw * 4.9245;
 	#elif defined(BOARD_TLORA_OLV216)
-		raw = adc_reading + 5;
+		raw = raw * 1000.0; // convert to volt
 	#elif defined(BOARD_E290)
 		raw = raw * 4.13173653;
 	#else
