@@ -174,6 +174,8 @@ void init_flash(void)
 
 		memcpy(meshcom_settings.node_passwd, old_struct.node_passwd, 15);
 
+		meshcom_settings.node_sset3 = old_struct.node_sset3;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

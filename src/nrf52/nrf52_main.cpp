@@ -400,6 +400,7 @@ void nrf52setup()
     bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
+    bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
 
     bDisplayInfo = bLORADEBUG;
 

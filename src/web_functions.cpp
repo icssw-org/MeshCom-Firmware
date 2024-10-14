@@ -68,6 +68,9 @@ void startWebserver()
     if(bweb_server_running)
         return;
 
+    if(!meshcom_settings.node_hasIPaddress)
+        return;
+
 #ifdef ESP32
     // Set up mDNS responder:
     // - first argument is the domain name, in this example
@@ -94,6 +97,9 @@ void stopWebserver()
 void loopWebserver()
 {
     if(!bweb_server_running)
+        return;
+
+    if(!meshcom_settings.node_hasIPaddress)
         return;
 
     web_client = web_server.available(); // Create a client connection.
@@ -273,12 +279,12 @@ void loopWebserver()
                 else
                 if (web_header.indexOf("GET /smalldisplay/on") >= 0)
                 {
-                    commandAction((char*)"--smalldisplay on", bPhoneReady);
+                    commandAction((char*)"--small on", bPhoneReady);
                 }
                 else
                 if (web_header.indexOf("GET /smalldisplay/off") >= 0)
                 {
-                    commandAction((char*)"--smalldisplay off", bPhoneReady);
+                    commandAction((char*)"--small off", bPhoneReady);
                 }
                 else
                 if (web_header.indexOf("GET /nopos/on") >= 0)
@@ -1150,7 +1156,7 @@ void loopWebserver()
                     web_client.println("<tr><td>\n");
                     web_client.println("<label for=\"fname\"><b>MAXV:</b></label>");
                     web_client.println("</td><td>\n");
-                    web_client.printf("<input type=\"text\" value=\"%.2f\" maxlength=\"4\" size=\"4\" id=\"maxv\" name=\"maxv\">\n", meshcom_settings.node_maxv);
+                    web_client.printf("<input type=\"text\" value=\"%.3f\" maxlength=\"5\" size=\"5\" id=\"maxv\" name=\"maxv\">\n", meshcom_settings.node_maxv);
                     web_client.println("<input type=\"submit\" value=\"set\">");
                     web_client.println("</td></tr>\n");
                     web_client.println("</form>");

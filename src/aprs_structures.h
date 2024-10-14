@@ -45,6 +45,8 @@ struct aprsMessage
 
 struct aprsPosition
 {
+    String pos_atxt;
+    
     double lat;
     char lat_c;
     double lon;
@@ -65,6 +67,11 @@ struct aprsPosition
     float qnh;
     float gasres;
     float co2;
+
+    // softser
+    float softser1; // Pegel
+    float softser2; // Temp
+    float softser3; // Volt
 };
 
 struct mheardLine

@@ -42,6 +42,7 @@ extern bool bINA226ON;
 extern bool bRTCON;
 extern bool bSMALLDISPLAY;
 extern bool bSOFTSERON;
+extern bool bMHONLY;
 
 extern bool bTCA9548A;
 extern bool bMCP23017;
@@ -165,3 +166,5 @@ extern String strSOFTSERAPP_BATT;
 
 extern String strSOFTSERAPP_FIXPEGEL;
 extern String strSOFTSERAPP_FIXTEMP;
+
+extern byte c1;

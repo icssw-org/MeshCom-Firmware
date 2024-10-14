@@ -217,7 +217,7 @@ struct s_meshcom_settings
 
 	int node_sset = 0;
 
-	float node_maxv = 4.24;
+	float node_maxv = 4.125;
 
 	char node_extern[40] = {0};
 
@@ -267,6 +267,8 @@ struct s_meshcom_settings
 	int node_postime = 0;
 
 	char node_passwd[15] = {0};
+
+	int node_sset3 = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;
@@ -355,7 +357,7 @@ struct s_meshcomcompat_settings
 
 	int node_sset = 0;
 
-	float node_maxv = 4.24;
+	float node_maxv = 4.125;
 
 	char node_extern[40] = {0};
 
@@ -405,6 +407,8 @@ struct s_meshcomcompat_settings
 	int node_postime = 0;
 
 	char node_passwd[15] = {0};
+
+	int node_sset3 = 0x0000;
 
 	// nicht im Flash
 	int node_press_alt = 0;

@@ -7,8 +7,8 @@ definitions
 #include <Arduino.h>
 
 #define SOURCE_TYPE "C"
-#define SOURCE_VERSION "4.33"
-#define SOURCE_VERSION_SUB "e"
+#define SOURCE_VERSION "4.34"
+#define SOURCE_VERSION_SUB "c"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -25,6 +25,7 @@ definitions
 #define TBEAM_AXP2101 12
 #define EBYTE_E22 39
 #define HELTEC_V3 43
+#define HELTEC_E290 44
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 // set hardware
@@ -150,7 +151,7 @@ definitions
     #define ENABLE_BMX280
     #define ENABLE_BMX680
     #define ENABLE_MCP23017
-    #define ENABLE_INA226
+    //I2C fault #define ENABLE_INA226
     #define ENABLE_RTC
     #define ENABLE_SOFTSER
     #define TX_POWER_MAX 22  // max 22dBm
@@ -204,6 +205,27 @@ definitions
 #define ETH_CS SS                     // use this to try with pin 26 CS
 #define MAX_DEVICE_ID 0xfFfFfFfFfFfF    // maximum mac address used to mask uint64_t from HW register
 
+#endif
+
+#ifdef BOARD_E290
+    #define MODUL_HARDWARE HELTEC_E290
+    #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
+    #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
+//    #define ENABLE_GPS
+//    #define ENABLE_BMX280
+//    #define ENABLE_BMX680
+//    #define ENABLE_MCP23017
+//    #define ENABLE_INA226
+//    #define ENABLE_RTC
+//    #define ENABLE_SOFTSER
+    #define TX_POWER_MAX 22  // max 22 dBm
+    #define TX_POWER_MIN 1
+    
+    #define SX1262_E290
+
+    // Defined using AXP192
+//    #define XPOWERS_CHIP_AXP192
+    #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 #endif
 
 // Meshcom Params
@@ -295,7 +317,7 @@ definitions
 #define TX_OUTPUT_POWER 22  // SX1268 have up to +22dBm
 #endif
 
-#ifdef SX126X_V3
+#ifdef SX1262_E290
 #define TX_OUTPUT_POWER 22  // SX1268 have up to +22dBm
 #endif
 
@@ -306,6 +328,9 @@ definitions
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
+#ifdef SX126X_V3
+#define TX_OUTPUT_POWER 22  // SX1262 have up to +22dBm
+#endif
 /**
  * RadioLib Coding Rate: Allowed values range from 5 to 8.
  * case 5: CR_4_5;
@@ -373,8 +398,8 @@ static const uint8_t SCK   = 5;
 #define LED_PIN 25
 
 #define RESET_OLED RST_OLED
-#define I2C_SDA SDA_OLED // I2C pins for this board
-#define I2C_SCL SCL_OLED
+#define I2C_SDA 17 // I2C pins for this board
+#define I2C_SCL 18
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
@@ -456,20 +481,14 @@ static const uint8_t KEY_BUILTIN = 39;
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_MULTIPLIER 4.9245
 
-#define USE_SX1262
-
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 23
 #define LORA_DIO1 33 // SX1268 IRQ
 #define LORA_DIO2 32 // SX1268 BUSY
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
+#define LORA_NSS 18
 
-#define RF95_SCK 5
-#define RF95_MISO 19
-#define RF95_MOSI 27
-#define RF95_NSS 18
-
-#define SX1268_CS RF95_NSS
+#define SX1268_CS LORA_NSS
 #define SX1268_IRQ LORA_DIO1
 #define SX1268_RST LORA_RESET
 #define SX1268_GPIO LORA_DIO2
@@ -552,6 +571,7 @@ static const uint8_t SCK =  5;
 //#define LORA_CS  //already defined
 
 #define BUTTON_PIN 12   // GIO12
+#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
 #define I2C_SDA    21
 #define I2C_SCL    22
@@ -579,6 +599,36 @@ static const uint8_t SCK =  5;
 #define SX1268_IRQ LORA_DIO1
 #define SX1268_RST LORA_RST
 #define SX1268_GPIO LORA_DIO0
+
+#endif
+
+#ifdef BOARD_E290
+
+#define SDA_PIN 39
+#define SCL_PIN 38
+
+//#define LED_PIN 25
+
+//#define RESET_OLED RST_OLED
+#define I2C_SDA SDA_PIN // I2C pins for this board
+#define I2C_SCL SCL_PIN
+
+//#define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
+
+#define BUTTON_PIN 21
+
+#define BATTERY_PIN 7 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define ADC_MULTIPLIER 4.9245
+
+// PCB Wiring - LoRa - only used for prepareToSleep()
+// Provided for use convenience, and examples
+#define PIN_LORA_DIO_1          14
+#define PIN_LORA_NSS            8
+#define PIN_LORA_NRST           12
+#define PIN_LORA_BUSY           13
+#define PIN_LORA_SCK            9
+#define PIN_LORA_MISO           11
+#define PIN_LORA_MOSI           10
 
 #endif
 

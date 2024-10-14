@@ -63,4 +63,14 @@ double cround4(double dvar);
 
 int conv_fuss(int alt_meter);
 
+#ifdef BOARD_E290
+void DrawDirection(float angle, int cx, int cy, int radius);
+void DrawRssi(int cx, int cy, int16_t rssi);
+double degreesToRadians(double degrees);
+#endif
+
+byte utf8ascii(byte ascii);
+String utf8ascii(String s);
+void utf8ascii(char* s);
+
 #endif // _LOOP_FUNCTIONS_H_

@@ -363,7 +363,13 @@ bool startWIFI()
 
   if(bWIFIAP)
   {
+    WiFi.disconnect(true);
+    delay(500);
+
+    WiFi.mode(WIFI_AP);
     WiFi.softAP(cBLEName);
+    
+    Serial.printf("WiFI AP mode ssid<%s> connected\n", cBLEName);
 
     return true;
   }
@@ -371,32 +377,59 @@ bool startWIFI()
   {
     if(strcmp(meshcom_settings.node_ssid, "none") == 0)
     {
-      Serial.printf("WiFI no ssid<%s> not connected\n", meshcom_settings.node_ssid);
+      Serial.printf("WiFI ST no ssid<%s> pwd<%s> not connected\n", meshcom_settings.node_ssid, meshcom_settings.node_pwd);
       return false;
     }
   }
 
+#ifdef ESP32
+  WiFi.disconnect(true);
+	delay(500);
 
+  // Scan for AP with best RSSI
+	int nrAps = WiFi.scanNetworks();
+  int best_rssi = -200;
+  int best_idx = 0;
+  for (int i = 0; i < nrAps; ++i)
+  {
+     if(strcmp(WiFi.SSID(i).c_str(), meshcom_settings.node_ssid) == 0)
+     {
+        Serial.printf("SSID: %s CHAN: %d BSSID: %012x RSSI:%i\n", WiFi.SSID(i), WiFi.channel(i),WiFi.BSSID(i), WiFi.RSSI(i));
+        if(WiFi.RSSI(i) > best_rssi)
+        {
+          best_rssi = WiFi.RSSI(i);
+          best_idx = i;
+        }
+     }
+  }
+  Serial.printf("-> connecting to BSSID: %012x CHAN: %i\n",WiFi.BSSID(best_idx),WiFi.channel(best_idx));	
+  WiFi.mode(WIFI_STA);
+  
+	WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
+	delay(500);
+
+  Serial.printf("WiFi.power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
+#else
   WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
-
+#endif
   int iWlanWait = 0;
 
   Serial.print("Wait WiFI connect ");
 
-  while(WiFi.status() != WL_CONNECTED && iWlanWait < 20)
+  while(WiFi.status() != WL_CONNECTED)
   {
     delay(500);
     Serial.print(".");
     iWlanWait++;
 
-    if(iWlanWait > 15)
+    if(iWlanWait > 5)
     {
       Serial.printf("\nWiFI ssid<%s> connection error\n", meshcom_settings.node_ssid);
       return false;
     }
   }
 
-  Serial.println();
+  Serial.println("WIFI connect OK");
 
   return true;
 }
@@ -415,6 +448,8 @@ void startMeshComUDP()
   else
   {
     node_ip = WiFi.localIP();
+
+    Serial.println(node_ip);
 
     sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
     sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
