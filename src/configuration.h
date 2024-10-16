@@ -211,7 +211,7 @@ definitions
     #define MODUL_HARDWARE HELTEC_E290
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
-//    #define ENABLE_GPS
+    #define ENABLE_GPS
 //    #define ENABLE_BMX280
 //    #define ENABLE_BMX680
 //    #define ENABLE_MCP23017
