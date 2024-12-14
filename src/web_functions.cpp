@@ -1301,7 +1301,7 @@ void loopWebserver()
 
                                     String msgtxt = aprsmsg.msg_payload;
                                     if(msgtxt.indexOf('{') > 0)
-                                        msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{')-1);
+                                        msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{'));
 
                                     if(strcmp(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()) == 0)
                                         web_client.printf("<tr><td class=\"td2\"></td><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small><b>%s</b></td></tr>\n", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str(), msgtxt.c_str());

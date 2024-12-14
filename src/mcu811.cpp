@@ -71,6 +71,8 @@ bool loopMCU811()
     if(!bMCU811ON)
         return false;
 
+    Wire.endTransmission();
+
     maxMCU811ValideCount=0;
     while(!ccs.available())
     {
@@ -85,6 +87,7 @@ bool loopMCU811()
         }
 
         delay(500);
+        Serial.println("[LOOP]...MCU-811 not available");
         return false;
     }
 

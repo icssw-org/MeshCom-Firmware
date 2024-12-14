@@ -12,7 +12,7 @@
 #define I2C_ADDRESS_BMP 0x77
 #define I2C_ADDRESS_BME 0x76
 
-uint8_t bmx_i2c_address = 0x00;
+uint8_t bmx_i2c_address = 0;
 
 #include "bmx280.h"
 
@@ -36,8 +36,8 @@ class BMx280Wire : public BMx280MI
 	public:	
 		//constructor of the derived class. 
 		//@param address i2c address of the sensor.
-		BMx280Wire(uint8_t i2c_address):
-		address_(i2c_address)	//initialize the BMx280Wire classes private member address_ to the i2c address provided
+		BMx280Wire(uint8_t bmx_i2c_address):
+		address_(bmx_i2c_address)	//initialize the BMx280Wire classes private member address_ to the i2c address provided
 		{
 			//nothing else to do here...
 		}
@@ -121,18 +121,22 @@ class BMx280Wire : public BMx280MI
 //create an BMx280 object using the I2C interface, I2C address 0x01 and IRQ pin number 2
 BMx280Wire bmx280(0x00);
 
-void setupBMX280()
+void setupBMX280(bool bNewStart)
 {
 	if(bWXDEBUG)	
 		Serial.printf("bBMPON:%i bBMEON:%i\n", bBMPON, bBMEON);
 
-  if(bBMPON)
-    bmx_i2c_address = I2C_ADDRESS_BMP;
-  else
-    if(bBMEON)
-      bmx_i2c_address = I2C_ADDRESS_BME;
+  	if(bBMPON)
+    	bmx_i2c_address = I2C_ADDRESS_BMP;
+  	else
+    	if(bBMEON)
+      	bmx_i2c_address = I2C_ADDRESS_BME;
     else
-      return;
+      	return;
+
+	if(!bNewStart)
+		Wire.endTransmission(true);
+
 
 	bmx280.address_ = bmx_i2c_address;	//initialize the BMx280Wire classes private member address_ to the i2c address provided
 
@@ -170,6 +174,8 @@ bool loopBMX280()
 	if(!bBMEON && !bBMPON)
 		return false;
 
+	Wire.endTransmission(true);
+
 	//start a measurement
 	if (!bmx280.measure())
 	{
@@ -180,21 +186,17 @@ bool loopBMX280()
 	}
 
 	//wait for the measurement to finish
-	if(!bmx280.hasValue())
+	int maxLoop=20;
+	do
 	{
-		if(bWXDEBUG)
-			Serial.println("BME/BMP Values not valid");
+		delay(100);
+		maxLoop--;
+		
+	} while (!bmx280.hasValue() && maxLoop > 0);
 
-		maxValideCount++;
-
-		if(maxValideCount > 10)
-		{
-			bBMEON=false;
-			bBMPON=false;
-
-			maxValideCount=0;
-		}
-
+	if(maxLoop <= 0)
+	{
+		Serial.println("BMX280 vales not valid");
 		return false;
 	}
 

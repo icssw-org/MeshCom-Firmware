@@ -1,11 +1,6 @@
 // (C) 2023 OE1KBC Kurt Baumann, OE1KFR Rainer 
 // (C) 2016, 2017, 2018, 2018, 2019, 2020 OE1KBC Kurt Baumann
 //
-// This code is not for distribution and may not be published!
-// Vervielfältigung und Veröffentlichung des Codes sind nicht gestattet!
-// Lizenz: kein Open Source.
-// zugelassen ausschließlich für OE1KBC, OE1KFR
-// alle anderen Finger weg !
 // 20230326: Version 4.00: START
 
 #include <Arduino.h>
@@ -209,6 +204,16 @@ SX1276 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 #ifdef BOARD_E220
 // RadioModule derived from SX1262 
 LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
+#endif
+
+#ifdef SX1262X
+    // RadioModule SX1268 
+    // cs - irq - reset - interrupt gpio
+    // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
+    // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
+
+    SX1262 radio = new Module(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
+
 #endif
 
 #ifdef SX126X
@@ -499,11 +504,12 @@ void esp32setup()
     #if defined(MODUL_FW_TBEAM)
         setupGPS(bSETGPS_POWER);
     #else
-        Wire.begin(I2C_SDA, I2C_SCL);
+        //Wire.begin(I2C_SDA, I2C_SCL);
+        Wire.begin();
     #endif
 
     #if defined(ENABLE_BMX280)
-        setupBMX280();
+        setupBMX280(true);
         setupMCU811();
     #endif
 
@@ -779,7 +785,7 @@ void esp32setup()
         #endif
 
         // setup for SX126x Radios
-        #if defined(SX126X)
+        #if defined(SX126X) || defined(SX1262X)
         // set the function that will be called
         // when LoRa preamble is not detected within CAD timeout period
         // or when a packet is received
@@ -793,7 +799,7 @@ void esp32setup()
         // radio.setDio1Action(setFlagDetected, RISING);
 
         // start scanning the channel
-        Serial.print(F("[SX126x] Starting to listen ... "));
+        Serial.print(F("[SX126x/SX1262X] Starting to listen ... "));
         state = radio.startReceive();
         if (state == RADIOLIB_ERR_NONE)
         {
@@ -821,7 +827,7 @@ void esp32setup()
             radio.setDio1Action(setFlagSent);
 
             // start scanning the channel
-            Serial.print(F("[SX126x] Starting to listen ... "));
+            Serial.print(F("[SX126x/E290] Starting to listen ... "));
             state = radio.startReceive();
             if (state == RADIOLIB_ERR_NONE)
             {
@@ -840,14 +846,14 @@ void esp32setup()
             }
         #endif
         
-        // setup for SX126x Radios
+        // setup for E290 Radios
         #if defined(BOARD_E220)
 
             // interrupt pin
             radio.setDio1Action(setFlag);
 
             // start scanning the channel
-            Serial.print(F("[SX126x] Starting to listen ... "));
+            Serial.print(F("[E290] Starting to listen ... "));
             state = radio.startReceive();
             if (state == RADIOLIB_ERR_NONE)
             {
@@ -1460,11 +1466,7 @@ void esp32loop()
 //#ifndef BOARD_TLORA_OLV216
     if(bONEWIRE)
     {
-        if(onewireTimeWait == 0)
-            onewireTimeWait = millis() - 10000;
-
-
-        if ((onewireTimeWait + 10000) < millis())  // 10 sec
+        if ((onewireTimeWait + 30000) < millis())  // 30 sec
         {
             //if (tx_is_active == false && is_receiving == false)
             {
@@ -1489,10 +1491,7 @@ void esp32loop()
     #if defined(ENABLE_BMX280)
     if(bBMPON || bBMEON)
     {
-        if(BMXTimeWait == 0)
-            BMXTimeWait = millis() - 10000;
-
-        if ((BMXTimeWait + 30000) < millis())   // 30 sec
+        if ((BMXTimeWait + 60000) < millis())   // 60 sec
         {
                 if(loopBMX280())
                 {
@@ -1519,11 +1518,9 @@ void esp32loop()
 
     checkButtonState();
 
+    #if defined(ENABLE_BMX280)
     if(bMCU811ON)
     {
-        if(MCU811TimeWait == 0)
-            MCU811TimeWait = millis() - 10000;
-
         if ((MCU811TimeWait + 60000) < millis())   // 60 sec
         {
             // read MCU-811 Sensor
@@ -1541,6 +1538,7 @@ void esp32loop()
             MCU811TimeWait = millis(); // wait for next messurement
         }
     }
+    #endif
 
     #if defined(ENABLE_INA226)
     if(bINA226ON)
