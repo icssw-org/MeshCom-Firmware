@@ -76,6 +76,7 @@ void setupBME680()
   // if none found or there is another sensor on the other address return for now!!! TODO: fix this
   if (foundAddr == 0 || foundAddr == 3) {
     Serial.println("[INIT]...Could not find BME680 sensor or Address conflict!");
+    bBME680ON=false;
     return;
   } else {
     bme680_found = true;

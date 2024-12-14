@@ -1,10 +1,5 @@
 // (C) 2023 OE1KBC Kurt Baumann, OE1KFR Rainer 
 //
-// This code is not for distribution and may not be published!
-// Vervielfältigung und Veröffentlichung des Codes sind nicht gestattet!
-// Lizenz: kein Open Source.
-// zugelassen ausschließlich für OE1KBC, OE1KFR
-// alle anderen Finger weg !
 // 20230326: Version 4.00: START
 
 #include <Arduino.h>

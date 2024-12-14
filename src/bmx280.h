@@ -5,7 +5,7 @@
 
 #if defined (ENABLE_BMX280)
 
-void setupBMX280(void);
+void setupBMX280(bool bNewStart);
 
 bool loopBMX280(void);
 

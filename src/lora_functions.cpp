@@ -13,6 +13,12 @@
     extern int transmissionState;
 #endif
 
+#ifdef SX1262X
+    #include <RadioLib.h>
+    extern SX1262 radio;
+    extern int transmissionState;
+#endif
+
 #ifdef SX126X
     #include <RadioLib.h>
     extern SX1268 radio;

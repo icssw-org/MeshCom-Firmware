@@ -1626,9 +1626,13 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
                         #ifdef BOARD_E290
                             DrawRssi(3, 117, rssi);
+
+                            sprintf(msg_text, "ALT:%im", alt);
+                            msg_text[20]=0x00;
+                            sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
                         #endif
                     
-                        sprintf(msg_text, "ALT:%im", alt);
+                        sprintf(msg_text, "ALT:%im rssi:%i", alt, rssi);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
 
