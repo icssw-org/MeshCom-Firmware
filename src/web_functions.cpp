@@ -71,13 +71,18 @@ void startWebserver()
     if(!meshcom_settings.node_hasIPaddress)
         return;
 
+
 #ifdef ESP32
+
+    web_server.stop();
+
     // Set up mDNS responder:
     // - first argument is the domain name, in this example
     //   the fully-qualified domain name is "esp32.local"
     // - second argument is the IP address to advertise
     //   we send our IP address on the WiFi network
-    if (!MDNS.begin(meshcom_settings.node_call)) {
+    if (!MDNS.begin(meshcom_settings.node_call))
+    {
         Serial.println("Error setting up MDNS responder!");
         return;
     }

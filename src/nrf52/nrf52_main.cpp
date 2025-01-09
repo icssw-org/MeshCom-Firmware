@@ -62,8 +62,8 @@ void sendHeartbeat();
 
 #include <onewire_functions.h>
 
-#include <SparkFun_Ublox_Arduino_Library.h>
-SFE_UBLOX_GPS myGPS;
+#include <SparkFun_u-blox_GNSS_Arduino_Library.h>
+SFE_UBLOX_GNSS myGPS;
 
 // UBLOX Modul auf Factory-Set zurück setzen
 // derzeit nur im esp32_gps realisiert
@@ -136,8 +136,7 @@ Sync Word Setting in MeshCom
     Define: sx126x.h line 109:
     #define LORA_MAC_PUBLIC_SYNCWORD 0x242b
 
-    Radio.SetPublicNetwork(true); needs to be called, so syncword gets new set in radio.cpp line: 1183 in
-    void RadioSetPublicNetwork(bool enable)
+    Radio.SetCustomSyncWord(0x242b); needs to be called, so syncword gets new set in radio.cpp
     Method
 */
 
@@ -586,7 +585,7 @@ void nrf52setup()
 		// Init BLE
 		init_ble();
 
-        Serial.println("[init] BLE init");
+        Serial.println("[INIT]...BLE init");
 	}
 	else
 	{
@@ -607,7 +606,7 @@ void nrf52setup()
     Wire.begin();
 
     #if defined(ENABLE_BMX280)
-        setupBMX280();
+        setupBMX280(true);
         setupMCU811();
     #endif
 
@@ -669,7 +668,7 @@ void nrf52setup()
     RadioEvents.RxTimeout = OnRxTimeout;
     RadioEvents.RxError = OnRxError;
     //RadioEvents.PreAmpDetect = OnPreambleDetect;
-    RadioEvents.HeaderDetect = OnHeaderDetect;
+    RadioEvents.PreAmpDetect = OnHeaderDetect;
     
     lora_setcountry(meshcom_settings.node_country);
 
@@ -678,7 +677,7 @@ void nrf52setup()
 
     // Sets the Syncword new that we can set the MESHCOM SWORD
     DEBUG_MSG("RADIO", "Setting new LoRa Sync Word");
-    Radio.SetPublicNetwork(true);
+    Radio.SetCustomSyncWord(0x242b);
 
     // set bandwidth 
     Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", getBW());

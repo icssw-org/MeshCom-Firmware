@@ -365,11 +365,14 @@ bool bSetDisplay = false;
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
-	if(bClear || (x == 0 && y== 0))
+	if(bClear || (x == 0 && y== 0) || (x == 0 && memcmp(text, "#F", 2) == 0))
     {
         #ifdef BOARD_E290
             e290_display.clearMemory();
-            e290_display.fastmodeOn();
+            
+        	if(memcmp(text, "#S", 2) == 0)
+                e290_display.fastmodeOn();
+            
             e290_display.setFont(&FreeMonoBold12pt7b);
         #else
             u8g2.setFont(u8g2_font_6x10_mf);
@@ -425,7 +428,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     char ptext[30] = {0};
                     pageText[its][pageLine[its][2]] = 0x00;
                     
-                    if(memcmp(pageText[its], "#S", 2) == 0)
+                    if(memcmp(pageText[its], "#S", 2) == 0 || memcmp(pageText[its], "#F", 2) == 0)  // #F fastmode off
                     {
                         // only transfer
                         if(!bNeu)
@@ -459,7 +462,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     }
                 }
 
-            	if(memcmp(text, "#S", 2) != 0)
+            	if(memcmp(text, "#S", 2) != 0 && memcmp(text, "#F", 2) != 0)
                     e290_display.update();
             }
             
@@ -846,7 +849,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // ppppp ... password (PWLFD)
     // S1 ... A0 switch A0-7 B0-7
     // aa ... ON or OF
-   
+
     if(aprsmsg.msg_payload.startsWith("{MCP}") || aprsmsg.msg_payload.startsWith("{mcp}"))
     {
             char cset[30];
@@ -990,7 +993,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #ifdef BOARD_E290
 
-    sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
+    sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");    // not fastmode for CET display
 
     e290_display.setCursor(0, dzeile[1]);
     e290_display.setFont(&FreeSans9pt7b);
@@ -2157,7 +2160,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     #endif
 
     // set default
-    if(meshcom_settings.node_symid != '/' && meshcom_settings.node_symid != '\'')
+    if(meshcom_settings.node_symid != '/' && meshcom_settings.node_symid != '\'' &&  meshcom_settings.node_symid != 'L' && meshcom_settings.node_symid != 'M')
     {
         meshcom_settings.node_symid = '/';
         meshcom_settings.node_symcd = '#';
