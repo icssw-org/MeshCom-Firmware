@@ -752,11 +752,14 @@ void esp32setup()
         // when LoRa preamble is not detected within CAD timeout period
         // or when a packet is received
         
-        radio.setPacketReceivedAction(setFlagReceive);
-        radio.setPacketSentAction(setFlagSent);
+        // set Receive Interupt
+        bEnableInterruptReceive = true; //KBC 0801
+        radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
 
-        radio.setDio0Action(setFlagReceive, RISING);
-        radio.setDio1Action(setFlagSent, RISING);
+        //KBC 0801 radio.setPacketSentAction(setFlagSent);
+
+        //KBC 0801 radio.setDio0Action(setFlagReceive, RISING);
+        //KBC 0801 radio.setDio1Action(setFlagSent, RISING);
 
         // set the function that will be called
         // when LoRa preamble is detected
@@ -820,11 +823,14 @@ void esp32setup()
         #endif
 
         #if defined(SX126X_V3) || defined(SX1262_E290)
-            // interrupt pin
-            radio.setPacketReceivedAction(setFlagReceive);
-            radio.setPacketSentAction(setFlagSent);
 
-            radio.setDio1Action(setFlagSent);
+            // set Receive Interupt
+            bEnableInterruptReceive = true; //KBC 0801
+            radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
+            
+            //KBC 0801 radio.setPacketSentAction(setFlagSent);
+
+            //KBC 0801 radio.setDio1Action(setFlagSent);
 
             // start scanning the channel
             Serial.print(F("[SX126x/E290] Starting to listen ... "));
@@ -1034,14 +1040,37 @@ void esp32loop()
         {
             iReceiveTimeOutTime=0;
 
-            // LoRa preamble was detected
-            if(bLORADEBUG)
+            // clear Receive Interrupt
+            bEnableInterruptReceive = false; //KBC 0801
+            radio.clearPacketReceivedAction(); // KBC 0801
+
+            // clear Transmit Interrupt
+            bEnableInterruptTransmit = false; // KBC 0801
+            radio.clearPacketSentAction();  //KBC 0801
+
+            // set Receive Interupt
+            bEnableInterruptReceive = true; //KBC 0801
+            radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
+
+            int state = radio.startReceive();
+            if (state == RADIOLIB_ERR_NONE)
             {
-                Serial.printf("[SX12xx] Receive Timeout, starting sending again ... \n");
+                if(bLORADEBUG)
+                    Serial.print(getTimeString());
+                    Serial.printf("[SX12xx] Receive Timeout, startReceive sucess\n");
             }
+            else
+            {
+                if(bLORADEBUG)
+                {
+                    Serial.print(getTimeString());
+                    Serial.print(" [SX12xx] Receive Timeout, startReceive error = ");
+                    Serial.println(state);
+                }
+            }        
         }
     }
-
+    
     if(bLoopActive)
         Serial.println("loop 01");
 
@@ -1061,7 +1090,17 @@ void esp32loop()
 
             checkRX();
 
-            bEnableInterruptReceive = true;
+            // clear Receive Interrupt
+            bEnableInterruptReceive = false; // KBC 0801
+            radio.clearPacketReceivedAction(); // KBC 0801
+
+            // clear Transmit Interrupt
+            bEnableInterruptTransmit = false; // KBC 0801
+            radio.clearPacketSentAction();  //KBC 0801
+
+            // set Receive Interupt
+            bEnableInterruptReceive = true; //KBC 0801
+            radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
         }
         else
         if(transmittedFlag)
@@ -1092,7 +1131,6 @@ void esp32loop()
             // RF switch is powered down etc.
             radio.finishTransmit();
 
-
             #ifndef BOARD_TLORA_OLV216
             // reset MeshCom now
             if(bSetLoRaAPRS)
@@ -1105,7 +1143,19 @@ void esp32loop()
             OnTxDone();
 
             if(bLORADEBUG)
-                Serial.print(F("[SX12xx] Starting to listen again... "));
+                Serial.print(F("[SX127x] Starting to listen again... "));
+
+            // clear Transmit Interrupt
+            bEnableInterruptTransmit = false; // KBC 0801
+            radio.clearPacketSentAction();  //KBC 0801
+
+            // clear Receive Interrupt
+            bEnableInterruptReceive = false; // KBC 0801
+            radio.clearPacketReceivedAction();  //KBC 0801
+
+            // set Receive Interupt
+            bEnableInterruptReceive = true;
+            radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
 
             int state = radio.startReceive();
             if (state == RADIOLIB_ERR_NONE)
@@ -1123,8 +1173,6 @@ void esp32loop()
             }        
 
             iReceiveTimeOutTime = millis(); // start to wait for next transmit
-
-            bEnableInterruptReceive = true;
         }
     }
 
@@ -1140,16 +1188,31 @@ void esp32loop()
             cmd_counter=0;
             tx_waiting=true;
 
+            // clear Receive Interrupt
             bEnableInterruptReceive = false;
+            radio.clearPacketReceivedAction();  //KBC 0801
+
+            // set Transmit Interupt
+            bEnableInterruptTransmit = true; //KBC 0801
+            radio.setPacketSentAction(setFlagSent); //KBC 0801
 
             if(doTX())
             {
-                bEnableInterruptTransmit = true;
+                //KBC 0801 bEnableInterruptTransmit = true;
             }
             else
             {
                 if(bLORADEBUG)
-                    Serial.print(F("[SX12xx] Starting to listen again... "));
+                    Serial.print(F("[SX127x] Starting to listen again... "));
+
+                // clear Transmit Interrupt
+                bEnableInterruptReceive = false; // KBC 0801
+                bEnableInterruptTransmit = false; // KBC 0801
+                radio.clearPacketSentAction();  //KBC 0801
+
+                // set Receive Interupt
+                bEnableInterruptReceive = true; //KBC 0801
+                radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
 
                 int state = radio.startReceive();
                 if (state == RADIOLIB_ERR_NONE)

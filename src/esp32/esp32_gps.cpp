@@ -6,6 +6,8 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <clock.h>
+
+#include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <TinyGPSPlus.h>
 
 #if defined(MODUL_FW_TBEAM)
@@ -54,9 +56,7 @@ XPowersLibInterface *PMU = NULL;
 // TinyGPS
 TinyGPSPlus tinyGPSPlus;
 
-#include "SparkFun_Ublox_Arduino_Library.h"
-
-SFE_UBLOX_GPS myGPS;
+SFE_UBLOX_GNSS myGPS;
 
 int direction_S_N = 0;  //0--S, 1--N
 int direction_E_W = 0;  //0--E, 1--W

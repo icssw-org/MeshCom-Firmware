@@ -373,7 +373,7 @@ void RadioInit();
     RadioInit();
 
     // Sets the Syncword new that we can set the MESHCOM SWORD
-    Radio.SetPublicNetwork(true);
+    Radio.SetCustomSyncWord(0x242b);
 
     if(bLORADEBUG)
         Serial.printf("[LoRa]...RF_FREQUENCY: %.4f kHz\n", getFreq());
@@ -450,7 +450,7 @@ void RadioInit();
     RadioInit();
 
     // Sets the Syncword new that we can set the MESHCOM SWORD
-    Radio.SetPublicNetwork(false);
+    // not used because APRS using radioInit SYNCWORD ... Radio.SetCustomSyncWord(0x242b);
 
     if(bLORADEBUG)
         Serial.printf("[LoRa]...RF_FREQUENCY: %.4f kHz\n", LORA_APRS_FREQUENCY/1000000.);
