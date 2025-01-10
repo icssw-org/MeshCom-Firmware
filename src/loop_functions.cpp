@@ -12,6 +12,8 @@
 
 #include "TinyGPSPlus.h"
 
+#include <Wire.h> 
+
 // TinyGPS
 extern TinyGPSPlus tinyGPSPLus;
 
@@ -110,16 +112,23 @@ int dzeile[6] = {16, 44, 64, 84, 104, 124};
 
 int dzeile[6] = {10, 24, 34, 44, 54, 64};
 
+U8G2 *u8g2;
+
 #if defined(BOARD_HELTEC)
-    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, 16, 15, 4);
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, 16, 15, 4);
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0, 16, 15, 4);
 #elif defined(BOARD_HELTEC_V3)
-    U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2(U8G2_R0, 18, 17, 21);
+    U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, 21);
+    U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, 18, 17, 21);
 #elif defined(BOARD_RAK4630)
-    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);  //RESET CLOCK DATA
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0);  //RESET CLOCK DATA
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0);  //RESET CLOCK DATA
 #elif defined(BOARD_TLORA_OLV216)
-    U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 #else
-    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 #endif
 
 #endif
@@ -363,6 +372,25 @@ int pageHold=PAGE_MAX-1;
 
 bool bSetDisplay = false;
 
+// detect oled-display type
+// see https://github.com/olikraus/u8g2/discussions/2088
+bool esp32_isSSD1306(int address) {
+  byte buffer[0];
+
+  Wire.begin(I2C_SDA, I2C_SCL);
+  Wire.beginTransmission(address);
+  Wire.write(0x00);
+Wire.endTransmission(false);
+            Wire.requestFrom(address, static_cast<uint8_t>(1));  // This register is 8 bits = 1 byte long
+  if (Wire.available() > 0) {
+    Wire.readBytes(buffer, 1);
+  }
+  Wire.endTransmission();
+
+  buffer[0] &= 0x0f;        // mask off power on/off bit
+  return buffer[0] == 0x6;  //0x3 = SSD1306 128x32, 0x6 = SSD1306 128x64, 0x7 || 0xf = SH1107, 0x8 = SH1106
+}
+
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
 	if(bClear || (x == 0 && y== 0) || (x == 0 && memcmp(text, "#F", 2) == 0))
@@ -375,7 +403,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             
             e290_display.setFont(&FreeMonoBold12pt7b);
         #else
-            u8g2.setFont(u8g2_font_6x10_mf);
+            u8g2->setFont(u8g2_font_6x10_mf);
         #endif
 
     	if(bClear)
@@ -447,7 +475,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     {
                         e290_display.drawLine(0, 22, 320, 22, BLACK);
 
-                        //u8g2.drawHLine(pageLine[its][0], pageLine[its][1], 120);
+                        //u8g2->drawHLine(pageLine[its][0], pageLine[its][1], 120);
                     }
                     else
                     {
@@ -457,7 +485,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                             e290_display.setCursor(pageLine[its][0], pageLine[its][1]);
                             e290_display.println(ptext);
 
-                            //u8g2.drawUTF8(pageLine[its][0], pageLine[its][1], ptext);
+                            //u8g2->drawUTF8(pageLine[its][0], pageLine[its][1], ptext);
                         }
                     }
                 }
@@ -468,7 +496,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             
         #else
         
-        u8g2.firstPage();
+        u8g2->firstPage();
         do
         {
             if(pageLineAnz > 0)
@@ -490,19 +518,19 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     
                     if(memcmp(pageText[its], "#L", 2) == 0)
                     {
-                        u8g2.drawHLine(pageLine[its][0], pageLine[its][1], 120);
+                        u8g2->drawHLine(pageLine[its][0], pageLine[its][1], 120);
                     }
                     else
                     {
                         sprintf(ptext, "%s", pageText[its]);
                         if(pageLine[its][1] >= 0)
-                            u8g2.drawUTF8(pageLine[its][0], pageLine[its][1], ptext);
+                            u8g2->drawUTF8(pageLine[its][0], pageLine[its][1], ptext);
                     }
                 }
 
             }
 
-        } while (u8g2.nextPage());
+        } while (u8g2->nextPage());
         
         #endif
 
@@ -700,13 +728,13 @@ void sendDisplayTime()
     #else
 
         #ifdef BOARD_HELTEC_V3
-        u8g2.firstPage();
-        u8g2.drawStr(pageLine[0][0], pageLine[0][1], print_text);
-        u8g2.nextPage();
+        u8g2->firstPage();
+        u8g2->drawStr(pageLine[0][0], pageLine[0][1], print_text);
+        u8g2->nextPage();
         #else
-        u8g2.setCursor(pageLine[0][0], pageLine[0][1]);
-        u8g2.print(print_text);
-        u8g2.sendBuffer();
+        u8g2->setCursor(pageLine[0][0], pageLine[0][1]);
+        u8g2->print(print_text);
+        u8g2->sendBuffer();
         #endif
     
     #endif
