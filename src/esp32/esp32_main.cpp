@@ -69,7 +69,7 @@ extern XPowersLibInterface *PMU;
 #else
 
 #include <U8g2lib.h>
-
+/*
 #if defined(BOARD_HELTEC)
     extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 #elif defined(BOARD_HELTEC_V3)
@@ -80,7 +80,11 @@ extern XPowersLibInterface *PMU;
     extern U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2;
 #else
     extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
-#endif
+#endif */
+
+extern U8G2 *u8g2;
+extern U8G2 u8g2_1;
+extern U8G2 u8g2_2;
 
 #endif
 
@@ -610,21 +614,31 @@ void esp32setup()
 
     #else
 
-    u8g2.begin();
+    Serial.println(F("Auto detecting display:"));
+    
+    if (esp32_isSSD1306(0x3C)) { //Address of the display to be checked
+        Serial.println(F("-> OLED Display is SSD1306"));
+        u8g2 = &u8g2_1;
+    } else {
+        Serial.println(F("-> OLED Display is SH1106"));
+        u8g2 = &u8g2_2;
+    }
 
-    u8g2.clearDisplay();
-    u8g2.setFont(u8g2_font_6x10_mf);
-    u8g2.firstPage();
+    u8g2->begin();
+
+    u8g2->clearDisplay();
+    u8g2->setFont(u8g2_font_6x10_mf);
+    u8g2->firstPage();
     do
     {
-        u8g2.setFont(u8g2_font_10x20_mf);
-        u8g2.drawStr(5, 20, "MeshCom 4.0");
-        u8g2.setFont(u8g2_font_6x10_mf);
-        u8g2.drawStr(5, 30, cvers);
-        u8g2.drawStr(5, 40, "by icssw.org");
-        u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
-        u8g2.drawStr(5, 60, "...starting now");
-    } while (u8g2.nextPage());
+        u8g2->setFont(u8g2_font_10x20_mf);
+        u8g2->drawStr(5, 20, "MeshCom 4.0");
+        u8g2->setFont(u8g2_font_6x10_mf);
+        u8g2->drawStr(5, 30, cvers);
+        u8g2->drawStr(5, 40, "by icssw.org");
+        u8g2->drawStr(5, 50, "OE1KFR, OE1KBC");
+        u8g2->drawStr(5, 60, "...starting now");
+    } while (u8g2->nextPage());
 
     #endif
 

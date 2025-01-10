@@ -35,7 +35,29 @@ String strInfo = "";
             if(address == 0x20)strDev="MCP23017/0";
             if(address == 0x21)strDev="MCP23017/1";
             if(address == 0x34)strDev="AXP192/2101";
-            if(address == 0x3C)strDev="OLED";
+            if(address == 0x3C)
+            {
+                strDev="OLED";
+                byte buffer[0];
+            Wire.beginTransmission(address);
+            Wire.write(0x00);
+            Wire.endTransmission(false);
+            Wire.requestFrom(address, static_cast<uint8_t>(1));  // This register is 8 bits = 1 byte long
+            if (Wire.available() > 0) {
+                Serial.println("[OLED]...DATA AVAILABLE");
+                Wire.readBytes(buffer, 1);
+            }
+            Wire.endTransmission();
+
+            Serial.printf("[OLED]...RESULT: %i\n", buffer[0]);
+
+            buffer[0] &= 0x0f;        // mask off power on/off bit
+            if(buffer[0] == 0x6)
+                strDev="OLED SSD1306";
+            else
+                strDev="OLED SH1106";
+
+            }
             if(address == 0x40)strDev="INA226";
             if(address == 0x57)strDev="[RTC DS3231 EPROM]";
             if(address == 0x5A)strDev="MCU-811";

@@ -635,23 +635,23 @@ void nrf52setup()
         setupSOFTSER();
     #endif
 
-    u8g2.begin();
+    u8g2->begin();
 
-    u8g2.clearDisplay();
-    u8g2.setFont(u8g2_font_6x10_mf);
-    u8g2.firstPage();
+    u8g2->clearDisplay();
+    u8g2->setFont(u8g2_font_6x10_mf);
+    u8g2->firstPage();
     do
     {
-        u8g2.setFont(u8g2_font_10x20_mf);
-        u8g2.drawStr(5, 20, "MeshCom 4.0");
-        u8g2.setFont(u8g2_font_6x10_mf);
+        u8g2->setFont(u8g2_font_10x20_mf);
+        u8g2->drawStr(5, 20, "MeshCom 4.0");
+        u8g2->setFont(u8g2_font_6x10_mf);
         char cvers[20];
         sprintf(cvers, "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
-        u8g2.drawStr(5, 30, cvers);
-        u8g2.drawStr(5, 40, "by icssw.org");
-        u8g2.drawStr(5, 50, "OE1KFR, OE1KBC");
-        u8g2.drawStr(5, 60, "...starting now");
-    } while (u8g2.nextPage());
+        u8g2->drawStr(5, 30, cvers);
+        u8g2->drawStr(5, 40, "by icssw.org");
+        u8g2->drawStr(5, 50, "OE1KFR, OE1KBC");
+        u8g2->drawStr(5, 60, "...starting now");
+    } while (u8g2->nextPage());
 
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;

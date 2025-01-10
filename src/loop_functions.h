@@ -13,7 +13,7 @@
 #endif
 
 // OLED Display 1306 128 x 64 px
-#include <U8g2lib.h> // Click to install library: http://librarymanager/All#u8g2
+#include <U8g2lib.h>
 
 unsigned long getUnixClock();
 
@@ -46,6 +46,8 @@ void addBLECommandBack(char *text);
 void addLoraRxBuffer(unsigned int msg_id);
 
 int checkOwnTx(uint8_t compBuffer[4]);
+
+bool esp32_isSSD1306(int address);
 
 void sendMessage(char *msg_text, int len);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);
