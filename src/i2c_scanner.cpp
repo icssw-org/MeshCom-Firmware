@@ -44,15 +44,18 @@ String strInfo = "";
             Wire.endTransmission(false);
             Wire.requestFrom(address, static_cast<uint8_t>(1));  // This register is 8 bits = 1 byte long
             if (Wire.available() > 0) {
+                Serial.println("[OLED]...DATA AVAILABLE");
                 Wire.readBytes(buffer, 1);
             }
             Wire.endTransmission();
 
+            Serial.printf("[OLED]...RESULT: %i\n", buffer[0]);
+
             buffer[0] &= 0x0f;        // mask off power on/off bit
             if(buffer[0] == 0x6)
-                Serial.println("-> OLED Display is SSD1306");
+                strDev="OLED SSD1306";
             else
-                Serial.println("-> OLED Display is SH1106");
+                strDev="OLED SH1106";
 
             }
             if(address == 0x40)strDev="INA226";
