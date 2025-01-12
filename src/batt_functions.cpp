@@ -146,7 +146,12 @@ void init_batt(void)
 {
     Serial.println("[INIT]...init_batt");
 
-/** Analog input for battery level */
+// getht für HELTEC V3 und für V3.2  wichtig für Display
+#if defined(BOARD_HELTEC_V3)
+	pinMode(36,OUTPUT);
+	digitalWrite(36, LOW);
+#endif
+
 #if defined(NRF52_SERIES)
 	// Set the resolution to 12-bit (0..4095)
 	analogReadResolution(12); // Can be 8, 10, 12 or 14

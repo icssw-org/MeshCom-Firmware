@@ -2072,7 +2072,7 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            printf("\n%s", print_buff+2);
+            printf("showi2c %s\n", print_buff);
         }
 
         return;
@@ -2294,10 +2294,10 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...GATEWAY %s %s ...MHONLY %s ...MESH %s ...WEBSERVER %s ...BUTTON  %s ... SS %s\n...PASSWD %s\n",
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...GATEWAY %s %s ...MHONLY %s ...MESH %s ...BUTTON  %s ... SS %s\n...PASSWD %s\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
-                    (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMHONLY?"on":"off"), (bMESH?"on":"off"), (bWEBSERVER?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
+                    (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMHONLY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
@@ -2335,13 +2335,14 @@ void commandAction(char *msg_text, bool ble)
             }
 
             #ifndef BOARD_RAK4630
-                Serial.printf("...WIFI-AP  %s\n", (bWIFIAP?"yes":"no"));
+                Serial.printf("...WIFI-AP  %s\n", (bWIFIAP?"on":"off"));
                 if(bWIFIAP)
                 {
                     Serial.printf("...SSID     %s\n", cBLEName);
                     Serial.printf("...PASSWORD <>\n");
                 }
-                else
+
+                Serial.printf("...Webserver  %s\n", (bWEBSERVER?"on":"off"));
                 {
                     Serial.printf("...SSID     %s\n", meshcom_settings.node_ssid);
                     Serial.printf("...PASSWORD %s\n", meshcom_settings.node_pwd);

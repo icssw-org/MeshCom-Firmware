@@ -86,7 +86,10 @@ void startWebserver()
         Serial.println("Error setting up MDNS responder!");
         return;
     }
-    Serial.println("mDNS responder started");
+    
+    if(bDEBUG)
+        Serial.println("mDNS responder started");
+        
 #endif
 
     web_server.begin();
