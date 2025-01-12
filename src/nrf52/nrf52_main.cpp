@@ -253,7 +253,10 @@ void interruptHandle3()
 
 #include <U8g2lib.h>
 
-extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
+//extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
+extern U8G2 *u8g2;
+extern U8G2 u8g2_1;
+extern U8G2 u8g2_2;
 
 // Prototypes
 void blinkLED();                                     // blink GREEN
@@ -634,6 +637,19 @@ void nrf52setup()
     #if defined(ENABLE_SOFTSER)
         setupSOFTSER();
     #endif
+
+    Serial.println(F("Auto detecting display:"));
+    
+    if (esp32_isSSD1306(0x3C))
+    { //Address of the display to be checked
+        Serial.println(F("-> OLED Display is SSD1306"));
+        u8g2 = &u8g2_2;
+    }
+    else
+    {
+        Serial.println(F("-> OLED Display is SH1106"));
+        u8g2 = &u8g2_1;
+    }
 
     u8g2->begin();
 
