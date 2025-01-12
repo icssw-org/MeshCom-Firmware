@@ -15,10 +15,6 @@ void startMeshComUDP();
 void sendMeshComHeartbeat();
 void resetMeshComUDP();
 
-// WebServer
-void startWebserver();
-void loopWebserver();
-
 // Extern JSON UDP
 void startExternUDP();
 void getExternUDP();

@@ -264,6 +264,7 @@ volatile bool bEnableInterruptReceive = true;
 
 // flag to indicate if we are after receiving
 unsigned long iReceiveTimeOutTime = 0;
+unsigned long inoReceiveTimeOutTime = 0;
 
 // flag to indicate if we are currently allowed to transmittig
 volatile bool transmittedFlag = false;
@@ -508,8 +509,8 @@ void esp32setup()
     #if defined(MODUL_FW_TBEAM)
         setupGPS(bSETGPS_POWER);
     #else
-        //Wire.begin(I2C_SDA, I2C_SCL);
-        Wire.begin();
+        Wire.begin(I2C_SDA, I2C_SCL);
+        //Wire.begin();
     #endif
 
     #if defined(ENABLE_BMX280)
@@ -616,12 +617,15 @@ void esp32setup()
 
     Serial.println(F("Auto detecting display:"));
     
-    if (esp32_isSSD1306(0x3C)) { //Address of the display to be checked
+    if (esp32_isSSD1306(0x3C))
+    { //Address of the display to be checked
         Serial.println(F("-> OLED Display is SSD1306"));
-        u8g2 = &u8g2_1;
-    } else {
-        Serial.println(F("-> OLED Display is SH1106"));
         u8g2 = &u8g2_2;
+    }
+    else
+    {
+        Serial.println(F("-> OLED Display is SH1106"));
+        u8g2 = &u8g2_1;
     }
 
     u8g2->begin();
@@ -1047,6 +1051,20 @@ void esp32loop()
     if(bLoopActive)
         Serial.println("loop 00");
 
+    if(inoReceiveTimeOutTime > 0)
+    {
+        // Timeout RECEIVE_TIMEOUT
+        if((inoReceiveTimeOutTime + (60 * 6 * 1000)) < millis())  // 6 Minuten
+        {
+            inoReceiveTimeOutTime=0;
+
+            char tmessage[50];
+            sprintf(tmessage, ":%s", (char*)"test restart LoRa-Loop");
+
+            sendMessage(tmessage, strlen(tmessage));
+        }
+    }
+
     if(iReceiveTimeOutTime > 0)
     {
         // Timeout RECEIVE_TIMEOUT
@@ -1070,15 +1088,17 @@ void esp32loop()
             if (state == RADIOLIB_ERR_NONE)
             {
                 if(bLORADEBUG)
+                {
                     Serial.print(getTimeString());
-                    Serial.printf("[SX12xx] Receive Timeout, startReceive sucess\n");
+                    Serial.println(" [SX12xx] Receive Timeout, startReceive again with sucess");
+                }
             }
             else
             {
                 if(bLORADEBUG)
                 {
                     Serial.print(getTimeString());
-                    Serial.print(" [SX12xx] Receive Timeout, startReceive error = ");
+                    Serial.print(" [SX12xx] Receive Timeout, startReceive again with error = ");
                     Serial.println(state);
                 }
             }        
@@ -1115,6 +1135,8 @@ void esp32loop()
             // set Receive Interupt
             bEnableInterruptReceive = true; //KBC 0801
             radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
+
+            inoReceiveTimeOutTime=millis();
         }
         else
         if(transmittedFlag)
@@ -1156,9 +1178,6 @@ void esp32loop()
 
             OnTxDone();
 
-            if(bLORADEBUG)
-                Serial.print(F("[SX127x] Starting to listen again... "));
-
             // clear Transmit Interrupt
             bEnableInterruptTransmit = false; // KBC 0801
             radio.clearPacketSentAction();  //KBC 0801
@@ -1172,19 +1191,18 @@ void esp32loop()
             radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
 
             int state = radio.startReceive();
-            if (state == RADIOLIB_ERR_NONE)
-            {
-                if(bLORADEBUG)
-                    Serial.println(F("success!"));
-            }
-            else
+
+            if (state != RADIOLIB_ERR_NONE)
             {
                 if(bLORADEBUG)
                 {
+                    Serial.print(F("[SX127x] Starting to listen again... "));
                     Serial.print(F("failed, code "));
                     Serial.println(state);
                 }
             }        
+
+            inoReceiveTimeOutTime=millis();
 
             iReceiveTimeOutTime = millis(); // start to wait for next transmit
         }

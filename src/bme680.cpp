@@ -3,6 +3,10 @@
 
 #if defined (ENABLE_BMX680)
 
+#include <Arduino.h>
+
+#include <Wire.h>
+
 #include <Adafruit_BME680.h> 
 #include <Adafruit_Sensor.h>
 #ifdef NRF52_SERIES

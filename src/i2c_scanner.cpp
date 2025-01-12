@@ -1,6 +1,8 @@
 #include "i2c_scanner.h"
 
-#include <Wire.h>               
+#include <Arduino.h>
+
+#include <Wire.h>
 
 // I2C Scanner Function
 String scanI2C()
@@ -13,14 +15,10 @@ String strInfo = "";
 
     char cInfo[100] = {0};
 
+    Serial.println("[I2C] ... Scanner started");
+
     sprintf(cInfo, "--[I2C] ... Scanner\n");
     strInfo.concat(cInfo);
-
-    #if defined(ESP32)
-        Wire.begin(I2C_SDA, I2C_SCL);
-    #else
-        Wire.begin();
-    #endif
 
     for (address = 1; address < 127; address++)
     {
@@ -28,9 +26,11 @@ String strInfo = "";
         // the Write.endTransmisstion to see if
         // a device did acknowledge to the address.
         Wire.beginTransmission(address);
+        
         error = Wire.endTransmission();
         if (error == 0)
         {
+
             String strDev="";
             if(address == 0x20)strDev="MCP23017/0";
             if(address == 0x21)strDev="MCP23017/1";
@@ -39,25 +39,29 @@ String strInfo = "";
             {
                 strDev="OLED";
                 byte buffer[0];
-            Wire.beginTransmission(address);
-            Wire.write(0x00);
-            Wire.endTransmission(false);
-            Wire.requestFrom(address, static_cast<uint8_t>(1));  // This register is 8 bits = 1 byte long
-            if (Wire.available() > 0) {
-                Serial.println("[OLED]...DATA AVAILABLE");
-                Wire.readBytes(buffer, 1);
+
+                Wire.beginTransmission(address);
+                Wire.write(0x00);
+                Wire.endTransmission(false);
+                Wire.requestFrom(address, 1);
+                
+                if (Wire.available() > 0)
+                {
+                    //Serial.println("[OLED]...DATA AVAILABLE");
+                    Wire.readBytes(buffer, 1);
+                }
+                
+                Wire.endTransmission();
+
+                //Serial.printf("[OLED]...RESULT: %i\n", buffer[0]);
+
+                buffer[0] &= 0x0f;        // mask off power on/off bit
+                if(buffer[0] == 0x8)
+                    strDev="OLED SSD1306";
+                else
+                    strDev="OLED SH1106";
             }
-            Wire.endTransmission();
 
-            Serial.printf("[OLED]...RESULT: %i\n", buffer[0]);
-
-            buffer[0] &= 0x0f;        // mask off power on/off bit
-            if(buffer[0] == 0x6)
-                strDev="OLED SSD1306";
-            else
-                strDev="OLED SH1106";
-
-            }
             if(address == 0x40)strDev="INA226";
             if(address == 0x57)strDev="[RTC DS3231 EPROM]";
             if(address == 0x5A)strDev="MCU-811";

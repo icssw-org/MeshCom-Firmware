@@ -374,21 +374,34 @@ bool bSetDisplay = false;
 
 // detect oled-display type
 // see https://github.com/olikraus/u8g2/discussions/2088
-bool esp32_isSSD1306(int address) {
-  byte buffer[0];
+bool esp32_isSSD1306(int address)
+{
+    byte buffer[0];
 
-  Wire.begin(I2C_SDA, I2C_SCL);
-  Wire.beginTransmission(address);
-  Wire.write(0x00);
-Wire.endTransmission(false);
-            Wire.requestFrom(address, static_cast<uint8_t>(1));  // This register is 8 bits = 1 byte long
-  if (Wire.available() > 0) {
-    Wire.readBytes(buffer, 1);
-  }
-  Wire.endTransmission();
+    Wire.beginTransmission(address);
+    Wire.write(0x00);
+    Wire.endTransmission(false);
+    Wire.requestFrom(address, 1);
+    if (Wire.available() > 0)
+    {
+        Wire.readBytes(buffer, 1);
+    }
+    Wire.endTransmission();
 
-  buffer[0] &= 0x0f;        // mask off power on/off bit
-  return buffer[0] == 0x6;  //0x3 = SSD1306 128x32, 0x6 = SSD1306 128x64, 0x7 || 0xf = SH1107, 0x8 = SH1106
+    Serial.printf("Display type: %02X\n", buffer[0]);
+
+    // 0x00 == T-BEAM 1.3" 1306
+    // 0x03 == T-BEAM 0.9"
+    // 0x28 == E22 1.3" 1306
+    // 0x07 == T-LORA 0.9! type 1
+    // 0x07 == T-LORA 0.9" type 2
+    // 0x09 == HELTEC V3 type 1
+    // 0x3F == HELTEC V3 type 2
+
+    if((buffer[0] & 0x0f) == 0x08 || (buffer[0] & 0x0f) == 0x00)
+        return true;
+
+    return false;
 }
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)

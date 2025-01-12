@@ -4,6 +4,8 @@
 
 #include <Arduino.h>
 
+#include <Wire.h>
+
 #include <ina226_functions.h>
 
 #include "INA226.h"
@@ -20,8 +22,6 @@ float vPOWER=0.0;
 
 bool setupINA226()
 {  
-    Wire.begin();
-
     if (!INA0.begin() )
     {
         bINA226ON = false;
