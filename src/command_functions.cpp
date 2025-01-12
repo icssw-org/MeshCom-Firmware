@@ -941,9 +941,14 @@ void commandAction(char *msg_text, bool ble)
         
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7EFF;
 
-        save_settings();
+        if(ble)
+        {
+            bNodeSetting = true;
+        }
+        else
+            bReturn = true;
 
-        return;
+        save_settings();
     }
     else
     if(commandCheck(msg_text+2, (char*)"gateway nopos") == 0)
@@ -952,9 +957,14 @@ void commandAction(char *msg_text, bool ble)
         
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0100;
 
-        save_settings();
+        if(ble)
+        {
+            bNodeSetting = true;
+        }
+        else
+            bReturn = true;
 
-        return;
+        save_settings();
     }
     else
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
@@ -2439,7 +2449,7 @@ void commandAction(char *msg_text, bool ble)
             swdoc["PW"] = meshcom_settings.node_pwd;
         }
         swdoc["IP"] = meshcom_settings.node_ip;
-        swdoc["GW"] = meshcom_settings.node_gw;
+        swdoc["GW"] = bGATEWAY;
         swdoc["AP"] = bWIFIAP;
         swdoc["DNS"] = meshcom_settings.node_dns;
         swdoc["SUB"] = meshcom_settings.node_subnet;
@@ -2585,6 +2595,7 @@ void sendNodeSetting()
     nsetdoc["MSF"] = meshcom_settings.node_sf;
     nsetdoc["MCR"] = meshcom_settings.node_cr;
     nsetdoc["MBW"] = meshcom_settings.node_bw;
+    nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));
