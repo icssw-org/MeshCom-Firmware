@@ -2449,7 +2449,7 @@ void commandAction(char *msg_text, bool ble)
             swdoc["PW"] = meshcom_settings.node_pwd;
         }
         swdoc["IP"] = meshcom_settings.node_ip;
-        swdoc["GW"] = bGATEWAY;
+        swdoc["GW"] = meshcom_settings.node_gw;     // IP GW Address
         swdoc["AP"] = bWIFIAP;
         swdoc["DNS"] = meshcom_settings.node_dns;
         swdoc["SUB"] = meshcom_settings.node_subnet;
