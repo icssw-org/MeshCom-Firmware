@@ -1548,8 +1548,9 @@ void esp32loop()
             #else
                 global_batt = read_batt();
                 global_proz = mv_to_percent(global_batt);
-                if(bDEBUG)
-                    Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
+                
+                //if(bDEBUG)
+                //    Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
             #endif
 
             BattTimeWait = millis();
@@ -1726,7 +1727,7 @@ void esp32loop()
 
     if(bWEBSERVER)
     {
-        if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 60)) < millis()))   // HEARTBEAT_INTERVAL to minutes
+        if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 30)) < millis()))   // repeat 15 minutes
         {
             // restart WEB-Client
             stopWebserver();
@@ -1746,7 +1747,7 @@ void esp32loop()
     ////////////////////////////////////////////////
 
     if(bLoopActive)
-            Serial.printf("[LOOP] B\n");
+        Serial.printf("[LOOP] B\n");
 
     delay(100);
 

@@ -378,10 +378,16 @@ bool esp32_isSSD1306(int address)
 {
     byte buffer[0];
 
-    Wire.beginTransmission(address);
-    Wire.write(0x00);
-    Wire.endTransmission(false);
-    Wire.requestFrom(address, 1);
+    #ifdef BOARD_HELTEC_V3
+        return false;
+    #else
+        Wire.beginTransmission(address);
+        Wire.write(0x00);
+        Wire.endTransmission(false);
+        Wire.requestFrom(address, 1);
+    #endif
+
+    
     if (Wire.available() > 0)
     {
         Wire.readBytes(buffer, 1);

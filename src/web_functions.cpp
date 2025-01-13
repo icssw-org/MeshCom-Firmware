@@ -76,6 +76,8 @@ void startWebserver()
 
     web_server.stop();
 
+    MDNS.end();
+
     // Set up mDNS responder:
     // - first argument is the domain name, in this example
     //   the fully-qualified domain name is "esp32.local"
@@ -83,12 +85,16 @@ void startWebserver()
     //   we send our IP address on the WiFi network
     if (!MDNS.begin(meshcom_settings.node_call))
     {
-        Serial.println("Error setting up MDNS responder!");
+        Serial.print(getTimeString());
+        Serial.println(" Error setting up MDNS responder!");
         return;
     }
     
     if(bDEBUG)
-        Serial.println("mDNS responder started");
+    {
+        Serial.print(getTimeString());
+        Serial.println(" mDNS responder started");
+    }
         
 #endif
 
@@ -99,6 +105,10 @@ void startWebserver()
 
 void stopWebserver()
 {
+    MDNS.end();
+    
+    web_server.stop();
+
     bweb_server_running = false;
 }
 
