@@ -9,6 +9,7 @@
 #include "configuration.h"
 #include "regex_functions.h"
 #include "lora_setchip.h"
+#include "spectral_scan.h"
 
 // Sensors
 #include "bmx280.h"
@@ -292,6 +293,22 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"spectrum") == 0)
+    {
+        
+        sx126x_spectral_scan();
+        
+        #ifdef ESP32
+            ESP.restart();
+        #endif
+        
+        #if defined NRF52_SERIES
+            NVIC_SystemReset();     // resets the device
+        #endif
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"help") == 0)
     {
 
@@ -326,6 +343,8 @@ void commandAction(char *msg_text, bool ble)
             Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--mesh    on/off\n");
             delay(100);
             Serial.printf("--softser on/off/send/app/baud/fixpegel/fixtemp\n");
+            delay(100);
+            Serial.printf("--spectrum   run spectral scan\n");
         }
 
         return;
