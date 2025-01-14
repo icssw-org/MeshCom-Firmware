@@ -105,9 +105,11 @@ void startWebserver()
 
 void stopWebserver()
 {
-    MDNS.end();
-    
+#ifdef ESP32
+    MDNS.end();   
+
     web_server.stop();
+#endif
 
     bweb_server_running = false;
 }
@@ -1743,7 +1745,6 @@ void loopWebserver()
                 if(web_page_state == 5) //Message TAB
                 {
                     web_client.println("<td><a href=\"/mclear\"><button class=\"button\"><b>M.CLEAR</b></button></a></td>");
-                    web_client.println("<td><a href=\"/refresh/#anchor_button\"><button class=\"button\"><b>REFRESH</b></button></a></td>");
                     web_client.println("</tr>");
                 }
 

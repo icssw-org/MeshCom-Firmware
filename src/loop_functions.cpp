@@ -77,6 +77,7 @@ int DisplayTimeWait = 0;
 
 bool bWaitButton_Released = false;
 bool bButtonCheck = false;
+uint8_t iButtonPin = 0;
 
 int iInitDisplay = 0;
 int iDisplayChange = 0;
@@ -376,7 +377,7 @@ bool bSetDisplay = false;
 // see https://github.com/olikraus/u8g2/discussions/2088
 bool esp32_isSSD1306(int address)
 {
-    byte buffer[0];
+    byte buffer[1];
 
     #ifdef BOARD_HELTEC_V3
         return false;
@@ -595,7 +596,7 @@ void sendDisplayHead(bool bInit)
     sprintf(print_text, "MAC:   %08X", _GW_ID);
     sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-    sprintf(print_text, "Modul: %i", BOARD_HARDWARE);
+    sprintf(print_text, "BT-Code: %06i", meshcom_settings.bt_code);
     sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
     if(bWIFIAP)
@@ -1210,9 +1211,9 @@ void initButtonPin()
 {
     #ifdef BUTTON_PIN
         #ifdef BOARD_E290
-            pinMode(BUTTON_PIN, INPUT); // pullup placed on hardware
+            pinMode(iButtonPin, INPUT); // pullup placed on hardware
         #else
-            pinMode(BUTTON_PIN, INPUT_PULLUP);
+            pinMode(iButtonPin, INPUT_PULLUP);
         #endif
     #endif
 }
@@ -1226,11 +1227,11 @@ void checkButtonState()
 {
     #ifdef BUTTON_PIN
     
-    //Serial.printf("BUTTON_PIN:%i bButtonCheck:%i\n", digitalRead(BUTTON_PIN), bButtonCheck);
+    //Serial.printf("iButtonPin:%i bButtonCheck:%i\n", digitalRead(iButtonPin), bButtonCheck);
 
         if(bButtonCheck)
         {
-            if(digitalRead(BUTTON_PIN) == 0)
+            if(digitalRead(iButtonPin) == 0)
             {
                 checkButtoExtraLong++;
                 if(checkButtoExtraLong > 100)

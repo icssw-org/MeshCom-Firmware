@@ -130,9 +130,9 @@ void setupBMX280(bool bNewStart)
     	bmx_i2c_address = I2C_ADDRESS_BMP;
   	else
     	if(bBMEON)
-      	bmx_i2c_address = I2C_ADDRESS_BME;
-    else
-      	return;
+      		bmx_i2c_address = I2C_ADDRESS_BME;
+    	else
+      		return;
 
 	if(!bNewStart)
 		Wire.endTransmission(true);

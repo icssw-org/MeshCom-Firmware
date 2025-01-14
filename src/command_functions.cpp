@@ -309,6 +309,8 @@ void commandAction(char *msg_text, bool ble)
             Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
             delay(100);
 #endif
+            Serial.printf("--btcode 999999 BT-Code\n--button_pin 99 User-Button\n");
+            delay(100);
             Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
             delay(100);
             Serial.printf("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--atxt   set APRS Textinfo\n--showI2C\n");
@@ -439,6 +441,23 @@ void commandAction(char *msg_text, bool ble)
             bReturn = true;
 
         save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"button_pin ") == 0)
+    {
+        sscanf(msg_text+13, "%d", &meshcom_settings.node_button_pin);
+
+        if(meshcom_settings.node_button_pin < 0 || meshcom_settings.node_button_pin > 99)
+        {
+            Serial.printf("Wrong BUTTON GPIO PIN only > 1 and <= 99");
+            return;
+        }
+
+        save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"track on") == 0)
@@ -1382,6 +1401,23 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"btcode ") == 0)
+    {
+        sscanf(msg_text+9, "%d", &meshcom_settings.bt_code);
+
+        if(meshcom_settings.bt_code < 0 || meshcom_settings.bt_code > 999999)
+        {
+            Serial.printf("Wrong BT Code only > 1 and < 999999");
+            return;
+        }
+
+        save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"pos") == 0)
     {
         bPos=true;
@@ -2304,10 +2340,14 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...GATEWAY %s %s ...MHONLY %s ...MESH %s ...BUTTON  %s ... SS %s\n...PASSWD %s\n",
+            int ibt = meshcom_settings.node_button_pin;
+            if(ibt == 0)
+                ibt = BUTTON_PIN;
+
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...GATEWAY %s %s ...MHONLY %s ...MESH %s ...BUTTON (%i) %s  ... SOFTSER %s\n...PASSWD %s\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
-                    (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMHONLY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
+                    (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMHONLY?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
@@ -2315,6 +2355,7 @@ void commandAction(char *msg_text, bool ble)
 #ifndef BOARD_RAK4630
             Serial.printf("...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n", (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
 #endif
+            Serial.printf("...BTCODE  %06i\n", meshcom_settings.bt_code);
             Serial.printf("...ATXT: %s\n...BLE : %s\n...DISP: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
                     meshcom_settings.node_atxt, (bBLElong?"long":"short"), (bSMALLDISPLAY?"small":"normal"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower());

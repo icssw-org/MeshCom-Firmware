@@ -135,6 +135,11 @@ void init_flash(void)
     sprintf(meshcom_settings.node_passwd, "%s", strVar.c_str());
 
     meshcom_settings.node_sset3 = preferences.getInt("node_sset3", 0x0000);
+
+    meshcom_settings.bt_code = preferences.getInt("bt_code", 0x000000);
+
+    meshcom_settings.node_button_pin = preferences.getInt("node_bpin", 0);
+
 }
 
 void save_settings(void)
@@ -264,6 +269,10 @@ void save_settings(void)
     preferences.putString("node_passwd", strVar); 
 
     preferences.putInt("node_sset3", meshcom_settings.node_sset3);
+
+    preferences.putInt("bt_code", meshcom_settings.bt_code);
+
+    preferences.putInt("node_bpin", meshcom_settings.node_button_pin);
 
     preferences.end();
 

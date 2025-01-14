@@ -172,7 +172,14 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
 
 	/***************** New - Security handled here ********************
 	****** Note: these are the same return values as defaults ********/
-	uint32_t onPassKeyRequest() {
+	uint32_t onPassKeyRequest()
+    {
+        if(meshcom_settings.bt_code > 0 && meshcom_settings.bt_code <= 999999)
+        {
+    		Serial.printf("Server PassKeyRequest <%06i>\n", meshcom_settings.bt_code);
+	    	return (uint32_t)meshcom_settings.bt_code;
+        }
+
 		Serial.printf("Server PassKeyRequest <%06i>\n", PIN);
 		return PIN;
 	}
@@ -422,6 +429,10 @@ void esp32setup()
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
     bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
+
+    iButtonPin = BUTTON_PIN;
+    if(meshcom_settings.node_button_pin > 0)
+        iButtonPin = meshcom_settings.node_button_pin;
 
     // if Node not set --> WifiAP Mode on
     if(meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
@@ -928,7 +939,10 @@ void esp32setup()
 
     NimBLEDevice::setSecurityAuth(true, true, true);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
-    NimBLEDevice::setSecurityPasskey(PIN);
+    if(meshcom_settings.bt_code > 0 && meshcom_settings.bt_code <= 999999)
+        NimBLEDevice::setSecurityPasskey(meshcom_settings.bt_code);
+    else
+        NimBLEDevice::setSecurityPasskey(PIN);
 
 #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
@@ -1046,11 +1060,6 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
-    bool bLoopActive = false;
-
-    if(bLoopActive)
-        Serial.println("loop 00");
-
     if(inoReceiveTimeOutTime > 0)
     {
         // Timeout RECEIVE_TIMEOUT
@@ -1058,10 +1067,18 @@ void esp32loop()
         {
             inoReceiveTimeOutTime=0;
 
+            if(bLORADEBUG)
+            {
+                Serial.print(getTimeString());
+                Serial.println(" [SX12xx] Receive Timeout > 6.5 min. just for info");
+            }
+
+            /*
             char tmessage[50];
             sprintf(tmessage, ":%s", (char*)"test restart LoRa-Loop");
 
             sendMessage(tmessage, strlen(tmessage));
+            */
         }
     }
 
@@ -1105,9 +1122,6 @@ void esp32loop()
         }
     }
     
-    if(bLoopActive)
-        Serial.println("loop 01");
-
     if(receiveFlag || transmittedFlag)
     {
         int state = RADIOLIB_ERR_NONE;
@@ -1264,9 +1278,6 @@ void esp32loop()
         }
     }
     
-    if(bLoopActive)
-        Serial.println("loop 02");
-
     // get RTC Now
     // RTC hat Vorrang zu Zeit via MeshCom-Server
     if(bRTCON)
@@ -1321,9 +1332,6 @@ void esp32loop()
         }
     #endif
 
-    if(bLoopActive)
-        Serial.printf("[LOOP] 1\n");
-
     checkButtonState();
 
     // BLE
@@ -1343,17 +1351,11 @@ void esp32loop()
         isPhoneReady = 0;
     }
 
-    if(bLoopActive)
-        Serial.printf("[LOOP] 1-1\n");
-
     // connecting
     if (deviceConnected && !oldDeviceConnected) {
 		// do stuff here on connecting
         oldDeviceConnected = deviceConnected;
     }
-
-    if(bLoopActive)
-        Serial.printf("[LOOP] 1-2\n");
 
     // check if message from phone to send
     if(hasMsgFromPhone)
@@ -1364,9 +1366,6 @@ void esp32loop()
 
         hasMsgFromPhone = false;
     }
-
-    if(bLoopActive)
-        Serial.printf("[LOOP] 1-3\n");
 
     checkButtonState();
 
@@ -1415,9 +1414,6 @@ void esp32loop()
         }
     }
 
-    if(bLoopActive)
-        Serial.printf("[LOOP] 2\n");
-
     // gps refresh every 10 sec
     if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
     {
@@ -1443,9 +1439,6 @@ void esp32loop()
 
         gps_refresh_timer = millis();
     }
-
-    if(bLoopActive)
-        Serial.printf("[LOOP] 3\n");
 
     checkButtonState();
 
@@ -1488,9 +1481,6 @@ void esp32loop()
         }
     }
 
-    if(bLoopActive)
-        Serial.printf("[LOOP] 4\n");
-
     // rebootAuto
     if(rebootAuto > 0)
     {
@@ -1506,13 +1496,7 @@ void esp32loop()
 
     checkButtonState();
 
-    if(bLoopActive)
-        Serial.printf("[LOOP] 5\n");
-
     checkSerialCommand();
-
-    if(bLoopActive)
-        Serial.printf("[LOOP] 6\n");
 
     if(BattTimeWait == 0)
         BattTimeWait = millis() - 10000;
@@ -1580,9 +1564,6 @@ void esp32loop()
     }
 //#endif
 
-    if(bLoopActive)
-        Serial.printf("[LOOP] 7\n");
-
     // read BMP Sensor
     #if defined(ENABLE_BMX280)
     if(bBMPON || bBMEON)
@@ -1608,9 +1589,6 @@ void esp32loop()
         }
     }
     #endif
-
-    if(bLoopActive)
-        Serial.printf("[LOOP] 8\n");
 
     checkButtonState();
 
@@ -1658,9 +1636,6 @@ void esp32loop()
     }
     #endif
 
-    if(bLoopActive)
-        Serial.printf("[LOOP] 9\n");
-
     // read every n seconds the bme680 sensor calculated from millis()
     #if defined(ENABLE_BMX680)
     if(bBME680ON && bme680_found)
@@ -1690,9 +1665,6 @@ void esp32loop()
     }
     #endif
     
-    if(bLoopActive)
-        Serial.printf("[LOOP] A\n");
-
     checkButtonState();
 
     ////////////////////////////////////////////////
@@ -1745,9 +1717,6 @@ void esp32loop()
 
     //
     ////////////////////////////////////////////////
-
-    if(bLoopActive)
-        Serial.printf("[LOOP] B\n");
 
     delay(100);
 

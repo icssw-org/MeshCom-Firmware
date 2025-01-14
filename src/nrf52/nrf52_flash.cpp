@@ -176,6 +176,10 @@ void init_flash(void)
 
 		meshcom_settings.node_sset3 = old_struct.node_sset3;
 
+		meshcom_settings.bt_code = old_struct.bt_code;
+
+		meshcom_settings.node_button_pin = old_struct.node_button_pin;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

@@ -38,7 +38,7 @@ String strInfo = "";
             if(address == 0x3C)
             {
                 strDev="OLED";
-                byte buffer[0];
+                byte buffer[1];
 
                 Wire.beginTransmission(address);
                 Wire.write(0x00);
