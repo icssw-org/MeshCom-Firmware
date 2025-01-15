@@ -210,7 +210,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             if(strcmp(destination_call, "*") == 0 || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
             {
                 // wenn eine Meldung via UDP kommt und den eigene Node betrifft dann keine weiterleitung an LoRa TX
-                if(strcmp(destination_call, meshcom_settings.node_call))
+                if(strcmp(destination_call, meshcom_settings.node_call) == 0)
                   bUDPtoLoraSend=false;
 
                 unsigned int iAckId = 0;
