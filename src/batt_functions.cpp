@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <configuration.h>
 
+#include <loop_functions_extern.h>
+
 float global_batt = 0;
 int global_proz = 0;
 
@@ -35,6 +37,12 @@ uint32_t vbat_pin = BATTERY_PIN;
 #endif
 
 #if defined(BOARD_TLORA_OLV216)
+
+uint32_t vbat_pin = BATTERY_PIN;
+
+#endif
+
+#if defined(BOARD_HELTEC_V3)
 
 uint32_t vbat_pin = BATTERY_PIN;
 
@@ -150,6 +158,15 @@ void init_batt(void)
 #if defined(BOARD_HELTEC_V3)
 	pinMode(36,OUTPUT);
 	digitalWrite(36, LOW);
+
+	#define ADC_CTRL_PIN 37
+	#define BATTERY_SAMPLES 20
+
+	pinMode(vbat_pin, INPUT);
+	pinMode(ADC_CTRL_PIN, OUTPUT);
+
+	analogReadResolution(12);
+
 #endif
 
 #if defined(NRF52_SERIES)
@@ -240,6 +257,44 @@ float read_batt(void)
 	
 		raw = (float)battery_levl;
 
+	#elif defined(BOARD_HELTEC_V3)
+
+		// ADC resolution
+		const int resolution = 12;
+		const int adcMax = pow(2,resolution) - 1;
+		const float adcMaxVoltage = 3.3;
+		// On-board voltage divider
+		const int R1 = 390;
+		const int R2 = 100;
+		// Calibration measurements
+		const float measuredVoltage = 4.2;
+		const float reportedVoltage = 4.095;
+		// Calibration factor
+		const float factor = (adcMaxVoltage / adcMax) * ((R1 + R2)/(float)R2) * (measuredVoltage / reportedVoltage);
+		
+		//V3.1 digitalWrite(ADC_CTRL_PIN,LOW);
+		digitalWrite(ADC_CTRL_PIN,HIGH);
+
+		delay(100);
+		int analogValue = analogRead(vbat_pin);
+		
+		//V3.1 digitalWrite(ADC_CTRL_PIN, HIGH);
+		digitalWrite(ADC_CTRL_PIN, LOW);
+
+		float floatVoltage = factor * analogValue;
+		uint16_t voltage = (int)(floatVoltage * 1000.0);
+
+		if(bDEBUG)
+		{
+			Serial.print("[readBatteryVoltage] ADC : ");
+			Serial.println(analogValue);
+			Serial.print("[readBatteryVoltage] Float : ");
+			Serial.println(floatVoltage,3);
+			Serial.print("[readBatteryVoltage] milliVolts : ");
+			Serial.println(voltage);
+		}
+
+		raw = floatVoltage * 1000.0;
 	#else
 
 	int imax=1;
@@ -262,7 +317,7 @@ float read_batt(void)
 	//Convert adc_reading to voltage in mV
 	uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
 
-	//Serial.printf("Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
+	Serial.printf("Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
 	
 
 	raw = voltage;
@@ -279,7 +334,7 @@ float read_batt(void)
 	#elif defined(BOARD_HELTEC)
 		raw = raw * 24.80;
 	#elif defined(BOARD_HELTEC_V3)
-		raw = raw * 4.9245;
+		// al done
 	#elif defined(BOARD_TLORA_OLV216)
 		raw = raw * 1000.0; // convert to volt
 	#elif defined(BOARD_E290)
@@ -288,7 +343,8 @@ float read_batt(void)
 		raw = raw * 24.80;
 	#endif
 
-	//Serial.printf("FLOW raw:%.2f mV\n", raw);
+	if(bDEBUG)
+		Serial.printf("FLOW raw:%.2f mV\n", raw);
 
 	delay(50);
 

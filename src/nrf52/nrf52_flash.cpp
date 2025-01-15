@@ -180,6 +180,12 @@ void init_flash(void)
 
 		meshcom_settings.node_button_pin = old_struct.node_button_pin;
 
+		memcpy(meshcom_settings.node_ownip, old_struct.node_ownip, 20);
+		memcpy(meshcom_settings.node_owngw, old_struct.node_owngw, 20);
+		memcpy(meshcom_settings.node_ownms, old_struct.node_ownms, 20);
+
+		memcpy(meshcom_settings.node_name, old_struct.node_name, 15);
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
@@ -256,7 +262,7 @@ boolean save_settings(void)
 	
 	log_settings();
 
-    Serial.println("\nflash save...");
+	//Test only Serial.println("\nflash save...");
 
 	return result;
 }

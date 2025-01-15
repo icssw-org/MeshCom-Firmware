@@ -803,7 +803,7 @@ void sendDisplayMainline()
     }
 
     sendDisplay1306(true, false, 3, dzeile[0], print_text);
-    sendDisplay1306(false, false, 3, 12, (char*)"#L");
+    sendDisplay1306(false, false, 3, 14, (char*)"#L");
 }
 
 void mainStartTimeLoop()
@@ -900,91 +900,93 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     if(aprsmsg.msg_payload.startsWith("{MCP}") || aprsmsg.msg_payload.startsWith("{mcp}"))
     {
-            char cset[30];
-            memset(cset, 0x00, sizeof(cset));
+        char cset[30];
+        memset(cset, 0x00, sizeof(cset));
 
-            sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
-            char cpasswd[6];
-            memcpy(cpasswd, cset+5+2+2+3, 5);
+        sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
+        char cpasswd[6];
+        memcpy(cpasswd, cset+5+2+2+3, 5);
 
-            char clfd[10];
-            memset(clfd, 0x00, sizeof(clfd));
-            sprintf(clfd, "%03i", (int)(aprsmsg.msg_id & 0x3FF));
+        char clfd[10];
+        memset(clfd, 0x00, sizeof(clfd));
+        sprintf(clfd, "%03i", (int)(aprsmsg.msg_id & 0x3FF));
 
-            // check pwd
-            bool bpass=true;
-            for(int ip=0;ip<5;ip++)
+        // check pwd
+        bool bpass=true;
+        for(int ip=0;ip<5;ip++)
+        {
+            if(cpasswd[ip] != 0x00 && bpass)
             {
-                if(cpasswd[ip] != 0x00 && bpass)
+                bool bp=false;
+                for(int ic=0;ic<15;ic++)
                 {
-                    bool bp=false;
-                    for(int ic=0;ic<15;ic++)
-                    {
-                        if(meshcom_settings.node_passwd[ic] == cpasswd[ip])
-                            bp=true;
-                    }
-
-                    bpass = bp;
+                    if(meshcom_settings.node_passwd[ic] == cpasswd[ip])
+                        bp=true;
                 }
+
+                bpass = bp;
             }
+        }
 
-            if(bpass)
+        if(bpass)
+        {
+            if(!(cset[5] == clfd[0] && cset[8] == clfd[1] && cset[11] == clfd[2]))
             {
-                if(!(cset[5] == clfd[0] && cset[8] == clfd[1] && cset[11] == clfd[2]))
-                {
-                    bpass=false;
-                    Serial.printf("[MCP] wrong lfd:%s\n", clfd);
-                }
+                bpass=false;
+                Serial.printf("[MCP] wrong lfd:%s\n", clfd);
             }
+        }
 
-            if(bpass)
+        if(bpass)
+        {
+            int iswitch = 0;
+            bool bON = false;
+            if(cset[6] == 'A' || cset[6] == 'B' || cset[6] == 'a' || cset[6] == 'b')
             {
-                int iswitch = 0;
-                bool bON = false;
-                if(cset[6] == 'A' || cset[6] == 'B' || cset[6] == 'a' || cset[6] == 'b')
+                iswitch=cset[7]-0x30;
+                if(iswitch >= 0 and iswitch < 8)
                 {
-                    iswitch=cset[7]-0x30;
-                    if(iswitch >= 0 and iswitch < 8)
-                    {
-                        if(memcmp(cset+9, "ON", 2) == 0 || memcmp(cset+9, "on", 2) == 0)
-                            bON = true;
+                    if(memcmp(cset+9, "ON", 2) == 0 || memcmp(cset+9, "on", 2) == 0)
+                        bON = true;
 
-                        Serial.printf("[MCP] key:%-5.5s command: %c%i %s\n", cpasswd, cset[6], iswitch, (bON?"on":"off"));
+                    Serial.printf("[MCP] key:%-5.5s command: %c%i %s\n", cpasswd, cset[6], iswitch, (bON?"on":"off"));
 
-                        bool bPhoneReady = false;
-                        if (isPhoneReady == 1)
-                            bPhoneReady = true;
+                    bool bPhoneReady = false;
+                    if (isPhoneReady == 1)
+                        bPhoneReady = true;
 
-                        char cBefehl[30];
-                        if(bON)
-                            sprintf(cBefehl, "--setout %c%i off", cset[6], iswitch);
-                        else
-                            sprintf(cBefehl, "--setout %c%i on", cset[6], iswitch);
-
-                        commandAction(cBefehl, bPhoneReady);
-                    }
+                    char cBefehl[30];
+                    if(bON)
+                        sprintf(cBefehl, "--setout %c%i off", cset[6], iswitch);
                     else
-                    {
-                        Serial.println("[MCP] wrong switch number");
-                    }
+                        sprintf(cBefehl, "--setout %c%i on", cset[6], iswitch);
+
+                    commandAction(cBefehl, bPhoneReady);
                 }
                 else
                 {
-                    Serial.println("[MCP] no command recognized");
+                    Serial.println("[MCP] wrong switch number");
                 }
             }
             else
             {
-                Serial.println("[MCP] wrong keyword");
+                Serial.println("[MCP] no command recognized");
             }
+        }
+        else
+        {
+            Serial.println("[MCP] wrong keyword");
+        }
+
         return;
     }
     else
     if(aprsmsg.msg_payload.startsWith("{SET}") > 0)
     {
-            char cset[30];
-            sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
-            sscanf(cset+5, "%d;%d;", &meshcom_settings.max_hop_text, &meshcom_settings.max_hop_pos);
+        char cset[30];
+        sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
+        sscanf(cset+5, "%d;%d;", &meshcom_settings.max_hop_text, &meshcom_settings.max_hop_pos);
+
         return;
     }
     else
@@ -1031,7 +1033,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     if(bDisplayOff)
     {
-        DisplayOffWait=millis() + (30 * 1000); // seconds
+        DisplayOffWait = millis() + (30 * 1000); // 30 seconds
         bDisplayOff=false;
     }
     
@@ -1210,11 +1212,14 @@ void init_loop_function()
 void initButtonPin()
 {
     #ifdef BUTTON_PIN
+    if(bButtonCheck)
+    {
         #ifdef BOARD_E290
             pinMode(iButtonPin, INPUT); // pullup placed on hardware
         #else
             pinMode(iButtonPin, INPUT_PULLUP);
         #endif
+    }
     #endif
 }
 
@@ -1383,6 +1388,10 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     //Serial.printf("bPosDisplay:%i bSetDisplay:%i pageHold:%i bDisplayTrack:%i\n", bPosDisplay, bSetDisplay, pageHold, bDisplayTrack);
 
     if(!bPosDisplay)
+        return;
+
+    // wenn Textmeldung angezeigt wird dann warten bis Display off
+    if(DisplayOffWait > 0)
         return;
 
     if(bSetDisplay || pageHold > 0 || bDisplayTrack)
@@ -1927,6 +1936,10 @@ void sendMessage(char *msg_text, int len)
     // store last message to compare later on
     memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
     own_msg_id[iWriteOwn][4]=0x00;
+
+    if(bDisplayInfo)
+        Serial.printf("[ACK-OWNID] own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][0], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][3]);
+
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
@@ -2008,6 +2021,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         char cversion[5]={0};
 
         char catxt[50]={0};
+        char cname[50]={0};
         char cbatt[15]={0};
         char calt[15]={0};
         char cpress[15]={0};
@@ -2037,7 +2051,12 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         {
             if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
             {
-                sprintf(catxt, "%s ", meshcom_settings.node_atxt);
+                sprintf(catxt, "%s", meshcom_settings.node_atxt);
+            }
+
+            if(strcmp(meshcom_settings.node_name, "none") != 0 && meshcom_settings.node_name[0] != 0x00)
+            {
+                sprintf(cname, "#%s", meshcom_settings.node_name);
             }
         }
 
@@ -2173,7 +2192,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
             /////////////////////////////////////////////////////////////////
         }
 
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc, csfpegel, csftemp, csfbatt, cversion);
+        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc, csfpegel, csftemp, csfbatt, cversion);
 
     }
 
@@ -2447,13 +2466,13 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     
     encodeAPRS(msg_buffer, aprsmsg);
 
+    // ACK-Message send to LoRa TX
     if(bDisplayInfo)
     {
         printBuffer_aprs((char*)"NEW-ACK", aprsmsg);
         Serial.println();
     }
 
-    // ACK-Message send to LoRa TX
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
     iWrite++;

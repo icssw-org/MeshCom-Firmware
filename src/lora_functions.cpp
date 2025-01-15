@@ -367,6 +367,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         print_buff[5]=0x01;  // ACK
                                         print_buff[6]=0x00;
                                         
+                                        if(bDisplayInfo)
+                                            Serial.printf("\n[ACK-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[1], print_buff[2], print_buff[3], print_buff[4]);
+
+                                        int iackcheck = checkOwnTx(print_buff+1);
+                                        if(iackcheck >= 0)
+                                        {
+                                            own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
+                                        }
+
                                         addBLEOutBuffer(print_buff, 7);
                                     }
                                     else

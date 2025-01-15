@@ -48,7 +48,7 @@ bool CheckOwnGroup(String callsign)
     // no Group-Check
     int checkgroup = CheckGroup(callsign);
 
-    if(checkgroup < 0)
+    if(checkgroup <= 0)
         return false;
 
     bool bHasGroup=false;

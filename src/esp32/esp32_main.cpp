@@ -1478,6 +1478,7 @@ void esp32loop()
         {
             DisplayOffWait = 0;
             bDisplayOff=true;
+            sendDisplay1306(true, true, 0, 0, (char*)"#C");
         }
     }
 
@@ -1533,8 +1534,8 @@ void esp32loop()
                 global_batt = read_batt();
                 global_proz = mv_to_percent(global_batt);
                 
-                //if(bDEBUG)
-                //    Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
+                if(bDEBUG)
+                    Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
             #endif
 
             BattTimeWait = millis();
@@ -1848,10 +1849,13 @@ void checkSerialCommand(void)
         }
         else
         {
-            if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+            if(bDEBUG)
             {
-                printf("MSG:%02X", rd);
-                printf("..not sent\n");
+                if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+                {
+                    printf("MSG:%02X", rd);
+                    printf("..not sent\n");
+                }
             }
             strText="";
         }

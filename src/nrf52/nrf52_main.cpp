@@ -1142,6 +1142,7 @@ void nrf52loop()
         {
             DisplayOffWait = 0;
             bDisplayOff=true;
+            sendDisplay1306(true, true, 0, 0, (char*)"#C");
         }
     }
     

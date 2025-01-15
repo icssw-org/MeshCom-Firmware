@@ -576,6 +576,22 @@ void loopWebserver()
                     commandAction(message_text, bPhoneReady);
                 }
                 else
+                if (web_header.indexOf("?ubgpio=") >= 0)
+                {
+                    idx_text=web_header.indexOf("=") + 1;
+
+                    String message="";
+
+                    if(idx_text_end <= 0)
+                        message = hex2ascii(web_header.substring(idx_text));
+                    else
+                        message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                    sprintf(message_text, "--button gpio %s", message.c_str());
+                    
+                    commandAction(message_text, bPhoneReady);
+                }
+                else
                 if (web_header.indexOf("?maxv=") >= 0)
                 {
                     idx_text=web_header.indexOf("=") + 1;
@@ -743,6 +759,22 @@ void loopWebserver()
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
                     setRTCNow(message);
+                }
+                else
+                if (web_header.indexOf("?nametext=") >= 0)
+                {
+                    idx_text=web_header.indexOf("=") + 1;
+
+                    String message="";
+
+                    if(idx_text_end <= 0)
+                        message = hex2ascii(web_header.substring(idx_text));
+                    else
+                        message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                    sprintf(message_text, "--setname %s", message.c_str());
+                    
+                    commandAction(message_text, bPhoneReady);
                 }
                 else
                 if (web_header.indexOf("?aprstext=") >= 0)
@@ -1134,6 +1166,15 @@ void loopWebserver()
 
                     web_client.println("<form action=\"/#\">");
                     web_client.println("<tr><td>\n");
+                    web_client.println("<label for=\"fname\"><b>Name:</b></label>");
+                    web_client.println("</td><td>\n");
+                    web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"25\" size=\"25\" id=\"nametext\" name=\"nametext\">\n", meshcom_settings.node_name);
+                    web_client.println("<input type=\"submit\" value=\"set\">");
+                    web_client.println("</td></tr>\n");
+                    web_client.println("</form>");
+
+                    web_client.println("<form action=\"/#\">");
+                    web_client.println("<tr><td>\n");
                     web_client.println("<label for=\"fname\"><b>APRS-Text:</b></label>");
                     web_client.println("</td><td>\n");
                     web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"25\" size=\"25\" id=\"aprstext\" name=\"aprstext\">\n", meshcom_settings.node_atxt);
@@ -1168,6 +1209,15 @@ void loopWebserver()
                     web_client.println("<label for=\"fname\"><b>ONEWIRE-PIN:</b></label>");
                     web_client.println("</td><td>\n");
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"2\" id=\"owgpio\" name=\"owgpio\">\n", meshcom_settings.node_owgpio);
+                    web_client.println("<input type=\"submit\" value=\"set\">");
+                    web_client.println("</td></tr>\n");
+                    web_client.println("</form>");
+
+                    web_client.println("<form action=\"/#\">");
+                    web_client.println("<tr><td>\n");
+                    web_client.println("<label for=\"fname\"><b>BUTTON-PIN:</b></label>");
+                    web_client.println("</td><td>\n");
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"2\" id=\"ubgpio\" name=\"ubgpio\">\n", meshcom_settings.node_button_pin);
                     web_client.println("<input type=\"submit\" value=\"set\">");
                     web_client.println("</td></tr>\n");
                     web_client.println("</form>");
@@ -1301,14 +1351,18 @@ void loopWebserver()
                             int icheck = checkOwnTx(toPhoneBuff+1);
 
                             String ccheck="";
-                            if(own_msg_id[icheck][4] == 1)   // 00...not heard, 01...heard, 02...ACK
+                            
+                            if(icheck >= 0)
                             {
-                                ccheck="&#x2713&nbsp;";
-                            }
+                                if(own_msg_id[icheck][4] == 1)   // 00...not heard, 01...heard, 02...ACK
+                                {
+                                    ccheck="&#x2713&nbsp;";
+                                }
 
-                            if(own_msg_id[icheck][4] == 2)   // 00...not heard, 01...heard, 02...ACK
-                            {
-                                ccheck="&#x2611;&nbsp;";
+                                if(own_msg_id[icheck][4] == 2)   // 00...not heard, 01...heard, 02...ACK
+                                {
+                                    ccheck="&#x2611;&nbsp;";
+                                }
                             }
 
                             // Textmessage
@@ -1675,7 +1729,7 @@ void loopWebserver()
                     // ONEWIRE ON
                     if (bONEWIRE)
                     {
-                        web_client.println("<td><a href=\"/onewire/off\"><button class=\"button button2\"<b>ONEWIRE</b></button></a></td>");
+                        web_client.printf("<td><a href=\"/onewire/off\"><button class=\"button button2\"<b>ONEWIRE (%i)</b></button></a></td>\n", meshcom_settings.node_owgpio);
                     }
                     else
                     {
