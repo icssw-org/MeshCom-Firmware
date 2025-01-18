@@ -30,6 +30,12 @@ extern int state; // only for gps reset
 extern bool bMitHardReset;
 #endif
 
+// OTA Libs for ESP32 Partition Switching
+#ifdef ESP32
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
+#endif
+
 uint16_t json_len = 0;
 void sendNodeSetting();
 void sendGpsJson();
@@ -304,6 +310,23 @@ void commandAction(char *msg_text, bool ble)
         
         #if defined NRF52_SERIES
             NVIC_SystemReset();     // resets the device
+        #endif
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"ota-update") == 0)
+    {
+        #ifdef ESP32
+        delay(2000);
+        const esp_partition_t* partition = esp_partition_find_first(esp_partition_type_t::ESP_PARTITION_TYPE_APP, esp_partition_subtype_t::ESP_PARTITION_SUBTYPE_APP_FACTORY, "safeboot");
+        if (partition) {
+            esp_ota_set_boot_partition(partition);
+            esp_restart();
+            return;
+        } else {
+            return;
+        }
         #endif
 
         return;
