@@ -21,6 +21,9 @@ uint8_t udpRead=0;
 #include <WiFiClient.h>
 
 IPAddress node_ip = IPAddress(0,0,0,0);
+IPAddress node_gw = IPAddress(0,0,0,0);
+IPAddress node_ms = IPAddress(0,0,0,0);
+
 IPAddress node_hostip = IPAddress(0,0,0,0);
 
 IPAddress extern_node_ip = IPAddress(0,0,0,0);
@@ -79,6 +82,7 @@ void getMeshComUDP()
 // UDP functions
 void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int packetSize)
 {
+    char source_call[20] = {0};
     char destination_call[20] = {0};
 
     udp_is_busy = true;
@@ -135,6 +139,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
         if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
         {
+          bool bBLELoopOut = true;
+
           last_upd_timer = millis();
           
           memcpy(convBuffer, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);
@@ -154,6 +160,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // print which message type we got
           uint8_t msg_type_b_lora = decodeAPRS(convBuffer, (uint8_t)lora_tx_msg_len, aprsmsg);
 
+          sprintf(source_call, "%s", aprsmsg.msg_source_call.c_str());
           sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
 
           bool bUDPtoLoraSend = true;
@@ -202,34 +209,81 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 sendDisplayText(aprsmsg, 99, 0);
             }
             else
-            if(strcmp(destination_call, "*") == 0 || CheckGroup(destination_call) > 0)
+            if(strcmp(destination_call, "*") == 0 || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
             {
-                sendDisplayText(aprsmsg, 99, 0);
+                // wenn eine Meldung via UDP kommt und den eigene Node betrifft dann keine weiterleitung an LoRa TX
+                if(strcmp(destination_call, meshcom_settings.node_call) == 0)
+                    bUDPtoLoraSend=false;
 
-                // APP Offline
-                if(isPhoneReady == 0)
+                unsigned int iAckId = 0;
+
+                int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
+                int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
+                
+                if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
                 {
-                    aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
+                    unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
+                    msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
 
-                    uint8_t tempRcvBuffer[255];
+                    uint8_t print_buff[30];
 
-                    aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+                    print_buff[0]=0x41;
+                    print_buff[1]=msg_counter & 0xFF;
+                    print_buff[2]=(msg_counter >> 8) & 0xFF;
+                    print_buff[3]=(msg_counter >> 16) & 0xFF;
+                    print_buff[4]=(msg_counter >> 24) & 0xFF;
+                    print_buff[5]=0x01;  // ACK
+                    print_buff[6]=0x00;
+                    
+                    if(bDisplayInfo)
+                        Serial.printf("\n[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[1], print_buff[2], print_buff[3], print_buff[4]);
 
-                    uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+                    int iackcheck = checkOwnTx(print_buff+1);
+                    if(iackcheck >= 0)
+                    {
+                        own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
+                    }
 
-                    addBLEOutBuffer(tempRcvBuffer, tempsize);
+                    addBLEOutBuffer(print_buff, 7);
+
+                    if(strcmp(source_call, meshcom_settings.node_call) == 0)
+                        bUDPtoLoraSend=false;
+
+                    bBLELoopOut=false;
                 }
-                else
+                if(iEnqPos > 0)
                 {
-                    addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
+                  iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
+                  aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
+                }
+
+                if(iAckPos <= 0)
+                  sendDisplayText(aprsmsg, 99, 0);
+
+                aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
+
+                uint8_t tempRcvBuffer[255];
+
+                aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+
+                uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                addBLEOutBuffer(tempRcvBuffer, tempsize);
+
+                bBLELoopOut=false;
+
+                // DM message for lokal Node 
+                if(iAckId > 0)
+                {
+                  SendAckMessage(source_call, iAckId);
                 }
             }
           }
 
           // first byte is always the len of the msg
           // UDP messages send to LoRa TX
-            // resend only Packet to all and !owncall
-          if(strcmp(destination_call, meshcom_settings.node_call) != 0 && bUDPtoLoraSend)
+          // resend only Packet to all and !owncall
+          if(bUDPtoLoraSend)
           {
             ringBuffer[iWrite][0] = size;
             memcpy(ringBuffer[iWrite] + 1, convBuffer, size);
@@ -239,7 +293,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
             // add rcvMsg to BLE out Buff
             // size message is int -> uint16_t buffer size
-            if(isPhoneReady == 1)
+            if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
             {
                 addBLEOutBuffer(convBuffer, size);
             }
@@ -295,9 +349,6 @@ void sendMeshComUDP()
         {
             uint8_t msg_len = ringBufferUDPout[udpRead][0];
 
-            //DEBUG_MSG_VAL("UDP", udpRead, "UDP TX out:");
-            //neth.printBuffer(ringBufferUDPout[udpRead] + 1, msg_len);
-
             // send it over UDP
 
             Udp.beginPacket(node_hostip , UDP_PORT);
@@ -324,7 +375,10 @@ void sendMeshComUDP()
 
             Udp.endPacket();
 
-            memcpy(convBuffer, ringBufferUDPout[udpRead] + 1, msg_len);
+            uint8_t longname_len = strlen(meshcom_settings.node_call);
+            uint8_t offset_params = longname_len + 8 + 2;
+
+            memcpy(convBuffer, ringBufferUDPout[udpRead] + offset_params, msg_len);
 
             if(convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40)
             {
@@ -450,6 +504,30 @@ void startMeshComUDP()
 
     sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
     sprintf(meshcom_settings.node_subnet, "255.255.255.0");
+  }
+  else
+  // Wifi IP-Addess static
+  if(strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7)
+  {
+    sprintf(meshcom_settings.node_ip, "%s", meshcom_settings.node_ownip);
+    sprintf(meshcom_settings.node_gw, "%s", meshcom_settings.node_owngw);
+    sprintf(meshcom_settings.node_dns, "%s", (char*)"8.8.8.8");
+    sprintf(meshcom_settings.node_subnet, "%s", meshcom_settings.node_ownms);
+
+    // Set your Static IP address
+    node_ip.fromString(meshcom_settings.node_ownip);
+    // Set your Gateway IP address
+    node_gw.fromString(meshcom_settings.node_owngw);
+    // Set your Gateway IP mask
+    node_ms.fromString(meshcom_settings.node_ownms);
+
+    IPAddress primaryDNS(8, 8, 8, 8);   //optional
+    IPAddress secondaryDNS(44, 143, 0, 10); //optional
+    // Configures static IP address
+    if (!WiFi.config(node_ip, node_gw, node_ms, primaryDNS, secondaryDNS))
+    {
+      Serial.println("[Error] STA Failed to configure");
+    }
   }
   else
   {
@@ -893,6 +971,7 @@ void addNodeData(uint8_t msg_buffer[300], uint16_t size, int16_t rssi, int8_t sn
         // TODO change txBuffer with ringbuffer
         //DEBUG_MSG("UDP", "UDP out Buffer");
         //neth.printBuffer(txBuffer, (size + offset));
+
         addUdpOutBuffer(txBuffer, (size + offset));
     }
     else
@@ -919,6 +998,7 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
     udpWrite++;
     if (udpWrite >= MAX_RING_UDP) // if the buffer is full we start at index 0 -> take care of overwriting!
         udpWrite = 0;
+
 }
 
 void sendKEEP()

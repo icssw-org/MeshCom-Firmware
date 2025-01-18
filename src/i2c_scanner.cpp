@@ -38,12 +38,12 @@ String strInfo = "";
             if(address == 0x3C)
             {
                 strDev="OLED";
-                byte buffer[0];
+                byte buffer[1];
 
                 Wire.beginTransmission(address);
                 Wire.write(0x00);
                 Wire.endTransmission(false);
-                Wire.requestFrom(address, 1);
+                Wire.requestFrom(address, (size_t)(1));
                 
                 if (Wire.available() > 0)
                 {
@@ -56,7 +56,7 @@ String strInfo = "";
                 //Serial.printf("[OLED]...RESULT: %i\n", buffer[0]);
 
                 buffer[0] &= 0x0f;        // mask off power on/off bit
-                if(buffer[0] == 0x8)
+                if(buffer[0] == 0x8 || buffer[0] == 0x0)
                     strDev="OLED SSD1306";
                 else
                     strDev="OLED SH1106";

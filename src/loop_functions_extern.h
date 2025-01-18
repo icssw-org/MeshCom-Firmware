@@ -32,6 +32,7 @@ extern unsigned long BMXTimeWait;
 extern unsigned long MCU811TimeWait;
 extern unsigned long INA226TimeWait;
 extern bool bButtonCheck;
+extern uint8_t iButtonPin;
 extern bool bDisplayTrack;
 extern bool bGPSON;
 extern bool bBMPON;

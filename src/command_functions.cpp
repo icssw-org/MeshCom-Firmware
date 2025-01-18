@@ -302,13 +302,15 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            Serial.printf("MeshCom %s %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
+            Serial.printf("MeshCom %s %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setname  set first name\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
             delay(100);
 
 #ifndef BOARD_RAK4630
-            Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
+            Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--setownip ip:255.255.255.255\n--setowngw gw:255.255.255.255\n--setownms mask:255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
             delay(100);
 #endif
+            Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n");
+            delay(100);
             Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
             delay(100);
             Serial.printf("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--atxt   set APRS Textinfo\n--showI2C\n");
@@ -439,6 +441,28 @@ void commandAction(char *msg_text, bool ble)
             bReturn = true;
 
         save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"button gpio ") == 0)
+    {
+        sscanf(msg_text+14, "%d", &meshcom_settings.node_button_pin);
+
+        if(meshcom_settings.node_button_pin < 0 || meshcom_settings.node_button_pin > 99)
+        {
+            Serial.printf("Wrong BUTTON GPIO PIN only > 1 and <= 99");
+            return;
+        }
+
+        save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        if(ble)
+        {
+            bNodeSetting = true;
+        }
+        else
+            bReturn = true;
     }
     else
     if(commandCheck(msg_text+2, (char*)"track on") == 0)
@@ -1382,6 +1406,31 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"btcode ") == 0)
+    {
+        sscanf(msg_text+9, "%d", &meshcom_settings.bt_code);
+
+        if(meshcom_settings.bt_code < 0 || meshcom_settings.bt_code > 999999)
+        {
+            Serial.printf("Wrong BT Code only > 1 and < 999999");
+            return;
+        }
+
+        save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        if(ble)
+        {
+            //addBLECommandBack((char*)msg_text);
+            //bNodeSetting = true;
+            sendNodeSetting();
+
+        }
+        else
+            bReturn = true;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"pos") == 0)
     {
         bPos=true;
@@ -1418,16 +1467,52 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"symid") == 0)
     {
+        _owner_c[0] = meshcom_settings.node_symid;
+
         meshcom_settings.node_symid=msg_text[8];
+
+        bool bSymbolTable = false;
+        if(meshcom_settings.node_symid == '/' || meshcom_settings.node_symid != '\'')
+            bSymbolTable = true;
+        else
+        if(meshcom_settings.node_symid >= '0' && meshcom_settings.node_symid <= '9')
+            bSymbolTable = true;
+        else
+        if(meshcom_settings.node_symid >= 'A' && meshcom_settings.node_symid <= 'Z')
+            bSymbolTable = true;
+
+        if(!bSymbolTable)
+        {
+            Serial.println("Symbol Table nur / \\ 0-9 A-Z");
+            meshcom_settings.node_symid = _owner_c[0];
+        }
+
         save_settings();
 
-        return;
+        if(ble)
+            sendAPRSset();
     }
     else
     if(commandCheck(msg_text+2, (char*)"symcd") == 0)
     {
+        _owner_c[0] = meshcom_settings.node_symcd;
+
         meshcom_settings.node_symcd=msg_text[8];
+
+        bool bSymbolCode = false;
+        if(meshcom_settings.node_symcd >= '!' && meshcom_settings.node_symcd <= '}')
+            bSymbolCode = true;
+
+        if(!bSymbolCode)
+        {
+            Serial.println("Symbol Code nur >= ! && <= }");
+            meshcom_settings.node_symcd = _owner_c[0];
+        }
+
         save_settings();
+
+        if(ble)
+            sendAPRSset();
 
         return;
     }
@@ -1438,7 +1523,31 @@ void commandAction(char *msg_text, bool ble)
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
             _owner_c[strlen(_owner_c)-1] = 0x00;
         sVar = _owner_c;
+
+        sVar.trim();
+
         sprintf(meshcom_settings.node_atxt, "%s", sVar.c_str());
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setname ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+10);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        sVar = _owner_c;
+
+        sVar.trim();
+
+        sprintf(meshcom_settings.node_name, "%s", sVar.c_str());
 
         if(ble)
         {
@@ -1484,9 +1593,15 @@ void commandAction(char *msg_text, bool ble)
             bWifiSetting = true;
         }
 
+        if(strcmp(meshcom_settings.node_ssid, "none") == 0)
+            memset(meshcom_settings.node_ssid, 0x00, sizeof(meshcom_settings.node_ssid));
+
+        if(strcmp(meshcom_settings.node_pwd, "none") == 0)
+            memset(meshcom_settings.node_pwd, 0x00, sizeof(meshcom_settings.node_pwd));
+
         save_settings();
 
-        if(strcmp(meshcom_settings.node_pwd, "none") == 0 || strlen(meshcom_settings.node_pwd) > 4)
+        if((strlen(meshcom_settings.node_pwd) > 1 && strlen(meshcom_settings.node_ssid) > 1))
         {
             Serial.println("Auto. Reboot after 15 sec.");
 
@@ -1508,9 +1623,85 @@ void commandAction(char *msg_text, bool ble)
             bWifiSetting = true;
         }
 
+        if(strcmp(meshcom_settings.node_ssid, "none") == 0)
+            memset(meshcom_settings.node_ssid, 0x00, sizeof(meshcom_settings.node_ssid));
+
+        if(strcmp(meshcom_settings.node_pwd, "none") == 0)
+            memset(meshcom_settings.node_pwd, 0x00, sizeof(meshcom_settings.node_pwd));
+
         save_settings();
 
-        if(strcmp(meshcom_settings.node_pwd, "none") == 0 || strlen(meshcom_settings.node_pwd) > 4)
+        if((strlen(meshcom_settings.node_pwd) > 1 && strlen(meshcom_settings.node_ssid) > 1))
+        {
+            Serial.println("Auto. Reboot after 15 sec.");
+
+            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+        }
+
+        return;
+    }
+    if(commandCheck(msg_text+2, (char*)"setownip ") == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        sprintf(meshcom_settings.node_ownip, "%s", msg_text+11);
+
+        if(ble)
+        {
+            bWifiSetting = true;
+        }
+
+        save_settings();
+
+        if(strcmp(meshcom_settings.node_ownms, "none") == 0 || (strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7))
+        {
+            Serial.println("Auto. Reboot after 15 sec.");
+
+            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setowngw ") == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        sprintf(meshcom_settings.node_owngw, "%s", msg_text+11);
+
+        if(ble)
+        {
+            bWifiSetting = true;
+        }
+
+        save_settings();
+
+        if(strcmp(meshcom_settings.node_owngw, "none") == 0 || (strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7))
+        {
+            Serial.println("Auto. Reboot after 15 sec.");
+
+            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+        }
+
+        return;
+    }
+    if(commandCheck(msg_text+2, (char*)"setownms ") == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        sprintf(meshcom_settings.node_ownms, "%s", msg_text+11);
+
+        if(ble)
+        {
+            bWifiSetting = true;
+        }
+
+        save_settings();
+
+        if(strcmp(meshcom_settings.node_ownms, "none") == 0 || (strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7))
         {
             Serial.println("Auto. Reboot after 15 sec.");
 
@@ -2304,19 +2495,24 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...GATEWAY %s %s ...MHONLY %s ...MESH %s ...BUTTON  %s ... SS %s\n...PASSWD %s\n",
+            int ibt = meshcom_settings.node_button_pin;
+            if(ibt == 0)
+                ibt = BUTTON_PIN;
+
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...MHONLY %s ...MESH %s ...BUTTON (%i) %s  ... SOFTSER %s\n...PASSWD <%s>\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
-                    (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMHONLY?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
+                    (bMHONLY?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
-            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG  %s ...WXDEBUG %s ... BLEDEBUG %s\n",
+            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ... BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
 #ifndef BOARD_RAK4630
             Serial.printf("...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n", (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
 #endif
-            Serial.printf("...ATXT: %s\n...BLE : %s\n...DISP: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
-                    meshcom_settings.node_atxt, (bBLElong?"long":"short"), (bSMALLDISPLAY?"small":"normal"),
+            Serial.printf("...BTCODE  %06i\n", meshcom_settings.bt_code);
+            Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
+                    meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"),  (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower());
 
             for(int ig=0;ig<6;ig++)
@@ -2344,30 +2540,37 @@ void commandAction(char *msg_text, bool ble)
                 Serial.println("");
             }
 
+            Serial.printf("...Webserver %s\n", (bWEBSERVER?"on":"off"));
+            Serial.printf("...Gateway   %s %s\n", (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""));
+
             #ifndef BOARD_RAK4630
-                Serial.printf("...WIFI-AP  %s\n", (bWIFIAP?"on":"off"));
+                Serial.printf("...WIFI-AP   %s\n", (bWIFIAP?"on":"off"));
                 if(bWIFIAP)
                 {
-                    Serial.printf("...SSID     %s\n", cBLEName);
+                    Serial.printf("...SSID      %s\n", cBLEName);
                     Serial.printf("...PASSWORD <>\n");
                 }
-
-                Serial.printf("...Webserver  %s\n", (bWEBSERVER?"on":"off"));
+                else
                 {
-                    Serial.printf("...SSID     %s\n", meshcom_settings.node_ssid);
-                    Serial.printf("...PASSWORD %s\n", meshcom_settings.node_pwd);
+                    Serial.printf("...SSID      %s\n", meshcom_settings.node_ssid);
+                    Serial.printf("...PASSWORD  %s\n", meshcom_settings.node_pwd);
                 }
+
+                Serial.printf("...OWNIP address: %s\n", meshcom_settings.node_ownip);
+                Serial.printf("...OWNMS address: %s\n", meshcom_settings.node_ownms);
+                Serial.printf("...OWNGW address: %s\n", meshcom_settings.node_owngw);
             #endif
+
             Serial.printf("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             if(meshcom_settings.node_hasIPaddress)
             {
-                Serial.printf("...IP address  : %s\n", meshcom_settings.node_ip);
+                Serial.printf("...IP address   : %s\n", meshcom_settings.node_ip);
+                Serial.printf("...SUBNET-MASK  : %s\n", meshcom_settings.node_subnet);
                 if(!bWIFIAP)
                 {
-                    Serial.printf("...GW address  : %s\n", meshcom_settings.node_gw);
-                    Serial.printf("...DNS address : %s\n", meshcom_settings.node_dns);
+                    Serial.printf("...GW address   : %s\n", meshcom_settings.node_gw);
+                    Serial.printf("...DNS address  : %s\n", meshcom_settings.node_dns);
                 }
-                Serial.printf("...SUBNET-MASK : %s\n", meshcom_settings.node_subnet);
     
                 if(!bWIFIAP)
                     Serial.printf("...UDP-HBeat   : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
@@ -2413,6 +2616,7 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["LPS33"] = bLPS33;
         sensdoc["OW"] = bONEWIRE;
         sensdoc["OWPIN"] = meshcom_settings.node_owgpio;
+        sensdoc["USERPIN"] = meshcom_settings.node_button_pin;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
@@ -2453,6 +2657,9 @@ void commandAction(char *msg_text, bool ble)
         swdoc["AP"] = bWIFIAP;
         swdoc["DNS"] = meshcom_settings.node_dns;
         swdoc["SUB"] = meshcom_settings.node_subnet;
+        swdoc["OWNIP"] = meshcom_settings.node_ownip;
+        swdoc["OWNGW"] = meshcom_settings.node_owngw;
+        swdoc["OWNMS"] = meshcom_settings.node_ownms;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
@@ -2596,6 +2803,7 @@ void sendNodeSetting()
     nsetdoc["MCR"] = meshcom_settings.node_cr;
     nsetdoc["MBW"] = meshcom_settings.node_bw;
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
+    nsetdoc["BTCODE"] = meshcom_settings.bt_code;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));
@@ -2626,6 +2834,7 @@ void sendAPRSset()
     aprsdoc["ATXT"] = meshcom_settings.node_atxt;
     aprsdoc["SYMID"] = symid;
     aprsdoc["SYMCD"] = symcd;
+    aprsdoc["NAME"] = meshcom_settings.node_name;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));

@@ -46,8 +46,8 @@ void setupBME680()
 	if(bWXDEBUG)	
 		Serial.printf("bBME680ON:%i\n", bBME680ON);
 
-  // Don't mix BME28x and BME680 they share same addresses
-  if(bBMEON && bBMPON)
+  // Don't mix BME280 or BMP280 and BME680 they share same addresses
+  if(bBME680ON && (bBMEON || bBMPON))
   {
     Serial.println("[INIT]...BME680 and BMx280 can't be used together!");
     return; 

@@ -71,7 +71,7 @@ bool loopMCU811()
     if(!bMCU811ON)
         return false;
 
-    Wire.endTransmission();
+	Wire.endTransmission(true);
 
     maxMCU811ValideCount=0;
     while(!ccs.available())

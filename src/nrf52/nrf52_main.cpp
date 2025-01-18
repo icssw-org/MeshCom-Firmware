@@ -404,6 +404,10 @@ void nrf52setup()
     meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
     meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
 
+    iButtonPin = BUTTON_PIN;
+    if(meshcom_settings.node_button_pin > 0)
+        iButtonPin = meshcom_settings.node_button_pin;
+
     // if Node is in WifiAP Mode -> no Gateway posible
     if(bWIFIAP && bGATEWAY)
     {
@@ -751,7 +755,6 @@ void nrf52setup()
         TX_TIMEOUT_VALUE);
 
     //  Start receiving LoRa packets
-    DEBUG_MSG("RADIO", "Starting RX MODE");
     Radio.Rx(RX_TIMEOUT_VALUE);
 
     // set left button interrupt
@@ -1137,6 +1140,7 @@ void nrf52loop()
         {
             DisplayOffWait = 0;
             bDisplayOff=true;
+            sendDisplay1306(true, true, 0, 0, (char*)"#C");
         }
     }
     
@@ -1612,10 +1616,13 @@ void checkSerialCommand(void)
         }
         else
         {
-            if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+            if(bDEBUG)
             {
-                printf("MSG:%02X", rd);
-                printf("..not sent\n");
+                if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+                {
+                    printf("MSG:%02X", rd);
+                    printf("..not sent\n");
+                }
             }
             strText="";
         }

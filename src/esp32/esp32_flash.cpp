@@ -135,6 +135,21 @@ void init_flash(void)
     sprintf(meshcom_settings.node_passwd, "%s", strVar.c_str());
 
     meshcom_settings.node_sset3 = preferences.getInt("node_sset3", 0x0000);
+
+    meshcom_settings.bt_code = preferences.getInt("bt_code", 0x000000);
+
+    meshcom_settings.node_button_pin = preferences.getInt("node_bpin", 0);
+
+    strVar = preferences.getString("node_ownip");
+    sprintf(meshcom_settings.node_ownip, "%s", strVar.c_str());
+    strVar = preferences.getString("node_owngw");
+    sprintf(meshcom_settings.node_owngw, "%s", strVar.c_str());
+    strVar = preferences.getString("node_ownms");
+    sprintf(meshcom_settings.node_ownms, "%s", strVar.c_str());
+
+    strVar = preferences.getString("node_name");
+    sprintf(meshcom_settings.node_name, "%s", strVar.c_str());
+
 }
 
 void save_settings(void)
@@ -265,7 +280,21 @@ void save_settings(void)
 
     preferences.putInt("node_sset3", meshcom_settings.node_sset3);
 
+    preferences.putInt("bt_code", meshcom_settings.bt_code);
+
+    preferences.putInt("node_bpin", meshcom_settings.node_button_pin);
+
+    strVar = meshcom_settings.node_ownip;
+    preferences.putString("node_ownip", strVar); 
+    strVar = meshcom_settings.node_owngw;
+    preferences.putString("node_owngw", strVar); 
+    strVar = meshcom_settings.node_ownms;
+    preferences.putString("node_ownms", strVar); 
+
+    strVar = meshcom_settings.node_name;
+    preferences.putString("node_name", strVar); 
+
     preferences.end();
 
-    Serial.println("flash save...");
+    //Test only Serial.println("flash save...");
 }

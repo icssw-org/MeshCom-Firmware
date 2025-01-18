@@ -100,6 +100,16 @@ struct s_meshcom_settings
 
 	int node_sset3 = 0x0000;
 
+	int bt_code = 0;
+
+	int node_button_pin = 0;
+
+	char node_ownip[20] = {0};
+	char node_owngw[20] = {0};
+	char node_ownms[20] = {0};
+
+	char node_name[20] = {0};
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;

@@ -55,17 +55,10 @@ class BMx280Wire : public BMx280MI
 		//@return read data (1 byte).
 		uint8_t readRegister(uint8_t reg)
 		{
-		#if defined(ARDUINO_SAM_DUE)
-			//workaround for Arduino Due. The Due seems not to send a repeated start with the code above, so this 
-			//undocumented feature of Wire::requestFrom() is used. can be used on other Arduinos too (tested on Mega2560)
-			//see this thread for more info: https://forum.arduino.cc/index.php?topic=385377.0
-			Wire.requestFrom(address_, 1, reg, 1, true);
-		#else
 			Wire.beginTransmission(address_);
 			Wire.write(reg);
 			Wire.endTransmission(false);
-			Wire.requestFrom(address_, static_cast<uint8_t>(1));
-		#endif
+			Wire.requestFrom(address_, (size_t)(1));
 			
 			return Wire.read();
 		}
@@ -82,23 +75,16 @@ class BMx280Wire : public BMx280MI
 
 			uint32_t data = 0L;
 
-#if defined(ARDUINO_SAM_DUE)
-			//workaround for Arduino Due. The Due seems not to send a repeated start with the code below, so this 
-			//undocumented feature of Wire::requestFrom() is used. can be used on other Arduinos too (tested on Mega2560)
-			//see this thread for more info: https://forum.arduino.cc/index.php?topic=385377.0
-			Wire.requestFrom(address_, length, data, length, true);
-#else
 			Wire.beginTransmission(address_);
 			Wire.write(reg);
 			Wire.endTransmission(false);
-			Wire.requestFrom(address_, static_cast<uint8_t>(length));
+			Wire.requestFrom(address_, (size_t)(length));
 
 			for (uint8_t i = 0; i < length; i++)
 			{
 				data <<= 8;
 				data |= Wire.read();
 			}
-#endif
 
 			return data;
 		}
@@ -126,13 +112,20 @@ void setupBMX280(bool bNewStart)
 	if(bWXDEBUG)	
 		Serial.printf("bBMPON:%i bBMEON:%i\n", bBMPON, bBMEON);
 
+	// Don't mix BME280 or BMP280 and BME680 they share same addresses
+	if(bBME680ON)
+	{
+		Serial.println("[INIT]...BME680 and BMx280 can't be used together!");
+		return; 
+	}
+
   	if(bBMPON)
     	bmx_i2c_address = I2C_ADDRESS_BMP;
   	else
     	if(bBMEON)
-      	bmx_i2c_address = I2C_ADDRESS_BME;
-    else
-      	return;
+      		bmx_i2c_address = I2C_ADDRESS_BME;
+    	else
+      		return;
 
 	if(!bNewStart)
 		Wire.endTransmission(true);
