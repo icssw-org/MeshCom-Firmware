@@ -870,7 +870,16 @@ void loopWebserver()
                     if(web_header.indexOf("=1") > 0)
                         sprintf(message_text, "--symid /");
                     else
+                    if(web_header.indexOf("=2") > 0)
                         sprintf(message_text, "--symid \\");
+                    else
+                    if(web_header.indexOf("=3") > 0)
+                        sprintf(message_text, "--symid M");
+                    else
+                    if(web_header.indexOf("=4") > 0)
+                        sprintf(message_text, "--symid G");
+                    else
+                        sprintf(message_text, "--symid L");
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -1188,9 +1197,19 @@ void loopWebserver()
                     web_client.println("</td><td>\n");
 
                     if(meshcom_settings.node_symid == '/')
-                        web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\" selected>/</option><option value=\"2\">\\</option>");
+                        web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\" selected>/</option><option value=\"2\">\\</option><option value=\"3\">M</option><option value=\"4\">G</option><option value=\"5\">L</option>");
                     else
-                        web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\">/</option><option value=\"2\" selected>\\</option>");
+                        if(meshcom_settings.node_symid == 'G')
+                            web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\">/</option><option value=\"2\">\\</option><option value=\"3\">M</option><option value=\"4\" selected>G</option><option value=\"5\">L</option>");
+                    else
+                        if(meshcom_settings.node_symid == 'M')
+                            web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\">/</option><option value=\"2\">\\</option><option value=\"3\" selected>M</option><option value=\"4\">G</option><option value=\"5\">L</option>");
+                    else
+                        if(meshcom_settings.node_symid == 'L')
+                            web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\">/</option><option value=\"2\">\\</option><option value=\"3\">M</option><option value=\"4\">G</option><option value=\"5\" selected>L</option>");
+                    else
+                        web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\">/</option><option value=\"2\" selected>\\</option><option value=\"3\">M</option><option value=\"4\">G</option><option value=\"5\">L</option>");
+
                     web_client.println("&nbsp;<input type=\"submit\" value=\"set\">");
                     web_client.println("</td></tr>\n");
                     web_client.println("</form>");

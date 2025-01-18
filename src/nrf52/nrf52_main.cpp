@@ -756,7 +756,6 @@ void nrf52setup()
         TX_TIMEOUT_VALUE);
 
     //  Start receiving LoRa packets
-    DEBUG_MSG("RADIO", "Starting RX MODE");
     Radio.Rx(RX_TIMEOUT_VALUE);
 
     // set left button interrupt
@@ -1618,10 +1617,13 @@ void checkSerialCommand(void)
         }
         else
         {
-            if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+            if(bDEBUG)
             {
-                printf("MSG:%02X", rd);
-                printf("..not sent\n");
+                if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+                {
+                    printf("MSG:%02X", rd);
+                    printf("..not sent\n");
+                }
             }
             strText="";
         }

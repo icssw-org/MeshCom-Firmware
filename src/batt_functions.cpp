@@ -317,13 +317,8 @@ float read_batt(void)
 	//Convert adc_reading to voltage in mV
 	uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
 
-	Serial.printf("Raw: %d\tVoltage: %dmV\n", adc_reading, voltage);
-	
-
 	raw = voltage;
 	
-	//Serial.printf("adc_reading:%i voltage:%i\n", adc_reading, voltage);
-
 	#endif
 
 	// take it als mV

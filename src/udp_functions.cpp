@@ -139,6 +139,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
         if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
         {
+          bool bBLELoopOut = true;
+
           last_upd_timer = millis();
           
           memcpy(convBuffer, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);
@@ -211,7 +213,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             {
                 // wenn eine Meldung via UDP kommt und den eigene Node betrifft dann keine weiterleitung an LoRa TX
                 if(strcmp(destination_call, meshcom_settings.node_call) == 0)
-                  bUDPtoLoraSend=false;
+                    bUDPtoLoraSend=false;
 
                 unsigned int iAckId = 0;
 
@@ -243,6 +245,11 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                     }
 
                     addBLEOutBuffer(print_buff, 7);
+
+                    if(strcmp(source_call, meshcom_settings.node_call) == 0)
+                        bUDPtoLoraSend=false;
+
+                    bBLELoopOut=false;
                 }
                 if(iEnqPos > 0)
                 {
@@ -253,27 +260,23 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 if(iAckPos <= 0)
                   sendDisplayText(aprsmsg, 99, 0);
 
-                // APP Offline
-                if(isPhoneReady == 0)
-                {
-                    aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
+                aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
 
-                    uint8_t tempRcvBuffer[255];
+                uint8_t tempRcvBuffer[255];
 
-                    aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+                aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
 
-                    uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+                uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
-                    addBLEOutBuffer(tempRcvBuffer, tempsize);
-                }
-                else
-                {
-                    addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
-                }
+                addBLEOutBuffer(tempRcvBuffer, tempsize);
+
+                bBLELoopOut=false;
 
                 // DM message for lokal Node 
                 if(iAckId > 0)
+                {
                   SendAckMessage(source_call, iAckId);
+                }
             }
           }
 
@@ -290,7 +293,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
             // add rcvMsg to BLE out Buff
             // size message is int -> uint16_t buffer size
-            if(isPhoneReady == 1)
+            if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
             {
                 addBLEOutBuffer(convBuffer, size);
             }

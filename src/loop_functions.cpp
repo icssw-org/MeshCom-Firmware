@@ -2227,20 +2227,27 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
     #endif
 
     // set default
-    if(meshcom_settings.node_symid != '/' && meshcom_settings.node_symid != '\'' &&  meshcom_settings.node_symid != 'L' && meshcom_settings.node_symid != 'M')
+    // Symbol Table / \ 0-9 A-Z  (compressed a-z)
+    bool bSymbolTable = false;
+    if(meshcom_settings.node_symid == '/' || meshcom_settings.node_symid != '\'')
+        bSymbolTable = true;
+    else
+    if(meshcom_settings.node_symid >= '0' && meshcom_settings.node_symid <= '9')
+        bSymbolTable = true;
+    else
+    if(meshcom_settings.node_symid >= 'A' && meshcom_settings.node_symid <= 'Z')
+        bSymbolTable = true;
+
+    bool bSymbolCode = false;
+    if(meshcom_settings.node_symcd >= '!' && meshcom_settings.node_symcd <= '}')
+        bSymbolCode = true;
+
+    if(!bSymbolTable || !bSymbolCode)   // set default
     {
         meshcom_settings.node_symid = '/';
         meshcom_settings.node_symcd = '#';
 
         save_settings();
-    }
-    else
-    {
-        if(meshcom_settings.node_symcd < '!' || meshcom_settings.node_symcd > '}')
-        {
-            meshcom_settings.node_symcd = '#';
-            save_settings();
-        }
     }
 
     if(bSendViaAPRS)
@@ -2473,11 +2480,14 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
         Serial.println();
     }
 
-    ringBuffer[iWrite][0]=aprsmsg.msg_len;
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
-    iWrite++;
-    if(iWrite >= MAX_RING)
-        iWrite=0;
+    if(strcmp(dest_call.c_str(), meshcom_settings.node_call) == 0)
+    {
+        ringBuffer[iWrite][0]=aprsmsg.msg_len;
+        memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
+        iWrite++;
+        if(iWrite >= MAX_RING)
+            iWrite=0;
+    }
     
     if(bGATEWAY)
     {
