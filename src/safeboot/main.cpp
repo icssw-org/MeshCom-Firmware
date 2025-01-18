@@ -94,7 +94,7 @@ void wifiConnect() {
     iWlanWait++;
     Serial.print(".");
 
-    if(iWlanWait > 5)
+    if(iWlanWait > 10)
     {
       // Start AP
       Serial.println("\nStarting AP");
