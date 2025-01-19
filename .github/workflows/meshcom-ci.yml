@@ -1,6 +1,5 @@
 name: MeshCom CI
 
-
 on: 
   push:
     tags:
@@ -54,6 +53,9 @@ jobs:
         
     - uses: ncipollo/release-action@v1
       with:
+        allowUpdates: true
+        removeArtifacts: true
+        replacesArtifacts: true
         artifacts: ".pio/build/E22-DevKitC/E22-DevKitC.bin,
         .pio/build/heltec_wifi_lora_32_V2/heltec_wifi_lora_32_V2.bin,
         .pio/build/heltec_wifi_lora_32_V3/heltec_wifi_lora_32_V3.bin,
