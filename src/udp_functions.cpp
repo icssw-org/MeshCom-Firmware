@@ -437,7 +437,7 @@ bool startWIFI()
   }
 
 #ifdef ESP32
-  WiFi.disconnect(true);
+  //WiFi.disconnect(true);
 	delay(500);
 
   // Scan for AP with best RSSI
@@ -507,6 +507,9 @@ bool startWIFI()
   }
 
   Serial.println("WIFI connect OK");
+
+  // run startMeshComUDP() to get IP Address
+  startMeshComUDP();
 
   return true;
 }
