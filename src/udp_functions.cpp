@@ -443,7 +443,7 @@ bool startWIFI()
   // Scan for AP with best RSSI
 	int nrAps = WiFi.scanNetworks();
   int best_rssi = -200;
-  int best_idx = 0;
+  int best_idx = -1;
   for (int i = 0; i < nrAps; ++i)
   {
      if(strcmp(WiFi.SSID(i).c_str(), meshcom_settings.node_ssid) == 0)
@@ -456,17 +456,34 @@ bool startWIFI()
         }
      }
   }
-  Serial.printf("-> connecting to BSSID: %012x CHAN: %i\n",WiFi.BSSID(best_idx),WiFi.channel(best_idx));	
-  WiFi.mode(WIFI_STA);
+  if(best_idx == -1)
+  {
+    // ESP32 - force connecting (in case of hidden ssid or out of range atm)
+    Serial.printf("-> try connecting to SSID: %s \n",meshcom_settings.node_ssid);	
+    WiFi.mode(WIFI_STA);
+    
+    if(strcmp(meshcom_settings.node_pwd, "none") == 0)
+      WiFi.begin(meshcom_settings.node_ssid, NULL);
+    else
+      WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
   
-  if(strcmp(meshcom_settings.node_pwd, "none") == 0)
-  	WiFi.begin(meshcom_settings.node_ssid, NULL, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
+  }
   else
-  	WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
-	delay(500);
+  {
+    // ESP32 - connecting to strongest ssid
+    Serial.printf("-> connecting to BSSID: %012x CHAN: %i\n",WiFi.BSSID(best_idx),WiFi.channel(best_idx));	
+    WiFi.mode(WIFI_STA);
+    
+    if(strcmp(meshcom_settings.node_pwd, "none") == 0)
+      WiFi.begin(meshcom_settings.node_ssid, NULL, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
+    else
+      WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
+  }
+  delay(500);
 
   Serial.printf("WiFi.power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
 #else
+  // RAK WIFI connect
   if(strcmp(meshcom_settings.node_pwd, "none") == 0)
     WiFi.begin(meshcom_settings.node_ssid, NULL);
   else
