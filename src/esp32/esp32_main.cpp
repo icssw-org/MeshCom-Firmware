@@ -416,6 +416,9 @@ void esp32setup()
     bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
+    bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
+
+
     bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
 
     iButtonPin = BUTTON_PIN;
@@ -681,6 +684,16 @@ void esp32setup()
     if(bRadio)
     {
         lora_setcountry(meshcom_settings.node_country);
+
+        // set boosted gain
+        #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+        Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
+        if (radio.setRxBoostedGainMode(meshcom_settings.node_sset2 & 0x0800)  != RADIOLIB_ERR_NONE ) {
+            Serial.println(F("Boosted Gain is not available for this module!"));
+            while (true);
+        }
+        #endif
+
 
         // set carrier frequency
         Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", meshcom_settings.node_freq);
