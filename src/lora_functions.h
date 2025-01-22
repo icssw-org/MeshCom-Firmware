@@ -13,7 +13,7 @@ bool is_new_packet(uint8_t compBuffer[4]);
 
 void StartReceiveAgain();
 
-bool doTX();
+bool doTX(int iReadTX);
 void OnTxDone(void);
 void OnTxTimeout(void);
 void OnPreambleDetect(void);

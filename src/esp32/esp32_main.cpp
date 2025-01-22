@@ -1250,9 +1250,23 @@ void esp32loop()
             bEnableInterruptTransmit = true; //KBC 0801
             radio.setPacketSentAction(setFlagSent); //KBC 0801
 
-            if(doTX())
+            int iReadTX = iRead;
+
+            if(iRetransmit >= 0)
+                iReadTX = iRetransmit;
+
+            if(doTX(iReadTX))
             {
-                //KBC 0801 bEnableInterruptTransmit = true;
+                if(iRetransmit >= 0)
+                {
+                    iRetransmit = -1;
+                }
+                else
+                {
+                    iRead++;
+                    if (iRead >= MAX_RING)
+                        iRead = 0;
+                }
             }
             else
             {

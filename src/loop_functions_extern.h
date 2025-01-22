@@ -94,6 +94,7 @@ extern uint8_t own_msg_id[MAX_RING][5];
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];
 extern int iWrite;
 extern int iRead;
+extern int iRetransmit;
 
 extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE];
 extern int RAWLoRaWrite;

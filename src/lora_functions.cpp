@@ -711,7 +711,7 @@ bool is_new_packet(uint8_t compBuffer[4])
 
 /**@brief our Lora TX sequence
  */
-bool doTX()
+bool doTX(int iReadTX)
 {
     // next TX new TX-DELAY
     if(cmd_counter > 0)
@@ -724,26 +724,20 @@ bool doTX()
         return false;
     }
 
-    if (iWrite != iRead && iRead < MAX_RING)
+    if (iWrite != iReadTX && iReadTX < MAX_RING)
     {
-        sendlng = ringBuffer[iRead][0];
-        memcpy(lora_tx_buffer, ringBuffer[iRead] + 2, sendlng);
+        sendlng = ringBuffer[iReadTX][0];
+        memcpy(lora_tx_buffer, ringBuffer[iReadTX] + 2, sendlng);
 
-        ringBuffer[iRead][1]=0x01; // mark retransmission Status sent
+        ringBuffer[iReadTX][1]=0x01; // mark retransmission Status sent
 
         if(bLORADEBUG)
         {
-            unsigned int ring_msg_id = (ringBuffer[iRead][6]<<24) | (ringBuffer[iRead][5]<<16) | (ringBuffer[iRead][4]<<8) | ringBuffer[iRead][3];
-            Serial.printf("senden   retid:%i status:%02X lng;%02X msg-id:%c-%08X\n", iRead, ringBuffer[iRead][1], ringBuffer[iRead][0], ringBuffer[iRead][2], ring_msg_id);
+            unsigned int ring_msg_id = (ringBuffer[iReadTX][6]<<24) | (ringBuffer[iReadTX][5]<<16) | (ringBuffer[iReadTX][4]<<8) | ringBuffer[iReadTX][3];
+            Serial.printf("senden   retid:%i status:%02X lng;%02X msg-id:%c-%08X\n", iReadTX, ringBuffer[iReadTX][1], ringBuffer[iReadTX][0], ringBuffer[iReadTX][2], ring_msg_id);
         }
 
         lora_tx_buffer[sendlng]=0x00;
-
-        int save_read=iRead;
-
-        iRead++;
-        if (iRead >= MAX_RING)
-            iRead = 0;
 
         // we can now tx the message
         if (TX_ENABLE == 1)
@@ -772,7 +766,6 @@ bool doTX()
 
                 if(!lora_setchip_aprs())
                 {
-                    iRead=save_read;
                     return false;
                 }
                 
@@ -821,7 +814,6 @@ bool doTX()
                             //if(bLORADEBUG)
                             //    Serial.printf("cmd_counter = 7:%i \n", cmd_counter);
 
-                            iRead=save_read;
                             tx_waiting=true;
                             return false;
                         }
@@ -879,30 +871,35 @@ bool doTX()
 // Messages are to retransmit
 // based on:
 // unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE] = {0};
-// int iWrite=0;
-// int iRead=0;
 
 bool updateRetransmissionStatus()
 {
 //    Serial.println("update retransmit");
 
-    for(int ircheck=0; ircheck < MAX_RING; ircheck++)
+    // retransmitt running
+    if(iRetransmit < 0)
     {
-        // Status == ringBuffer[ircheck][1]
-        //   0x00 not yet sendt
-        //   0xFF no retransmission
-        if(ringBuffer[ircheck][0] > 0 && ringBuffer[ircheck][1] > 0x00 && ringBuffer[ircheck][1] != 0xFF)
+        for(int ircheck=0; ircheck < MAX_RING; ircheck++)
         {
-            ringBuffer[ircheck][1]++;
-
-            // stopen da kein Empfang über längere Zeit
-            if(ringBuffer[ircheck][1] == 0x10)
-                ringBuffer[ircheck][1] = 0xFF;
-
-            //if(bLORADEBUG)
+            // Status == ringBuffer[ircheck][1]
+            //   0x00 not yet sendt
+            //   0xFF no retransmission
+            if(ringBuffer[ircheck][0] > 0 && ringBuffer[ircheck][1] > 0x00 && ringBuffer[ircheck][1] != 0xFF)
             {
-                int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
-                Serial.printf("Retransmit retid:%i status:%02X lng;%02X msg-id:%c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
+                ringBuffer[ircheck][1]++;
+
+                // stoppen da kein Empfang über längere Zeit
+                if(ringBuffer[ircheck][1] == 0x10)
+                {
+                    ringBuffer[ircheck][1] = 0xFF;
+
+                    int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
+                    Serial.printf("Retransmit retid:%i status:%02X lng;%02X msg-id:%c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
+
+                    iRetransmit = ircheck;
+
+                    return true;
+                }
             }
         }
     }

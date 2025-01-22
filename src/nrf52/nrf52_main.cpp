@@ -835,7 +835,14 @@ void nrf52loop()
         if (iWrite != iRead)
         {
             // save transmission state between loops
-            doTX();
+            int iReadTX = iRead;
+            
+            if(doTX(iReadTX))
+            {
+                iRead++;
+                if (iRead >= MAX_RING)
+                    iRead = 0;
+            }
         }
     }
 

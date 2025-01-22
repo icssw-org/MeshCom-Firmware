@@ -193,7 +193,7 @@ void loopWebserver()
             if(strcmp(strGetPassword.c_str(), meshcom_settings.node_webpwd) == 0)
             {
                 Serial.print(getTimeString());
-                Serial.printf("WEBServer Password OK IP:<%s>\n", c_web_ip_now);
+                Serial.printf(" WEBServer Password OK IP:<%s>\n", c_web_ip_now);
 
                 sprintf(web_ip[inext_free], "%s", c_web_ip_now);
                 web_ip_passwd_time[inext_free] = millis();
@@ -203,7 +203,7 @@ void loopWebserver()
             else
             {
                 Serial.print(getTimeString());
-                Serial.printf("WEBServer Password not found IP:<%s>\n", c_web_ip_now);
+                Serial.printf(" WEBServer Password not found IP:<%s>\n", c_web_ip_now);
             }
         }
     }
