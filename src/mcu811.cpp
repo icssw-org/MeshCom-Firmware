@@ -68,7 +68,7 @@ bool setupMCU811()
 
 bool loopMCU811()
 {
-    if(!bMCU811ON)
+    if(bMCU811ON == false)
         return false;
 
 	Wire.endTransmission(true);

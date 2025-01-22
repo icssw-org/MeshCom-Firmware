@@ -342,7 +342,7 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
             delay(100);
-            Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--mesh    on/off\n");
+            Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx\n--mesh    on/off\n");
             delay(100);
             Serial.printf("--softser on/off/send/app/baud/fixpegel/fixtemp\n");
             delay(100);
@@ -448,6 +448,8 @@ void commandAction(char *msg_text, bool ble)
             bReturn = true;
 
         save_settings();
+
+        initButtonPin();
     }
     else
     if(commandCheck(msg_text+2, (char*)"button off") == 0)
@@ -478,14 +480,14 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
-
         if(ble)
         {
             bNodeSetting = true;
         }
         else
             bReturn = true;
+
+        initButtonPin();
     }
     else
     if(commandCheck(msg_text+2, (char*)"track on") == 0)
@@ -594,8 +596,6 @@ void commandAction(char *msg_text, bool ble)
     #endif
     if(commandCheck(msg_text+2, (char*)"bleshort") == 0)
     {
-        bGPSON=true;
-
         if(ble)
         {
             addBLECommandBack((char*)"--bleshort");
@@ -614,8 +614,6 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"blelong") == 0)
     {
-        bGPSON=true;
-
         if(ble)
         {
             addBLECommandBack((char*)"--blelong");
@@ -1051,6 +1049,60 @@ void commandAction(char *msg_text, bool ble)
 
         if(meshcom_settings.node_hasIPaddress)
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"webpwd ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+9);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        sVar = _owner_c;
+
+        sVar.trim();
+
+        if(sVar == "none")
+            sVar = "";
+
+        if(sVar.length() > 19)
+            sVar = sVar.substring(0, 19);
+
+        sprintf(meshcom_settings.node_webpwd, "%s", sVar.c_str());
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setname ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+10);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        sVar = _owner_c;
+
+        sVar.trim();
+
+        if(sVar == "none")
+            sVar = "";
+
+        if(sVar.length() > 19)
+            sVar = sVar.substring(0, 19);
+
+        sprintf(meshcom_settings.node_name, "%s", sVar.c_str());
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        save_settings();
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"mesh on") == 0)
@@ -1592,27 +1644,6 @@ void commandAction(char *msg_text, bool ble)
         sVar.trim();
 
         sprintf(meshcom_settings.node_atxt, "%s", sVar.c_str());
-
-        if(ble)
-        {
-            addBLECommandBack((char*)msg_text);
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setname ") == 0)
-    {
-        sprintf(_owner_c, "%s", msg_text+10);
-        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
-            _owner_c[strlen(_owner_c)-1] = 0x00;
-        sVar = _owner_c;
-
-        sVar.trim();
-
-        sprintf(meshcom_settings.node_name, "%s", sVar.c_str());
 
         if(ble)
         {
@@ -2606,6 +2637,7 @@ void commandAction(char *msg_text, bool ble)
             }
 
             Serial.printf("...Webserver %s\n", (bWEBSERVER?"on":"off"));
+            Serial.printf("...Webpwd    %s\n", meshcom_settings.node_webpwd);
             Serial.printf("...Gateway   %s %s\n", (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""));
 
             #ifndef BOARD_RAK4630
@@ -2856,6 +2888,7 @@ void sendNodeSetting()
     nsetdoc["TYP"] = "SN";
     nsetdoc["GW"] = bGATEWAY;
     nsetdoc["WS"] = bWEBSERVER;
+    nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc["DISP"] =  bDisplayOff;
     nsetdoc["BTN"] = bButtonCheck;
     nsetdoc["MSH"] = bMESH;

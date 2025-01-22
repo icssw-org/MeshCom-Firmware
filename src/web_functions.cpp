@@ -62,6 +62,12 @@ int web_page_state = 0;
 
 bool bweb_server_running = false;
 
+bool bRefresh = false;
+
+// password check
+char web_ip[10][20];
+long web_ip_passwd_time[10];
+
 // WEBSERVER
 void startWebserver()
 {
@@ -126,10 +132,11 @@ void loopWebserver()
 
     // HTML Page formating
     if (web_client)
-    {                             // If a new client connects,
+    {      
+        // If a new client connects,
         web_client_html(web_client);
     }
-
+    
     // Close the connection
     web_client.stop();
 }
@@ -140,6 +147,103 @@ void loopWebserver()
     void web_client_html(EthernetClient web_client)
 #endif
 {
+    IPAddress web_ip_now = web_client.remoteIP();
+
+    char c_web_ip_now[20];
+
+    sprintf(c_web_ip_now, "%i.%i.%i.%i", web_ip_now[0], web_ip_now[1], web_ip_now[2], web_ip_now[3]);
+
+    if(bDEBUG)
+        Serial.println(web_ip_now);
+
+    bool bPasswordOk = false;
+
+    // check password used
+    int inext_free = -1;
+    int iwebid = -1;
+
+    if(strlen(meshcom_settings.node_webpwd) > 0)
+    {
+        for(int iwid = 0; iwid < 10; iwid++)
+        {
+            // check timeout
+            if(web_ip_passwd_time[iwid] > 0)
+            {
+                if(bDEBUG)
+                    Serial.printf("iwid:%i web_ip[iwid]:%s %s\n", iwid, web_ip[iwid], c_web_ip_now);
+
+                if(strcmp(web_ip[iwid], c_web_ip_now) == 0)
+                {
+                    bPasswordOk = true;
+                    web_ip_passwd_time[iwid] = millis();
+                    iwebid=iwid;
+                }
+            }
+            else
+            {
+                if(inext_free < 0)
+                    inext_free = iwid;
+            }
+        }
+
+        if(!bPasswordOk)
+        {
+            String strGetPassword = work_webpage(true, inext_free);
+
+            if(strcmp(strGetPassword.c_str(), meshcom_settings.node_webpwd) == 0)
+            {
+                Serial.print(getTimeString());
+                Serial.printf("WEBServer Password OK IP:<%s>\n", c_web_ip_now);
+
+                sprintf(web_ip[inext_free], "%s", c_web_ip_now);
+                web_ip_passwd_time[inext_free] = millis();
+                bPasswordOk = true;
+                iwebid=inext_free;
+            }
+            else
+            {
+                Serial.print(getTimeString());
+                Serial.printf("WEBServer Password not found IP:<%s>\n", c_web_ip_now);
+            }
+        }
+    }
+    else
+        bPasswordOk = true;
+
+    // no connection via password or no password need
+    if(!bPasswordOk)
+        work_webpage(true, inext_free);
+    else
+        work_webpage(false, iwebid);
+}
+
+void pwd_webpage()
+{
+    web_client.println("<table class=\"table\">");
+
+    web_client.println("<colgroup>");
+    web_client.println("<col style=\"width: 25%;\">");
+    web_client.println("<col style=\"width: 75%;\">");
+    web_client.println("</colgroup>\n");
+
+    web_client.println("<form action=\"/#\">");
+    web_client.println("<tr><td>\n");
+    web_client.println("<label for=\"fname\"><b>LOGIN Password</b></label>");
+    web_client.println("</td><td>\n");
+    web_client.printf("<input type=\"text\" maxlength=\"20\" size=\"20\" id=\"nodepassword\" name=\"nodepassword\">\n");
+    web_client.println("<input type=\"submit\" value=\"LOGIN\">");
+    web_client.println("</td></tr>\n");
+    web_client.println("</form>");
+
+    web_client.println("</table>");
+
+    web_client.println("</body></html>");
+}
+
+String work_webpage(bool bget_password, int webid)
+{
+    String password_message="";
+
     web_header="";
 
     web_currentTime = millis();
@@ -150,7 +254,7 @@ void loopWebserver()
 
     String web_currentLine = "";                // make a String to hold incoming data from the client
 
-    while (web_client.connected() && web_currentTime - web_previousTime <= web_timeoutTime)
+    while (web_client.connected() && (web_currentTime - web_previousTime) <= web_timeoutTime)
     {  // loop while the client's connected
         web_currentTime = millis();
         if (web_client.available())
@@ -164,22 +268,17 @@ void loopWebserver()
             web_header += c;
 
             if (c == '\n')
-            {                    // if the byte is a newline character
+            {
+                // if the byte is a newline character
                 // if the current line is blank, you got two newline characters in a row.
                 // that's the end of the client HTTP request, so send a response:
                 if (web_currentLine.length() == 0) {
-                // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-                // and a content-type so the client knows what's coming, then a blank line:
-                web_client.println("HTTP/1.1 200 OK");
-                web_client.println("Content-type:text/html");
-                web_client.println("Connection: close");
-                web_client.println();
                 
                 bool bPhoneReady = false;
                 if (isPhoneReady == 1)
                     bPhoneReady = true;
 
-                bool bRefresh = false;
+                bRefresh = false;
 
                 // turns the Button on and off
                 if (web_header.indexOf("GET /display/on") >= 0)
@@ -277,6 +376,11 @@ void loopWebserver()
                     commandAction((char*)"--reboot", bPhoneReady);
                 }
                 else
+                if (web_header.indexOf("GET /logout") >= 0)
+                {
+                    web_ip_passwd_time[webid] = 0;
+                }
+                else
                 if (web_header.indexOf("GET /onewire/on") >= 0)
                 {
                     commandAction((char*)"--onewire on", bPhoneReady);
@@ -371,11 +475,6 @@ void loopWebserver()
 
                     sprintf(cBefehl, "--setio %s IN", web_header.substring(ipos+17, ipos+19).c_str());
                     commandAction(cBefehl, bPhoneReady);
-                }
-                else
-                if (web_header.indexOf("GET /reboot") >= 0)
-                {
-                    commandAction((char*)"--reboot", bPhoneReady);
                 }
                 else
                 if (web_header.indexOf("GET /sendpos") >= 0)
@@ -541,6 +640,26 @@ void loopWebserver()
 
                         message_call="";
                     }
+                }
+                else
+                //?message=ok HTTP/1.1
+                if (web_header.indexOf("?nodepassword=") >= 0 && bget_password && webid >= 0)
+                {
+                    idx_text=web_header.indexOf("=") + 1;
+
+                    password_message="";
+
+                    if(idx_text_end <= 0)
+                        password_message = hex2ascii(web_header.substring(idx_text));
+                    else
+                        password_message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                    continue;
+                }
+                else
+                if (web_header.indexOf("?nodepassword=") >= 0 && !bget_password)
+                {
+                    web_page_state=0;
                 }
                 else
                 //?message=ok HTTP/1.1
@@ -867,19 +986,16 @@ void loopWebserver()
                 else
                 if (web_header.indexOf("?aprsgroup=") >= 0)
                 {
-                    if(web_header.indexOf("=1") > 0)
-                        sprintf(message_text, "--symid /");
+                    idx_text=web_header.indexOf("=") + 1;
+
+                    String message="";
+
+                    if(idx_text_end <= 0)
+                        message = hex2ascii(web_header.substring(idx_text));
                     else
-                    if(web_header.indexOf("=2") > 0)
-                        sprintf(message_text, "--symid \\");
-                    else
-                    if(web_header.indexOf("=3") > 0)
-                        sprintf(message_text, "--symid M");
-                    else
-                    if(web_header.indexOf("=4") > 0)
-                        sprintf(message_text, "--symid G");
-                    else
-                        sprintf(message_text, "--symid L");
+                        message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                    sprintf(message_text, "--symid %-1.1s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -940,61 +1056,15 @@ void loopWebserver()
                     save_settings();
                 }
 
-                // Display the HTML web page
-                web_client.println("<!DOCTYPE html><html>");
-                web_client.println("<head><meta charset=\"utf-8\" name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+                main_webpage();
 
-                if(bRefresh)
-                    web_client.println("<meta http-equiv=\"Refresh\" content=\"10\">");
+                // no Display in get password
+                if(bget_password)
+                {
+                    pwd_webpage();
 
-                web_client.println("<link rel=\"icon\" href=\"data:,\">");
-                // CSS to style the on/off buttons 
-                // Feel free to change the background-color and font-size attributes to fit your preferences
-                web_client.println("<style>html { font-family: Helvetica; font-size: 16px; color:#a2182f; display: inline-block; margin: 0px auto; text-align: left;}");
-                
-                web_client.println("@media screen and (max-width: 600px) {");
-                web_client.println("button, table, th, td {font-size: 10px;}");
-                web_client.println("h3 {font-size: 20px;}");
-                web_client.println("}");
-
-                web_client.println("@media screen and (min-width: 601px; max-width: 800px) {");
-                web_client.println("button, table, th, td {font-size: 14px;}");
-                web_client.println("h3 {font-size: 20px;}");
-                web_client.println("}");
-
-                web_client.println("@media screen and (min-width: 801px) {");
-                web_client.println("button, table, th, td {font-size: 16px;}");
-                web_client.println("h3 {font-size: 24px;}");
-                web_client.println("}");
-
-                // Button Style
-                web_client.println(".button { border: none; color:  #a2182f; height:26px; width:100%; padding: 1px 1px;");
-                web_client.println("text-decoration: none; margin: 2px; cursor: pointer; border-radius: 8px;}");
-                web_client.println(".button2 {background-color:  #a2182f; color: white;}");
-
-                web_client.println(".table {background-color: #FCEDF0; width: max(25%, min(801px, 100%));margin-bottom: 0px;}");
-                web_client.println(".table, th, td {border: 1px solid white; border-collapse: collapse;}");
-                web_client.println(".table2 {background-color: white;}");
-                web_client.println(".tableconsole {font-family: Lucida Console; font-size: 14px;}");
-                web_client.println(".td2 {background-color: white;}");
-
-                web_client.println("input[type=submit] {background-color: #a2182f; color: white; padding: 3px 10px;}");
-
-                web_client.println("</style></head>");
-                
-                // Web Page Heading
-                web_client.printf("<body><h3 style=\"margin-bottom: 0px;\">MeshCom 4.0 &nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT</h3>\n", meshcom_settings.node_call,
-                    meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
-
-                web_client.println("<table class=\"table\">");
-                web_client.println("<colgroup>");
-                web_client.println("<col style=\"width: 25%;\">");
-                web_client.println("<col style=\"width: 25%;\">");
-                web_client.println("<col style=\"width: 25%;\">");
-                web_client.println("<col style=\"width: 25%;\">");
-                web_client.println("</colgroup><tr>\n");
-                web_client.println("<td><a href=\"#anchor_button\"><button class=\"button button2\"<b>COMMANDS</b></button></a></td>");
-                web_client.println("</tr></table>");
+                    continue;
+                }
 
                 // POS
                 if(web_page_state == 1)
@@ -1195,22 +1265,8 @@ void loopWebserver()
                     web_client.println("<tr><td>\n");
                     web_client.println("<label for=\"fname\"><b>APRS-GROUP:</b></label>");
                     web_client.println("</td><td>\n");
-
-                    if(meshcom_settings.node_symid == '/')
-                        web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\" selected>/</option><option value=\"2\">\\</option><option value=\"3\">M</option><option value=\"4\">G</option><option value=\"5\">L</option>");
-                    else
-                        if(meshcom_settings.node_symid == 'G')
-                            web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\">/</option><option value=\"2\">\\</option><option value=\"3\">M</option><option value=\"4\" selected>G</option><option value=\"5\">L</option>");
-                    else
-                        if(meshcom_settings.node_symid == 'M')
-                            web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\">/</option><option value=\"2\">\\</option><option value=\"3\" selected>M</option><option value=\"4\">G</option><option value=\"5\">L</option>");
-                    else
-                        if(meshcom_settings.node_symid == 'L')
-                            web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\">/</option><option value=\"2\">\\</option><option value=\"3\">M</option><option value=\"4\">G</option><option value=\"5\" selected>L</option>");
-                    else
-                        web_client.println("<select id=\"aprsgroup\" name=\"aprsgroup\"><option value=\"1\">/</option><option value=\"2\" selected>\\</option><option value=\"3\">M</option><option value=\"4\">G</option><option value=\"5\">L</option>");
-
-                    web_client.println("&nbsp;<input type=\"submit\" value=\"set\">");
+                    web_client.printf("<input type=\"text\" value=\"%c\" maxlength=\"1\" size=\"2\" id=\"aprsgroup\" name=\"aprsgroup\">\n", meshcom_settings.node_symid);
+                    web_client.println("<input type=\"submit\" value=\"set\">");
                     web_client.println("</td></tr>\n");
                     web_client.println("</form>");
 
@@ -1854,7 +1910,10 @@ void loopWebserver()
                     web_client.println("<td><a href=\"/softser\"><button class=\"button\"><b>SOFTSER</b></button></a></td>");   // page 8
 
                 // REBOOT
-                web_client.println("<td><a href=\"/reboot\"><button class=\"button\"><b>REBOOT</b></button></a></td></tr>");
+                web_client.println("<td><a href=\"/reboot\"><button class=\"button\"><b>REBOOT</b></button></a></td>");
+
+                // LOGOUT
+                web_client.println("<td><a href=\"/logout\"><button class=\"button\"><b>LOGOUT</b></button></a></td></tr>");
 
                 web_client.println("</table>");
 
@@ -1868,7 +1927,7 @@ void loopWebserver()
                 }
                 else
                 { // if you got a newline, then clear currentLine
-                web_currentLine = "";
+                    web_currentLine = "";
                 }
             }
             else
@@ -1884,6 +1943,8 @@ void loopWebserver()
         Serial.println("Client disconnected.");
         Serial.println("");
     }
+
+    return password_message;
 }
 
 // HTTP functions
@@ -2032,4 +2093,71 @@ String hex2ascii(String ustring)
     string.replace("%09", "");
 
     return string;
+}
+
+void main_webpage()
+{
+    // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+    // and a content-type so the client knows what's coming, then a blank line:
+    web_client.println("HTTP/1.1 200 OK");
+    web_client.println("Content-type:text/html");
+    web_client.println("Connection: close");
+    web_client.println();
+
+// Display the HTML web page
+    web_client.println("<!DOCTYPE html><html>");
+    web_client.println("<head><meta charset=\"utf-8\" name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+
+    if(bRefresh)
+        web_client.println("<meta http-equiv=\"Refresh\" content=\"10\">");
+
+    web_client.println("<link rel=\"icon\" href=\"data:,\">");
+    // CSS to style the on/off buttons 
+    // Feel free to change the background-color and font-size attributes to fit your preferences
+    web_client.println("<style>html { font-family: Helvetica; font-size: 16px; color:#a2182f; display: inline-block; margin: 0px auto; text-align: left;}");
+    
+    web_client.println("@media screen and (max-width: 600px) {");
+    web_client.println("button, table, th, td {font-size: 10px;}");
+    web_client.println("h3 {font-size: 20px;}");
+    web_client.println("}");
+
+    web_client.println("@media screen and (min-width: 601px; max-width: 800px) {");
+    web_client.println("button, table, th, td {font-size: 14px;}");
+    web_client.println("h3 {font-size: 20px;}");
+    web_client.println("}");
+
+    web_client.println("@media screen and (min-width: 801px) {");
+    web_client.println("button, table, th, td {font-size: 16px;}");
+    web_client.println("h3 {font-size: 24px;}");
+    web_client.println("}");
+
+    // Button Style
+    web_client.println(".button { border: none; color:  #a2182f; height:26px; width:100%; padding: 1px 1px;");
+    web_client.println("text-decoration: none; margin: 2px; cursor: pointer; border-radius: 8px;}");
+    web_client.println(".button2 {background-color:  #a2182f; color: white;}");
+
+    web_client.println(".table {background-color: #FCEDF0; width: max(25%, min(801px, 100%));margin-bottom: 0px;}");
+    web_client.println(".table, th, td {border: 1px solid white; border-collapse: collapse;}");
+    web_client.println(".table2 {background-color: white;}");
+    web_client.println(".tableconsole {font-family: Lucida Console; font-size: 14px;}");
+    web_client.println(".td2 {background-color: white;}");
+
+    web_client.println("input[type=submit] {background-color: #a2182f; color: white; padding: 3px 10px;}");
+
+    web_client.println("</style></head>");
+    
+    // Web Page Heading
+    web_client.printf("<body><h3 style=\"margin-bottom: 0px;\">MeshCom 4.0 &nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT</h3>\n", meshcom_settings.node_call,
+        meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+
+    web_client.println("<table class=\"table\">");
+    web_client.println("<colgroup>");
+    web_client.println("<col style=\"width: 25%;\">");
+    web_client.println("<col style=\"width: 25%;\">");
+    web_client.println("<col style=\"width: 25%;\">");
+    web_client.println("<col style=\"width: 25%;\">");
+    web_client.println("</colgroup><tr>\n");
+    web_client.println("<td><a href=\"#anchor_button\"><button class=\"button button2\"<b>COMMANDS</b></button></a></td>");
+    web_client.println("</tr></table>");
+
 }

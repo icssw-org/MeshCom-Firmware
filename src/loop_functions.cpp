@@ -79,6 +79,7 @@ int DisplayTimeWait = 0;
 
 bool bWaitButton_Released = false;
 bool bButtonCheck = false;
+bool bcheckBottonRun = false;
 uint8_t iButtonPin = 0;
 
 int iInitDisplay = 0;
@@ -419,9 +420,13 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     {
         #ifdef BOARD_E290
             e290_display.clearMemory();
-            
-        	if(memcmp(text, "#S", 2) == 0)
-                e290_display.fastmodeOn();
+
+        	if(memcmp(text, "#F", 2) == 0)
+                e290_display.clear();
+            else
+                e290_display.clearMemory();
+
+            e290_display.fastmodeOn();
             
             e290_display.setFont(&FreeMonoBold12pt7b);
         #else
@@ -1213,15 +1218,21 @@ void init_loop_function()
 // BUTTON
 void initButtonPin()
 {
-    #ifdef BUTTON_PIN
+    #if defined (BUTTON_PIN)
+
+    bcheckBottonRun = false;
+
     if(bButtonCheck)
     {
-        #ifdef BOARD_E290
+        #if defined (BOARD_E290)
             pinMode(iButtonPin, INPUT); // pullup placed on hardware
+        #elif defined (BOARD_RAK4630)
+            pinMode(BUTTON_PIN, INPUT_PULLUP);
         #else
             pinMode(iButtonPin, INPUT_PULLUP);
         #endif
     }
+    
     #endif
 }
 
@@ -1233,154 +1244,166 @@ bool bPressed=false;
 void checkButtonState()
 {
     #ifdef BUTTON_PIN
-    
-    //Serial.printf("iButtonPin:%i bButtonCheck:%i\n", digitalRead(iButtonPin), bButtonCheck);
 
-        if(bButtonCheck)
+    if(bcheckBottonRun)
+        return;
+   
+    bcheckBottonRun = true;
+
+    if(bButtonCheck)
+    {
+        #if defined (BOARD_RAK4630)
+            if(digitalRead(BUTTON_PIN) == LOW)
+        #else
+            if(digitalRead(iButtonPin) == LOW)
+        #endif
         {
-            if(digitalRead(iButtonPin) == 0)
+            checkButtoExtraLong++;
+            if(checkButtoExtraLong > 100)
             {
-                checkButtoExtraLong++;
-                if(checkButtoExtraLong > 100)
-                {
-                    checkButtoExtraLong=0;
-                    //bButtonCheck=false;
-                    //meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
-                    //save_settings();
-                    Serial.println("BUTTON not connected (set BUTTON to off)");
-                    return;
-                }
-
-                //if(bDEBUG)
-                //    Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);
-
-                if(!bPressed)
-                {
-                    bPressed = true;
-
-                    if(iPress < 3)
-                        iPress++;
-
-                    checkButtonTime = 30;
-
-                    if(bDEBUG)
-                        Serial.printf("1:checkButtonTime:%i iPress:%i\n", checkButtonTime, iPress);
-                }
-
+                checkButtoExtraLong=0;
+                
+                bButtonCheck=false;
+                meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
+                save_settings();
+                
+                Serial.println("BUTTON not connected (set BUTTON to off)");
+                bcheckBottonRun = false;
                 return;
             }
-            else
+
+            //if(bDEBUG)
+            //    Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);
+
+            if(!bPressed)
             {
-                checkButtoExtraLong = 0;
+                bPressed = true;
 
-                bPressed = false;
+                if(iPress < 3)
+                    iPress++;
 
-                checkButtonTime--;
+                checkButtonTime = 30;
 
-                if(checkButtonTime < 0)
+                if(bDEBUG)
+                    Serial.printf("1:checkButtonTime:%i iPress:%i\n", checkButtonTime, iPress);
+            }
+
+            bcheckBottonRun = false;
+            return;
+        }
+        else
+        {
+            checkButtoExtraLong = 0;
+
+            bPressed = false;
+
+            checkButtonTime--;
+
+            if(checkButtonTime < 0)
+            {
+                if(iPress == 3)
                 {
-                    if(iPress == 3)
+                    if(bDEBUG)
+                        Serial.println("BUTTON triple press");
+
+                    bDisplayTrack=!bDisplayTrack;
+
+                    if(bDisplayTrack)
+                        commandAction((char*)"--track on", false);
+                    else
+                        commandAction((char*)"--track off", false);
+
+                    bDisplayOff=false;
+
+                    sendDisplayHead(false);
+
+                }
+                else
+                if(iPress == 2)
+                {
+                    if(bDEBUG)
+                        Serial.println("BUTTON double press");
+
+                    if(bDisplayTrack)
+                        commandAction((char*)"--sendtrack", false);
+                    else
+                        commandAction((char*)"--sendpos", false);
+                }
+                else
+                if(iPress == 1 && !bDisplayTrack)
+                {
+                    if(bDEBUG)
+                        Serial.printf("BUTTON singel press %i %i\n", pageLastLineAnz[pagePointer], bDisplayTrack);
+
+                    if(pageLastLineAnz[pagePointer] == 0)
                     {
-                        if(bDEBUG)
-                            Serial.println("BUTTON triple press");
+                        pagePointer = pageLastPointer - 1;
+                        if(pagePointer < 0)
+                            pagePointer = PAGE_MAX-1;
 
-                        bDisplayTrack=!bDisplayTrack;
+                        #ifdef BOARD_E290
+                            sendDisplayMainline();
+                            e290_display.update();
+                        #else
+                            pageHold=0;
+                            bDisplayOff=!bDisplayOff;
+                            sendDisplayHead(false);
+                        #endif
 
-                        if(bDisplayTrack)
-                            commandAction((char*)"--track on", false);
-                        else
-                            commandAction((char*)"--track off", false);
-
+                    }
+                    else
+                    {
                         bDisplayOff=false;
 
-                        sendDisplayHead(false);
-
-                    }
-                    else
-                    if(iPress == 2)
-                    {
-                        if(bDEBUG)
-                            Serial.println("BUTTON double press");
-
-                        if(bDisplayTrack)
-                            commandAction((char*)"--sendtrack", false);
-                        else
-                            commandAction((char*)"--sendpos", false);
-                    }
-                    else
-                    if(iPress == 1 && !bDisplayTrack)
-                    {
-                        if(bDEBUG)
-                            Serial.printf("BUTTON singel press %i %i\n", pageLastLineAnz[pagePointer], bDisplayTrack);
-
-                        if(pageLastLineAnz[pagePointer] == 0)
+                        pageLineAnz = pageLastLineAnz[pagePointer];
+                        for(int its=0;its<pageLineAnz;its++)
                         {
-                            pagePointer = pageLastPointer - 1;
-                            if(pagePointer < 0)
-                                pagePointer = PAGE_MAX-1;
-
-                            #ifdef BOARD_E290
-                                sendDisplayMainline();
-                                e290_display.update();
-                            #else
-                                pageHold=0;
-                                bDisplayOff=!bDisplayOff;
-                                sendDisplayHead(false);
-                            #endif
-
-                        }
-                        else
-                        {
-                            bDisplayOff=false;
-
-                            pageLineAnz = pageLastLineAnz[pagePointer];
-                            for(int its=0;its<pageLineAnz;its++)
+                            // Save last Text (init)
+                            pageLine[its][0] = pageLastLine[pagePointer][its][0];
+                            pageLine[its][1] = pageLastLine[pagePointer][its][1];
+                            pageLine[its][2] = pageLastLine[pagePointer][its][2];
+                            memcpy(pageText[its], pageLastText[pagePointer][its], 25);
+                            if(its == 0)
                             {
-                                // Save last Text (init)
-                                pageLine[its][0] = pageLastLine[pagePointer][its][0];
-                                pageLine[its][1] = pageLastLine[pagePointer][its][1];
-                                pageLine[its][2] = pageLastLine[pagePointer][its][2];
-                                memcpy(pageText[its], pageLastText[pagePointer][its], 25);
-                                if(its == 0)
+                                for(int iss=0; iss < 20; iss++)
                                 {
-                                    for(int iss=0; iss < 20; iss++)
-                                    {
-                                        if(pageText[its][iss] == 0x00)
-                                            pageText[its][iss] = 0x20;
-                                    }
-                                    pageText[its][19] = pagePointer | 0x30;
-                                    pageText[its][20] = 0x00;
+                                    if(pageText[its][iss] == 0x00)
+                                        pageText[its][iss] = 0x20;
                                 }
+                                pageText[its][19] = pagePointer | 0x30;
+                                pageText[its][20] = 0x00;
                             }
-
-                            #ifdef BOARD_E290
-                                iDisplayType=9;
-                            #else
-                                iDisplayType=0;
-                            #endif
-
-                            strcpy(pageTextLong1, pageLastTextLong1[pagePointer]);
-                            strcpy(pageTextLong2, pageLastTextLong2[pagePointer]);
-
-                            //Serial.printf("pageLineAnz:%i pagePointer:%i <%i %i %i> pageText<%s><%s><%s><%s>\n", pageLineAnz, pagePointer, pageLine[2][0], pageLine[2][1], pageLine[2][2], pageText[0], pageText[1], pageText[2], pageTextLong2);
-
-                            sendDisplay1306(false, true, 0, 0, (char*)"#N");
-
-                            pagePointer--;
-                            if(pagePointer < 0)
-                                pagePointer=PAGE_MAX-1;
-
-                            pageHold=5;
                         }
+
+                        #ifdef BOARD_E290
+                            iDisplayType=9;
+                        #else
+                            iDisplayType=0;
+                        #endif
+
+                        strcpy(pageTextLong1, pageLastTextLong1[pagePointer]);
+                        strcpy(pageTextLong2, pageLastTextLong2[pagePointer]);
+
+                        //Serial.printf("pageLineAnz:%i pagePointer:%i <%i %i %i> pageText<%s><%s><%s><%s>\n", pageLineAnz, pagePointer, pageLine[2][0], pageLine[2][1], pageLine[2][2], pageText[0], pageText[1], pageText[2], pageTextLong2);
+
+                        sendDisplay1306(false, true, 0, 0, (char*)"#N");
+
+                        pagePointer--;
+                        if(pagePointer < 0)
+                            pagePointer=PAGE_MAX-1;
+
+                        pageHold=5;
                     }
-
-                    checkButtonTime = 0;
-
-                    iPress = 0;
                 }
+
+                checkButtonTime = 0;
+
+                iPress = 0;
             }
         }
+    }
 
+    bcheckBottonRun = false;
 
     #endif
 }
@@ -1866,7 +1889,7 @@ void sendMessage(char *msg_text, int len)
                 strMsg = newMsg;
             }
             else
-                if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
+                if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "*" && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
                     bDM=true;
         }
     }
