@@ -812,10 +812,6 @@ void nrf52setup()
 
 void nrf52loop()
 {
-    // check if we have messages in ringbuffer to send
-    //Serial.printf("is_receiving:%i tx_is_active:%i iWrite:%i iRead:%i \n", is_receiving, tx_is_active, iWrite, iRead);
-
-
     if(iReceiveTimeOutTime > 0)
     {
         // Timeout RECEIVE_TIMEOUT

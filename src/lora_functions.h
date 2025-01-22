@@ -19,4 +19,6 @@ void OnTxTimeout(void);
 void OnPreambleDetect(void);
 void OnHeaderDetect(void);
 
+bool updateRetransmissionStatus(void);
+
 #endif

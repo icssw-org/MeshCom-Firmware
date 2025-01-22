@@ -268,6 +268,9 @@ volatile bool bEnableInterruptTransmit = false;
 // flag to indicate that a packet was detected or CAD timed out
 volatile bool scanFlag = false;
 
+// flag to indicate one second 
+unsigned long retransmit_timer = 0;
+
 #if defined(ESP8266) || defined(ESP32)
   ICACHE_RAM_ATTR
 #endif
@@ -1078,6 +1081,13 @@ void esp32loop()
             sendMessage(tmessage, strlen(tmessage));
             */
         }
+    }
+
+    if ((retransmit_timer + (1000 * 5)) < millis())   // repeat 5 seconds
+    {
+        updateRetransmissionStatus();
+
+        retransmit_timer = millis();
     }
 
     if(iReceiveTimeOutTime > 0)
