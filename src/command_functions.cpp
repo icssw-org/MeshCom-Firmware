@@ -347,6 +347,10 @@ void commandAction(char *msg_text, bool ble)
             Serial.printf("--softser on/off/send/app/baud/fixpegel/fixtemp\n");
             delay(100);
             Serial.printf("--spectrum   run spectral scan\n");
+            #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+            delay(100);
+            Serial.printf("--setboostedgain    on/off  enable/disable boosted rx gain\n");
+            #endif
         }
 
         return;
@@ -1227,6 +1231,48 @@ void commandAction(char *msg_text, bool ble)
         
         return;
     }
+    #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+    else
+    if(commandCheck(msg_text+2, (char*)"setboostedgain on") == 0)
+    {
+        bBOOSTEDGAIN = true;
+
+        meshcom_settings.node_sset2 |=  0x0800;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--setboostedgain on");
+        }
+
+        save_settings();
+
+        Serial.println("Auto. Reboot after 5 sec.");
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setboostedgain off") == 0)
+    {
+        bBOOSTEDGAIN = false;
+
+         meshcom_settings.node_sset2 &=  ~0x0800;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--setboostedgain off");
+        }
+
+        save_settings();
+
+        Serial.println("Auto. Reboot after 5 sec.");
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        return;
+    }
+    #endif
     else
     if(commandCheck(msg_text+2, (char*)"bledebug on") == 0)
     {
