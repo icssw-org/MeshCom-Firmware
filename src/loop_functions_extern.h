@@ -61,6 +61,8 @@ extern bool bSOFTSERDEBUG;
 
 extern bool bBLElong;
 
+extern bool bBOOSTEDGAIN;
+
 extern bool bGATEWAY;
 extern bool bGATEWAY_NOPOS;
 extern bool bMESH;

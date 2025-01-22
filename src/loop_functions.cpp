@@ -70,6 +70,8 @@ bool bSHORTPATH = false;
 bool bGPSDEBUG = false;
 bool bSOFTSERDEBUG = false;
 
+bool bBOOSTEDGAIN = false;
+
 bool bBLElong = false;
 
 int iDisplayType = 0;
