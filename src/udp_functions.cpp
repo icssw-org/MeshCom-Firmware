@@ -218,9 +218,17 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 unsigned int iAckId = 0;
 
                 int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
+                int iRefPos=aprsmsg.msg_payload.indexOf(":rej");
                 int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
+
+                if(strcmp(destination_call, "*") == 0)
+                {
+                  iAckPos=0;
+                  iRefPos=0;
+                  iEnqPos=0;
+                }
                 
-                if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
+                if(iAckPos > 0 || iRefPos > 0)
                 {
                     unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
                     msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
@@ -553,8 +561,6 @@ void startMeshComUDP()
   {
     node_ip = WiFi.localIP();
 
-    Serial.println(node_ip);
-
     sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
     sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
     sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[2], WiFi.dnsIP()[3]);
@@ -789,7 +795,7 @@ void getExtern(unsigned char incoming[255], int len)
   aprsmsg.msg_destination_path = getJSON(incoming, len, (char*)"dst");
   aprsmsg.msg_payload = getJSON(incoming, len, (char*)"msg");
 
-  Serial.printf("aprsmsg.msg_destination_path:%s aprsmsg.msg_payload:%s\n", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
+  //Serial.printf("aprsmsg.msg_destination_path:%s aprsmsg.msg_payload:%s\n", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
   if(aprsmsg.msg_payload == "none")
   {

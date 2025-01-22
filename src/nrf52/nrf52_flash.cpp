@@ -184,7 +184,9 @@ void init_flash(void)
 		memcpy(meshcom_settings.node_owngw, old_struct.node_owngw, 20);
 		memcpy(meshcom_settings.node_ownms, old_struct.node_ownms, 20);
 
-		memcpy(meshcom_settings.node_name, old_struct.node_name, 15);
+		memcpy(meshcom_settings.node_name, old_struct.node_name, 20);
+
+		memcpy(meshcom_settings.node_webpwd, old_struct.node_webpwd, 20);
 
 		save_settings();
 		// delay(1000);
