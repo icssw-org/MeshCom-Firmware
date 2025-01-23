@@ -346,7 +346,7 @@ bool init_flash_done=false;
 
 String strText="";
 
-unsigned int  getMacAddr(void)
+unsigned int getMacAddr(void)
 {
     uint64_t dmac64 = ESP.getEfuseMac();
 
@@ -1449,7 +1449,7 @@ void esp32loop()
         }
 
         #ifdef ENABLE_GPS
-            unsigned int igps = getGPS();
+            unsigned int igps = (unsigned int)getGPS();
             if(igps > 0)
                 posinfo_interval = igps;
             else

@@ -36,6 +36,7 @@ bool bPosDisplay = true;
 bool bDisplayOff = false;
 bool bDisplayVolt = false;
 bool bDisplayInfo = false;
+bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
 bool bGPSON = false;
@@ -1454,7 +1455,6 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     initAPRSPOS(aprspos);
 
-        Serial.println("2");
     decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
 
     //display positions from myheard nodes only
@@ -1975,16 +1975,21 @@ void sendMessage(char *msg_text, int len)
     // local messages send to LoRa TX
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
     memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
+    
     if (ringBuffer[iWrite][2] == 0x3A) // only Messages
+    {
         ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+    }
     else
+    {
         ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+    }   
 
-        if(bLORADEBUG)
-        {
-            unsigned int ring_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
-            Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id:%c-%08X\n", iWrite, ringBuffer[iWrite][1], ringBuffer[iWrite][0], ringBuffer[iWrite][2], ring_msg_id);
-        }
+    if(bDisplayRetx)
+    {
+        unsigned int ring_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
+        Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iWrite, ringBuffer[iWrite][1], ringBuffer[iWrite][0], ringBuffer[iWrite][2], ring_msg_id);
+    }
 
     iWrite++;
     if(iWrite >= MAX_RING)

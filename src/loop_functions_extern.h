@@ -24,6 +24,7 @@ extern bool bPosDisplay;
 extern bool bDisplayOff;
 extern bool bDisplayVolt;
 extern bool bDisplayInfo;
+extern bool bDisplayRetx;
 extern unsigned long DisplayOffWait;
 extern int DisplayTimeWait;
 extern unsigned long BattTimeWait;

@@ -446,7 +446,7 @@ unsigned int getGPS(void)
     if(!bGPSON)
     {
         if(meshcom_settings.node_postime > 0)
-            return meshcom_settings.node_postime;
+            return (unsigned long)meshcom_settings.node_postime;
 
         return POSINFO_INTERVAL;
     }
