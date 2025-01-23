@@ -247,6 +247,24 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"setretx off") == 0)
+    {
+        Serial.println("\nsetretx off");
+
+        bDisplayRetx=false;
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setretx on") == 0)
+    {
+        Serial.println("\nsetretx on");
+
+        bDisplayRetx=true;
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"shortpath off") == 0)
     {
         Serial.println("\nshortpath off");
@@ -1253,6 +1271,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bLORADEBUG=true;
         bDisplayInfo=true;
+        bDisplayRetx=true;
 
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0200;   //
 
@@ -1270,6 +1289,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bLORADEBUG=false;
         bDisplayInfo=false;
+        bDisplayRetx=false;
 
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7DFF;   //
 
