@@ -23,6 +23,9 @@
 // Ethernet Object
 NrfETH neth;
 
+// flag to indicate one second 
+unsigned long retransmit_timer = 0;
+
 // timers
 uint32_t dhcp_timer = 0;         // dhcp refresh timer
 
@@ -812,6 +815,13 @@ void nrf52setup()
 
 void nrf52loop()
 {
+    if ((retransmit_timer + (1000 * 5)) < millis())   // repeat 5 seconds
+    {
+        updateRetransmissionStatus();
+
+        retransmit_timer = millis();
+    }
+
     if(iReceiveTimeOutTime > 0)
     {
         // Timeout RECEIVE_TIMEOUT
@@ -832,16 +842,29 @@ void nrf52loop()
         // channel is free
         // nothing was detected
         // do not print anything, it just spams the console
-        if (iWrite != iRead)
+        int iReadTX = iRead;
+        bool bRTX=false;
+
+        if(iRetransmit >= 0)
         {
-            // save transmission state between loops
-            int iReadTX = iRead;
-            
-            if(doTX(iReadTX))
+            iReadTX = iRetransmit;
+            bRTX = true;
+        }
+
+        if (iWrite != iRead || bRTX)
+        {
+            if(doTX(iReadTX, bRTX))
             {
-                iRead++;
-                if (iRead >= MAX_RING)
-                    iRead = 0;
+                if(bRTX)
+                {
+                    iRetransmit = -1;
+                }
+                else
+                {
+                    iRead++;
+                    if (iRead >= MAX_RING)
+                        iRead = 0;
+                }
             }
         }
     }

@@ -128,7 +128,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                     iWrite++;
                     if(iWrite >= MAX_RING)
-                    iWrite=0;
+                        iWrite=0;
         
                     if(bLORADEBUG)
                         Serial.printf("ACK forward  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
@@ -711,7 +711,7 @@ bool is_new_packet(uint8_t compBuffer[4])
 
 /**@brief our Lora TX sequence
  */
-bool doTX(int iReadTX)
+bool doTX(int iReadTX, bool bRTX)
 {
     // next TX new TX-DELAY
     if(cmd_counter > 0)
@@ -724,13 +724,18 @@ bool doTX(int iReadTX)
         return false;
     }
 
-    if (iWrite != iReadTX && iReadTX < MAX_RING)
+    if (iReadTX < MAX_RING && ringBuffer[iReadTX][0] > 0)
     {
         sendlng = ringBuffer[iReadTX][0];
         memcpy(lora_tx_buffer, ringBuffer[iReadTX] + 2, sendlng);
 
-        ringBuffer[iReadTX][1]=0x01; // mark retransmission Status sent
+        // Retransmit
+        if(bRTX)
+            ringBuffer[iReadTX][1]=0xFF; // mark retransmission Status sent
+        else
+            ringBuffer[iReadTX][1]=0x01; // mark retransmission Status sent
 
+    
         if(bLORADEBUG)
         {
             unsigned int ring_msg_id = (ringBuffer[iReadTX][6]<<24) | (ringBuffer[iReadTX][5]<<16) | (ringBuffer[iReadTX][4]<<8) | ringBuffer[iReadTX][3];
@@ -884,6 +889,11 @@ bool updateRetransmissionStatus()
             // Status == ringBuffer[ircheck][1]
             //   0x00 not yet sendt
             //   0xFF no retransmission
+            if(ringBuffer[ircheck][2] != 0x3A)
+            {
+                ringBuffer[ircheck][1] = 0xFF;
+            }
+
             if(ringBuffer[ircheck][0] > 0 && ringBuffer[ircheck][1] > 0x00 && ringBuffer[ircheck][1] != 0xFF)
             {
                 ringBuffer[ircheck][1]++;
@@ -891,8 +901,6 @@ bool updateRetransmissionStatus()
                 // stoppen da kein Empfang über längere Zeit
                 if(ringBuffer[ircheck][1] == 0x10)
                 {
-                    ringBuffer[ircheck][1] = 0xFF;
-
                     int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
                     Serial.printf("Retransmit retid:%i status:%02X lng;%02X msg-id:%c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
 

@@ -1454,6 +1454,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     initAPRSPOS(aprspos);
 
+        Serial.println("2");
     decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
 
     //display positions from myheard nodes only

@@ -1236,7 +1236,16 @@ void esp32loop()
         // channel is free
         // nothing was detected
         // do not print anything, it just spams the console
-        if (iWrite != iRead)
+        int iReadTX = iRead;
+        bool bRTX = false;
+
+        if(iRetransmit >= 0)
+        {
+            iReadTX = iRetransmit;
+            bRTX = true;
+        }
+
+        if (iWrite != iRead || bRTX)
         {
             // save transmission state between loops
             cmd_counter=0;
@@ -1250,14 +1259,9 @@ void esp32loop()
             bEnableInterruptTransmit = true; //KBC 0801
             radio.setPacketSentAction(setFlagSent); //KBC 0801
 
-            int iReadTX = iRead;
-
-            if(iRetransmit >= 0)
-                iReadTX = iRetransmit;
-
-            if(doTX(iReadTX))
+            if(doTX(iReadTX, bRTX))
             {
-                if(iRetransmit >= 0)
+                if(bRTX)
                 {
                     iRetransmit = -1;
                 }
