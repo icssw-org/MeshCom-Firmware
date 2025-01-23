@@ -268,6 +268,9 @@ volatile bool bEnableInterruptTransmit = false;
 // flag to indicate that a packet was detected or CAD timed out
 volatile bool scanFlag = false;
 
+// flag to indicate one second 
+unsigned long retransmit_timer = 0;
+
 #if defined(ESP8266) || defined(ESP32)
   ICACHE_RAM_ATTR
 #endif
@@ -1080,6 +1083,13 @@ void esp32loop()
         }
     }
 
+    if ((retransmit_timer + (1000 * 5)) < millis())   // repeat 5 seconds
+    {
+        updateRetransmissionStatus();
+
+        retransmit_timer = millis();
+    }
+
     if(iReceiveTimeOutTime > 0)
     {
         // Timeout RECEIVE_TIMEOUT
@@ -1226,7 +1236,16 @@ void esp32loop()
         // channel is free
         // nothing was detected
         // do not print anything, it just spams the console
-        if (iWrite != iRead)
+        int iReadTX = iRead;
+        bool bRTX = false;
+
+        if(iRetransmit >= 0)
+        {
+            iReadTX = iRetransmit;
+            bRTX = true;
+        }
+
+        if (iWrite != iRead || bRTX)
         {
             // save transmission state between loops
             cmd_counter=0;
@@ -1240,9 +1259,18 @@ void esp32loop()
             bEnableInterruptTransmit = true; //KBC 0801
             radio.setPacketSentAction(setFlagSent); //KBC 0801
 
-            if(doTX())
+            if(doTX(iReadTX, bRTX))
             {
-                //KBC 0801 bEnableInterruptTransmit = true;
+                if(bRTX)
+                {
+                    iRetransmit = -1;
+                }
+                else
+                {
+                    iRead++;
+                    if (iRead >= MAX_RING)
+                        iRead = 0;
+                }
             }
             else
             {

@@ -13,10 +13,12 @@ bool is_new_packet(uint8_t compBuffer[4]);
 
 void StartReceiveAgain();
 
-bool doTX();
+bool doTX(int iReadTX, bool bRTX);
 void OnTxDone(void);
 void OnTxTimeout(void);
 void OnPreambleDetect(void);
 void OnHeaderDetect(void);
+
+bool updateRetransmissionStatus(void);
 
 #endif
