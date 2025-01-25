@@ -36,6 +36,7 @@ bool bPosDisplay = true;
 bool bDisplayOff = false;
 bool bDisplayVolt = false;
 bool bDisplayInfo = false;
+bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
 bool bGPSON = false;
@@ -70,6 +71,8 @@ bool bSHORTPATH = false;
 bool bGPSDEBUG = false;
 bool bSOFTSERDEBUG = false;
 
+bool bBOOSTEDGAIN = false;
+
 bool bBLElong = false;
 
 int iDisplayType = 0;
@@ -77,6 +80,7 @@ int DisplayTimeWait = 0;
 
 bool bWaitButton_Released = false;
 bool bButtonCheck = false;
+bool bcheckBottonRun = false;
 uint8_t iButtonPin = 0;
 
 int iInitDisplay = 0;
@@ -147,6 +151,7 @@ int iWriteOwn=0;
 unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE] = {0};
 int iWrite=0;
 int iRead=0;
+int iRetransmit=-1;
 
 // RINGBUFFER for incomming LoRa RX msg_id
 uint8_t ringBufferLoraRX[MAX_RING][4] = {0};
@@ -417,9 +422,13 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     {
         #ifdef BOARD_E290
             e290_display.clearMemory();
-            
-        	if(memcmp(text, "#S", 2) == 0)
-                e290_display.fastmodeOn();
+
+        	if(memcmp(text, "#F", 2) == 0)
+                e290_display.clear();
+            else
+                e290_display.clearMemory();
+
+            e290_display.fastmodeOn();
             
             e290_display.setFont(&FreeMonoBold12pt7b);
         #else
@@ -1052,10 +1061,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // DM
     if(aprsmsg.msg_destination_path != "*")
     {
-        strPath = aprsmsg.msg_source_call + ">" + aprsmsg.msg_destination_call;
+        strPath = "DM <" + aprsmsg.msg_source_call + ">";
     }
 
-    if(aprsmsg.msg_source_path.length() < (20-7))
+    if(strPath.length() < (20-4))
         sprintf(msg_text, "%s <%i>", strPath.c_str(), rssi);
     else
         sprintf(msg_text, "%s", strPath.c_str());
@@ -1091,10 +1100,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // DM
     if(aprsmsg.msg_destination_path != "*")
     {
-        strPath = aprsmsg.msg_source_call + ">" + aprsmsg.msg_destination_call;
+        strPath = "DM <" + aprsmsg.msg_source_call + ">";
     }
 
-    if(aprsmsg.msg_source_path.length() < (20-7))
+    if(aprsmsg.msg_source_path.length() < (20-5))
         sprintf(msg_text, "%s <%i>", strPath.c_str(), rssi);
     else
         sprintf(msg_text, "%s", strPath.c_str());
@@ -1211,15 +1220,21 @@ void init_loop_function()
 // BUTTON
 void initButtonPin()
 {
-    #ifdef BUTTON_PIN
+    #if defined (BUTTON_PIN)
+
+    bcheckBottonRun = false;
+
     if(bButtonCheck)
     {
-        #ifdef BOARD_E290
+        #if defined (BOARD_E290)
             pinMode(iButtonPin, INPUT); // pullup placed on hardware
+        #elif defined (BOARD_RAK4630)
+            pinMode(BUTTON_PIN, INPUT_PULLUP);
         #else
             pinMode(iButtonPin, INPUT_PULLUP);
         #endif
     }
+    
     #endif
 }
 
@@ -1231,154 +1246,166 @@ bool bPressed=false;
 void checkButtonState()
 {
     #ifdef BUTTON_PIN
-    
-    //Serial.printf("iButtonPin:%i bButtonCheck:%i\n", digitalRead(iButtonPin), bButtonCheck);
 
-        if(bButtonCheck)
+    if(bcheckBottonRun)
+        return;
+   
+    bcheckBottonRun = true;
+
+    if(bButtonCheck)
+    {
+        #if defined (BOARD_RAK4630)
+            if(digitalRead(BUTTON_PIN) == LOW)
+        #else
+            if(digitalRead(iButtonPin) == LOW)
+        #endif
         {
-            if(digitalRead(iButtonPin) == 0)
+            checkButtoExtraLong++;
+            if(checkButtoExtraLong > 100)
             {
-                checkButtoExtraLong++;
-                if(checkButtoExtraLong > 100)
-                {
-                    checkButtoExtraLong=0;
-                    //bButtonCheck=false;
-                    //meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
-                    //save_settings();
-                    Serial.println("BUTTON not connected (set BUTTON to off)");
-                    return;
-                }
-
-                //if(bDEBUG)
-                //    Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);
-
-                if(!bPressed)
-                {
-                    bPressed = true;
-
-                    if(iPress < 3)
-                        iPress++;
-
-                    checkButtonTime = 30;
-
-                    if(bDEBUG)
-                        Serial.printf("1:checkButtonTime:%i iPress:%i\n", checkButtonTime, iPress);
-                }
-
+                checkButtoExtraLong=0;
+                
+                bButtonCheck=false;
+                meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
+                save_settings();
+                
+                Serial.println("BUTTON not connected (set BUTTON to off)");
+                bcheckBottonRun = false;
                 return;
             }
-            else
+
+            //if(bDEBUG)
+            //    Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);
+
+            if(!bPressed)
             {
-                checkButtoExtraLong = 0;
+                bPressed = true;
 
-                bPressed = false;
+                if(iPress < 3)
+                    iPress++;
 
-                checkButtonTime--;
+                checkButtonTime = 30;
 
-                if(checkButtonTime < 0)
+                if(bDEBUG)
+                    Serial.printf("1:checkButtonTime:%i iPress:%i\n", checkButtonTime, iPress);
+            }
+
+            bcheckBottonRun = false;
+            return;
+        }
+        else
+        {
+            checkButtoExtraLong = 0;
+
+            bPressed = false;
+
+            checkButtonTime--;
+
+            if(checkButtonTime < 0)
+            {
+                if(iPress == 3)
                 {
-                    if(iPress == 3)
+                    if(bDEBUG)
+                        Serial.println("BUTTON triple press");
+
+                    bDisplayTrack=!bDisplayTrack;
+
+                    if(bDisplayTrack)
+                        commandAction((char*)"--track on", false);
+                    else
+                        commandAction((char*)"--track off", false);
+
+                    bDisplayOff=false;
+
+                    sendDisplayHead(false);
+
+                }
+                else
+                if(iPress == 2)
+                {
+                    if(bDEBUG)
+                        Serial.println("BUTTON double press");
+
+                    if(bDisplayTrack)
+                        commandAction((char*)"--sendtrack", false);
+                    else
+                        commandAction((char*)"--sendpos", false);
+                }
+                else
+                if(iPress == 1 && !bDisplayTrack)
+                {
+                    if(bDEBUG)
+                        Serial.printf("BUTTON singel press %i %i\n", pageLastLineAnz[pagePointer], bDisplayTrack);
+
+                    if(pageLastLineAnz[pagePointer] == 0)
                     {
-                        if(bDEBUG)
-                            Serial.println("BUTTON triple press");
+                        pagePointer = pageLastPointer - 1;
+                        if(pagePointer < 0)
+                            pagePointer = PAGE_MAX-1;
 
-                        bDisplayTrack=!bDisplayTrack;
+                        #ifdef BOARD_E290
+                            sendDisplayMainline();
+                            e290_display.update();
+                        #else
+                            pageHold=0;
+                            bDisplayOff=!bDisplayOff;
+                            sendDisplayHead(false);
+                        #endif
 
-                        if(bDisplayTrack)
-                            commandAction((char*)"--track on", false);
-                        else
-                            commandAction((char*)"--track off", false);
-
+                    }
+                    else
+                    {
                         bDisplayOff=false;
 
-                        sendDisplayHead(false);
-
-                    }
-                    else
-                    if(iPress == 2)
-                    {
-                        if(bDEBUG)
-                            Serial.println("BUTTON double press");
-
-                        if(bDisplayTrack)
-                            commandAction((char*)"--sendtrack", false);
-                        else
-                            commandAction((char*)"--sendpos", false);
-                    }
-                    else
-                    if(iPress == 1 && !bDisplayTrack)
-                    {
-                        if(bDEBUG)
-                            Serial.printf("BUTTON singel press %i %i\n", pageLastLineAnz[pagePointer], bDisplayTrack);
-
-                        if(pageLastLineAnz[pagePointer] == 0)
+                        pageLineAnz = pageLastLineAnz[pagePointer];
+                        for(int its=0;its<pageLineAnz;its++)
                         {
-                            pagePointer = pageLastPointer - 1;
-                            if(pagePointer < 0)
-                                pagePointer = PAGE_MAX-1;
-
-                            #ifdef BOARD_E290
-                                sendDisplayMainline();
-                                e290_display.update();
-                            #else
-                                pageHold=0;
-                                bDisplayOff=!bDisplayOff;
-                                sendDisplayHead(false);
-                            #endif
-
-                        }
-                        else
-                        {
-                            bDisplayOff=false;
-
-                            pageLineAnz = pageLastLineAnz[pagePointer];
-                            for(int its=0;its<pageLineAnz;its++)
+                            // Save last Text (init)
+                            pageLine[its][0] = pageLastLine[pagePointer][its][0];
+                            pageLine[its][1] = pageLastLine[pagePointer][its][1];
+                            pageLine[its][2] = pageLastLine[pagePointer][its][2];
+                            memcpy(pageText[its], pageLastText[pagePointer][its], 25);
+                            if(its == 0)
                             {
-                                // Save last Text (init)
-                                pageLine[its][0] = pageLastLine[pagePointer][its][0];
-                                pageLine[its][1] = pageLastLine[pagePointer][its][1];
-                                pageLine[its][2] = pageLastLine[pagePointer][its][2];
-                                memcpy(pageText[its], pageLastText[pagePointer][its], 25);
-                                if(its == 0)
+                                for(int iss=0; iss < 20; iss++)
                                 {
-                                    for(int iss=0; iss < 20; iss++)
-                                    {
-                                        if(pageText[its][iss] == 0x00)
-                                            pageText[its][iss] = 0x20;
-                                    }
-                                    pageText[its][19] = pagePointer | 0x30;
-                                    pageText[its][20] = 0x00;
+                                    if(pageText[its][iss] == 0x00)
+                                        pageText[its][iss] = 0x20;
                                 }
+                                pageText[its][19] = pagePointer | 0x30;
+                                pageText[its][20] = 0x00;
                             }
-
-                            #ifdef BOARD_E290
-                                iDisplayType=9;
-                            #else
-                                iDisplayType=0;
-                            #endif
-
-                            strcpy(pageTextLong1, pageLastTextLong1[pagePointer]);
-                            strcpy(pageTextLong2, pageLastTextLong2[pagePointer]);
-
-                            //Serial.printf("pageLineAnz:%i pagePointer:%i <%i %i %i> pageText<%s><%s><%s><%s>\n", pageLineAnz, pagePointer, pageLine[2][0], pageLine[2][1], pageLine[2][2], pageText[0], pageText[1], pageText[2], pageTextLong2);
-
-                            sendDisplay1306(false, true, 0, 0, (char*)"#N");
-
-                            pagePointer--;
-                            if(pagePointer < 0)
-                                pagePointer=PAGE_MAX-1;
-
-                            pageHold=5;
                         }
+
+                        #ifdef BOARD_E290
+                            iDisplayType=9;
+                        #else
+                            iDisplayType=0;
+                        #endif
+
+                        strcpy(pageTextLong1, pageLastTextLong1[pagePointer]);
+                        strcpy(pageTextLong2, pageLastTextLong2[pagePointer]);
+
+                        //Serial.printf("pageLineAnz:%i pagePointer:%i <%i %i %i> pageText<%s><%s><%s><%s>\n", pageLineAnz, pagePointer, pageLine[2][0], pageLine[2][1], pageLine[2][2], pageText[0], pageText[1], pageText[2], pageTextLong2);
+
+                        sendDisplay1306(false, true, 0, 0, (char*)"#N");
+
+                        pagePointer--;
+                        if(pagePointer < 0)
+                            pagePointer=PAGE_MAX-1;
+
+                        pageHold=5;
                     }
-
-                    checkButtonTime = 0;
-
-                    iPress = 0;
                 }
+
+                checkButtonTime = 0;
+
+                iPress = 0;
             }
         }
+    }
 
+    bcheckBottonRun = false;
 
     #endif
 }
@@ -1864,7 +1891,7 @@ void sendMessage(char *msg_text, int len)
                 strMsg = newMsg;
             }
             else
-                if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
+                if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "*" && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
                     bDM=true;
         }
     }
@@ -1944,9 +1971,26 @@ void sendMessage(char *msg_text, int len)
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
 
+    // Master RingBuffer for transmission
     // local messages send to LoRa TX
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
+    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
+    
+    if (ringBuffer[iWrite][2] == 0x3A) // only Messages
+    {
+        ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+    }
+    else
+    {
+        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+    }   
+
+    if(bDisplayRetx)
+    {
+        unsigned int ring_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
+        Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iWrite, ringBuffer[iWrite][1], ringBuffer[iWrite][0], ringBuffer[iWrite][2], ring_msg_id);
+    }
+
     iWrite++;
     if(iWrite >= MAX_RING)
         iWrite=0;
@@ -2263,7 +2307,8 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
         // local LoRa-APRS position-messages send to LoRa TX
         ringBuffer[iWrite][0]=ilng;
-        memcpy(ringBuffer[iWrite]+1, msg_buffer, ilng);
+        ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
+        memcpy(ringBuffer[iWrite]+2, msg_buffer, ilng);
         iWrite++;
         if(iWrite >= MAX_RING)
             iWrite=0;
@@ -2349,7 +2394,8 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
         // local position-messages send to LoRa TX
         ringBuffer[iWrite][0]=aprsmsg.msg_len;
-        memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
+        ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
+        memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
         iWrite++;
         if(iWrite >= MAX_RING)
             iWrite=0;
@@ -2422,7 +2468,8 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
 
     // local position-messages send to LoRa TX
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
-    memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
+    ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
+    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
     iWrite++;
     if(iWrite >= MAX_RING)
         iWrite=0;
@@ -2483,7 +2530,8 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     if(strcmp(dest_call.c_str(), meshcom_settings.node_call) == 0)
     {
         ringBuffer[iWrite][0]=aprsmsg.msg_len;
-        memcpy(ringBuffer[iWrite]+1, msg_buffer, aprsmsg.msg_len);
+        ringBuffer[iWrite][2]=0xFF;    // Status byte for retransmission 0xFF no retransmission
+        memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
         iWrite++;
         if(iWrite >= MAX_RING)
             iWrite=0;

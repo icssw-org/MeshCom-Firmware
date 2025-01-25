@@ -218,9 +218,17 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 unsigned int iAckId = 0;
 
                 int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
+                int iRefPos=aprsmsg.msg_payload.indexOf(":rej");
                 int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
+
+                if(strcmp(destination_call, "*") == 0)
+                {
+                  iAckPos=0;
+                  iRefPos=0;
+                  iEnqPos=0;
+                }
                 
-                if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
+                if(iAckPos > 0 || iRefPos > 0)
                 {
                     unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
                     msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
@@ -286,7 +294,11 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           if(bUDPtoLoraSend)
           {
             ringBuffer[iWrite][0] = size;
-            memcpy(ringBuffer[iWrite] + 1, convBuffer, size);
+            if (msg_type_b == 0x3A) // only Messages
+              ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+            else
+              ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+            memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
             iWrite++;
             if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
               iWrite = 0;
@@ -437,7 +449,7 @@ bool startWIFI()
   }
 
 #ifdef ESP32
-  WiFi.disconnect(true);
+  //WiFi.disconnect(true);
 	delay(500);
 
   // Scan for AP with best RSSI
@@ -508,6 +520,9 @@ bool startWIFI()
 
   Serial.println("WIFI connect OK");
 
+  // run startMeshComUDP() to get IP Address
+  startMeshComUDP();
+
   return true;
 }
 
@@ -549,8 +564,6 @@ void startMeshComUDP()
   else
   {
     node_ip = WiFi.localIP();
-
-    Serial.println(node_ip);
 
     sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
     sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
@@ -786,7 +799,7 @@ void getExtern(unsigned char incoming[255], int len)
   aprsmsg.msg_destination_path = getJSON(incoming, len, (char*)"dst");
   aprsmsg.msg_payload = getJSON(incoming, len, (char*)"msg");
 
-  Serial.printf("aprsmsg.msg_destination_path:%s aprsmsg.msg_payload:%s\n", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
+  //Serial.printf("aprsmsg.msg_destination_path:%s aprsmsg.msg_payload:%s\n", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
   if(aprsmsg.msg_payload == "none")
   {

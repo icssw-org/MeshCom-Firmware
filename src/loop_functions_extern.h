@@ -24,6 +24,7 @@ extern bool bPosDisplay;
 extern bool bDisplayOff;
 extern bool bDisplayVolt;
 extern bool bDisplayInfo;
+extern bool bDisplayRetx;
 extern unsigned long DisplayOffWait;
 extern int DisplayTimeWait;
 extern unsigned long BattTimeWait;
@@ -61,6 +62,8 @@ extern bool bSOFTSERDEBUG;
 
 extern bool bBLElong;
 
+extern bool bBOOSTEDGAIN;
+
 extern bool bGATEWAY;
 extern bool bGATEWAY_NOPOS;
 extern bool bMESH;
@@ -92,6 +95,7 @@ extern uint8_t own_msg_id[MAX_RING][5];
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE];
 extern int iWrite;
 extern int iRead;
+extern int iRetransmit;
 
 extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE];
 extern int RAWLoRaWrite;

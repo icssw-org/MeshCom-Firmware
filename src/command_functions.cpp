@@ -253,6 +253,24 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"setretx off") == 0)
+    {
+        Serial.println("\nsetretx off");
+
+        bDisplayRetx=false;
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setretx on") == 0)
+    {
+        Serial.println("\nsetretx on");
+
+        bDisplayRetx=true;
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"shortpath off") == 0)
     {
         Serial.println("\nshortpath off");
@@ -365,11 +383,15 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
             delay(100);
-            Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--mesh    on/off\n");
+            Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx\n--mesh    on/off\n");
             delay(100);
             Serial.printf("--softser on/off/send/app/baud/fixpegel/fixtemp\n");
             delay(100);
             Serial.printf("--spectrum   run spectral scan\n");
+            #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+            delay(100);
+            Serial.printf("--setboostedgain    on/off  enable/disable boosted rx gain\n");
+            #endif
         }
 
         return;
@@ -467,6 +489,8 @@ void commandAction(char *msg_text, bool ble)
             bReturn = true;
 
         save_settings();
+
+        initButtonPin();
     }
     else
     if(commandCheck(msg_text+2, (char*)"button off") == 0)
@@ -497,14 +521,14 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
-
         if(ble)
         {
             bNodeSetting = true;
         }
         else
             bReturn = true;
+
+        initButtonPin();
     }
     else
     if(commandCheck(msg_text+2, (char*)"track on") == 0)
@@ -613,8 +637,6 @@ void commandAction(char *msg_text, bool ble)
     #endif
     if(commandCheck(msg_text+2, (char*)"bleshort") == 0)
     {
-        bGPSON=true;
-
         if(ble)
         {
             addBLECommandBack((char*)"--bleshort");
@@ -633,8 +655,6 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"blelong") == 0)
     {
-        bGPSON=true;
-
         if(ble)
         {
             addBLECommandBack((char*)"--blelong");
@@ -1072,6 +1092,60 @@ void commandAction(char *msg_text, bool ble)
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
     }
     else
+    if(commandCheck(msg_text+2, (char*)"webpwd ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+9);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        sVar = _owner_c;
+
+        sVar.trim();
+
+        if(sVar == "none")
+            sVar = "";
+
+        if(sVar.length() > 19)
+            sVar = sVar.substring(0, 19);
+
+        sprintf(meshcom_settings.node_webpwd, "%s", sVar.c_str());
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setname ") == 0)
+    {
+        sprintf(_owner_c, "%s", msg_text+10);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        sVar = _owner_c;
+
+        sVar.trim();
+
+        if(sVar == "none")
+            sVar = "";
+
+        if(sVar.length() > 19)
+            sVar = sVar.substring(0, 19);
+
+        sprintf(meshcom_settings.node_name, "%s", sVar.c_str());
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"mesh on") == 0)
     {
         bMESH=true;
@@ -1220,6 +1294,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bLORADEBUG=true;
         bDisplayInfo=true;
+        bDisplayRetx=true;
 
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0200;   //
 
@@ -1237,6 +1312,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bLORADEBUG=false;
         bDisplayInfo=false;
+        bDisplayRetx=false;
 
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7DFF;   //
 
@@ -1250,6 +1326,48 @@ void commandAction(char *msg_text, bool ble)
         
         return;
     }
+    #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+    else
+    if(commandCheck(msg_text+2, (char*)"setboostedgain on") == 0)
+    {
+        bBOOSTEDGAIN = true;
+
+        meshcom_settings.node_sset2 |=  0x0800;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--setboostedgain on");
+        }
+
+        save_settings();
+
+        Serial.println("Auto. Reboot after 5 sec.");
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setboostedgain off") == 0)
+    {
+        bBOOSTEDGAIN = false;
+
+         meshcom_settings.node_sset2 &=  ~0x0800;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--setboostedgain off");
+        }
+
+        save_settings();
+
+        Serial.println("Auto. Reboot after 5 sec.");
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+
+        return;
+    }
+    #endif
     else
     if(commandCheck(msg_text+2, (char*)"bledebug on") == 0)
     {
@@ -1569,27 +1687,6 @@ void commandAction(char *msg_text, bool ble)
         sVar.trim();
 
         sprintf(meshcom_settings.node_atxt, "%s", sVar.c_str());
-
-        if(ble)
-        {
-            addBLECommandBack((char*)msg_text);
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setname ") == 0)
-    {
-        sprintf(_owner_c, "%s", msg_text+10);
-        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
-            _owner_c[strlen(_owner_c)-1] = 0x00;
-        sVar = _owner_c;
-
-        sVar.trim();
-
-        sprintf(meshcom_settings.node_name, "%s", sVar.c_str());
 
         if(ble)
         {
@@ -2524,6 +2621,7 @@ void commandAction(char *msg_text, bool ble)
             idoc["GCB4"] = meshcom_settings.node_gcb[4];
             idoc["GCB5"] = meshcom_settings.node_gcb[5];
             idoc["CTRY"] = ctrycode;
+            idoc["BOOST"] = (bBOOSTEDGAIN ? "on" : "off");
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 
@@ -2553,14 +2651,19 @@ void commandAction(char *msg_text, bool ble)
             Serial.printf("...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n", (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
 #endif
             Serial.printf("...BTCODE  %06i\n", meshcom_settings.bt_code);
-            Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm\n",
+            Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
                     meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"),  (bDisplayOff?"off":"on"),
-                    getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower());
+                    getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
 
             for(int ig=0;ig<6;ig++)
             {
                 if(meshcom_settings.node_gcb[ig] > 0)
-                    Serial.printf("...GC [%2i] %4i\n", ig+1, meshcom_settings.node_gcb[ig]);
+                {
+                    if(ig == 0)
+                        Serial.printf("\n...");
+
+                    Serial.printf("GC-%i:%i ", ig+1, meshcom_settings.node_gcb[ig]);
+                }
             }
 
             if(bSOFTSERON && meshcom_settings.node_ss_baud > 0)
@@ -2574,7 +2677,7 @@ void commandAction(char *msg_text, bool ble)
 
             if(bINA226ON)
             {
-                Serial.printf("INA226\n");
+                Serial.printf("\nINA226\n");
                 Serial.printf("...vBUS     %.2f V\n", meshcom_settings.node_vbus);
                 Serial.printf("...vSHUNT   %.2f mV\n", meshcom_settings.node_vshunt);
                 Serial.printf("...vCURRENT %.1f mA\n", meshcom_settings.node_vcurrent);
@@ -2582,20 +2685,21 @@ void commandAction(char *msg_text, bool ble)
                 Serial.println("");
             }
 
-            Serial.printf("...Webserver %s\n", (bWEBSERVER?"on":"off"));
-            Serial.printf("...Gateway   %s %s\n", (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""));
+            Serial.printf("\n...Webserver %s", (bWEBSERVER?"on":"off"));
+            Serial.printf(" / Webpwd <%s>", meshcom_settings.node_webpwd);
+            Serial.printf(" / Gateway %s %s\n", (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""));
 
             #ifndef BOARD_RAK4630
                 Serial.printf("...WIFI-AP   %s\n", (bWIFIAP?"on":"off"));
                 if(bWIFIAP)
                 {
-                    Serial.printf("...SSID      %s\n", cBLEName);
-                    Serial.printf("...PASSWORD <>\n");
+                    Serial.printf("...SSID <%s>", cBLEName);
+                    Serial.printf(" / PASSWORD <>\n");
                 }
                 else
                 {
-                    Serial.printf("...SSID      %s\n", meshcom_settings.node_ssid);
-                    Serial.printf("...PASSWORD  %s\n", meshcom_settings.node_pwd);
+                    Serial.printf("...SSID <%s>", meshcom_settings.node_ssid);
+                    Serial.printf(" / PASSWORD <%s>\n", meshcom_settings.node_pwd);
                 }
 
                 Serial.printf("...OWNIP address: %s\n", meshcom_settings.node_ownip);
@@ -2603,7 +2707,7 @@ void commandAction(char *msg_text, bool ble)
                 Serial.printf("...OWNGW address: %s\n", meshcom_settings.node_owngw);
             #endif
 
-            Serial.printf("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
+            Serial.printf("\n...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             if(meshcom_settings.node_hasIPaddress)
             {
                 Serial.printf("...IP address   : %s\n", meshcom_settings.node_ip);
@@ -2833,6 +2937,7 @@ void sendNodeSetting()
     nsetdoc["TYP"] = "SN";
     nsetdoc["GW"] = bGATEWAY;
     nsetdoc["WS"] = bWEBSERVER;
+    nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc["DISP"] =  bDisplayOff;
     nsetdoc["BTN"] = bButtonCheck;
     nsetdoc["MSH"] = bMESH;

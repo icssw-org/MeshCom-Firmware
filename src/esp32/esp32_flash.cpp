@@ -150,6 +150,8 @@ void init_flash(void)
     strVar = preferences.getString("node_name");
     sprintf(meshcom_settings.node_name, "%s", strVar.c_str());
 
+    strVar = preferences.getString("node_webpwd");
+    sprintf(meshcom_settings.node_webpwd, "%s", strVar.c_str());
 }
 
 void save_settings(void)
@@ -293,6 +295,9 @@ void save_settings(void)
 
     strVar = meshcom_settings.node_name;
     preferences.putString("node_name", strVar); 
+
+    strVar = meshcom_settings.node_webpwd;
+    preferences.putString("node_webpwd", strVar); 
 
     preferences.end();
 
