@@ -411,9 +411,13 @@ int NrfETH::getUDP()
               
               ringBuffer[iWrite][0] = aprsmsg.msg_len;
               if(msg_type_b == 0x3A)
-                ringBuffer[iWrite][1] = 0x00;
+              {
+                if(aprsmsg.msg_payload.startsWith("{") > 0)
+                    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+                else
+                    ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+              }
               else
-                ringBuffer[iWrite][1] = 0xFF;
               memcpy(ringBuffer[iWrite] + 2, inc_udp_buffer, aprsmsg.msg_len);
 
               iWrite++;

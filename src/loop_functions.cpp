@@ -1978,7 +1978,10 @@ void sendMessage(char *msg_text, int len)
     
     if (ringBuffer[iWrite][2] == 0x3A) // only Messages
     {
-        ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+        if(aprsmsg.msg_payload.startsWith("{") > 0)
+            ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+        else
+            ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
     }
     else
     {
