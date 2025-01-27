@@ -295,7 +295,12 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           {
             ringBuffer[iWrite][0] = size;
             if (msg_type_b == 0x3A) // only Messages
-              ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+            {
+              if(aprsmsg.msg_payload.startsWith("{") > 0)
+                  ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+              else
+                  ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+            }
             else
               ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
             memcpy(ringBuffer[iWrite] + 2, convBuffer, size);

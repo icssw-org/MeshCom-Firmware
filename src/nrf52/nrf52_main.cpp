@@ -842,30 +842,10 @@ void nrf52loop()
         // channel is free
         // nothing was detected
         // do not print anything, it just spams the console
-        int iReadTX = iRead;
-        bool bRTX=false;
-
-        if(iRetransmit >= 0)
+        if (iWrite != iRead)
         {
-            iReadTX = iRetransmit;
-            bRTX = true;
-        }
-
-        if (iWrite != iRead || bRTX)
-        {
-            if(doTX(iReadTX, bRTX))
-            {
-                if(bRTX)
-                {
-                    iRetransmit = -1;
-                }
-                else
-                {
-                    iRead++;
-                    if (iRead >= MAX_RING)
-                        iRead = 0;
-                }
-            }
+            // save transmission state between loops
+            doTX();
         }
     }
 

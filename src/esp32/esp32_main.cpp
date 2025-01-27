@@ -863,7 +863,7 @@ void esp32setup()
             //KBC 0801 radio.setDio1Action(setFlagSent);
 
             // start scanning the channel
-            Serial.print(F("[SX126x/E290] Starting to listen ... "));
+            Serial.print(F("[SX126x/E290] Starting to listen (0) ... "));
             state = radio.startReceive();
             if (state == RADIOLIB_ERR_NONE)
             {
@@ -1218,7 +1218,7 @@ void esp32loop()
             {
                 if(bLORADEBUG)
                 {
-                    Serial.print(F("[SX127x] Starting to listen again... "));
+                    Serial.print(F("[SX127x] Starting to listen again (1)... "));
                     Serial.print(F("failed, code "));
                     Serial.println(state);
                 }
@@ -1236,16 +1236,7 @@ void esp32loop()
         // channel is free
         // nothing was detected
         // do not print anything, it just spams the console
-        int iReadTX = iRead;
-        bool bRTX = false;
-
-        if(iRetransmit >= 0)
-        {
-            iReadTX = iRetransmit;
-            bRTX = true;
-        }
-
-        if (iWrite != iRead || bRTX)
+        if (iWrite != iRead)
         {
             // save transmission state between loops
             cmd_counter=0;
@@ -1259,18 +1250,9 @@ void esp32loop()
             bEnableInterruptTransmit = true; //KBC 0801
             radio.setPacketSentAction(setFlagSent); //KBC 0801
 
-            if(doTX(iReadTX, bRTX))
+            if(doTX())
             {
-                if(bRTX)
-                {
-                    iRetransmit = -1;
-                }
-                else
-                {
-                    iRead++;
-                    if (iRead >= MAX_RING)
-                        iRead = 0;
-                }
+                //KBC 0801 bEnableInterruptTransmit = true;
             }
             else
             {
