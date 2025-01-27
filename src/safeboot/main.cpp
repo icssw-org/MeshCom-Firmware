@@ -61,17 +61,25 @@ void wifiConnect() {
   }
 
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
+  WiFi.disconnect(true);
 	delay(500);
 
   // Scan for AP with best RSSI
 	int nrAps = WiFi.scanNetworks();
   int best_rssi = -200;
-  int best_idx = 0;
+  int best_idx = -1;
   for (int i = 0; i < nrAps; ++i)
   {
+     
      if(strcmp(WiFi.SSID(i).c_str(), ssid) == 0)
      {
+        Serial.printf("SSID: %s CHAN: %d RSSI: %i BSSID: ", WiFi.SSID(i), WiFi.channel(i), WiFi.RSSI(i));
+        uint8_t *bssid = WiFi.BSSID(i);
+        for (byte i = 0; i < 6; i++){
+          Serial.print(*bssid++, HEX);
+          if (i < 5) Serial.print(":");
+        }
+        Serial.println("");
         if(WiFi.RSSI(i) > best_rssi)
         {
           best_rssi = WiFi.RSSI(i);
@@ -79,10 +87,39 @@ void wifiConnect() {
         }
      }
   }	
+
+  if(best_idx == -1)
+  {
+    // ESP32 - force connecting (in case of hidden ssid or out of range atm)
+    Serial.printf("-> try connecting to SSID: %s \n",ssid);	
+    WiFi.mode(WIFI_STA);
+    
+    if(strcmp(pass, "none") == 0)
+      WiFi.begin(ssid, NULL);
+    else
+      WiFi.begin(ssid, pass);
+  
+  }
+  else
+  {
+    // ESP32 - connecting to strongest ssid
+    Serial.printf("-> connecting to CHAN: %i BSSID: ",WiFi.channel(best_idx));	
+    uint8_t *bssid = WiFi.BSSID(best_idx);
+    for (byte i = 0; i < 6; i++){
+      Serial.print(*bssid++, HEX);
+      if (i < 5) Serial.print(":");
+      }
+    Serial.println("");
+    WiFi.mode(WIFI_STA);
+    
+    if(strcmp(pass, "none") == 0)
+      WiFi.begin(ssid, NULL, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
+    else
+      WiFi.begin(ssid, pass, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
+  }
+  delay(500);
  
   
-	WiFi.begin(ssid, pass, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
-	delay(500);
 
   Serial.println("Connecting to WiFi");
 
@@ -90,11 +127,12 @@ void wifiConnect() {
 
   while(WiFi.status() != WL_CONNECTED)
   {
-    delay(500);
+    delay(1000);
     iWlanWait++;
     Serial.print(".");
+    if(iWlanWait == 5) WiFi.reconnect();
 
-    if(iWlanWait > 10)
+    if(iWlanWait > 15)
     {
       // Start AP
       Serial.println("\nStarting AP");
@@ -106,7 +144,7 @@ void wifiConnect() {
     }
   }
 
-  Serial.println("Connected to WiFi");
+  Serial.println("\nConnected to WiFi");
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
   // start mDNS responder

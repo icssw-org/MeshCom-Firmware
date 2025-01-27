@@ -295,7 +295,12 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           {
             ringBuffer[iWrite][0] = size;
             if (msg_type_b == 0x3A) // only Messages
-              ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+            {
+              if(aprsmsg.msg_payload.startsWith("{") > 0)
+                  ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+              else
+                  ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+            }
             else
               ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
             memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
@@ -422,6 +427,7 @@ void sendMeshComUDP()
     }
 }
 
+
 bool startWIFI()
 {
   if(hasIPaddress)
@@ -449,7 +455,7 @@ bool startWIFI()
   }
 
 #ifdef ESP32
-  //WiFi.disconnect(true);
+  WiFi.disconnect(true);
 	delay(500);
 
   // Scan for AP with best RSSI
@@ -460,7 +466,14 @@ bool startWIFI()
   {
      if(strcmp(WiFi.SSID(i).c_str(), meshcom_settings.node_ssid) == 0)
      {
-        Serial.printf("SSID: %s CHAN: %d BSSID: %012x RSSI:%i\n", WiFi.SSID(i), WiFi.channel(i),WiFi.BSSID(i), WiFi.RSSI(i));
+      Serial.printf("SSID: %s CHAN: %d RSSI: %i BSSID: ", WiFi.SSID(i), WiFi.channel(i), WiFi.RSSI(i));
+      uint8_t *bssid = WiFi.BSSID(i);
+      for (byte i = 0; i < 6; i++){
+        Serial.print(*bssid++, HEX);
+        if (i < 5) Serial.print(":");
+      }
+      Serial.println("");
+
         if(WiFi.RSSI(i) > best_rssi)
         {
           best_rssi = WiFi.RSSI(i);
@@ -483,7 +496,13 @@ bool startWIFI()
   else
   {
     // ESP32 - connecting to strongest ssid
-    Serial.printf("-> connecting to BSSID: %012x CHAN: %i\n",WiFi.BSSID(best_idx),WiFi.channel(best_idx));	
+    Serial.printf("-> connecting to CHAN: %i BSSID: ",WiFi.channel(best_idx));	
+    uint8_t *bssid = WiFi.BSSID(best_idx);
+    for (byte i = 0; i < 6; i++){
+      Serial.print(*bssid++, HEX);
+      if (i < 5) Serial.print(":");
+      }
+    Serial.println("");
     WiFi.mode(WIFI_STA);
     
     if(strcmp(meshcom_settings.node_pwd, "none") == 0)
@@ -507,11 +526,12 @@ bool startWIFI()
 
   while(WiFi.status() != WL_CONNECTED)
   {
-    delay(500);
+    delay(1000);
     Serial.print(".");
     iWlanWait++;
+    if(iWlanWait == 5) WiFi.reconnect();
 
-    if(iWlanWait > 5)
+    if(iWlanWait > 15)
     {
       Serial.printf("\nWiFI ssid<%s> connection error\n", meshcom_settings.node_ssid);
       return false;
