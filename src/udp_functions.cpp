@@ -316,9 +316,6 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             {
                 addBLEOutBuffer(convBuffer, size);
             }
-
-            // store last message to compare later on
-            insertOwnTx(convBuffer+1);
           }
         }
 

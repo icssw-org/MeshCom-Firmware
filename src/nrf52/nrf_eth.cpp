@@ -204,8 +204,6 @@ int NrfETH::getUDP()
 
   uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
-  uint8_t print_buff[30];
-
   udp_is_busy = true;   //setting the busy flag
 
   int packetSize = Udp.parsePacket(); // If there's data available, read a packet.
@@ -419,9 +417,6 @@ int NrfETH::getUDP()
               {
                   addBLEOutBuffer(convBuffer, size);
               }
-
-              // store last message to compare later on
-              insertOwnTx(convBuffer+1);
             }
           }
         }
