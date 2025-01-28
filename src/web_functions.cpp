@@ -432,6 +432,16 @@ String work_webpage(bool bget_password, int webid)
                     commandAction((char*)"--softser off", bPhoneReady);
                 }
                 else
+                if (web_header.indexOf("GET /nomsgall/on") >= 0)
+                {
+                    commandAction((char*)"--nomsgall on", bPhoneReady);
+                }
+                else
+                if (web_header.indexOf("GET /nomsgall/off") >= 0)
+                {
+                    commandAction((char*)"--nomsgall off", bPhoneReady);
+                }
+                else
                 if (web_header.indexOf("GET /volt/on") >= 0)
                 {
                     commandAction((char*)"--volt", bPhoneReady);
@@ -1860,6 +1870,16 @@ String work_webpage(bool bget_password, int webid)
                     else
                     {
                         web_client.println("<td><a href=\"/smalldisplay/on\"><button class=\"button\"><b>SMALL</b></button></a></td>");
+                    }
+
+                    // NOMSGALL
+                    if (bNoMSGtoALL)
+                    {
+                        web_client.println("<td><a href=\"/nomsgall/off\"><button class=\"button button2\"<b>NOMSGALL</b></button></a></td>");
+                    }
+                    else
+                    {
+                        web_client.println("<td><a href=\"/nomsgall/on\"><button class=\"button\"><b>NOMSGALL</b></button></a></td>");
                     }
 
                     // SOFTSER

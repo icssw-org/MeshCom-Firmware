@@ -294,6 +294,13 @@ int NrfETH::getUDP()
             sprintf(source_call, "%s", aprsmsg.msg_source_call.c_str());
             sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
 
+            aprsmsg.msg_source_path.concat(',');
+            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+
+            aprsmsg.msg_server = true;
+
+            aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+
             memset(convBuffer, 0x00, UDP_TX_BUF_SIZE);
 
             uint8_t size = encodeAPRS(convBuffer, aprsmsg);

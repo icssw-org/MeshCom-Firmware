@@ -774,7 +774,7 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
     }
     else
-    if(commandCheck(msg_text+2, (char*)"noallmsg on") == 0)
+    if(commandCheck(msg_text+2, (char*)"nomsgall on") == 0)
     {
         bNoMSGtoALL=true;
         
@@ -859,7 +859,7 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
     }
     else
-    if(commandCheck(msg_text+2, (char*)"noallmsg off") == 0)
+    if(commandCheck(msg_text+2, (char*)"nomsgall off") == 0)
     {
         bNoMSGtoALL=false;
         
@@ -2644,7 +2644,7 @@ void commandAction(char *msg_text, bool ble)
             if(ibt == 0)
                 ibt = BUTTON_PIN;
 
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...MHONLY %s ...NOALLMSG %s ...MESH %s ...BUTTON (%i) %s  ... SOFTSER %s\n...PASSWD <%s>\n",
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...MHONLY %s ...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s  ... SOFTSER %s\n...PASSWD <%s>\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
                     (bMHONLY?"on":"off"), (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
