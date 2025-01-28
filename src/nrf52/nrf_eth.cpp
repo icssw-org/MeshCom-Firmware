@@ -315,7 +315,7 @@ int NrfETH::getUDP()
                   sendDisplayText(aprsmsg, 99, 0);
               }
               else
-              if(strcmp(destination_call, "*") == 0 || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
+              if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
               {
                   // wenn eine Meldung via UDP kommt und den eigene Node betrifft dann keine weiterleitung an LoRa TX
                   if(strcmp(destination_call, meshcom_settings.node_call) == 0)

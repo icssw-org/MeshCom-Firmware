@@ -455,7 +455,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     }
                                     else
                                     {
-                                        if(strcmp(destination_call, "*") == 0 || CheckOwnGroup(destination_call))
+                                        if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || CheckOwnGroup(destination_call))
                                         {
                                             sendDisplayText(aprsmsg, rssi, snr);
 

@@ -401,6 +401,7 @@ void nrf52setup()
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
 
     bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
+    bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
 
     bDisplayInfo = bLORADEBUG;
 

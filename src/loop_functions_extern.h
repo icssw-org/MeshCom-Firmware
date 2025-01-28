@@ -45,6 +45,7 @@ extern bool bRTCON;
 extern bool bSMALLDISPLAY;
 extern bool bSOFTSERON;
 extern bool bMHONLY;
+extern bool bNoMSGtoALL;
 
 extern bool bTCA9548A;
 extern bool bMCP23017;

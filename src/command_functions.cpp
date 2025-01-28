@@ -774,6 +774,20 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
     }
     else
+    if(commandCheck(msg_text+2, (char*)"noallmsg on") == 0)
+    {
+        bNoMSGtoALL=true;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0002;
+
+        if(ble)
+            bSensSetting = true;
+        else
+            bReturn = true;
+
+        save_settings();
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"bmx off") == 0 || commandCheck(msg_text+2, (char*)"bme off") == 0 || commandCheck(msg_text+2, (char*)"bmp off") == 0)
     {
         bBMPON=false;
@@ -836,6 +850,20 @@ void commandAction(char *msg_text, bool ble)
         bMHONLY=false;
         
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FFE;
+        
+        if(ble)
+            bSensSetting = true;
+        else
+            bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"noallmsg off") == 0)
+    {
+        bNoMSGtoALL=false;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FFD;
         
         if(ble)
             bSensSetting = true;
@@ -2616,10 +2644,10 @@ void commandAction(char *msg_text, bool ble)
             if(ibt == 0)
                 ibt = BUTTON_PIN;
 
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...MHONLY %s ...MESH %s ...BUTTON (%i) %s  ... SOFTSER %s\n...PASSWD <%s>\n",
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...MHONLY %s ...NOALLMSG %s ...MESH %s ...BUTTON (%i) %s  ... SOFTSER %s\n...PASSWD <%s>\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
-                    (bMHONLY?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
+                    (bMHONLY?"on":"off"), (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ... BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
@@ -2675,8 +2703,15 @@ void commandAction(char *msg_text, bool ble)
                 }
                 else
                 {
-                    Serial.printf("...SSID <%s>", meshcom_settings.node_ssid);
-                    Serial.printf(" / PASSWORD <%s>\n", meshcom_settings.node_pwd);
+                    if(strlen(meshcom_settings.node_ssid) > 0)
+                        Serial.printf("...SSID <**********>");
+                    else
+                        Serial.printf("...SSID <>");
+
+                    if(strlen(meshcom_settings.node_pwd) > 0)
+                        Serial.printf(" / PASSWORD <**********>\n");
+                    else
+                        Serial.printf(" / PASSWORD <>\n");
                 }
 
                 Serial.printf("...OWNIP address: %s\n", meshcom_settings.node_ownip);
@@ -2734,12 +2769,13 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["680"] = bBME680ON;
         sensdoc["811"] = bMCU811ON;
         sensdoc["SMALL"] = bSMALLDISPLAY;
-        sensdoc["MHONLY"] = bMHONLY;
         sensdoc["SS"] = bSOFTSERON;
         sensdoc["LPS33"] = bLPS33;
         sensdoc["OW"] = bONEWIRE;
         sensdoc["OWPIN"] = meshcom_settings.node_owgpio;
         sensdoc["USERPIN"] = meshcom_settings.node_button_pin;
+        sensdoc["MHONLY"] = bMHONLY;
+        sensdoc["NOALL"] = bNoMSGtoALL;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));

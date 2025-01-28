@@ -419,7 +419,9 @@ void esp32setup()
     bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
+
     bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
+    bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
 
     iButtonPin = BUTTON_PIN;
     if(meshcom_settings.node_button_pin > 0)

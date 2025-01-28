@@ -49,6 +49,7 @@ bool bRTCON = false;
 bool bSMALLDISPLAY = false;
 bool bSOFTSERON = false;
 bool bMHONLY = false;
+bool bNoMSGtoALL = false;
 
 bool bTCA9548A = false;
 
@@ -766,9 +767,11 @@ void sendDisplayTime()
     pageLine[0][0] = 3;
     pageLine[0][1] = dzeile[0];
 
-    u8g2->setCursor(pageLine[0][0], pageLine[0][1]);
-    u8g2->print(print_text);
-    u8g2->sendBuffer();
+    #ifndef BOARD_E290
+        u8g2->setCursor(pageLine[0][0], pageLine[0][1]);
+        u8g2->print(print_text);
+        u8g2->sendBuffer();
+    #endif
 
     bSetDisplay = false;
 }
