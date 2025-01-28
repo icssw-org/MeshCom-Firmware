@@ -73,7 +73,7 @@ void wifiConnect() {
      
      if(strcmp(WiFi.SSID(i).c_str(), ssid) == 0)
      {
-        Serial.printf("SSID: %s CHAN: %d RSSI: %i BSSID: ", WiFi.SSID(i), WiFi.channel(i), WiFi.RSSI(i));
+        Serial.printf("SSID: %s CHAN: %d RSSI: %d BSSID: ", WiFi.SSID(i).c_str(), (int) WiFi.channel(i), (int) WiFi.RSSI(i));
         uint8_t *bssid = WiFi.BSSID(i);
         for (byte i = 0; i < 6; i++){
           Serial.print(*bssid++, HEX);
@@ -103,7 +103,7 @@ void wifiConnect() {
   else
   {
     // ESP32 - connecting to strongest ssid
-    Serial.printf("-> connecting to CHAN: %i BSSID: ",WiFi.channel(best_idx));	
+    Serial.printf("-> connecting to CHAN: %d BSSID: ",(int) WiFi.channel(best_idx));	
     uint8_t *bssid = WiFi.BSSID(best_idx);
     for (byte i = 0; i < 6; i++){
       Serial.print(*bssid++, HEX);
