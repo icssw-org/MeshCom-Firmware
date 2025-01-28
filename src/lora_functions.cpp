@@ -77,13 +77,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     if(payload[0] == 0x41)
     {
-        if(bLORADEBUG)
+        if(bDisplayInfo)
         {
             Serial.print(getTimeString());
             if(size == 7)
-                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
+                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
             else
-                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
+                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
         }
 
         memcpy(print_buff, payload, 12);
@@ -129,12 +129,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     iWrite++;
                     if(iWrite >= MAX_RING)
                         iWrite=0;
-        
-                    if(bLORADEBUG)
-                        Serial.printf("ACK forward  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+
+                    if(bDisplayInfo)
+                        Serial.print(" This packet to mesh");
                 }
             }
         }
+
+        if(bDisplayInfo)
+            Serial.println("");
+
     }
     else
     {
@@ -862,15 +866,6 @@ bool doTX()
                     #else
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                     #endif
-
-                    if (iWrite == iRead)
-                    {
-                        DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
-                    }
-                    else
-                    {
-                        DEBUG_MSG_VAL("RADIO", iRead, "TX :");
-                    }
 
                     if(lora_tx_buffer[0] == 0x41)
                     {

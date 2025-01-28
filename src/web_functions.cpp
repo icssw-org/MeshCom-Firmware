@@ -57,6 +57,7 @@ int idx_text_call_end=0;
 int idx_text_end=0;
 
 char message_text[200];
+char web_last_message_sent[200];
 
 int web_page_state = 0;
 
@@ -479,10 +480,14 @@ String work_webpage(bool bget_password, int webid)
                 else
                 if (web_header.indexOf("GET /sendpos") >= 0)
                 {
+                    int iwi=web_header.indexOf("GET /sendpos");
+
                     if(bDisplayTrack)
                         commandAction((char*)"--sendpos", bPhoneReady);
                     else
                         commandAction((char*)"--sendtrack", bPhoneReady);
+
+                    web_page_state=web_header.substring(iwi+12, iwi+13).toInt();
                 }
                 else
                 if (web_header.indexOf("GET /info") >= 0)
@@ -631,11 +636,17 @@ String work_webpage(bool bget_password, int webid)
                                 message_text[iml]=0x00;
                             }
 
-                            hasMsgFromPhone=true;
+                            // text muss unterschiedlich sein
+                            if(memcmp(web_last_message_sent, message_text, iml) != 0 && iml > 0)
+                            {
+                                hasMsgFromPhone=true;
 
-                            sendMessage(message_text, iml);
+                                sendMessage(message_text, iml);
 
-                            hasMsgFromPhone=false;
+                                memcpy(web_last_message_sent, message_text, iml);
+
+                                hasMsgFromPhone=false;
+                            }
                         }
 
                         message_call="";
@@ -1901,7 +1912,7 @@ String work_webpage(bool bget_password, int webid)
                 web_client.println("<td><a href=\"/message\"><button class=\"button\"><b>MESSAGE</b></button></a></td>");      //page 5
                 
                 web_client.println("<td><a href=\"/logprint\"><button class=\"button\"><b>RX-LOG</b></button></a></td>");       //page 6
-                web_client.println("<td><a href=\"/sendpos\"><button class=\"button\"><b>SENDPOS</b></button></a></td></tr>");
+                web_client.printf("<td><a href=\"/sendpos%i\"><button class=\"button\"><b>SENDPOS</b></button></a></td></tr>\n", web_page_state);
 
                 if(bMCP23017)
                     web_client.println("<tr><td><a href=\"/mcpstatus\"><button class=\"button\"><b>MCP-STATUS</b></button></a></td>");       //page 7

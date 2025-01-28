@@ -290,7 +290,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
           // first byte is always the len of the msg
           // UDP messages send to LoRa TX
-          // resend only Packet to all and !owncall
+          // resend only Packet to all
           if(bUDPtoLoraSend)
           {
             ringBuffer[iWrite][0] = size;
@@ -314,6 +314,9 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             {
                 addBLEOutBuffer(convBuffer, size);
             }
+
+            // store last message to compare later on
+            insertOwnTx(convBuffer+1);
           }
         }
 

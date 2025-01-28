@@ -115,7 +115,7 @@ int dzeile[6] = {16, 44, 64, 84, 104, 124};
 
 #else
 
-int dzeile[6] = {10, 24, 34, 44, 54, 64};
+int dzeile[6] = {11, 24, 34, 44, 54, 64};
 
 U8G2 *u8g2;
 
@@ -357,6 +357,19 @@ int checkOwnTx(uint8_t compBuffer[4])
     }
 
     return -1;
+}
+
+void insertOwnTx(uint8_t compBuffer[3])
+{
+    memcpy(own_msg_id[iWriteOwn], compBuffer, 3);
+    own_msg_id[iWriteOwn][4]=0x00;
+
+    if(bDisplayInfo)
+        Serial.printf("[INS-OWNID] own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1]);
+
+    iWriteOwn++;
+    if(iWriteOwn >= MAX_RING)
+        iWriteOwn=0;
 }
 
 int pageLine[7][3] = {0};
@@ -753,20 +766,9 @@ void sendDisplayTime()
     pageLine[0][0] = 3;
     pageLine[0][1] = dzeile[0];
 
-    #ifdef BOARD_E290
-    #else
-
-        #ifdef BOARD_HELTEC_V3
-        u8g2->firstPage();
-        u8g2->drawStr(pageLine[0][0], pageLine[0][1], print_text);
-        u8g2->nextPage();
-        #else
-        u8g2->setCursor(pageLine[0][0], pageLine[0][1]);
-        u8g2->print(print_text);
-        u8g2->sendBuffer();
-        #endif
-    
-    #endif
+    u8g2->setCursor(pageLine[0][0], pageLine[0][1]);
+    u8g2->print(print_text);
+    u8g2->sendBuffer();
 
     bSetDisplay = false;
 }
@@ -1961,15 +1963,7 @@ void sendMessage(char *msg_text, int len)
     }
 
     // store last message to compare later on
-    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
-    own_msg_id[iWriteOwn][4]=0x00;
-
-    if(bDisplayInfo)
-        Serial.printf("[ACK-OWNID] own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][0], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][3]);
-
-    iWriteOwn++;
-    if(iWriteOwn >= MAX_RING)
-        iWriteOwn=0;
+    insertOwnTx(msg_buffer+1);
 
     // Master RingBuffer for transmission
     // local messages send to LoRa TX
