@@ -1784,6 +1784,42 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+    else
+    if(commandCheck(msg_text+2, (char*)"wifiap on") == 0)
+    {
+        bWIFIAP=true;
+
+        bGATEWAY=false;
+        
+        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0080;
+
+        if(ble)
+        {
+            bWifiSetting = true;
+        }
+        else
+            bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"wifiap off") == 0)
+    {
+        bWIFIAP=false;
+        
+        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 & 0x7F7F;   // mask 0x0080
+
+        if(ble)
+        {
+            bWifiSetting = true;
+        }
+        else
+            bReturn = true;
+
+        save_settings();
+    }
+    else
+#endif
     if(commandCheck(msg_text+2, (char*)"setownip ") == 0)
     {
         // max. 40 char
@@ -1855,42 +1891,6 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"wifiap on") == 0)
-    {
-        bWIFIAP=true;
-
-        bGATEWAY=false;
-        
-        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0080;
-
-        if(ble)
-        {
-            bWifiSetting = true;
-        }
-        else
-            bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"wifiap off") == 0)
-    {
-        bWIFIAP=false;
-        
-        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 & 0x7F7F;   // mask 0x0080
-
-        if(ble)
-        {
-            bWifiSetting = true;
-        }
-        else
-            bReturn = true;
-
-        save_settings();
-    }
-    else
-    #endif
-
     if(commandCheck(msg_text+2, (char*)"sethamnet") == 0)
     {
         meshcom_settings.node_hamnet_only = 1;
@@ -2713,11 +2713,11 @@ void commandAction(char *msg_text, bool ble)
                     else
                         Serial.printf(" / PASSWORD <>\n");
                 }
-
-                Serial.printf("...OWNIP address: %s\n", meshcom_settings.node_ownip);
-                Serial.printf("...OWNMS address: %s\n", meshcom_settings.node_ownms);
-                Serial.printf("...OWNGW address: %s\n", meshcom_settings.node_owngw);
             #endif
+
+            Serial.printf("...OWNIP address: %s\n", meshcom_settings.node_ownip);
+            Serial.printf("...OWNMS address: %s\n", meshcom_settings.node_ownms);
+            Serial.printf("...OWNGW address: %s\n", meshcom_settings.node_owngw);
 
             Serial.printf("\n...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             if(meshcom_settings.node_hasIPaddress)

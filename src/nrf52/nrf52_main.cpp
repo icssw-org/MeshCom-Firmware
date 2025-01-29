@@ -783,7 +783,8 @@ void nrf52setup()
     {
         //////////////////////////////////////////////////////
         // ETHERNET INIT
-        Serial.println("[init] ETH DHCP init");
+        if(bDEBUG)
+            Serial.println("[init] ETH DHCP init");
     
         neth.initethDHCP();
 
@@ -833,7 +834,7 @@ void nrf52loop()
             // LoRa preamble was detected
             if(bLORADEBUG)
             {
-                Serial.printf("[SX12xx] Receive Timeout, starting sending again ... \n");
+                Serial.printf("[SX12xx] Receive Timeout, starting receiving again ... \n");
             }
         }
     }
@@ -1063,8 +1064,11 @@ void nrf52loop()
             neth.hasIPaddress = false;
             cmd_counter = 50;
 
-            Serial.print(getTimeString());
-            Serial.println(" [MAIN] initethDHCP");
+            if(bDEBUG)
+            {
+                Serial.print(getTimeString());
+                Serial.println(" [MAIN] initethDHCP");
+            }
 
             neth.initethDHCP();
 

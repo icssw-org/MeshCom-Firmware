@@ -521,7 +521,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 if(iWrite >= MAX_RING)
                                                     iWrite=0;
 
-                                                Serial.printf("ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                                                if(bDisplayInfo)
+                                                {
+                                                    Serial.print(getTimeString());
+                                                    Serial.printf("ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                                                }
                                                 
                                                 unsigned long mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
                                                 addLoraRxBuffer(mid);
