@@ -1545,7 +1545,10 @@ void esp32loop()
                 global_proz = mv_to_percent(global_batt);
                 
                 if(bDEBUG)
+                {
+            		Serial.print("[readBatteryVoltage] : ");
                     Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
+                }
             #endif
 
             BattTimeWait = millis();

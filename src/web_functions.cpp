@@ -771,6 +771,9 @@ String work_webpage(bool bget_password, int webid)
                             ++separator;
                             int lgroup = atoi(separator);
 
+                            if(lgroup < 0 || lgroup > 99999)
+                                lgroup = 0;
+
                             meshcom_settings.node_gcb[lindex] = lgroup;
                         }
                         
@@ -1331,12 +1334,12 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<tr><td>\n");
                     web_client.println("<label for=\"fname\"><b>LISTEN-TO:</b></label>");
                     web_client.println("</td><td>\n");
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento0\" name=\"listento0\">\n", meshcom_settings.node_gcb[0]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento1\" name=\"1\">\n", meshcom_settings.node_gcb[1]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento2\" name=\"2\">\n", meshcom_settings.node_gcb[2]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento3\" name=\"3\">\n", meshcom_settings.node_gcb[3]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento4\" name=\"4\">\n", meshcom_settings.node_gcb[4]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento5\" name=\"5\">\n", meshcom_settings.node_gcb[5]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento0\" name=\"listento0\">\n", meshcom_settings.node_gcb[0]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento1\" name=\"1\">\n", meshcom_settings.node_gcb[1]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento2\" name=\"2\">\n", meshcom_settings.node_gcb[2]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento3\" name=\"3\">\n", meshcom_settings.node_gcb[3]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento4\" name=\"4\">\n", meshcom_settings.node_gcb[4]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento5\" name=\"5\">\n", meshcom_settings.node_gcb[5]);
                     web_client.println("<input type=\"submit\" value=\"send\">");
                     web_client.println("</td></tr>\n");
                     web_client.println("</form>");

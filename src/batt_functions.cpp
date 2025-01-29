@@ -339,7 +339,10 @@ float read_batt(void)
 	#endif
 
 	if(bDEBUG)
-		Serial.printf("FLOW raw:%.2f mV\n", raw);
+	{
+		Serial.print("[readBatteryVoltage] raw mV : ");
+		Serial.println(raw);
+	}
 
 	delay(50);
 

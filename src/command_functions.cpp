@@ -2438,6 +2438,10 @@ void commandAction(char *msg_text, bool ble)
             if(_owner_c[iset] == ';')
             {
                 meshcom_settings.node_gcb[igrc-1] = strdec.toInt();
+                
+                // GRP 0...99999
+                if(meshcom_settings.node_gcb[igrc-1] < 0 || meshcom_settings.node_gcb[igrc-1] > 99999)
+                    meshcom_settings.node_gcb[igrc-1] = 0;
 
                 strdec="";
 
