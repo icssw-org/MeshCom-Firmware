@@ -204,6 +204,7 @@ int no_gps_reset_counter = 0;
 
 // Loop timers
 unsigned long posinfo_timer = 0;    // we check periodically to send GPS
+unsigned long heyinfo_timer = 0;    // we check periodically to send HEY
 unsigned long temphum_timer = 0;    // we check periodically get TEMP/HUM
 unsigned long druck_timer = 0;      // we check periodically get AIRPRESURE
 unsigned long hb_timer = 0;
@@ -2549,6 +2550,61 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
+}
+
+// Send Hey-Message
+void sendHey()
+{
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+
+    struct aprsMessage aprsmsg;
+
+    initAPRS(aprsmsg, '@');
+
+    aprsmsg.msg_len = 0;
+
+    // MSG ID zusammen setzen    
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
+    
+    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    aprsmsg.msg_destination_path = "H";
+    aprsmsg.msg_payload = "R";
+   
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 999)
+        meshcom_settings.node_msgid=0;
+
+    // Flash rewrite
+    save_settings();
+
+    encodeAPRS(msg_buffer, aprsmsg);
+
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-HEY", aprsmsg);
+        Serial.println();
+    }
+
+    // store last message to compare later on
+    insertOwnTx(msg_buffer+1);
+
+    if(bGATEWAY)
+    {
+	    // UDP out
+		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    }
+    else
+    {
+        // Master RingBuffer for transmission
+        // local messages send to LoRa TX
+        ringBuffer[iWrite][0] = aprsmsg.msg_len;
+        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+        memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
+
+        iWrite++;
+        if(iWrite >= MAX_RING)
+            iWrite=0;
+    }
 }
 
 int GetHeadingDifference(int heading1, int heading2)

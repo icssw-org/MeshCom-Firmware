@@ -308,7 +308,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                     case 0x3A: DEBUG_MSG("RADIO", "Received Textmessage"); break;
                     case 0x21: DEBUG_MSG("RADIO", "Received PosInfo"); break;
-                    case 0x40: DEBUG_MSG("RADIO", "Received Weather"); break;
+                    case 0x40: DEBUG_MSG("RADIO", "Received Hey"); break;
                     default:
                         DEBUG_MSG("RADIO", "Received unknown");
                         if(bDEBUG)
@@ -575,12 +575,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     bMeshDestination = false;
                                 if(aprsmsg.payload_type == '!' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_pos+1)    // POS
                                     bMeshDestination = false;
+                                if(aprsmsg.payload_type == '@')    // HEY no Mesh on GATEWAYs
+                                    bMeshDestination = false;
                             }
 
                             // GATEWAY action before MESH
                             // and not MESHed from another Gateways
                             if(bGATEWAY && !aprsmsg.msg_server) 
+                            {
                                 addNodeData(RcvBuffer, size, rssi, snr);
+                            }
 
                             // resend only Packet to all and !owncall 
                             if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && bMeshDestination)
@@ -609,6 +613,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
                                     }
 
+                                    if(aprsmsg.payload_type == '@')
+                                    {
+                                        aprsmsg.msg_payload.concat(rssi);
+                                        aprsmsg.msg_payload.concat(',');
+                                    }
+                                    
                                     aprsmsg.msg_last_hw = BOARD_HARDWARE;   // hardware  last sending node
 
                                     memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
@@ -627,6 +637,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         else
                                             ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
                                     }
+                                    else
+                                        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
 
                                     if(bDisplayRetx)
                                     {

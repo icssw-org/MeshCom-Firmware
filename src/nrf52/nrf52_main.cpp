@@ -158,6 +158,7 @@ bool g_meshcom_initialized;
 bool init_flash_done=false;
 
 bool bPosFirst = true;
+bool bHeyFirst = true;
 
 // Queue for sending config jsons to phone
 uint8_t iPhoneState = 0;
@@ -1036,6 +1037,17 @@ void nrf52loop()
             commandAction((char*)"--pos", true);
             pos_shot = false;
         }
+    }
+
+    // heysinfo_interval in Seconds == 2 minutes
+    if (((heyinfo_timer + (2 * 60 * 1000)) < millis()) || bHeyFirst)
+    {
+        bHeyFirst = false;
+        
+        if(!bGATEWAY)
+            sendHey();
+
+        heyinfo_timer = millis();
     }
 
     // get UDP & send UDP message from ringBufferOut if there is one to tx

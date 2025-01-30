@@ -133,7 +133,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
         {
           case 0x3A: DEBUG_MSG("UDP", "Received Textmessage"); break; // ':'
           case 0x21: DEBUG_MSG("UDP", "Received PosInfo"); break;     // '!'
-          case 0x40: DEBUG_MSG("UDP", "Received Weather"); break;     // '@'
+          case 0x40: DEBUG_MSG("UDP", "Received Hey"); break;     // '@'
           default: DEBUG_MSG("UDP", "Received unknown"); break;
         }
 

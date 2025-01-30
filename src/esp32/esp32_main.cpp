@@ -99,6 +99,8 @@ extern U8G2 u8g2_2;
 */
 
 bool bPosFirst = true;
+bool bHeyFirst = true;
+
 /*
     Video: https://www.youtube.com/watch?v=oCMOYS71NIU
     Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
@@ -1478,6 +1480,17 @@ void esp32loop()
         }
 
         posinfo_timer = millis();
+    }
+
+    // heysinfo_interval in Seconds == 2 minutes
+    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
+    {
+        bHeyFirst = false;
+        
+        if(!bGATEWAY)
+            sendHey();
+
+        heyinfo_timer = millis();
     }
 
     mainStartTimeLoop();

@@ -1606,6 +1606,18 @@ void commandAction(char *msg_text, bool ble)
         bWeather=true;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"sendhey") == 0)
+    {
+        sendHey();
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--posted");
+        }
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"sendpos") == 0)
     {
         sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
