@@ -1087,7 +1087,7 @@ void esp32loop()
         }
     }
 
-    if ((retransmit_timer + (1000 * 5)) < millis())   // repeat 5 seconds
+    if ((retransmit_timer + (1000 * 10)) < millis())   // repeat 10 seconds
     {
         updateRetransmissionStatus();
 

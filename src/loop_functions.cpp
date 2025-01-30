@@ -361,13 +361,13 @@ int checkOwnTx(uint8_t compBuffer[4])
     return -1;
 }
 
-void insertOwnTx(uint8_t compBuffer[3])
+void insertOwnTx(uint8_t compBuffer[4])
 {
-    memcpy(own_msg_id[iWriteOwn], compBuffer, 3);
+    memcpy(own_msg_id[iWriteOwn], compBuffer, 4);
     own_msg_id[iWriteOwn][4]=0x00;
 
     if(bDisplayInfo)
-        Serial.printf("[INS-OWNID] own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1]);
+        Serial.printf("[INS-OWNID] own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
 
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)

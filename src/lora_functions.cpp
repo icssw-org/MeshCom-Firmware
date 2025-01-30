@@ -151,7 +151,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         // RX-OK do not need retransmission
         for(int ircheck=0;ircheck<MAX_RING;ircheck++)
         {
-            if(ringBuffer[ircheck][0] > 0 && ringBuffer[ircheck][1] != 0x01 && ringBuffer[ircheck][1] != 0xFF)
+            if(ringBuffer[ircheck][0] > 0 && ringBuffer[ircheck][1] != 0xFF)
             {
                 unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
 
@@ -165,8 +165,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     {
                         Serial.printf("got lora rx for retid:%i no need status:%02X lng;%i msg-id:%c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
                     }
-
-                    break;
                 }
             }
         }
@@ -361,6 +359,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         if(ring_msg_id == aprsmsg.msg_id)
                         {
                             bMsg=true;
+                            
+                            Serial.println("bMsg = true");
 
                             break;
                         }
@@ -771,7 +771,7 @@ bool doTX()
         if(ringBuffer[iRead][1] == 0x00) // mark open to send
             ringBuffer[iRead][1] = 0x01; // mark as sent
 
-        if(ringBuffer[iRead][1] == 0x10)
+        if(ringBuffer[iRead][1] == 0x7F)
         {
             if(bDisplayRetx)
             {
@@ -924,7 +924,7 @@ bool updateRetransmissionStatus()
     for(int ircheck=0; ircheck < MAX_RING; ircheck++)
     {
         // Status == ringBuffer[ircheck][1]
-        //   0x00 not yet sendt
+        //   0x00 not yet sent
         //   0xFF no retransmission
         if(ringBuffer[ircheck][2] != 0x3A)
         {
@@ -938,7 +938,7 @@ bool updateRetransmissionStatus()
             ringBuffer[ircheck][1]++;
 
             // stoppen da kein Empfang über längere Zeit
-            if(ringBuffer[ircheck][1] == 0x10)
+            if(ringBuffer[ircheck][1] == 0x20)    // 32 x 10sec = 320sec (5min 20sec) Wartezeit
             {
                 int ring_msg_lng = ringBuffer[ircheck][0];
 
@@ -949,18 +949,21 @@ bool updateRetransmissionStatus()
 
                     for(int iq=0;iq<ring_msg_lng+2;iq++)
                     {
-                        if(ringBuffer[ircheck][iq] > 0x20 && ringBuffer[ircheck][iq] < 0x7F)
+                        if(ringBuffer[ircheck][iq] >= 0x20 && ringBuffer[ircheck][iq] <= 0x7F)
                             Serial.printf("%c", ringBuffer[ircheck][iq]);
                     }
                     Serial.println("");
                 }
 
-                // Neuen Eintrag im Ringbuffer
+                // origimalmeldung markieren
+                ringBuffer[ircheck][1] = 0xFF;
+
+                // Neuen Eintrag im Ringbuffer zur Wiederholung anlegen
                 memcpy(ringBuffer[iWrite], ringBuffer[ircheck], size + 2);
 
                 // KB hier das retransmitt
                 if (ringBuffer[iWrite][2] == 0x3A) // only Messages
-                    ringBuffer[iWrite][1] = 0x10; // retransmission Status ...0x10 retransmission
+                    ringBuffer[iWrite][1] = 0x7F; // retransmission Status ...0x7F retransmission
                 else
                     ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
                 
