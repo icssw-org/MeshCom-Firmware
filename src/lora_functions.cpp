@@ -155,9 +155,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             {
                 unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
 
-                //Serial.printf("ring_msg_id:%08X rx_msg_id:%08X\n", ring_msg_id, rx_msg_id);
-
-                if(ring_msg_id == rx_msg_id)
+                if(memcmp(ringBuffer[ircheck]+3, RcvBuffer+1, 4) == 0)
                 {
                     ringBuffer[ircheck][1] = 0xFF; // no retransmission
 
@@ -353,10 +351,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     {
                         unsigned int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
 
-                        //if(ring_msg_id != 0 && bDEBUG)
-                        //    printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, aprsmsg.msg_id);
-
-                        if(ring_msg_id == aprsmsg.msg_id)
+                        if(memcmp(ringBufferLoraRX[iop], RcvBuffer+1, 4) == 0)
                         {
                             bMsg=true;
                             

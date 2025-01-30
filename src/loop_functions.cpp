@@ -1969,6 +1969,8 @@ void sendMessage(char *msg_text, int len)
     // store last message to compare later on
     insertOwnTx(msg_buffer+1);
 
+    addLoraRxBuffer(aprsmsg.msg_id);
+
     // Master RingBuffer for transmission
     // local messages send to LoRa TX
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
