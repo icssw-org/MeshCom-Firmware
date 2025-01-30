@@ -403,6 +403,7 @@ void nrf52setup()
 
     bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
+    bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
 
     bDisplayInfo = bLORADEBUG;
 
@@ -1059,7 +1060,7 @@ void nrf52loop()
             if(neth.checkUDP() >= 0)
                 neth.getUDP();
 
-            sendUDP();
+            sendUDP(); 
         }
         else
         {
@@ -1082,21 +1083,29 @@ void nrf52loop()
                 Serial.println(" [MAIN] initethDHCP");
             }
 
+            Serial.println("neth.initethDHCP()");
+
             neth.initethDHCP();
 
+            Serial.println("neth.initethDHCP() end");
         }
         
         // DHCP refresh
         if ((dhcp_timer + (DHCP_REFRESH * 60000)) < millis())
         {
-            if(bDEBUG)
+            // no need on static IPs
+            if(!(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6))
             {
-                Serial.print(getTimeString());
-                Serial.println(" [MAIN] checkDHCP");
-            }
+                if(bDEBUG)
+                {
+                    Serial.print(getTimeString());
+                    Serial.println(" [MAIN] checkDHCP");
+                }
 
-            dhcp_timer = millis();
-            neth.checkDHCP();
+                dhcp_timer = millis();
+                
+                neth.checkDHCP();
+            }
         }
     }
 

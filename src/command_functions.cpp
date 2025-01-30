@@ -1378,6 +1378,8 @@ void commandAction(char *msg_text, bool ble)
     {
         bBLEDEBUG=true;
 
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0004;
+
         if(ble)
         {
             addBLECommandBack((char*)"--bledebug on");
@@ -1389,6 +1391,8 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"bledebug off") == 0)
     {
         bBLEDEBUG=false;
+
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FFB;
 
         if(ble)
         {

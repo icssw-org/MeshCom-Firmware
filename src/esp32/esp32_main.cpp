@@ -424,6 +424,7 @@ void esp32setup()
 
     bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
+    bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
 
     iButtonPin = BUTTON_PIN;
     if(meshcom_settings.node_button_pin > 0)
