@@ -17,7 +17,7 @@ class NrfETH {
 
     void startUDP();
 
-    void initethfixIP(bool bDisplay);
+    void initethfixIP();
 
     void initethDHCP();
 

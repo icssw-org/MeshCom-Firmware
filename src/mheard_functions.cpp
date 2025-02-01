@@ -135,7 +135,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     int16_t mh_rssi;
     int8_t mh_snr;
     */
-    sprintf(mheardBuffer[ipos], "%s@%s@%c@%i@%i@%i@%i@%.1lf@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
+    snprintf(mheardBuffer[ipos], sizeof(mheardBuffer[ipos]), "%s@%s@%c@%i@%i@%i@%i@%.1lf@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
      mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh);
 
     // generate JSON

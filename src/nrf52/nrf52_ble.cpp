@@ -96,7 +96,7 @@ void init_ble(void)
 	/** Device name for RAK4631 */
 	sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);	// Anzeige mit callsign
 
-	Serial.print("init helper_string:");
+	Serial.print("[INIT]...init helper_string:");
 	Serial.println(helper_string);
 
 #endif

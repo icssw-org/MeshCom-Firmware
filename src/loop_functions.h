@@ -46,6 +46,7 @@ void addBLECommandBack(char *text);
 void addLoraRxBuffer(unsigned int msg_id);
 
 int checkOwnTx(uint8_t compBuffer[4]);
+void insertOwnTx(uint8_t compBuffer[3]);
 
 bool esp32_isSSD1306(int address);
 
@@ -54,6 +55,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
 void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
 void SendAckMessage(String dest_call, unsigned int iAckId);
+void sendHey();
 
 unsigned int setSMartBeaconing(double flat, double flon);
 

@@ -133,7 +133,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
         {
           case 0x3A: DEBUG_MSG("UDP", "Received Textmessage"); break; // ':'
           case 0x21: DEBUG_MSG("UDP", "Received PosInfo"); break;     // '!'
-          case 0x40: DEBUG_MSG("UDP", "Received Weather"); break;     // '@'
+          case 0x40: DEBUG_MSG("UDP", "Received Hey"); break;     // '@'
           default: DEBUG_MSG("UDP", "Received unknown"); break;
         }
 
@@ -209,7 +209,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 sendDisplayText(aprsmsg, 99, 0);
             }
             else
-            if(strcmp(destination_call, "*") == 0 || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
+            if((strcmp(destination_call, "*") == 0 && bNoMSGtoALL) || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
             {
                 // wenn eine Meldung via UDP kommt und den eigene Node betrifft dann keine weiterleitung an LoRa TX
                 if(strcmp(destination_call, meshcom_settings.node_call) == 0)
@@ -266,7 +266,9 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 }
 
                 if(iAckPos <= 0)
+                {
                   sendDisplayText(aprsmsg, 99, 0);
+                }
 
                 aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
 
@@ -290,7 +292,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
           // first byte is always the len of the msg
           // UDP messages send to LoRa TX
-          // resend only Packet to all and !owncall
+          // resend only Packet to all
           if(bUDPtoLoraSend)
           {
             ringBuffer[iWrite][0] = size;
@@ -307,6 +309,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             iWrite++;
             if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
               iWrite = 0;
+
+            addLoraRxBuffer(aprsmsg.msg_id);
 
             // add rcvMsg to BLE out Buff
             // size message is int -> uint16_t buffer size

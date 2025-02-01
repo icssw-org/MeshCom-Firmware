@@ -283,7 +283,12 @@ void sendToPhone()
 			toPhoneRead = 0;
 
 		if(bBLEDEBUG)
-			Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7); //TODO
+		{
+			if(toPhoneBuff[0] == ':' || toPhoneBuff[0] == '!' || toPhoneBuff[0] == '@')
+				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7);
+			else
+				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff);
+		}
     }
     
     ble_busy_flag = false;
@@ -342,7 +347,12 @@ void sendComToPhone()
 			ComToPhoneRead = 0;
 
 		if(bBLEDEBUG)
-			Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7);
+		{
+			if(ComToPhoneBuff[0] == ':' || ComToPhoneBuff[0] == '!' || ComToPhoneBuff[0] == '@')
+				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7);
+			else
+				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff);
+		}
     }
     
     ble_busy_flag = false;

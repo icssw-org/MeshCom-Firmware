@@ -99,6 +99,8 @@ extern U8G2 u8g2_2;
 */
 
 bool bPosFirst = true;
+bool bHeyFirst = true;
+
 /*
     Video: https://www.youtube.com/watch?v=oCMOYS71NIU
     Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
@@ -419,7 +421,10 @@ void esp32setup()
     bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
+
     bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
+    bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
+    bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
 
     iButtonPin = BUTTON_PIN;
     if(meshcom_settings.node_button_pin > 0)
@@ -638,12 +643,14 @@ void esp32setup()
     do
     {
         u8g2->setFont(u8g2_font_10x20_mf);
-        u8g2->drawStr(5, 20, "MeshCom 4.0");
+        u8g2->drawStr(5, 15, "MeshCom 4.0");
         u8g2->setFont(u8g2_font_6x10_mf);
-        u8g2->drawStr(5, 30, cvers);
-        u8g2->drawStr(5, 40, "by icssw.org");
-        u8g2->drawStr(5, 50, "OE1KFR, OE1KBC");
-        u8g2->drawStr(5, 60, "...starting now");
+        char cvers[20];
+        sprintf(cvers, "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        u8g2->drawStr(5, 25, cvers);
+        u8g2->drawStr(5, 35, "by icssw.org");
+        u8g2->drawStr(5, 45, "OE1KFR, OE1KBC");
+        u8g2->drawStr(5, 55, "...starting now");
     } while (u8g2->nextPage());
 
     #endif
@@ -1083,11 +1090,14 @@ void esp32loop()
         }
     }
 
-    if ((retransmit_timer + (1000 * 5)) < millis())   // repeat 5 seconds
+    if(!bGATEWAY)
     {
-        updateRetransmissionStatus();
+        if ((retransmit_timer + (1000 * 10)) < millis())   // repeat 10 seconds
+        {
+            updateRetransmissionStatus();
 
-        retransmit_timer = millis();
+            retransmit_timer = millis();
+        }
     }
 
     if(iReceiveTimeOutTime > 0)
@@ -1478,6 +1488,17 @@ void esp32loop()
         posinfo_timer = millis();
     }
 
+    // heysinfo_interval in Seconds == 2 minutes
+    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
+    {
+        bHeyFirst = false;
+        
+        if(!bGATEWAY)
+            sendHey();
+
+        heyinfo_timer = millis();
+    }
+
     mainStartTimeLoop();
 
     if(DisplayOffWait > 0)
@@ -1543,7 +1564,10 @@ void esp32loop()
                 global_proz = mv_to_percent(global_batt);
                 
                 if(bDEBUG)
+                {
+            		Serial.print("[readBatteryVoltage] : ");
                     Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
+                }
             #endif
 
             BattTimeWait = millis();

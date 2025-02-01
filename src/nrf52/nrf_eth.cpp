@@ -35,12 +35,37 @@ String NrfETH::getNodeIP()
 
 /**@brief init of ETH board with fix IP
  */
-void NrfETH::initethfixIP(bool bDisplay)
+void NrfETH::initethfixIP()
 {
   IPAddress ip(192, 168, 100, 100); // Set IP address,dependent on your local network.
   IPAddress dns(8, 8, 8, 8);
   IPAddress gw(192, 168, 100, 1);
   IPAddress subnet(255, 255, 255, 0);
+
+  // händische IP Vergabe
+  if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+  {
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"44.143.0.10");
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
+
+    // Set your Static IP address
+    ip.fromString(meshcom_settings.node_ownip);
+    // Set your Gateway IP address
+    gw.fromString(meshcom_settings.node_owngw);
+    // Set your Gateway IP mask
+    subnet.fromString(meshcom_settings.node_ownms);
+
+    IPAddress dns(44, 143, 8, 10);   //optional
+  }
+  else
+  {
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", gw[0], gw[1], gw[2], gw[3]);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%i.%i.%i.%i", dns[0], dns[1], dns[3], dns[3]);
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%i.%i.%i.%i", subnet[0], subnet[1], subnet[2], subnet[3]);
+  }
 
   // init Hardware
   initETH_HW();
@@ -50,22 +75,21 @@ void NrfETH::initethfixIP(bool bDisplay)
 
   Ethernet.begin(macaddr, ip, dns, gw, subnet);
   
-  Serial.println("Ethernet.begin");
-
   // check if HW present and if we have a connected cable -> if so start UDP
   if (Ethernet.hardwareStatus() == EthernetNoHardware) // Check for Ethernet hardware present.
   {
-      Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
-  
-      hasETHHardware=false;
+    Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
 
-      return;
+    hasETHHardware=false;
+
+    return;
   }
 
   int iWaitStatus = 5;
 
   while (Ethernet.linkStatus() == LinkOFF)
   {
+    if(iWaitStatus < 5)
       Serial.printf("ERROR: Ethernet cable is not connected (1/%i).\n", iWaitStatus);
 
     delay(5000);
@@ -79,7 +103,7 @@ void NrfETH::initethfixIP(bool bDisplay)
     }
   }
 
-  Serial.print("\nMy IP address: ");
+  Serial.print("My IP address: ");
   Serial.println(ip); // Print your local IP address.
   Serial.print("Default GW address: ");
   Serial.println(gw);
@@ -87,12 +111,6 @@ void NrfETH::initethfixIP(bool bDisplay)
   Serial.println(dns);
   Serial.print("SNM: ");
   Serial.println(subnet);
-  Serial.println("");
-
-  sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
-  sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", gw[0], gw[1], gw[2], gw[3]);
-  sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", dns[0], dns[1], dns[3], dns[3]);
-  sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", subnet[0], subnet[1], subnet[2], subnet[3]);
 
   hasIPaddress = true;
 
@@ -111,8 +129,8 @@ void NrfETH::initethfixIP(bool bDisplay)
   {
     commandAction((char *)"--wifiset", true);
   }
-}
 
+}
 
 
 /**@brief init of ETH board with DHCP
@@ -125,32 +143,44 @@ void NrfETH::initethDHCP()
   // get mac addr
   getMyMac();
 
-  initethfixIP(false);
+  initethfixIP();
 
   if(!hasETHHardware)
     return;
 
-  // get DHCP IP config, returns 0 if success
-  if(startDHCP() == 0)
+  if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
   {
-    // start the UDP service
-    startUDP();
+      //start ntpclient
+      timeClient.begin();
 
-    //start ntpclient
-    timeClient.begin();
-
-    //timeClient.setTimeOffset(TIME_OFFSET * 60);
-    if (updateNTP() == true)
-      DEBUG_MSG("NTP", "Updated");
+      //timeClient.setTimeOffset(TIME_OFFSET * 60);
+      if (updateNTP() == true)
+        DEBUG_MSG("NTP", "Updated");
   }
-  else 
+  else
   {
-    Serial.println("ERROR: DHCP No Answer");
-    Serial.println("ERROR: Setting to fixed IP config");
-    hasIPaddress = false;
+    // get DHCP IP config, returns 0 if success
+    if(startDHCP() == 0)
+    {
+      // start the UDP service
+      startUDP();
 
-    //go with an fixed IP Address
-    initethfixIP(true);
+      //start ntpclient
+      timeClient.begin();
+
+      //timeClient.setTimeOffset(TIME_OFFSET * 60);
+      if (updateNTP() == true)
+        DEBUG_MSG("NTP", "Updated");
+    }
+    else 
+    {
+      Serial.println("ERROR: DHCP No Answer");
+      Serial.println("ERROR: Setting to fixed IP config");
+      hasIPaddress = false;
+
+      //go with an fixed IP Address
+      initethfixIP();
+    }
   }
 }
 
@@ -199,9 +229,10 @@ int NrfETH::checkUDP()
  */
 int NrfETH::getUDP()
 {
+  char source_call[20] = {0};
   char destination_call[20] = {0};
 
-  uint8_t print_buff[30];
+  uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
   udp_is_busy = true;   //setting the busy flag
 
@@ -273,6 +304,8 @@ int NrfETH::getUDP()
 
         if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
         {
+          bool bBLELoopOut = true;
+
           struct aprsMessage aprsmsg;
           
           // print which message type we got
@@ -288,19 +321,60 @@ int NrfETH::getUDP()
 
             bool bUDPtoLoraSend = true;
 
-            if(msg_type_b == 0x3A)  // type:message
-            {
-              sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+            snprintf(source_call, sizeof(source_call), "%s", aprsmsg.msg_source_call.c_str());
+            snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
 
-              if(strcmp(destination_call, meshcom_settings.node_call) == 0)
+            aprsmsg.msg_source_path.concat(',');
+            aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+
+            aprsmsg.msg_server = true;
+
+            aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+
+            memset(convBuffer, 0x00, UDP_TX_BUF_SIZE);
+
+            uint8_t size = encodeAPRS(convBuffer, aprsmsg);
+
+            if(size > UDP_TX_BUF_SIZE)
+                size = UDP_TX_BUF_SIZE;
+
+            if(msg_type_b == 0x3A)
+            {
+              if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
               {
+                  sendDisplayText(aprsmsg, 99, 0);
+              }
+              else
+              if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
+              {
+                  sendDisplayText(aprsmsg, 99, 0);
+              }
+              else
+              if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
+              {
+                  // wenn eine Meldung via UDP kommt und den eigene Node betrifft dann keine weiterleitung an LoRa TX
+                  if(strcmp(destination_call, meshcom_settings.node_call) == 0)
+                      bUDPtoLoraSend=false;
+
+                  unsigned int iAckId = 0;
+
                   int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
+                  int iRefPos=aprsmsg.msg_payload.indexOf(":rej");
                   int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
+
+                  if(strcmp(destination_call, "*") == 0)
+                  {
+                    iAckPos=0;
+                    iRefPos=0;
+                    iEnqPos=0;
+                  }
                   
-                  if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
+                  if(iAckPos > 0 || iRefPos > 0)
                   {
                       unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
                       msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
+
+                      uint8_t print_buff[30];
 
                       print_buff[0]=0x41;
                       print_buff[1]=msg_counter & 0xFF;
@@ -310,107 +384,57 @@ int NrfETH::getUDP()
                       print_buff[5]=0x01;  // ACK
                       print_buff[6]=0x00;
                       
+                      if(bDisplayInfo)
+                          Serial.printf("\n[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[1], print_buff[2], print_buff[3], print_buff[4]);
+
+                      int iackcheck = checkOwnTx(print_buff+1);
+                      if(iackcheck >= 0)
+                      {
+                          own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
+                      }
+
                       addBLEOutBuffer(print_buff, 7);
+
+                      if(strcmp(source_call, meshcom_settings.node_call) == 0)
+                          bUDPtoLoraSend=false;
+
+                      bBLELoopOut=false;
                   }
-                  else
                   if(iEnqPos > 0)
                   {
-                      unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
-                      
-                      if(bDisplayInfo)
-                          Serial.println("");
-                          
-                      SendAckMessage(aprsmsg.msg_source_call, iAckId);
-
-                      aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
-                      
-                      uint8_t tempRcvBuffer[255];
-
-                      aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
-
-                      uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
-
-                      addBLEOutBuffer(tempRcvBuffer, tempsize);
+                    iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
+                    aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
                   }
-                  else
+
+                  if(iAckPos <= 0)
+                    sendDisplayText(aprsmsg, 99, 0);
+
+                  aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
+
+                  uint8_t tempRcvBuffer[255];
+
+                  aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+
+                  uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                  addBLEOutBuffer(tempRcvBuffer, tempsize);
+
+                  bBLELoopOut=false;
+
+                  // DM message for lokal Node 
+                  if(iAckId > 0)
                   {
-                      sendDisplayText(aprsmsg, 99, 0);
-
-                      addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
-                  }
-              }
-              else
-              {
-                  if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
-                  {
-                      sendDisplayText(aprsmsg, 99, 0);
-                  }
-                  else
-                  if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
-                  {
-                      sendDisplayText(aprsmsg, 99, 0);
-                  }
-                  else
-                  if(strcmp(destination_call, "*") == 0 || CheckGroup(destination_call) > 0)
-                  {
-                      sendDisplayText(aprsmsg, 99, 0);
-
-                      // APP Offline
-                      if(isPhoneReady == 0)
-                      {
-                          aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
-
-                          uint8_t tempRcvBuffer[255];
-
-                          aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
-
-                          uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
-
-                          addBLEOutBuffer(tempRcvBuffer, tempsize);
-                      }
-                      else
-                      {
-                          addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
-                      }
+                    SendAckMessage(source_call, iAckId);
                   }
               }
             }
-            else
-            if(msg_type_b == 0x21)  // type:position
+
+
+            // resend only Packet
+            if(bUDPtoLoraSend)
             {
-              sendDisplayPosition(aprsmsg, 99, 0);
-
-              if(isPhoneReady > 0)
-                addBLEOutBuffer(RcvBuffer, lora_tx_msg_len);
-
-              if(bGATEWAY_NOPOS)
-                bUDPtoLoraSend=false;
-            }
-
-            // resend only Packet to all and !owncall
-            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && bUDPtoLoraSend)
-            {
-              addLoraRxBuffer(aprsmsg.msg_id);
-
-              aprsmsg.msg_source_path.concat(',');
-              aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-
-              aprsmsg.msg_server = true;
-
-              aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
-
-              encodeAPRS(inc_udp_buffer, aprsmsg);
-
-              // first byte is always the len of the msg
-              // UDP messages send to LoRa TX
-              if(bDEBUG)
-              {
-                Serial.print(getTimeString());
-                Serial.printf("Ringbuffer added element: %u\n", iWrite);
-              }
-              
-              ringBuffer[iWrite][0] = aprsmsg.msg_len;
-              if(msg_type_b == 0x3A)
+              ringBuffer[iWrite][0] = size;
+              if (msg_type_b == 0x3A) // only Messages
               {
                 if(aprsmsg.msg_payload.startsWith("{") > 0)
                     ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
@@ -418,11 +442,20 @@ int NrfETH::getUDP()
                     ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
               }
               else
-              memcpy(ringBuffer[iWrite] + 2, inc_udp_buffer, aprsmsg.msg_len);
-
+                ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+              memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
               iWrite++;
               if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
                 iWrite = 0;
+
+              addLoraRxBuffer(aprsmsg.msg_id);
+
+              // add rcvMsg to BLE out Buff
+              // size message is int -> uint16_t buffer size
+              if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
+              {
+                  addBLEOutBuffer(convBuffer, size);
+              }
             }
           }
         }
@@ -795,8 +828,7 @@ int NrfETH::startDHCP()
 
   if (Ethernet.localIP() != IPAddress(0, 0, 0, 0))
   {
-    DEBUG_MSG("ETH", "DHCP Config successful!");
-    Serial.print("\nMy IP address: ");
+    Serial.print("My IP address: ");
     Serial.println(Ethernet.localIP()); // Print your local IP address.
     Serial.print("Default GW address: ");
     Serial.println(Ethernet.gatewayIP());
@@ -804,12 +836,11 @@ int NrfETH::startDHCP()
     Serial.println(Ethernet.dnsServerIP());
     Serial.print("SNM: ");
     Serial.println(Ethernet.subnetMask());
-    Serial.println("");
 
-    sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2], Ethernet.localIP()[3]);
-    sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
-    sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
-    sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2], Ethernet.subnetMask()[3]);
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2], Ethernet.localIP()[3]);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%i.%i.%i.%i", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%i.%i.%i.%i", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2], Ethernet.subnetMask()[3]);
 
     hasIPaddress = true;
 
@@ -852,21 +883,18 @@ int NrfETH::checkDHCP()
  */
 void NrfETH::startUDP()
 {
-  DEBUG_MSG("UDP-ETH", "Local UDP Port:");
-  Serial.println(LOCAL_PORT);
-  DEBUG_MSG("UDP-ETH", "Destination UDP Port:");
-  Serial.println(UDP_PORT);
-
   // set our destination UDP Server address Hamnet / Internet
   IPAddress local_addr = Ethernet.localIP();
   
   char sn[20];
-  sprintf(sn, "%i.%i.%i.%i", local_addr[0], local_addr[1], local_addr[2], local_addr[3]);
+  snprintf(sn, sizeof(sn), "%i.%i.%i.%i", local_addr[0], local_addr[1], local_addr[2], local_addr[3]);
   s_node_ip=sn;
 
   if (local_addr[0] == 44 || meshcom_settings.node_hamnet_only)
   {
-    Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
+    if(bDEBUG)
+      Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
+
     udp_dest_addr = IPAddress(44, 143, 8, 143);
 
     // meshCom 4.0 Test-Server
@@ -881,15 +909,12 @@ void NrfETH::startUDP()
     Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
     //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
     udp_dest_addr = IPAddress(89, 185, 97, 38);
-    //udp_dest_addr = IPAddress(213, 47, 219, 169);
   }
 
-  sprintf(sn, "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
+  snprintf(sn, sizeof(sn), "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
   s_node_hostip = sn;
 
   Udp.begin(LOCAL_PORT); // Start UDP.
-
-  //has_udp_conn = true;
 
   DEBUG_MSG("UDP_ETH", "UDP init successful!");
 }

@@ -96,8 +96,8 @@ void init_flash(void)
 		meshcom_settings.node_hum = old_struct.node_hum;
 		meshcom_settings.node_press = old_struct.node_press;
 
-		memcpy(meshcom_settings.node_ssid, old_struct.node_ssid, 40);
-		memcpy(meshcom_settings.node_pwd, old_struct.node_pwd, 40);
+		memcpy(meshcom_settings.node_ossid, old_struct.node_ossid, 40);
+		memcpy(meshcom_settings.node_opwd, old_struct.node_opwd, 40);
 
 		meshcom_settings.node_hamnet_only = old_struct.node_hamnet_only;
 
@@ -187,6 +187,9 @@ void init_flash(void)
 		memcpy(meshcom_settings.node_name, old_struct.node_name, 20);
 
 		memcpy(meshcom_settings.node_webpwd, old_struct.node_webpwd, 20);
+
+		memcpy(meshcom_settings.node_ssid, old_struct.node_ssid, 40);
+		memcpy(meshcom_settings.node_pwd, old_struct.node_pwd, 40);
 
 		save_settings();
 		// delay(1000);
