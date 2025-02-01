@@ -45,10 +45,10 @@ void NrfETH::initethfixIP()
   // händische IP Vergabe
   if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
   {
-    sprintf(meshcom_settings.node_ip, "%s", meshcom_settings.node_ownip);
-    sprintf(meshcom_settings.node_gw, "%s", meshcom_settings.node_owngw);
-    sprintf(meshcom_settings.node_dns, "%s", (char*)"44.143.0.10");
-    sprintf(meshcom_settings.node_subnet, "%s", meshcom_settings.node_ownms);
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"44.143.0.10");
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
 
     // Set your Static IP address
     ip.fromString(meshcom_settings.node_ownip);
@@ -61,10 +61,10 @@ void NrfETH::initethfixIP()
   }
   else
   {
-    sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
-    sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", gw[0], gw[1], gw[2], gw[3]);
-    sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", dns[0], dns[1], dns[3], dns[3]);
-    sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", subnet[0], subnet[1], subnet[2], subnet[3]);
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", gw[0], gw[1], gw[2], gw[3]);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%i.%i.%i.%i", dns[0], dns[1], dns[3], dns[3]);
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%i.%i.%i.%i", subnet[0], subnet[1], subnet[2], subnet[3]);
   }
 
   // init Hardware
@@ -321,8 +321,8 @@ int NrfETH::getUDP()
 
             bool bUDPtoLoraSend = true;
 
-            sprintf(source_call, "%s", aprsmsg.msg_source_call.c_str());
-            sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+            snprintf(source_call, sizeof(source_call), "%s", aprsmsg.msg_source_call.c_str());
+            snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
 
             aprsmsg.msg_source_path.concat(',');
             aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
@@ -447,7 +447,6 @@ int NrfETH::getUDP()
               iWrite++;
               if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
                 iWrite = 0;
-
 
               addLoraRxBuffer(aprsmsg.msg_id);
 
@@ -838,10 +837,10 @@ int NrfETH::startDHCP()
     Serial.print("SNM: ");
     Serial.println(Ethernet.subnetMask());
 
-    sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2], Ethernet.localIP()[3]);
-    sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
-    sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
-    sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2], Ethernet.subnetMask()[3]);
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2], Ethernet.localIP()[3]);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%i.%i.%i.%i", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%i.%i.%i.%i", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2], Ethernet.subnetMask()[3]);
 
     hasIPaddress = true;
 
@@ -888,7 +887,7 @@ void NrfETH::startUDP()
   IPAddress local_addr = Ethernet.localIP();
   
   char sn[20];
-  sprintf(sn, "%i.%i.%i.%i", local_addr[0], local_addr[1], local_addr[2], local_addr[3]);
+  snprintf(sn, sizeof(sn), "%i.%i.%i.%i", local_addr[0], local_addr[1], local_addr[2], local_addr[3]);
   s_node_ip=sn;
 
   if (local_addr[0] == 44 || meshcom_settings.node_hamnet_only)
@@ -912,7 +911,7 @@ void NrfETH::startUDP()
     udp_dest_addr = IPAddress(89, 185, 97, 38);
   }
 
-  sprintf(sn, "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
+  snprintf(sn, sizeof(sn), "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
   s_node_hostip = sn;
 
   Udp.begin(LOCAL_PORT); // Start UDP.

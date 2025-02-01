@@ -359,8 +359,8 @@ struct s_meshcomcompat_settings
 	float node_hum = 0;
 	float node_press = 0;
 
-	char node_ssid[40] = {0};
-	char node_pwd[40] = {0};
+	char node_ossid[40] = {0};
+	char node_opwd[40] = {0};
 
 	// Send repeat time in milliseconds: 2 * 60 * 1000 => 2 minutes
 	uint32_t send_repeat_time = 0;
@@ -433,6 +433,9 @@ struct s_meshcomcompat_settings
 	char node_name[20] = {0};
 
 	char node_webpwd[20] = {0};
+
+	char node_ssid[33] = {0};
+	char node_pwd[64] = {0};
 
 	// nicht im Flash
 	int node_press_alt = 0;

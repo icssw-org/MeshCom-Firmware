@@ -643,12 +643,14 @@ void esp32setup()
     do
     {
         u8g2->setFont(u8g2_font_10x20_mf);
-        u8g2->drawStr(5, 20, "MeshCom 4.0");
+        u8g2->drawStr(5, 15, "MeshCom 4.0");
         u8g2->setFont(u8g2_font_6x10_mf);
-        u8g2->drawStr(5, 30, cvers);
-        u8g2->drawStr(5, 40, "by icssw.org");
-        u8g2->drawStr(5, 50, "OE1KFR, OE1KBC");
-        u8g2->drawStr(5, 60, "...starting now");
+        char cvers[20];
+        sprintf(cvers, "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        u8g2->drawStr(5, 25, cvers);
+        u8g2->drawStr(5, 35, "by icssw.org");
+        u8g2->drawStr(5, 45, "OE1KFR, OE1KBC");
+        u8g2->drawStr(5, 55, "...starting now");
     } while (u8g2->nextPage());
 
     #endif
@@ -1088,11 +1090,14 @@ void esp32loop()
         }
     }
 
-    if ((retransmit_timer + (1000 * 10)) < millis())   // repeat 10 seconds
+    if(!bGATEWAY)
     {
-        updateRetransmissionStatus();
+        if ((retransmit_timer + (1000 * 10)) < millis())   // repeat 10 seconds
+        {
+            updateRetransmissionStatus();
 
-        retransmit_timer = millis();
+            retransmit_timer = millis();
+        }
     }
 
     if(iReceiveTimeOutTime > 0)

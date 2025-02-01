@@ -118,7 +118,7 @@ void commandAction(char *msg_text, bool ble)
     {
         if(ble)
         {
-            sprintf(print_buff, "--wrong command %s\n", msg_text);
+            snprintf(print_buff, sizeof(print_buff), "--wrong command %s\n", msg_text);
             addBLECommandBack(print_buff);
         }
         else
@@ -132,7 +132,7 @@ void commandAction(char *msg_text, bool ble)
     /* TEST
     if(commandCheck(msg_text+2, (char*)"compress ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+11);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+11);
         _owner_c[49] = 0x00;
 
         String text=_owner_c;
@@ -332,7 +332,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s commands\n--info show info\n--reboot  Node reboot\n--pos show lat/lon/alt/time info\n--sendpos send pos now\n--sendtrack send LORAAprs now\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
+            snprintf(print_buff, sizeof(print_buff), "--MeshCom %s %-4.4s%-1.1s commands\n--info show info\n--reboot  Node reboot\n--pos show lat/lon/alt/time info\n--sendpos send pos now\n--sendtrack send LORAAprs now\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
             addBLECommandBack(print_buff);
         }
         else
@@ -1099,7 +1099,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"webpwd ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
             _owner_c[strlen(_owner_c)-1] = 0x00;
         sVar = _owner_c;
@@ -1112,7 +1112,7 @@ void commandAction(char *msg_text, bool ble)
         if(sVar.length() > 19)
             sVar = sVar.substring(0, 19);
 
-        sprintf(meshcom_settings.node_webpwd, "%s", sVar.c_str());
+        snprintf(meshcom_settings.node_webpwd, sizeof(meshcom_settings.node_webpwd), "%s", sVar.c_str());
 
         if(ble)
         {
@@ -1126,7 +1126,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setname ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+10);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
             _owner_c[strlen(_owner_c)-1] = 0x00;
         sVar = _owner_c;
@@ -1139,7 +1139,7 @@ void commandAction(char *msg_text, bool ble)
         if(sVar.length() > 19)
             sVar = sVar.substring(0, 19);
 
-        sprintf(meshcom_settings.node_name, "%s", sVar.c_str());
+        snprintf(meshcom_settings.node_name, sizeof(meshcom_settings.node_name), "%s", sVar.c_str());
 
         if(ble)
         {
@@ -1254,7 +1254,7 @@ void commandAction(char *msg_text, bool ble)
         // max. 40 char
         msg_text[50]=0x00;
 
-        sprintf(meshcom_settings.node_extern, "%s", msg_text+11);
+        snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", msg_text+11);
 
         save_settings();
 
@@ -1516,7 +1516,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"softser send") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+15);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+15);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
             _owner_c[strlen(_owner_c)-1] = 0x00;
 
@@ -1565,10 +1565,10 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"passwd ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
         _owner_c[14] = 0x00;    // max. 14 chars
 
-        sprintf(meshcom_settings.node_passwd, "%s", _owner_c);
+        snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%s", _owner_c);
 
         save_settings();
 
@@ -1700,14 +1700,14 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"atxt ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+7);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+7);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
             _owner_c[strlen(_owner_c)-1] = 0x00;
         sVar = _owner_c;
 
         sVar.trim();
 
-        sprintf(meshcom_settings.node_atxt, "%s", sVar.c_str());
+        snprintf(meshcom_settings.node_atxt, sizeof(meshcom_settings.node_atxt), "%s", sVar.c_str());
 
         if(ble)
         {
@@ -1721,14 +1721,14 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setcall ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+10);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
             _owner_c[strlen(_owner_c)-1] = 0x00;
         sVar = _owner_c;
         sVar.toUpperCase();
-        sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
+        snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sVar.c_str());
 
-        sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
+        snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
         Serial.printf("Call:%s Short:%s set\n", meshcom_settings.node_call, meshcom_settings.node_short);
 
@@ -1743,10 +1743,10 @@ void commandAction(char *msg_text, bool ble)
 #ifndef BOARD_RAK4630
     if(commandCheck(msg_text+2, (char*)"setssid ") == 0)
     {
-        // max. 40 char
-        msg_text[50]=0x00;
+        // max. 32 char
+        msg_text[32]=0x00;
 
-        sprintf(meshcom_settings.node_ssid, "%s", msg_text+10);
+        snprintf(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid), "%s", msg_text+10);
 
         if(ble)
         {
@@ -1773,10 +1773,10 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setpwd ") == 0)
     {
-        // max. 40 char
-        msg_text[50]=0x00;
+        // max. 63 char
+        msg_text[63]=0x00;
 
-        sprintf(meshcom_settings.node_pwd, "%s", msg_text+9);
+        snprintf(meshcom_settings.node_pwd, sizeof(meshcom_settings.node_pwd), "%s", msg_text+9);
 
         if(ble)
         {
@@ -1841,7 +1841,7 @@ void commandAction(char *msg_text, bool ble)
         // max. 40 char
         msg_text[50]=0x00;
 
-        sprintf(meshcom_settings.node_ownip, "%s", msg_text+11);
+        snprintf(meshcom_settings.node_ownip, sizeof(meshcom_settings.node_ownip), "%s", msg_text+11);
 
         if(ble)
         {
@@ -1865,7 +1865,7 @@ void commandAction(char *msg_text, bool ble)
         // max. 40 char
         msg_text[50]=0x00;
 
-        sprintf(meshcom_settings.node_owngw, "%s", msg_text+11);
+        snprintf(meshcom_settings.node_owngw, sizeof(meshcom_settings.node_owngw), "%s", msg_text+11);
 
         if(ble)
         {
@@ -1888,7 +1888,7 @@ void commandAction(char *msg_text, bool ble)
         // max. 40 char
         msg_text[50]=0x00;
 
-        sprintf(meshcom_settings.node_ownms, "%s", msg_text+11);
+        snprintf(meshcom_settings.node_ownms, sizeof(meshcom_settings.node_ownms), "%s", msg_text+11);
 
         if(ble)
         {
@@ -1945,7 +1945,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setlat ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
         sscanf(_owner_c, "%lf", &dVar);
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
@@ -1971,7 +1971,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setlon ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
         sscanf(_owner_c, "%lf", &dVar);
 
         meshcom_settings.node_lon=dVar;
@@ -1997,7 +1997,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setalt ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
         sscanf(_owner_c, "%d", &iVar);
 
         if(iVar < 0 || iVar > 40000)
@@ -2046,7 +2046,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(strMasterPort == "A" || strMasterPort == "B")
         {
-            sprintf(_owner_c, "%-1.1s", msg_text+10);
+            snprintf(_owner_c, sizeof(_owner_c), "%-1.1s", msg_text+10);
             sscanf(_owner_c, "%d", &iVar);
         }
 
@@ -2063,7 +2063,7 @@ void commandAction(char *msg_text, bool ble)
 
             if((meshcom_settings.node_mcp17io & mask) > 0)   // check PIN set to OUTPUT
             {
-                sprintf(_owner_c, "%s", msg_text+12);
+                snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+12);
 
                 String strsep = _owner_c;
                 
@@ -2117,7 +2117,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(strMasterPort == "A" || strMasterPort == "B")
         {
-            sprintf(_owner_c, "%-1.1s", msg_text+9);
+            snprintf(_owner_c, sizeof(_owner_c), "%-1.1s", msg_text+9);
             sscanf(_owner_c, "%d", &iVar);
         }
 
@@ -2130,7 +2130,7 @@ void commandAction(char *msg_text, bool ble)
 
             int mask = 0x0001 << iVar;
 
-            sprintf(_owner_c, "%s", msg_text+11);
+            snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+11);
 
             String strsep = _owner_c;
             
@@ -2151,7 +2151,7 @@ void commandAction(char *msg_text, bool ble)
                     if(strsep.length() > 16)
                         strsep = strsep.substring(0, 15);
 
-                    sprintf(meshcom_settings.node_mcp17t[iVar], "%s", strsep.c_str());
+                    snprintf(meshcom_settings.node_mcp17t[iVar], sizeof(meshcom_settings.node_mcp17t[iVar]), "%s", strsep.c_str());
                 }
             }
             else
@@ -2170,7 +2170,7 @@ void commandAction(char *msg_text, bool ble)
                     if(strsep.length() > 16)
                         strsep = strsep.substring(0, 15);
 
-                    sprintf(meshcom_settings.node_mcp17t[iVar], "%s", strsep.c_str());
+                    snprintf(meshcom_settings.node_mcp17t[iVar], sizeof(meshcom_settings.node_mcp17t[iVar]), "%s", strsep.c_str());
                 }
             }
 
@@ -2196,7 +2196,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setctry ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+10);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
 
         String strCtry = _owner_c;
         strCtry.toUpperCase();
@@ -2239,7 +2239,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"txpower ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+10);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
         sscanf(_owner_c, "%d", &iVar);
 
         if(iVar < TX_POWER_MIN || iVar > TX_POWER_MAX)
@@ -2270,7 +2270,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"txfreq ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+9);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
         sscanf(_owner_c, "%f", &fVar);
 
         float dec_bandwith = (LORA_BANDWIDTH/2.0)/100.0;
@@ -2305,7 +2305,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"txbw ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+7);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+7);
         sscanf(_owner_c, "%f", &fVar);
 
         if(fVar != 125 && fVar != 250)
@@ -2335,7 +2335,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"txsf ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+7);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+7);
         sscanf(_owner_c, "%d", &iVar);
 
         if(iVar < 6 || iVar > 12)
@@ -2365,7 +2365,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"txcr ") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+7);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+7);
         sscanf(_owner_c, "%d", &iVar);
 
         if(iVar < 4 || iVar > 6)
@@ -2395,7 +2395,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"lora") == 0)
     {
-        sprintf(print_buff, "--MeshCom %s %-4.4s%-1.1s\n...LoRa RF-Frequ: <%.4f MHz>\n...LoRa RF-Power: <%i dBm>\n...LoRa RF-BW:    <%.0f kHz>\n...LoRa RF-SF:    <%i>\n...LoRa RF-CR:    <4/%i>\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+        snprintf(print_buff, sizeof(print_buff), "--MeshCom %s %-4.4s%-1.1s\n...LoRa RF-Frequ: <%.4f MHz>\n...LoRa RF-Power: <%i dBm>\n...LoRa RF-BW:    <%.0f kHz>\n...LoRa RF-SF:    <%i>\n...LoRa RF-CR:    <4/%i>\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                 getFreq(), getPower(), getBW(), getSF(), getCR());
 
         if(ble)
@@ -2425,7 +2425,7 @@ void commandAction(char *msg_text, bool ble)
             stri2c = scanI2C();
         #endif
 
-        sprintf(print_buff, "%s", stri2c.c_str());
+        snprintf(print_buff, sizeof(print_buff), "%s", stri2c.c_str());
 
         if(ble)
         {
@@ -2441,7 +2441,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setgrc") == 0)
     {
-        sprintf(_owner_c, "%s;", msg_text+9);
+        snprintf(_owner_c, sizeof(_owner_c), "%s;", msg_text+9);
 
         int igrc=1;
         String strdec = "";
@@ -2511,7 +2511,7 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"regex") == 0)
     {
-        sprintf(_owner_c, "%s", msg_text+8);
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+8);
 
         String strCallSign = _owner_c;
     
@@ -2624,10 +2624,10 @@ void commandAction(char *msg_text, bool ble)
             JsonDocument idoc;
 
             char fwver[20];
-            sprintf(fwver, "%s %s %s", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
+            snprintf(fwver, sizeof(fwver), "%s %s %s", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB);
 
             char ctrycode[5];
-            sprintf(ctrycode, "%s", getCountry(meshcom_settings.node_country).c_str());
+            snprintf(ctrycode, sizeof(ctrycode), "%s", getCountry(meshcom_settings.node_country).c_str());
 
             idoc["TYP"] = "I";
             idoc["FWVER"] = fwver;
@@ -2869,7 +2869,7 @@ void commandAction(char *msg_text, bool ble)
     }
     else
     {
-        sprintf(print_buff, "\n--MeshCom %s %-4.4s%s ...wrong command %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
+        snprintf(print_buff, sizeof(print_buff), "\n--MeshCom %s %-4.4s%s ...wrong command %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
 
         if(ble)
         {
@@ -3005,8 +3005,8 @@ void sendAPRSset()
     // {"TYP":"SA","ATXT":"none","SYMID":"/","SYMCD":"#"}
     char symcd [2] = {0};
     char symid [2] = {0};
-    sprintf(symcd, "%c", meshcom_settings.node_symcd);
-    sprintf(symid, "%c", meshcom_settings.node_symid);
+    snprintf(symcd, sizeof(symcd), "%c", meshcom_settings.node_symcd);
+    snprintf(symid, sizeof(symid), "%c", meshcom_settings.node_symid);
 
     JsonDocument aprsdoc;
 

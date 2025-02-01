@@ -473,7 +473,7 @@ void nrf52setup()
 	
 	// initialize clock
 	boResult = MyClock.Init();
-	Serial.printf("Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
+	Serial.printf("[INIT]...Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
 
     DisplayTimeWait=0;
     //
@@ -648,16 +648,16 @@ void nrf52setup()
         setupSOFTSER();
     #endif
 
-    Serial.println(F("Auto detecting display:"));
+    Serial.println(F("[INIT]...Auto detecting display:"));
     
     if (esp32_isSSD1306(0x3C))
     { //Address of the display to be checked
-        Serial.println(F("-> OLED Display is SSD1306"));
+        Serial.println(F("[INIT]...-> OLED Display is SSD1306"));
         u8g2 = &u8g2_2;
     }
     else
     {
-        Serial.println(F("-> OLED Display is SH1106"));
+        Serial.println(F("[INIT]...-> OLED Display is SH1106"));
         u8g2 = &u8g2_1;
     }
 
@@ -669,14 +669,14 @@ void nrf52setup()
     do
     {
         u8g2->setFont(u8g2_font_10x20_mf);
-        u8g2->drawStr(5, 20, "MeshCom 4.0");
+        u8g2->drawStr(5, 15, "MeshCom 4.0");
         u8g2->setFont(u8g2_font_6x10_mf);
         char cvers[20];
-        sprintf(cvers, "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
-        u8g2->drawStr(5, 30, cvers);
-        u8g2->drawStr(5, 40, "by icssw.org");
-        u8g2->drawStr(5, 50, "OE1KFR, OE1KBC");
-        u8g2->drawStr(5, 60, "...starting now");
+        snprintf(cvers, sizeof(cvers), "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        u8g2->drawStr(5, 25, cvers);
+        u8g2->drawStr(5, 35, "by icssw.org");
+        u8g2->drawStr(5, 45, "OE1KFR, OE1KBC");
+        u8g2->drawStr(5, 55, "...starting now");
     } while (u8g2->nextPage());
 
     // reset GPS-Time parameter
@@ -685,7 +685,7 @@ void nrf52setup()
     meshcom_settings.node_date_second = 0;
     meshcom_settings.node_date_hundredths = 0;
 
-    Serial.println("CLIENT STARTED");
+    Serial.println("[INIT] CLIENT STARTED");
 
     //  Set the LoRa Callback Functions
     RadioEvents.TxDone = OnTxDone;
@@ -813,46 +813,11 @@ void nrf52setup()
 
             save_settings();
         }
-        
     }
 }
 
 void nrf52loop()
 {
-    if ((retransmit_timer + (1000 * 10)) < millis())   // repeat 10 seconds
-    {
-        updateRetransmissionStatus();
-
-        retransmit_timer = millis();
-    }
-
-    if(iReceiveTimeOutTime > 0)
-    {
-        // Timeout RECEIVE_TIMEOUT
-        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
-        {
-            iReceiveTimeOutTime=0;
-
-            // LoRa preamble was detected
-            if(bLORADEBUG)
-            {
-                Serial.printf("[SX12xx] Receive Timeout, starting receiving again ... \n");
-            }
-        }
-    }
-
-    if(iReceiveTimeOutTime == 0 && is_receiving == false && tx_is_active == false)
-    {
-        // channel is free
-        // nothing was detected
-        // do not print anything, it just spams the console
-        if (iWrite != iRead)
-        {
-            // save transmission state between loops
-            doTX();
-        }
-    }
-
     // get RTC Now
     // RTC hat Vorrang zu Zeit via MeshCom-Server
     if(bRTCON)
@@ -885,6 +850,43 @@ void nrf52loop()
         meshcom_settings.node_date_hour = MyClock.Hour();
         meshcom_settings.node_date_minute = MyClock.Minute();
         meshcom_settings.node_date_second = MyClock.Second();
+    }
+
+    if(!bGATEWAY)
+    {
+        if ((retransmit_timer + (1000 * 10)) < millis())   // repeat 10 seconds
+        {
+            updateRetransmissionStatus();
+
+            retransmit_timer = millis();
+        }
+    }
+
+    if(iReceiveTimeOutTime > 0)
+    {
+        // Timeout RECEIVE_TIMEOUT
+        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
+        {
+            iReceiveTimeOutTime=0;
+
+            // LoRa preamble was detected
+            if(bLORADEBUG)
+            {
+                Serial.printf("[SX12xx] Receive Timeout, starting receiving again ... \n");
+            }
+        }
+    }
+
+    if(iReceiveTimeOutTime == 0 && is_receiving == false && tx_is_active == false)
+    {
+        // channel is free
+        // nothing was detected
+        // do not print anything, it just spams the console
+        if (iWrite != iRead)
+        {
+            // save transmission state between loops
+            doTX();
+        }
     }
 
     // SOFTSER
@@ -1083,11 +1085,7 @@ void nrf52loop()
                 Serial.println(" [MAIN] initethDHCP");
             }
 
-            Serial.println("neth.initethDHCP()");
-
             neth.initethDHCP();
-
-            Serial.println("neth.initethDHCP() end");
         }
         
         // DHCP refresh

@@ -929,7 +929,7 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage
     if(bMESH)
         msg_buffer[5] = msg_buffer[5] | 0x10;
 
-    sprintf(msg_start, "%s>%s%c", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type);
+    snprintf(msg_start, sizeof(msg_start), "%s>%s%c", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type);
 
     uint16_t ilng=aprsmsg.msg_source_path.length() + 1 + aprsmsg.msg_destination_path.length() + 1;
     
@@ -950,7 +950,7 @@ uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMes
 
     memset(msg_start, 0x00, ilng+1);
 
-    sprintf(msg_start, "%s", aprsmsg.msg_payload.c_str());
+    snprintf(msg_start, sizeof(msg_start), "%s", aprsmsg.msg_payload.c_str());
     
     if(ilng >= UDP_TX_BUF_SIZE)
         ilng = UDP_TX_BUF_SIZE - 1;
@@ -1063,7 +1063,7 @@ uint16_t encodeLoRaAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10
     if(meshcom_settings.node_atxt[0] != 0x00)
         msgtext = meshcom_settings.node_atxt;
 
-    sprintf(msg_start, "%s>APLT00-1,WIDE1-1:!%07.2lf%c%c%08.2lf%c%c%s", cSourceCall, slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, msgtext.c_str());
+    snprintf(msg_start, sizeof(msg_start), "%s>APLT00-1,WIDE1-1:!%07.2lf%c%c%08.2lf%c%c%s", cSourceCall, slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, msgtext.c_str());
 
     ilng = strlen(msg_start) + 3;
 
@@ -1161,7 +1161,7 @@ uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSou
     if(meshcom_settings.node_atxt[0] != 0x00)
         msgtext = meshcom_settings.node_atxt;
 
-    sprintf(msg_start, "%s>APLT00-1,WIDE1-1:=%c%c%c%c%c%c%c%c%c%c P[%s", cSourceCall, meshcom_settings.node_symid, clat[0], clat[1], clat[2], clat[3], clon[0], clon[1], clon[2], clon[3], meshcom_settings.node_symcd, msgtext.c_str());
+    snprintf(msg_start, sizeof(msg_start), "%s>APLT00-1,WIDE1-1:=%c%c%c%c%c%c%c%c%c%c P[%s", cSourceCall, meshcom_settings.node_symid, clat[0], clat[1], clat[2], clat[3], clon[0], clon[1], clon[2], clon[3], meshcom_settings.node_symcd, msgtext.c_str());
 
     ilng = strlen(msg_start) + 3;
 

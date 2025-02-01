@@ -116,7 +116,7 @@ int dzeile[6] = {16, 44, 64, 84, 104, 124};
 
 #else
 
-int dzeile[6] = {11, 24, 34, 44, 54, 64};
+int dzeile[6] = {8, 21, 31, 41, 51, 61};
 
 U8G2 *u8g2;
 
@@ -523,7 +523,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     }
                     else
                     {
-                        sprintf(ptext, "%s", pageText[its]);
+                        snprintf(ptext, sizeof(ptext), "%s", pageText[its]);
                         if(pageLine[its][1] >= 0)
                         {
                             e290_display.setCursor(pageLine[its][0], pageLine[its][1]);
@@ -566,7 +566,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     }
                     else
                     {
-                        sprintf(ptext, "%s", pageText[its]);
+                        snprintf(ptext, sizeof(ptext), "%s", pageText[its]);
                         if(pageLine[its][1] >= 0)
                             u8g2->drawUTF8(pageLine[its][0], pageLine[its][1], ptext);
                     }
@@ -611,22 +611,22 @@ void sendDisplayHead(bool bInit)
 
     sendDisplayMainline();
 
-    sprintf(print_text, "Call:  %s", meshcom_settings.node_call);
+    snprintf(print_text, sizeof(print_text), "Call:  %s", meshcom_settings.node_call);
     sendDisplay1306(false, false, 3, dzeile[1], print_text);
 
-    sprintf(print_text, "Short: %s", meshcom_settings.node_short);
+    snprintf(print_text, sizeof(print_text), "Short: %s", meshcom_settings.node_short);
     sendDisplay1306(false, false, 3, dzeile[2], print_text);
 
-    sprintf(print_text, "MAC:   %08X", _GW_ID);
+    snprintf(print_text, sizeof(print_text), "MAC:   %08X", _GW_ID);
     sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-    sprintf(print_text, "BT-Code: %06i", meshcom_settings.bt_code);
+    snprintf(print_text, sizeof(print_text), "BT-Code: %06i", meshcom_settings.bt_code);
     sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
     if(bWIFIAP)
-        sprintf(print_text, "ssid:  %-15.15s", cBLEName);
+        snprintf(print_text, sizeof(print_text), "ssid:  %-15.15s", cBLEName);
     else
-        sprintf(print_text, "ssid:  %-15.15s", meshcom_settings.node_ssid);
+        snprintf(print_text, sizeof(print_text), "ssid:  %-15.15s", meshcom_settings.node_ssid);
 
     sendDisplay1306(false, true, 3, dzeile[5], print_text);
 
@@ -653,19 +653,19 @@ void sendDisplayTrack()
 
     sendDisplayMainline();
 
-    sprintf(print_text, "LAT : %.4lf %c  %s", meshcom_settings.node_lat, meshcom_settings.node_lat_c, (posinfo_fix?"fix":""));
+    snprintf(print_text, sizeof(print_text), "LAT : %.4lf %c  %s", meshcom_settings.node_lat, meshcom_settings.node_lat_c, (posinfo_fix?"fix":""));
     sendDisplay1306(false, false, 3, dzeile[1], print_text);
 
-    sprintf(print_text, "LON : %.4lf %c %4i", meshcom_settings.node_lon, meshcom_settings.node_lon_c, (int)posinfo_satcount);
+    snprintf(print_text, sizeof(print_text), "LON : %.4lf %c %4i", meshcom_settings.node_lon, meshcom_settings.node_lon_c, (int)posinfo_satcount);
     sendDisplay1306(false, false, 3, dzeile[2], print_text);
 
-    sprintf(print_text, "RATE: %5i sec %4i", (int)posinfo_interval, posinfo_hdop);
+    snprintf(print_text, sizeof(print_text), "RATE: %5i sec %4i", (int)posinfo_interval, posinfo_hdop);
     sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-    sprintf(print_text, "DIST: %5i m", posinfo_distance);
+    snprintf(print_text, sizeof(print_text), "DIST: %5i m", posinfo_distance);
     sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
-    sprintf(print_text, "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
+    snprintf(print_text, sizeof(print_text), "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
     sendDisplay1306(false, true, 3, dzeile[5], print_text);
 
 
@@ -692,19 +692,19 @@ void sendDisplayWX()
 
     sendDisplayMainline();
 
-    sprintf(print_text, "TEMP : %.1f °C", meshcom_settings.node_temp);
+    snprintf(print_text, sizeof(print_text), "TEMP : %.1f °C", meshcom_settings.node_temp);
     sendDisplay1306(false, false, 3, dzeile[1], print_text);
 
-    sprintf(print_text, "HUM  : %.1f %%", meshcom_settings.node_hum);
+    snprintf(print_text, sizeof(print_text), "HUM  : %.1f %%", meshcom_settings.node_hum);
     sendDisplay1306(false, false, 3, dzeile[2], print_text);
 
-    sprintf(print_text, "QFE  : %.1f hPa", meshcom_settings.node_press);
+    snprintf(print_text, sizeof(print_text), "QFE  : %.1f hPa", meshcom_settings.node_press);
     sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-    sprintf(print_text, "QNH  : %.1f hPa", meshcom_settings.node_press_asl);
+    snprintf(print_text, sizeof(print_text), "QNH  : %.1f hPa", meshcom_settings.node_press_asl);
     sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
-    sprintf(print_text, "ALT:%5im / %5im", meshcom_settings.node_alt, meshcom_settings.node_press_alt);
+    snprintf(print_text, sizeof(print_text), "ALT:%5im / %5im", meshcom_settings.node_alt, meshcom_settings.node_press_alt);
     sendDisplay1306(false, true, 3, dzeile[5], print_text);
 
 
@@ -743,26 +743,26 @@ void sendDisplayTime()
 
     char nodetype[5];
 
-    sprintf(nodetype, "%s", SOURCE_TYPE);
+    snprintf(nodetype, sizeof(nodetype), "%s", SOURCE_TYPE);
     if(bGATEWAY)
-        sprintf(nodetype, "G");
+        snprintf(nodetype, sizeof(nodetype), "G");
 
     if(bDisplayVolt)
-        sprintf(cbatt, "%4.2f", global_batt/1000.0);
+        snprintf(cbatt, sizeof(cbatt), "%4.2f", global_batt/1000.0);
     else
-        sprintf(cbatt, "%3d%%", global_proz);
+        snprintf(cbatt, sizeof(cbatt), "%3d%%", global_proz);
 
  #if defined(XPOWERS_CHIP_AXP192)
     if(global_batt == 0.0)
-        sprintf(cbatt, " USB");
+        snprintf(cbatt, sizeof(cbatt), " USB");
  #endif
 
  #if defined(XPOWERS_CHIP_AXP2101)
     if(global_batt == 0.0)
-        sprintf(cbatt, " USB");
+        snprintf(cbatt, sizeof(cbatt), " USB");
  #endif
 
-    sprintf(print_text, "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+    snprintf(print_text, sizeof(print_text), "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
 
     memcpy(pageText[0], print_text, 20);
     pageLine[0][0] = 3;
@@ -783,42 +783,42 @@ void sendDisplayMainline()
     char cbatt[5];
     char nodetype[5];
 
-    sprintf(nodetype, "%s", SOURCE_TYPE);
+    snprintf(nodetype, sizeof(nodetype), "%s", SOURCE_TYPE);
 
     if(bGATEWAY)
-        sprintf(nodetype, "G");
+        snprintf(nodetype, sizeof(nodetype),"G");
 
     if(bDisplayVolt)
-        sprintf(cbatt, "%4.2f", global_batt/1000.0);
+        snprintf(cbatt, sizeof(cbatt), "%4.2f", global_batt/1000.0);
     else
-        sprintf(cbatt, "%3d%%", global_proz);
+        snprintf(cbatt, sizeof(cbatt), "%3d%%", global_proz);
 
  #if defined(XPOWERS_CHIP_AXP192)
     if(global_batt == 0.0)
-        sprintf(cbatt, " USB");
+        snprintf(cbatt, sizeof(cbatt), " USB");
  #endif
 
  #if defined(XPOWERS_CHIP_AXP2101)
     if(global_batt == 0.0)
-        sprintf(cbatt, " USB");
+        snprintf(cbatt, sizeof(cbatt), " USB");
  #endif
 
  #if defined(BOARD_E290)
     if(global_batt > 4300.0)
-        sprintf(cbatt, " USB");
+        snprintf(cbatt, sizeof(cbatt), " USB");
  #endif
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
-        sprintf(print_text, "%-1.1s %-4.4s%-1.1s         %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s         %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
     }
     else
     {
-        sprintf(print_text, "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
     sendDisplay1306(true, false, 3, dzeile[0], print_text);
-    sendDisplay1306(false, false, 3, 14, (char*)"#L");
+    sendDisplay1306(false, false, 3, dzeile[0]+3, (char*)"#L");
 }
 
 void mainStartTimeLoop()
@@ -918,13 +918,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         char cset[30];
         memset(cset, 0x00, sizeof(cset));
 
-        sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
+        snprintf(cset, sizeof(cset), "%s", aprsmsg.msg_payload.c_str());
         char cpasswd[6];
         memcpy(cpasswd, cset+5+2+2+3, 5);
 
         char clfd[10];
         memset(clfd, 0x00, sizeof(clfd));
-        sprintf(clfd, "%03i", (int)(aprsmsg.msg_id & 0x3FF));
+        snprintf(clfd, sizeof(cset), "%03i", (int)(aprsmsg.msg_id & 0x3FF));
 
         // check pwd
         bool bpass=true;
@@ -972,9 +972,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
                     char cBefehl[30];
                     if(bON)
-                        sprintf(cBefehl, "--setout %c%i off", cset[6], iswitch);
+                        snprintf(cBefehl, sizeof(cBefehl), "--setout %c%i off", cset[6], iswitch);
                     else
-                        sprintf(cBefehl, "--setout %c%i on", cset[6], iswitch);
+                        snprintf(cBefehl, sizeof(cBefehl), "--setout %c%i on", cset[6], iswitch);
 
                     commandAction(cBefehl, bPhoneReady);
                 }
@@ -999,7 +999,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     if(aprsmsg.msg_payload.startsWith("{SET}") > 0)
     {
         char cset[30];
-        sprintf(cset, "%s", aprsmsg.msg_payload.c_str());
+        snprintf(cset, sizeof(cset), "%s", aprsmsg.msg_payload.c_str());
         sscanf(cset+5, "%d;%d;", &meshcom_settings.max_hop_text, &meshcom_settings.max_hop_pos);
 
         return;
@@ -1009,25 +1009,34 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     {
         if(!bRTCON)
         {
-            char csetTime[30];
-            sprintf(csetTime, "%s", aprsmsg.msg_payload.c_str());
+            int Year=2000;
+            int Month=1;
+            int Day=1;
+            int Hour=0;
+            int Minute=0;
+            int Second=0;
 
-            int Year;
-            int Month;
-            int Day;
-            int Hour;
-            int Minute;
-            int Second;
+            //sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
 
-            sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
+            // {CET}2025-01-31 07:47:40
+            Year = aprsmsg.msg_payload.substring(5, 9).toInt();
+            Month = aprsmsg.msg_payload.substring(10, 12).toInt();
+            Day = aprsmsg.msg_payload.substring(13, 15).toInt();
+            Hour = aprsmsg.msg_payload.substring(16, 18).toInt();
+            Minute = aprsmsg.msg_payload.substring(19, 21).toInt();
+            Second = aprsmsg.msg_payload.substring(22, 24).toInt();
         
+            if(bDisplayInfo)
+            {
+                Serial.printf("{CET} %i.%02i.%02i %02i:%02i:%02i\n", Year, Month, Day, Hour, Minute, Second);
+            }
+
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
 
             if(bDisplayInfo)
             {
-                Serial.println("");
                 Serial.print(getTimeString());
-                Serial.println(" TIMESET: Time set ");
+                Serial.println(" Time set ");
             }
 
             bPosDisplay=true;
@@ -1071,9 +1080,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     }
 
     if(strPath.length() < (20-4))
-        sprintf(msg_text, "%s <%i>", strPath.c_str(), rssi);
+        snprintf(msg_text, sizeof(msg_text), "%s <%i>", strPath.c_str(), rssi);
     else
-        sprintf(msg_text, "%s", strPath.c_str());
+        snprintf(msg_text, sizeof(msg_text), "%s", strPath.c_str());
 
     msg_text[20]=0x00;
     e290_display.println(msg_text);
@@ -1104,15 +1113,20 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     String strPath = aprsmsg.msg_source_path;
     // DM
-    if(aprsmsg.msg_destination_path != "*")
+    if(CheckGroup(aprsmsg.msg_destination_path))
     {
-        strPath = "DM <" + aprsmsg.msg_source_call + ">";
+        strPath = "GM" + aprsmsg.msg_destination_path + " <" + aprsmsg.msg_source_call + ">";
     }
+    else
+        if(aprsmsg.msg_destination_path != "*")
+        {
+            strPath = "DM <" + aprsmsg.msg_source_call + ">";
+        }
 
     if(aprsmsg.msg_source_path.length() < (20-5))
-        sprintf(msg_text, "%s <%i>", strPath.c_str(), rssi);
+        snprintf(msg_text, sizeof(msg_text), "%s <%i>", strPath.c_str(), rssi);
     else
-        sprintf(msg_text, "%s", strPath.c_str());
+        snprintf(msg_text, sizeof(msg_text), "%s", strPath.c_str());
 
     msg_text[20]=0x00;
     sendDisplay1306(bClear, false, 3, dzeile[izeile], msg_text);
@@ -1161,13 +1175,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         if((strlen(line_text) + strlen(words[itxt])) > 19)
         {
             line_text[20]=0x00;
-            sprintf(msg_text, "%s", line_text);
+            snprintf(msg_text,sizeof(msg_text), "%s", line_text);
 
             if(izeile > 5)
                 bEnd=true;
 
             if(bEnd && itxt < iwords)
-                sprintf(msg_text, "%-17.17s...", line_text);
+                snprintf(msg_text, sizeof(msg_text), "%-17.17s...", line_text);
 
             msg_text[20]=0x00;
             sendDisplay1306(bClear, bEnd, 3, dzeile[izeile], msg_text);
@@ -1203,7 +1217,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         bEnd=true;
         line_text[20]=0x00;
-        sprintf(msg_text, "%s", line_text);
+        snprintf(msg_text, sizeof(msg_text), "%s", line_text);
         //Serial.printf("1306-02:%s len:%i izeile:%i\n", msg_text, strlen(msg_text), izeile);
         msg_text[20]=0x00;
         sendDisplay1306(bClear, bEnd, 3, dzeile[izeile], msg_text);
@@ -1509,7 +1523,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         char ctime_buf[30];
 
-        sprintf(ctime_buf, "%s", aprspos.pos_atxt.substring(11, 23).c_str());
+        snprintf(ctime_buf, sizeof(ctime_buf), "%s", aprspos.pos_atxt.substring(11, 23).c_str());
 
         sscanf(ctime_buf, "%02u%02u%02u%02u%02u%02u", &year, &month, &day, &hour, &minute, &second);
 
@@ -1538,9 +1552,9 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #endif
 
     if(aprspos.softser3 > 0)
-        sprintf(msg_text, "#%s", aprspos.pos_atxt.substring(0, 17).c_str());
+        snprintf(msg_text, sizeof(msg_text), "#%s", aprspos.pos_atxt.substring(0, 17).c_str());
     else
-        sprintf(msg_text, "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
+        snprintf(msg_text, sizeof(msg_text), "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
 
 
     msg_text[20]=0x00;
@@ -1558,7 +1572,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             sscanf(print_text, "%lf", &lat);
 
-            sprintf(msg_text, "LAT: %s%c%5ikm", print_text, aprsmsg.msg_payload.charAt(itxt), dist_to);
+            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%5ikm", print_text, aprsmsg.msg_payload.charAt(itxt), dist_to);
             msg_text[20]=0x00;
             sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
 
@@ -1590,10 +1604,10 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             for(int idir=0; idir<9; idir++)
             {
                 if(dir_to >= von_dir_to[idir] && dir_to <= von_dir_to[idir+1])
-                    sprintf(cdir_to, "%s", von_c_dir_to[idir+1]);
+                    snprintf(cdir_to, sizeof(cdir_to), "%s", von_c_dir_to[idir+1]);
             }
 
-            sprintf(msg_text, "LON:%s%c%5i%s", print_text, aprsmsg.msg_payload.charAt(itxt), dir_to, cdir_to);
+            snprintf(msg_text, sizeof(msg_text), "LON:%s%c%5i%s", print_text, aprsmsg.msg_payload.charAt(itxt), dir_to, cdir_to);
             msg_text[20]=0x00;
             sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
 
@@ -1677,12 +1691,12 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                             DrawRssi(3, 117, rssi);
                         #endif
 
-                        sprintf(msg_text, "%.0fcm %.1fC %.1fV", aprspos.softser1, aprspos.softser2, aprspos.softser3);
+                        snprintf(msg_text, sizeof(msg_text), "%.0fcm %.1fC %.1fV", aprspos.softser1, aprspos.softser2, aprspos.softser3);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
 
                         char cDateTime[50];
-                        sprintf(cDateTime, "%04i-%02i-%02iT%02i:%02i:%02i", meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+                        snprintf(cDateTime, sizeof(cDateTime), "%04i-%02i-%02iT%02i:%02i:%02i", meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 
                         Serial.printf("\n<StationData stationId=\"%s\">\n", aprspos.pos_atxt.substring(0 , 9).c_str());
                         Serial.printf("<ChannelData channelId\"0060\" unit=\"cm\"><VT t=%s>%.0f</VT></ChannelData>\n", cDateTime, aprspos.softser1);
@@ -1720,12 +1734,12 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                         #ifdef BOARD_E290
                             DrawRssi(3, 117, rssi);
 
-                            sprintf(msg_text, "ALT:%im", alt);
+                            snprintf(msg_text, sizeof(msg_text), "ALT:%im", alt);
                             msg_text[20]=0x00;
                             sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
                         #endif
                     
-                        sprintf(msg_text, "ALT:%im rssi:%i", alt, rssi);
+                        snprintf(msg_text, sizeof(msg_text), "ALT:%im rssi:%i", alt, rssi);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
 
@@ -1799,7 +1813,7 @@ void printAsciiBuffer(uint8_t *buffer, int len)
 String getDateString()
 {
     char currDate[11] = {0};
-    sprintf(currDate, "%04i-%02i-%02i", meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day);
+    snprintf(currDate, sizeof(currDate), "%04i-%02i-%02i", meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day);
 
     return (String)currDate;
 }
@@ -1807,7 +1821,7 @@ String getDateString()
 String getTimeString()
 {
     char currTime[10] = {0};
-    sprintf(currTime, "%02i:%02i:%02i", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+    snprintf(currTime, sizeof(currTime), "%02i:%02i:%02i", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 
     return (String)currTime;
 }
@@ -1820,7 +1834,7 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
     if(ilpayload > 30)
         ilpayload=30;
 
-    sprintf(internal_message, "%s %s:%08X %02X %i %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
+    snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %02X %i %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
         aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh,
         aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
         aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(),
@@ -1885,7 +1899,7 @@ void sendMessage(char *msg_text, int len)
             if(strMsg.startsWith("{mcp}") || strMsg.startsWith("{MCP}")) // Fernwirken
             {
                 char cId[4] = {0};
-                sprintf(cId, "%03i", meshcom_settings.node_msgid);
+                snprintf(cId, sizeof(cId), "%03i", meshcom_settings.node_msgid);
                 String newMsg = "{mcp}";
                 newMsg.concat(cId[0]);
                 newMsg.concat(strMsg.substring(5, 7).c_str());
@@ -1922,7 +1936,7 @@ void sendMessage(char *msg_text, int len)
     if(bDM)
     {
         char cAckId[4] = {0};
-        sprintf(cAckId, "%03i", meshcom_settings.node_msgid);
+        snprintf(cAckId, sizeof(cAckId), "%03i", meshcom_settings.node_msgid);
         aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
     }
 
@@ -2062,7 +2076,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         lat_c = 'N';
 
     if(bWeather)
-        sprintf(msg_start, "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, slat, lat_c, meshcom_settings.node_symid, slon, lon_c);
+        snprintf(msg_start, sizeof(msg_start), "%02i%02i%02iz%07.2lf%c%c%08.2lf%c_", meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, slat, lat_c, meshcom_settings.node_symid, slon, lon_c);
     else
     {
         char cversion[5]={0};
@@ -2091,92 +2105,92 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         if(bSOFTSERON && strSOFTSERAPP_ID.length() > 0)
         {
             bSOFTSERAPPPOS=true;
-            sprintf(catxt, "%s:%02i%02i%02i%02i%02i%02i ", strSOFTSERAPP_ID.c_str(), meshcom_settings.node_date_year - 2000, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+            snprintf(catxt, sizeof(catxt), "%s:%02i%02i%02i%02i%02i%02i ", strSOFTSERAPP_ID.c_str(), meshcom_settings.node_date_year - 2000, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
         }
         else
         #endif
         {
             if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
             {
-                sprintf(catxt, "%s", meshcom_settings.node_atxt);
+                snprintf(catxt,  sizeof(catxt), "%s", meshcom_settings.node_atxt);
             }
 
             if(strcmp(meshcom_settings.node_name, "none") != 0 && meshcom_settings.node_name[0] != 0x00)
             {
-                sprintf(cname, "#%s", meshcom_settings.node_name);
+                snprintf(cname,  sizeof(cname), "#%s", meshcom_settings.node_name);
             }
         }
 
         if(global_proz > 0 && !bSOFTSERAPPPOS)
         {
-            sprintf(cbatt, "/B=%03d", global_proz);
+            snprintf(cbatt, sizeof(cbatt), "/B=%03d", global_proz);
         }
 
         if(alt > 0)
         {
             // auf Fuss umrechnen
             if(bFuss)
-                sprintf(calt, "/A=%06i", conv_fuss(alt));
+                snprintf(calt, sizeof(calt), "/A=%06i", conv_fuss(alt));
             else
-                sprintf(calt, "/A=%05i", alt);
+                snprintf(calt, sizeof(calt), "/A=%05i", alt);
         }
 
         if(press > 0)
         {
-            sprintf(cpress, "/P=%.1f", press);
+            snprintf(cpress, sizeof(cpress), "/P=%.1f", press);
             if(memcmp(cpress, "/P=nan", 6) == 0)
                 return "";
         }
 
         if(hum > 0)
         {
-            sprintf(chum, "/H=%.1f", hum);
+            snprintf(chum, sizeof(chum), "/H=%.1f", hum);
             if(memcmp(cpress, "/H=nan", 6) == 0)
                 return "";
         }
 
         if(temp != 0)
         {
-            sprintf(ctemp, "/T=%.1f", temp);
+            snprintf(ctemp, sizeof(ctemp), "/T=%.1f", temp);
             if(memcmp(cpress, "/T=nan", 6) == 0)
                 return "";
         }
 
         if(temp2 != 0 && !bSOFTSERAPPPOS)
         {
-            sprintf(ctemp2, "/O=%.1f", temp2);
+            snprintf(ctemp2, sizeof(ctemp2), "/O=%.1f", temp2);
             if(memcmp(cpress, "/O=nan", 6) == 0)
                 return "";
         }
 
         if(qfe > 0)
         {
-            sprintf(cqfe, "/F=%i", qfe);
+            snprintf(cqfe, sizeof(cqfe), "/F=%i", qfe);
             if(memcmp(cpress, "/F=nan", 6) == 0)
                 return "";
         }
 
         if(qnh > 0 && !bMCU811ON && !bBME680ON)
         {
-            sprintf(cqnh, "/Q=%.1f", qnh);
+            snprintf(cqnh, sizeof(cqnh), "/Q=%.1f", qnh);
             if(memcmp(cpress, "/Q=nan", 6) == 0)
                 return "";
         }
 
         if(gasres > 0 && bBME680ON)
         {
-            sprintf(cversion, "%s", "/V=3");
+            snprintf(cversion, sizeof(cversion), "%s", "/V=3");
 
-            sprintf(cgasres, "/G=%.1f", gasres);
+            snprintf(cgasres, sizeof(cgasres), "/G=%.1f", gasres);
             if(memcmp(cpress, "/G=nan", 6) == 0)
                 return "";
         }
 
         if(co2 > 0 && bMCU811ON)
         {
-            sprintf(cversion, "%s", "/V=2");
+            snprintf(cversion, sizeof(cversion),  "%s", "/V=2");
 
-            sprintf(cco2, "/C=%.0f", co2);
+            snprintf(cco2, sizeof(cco2), "/C=%.0f", co2);
             if(memcmp(cpress, "/C=nan", 6) == 0)
                 return "";
         }
@@ -2184,32 +2198,32 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         #if defined(ENABLE_SOFTSER)
         if(bSOFTSERAPPPOS)
         {
-            sprintf(cversion, "%s", "/V=4");
+            snprintf(cversion, sizeof(cversion), "%s", "/V=4");
 
             if(strSOFTSERAPP_PEGEL.length() > 1 || strSOFTSERAPP_FIXPEGEL.length() > 1)
             {
                 if(strSOFTSERAPP_FIXPEGEL.length() < 1)
-                    sprintf(csfpegel, "/1=%s", strSOFTSERAPP_PEGEL.c_str());
+                    snprintf(csfpegel, sizeof(csfpegel), "/1=%s", strSOFTSERAPP_PEGEL.c_str());
                 else
-                    sprintf(csfpegel, "/1=%s", strSOFTSERAPP_FIXPEGEL.c_str());
+                    snprintf(csfpegel, sizeof(csfpegel), "/1=%s", strSOFTSERAPP_FIXPEGEL.c_str());
             }
 
             if(strSOFTSERAPP_TEMP.length() > 1 || strSOFTSERAPP_FIXTEMP.length() > 1)
             {
                 if(strSOFTSERAPP_FIXTEMP.length() < 1)
-                    sprintf(csftemp, "/2=%s", strSOFTSERAPP_TEMP.c_str());
+                    snprintf(csftemp, sizeof(csftemp), "/2=%s", strSOFTSERAPP_TEMP.c_str());
                 else
-                    sprintf(csftemp, "/2=%s", strSOFTSERAPP_FIXTEMP.c_str());
+                    snprintf(csftemp, sizeof(csftemp), "/2=%s", strSOFTSERAPP_FIXTEMP.c_str());
             }
 
             if(strSOFTSERAPP_BATT.length() > 1)
             {
-                sprintf(csfbatt, "/3=%s", strSOFTSERAPP_BATT.c_str());
+                snprintf(csfbatt, sizeof(csfbatt), "/3=%s", strSOFTSERAPP_BATT.c_str());
             }
 
             if(bONEWIRE)
             {
-                sprintf(ctemp2, "/O=%.1f", temp2);
+                snprintf(ctemp2, sizeof(ctemp2), "/O=%.1f", temp2);
                 if(memcmp(cpress, "/O=nan", 6) == 0)
                     memset(ctemp2, 0x00, sizeof(ctemp2));
             }
@@ -2226,20 +2240,20 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
             {
                 if(meshcom_settings.node_gcb[igrc] > 0)
                 {
-                    sprintf(cGC, "%i;", meshcom_settings.node_gcb[igrc]);
+                    snprintf(cGC, sizeof(cGC), "%i;", meshcom_settings.node_gcb[igrc]);
                     strGRC.concat(cGC);
                 }
             }
 
             if(strGRC.length() > 0)
             {
-                sprintf(cgrc, "/R=%s", strGRC.c_str());
+                snprintf(cgrc, sizeof(cgrc), "/R=%s", strGRC.c_str());
             }
             //
             /////////////////////////////////////////////////////////////////
         }
 
-        sprintf(msg_start, "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc, csfpegel, csftemp, csfbatt, cversion);
+        snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc, csfpegel, csftemp, csfbatt, cversion);
 
     }
 
@@ -2508,9 +2522,9 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
 
     char cackmsg[20];
     if(strcmp(dest_call.c_str(), "WLNK-1") == 0)
-        sprintf(cackmsg, "ack%04i", iAckId);
+        snprintf(cackmsg, sizeof(cackmsg), "ack%04i", iAckId);
     else
-        sprintf(cackmsg, "%-9.9s:ack%03i", dest_call.c_str(), iAckId);
+        snprintf(cackmsg, sizeof(cackmsg), "%-9.9s:ack%03i", dest_call.c_str(), iAckId);
     aprsmsg.msg_payload = cackmsg;
 
     meshcom_settings.node_msgid++;
@@ -2725,7 +2739,7 @@ String convertCallToShort(char callsign[10])
 double cround4(double dvar)
 {
     char cvar[20];
-    sprintf(cvar, "%.4lf", dvar);
+    snprintf(cvar, sizeof(cvar), "%.4lf", dvar);
     double rvar;
     sscanf(cvar, "%lf", &rvar);
 

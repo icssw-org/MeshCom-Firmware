@@ -144,10 +144,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     {
         memcpy(RcvBuffer, payload, size);
 
-        //Serial.println("got lora rx");
-
-        unsigned int rx_msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
-
         // RX-OK do not need retransmission
         for(int ircheck=0;ircheck<MAX_RING;ircheck++)
         {
@@ -349,8 +345,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                     for(int iop=0;iop<MAX_RING;iop++)
                     {
-                        unsigned int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
-
                         if(memcmp(ringBufferLoraRX[iop], RcvBuffer+1, 4) == 0)
                         {
                             bMsg=true;
@@ -372,7 +366,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             // size message is int -> uint16_t buffer size
 
                             char destination_call[20];
-                            sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+                            snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
 
                             if(msg_type_b_lora == 0x3A)    // text message store&forward
                             {

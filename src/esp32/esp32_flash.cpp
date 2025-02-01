@@ -35,9 +35,9 @@ void init_flash(void)
     meshcom_settings.node_press = preferences.getFloat("node_press", 0.0);
 
     strVar = preferences.getString("node_ssid", "none");
-    sprintf(meshcom_settings.node_ssid, "%s", strVar.c_str());
+    sprintf(meshcom_settings.node_ossid, "%s", strVar.c_str());
     strVar = preferences.getString("node_pwd", "none");
-    sprintf(meshcom_settings.node_pwd, "%s", strVar.c_str());
+    sprintf(meshcom_settings.node_opwd, "%s", strVar.c_str());
 
     meshcom_settings.node_hamnet_only = preferences.getInt("node_honly", 0);
 
@@ -152,6 +152,11 @@ void init_flash(void)
 
     strVar = preferences.getString("node_webpwd");
     sprintf(meshcom_settings.node_webpwd, "%s", strVar.c_str());
+
+    strVar = preferences.getString("node_lssid", "none");
+    sprintf(meshcom_settings.node_ssid, "%s", strVar.c_str());
+    strVar = preferences.getString("node_lpwd", "none");
+    sprintf(meshcom_settings.node_pwd, "%s", strVar.c_str());
 }
 
 void save_settings(void)
@@ -180,9 +185,9 @@ void save_settings(void)
     preferences.putFloat("node_hum", meshcom_settings.node_hum);
     preferences.putFloat("node_press", meshcom_settings.node_press);
 
-    strVar = meshcom_settings.node_ssid;
+    strVar = meshcom_settings.node_ossid;
     preferences.putString("node_ssid", strVar); 
-    strVar = meshcom_settings.node_pwd;
+    strVar = meshcom_settings.node_opwd;
     preferences.putString("node_pwd", strVar); 
 
     preferences.putInt("node_honly", meshcom_settings.node_hamnet_only);
@@ -298,6 +303,11 @@ void save_settings(void)
 
     strVar = meshcom_settings.node_webpwd;
     preferences.putString("node_webpwd", strVar); 
+
+    strVar = meshcom_settings.node_ssid;
+    preferences.putString("node_lssid", strVar); 
+    strVar = meshcom_settings.node_pwd;
+    preferences.putString("node_lpwd", strVar); 
 
     preferences.end();
 
