@@ -143,24 +143,34 @@ uint8_t iPhoneState=0;
 
 
 class MyServerCallbacks: public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer)
+    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override 
     {
         deviceConnected = true;
         config_to_phone_prepare = true;
+        
+        Serial.printf("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
+        /**
+         *  We can use the connection handle here to ask for different connection parameters.
+         *  Args: connection handle, min connection interval, max connection interval
+         *  latency, supervision timeout.
+         *  Units; Min/Max Intervals: 1.25 millisecond increments.
+         *  Latency: number of intervals allowed to skip.
+         *  Timeout: 10 millisecond increments.
+         */
+        //pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
         // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
         commandAction((char*)"--conffin", true);
-        Serial.println("BLE connected");
     };
 
-    void onDisconnect(NimBLEServer* pServer)
+    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
     {
         deviceConnected = false;
-        Serial.println("BLE disconnected");
+        Serial.printf("BLE disconnected. Reason: %i\n", reason);
+        //NimBLEDevice::startAdvertising();
     }
 
-	/***************** New - Security handled here ********************
-	****** Note: these are the same return values as defaults ********/
-	uint32_t onPassKeyRequest()
+	/********************* Security handled here *********************/
+	uint32_t onPassKeyDisplay() override 
     {
         if(meshcom_settings.bt_code > 0 && meshcom_settings.bt_code <= 999999)
         {
@@ -172,26 +182,45 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
 		return PIN;
 	}
 	/*******************************************************************/
-};
 
-class MyCallbacks: public NimBLECharacteristicCallbacks 
-{
-    void onWrite(NimBLECharacteristic *pCharacteristic)
-    {
-        // Forward data from Mobile to our peripheral
+    void onAuthenticationComplete(NimBLEConnInfo& connInfo) override {
+        /** Check that encryption was successful, if not we disconnect the client */
+        if (!connInfo.isEncrypted()) {
+            NimBLEDevice::getServer()->disconnect(connInfo.getConnHandle());
+            Serial.printf("Encrypt connection failed - disconnecting client\n");
+            return;
+        }
+
+        Serial.printf("Secured connection to: %s\n", connInfo.getAddress().toString().c_str());
+    }
+} serverCallbacks;
+
+
+/** Handler class for characteristic actions */
+class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
+    /*void onRead(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
+        Serial.printf("%s : onRead(), value: %s\n",
+               pCharacteristic->getUUID().toString().c_str(),
+               pCharacteristic->getValue().c_str());
+    }*/
+
+    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
+
         uint8_t conf_data[MAX_MSG_LEN_PHONE] = {0};
         size_t conf_length=0;
-
-        conf_length = pCharacteristic->getDataLength(); // getLength();
+        conf_length = pCharacteristic->getLength(); // getLength();
 
         if (conf_length <= 0)
             return;
-
+        
         memcpy(conf_data, pCharacteristic->getValue() , conf_length);
 
-    	readPhoneCommand(conf_data);
-    };
-};
+        readPhoneCommand(conf_data);
+    }
+
+} chrCallbacks;
+
+
 
 #ifdef SX127X
 // RadioModule SX1278 
@@ -930,16 +959,16 @@ void esp32setup()
 
     Serial.printf("[INIT]...BLE-Device started with BLE-Name <%s>\n", strBLEName.c_str());
 
-    NimBLEDevice::init("NimBLE");
+    NimBLEDevice::init(strBLEName);
 
-    Serial.printf("[INIT]...NIM<%s>\n", NimBLEDevice::toString().c_str());
+    Serial.printf("[INIT]...BLE Devicename <%s>\n", NimBLEDevice::toString().c_str());
     
-    NimBLEDevice::setDeviceName(strBLEName);
+    //NimBLEDevice::setDeviceName(strBLEName);
 
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9); // +9db ESP_PWR_LVL_P9
-
-    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setPower(9); // +9dbm
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
+    NimBLEDevice::setSecurityAuth(true, true, true);
+    
     if(meshcom_settings.bt_code > 0 && meshcom_settings.bt_code <= 999999)
         NimBLEDevice::setSecurityPasskey(meshcom_settings.bt_code);
     else
@@ -951,8 +980,8 @@ void esp32setup()
 
     // Create the BLE Server
     pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new MyServerCallbacks());
-    pServer->advertiseOnDisconnect(false);
+    pServer->setCallbacks(&serverCallbacks);
+    //pServer->advertiseOnDisconnect(false);
 
     // Create the BLE Service
     pService = pServer->createService(SERVICE_UUID);
@@ -988,7 +1017,7 @@ void esp32setup()
 #endif
                         NIMBLE_PROPERTY::NOTIFY );
 
-    pRxCharacteristic->setCallbacks(new MyCallbacks());
+    pRxCharacteristic->setCallbacks(&chrCallbacks);
 
     // Start the service
     pService->start();
@@ -1001,10 +1030,10 @@ void esp32setup()
     pAdvertising->addServiceUUID(SERVICE_UUID);
 
     if(bBLElong)
-        pAdvertising->setScanResponse(true);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
+        pAdvertising->enableScanResponse(true);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
     else
-        pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
-
+        pAdvertising->enableScanResponse(false);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
+    
     pAdvertising->start(0);
  
     Serial.println("[INIT]...Waiting a client connection to notify...");
@@ -1050,6 +1079,7 @@ void esp32setup()
 
 }
 
+// BLE TX Function -> Node to Client
 void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 {
     if(bBLEDEBUG)
@@ -1058,6 +1088,8 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
     pTxCharacteristic->setValue(confBuff, conf_len);
     pTxCharacteristic->notify();
 }
+
+
 
 void esp32loop()
 {
