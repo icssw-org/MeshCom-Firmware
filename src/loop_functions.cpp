@@ -1067,10 +1067,15 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     String strPath = aprsmsg.msg_source_path;
     // DM
-    if(aprsmsg.msg_destination_path != "*")
+    if(CheckGroup(aprsmsg.msg_destination_path))
     {
-        strPath = "DM <" + aprsmsg.msg_source_call + ">";
+        strPath = "GM" + aprsmsg.msg_destination_path + " <" + aprsmsg.msg_source_call + ">";
     }
+    else
+        if(aprsmsg.msg_destination_path != "*")
+        {
+            strPath = "DM <" + aprsmsg.msg_source_call + ">";
+        }
 
     if(strPath.length() < (20-4))
         snprintf(msg_text, sizeof(msg_text), "%s <%i>", strPath.c_str(), rssi);
