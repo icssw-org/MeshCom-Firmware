@@ -118,8 +118,8 @@ void sendConfigToPhone ()
 
 	// WiFissid
 	confBuff[ssid_offset] = ssid_len;
-	meshcom_settings.node_ssid[39]=0x00;
-	if(strlen(meshcom_settings.node_ssid) < 1 || strlen(meshcom_settings.node_ssid) > 40)
+	meshcom_settings.node_ssid[32]=0x00;
+	if(strlen(meshcom_settings.node_ssid) < 1 || strlen(meshcom_settings.node_ssid) > 32)
 	{
 		strcpy(meshcom_settings.node_ssid, "none");
         save_settings();
@@ -128,8 +128,8 @@ void sendConfigToPhone ()
 	
 	// WiFipasswword
 	confBuff[pwd_offset] = pwd_len;
-	meshcom_settings.node_pwd[39]=0x00;
-	if(strlen(meshcom_settings.node_pwd) < 1 || strlen(meshcom_settings.node_pwd) > 40)
+	meshcom_settings.node_pwd[63]=0x00;
+	if(strlen(meshcom_settings.node_pwd) < 1 || strlen(meshcom_settings.node_pwd) > 63)
 	{
 		strcpy(meshcom_settings.node_pwd, "none");
         save_settings();

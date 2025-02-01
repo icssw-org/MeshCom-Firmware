@@ -464,6 +464,10 @@ void esp32setup()
 	init_batt();
 
 
+    #ifndef ENABLE_SOFTSER
+        bSOFTSERON=false;
+    #endif
+
     global_batt = 4125.0;
 
     posinfo_interval = POSINFO_INTERVAL;

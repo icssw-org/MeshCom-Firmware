@@ -1007,40 +1007,33 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     else
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
-        if(!bRTCON)
-        {
-            int Year=2000;
-            int Month=1;
-            int Day=1;
-            int Hour=0;
-            int Minute=0;
-            int Second=0;
-
-            //sscanf(csetTime+5, "%d-%d-%d %d:%d:%d", &Year, &Month, &Day, &Hour, &Minute, &Second);
-
-            // {CET}2025-01-31 07:47:40
-            Year = aprsmsg.msg_payload.substring(5, 9).toInt();
-            Month = aprsmsg.msg_payload.substring(10, 12).toInt();
-            Day = aprsmsg.msg_payload.substring(13, 15).toInt();
-            Hour = aprsmsg.msg_payload.substring(16, 18).toInt();
-            Minute = aprsmsg.msg_payload.substring(19, 21).toInt();
-            Second = aprsmsg.msg_payload.substring(22, 24).toInt();
-        
-            if(bDisplayInfo)
+        #ifndef BOARD_RAK4630
+            if(!bRTCON)
             {
-                Serial.printf("{CET} %i.%02i.%02i %02i:%02i:%02i\n", Year, Month, Day, Hour, Minute, Second);
+                uint16_t Year=2000;
+                uint16_t Month=1;
+                uint16_t Day=1;
+                uint16_t Hour=0;
+                uint16_t Minute=0;
+                uint16_t Second=0;
+
+                // {CET}2025-01-31 07:47:40
+                Year = (uint16_t)aprsmsg.msg_payload.substring(5, 9).toInt();
+                Month = (uint16_t)aprsmsg.msg_payload.substring(10, 12).toInt();
+                Day = (uint16_t)aprsmsg.msg_payload.substring(13, 15).toInt();
+                Hour = (uint16_t)aprsmsg.msg_payload.substring(16, 18).toInt();
+                Minute = (uint16_t)aprsmsg.msg_payload.substring(19, 21).toInt();
+                Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
+            
+                if(bDisplayInfo)
+                {
+                    Serial.printf("{CET} %i.%02u.%02u %02u:%02u:%02u\n", Year, Month, Day, Hour, Minute, Second);
+                }
+
+                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+
             }
-
-            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-
-            if(bDisplayInfo)
-            {
-                Serial.print(getTimeString());
-                Serial.println(" Time set ");
-            }
-
-            bPosDisplay=true;
-        }
+        #endif
 
         return;
     }
@@ -1514,35 +1507,44 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     if(aprspos.softser3 > 0)
     {
-        unsigned int year;
-        unsigned int month;
-        unsigned int day;
-        unsigned int hour;
-        unsigned int minute;
-        unsigned int second;
+        uint16_t Year;
+        uint16_t Month;
+        uint16_t Day;
+        uint16_t Hour;
+        uint16_t Minute;
+        uint16_t Second;
 
         char ctime_buf[30];
 
         snprintf(ctime_buf, sizeof(ctime_buf), "%s", aprspos.pos_atxt.substring(11, 23).c_str());
 
-        sscanf(ctime_buf, "%02u%02u%02u%02u%02u%02u", &year, &month, &day, &hour, &minute, &second);
+        String strSerTime = ctime_buf;
 
-        year = year + 2000;
+        Year = (uint16_t)strSerTime.substring(0, 2).toInt();
+        Month = (uint16_t)strSerTime.substring(2, 4).toInt();
+        Day = (uint16_t)strSerTime.substring(4, 6).toInt();
+        Hour = (uint16_t)strSerTime.substring(6, 8).toInt();
+        Minute = (uint16_t)strSerTime.substring(8, 10).toInt();
+        Second = (uint16_t)strSerTime.substring(10, 12).toInt();
 
-        meshcom_settings.node_date_year = year;
-        meshcom_settings.node_date_month = month;
-        meshcom_settings.node_date_day = day;
-        meshcom_settings.node_date_hour = hour + meshcom_settings.node_utcoff;
+        //sscanf(ctime_buf, "%02u%02u%02u%02u%02u%02u", &year, &month, &day, &hour, &minute, &second);
+
+        Year = Year + 2000;
+
+        meshcom_settings.node_date_year = Year;
+        meshcom_settings.node_date_month = Month;
+        meshcom_settings.node_date_day = Day;
+        meshcom_settings.node_date_hour = Hour + meshcom_settings.node_utcoff;
         if(meshcom_settings.node_date_hour > 24)
         {
             meshcom_settings.node_date_hour=meshcom_settings.node_date_hour-24;
             meshcom_settings.node_date_day++;
 
         }
-        meshcom_settings.node_date_minute = minute;
-        meshcom_settings.node_date_second = second;
+        meshcom_settings.node_date_minute = Minute;
+        meshcom_settings.node_date_second = Second;
 
-        MyClock.setCurrentTime(meshcom_settings.node_utcoff, year, month, day, hour, minute, second);
+        MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
     }
 
     sendDisplayMainline();

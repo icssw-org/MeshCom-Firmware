@@ -422,6 +422,10 @@ void nrf52setup()
         bEXTUDP=false;
     }
 
+    #ifndef ENABLE_SOFTSER
+        bSOFTSERON=false;
+    #endif
+
     global_batt = 4200.0;
 
     meshcom_settings.node_press = 0.0;
@@ -1400,6 +1404,21 @@ void nrf52loop()
 
     if(bWEBSERVER)
     {
+        if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 30)) < millis()))   // repeat 15 minutes
+        {
+            // restart WEB-Client
+            stopWebserver();
+
+            web_timer = millis();
+
+            #ifndef BOARD_RAK4630
+                if(!meshcom_settings.node_hasIPaddress)
+                    startWIFI();
+            #endif
+        }
+
+        startWebserver();
+
         loopWebserver();
     }
 
