@@ -1046,6 +1046,8 @@ void esp32setup()
                 delay(500);
                 
                 startWebserver();
+        
+                loopWebserver();
             }
 
             if(bEXTUDP)

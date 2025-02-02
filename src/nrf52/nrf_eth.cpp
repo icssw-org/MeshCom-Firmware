@@ -8,8 +8,8 @@
 #include <nrf_eth.h>
 #include <debugconf.h>
 #include <string.h>
-#include <NTPClient.h>
-#include <time.h>
+//#include <NTPClient.h>
+//#include <time.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <command_functions.h>
@@ -18,7 +18,7 @@ EthernetUDP Udp;
 
 //NTP setup
 EthernetUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 7200); // 2h Time offset
+//NTPClient timeClient(ntpUDP, "pool.ntp.org", 7200); // 2h Time offset
 
 // byte macaddr[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEC}; // Set the MAC address, do not repeat in a network.
 uint8_t macaddr[6] = {0};
@@ -37,73 +37,54 @@ String NrfETH::getNodeIP()
  */
 void NrfETH::initethfixIP()
 {
+  if(hasIPaddress)
+    return;
+
   IPAddress ip(192, 168, 100, 100); // Set IP address,dependent on your local network.
   IPAddress dns(8, 8, 8, 8);
   IPAddress gw(192, 168, 100, 1);
   IPAddress subnet(255, 255, 255, 0);
 
   // händische IP Vergabe
-  if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
-  {
-    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
-    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
+  snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
+  snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
+  if(memcmp(meshcom_settings.node_ownip, "44", 2) == 0)
     snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"44.143.0.10");
-    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
-
-    // Set your Static IP address
-    ip.fromString(meshcom_settings.node_ownip);
-    // Set your Gateway IP address
-    gw.fromString(meshcom_settings.node_owngw);
-    // Set your Gateway IP mask
-    subnet.fromString(meshcom_settings.node_ownms);
-
-    IPAddress dns(44, 143, 8, 10);   //optional
-  }
   else
-  {
-    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
-    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", gw[0], gw[1], gw[2], gw[3]);
-    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%i.%i.%i.%i", dns[0], dns[1], dns[3], dns[3]);
-    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%i.%i.%i.%i", subnet[0], subnet[1], subnet[2], subnet[3]);
-  }
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"8.8.8.8");
+  snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
+
+  // Set your Static IP address
+  ip.fromString(meshcom_settings.node_ip);
+  // Set your Gateway IP address
+  gw.fromString(meshcom_settings.node_gw);
+  // Set your Gateway IP mask
+  subnet.fromString(meshcom_settings.node_subnet);
+  // set DNS
+  dns.fromString(meshcom_settings.node_dns);
 
   // init Hardware
   initETH_HW();
-  
+
   // get mac addr
   getMyMac();
 
   Ethernet.begin(macaddr, ip, dns, gw, subnet);
+
+  int iWaitStatus=5;
   
-  // check if HW present and if we have a connected cable -> if so start UDP
-  if (Ethernet.hardwareStatus() == EthernetNoHardware) // Check for Ethernet hardware present.
-  {
-    Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
-
-    hasETHHardware=false;
-
-    return;
-  }
-
-  int iWaitStatus = 5;
-
   while (Ethernet.linkStatus() == LinkOFF)
   {
-    if(iWaitStatus < 5)
-      Serial.printf("ERROR: Ethernet cable is not connected (1/%i).\n", iWaitStatus);
-
-    delay(5000);
-
+    Serial.printf("ERROR: Ethernet cable is not connected (2/%i).\n", iWaitStatus);
+    delay(500);
+    
     iWaitStatus--;
     
     if(iWaitStatus < 1)
-    {
-      hasIPaddress = false;
       return;
-    }
   }
 
-  Serial.print("My IP address: ");
+  Serial.print("\nMy IP address: ");
   Serial.println(ip); // Print your local IP address.
   Serial.print("Default GW address: ");
   Serial.println(gw);
@@ -111,25 +92,25 @@ void NrfETH::initethfixIP()
   Serial.println(dns);
   Serial.print("SNM: ");
   Serial.println(subnet);
+  Serial.println("");
 
   hasIPaddress = true;
 
   last_upd_timer = millis();
 
   // start the UDP service
-  startUDP();
+  startFIXUDP();
 
   //start ntpclient
-  timeClient.begin();
+  //timeClient.begin();
 
-  if (updateNTP() == true) DEBUG_MSG("NTP", "Updated");
+  //if (updateNTP() == true) DEBUG_MSG("NTP", "Updated");
 
   // update phone status
   if (isPhoneReady == 1)
   {
     commandAction((char *)"--wifiset", true);
   }
-
 }
 
 
@@ -143,44 +124,27 @@ void NrfETH::initethDHCP()
   // get mac addr
   getMyMac();
 
-  initethfixIP();
-
   if(!hasETHHardware)
     return;
 
-  if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+  // get DHCP IP config, returns 0 if success
+  if(startETH() == 0)
   {
-      //start ntpclient
-      timeClient.begin();
+    // start the UDP service
+    startUDP();
 
-      //timeClient.setTimeOffset(TIME_OFFSET * 60);
-      if (updateNTP() == true)
-        DEBUG_MSG("NTP", "Updated");
+    //start ntpclient
+    //timeClient.begin();
+
+    //timeClient.setTimeOffset(TIME_OFFSET * 60);
+    //if (updateNTP() == true)
+    //  DEBUG_MSG("NTP", "Updated");
   }
-  else
+  else 
   {
-    // get DHCP IP config, returns 0 if success
-    if(startDHCP() == 0)
-    {
-      // start the UDP service
-      startUDP();
-
-      //start ntpclient
-      timeClient.begin();
-
-      //timeClient.setTimeOffset(TIME_OFFSET * 60);
-      if (updateNTP() == true)
-        DEBUG_MSG("NTP", "Updated");
-    }
-    else 
-    {
-      Serial.println("ERROR: DHCP No Answer");
-      Serial.println("ERROR: Setting to fixed IP config");
-      hasIPaddress = false;
-
-      //go with an fixed IP Address
-      initethfixIP();
-    }
+    Serial.println("ERROR: DHCP No Answer");
+    Serial.println("ERROR: Set to fixed IP!");
+    hasIPaddress = false;
   }
 }
 
@@ -217,7 +181,7 @@ int NrfETH::checkUDP()
 {
   if(Udp.check() < 0)
   {
-    Serial.println("[UDP ERROR] getUDP");
+    Serial.println("[UDP ERROR] checkUDP");
     return -1;
   }
 
@@ -688,6 +652,7 @@ void NrfETH::getMyMac()
 
 /**@brief Method to sync with NTP
  */
+/*
 bool NrfETH::updateNTP()
 {
   if(timeClient.update() == false)
@@ -700,10 +665,12 @@ bool NrfETH::updateNTP()
   //Serial.println(timeClient.getFormattedTime());
   return true;
 }
+*/
 
 
 /**@brief Method to get a String with current time
  */
+/*
 void NrfETH::setFlashfromNtpTime()
 {
   if(timeClient.isTimeSet())
@@ -713,9 +680,11 @@ void NrfETH::setFlashfromNtpTime()
     meshcom_settings.node_date_second = timeClient.getSeconds();
   }
 }
+*/
 
 /**@brief Method to get a String with current time
  */
+/*
 String NrfETH::getNtpTime()
 {
   String currTime = "??:??:??";
@@ -727,9 +696,11 @@ String NrfETH::getNtpTime()
   
   return currTime;
 }
+*/
 
 /**@brief Method to get a unsigned long with current time
  */
+/*
 unsigned long NrfETH::getNtpEpoch()
 {
   if(timeClient.isTimeSet())
@@ -739,6 +710,7 @@ unsigned long NrfETH::getNtpEpoch()
   
   return 0;
 }
+*/
 
 
 /**@brief Method to renew/reset DHCP
@@ -754,7 +726,7 @@ int NrfETH::resetDHCP()
   //initETH_HW();
 
   // renew DHCP config
-  if(startDHCP() == 0)
+  if(startETH() == 0)
   {
     // start UDP Service again
     startUDP();
@@ -790,16 +762,16 @@ void NrfETH::initETH_HW()
 
 /**@brief Initialises the ETH HW
  */
-int NrfETH::startDHCP()
+int NrfETH::startETH()
 {
-  if(!hasIPaddress)
-    return 1;
+  if(hasIPaddress)
+    return 0;
 
-  Serial.println("\nInitialize Ethernet with DHCP."); // start the Ethernet connection.
+  Serial.println("\nInitialize Ethernet"); // start the Ethernet connection.
 
   if (Ethernet.begin(macaddr) == 0)
   {
-    Serial.println("Failed to configure Ethernet using DHCP");
+    Serial.println("Failed to configure Ethernet using FIX/DHCP");
     if (Ethernet.hardwareStatus() == EthernetNoHardware) // Check for Ethernet hardware present.
     {
       Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
@@ -854,7 +826,7 @@ int NrfETH::startDHCP()
   }
   else
   {
-    DEBUG_MSG("ERROR", "DHCP Config failed!");
+    DEBUG_MSG("ERROR", "ETH Config failed!");
   }
     return 1;
 }
@@ -901,8 +873,8 @@ void NrfETH::startUDP()
     //DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.9.72");
     //udp_dest_addr = IPAddress(44, 143, 9, 72);
 
-    DEBUG_MSG("NTP", "Setting Hamnet NTP");
-    timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+    //DEBUG_MSG("NTP", "Setting Hamnet NTP");
+    //timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
   }
   else
   {
@@ -917,4 +889,43 @@ void NrfETH::startUDP()
   Udp.begin(LOCAL_PORT); // Start UDP.
 
   DEBUG_MSG("UDP_ETH", "UDP init successful!");
+
+  last_upd_timer = millis();
+
+}
+
+void NrfETH::startFIXUDP()
+{
+  char sn[20];
+  snprintf(sn, sizeof(sn), "%s", meshcom_settings.node_ownip);
+  s_node_ip=sn;
+
+  if (memcmp(meshcom_settings.node_ip, "44", 2) == 0 || meshcom_settings.node_hamnet_only)
+  {
+    if(bDEBUG)
+      Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
+
+    udp_dest_addr = IPAddress(44, 143, 8, 143);
+
+    // meshCom 4.0 Test-Server
+    //DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.9.72");
+    //udp_dest_addr = IPAddress(44, 143, 9, 72);
+
+    //DEBUG_MSG("NTP", "Setting Hamnet NTP");
+    //timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+  }
+  else
+  {
+    Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
+    //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
+    udp_dest_addr = IPAddress(89, 185, 97, 38);
+  }
+
+  snprintf(sn, sizeof(sn), "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
+  s_node_hostip = sn;
+
+  Udp.begin(LOCAL_PORT); // Start UDP.
+
+  Serial.print("[UDP_ETH]...UDP init successful - Port:");
+  Serial.println(LOCAL_PORT);
 }

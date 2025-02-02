@@ -426,6 +426,18 @@ void nrf52setup()
         bSOFTSERON=false;
     #endif
 
+    // Umstekllung auf langes WIFI Passwort
+    if(strlen(meshcom_settings.node_ossid) > 4 && strlen(meshcom_settings.node_ssid) < 5)
+    {
+        strcpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid);
+        strcpy(meshcom_settings.node_pwd, meshcom_settings.node_opwd);
+
+        memset(meshcom_settings.node_ossid, 0x00, sizeof(meshcom_settings.node_ossid));
+        memset(meshcom_settings.node_opwd, 0x00, sizeof(meshcom_settings.node_opwd));
+
+        save_settings();
+    }
+
     global_batt = 4200.0;
 
     meshcom_settings.node_press = 0.0;
@@ -789,18 +801,32 @@ void nrf52setup()
     {
         //////////////////////////////////////////////////////
         // ETHERNET INIT
-        if(bDEBUG)
-            Serial.println("[init] ETH DHCP init");
-    
-        neth.initethDHCP();
+   
+        if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+        {
+            if(bDEBUG)
+                Serial.println("[init] ETH FIX-IP init");
+
+            neth.initethfixIP();
+        }
+        else
+        {
+            if(bDEBUG)
+                Serial.println("[init] ETH DHCP init");
+
+            neth.initethDHCP();
+        }
 
         if(neth.hasETHHardware)
         {
-            sendHeartbeat();
+            if(bGATEWAY)
+            {
+                sendHeartbeat();
 
-            Serial.println("=====================================");
-            Serial.printf("GATEWAY 4.0 RUNNING %s\n", neth.hasIPaddress?"ETH connect":"ETH no connect");
-            Serial.println("=====================================");
+                Serial.println("=====================================");
+                Serial.printf("GATEWAY 4.0 RUNNING %s\n", neth.hasIPaddress?"ETH connect":"ETH no connect");
+                Serial.println("=====================================");
+            }
 
             if(bWEBSERVER)
             {
@@ -1063,8 +1089,7 @@ void nrf52loop()
         // check if we received a UDP packet
         if (neth.hasIPaddress)
         {
-            if(neth.checkUDP() >= 0)
-                neth.getUDP();
+            neth.getUDP();
 
             sendUDP(); 
         }
@@ -1079,17 +1104,32 @@ void nrf52loop()
         // check HB response (we also check successful sending KEEP. check if they work together!)
         if((neth.last_upd_timer + (MAX_HB_RX_TIME * 1000)) < millis())
         {
-            // avoid TX and UDP 
-            neth.hasIPaddress = false;
-            cmd_counter = 50;
-
-            if(bDEBUG)
+            // avoid TX and UDP
+            if(!neth.hasIPaddress)
             {
-                Serial.print(getTimeString());
-                Serial.println(" [MAIN] initethDHCP");
-            }
+                neth.hasIPaddress = false;
+                cmd_counter = 50;
 
-            neth.initethDHCP();
+                if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+                {
+                    if(bDEBUG)
+                    {
+                        Serial.print(getTimeString());
+                        Serial.println(" [MAIN] initethETH fix-IP");
+                    }
+
+                    neth.initethfixIP();
+                }
+                else
+                {
+                    {
+                        Serial.print(getTimeString());
+                        Serial.println(" [MAIN] initethETH DHCP");
+                    }
+
+                    neth.initethDHCP();
+                }
+            }
         }
         
         // DHCP refresh
@@ -1103,11 +1143,11 @@ void nrf52loop()
                     Serial.print(getTimeString());
                     Serial.println(" [MAIN] checkDHCP");
                 }
-
-                dhcp_timer = millis();
                 
                 neth.checkDHCP();
             }
+
+            dhcp_timer = millis();
         }
     }
 
@@ -1406,20 +1446,27 @@ void nrf52loop()
     {
         if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 30)) < millis()))   // repeat 15 minutes
         {
+            meshcom_settings.node_hasIPaddress = neth.hasIPaddress;
+
             // restart WEB-Client
             stopWebserver();
 
             web_timer = millis();
 
             #ifndef BOARD_RAK4630
-                if(!meshcom_settings.node_hasIPaddress)
-                    startWIFI();
+            if(!meshcom_settings.node_hasIPaddress)
+            startWIFI();
             #endif
+
+            startWebserver();
+
+            loopWebserver(); 
+        }
+        else
+        {
+            loopWebserver(); 
         }
 
-        startWebserver();
-
-        loopWebserver();
     }
 
     //  We are on FreeRTOS, give other tasks a chance to run

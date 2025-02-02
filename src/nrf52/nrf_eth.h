@@ -9,13 +9,15 @@ class NrfETH {
     
     void initETH_HW();
 
-    int startDHCP();
+    int startETH();
 
     int checkDHCP();
 
     int checkUDP();
 
     void startUDP();
+
+    void startFIXUDP();
 
     void initethfixIP();
 
