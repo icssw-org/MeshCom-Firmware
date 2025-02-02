@@ -41,10 +41,17 @@ void wifiConnect() {
   bool bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
 
   Serial.printf("\nNVS Flash Settings:\n");
+  Serial.printf("Callsign: %s\n", meshcom_settings.node_call);
   Serial.printf("Wifi SSID: %s\n", ssid);
   Serial.printf("Webserver: %d\n", bWEBSERVER);
   Serial.printf("Gateway: %d\n", bGATEWAY);
   Serial.printf("WIFI AP: %d\n", bWIFIAP);
+
+  // Set the hostname from the callsign. If the callsign is not set, use the default hostname
+  if(meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
+  {
+    hostname = meshcom_settings.node_call;
+  }
 
 
   // When there is no SSID or WIFI-AP is enabled, start AP
