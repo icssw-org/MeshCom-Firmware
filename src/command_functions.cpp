@@ -1257,6 +1257,13 @@ void commandAction(char *msg_text, bool ble)
 
         snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", msg_text+11);
 
+        if(strcmp(meshcom_settings.node_extern, meshcom_settings.node_ip) == 0)
+        {
+            snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", "");
+            Serial.printf("\nEXTERNAL-IP:%s is same as Own-IP - please set another IP\n", meshcom_settings.node_extern);
+            return;
+        }
+
         save_settings();
 
         return;
@@ -1852,7 +1859,7 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        if(strcmp(meshcom_settings.node_ownms, "none") == 0 || (strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7))
+        if(strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7)
         {
             Serial.println("Auto. Reboot after 15 sec.");
 
@@ -1876,7 +1883,7 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        if(strcmp(meshcom_settings.node_owngw, "none") == 0 || (strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7))
+        if(strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7)
         {
             Serial.println("Auto. Reboot after 15 sec.");
 
@@ -1899,7 +1906,7 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        if(strcmp(meshcom_settings.node_ownms, "none") == 0 || (strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7))
+        if(strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7)
         {
             Serial.println("Auto. Reboot after 15 sec.");
 
@@ -2829,12 +2836,12 @@ void commandAction(char *msg_text, bool ble)
         if(bWIFIAP)
         {
             swdoc["SSID"] = cBLEName;
-            swdoc["PW"] = "";
+            //KBC/KFR swdoc["PW"] = "";
         }
         else
         {
             swdoc["SSID"] = meshcom_settings.node_ssid;
-            swdoc["PW"] = meshcom_settings.node_pwd;
+            //KBC/KFR swdoc["PW"] = meshcom_settings.node_pwd;
         }
         swdoc["IP"] = meshcom_settings.node_ip;
         swdoc["GW"] = meshcom_settings.node_gw;     // IP GW Address
@@ -2975,7 +2982,7 @@ void sendNodeSetting()
     nsetdoc["TYP"] = "SN";
     nsetdoc["GW"] = bGATEWAY;
     nsetdoc["WS"] = bWEBSERVER;
-    nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
+    //KBC/KFR nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc["DISP"] =  bDisplayOff;
     nsetdoc["BTN"] = bButtonCheck;
     nsetdoc["MSH"] = bMESH;
@@ -2988,7 +2995,7 @@ void sendNodeSetting()
     nsetdoc["MCR"] = meshcom_settings.node_cr;
     nsetdoc["MBW"] = meshcom_settings.node_bw;
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
-    nsetdoc["BTCODE"] = meshcom_settings.bt_code;
+    //KBC/KFR nsetdoc["BTCODE"] = meshcom_settings.bt_code;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));

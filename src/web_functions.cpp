@@ -106,13 +106,15 @@ void startWebserver()
         Serial.print(getTimeString());
         Serial.println(" mDNS responder started");
     }
-        
-#endif
 
+    web_server.begin();
+#else
     if(web_server.server_port[1] == 0)
     {
         web_server.begin();
     }
+#endif
+
 
     bweb_server_running = true;
 

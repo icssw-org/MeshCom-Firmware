@@ -75,7 +75,7 @@ void NrfETH::initethfixIP()
   
   while (Ethernet.linkStatus() == LinkOFF)
   {
-    Serial.printf("ERROR: Ethernet cable is not connected (2/%i).\n", iWaitStatus);
+    Serial.printf("ERROR: Ethernet cable is not connected (%i).\n", iWaitStatus);
     delay(500);
     
     iWaitStatus--;
@@ -785,7 +785,7 @@ int NrfETH::startETH()
     
     while (Ethernet.linkStatus() == LinkOFF)
     {
-      Serial.printf("ERROR: Ethernet cable is not connected (2/%i).\n", iWaitStatus);
+      Serial.printf("ERROR: Ethernet cable is not connected (%i).\n", iWaitStatus);
       delay(500);
       
       iWaitStatus--;

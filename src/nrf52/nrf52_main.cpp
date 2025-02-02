@@ -1448,24 +1448,20 @@ void nrf52loop()
         {
             meshcom_settings.node_hasIPaddress = neth.hasIPaddress;
 
-            // restart WEB-Client
-            stopWebserver();
-
             web_timer = millis();
 
             #ifndef BOARD_RAK4630
-            if(!meshcom_settings.node_hasIPaddress)
-            startWIFI();
+                // restart WEB-Client
+                stopWebserver();
+
+                if(!meshcom_settings.node_hasIPaddress)
+                    startWIFI();
             #endif
 
             startWebserver();
+        }
 
-            loopWebserver(); 
-        }
-        else
-        {
-            loopWebserver(); 
-        }
+        loopWebserver(); 
 
     }
 
