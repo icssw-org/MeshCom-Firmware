@@ -48,9 +48,6 @@ bool setupMCU811()
         if(maxMCU811ValideCount > 10)
         {
             Serial.println("[INIT]...MCU-811 not found");
-            bMCU811ON=false;
-            meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FF7; // MCU811 off
-            save_settings();
             return false;
         }
 
@@ -68,8 +65,11 @@ bool setupMCU811()
 
 bool loopMCU811()
 {
-    if(bMCU811ON == false)
+    if(!bMCU811ON)
+    {
+        meshcom_settings.node_co2=0.0;
         return false;
+    }
 
 	Wire.endTransmission(true);
 
@@ -80,9 +80,6 @@ bool loopMCU811()
         if(maxMCU811ValideCount > 10)
         {
             Serial.println("[LOOP]...MCU-811 not available");
-            bMCU811ON=false;
-            meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FF7; // MCU811 off
-            save_settings();
             return false;
         }
 
