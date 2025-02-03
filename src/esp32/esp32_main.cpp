@@ -468,6 +468,18 @@ void esp32setup()
         bSOFTSERON=false;
     #endif
 
+    // Umstekllung auf langes WIFI Passwort
+    if(strlen(meshcom_settings.node_ossid) > 4 && strlen(meshcom_settings.node_ssid) < 5)
+    {
+        strcpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid);
+        strcpy(meshcom_settings.node_pwd, meshcom_settings.node_opwd);
+
+        memset(meshcom_settings.node_ossid, 0x00, sizeof(meshcom_settings.node_ossid));
+        memset(meshcom_settings.node_opwd, 0x00, sizeof(meshcom_settings.node_opwd));
+
+        save_settings();
+    }
+
     global_batt = 4125.0;
 
     posinfo_interval = POSINFO_INTERVAL;
@@ -1494,7 +1506,7 @@ void esp32loop()
         posinfo_timer = millis();
     }
 
-    // heysinfo_interval in Seconds == 2 minutes
+    // heysinfo_interval in Seconds == 15 minutes
     if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
     {
         bHeyFirst = false;

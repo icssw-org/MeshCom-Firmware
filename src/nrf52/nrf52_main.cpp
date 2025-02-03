@@ -1072,8 +1072,8 @@ void nrf52loop()
         }
     }
 
-    // heysinfo_interval in Seconds == 2 minutes
-    if (((heyinfo_timer + (2 * 60 * 1000)) < millis()) || bHeyFirst)
+    // heysinfo_interval in Seconds == 15 minutes
+    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
     {
         bHeyFirst = false;
         
