@@ -1,5 +1,4 @@
 #include "Arduino.h"
-#include "Arduino.h"
 
 #include "loop_functions.h"
 #include "command_functions.h"
@@ -1045,6 +1044,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
 
     bSetDisplay=true;
+
+    // wenn Display ausgeschalten werden bei GATWAYs keine Anzeigen gemaacht
+    if(bDisplayOff && bGATEWAY)
+        return;
 
     if(bDisplayOff)
     {

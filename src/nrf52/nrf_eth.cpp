@@ -7,7 +7,7 @@
 #include <Arduino.h>
 #include <nrf_eth.h>
 #include <debugconf.h>
-#include <string.h>
+//#include <string.h>
 //#include <NTPClient.h>
 //#include <time.h>
 #include <loop_functions.h>
@@ -304,14 +304,20 @@ int NrfETH::getUDP()
 
             if(msg_type_b == 0x3A)
             {
+              if(bDisplayInfo)
+              {
+                printBuffer_aprs((char*)"RX-UDP ", aprsmsg);
+                Serial.println();
+              }
+
               if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
               {
-                  sendDisplayText(aprsmsg, 99, 0);
+                  sendDisplayText(aprsmsg, (int16_t)99, (int8_t)0);
               }
               else
               if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
               {
-                  sendDisplayText(aprsmsg, 99, 0);
+                  sendDisplayText(aprsmsg, (int16_t)99, (int8_t)0);
               }
               else
               if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
@@ -364,6 +370,7 @@ int NrfETH::getUDP()
 
                       bBLELoopOut=false;
                   }
+
                   if(iEnqPos > 0)
                   {
                     iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
@@ -371,11 +378,11 @@ int NrfETH::getUDP()
                   }
 
                   if(iAckPos <= 0)
-                    sendDisplayText(aprsmsg, 99, 0);
+                    sendDisplayText(aprsmsg, (int16_t)99, (int8_t)0);
 
                   aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
 
-                  uint8_t tempRcvBuffer[255];
+                  uint8_t tempRcvBuffer[UDP_TX_BUF_SIZE];
 
                   aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
 
@@ -388,7 +395,8 @@ int NrfETH::getUDP()
                   // DM message for lokal Node 
                   if(iAckId > 0)
                   {
-                    SendAckMessage(source_call, iAckId);
+                    String strSource_call = source_call;
+                    SendAckMessage(strSource_call, iAckId);
                   }
               }
             }
