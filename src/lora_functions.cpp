@@ -1,3 +1,4 @@
+#include "Arduino.h"
 #include "configuration.h"
 
 #ifdef SX127X

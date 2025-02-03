@@ -75,8 +75,12 @@ void startWebserver()
     if(bweb_server_running)
         return;
 
-    if(!meshcom_settings.node_hasIPaddress)
+    if(strlen(meshcom_settings.node_ip) < 7)
+    {
+        Serial.print("[WEB]...no ip set :");
+        Serial.println(meshcom_settings.node_ip);
         return;
+    }
 
 
 #ifdef ESP32
@@ -102,12 +106,18 @@ void startWebserver()
         Serial.print(getTimeString());
         Serial.println(" mDNS responder started");
     }
-        
-#endif
 
     web_server.begin();
+#else
+    if(web_server.server_port[1] == 0)
+    {
+        web_server.begin();
+    }
+#endif
+
 
     bweb_server_running = true;
+
 }
 
 void stopWebserver()
@@ -126,14 +136,18 @@ void loopWebserver()
     if(!bweb_server_running)
         return;
 
-    if(!meshcom_settings.node_hasIPaddress)
+    if(strlen(meshcom_settings.node_ip) < 7)
+    {
+        Serial.print("[WEBLOOP]...no ip set :");
+        Serial.println(meshcom_settings.node_ip);
         return;
+    }
 
     web_client = web_server.available(); // Create a client connection.
 
     // HTML Page formating
     if (web_client)
-    {      
+    {
         // If a new client connects,
         web_client_html(web_client);
     }

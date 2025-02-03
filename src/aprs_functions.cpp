@@ -31,13 +31,14 @@ int CheckGroup(String callsign)
 	{
 		if(callsign.charAt(ic) == 0x00)
 			break;
+
 		if(callsign.charAt(ic) < 0x30 || callsign.charAt(ic) > 0x39)
 			return 0;
 	}
 
 	int ig=callsign.toInt();
 
-	if(ig <= 0 || ig > 9999)
+	if(ig <= 0 || ig > 99999)
 		return 0;
 	
 	return ig;

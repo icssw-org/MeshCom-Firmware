@@ -1,5 +1,4 @@
 #include "Arduino.h"
-#include "Arduino.h"
 
 #include "loop_functions.h"
 #include "command_functions.h"
@@ -1007,33 +1006,31 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     else
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
-        #ifndef BOARD_RAK4630
-            if(!bRTCON)
+        if(!bRTCON)
+        {
+            uint16_t Year=2000;
+            uint16_t Month=1;
+            uint16_t Day=1;
+            uint16_t Hour=0;
+            uint16_t Minute=0;
+            uint16_t Second=0;
+
+            // {CET}2025-01-31 07:47:40
+            Year = (uint16_t)aprsmsg.msg_payload.substring(5, 9).toInt();
+            Month = (uint16_t)aprsmsg.msg_payload.substring(10, 12).toInt();
+            Day = (uint16_t)aprsmsg.msg_payload.substring(13, 15).toInt();
+            Hour = (uint16_t)aprsmsg.msg_payload.substring(16, 18).toInt();
+            Minute = (uint16_t)aprsmsg.msg_payload.substring(19, 21).toInt();
+            Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
+        
+            if(bDisplayInfo)
             {
-                uint16_t Year=2000;
-                uint16_t Month=1;
-                uint16_t Day=1;
-                uint16_t Hour=0;
-                uint16_t Minute=0;
-                uint16_t Second=0;
-
-                // {CET}2025-01-31 07:47:40
-                Year = (uint16_t)aprsmsg.msg_payload.substring(5, 9).toInt();
-                Month = (uint16_t)aprsmsg.msg_payload.substring(10, 12).toInt();
-                Day = (uint16_t)aprsmsg.msg_payload.substring(13, 15).toInt();
-                Hour = (uint16_t)aprsmsg.msg_payload.substring(16, 18).toInt();
-                Minute = (uint16_t)aprsmsg.msg_payload.substring(19, 21).toInt();
-                Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
-            
-                if(bDisplayInfo)
-                {
-                    Serial.printf("{CET} %i.%02u.%02u %02u:%02u:%02u\n", Year, Month, Day, Hour, Minute, Second);
-                }
-
-                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-
+                Serial.printf("{CET} %i.%02u.%02u %02u:%02u:%02u\n", Year, Month, Day, Hour, Minute, Second);
             }
-        #endif
+
+            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+
+        }
 
         return;
     }
@@ -1047,6 +1044,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
 
     bSetDisplay=true;
+
+    // wenn Display ausgeschalten werden bei GATWAYs keine Anzeigen gemaacht
+    if(bDisplayOff && bGATEWAY)
+        return;
 
     if(bDisplayOff)
     {
