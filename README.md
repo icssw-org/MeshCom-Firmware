@@ -113,6 +113,8 @@ MeshCom 4.0 verwendet für die Payload-Daten das AX.25 Protokoll, wie es für AP
 - 12 TTGO T-Beam ESP32 SX1278 TBEAM-AXP2101
 - 39 Ebyte Lora E22 ESP32 SX1278 EBYTE-E22
 - 43 WiFi LoRa 32 v3 ESP32-S3 SX1262 HELTEC-V3 V3
+- 44 Heltec E290
+- 45 TTGO T-Beam ESP32 SX1268 T-BEAM-1268 1.2 SX1262
 
 ### MeshCom LoRa modulations index
 
@@ -138,19 +140,35 @@ Usually it is done via the upload button in VSCode directly.
 Otherwise if not already installed, install a recent python version. Then you need to get the esptool via Pip: `pip install esptool` <br/>
 - The firmware.bin, bootloader.bin and partition.bin file is written after compiling to the hidden `.pio/build` directory of the MeshCom-Firmware repo directory.<br/>
 
-If you only update the firmware, you only want the corresponding file to flash.<br> Adresses where to flash each one of the files:<br/>
+If you only update the firmware, you only want the corresponding file to flash.<br> Adresses where to flash each one of the files on an ESP32:<br/>
 
 | Address | File |
 | --- | ----------- |
 | 0x1000 | bootloader.bin |
 | 0x8000 | partitions.bin |
-| 0x10000 | firmware.bin |
+| 0x10000 | safeboot.bin |
+| 0xC0000 | firmware.bin |
 
-Mac: `python esptool.py -p /dev/tty.usbserial-<NUMBER> write_flash 0x10000 <PATH-TO-BIN-FILE>/firmware.bin`<br/>
+Mac: `python esptool.py -p /dev/tty.usbserial-<NUMBER> write_flash 0x1000 <PATH-TO-BIN-FILE>/bootloader.bin 0x8000 <PATH-TO-BIN-FILE>/partitions.bin 0x10000 <PATH-TO-BIN-FILE>/safeboot-s3.bin 0xC0000 <PATH-TO-BIN-FILE>/firmware.bin `<br/>
+
+For an ESP-S3 like the Heltec V3, E290, etc:
+
+| Address | File |
+| --- | ----------- |
+| 0x0000 | bootloader.bin |
+| 0x8000 | partitions.bin |
+| 0x10000 | safeboot-s3.bin |
+| 0xC0000 | firmware.bin |
+
+Mac: `python esptool.py -p /dev/tty.usbserial-<NUMBER> write_flash 0x0000 <PATH-TO-BIN-FILE>/bootloader.bin 0x8000 <PATH-TO-BIN-FILE>/partitions.bin 0x10000 <PATH-TO-BIN-FILE>/safeboot-s3.bin 0xC0000 <PATH-TO-BIN-FILE>/firmware.bin `<br/>
 Linux: same but serial device under `/dev` can be `ttyUSB0` or similar.<br/>
 Windows: serial device is usually some COM<br/>
 Ready build firmware can also be flashed via the online tool (Chrome, Edge, Opera):<br/>
 https://oe1kfr.com/esptool/<br/>
+
+### OTA-Update:
+The safeboot.bin or safeboot-s3.bin contains the factory image which holds the OTA-Update firmware. To update via OTA after you have initially flashed the board, you can either enter the command `--ota-update` on the serial console or hit the OTA-Update Button in the webserver or in the phone app. The node then boots into the ota-firmware. If you had already configured your wifi credentials and had a connection to your wifi router, the node will try to connect again to that. Open the website via `<YOUR-NodeCALLSIGN>.local` or via its IP address. If there was no wifi configured upfront, the node then activates the AP mode and you can find a WiFi AP named `MeshCom-OTA` and the website of the OTA can either be accessed via the IP address: `192.168.4.1` or via `MeshCom-OTA.local`<br>
+If the upload fails it will always fall back to the OTA firmware.
 
 #### Erasing the NVS: 
 If you want to wipe the settings stored on the node:<br/>

@@ -109,11 +109,14 @@ BMx280Wire bmx280(0x00);
 
 void setupBMX280(bool bNewStart)
 {
+	if(!bBMPON && !bBMEON)
+		return;
+		
 	if(bWXDEBUG)	
 		Serial.printf("bBMPON:%i bBMEON:%i\n", bBMPON, bBMEON);
 
 	// Don't mix BME280 or BMP280 and BME680 they share same addresses
-	if(bBME680ON)
+	if(bBME680ON && (bBMPON || bBMEON))
 	{
 		Serial.println("[INIT]...BME680 and BMx280 can't be used together!");
 		return; 
