@@ -9,7 +9,7 @@ class NrfETH {
     
     void initETH_HW();
 
-    int startDHCP();
+    int startETH();
 
     int checkDHCP();
 
@@ -17,7 +17,9 @@ class NrfETH {
 
     void startUDP();
 
-    void initethfixIP(bool bDisplay);
+    void startFIXUDP();
+
+    void initethfixIP();
 
     void initethDHCP();
 

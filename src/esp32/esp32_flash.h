@@ -25,8 +25,8 @@ struct s_meshcom_settings
 	char  node_symid = '/';
 	char  node_symcd = '#';
 
-	char node_ssid[40] = {0};
-	char node_pwd[40] = {0};
+	char node_ossid[40] = {0};
+	char node_opwd[40] = {0};
 
 	int node_date_year = 0;
 	int node_date_month = 0;
@@ -111,6 +111,9 @@ struct s_meshcom_settings
 	char node_name[20] = {0};
 
 	char node_webpwd[20] = {0};
+
+	char node_ssid[33] = {0};
+	char node_pwd[64] = {0};
 
 	// nicht im Flash
 	int node_press_alt = 0;

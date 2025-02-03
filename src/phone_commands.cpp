@@ -118,8 +118,8 @@ void sendConfigToPhone ()
 
 	// WiFissid
 	confBuff[ssid_offset] = ssid_len;
-	meshcom_settings.node_ssid[39]=0x00;
-	if(strlen(meshcom_settings.node_ssid) < 1 || strlen(meshcom_settings.node_ssid) > 40)
+	meshcom_settings.node_ssid[32]=0x00;
+	if(strlen(meshcom_settings.node_ssid) < 1 || strlen(meshcom_settings.node_ssid) > 32)
 	{
 		strcpy(meshcom_settings.node_ssid, "none");
         save_settings();
@@ -128,8 +128,8 @@ void sendConfigToPhone ()
 	
 	// WiFipasswword
 	confBuff[pwd_offset] = pwd_len;
-	meshcom_settings.node_pwd[39]=0x00;
-	if(strlen(meshcom_settings.node_pwd) < 1 || strlen(meshcom_settings.node_pwd) > 40)
+	meshcom_settings.node_pwd[63]=0x00;
+	if(strlen(meshcom_settings.node_pwd) < 1 || strlen(meshcom_settings.node_pwd) > 63)
 	{
 		strcpy(meshcom_settings.node_pwd, "none");
         save_settings();
@@ -283,7 +283,12 @@ void sendToPhone()
 			toPhoneRead = 0;
 
 		if(bBLEDEBUG)
-			Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7); //TODO
+		{
+			if(toPhoneBuff[0] == ':' || toPhoneBuff[0] == '!' || toPhoneBuff[0] == '@')
+				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7);
+			else
+				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff);
+		}
     }
     
     ble_busy_flag = false;
@@ -342,7 +347,12 @@ void sendComToPhone()
 			ComToPhoneRead = 0;
 
 		if(bBLEDEBUG)
-			Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7);
+		{
+			if(ComToPhoneBuff[0] == ':' || ComToPhoneBuff[0] == '!' || ComToPhoneBuff[0] == '@')
+				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7);
+			else
+				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff);
+		}
     }
     
     ble_busy_flag = false;

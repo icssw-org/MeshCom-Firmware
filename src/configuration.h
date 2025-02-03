@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.34"
-#define SOURCE_VERSION_SUB "l"
+#define SOURCE_VERSION_SUB "n"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -267,6 +267,7 @@ definitions
 #define UDP_MSG_INDICATOR_LEN 4            // the first n bytes to recognize which incoming message we have (GATE, CONF)
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
 #define POSINFO_INTERVAL 30 * 60           // POSINFO interval in seconds default 30 minutes
+#define HEYINFO_INTERVAL 15 * 60           // POSINFO interval in seconds default 5 minutes
 #define GPS_REFRESH_INTERVAL 10            // GPS Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds

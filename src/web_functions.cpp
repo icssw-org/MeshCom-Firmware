@@ -57,6 +57,7 @@ int idx_text_call_end=0;
 int idx_text_end=0;
 
 char message_text[200];
+char web_last_message_sent[200];
 
 int web_page_state = 0;
 
@@ -74,8 +75,12 @@ void startWebserver()
     if(bweb_server_running)
         return;
 
-    if(!meshcom_settings.node_hasIPaddress)
+    if(strlen(meshcom_settings.node_ip) < 7)
+    {
+        Serial.print("[WEB]...no ip set :");
+        Serial.println(meshcom_settings.node_ip);
         return;
+    }
 
 
 #ifdef ESP32
@@ -101,12 +106,18 @@ void startWebserver()
         Serial.print(getTimeString());
         Serial.println(" mDNS responder started");
     }
-        
-#endif
 
     web_server.begin();
+#else
+    if(web_server.server_port[1] == 0)
+    {
+        web_server.begin();
+    }
+#endif
+
 
     bweb_server_running = true;
+
 }
 
 void stopWebserver()
@@ -125,14 +136,18 @@ void loopWebserver()
     if(!bweb_server_running)
         return;
 
-    if(!meshcom_settings.node_hasIPaddress)
+    if(strlen(meshcom_settings.node_ip) < 7)
+    {
+        Serial.print("[WEBLOOP]...no ip set :");
+        Serial.println(meshcom_settings.node_ip);
         return;
+    }
 
     web_client = web_server.available(); // Create a client connection.
 
     // HTML Page formating
     if (web_client)
-    {      
+    {
         // If a new client connects,
         web_client_html(web_client);
     }
@@ -151,7 +166,7 @@ void loopWebserver()
 
     char c_web_ip_now[20];
 
-    sprintf(c_web_ip_now, "%i.%i.%i.%i", web_ip_now[0], web_ip_now[1], web_ip_now[2], web_ip_now[3]);
+    snprintf(c_web_ip_now, sizeof(c_web_ip_now), "%i.%i.%i.%i", web_ip_now[0], web_ip_now[1], web_ip_now[2], web_ip_now[3]);
 
     if(bDEBUG)
         Serial.println(web_ip_now);
@@ -193,9 +208,9 @@ void loopWebserver()
             if(strcmp(strGetPassword.c_str(), meshcom_settings.node_webpwd) == 0)
             {
                 Serial.print(getTimeString());
-                Serial.printf(" WEBServer Password OK IP:<%s>\n", c_web_ip_now);
+                Serial.printf(" WEBServer Password OK IP:<%s pos:%i>\n", c_web_ip_now, inext_free);
 
-                sprintf(web_ip[inext_free], "%s", c_web_ip_now);
+                snprintf(web_ip[inext_free], sizeof(web_ip[inext_free]), "%s", c_web_ip_now);
                 web_ip_passwd_time[inext_free] = millis();
                 bPasswordOk = true;
                 iwebid=inext_free;
@@ -431,6 +446,16 @@ String work_webpage(bool bget_password, int webid)
                     commandAction((char*)"--softser off", bPhoneReady);
                 }
                 else
+                if (web_header.indexOf("GET /nomsgall/on") >= 0)
+                {
+                    commandAction((char*)"--nomsgall on", bPhoneReady);
+                }
+                else
+                if (web_header.indexOf("GET /nomsgall/off") >= 0)
+                {
+                    commandAction((char*)"--nomsgall off", bPhoneReady);
+                }
+                else
                 if (web_header.indexOf("GET /volt/on") >= 0)
                 {
                     commandAction((char*)"--volt", bPhoneReady);
@@ -445,7 +470,7 @@ String work_webpage(bool bget_password, int webid)
                 {
                     int ipos=web_header.indexOf("GET /mcp/on/");
                     char cBefehl[30];
-                    sprintf(cBefehl, "--setout %s on", web_header.substring(ipos+12, ipos+14).c_str());
+                    snprintf(cBefehl, sizeof(cBefehl), "--setout %s on", web_header.substring(ipos+12, ipos+14).c_str());
                     commandAction(cBefehl, bPhoneReady);
                 }
                 else
@@ -453,7 +478,7 @@ String work_webpage(bool bget_password, int webid)
                 {
                     int ipos=web_header.indexOf("GET /mcp/off/");
                     char cBefehl[30];
-                    sprintf(cBefehl, "--setout %s off", web_header.substring(ipos+13, ipos+15).c_str());
+                    snprintf(cBefehl, sizeof(cBefehl), "--setout %s off", web_header.substring(ipos+13, ipos+15).c_str());
                     commandAction(cBefehl, bPhoneReady);
                 }
                 else
@@ -461,7 +486,7 @@ String work_webpage(bool bget_password, int webid)
                 {
                     int ipos=web_header.indexOf("GET /mcptype/IN/");
                     char cBefehl[30];
-                    sprintf(cBefehl, "--setio %s OUT", web_header.substring(ipos+16, ipos+18).c_str());
+                    snprintf(cBefehl, sizeof(cBefehl), "--setio %s OUT", web_header.substring(ipos+16, ipos+18).c_str());
                     commandAction(cBefehl, bPhoneReady);
                 }
                 else
@@ -470,19 +495,23 @@ String work_webpage(bool bget_password, int webid)
                     int ipos=web_header.indexOf("GET /mcptype/OUT/");
                     char cBefehl[30];
 
-                    sprintf(cBefehl, "--setout %s OFF", web_header.substring(ipos+17, ipos+19).c_str());
+                    snprintf(cBefehl, sizeof(cBefehl), "--setout %s OFF", web_header.substring(ipos+17, ipos+19).c_str());
                     commandAction(cBefehl, bPhoneReady);
 
-                    sprintf(cBefehl, "--setio %s IN", web_header.substring(ipos+17, ipos+19).c_str());
+                    snprintf(cBefehl, sizeof(cBefehl), "--setio %s IN", web_header.substring(ipos+17, ipos+19).c_str());
                     commandAction(cBefehl, bPhoneReady);
                 }
                 else
                 if (web_header.indexOf("GET /sendpos") >= 0)
                 {
+                    int iwi=web_header.indexOf("GET /sendpos");
+
                     if(bDisplayTrack)
                         commandAction((char*)"--sendpos", bPhoneReady);
                     else
                         commandAction((char*)"--sendtrack", bPhoneReady);
+
+                    web_page_state=web_header.substring(iwi+12, iwi+13).toInt();
                 }
                 else
                 if (web_header.indexOf("GET /info") >= 0)
@@ -619,9 +648,9 @@ String work_webpage(bool bget_password, int webid)
                         if(message.length() > 0)
                         {
                             if(message_call.length() > 0)
-                                sprintf(message_text, ":{%s}%s", message_call.c_str(), message.c_str());
+                                snprintf(message_text, sizeof(message_text), ":{%s}%s", message_call.c_str(), message.c_str());
                             else
-                                sprintf(message_text, ":%s", message.c_str());
+                                snprintf(message_text, sizeof(message_text), ":%s", message.c_str());
                             
                             
                             int iml=strlen(message_text);
@@ -631,11 +660,17 @@ String work_webpage(bool bget_password, int webid)
                                 message_text[iml]=0x00;
                             }
 
-                            hasMsgFromPhone=true;
+                            // text muss unterschiedlich sein
+                            if(memcmp(web_last_message_sent, message_text, iml) != 0 && iml > 0)
+                            {
+                                hasMsgFromPhone=true;
 
-                            sendMessage(message_text, iml);
+                                sendMessage(message_text, iml);
 
-                            hasMsgFromPhone=false;
+                                memcpy(web_last_message_sent, message_text, iml);
+
+                                hasMsgFromPhone=false;
+                            }
                         }
 
                         message_call="";
@@ -674,7 +709,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--setcall %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--setcall %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -690,7 +725,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--onewire gpio %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--onewire gpio %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -706,7 +741,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--button gpio %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--button gpio %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -722,7 +757,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--maxv %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--maxv %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -732,7 +767,7 @@ String work_webpage(bool bget_password, int webid)
                     String strListen = web_header.substring(web_header.indexOf("?listento0=")+9, web_header.indexOf(" HTTP"));
                     strListen += "&";
                     char cListen[80];
-                    sprintf(cListen, "%s", strListen.c_str());
+                    snprintf(cListen, sizeof(cListen), "%s", strListen.c_str());
 
                     // Read each command pair 
                     char* command = strtok(cListen, "&");
@@ -750,6 +785,9 @@ String work_webpage(bool bget_password, int webid)
                             ++separator;
                             int lgroup = atoi(separator);
 
+                            if(lgroup < 0 || lgroup > 99999)
+                                lgroup = 0;
+
                             meshcom_settings.node_gcb[lindex] = lgroup;
                         }
                         
@@ -765,7 +803,7 @@ String work_webpage(bool bget_password, int webid)
                     String strListen = web_header.substring(web_header.indexOf("?ss0=")+3, web_header.indexOf(" HTTP"));
                     strListen += "&";
                     char cListen[80];
-                    sprintf(cListen, "%s", strListen.c_str());
+                    snprintf(cListen, sizeof(cListen), "%s", strListen.c_str());
 
                     // Read each command pair 
                     char* command = strtok(cListen, "&");
@@ -813,7 +851,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--softser send %s\r", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--softser send %s\r", message.c_str());
 
                     commandAction(message_text, bPhoneReady);
                 }
@@ -829,7 +867,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--passwd %s\r", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--passwd %s\r", message.c_str());
 
                     commandAction(message_text, bPhoneReady);
                 }
@@ -845,7 +883,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--txpower %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--txpower %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -861,7 +899,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--utcoff %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--utcoff %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -891,7 +929,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--setname %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--setname %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -907,7 +945,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--atxt %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--atxt %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -926,7 +964,7 @@ String work_webpage(bool bget_password, int webid)
                     if(iend > 0 && iend > idx_text)
                         message = hex2ascii(web_header.substring(idx_text, iend));
 
-                    sprintf(message_text, "--setlat %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--setlat %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
 
@@ -946,7 +984,7 @@ String work_webpage(bool bget_password, int webid)
                         else
                             message = hex2ascii(web_header.substring(idx_text, iend));
 
-                        sprintf(message_text, "--setlon %s", message.c_str());
+                        snprintf(message_text, sizeof(message_text), "--setlon %s", message.c_str());
 
                         commandAction(message_text, bPhoneReady);
                     }
@@ -962,7 +1000,7 @@ String work_webpage(bool bget_password, int webid)
                         else
                             message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                        sprintf(message_text, "--setalt %s", message.c_str());
+                        snprintf(message_text, sizeof(message_text), "--setalt %s", message.c_str());
 
                         commandAction(message_text, bPhoneReady);
                     }
@@ -979,7 +1017,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--setctry %s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--setctry %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -995,7 +1033,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--symid %-1.1s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--symid %-1.1s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -1011,7 +1049,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "--symcd %-1.1s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "--symcd %-1.1s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -1028,7 +1066,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(message_text, "%s", message.c_str());
+                    snprintf(message_text, sizeof(message_text), "%s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -1051,7 +1089,7 @@ String work_webpage(bool bget_password, int webid)
                     else
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
-                    sprintf(meshcom_settings.node_mcp17t[idx], "%s", message.c_str());
+                    snprintf(meshcom_settings.node_mcp17t[idx], sizeof(meshcom_settings.node_mcp17t[idx]), "%s", message.c_str());
 
                     save_settings();
                 }
@@ -1310,12 +1348,12 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<tr><td>\n");
                     web_client.println("<label for=\"fname\"><b>LISTEN-TO:</b></label>");
                     web_client.println("</td><td>\n");
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento0\" name=\"listento0\">\n", meshcom_settings.node_gcb[0]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento1\" name=\"1\">\n", meshcom_settings.node_gcb[1]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento2\" name=\"2\">\n", meshcom_settings.node_gcb[2]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento3\" name=\"3\">\n", meshcom_settings.node_gcb[3]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento4\" name=\"4\">\n", meshcom_settings.node_gcb[4]);
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"4\" id=\"listento5\" name=\"5\">\n", meshcom_settings.node_gcb[5]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento0\" name=\"listento0\">\n", meshcom_settings.node_gcb[0]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento1\" name=\"1\">\n", meshcom_settings.node_gcb[1]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento2\" name=\"2\">\n", meshcom_settings.node_gcb[2]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento3\" name=\"3\">\n", meshcom_settings.node_gcb[3]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento4\" name=\"4\">\n", meshcom_settings.node_gcb[4]);
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento5\" name=\"5\">\n", meshcom_settings.node_gcb[5]);
                     web_client.println("<input type=\"submit\" value=\"send\">");
                     web_client.println("</td></tr>\n");
                     web_client.println("</form>");
@@ -1851,6 +1889,16 @@ String work_webpage(bool bget_password, int webid)
                         web_client.println("<td><a href=\"/smalldisplay/on\"><button class=\"button\"><b>SMALL</b></button></a></td>");
                     }
 
+                    // NOMSGALL
+                    if (bNoMSGtoALL)
+                    {
+                        web_client.println("<td><a href=\"/nomsgall/off\"><button class=\"button button2\"<b>NOMSGALL</b></button></a></td>");
+                    }
+                    else
+                    {
+                        web_client.println("<td><a href=\"/nomsgall/on\"><button class=\"button\"><b>NOMSGALL</b></button></a></td>");
+                    }
+
                     // SOFTSER
                     if (bSOFTSERON)
                     {
@@ -1901,7 +1949,7 @@ String work_webpage(bool bget_password, int webid)
                 web_client.println("<td><a href=\"/message\"><button class=\"button\"><b>MESSAGE</b></button></a></td>");      //page 5
                 
                 web_client.println("<td><a href=\"/logprint\"><button class=\"button\"><b>RX-LOG</b></button></a></td>");       //page 6
-                web_client.println("<td><a href=\"/sendpos\"><button class=\"button\"><b>SENDPOS</b></button></a></td></tr>");
+                web_client.printf("<td><a href=\"/sendpos%i\"><button class=\"button\"><b>SENDPOS</b></button></a></td></tr>\n", web_page_state);
 
                 if(bMCP23017)
                     web_client.println("<tr><td><a href=\"/mcpstatus\"><button class=\"button\"><b>MCP-STATUS</b></button></a></td>");       //page 7
@@ -1963,7 +2011,7 @@ String hex2ascii(String ustring)
     char dbuff[3];
     int ihex=0;
 
-    sprintf(pbuff, "%s", ustring.c_str());
+    snprintf(pbuff, sizeof(pbuff), "%s", ustring.c_str());
 
     int in=0;
     int il=0;

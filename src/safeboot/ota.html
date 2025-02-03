@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeshCom OTA</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            text-align: center;
+            background: #1e1e1e;
+            padding: 30px 20px;
+            border-radius: 12px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            width: 90%;
+            max-width: 450px;
+        }
+
+        .header {
+            font-size: 28px;
+            font-weight: bold;
+            color: #007BFF;
+            margin-bottom: 25px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            color: #bbb;
+            margin-bottom: 5px;
+        }
+
+        select, input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background-color: #2e2e2e;
+            color: white;
+            font-size: 14px;
+        }
+
+        .drop-zone {
+            border: 2px dashed #007BFF;
+            border-radius: 12px;
+            padding: 30px;
+            cursor: pointer;
+            background-color: #2e2e2e;
+            color: #aaa;
+            transition: background-color 0.3s, color 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .drop-zone.dragover {
+            background-color: #1e1e1e;
+            color: #007BFF;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background-color: #007BFF;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        progress {
+            width: 100%;
+            height: 20px;
+            margin-top: 20px;
+            border-radius: 12px;
+        }
+
+        progress::-webkit-progress-bar {
+            background-color: #444;
+            border-radius: 12px;
+        }
+
+        progress::-webkit-progress-value {
+            background-color: #007BFF;
+            border-radius: 12px;
+        }
+
+        progress::-moz-progress-bar {
+            background-color: #007BFF;
+            border-radius: 12px;
+        }
+
+        .status {
+            font-size: 14px;
+            color: #aaa;
+            margin-top: 15px;
+						margin-bottom: 15px;
+        }
+
+        path { fill: rgb(175,40,51);}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <svg version="1.0" xmlns="http://www.w3.org/2000/svg"
+        width="90.000000pt" height="90.000000pt" viewBox="0 0 128.000000 128.000000"
+        preserveAspectRatio="xMidYMid meet">
+
+        <g transform="translate(0.000000,128.000000) scale(0.100000,-0.100000)"
+        fill="#000000" stroke="none">
+        <path d="M753 1199 c-41 -12 -81 -60 -95 -115 -14 -49 -7 -46 -160 -79 l-77
+        -17 -38 40 c-101 106 -263 42 -263 -104 0 -60 29 -107 80 -131 l39 -18 1 -107
+        0 -107 -38 -10 c-63 -17 -112 -81 -112 -146 0 -57 33 -110 83 -134 73 -35 139
+        -22 190 38 l26 32 89 -48 88 -47 -4 -55 c-6 -101 58 -165 158 -159 62 4 98 25
+        126 73 22 37 23 114 2 147 -16 25 -16 26 62 103 69 68 80 76 98 66 11 -6 44
+        -11 73 -11 94 0 152 58 153 153 0 51 -19 85 -68 121 -21 16 -42 21 -90 21
+        l-63 0 -54 100 c-30 55 -55 105 -57 112 -2 6 6 21 18 33 69 69 48 191 -40 237
+        -46 24 -75 27 -127 12z m118 -35 c20 -10 38 -32 51 -61 19 -43 19 -47 3 -89
+        -38 -101 -169 -113 -225 -21 -66 107 57 230 171 171z m-516 -147 c44 -44 54
+        -94 28 -143 -21 -40 -73 -74 -113 -74 -40 0 -92 34 -113 74 -26 49 -16 99 28
+        143 29 29 39 33 85 33 46 0 56 -4 85 -33z m315 -24 c11 -21 26 -46 32 -55 10
+        -14 8 -22 -12 -43 -18 -20 -33 -25 -69 -25 -27 0 -67 -10 -96 -24 -46 -21 -52
+        -22 -81 -8 -30 14 -31 16 -27 66 3 28 6 55 7 61 1 5 52 22 112 36 60 15 110
+        27 111 28 2 1 12 -16 23 -36z m70 -108 c0 -28 -3 -33 -17 -28 -32 11 -33 14
+        -17 39 23 34 34 30 34 -11z m211 -93 l50 -93 -29 -34 c-16 -18 -31 -38 -33
+        -44 -2 -6 -14 -8 -26 -5 -17 5 -24 18 -33 59 -12 57 -54 124 -95 151 -18 12
+        -25 25 -25 50 0 31 1 33 33 28 17 -3 43 -1 57 4 31 12 34 9 101 -116z m-516
+        36 c31 -14 31 -19 1 -47 l-24 -23 -16 25 c-16 23 -13 57 5 57 4 0 20 -5 34
+        -12z m-47 -59 c18 -29 18 -35 5 -78 -8 -25 -12 -64 -9 -86 4 -30 1 -46 -13
+        -62 l-19 -22 -51 21 -51 22 0 103 c0 91 2 103 18 104 9 0 33 6 52 13 19 8 38
+        14 42 15 3 0 15 -13 26 -30z m434 -40 c42 -49 28 -169 -23 -198 -28 -16 -69
+        -10 -93 14 -21 22 -30 94 -17 143 19 68 91 91 133 41z m-272 -49 c0 -56 3 -70
+        15 -70 19 0 20 -26 1 -37 -8 -4 -15 -17 -18 -28 -5 -28 -42 -26 -46 3 -3 19
+        -9 22 -48 22 -38 0 -44 3 -44 21 0 12 17 52 38 90 34 63 40 69 70 69 l32 0 0
+        -70z m615 -33 c41 -41 51 -77 36 -127 -14 -46 -56 -80 -109 -87 -47 -6 -100
+        27 -125 80 -17 33 -17 42 -5 79 17 55 64 88 125 88 38 0 51 -6 78 -33z m-254
+        -47 c13 -7 19 -21 19 -44 0 -30 -3 -34 -32 -39 -18 -2 -34 -4 -34 -3 -3 2 21
+        96 24 96 2 0 12 -5 23 -10z m-254 -36 c8 -21 -19 -46 -40 -38 -17 6 -23 35
+        -10 47 12 13 44 7 50 -9z m-246 -46 c6 -13 23 -35 37 -50 30 -32 29 -35 -17
+        -40 -31 -3 -35 0 -42 25 -4 16 -13 35 -20 43 -9 11 -9 17 1 29 17 21 27 19 41
+        -7z m-104 -8 c74 -45 83 -139 19 -197 -29 -27 -44 -33 -78 -33 -77 0 -127 50
+        -128 127 0 95 105 153 187 103z m649 -34 l22 -34 -77 -76 -77 -77 -42 23 c-35
+        19 -42 28 -42 53 0 24 12 40 57 80 52 46 82 61 123 63 8 1 25 -14 36 -32z
+        m-378 -85 c42 -12 84 -55 66 -69 -5 -4 -23 -20 -41 -36 l-31 -28 -91 48 c-60
+        32 -90 53 -86 62 3 8 5 20 5 27 0 21 79 35 110 19 14 -6 44 -17 68 -23z m152
+        -26 c0 -33 -2 -35 -33 -35 -22 0 -36 7 -45 21 -7 12 -12 22 -10 24 3 3 68 23
+        81 24 4 1 7 -15 7 -34z m30 -71 c103 -41 106 -180 5 -228 -46 -22 -93 -15
+        -134 20 -75 63 -55 175 39 213 35 14 44 13 90 -5z"/>
+        <path d="M737 673 c-9 -57 5 -108 28 -108 18 0 20 7 20 70 0 64 -2 70 -21 73
+        -18 3 -22 -3 -27 -35z"/>
+        <path d="M473 650 l-21 -40 24 0 c21 0 24 4 24 40 0 22 -1 40 -2 40 -2 0 -13
+        -18 -25 -40z"/>
+        </g>
+        </svg>
+        <div class="header">MeshCom OTA Update</div>
+        <div class="form-group">
+            <label for="type">Select Upload Type</label>
+            <select id="type">
+                <option value="fr">Firmware</option>
+                <option value="fs" disabled>SPIFFS / LittleFS</option>
+            </select>
+        </div>
+        <div class="drop-zone" id="dropZone">
+            Drag and drop a file here or click to select
+        </div>
+        <input type="file" id="firmware" hidden />
+        <button onclick="uploadFirmware()" id="uploadButton">Upload</button>
+        <progress id="progressBar" value="0" max="100"></progress>
+        <div class="status" id="status"></div>
+		<button onclick="cancelUpdate()" id="cancelButton">Cancel - Boot into App</button>
+
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('firmware');
+        const progressBar = document.getElementById('progressBar');
+        const status = document.getElementById('status');
+        const uploadBtn = document.getElementById('uploadButton');
+		const cancelBtn = document.getElementById('cancelButton');
+        let selectedFile = null;
+        const hostIP = window.location.host;
+        const uploadUrl = `http://${hostIP}/ota/upload`;
+		status.textContent = "Please select a file to upload";
+        let finishedWithErr = false;
+
+        // Drag-and-drop functionality
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (event.dataTransfer.files.length > 0) {
+                selectedFile = event.dataTransfer.files[0];
+                // check if the file is .bin otherwise reset
+                if (!selectedFile.name.endsWith('.bin')) {
+                    selectedFile = null;
+                    dropZone.textContent = 'Drag and drop a file here or click to select';
+                    status.textContent = 'Please select a .bin file!';
+                    uploadBtn.disabled = true;
+                    uploadBtn.style.backgroundColor = '#444';
+                } else {
+                    dropZone.textContent = selectedFile.name;
+                    uploadBtn.style.backgroundColor = '#007BFF';
+                    uploadBtn.disabled = false;
+                    status.textContent = 'Ready for upload';
+                }
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                selectedFile = fileInput.files[0];
+                dropZone.textContent = selectedFile.name;
+            }
+        });
+
+        async function uploadFirmware() {
+            const typeSelect = document.getElementById('type');
+
+            if (!selectedFile) {
+                status.textContent = "No firmware file provided!";
+                return;
+            }
+						
+            cancelBtn.disabled = true;
+            cancelBtn.style.backgroundColor = '#444';
+						
+			// Generate MD5 hash of the selected file
+            status.textContent = "Genersting MD5 hash...";
+            const hash = await calculateMD5(selectedFile);
+            //console.log("MD5 hash:", hash);
+            status.textContent = "Uploading Firmware...";
+
+			
+            try {
+                // Start OTA with GET request
+                const startResponse = await fetch(`http://${hostIP}/ota/start?mode=${typeSelect.value}&hash=${hash}`, {
+                    method: 'GET',
+                    headers: {
+                        'Host': hostIP,
+                        'Connection': 'keep-alive'
+                    }
+                });
+
+                if (startResponse.status !== 200) {
+                    status.textContent = `Error Start: ${await startResponse.text()}`;
+                    console.log("Error Start:", startResponse);
+                    return;
+                } else {
+                    status.textContent = "Start successful!";
+                    console.log("Start successful!");
+                }
+
+                // Upload firmware with POST request
+                const formData = new FormData();
+                formData.append('file', selectedFile, selectedFile.name);
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', uploadUrl, true);
+                xhr.setRequestHeader('Connection', 'keep-alive');
+
+                xhr.upload.addEventListener('progress', (event) => {
+                    if (event.lengthComputable) {
+                        const progress = Math.round((event.loaded / event.total) * 100);
+                        progressBar.value = progress;
+                        status.textContent = `Uploading: ${progress}%`;
+                    }
+                });
+
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        progressBar.value = 100;
+                        status.textContent = 'Upload successful! Rebooting...';
+                        finishedWithErr = false;
+                    } else {
+                        status.textContent = `Error: ${xhr.status} - ${xhr.responseText}`;
+                        finishedWithErr = true;
+                        cancelBtn.style.backgroundColor = '#007BFF';
+                        cancelBtn.disabled = false;
+                    }
+                };
+
+                xhr.onerror = () => {
+                    status.textContent = 'An error occurred during the upload.';
+                    cancelBtn.style.backgroundColor = '#007BFF';
+                    cancelBtn.disabled = false;
+                    finishedWithErr = true;
+                };
+
+                xhr.send(formData);
+
+            } catch (error) {
+                status.textContent = `Error: ${error}`;
+                //console.error("Error:", error);
+            }
+        }
+				
+        async function cancelUpdate(){
+            if(!finishedWithErr){
+                status.textContent = "Cancelling Update...";
+                const cancelResponse = await fetch(`http://${hostIP}/ota/cancel`, {
+                    method: 'GET',
+                    headers: {
+                        'Host': hostIP,
+                        'Connection': 'keep-alive'
+                    }
+                });
+                if (cancelResponse.status !== 200) {
+                    status.textContent = `Error Cancel: ${await cancelResponse.text()}`;
+                } else {
+                    status.textContent = "Cancel successful! Rebooting...";
+                }
+            } else {
+                status.textContent = "Cancel not possible, upload error!";
+            }
+        }
+				
+        function calculateMD5(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const spark = new SparkMD5();
+                    spark.appendBinary(e.target.result);
+                    resolve(spark.end());
+                };
+                reader.readAsBinaryString(file);
+            });
+        }
+
+        /*! Inline SparkMD5 code */
+        (function(factory){if(typeof exports==="object"){module.exports=factory()}else if(typeof define==="function"&&define.amd){define(factory)}else{var glob;try{glob=window}catch(e){glob=self}glob.SparkMD5=factory()}})(function(undefined){"use strict";var add32=function(a,b){return a+b&4294967295},hex_chr=["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f"];function cmn(q,a,b,x,s,t){a=add32(add32(a,q),add32(x,t));return add32(a<<s|a>>>32-s,b)}function md5cycle(x,k){var a=x[0],b=x[1],c=x[2],d=x[3];a+=(b&c|~b&d)+k[0]-680876936|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[1]-389564586|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[2]+606105819|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[3]-1044525330|0;b=(b<<22|b>>>10)+c|0;a+=(b&c|~b&d)+k[4]-176418897|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[5]+1200080426|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[6]-1473231341|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[7]-45705983|0;b=(b<<22|b>>>10)+c|0;a+=(b&c|~b&d)+k[8]+1770035416|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[9]-1958414417|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[10]-42063|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[11]-1990404162|0;b=(b<<22|b>>>10)+c|0;a+=(b&c|~b&d)+k[12]+1804603682|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[13]-40341101|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[14]-1502002290|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[15]+1236535329|0;b=(b<<22|b>>>10)+c|0;a+=(b&d|c&~d)+k[1]-165796510|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[6]-1069501632|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[11]+643717713|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[0]-373897302|0;b=(b<<20|b>>>12)+c|0;a+=(b&d|c&~d)+k[5]-701558691|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[10]+38016083|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[15]-660478335|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[4]-405537848|0;b=(b<<20|b>>>12)+c|0;a+=(b&d|c&~d)+k[9]+568446438|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[14]-1019803690|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[3]-187363961|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[8]+1163531501|0;b=(b<<20|b>>>12)+c|0;a+=(b&d|c&~d)+k[13]-1444681467|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[2]-51403784|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[7]+1735328473|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[12]-1926607734|0;b=(b<<20|b>>>12)+c|0;a+=(b^c^d)+k[5]-378558|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[8]-2022574463|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[11]+1839030562|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[14]-35309556|0;b=(b<<23|b>>>9)+c|0;a+=(b^c^d)+k[1]-1530992060|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[4]+1272893353|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[7]-155497632|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[10]-1094730640|0;b=(b<<23|b>>>9)+c|0;a+=(b^c^d)+k[13]+681279174|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[0]-358537222|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[3]-722521979|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[6]+76029189|0;b=(b<<23|b>>>9)+c|0;a+=(b^c^d)+k[9]-640364487|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[12]-421815835|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[15]+530742520|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[2]-995338651|0;b=(b<<23|b>>>9)+c|0;a+=(c^(b|~d))+k[0]-198630844|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[7]+1126891415|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[14]-1416354905|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[5]-57434055|0;b=(b<<21|b>>>11)+c|0;a+=(c^(b|~d))+k[12]+1700485571|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[3]-1894986606|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[10]-1051523|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[1]-2054922799|0;b=(b<<21|b>>>11)+c|0;a+=(c^(b|~d))+k[8]+1873313359|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[15]-30611744|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[6]-1560198380|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[13]+1309151649|0;b=(b<<21|b>>>11)+c|0;a+=(c^(b|~d))+k[4]-145523070|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[11]-1120210379|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[2]+718787259|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[9]-343485551|0;b=(b<<21|b>>>11)+c|0;x[0]=a+x[0]|0;x[1]=b+x[1]|0;x[2]=c+x[2]|0;x[3]=d+x[3]|0}function md5blk(s){var md5blks=[],i;for(i=0;i<64;i+=4){md5blks[i>>2]=s.charCodeAt(i)+(s.charCodeAt(i+1)<<8)+(s.charCodeAt(i+2)<<16)+(s.charCodeAt(i+3)<<24)}return md5blks}function md5blk_array(a){var md5blks=[],i;for(i=0;i<64;i+=4){md5blks[i>>2]=a[i]+(a[i+1]<<8)+(a[i+2]<<16)+(a[i+3]<<24)}return md5blks}function md51(s){var n=s.length,state=[1732584193,-271733879,-1732584194,271733878],i,length,tail,tmp,lo,hi;for(i=64;i<=n;i+=64){md5cycle(state,md5blk(s.substring(i-64,i)))}s=s.substring(i-64);length=s.length;tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(i=0;i<length;i+=1){tail[i>>2]|=s.charCodeAt(i)<<(i%4<<3)}tail[i>>2]|=128<<(i%4<<3);if(i>55){md5cycle(state,tail);for(i=0;i<16;i+=1){tail[i]=0}}tmp=n*8;tmp=tmp.toString(16).match(/(.*?)(.{0,8})$/);lo=parseInt(tmp[2],16);hi=parseInt(tmp[1],16)||0;tail[14]=lo;tail[15]=hi;md5cycle(state,tail);return state}function md51_array(a){var n=a.length,state=[1732584193,-271733879,-1732584194,271733878],i,length,tail,tmp,lo,hi;for(i=64;i<=n;i+=64){md5cycle(state,md5blk_array(a.subarray(i-64,i)))}a=i-64<n?a.subarray(i-64):new Uint8Array(0);length=a.length;tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(i=0;i<length;i+=1){tail[i>>2]|=a[i]<<(i%4<<3)}tail[i>>2]|=128<<(i%4<<3);if(i>55){md5cycle(state,tail);for(i=0;i<16;i+=1){tail[i]=0}}tmp=n*8;tmp=tmp.toString(16).match(/(.*?)(.{0,8})$/);lo=parseInt(tmp[2],16);hi=parseInt(tmp[1],16)||0;tail[14]=lo;tail[15]=hi;md5cycle(state,tail);return state}function rhex(n){var s="",j;for(j=0;j<4;j+=1){s+=hex_chr[n>>j*8+4&15]+hex_chr[n>>j*8&15]}return s}function hex(x){var i;for(i=0;i<x.length;i+=1){x[i]=rhex(x[i])}return x.join("")}if(hex(md51("hello"))!=="5d41402abc4b2a76b9719d911017c592"){add32=function(x,y){var lsw=(x&65535)+(y&65535),msw=(x>>16)+(y>>16)+(lsw>>16);return msw<<16|lsw&65535}}if(typeof ArrayBuffer!=="undefined"&&!ArrayBuffer.prototype.slice){(function(){function clamp(val,length){val=val|0||0;if(val<0){return Math.max(val+length,0)}return Math.min(val,length)}ArrayBuffer.prototype.slice=function(from,to){var length=this.byteLength,begin=clamp(from,length),end=length,num,target,targetArray,sourceArray;if(to!==undefined){end=clamp(to,length)}if(begin>end){return new ArrayBuffer(0)}num=end-begin;target=new ArrayBuffer(num);targetArray=new Uint8Array(target);sourceArray=new Uint8Array(this,begin,num);targetArray.set(sourceArray);return target}})()}function toUtf8(str){if(/[\u0080-\uFFFF]/.test(str)){str=unescape(encodeURIComponent(str))}return str}function utf8Str2ArrayBuffer(str,returnUInt8Array){var length=str.length,buff=new ArrayBuffer(length),arr=new Uint8Array(buff),i;for(i=0;i<length;i+=1){arr[i]=str.charCodeAt(i)}return returnUInt8Array?arr:buff}function arrayBuffer2Utf8Str(buff){return String.fromCharCode.apply(null,new Uint8Array(buff))}function concatenateArrayBuffers(first,second,returnUInt8Array){var result=new Uint8Array(first.byteLength+second.byteLength);result.set(new Uint8Array(first));result.set(new Uint8Array(second),first.byteLength);return returnUInt8Array?result:result.buffer}function hexToBinaryString(hex){var bytes=[],length=hex.length,x;for(x=0;x<length-1;x+=2){bytes.push(parseInt(hex.substr(x,2),16))}return String.fromCharCode.apply(String,bytes)}function SparkMD5(){this.reset()}SparkMD5.prototype.append=function(str){this.appendBinary(toUtf8(str));return this};SparkMD5.prototype.appendBinary=function(contents){this._buff+=contents;this._length+=contents.length;var length=this._buff.length,i;for(i=64;i<=length;i+=64){md5cycle(this._hash,md5blk(this._buff.substring(i-64,i)))}this._buff=this._buff.substring(i-64);return this};SparkMD5.prototype.end=function(raw){var buff=this._buff,length=buff.length,i,tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],ret;for(i=0;i<length;i+=1){tail[i>>2]|=buff.charCodeAt(i)<<(i%4<<3)}this._finish(tail,length);ret=hex(this._hash);if(raw){ret=hexToBinaryString(ret)}this.reset();return ret};SparkMD5.prototype.reset=function(){this._buff="";this._length=0;this._hash=[1732584193,-271733879,-1732584194,271733878];return this};SparkMD5.prototype.getState=function(){return{buff:this._buff,length:this._length,hash:this._hash.slice()}};SparkMD5.prototype.setState=function(state){this._buff=state.buff;this._length=state.length;this._hash=state.hash;return this};SparkMD5.prototype.destroy=function(){delete this._hash;delete this._buff;delete this._length};SparkMD5.prototype._finish=function(tail,length){var i=length,tmp,lo,hi;tail[i>>2]|=128<<(i%4<<3);if(i>55){md5cycle(this._hash,tail);for(i=0;i<16;i+=1){tail[i]=0}}tmp=this._length*8;tmp=tmp.toString(16).match(/(.*?)(.{0,8})$/);lo=parseInt(tmp[2],16);hi=parseInt(tmp[1],16)||0;tail[14]=lo;tail[15]=hi;md5cycle(this._hash,tail)};SparkMD5.hash=function(str,raw){return SparkMD5.hashBinary(toUtf8(str),raw)};SparkMD5.hashBinary=function(content,raw){var hash=md51(content),ret=hex(hash);return raw?hexToBinaryString(ret):ret};SparkMD5.ArrayBuffer=function(){this.reset()};SparkMD5.ArrayBuffer.prototype.append=function(arr){var buff=concatenateArrayBuffers(this._buff.buffer,arr,true),length=buff.length,i;this._length+=arr.byteLength;for(i=64;i<=length;i+=64){md5cycle(this._hash,md5blk_array(buff.subarray(i-64,i)))}this._buff=i-64<length?new Uint8Array(buff.buffer.slice(i-64)):new Uint8Array(0);return this};SparkMD5.ArrayBuffer.prototype.end=function(raw){var buff=this._buff,length=buff.length,tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],i,ret;for(i=0;i<length;i+=1){tail[i>>2]|=buff[i]<<(i%4<<3)}this._finish(tail,length);ret=hex(this._hash);if(raw){ret=hexToBinaryString(ret)}this.reset();return ret};SparkMD5.ArrayBuffer.prototype.reset=function(){this._buff=new Uint8Array(0);this._length=0;this._hash=[1732584193,-271733879,-1732584194,271733878];return this};SparkMD5.ArrayBuffer.prototype.getState=function(){var state=SparkMD5.prototype.getState.call(this);state.buff=arrayBuffer2Utf8Str(state.buff);return state};SparkMD5.ArrayBuffer.prototype.setState=function(state){state.buff=utf8Str2ArrayBuffer(state.buff,true);return SparkMD5.prototype.setState.call(this,state)};SparkMD5.ArrayBuffer.prototype.destroy=SparkMD5.prototype.destroy;SparkMD5.ArrayBuffer.prototype._finish=SparkMD5.prototype._finish;SparkMD5.ArrayBuffer.hash=function(arr,raw){var hash=md51_array(new Uint8Array(arr)),ret=hex(hash);return raw?hexToBinaryString(ret):ret};return SparkMD5});
+    </script>
+</body>
+</html>

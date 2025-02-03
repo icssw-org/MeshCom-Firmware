@@ -99,6 +99,8 @@ extern U8G2 u8g2_2;
 */
 
 bool bPosFirst = true;
+bool bHeyFirst = true;
+
 /*
     Video: https://www.youtube.com/watch?v=oCMOYS71NIU
     Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
@@ -419,7 +421,10 @@ void esp32setup()
     bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
+
     bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
+    bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
+    bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
 
     iButtonPin = BUTTON_PIN;
     if(meshcom_settings.node_button_pin > 0)
@@ -458,6 +463,22 @@ void esp32setup()
     // Initialize battery reading
 	init_batt();
 
+
+    #ifndef ENABLE_SOFTSER
+        bSOFTSERON=false;
+    #endif
+
+    // Umstekllung auf langes WIFI Passwort
+    if(strlen(meshcom_settings.node_ossid) > 4 && strlen(meshcom_settings.node_ssid) < 5)
+    {
+        strcpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid);
+        strcpy(meshcom_settings.node_pwd, meshcom_settings.node_opwd);
+
+        memset(meshcom_settings.node_ossid, 0x00, sizeof(meshcom_settings.node_ossid));
+        memset(meshcom_settings.node_opwd, 0x00, sizeof(meshcom_settings.node_opwd));
+
+        save_settings();
+    }
 
     global_batt = 4125.0;
 
@@ -638,12 +659,14 @@ void esp32setup()
     do
     {
         u8g2->setFont(u8g2_font_10x20_mf);
-        u8g2->drawStr(5, 20, "MeshCom 4.0");
+        u8g2->drawStr(5, 15, "MeshCom 4.0");
         u8g2->setFont(u8g2_font_6x10_mf);
-        u8g2->drawStr(5, 30, cvers);
-        u8g2->drawStr(5, 40, "by icssw.org");
-        u8g2->drawStr(5, 50, "OE1KFR, OE1KBC");
-        u8g2->drawStr(5, 60, "...starting now");
+        char cvers[20];
+        sprintf(cvers, "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        u8g2->drawStr(5, 25, cvers);
+        u8g2->drawStr(5, 35, "by icssw.org");
+        u8g2->drawStr(5, 45, "OE1KFR, OE1KBC");
+        u8g2->drawStr(5, 55, "...starting now");
     } while (u8g2->nextPage());
 
     #endif
@@ -863,7 +886,7 @@ void esp32setup()
             //KBC 0801 radio.setDio1Action(setFlagSent);
 
             // start scanning the channel
-            Serial.print(F("[SX126x/E290] Starting to listen ... "));
+            Serial.print(F("[SX126x/E290] Starting to listen (0) ... "));
             state = radio.startReceive();
             if (state == RADIOLIB_ERR_NONE)
             {
@@ -1035,6 +1058,8 @@ void esp32setup()
                 delay(500);
                 
                 startWebserver();
+        
+                loopWebserver();
             }
 
             if(bEXTUDP)
@@ -1083,11 +1108,14 @@ void esp32loop()
         }
     }
 
-    if ((retransmit_timer + (1000 * 5)) < millis())   // repeat 5 seconds
+    if(!bGATEWAY)
     {
-        updateRetransmissionStatus();
+        if ((retransmit_timer + (1000 * 10)) < millis())   // repeat 10 seconds
+        {
+            updateRetransmissionStatus();
 
-        retransmit_timer = millis();
+            retransmit_timer = millis();
+        }
     }
 
     if(iReceiveTimeOutTime > 0)
@@ -1218,7 +1246,7 @@ void esp32loop()
             {
                 if(bLORADEBUG)
                 {
-                    Serial.print(F("[SX127x] Starting to listen again... "));
+                    Serial.print(F("[SX127x] Starting to listen again (1)... "));
                     Serial.print(F("failed, code "));
                     Serial.println(state);
                 }
@@ -1236,16 +1264,7 @@ void esp32loop()
         // channel is free
         // nothing was detected
         // do not print anything, it just spams the console
-        int iReadTX = iRead;
-        bool bRTX = false;
-
-        if(iRetransmit >= 0)
-        {
-            iReadTX = iRetransmit;
-            bRTX = true;
-        }
-
-        if (iWrite != iRead || bRTX)
+        if (iWrite != iRead)
         {
             // save transmission state between loops
             cmd_counter=0;
@@ -1259,18 +1278,9 @@ void esp32loop()
             bEnableInterruptTransmit = true; //KBC 0801
             radio.setPacketSentAction(setFlagSent); //KBC 0801
 
-            if(doTX(iReadTX, bRTX))
+            if(doTX())
             {
-                if(bRTX)
-                {
-                    iRetransmit = -1;
-                }
-                else
-                {
-                    iRead++;
-                    if (iRead >= MAX_RING)
-                        iRead = 0;
-                }
+                //KBC 0801 bEnableInterruptTransmit = true;
             }
             else
             {
@@ -1496,6 +1506,17 @@ void esp32loop()
         posinfo_timer = millis();
     }
 
+    // heysinfo_interval in Seconds == 15 minutes
+    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
+    {
+        bHeyFirst = false;
+        
+        if(!bGATEWAY)
+            sendHey();
+
+        heyinfo_timer = millis();
+    }
+
     mainStartTimeLoop();
 
     if(DisplayOffWait > 0)
@@ -1561,7 +1582,10 @@ void esp32loop()
                 global_proz = mv_to_percent(global_batt);
                 
                 if(bDEBUG)
+                {
+            		Serial.print("[readBatteryVoltage] : ");
                     Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
+                }
             #endif
 
             BattTimeWait = millis();
@@ -1728,13 +1752,16 @@ void esp32loop()
     {
         if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 30)) < millis()))   // repeat 15 minutes
         {
-            // restart WEB-Client
-            stopWebserver();
 
             web_timer = millis();
 
-            if(!meshcom_settings.node_hasIPaddress)
-                startWIFI();
+            #ifndef BOARD_RAK4630
+                // restart WEB-Client
+                stopWebserver();
+
+                if(!meshcom_settings.node_hasIPaddress)
+                    startWIFI();
+            #endif
         }
 
         startWebserver();

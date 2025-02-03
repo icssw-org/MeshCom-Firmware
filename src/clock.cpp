@@ -23,18 +23,8 @@
 */
 
 //---| definitions |----------------------------------------------------------
-#define USE_EEPROM		0
-#undef  TEST
-//#define TEST
 
 //---|debugging |---------------------------------------------------------------
-#if defined(TEST)
-#  define DebugOut(s)		Serial.println(s)
-#  define DebugVal(s,x)		Serial.printf(s,x)
-#else
-#  define DebugOut(s)
-#  define DebugVal(s,x)
-#endif
 
 //---| definitions |------------------------------------------------------------
 #define       ADDR_ALARM_ENABLE	0x00
@@ -51,15 +41,7 @@
 //---| includes |---------------------------------------------------------------
 
 
-#if defined(ESP8266)
-#  include <pgmspace.h>
-//#else
-//#include <avr/pgmspace.h>
-#endif
 #include <Arduino.h>
-#if defined(USE_EEPROM) && (USE_EEPROM > 0)
-#  include <EEPROM.h>
-#endif
 #include "clock.h"
 
 //---| globals |----------------------------------------------------------------
@@ -106,7 +88,7 @@ Clock::EEvent Clock::CheckEvent()
 		if (u8Day != suClock_m.tm_mday)
 		{
 			eEvent = Clock::eEventDay;
-			DebugOut("[clock] new day starts");
+			//DebugOut("[clock] new day starts");
 			SaveAlarm();
 			SaveClock();
 		}
@@ -114,12 +96,12 @@ Clock::EEvent Clock::CheckEvent()
 		if (u8Hour != suClock_m.tm_hour)
 		{
 			eEvent = Clock::eEventHour;
-			DebugOut("[clock] new hour starts");
+			//DebugOut("[clock] new hour starts");
 		}
 		else
 		{
 			eEvent = Clock::eEventMinute;
-			DebugOut("[clock] new minute starts");
+			//DebugOut("[clock] new minute starts");
 		}
 
 		// check for alarm
@@ -130,7 +112,7 @@ Clock::EEvent Clock::CheckEvent()
 			              ((au8AlarmNext_m[0] == suClock_m.tm_hour) && (au8AlarmNext_m[1] == suClock_m.tm_min)));
 			if (boAlarm_m)
 			{       
-				DebugOut("[clock] alarm event");
+				//1DebugOut("[clock] alarm event");
 			}
 		}
 
@@ -157,7 +139,7 @@ bool Clock::EnableAlarm(const bool boEnable /*= true*/)
 	boAlarmEnable_m   = boEnable;
 	au8AlarmNext_m[0] = 0xFF;
 	au8AlarmNext_m[1] = 0xFF;
-	DebugOut(boEnable ? "[clock] enable alarm" : "[clock] disable alarm");
+	//DebugOut(boEnable ? "[clock] enable alarm" : "[clock] disable alarm");
 	SaveAlarm();
 	return boReturnValue;
 }
@@ -167,9 +149,7 @@ bool Clock::EnableAlarm(const bool boEnable /*= true*/)
 //----------------------------------------------------------------------------
 const char* Clock::GetDateStr()
 {
-	snprintf(szDateStr_m, sizeof(szDateStr_m), "%2u. %s. %04u",
-	         suClock_m.tm_mday, Months[suClock_m.tm_mon],
-		 1900 + suClock_m.tm_year);
+	snprintf(szDateStr_m, sizeof(szDateStr_m), "%2u. %s. %04u", suClock_m.tm_mday, Months[suClock_m.tm_mon], 1900 + suClock_m.tm_year);
 	return szDateStr_m;
 }
 
@@ -182,13 +162,11 @@ const char* Clock::GetAlarmTime()
 	{
 		if ((au8AlarmNext_m[0] < 24) && (au8AlarmNext_m[1] < 60))
 		{
-			snprintf(szAlarmTime_m, sizeof(szAlarmTime_m),
-			         "*%2u:%02u", au8AlarmNext_m[0], au8AlarmNext_m[1]);
+			snprintf(szAlarmTime_m, sizeof(szAlarmTime_m), "*%2u:%02u", au8AlarmNext_m[0], au8AlarmNext_m[1]);
 		}
 		else
 		{
-			snprintf(szAlarmTime_m, sizeof(szAlarmTime_m),
-			         " %2u:%02u", au8Alarm_m[0], au8Alarm_m[1]);
+			snprintf(szAlarmTime_m, sizeof(szAlarmTime_m), " %2u:%02u", au8Alarm_m[0], au8Alarm_m[1]);
 		}
 	}
 	else
@@ -212,67 +190,7 @@ bool Clock::Init()
 	au8AlarmNext_m[0] = 0xFF;
 	au8AlarmNext_m[1] = 0xFF;
 
-#if defined(USE_EEPROM) && (USE_EEPROM > 0)
-	DebugOut("[clock] initialization with EEPROM");
-	EEPROM.begin(512);
-	
-	// read clock
-	DebugOut("[clock] try to read clock data stored in EEPROM");
-	memset(&suClock_m, 0, sizeof(suClock_m));
-	suClock_m.tm_hour = EEPROM.read(ADDR_CLOCK_HOUR);
-	suClock_m.tm_min  = EEPROM.read(ADDR_CLOCK_MINUTE);
-	suClock_m.tm_mday = EEPROM.read(ADDR_CLOCK_DAY);
-	suClock_m.tm_mon  = EEPROM.read(ADDR_CLOCK_MONTH);
-	suClock_m.tm_year = EEPROM.read(ADDR_CLOCK_YEAR);
-	DebugVal("[clock] read hour from EEPROM:   0x%02X\n", suClock_m.tm_hour);
-	DebugVal("[clock] read minute from EEPROM: 0x%02X\n", suClock_m.tm_min);
-	DebugVal("[clock] read day from EEPROM:    0x%02X\n", suClock_m.tm_mday);
-	DebugVal("[clock] read month from EEPROM:  0x%02X\n", suClock_m.tm_mon);
-	DebugVal("[clock] read year from EEPROM:   0x%02X\n", suClock_m.tm_year);
-	
-	if ((suClock_m.tm_hour >= 0) && (suClock_m.tm_hour <  24) &&
-	    (suClock_m.tm_min  >= 0) && (suClock_m.tm_min  <  60) &&
-	    (suClock_m.tm_mday >  0) && (suClock_m.tm_mday <= 31) &&
-	    (suClock_m.tm_mon  >= 0) && (suClock_m.tm_mon  <  12) &&
-	    (suClock_m.tm_year >= 0) && (suClock_m.tm_year < 200))
-	{
-		DebugOut("[clock] clock info successfully read from EEPROM");
-		tsClock_m = mktime(&suClock_m);
-	}
-	else
-	{
-		DebugOut("[clock] can't reads clock info from EEPROM!");
-		SetClockDefaults();
-	}
-	
-	// read alarm clock
-	boAlarmEnable_m  = false;
-	boAlarmValid_m   = false;
-	DebugOut("[clock] try to read alarm data stored in EEPROM");
-	au8Alarm_m[0]    = EEPROM.read(ADDR_ALARM_HOUR);
-	au8Alarm_m[1]    = EEPROM.read(ADDR_ALARM_MINUTE);
-	uint8_t u8Enable = EEPROM.read(ADDR_ALARM_ENABLE);
-	DebugVal("[clock] read alarm hour from EEPROM:   0x%02X\n", au8Alarm_m[0]);
-	DebugVal("[clock] read alarm minute from EEPROM: 0x%02X\n", au8Alarm_m[1]);
-	DebugVal("[clock] read alarm marker from EEPROM: 0x%02X\n", u8Enable);
-
-	if ((au8Alarm_m[0] < 24) && (au8Alarm_m[1] < 60))
-	{
-		DebugOut("[clock] alarm time successfully read from EEPROM");
-		boAlarmEnable_m = (u8Enable == VALUE_ALARM_ON);
-		boAlarmValid_m  = true;
-	}
-	else
-	{
-		DebugOut("[clock] invalid alarm time read from EEPROM!");
-		SetAlarmDefaults();
-	}
-
-	EEPROM.end();				
-
-#else
-	DebugOut("[clock] initialization w/o EEPROM");
-#endif
+	//DebugOut("[clock] initialization w/o EEPROM");
 
 	// set new update cycle
 	u32Start_m = 0;
@@ -287,21 +205,7 @@ bool Clock::Init()
 //----------------------------------------------------------------------------
 bool Clock::SaveAlarm()
 {
-#if defined(USE_EEPROM) && (USE_EEPROM > 0)
-	DebugOut("[clock] store alarm settings (EEPROM)");
-	EEPROM.begin(512);
-	EEPROM.write(ADDR_ALARM_ENABLE, boAlarmEnable_m ? VALUE_ALARM_ON
-	                                                : VALUE_ALARM_OFF);
-	EEPROM.write(ADDR_ALARM_HOUR,   au8Alarm_m[0]);
-	EEPROM.write(ADDR_ALARM_MINUTE, au8Alarm_m[1]);
-	delay(200);
-	EEPROM.commit();
-	EEPROM.end();
-	boAlarmValid_m = true;
-	return true;
-#else
 	return false;
-#endif
 }
 
 //----------------------------------------------------------------------------
@@ -309,21 +213,7 @@ bool Clock::SaveAlarm()
 //----------------------------------------------------------------------------
 bool Clock::SaveClock()
 {
-#if defined(USE_EEPROM) && (USE_EEPROM > 0)
-	DebugOut("[clock] store current clock (EEPROM)");
-	EEPROM.begin(512);
-	EEPROM.write(ADDR_CLOCK_HOUR,   suClock_m.tm_hour);
-	EEPROM.write(ADDR_CLOCK_MINUTE, suClock_m.tm_min);
-	EEPROM.write(ADDR_CLOCK_DAY,    suClock_m.tm_mday);
-	EEPROM.write(ADDR_CLOCK_MONTH,  suClock_m.tm_mon);
-	EEPROM.write(ADDR_CLOCK_YEAR,   suClock_m.tm_year);
-	delay(200);
-	EEPROM.commit();
-	EEPROM.end();
-	return true;
-#else
 	return false;
-#endif
 }
 
 //----------------------------------------------------------------------------
@@ -512,14 +402,14 @@ void Clock::Snooze(bool bo24Hours /*= false*/)
 	{
 		if (bo24Hours)
 		{
-			DebugOut("[clock] snooze for 24h");
+			//DebugOut("[clock] snooze for 24h");
 			au8AlarmNext_m[0] = 0xFF;
 			au8AlarmNext_m[1] = 0xFF;
 		}
 		else
 		if ((au8AlarmNext_m[0] < 24) && (au8AlarmNext_m[1] < 60))
 		{
-			DebugOut("[clock] snooze (next)");
+			//DebugOut("[clock] snooze (next)");
 			au8AlarmNext_m[1] += SnoozeMinutes;
 			
 			if (au8AlarmNext_m[1] >= 60)
@@ -535,7 +425,7 @@ void Clock::Snooze(bool bo24Hours /*= false*/)
 		}
 		else
 		{
-			DebugOut("[clock] snooze (first)");
+			//DebugOut("[clock] snooze (first)");
 			au8AlarmNext_m[0] = au8Alarm_m[0];
 			au8AlarmNext_m[1] = au8Alarm_m[1] + SnoozeMinutes;
 			

@@ -1,3 +1,4 @@
+#include "Arduino.h"
 #include "configuration.h"
 
 #ifdef SX127X
@@ -77,13 +78,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     if(payload[0] == 0x41)
     {
-        if(bLORADEBUG)
+        if(bDisplayInfo)
         {
             Serial.print(getTimeString());
             if(size == 7)
-                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
+                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
             else
-                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
+                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
         }
 
         memcpy(print_buff, payload, 12);
@@ -129,46 +130,35 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     iWrite++;
                     if(iWrite >= MAX_RING)
                         iWrite=0;
-        
-                    if(bLORADEBUG)
-                        Serial.printf("ACK forward  %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+
+                    if(bDisplayInfo)
+                        Serial.print(" This packet to mesh");
                 }
             }
         }
+
+        if(bDisplayInfo)
+            Serial.println("");
+
     }
     else
     {
         memcpy(RcvBuffer, payload, size);
 
-        //Serial.println("got lora rx");
-
-        unsigned int rx_msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
-
         // RX-OK do not need retransmission
         for(int ircheck=0;ircheck<MAX_RING;ircheck++)
         {
-            if(ringBuffer[ircheck][0] > 0 && ringBuffer[ircheck][1] != 0x01 && ringBuffer[ircheck][1] != 0xFF)
+            if(ringBuffer[ircheck][0] > 0 && ringBuffer[ircheck][1] != 0xFF)
             {
                 unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
 
-                //Serial.printf("ring_msg_id:%08X rx_msg_id:%08X\n", ring_msg_id, rx_msg_id);
-
-                if(ring_msg_id == rx_msg_id)
+                if(memcmp(ringBuffer[ircheck]+3, RcvBuffer+1, 4) == 0)
                 {
                     ringBuffer[ircheck][1] = 0xFF; // no retransmission
 
                     if(bDisplayRetx)
                     {
                         Serial.printf("got lora rx for retid:%i no need status:%02X lng;%i msg-id:%c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
-                    }
-
-                    break;
-                }
-                else
-                {
-                    if(bDisplayRetx)
-                    {                        
-                        Serial.printf("got lora not found ring_msg_id:%08X != rx_msg_id:%08X\n", ring_msg_id, rx_msg_id);
                     }
                 }
             }
@@ -204,78 +194,81 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             ///////////////////////////////////////////////
             // MHeard
-            if(aprsmsg.msg_source_last != meshcom_settings.node_call)
+            if(aprsmsg.payload_type != '@')
             {
-                struct mheardLine mheardLine;
-
-                initMheardLine(mheardLine);
-
-                mheardLine.mh_callsign = aprsmsg.msg_source_last;
-                mheardLine.mh_hw = aprsmsg.msg_last_hw;
-                mheardLine.mh_mod = aprsmsg.msg_source_mod;
-                mheardLine.mh_rssi = rssi;
-                mheardLine.mh_snr = snr;
-                mheardLine.mh_date = getDateString();
-                mheardLine.mh_time = getTimeString();
-                mheardLine.mh_payload_type = aprsmsg.payload_type;
-                mheardLine.mh_dist = 0;
-                mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
-                mheardLine.mh_mesh = aprsmsg.msg_mesh;
-                
-                // check MHeard exists already
-                int ipos=-1;
-                for(int iset=0; iset<MAX_MHEARD; iset++)
+                if(aprsmsg.msg_source_last != meshcom_settings.node_call)
                 {
-                    if(mheardCalls[iset][0] != 0x00)
+                    struct mheardLine mheardLine;
+
+                    initMheardLine(mheardLine);
+
+                    mheardLine.mh_callsign = aprsmsg.msg_source_last;
+                    mheardLine.mh_hw = aprsmsg.msg_last_hw;
+                    mheardLine.mh_mod = aprsmsg.msg_source_mod;
+                    mheardLine.mh_rssi = rssi;
+                    mheardLine.mh_snr = snr;
+                    mheardLine.mh_date = getDateString();
+                    mheardLine.mh_time = getTimeString();
+                    mheardLine.mh_payload_type = aprsmsg.payload_type;
+                    mheardLine.mh_dist = 0;
+                    mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
+                    mheardLine.mh_mesh = aprsmsg.msg_mesh;
+                    
+                    // check MHeard exists already
+                    int ipos=-1;
+                    for(int iset=0; iset<MAX_MHEARD; iset++)
                     {
-                        if(strcmp(mheardCalls[iset], aprsmsg.msg_source_last.c_str()) == 0)
+                        if(mheardCalls[iset][0] != 0x00)
                         {
-                            ipos=iset;
-                            lat = mheardLat[ipos];
-                            lon = mheardLon[ipos];
-                            break;
-                        }
-                    }
-                }
-
-                if(aprsmsg.msg_source_call == aprsmsg.msg_source_last)
-                {
-                    if(msg_type_b_lora == 0x21) // Position
-                    {
-                        struct aprsPosition aprspos;
-
-                        if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
-                        {
-                            // Display Distance, Direction
-                            lat = conv_coord_to_dec(aprspos.lat);
-                            if(aprspos.lat_c == 'S')
-                                lat = lat * -1.0;
-                            lon = conv_coord_to_dec(aprspos.lon);
-                            if(aprspos.lon_c == 'W')
-                                lon = lon * -1.0;
-
-                            if(ipos >= 0)
+                            if(strcmp(mheardCalls[iset], aprsmsg.msg_source_last.c_str()) == 0)
                             {
-                                mheardLat[ipos]=lat;
-                                mheardLon[ipos]=lon;
+                                ipos=iset;
+                                lat = mheardLat[ipos];
+                                lon = mheardLon[ipos];
+                                break;
                             }
                         }
                     }
-                }
 
-                if(lat != 0.0 && lon != 0.0)
-                    mheardLine.mh_dist = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+                    if(aprsmsg.msg_source_call == aprsmsg.msg_source_last)
+                    {
+                        if(msg_type_b_lora == 0x21) // Position
+                        {
+                            struct aprsPosition aprspos;
 
-                updateMheard(mheardLine, isPhoneReady);
+                            if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
+                            {
+                                // Display Distance, Direction
+                                lat = conv_coord_to_dec(aprspos.lat);
+                                if(aprspos.lat_c == 'S')
+                                    lat = lat * -1.0;
+                                lon = conv_coord_to_dec(aprspos.lon);
+                                if(aprspos.lon_c == 'W')
+                                    lon = lon * -1.0;
 
-                // last heard LoRa MeshCom-Packet
-                lastHeardTime = millis();
+                                if(ipos >= 0)
+                                {
+                                    mheardLat[ipos]=lat;
+                                    mheardLon[ipos]=lon;
+                                }
+                            }
+                        }
+                    }
 
-                // print aprs message
-                if(bLORADEBUG && bDisplayInfo)
-                {
-                    printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
-                    Serial.println();
+                    if(lat != 0.0 && lon != 0.0)
+                        mheardLine.mh_dist = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+
+                    updateMheard(mheardLine, isPhoneReady);
+
+                    // last heard LoRa MeshCom-Packet
+                    lastHeardTime = millis();
+
+                    // print aprs message
+                    if(bLORADEBUG && bDisplayInfo)
+                    {
+                        printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
+                        Serial.println();
+                    }
                 }
             }
 
@@ -311,7 +304,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                     case 0x3A: DEBUG_MSG("RADIO", "Received Textmessage"); break;
                     case 0x21: DEBUG_MSG("RADIO", "Received PosInfo"); break;
-                    case 0x40: DEBUG_MSG("RADIO", "Received Weather"); break;
+                    case 0x40: DEBUG_MSG("RADIO", "Received Hey"); break;
                     default:
                         DEBUG_MSG("RADIO", "Received unknown");
                         if(bDEBUG)
@@ -356,14 +349,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                     for(int iop=0;iop<MAX_RING;iop++)
                     {
-                        unsigned int ring_msg_id = (ringBufferLoraRX[iop][3]<<24) | (ringBufferLoraRX[iop][2]<<16) | (ringBufferLoraRX[iop][1]<<8) | ringBufferLoraRX[iop][0];
-
-                        //if(ring_msg_id != 0 && bDEBUG)
-                        //    printf("ring_msg_id:%08X msg_id:%08X\n", ring_msg_id, aprsmsg.msg_id);
-
-                        if(ring_msg_id == aprsmsg.msg_id)
+                        if(memcmp(ringBufferLoraRX[iop], RcvBuffer+1, 4) == 0)
                         {
                             bMsg=true;
+                            
+                            Serial.println("bMsg = true");
 
                             break;
                         }
@@ -380,7 +370,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             // size message is int -> uint16_t buffer size
 
                             char destination_call[20];
-                            sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+                            snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
 
                             if(msg_type_b_lora == 0x3A)    // text message store&forward
                             {
@@ -458,7 +448,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     }
                                     else
                                     {
-                                        if(strcmp(destination_call, "*") == 0 || CheckOwnGroup(destination_call))
+                                        if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || CheckOwnGroup(destination_call))
                                         {
                                             sendDisplayText(aprsmsg, rssi, snr);
 
@@ -524,7 +514,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 if(iWrite >= MAX_RING)
                                                     iWrite=0;
 
-                                                Serial.printf("ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                                                if(bDisplayInfo)
+                                                {
+                                                    Serial.print(getTimeString());
+                                                    Serial.printf("ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                                                }
                                                 
                                                 unsigned long mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
                                                 addLoraRxBuffer(mid);
@@ -574,12 +568,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     bMeshDestination = false;
                                 if(aprsmsg.payload_type == '!' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_pos+1)    // POS
                                     bMeshDestination = false;
+                                if(aprsmsg.payload_type == '@')    // HEY no Mesh on GATEWAYs
+                                    bMeshDestination = false;
                             }
 
                             // GATEWAY action before MESH
                             // and not MESHed from another Gateways
                             if(bGATEWAY && !aprsmsg.msg_server) 
+                            {
                                 addNodeData(RcvBuffer, size, rssi, snr);
+                            }
 
                             // resend only Packet to all and !owncall 
                             if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && bMeshDestination)
@@ -608,6 +606,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
                                     }
 
+                                    if(aprsmsg.payload_type == '@')
+                                    {
+                                        aprsmsg.msg_payload.concat(rssi*-1.0);
+                                        aprsmsg.msg_payload.concat(',');
+                                    }
+                                    
                                     aprsmsg.msg_last_hw = BOARD_HARDWARE;   // hardware  last sending node
 
                                     memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
@@ -620,9 +624,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     ringBuffer[iWrite][0]=size;
                                     memcpy(ringBuffer[iWrite]+2, RcvBuffer, size);
                                     if (ringBuffer[iWrite][2] == 0x3A) // only Messages
-                                        ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+                                    {
+                                        if(aprsmsg.msg_payload.startsWith("{") > 0)
+                                            ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+                                        else
+                                            ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+                                    }
                                     else
-                                        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+                                        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
 
                                     if(bDisplayRetx)
                                     {
@@ -729,7 +738,7 @@ bool is_new_packet(uint8_t compBuffer[4])
 
 /**@brief our Lora TX sequence
  */
-bool doTX(int iReadTX, bool bRTX)
+bool doTX()
 {
     // next TX new TX-DELAY
     if(cmd_counter > 0)
@@ -742,37 +751,33 @@ bool doTX(int iReadTX, bool bRTX)
         return false;
     }
 
-    if (iReadTX < MAX_RING && ringBuffer[iReadTX][0] > 0)
+    if (iWrite != iRead && iRead < MAX_RING)
     {
-        sendlng = ringBuffer[iReadTX][0];
-        memcpy(lora_tx_buffer, ringBuffer[iReadTX] + 2, sendlng);
-
-        // nur wenn retransmit
-        bool bRTX_Display = false;
-
-        if(bRTX)
-        {
-            ringBuffer[iReadTX][1]=0xFF; // mark retransmission Status sent
-            bRTX_Display = true;
-        }
-        else
-        {
-            if(ringBuffer[iReadTX][1] == 0x00)
-            {
-                // nur wenn retransmit gepklant
-                ringBuffer[iReadTX][1]=0x01; // mark retransmission Status start retransmission
-                bRTX_Display = true;
-            }
-        }
-
-    
-        if(bDisplayRetx && bRTX_Display)
-        {
-            unsigned int ring_msg_id = (ringBuffer[iReadTX][6]<<24) | (ringBuffer[iReadTX][5]<<16) | (ringBuffer[iReadTX][4]<<8) | ringBuffer[iReadTX][3];
-            Serial.printf("senden   retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iReadTX, ringBuffer[iReadTX][1], ringBuffer[iReadTX][0], ringBuffer[iReadTX][2], ring_msg_id);
-        }
-
+        sendlng = ringBuffer[iRead][0];
+        memcpy(lora_tx_buffer, ringBuffer[iRead] + 2, sendlng);
+        
         lora_tx_buffer[sendlng]=0x00;
+
+        int save_read = iRead;
+        char save_ring_status = ringBuffer[iRead][1];
+
+        if(ringBuffer[iRead][1] == 0x00) // mark open to send
+            ringBuffer[iRead][1] = 0x01; // mark as sent
+
+        if(ringBuffer[iRead][1] == 0x7F)
+        {
+            if(bDisplayRetx)
+            {
+                unsigned int ring_msg_id = (ringBuffer[iRead][6]<<24) | (ringBuffer[iRead][5]<<16) | (ringBuffer[iRead][4]<<8) | ringBuffer[iRead][3];
+                Serial.printf("resend   retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iRead, ringBuffer[iRead][1], ringBuffer[iRead][0], ringBuffer[iRead][2], ring_msg_id);
+            }
+
+            ringBuffer[iRead][1] = 0xFF; // mark as resent
+        }
+
+        iRead++;
+        if (iRead >= MAX_RING)
+            iRead = 0;
 
         // we can now tx the message
         if (TX_ENABLE == 1)
@@ -801,6 +806,9 @@ bool doTX(int iReadTX, bool bRTX)
 
                 if(!lora_setchip_aprs())
                 {
+                    iRead=save_read;
+                    ringBuffer[iRead][1] = save_ring_status;
+
                     return false;
                 }
                 
@@ -849,7 +857,11 @@ bool doTX(int iReadTX, bool bRTX)
                             //if(bLORADEBUG)
                             //    Serial.printf("cmd_counter = 7:%i \n", cmd_counter);
 
+                            iRead=save_read;
+                            ringBuffer[iRead][1] = save_ring_status;
+
                             tx_waiting=true;
+                            
                             return false;
                         }
                     }
@@ -863,15 +875,6 @@ bool doTX(int iReadTX, bool bRTX)
                     #else
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                     #endif
-
-                    if (iWrite == iRead)
-                    {
-                        DEBUG_MSG_VAL("RADIO", iRead,  "TX (LAST) :");
-                    }
-                    else
-                    {
-                        DEBUG_MSG_VAL("RADIO", iRead, "TX :");
-                    }
 
                     if(lora_tx_buffer[0] == 0x41)
                     {
@@ -911,45 +914,58 @@ bool updateRetransmissionStatus()
 {
 //    Serial.println("update retransmit");
 
-    // retransmitt running
-    if(iRetransmit < 0)
+    for(int ircheck=0; ircheck < MAX_RING; ircheck++)
     {
-        for(int ircheck=0; ircheck < MAX_RING; ircheck++)
+        // Status == ringBuffer[ircheck][1]
+        //   0x00 not yet sent
+        //   0xFF no retransmission
+        if(ringBuffer[ircheck][2] != 0x3A)
         {
-            // Status == ringBuffer[ircheck][1]
-            //   0x00 not yet sendt
-            //   0xFF no retransmission
-            if(ringBuffer[ircheck][2] != 0x3A)
-            {
-                ringBuffer[ircheck][1] = 0xFF;
-            }
+            ringBuffer[ircheck][1] = 0xFF;
+        }
 
-            if(ringBuffer[ircheck][0] > 0 && ringBuffer[ircheck][1] != 0x00 && ringBuffer[ircheck][1] != 0xFF)
-            {
-                ringBuffer[ircheck][1]++;
+        int size = ringBuffer[ircheck][0];
 
-                // stoppen da kein Empfang über längere Zeit
-                if(ringBuffer[ircheck][1] == 0x10)
+        if(size > 0 && ringBuffer[ircheck][1] != 0x00 && ringBuffer[ircheck][1] != 0xFF)
+        {
+            ringBuffer[ircheck][1]++;
+
+            // stoppen da kein Empfang über längere Zeit
+            if(ringBuffer[ircheck][1] == 0x20)    // 32 x 10sec = 320sec (5min 20sec) Wartezeit
+            {
+                int ring_msg_lng = ringBuffer[ircheck][0];
+
+                if(bDisplayRetx)
                 {
-                    int ring_msg_lng = ringBuffer[ircheck][0];
+                    unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
+                    Serial.printf("Retransmit retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
 
-                    if(bDisplayRetx)
+                    for(int iq=0;iq<ring_msg_lng+2;iq++)
                     {
-                        unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
-                        Serial.printf("Retransmit retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
-
-                        for(int iq=0;iq<ring_msg_lng+2;iq++)
-                        {
-                            if(ringBuffer[ircheck][iq] > 0x20 && ringBuffer[ircheck][iq] < 0x7F)
-                                Serial.printf("%c", ringBuffer[ircheck][iq]);
-                        }
-                        Serial.println("");
+                        if(ringBuffer[ircheck][iq] >= 0x20 && ringBuffer[ircheck][iq] <= 0x7F)
+                            Serial.printf("%c", ringBuffer[ircheck][iq]);
                     }
-
-                    iRetransmit = ircheck;
-
-                    return true;
+                    Serial.println("");
                 }
+
+                // origimalmeldung markieren
+                ringBuffer[ircheck][1] = 0xFF;
+
+                // Neuen Eintrag im Ringbuffer zur Wiederholung anlegen
+                memcpy(ringBuffer[iWrite], ringBuffer[ircheck], size + 2);
+
+                // KB hier das retransmitt
+                if (ringBuffer[iWrite][2] == 0x3A) // only Messages
+                    ringBuffer[iWrite][1] = 0x7F; // retransmission Status ...0x7F retransmission
+                else
+                    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+                
+                
+                iWrite++;
+                if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
+                    iWrite = 0;
+
+                return true;
             }
         }
     }
