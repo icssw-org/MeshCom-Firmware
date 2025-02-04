@@ -68,8 +68,11 @@ bool setupMCU811()
 
 bool loopMCU811()
 {
-    if(bMCU811ON == false)
+    if(!bMCU811ON)
+    {
+        meshcom_settings.node_co2=0.0;
         return false;
+    }
 
 	Wire.endTransmission(true);
 
