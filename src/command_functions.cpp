@@ -1535,7 +1535,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bSOFTSERON=false;
 
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x3FFF;
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7BFF;
 
         if(ble)
             bSensSetting = true;
