@@ -82,12 +82,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         {
             Serial.print(getTimeString());
             if(size == 7)
-                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
+                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X", (char*)"RX-LoRa", payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
             else
-                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X", (char*)"RX-LoRa", payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7], payload[8], payload[9], payload[10], payload[11]);
+                Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X", (char*)"RX-LoRa", payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
         }
 
         memcpy(print_buff, payload, 12);
+
+        /*
+        bool bServerFlag = false;
+        if((print_buff[5] & 0x80) == 0x80)
+            bServerFlag=true;
+        */
 
         int icheck = checkOwnTx(print_buff+6);
 
@@ -432,19 +438,23 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 }
                                 else
                                 {
+                                    bool bSendAckGateway=true;
                                     if(memcmp(aprsmsg.msg_payload.c_str(), "{MCP}", 5) == 0)
                                     {
                                         sendDisplayText(aprsmsg, rssi, snr);
+                                        bSendAckGateway=false;
                                     }
                                     else
                                     if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
                                     {
                                         sendDisplayText(aprsmsg, rssi, snr);
+                                        bSendAckGateway=false;
                                     }
                                     else
                                     if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
                                     {
                                         sendDisplayText(aprsmsg, rssi, snr);
+                                        bSendAckGateway=false;
                                     }
                                     else
                                     {
@@ -468,77 +478,84 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 addBLEOutBuffer(RcvBuffer, size);
                                             }
                                         }
+
+                                        // Wenn Meldung bereits von einem gateway/Server kommt kein ACK von einem anderen Gateway
+                                        if(aprsmsg.msg_server)
+                                            bSendAckGateway=false;
                                     }
 
                                     if(bGATEWAY)
                                     {
-                                        print_buff[6]=aprsmsg.msg_id & 0xFF;
-                                        print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
-                                        print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
-                                        print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
-
-                                        // nur bei Meldungen an fremde mit ACK
-                                        if(checkOwnTx(print_buff+6) >= 0)
+                                        if(bSendAckGateway)
                                         {
-                                            // und an alle geht Wolke mit Hackerl an BLE senden
-                                            if(aprsmsg.msg_destination_path == "*")
+                                            print_buff[6]=aprsmsg.msg_id & 0xFF;
+                                            print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
+                                            print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
+                                            print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
+
+                                            // nur bei Meldungen an fremde mit ACK
+                                            if(checkOwnTx(print_buff+6) >= 0)
                                             {
-                                                print_buff[5]=0x41;
-                                                print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
-                                                print_buff[11]=0x00;     // msg always 0x00 at the end
-                                                addBLEOutBuffer(print_buff+5, 7);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
-                                            if(aprsmsg.msg_destination_path == "*" || aprsmsg.msg_destination_path == "WLNK-1" || aprsmsg.msg_destination_path == "APRS2SOTA" || CheckGroup(aprsmsg.msg_destination_path) > 0)
-                                            {
-                                                // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
-                                                msg_counter=millis();   // ACK mit neuer msg_id versenden
-
-                                                print_buff[0]=0x41;
-                                                print_buff[1]=msg_counter & 0xFF;
-                                                print_buff[2]=(msg_counter >> 8) & 0xFF;
-                                                print_buff[3]=(msg_counter >> 16) & 0xFF;
-                                                print_buff[4]=(msg_counter >> 24) & 0xFF;
-                                                print_buff[5]=0x85; // max hop
-                                                print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
-                                                print_buff[11]=0x00;     // msg always 0x00 at the end
-                                                
-                                                ringBuffer[iWrite][0]=12;
-                                                ringBuffer[iWrite][1]=0xFF; // retransmission Status ...0xFF no retransmission
-                                                memcpy(ringBuffer[iWrite]+2, print_buff, 12);
-
-                                                iWrite++;
-                                                if(iWrite >= MAX_RING)
-                                                    iWrite=0;
-
-                                                if(bDisplayInfo)
+                                                // und an alle geht Wolke mit Hackerl an BLE senden
+                                                if(aprsmsg.msg_destination_path == "*")
                                                 {
-                                                    Serial.print(getTimeString());
-                                                    Serial.printf("ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                                                    print_buff[5]=0x41;
+                                                    print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
+                                                    print_buff[11]=0x00;     // msg always 0x00 at the end
+                                                    addBLEOutBuffer(print_buff+5, 7);
                                                 }
-                                                
-                                                unsigned long mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
-                                                addLoraRxBuffer(mid);
+                                            }
+                                            else
+                                            {
+                                                //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
+                                                if(aprsmsg.msg_destination_path == "*" || aprsmsg.msg_destination_path == "WLNK-1" || aprsmsg.msg_destination_path == "APRS2SOTA" || CheckGroup(aprsmsg.msg_destination_path) > 0)
+                                                {
+                                                    // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
+                                                    msg_counter=millis();   // ACK mit neuer msg_id versenden
 
-                                                msg_counter=millis();   // ACK mit neuer msg_id versenden
+                                                    print_buff[0]=0x41;
+                                                    print_buff[1]=msg_counter & 0xFF;
+                                                    print_buff[2]=(msg_counter >> 8) & 0xFF;
+                                                    print_buff[3]=(msg_counter >> 16) & 0xFF;
+                                                    print_buff[4]=(msg_counter >> 24) & 0xFF;
+                                                    print_buff[5]=0x85;      // server & max hop
+                                                    print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
+                                                    print_buff[11]=0x00;     // msg always 0x00 at the end
+                                                    
+                                                    ringBuffer[iWrite][0]=12;
+                                                    ringBuffer[iWrite][1]=0xFF; // retransmission Status ...0xFF no retransmission
+                                                    memcpy(ringBuffer[iWrite]+2, print_buff, 12);
 
-                                                print_buff[1]=msg_counter & 0xFF;
-                                                print_buff[2]=(msg_counter >> 8) & 0xFF;
-                                                print_buff[3]=(msg_counter >> 16) & 0xFF;
-                                                print_buff[4]=(msg_counter >> 24) & 0xFF;
+                                                    iWrite++;
+                                                    if(iWrite >= MAX_RING)
+                                                        iWrite=0;
 
-                                                memcpy(ringBuffer[iWrite]+2, print_buff, 12);
+                                                    if(bDisplayInfo)
+                                                    {
+                                                        Serial.print(getTimeString());
+                                                        Serial.printf("ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                                                    }
+                                                    
+                                                    unsigned long mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
+                                                    addLoraRxBuffer(mid);
 
-                                                iWrite++;
-                                                if(iWrite >= MAX_RING)
-                                                    iWrite=0;
+                                                    msg_counter=millis();   // ACK mit neuer msg_id versenden
 
-                                                mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
-                                                
-                                                addLoraRxBuffer(mid);
+                                                    print_buff[1]=msg_counter & 0xFF;
+                                                    print_buff[2]=(msg_counter >> 8) & 0xFF;
+                                                    print_buff[3]=(msg_counter >> 16) & 0xFF;
+                                                    print_buff[4]=(msg_counter >> 24) & 0xFF;
+
+                                                    memcpy(ringBuffer[iWrite]+2, print_buff, 12);
+
+                                                    iWrite++;
+                                                    if(iWrite >= MAX_RING)
+                                                        iWrite=0;
+
+                                                    mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
+                                                    
+                                                    addLoraRxBuffer(mid);
+                                                }
                                             }
                                         }
                                     }
@@ -881,7 +898,10 @@ bool doTX()
                         if(bDisplayInfo)
                         {
                             Serial.print(getTimeString());
-                            Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[1], lora_tx_buffer[2], lora_tx_buffer[3], lora_tx_buffer[4], lora_tx_buffer[5], lora_tx_buffer[6]);
+                        if(sendlng == 7)
+                            Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[4], lora_tx_buffer[3], lora_tx_buffer[2], lora_tx_buffer[1], lora_tx_buffer[5], lora_tx_buffer[6]);
+                        else
+                            Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", (char*)"TX-LoRa", lora_tx_buffer[0], lora_tx_buffer[4], lora_tx_buffer[3], lora_tx_buffer[2], lora_tx_buffer[1], lora_tx_buffer[5], lora_tx_buffer[9], lora_tx_buffer[8], lora_tx_buffer[7], lora_tx_buffer[6], lora_tx_buffer[10], lora_tx_buffer[11]);
                         }
                     }   
                     else
