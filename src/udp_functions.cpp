@@ -805,9 +805,9 @@ String getJSON(unsigned char incoming[300], int len, char *iname)
 
 }
 
-void getExtern(unsigned char incoming[255], int len)
+void getExtern(unsigned char incoming[], int len)
 {
-  char val[100];
+  char val[160];
   struct aprsMessage aprsmsg;
 
   // Decode
@@ -832,7 +832,7 @@ void getExtern(unsigned char incoming[255], int len)
     return;
   }
   
-  sprintf(val, ":{%s}%s", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+  snprintf(val,160, ":{%s}%s", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
 
   sendMessage(val, strlen(val));
 }
