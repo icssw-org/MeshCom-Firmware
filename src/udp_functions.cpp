@@ -807,7 +807,7 @@ String getJSON(unsigned char incoming[300], int len, char *iname)
 
 void getExtern(unsigned char incoming[], int len)
 {
-  char val[160];
+  char val[160+1];
   struct aprsMessage aprsmsg;
 
   // Decode
