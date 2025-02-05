@@ -472,7 +472,7 @@ bool startWIFI()
   {
      if(strcmp(WiFi.SSID(i).c_str(), meshcom_settings.node_ssid) == 0)
      {
-      Serial.printf("SSID: %s CHAN: %d RSSI: %d BSSID: ", WiFi.SSID(i).c_str(), (int) WiFi.channel(i), (int) WiFi.RSSI(i));
+      Serial.printf("[WIFI]...SSID: %s CHAN: %d RSSI: %d BSSID: ", WiFi.SSID(i).c_str(), (int) WiFi.channel(i), (int) WiFi.RSSI(i));
       uint8_t *bssid = WiFi.BSSID(i);
       for (byte i = 0; i < 6; i++){
         Serial.print(*bssid++, HEX);
@@ -487,10 +487,11 @@ bool startWIFI()
         }
      }
   }
+
   if(best_idx == -1)
   {
     // ESP32 - force connecting (in case of hidden ssid or out of range atm)
-    Serial.printf("-> try connecting to SSID: %s \n",meshcom_settings.node_ssid);	
+    Serial.printf("[WIFI]...try connecting to SSID: %s \n",meshcom_settings.node_ssid);	
     WiFi.mode(WIFI_STA);
     
     if(strcmp(meshcom_settings.node_pwd, "none") == 0)
@@ -502,7 +503,7 @@ bool startWIFI()
   else
   {
     // ESP32 - connecting to strongest ssid
-    Serial.printf("-> connecting to CHAN: %d BSSID: ",(int) WiFi.channel(best_idx));	
+    Serial.printf("[WIFI]...connecting to CHAN: %d BSSID: ",(int) WiFi.channel(best_idx));	
     uint8_t *bssid = WiFi.BSSID(best_idx);
     for (byte i = 0; i < 6; i++){
       Serial.print(*bssid++, HEX);
@@ -516,9 +517,10 @@ bool startWIFI()
     else
       WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
   }
+  
   delay(500);
 
-  Serial.printf("WiFi.power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
+  Serial.printf("[WIFI]...power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
 #else
   // RAK WIFI connect
   if(strcmp(meshcom_settings.node_pwd, "none") == 0)
@@ -527,20 +529,21 @@ bool startWIFI()
     WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
 #endif
 
-  Serial.println("Wait WiFI connect");
-
-  if(!doWiFiConnect())
-    return false;
+  iWlanWait = 1;
 
   return true;
 }
 
 bool doWiFiConnect()
 {
+  if(iWlanWait == 1)
+    Serial.print("[WIFI]...Wait connect ");
+
   while(WiFi.status() != WL_CONNECTED)
   {
+
     //delay(1000);
-    //Serial.print(".");
+    Serial.print(".");
 
     iWlanWait++;
     
@@ -549,13 +552,16 @@ bool doWiFiConnect()
 
     if(iWlanWait > 15)
     {
-      Serial.printf("\nWiFI ssid<%s> connection error\n", meshcom_settings.node_ssid);
+      Serial.printf("\n[WIFI]...ssid<%s> connection error\n", meshcom_settings.node_ssid);
       iWlanWait = 0;
-      return false;
     }
+
+    return false;
+
   }
 
-  Serial.println("WIFI connect OK");
+  Serial.println("");
+  Serial.println("[WIFI]...connect OK");
 
   iWlanWait = 0;
 
@@ -642,7 +648,7 @@ void startMeshComUDP()
 
   Udp.begin(LOCAL_PORT);
 
-  Serial.printf("WiFi now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
+  Serial.printf("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
 
   hasIPaddress=true;
   meshcom_settings.node_hasIPaddress = hasIPaddress;

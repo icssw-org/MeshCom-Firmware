@@ -1038,6 +1038,10 @@ void esp32setup()
     meshcom_settings.node_date_second = 0;
     meshcom_settings.node_date_hundredths = 0;
 
+    Serial.println("==============");
+    Serial.println("CLIENT STARTED");
+    Serial.println("==============");
+
     ///////////////////////////////////////////////////////
     // WIFI
     if(bGATEWAY || bEXTUDP || bWEBSERVER)
@@ -1046,13 +1050,6 @@ void esp32setup()
 
         if(startWIFI())
         {
-            if(bGATEWAY || bWEBSERVER)
-            {
-                // get Wifi DHCP, start WIfI
-                sendMeshComHeartbeat();
-            }
-
-
             if(bWEBSERVER)
             {
                 delay(500);
@@ -1068,10 +1065,6 @@ void esp32setup()
     }
     //
     ///////////////////////////////////////////////////////
-
-    Serial.println("==============");
-    Serial.println("CLIENT STARTED");
-    Serial.println("==============");
 
 }
 
@@ -1756,7 +1749,7 @@ void esp32loop()
             web_timer = millis();
 
             #ifndef BOARD_RAK4630
-                if(!meshcom_settings.node_hasIPaddress)
+                if(!meshcom_settings.node_hasIPaddress || iWlanWait > 0)
                 {
                     if(iWlanWait == 0)
                     {
