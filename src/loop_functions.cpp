@@ -20,6 +20,8 @@ int BOARD_HARDWARE = MODUL_HARDWARE;
 
 extern unsigned long rebootAuto;
 
+int iWlanWait = 0;
+
 extern float global_batt;
 extern int global_proz;
 

@@ -74,5 +74,7 @@ jobs:
         .pio/build/esp32-safeboot/safeboot.bin,
         .pio/build/esp32-S3-safeboot/bootloader-s3.bin,
         .pio/build/esp32-safeboot/bootloader.bin,
-        .pio/build/esp32-safeboot/partitions.bin"
+        .pio/build/esp32-safeboot/partitions.bin,
+        otadata.bin"
+        
         bodyFile: "release.md"

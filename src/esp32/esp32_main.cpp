@@ -1750,17 +1750,26 @@ void esp32loop()
 
     if(bWEBSERVER)
     {
-        if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 30)) < millis()))   // repeat 15 minutes
+        if (web_timer == 0 || (iWlanWait > 0 && ((web_timer + 1000) < millis())) || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 30)) < millis()))   // repeat 15 minutes
         {
 
             web_timer = millis();
 
             #ifndef BOARD_RAK4630
-                // restart WEB-Client
-                stopWebserver();
-
                 if(!meshcom_settings.node_hasIPaddress)
-                    startWIFI();
+                {
+                    if(iWlanWait == 0)
+                    {
+                        // restart WEB-Client
+                        stopWebserver();
+
+                        startWIFI();
+                    }
+                    else
+                        doWiFiConnect();
+                }
+                else
+                    iWlanWait = 0;
             #endif
         }
 

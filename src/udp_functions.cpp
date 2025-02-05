@@ -6,6 +6,7 @@
 #include <debugconf.h>
 #include <batt_functions.h>
 #include <command_functions.h>
+#include <loop_functions_extern.h>
 
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
@@ -525,25 +526,38 @@ bool startWIFI()
   else
     WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
 #endif
-  int iWlanWait = 0;
 
-  Serial.print("Wait WiFI connect ");
+  Serial.println("Wait WiFI connect");
 
+  if(!doWiFiConnect())
+    return false;
+
+  return true;
+}
+
+bool doWiFiConnect()
+{
   while(WiFi.status() != WL_CONNECTED)
   {
-    delay(1000);
-    Serial.print(".");
+    //delay(1000);
+    //Serial.print(".");
+
     iWlanWait++;
-    if(iWlanWait == 5) WiFi.reconnect();
+    
+    if(iWlanWait == 7)
+      WiFi.reconnect();
 
     if(iWlanWait > 15)
     {
       Serial.printf("\nWiFI ssid<%s> connection error\n", meshcom_settings.node_ssid);
+      iWlanWait = 0;
       return false;
     }
   }
 
   Serial.println("WIFI connect OK");
+
+  iWlanWait = 0;
 
   // run startMeshComUDP() to get IP Address
   startMeshComUDP();

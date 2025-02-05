@@ -48,7 +48,7 @@ void wifiConnect() {
   Serial.printf("WIFI AP: %d\n", bWIFIAP);
 
   // Set the hostname from the callsign. If the callsign is not set, use the default hostname
-  if(meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
+  if(!((meshcom_settings.node_call[0] == 0x00) || (memcmp(meshcom_settings.node_call, "none", 4) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0)))
   {
     hostname = meshcom_settings.node_call;
   }
