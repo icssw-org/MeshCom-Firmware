@@ -77,8 +77,11 @@ void startWebserver()
 
     if(strlen(meshcom_settings.node_ip) < 7)
     {
-        Serial.print("[WEB]...no ip set :");
-        Serial.println(meshcom_settings.node_ip);
+        if(bDEBUG)
+        {
+            Serial.print("[WEB]...no ip set :");
+            Serial.println(meshcom_settings.node_ip);
+        }
         return;
     }
 
@@ -138,8 +141,11 @@ void loopWebserver()
 
     if(strlen(meshcom_settings.node_ip) < 7)
     {
-        Serial.print("[WEBLOOP]...no ip set :");
-        Serial.println(meshcom_settings.node_ip);
+        if(bDEBUG)
+        {
+            Serial.print("[WEBLOOP]...no ip set :");
+            Serial.println(meshcom_settings.node_ip);
+        }
         return;
     }
 

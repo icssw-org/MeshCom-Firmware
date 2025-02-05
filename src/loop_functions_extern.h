@@ -12,6 +12,8 @@ extern int BOARD_HARDWARE;
 
 extern unsigned long rebootAuto;
 
+extern int iWlanWait;
+
 extern bool bSetLoRaAPRS;
 
 extern bool bDEBUG;
