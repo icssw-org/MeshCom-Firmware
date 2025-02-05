@@ -2696,19 +2696,19 @@ void commandAction(char *msg_text, bool ble)
             if(ibt == 0)
                 ibt = BUTTON_PIN;
 
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...MHONLY %s ...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s  ... SOFTSER %s\n...PASSWD <%s>\n",
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call: <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...MHONLY %s ...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s\n...PASSWD <%s>\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
                     (bMHONLY?"on":"off"), (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
-            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ... BLEDEBUG %s\n",
+            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
 #ifndef BOARD_RAK4630
-            Serial.printf("...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n", (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
+            Serial.printf("...EXTUDP %s ...EXTSERUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
 #endif
-            Serial.printf("...BTCODE  %06i\n", meshcom_settings.bt_code);
-            Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
+            Serial.printf("...BTCODE %06i\n", meshcom_settings.bt_code);
+            Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
                     meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"),  (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
 
@@ -2761,7 +2761,7 @@ void commandAction(char *msg_text, bool ble)
                         Serial.printf("...SSID <>");
 
                     if(strlen(meshcom_settings.node_pwd) > 0)
-                        Serial.printf(" / PASSWORD <%s>\n", meshcom_settings.node_pwd);
+                        Serial.printf(" / PASSWORD <******>\n");
                     else
                         Serial.printf(" / PASSWORD <>\n");
                 }
@@ -2783,7 +2783,7 @@ void commandAction(char *msg_text, bool ble)
                 }
     
                 if(!bWIFIAP)
-                    Serial.printf("...UDP-HBeat   : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
+                    Serial.printf("...UDP-HBeat    : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
             }
     
             sendDisplayHead(true);
