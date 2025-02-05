@@ -527,7 +527,7 @@ bool startWIFI()
     WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
 #endif
 
-  Serial.print("Wait WiFI connect ");
+  Serial.println("Wait WiFI connect");
 
   if(!doWiFiConnect())
     return false;
