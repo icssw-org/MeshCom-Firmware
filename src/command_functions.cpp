@@ -2756,12 +2756,12 @@ void commandAction(char *msg_text, bool ble)
                 else
                 {
                     if(strlen(meshcom_settings.node_ssid) > 0)
-                        Serial.printf("...SSID <**********>");
+                        Serial.printf("...SSID <%s>", meshcom_settings.node_ssid);
                     else
                         Serial.printf("...SSID <>");
 
                     if(strlen(meshcom_settings.node_pwd) > 0)
-                        Serial.printf(" / PASSWORD <**********>\n");
+                        Serial.printf(" / PASSWORD <%s>\n", meshcom_settings.node_pwd);
                     else
                         Serial.printf(" / PASSWORD <>\n");
                 }
