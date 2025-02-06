@@ -481,14 +481,14 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			sVar.toUpperCase();
 			sVar.trim();
 
-			sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
+			snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sVar.c_str());
 
-			sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
+			snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
 			//Führt zu Reconnect sendDisplayHead(false);
 
 			#if defined NRF52_SERIES
-				sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
+				snprintf(helper_string, sizeof(helper_string),"%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
 				
 				if(bBLEDEBUG)
 				{
@@ -636,8 +636,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				String s_SSID = ssid_arr;
 				String s_PWD = pwd_arr;
 
-				sprintf(meshcom_settings.node_ssid, "%s", s_SSID.c_str());
-				sprintf(meshcom_settings.node_pwd, "%s", s_PWD.c_str());
+				snprintf(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid),"%s", s_SSID.c_str());
+				snprintf(meshcom_settings.node_pwd, sizeof(meshcom_settings.node_pwd),"%s", s_PWD.c_str());
 
 				if(bBLEDEBUG)
 					Serial.println("Wifi Setting from phone set");

@@ -625,7 +625,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                     if(aprsmsg.payload_type == '@')
                                     {
-                                        aprsmsg.msg_payload.concat(rssi*-1.0);
+                                        char crssi[10];
+                                        snprintf(crssi, sizeof(crssi), "%.0f", rssi*-1.0);
+                                        aprsmsg.msg_payload.concat(crssi);
                                         aprsmsg.msg_payload.concat(',');
                                     }
                                     

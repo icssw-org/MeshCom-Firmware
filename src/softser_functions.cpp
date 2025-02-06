@@ -58,12 +58,12 @@ bool loopSOFTSER(int ID, int iFunction)
     {
         if(iFunction == 0)
         {
-            sprintf(cText, "%s", "/cl/time/get");
+            snprintf(cText, sizeof(cText), "%s", "/cl/time/get");
         }
         else
         if(iFunction == 1)
         {
-            sprintf(cText, "/cl/data/get/%s", strSOFTSER_BUF.substring(6, 20).c_str());
+            snprintf(cText, sizeof(cText), "/cl/data/get/%s", strSOFTSER_BUF.substring(6, 20).c_str());
 
             unsigned int year;
             unsigned int month;
@@ -74,7 +74,7 @@ bool loopSOFTSER(int ID, int iFunction)
 
             char ctime_buf[30];
 
-            sprintf(ctime_buf, "%s", strSOFTSER_BUF.substring(6, 20).c_str());
+            snprintf(ctime_buf, sizeof(ctime_buf), "%s", strSOFTSER_BUF.substring(6, 20).c_str());
 
             sscanf(ctime_buf, "%04u%02u%02u%02u%02u%02u", &year, &month, &day, &hour, &minute, &second);
 
@@ -258,7 +258,7 @@ bool getSOFTSER()
 
             if((c < 0x20 || c > 0x7f) && c != 0x0d && c != 0x0a)
             {
-                sprintf(tmp_hex, "<0x%02x>", c);
+                snprintf(tmp_hex, sizeof(tmp_hex), "<0x%02x>", c);
                 tmp_data += tmp_hex;
                 
             }
@@ -293,7 +293,7 @@ bool sendSOFTSER(char cText[100])
 
     char cSend[100];
     
-    sprintf(cSend, "\r");
+    snprintf(cSend, sizeof(cSend), "\r");
 
 #ifdef ESP32
     SOFTSER.write(cSend);
@@ -303,7 +303,7 @@ bool sendSOFTSER(char cText[100])
 
     delay(500);
 
-    sprintf(cSend, "%s\r", cText);
+    snprintf(cSend, sizeof(cSend), "%s\r", cText);
 
 #ifdef ESP32
     SOFTSER.write(cSend);

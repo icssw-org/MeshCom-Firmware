@@ -1336,7 +1336,10 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<tr><td>\n");
                     web_client.println("<label for=\"fname\"><b>BUTTON-PIN:</b></label>");
                     web_client.println("</td><td>\n");
-                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"2\" id=\"ubgpio\" name=\"ubgpio\">\n", meshcom_settings.node_button_pin);
+                    int ibt = meshcom_settings.node_button_pin;
+                    if(ibt == 0)
+                        ibt = BUTTON_PIN;
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"2\" id=\"ubgpio\" name=\"ubgpio\">\n", ibt);
                     web_client.println("<input type=\"submit\" value=\"set\">");
                     web_client.println("</td></tr>\n");
                     web_client.println("</form>");
