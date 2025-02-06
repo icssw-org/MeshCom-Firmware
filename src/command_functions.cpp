@@ -2859,12 +2859,14 @@ void commandAction(char *msg_text, bool ble)
         if(bWIFIAP)
         {
             swdoc["SSID"] = cBLEName;
-            //KBC/KFR swdoc["PW"] = "";
+            //KBC/KFR -> TO BE REMOVED!
+            swdoc["PW"] = "";
         }
         else
         {
             swdoc["SSID"] = meshcom_settings.node_ssid;
-            //KBC/KFR swdoc["PW"] = meshcom_settings.node_pwd;
+            //KBC/KFR -> TO BE REMOVED!
+            swdoc["PW"] = meshcom_settings.node_pwd;
         }
         swdoc["IP"] = meshcom_settings.node_ip;
         swdoc["GW"] = meshcom_settings.node_gw;     // IP GW Address
@@ -3005,7 +3007,8 @@ void sendNodeSetting()
     nsetdoc["TYP"] = "SN";
     nsetdoc["GW"] = bGATEWAY;
     nsetdoc["WS"] = bWEBSERVER;
-    //KBC/KFR nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
+    //KBC/KFR -> TO BE REMOVED!
+    nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc["DISP"] =  bDisplayOff;
     nsetdoc["BTN"] = bButtonCheck;
     nsetdoc["MSH"] = bMESH;
@@ -3018,7 +3021,8 @@ void sendNodeSetting()
     nsetdoc["MCR"] = meshcom_settings.node_cr;
     nsetdoc["MBW"] = meshcom_settings.node_bw;
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
-    //KBC/KFR nsetdoc["BTCODE"] = meshcom_settings.bt_code;
+    //KBC/KFR  -> TO BE REMOVED!
+    nsetdoc["BTCODE"] = meshcom_settings.bt_code;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));
