@@ -113,7 +113,7 @@ EInkDisplay_VisionMasterE290 e290_display;
 #include "Fonts/FreeSans9pt7b.h"
 #include "Fonts/FreeSans12pt7b.h"
 
-int dzeile[6] = {16, 44, 64, 84, 104, 124};
+int dzeile[6] = {16, 41, 61, 81, 101, 121};
 
 #else
 

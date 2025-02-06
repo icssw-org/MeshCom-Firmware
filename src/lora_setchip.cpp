@@ -39,7 +39,7 @@ bool rf_crc = true;
 uint16_t rf_preamble_length = LORA_PREAMBLE_LENGTH;
 
 //0...EU  1...UK, 2...ON, 3...EA, 4...OM, 8...EU8, 10...US, ..... 18...868, 19...915, 20...MAN
-String strCountry[21] = {"EU", "UK", "ON", "EA", "OM", "none", "none", "none", "EU8", "UK8", "US", "VR2", "none", "none", "none", "none", "none", "none", "868", "915", "MAN"};
+String strCountry[21] = {"EU", "UK", "ON", "EA", "LA", "none", "none", "none", "EU8", "UK8", "US", "VR2", "none", "none", "none", "none", "none", "none", "868", "915", "MAN"};
 
 String getCountry(int iCtry)
 {

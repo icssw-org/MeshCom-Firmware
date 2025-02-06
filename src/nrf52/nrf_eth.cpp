@@ -304,12 +304,6 @@ int NrfETH::getUDP()
 
             if(msg_type_b == 0x3A)
             {
-              if(bDisplayInfo)
-              {
-                printBuffer_aprs((char*)"RX-UDP ", aprsmsg);
-                Serial.println();
-              }
-
               if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
               {
                   sendDisplayText(aprsmsg, (int16_t)99, (int8_t)0);

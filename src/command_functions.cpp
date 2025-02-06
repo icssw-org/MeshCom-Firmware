@@ -706,7 +706,9 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        setupBMX280(false);
+        #if defined(ENABLE_BMX280)
+            setupBMX280(false);
+        #endif
     }
     else
     if(commandCheck(msg_text+2, (char*)"bme on") == 0)
@@ -729,7 +731,9 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        setupBMX280(false);
+        #if defined(ENABLE_BMX280)
+            setupBMX280(false);
+        #endif
     }
     else
     if(commandCheck(msg_text+2, (char*)"680 on") == 0)
@@ -753,7 +757,7 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
 
         #if defined(ENABLE_BMX680)
-        setupBME680();
+            setupBME680();
         #endif
     }
     else
@@ -770,7 +774,9 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        setupMCU811();
+        #if defined(ENABLE_MC811)
+            setupMCU811();
+        #endif
     }
     else
     #endif
@@ -836,7 +842,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bBME680ON=false;
         
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFA; // BME680 off
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFB; // BME680 off
 
         if(ble)
             bSensSetting = true;
@@ -1848,6 +1854,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bWIFIAP=true;
 
+        bWEBSERVER=true;
         bGATEWAY=false;
         
         meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0080;
@@ -1860,11 +1867,16 @@ void commandAction(char *msg_text, bool ble)
             bReturn = true;
 
         save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
     }
     else
     if(commandCheck(msg_text+2, (char*)"wifiap off") == 0)
     {
         bWIFIAP=false;
+
+        bWEBSERVER=false;
+        bGATEWAY=false;
         
         meshcom_settings.node_sset2  = meshcom_settings.node_sset2 & 0x7F7F;   // mask 0x0080
 
@@ -1876,6 +1888,8 @@ void commandAction(char *msg_text, bool ble)
             bReturn = true;
 
         save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
     }
     else
 #endif
@@ -2870,12 +2884,14 @@ void commandAction(char *msg_text, bool ble)
         if(bWIFIAP)
         {
             swdoc["SSID"] = cBLEName;
-            //KBC/KFR swdoc["PW"] = "";
+            //KBC/KFR
+             swdoc["PW"] = "";
         }
         else
         {
             swdoc["SSID"] = meshcom_settings.node_ssid;
-            //KBC/KFR swdoc["PW"] = meshcom_settings.node_pwd;
+            //KBC/KFR
+             swdoc["PW"] = meshcom_settings.node_pwd;
         }
         swdoc["IP"] = meshcom_settings.node_ip;
         swdoc["GW"] = meshcom_settings.node_gw;     // IP GW Address
@@ -3016,7 +3032,8 @@ void sendNodeSetting()
     nsetdoc["TYP"] = "SN";
     nsetdoc["GW"] = bGATEWAY;
     nsetdoc["WS"] = bWEBSERVER;
-    //KBC/KFR nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
+    //KBC/KFR
+     nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc["DISP"] =  bDisplayOff;
     nsetdoc["BTN"] = bButtonCheck;
     nsetdoc["MSH"] = bMESH;
@@ -3029,7 +3046,8 @@ void sendNodeSetting()
     nsetdoc["MCR"] = meshcom_settings.node_cr;
     nsetdoc["MBW"] = meshcom_settings.node_bw;
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
-    //KBC/KFR nsetdoc["BTCODE"] = meshcom_settings.bt_code;
+    //KBC/KFR
+     nsetdoc["BTCODE"] = meshcom_settings.bt_code;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));

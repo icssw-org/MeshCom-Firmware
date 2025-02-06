@@ -436,7 +436,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 		case 0x20: {
 
-			DEBUG_MSG("BLE", "Timestamp from phone received");
+			if(bBLEDEBUG)
+				Serial.print("[BLE] Timestamp from phone received ");
 
 			// 4B Timestamp
 			uint32_t timestamp = 0;
@@ -444,20 +445,46 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			// set the meshcom settings variables for the timestamp
 			struct tm timeinfo = {0};
 			gmtime_r((time_t*)&timestamp, &timeinfo);
+
+			if(bBLEDEBUG)
+				Serial.printf("%i.%i.%i %i:%i:%i\n", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
 			// set the clock
 			if(bRTCON)
 			{
 				setRTCNow(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+				
+				DateTime utc = getRTCNow();
+
+				DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
+
+				meshcom_settings.node_date_year = now.year();
+				meshcom_settings.node_date_month = now.month();
+				meshcom_settings.node_date_day = now.day();
+
+				meshcom_settings.node_date_hour = now.hour();
+				meshcom_settings.node_date_minute = now.minute();
+				meshcom_settings.node_date_second = now.second();
 			}
 			else
 			{
 				MyClock.setCurrentTime(meshcom_settings.node_utcoff, timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+				MyClock.CheckEvent();
+				
+				meshcom_settings.node_date_year = MyClock.Year();
+				meshcom_settings.node_date_month = MyClock.Month();
+				meshcom_settings.node_date_day = MyClock.Day();
+
+				meshcom_settings.node_date_hour = MyClock.Hour();
+				meshcom_settings.node_date_minute = MyClock.Minute();
+				meshcom_settings.node_date_second = MyClock.Second();
 			}
 
 			if (bBLEDEBUG)
 			{
-				Serial.printf("Timestamp from phone <UTC>: %u\n", timestamp);
-				Serial.printf("Date <UTC>: %02d.%02d.%04d %02d:%02d:%02d\n", meshcom_settings.node_date_day, meshcom_settings.node_date_month, meshcom_settings.node_date_year, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+				Serial.printf("[BLE] Timestamp from phone <UTC>: %u\n", timestamp);
+				Serial.printf("[BLE] Date <LT>: %02d.%02d.%04d %02d:%02d:%02d\n", meshcom_settings.node_date_day, meshcom_settings.node_date_month, meshcom_settings.node_date_year, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 			}
 
 			break;
