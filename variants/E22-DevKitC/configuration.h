@@ -1,5 +1,5 @@
 /*
-definitions
+definitions for E22 Board
 */
 
 #pragma once
@@ -24,57 +24,11 @@ definitions
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 
-
-
-
-
-#ifdef ESP32
-
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
-
-// ESP32
-/** 
- * Radiolib Object Module
- * Pins needed DIO0, DIO1, NSS(CS), RESET
- * Pin Definitions are found in the Board Files under: 
- * USERDIRECTORY/.platformio/packages/framework-arduinoespressif32/variants
- * Pin Definitions vary in the definitions
-*/ 
-
-// Board names are defined in platformio.ini so it is easy to distinguish them
-// Chipselect SS definition is on all boards the same 
-
-// !!sofern richtig wird DIO1 nur für LoRaWAN benötigt. Das TloraV2 hat keinen DIO1 definiert, 
-// wird aber grundsätzlich in der Modem-Config benötigt!!!
-
-
-
-#ifdef SX127X
-#define TX_OUTPUT_POWER 17
-#endif
-
-#ifdef SX1262X
-#define TX_OUTPUT_POWER 22  // SX1268 have up to +22dBm
-#endif
-
-#ifdef SX126X
-#define TX_OUTPUT_POWER 22  // SX1268 have up to +22dBm
-#endif
-
-#ifdef SX1262_E290
-#define TX_OUTPUT_POWER 22  // SX1268 have up to +22dBm
-#endif
-
-
-#ifdef SX1262
-#define TX_OUTPUT_POWER 22  // SX1262 have up to +22dBm
-#endif
-
+#define TX_OUTPUT_POWER 22  // E22 / SX1262 have up to +22dBm
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
-#ifdef SX126X_V3
-#define TX_OUTPUT_POWER 22  // SX1262 have up to +22dBm
-#endif
+
 /**
  * RadioLib Coding Rate: Allowed values range from 5 to 8.
  * case 5: CR_4_5;
@@ -98,14 +52,6 @@ definitions
 */
 #define LORA_SF 11
 
-
-
-
-
-
-
-
-
 // Custom Board homemade E22-Ebyte Module + AZ Delivery ESP32 DevKitC v4
 
 #define BUTTON_PIN 12
@@ -128,12 +74,3 @@ definitions
 #define SX1268_GPIO LORA_DIO0
 
 #define OneWire_GPIO 25 // getestet OE5HWN
-
-
-
-#endif
-
-// common for all Boards:
-
-// OLED
-#define SSD1306_ADDRESS 0x3C
