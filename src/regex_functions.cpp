@@ -12,9 +12,12 @@ int ret_call;
 
 bool checkRegexCall(String callsign)
 {
-	if(callsign == "*")
+	if(callsign == "*") // TOALL message
 		return true;
 	
+	if(callsign == "H")	// HEY Message
+		return true;
+
 	if(callsign == "BOT GATE")
 		return true;
 

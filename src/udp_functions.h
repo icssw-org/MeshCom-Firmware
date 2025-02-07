@@ -6,6 +6,7 @@
 
 // WIFI functions
 bool startWIFI();
+bool doWiFiConnect();
 
 // MeshCom UDP functions
 void getMeshComUDP();

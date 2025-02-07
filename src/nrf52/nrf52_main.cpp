@@ -158,6 +158,7 @@ bool g_meshcom_initialized;
 bool init_flash_done=false;
 
 bool bPosFirst = true;
+bool bHeyFirst = true;
 
 // Queue for sending config jsons to phone
 uint8_t iPhoneState = 0;
@@ -399,8 +400,11 @@ void nrf52setup()
     bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
     bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
+    bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
 
     bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
+    bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
+    bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
 
     bDisplayInfo = bLORADEBUG;
 
@@ -417,6 +421,22 @@ void nrf52setup()
         bGATEWAY=false;
         bEXTSER=false;
         bEXTUDP=false;
+    }
+
+    #ifndef ENABLE_SOFTSER
+        bSOFTSERON=false;
+    #endif
+
+    // Umstekllung auf langes WIFI Passwort
+    if(strlen(meshcom_settings.node_ossid) > 4 && strlen(meshcom_settings.node_ssid) < 5)
+    {
+        strcpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid);
+        strcpy(meshcom_settings.node_pwd, meshcom_settings.node_opwd);
+
+        memset(meshcom_settings.node_ossid, 0x00, sizeof(meshcom_settings.node_ossid));
+        memset(meshcom_settings.node_opwd, 0x00, sizeof(meshcom_settings.node_opwd));
+
+        save_settings();
     }
 
     global_batt = 4200.0;
@@ -470,7 +490,7 @@ void nrf52setup()
 	
 	// initialize clock
 	boResult = MyClock.Init();
-	Serial.printf("Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
+	Serial.printf("[INIT]...Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
 
     DisplayTimeWait=0;
     //
@@ -645,16 +665,16 @@ void nrf52setup()
         setupSOFTSER();
     #endif
 
-    Serial.println(F("Auto detecting display:"));
+    Serial.println(F("[INIT]...Auto detecting display:"));
     
     if (esp32_isSSD1306(0x3C))
     { //Address of the display to be checked
-        Serial.println(F("-> OLED Display is SSD1306"));
+        Serial.println(F("[INIT]...-> OLED Display is SSD1306"));
         u8g2 = &u8g2_2;
     }
     else
     {
-        Serial.println(F("-> OLED Display is SH1106"));
+        Serial.println(F("[INIT]...-> OLED Display is SH1106"));
         u8g2 = &u8g2_1;
     }
 
@@ -666,14 +686,14 @@ void nrf52setup()
     do
     {
         u8g2->setFont(u8g2_font_10x20_mf);
-        u8g2->drawStr(5, 20, "MeshCom 4.0");
+        u8g2->drawStr(5, 15, "MeshCom 4.0");
         u8g2->setFont(u8g2_font_6x10_mf);
         char cvers[20];
-        sprintf(cvers, "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
-        u8g2->drawStr(5, 30, cvers);
-        u8g2->drawStr(5, 40, "by icssw.org");
-        u8g2->drawStr(5, 50, "OE1KFR, OE1KBC");
-        u8g2->drawStr(5, 60, "...starting now");
+        snprintf(cvers, sizeof(cvers), "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        u8g2->drawStr(5, 25, cvers);
+        u8g2->drawStr(5, 35, "by icssw.org");
+        u8g2->drawStr(5, 45, "OE1KFR, OE1KBC");
+        u8g2->drawStr(5, 55, "...starting now");
     } while (u8g2->nextPage());
 
     // reset GPS-Time parameter
@@ -682,7 +702,7 @@ void nrf52setup()
     meshcom_settings.node_date_second = 0;
     meshcom_settings.node_date_hundredths = 0;
 
-    Serial.println("CLIENT STARTED");
+    Serial.println("[INIT] CLIENT STARTED");
 
     //  Set the LoRa Callback Functions
     RadioEvents.TxDone = OnTxDone;
@@ -782,17 +802,32 @@ void nrf52setup()
     {
         //////////////////////////////////////////////////////
         // ETHERNET INIT
-        Serial.println("[init] ETH DHCP init");
-    
-        neth.initethDHCP();
+   
+        if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+        {
+            if(bDEBUG)
+                Serial.println("[init] ETH FIX-IP init");
+
+            neth.initethfixIP();
+        }
+        else
+        {
+            if(bDEBUG)
+                Serial.println("[init] ETH DHCP init");
+
+            neth.initethDHCP();
+        }
 
         if(neth.hasETHHardware)
         {
-            sendHeartbeat();
+            if(bGATEWAY)
+            {
+                sendHeartbeat();
 
-            Serial.println("=====================================");
-            Serial.printf("GATEWAY 4.0 RUNNING %s\n", neth.hasIPaddress?"ETH connect":"ETH no connect");
-            Serial.println("=====================================");
+                Serial.println("=====================================");
+                Serial.printf("GATEWAY 4.0 RUNNING %s\n", neth.hasIPaddress?"ETH connect":"ETH no connect");
+                Serial.println("=====================================");
+            }
 
             if(bWEBSERVER)
             {
@@ -809,66 +844,11 @@ void nrf52setup()
 
             save_settings();
         }
-        
     }
 }
 
 void nrf52loop()
 {
-    if ((retransmit_timer + (1000 * 5)) < millis())   // repeat 5 seconds
-    {
-        updateRetransmissionStatus();
-
-        retransmit_timer = millis();
-    }
-
-    if(iReceiveTimeOutTime > 0)
-    {
-        // Timeout RECEIVE_TIMEOUT
-        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
-        {
-            iReceiveTimeOutTime=0;
-
-            // LoRa preamble was detected
-            if(bLORADEBUG)
-            {
-                Serial.printf("[SX12xx] Receive Timeout, starting sending again ... \n");
-            }
-        }
-    }
-
-    if(iReceiveTimeOutTime == 0 && is_receiving == false && tx_is_active == false)
-    {
-        // channel is free
-        // nothing was detected
-        // do not print anything, it just spams the console
-        int iReadTX = iRead;
-        bool bRTX=false;
-
-        if(iRetransmit >= 0)
-        {
-            iReadTX = iRetransmit;
-            bRTX = true;
-        }
-
-        if (iWrite != iRead || bRTX)
-        {
-            if(doTX(iReadTX, bRTX))
-            {
-                if(bRTX)
-                {
-                    iRetransmit = -1;
-                }
-                else
-                {
-                    iRead++;
-                    if (iRead >= MAX_RING)
-                        iRead = 0;
-                }
-            }
-        }
-    }
-
     // get RTC Now
     // RTC hat Vorrang zu Zeit via MeshCom-Server
     if(bRTCON)
@@ -901,6 +881,43 @@ void nrf52loop()
         meshcom_settings.node_date_hour = MyClock.Hour();
         meshcom_settings.node_date_minute = MyClock.Minute();
         meshcom_settings.node_date_second = MyClock.Second();
+    }
+
+    if(!bGATEWAY)
+    {
+        if ((retransmit_timer + (1000 * 10)) < millis())   // repeat 10 seconds
+        {
+            updateRetransmissionStatus();
+
+            retransmit_timer = millis();
+        }
+    }
+
+    if(iReceiveTimeOutTime > 0)
+    {
+        // Timeout RECEIVE_TIMEOUT
+        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
+        {
+            iReceiveTimeOutTime=0;
+
+            // LoRa preamble was detected
+            if(bLORADEBUG)
+            {
+                Serial.printf("[SX12xx] Receive Timeout, starting receiving again ... \n");
+            }
+        }
+    }
+
+    if(iReceiveTimeOutTime == 0 && is_receiving == false && tx_is_active == false)
+    {
+        // channel is free
+        // nothing was detected
+        // do not print anything, it just spams the console
+        if (iWrite != iRead)
+        {
+            // save transmission state between loops
+            doTX();
+        }
     }
 
     // SOFTSER
@@ -1056,16 +1073,26 @@ void nrf52loop()
         }
     }
 
+    // heysinfo_interval in Seconds == 15 minutes
+    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
+    {
+        bHeyFirst = false;
+        
+        if(!bGATEWAY)
+            sendHey();
+
+        heyinfo_timer = millis();
+    }
+
     // get UDP & send UDP message from ringBufferOut if there is one to tx
     if(bGATEWAY)
     {
         // check if we received a UDP packet
         if (neth.hasIPaddress)
         {
-            if(neth.checkUDP() >= 0)
-                neth.getUDP();
+            neth.getUDP();
 
-            sendUDP();
+            sendUDP(); 
         }
         else
         {
@@ -1078,28 +1105,50 @@ void nrf52loop()
         // check HB response (we also check successful sending KEEP. check if they work together!)
         if((neth.last_upd_timer + (MAX_HB_RX_TIME * 1000)) < millis())
         {
-            // avoid TX and UDP 
-            neth.hasIPaddress = false;
-            cmd_counter = 50;
+            // avoid TX and UDP
+            if(!neth.hasIPaddress)
+            {
+                neth.hasIPaddress = false;
+                cmd_counter = 50;
 
-            Serial.print(getTimeString());
-            Serial.println(" [MAIN] initethDHCP");
+                if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+                {
+                    if(bDEBUG)
+                    {
+                        Serial.print(getTimeString());
+                        Serial.println(" [MAIN] initethETH fix-IP");
+                    }
 
-            neth.initethDHCP();
+                    neth.initethfixIP();
+                }
+                else
+                {
+                    {
+                        Serial.print(getTimeString());
+                        Serial.println(" [MAIN] initethETH DHCP");
+                    }
 
+                    neth.initethDHCP();
+                }
+            }
         }
         
         // DHCP refresh
         if ((dhcp_timer + (DHCP_REFRESH * 60000)) < millis())
         {
-            if(bDEBUG)
+            // no need on static IPs
+            if(!(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6))
             {
-                Serial.print(getTimeString());
-                Serial.println(" [MAIN] checkDHCP");
+                if(bDEBUG)
+                {
+                    Serial.print(getTimeString());
+                    Serial.println(" [MAIN] checkDHCP");
+                }
+                
+                neth.checkDHCP();
             }
 
             dhcp_timer = millis();
-            neth.checkDHCP();
         }
     }
 
@@ -1396,7 +1445,25 @@ void nrf52loop()
 
     if(bWEBSERVER)
     {
-        loopWebserver();
+        if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 30)) < millis()))   // repeat 15 minutes
+        {
+            meshcom_settings.node_hasIPaddress = neth.hasIPaddress;
+
+            web_timer = millis();
+
+            #ifndef BOARD_RAK4630
+                // restart WEB-Client
+                stopWebserver();
+
+                if(!meshcom_settings.node_hasIPaddress)
+                    startWIFI();
+            #endif
+
+            startWebserver();
+        }
+
+        loopWebserver(); 
+
     }
 
     //  We are on FreeRTOS, give other tasks a chance to run

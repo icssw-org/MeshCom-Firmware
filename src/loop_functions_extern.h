@@ -12,6 +12,8 @@ extern int BOARD_HARDWARE;
 
 extern unsigned long rebootAuto;
 
+extern int iWlanWait;
+
 extern bool bSetLoRaAPRS;
 
 extern bool bDEBUG;
@@ -45,6 +47,7 @@ extern bool bRTCON;
 extern bool bSMALLDISPLAY;
 extern bool bSOFTSERON;
 extern bool bMHONLY;
+extern bool bNoMSGtoALL;
 
 extern bool bTCA9548A;
 extern bool bMCP23017;
@@ -145,6 +148,7 @@ extern bool wx_shot;
 extern int no_gps_reset_counter;
 
 extern unsigned long posinfo_timer;      // we check periodically to send GPS
+extern unsigned long heyinfo_timer;      // we check periodically to send HEY
 extern unsigned long temphum_timer;      // we check periodically get TEMP/HUM
 extern unsigned long druck_timer;        // we check periodically get AIRPRESURE
 extern unsigned long hb_timer;           // GW Server-Heartbeat-Timer

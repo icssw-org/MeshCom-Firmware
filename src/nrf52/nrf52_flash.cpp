@@ -188,6 +188,9 @@ void init_flash(void)
 
 		memcpy(meshcom_settings.node_webpwd, old_struct.node_webpwd, 20);
 
+		memcpy(meshcom_settings.node_ssid, old_struct.node_ssid, 33);
+		memcpy(meshcom_settings.node_pwd, old_struct.node_pwd, 64);
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

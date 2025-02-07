@@ -6,6 +6,7 @@
 #include <debugconf.h>
 #include <batt_functions.h>
 #include <command_functions.h>
+#include <loop_functions_extern.h>
 
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
@@ -133,7 +134,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
         {
           case 0x3A: DEBUG_MSG("UDP", "Received Textmessage"); break; // ':'
           case 0x21: DEBUG_MSG("UDP", "Received PosInfo"); break;     // '!'
-          case 0x40: DEBUG_MSG("UDP", "Received Weather"); break;     // '@'
+          case 0x40: DEBUG_MSG("UDP", "Received Hey"); break;     // '@'
           default: DEBUG_MSG("UDP", "Received unknown"); break;
         }
 
@@ -160,8 +161,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // print which message type we got
           uint8_t msg_type_b_lora = decodeAPRS(convBuffer, (uint8_t)lora_tx_msg_len, aprsmsg);
 
-          sprintf(source_call, "%s", aprsmsg.msg_source_call.c_str());
-          sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+          snprintf(source_call, sizeof(source_call), "%s", aprsmsg.msg_source_call.c_str());
+          snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
 
           bool bUDPtoLoraSend = true;
 
@@ -209,7 +210,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 sendDisplayText(aprsmsg, 99, 0);
             }
             else
-            if(strcmp(destination_call, "*") == 0 || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
+            if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
             {
                 // wenn eine Meldung via UDP kommt und den eigene Node betrifft dann keine weiterleitung an LoRa TX
                 if(strcmp(destination_call, meshcom_settings.node_call) == 0)
@@ -266,11 +267,13 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 }
 
                 if(iAckPos <= 0)
+                {
                   sendDisplayText(aprsmsg, 99, 0);
+                }
 
                 aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
 
-                uint8_t tempRcvBuffer[255];
+                uint8_t tempRcvBuffer[UDP_TX_BUF_SIZE];
 
                 aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
 
@@ -283,25 +286,36 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 // DM message for lokal Node 
                 if(iAckId > 0)
                 {
-                  SendAckMessage(source_call, iAckId);
+                  String strSource_call = source_call;
+                  SendAckMessage(strSource_call, iAckId);
                 }
             }
           }
 
           // first byte is always the len of the msg
           // UDP messages send to LoRa TX
-          // resend only Packet to all and !owncall
+          // resend only Packet to all
           if(bUDPtoLoraSend)
           {
+            // store last message to compare later on
+            insertOwnTx(aprsmsg.msg_id);
+
             ringBuffer[iWrite][0] = size;
             if (msg_type_b == 0x3A) // only Messages
-              ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+            {
+              if(aprsmsg.msg_payload.startsWith("{") > 0)
+                  ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+              else
+                  ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+            }
             else
               ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
             memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
             iWrite++;
             if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
               iWrite = 0;
+
+            addLoraRxBuffer(aprsmsg.msg_id);
 
             // add rcvMsg to BLE out Buff
             // size message is int -> uint16_t buffer size
@@ -422,6 +436,7 @@ void sendMeshComUDP()
     }
 }
 
+
 bool startWIFI()
 {
   if(hasIPaddress)
@@ -449,7 +464,7 @@ bool startWIFI()
   }
 
 #ifdef ESP32
-  //WiFi.disconnect(true);
+  WiFi.disconnect(true);
 	delay(500);
 
   // Scan for AP with best RSSI
@@ -460,7 +475,14 @@ bool startWIFI()
   {
      if(strcmp(WiFi.SSID(i).c_str(), meshcom_settings.node_ssid) == 0)
      {
-        Serial.printf("SSID: %s CHAN: %d BSSID: %012x RSSI:%i\n", WiFi.SSID(i), WiFi.channel(i),WiFi.BSSID(i), WiFi.RSSI(i));
+      Serial.printf("[WIFI]...SSID: %s CHAN: %d RSSI: %d BSSID: ", WiFi.SSID(i).c_str(), (int) WiFi.channel(i), (int) WiFi.RSSI(i));
+      uint8_t *bssid = WiFi.BSSID(i);
+      for (byte i = 0; i < 6; i++){
+        Serial.print(*bssid++, HEX);
+        if (i < 5) Serial.print(":");
+      }
+      Serial.println("");
+
         if(WiFi.RSSI(i) > best_rssi)
         {
           best_rssi = WiFi.RSSI(i);
@@ -468,10 +490,11 @@ bool startWIFI()
         }
      }
   }
+
   if(best_idx == -1)
   {
     // ESP32 - force connecting (in case of hidden ssid or out of range atm)
-    Serial.printf("-> try connecting to SSID: %s \n",meshcom_settings.node_ssid);	
+    Serial.printf("[WIFI]...try connecting to SSID: %s \n",meshcom_settings.node_ssid);	
     WiFi.mode(WIFI_STA);
     
     if(strcmp(meshcom_settings.node_pwd, "none") == 0)
@@ -483,7 +506,13 @@ bool startWIFI()
   else
   {
     // ESP32 - connecting to strongest ssid
-    Serial.printf("-> connecting to BSSID: %012x CHAN: %i\n",WiFi.BSSID(best_idx),WiFi.channel(best_idx));	
+    Serial.printf("[WIFI]...connecting to CHAN: %d BSSID: ",(int) WiFi.channel(best_idx));	
+    uint8_t *bssid = WiFi.BSSID(best_idx);
+    for (byte i = 0; i < 6; i++){
+      Serial.print(*bssid++, HEX);
+      if (i < 5) Serial.print(":");
+      }
+    Serial.println("");
     WiFi.mode(WIFI_STA);
     
     if(strcmp(meshcom_settings.node_pwd, "none") == 0)
@@ -491,9 +520,10 @@ bool startWIFI()
     else
       WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
   }
+  
   delay(500);
 
-  Serial.printf("WiFi.power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
+  Serial.printf("[WIFI]...power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
 #else
   // RAK WIFI connect
   if(strcmp(meshcom_settings.node_pwd, "none") == 0)
@@ -501,24 +531,42 @@ bool startWIFI()
   else
     WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
 #endif
-  int iWlanWait = 0;
 
-  Serial.print("Wait WiFI connect ");
+  iWlanWait = 1;
+
+  return true;
+}
+
+bool doWiFiConnect()
+{
+  if(iWlanWait == 1)
+    Serial.print("[WIFI]...Wait connect ");
 
   while(WiFi.status() != WL_CONNECTED)
   {
-    delay(500);
-    Serial.print(".");
-    iWlanWait++;
 
-    if(iWlanWait > 5)
+    //delay(1000);
+    Serial.print(".");
+
+    iWlanWait++;
+    
+    if(iWlanWait == 7)
+      WiFi.reconnect();
+
+    if(iWlanWait > 15)
     {
-      Serial.printf("\nWiFI ssid<%s> connection error\n", meshcom_settings.node_ssid);
-      return false;
+      Serial.printf("\n[WIFI]...ssid<%s> connection error\n", meshcom_settings.node_ssid);
+      iWlanWait = 0;
     }
+
+    return false;
+
   }
 
-  Serial.println("WIFI connect OK");
+  Serial.println("");
+  Serial.println("[WIFI]...connect OK");
+
+  iWlanWait = 0;
 
   // run startMeshComUDP() to get IP Address
   startMeshComUDP();
@@ -534,17 +582,17 @@ void startMeshComUDP()
 
     node_ip = WiFi.softAPIP();
 
-    sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
-    sprintf(meshcom_settings.node_subnet, "255.255.255.0");
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "255.255.255.0");
   }
   else
   // Wifi IP-Addess static
   if(strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7)
   {
-    sprintf(meshcom_settings.node_ip, "%s", meshcom_settings.node_ownip);
-    sprintf(meshcom_settings.node_gw, "%s", meshcom_settings.node_owngw);
-    sprintf(meshcom_settings.node_dns, "%s", (char*)"8.8.8.8");
-    sprintf(meshcom_settings.node_subnet, "%s", meshcom_settings.node_ownms);
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"8.8.8.8");
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
 
     // Set your Static IP address
     node_ip.fromString(meshcom_settings.node_ownip);
@@ -565,10 +613,10 @@ void startMeshComUDP()
   {
     node_ip = WiFi.localIP();
 
-    sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
-    sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
-    sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[2], WiFi.dnsIP()[3]);
-    sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", WiFi.subnetMask()[0], WiFi.subnetMask()[1], WiFi.subnetMask()[2], WiFi.subnetMask()[3]);
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[2], WiFi.dnsIP()[3]);
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%i.%i.%i.%i", WiFi.subnetMask()[0], WiFi.subnetMask()[1], WiFi.subnetMask()[2], WiFi.subnetMask()[3]);
   }
 
   // update phone status
@@ -603,7 +651,7 @@ void startMeshComUDP()
 
   Udp.begin(LOCAL_PORT);
 
-  Serial.printf("WiFi now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
+  Serial.printf("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
 
   hasIPaddress=true;
   meshcom_settings.node_hasIPaddress = hasIPaddress;
@@ -780,9 +828,9 @@ String getJSON(unsigned char incoming[300], int len, char *iname)
 
 }
 
-void getExtern(unsigned char incoming[255], int len)
+void getExtern(unsigned char incoming[], int len)
 {
-  char val[100];
+  char val[160+1];
   struct aprsMessage aprsmsg;
 
   // Decode
@@ -807,7 +855,7 @@ void getExtern(unsigned char incoming[255], int len)
     return;
   }
   
-  sprintf(val, ":{%s}%s", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+  snprintf(val,160, ":{%s}%s", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
 
   sendMessage(val, strlen(val));
 }
@@ -888,10 +936,10 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
       escape_group[1] = 0x00;
 
     if(strcmp(src_type, "node") == 0)
-      sprintf(c_json, "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i}",
+      snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i}",
       src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, mv_to_percent(global_batt));
     else
-      sprintf(c_json, "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i,\"firmware\":\"%-4.4s\"}",
+      snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i,\"firmware\":\"%-4.4s\"}",
       src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, mv_to_percent(global_batt), SOURCE_VERSION);
 
     memcpy(u_json, c_json, strlen(c_json));
@@ -900,7 +948,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
   // Text
   if(msg_type_b_lora == 0x3A)
   {
-    sprintf(c_json, "{\"src_type\":\"%s\",\"type\":\"msg\",\"src\":\"%s\",\"dst\":\"%s\",\"msg\":\"%s\",\"msg_id\":\"%08X\"}",
+    snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"msg\",\"src\":\"%s\",\"dst\":\"%s\",\"msg\":\"%s\",\"msg_id\":\"%08X\"}",
     src_type, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str(), aprsmsg.msg_id);
 
     memcpy(u_json, c_json, strlen(c_json));

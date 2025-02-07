@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.34"
-#define SOURCE_VERSION_SUB "l"
+#define SOURCE_VERSION_SUB "o"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -38,6 +38,7 @@ definitions
     #define TX_POWER_MIN 1
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_INA226
     #define ENABLE_RTC
     #define ENABLE_SOFTSER
@@ -74,6 +75,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -95,6 +97,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -116,6 +119,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -137,6 +141,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -154,6 +159,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -172,6 +178,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     //I2C fault #define ENABLE_INA226
     #define ENABLE_RTC
@@ -189,6 +196,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -234,11 +242,12 @@ definitions
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define ENABLE_GPS
-//    #define ENABLE_BMX280
-//    #define ENABLE_BMX680
-//    #define ENABLE_MCP23017
-//    #define ENABLE_INA226
-//    #define ENABLE_RTC
+    #define ENABLE_BMX280
+    #define ENABLE_BMX680
+    #define ENABLE_MC811
+    #define ENABLE_MCP23017
+    #define ENABLE_INA226
+    #define ENABLE_RTC
 //    #define ENABLE_SOFTSER
     #define TX_POWER_MAX 22  // max 22 dBm
     #define TX_POWER_MIN 1
@@ -267,6 +276,7 @@ definitions
 #define UDP_MSG_INDICATOR_LEN 4            // the first n bytes to recognize which incoming message we have (GATE, CONF)
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
 #define POSINFO_INTERVAL 30 * 60           // POSINFO interval in seconds default 30 minutes
+#define HEYINFO_INTERVAL 15 * 60           // POSINFO interval in seconds default 5 minutes
 #define GPS_REFRESH_INTERVAL 10            // GPS Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds
@@ -424,8 +434,11 @@ static const uint8_t SCK   = 5;
 #define LED_PIN 25
 
 #define RESET_OLED RST_OLED
-#define I2C_SDA 17 // I2C pins for this board
-#define I2C_SCL 18
+//issue #108 #define I2C_SDA 17 // I2C pins for this board
+//issue #108 #define I2C_SCL 18
+
+#define I2C_SDA 41 // I2C pins for this board
+#define I2C_SCL 42
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
@@ -594,35 +607,6 @@ static const uint8_t SCK =  5;
 #endif
 
 #ifdef BOARD_TLORA_OLV216
-/**
- * static const uint8_t KEY_BUILTIN =  0;
-static const uint8_t TX =   1;
-static const uint8_t RX =   3;
-static const uint8_t SDA =  21;
-static const uint8_t SCL =  22;
-static const uint8_t SS =   18;
-static const uint8_t MOSI = 27;
-static const uint8_t MISO = 19;
-static const uint8_t SCK =  5;
-// I2C OLED Display works with SSD1306 driver
-#define OLED_SDA    21
-#define OLED_SCL    22
-#define OLED_RST    16
-// SPI LoRa Radio
-#define LORA_SCK    5   // GPIO5 - SX1276 SCK
-#define LORA_MISO   19  // GPIO19 - SX1276 MISO
-#define LORA_MOSI   27  // GPIO27 - SX1276 MOSI
-#define LORA_CS     18  // GPIO18 - SX1276 CS
-#define LORA_RST    23  // GPIO23 - SX1276 RST
-#define LORA_IRQ    26  // GPIO26 - SX1276 IRQ (interrupt request)
-#define LORA_D1     33  // GPIO33 - SX1276 IO1 (for LMIC Arduino library)
-#define LORA_D2     32 // GPIO32 - SX1276 IO2
-// SD card
-#define SD_SCK  14
-#define SD_MISO 2
-#define SD_MOSI 15
-#define SD_CS   13
-*/
 //#define LORA_RST  //already defined
 #define LORA_DIO0 LORA_IRQ
 #define LORA_DIO1 LORA_D1
@@ -633,6 +617,8 @@ static const uint8_t SCK =  5;
 
 #define I2C_SDA    21
 #define I2C_SCL    22
+
+#define OneWire_GPIO 25 // getestet OE5HWN
 
 #endif
 
@@ -657,6 +643,8 @@ static const uint8_t SCK =  5;
 #define SX1268_IRQ LORA_DIO1
 #define SX1268_RST LORA_RST
 #define SX1268_GPIO LORA_DIO0
+
+#define OneWire_GPIO 25 // getestet OE5HWN
 
 #endif
 

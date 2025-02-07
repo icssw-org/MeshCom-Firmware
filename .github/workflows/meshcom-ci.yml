@@ -52,7 +52,9 @@ jobs:
       mv .pio/build/ttgo_tbeam_SX1262/firmware.bin .pio/build/ttgo_tbeam_SX1262/ttgo_tbeam_SX1262.bin &
       mv .pio/build/ttgo_tbeam_SX1268/firmware.bin .pio/build/ttgo_tbeam_SX1268/ttgo_tbeam_SX1268.bin &
       mv .pio/build/vision-master-e290/firmware.bin .pio/build/vision-master-e290/vision-master-e290.bin &
-      mv .pio/build/wiscore_rak4631/firmware.zip .pio/build/wiscore_rak4631/wiscore_rak4631.zip"
+      mv .pio/build/wiscore_rak4631/firmware.zip .pio/build/wiscore_rak4631/wiscore_rak4631.zip &
+      mv .pio/build/esp32-S3-safeboot/safeboot.bin .pio/build/esp32-S3-safeboot/safeboot-s3.bin &
+      mv .pio/build/esp32-S3-safeboot/bootloader.bin .pio/build/esp32-S3-safeboot/bootloader-s3.bin"
         
     - uses: ncipollo/release-action@v1
       with:
@@ -67,5 +69,12 @@ jobs:
         .pio/build/ttgo_tbeam_SX1262/ttgo_tbeam_SX1262.bin,
         .pio/build/ttgo_tbeam_SX1268/ttgo_tbeam_SX1268.bin,
         .pio/build/vision-master-e290/vision-master-e290.bin,
-        .pio/build/wiscore_rak4631/wiscore_rak4631.zip"
+        .pio/build/wiscore_rak4631/wiscore_rak4631.zip,
+        .pio/build/esp32-S3-safeboot/safeboot-s3.bin,
+        .pio/build/esp32-safeboot/safeboot.bin,
+        .pio/build/esp32-S3-safeboot/bootloader-s3.bin,
+        .pio/build/esp32-safeboot/bootloader.bin,
+        .pio/build/esp32-safeboot/partitions.bin,
+        otadata.bin"
+        
         bodyFile: "release.md"
