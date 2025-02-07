@@ -436,7 +436,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 		case 0x20: {
 
-			DEBUG_MSG("BLE", "Timestamp from phone received");
+			if(bBLEDEBUG)
+				Serial.print("[BLE] Timestamp from phone received ");
 
 			// 4B Timestamp
 			uint32_t timestamp = 0;
@@ -444,20 +445,46 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			// set the meshcom settings variables for the timestamp
 			struct tm timeinfo = {0};
 			gmtime_r((time_t*)&timestamp, &timeinfo);
+
+			if(bBLEDEBUG)
+				Serial.printf("%i.%i.%i %i:%i:%i\n", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
 			// set the clock
 			if(bRTCON)
 			{
 				setRTCNow(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+				
+				DateTime utc = getRTCNow();
+
+				DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
+
+				meshcom_settings.node_date_year = now.year();
+				meshcom_settings.node_date_month = now.month();
+				meshcom_settings.node_date_day = now.day();
+
+				meshcom_settings.node_date_hour = now.hour();
+				meshcom_settings.node_date_minute = now.minute();
+				meshcom_settings.node_date_second = now.second();
 			}
 			else
 			{
 				MyClock.setCurrentTime(meshcom_settings.node_utcoff, timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+				MyClock.CheckEvent();
+				
+				meshcom_settings.node_date_year = MyClock.Year();
+				meshcom_settings.node_date_month = MyClock.Month();
+				meshcom_settings.node_date_day = MyClock.Day();
+
+				meshcom_settings.node_date_hour = MyClock.Hour();
+				meshcom_settings.node_date_minute = MyClock.Minute();
+				meshcom_settings.node_date_second = MyClock.Second();
 			}
 
 			if (bBLEDEBUG)
 			{
-				Serial.printf("Timestamp from phone <UTC>: %u\n", timestamp);
-				Serial.printf("Date <UTC>: %02d.%02d.%04d %02d:%02d:%02d\n", meshcom_settings.node_date_day, meshcom_settings.node_date_month, meshcom_settings.node_date_year, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+				Serial.printf("[BLE] Timestamp from phone <UTC>: %u\n", timestamp);
+				Serial.printf("[BLE] Date <LT>: %02d.%02d.%04d %02d:%02d:%02d\n", meshcom_settings.node_date_day, meshcom_settings.node_date_month, meshcom_settings.node_date_year, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 			}
 
 			break;
@@ -481,14 +508,14 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			sVar.toUpperCase();
 			sVar.trim();
 
-			sprintf(meshcom_settings.node_call, "%s", sVar.c_str());
+			snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sVar.c_str());
 
-			sprintf(meshcom_settings.node_short, "%s", convertCallToShort(meshcom_settings.node_call).c_str());
+			snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
 			//Führt zu Reconnect sendDisplayHead(false);
 
 			#if defined NRF52_SERIES
-				sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
+				snprintf(helper_string, sizeof(helper_string),"%s-%02x%02x-%s", g_ble_dev_name, dmac[4], dmac[5], meshcom_settings.node_call); // Anzeige mit callsign
 				
 				if(bBLEDEBUG)
 				{
@@ -636,8 +663,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				String s_SSID = ssid_arr;
 				String s_PWD = pwd_arr;
 
-				sprintf(meshcom_settings.node_ssid, "%s", s_SSID.c_str());
-				sprintf(meshcom_settings.node_pwd, "%s", s_PWD.c_str());
+				snprintf(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid),"%s", s_SSID.c_str());
+				snprintf(meshcom_settings.node_pwd, sizeof(meshcom_settings.node_pwd),"%s", s_PWD.c_str());
 
 				if(bBLEDEBUG)
 					Serial.println("Wifi Setting from phone set");

@@ -468,8 +468,8 @@ void esp32setup()
         bSOFTSERON=false;
     #endif
 
-    // Umstekllung auf langes WIFI Passwort
-    if(strlen(meshcom_settings.node_ossid) > 4 && strlen(meshcom_settings.node_ssid) < 5)
+    // Umstellung auf langes WIFI Passwort
+    if(strlen(meshcom_settings.node_ossid) > 0 && (strlen(meshcom_settings.node_ssid) == 0 || strcmp(meshcom_settings.node_ssid, "none") == 0))
     {
         strcpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid);
         strcpy(meshcom_settings.node_pwd, meshcom_settings.node_opwd);
@@ -538,6 +538,9 @@ void esp32setup()
 
     #if defined(ENABLE_BMX280)
         setupBMX280(true);
+    #endif
+
+    #if defined(ENABLE_MC811)
         setupMCU811();
     #endif
 
