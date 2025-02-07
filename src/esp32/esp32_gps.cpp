@@ -9,6 +9,7 @@
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <TinyGPSPlus.h>
+#include <command_functions.h>
 
 #if defined(MODUL_FW_TBEAM)
     #define GPS_RX_PIN 34
@@ -505,7 +506,7 @@ unsigned int getGPS(void)
                     delay(200); //Wait a bit before trying again to limit the Serial output flood
                     maxStateCount++;
 
-                    if(maxStateCount > 5)
+                    if(maxStateCount > 3)
                     {
                         maxStateCount = 1;
                         state = 0;
@@ -524,9 +525,8 @@ unsigned int getGPS(void)
                         delay(300);
                         */
 
-                        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FBF;
-                        save_settings();
-
+                        commandAction((char*)"--gps off", true);
+                        
                         Serial.println("GPS serial not connected (set GPS to off)");
         
                         break;

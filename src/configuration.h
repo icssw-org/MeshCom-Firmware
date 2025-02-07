@@ -8,7 +8,7 @@ definitions
 
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.34"
-#define SOURCE_VERSION_SUB "n"
+#define SOURCE_VERSION_SUB "o"
 
 //Hardware Types
 #define TLORA_V2 1
@@ -38,6 +38,7 @@ definitions
     #define TX_POWER_MIN 1
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_INA226
     #define ENABLE_RTC
     #define ENABLE_SOFTSER
@@ -74,6 +75,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -95,6 +97,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -116,6 +119,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -137,6 +141,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -154,6 +159,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -172,6 +178,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     //I2C fault #define ENABLE_INA226
     #define ENABLE_RTC
@@ -189,6 +196,7 @@ definitions
     #define ENABLE_GPS
     #define ENABLE_BMX280
     #define ENABLE_BMX680
+    #define ENABLE_MC811
     #define ENABLE_MCP23017
     #define ENABLE_INA226
     #define ENABLE_RTC
@@ -234,11 +242,12 @@ definitions
     #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
     #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
     #define ENABLE_GPS
-//    #define ENABLE_BMX280
-//    #define ENABLE_BMX680
-//    #define ENABLE_MCP23017
-//    #define ENABLE_INA226
-//    #define ENABLE_RTC
+    #define ENABLE_BMX280
+    #define ENABLE_BMX680
+    #define ENABLE_MC811
+    #define ENABLE_MCP23017
+    #define ENABLE_INA226
+    #define ENABLE_RTC
 //    #define ENABLE_SOFTSER
     #define TX_POWER_MAX 22  // max 22 dBm
     #define TX_POWER_MIN 1

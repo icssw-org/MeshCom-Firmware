@@ -512,11 +512,16 @@ void commandAction(char *msg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"button gpio ") == 0)
     {
+        int ibt = meshcom_settings.node_button_pin;
+
         sscanf(msg_text+14, "%d", &meshcom_settings.node_button_pin);
 
         if(meshcom_settings.node_button_pin < 0 || meshcom_settings.node_button_pin > 99)
         {
             Serial.printf("Wrong BUTTON GPIO PIN only > 1 and <= 99");
+            
+            meshcom_settings.node_button_pin = ibt;
+
             return;
         }
 
@@ -701,7 +706,9 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        setupBMX280(false);
+        #if defined(ENABLE_BMX280)
+            setupBMX280(false);
+        #endif
     }
     else
     if(commandCheck(msg_text+2, (char*)"bme on") == 0)
@@ -724,7 +731,9 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        setupBMX280(false);
+        #if defined(ENABLE_BMX280)
+            setupBMX280(false);
+        #endif
     }
     else
     if(commandCheck(msg_text+2, (char*)"680 on") == 0)
@@ -748,7 +757,7 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
 
         #if defined(ENABLE_BMX680)
-        setupBME680();
+            setupBME680();
         #endif
     }
     else
@@ -765,7 +774,9 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        setupMCU811();
+        #if defined(ENABLE_MC811)
+            setupMCU811();
+        #endif
     }
     else
     #endif
@@ -831,7 +842,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bBME680ON=false;
         
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFA; // BME680 off
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFB; // BME680 off
 
         if(ble)
             bSensSetting = true;
@@ -1416,6 +1427,8 @@ void commandAction(char *msg_text, bool ble)
             addBLECommandBack((char*)"--bledebug on");
         }
 
+        save_settings();
+
         return;
     }
     else
@@ -1430,6 +1443,8 @@ void commandAction(char *msg_text, bool ble)
             addBLECommandBack((char*)"--bledebug off");
         }
 
+        save_settings();
+
         return;
     }
     else
@@ -1437,10 +1452,14 @@ void commandAction(char *msg_text, bool ble)
     {
         bWXDEBUG=true;
 
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x0008;
+
         if(ble)
         {
             addBLECommandBack((char*)"--wxdebug on");
         }
+
+        save_settings();
 
         return;
     }
@@ -1449,10 +1468,14 @@ void commandAction(char *msg_text, bool ble)
     {
         bWXDEBUG=false;
 
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FF7;
+
         if(ble)
         {
             addBLECommandBack((char*)"--wxdebug off");
         }
+
+        save_settings();
 
         return;
     }
@@ -1788,12 +1811,9 @@ void commandAction(char *msg_text, bool ble)
         if(strcmp(meshcom_settings.node_ssid, "none") == 0)
             memset(meshcom_settings.node_ssid, 0x00, sizeof(meshcom_settings.node_ssid));
 
-        if(strcmp(meshcom_settings.node_pwd, "none") == 0)
-            memset(meshcom_settings.node_pwd, 0x00, sizeof(meshcom_settings.node_pwd));
-
         save_settings();
 
-        if((strlen(meshcom_settings.node_pwd) > 1 && strlen(meshcom_settings.node_ssid) > 1))
+        if(((strlen(meshcom_settings.node_pwd) > 1 || strcmp(meshcom_settings.node_pwd, "none") == 0) && strlen(meshcom_settings.node_ssid) > 1))
         {
             Serial.println("Auto. Reboot after 15 sec.");
 
@@ -1818,12 +1838,9 @@ void commandAction(char *msg_text, bool ble)
         if(strcmp(meshcom_settings.node_ssid, "none") == 0)
             memset(meshcom_settings.node_ssid, 0x00, sizeof(meshcom_settings.node_ssid));
 
-        if(strcmp(meshcom_settings.node_pwd, "none") == 0)
-            memset(meshcom_settings.node_pwd, 0x00, sizeof(meshcom_settings.node_pwd));
-
         save_settings();
 
-        if((strlen(meshcom_settings.node_pwd) > 1 && strlen(meshcom_settings.node_ssid) > 1))
+        if(((strlen(meshcom_settings.node_pwd) > 1 || strcmp(meshcom_settings.node_pwd, "none") == 0) && strlen(meshcom_settings.node_ssid) > 1))
         {
             Serial.println("Auto. Reboot after 15 sec.");
 
@@ -1837,6 +1854,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bWIFIAP=true;
 
+        bWEBSERVER=true;
         bGATEWAY=false;
         
         meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0080;
@@ -1849,11 +1867,16 @@ void commandAction(char *msg_text, bool ble)
             bReturn = true;
 
         save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
     }
     else
     if(commandCheck(msg_text+2, (char*)"wifiap off") == 0)
     {
         bWIFIAP=false;
+
+        bWEBSERVER=false;
+        bGATEWAY=false;
         
         meshcom_settings.node_sset2  = meshcom_settings.node_sset2 & 0x7F7F;   // mask 0x0080
 
@@ -1865,6 +1888,8 @@ void commandAction(char *msg_text, bool ble)
             bReturn = true;
 
         save_settings();
+
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
     }
     else
 #endif
@@ -2696,19 +2721,19 @@ void commandAction(char *msg_text, bool ble)
             if(ibt == 0)
                 ibt = BUTTON_PIN;
 
-            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call:  <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...MHONLY %s ...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s  ... SOFTSER %s\n...PASSWD <%s>\n",
+            Serial.printf("--MeshCom %s %-4.4s%-1.1s\n...Call: <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...MHONLY %s ...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s\n...PASSWD <%s>\n",
                     SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
                     (bMHONLY?"on":"off"), (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
-            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG  %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ... BLEDEBUG %s\n",
+            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
 #ifndef BOARD_RAK4630
-            Serial.printf("...EXTUDP  %s  ...EXTSERUDP  %s  ...EXT IP  %s\n", (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
+            Serial.printf("...EXTUDP %s ...EXTSERUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
 #endif
-            Serial.printf("...BTCODE  %06i\n", meshcom_settings.bt_code);
-            Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY: %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
+            Serial.printf("...BTCODE %06i\n", meshcom_settings.bt_code);
+            Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
                     meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"),  (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
 
@@ -2783,7 +2808,7 @@ void commandAction(char *msg_text, bool ble)
                 }
     
                 if(!bWIFIAP)
-                    Serial.printf("...UDP-HBeat   : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
+                    Serial.printf("...UDP-HBeat : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
             }
     
             sendDisplayHead(true);
@@ -2859,14 +2884,14 @@ void commandAction(char *msg_text, bool ble)
         if(bWIFIAP)
         {
             swdoc["SSID"] = cBLEName;
-            //KBC/KFR -> TO BE REMOVED!
-            swdoc["PW"] = "";
+            //KBC/KFR
+             swdoc["PW"] = "";
         }
         else
         {
             swdoc["SSID"] = meshcom_settings.node_ssid;
-            //KBC/KFR -> TO BE REMOVED!
-            swdoc["PW"] = meshcom_settings.node_pwd;
+            //KBC/KFR
+             swdoc["PW"] = meshcom_settings.node_pwd;
         }
         swdoc["IP"] = meshcom_settings.node_ip;
         swdoc["GW"] = meshcom_settings.node_gw;     // IP GW Address
@@ -3007,8 +3032,8 @@ void sendNodeSetting()
     nsetdoc["TYP"] = "SN";
     nsetdoc["GW"] = bGATEWAY;
     nsetdoc["WS"] = bWEBSERVER;
-    //KBC/KFR -> TO BE REMOVED!
-    nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
+    //KBC/KFR
+     nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc["DISP"] =  bDisplayOff;
     nsetdoc["BTN"] = bButtonCheck;
     nsetdoc["MSH"] = bMESH;
@@ -3021,8 +3046,8 @@ void sendNodeSetting()
     nsetdoc["MCR"] = meshcom_settings.node_cr;
     nsetdoc["MBW"] = meshcom_settings.node_bw;
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
-    //KBC/KFR  -> TO BE REMOVED!
-    nsetdoc["BTCODE"] = meshcom_settings.bt_code;
+    //KBC/KFR
+     nsetdoc["BTCODE"] = meshcom_settings.bt_code;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));

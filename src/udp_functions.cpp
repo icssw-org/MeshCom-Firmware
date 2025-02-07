@@ -161,8 +161,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // print which message type we got
           uint8_t msg_type_b_lora = decodeAPRS(convBuffer, (uint8_t)lora_tx_msg_len, aprsmsg);
 
-          sprintf(source_call, "%s", aprsmsg.msg_source_call.c_str());
-          sprintf(destination_call, "%s", aprsmsg.msg_destination_call.c_str());
+          snprintf(source_call, sizeof(source_call), "%s", aprsmsg.msg_source_call.c_str());
+          snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
 
           bool bUDPtoLoraSend = true;
 
@@ -297,6 +297,9 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // resend only Packet to all
           if(bUDPtoLoraSend)
           {
+            // store last message to compare later on
+            insertOwnTx(aprsmsg.msg_id);
+
             ringBuffer[iWrite][0] = size;
             if (msg_type_b == 0x3A) // only Messages
             {
@@ -579,17 +582,17 @@ void startMeshComUDP()
 
     node_ip = WiFi.softAPIP();
 
-    sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
-    sprintf(meshcom_settings.node_subnet, "255.255.255.0");
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "255.255.255.0");
   }
   else
   // Wifi IP-Addess static
   if(strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7)
   {
-    sprintf(meshcom_settings.node_ip, "%s", meshcom_settings.node_ownip);
-    sprintf(meshcom_settings.node_gw, "%s", meshcom_settings.node_owngw);
-    sprintf(meshcom_settings.node_dns, "%s", (char*)"8.8.8.8");
-    sprintf(meshcom_settings.node_subnet, "%s", meshcom_settings.node_ownms);
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"8.8.8.8");
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
 
     // Set your Static IP address
     node_ip.fromString(meshcom_settings.node_ownip);
@@ -610,10 +613,10 @@ void startMeshComUDP()
   {
     node_ip = WiFi.localIP();
 
-    sprintf(meshcom_settings.node_ip, "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
-    sprintf(meshcom_settings.node_gw, "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
-    sprintf(meshcom_settings.node_dns, "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[2], WiFi.dnsIP()[3]);
-    sprintf(meshcom_settings.node_subnet, "%i.%i.%i.%i", WiFi.subnetMask()[0], WiFi.subnetMask()[1], WiFi.subnetMask()[2], WiFi.subnetMask()[3]);
+    snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
+    snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[2], WiFi.dnsIP()[3]);
+    snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%i.%i.%i.%i", WiFi.subnetMask()[0], WiFi.subnetMask()[1], WiFi.subnetMask()[2], WiFi.subnetMask()[3]);
   }
 
   // update phone status
@@ -933,10 +936,10 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
       escape_group[1] = 0x00;
 
     if(strcmp(src_type, "node") == 0)
-      sprintf(c_json, "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i}",
+      snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i}",
       src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, mv_to_percent(global_batt));
     else
-      sprintf(c_json, "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i,\"firmware\":\"%-4.4s\"}",
+      snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i,\"firmware\":\"%-4.4s\"}",
       src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, mv_to_percent(global_batt), SOURCE_VERSION);
 
     memcpy(u_json, c_json, strlen(c_json));
@@ -945,7 +948,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
   // Text
   if(msg_type_b_lora == 0x3A)
   {
-    sprintf(c_json, "{\"src_type\":\"%s\",\"type\":\"msg\",\"src\":\"%s\",\"dst\":\"%s\",\"msg\":\"%s\",\"msg_id\":\"%08X\"}",
+    snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"msg\",\"src\":\"%s\",\"dst\":\"%s\",\"msg\":\"%s\",\"msg_id\":\"%08X\"}",
     src_type, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str(), aprsmsg.msg_id);
 
     memcpy(u_json, c_json, strlen(c_json));
