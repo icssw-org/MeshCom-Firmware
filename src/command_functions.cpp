@@ -74,6 +74,13 @@ char print_buff[600];
 
 uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
+void commandAction(char *msg_text, int ible)
+{
+    if(ible == 1)
+        commandAction(msg_text, true);
+    else
+        commandAction(msg_text, false);
+}
 void commandAction(char *msg_text, bool ble)
 {
     //char print_buff[600];
@@ -160,8 +167,6 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            //addBLECommandBack((char*)msg_text);
-            //bNodeSetting = true;
             sendNodeSetting();
             sendGpsJson();
 
@@ -446,9 +451,13 @@ void commandAction(char *msg_text, bool ble)
 
         meshcom_settings.node_sset = (meshcom_settings.node_sset & 0x7FFD) | 0x0004;   // both off + set bDisplyOff
 
+Serial.println("display on");
+
         if(ble)
         {
-            bNodeSetting = true;
+Serial.println("display on ble");
+            bNodeSetting=true;
+Serial.println("display on ble end");
         }
         else
             bReturn = true;
@@ -456,6 +465,7 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
 
         sendDisplayHead(false);
+Serial.println("display on end");
     }
     else
     if(commandCheck(msg_text+2, (char*)"display off") == 0)
@@ -466,7 +476,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -484,7 +494,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -502,7 +512,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -529,7 +539,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -547,7 +557,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -563,7 +573,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -586,7 +596,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;   
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -604,7 +614,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
 
         bDisplayTrack=false;
@@ -613,7 +623,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -700,7 +710,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0080;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -725,7 +737,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x00100;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -750,7 +764,11 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0004;
 
         if(ble)
+        {
+        {
             bSensSetting = true;
+        }
+        }
         else
             bReturn = true;
 
@@ -768,7 +786,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0008;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -788,7 +808,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0200;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -802,7 +824,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0001;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -816,7 +840,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0002;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -831,7 +857,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;   // BME280/BMP280 off
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -845,7 +873,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFB; // BME680 off
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -859,7 +889,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FF7; // MCU811 off
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -873,7 +905,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7DFF;
         
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -887,7 +921,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FFE;
         
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -901,7 +937,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FFD;
         
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -916,7 +954,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0002;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -930,7 +970,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFD;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -946,7 +988,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0001;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -969,7 +1013,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFE;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -1037,7 +1083,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -1053,7 +1099,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -1069,7 +1115,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -1085,7 +1131,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -1102,7 +1148,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -1121,7 +1167,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -1194,7 +1240,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true; 
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -1210,7 +1256,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting = true;
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -1545,7 +1591,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0400;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -1561,7 +1609,9 @@ void commandAction(char *msg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7BFF;
 
         if(ble)
+        {
             bSensSetting = true;
+        }
         else
             bReturn = true;
 
@@ -1645,10 +1695,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            //addBLECommandBack((char*)msg_text);
-            //bNodeSetting = true;
-            sendNodeSetting();
-
+            bNodeSetting=true;
         }
         else
             bReturn = true;
@@ -2312,7 +2359,7 @@ void commandAction(char *msg_text, bool ble)
             if(ble)
             {
                 addBLECommandBack((char*)msg_text);
-                bNodeSetting = true;
+                sendNodeSetting();
             }
 
             save_settings();
@@ -2545,13 +2592,11 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"wifiset") == 0)
     {
         bWifiSetting=true;
-
     }
     else
     if(commandCheck(msg_text+2, (char*)"nodeset") == 0)
     {
         bNodeSetting=true;
-
     }
     else
     if(commandCheck(msg_text+2, (char*)"aprsset") == 0)
@@ -2567,6 +2612,24 @@ void commandAction(char *msg_text, bool ble)
     }
     else
     if(commandCheck(msg_text+2, (char*)"regex") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+8);
+
+        String strCallSign = _owner_c;
+    
+        if(checkRegexCall(strCallSign))
+        {
+            Serial.printf("\n%s match\n", strCallSign.c_str());
+        }
+        else
+        {
+            Serial.printf("\n%s no match\n", strCallSign.c_str());
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"nodeset") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+8);
 
@@ -2840,6 +2903,9 @@ void commandAction(char *msg_text, bool ble)
     else
     if(bSensSetting)
     {
+        // button on/of senden
+        sendNodeSetting();
+
         /*{"TYP":"SE", "BME":false,"BMP":false,"680":true,"811":false,"LPS33":false,"OW":false,"OWPIN":4}*/
         JsonDocument sensdoc;
 

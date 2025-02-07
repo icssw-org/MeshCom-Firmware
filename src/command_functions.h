@@ -6,5 +6,6 @@
 #include <debugconf.h>
 
 void commandAction(char *msg_text, bool ble);
+void commandAction(char *msg_text, int ible);
 
 #endif // _COMMAND_FUNCTIONS_H_

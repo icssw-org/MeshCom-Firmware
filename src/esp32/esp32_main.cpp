@@ -150,7 +150,7 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
         deviceConnected = true;
         config_to_phone_prepare = true;
         // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-        commandAction((char*)"--conffin", true);
+        commandAction((char*)"--conffin", isPhoneReady);
         Serial.println("BLE connected");
     };
 
@@ -1494,7 +1494,7 @@ void esp32loop()
 
             if(pos_shot)
             {
-                commandAction((char*)"--pos", true);
+                commandAction((char*)"--pos", isPhoneReady);
                 pos_shot = false;
             }
         }
@@ -1603,7 +1603,7 @@ void esp32loop()
 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", true);
+                    commandAction((char*)"--wx", isPhoneReady);
                     wx_shot = false;
                 }
             }
@@ -1627,7 +1627,7 @@ void esp32loop()
                     
                     if(wx_shot)
                     {
-                        commandAction((char*)"--wx", true);
+                        commandAction((char*)"--wx", isPhoneReady);
                         wx_shot = false;
                     }
                 }
@@ -1651,7 +1651,7 @@ void esp32loop()
                 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", true);
+                    commandAction((char*)"--wx", isPhoneReady);
                     wx_shot = false;
                 }
             }
@@ -1699,7 +1699,7 @@ void esp32loop()
 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", true);
+                    commandAction((char*)"--wx", isPhoneReady);
                     wx_shot = false;
                 }
 
@@ -1897,10 +1897,10 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer, inext);
 
                 if(strText.startsWith("-"))
-                    commandAction(msg_buffer, false);
+                    commandAction(msg_buffer, isPhoneReady);
 
                 if(strText.startsWith("{"))
-                    commandAction(msg_buffer, false);
+                    commandAction(msg_buffer, isPhoneReady);
 
                 strText="";
             }

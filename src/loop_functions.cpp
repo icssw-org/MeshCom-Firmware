@@ -972,17 +972,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
                     Serial.printf("[MCP] key:%-5.5s command: %c%i %s\n", cpasswd, cset[6], iswitch, (bON?"on":"off"));
 
-                    bool bPhoneReady = false;
-                    if (isPhoneReady == 1)
-                        bPhoneReady = true;
-
                     char cBefehl[30];
                     if(bON)
                         snprintf(cBefehl, sizeof(cBefehl), "--setout %c%i off", cset[6], iswitch);
                     else
                         snprintf(cBefehl, sizeof(cBefehl), "--setout %c%i on", cset[6], iswitch);
 
-                    commandAction(cBefehl, bPhoneReady);
+                    commandAction(cBefehl, isPhoneReady);
                 }
                 else
                 {
@@ -1332,9 +1328,9 @@ void checkButtonState()
                     bDisplayTrack=!bDisplayTrack;
 
                     if(bDisplayTrack)
-                        commandAction((char*)"--track on", false);
+                        commandAction((char*)"--track on", isPhoneReady);
                     else
-                        commandAction((char*)"--track off", false);
+                        commandAction((char*)"--track off", isPhoneReady);
 
                     bDisplayOff=false;
 
@@ -1348,9 +1344,9 @@ void checkButtonState()
                         Serial.println("BUTTON double press");
 
                     if(bDisplayTrack)
-                        commandAction((char*)"--sendtrack", false);
+                        commandAction((char*)"--sendtrack", isPhoneReady);
                     else
-                        commandAction((char*)"--sendpos", false);
+                        commandAction((char*)"--sendpos", isPhoneReady);
                 }
                 else
                 if(iPress == 1 && !bDisplayTrack)
@@ -1880,7 +1876,7 @@ void sendMessage(char *msg_text, int len)
         if(bDisplayInfo)
             Serial.printf("COMMAND:%s\n", msg_text);
 
-        commandAction(msg_text, true);
+        commandAction(msg_text, isPhoneReady);
         return;
     }
 
