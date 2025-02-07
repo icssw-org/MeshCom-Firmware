@@ -46,7 +46,7 @@ void addBLECommandBack(char *text);
 void addLoraRxBuffer(unsigned int msg_id);
 
 int checkOwnTx(uint8_t compBuffer[4]);
-void insertOwnTx(uint8_t compBuffer[3]);
+void insertOwnTx(unsigned int id);
 
 bool esp32_isSSD1306(int address);
 

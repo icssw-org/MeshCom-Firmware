@@ -297,6 +297,9 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // resend only Packet to all
           if(bUDPtoLoraSend)
           {
+            // store last message to compare later on
+            insertOwnTx(aprsmsg.msg_id);
+
             ringBuffer[iWrite][0] = size;
             if (msg_type_b == 0x3A) // only Messages
             {
