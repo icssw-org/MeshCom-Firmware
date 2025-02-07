@@ -1,6 +1,6 @@
 #define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.34"
-#define SOURCE_VERSION_SUB "n"
+#define SOURCE_VERSION_SUB "o"
 
 //Hardware Types
 #define TLORA_V2 1
