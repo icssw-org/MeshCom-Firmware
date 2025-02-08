@@ -156,7 +156,7 @@ int iRead=0;
 int iRetransmit=-1;
 
 // RINGBUFFER for incomming LoRa RX msg_id
-uint8_t ringBufferLoraRX[MAX_RING][4] = {0};
+uint8_t ringBufferLoraRX[MAX_RING][5] = {0};
 uint8_t loraWrite = 0;   // counter for ringbuffer
 
 // RINGBUFFER RAW LoRa RX
@@ -328,7 +328,7 @@ void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
 /**@brief Function adding messages into outgoing UDP ringbuffer
  * 
  */
-void addLoraRxBuffer(unsigned int msg_id)
+void addLoraRxBuffer(unsigned int msg_id, bool bserver)
 {
     // byte 0-3 msg_id
     ringBufferLoraRX[loraWrite][3] = msg_id >> 24;
@@ -336,19 +336,42 @@ void addLoraRxBuffer(unsigned int msg_id)
     ringBufferLoraRX[loraWrite][1] = msg_id >> 8;
     ringBufferLoraRX[loraWrite][0] = msg_id;
 
-    /*
-    if(bDEBUG)
-    {
-        Serial.printf("LoraRX Ringbuffer added element: %u %02X%02X%02X%02X", loraWrite, ringBufferLoraRX[loraWrite][3], ringBufferLoraRX[loraWrite][2], ringBufferLoraRX[loraWrite][1], ringBufferLoraRX[loraWrite][0]);
-    }
-    */
+    if(bserver)
+        ringBufferLoraRX[loraWrite][4] = 1;
+    else
+        ringBufferLoraRX[loraWrite][4] = 0;
 
     loraWrite++;
-
-    //Serial.printf("loraWrite:%i\n", loraWrite);
-
     if (loraWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         loraWrite = 0;
+}
+
+int checkOwnRx(uint8_t compBuffer[4])
+{
+    for(int ilo=0; ilo<MAX_RING; ilo++)
+    {
+        if(memcmp(ringBufferLoraRX[ilo], compBuffer, 4) == 0)
+            return ilo;
+    }
+
+    return -1;
+}
+
+bool checkServerRx(uint8_t compBuffer[4])
+{
+    for(int ilo=0; ilo<MAX_RING; ilo++)
+    {
+        if(memcmp(ringBufferLoraRX[ilo], compBuffer, 4) == 0)
+        {
+            // MSG wurde von einem anderen GW gesendet
+            if(ringBufferLoraRX[ilo][4] == 1)
+                return true;
+
+            break;
+        }
+    }
+
+    return false;
 }
 
 int checkOwnTx(uint8_t compBuffer[4])
@@ -1837,12 +1860,13 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
     char internal_message[UDP_TX_BUF_SIZE];
 
     int ilpayload=aprsmsg.msg_payload.length();
-    if(ilpayload > 30)
-        ilpayload=30;
+    if(ilpayload > 60)
+        ilpayload=60;
 
-    snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %02X %i %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
+    //snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %02X %i %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
+    snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %02X %i%i%i %s>%s %c%s",  msgSource, getTimeString().c_str(),
         aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh,
-        aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
+        //aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
         aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(),
         aprsmsg.payload_type, aprsmsg.msg_payload.substring(0, ilpayload).c_str());
 
@@ -1855,10 +1879,20 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
     Serial.print(getTimeString());
-    Serial.printf(" %s: %03i %c x%08X %02X %i %i %i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X FW:%02i:%c LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+    Serial.printf(" %s: %03i %c x%08X H%02X S%i T%i M%i %s>%s%c%s HW:%02i MOD:%02i FCS:%04X FW:%02i:%c LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
         aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
+
+void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_t size)
+{
+    Serial.print(getTimeString());
+    if(size == 7)
+        Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X", msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
+    else
+        Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X", msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
+}
+
 
 ///////////////////////////////////////////////////////////////////////////
 // APRS Meldungen
@@ -1989,7 +2023,7 @@ void sendMessage(char *msg_text, int len)
     // store last message to compare later on
     insertOwnTx(aprsmsg.msg_id);
 
-    addLoraRxBuffer(aprsmsg.msg_id);
+    addLoraRxBuffer(aprsmsg.msg_id, true);
 
     // Master RingBuffer for transmission
     // local messages send to LoRa TX

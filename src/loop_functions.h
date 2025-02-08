@@ -39,12 +39,15 @@ void printBuffer(uint8_t *buffer, int len);
 void printAsciiBuffer(uint8_t *buffer, int len);
 void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
 String charBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
+void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_t size);
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLECommandBack(char *text);
-void addLoraRxBuffer(unsigned int msg_id);
+void addLoraRxBuffer(unsigned int msg_id, bool msg_server);
 
+int checkOwnRx(uint8_t compBuffer[4]);
+bool checkServerRx(uint8_t compBuffer[4]);
 int checkOwnTx(uint8_t compBuffer[4]);
 void insertOwnTx(unsigned int id);
 

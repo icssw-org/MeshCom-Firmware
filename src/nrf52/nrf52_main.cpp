@@ -1700,9 +1700,9 @@ void checkSerialCommand(void)
 
                 if(strText.startsWith(":"))
                     sendMessage(msg_buffer+1, inext-1);
-
-                if(strText.startsWith("-"))
-                    commandAction(msg_buffer, falisPhoneReadyse);
+                else
+                    if(strText.startsWith("-"))
+                        commandAction(msg_buffer, isPhoneReady);
 
                 strText="";
             }
