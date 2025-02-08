@@ -38,8 +38,8 @@
 bool rf_crc = true;
 uint16_t rf_preamble_length = LORA_PREAMBLE_LENGTH;
 
-//0...EU  1...UK, 2...ON, 3...EA, 8...EU8, 10...US, ..... 18...868, 19...915, 20...MAN
-String strCountry[21] = {"EU", "UK", "ON", "EA", "none", "none", "none", "none", "EU8", "UK8", "US", "VR2", "none", "none", "none", "none", "none", "none", "868", "915", "MAN"};
+//0...EU  1...UK, 2...ON, 3...EA, 4...OM, 8...EU8, 10...US, ..... 18...868, 19...915, 20...MAN
+String strCountry[21] = {"EU", "UK", "ON", "EA", "LA", "none", "none", "none", "EU8", "UK8", "US", "VR2", "none", "none", "none", "none", "none", "none", "868", "915", "MAN"};
 
 String getCountry(int iCtry)
 {
@@ -174,6 +174,27 @@ void lora_setcountry(int iCtry)
                 meshcom_settings.node_bw = 0;
                 meshcom_settings.node_cr = 2;
             #else
+                meshcom_settings.node_bw = 125.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = 12;
+
+            meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
+
+            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+
+            break;
+
+        case 4:  // OM LongSlow
+            meshcom_settings.node_freq = RF_FREQUENCY;
+
+            #if defined BOARD_RAK4630
+                meshcom_settings.node_freq = 433925000;
+                meshcom_settings.node_bw = 0;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_freq = 433.9250;
                 meshcom_settings.node_bw = 125.0;
                 meshcom_settings.node_cr = 6;
             #endif

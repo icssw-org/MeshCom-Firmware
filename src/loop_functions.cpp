@@ -113,7 +113,7 @@ EInkDisplay_VisionMasterE290 e290_display;
 #include "Fonts/FreeSans9pt7b.h"
 #include "Fonts/FreeSans12pt7b.h"
 
-int dzeile[6] = {16, 44, 64, 84, 104, 124};
+int dzeile[6] = {16, 41, 61, 81, 101, 121};
 
 #else
 
@@ -362,9 +362,14 @@ int checkOwnTx(uint8_t compBuffer[4])
     return -1;
 }
 
-void insertOwnTx(uint8_t compBuffer[4])
+void insertOwnTx(unsigned int msg_id)
 {
-    memcpy(own_msg_id[iWriteOwn], compBuffer, 4);
+    // byte 0-3 msg_id
+    own_msg_id[iWriteOwn][3] = msg_id >> 24;
+    own_msg_id[iWriteOwn][2] = msg_id >> 16;
+    own_msg_id[iWriteOwn][1] = msg_id >> 8;
+    own_msg_id[iWriteOwn][0] = msg_id;
+
     own_msg_id[iWriteOwn][4]=0x00;
 
     if(bDisplayInfo)
@@ -1025,11 +1030,6 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             Minute = (uint16_t)aprsmsg.msg_payload.substring(19, 21).toInt();
             Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
         
-            if(bDisplayInfo)
-            {
-                Serial.printf("{CET} %i.%02u.%02u %02u:%02u:%02u\n", Year, Month, Day, Hour, Minute, Second);
-            }
-
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
 
         }
@@ -1991,7 +1991,7 @@ void sendMessage(char *msg_text, int len)
     }
 
     // store last message to compare later on
-    insertOwnTx(msg_buffer+1);
+    insertOwnTx(aprsmsg.msg_id);
 
     addLoraRxBuffer(aprsmsg.msg_id);
 
@@ -2612,7 +2612,7 @@ void sendHey()
     }
 
     // store last message to compare later on
-    insertOwnTx(msg_buffer+1);
+    insertOwnTx(aprsmsg.msg_id);
 
     if(bGATEWAY)
     {

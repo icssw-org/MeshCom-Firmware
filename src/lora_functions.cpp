@@ -96,11 +96,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         */
 
         int icheck = checkOwnTx(print_buff+6);
+        bool bIsNew = is_new_packet(print_buff+1);
 
-        if(is_new_packet(print_buff+1) || icheck > 0)
+        if(bIsNew || icheck > 0)
         {
             // add rcvMsg to forward to LoRa TX
-            if(is_new_packet(print_buff+1))
+            if(bIsNew)
             {
                 unsigned int mid=(print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
                 addLoraRxBuffer(mid);
@@ -125,7 +126,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             }
             else
             {
-                if(print_buff[5] > 0x00 && bMESH)
+                // ACK nur weitersenden wenn es eine neue MSG-ID ist && MESH = on && nicht eine MSG-ID ist welche nicht selbst ausgesendet wurde
+                if(print_buff[5] > 0x00 && bMESH && icheck <= 0)
                 {
                     print_buff[5]--;
 
@@ -518,7 +520,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                     print_buff[2]=(msg_counter >> 8) & 0xFF;
                                                     print_buff[3]=(msg_counter >> 16) & 0xFF;
                                                     print_buff[4]=(msg_counter >> 24) & 0xFF;
-                                                    print_buff[5]=0x85;      // server & max hop
+                                                    print_buff[5]=0x80;      // server & max hop
+                                                    print_buff[5] = print_buff[5] | meshcom_settings.max_hop_text;
                                                     print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
                                                     print_buff[11]=0x00;     // msg always 0x00 at the end
                                                     
@@ -625,7 +628,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                     if(aprsmsg.payload_type == '@')
                                     {
-                                        aprsmsg.msg_payload.concat(rssi*-1.0);
+                                        char crssi[10];
+                                        snprintf(crssi, sizeof(crssi), "%.0f", rssi*-1.0);
+                                        aprsmsg.msg_payload.concat(crssi);
                                         aprsmsg.msg_payload.concat(',');
                                     }
                                     
