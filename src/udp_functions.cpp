@@ -8,6 +8,8 @@
 #include <command_functions.h>
 #include <loop_functions_extern.h>
 
+#include <NTPClient.h>
+
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 // RINGBUFFER for outgoing UDP lora packets for lora TX
@@ -41,6 +43,8 @@ bool hasExternIPaddress = false;
 WiFiUDP Udp;
 
 WiFiUDP UdpExtern;
+
+NTPClient timeClient(Udp);
 
 unsigned char incomingPacket[UDP_TX_BUF_SIZE];  // buffer for incoming packets
 int packetSize=0;
@@ -568,10 +572,27 @@ bool doWiFiConnect()
 
   iWlanWait = 0;
 
+  timeClient.begin();
+
   // run startMeshComUDP() to get IP Address
   startMeshComUDP();
 
   return true;
+}
+
+String udpUpdateTimeClient()
+{
+  timeClient.update();
+
+  Serial.print("TimeClient now: ");
+  Serial.println(timeClient.getFormattedTime());
+
+  return timeClient.getFormattedTime();
+}
+
+String udpGetTimeClient()
+{
+  return timeClient.getFormattedTime();
 }
 
 void startMeshComUDP()

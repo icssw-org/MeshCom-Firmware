@@ -7,6 +7,8 @@
 // WIFI functions
 bool startWIFI();
 bool doWiFiConnect();
+String udpUpdateTimeClient();
+String udpGetTimeClient();
 
 // MeshCom UDP functions
 void getMeshComUDP();
