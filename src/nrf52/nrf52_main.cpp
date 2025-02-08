@@ -885,7 +885,7 @@ void nrf52loop()
 
     if(!bGATEWAY)
     {
-        if ((retransmit_timer + (1000 * 10)) < millis())   // repeat 10 seconds
+        if ((retransmit_timer + (1000 * 2)) < millis())   // repeat 2 seconds
         {
             updateRetransmissionStatus();
 
@@ -1021,7 +1021,7 @@ void nrf52loop()
         else
         {
             // wait after BLE Connect 3 sec.
-            if(millis() < config_to_phone_prepare_timer + 3000)
+            if(millis() < config_to_phone_prepare_timer + 2000)
                 iPhoneState = 0;
 
             if (iPhoneState > 6)   // only every 6 times of mainloop send to phone  RAK 2 x ESP

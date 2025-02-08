@@ -451,13 +451,9 @@ void commandAction(char *msg_text, bool ble)
 
         meshcom_settings.node_sset = (meshcom_settings.node_sset & 0x7FFD) | 0x0004;   // both off + set bDisplyOff
 
-Serial.println("display on");
-
         if(ble)
         {
-Serial.println("display on ble");
             bNodeSetting=true;
-Serial.println("display on ble end");
         }
         else
             bReturn = true;
@@ -465,7 +461,6 @@ Serial.println("display on ble end");
         save_settings();
 
         sendDisplayHead(false);
-Serial.println("display on end");
     }
     else
     if(commandCheck(msg_text+2, (char*)"display off") == 0)
