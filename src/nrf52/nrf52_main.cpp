@@ -945,7 +945,13 @@ void nrf52loop()
     // check if message from phone to send
     if(hasMsgFromPhone)
     {
-        sendMessage(textbuff_phone, txt_msg_len_phone);
+        //sendMessage(textbuff_phone, txt_msg_len_phone);
+
+        if(memcmp(textbuff_phone, ":", 1) == 0)
+            sendMessage(textbuff_phone, txt_msg_len_phone);
+
+        if(memcmp(textbuff_phone, "-", 1) == 0)
+            commandAction(textbuff_phone, isPhoneReady);
 
         hasMsgFromPhone = false;
     }

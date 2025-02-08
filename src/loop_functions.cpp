@@ -1004,7 +1004,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                     else
                         snprintf(cBefehl, sizeof(cBefehl), "--setout %c%i on", cset[6], iswitch);
 
-                    commandAction(cBefehl, isPhoneReady);
+                    commandAction(cBefehl, false);
                 }
                 else
                 {
@@ -1035,7 +1035,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     else
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
-        if(!bRTCON)
+        // CET Meldungen nur annehmen wenn nichr GPS, RTC oder Handyverbindung vorhanden ist
+        if(!bRTCON && !bGPSON && isPhoneReady == 0)
         {
             uint16_t Year=2000;
             uint16_t Month=1;
@@ -1053,7 +1054,6 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
         
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-
         }
 
         return;
@@ -1354,9 +1354,9 @@ void checkButtonState()
                     bDisplayTrack=!bDisplayTrack;
 
                     if(bDisplayTrack)
-                        commandAction((char*)"--track on", isPhoneReady);
+                        commandAction((char*)"--track on", false);
                     else
-                        commandAction((char*)"--track off", isPhoneReady);
+                        commandAction((char*)"--track off", false);
 
                     bDisplayOff=false;
 
@@ -1370,9 +1370,9 @@ void checkButtonState()
                         Serial.println("BUTTON double press");
 
                     if(bDisplayTrack)
-                        commandAction((char*)"--sendtrack", isPhoneReady);
+                        commandAction((char*)"--sendtrack", false);
                     else
-                        commandAction((char*)"--sendpos", isPhoneReady);
+                        commandAction((char*)"--sendpos", false);
                 }
                 else
                 if(iPress == 1 && !bDisplayTrack)
@@ -1908,12 +1908,12 @@ void sendMessage(char *msg_text, int len)
         return;
     }
 
-    if(memcmp(msg_text, "--", 1) == 0)
+    if(memcmp(msg_text, "-", 1) == 0)
     {
         if(bDisplayInfo)
             Serial.printf("COMMAND:%s\n", msg_text);
 
-        commandAction(msg_text, isPhoneReady);
+        commandAction(msg_text, false);
         return;
     }
 
