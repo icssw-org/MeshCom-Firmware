@@ -396,7 +396,10 @@ void insertOwnTx(unsigned int msg_id)
     own_msg_id[iWriteOwn][4]=0x00;
 
     if(bDisplayInfo)
-        Serial.printf("[INS-OWNID] own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
+    {
+        Serial.print(getTimeString());
+        Serial.printf("Insert own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
+    }
 
     iWriteOwn++;
     if(iWriteOwn >= MAX_RING)
