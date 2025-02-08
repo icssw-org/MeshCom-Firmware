@@ -417,7 +417,7 @@ int NrfETH::getUDP()
               if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
                 iWrite = 0;
 
-              addLoraRxBuffer(aprsmsg.msg_id);
+              addLoraRxBuffer(aprsmsg.msg_id, true);
 
               // add rcvMsg to BLE out Buff
               // size message is int -> uint16_t buffer size

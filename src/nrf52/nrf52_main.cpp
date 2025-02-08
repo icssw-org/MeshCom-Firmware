@@ -1068,7 +1068,7 @@ void nrf52loop()
 
         if(pos_shot)
         {
-            commandAction((char*)"--pos", true);
+            commandAction((char*)"--pos", isPhoneReady);
             pos_shot = false;
         }
     }
@@ -1177,7 +1177,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", true);
+                commandAction((char*)"--wx", isPhoneReady);
                 wx_shot = false;
             }
         }
@@ -1199,7 +1199,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", true);
+                commandAction((char*)"--wx", isPhoneReady);
                 wx_shot = false;
             }
         }
@@ -1269,7 +1269,7 @@ void nrf52loop()
 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", true);
+                    commandAction((char*)"--wx", isPhoneReady);
                     wx_shot = false;
                 }
             }
@@ -1290,7 +1290,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", true);
+                commandAction((char*)"--wx", isPhoneReady);
                 wx_shot = false;
             }
         }
@@ -1312,7 +1312,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", true);
+                commandAction((char*)"--wx", isPhoneReady);
                 wx_shot = false;
             }
 
@@ -1343,7 +1343,7 @@ void nrf52loop()
                     
                     if(wx_shot)
                     {
-                        commandAction((char*)"--wx", true);
+                        commandAction((char*)"--wx", isPhoneReady);
                         wx_shot = false;
                     }
                 }
@@ -1367,7 +1367,7 @@ void nrf52loop()
                 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", true);
+                    commandAction((char*)"--wx", isPhoneReady);
                     wx_shot = false;
                 }
             }
@@ -1412,7 +1412,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", true);
+                commandAction((char*)"--wx", isPhoneReady);
                 wx_shot = false;
             }
 
@@ -1700,9 +1700,9 @@ void checkSerialCommand(void)
 
                 if(strText.startsWith(":"))
                     sendMessage(msg_buffer+1, inext-1);
-
-                if(strText.startsWith("-"))
-                    commandAction(msg_buffer, false);
+                else
+                    if(strText.startsWith("-"))
+                        commandAction(msg_buffer, isPhoneReady);
 
                 strText="";
             }

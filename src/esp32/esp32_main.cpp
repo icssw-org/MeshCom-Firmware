@@ -161,7 +161,8 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
          */
         //pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
         // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-        commandAction((char*)"--conffin", true);
+        commandAction((char*)"--conffin", isPhoneReady);
+        Serial.println("BLE connected");
     };
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
@@ -1526,7 +1527,7 @@ void esp32loop()
 
             if(pos_shot)
             {
-                commandAction((char*)"--pos", true);
+                commandAction((char*)"--pos", isPhoneReady);
                 pos_shot = false;
             }
         }
@@ -1635,7 +1636,7 @@ void esp32loop()
 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", true);
+                    commandAction((char*)"--wx", isPhoneReady);
                     wx_shot = false;
                 }
             }
@@ -1659,7 +1660,7 @@ void esp32loop()
                     
                     if(wx_shot)
                     {
-                        commandAction((char*)"--wx", true);
+                        commandAction((char*)"--wx", isPhoneReady);
                         wx_shot = false;
                     }
                 }
@@ -1683,7 +1684,7 @@ void esp32loop()
                 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", true);
+                    commandAction((char*)"--wx", isPhoneReady);
                     wx_shot = false;
                 }
             }
@@ -1731,7 +1732,7 @@ void esp32loop()
 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", true);
+                    commandAction((char*)"--wx", isPhoneReady);
                     wx_shot = false;
                 }
 
@@ -1929,10 +1930,10 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer, inext);
 
                 if(strText.startsWith("-"))
-                    commandAction(msg_buffer, false);
+                    commandAction(msg_buffer, isPhoneReady);
 
                 if(strText.startsWith("{"))
-                    commandAction(msg_buffer, false);
+                    commandAction(msg_buffer, isPhoneReady);
 
                 strText="";
             }
