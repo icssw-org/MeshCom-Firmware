@@ -24,7 +24,7 @@ uint8_t shortVERSION()
 
 int CheckGroup(String callsign)
 {
-	if(callsign.length() <= 0 || callsign.length() > 4)
+	if(callsign.length() <= 0 || callsign.length() > 5)
 		return 0;
 	
 	for(int ic=0;ic<(int)callsign.length();ic++)
