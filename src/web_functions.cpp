@@ -1550,7 +1550,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<col style=\"width: 100%;\">");
                     web_client.println("</colgroup>\n");
 
-                    web_client.println("<tr><th>LoRa-LOG</th></tr>");
+                    web_client.println("<tr><th>LoRa-RX-LOG</th></tr>");
 
                     while(RAWLoRaWrite != iRead)
                     {
