@@ -1049,11 +1049,21 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             Year = (uint16_t)aprsmsg.msg_payload.substring(5, 9).toInt();
             Month = (uint16_t)aprsmsg.msg_payload.substring(10, 12).toInt();
             Day = (uint16_t)aprsmsg.msg_payload.substring(13, 15).toInt();
+
             Hour = (uint16_t)aprsmsg.msg_payload.substring(16, 18).toInt();
             Minute = (uint16_t)aprsmsg.msg_payload.substring(19, 21).toInt();
             Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
-        
-            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+
+            if(meshcom_settings.node_hasIPaddress)
+            {
+                Hour = (uint16_t)meshcom_settings.node_date_hour;
+                Minute = (uint16_t)meshcom_settings.node_date_minute;
+                Second = (uint16_t)meshcom_settings.node_date_second;
+    
+                MyClock.setCurrentTime(meshcom_settings.node_utcoff * -1.0, Year, Month, Day, Hour, Minute, Second);
+            }
+            else
+                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
         }
 
         return;
