@@ -1427,7 +1427,15 @@ void esp32loop()
     {
         if(bBLEDEBUG)
             Serial.printf("[LOOP] hasMsgFromPhone\n");
-        sendMessage(textbuff_phone, txt_msg_len_phone);
+        
+        //sendMessage(textbuff_phone, txt_msg_len_phone);
+
+        if(memcmp(textbuff_phone, ":", 1) == 0)
+            sendMessage(textbuff_phone, txt_msg_len_phone);
+
+        if(memcmp(textbuff_phone, "-", 1) == 0)
+            commandAction(textbuff_phone, isPhoneReady);
+
 
         hasMsgFromPhone = false;
     }
