@@ -410,9 +410,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 	float long_phone = 0.0;
 
 	if(bBLEDEBUG)
-		Serial.printf("BLE... msg_len:%i msg_type:%02X msg:payload_len:%i\n", msg_len, msg_type, msg_payload_len);
-
-	if(bBLEDEBUG)
 	{
 		printBuffer(conf_data, msg_len);
 		Serial.println();
