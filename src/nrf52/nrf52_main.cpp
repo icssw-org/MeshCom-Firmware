@@ -26,6 +26,9 @@ NrfETH neth;
 // flag to indicate one second 
 unsigned long retransmit_timer = 0;
 
+// flag to update NTP Time
+unsigned long updateTimeClient = 0;
+
 // timers
 uint32_t dhcp_timer = 0;         // dhcp refresh timer
 
@@ -851,8 +854,12 @@ void nrf52loop()
 {
     // get RTC Now
     // RTC hat Vorrang zu Zeit via MeshCom-Server
+    bool bMyClock = true;
+
     if(bRTCON)
     {
+        bMyClock = false;
+
         loopRTC();
 
         if(!bGPSON) // GPS hat Vorang zur RTC
@@ -871,6 +878,25 @@ void nrf52loop()
         }
     }
     else
+    if(meshcom_settings.node_hasIPaddress)
+    {
+        String strTime = udpGetTimeClient();
+
+        if((updateTimeClient + 1000 * 60 * 3) < millis() || updateTimeClient == 0)
+        {
+            strTime = udpUpdateTimeClient();
+
+            updateTimeClient = millis();
+        }
+
+        uint16_t Hour = (uint16_t)strTime.substring(0, 2).toInt();
+        uint16_t Minute = (uint16_t)strTime.substring(3, 5).toInt();
+        uint16_t Second = (uint16_t)strTime.substring(6, 8).toInt();
+    
+        MyClock.setCurrentTime(meshcom_settings.node_utcoff, (uint16_t)meshcom_settings.node_date_year, (uint16_t)meshcom_settings.node_date_month, (uint16_t)meshcom_settings.node_date_day, Hour, Minute, Second);
+    }
+    
+    if(bMyClock)
     {
         MyClock.CheckEvent();
         

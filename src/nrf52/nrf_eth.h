@@ -23,6 +23,9 @@ class NrfETH {
 
     void initethDHCP();
 
+    String udpUpdateTimeClient();
+    String udpGetTimeClient();
+
     bool hasIPaddress = false;
 
     bool hasETHHardware = true;

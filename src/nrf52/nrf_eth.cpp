@@ -14,11 +14,11 @@
 #include <loop_functions_extern.h>
 #include <command_functions.h>
 
+#include <NTPClient.h>
+
 EthernetUDP Udp;
 
-//NTP setup
-EthernetUDP ntpUDP;
-//NTPClient timeClient(ntpUDP, "pool.ntp.org", 7200); // 2h Time offset
+NTPClient timeClient(Udp);
 
 // byte macaddr[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEC}; // Set the MAC address, do not repeat in a network.
 uint8_t macaddr[6] = {0};
@@ -101,11 +101,6 @@ void NrfETH::initethfixIP()
   // start the UDP service
   startFIXUDP();
 
-  //start ntpclient
-  //timeClient.begin();
-
-  //if (updateNTP() == true) DEBUG_MSG("NTP", "Updated");
-
   // update phone status
   if (isPhoneReady == 1)
   {
@@ -133,12 +128,6 @@ void NrfETH::initethDHCP()
     // start the UDP service
     startUDP();
 
-    //start ntpclient
-    //timeClient.begin();
-
-    //timeClient.setTimeOffset(TIME_OFFSET * 60);
-    //if (updateNTP() == true)
-    //  DEBUG_MSG("NTP", "Updated");
   }
   else 
   {
@@ -654,70 +643,6 @@ void NrfETH::getMyMac()
   DEBUG_MSG("Radio", "GW-ID: 0x%04X", _GW_ID);
 }
 
-
-/**@brief Method to sync with NTP
- */
-/*
-bool NrfETH::updateNTP()
-{
-  if(timeClient.update() == false)
-  {
-    DEBUG_MSG("ERROR", "Could not update NTP");
-    return false;
-  }
-
-  DEBUG_MSG("NTP", "Updating NTP Time ");
-  //Serial.println(timeClient.getFormattedTime());
-  return true;
-}
-*/
-
-
-/**@brief Method to get a String with current time
- */
-/*
-void NrfETH::setFlashfromNtpTime()
-{
-  if(timeClient.isTimeSet())
-  {
-    meshcom_settings.node_date_hour = timeClient.getHours();
-    meshcom_settings.node_date_minute = timeClient.getMinutes();
-    meshcom_settings.node_date_second = timeClient.getSeconds();
-  }
-}
-*/
-
-/**@brief Method to get a String with current time
- */
-/*
-String NrfETH::getNtpTime()
-{
-  String currTime = "??:??:??";
-
-  if(timeClient.isTimeSet())
-  {
-    currTime = timeClient.getFormattedTime();
-  }
-  
-  return currTime;
-}
-*/
-
-/**@brief Method to get a unsigned long with current time
- */
-/*
-unsigned long NrfETH::getNtpEpoch()
-{
-  if(timeClient.isTimeSet())
-  {
-    return  timeClient.getEpochTime();
-  }
-  
-  return 0;
-}
-*/
-
-
 /**@brief Method to renew/reset DHCP
  */
 int NrfETH::resetDHCP()
@@ -895,8 +820,25 @@ void NrfETH::startUDP()
 
   DEBUG_MSG("UDP_ETH", "UDP init successful!");
 
+  timeClient.begin();
+
   last_upd_timer = millis();
 
+}
+
+String udpUpdateTimeClient()
+{
+  timeClient.update();
+
+  Serial.print("TimeClient now: ");
+  Serial.println(timeClient.getFormattedTime());
+
+  return timeClient.getFormattedTime();
+}
+
+String udpGetTimeClient()
+{
+  return timeClient.getFormattedTime();
 }
 
 void NrfETH::startFIXUDP()
