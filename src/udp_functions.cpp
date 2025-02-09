@@ -584,8 +584,11 @@ String udpUpdateTimeClient()
 {
   timeClient.update();
 
-  Serial.print("TimeClient now: ");
-  Serial.println(timeClient.getFormattedTime());
+  if(bDisplayInfo)
+  {
+    Serial.print("TimeClient now (UTC): ");
+    Serial.println(timeClient.getFormattedTime());
+  }
 
   return timeClient.getFormattedTime();
 }
