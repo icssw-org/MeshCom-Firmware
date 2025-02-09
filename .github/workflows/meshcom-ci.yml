@@ -44,7 +44,7 @@ jobs:
       run: "cd ${{ github.workspace }} && pio run"
 
     - name: Convert RAK to UF2
-      run: "wget https://raw.githubusercontent.com/microsoft/uf2/refs/heads/master/utils/uf2conv.py && wget https://raw.githubusercontent.com/microsoft/uf2/refs/heads/master/utils/uf2families.json && python3 uf2conv.py .pio/build/wiscore_rak4631/firmware.hex -c -o .pio/build/wiscore_rak4631/wiskcore_rak4631.uf2 -f 0xADA52840"
+      run: "wget https://raw.githubusercontent.com/microsoft/uf2/refs/heads/master/utils/uf2conv.py && wget https://raw.githubusercontent.com/microsoft/uf2/refs/heads/master/utils/uf2families.json && python3 uf2conv.py .pio/build/wiscore_rak4631/firmware.hex -c -o .pio/build/wiscore_rak4631/wiscore_rak4631.uf2 -f 0xADA52840"
 
     - name: Rename Files
       run: "mv .pio/build/E22-DevKitC/firmware.bin .pio/build/E22-DevKitC/E22-DevKitC.bin & 
@@ -73,7 +73,7 @@ jobs:
         .pio/build/ttgo_tbeam_SX1268/ttgo_tbeam_SX1268.bin,
         .pio/build/vision-master-e290/vision-master-e290.bin,
         .pio/build/wiscore_rak4631/wiscore_rak4631.zip,
-        .pio/build/wiscore_rak4631/wiskcore_rak4631.uf2,
+        .pio/build/wiscore_rak4631/wiscore_rak4631.uf2,
         .pio/build/esp32-S3-safeboot/safeboot-s3.bin,
         .pio/build/esp32-safeboot/safeboot.bin,
         .pio/build/esp32-S3-safeboot/bootloader-s3.bin,
