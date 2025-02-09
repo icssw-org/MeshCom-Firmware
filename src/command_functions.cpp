@@ -74,12 +74,16 @@ char print_buff[600];
 
 uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
-void commandAction(char *msg_text, int ilocal)
+bool bRxFromPhone = false;
+
+void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 {
-    if(ilocal == 1)
+    if(iphone == 1)
         commandAction(msg_text, true);
     else
         commandAction(msg_text, false);
+
+    bRxFromPhone = rxFromPhone;
 }
 
 void commandAction(char *msg_text, bool ble)
@@ -2663,11 +2667,14 @@ void commandAction(char *msg_text, bool ble)
             memcpy(msg_buffer +1, print_buff, strlen(print_buff));
             addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
         }
-        //else
-        {
-            Serial.printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BMP280: %s\n...BME280: %s\n...BME680: %s\n...MCU811: %s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
-            (bBMPON?"on":"off"), (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
 
+        if(!bRxFromPhone)
+        {
+            Serial.printf("\n\nMeshCom %s %-4.4s%-1.1s\n...BMP280: %s\n...BME280: %s\n...BME680: %s\n...MCU811: %s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,
+            (bBMPON?"on":"off"), (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio);
+
+            Serial.printf("...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", 
+            meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
         }
 
         return;
@@ -2678,7 +2685,8 @@ void commandAction(char *msg_text, bool ble)
         if(ble)
         {
         }
-        //else
+
+        if(!bRxFromPhone)
         {
             Serial.printf("\n\nMeshCom %s %-4.4s%-1.1s\n...MCP17 %s\n", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,  (bMCP23017?"on":"off"));
             
@@ -2763,7 +2771,8 @@ void commandAction(char *msg_text, bool ble)
             memcpy(msg_buffer +1, print_buff, strlen(print_buff));
             addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
         }
-        //else
+        
+        if(!bRxFromPhone)
         {
             int ibt = meshcom_settings.node_button_pin;
             if(ibt == 0)
@@ -2871,7 +2880,8 @@ void commandAction(char *msg_text, bool ble)
         {
             sendGpsJson();
         }
-        //else
+
+        if(!bRxFromPhone)
         {
             if(bShowPos)
             {

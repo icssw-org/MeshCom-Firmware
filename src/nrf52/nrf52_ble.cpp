@@ -190,7 +190,7 @@ void connect_callback(uint16_t conn_handle)
 	Bluefruit.setTxPower(4);
 	DEBUG_MSG("BLE", "Connected");
 	// set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-    commandAction((char*)"--conffin", true);
+    commandAction((char*)"--conffin", true, true);
 	isPhoneReady = 1;
 	config_to_phone_prepare = true;
 	g_ble_uart_is_connected = true;

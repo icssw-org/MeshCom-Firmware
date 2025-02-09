@@ -161,7 +161,7 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
          */
         //pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
         // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-        commandAction((char*)"--conffin", isPhoneReady);
+        commandAction((char*)"--conffin", isPhoneReady, true);
         Serial.println("BLE connected");
     };
 
@@ -1460,7 +1460,7 @@ void esp32loop()
             sendMessage(textbuff_phone, txt_msg_len_phone);
 
         if(memcmp(textbuff_phone, "-", 1) == 0)
-            commandAction(textbuff_phone, isPhoneReady);
+            commandAction(textbuff_phone, isPhoneReady, true);
 
 
         hasMsgFromPhone = false;
@@ -1474,7 +1474,9 @@ void esp32loop()
         {
             for(int config_cmds_index=0; config_cmds_index < json_configs_cnt; config_cmds_index++)
             {
-                sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
+                commandAction((char*)config_cmds[config_cmds_index], isPhoneReady, true);
+
+                //sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
             }
 
             sendMheard();
@@ -1561,7 +1563,7 @@ void esp32loop()
 
             if(pos_shot)
             {
-                commandAction((char*)"--pos", isPhoneReady);
+                commandAction((char*)"--pos", isPhoneReady, false);
                 pos_shot = false;
             }
         }
@@ -1670,7 +1672,7 @@ void esp32loop()
 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", isPhoneReady);
+                    commandAction((char*)"--wx", isPhoneReady, false);
                     wx_shot = false;
                 }
             }
@@ -1694,7 +1696,7 @@ void esp32loop()
                     
                     if(wx_shot)
                     {
-                        commandAction((char*)"--wx", isPhoneReady);
+                        commandAction((char*)"--wx", isPhoneReady, false);
                         wx_shot = false;
                     }
                 }
@@ -1718,7 +1720,7 @@ void esp32loop()
                 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", isPhoneReady);
+                    commandAction((char*)"--wx", isPhoneReady, false);
                     wx_shot = false;
                 }
             }
@@ -1766,7 +1768,7 @@ void esp32loop()
 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", isPhoneReady);
+                    commandAction((char*)"--wx", isPhoneReady, false);
                     wx_shot = false;
                 }
 
@@ -1964,10 +1966,10 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer, inext);
 
                 if(strText.startsWith("-"))
-                    commandAction(msg_buffer, isPhoneReady);
+                    commandAction(msg_buffer, isPhoneReady, false);
 
                 if(strText.startsWith("{"))
-                    commandAction(msg_buffer, isPhoneReady);
+                    commandAction(msg_buffer, isPhoneReady, false);
 
                 strText="";
             }

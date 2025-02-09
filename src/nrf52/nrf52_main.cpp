@@ -977,7 +977,7 @@ void nrf52loop()
             sendMessage(textbuff_phone, txt_msg_len_phone);
 
         if(memcmp(textbuff_phone, "-", 1) == 0)
-            commandAction(textbuff_phone, isPhoneReady);
+            commandAction(textbuff_phone, isPhoneReady, true);
 
         hasMsgFromPhone = false;
     }
@@ -1041,7 +1041,9 @@ void nrf52loop()
         {
             for(int config_cmds_index=0; config_cmds_index < json_configs_cnt; config_cmds_index++)
             {
-                sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
+                commandAction((char*)config_cmds[config_cmds_index], isPhoneReady, true);
+
+//                sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
             }
 
             sendMheard();
@@ -1100,7 +1102,7 @@ void nrf52loop()
 
         if(pos_shot)
         {
-            commandAction((char*)"--pos", isPhoneReady);
+            commandAction((char*)"--pos", isPhoneReady, false);
             pos_shot = false;
         }
     }
@@ -1209,7 +1211,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady);
+                commandAction((char*)"--wx", isPhoneReady, false);
                 wx_shot = false;
             }
         }
@@ -1231,7 +1233,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady);
+                commandAction((char*)"--wx", isPhoneReady, false);
                 wx_shot = false;
             }
         }
@@ -1301,7 +1303,7 @@ void nrf52loop()
 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", isPhoneReady);
+                    commandAction((char*)"--wx", isPhoneReady, false);
                     wx_shot = false;
                 }
             }
@@ -1322,7 +1324,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady);
+                commandAction((char*)"--wx", isPhoneReady, false);
                 wx_shot = false;
             }
         }
@@ -1344,7 +1346,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady);
+                commandAction((char*)"--wx", isPhoneReady, false);
                 wx_shot = false;
             }
 
@@ -1375,7 +1377,7 @@ void nrf52loop()
                     
                     if(wx_shot)
                     {
-                        commandAction((char*)"--wx", isPhoneReady);
+                        commandAction((char*)"--wx", isPhoneReady, false);
                         wx_shot = false;
                     }
                 }
@@ -1399,7 +1401,7 @@ void nrf52loop()
                 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", isPhoneReady);
+                    commandAction((char*)"--wx", isPhoneReady, false);
                     wx_shot = false;
                 }
             }
@@ -1444,7 +1446,7 @@ void nrf52loop()
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady);
+                commandAction((char*)"--wx", isPhoneReady, false);
                 wx_shot = false;
             }
 
@@ -1734,7 +1736,7 @@ void checkSerialCommand(void)
                     sendMessage(msg_buffer+1, inext-1);
                 else
                     if(strText.startsWith("-"))
-                        commandAction(msg_buffer, isPhoneReady);
+                        commandAction(msg_buffer, isPhoneReady, false);
 
                 strText="";
             }

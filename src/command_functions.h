@@ -6,6 +6,6 @@
 #include <debugconf.h>
 
 void commandAction(char *msg_text, bool ble);
-void commandAction(char *msg_text, int ible);
+void commandAction(char *msg_text, int iphone, bool rxFromPhone);
 
 #endif // _COMMAND_FUNCTIONS_H_
