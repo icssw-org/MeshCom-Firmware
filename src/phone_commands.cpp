@@ -240,7 +240,12 @@ void sendConfigToPhone ()
 void sendToPhone()
 {
     if(ble_busy_flag)
+	{
+		if(bBLEDEBUG)
+			Serial.println("ToPhone Busy Flag ble_busy_flag gesetzt");
+
         return;
+	}
 
     ble_busy_flag = true;
 
@@ -285,9 +290,9 @@ void sendToPhone()
 		if(bBLEDEBUG)
 		{
 			if(toPhoneBuff[0] == ':' || toPhoneBuff[0] == '!' || toPhoneBuff[0] == '@')
-				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7);
+				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s lng:%i\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7, blelen);
 			else
-				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s\n", toPhoneWrite, toPhoneRead, toPhoneBuff);
+				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s lng:%i\n", toPhoneWrite, toPhoneRead, toPhoneBuff, blelen);
 		}
     }
     
@@ -301,7 +306,12 @@ void sendToPhone()
 void sendComToPhone()
 {
     if(ble_busy_flag)
+	{
+		if(bBLEDEBUG)
+			Serial.println("ComToPhone Busy Flag ble_busy_flag gesetzt");
+
         return;
+	}
 
     ble_busy_flag = true;
 
@@ -349,9 +359,9 @@ void sendComToPhone()
 		if(bBLEDEBUG)
 		{
 			if(ComToPhoneBuff[0] == ':' || ComToPhoneBuff[0] == '!' || ComToPhoneBuff[0] == '@')
-				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7);
+				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s lng:%i\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7, blelen);
 			else
-				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff);
+				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s lng:%i\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff, blelen);
 		}
     }
     
@@ -399,7 +409,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 	float lat_phone = 0.0;
 	float long_phone = 0.0;
 
-	DEBUG_MSG_VAL("BLE", msg_len, "Msg from Device Length");
+	if(bBLEDEBUG)
+		Serial.printf("BLE... msg_len:%i msg_type:%02X msg:payload_len:%i\n", msg_len, msg_type, msg_payload_len);
 
 	if(bBLEDEBUG)
 	{

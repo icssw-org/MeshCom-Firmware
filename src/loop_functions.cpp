@@ -289,10 +289,10 @@ void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
     BLEComToPhoneBuff[ComToPhoneWrite][0] = len;
     memcpy(BLEComToPhoneBuff[ComToPhoneWrite] + 1, buffer, len);
 
-    if(bDEBUG)
+    if(bBLEDEBUG)
     {
-        Serial.printf("<%02X>BLEComToPhone RingBuff added len=%i to element: %u\n", buffer[0], len, ComToPhoneWrite);
-        printBuffer(BLEComToPhoneBuff[ComToPhoneWrite], len + 1);
+        Serial.printf("<%s> BLEComToPhone RingBuff added len=%i to element: %u\n", buffer, len, ComToPhoneWrite);
+        //printBuffer(BLEComToPhoneBuff[ComToPhoneWrite], len + 1);
     }
 
     ComToPhoneWrite++;
