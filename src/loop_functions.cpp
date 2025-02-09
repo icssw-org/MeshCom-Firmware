@@ -1059,6 +1059,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                 Hour = (uint16_t)meshcom_settings.node_date_hour;
                 Minute = (uint16_t)meshcom_settings.node_date_minute;
                 Second = (uint16_t)meshcom_settings.node_date_second;
+
+                meshcom_settings.node_date_year = Year;
+                meshcom_settings.node_date_month = Month;
+                meshcom_settings.node_date_day = Day;
     
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff * -1.0, Year, Month, Day, Hour, Minute, Second);
             }

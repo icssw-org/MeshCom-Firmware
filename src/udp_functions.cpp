@@ -8,8 +8,6 @@
 #include <command_functions.h>
 #include <loop_functions_extern.h>
 
-#include <NTPClient.h>
-
 static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 // RINGBUFFER for outgoing UDP lora packets for lora TX
@@ -18,6 +16,8 @@ uint8_t udpWrite=0;
 uint8_t udpRead=0;
 
 #ifdef ESP32
+
+#include <NTPClient.h>
 
 // WIFI
 #include <WiFi.h>
