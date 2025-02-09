@@ -633,8 +633,13 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				Serial.printf("Text from phone: %s\n", conf_data + 2);
 
 			// kopieren der message in buffer fuer main
-			textbuff_phone[0] = ':';
-			memcpy(textbuff_phone+1, conf_data + 2, txt_msg_len_phone);
+			int iposn=0;
+			if(memcmp(conf_data + 2, "--", 2) != 0)
+			{
+				textbuff_phone[0] = ':';
+				iposn=1;
+			}
+			memcpy(textbuff_phone+iposn, conf_data + 2, txt_msg_len_phone);
 			textbuff_phone[txt_msg_len_phone]=0x00;
 
 			// flag für main neue msg von phone
