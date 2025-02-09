@@ -640,7 +640,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				iposn=1;
 			}
 			memcpy(textbuff_phone+iposn, conf_data + 2, txt_msg_len_phone);
-			textbuff_phone[txt_msg_len_phone]=0x00;
+			textbuff_phone[txt_msg_len_phone+iposn]=0x00;
 
 			// flag für main neue msg von phone
 			hasMsgFromPhone = true;
