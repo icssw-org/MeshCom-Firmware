@@ -1682,8 +1682,8 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<col style=\"width: 75%;\">");
                     web_client.println("</colgroup>\n");
 
-                    web_client.printf("<tr><td style=\"width:40px\"><b>Firmware</b></td><td>MeshCom %s %-4.4s%-1.1s</td><tr><td><b>Call</b></td><td>%s ...%s</td></tr><tr><td><b>UTC-OFF</b></td><td>%.1f</td></tr>\n",
-                        SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,meshcom_settings.node_call, getHardwareLong(BOARD_HARDWARE).c_str(), meshcom_settings.node_utcoff);
+                    web_client.printf("<tr><td style=\"width:40px\"><b>Firmware</b></td><td>MeshCom %s %-4.4s%-1.1s (build: %s / %s)</td><tr><td><b>Call</b></td><td>%s ...%s</td></tr><tr><td><b>UTC-OFF</b></td><td>%.1f</td></tr>\n",
+                        SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB,__DATE__,__TIME__,meshcom_settings.node_call, getHardwareLong(BOARD_HARDWARE).c_str(), meshcom_settings.node_utcoff);
                     
                     web_client.printf("<tr><td><b>BATT</b></td><td>%.2f V %d %% max %.2f V</td></tr><tr><td><b>Setting</b></td><td>GATEWAY %s %s ...MESH %s</td></tr><tr><td></td><td>BUTTON  %s ...DEBUG %s</td></tr>\n",
                         global_batt/1000.0, global_proz, meshcom_settings.node_maxv, (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"));
