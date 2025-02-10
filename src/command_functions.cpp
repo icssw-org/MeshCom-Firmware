@@ -2898,9 +2898,6 @@ void commandAction(char *msg_text, bool ble)
     else
     if(bSensSetting)
     {
-        // button on/of senden
-        sendNodeSetting();
-
         /*{"TYP":"SE", "BME":false,"BMP":false,"680":true,"811":false,"LPS33":false,"OW":false,"OWPIN":4}*/
         JsonDocument sensdoc;
 
