@@ -836,7 +836,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bSensSetting = true;
+            bNodeSetting = true;
         }
 
         bReturn = true;
@@ -2759,7 +2759,7 @@ void commandAction(char *msg_text, bool ble)
             idoc["GCB4"] = meshcom_settings.node_gcb[4];
             idoc["GCB5"] = meshcom_settings.node_gcb[5];
             idoc["CTRY"] = ctrycode;
-            idoc["BOOST"] = (bBOOSTEDGAIN ? "on" : "off");
+            idoc["BOOST"] = bBOOSTEDGAIN;
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 
@@ -2912,8 +2912,6 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["OW"] = bONEWIRE;
         sensdoc["OWPIN"] = meshcom_settings.node_owgpio;
         sensdoc["USERPIN"] = meshcom_settings.node_button_pin;
-        sensdoc["MHONLY"] = bMHONLY;
-        sensdoc["NOALL"] = bNoMSGtoALL;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
@@ -3104,8 +3102,8 @@ void sendNodeSetting()
     nsetdoc["MCR"] = meshcom_settings.node_cr;
     nsetdoc["MBW"] = meshcom_settings.node_bw;
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
-    //KBC/KFR
-     nsetdoc["BTCODE"] = meshcom_settings.bt_code;
+    nsetdoc["MHONLY"] = bMHONLY;
+    nsetdoc["NOALL"] = bNoMSGtoALL;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));

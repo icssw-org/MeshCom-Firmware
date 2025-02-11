@@ -1068,6 +1068,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     {
         DisplayOffWait = millis() + (30 * 1000); // 30 seconds
         bDisplayOff=false;
+        commandAction((char*)"--display on", isPhoneReady, false);
     }
     
     iDisplayType = 0;
@@ -1383,6 +1384,12 @@ void checkButtonState()
                         #else
                             pageHold=0;
                             bDisplayOff=!bDisplayOff;
+
+                            if(bDisplayOff)
+                                commandAction((char*)"--display off", isPhoneReady, false);
+                            else
+                                commandAction((char*)"--display on", isPhoneReady, false);
+
                             sendDisplayHead(false);
                         #endif
 

@@ -156,18 +156,18 @@ void lora_setcountry(int iCtry)
             #else
                 meshcom_settings.node_freq = 439.9125;
                 meshcom_settings.node_bw = 125.0;
-                meshcom_settings.node_cr = 5;
+                meshcom_settings.node_cr = 6;
             #endif
 
             meshcom_settings.node_sf = 10;
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
             
-            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+            meshcom_settings.node_preamplebits = 8;
 
             break;
 
-        case 2:  // ON LongSlow
+        case 2:  // ON
             meshcom_settings.node_freq = RF_FREQUENCY;
 
             #if defined BOARD_RAK4630
@@ -178,15 +178,15 @@ void lora_setcountry(int iCtry)
                 meshcom_settings.node_cr = 6;
             #endif
 
-            meshcom_settings.node_sf = 12;
+            meshcom_settings.node_sf = 10;
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
 
-            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+            meshcom_settings.node_preamplebits = 8;
 
             break;
 
-        case 4:  // OM LongSlow
+        case 4:  // LA
             meshcom_settings.node_freq = RF_FREQUENCY;
 
             #if defined BOARD_RAK4630
@@ -199,11 +199,11 @@ void lora_setcountry(int iCtry)
                 meshcom_settings.node_cr = 6;
             #endif
 
-            meshcom_settings.node_sf = 12;
+            meshcom_settings.node_sf = 10;
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
 
-            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+            meshcom_settings.node_preamplebits = 8;
 
             break;
 
@@ -235,7 +235,7 @@ void lora_setcountry(int iCtry)
             #else
                 meshcom_settings.node_freq = 439.9125;
                 meshcom_settings.node_bw = 125.0;
-                meshcom_settings.node_cr = 5;
+                meshcom_settings.node_cr = 6;
             #endif
 
             meshcom_settings.node_sf = 10;
@@ -261,7 +261,7 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
             
-            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+            meshcom_settings.node_preamplebits = 8;
 
             break;
 
@@ -280,7 +280,7 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
             
-            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+            meshcom_settings.node_preamplebits = 8;
 
             break;
 
@@ -300,7 +300,7 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = 999;
 
-            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+            meshcom_settings.node_preamplebits = 8;
 
             break;
 
@@ -320,7 +320,7 @@ void lora_setcountry(int iCtry)
 
             meshcom_settings.node_track_freq = LORA_APRS_FREQUENCY;
             
-            meshcom_settings.node_preamplebits = LORA_PREAMBLE_LENGTH;
+            meshcom_settings.node_preamplebits = 8;
 
             break;
 
