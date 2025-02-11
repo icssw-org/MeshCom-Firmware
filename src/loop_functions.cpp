@@ -49,7 +49,6 @@ bool bINA226ON = false;
 bool bRTCON = false;
 bool bSMALLDISPLAY = false;
 bool bSOFTSERON = false;
-bool bMHONLY = false;
 bool bNoMSGtoALL = false;
 
 bool bTCA9548A = false;
@@ -1497,32 +1496,6 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     initAPRSPOS(aprspos);
 
     decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
-
-    //display positions from myheard nodes only
-    if(bMHONLY)
-    {
-        struct mheardLine mheardLine;
-
-        bool bMhFound=false;
-        for(int iset=0; iset<MAX_MHEARD; iset++)
-        {
-            if(mheardCalls[iset][0] != 0x00)
-            {
-                //Serial.printf("source <%s> mh <%s>\n", aprsmsg.msg_source_call.c_str(), mheardCalls[iset]);
-
-                if(strcmp(aprsmsg.msg_source_call.c_str(), mheardCalls[iset]) == 0)
-                {
-                    bMhFound=true;
-                }
-            }
-        }
-
-        if(!bMhFound)
-        {
-            bSetDisplay=false;
-            return;
-        }
-    }
 
     // Display Distance, Direction
     lat = conv_coord_to_dec(aprspos.lat);

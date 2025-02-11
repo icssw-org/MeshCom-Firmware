@@ -405,7 +405,7 @@ void nrf52setup()
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
 
-    bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
+    // nicht mehr notwendig bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
 
