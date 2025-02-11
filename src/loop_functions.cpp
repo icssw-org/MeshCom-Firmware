@@ -773,12 +773,6 @@ void sendDisplayTime()
     char print_text[500];
     char cbatt[5];
 
-    char nodetype[5];
-
-    snprintf(nodetype, sizeof(nodetype), "%s", SOURCE_TYPE);
-    if(bGATEWAY)
-        snprintf(nodetype, sizeof(nodetype), "G");
-
     if(bDisplayVolt)
         snprintf(cbatt, sizeof(cbatt), "%4.2f", global_batt/1000.0);
     else
@@ -794,7 +788,7 @@ void sendDisplayTime()
         snprintf(cbatt, sizeof(cbatt), " USB");
  #endif
 
-    snprintf(print_text, sizeof(print_text), "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+    snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
 
     memcpy(pageText[0], print_text, 20);
     pageLine[0][0] = 3;
@@ -815,10 +809,6 @@ void sendDisplayMainline()
     char cbatt[5];
     char nodetype[5];
 
-    snprintf(nodetype, sizeof(nodetype), "%s", SOURCE_TYPE);
-
-    if(bGATEWAY)
-        snprintf(nodetype, sizeof(nodetype),"G");
 
     if(bDisplayVolt)
         snprintf(cbatt, sizeof(cbatt), "%4.2f", global_batt/1000.0);
@@ -846,7 +836,7 @@ void sendDisplayMainline()
     }
     else
     {
-        snprintf(print_text, sizeof(print_text), "%-1.1s%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
     sendDisplay1306(true, false, 3, dzeile[0], print_text);
@@ -1054,20 +1044,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             Minute = (uint16_t)aprsmsg.msg_payload.substring(19, 21).toInt();
             Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
 
-            if(meshcom_settings.node_hasIPaddress)
-            {
-                Hour = (uint16_t)meshcom_settings.node_date_hour;
-                Minute = (uint16_t)meshcom_settings.node_date_minute;
-                Second = (uint16_t)meshcom_settings.node_date_second;
-
-                meshcom_settings.node_date_year = Year;
-                meshcom_settings.node_date_month = Month;
-                meshcom_settings.node_date_day = Day;
-    
-                MyClock.setCurrentTime(meshcom_settings.node_utcoff * -1.0, Year, Month, Day, Hour, Minute, Second);
-            }
-            else
-                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
         }
 
         return;

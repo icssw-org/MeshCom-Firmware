@@ -912,7 +912,10 @@ bool doTX()
                     if(bDisplayInfo)
                     {
                         if(lora_tx_buffer[0] == 0x41)
-                             printBuffer_ack((char*)"TX-Lora", lora_tx_buffer, sendlng);
+                        {
+                            printBuffer_ack((char*)"TX-Lora", lora_tx_buffer, sendlng);
+                            Serial.println("");
+                        }
                         else
                         {
                             printBuffer_aprs((char*)"TX-LoRa", aprsmsg);

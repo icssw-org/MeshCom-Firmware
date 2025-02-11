@@ -1,4 +1,3 @@
-#define SOURCE_TYPE "C"
 #define SOURCE_VERSION "4.34"
 #define SOURCE_VERSION_SUB "o"
 

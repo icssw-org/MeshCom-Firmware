@@ -692,7 +692,7 @@ void nrf52setup()
         u8g2->drawStr(5, 15, "MeshCom 4.0");
         u8g2->setFont(u8g2_font_6x10_mf);
         char cvers[20];
-        snprintf(cvers, sizeof(cvers), "FW %s%s/%s <%s>", SOURCE_TYPE, SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        snprintf(cvers, sizeof(cvers), "FW %s/%s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         u8g2->drawStr(5, 25, cvers);
         u8g2->drawStr(5, 35, "by icssw.org");
         u8g2->drawStr(5, 45, "OE1KFR, OE1KBC");
@@ -889,13 +889,19 @@ void nrf52loop()
             updateTimeClient = millis();
         }
 
+        String strDate = udpGetDateClient();
+
+        uint16_t Year = (uint16_t)strDate.substring(0, 4).toInt();
+        uint16_t Month = (uint16_t)strDate.substring(5, 7).toInt();
+        uint16_t Day = (uint16_t)strDate.substring(8, 10).toInt();
+
         uint16_t Hour = (uint16_t)strTime.substring(0, 2).toInt();
         uint16_t Minute = (uint16_t)strTime.substring(3, 5).toInt();
         uint16_t Second = (uint16_t)strTime.substring(6, 8).toInt();
     
-        MyClock.setCurrentTime(meshcom_settings.node_utcoff, (uint16_t)meshcom_settings.node_date_year, (uint16_t)meshcom_settings.node_date_month, (uint16_t)meshcom_settings.node_date_day, Hour, Minute, Second);
+        MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
     }
-    
+
     if(bMyClock)
     {
         MyClock.CheckEvent();
