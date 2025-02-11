@@ -21,7 +21,7 @@ definitions for HELTEC_V3
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
 #define TX_POWER_MAX 22  // max 22dBm
-#define TX_POWER_MIN 1
+#define TX_POWER_MIN 2
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
