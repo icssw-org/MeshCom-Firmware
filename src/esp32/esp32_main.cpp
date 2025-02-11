@@ -1596,6 +1596,7 @@ void esp32loop()
         {
             DisplayOffWait = 0;
             bDisplayOff=true;
+            commandAction((char*)"--display off", isPhoneReady, false);
             sendDisplay1306(true, true, 0, 0, (char*)"#C");
         }
     }
