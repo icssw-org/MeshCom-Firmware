@@ -17,6 +17,7 @@ definitions for HELTEC_V3
 #define ENABLE_BMX280
 #define ENABLE_BMX680
 #define ENABLE_MCP23017
+#define ENABLE_MC811
 //I2C fault #define ENABLE_INA226
 #define ENABLE_RTC
 #define ENABLE_SOFTSER

@@ -17,6 +17,7 @@ definitions for E22 Board
 #define ENABLE_BMX680
 #define ENABLE_MCP23017
 #define ENABLE_INA226
+#define ENABLE_MC811
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
 #define TX_POWER_MAX 22  // max 22dBm

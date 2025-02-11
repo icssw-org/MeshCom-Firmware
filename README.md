@@ -146,23 +146,24 @@ If you only update the firmware, you only want the corresponding file to flash.<
 | --- | ----------- |
 | 0x1000 | bootloader.bin |
 | 0x8000 | partitions.bin |
+| 0xE000 | otadata.bin |
 | 0x10000 | safeboot.bin |
 | 0xC0000 | firmware.bin |
 
-Mac: `python esptool.py -p /dev/tty.usbserial-<NUMBER> write_flash 0x1000 <PATH-TO-BIN-FILE>/bootloader.bin 0x8000 <PATH-TO-BIN-FILE>/partitions.bin 0x10000 <PATH-TO-BIN-FILE>/safeboot-s3.bin 0xC0000 <PATH-TO-BIN-FILE>/firmware.bin `<br/>
+`esptool.py -p <SERIAL_PORT> write_flash 0x1000 <PATH-TO-BIN-FILE>/bootloader.bin 0xE000 otadata.bin 0x8000 <PATH-TO-BIN-FILE>/partitions.bin 0x10000 <PATH-TO-BIN-FILE>/safeboot-s3.bin 0xC0000 <PATH-TO-BIN-FILE>/firmware.bin `<br/>
 
 For an ESP-S3 like the Heltec V3, E290, etc:
 
 | Address | File |
 | --- | ----------- |
-| 0x0000 | bootloader.bin |
+| 0x0000 | bootloader-s3.bin |
 | 0x8000 | partitions.bin |
+| 0xE000 | otadata.bin |
 | 0x10000 | safeboot-s3.bin |
 | 0xC0000 | firmware.bin |
 
-Mac: `python esptool.py -p /dev/tty.usbserial-<NUMBER> write_flash 0x0000 <PATH-TO-BIN-FILE>/bootloader.bin 0x8000 <PATH-TO-BIN-FILE>/partitions.bin 0x10000 <PATH-TO-BIN-FILE>/safeboot-s3.bin 0xC0000 <PATH-TO-BIN-FILE>/firmware.bin `<br/>
-Linux: same but serial device under `/dev` can be `ttyUSB0` or similar.<br/>
-Windows: serial device is usually some COM<br/>
+`esptool.py -p <SERIAL_PORT> write_flash 0x0000 <PATH-TO-BIN-FILE>/bootloader.bin 0xE000 otadata.bin 0x8000 <PATH-TO-BIN-FILE>/partitions.bin 0x10000 <PATH-TO-BIN-FILE>/safeboot-s3.bin 0xC0000 <PATH-TO-BIN-FILE>/firmware.bin `<br/>
+
 Ready build firmware can also be flashed via the online tool (Chrome, Edge, Opera):<br/>
 https://oe1kfr.com/esptool/<br/>
 
@@ -182,3 +183,8 @@ When you double click the button on the module it mounts a USB Device where you 
 https://github.com/microsoft/uf2/blob/master/utils/uf2conv.py<br/>
 
 `./uf2conv.py <PATH_TO-HEX-FILE> -c -o firmware.uf2 -f 0xADA52840`
+
+### Updating the bootloader on RAK or erasing flash:
+Please follow the instructions here: https://icssw.org/en/rak-wisblock-anleitung/<br/>
+
+
