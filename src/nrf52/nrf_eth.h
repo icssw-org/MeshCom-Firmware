@@ -25,6 +25,7 @@ class NrfETH {
 
     String udpUpdateTimeClient();
     String udpGetTimeClient();
+    String udpGetDateClient();
 
     bool hasIPaddress = false;
 
