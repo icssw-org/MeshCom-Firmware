@@ -13,7 +13,7 @@ definitions for RAK4631
 #define RF_FREQUENCY 433175000 // 432900000   // Hz
 #define LORA_APRS_FREQUENCY 433775000 // 432900000   // Hz
 #define TX_POWER_MAX 22  // max 22 dBm
-#define TX_POWER_MIN 1
+#define TX_POWER_MIN 2
 #define ENABLE_BMX280
 #define ENABLE_BMX680
 #define ENABLE_INA226

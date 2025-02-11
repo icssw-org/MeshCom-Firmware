@@ -20,7 +20,7 @@ definitions for E22 Board
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
 #define TX_POWER_MAX 22  // max 22dBm
-#define TX_POWER_MIN 1
+#define TX_POWER_MIN 2
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 
