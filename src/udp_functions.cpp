@@ -672,12 +672,6 @@ String udpGetDateClient()
 {
   String strDate = getDateTime(timeClient.getEpochTime());
 
-  if(bDisplayInfo)
-  {
-    Serial.print("TimeClient now (DATE): ");
-    Serial.println(strDate);
-  }
-
   return strDate;
 }
 
@@ -745,14 +739,18 @@ void startMeshComUDP()
 
       // MeshCom Test-Server
 
-      //DEBUG_MSG("NTP", "Setting Hamnet NTP");
-      //timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+      DEBUG_MSG("NTP", "Setting Hamnet NTP");
+      timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
     }
     else
     {
       DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 89.185.97.38");
       node_hostip = IPAddress(89, 185, 97, 38);
       s_node_hostip = node_hostip.toString();
+
+      //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
+      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+
     }
   }
 

@@ -7,9 +7,6 @@
 #include <Arduino.h>
 #include <nrf_eth.h>
 #include <debugconf.h>
-//#include <string.h>
-//#include <NTPClient.h>
-//#include <time.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <command_functions.h>
@@ -803,9 +800,6 @@ void NrfETH::startUDP()
     // meshCom 4.0 Test-Server
     //DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.9.72");
     //udp_dest_addr = IPAddress(44, 143, 9, 72);
-
-    //DEBUG_MSG("NTP", "Setting Hamnet NTP");
-    //timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
   }
   else
   {
@@ -918,12 +912,6 @@ String udpGetDateClient()
 {
   String strDate = getDateTime(timeClient.getEpochTime());
 
-  if(bDisplayInfo)
-  {
-    Serial.print("TimeClient now (DATE): ");
-    Serial.println(strDate);
-  }
-
   return strDate;
 }
 
@@ -940,18 +928,16 @@ void NrfETH::startFIXUDP()
 
     udp_dest_addr = IPAddress(44, 143, 8, 143);
 
-    // meshCom 4.0 Test-Server
-    //DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.9.72");
-    //udp_dest_addr = IPAddress(44, 143, 9, 72);
-
     //DEBUG_MSG("NTP", "Setting Hamnet NTP");
-    //timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+    timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
   }
   else
   {
     Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
-    //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
     udp_dest_addr = IPAddress(89, 185, 97, 38);
+
+    //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
+    timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
   }
 
   snprintf(sn, sizeof(sn), "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);

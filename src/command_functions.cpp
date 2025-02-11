@@ -820,7 +820,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            bSensSetting = true;
+            bNodeSetting = true;
         }
 
         bReturn = true;
