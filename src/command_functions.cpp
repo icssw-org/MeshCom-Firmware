@@ -16,6 +16,7 @@
 #include "mcu811.h"
 #include "io_functions.h"
 #include "softser_functions.h"
+#include <onewire_functions.h>
 
 //TEST #include "compress_functions.h"
 
@@ -959,15 +960,10 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        #ifdef NRF52_SERIES
-            delay(2000);
-            NVIC_SystemReset();     // resets the device
-        #endif
-
-        #ifdef ESP32
-            delay(2000);
-            ESP.restart();
-        #endif
+        if(bONEWIRE)
+        {
+            init_onewire();
+        }
     }
     else
     if(commandCheck(msg_text+2, (char*)"onewire off") == 0)
@@ -992,8 +988,9 @@ void commandAction(char *msg_text, bool ble)
 
         // Pin 2 is used for powering peripherals on RAK4630
         #ifdef BOARD_RAK4630
-        if(meshcom_settings.node_owgpio == 2){
-            Serial.println("GPIO 2 not supported on RAK4630");
+        if(meshcom_settings.node_owgpio <= 2)
+        {
+            Serial.println("GPIO 0-2 not supported on RAK4630 (reserved)");
             return;
         }
         #endif
@@ -1002,15 +999,10 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        #ifdef NRF52_SERIES
-            delay(2000);
-            NVIC_SystemReset();     // resets the device
-        #endif
-
-        #ifdef ESP32
-            delay(2000);
-            ESP.restart();
-        #endif
+        if(bONEWIRE)
+        {
+            init_onewire();
+        }
 
         return;
     }
