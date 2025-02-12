@@ -2321,9 +2321,7 @@ void commandAction(char *msg_text, bool ble)
 
             save_settings();
 
-            Serial.println("Auto. Reboot after 15 sec.");
-
-            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+            lora_setchip_meshcom();
         }
 
         return;
@@ -2356,9 +2354,7 @@ void commandAction(char *msg_text, bool ble)
 
             save_settings();
 
-            Serial.println("Auto. Reboot after 15 sec.");
-
-            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+            lora_setchip_meshcom();
         }
 
         return;
@@ -2386,9 +2382,7 @@ void commandAction(char *msg_text, bool ble)
 
             save_settings();
 
-            Serial.println("Auto. Reboot after 15 sec.");
-
-            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+            lora_setchip_meshcom();
         }
 
         return;
@@ -2416,9 +2410,7 @@ void commandAction(char *msg_text, bool ble)
 
             save_settings();
 
-            Serial.println("Auto. Reboot after 15 sec.");
-
-            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+            lora_setchip_meshcom();
         }
 
         return;
@@ -2446,9 +2438,7 @@ void commandAction(char *msg_text, bool ble)
 
             save_settings();
 
-            Serial.println("Auto. Reboot after 15 sec.");
-
-            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+            lora_setchip_meshcom();
         }
 
         return;

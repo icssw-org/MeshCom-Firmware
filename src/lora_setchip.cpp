@@ -138,6 +138,12 @@ int8_t getPower()
     if(power > TX_OUTPUT_POWER)
         power = TX_OUTPUT_POWER;
 
+    if(power > TX_POWER_MAX)
+        power= TX_POWER_MAX;
+
+    if(power < TX_POWER_MIN)
+        power = TX_POWER_MIN;
+
     return power;
 }
 
@@ -539,7 +545,7 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
 #ifdef ESP32
 
     if(bLORADEBUG)
-        Serial.printf("LoRa RF_FREQUENCY: %.3f MHz\n", rf_freq);
+        Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", rf_freq);
 
     if (radio.setFrequency(rf_freq) == RADIOLIB_ERR_INVALID_FREQUENCY)
     {
@@ -549,7 +555,7 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     }
 
     if(bLORADEBUG)
-        Serial.printf("LoRa RF_BANDWIDTH: %.0f kHz\n", rf_bw);
+        Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", rf_bw);
 
     if (radio.setBandwidth(rf_bw) == RADIOLIB_ERR_INVALID_BANDWIDTH)
     {
@@ -559,7 +565,7 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     }
 
     if(bLORADEBUG)
-        Serial.printf("LoRa RF_SF: %i\n", rf_sf);
+        Serial.printf("[LoRa]...RF_SF: %i\n", rf_sf);
 
     if (radio.setSpreadingFactor(rf_sf) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR)
     {
@@ -569,7 +575,7 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     }
 
     if(bLORADEBUG)
-        Serial.printf("LoRa RF_CR: 4/%i\n", rf_cr);
+        Serial.printf("[LoRa]...RF_CR: 4/%i\n", rf_cr);
 
     if (radio.setCodingRate(rf_cr) == RADIOLIB_ERR_INVALID_CODING_RATE)
     {
@@ -589,6 +595,22 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     if (radio.setPreambleLength(rf_preamble_length) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH)
     {
         Serial.println(F("Selected preamble length is invalid for this module!"));
+        return false;
+    }
+
+    // set output power to 10 dBm (accepted range is -3 - 17 dBm)
+    // NOTE: 20 dBm value allows high power operation, but transmission
+    //       duty cycle MUST NOT exceed 1%
+    
+    int8_t tx_power = getPower();
+    
+    // Set Radio TX configuration
+    if(bLORADEBUG)
+        Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
+
+    if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER)
+    {
+        Serial.println(F("Selected output power is invalid for this module!"));
         return false;
     }
 
