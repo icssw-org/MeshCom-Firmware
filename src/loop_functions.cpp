@@ -2107,7 +2107,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         char cqnh[15]={0};
         char cgasres[15]={0};
         char cco2[15]={0};
-        char cgrc[32]={0};
+        char cgrc[50]={0};
 
         char csfpegel[15]={0};
         char csftemp[15]={0};
@@ -2252,7 +2252,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
             char cGC[6];
             for(int igrc=0;igrc<6;igrc++)
             {
-                if(meshcom_settings.node_gcb[igrc] > 0)
+                if(meshcom_settings.node_gcb[igrc] > 0 && meshcom_settings.node_gcb[igrc] < 100000)
                 {
                     snprintf(cGC, sizeof(cGC), "%i;", meshcom_settings.node_gcb[igrc]);
                     strGRC.concat(cGC);

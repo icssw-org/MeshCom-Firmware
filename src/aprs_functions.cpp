@@ -56,7 +56,7 @@ bool CheckOwnGroup(String callsign)
 
     for(int ig=0;ig<6;ig++)
     {
-        if(meshcom_settings.node_gcb[ig] > 0)
+        if(meshcom_settings.node_gcb[ig] > 0 && meshcom_settings.node_gcb[ig] < 100000)
             bHasGroup=true;
 
         if(meshcom_settings.node_gcb[ig] == checkgroup)
