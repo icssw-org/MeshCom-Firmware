@@ -14,6 +14,7 @@
 // Sensors
 #include "bmx280.h"
 #include "mcu811.h"
+#include "sds_011.h"
 #include "io_functions.h"
 #include "softser_functions.h"
 

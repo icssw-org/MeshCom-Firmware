@@ -22,6 +22,7 @@
 #include "ina226_functions.h"
 #include "rtc_functions.h"
 #include "softser_functions.h"
+#include "sds_011.h"
 
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
@@ -605,6 +606,11 @@ void esp32setup()
 	// Initialize temp sensor
     if(bONEWIRE)
         init_onewire();
+
+    // SDS011
+    #if defined(ENABLE_SDS011)
+        sds_setup();
+    #endif
 
 
     //#if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)  || defined(BOARD_E22)
@@ -1785,6 +1791,10 @@ void esp32loop()
             bme680_timer = millis();
         }
     }
+    #endif
+
+    #if defined(ENABLE_SDS011)
+        sds_process();
     #endif
     
     checkButtonState();
