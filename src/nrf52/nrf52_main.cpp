@@ -880,16 +880,16 @@ void nrf52loop()
     else
     if(meshcom_settings.node_hasIPaddress)
     {
-        String strTime = udpGetTimeClient();
+        String strTime = neth.udpGetTimeClient();
 
         if((updateTimeClient + 1000 * 60 * 3) < millis() || updateTimeClient == 0)
         {
-            strTime = udpUpdateTimeClient();
+            strTime = neth.udpUpdateTimeClient();
 
             updateTimeClient = millis();
         }
 
-        String strDate = udpGetDateClient();
+        String strDate = neth.udpGetDateClient();
 
         uint16_t Year = (uint16_t)strDate.substring(0, 4).toInt();
         uint16_t Month = (uint16_t)strDate.substring(5, 7).toInt();
