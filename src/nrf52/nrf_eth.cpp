@@ -797,15 +797,17 @@ void NrfETH::startUDP()
 
     udp_dest_addr = IPAddress(44, 143, 8, 143);
 
-    // meshCom 4.0 Test-Server
-    //DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.9.72");
-    //udp_dest_addr = IPAddress(44, 143, 9, 72);
+    //DEBUG_MSG("NTP", "Setting Hamnet NTP");
+    timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
   }
   else
   {
     Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
     //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
     udp_dest_addr = IPAddress(89, 185, 97, 38);
+
+    //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
+    timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
   }
 
   snprintf(sn, sizeof(sn), "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
@@ -821,7 +823,7 @@ void NrfETH::startUDP()
 
 }
 
-String udpUpdateTimeClient()
+String NrfETH::udpUpdateTimeClient()
 {
   timeClient.update();
 
@@ -834,7 +836,7 @@ String udpUpdateTimeClient()
   return timeClient.getFormattedTime();
 }
 
-String udpGetTimeClient()
+String NrfETH::udpGetTimeClient()
 {
   return timeClient.getFormattedTime();
 }
@@ -849,17 +851,17 @@ String udpGetTimeClient()
 #define EPOCH_MONTH 1
 #define EPOCH_YEAR 1970
 
-int isLeapYear(int year)
+int NrfETH::isLeapYear(int year)
 {
     return year % 400 == 0 || (year % 4 == 0 && year % 100 != 0);
 }
 
-unsigned long getDaysForYear(int year) 
+unsigned long NrfETH::getDaysForYear(int year) 
 {
     return isLeapYear(year) ? (unsigned long)DAYS_PER_LEAP_YEAR : (unsigned long)DAYS_PER_YEAR;
 }
 
-void getDaysPerMonth(int year, int day[13])
+void NrfETH::getDaysPerMonth(int year, int day[13])
 {
     day[0] = 0;
     day[1] = 31;
@@ -876,39 +878,39 @@ void getDaysPerMonth(int year, int day[13])
     day[12] = 31;
 }
 
-String getDateTime(unsigned long timestamp)
+String NrfETH::getDateTime(unsigned long timestamp)
 {
-    unsigned long days = (unsigned long)SECONDS_PER_DAY;
-    days = timestamp / days;
+    unsigned long ldays = (unsigned long)SECONDS_PER_DAY;
+    ldays = timestamp / ldays;
 
-    int year = EPOCH_YEAR;
-    while (days >= getDaysForYear(year))
+    int iyear = EPOCH_YEAR;
+    while (ldays >= getDaysForYear(iyear))
     {
-        days -= getDaysForYear(year);
-        year++;
+        ldays -= getDaysForYear(iyear);
+        iyear++;
     }
 
     int daysPerMonth[13];
     
-    getDaysPerMonth(year, daysPerMonth);
+    getDaysPerMonth(iyear, daysPerMonth);
 
-    int month = EPOCH_MONTH;
-    while (days >= (unsigned long)daysPerMonth[month]) {
-        days -= daysPerMonth[month];
-        month++;
+    int imonth = EPOCH_MONTH;
+    while (ldays >= (unsigned long)daysPerMonth[imonth]) {
+        ldays -= daysPerMonth[imonth];
+        imonth++;
     }
 
-    int day = days + 1;
+    int iday = ldays + 1;
 
     char cDate[20];
-    snprintf(cDate, sizeof(cDate), "%04i.%02i.%02i", year, month, day);
+    snprintf(cDate, sizeof(cDate), "%04i.%02i.%02i", iyear, imonth, iday);
     
     String strDate = cDate;
 
     return strDate;
 }
 
-String udpGetDateClient()
+String NrfETH::udpGetDateClient()
 {
   String strDate = getDateTime(timeClient.getEpochTime());
 
