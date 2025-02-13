@@ -679,7 +679,7 @@ void startMeshComUDP()
 {
   if(bWIFIAP)
   {
-    WiFi.softAPConfig(IPAddress(10,10,10,1), IPAddress(10,10,10,1), IPAddress(255,255,255,0));
+    WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
 
     node_ip = WiFi.softAPIP();
 
