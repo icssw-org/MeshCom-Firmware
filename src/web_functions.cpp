@@ -75,7 +75,7 @@ void startWebserver()
     if(bweb_server_running)
         return;
 
-    if(strlen(meshcom_settings.node_ip) < 7)
+    if(strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
     {
         if(bDEBUG)
         {
