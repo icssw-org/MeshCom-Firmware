@@ -31,6 +31,7 @@
 #define UDP_PORT 1990                      // Set the server port.
 #define LOCAL_PORT UDP_PORT                // Set the local port we are listening to.
 #define EXTERN_PORT 1799                   // Set the external server port.
+#define EXTERN_RAW_PORT 1798    
 #define UDP_TX_BUF_SIZE 255                // BUffer size of outgoing buffer
 #define UDP_CONF_BUFF_SIZE UDP_TX_BUF_SIZE // Buffer to hold incoming config messages
 //#define SEE_ALL_PACKETS 0                  // switch to filter multiple receives of same packets from neighbours rebroadcasted

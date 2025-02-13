@@ -1112,6 +1112,17 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     }
 
     UdpExtern.endPacket();
+
++   // write raw data
++   UdpExtern.beginPacket(apip , EXTERN_RAW_PORT); 
+    
+    if(!UdpExtern.write(buffer, buflen))
+    {
+       resetMeshComUDP();
+    }
++   
++   UdpExtern.endPacket();
+
   }
   else
   {
