@@ -655,7 +655,7 @@ void sendDisplayHead(bool bInit)
     sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
     if(bWIFIAP)
-        snprintf(print_text, sizeof(print_text), "AP-ssid:  %-12.12s", meshcom_settings.node_call);
+        snprintf(print_text, sizeof(print_text), "AP-ssid: %-13.13s", meshcom_settings.node_call);
     else
         snprintf(print_text, sizeof(print_text), "ssid:  %-15.15s", meshcom_settings.node_ssid);
 
