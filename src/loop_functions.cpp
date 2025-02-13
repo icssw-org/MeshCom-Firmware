@@ -655,7 +655,7 @@ void sendDisplayHead(bool bInit)
     sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
     if(bWIFIAP)
-        snprintf(print_text, sizeof(print_text), "ssid:  %-15.15s", cBLEName);
+        snprintf(print_text, sizeof(print_text), "AP-ssid:  %-12.12s", meshcom_settings.node_call);
     else
         snprintf(print_text, sizeof(print_text), "ssid:  %-15.15s", meshcom_settings.node_ssid);
 
@@ -1294,6 +1294,7 @@ void checkButtonState()
             if(digitalRead(iButtonPin) == LOW)
         #endif
         {
+            /* kann wieder raus das der GPIO-PIN PULLUP ist
             checkButtoExtraLong++;
             if(checkButtoExtraLong > 100)
             {
@@ -1307,6 +1308,7 @@ void checkButtonState()
                 bcheckBottonRun = false;
                 return;
             }
+            */
 
             //if(bDEBUG)
             //    Serial.printf("Button Pressed pageLastPointer:%i pageLastLineAnz[%i]:%i Track:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer], bDisplayTrack);

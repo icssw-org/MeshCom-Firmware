@@ -64,7 +64,10 @@ int waitRestartUDPCounter = 5;
 
 void getMeshComUDP()
 {
-  meshcom_settings.node_hasIPaddress = hasIPaddress;
+  if(bWIFIAP)
+    return;
+
+    meshcom_settings.node_hasIPaddress = hasIPaddress;
   
   if(!hasIPaddress)
     return;
@@ -371,6 +374,9 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
  */
 void sendMeshComUDP()
 {
+    if(bWIFIAP)
+      return;
+
     if(!hasIPaddress)
       return;
 
@@ -453,10 +459,12 @@ bool startWIFI()
     delay(500);
 
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(cBLEName);
+    WiFi.softAP(meshcom_settings.node_call);
     
-    Serial.printf("WiFI AP mode ssid<%s> connected\n", cBLEName);
+    Serial.printf("WiFI AP mode ssid<%s> connected\n", meshcom_settings.node_call);
 
+    startMeshComUDP();
+    
     return true;
   }
   else
@@ -728,6 +736,9 @@ void startMeshComUDP()
 
   s_node_ip = node_ip.toString();
 
+  Serial.print("[WIFIAP]...node_ip ");
+  Serial.println(node_ip);
+
   // no gateway activity
   if(!bWIFIAP)
   {
@@ -752,18 +763,17 @@ void startMeshComUDP()
       timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
 
     }
+
+    Udp.begin(LOCAL_PORT);
+
+    Serial.printf("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
+  
+    // no gateway activity
+    sendMeshComHeartbeat();
   }
-
-  Udp.begin(LOCAL_PORT);
-
-  Serial.printf("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
 
   hasIPaddress=true;
   meshcom_settings.node_hasIPaddress = hasIPaddress;
-
-  // no gateway activity
-  if(!bWIFIAP)
-    sendMeshComHeartbeat();
 }
 
 void sendMeshComHeartbeat()
@@ -818,7 +828,10 @@ void resetMeshComUDP()
 // Extern JSON UDP
 void startExternUDP()
 {
-  if(!bEXTUDP)
+  if(bWIFIAP)
+    return;
+
+    if(!bEXTUDP)
     return;
 
   extern_node_ip = WiFi.localIP();
@@ -935,7 +948,10 @@ String getJSON(unsigned char incoming[300], int len, char *iname)
 
 void getExtern(unsigned char incoming[], int len)
 {
-  char val[160+1];
+  if(bWIFIAP)
+    return;
+
+    char val[160+1];
   struct aprsMessage aprsmsg;
 
   // Decode
@@ -967,7 +983,10 @@ void getExtern(unsigned char incoming[], int len)
 
 void getExternUDP()
 {
-  if(!bEXTUDP && !bEXTSER)
+  if(bWIFIAP)
+    return;
+
+    if(!bEXTUDP && !bEXTSER)
     return;
 
   if(!hasExternIPaddress && bEXTUDP)
@@ -997,6 +1016,9 @@ void getExternUDP()
 
 void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
 {
+  if(bWIFIAP)
+    return;
+
   if(!bEXTUDP && !bEXTSER)
     return;
 
@@ -1097,7 +1119,10 @@ void  sendExternHeartbeat()
 
 void resetExternUDP()
 {
-  UdpExtern.stop();
+  if(bWIFIAP)
+    return;
+
+    UdpExtern.stop();
 
   if(bEXTUDP)
   {

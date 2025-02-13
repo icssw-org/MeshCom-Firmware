@@ -2782,7 +2782,7 @@ void commandAction(char *msg_text, bool ble)
                 Serial.printf("...WIFI-AP   %s\n", (bWIFIAP?"on":"off"));
                 if(bWIFIAP)
                 {
-                    Serial.printf("...SSID <%s>", cBLEName);
+                    Serial.printf("...SSID <%s>", meshcom_settings.node_call);
                     Serial.printf(" / PASSWORD <>\n");
                 }
                 else
@@ -2799,9 +2799,12 @@ void commandAction(char *msg_text, bool ble)
                 }
             #endif
 
-            Serial.printf("...OWNIP address: %s\n", meshcom_settings.node_ownip);
-            Serial.printf("...OWNMS address: %s\n", meshcom_settings.node_ownms);
-            Serial.printf("...OWNGW address: %s\n", meshcom_settings.node_owngw);
+            if(!bWIFIAP)
+            {
+                Serial.printf("...OWNIP address: %s\n", meshcom_settings.node_ownip);
+                Serial.printf("...OWNMS address: %s\n", meshcom_settings.node_ownms);
+                Serial.printf("...OWNGW address: %s\n", meshcom_settings.node_owngw);
+            }
 
             Serial.printf("\n...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             if(meshcom_settings.node_hasIPaddress)
