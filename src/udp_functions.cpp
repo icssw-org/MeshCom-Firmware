@@ -736,9 +736,6 @@ void startMeshComUDP()
 
   s_node_ip = node_ip.toString();
 
-  Serial.print("[WIFIAP]...node_ip ");
-  Serial.println(node_ip);
-
   // no gateway activity
   if(!bWIFIAP)
   {
@@ -768,12 +765,22 @@ void startMeshComUDP()
 
     Serial.printf("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
   
-    // no gateway activity
+    hasIPaddress=true;
+    meshcom_settings.node_hasIPaddress = hasIPaddress;
+
+    // gateway activity
     sendMeshComHeartbeat();
+
+  }
+  else
+  {
+    Serial.print("[WIFIAP]...node_ip ");
+    Serial.println(node_ip);
+  
+    hasIPaddress=true;
   }
 
-  hasIPaddress=true;
-  meshcom_settings.node_hasIPaddress = hasIPaddress;
+
 }
 
 void sendMeshComHeartbeat()
@@ -831,7 +838,7 @@ void startExternUDP()
   if(bWIFIAP)
     return;
 
-    if(!bEXTUDP)
+  if(!bEXTUDP)
     return;
 
   extern_node_ip = WiFi.localIP();

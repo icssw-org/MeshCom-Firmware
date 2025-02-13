@@ -1091,9 +1091,10 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
     {
         bWEBSERVER=true;
+        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0040;    // mask 0x0040
+
         bWIFIAP=false;
-        
-        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0040;
+        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 & 0x7F7F;    // mask 0x0080
 
         if(ble)
         {
@@ -1111,7 +1112,6 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"webserver off") == 0)
     {
         bWEBSERVER=false;
-        
         meshcom_settings.node_sset2  = meshcom_settings.node_sset2 & 0x7FBF;   // mask 0x0040
 
         if(ble)
@@ -1849,11 +1849,13 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"wifiap on") == 0)
     {
         bWIFIAP=true;
+        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0080;    // mask 0x0080
 
         bWEBSERVER=true;
+        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0040;    // mask 0x0040
+
         bGATEWAY=false;
-        
-        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 | 0x0080;
+        meshcom_settings.node_sset  = meshcom_settings.node_sset & 0x7EFF;    // mask 0x1000
 
         if(ble)
         {
@@ -1870,11 +1872,13 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"wifiap off") == 0)
     {
         bWIFIAP=false;
+        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 & 0x7F7F;    // mask 0x0080
 
         bWEBSERVER=false;
+        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 & 0x7FBF;    // mask 0x0040
+
         bGATEWAY=false;
-        
-        meshcom_settings.node_sset2  = meshcom_settings.node_sset2 & 0x7F7F;   // mask 0x0080
+        meshcom_settings.node_sset  = meshcom_settings.node_sset & 0x7EFF;    // mask 0x1000
 
         if(ble)
         {
