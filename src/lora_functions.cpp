@@ -641,7 +641,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         snprintf(csmeter, sizeof(csmeter), "%.0f", rssi*-1.0);
                                         aprsmsg.msg_payload.concat(csmeter);
                                         aprsmsg.msg_payload.concat(',');
-                                        snprintf(csmeter, sizeof(csmeter), "%.0f", snr);
+                                        snprintf(csmeter, sizeof(csmeter), "%i", snr);
                                         aprsmsg.msg_payload.concat(csmeter);
                                         aprsmsg.msg_payload.concat(';');
                                     }
