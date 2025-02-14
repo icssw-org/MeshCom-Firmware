@@ -224,7 +224,7 @@ void loopWebserver()
             else
             {
                 Serial.print(getTimeString());
-                Serial.printf(" WEBServer Password not found IP:<%s>\n", c_web_ip_now);
+                Serial.printf(" WEBServer Password not found IP:<%s> show LOGIN\n", c_web_ip_now);
             }
         }
     }
