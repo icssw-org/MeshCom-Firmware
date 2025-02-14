@@ -79,9 +79,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     if(payload[0] == 0x41)
     {
         if(bDisplayInfo)
-        {
-            printBuffer_ack((char*)"RX-Lora", payload, size);
-        }
+            printBuffer_ack((char*)"RX-Lora1", payload, size);
 
         memcpy(print_buff, payload, 12);
 
@@ -121,7 +119,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             else
             {
                 // ACK nur weitersenden wenn es eine neue MSG-ID ist && MESH = on && nicht eine MSG-ID ist welche nicht selbst ausgesendet wurde
-                if(print_buff[5] > 0x00 && bMESH && itxcheck < 0 && !checkServerRx(print_buff+6))
+                if((print_buff[5] & 0x7F) > 0x00 && bMESH && itxcheck < 0 && !checkServerRx(print_buff+6))
                 {
                     print_buff[5]--;
 
@@ -331,7 +329,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                     // print aprs message
                     if(bDisplayInfo)
-                        printBuffer_aprs((char*)"RX-LoRa", aprsmsg);
+                        printBuffer_aprs((char*)"RX-LoRa2", aprsmsg);
 
                     // we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
                     // MODE BYTE: LongSlow = 1, MediumSlow = 3
