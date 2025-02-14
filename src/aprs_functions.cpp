@@ -93,12 +93,18 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
 
     if(meshcom_settings.node_sf == 12 && getCR() == 8 && getBW() == 125.0)
         aprsmsg.msg_source_mod = 4; // MeshCom SF 12 CR 4/8 BW 125 ... slow
-    
-    if(meshcom_settings.node_sf == 11 && getCR() == 5 && getBW() == 250.0)
-        aprsmsg.msg_source_mod = 5; // MeshCom SF 11 CR 4/5 BW 250 ... fast
-
+   
     if(meshcom_settings.node_sf == 12 && getCR() == 6 && getBW() == 125.0)
-        aprsmsg.msg_source_mod = 6; // MeshCom SF 12 CR 4/6 BW 125 ... longslow
+        aprsmsg.msg_source_mod = 5; // MeshCom SF 12 CR 4/6 BW 125 ... longslow
+
+    if(meshcom_settings.node_sf == 10 && getCR() == 6 && getBW() == 125.0)
+        aprsmsg.msg_source_mod = 6; // MeshCom SF 10 CR 4/6 BW 125 ... smallslow
+
+    if(meshcom_settings.node_sf == 11 && getCR() == 5 && getBW() == 250.0)
+        aprsmsg.msg_source_mod = 7; // MeshCom SF 11 CR 4/5 BW 250 ... fast
+
+    if(meshcom_settings.node_sf == 11 && getCR() == 6 && getBW() == 250.0)
+        aprsmsg.msg_source_mod = 8; // MeshCom SF 11 CR 4/5 BW 250 ... fastslow
 
     //if(bLORADEBUG)
     //    Serial.printf("sf:%i cr:%i bw:%f ... mod:%i\n", meshcom_settings.node_sf, getCR(), getBW(), aprsmsg.msg_source_mod);

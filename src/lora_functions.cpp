@@ -639,10 +639,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                     if(aprsmsg.payload_type == '@')
                                     {
-                                        char crssi[10];
-                                        snprintf(crssi, sizeof(crssi), "%.0f", rssi*-1.0);
-                                        aprsmsg.msg_payload.concat(crssi);
+                                        char csmeter[10];
+                                        snprintf(csmeter, sizeof(csmeter), "%.0f", rssi*-1.0);
+                                        aprsmsg.msg_payload.concat(csmeter);
                                         aprsmsg.msg_payload.concat(',');
+                                        snprintf(csmeter, sizeof(csmeter), "%.0f", snr);
+                                        aprsmsg.msg_payload.concat(csmeter);
+                                        aprsmsg.msg_payload.concat(';');
                                     }
                                     
                                     aprsmsg.msg_last_hw = BOARD_HARDWARE;   // hardware  last sending node
