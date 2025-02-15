@@ -1637,15 +1637,13 @@ void commandAction(char *msg_text, bool ble)
     {
         sscanf(msg_text+9, "%d", &meshcom_settings.bt_code);
 
-        if(meshcom_settings.bt_code < 0 || meshcom_settings.bt_code > 999999)
+        if(meshcom_settings.bt_code < 100000 || meshcom_settings.bt_code > 999999)
         {
-            Serial.printf("Wrong BT Code only > 1 and < 999999");
+            Serial.printf("Wrong BT Code only > 100000 and < 999999");
             return;
         }
 
         save_settings();
-
-        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
 
         if(ble)
         {
