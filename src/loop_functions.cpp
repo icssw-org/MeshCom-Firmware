@@ -455,8 +455,9 @@ bool esp32_isSSD1306(int address)
     // 0x07 == T-LORA 0.9" type 2
     // 0x09 == HELTEC V3 type 1
     // 0x3F == HELTEC V3 type 2
+    // 0x16 == T-BEAM 1.3" 1306
 
-    if((buffer[0] & 0x0f) == 0x08 || (buffer[0] & 0x0f) == 0x00)
+    if((buffer[0] & 0x03f) == 0x08 || (buffer[0] & 0x03f) == 0x00 || (buffer[0] & 0x3f) == 0x16)
         return true;
 
     return false;

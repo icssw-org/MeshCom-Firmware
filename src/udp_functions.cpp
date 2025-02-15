@@ -847,7 +847,7 @@ void startExternUDP()
 
   UdpExtern.begin(EXTERN_PORT);
 
-  Serial.printf("WiFi now listening at IP %s, UDP port %d\n",  s_extern_node_ip.c_str(), EXTERN_PORT);
+  Serial.printf("[EXTUDP]...now listening at IP %s, UDP port %d\n",  s_extern_node_ip.c_str(), EXTERN_PORT);
 
   hasExternIPaddress=true;
 
