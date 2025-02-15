@@ -373,7 +373,7 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
 
 #ifndef BOARD_RAK4630
-            Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--setownip ip:255.255.255.255\n--setowngw gw:255.255.255.255\n--setownms mask:255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extser  on/off\n--extudpip 99.99.99.99\n");
+            Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--setownip ip:255.255.255.255\n--setowngw gw:255.255.255.255\n--setownms mask:255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 1.2.3.4\n--extser  on/off\n--extudpip 99.99.99.99\n");
             delay(100);
 #endif
             Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n");
@@ -1228,6 +1228,8 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
+        resetExternUDP();
+
         return;
     }
     else
@@ -1285,6 +1287,9 @@ void commandAction(char *msg_text, bool ble)
         msg_text[50]=0x00;
 
         snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", msg_text+11);
+
+        if(strcmp(meshcom_settings.node_extern, "none") == 0)
+            memset(meshcom_settings.node_extern, 0x00, sizeof(meshcom_settings.node_extern));
 
         if(strcmp(meshcom_settings.node_extern, meshcom_settings.node_ip) == 0)
         {
