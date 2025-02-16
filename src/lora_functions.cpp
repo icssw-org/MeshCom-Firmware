@@ -53,9 +53,6 @@ extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern double mheardLat[MAX_MHEARD];
 extern double mheardLon[MAX_MHEARD];
 
-double lat=0;
-double lon=0;
-
 #include "TinyGPSPlus.h"
 
 // TinyGPS
@@ -216,6 +213,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     
                     // check MHeard exists already
                     int ipos=-1;
+                    double lat=0;
+                    double lon=0;
+
                     for(int iset=0; iset<MAX_MHEARD; iset++)
                     {
                         if(mheardCalls[iset][0] != 0x00)

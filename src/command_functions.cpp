@@ -1780,7 +1780,15 @@ void commandAction(char *msg_text, bool ble)
             _owner_c[strlen(_owner_c)-1] = 0x00;
         sVar = _owner_c;
         sVar.toUpperCase();
+
+        if(!checkRegexCall(sVar))
+        {
+            Serial.printf("\n[ERR]..Callsign <&%s> not valid\n", sVar.c_str());
+            return;
+        }
+
         snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sVar.c_str());
+
 
         snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
