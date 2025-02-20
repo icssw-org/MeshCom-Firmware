@@ -646,8 +646,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         aprsmsg.msg_payload.concat(';');
                                     }
                                     
-                                    aprsmsg.msg_last_hw = BOARD_HARDWARE;   // hardware  last sending node
-
                                     memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
 
                                     size = encodeAPRS(RcvBuffer, aprsmsg);
