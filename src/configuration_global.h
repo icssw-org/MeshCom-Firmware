@@ -9,7 +9,7 @@
 #define TBEAM_1268 5
 #define TBEAM_0p7 6
 #define T_ECHO 7
-#define TDECK 8
+#define T_DECK 8
 #define RAK4631 9
 #define HELTEC_V2_1 10
 #define HELTEC_V1 11
@@ -18,7 +18,7 @@
 #define HELTEC_V3 43
 #define HELTEC_E290 44
 #define TBEAM_1262 45
-#define TBEAM_1262 TDECK_PLUS 46
+#define T_DECK_PLUS 46
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 

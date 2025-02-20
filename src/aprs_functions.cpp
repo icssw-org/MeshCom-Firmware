@@ -84,7 +84,7 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
     aprsmsg.msg_id = 0;
     aprsmsg.payload_type = msgType;
     aprsmsg.max_hop = meshcom_settings.max_hop_pos;    // other
-    if(msgType == ':')
+    if(msgType == ':' || msgType == '@')
         aprsmsg.max_hop = meshcom_settings.max_hop_text;    // TEXT
     aprsmsg.msg_server = false;
     aprsmsg.msg_track = false;
