@@ -1383,8 +1383,10 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--setboostedgain on");
+             bInfo=true;
         }
+ 
+        bReturn = true;
 
         save_settings();
 
@@ -1392,7 +1394,6 @@ void commandAction(char *msg_text, bool ble)
 
         rebootAuto = millis() + 5 * 1000; // 5 Sekunden
 
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"setboostedgain off") == 0)
@@ -1403,16 +1404,16 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--setboostedgain off");
+             bInfo=true;
         }
+ 
+        bReturn = true;
 
         save_settings();
 
         Serial.println("Auto. Reboot after 5 sec.");
 
         rebootAuto = millis() + 5 * 1000; // 5 Sekunden
-
-        return;
     }
     #endif
     else
