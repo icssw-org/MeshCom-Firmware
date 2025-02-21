@@ -46,6 +46,9 @@ int CheckGroup(String callsign)
 
 bool CheckOwnGroup(String callsign)
 {
+    if(strcmp(callsign.c_str(), "*") == 0)
+        return false;
+        
     // no Group-Check
     int checkgroup = CheckGroup(callsign);
 
