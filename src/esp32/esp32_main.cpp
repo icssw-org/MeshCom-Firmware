@@ -159,10 +159,10 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
          *  Latency: number of intervals allowed to skip.
          *  Timeout: 10 millisecond increments.
          */
-        //pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
+        pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
         // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
         commandAction((char*)"--conffin", isPhoneReady, true);
-        Serial.println("BLE connected");
+
     };
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
@@ -1013,7 +1013,7 @@ void esp32setup()
     // Create the BLE Server
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(&serverCallbacks);
-    //pServer->advertiseOnDisconnect(false);
+    pServer->advertiseOnDisconnect(true);
 
     // Create the BLE Service
     pService = pServer->createService(SERVICE_UUID);
@@ -1066,7 +1066,7 @@ void esp32setup()
     else
         pAdvertising->enableScanResponse(false);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
     
-    pAdvertising->start(0);
+    pAdvertising->start();
  
     Serial.println("[INIT]...Waiting a client connection to notify...");
     
