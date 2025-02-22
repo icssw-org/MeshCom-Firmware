@@ -361,8 +361,6 @@ unsigned int readGPS(void)
 
     if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 800)
     {
-        direction_parse(tmp_data);
-
         double dlat, dlon;
 
         dlat = tinyGPSPlus.location.lat();
@@ -371,23 +369,15 @@ unsigned int readGPS(void)
         meshcom_settings.node_lat = cround4(dlat);
         meshcom_settings.node_lon = cround4(dlon);
 
-        if(direction_S_N == 1)
-        {
+        if(tinyGPSPlus.location.rawLat().negative)
             meshcom_settings.node_lat_c = 'S';
-        }
         else
-        {
             meshcom_settings.node_lat_c = 'N';
-        }
 
-        if(direction_E_W == 1)
-        {
-            meshcom_settings.node_lon_c = 'E';
-        }
-        else
-        {
+        if(tinyGPSPlus.location.rawLng().negative)
             meshcom_settings.node_lon_c = 'W';
-        }
+        else
+            meshcom_settings.node_lon_c = 'E';
 
         meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)tinyGPSPlus.altitude.meters()) / 11;
 
@@ -638,30 +628,6 @@ unsigned int getGPS(void)
     }
 
     return POSINFO_INTERVAL;
-}
-
-
-/**@brief Function for analytical direction.
- */
-void direction_parse(String tmp)
-{
-    if (tmp.indexOf(",E,") < 0 && tmp.indexOf(",W,") > 0)
-    {
-        direction_E_W = 0;  // WEST
-    }
-    else
-    {
-        direction_E_W = 1;  // EAST
-    }
-    
-    if (tmp.indexOf(",N,") < 0 && tmp.indexOf(",S,") > 0)
-    {
-        direction_S_N = 1;  // SOUTH
-    }
-    else
-    {
-        direction_S_N = 0;  // NORTH
-    }
 }
 
 #endif

@@ -18,6 +18,7 @@
 #define HELTEC_V3 43
 #define HELTEC_E290 44
 #define TBEAM_1262 45
+#define T_DECK_PLUS 46
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 
