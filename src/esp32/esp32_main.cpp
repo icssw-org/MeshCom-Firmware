@@ -1376,14 +1376,17 @@ void esp32loop()
     else
     if(meshcom_settings.node_hasIPaddress)
     {
-        String strTime = udpGetTimeClient();
+        String strTime = "none";
 
-        if((updateTimeClient + 1000 * 60 * 3) < millis() || updateTimeClient == 0)
+        // every five minutes
+        if((updateTimeClient + 1000 * 60 * 5) < millis() || updateTimeClient == 0)
         {
             strTime = udpUpdateTimeClient();
 
             updateTimeClient = millis();
         }
+        else
+            strTime = udpGetTimeClient();
 
         String strDate = udpGetDateClient();
 
@@ -1395,7 +1398,9 @@ void esp32loop()
         uint16_t Minute = (uint16_t)strTime.substring(3, 5).toInt();
         uint16_t Second = (uint16_t)strTime.substring(6, 8).toInt();
     
-        MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+        // check valid Date & Time
+        if(Year > 2020 && strTime.compareTo("none") != 0)
+            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
     }
     
     if(bMyClock)
