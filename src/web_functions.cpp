@@ -397,6 +397,11 @@ String work_webpage(bool bget_password, int webid)
                     commandAction((char*)"--reboot", bPhoneReady);
                 }
                 else
+                if (web_header.indexOf("GET /otaupdate") >= 0)
+                {
+                    commandAction((char*)"--ota-update", bPhoneReady);
+                }
+                else
                 if (web_header.indexOf("GET /logout") >= 0)
                 {
                     web_ip_passwd_time[webid] = 0;
@@ -1965,6 +1970,15 @@ String work_webpage(bool bget_password, int webid)
 
                 if(bSOFTSERON)
                     web_client.println("<td><a href=\"/softser\"><button class=\"button\"><b>SOFTSER</b></button></a></td>");   // page 8
+
+                
+                #ifdef ESP32
+                    if(web_page_state == 4)
+                    {
+                        // OTA-UPDATE
+                        web_client.println("<td><a href=\"/otaupdate\"><button class=\"button\"><b>OTA-UPDATE</b></button></a></td>");
+                    }
+                #endif
 
                 // REBOOT
                 web_client.println("<td><a href=\"/reboot\"><button class=\"button\"><b>REBOOT</b></button></a></td>");
