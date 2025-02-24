@@ -1727,6 +1727,8 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
             sendAPRSset();
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"symcd") == 0)
