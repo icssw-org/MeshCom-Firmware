@@ -2122,6 +2122,12 @@ String hex2ascii(String ustring)
     string.replace("%C3%96", "Ö");
     string.replace("%C3%9C", "Ü");
 
+    string.replace("%C3%B2", "ò");
+    string.replace("%C3%A0", "à");
+    string.replace("%C3%B9", "ù");
+    string.replace("%C3%A8", "è");
+    string.replace("%C3%A9", "é");
+
     string.replace("%C3%9F", "ß");
 
     string.replace("%0D%0A", "-");
