@@ -183,6 +183,9 @@ bool tx_waiting = false;
 
 uint8_t isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
+// NTP Date/Time valid
+bool bNTPDateTimeValid = false;
+
 // GPS SmartBeaconing variables
 unsigned long posinfo_interval = POSINFO_INTERVAL; // check interval
 int posinfo_distance = 0;
@@ -446,7 +449,7 @@ bool esp32_isSSD1306(int address)
     }
     Wire.endTransmission();
 
-    Serial.printf("Display type: %02X\n", buffer[0]);
+    Serial.printf("[INIT]...Display type: %02X\n", buffer[0]);
 
     // 0x00 == T-BEAM 1.3" 1306
     // 0x03 == T-BEAM 0.9"
@@ -1026,7 +1029,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
         // CET Meldungen nur annehmen wenn nichr GPS, RTC oder Handyverbindung vorhanden ist
-        if(!bRTCON && !bGPSON && isPhoneReady == 0)
+        if(!bRTCON && (!bGPSON || (bGPSON && !posinfo_fix)) && isPhoneReady == 0 && !bNTPDateTimeValid)
         {
             uint16_t Year=2000;
             uint16_t Month=1;
