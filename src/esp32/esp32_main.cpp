@@ -1400,14 +1400,27 @@ void esp32loop()
     
         // check valid Date & Time
         if(Year > 2020 && strTime.compareTo("none") != 0)
+        {
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+            bNTPDateTimeValid = true;
+        }
+        else
+            bNTPDateTimeValid = false;
+
+    }
+    else
+    {
+        bNTPDateTimeValid = false;
     }
     
     if(bMyClock)
     {
         MyClock.CheckEvent();
         
-        meshcom_settings.node_date_year = MyClock.Year();
+        if(MyClock.Year() > 2023)
+            meshcom_settings.node_date_year = MyClock.Year();
+        else
+            meshcom_settings.node_date_year = 0;
         meshcom_settings.node_date_month = MyClock.Month();
         meshcom_settings.node_date_day = MyClock.Day();
 
@@ -1636,6 +1649,7 @@ void esp32loop()
         if (tx_is_active == false && is_receiving == false)
         {
             #if defined(MODUL_FW_TBEAM)
+                int pmu_proz=0;
                 if(PMU != NULL)
                 {
                     global_batt = (float)PMU->getBattVoltage();
@@ -1644,6 +1658,9 @@ void esp32loop()
                     // no BATT
                     if(global_proz <= 0)
                     {
+                        if(bDEBUG)
+                            Serial.println("no battery is connected");
+                            
                         global_batt = (float)PMU->getVbusVoltage();
                         global_proz=100.0;
                     }
@@ -1655,7 +1672,7 @@ void esp32loop()
                 }
 
                 if(bDEBUG)
-                    Serial.printf("PMU.volt %.1f PMU.proz %i\n", global_batt, global_proz);
+                    Serial.printf("PMU.volt %.1f PMU.proz %i %i\n", global_batt, global_proz, pmu_proz);
             #else
                 global_batt = read_batt();
                 global_proz = mv_to_percent(global_batt);

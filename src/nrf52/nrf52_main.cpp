@@ -672,12 +672,12 @@ void nrf52setup()
     
     if (esp32_isSSD1306(0x3C))
     { //Address of the display to be checked
-        Serial.println(F("[INIT]...-> OLED Display is SSD1306"));
+        Serial.println(F("[INIT]...OLED Display is SSD1306"));
         u8g2 = &u8g2_2;
     }
     else
     {
-        Serial.println(F("[INIT]...-> OLED Display is SH1106"));
+        Serial.println(F("[INIT]...OLED Display is SH1106"));
         u8g2 = &u8g2_1;
     }
 
@@ -705,7 +705,7 @@ void nrf52setup()
     meshcom_settings.node_date_second = 0;
     meshcom_settings.node_date_hundredths = 0;
 
-    Serial.println("[INIT] CLIENT STARTED");
+    Serial.println("[INIT]...CLIENT STARTED");
 
     //  Set the LoRa Callback Functions
     RadioEvents.TxDone = OnTxDone;
@@ -904,7 +904,17 @@ void nrf52loop()
     
         // check valid Date & Time
         if(Year > 2020 && strTime.compareTo("none") != 0)
+        {
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+            bNTPDateTimeValid = true;
+        }
+        else
+            bNTPDateTimeValid = false;
+
+    }
+    else
+    {
+        bNTPDateTimeValid = false;
     }
 
 
@@ -912,7 +922,11 @@ void nrf52loop()
     {
         MyClock.CheckEvent();
         
-        meshcom_settings.node_date_year = MyClock.Year();
+        if(MyClock.Year() > 2023)
+            meshcom_settings.node_date_year = MyClock.Year();
+        else
+            meshcom_settings.node_date_year = 0;
+
         meshcom_settings.node_date_month = MyClock.Month();
         meshcom_settings.node_date_day = MyClock.Day();
 
@@ -1047,7 +1061,20 @@ void nrf52loop()
         gKeyNum = 0;
     }
 
-    if (isPhoneReady == 1)
+    #ifdef ENABLE_GPS
+    if(bGPSON)
+    {
+        // check GPS ON and activ --> <gKeyNum == 2> the signal must be active
+        if ((gps_refresh_timer + (5 * (GPS_REFRESH_INTERVAL * 1000))) < millis())
+        {
+            posinfo_fix = false;
+            posinfo_satcount = 0;
+            posinfo_hdop = 0;
+        }
+    }
+    #endif
+
+if (isPhoneReady == 1)
     {
         if (config_to_phone_prepare)
         {
@@ -1618,8 +1645,6 @@ unsigned int getGPS(void)
     if(bGPSDEBUG)
         Serial.println("-----------check GPS-----------");
 
-    String tmp_data = "";
-
     bool newData = false;
   
     // For one second we parse GPS data and report some key values
@@ -1632,16 +1657,16 @@ unsigned int getGPS(void)
         if(bGPSDEBUG)
             Serial.write(c);
 
-        tmp_data += c;
-
         if (tinyGPSPlus.encode(c))// Did a new valid sentence come in?
           newData = true;
       }
     }
 
-    if (newData)
+    if(bGPSDEBUG)
+        Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, tinyGPSPlus.satellites.value(), tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
+
+    if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 800)
     {
-        direction_parse(tmp_data);
         double dlat, dlon;
         
         dlat = tinyGPSPlus.location.lat();
@@ -1650,23 +1675,15 @@ unsigned int getGPS(void)
         meshcom_settings.node_lat = cround4(dlat);
         meshcom_settings.node_lon = cround4(dlon);
 
-        if(direction_S_N == 1)
-        {
+        if(tinyGPSPlus.location.rawLat().negative)
             meshcom_settings.node_lat_c = 'S';
-        }
         else
-        {
             meshcom_settings.node_lat_c = 'N';
-        }
 
-        if(direction_E_W == 1)
-        {
-            meshcom_settings.node_lon_c = 'E';
-        }
-        else
-        {
+        if(tinyGPSPlus.location.rawLng().negative)
             meshcom_settings.node_lon_c = 'W';
-        }
+        else
+            meshcom_settings.node_lon_c = 'E';
 
         meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)tinyGPSPlus.altitude.meters()) / 11;
 

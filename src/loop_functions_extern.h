@@ -125,6 +125,7 @@ extern bool tx_is_active;   // flag to store we are transmitting  a lora packet.
 extern bool tx_waiting;
 
 extern uint8_t isPhoneReady;      // flag we receive from phone when itis ready to receive data
+extern bool bNTPDateTimeValid;
 
 // timers
 extern unsigned long posinfo_interval; // check interval
