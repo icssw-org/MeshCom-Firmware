@@ -719,9 +719,7 @@ void commandAction(char *msg_text, bool ble)
 
         save_settings();
 
-        #if defined(ENABLE_BMX280)
-            setupBMX280(false);
-        #endif
+        setupBMX280(false);
     }
     else
     if(commandCheck(msg_text+2, (char*)"bme on") == 0)

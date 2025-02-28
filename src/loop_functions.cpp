@@ -181,7 +181,10 @@ bool is_receiving = false;  // flag to store we are receiving a lora packet.
 bool tx_is_active = false;  // flag to store we are transmitting  a lora packet.
 bool tx_waiting = false;
 
-uint8_t isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
+int isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
+
+// APP Time OK
+bool bPhoneTimeValid = false;
 
 // NTP Date/Time valid
 bool bNTPDateTimeValid = false;
@@ -201,8 +204,8 @@ uint32_t posinfo_satcount = 0;
 int posinfo_hdop = 0;
 bool posinfo_fix = false;
 bool posinfo_shot=false;
-bool pos_shot=false;
-bool wx_shot=false;
+bool pos_shot = false;
+bool wx_shot = false;
 int no_gps_reset_counter = 0;
 
 // Loop timers
@@ -1029,7 +1032,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
         // CET Meldungen nur annehmen wenn nichr GPS, RTC oder Handyverbindung vorhanden ist
-        if(!bRTCON && (!bGPSON || (bGPSON && !posinfo_fix)) && isPhoneReady == 0 && !bNTPDateTimeValid)
+        if(!bRTCON && !posinfo_fix && !bNTPDateTimeValid && !bPhoneTimeValid)
         {
             uint16_t Year=2000;
             uint16_t Month=1;
@@ -2716,7 +2719,6 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         if(direction_diff > 15)
         {
             posinfo_shot=true;
-            pos_shot = true;
         }
     }
 

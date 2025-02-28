@@ -23,11 +23,6 @@ class NrfETH {
 
     void initethDHCP();
 
-    int isLeapYear(int year);
-    void getDaysPerMonth(int year, int day[13]);
-    unsigned long getDaysForYear(int year) ;
-    String getDateTime(unsigned long timestamp);
-
     String udpUpdateTimeClient();
     String udpGetTimeClient();
     String udpGetDateClient();

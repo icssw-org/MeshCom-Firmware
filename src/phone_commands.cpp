@@ -7,6 +7,7 @@
 #include <time.h>
 #include <clock.h>
 #include <rtc_functions.h>
+#include <time_functions.h>
 
 //#include <command_functions.h>
 
@@ -224,13 +225,6 @@ void sendConfigToPhone ()
 	// one shot GPS
 	posinfo_shot = true;
 
-	// is done in main loop now
-	//pos_shot = true;
-
-	//wx_shot = true;
-
-	//BattTimeAPP=0;	// Batt Status zum Phone senden
-
 }
 
 /**
@@ -359,9 +353,9 @@ void sendComToPhone()
 		if(bBLEDEBUG)
 		{
 			if(ComToPhoneBuff[0] == ':' || ComToPhoneBuff[0] == '!' || ComToPhoneBuff[0] == '@')
-				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s lng:%i\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7, blelen);
+				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%-200.200s lng:%i\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7, blelen);
 			else
-				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%s lng:%i\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff, blelen);
+				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%-200.200s lng:%i\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff, blelen);
 		}
     }
     
@@ -444,23 +438,30 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 		case 0x20: {
 
-			if(bBLEDEBUG)
-				Serial.print("[BLE] Timestamp from phone received ");
-
 			// 4B Timestamp
 			uint32_t timestamp = 0;
 			memcpy(&timestamp, conf_data + 2, sizeof(timestamp));
-			// set the meshcom settings variables for the timestamp
-			struct tm timeinfo = {0};
-			gmtime_r((time_t*)&timestamp, &timeinfo);
 
+			String strDateTime = convertUNIXtoString(timestamp);
+			
 			if(bBLEDEBUG)
-				Serial.printf("%i.%i.%i %i:%i:%i\n", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+				Serial.printf("[BLE] Timestamp from phone (sec) <UTC>: %u -> %s\n", timestamp, strDateTime.c_str());
+
+
+			// 2025.02.27 13:18:24
+
+			uint16_t Year = (uint16_t)strDateTime.substring(0, 4).toInt();
+			uint16_t Month = (uint16_t)strDateTime.substring(5, 7).toInt();
+			uint16_t Day = (uint16_t)strDateTime.substring(8, 10).toInt();
+
+			uint16_t Hour = (uint16_t)strDateTime.substring(11, 13).toInt();
+			uint16_t Minute = (uint16_t)strDateTime.substring(14, 16).toInt();
+			uint16_t Second = (uint16_t)strDateTime.substring(17).toInt();
 
 			// set the clock
 			if(bRTCON)
 			{
-				setRTCNow(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+				setRTCNow(Year, Month, Day, Hour, Minute, Second);
 				
 				DateTime utc = getRTCNow();
 
@@ -476,7 +477,13 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			}
 			else
 			{
-				MyClock.setCurrentTime(meshcom_settings.node_utcoff, timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+				// check valid Date & Time
+
+				if(Year > 2020)
+				{
+					MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+					bPhoneTimeValid=true;
+				}
 
 				MyClock.CheckEvent();
 				
@@ -491,7 +498,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			if (bBLEDEBUG)
 			{
-				Serial.printf("[BLE] Timestamp from phone <UTC>: %u\n", timestamp);
 				Serial.printf("[BLE] Date <LT>: %02d.%02d.%04d %02d:%02d:%02d\n", meshcom_settings.node_date_day, meshcom_settings.node_date_month, meshcom_settings.node_date_year, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 			}
 
@@ -583,7 +589,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 		{
 			int altitude = 0;
 			memcpy(&altitude, conf_data + 2, sizeof(altitude));
-			DEBUG_MSG_VAL("BLE", altitude, "Altitude from phone:");
+			if(bBLEDEBUG)
+				Serial.printf("[BLE]...Altitude from phone: %i\n", altitude);
 
 			meshcom_settings.node_alt = altitude;
 
@@ -597,7 +604,9 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				pos_shot = true;
 				
 				wx_shot = true;
-			} else {
+			}
+			else
+			{
 				// save settings
 				save_settings();
 			}

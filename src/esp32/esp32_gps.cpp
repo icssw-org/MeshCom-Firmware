@@ -439,6 +439,10 @@ unsigned int getGPS(void)
         if(meshcom_settings.node_postime > 0)
             return (unsigned long)meshcom_settings.node_postime;
 
+        posinfo_fix = false;
+        posinfo_satcount = 0;
+        posinfo_hdop = 0;
+
         return POSINFO_INTERVAL;
     }
 

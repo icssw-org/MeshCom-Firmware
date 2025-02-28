@@ -10,6 +10,7 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <command_functions.h>
+#include <time_functions.h>
 
 #include <NTPClient.h>
 #include <time.h>
@@ -839,75 +840,6 @@ String NrfETH::udpUpdateTimeClient()
 String NrfETH::udpGetTimeClient()
 {
   return timeClient.getFormattedTime();
-}
-
-#define SECONDS_PER_MINUTE 60
-#define SECONDS_PER_HOUR   60 * SECONDS_PER_MINUTE
-#define SECONDS_PER_DAY  24 * SECONDS_PER_HOUR
-
-#define DAYS_PER_YEAR 365
-#define DAYS_PER_LEAP_YEAR DAYS_PER_YEAR + 1
-
-#define EPOCH_MONTH 1
-#define EPOCH_YEAR 1970
-
-int NrfETH::isLeapYear(int year)
-{
-    return year % 400 == 0 || (year % 4 == 0 && year % 100 != 0);
-}
-
-unsigned long NrfETH::getDaysForYear(int year) 
-{
-    return isLeapYear(year) ? (unsigned long)DAYS_PER_LEAP_YEAR : (unsigned long)DAYS_PER_YEAR;
-}
-
-void NrfETH::getDaysPerMonth(int year, int day[13])
-{
-    day[0] = 0;
-    day[1] = 31;
-    day[2] = isLeapYear(year) ? 29 : 28;
-    day[3] = 31;
-    day[4] = 30;
-    day[5] = 31;
-    day[6] = 30;
-    day[7] = 31;
-    day[8] = 31;
-    day[9] = 30;
-    day[10] = 31;
-    day[11] = 30;
-    day[12] = 31;
-}
-
-String NrfETH::getDateTime(unsigned long timestamp)
-{
-    unsigned long ldays = (unsigned long)SECONDS_PER_DAY;
-    ldays = timestamp / ldays;
-
-    int iyear = EPOCH_YEAR;
-    while (ldays >= getDaysForYear(iyear))
-    {
-        ldays -= getDaysForYear(iyear);
-        iyear++;
-    }
-
-    int daysPerMonth[13];
-    
-    getDaysPerMonth(iyear, daysPerMonth);
-
-    int imonth = EPOCH_MONTH;
-    while (ldays >= (unsigned long)daysPerMonth[imonth]) {
-        ldays -= daysPerMonth[imonth];
-        imonth++;
-    }
-
-    int iday = ldays + 1;
-
-    char cDate[20];
-    snprintf(cDate, sizeof(cDate), "%04i.%02i.%02i", iyear, imonth, iday);
-    
-    String strDate = cDate;
-
-    return strDate;
 }
 
 String NrfETH::udpGetDateClient()
