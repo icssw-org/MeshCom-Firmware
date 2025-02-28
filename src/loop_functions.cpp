@@ -2258,7 +2258,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
             // send Group-Call settings zu MesCom-Server
             String strGRC="";
 
-            char cGC[6];
+            char cGC[8];
             for(int igrc=0;igrc<6;igrc++)
             {
                 if(meshcom_settings.node_gcb[igrc] > 0 && meshcom_settings.node_gcb[igrc] < 100000)
