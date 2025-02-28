@@ -167,6 +167,7 @@ bool bHeyFirst = true;
 uint8_t iPhoneState = 0;
 bool config_to_phone_prepare = false;
 unsigned long config_to_phone_prepare_timer = 0;
+unsigned long config_to_phone_datetime_timer = 0;
 const uint8_t json_configs_cnt = 7;
 const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset"};
 uint8_t config_cmds_index = 0;
@@ -552,6 +553,12 @@ void nrf52setup()
             Serial.println("GPS: not connected");
 
         delay(100);
+    }
+    else
+    {
+        posinfo_fix = false;
+        posinfo_satcount = 0;
+        posinfo_hdop = 0;
     }
 
     // Try to initialize!
@@ -1070,6 +1077,7 @@ void nrf52loop()
             posinfo_fix = false;
             posinfo_satcount = 0;
             posinfo_hdop = 0;
+            posinfo_interval = POSINFO_INTERVAL;
         }
     }
     #endif
@@ -1119,6 +1127,14 @@ if (isPhoneReady == 1)
             else
                 iPhoneState++;
         }
+
+        // 5 minuten
+        if((config_to_phone_datetime_timer + (5 * 60 * 1000)) < millis())
+        {
+            bNTPDateTimeValid=false;
+
+            config_to_phone_datetime_timer = millis();
+        }
     }
 
     // posinfo
@@ -1130,6 +1146,7 @@ if (isPhoneReady == 1)
     {
         bPosFirst = false;
         posinfo_shot=false;
+        posinfo_timer = millis();
         
         sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
@@ -1137,11 +1154,9 @@ if (isPhoneReady == 1)
         posinfo_last_lon=posinfo_lon;
         posinfo_last_direction=posinfo_direction;
 
-        posinfo_timer = millis();
-
         if(pos_shot)
         {
-            commandAction((char*)"--pos", isPhoneReady, false);
+            commandAction((char*)"--pos", isPhoneReady, true);
             pos_shot = false;
         }
     }
@@ -1250,7 +1265,7 @@ if (isPhoneReady == 1)
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady, false);
+                commandAction((char*)"--wx", isPhoneReady, true);
                 wx_shot = false;
             }
         }
@@ -1272,7 +1287,7 @@ if (isPhoneReady == 1)
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady, false);
+                commandAction((char*)"--wx", isPhoneReady, true);
                 wx_shot = false;
             }
         }
@@ -1343,7 +1358,7 @@ if (isPhoneReady == 1)
 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", isPhoneReady, false);
+                    commandAction((char*)"--wx", isPhoneReady, true);
                     wx_shot = false;
                 }
             }
@@ -1364,7 +1379,7 @@ if (isPhoneReady == 1)
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady, false);
+                commandAction((char*)"--wx", isPhoneReady, true);
                 wx_shot = false;
             }
         }
@@ -1386,7 +1401,7 @@ if (isPhoneReady == 1)
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady, false);
+                commandAction((char*)"--wx", isPhoneReady, true);
                 wx_shot = false;
             }
 
@@ -1417,7 +1432,7 @@ if (isPhoneReady == 1)
                     
                     if(wx_shot)
                     {
-                        commandAction((char*)"--wx", isPhoneReady, false);
+                        commandAction((char*)"--wx", isPhoneReady, true);
                         wx_shot = false;
                     }
                 }
@@ -1441,7 +1456,7 @@ if (isPhoneReady == 1)
                 
                 if(wx_shot)
                 {
-                    commandAction((char*)"--wx", isPhoneReady, false);
+                    commandAction((char*)"--wx", isPhoneReady, true);
                     wx_shot = false;
                 }
             }
@@ -1486,7 +1501,7 @@ if (isPhoneReady == 1)
 
             if(wx_shot)
             {
-                commandAction((char*)"--wx", isPhoneReady, false);
+                commandAction((char*)"--wx", isPhoneReady, true);
                 wx_shot = false;
             }
 

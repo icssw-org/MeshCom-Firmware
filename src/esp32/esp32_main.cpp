@@ -135,6 +135,7 @@ uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Ken
 // Queue for sending config jsons to phone
 bool config_to_phone_prepare = false;
 unsigned long config_to_phone_prepare_timer = 0;
+unsigned long config_to_phone_datetime_timer = 0;
 const uint8_t json_configs_cnt = 7;
 const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset"};
 uint8_t config_cmds_index = 0;
@@ -1538,6 +1539,14 @@ void esp32loop()
             }
             else
                 iPhoneState++;
+        }
+
+        // 5 minuten
+        if((config_to_phone_datetime_timer + (5 * 60 * 1000)) < millis())
+        {
+            bNTPDateTimeValid=false;
+
+            config_to_phone_datetime_timer = millis();
         }
     }
 

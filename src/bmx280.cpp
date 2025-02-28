@@ -182,7 +182,7 @@ bool loopBMX280()
 	}
 
 	//wait for the measurement to finish
-	int maxLoop=20;
+	int maxLoop=10;
 	do
 	{
 		delay(100);

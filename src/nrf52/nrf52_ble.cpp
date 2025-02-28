@@ -18,7 +18,7 @@
 #include <configuration.h>
 #include <command_functions.h>
 
-extern uint8_t isPhoneReady;
+extern int isPhoneReady;
 extern bool ble_busy_flag;
 extern uint16_t swap2bytes(uint16_t value);
 extern void commandAction(char *msg_text, int len, bool ble);
