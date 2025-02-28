@@ -1,6 +1,7 @@
 #include <configuration.h>
 
 #include <Arduino.h>
+#include <time.h>
 
 #include <time_functions.h>
 
