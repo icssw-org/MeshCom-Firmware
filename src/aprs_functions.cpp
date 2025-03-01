@@ -52,7 +52,8 @@ bool CheckOwnGroup(String callsign)
     // no Group-Check
     int checkgroup = CheckGroup(callsign);
 
-    Serial.printf("[INFO]...GRC with #not for own-node %i\n", checkgroup);
+    if(bDisplayInfo)
+        Serial.printf("[INFO]...Check GRC %i for own-node\n", checkgroup);
 
     if(checkgroup <= 0)
         return false;
@@ -66,14 +67,17 @@ bool CheckOwnGroup(String callsign)
 
         if(meshcom_settings.node_gcb[ig] == checkgroup)
         {
-            Serial.printf("[INFO]...GRC for own-node %i\n", checkgroup);
+            if(bDisplayInfo)
+                Serial.printf("[INFO]...GRC %i unsed on own-node\n", checkgroup);
+
             return true;
         }
     }
 
     if(bHasGroup)
     {
-        Serial.printf("[INFO]...GRC with not for own-node %s\n", callsign.c_str());
+        if(bDisplayInfo)
+            Serial.printf("[INFO]...GRC not used for own-node %s\n", callsign.c_str());
 
         return false;
     }
