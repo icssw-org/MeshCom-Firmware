@@ -270,7 +270,7 @@ void showMHeard()
 
                 Serial.printf("%-11.11s/%03i | ", getHardwareLong(mheardLine.mh_hw).c_str(), mheardLine.mh_hw);
 
-                Serial.printf("%3i | ", mheardLine.mh_mod);
+                Serial.printf(" %2X | ", mheardLine.mh_mod);
                 Serial.printf("%4i | ", mheardLine.mh_rssi);
                 Serial.printf("%4i |", mheardLine.mh_snr);
                 Serial.printf("%5.1lf |", mheardLine.mh_dist);
