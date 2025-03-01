@@ -443,8 +443,6 @@ void nrf52setup()
         save_settings();
     }
 
-    global_batt = 4200.0;
-
     meshcom_settings.node_press = 0.0;
     meshcom_settings.node_hum = 0.0;
     meshcom_settings.node_temp = 0.0;
@@ -452,7 +450,12 @@ void nrf52setup()
     meshcom_settings.node_press_alt = 0;
     meshcom_settings.node_press_asl = 0.0;
 
+    global_batt = 4125.0;
+
     posinfo_interval = POSINFO_INTERVAL;
+
+    if(meshcom_settings.node_postime > 0)
+        posinfo_interval = meshcom_settings.node_postime;
 
     if(meshcom_settings.node_maxv > 0)
     {
