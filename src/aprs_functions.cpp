@@ -104,6 +104,7 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
     aprsmsg.msg_payload = "";
     aprsmsg.msg_fcs = 0;
     aprsmsg.msg_source_hw = BOARD_HARDWARE;
+    
     aprsmsg.msg_source_mod = 3; // MeshCom SF 11 CR 4/6 BW 250 ... medium
 
 
@@ -120,7 +121,9 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
         aprsmsg.msg_source_mod = 7; // MeshCom SF 11 CR 4/5 BW 250 ... fast
 
     if(meshcom_settings.node_sf == 11 && getCR() == 6 && getBW() == 250.0)
-        aprsmsg.msg_source_mod = 8; // MeshCom SF 11 CR 4/5 BW 250 ... fastslow
+        aprsmsg.msg_source_mod = 8; // MeshCom SF 11 CR 4/6 BW 250 ... fastslow
+
+    aprsmsg.msg_source_mod = aprsmsg.msg_source_mod | (meshcom_settings.node_country << 4);
 
     //if(bLORADEBUG)
     //    Serial.printf("sf:%i cr:%i bw:%f ... mod:%i\n", meshcom_settings.node_sf, getCR(), getBW(), aprsmsg.msg_source_mod);
