@@ -2724,7 +2724,7 @@ void commandAction(char *msg_text, bool ble)
             idoc["ID"] = _GW_ID;
             idoc["HWID"] = BOARD_HARDWARE;
             idoc["MAXV"] = meshcom_settings.node_maxv;
-            idoc["ATXT"] = meshcom_settings.node_atxt;
+            //TEST ist doppelt idoc["ATXT"] = meshcom_settings.node_atxt;
             idoc["BLE"] = (bBLElong ? "long" : "short");
             idoc["BATP"] = global_proz;
             idoc["BATV"] = global_batt/1000.0;

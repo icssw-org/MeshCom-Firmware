@@ -1105,10 +1105,10 @@ if (isPhoneReady == 1)
         else
         {
             // wait after BLE Connect 3 sec.
-            if(millis() < config_to_phone_prepare_timer + 2000)
+            if(millis() < config_to_phone_prepare_timer + 3000)
                 iPhoneState = 0;
 
-            if (iPhoneState > 6)   // only every 6 times of mainloop send to phone  RAK 2 x ESP
+            if (iPhoneState > 3)   // only every 6 times of mainloop send to phone  RAK 2 x ESP
             {
                 // prepare JSON config to phone after BLE connection
                 // send JSON config to phone after BLE connection
@@ -1128,7 +1128,9 @@ if (isPhoneReady == 1)
                 iPhoneState = 0;
             }
             else
+            {
                 iPhoneState++;
+            }
         }
 
         // 5 minuten

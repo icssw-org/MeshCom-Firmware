@@ -245,15 +245,15 @@ void pwd_webpage()
     web_client.println("<colgroup>");
     web_client.println("<col style=\"width: 25%;\">");
     web_client.println("<col style=\"width: 75%;\">");
-    web_client.println("</colgroup>\n");
+    web_client.println("</colgroup>");
 
     web_client.println("<form action=\"/#\">");
-    web_client.println("<tr><td>\n");
+    web_client.println("<tr><td>");
     web_client.println("<label for=\"fname\"><b>LOGIN Password</b></label>");
-    web_client.println("</td><td>\n");
+    web_client.println("</td><td>");
     web_client.printf("<input type=\"text\" maxlength=\"20\" size=\"20\" id=\"nodepassword\" name=\"nodepassword\">\n");
     web_client.println("<input type=\"submit\" value=\"LOGIN\">");
-    web_client.println("</td></tr>\n");
+    web_client.println("</td></tr>");
     web_client.println("</form>");
 
     web_client.println("</table>");
@@ -1123,7 +1123,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<colgroup>");
                     web_client.println("<col style=\"width: 25%;\">");
                     web_client.println("<col style=\"width: 75%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.printf("<tr><td style=\"width:40px\"><b>LAT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b></td><td>%.4lf %c</td></tr><tr><td><b>LON</b></td><td>%.4lf %c</td></tr><tr><td><b>ALT</b></td><td>%i</td></tr><tr><td><b>SAT</b></td><td>%i - %s - HDOP %i</td></tr>\n",
                     meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,(int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop);
@@ -1161,7 +1161,8 @@ String work_webpage(bool bget_password, int webid)
                                 web_client.printf("<td>%-8.8s</td>", mheardLine.mh_time.c_str());
                                 //web_client.printf("<td>%-3.3s</td>", getPayloadType(mheardLine.mh_payload_type));
                                 web_client.printf("<td>%-13.13s</td>", getHardwareLong(mheardLine.mh_hw).c_str());
-                                web_client.printf("<td>%3i</td>", mheardLine.mh_mod);
+                                web_client.printf("<td>%01i", (mheardLine.mh_mod >> 4));
+                                web_client.printf("/%01i</td>", mheardLine.mh_mod & 0x0f);
                                 web_client.printf("<td>%4i</td>", mheardLine.mh_rssi);
                                 web_client.printf("<td>%4i</td>", mheardLine.mh_snr);
                                 web_client.printf("<td>%5.1lf</td>", mheardLine.mh_dist);
@@ -1182,7 +1183,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<colgroup>");
                     web_client.println("<col style=\"width: 25%;\">");
                     web_client.println("<col style=\"width: 75%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.printf("<tr><td><b>BME(P)280</b></td><td>%s</td><tr><td><b>BME680</b></td><td>%s</td><tr><td><b>MCU811</b></td><td>%s</td><tr><td><b>LPS33</b></td><td>%s (RAK)</td><tr><td><b>ONEWIRE</b></td><td>%s (%i)</td><tr>\n",
                     (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio);
@@ -1201,21 +1202,21 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<colgroup>");
                     web_client.println("<col style=\"width: 25%;\">");
                     web_client.println("<col style=\"width: 75%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>NODE Call</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"9\" size=\"9\" id=\"nodecall\" name=\"nodecall\">\n", meshcom_settings.node_call);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>COUNTRY:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
 
                     web_client.println("<select id=\"country\" name=\"country\">");
 
@@ -1232,136 +1233,136 @@ String work_webpage(bool bget_password, int webid)
                         }
                     }
                     web_client.println("&nbsp;<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>TX-Power dBm:</b></label>");
                     web_client.println("</td><td>\n");
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"3\" id=\"txpower\" name=\"txpower\">\n", getPower());
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>UTC-Offset:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%.1f\" maxlength=\"5\" size=\"4\" id=\"utcoff\" name=\"utcoff\">\n", meshcom_settings.node_utcoff);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     if(bRTCON)
                     {
                         web_client.println("<form action=\"/#\">");
-                        web_client.println("<tr><td>\n");
+                        web_client.println("<tr><td>");
                         web_client.println("<label for=\"fname\"><b>UTC-Date/Time:</b></label>");
-                        web_client.println("</td><td>\n");
+                        web_client.println("</td><td>");
                         web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"19\" size=\"19\" id=\"utcdate\" name=\"utcdate\">\n", getStringRTCNow().c_str());
                         web_client.println("<input type=\"submit\" value=\"set\">");
-                        web_client.println("</td></tr>\n");
+                        web_client.println("</td></tr>");
                         web_client.println("</form>");
                     }
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>POS-LAT (+/-):</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     double lat=meshcom_settings.node_lat;
                     if(meshcom_settings.node_lat_c == 'S')
                         lat = lat * -1.0;
                     web_client.printf("<input type=\"text\" value=\"%.4lf\" maxlength=\"25\" size=\"15\" id=\"latidude\" name=\"latidude\">\n", lat);
 
-                    web_client.println("</td></tr><tr><td>\n");
+                    web_client.println("</td></tr><tr><td>");
 
                     web_client.println("<label for=\"fname\"><b>POS-LON (+/-):</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     double lon=meshcom_settings.node_lon;
                     if(meshcom_settings.node_lon_c == 'W')
                         lon = lon * -1.0;
                     web_client.printf("<input type=\"text\" value=\"%.4lf\" maxlength=\"15\" size=\"15\" id=\"longitude\" name=\"longitude\">\n", lon);
                     
-                    web_client.println("</td></tr><tr><td>\n");
+                    web_client.println("</td></tr><tr><td>");
 
                     web_client.println("<label for=\"fname\"><b>POS-Altitude:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"15\" size=\"15\" id=\"altitude\" name=\"altitude\">\n", meshcom_settings.node_alt);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>Name:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"25\" size=\"25\" id=\"nametext\" name=\"nametext\">\n", meshcom_settings.node_name);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>APRS-Text:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"25\" size=\"25\" id=\"aprstext\" name=\"aprstext\">\n", meshcom_settings.node_atxt);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>APRS-GROUP:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%c\" maxlength=\"1\" size=\"2\" id=\"aprsgroup\" name=\"aprsgroup\">\n", meshcom_settings.node_symid);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>APRS-SYMBOL:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%c\" maxlength=\"1\" size=\"2\" id=\"aprssymbol\" name=\"aprssymbol\">\n", meshcom_settings.node_symcd);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>ONEWIRE-PIN:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"2\" id=\"owgpio\" name=\"owgpio\">\n", meshcom_settings.node_owgpio);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>BUTTON-PIN:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     int ibt = meshcom_settings.node_button_pin;
                     if(ibt == 0)
                         ibt = BUTTON_PIN;
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"2\" id=\"ubgpio\" name=\"ubgpio\">\n", ibt);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>MAXV:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%.3f\" maxlength=\"5\" size=\"5\" id=\"maxv\" name=\"maxv\">\n", meshcom_settings.node_maxv);
                     web_client.println("<input type=\"submit\" value=\"set\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>LISTEN-TO:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento0\" name=\"listento0\">\n", meshcom_settings.node_gcb[0]);
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento1\" name=\"1\">\n", meshcom_settings.node_gcb[1]);
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento2\" name=\"2\">\n", meshcom_settings.node_gcb[2]);
@@ -1369,42 +1370,42 @@ String work_webpage(bool bget_password, int webid)
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento4\" name=\"4\">\n", meshcom_settings.node_gcb[4]);
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento5\" name=\"5\">\n", meshcom_settings.node_gcb[5]);
                     web_client.println("<input type=\"submit\" value=\"send\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form>");
 
                     if(bSOFTSERON)
                     {
                         web_client.println("<form action=\"/#\">");
-                        web_client.println("<tr><td>\n");
+                        web_client.println("<tr><td>");
                         web_client.println("<label for=\"fname\"><b>SS RX/TX/BAUD:</b></label>");
-                        web_client.println("</td><td>\n");
+                        web_client.println("</td><td>");
                         web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"4\" id=\"ssrx\" name=\"ss0\">\n", meshcom_settings.node_ss_rx_pin);
                         web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"4\" id=\"sstx\" name=\"1\">\n", meshcom_settings.node_ss_tx_pin);
                         web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"4\" size=\"5\" id=\"ssbd\" name=\"2\">\n", meshcom_settings.node_ss_baud);
                         web_client.println("<input type=\"submit\" value=\"set\">");
-                        web_client.println("</td></tr>\n");
+                        web_client.println("</td></tr>");
                         web_client.println("</form>");
                     }
 
                     if(bMCP23017)
                     {
                         web_client.println("<form action=\"/#\">");
-                        web_client.println("<tr><td>\n");
+                        web_client.println("<tr><td>");
                         web_client.println("<label for=\"fname\"><b>MCP PASSWD:</b></label>");
-                        web_client.println("</td><td>\n");
+                        web_client.println("</td><td>");
                         web_client.printf("<input type=\"text\" value=\"%s\" maxlength=\"14\" size=\"8\" id=\"passwd\" name=\"passwd\">\n", meshcom_settings.node_passwd);
                         web_client.println("<input type=\"submit\" value=\"set\">");
-                        web_client.println("</td></tr>\n");
+                        web_client.println("</td></tr>");
                         web_client.println("</form>");
                     }
 
                     web_client.println("<form action=\"/#\">");
-                    web_client.println("<tr><td>\n");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>COMMAND:</b></label>");
-                    web_client.println("</td><td>\n");
+                    web_client.println("</td><td>");
                     web_client.println("<input type=\"text\" maxlength=\"50\" size=\"30\" id=\"command\" name=\"command\">");
                     web_client.println("<input type=\"submit\" value=\"send\">");
-                    web_client.println("</td></tr>\n");
+                    web_client.println("</td></tr>");
                     web_client.println("</form></table>");
                 }
                 else
@@ -1420,7 +1421,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<col style=\"width: 25%;\">");
                     web_client.println("<col style=\"width: 25%;\">");
                     web_client.println("<col style=\"width: 25%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.println("<tr><th>last messages</th><th colspan=\"3\"></th></tr>");
 
@@ -1524,7 +1525,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<colgroup>");
                     web_client.println("<col style=\"width: 25%;\">");
                     web_client.println("<col style=\"width: 75%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.println("<form action=\"?\">");
 
@@ -1553,7 +1554,7 @@ String work_webpage(bool bget_password, int webid)
 
                     web_client.println("<colgroup>");
                     web_client.println("<col style=\"width: 100%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.println("<tr><th>LoRa-RX-LOG</th></tr>");
 
@@ -1580,7 +1581,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<col style=\"width: 49%;\">");
                     web_client.println("<col style=\"width: 15%;\">");
                     web_client.println("<col style=\"width: 10%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.printf("<tr><th>PORT</th><th>MCP-23017</th><th>%s</th><th>STATUS</th><th>SET</th></tr>\n", (bMCP23017?"active":"offline"));
 
@@ -1648,7 +1649,7 @@ String work_webpage(bool bget_password, int webid)
 
                     web_client.println("<colgroup>");
                     web_client.println("<col style=\"width: 100%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.println("<tr><th>last message</th></tr>");
 
@@ -1662,7 +1663,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<colgroup>");
                     web_client.println("<col style=\"width: 25%;\">");
                     web_client.println("<col style=\"width: 75%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.println("<form action=\"?\">");
 
@@ -1685,7 +1686,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<colgroup>");
                     web_client.println("<col style=\"width: 25%;\">");
                     web_client.println("<col style=\"width: 75%;\">");
-                    web_client.println("</colgroup>\n");
+                    web_client.println("</colgroup>");
 
                     web_client.printf("<tr><td style=\"width:40px\"><b>Firmware</b></td><td>MeshCom %-4.4s%-1.1s (build: %s / %s)</td><tr><td><b>Call</b></td><td>%s ...%s</td></tr><tr><td><b>UTC-OFF</b></td><td>%.1f</td></tr>\n",
                         SOURCE_VERSION, SOURCE_VERSION_SUB,__DATE__,__TIME__,meshcom_settings.node_call, getHardwareLong(BOARD_HARDWARE).c_str(), meshcom_settings.node_utcoff);
@@ -1699,8 +1700,10 @@ String work_webpage(bool bget_password, int webid)
 
                     web_client.printf("<tr><td><b>MESH-Settings</b></td><td>max_hop_text %i</td></tr><tr><td></td><td>max_hop_pos %i</td></tr>\n", meshcom_settings.max_hop_text, meshcom_settings.max_hop_pos);
 
-                    web_client.printf("<tr><td><b>COUNTRY</b></td><td>%s</td></tr><tr><td><b>FREQ</b></td><td>%.4f MHz</td></tr><tr><td><b>BW</b></td><td>%.0f kHz</td></tr><tr><td><b>SF</b></td><td>%i</td></tr><tr><td><b>CR</b></td><td>4/%i</td></tr><tr><td><b>TXPWR</b></td><td>%i dBm</td></tr>\n",
-                        getCountry(meshcom_settings.node_country).c_str(), getFreq(), getBW(), getSF(), getCR(), getPower());
+                    web_client.printf("<tr><td><b>COUNTRY</b></td><td>%s</td></tr><tr><td><b>FREQ</b></td><td>%.4f MHz</td></tr><tr><td><b>BW</b></td><td>%.0f kHz</td></tr><tr><td><b>SF</b></td><td>%i</td></tr><tr><td><b>CR</b></td><td>4/%i</td></tr>\n",
+                        getCountry(meshcom_settings.node_country).c_str(), getFreq(), getBW(), getSF(), getCR());
+
+                    web_client.printf("<tr><td><b>TXPWR</b></td><td>%i dBm</td></tr>\n", getPower());
 
                     web_client.println("<tr><td>&nbsp;</td><td>&nbsp;</td></tr>");
 
@@ -1756,7 +1759,7 @@ String work_webpage(bool bget_password, int webid)
                 web_client.println("<col style=\"width: 25%;\">");
                 web_client.println("<col style=\"width: 25%;\">");
                 web_client.println("<col style=\"width: 25%;\">");
-                web_client.println("</colgroup>\n");
+                web_client.println("</colgroup>");
 
                 // SETUP
                 if(web_page_state == 4)
@@ -2233,7 +2236,7 @@ void main_webpage()
     web_client.println("<col style=\"width: 25%;\">");
     web_client.println("<col style=\"width: 25%;\">");
     web_client.println("<col style=\"width: 25%;\">");
-    web_client.println("</colgroup><tr>\n");
+    web_client.println("</colgroup><tr>");
     web_client.println("<td><a href=\"#anchor_button\"><button class=\"button button2\"<b>COMMANDS</b></button></a></td>");
     web_client.println("</tr></table>");
 

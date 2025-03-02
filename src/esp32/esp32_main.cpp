@@ -1515,7 +1515,7 @@ void esp32loop()
         else
         {
             // wait after BLE Connect 3 sec.
-            if(millis() < config_to_phone_prepare_timer + 2000)
+            if(millis() < config_to_phone_prepare_timer + 3000)
                 iPhoneState = 0;
 
             if (iPhoneState > 3)   // only every 3 times of mainloop send to phone
