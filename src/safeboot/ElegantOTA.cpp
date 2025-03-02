@@ -200,12 +200,13 @@ void ElegantOTAClass::begin(ELEGANTOTA_WEBSERVER *server, const char * username,
         if(_authenticate && !request->authenticate(_username.c_str(), _password.c_str())){
           return request->requestAuthentication();
         }
+
         // Post-OTA update callback
-        if (postUpdateCallback != NULL) postUpdateCallback(!Update.hasError());
-        AsyncWebServerResponse *response = request->beginResponse((Update.hasError()) ? 400 : 200, "text/plain", (Update.hasError()) ? _update_error_str.c_str() : "OK");
-        response->addHeader("Connection", "close");
-        response->addHeader("Access-Control-Allow-Origin", "*");
-        request->send(response);
+        if (postUpdateCallback != NULL) {
+          Serial.println("Calling postUpdateCallback");
+          postUpdateCallback(!Update.hasError());
+        }
+
         // Set reboot flag
         if (!Update.hasError()) {
           if (_auto_reboot) {
@@ -213,6 +214,11 @@ void ElegantOTAClass::begin(ELEGANTOTA_WEBSERVER *server, const char * username,
             _reboot = true;
           }
         }
+
+        delay(100);
+        Serial.println("Sending response");
+        request->send((Update.hasError()) ? 400 : 200, "text/plain", (Update.hasError()) ? _update_error_str.c_str() : "OK");
+
     }, [&](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
         //Upload handler chunks in data
         if(_authenticate){
@@ -237,6 +243,7 @@ void ElegantOTAClass::begin(ELEGANTOTA_WEBSERVER *server, const char * username,
         }
             
         if (final) { // if the final flag is set then this is the last frame of data
+          Serial.println("Final frame received");
             if (!Update.end(true)) { //true to set the size to the current progress
                 // Save error to string
                 StreamString str;
@@ -325,14 +332,14 @@ void ElegantOTAClass::setAutoReboot(bool enable){
 
 void ElegantOTAClass::loop() {
   // Check if 2 seconds have passed since _reboot_request_millis was set
-  if (_reboot && millis() - _reboot_request_millis > 2000) {
+  if (_reboot && millis() - _reboot_request_millis > 2500) {
+    _reboot = false;
     Serial.println("Rebooting...\n");
     #if defined(ESP8266) || defined(ESP32)
       ESP.restart();
     #elif defined(TARGET_RP2040)
       rp2040.reboot();
     #endif
-    _reboot = false;
   }
 }
 
