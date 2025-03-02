@@ -52,7 +52,8 @@ bool CheckOwnGroup(String callsign)
     // no Group-Check
     int checkgroup = CheckGroup(callsign);
 
-    Serial.printf("[INFO]...GRC with #not for own-node %i\n", checkgroup);
+    if(bDisplayInfo)
+        Serial.printf("[INFO]...Check GRC %i for own-node\n", checkgroup);
 
     if(checkgroup <= 0)
         return false;
@@ -66,14 +67,17 @@ bool CheckOwnGroup(String callsign)
 
         if(meshcom_settings.node_gcb[ig] == checkgroup)
         {
-            Serial.printf("[INFO]...GRC for own-node %i\n", checkgroup);
+            if(bDisplayInfo)
+                Serial.printf("[INFO]...GRC %i unsed on own-node\n", checkgroup);
+
             return true;
         }
     }
 
     if(bHasGroup)
     {
-        Serial.printf("[INFO]...GRC with not for own-node %s\n", callsign.c_str());
+        if(bDisplayInfo)
+            Serial.printf("[INFO]...GRC not used for own-node %s\n", callsign.c_str());
 
         return false;
     }
@@ -100,6 +104,7 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
     aprsmsg.msg_payload = "";
     aprsmsg.msg_fcs = 0;
     aprsmsg.msg_source_hw = BOARD_HARDWARE;
+    
     aprsmsg.msg_source_mod = 3; // MeshCom SF 11 CR 4/6 BW 250 ... medium
 
 
@@ -116,7 +121,9 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
         aprsmsg.msg_source_mod = 7; // MeshCom SF 11 CR 4/5 BW 250 ... fast
 
     if(meshcom_settings.node_sf == 11 && getCR() == 6 && getBW() == 250.0)
-        aprsmsg.msg_source_mod = 8; // MeshCom SF 11 CR 4/5 BW 250 ... fastslow
+        aprsmsg.msg_source_mod = 8; // MeshCom SF 11 CR 4/6 BW 250 ... fastslow
+
+    aprsmsg.msg_source_mod = aprsmsg.msg_source_mod | (meshcom_settings.node_country << 4);
 
     //if(bLORADEBUG)
     //    Serial.printf("sf:%i cr:%i bw:%f ... mod:%i\n", meshcom_settings.node_sf, getCR(), getBW(), aprsmsg.msg_source_mod);

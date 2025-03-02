@@ -135,7 +135,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     int16_t mh_rssi;
     int8_t mh_snr;
     */
-    snprintf(mheardBuffer[ipos], sizeof(mheardBuffer[ipos]), "%s@%s@%c@%i@%i@%i@%i@%.1lf@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
+    snprintf(mheardBuffer[ipos], sizeof(mheardBuffer[ipos]), "%s@%s@%c@%i@%u@%i@%i@%.1lf@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
      mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh);
 
     // generate JSON
@@ -270,7 +270,7 @@ void showMHeard()
 
                 Serial.printf("%-11.11s/%03i | ", getHardwareLong(mheardLine.mh_hw).c_str(), mheardLine.mh_hw);
 
-                Serial.printf("%3i | ", mheardLine.mh_mod);
+                Serial.printf(" %01i/%01i | ", (mheardLine.mh_mod>>4), (mheardLine.mh_mod & 0xf));
                 Serial.printf("%4i | ", mheardLine.mh_rssi);
                 Serial.printf("%4i |", mheardLine.mh_snr);
                 Serial.printf("%5.1lf |", mheardLine.mh_dist);

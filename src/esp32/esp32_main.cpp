@@ -677,16 +677,16 @@ void esp32setup()
 
     #else
 
-    Serial.println(F("Auto detecting display:"));
+    Serial.println(F("[INIT]...Auto detecting display:"));
     
     if (esp32_isSSD1306(0x3C))
     { //Address of the display to be checked
-        Serial.println(F("-> OLED Display is SSD1306"));
+        Serial.println(F("[INIT]...OLED Display is SSD1306"));
         u8g2 = &u8g2_2;
     }
     else
     {
-        Serial.println(F("-> OLED Display is SH1106"));
+        Serial.println(F("[INIT]...OLED Display is SH1106"));
         u8g2 = &u8g2_1;
     }
 
@@ -1515,7 +1515,7 @@ void esp32loop()
         else
         {
             // wait after BLE Connect 3 sec.
-            if(millis() < config_to_phone_prepare_timer + 2000)
+            if(millis() < config_to_phone_prepare_timer + 3000)
                 iPhoneState = 0;
 
             if (iPhoneState > 3)   // only every 3 times of mainloop send to phone
@@ -1587,9 +1587,20 @@ void esp32loop()
         if(bSOFTSERON && SOFTSER_APP_ID == 1)
         {
             // no normal positons sent
+            if(bDisplayInfo)
+            {
+                Serial.print(getTimeString());
+                Serial.println("[POS]...NO sendPosition on bSOFTSERON");
+            }
         }
         else
         {
+            if(bDisplayInfo)
+            {
+                Serial.print(getTimeString());
+                Serial.println("[POS]...sendPostion initialized");
+            }
+
             sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
             posinfo_last_lat=posinfo_lat;

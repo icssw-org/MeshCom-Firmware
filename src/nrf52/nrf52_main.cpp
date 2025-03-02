@@ -443,8 +443,6 @@ void nrf52setup()
         save_settings();
     }
 
-    global_batt = 4200.0;
-
     meshcom_settings.node_press = 0.0;
     meshcom_settings.node_hum = 0.0;
     meshcom_settings.node_temp = 0.0;
@@ -452,7 +450,12 @@ void nrf52setup()
     meshcom_settings.node_press_alt = 0;
     meshcom_settings.node_press_asl = 0.0;
 
+    global_batt = 4125.0;
+
     posinfo_interval = POSINFO_INTERVAL;
+
+    if(meshcom_settings.node_postime > 0)
+        posinfo_interval = meshcom_settings.node_postime;
 
     if(meshcom_settings.node_maxv > 0)
     {
@@ -1102,10 +1105,10 @@ if (isPhoneReady == 1)
         else
         {
             // wait after BLE Connect 3 sec.
-            if(millis() < config_to_phone_prepare_timer + 2000)
+            if(millis() < config_to_phone_prepare_timer + 3000)
                 iPhoneState = 0;
 
-            if (iPhoneState > 6)   // only every 6 times of mainloop send to phone  RAK 2 x ESP
+            if (iPhoneState > 3)   // only every 6 times of mainloop send to phone  RAK 2 x ESP
             {
                 // prepare JSON config to phone after BLE connection
                 // send JSON config to phone after BLE connection
@@ -1125,7 +1128,9 @@ if (isPhoneReady == 1)
                 iPhoneState = 0;
             }
             else
+            {
                 iPhoneState++;
+            }
         }
 
         // 5 minuten
