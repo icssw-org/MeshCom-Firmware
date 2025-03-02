@@ -26,6 +26,10 @@ extern s_meshcom_settings meshcom_settings;
 
 bool updateInProgress = false;  // Flag to indicate if an update is in progress
 
+unsigned int ota_timeout_timer = 0; // Timer to check if OTA was started. If not, reboot to app/ota partition
+unsigned int last_timer_update = 0; // Timer to update the last time the OTA was updated
+int wait_ota_timeout = 180 * 1000; // OTA Timeout in seconds
+
 void startMDNS();
 
 
@@ -48,7 +52,7 @@ void wifiConnect() {
   Serial.printf("WIFI AP: %d\n", bWIFIAP);
 
   // Set the hostname from the callsign. If the callsign is not set, use the default hostname
-  if(!((meshcom_settings.node_call[0] == 0x00) || (memcmp(meshcom_settings.node_call, "none", 4) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0)))
+  if(!((meshcom_settings.node_call[0] == 0x00) || (memcmp(meshcom_settings.node_call, "none", 4) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX-00", 9) == 0)))
   {
     hostname = meshcom_settings.node_call;
   }
@@ -187,10 +191,11 @@ void setBootPartition_APP()
   if (partition)
   {
     esp_ota_set_boot_partition(partition);
+  } 
+  else
+  {
+    Serial.println("Error setting boot partition!");
   }
-  Serial.println("Rebooting...");
-  delay(300);
-  ESP.restart();
 }
 
 
@@ -216,14 +221,12 @@ void onOTAEnd(bool success)
   // Log when OTA has finished
   if (success)
   {
-    updateInProgress = false;
     Serial.println("OTA update finished successfully!");
     // Set next boot partition
     setBootPartition_APP();
   }
   else
   {
-    updateInProgress = false;
     Serial.println("There was an error during OTA update!");
   }
 }
@@ -236,14 +239,14 @@ void setup() {
   // whait for serial
   delay(1000);
   Serial.println("\n-----------------------------");
-  Serial.println("SafeBoot started");
+  Serial.println("OTA UDATE started");
 
   // Connect to saved ssid or as fallback spawn an AP
   wifiConnect();
 
   // Start ElegantOTA
   ElegantOTA.clearAuth();
-  ElegantOTA.setAutoReboot(false);
+  ElegantOTA.setAutoReboot(true);
   ElegantOTA.begin(&webServer);
   // ElegantOTA callbacks
   ElegantOTA.onStart(onOTAStart);
@@ -271,8 +274,25 @@ void setup() {
 
   webServer.begin();
 
+  ota_timeout_timer = millis();
+  last_timer_update = millis();
+
 }
 
 void loop() {
   ElegantOTA.loop();
+  // Check if OTA was started. If not, reboot to app/ota partition
+  if(!updateInProgress && (ota_timeout_timer > wait_ota_timeout))
+  {
+    Serial.println("OTA Start Timeout. Rebooting to app partition.");
+    setBootPartition_APP();
+    delay(500);
+    ESP.restart();
+  } 
+  
+  if (millis() - last_timer_update > 1000)
+  {
+    ota_timeout_timer = millis();
+    last_timer_update = millis();
+  }
 }

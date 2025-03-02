@@ -150,7 +150,7 @@ If you only update the firmware, you only want the corresponding file to flash.<
 | 0x10000 | safeboot.bin |
 | 0xC0000 | firmware.bin |
 
-`esptool.py -p <SERIAL_PORT> write_flash 0x1000 <PATH-TO-BIN-FILE>/bootloader.bin 0xE000 otadata.bin 0x8000 <PATH-TO-BIN-FILE>/partitions.bin 0x10000 <PATH-TO-BIN-FILE>/safeboot-s3.bin 0xC0000 <PATH-TO-BIN-FILE>/firmware.bin `<br/>
+`esptool.py -p <SERIAL_PORT> write_flash 0x1000 <PATH-TO-BIN-FILE>/bootloader.bin 0xE000 otadata.bin 0x8000 <PATH-TO-BIN-FILE>/partitions.bin 0x10000 <PATH-TO-BIN-FILE>/safeboot.bin 0xC0000 <PATH-TO-BIN-FILE>/firmware.bin `<br/>
 
 For an ESP-S3 like the Heltec V3, E290, etc:
 
@@ -171,6 +171,9 @@ https://oe1kfr.com/esptool/<br/>
 The safeboot.bin or safeboot-s3.bin contains the factory image which holds the OTA-Update firmware. To update via OTA after you have initially flashed the board, you can either enter the command `--ota-update` on the serial console or hit the OTA-Update Button in the webserver or in the phone app. The node then boots into the ota-firmware. If you had already configured your wifi credentials and had a connection to your wifi router, the node will try to connect again to that. Open the website via `<YOUR-NodeCALLSIGN>.local` or via its IP address. If there was no wifi configured upfront, the node then activates the AP mode and you can find a WiFi AP named `MeshCom-OTA` and the website of the OTA can either be accessed via the IP address: `192.168.4.1` or via `MeshCom-OTA.local`<br>
 If the upload fails it will always fall back to the OTA firmware.
 
+#### Erasing the Firmware: 
+If you want to wipe the firmware on the node:<br/>
+`python esptool.py --port <SERIAL-PORT> erase_flash`
 #### Erasing the NVS: 
 If you want to wipe the settings stored on the node:<br/>
 `python esptool.py --port <SERIAL-PORT> erase_region 0x009000 0x005000`
