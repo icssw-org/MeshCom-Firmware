@@ -825,7 +825,9 @@ void esp32setup()
         }
 
         // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
-        if (radio.setPreambleLength(LORA_PREAMBLE_LENGTH) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
+        Serial.printf("[LoRa]...PREAMBLE: %i symbols\n", meshcom_settings.node_preamplebits);
+        
+        if (radio.setPreambleLength(meshcom_settings.node_preamplebits) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
             Serial.println(F("Selected preamble length is invalid for this module!"));
             while (true);
         }

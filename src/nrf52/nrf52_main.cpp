@@ -754,6 +754,10 @@ void nrf52setup()
     //  Set the LoRa Frequency
     Radio.SetChannel(ifreq);
 
+    Serial.printf("[LoRa]...PREAMBLE: %i symbols\n", meshcom_settings.node_preamplebits);
+
+    uint16_t preamble_length = meshcom_settings.node_preamplebits;
+
     //  Configure the LoRa Transceiver for receiving messages
     Radio.SetRxConfig(
         MODEM_LORA,
@@ -761,7 +765,7 @@ void nrf52setup()
         (uint32_t)meshcom_settings.node_sf,
         (uint8_t)meshcom_settings.node_cr,
         0, //  AFC bandwidth: Unused with LoRa
-        LORA_PREAMBLE_LENGTH,
+        (uint16_t)preamble_length,
         LORA_SYMBOL_TIMEOUT,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         0,    //  Fixed payload length: N/A
@@ -782,7 +786,7 @@ void nrf52setup()
         (uint32_t)meshcom_settings.node_bw,
         (uint32_t)meshcom_settings.node_sf,
         (uint8_t)meshcom_settings.node_cr,
-        LORA_PREAMBLE_LENGTH,
+        (uint16_t)preamble_length,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         true, // CRC ON
         0,    // fsk only frequ hop

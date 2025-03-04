@@ -440,7 +440,7 @@ void RadioInit();
         (uint32_t)meshcom_settings.node_bw,
         (uint32_t)meshcom_settings.node_sf,
         (uint8_t)meshcom_settings.node_cr,
-        (uint8_t)meshcom_settings.node_preamplebits,
+        (uint16_t)meshcom_settings.node_preamplebits,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         true, // CRC ON
         0,    // fsk only frequ hop
