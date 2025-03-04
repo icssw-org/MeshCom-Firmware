@@ -99,7 +99,7 @@ void commandAction(char *msg_text, bool ble)
     // -info
     // -set-owner
 
-    char _owner_c[50];
+    char _owner_c[100];
     double dVar=0.0;
     int iVar;
     float fVar=0.0;
@@ -2531,6 +2531,8 @@ void commandAction(char *msg_text, bool ble)
                 strdec="";
 
                 igrc++;
+                if(igrc > 6)
+                    igrc=6;
             }
             else
             {
