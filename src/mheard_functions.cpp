@@ -54,7 +54,7 @@ void decodeMHeard(char mh_buffer[], struct mheardLine &mheardLine)
     String strdec = "";
     for(int iset=0; iset<55; iset++)
     {
-        if(mh_buffer[iset] == '@')
+        if(mh_buffer[iset] == '|')
         {
             switch (itype)
             {
@@ -135,7 +135,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     int16_t mh_rssi;
     int8_t mh_snr;
     */
-    snprintf(mheardBuffer[ipos], sizeof(mheardBuffer[ipos]), "%s@%s@%c@%i@%u@%i@%i@%.1lf@%i@%i@", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
+    snprintf(mheardBuffer[ipos], sizeof(mheardBuffer[ipos]), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
      mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh);
 
     // generate JSON
@@ -194,28 +194,28 @@ void sendMheard()
                 mheardLine.mh_callsign = mheardCalls[iset];
                 String mhstringdec = mheardBuffer[iset];
 
-                mheardLine.mh_date = getValue(mhstringdec, '@', 0);
-                mheardLine.mh_time = getValue(mhstringdec, '@', 1);
+                mheardLine.mh_date = getValue(mhstringdec, '|', 0);
+                mheardLine.mh_time = getValue(mhstringdec, '|', 1);
 
-                String xval = getValue(mhstringdec, '@', 2);
+                String xval = getValue(mhstringdec, '|', 2);
                 mheardLine.mh_payload_type = xval.charAt(0);
 
-                xval = getValue(mhstringdec, '@', 3);
+                xval = getValue(mhstringdec, '|', 3);
                 mheardLine.mh_hw = xval.toInt();
 
-                xval = getValue(mhstringdec, '@', 4);
+                xval = getValue(mhstringdec, '|', 4);
                 mheardLine.mh_mod = xval.toInt();
 
-                xval = getValue(mhstringdec, '@', 5);
+                xval = getValue(mhstringdec, '|', 5);
                 mheardLine.mh_rssi = xval.toInt();
 
-                xval = getValue(mhstringdec, '@', 6);
+                xval = getValue(mhstringdec, '|', 6);
                 mheardLine.mh_snr = xval.toInt();
 
-                xval = getValue(mhstringdec, '@', 7);
+                xval = getValue(mhstringdec, '|', 7);
                 mheardLine.mh_dist = xval.toFloat();
 
-                xval = getValue(mhstringdec, '@', 8);
+                xval = getValue(mhstringdec, '|', 8);
                 mheardLine.mh_path_len = xval.toInt();
 
                 // generate JSON
@@ -270,7 +270,7 @@ void showMHeard()
 
                 Serial.printf("%-11.11s/%03i | ", getHardwareLong(mheardLine.mh_hw).c_str(), mheardLine.mh_hw);
 
-                Serial.printf("%01i/%01i | ", (mheardLine.mh_mod>>4), (mheardLine.mh_mod & 0xf));
+                Serial.printf("%01X/%01i | ", (mheardLine.mh_mod>>4), (mheardLine.mh_mod & 0xf));
                 Serial.printf("%4i | ", mheardLine.mh_rssi);
                 Serial.printf("%4i |", mheardLine.mh_snr);
                 Serial.printf("%5.1lf |", mheardLine.mh_dist);
@@ -292,7 +292,7 @@ char* getPayloadType(char ptype)
         return (char*)"POS";
     else
     if(ptype == '@')
-        return (char*)"WX";
+        return (char*)"HEY";
 
     return (char*)"???";
 }

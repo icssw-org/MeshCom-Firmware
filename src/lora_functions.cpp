@@ -64,6 +64,7 @@ uint8_t preamble_cnt = 0;     // stores how often a preamble detect is thrown
 
 unsigned long track_to_meshcom_timer = 0;
 
+bool bNewLine = false;
 //////////////////////////////////////////////////////////////////////////
 // LoRa RX functions
 
@@ -76,7 +77,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     if(payload[0] == 0x41)
     {
         if(bDisplayInfo)
+        {
             printBuffer_ack((char*)"RX-Lora1", payload, size);
+            bNewLine=false;
+        }
 
         memcpy(print_buff, payload, 12);
 
@@ -108,8 +112,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         Serial.println();
                         Serial.print(getTimeString());
                         Serial.printf(" ACK to Phone  %02X %02X%02X%02X%02X %02X %02X", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                        bNewLine=false;
                     }
-                    
+                                
                     own_msg_id[itxcheck][4] = 0x02;   // 02...ACK
                 }
             }
@@ -129,13 +134,19 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         iWrite=0;
 
                     if(bDisplayInfo)
+                    {
                         Serial.print(" This packet to mesh");
-                }
+                        bNewLine=false;
+                    }
+                            }
             }
         }
 
         if(bDisplayInfo)
+        {
             Serial.println("");
+            bNewLine = true;
+        }
 
     }
     else
@@ -200,8 +211,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     initMheardLine(mheardLine);
 
                     mheardLine.mh_callsign = aprsmsg.msg_source_last;
-                    mheardLine.mh_hw = aprsmsg.msg_last_hw;
-                    mheardLine.mh_mod = aprsmsg.msg_source_mod;
+                    mheardLine.mh_hw = aprsmsg.msg_last_hw & 0x7F;
+                    
+                    if((aprsmsg.msg_last_hw & 0x80) == 0x80)    // Last-Sending
+                        mheardLine.mh_mod = aprsmsg.msg_source_mod;
+                    else
+                        mheardLine.mh_mod = aprsmsg.msg_source_mod | 0xF0;  // set mod not from last
+
                     mheardLine.mh_rssi = rssi;
                     mheardLine.mh_snr = snr;
                     mheardLine.mh_date = getDateString();
@@ -255,7 +271,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         }
                     }
 
-                    if(lat != 0.0 && lon != 0.0)
+                    if(lat != 0.0 && lon != 0.0 && meshcom_settings.node_lat != 0.0 && meshcom_settings.node_lon != 0.0)
                         mheardLine.mh_dist = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
 
                     updateMheard(mheardLine, isPhoneReady);
@@ -268,6 +284,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     {
                         printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
                         Serial.println();
+                        bNewLine=true;
                     }
                 }
             }
@@ -293,8 +310,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     {
                         Serial.print(getTimeString());
                         Serial.printf(" HEARD from <%s> to Phone  %02X %02X%02X%02X%02X %02X %02X\n", aprsmsg.msg_source_path.c_str(), print_buff[0], print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[6]);
+                        bNewLine=true;
                     }
-
+            
                     own_msg_id[icheck][4]=0x01; // 0x01 HEARD
                 }
             }
@@ -329,8 +347,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                     // print aprs message
                     if(bDisplayInfo)
+                    {
                         printBuffer_aprs((char*)"RX-LoRa2", aprsmsg);
-
+                        bNewLine=false;
+                    }
+            
                     // we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
                     // MODE BYTE: LongSlow = 1, MediumSlow = 3
                     // and send the UDP packet (done in the method)
@@ -361,7 +382,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             bMsg=true;
                             
                             if(bDisplayInfo)
+                            {
                                 Serial.println("bMsg = true");
+                                bNewLine=true;
+                            }
 
                             break;
                         }
@@ -405,8 +429,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                             Serial.println();
                                             Serial.print(getTimeString());
                                             Serial.printf("[ACK-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1]);
+                                            bNewLine=true;
                                         }
-
+                                
                                         int iackcheck = checkOwnTx(print_buff+1);
                                         if(iackcheck >= 0)
                                         {
@@ -421,7 +446,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
                                         
                                         if(bDisplayInfo)
+                                        {
                                             Serial.println("");
+                                            bNewLine=true;
+                                        }
                                             
                                         SendAckMessage(aprsmsg.msg_source_call, iAckId);
 
@@ -514,8 +542,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                             else
                                             {
                                                 if(bDisplayInfo)
+                                                {
                                                     Serial.println("");
-                                                            //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
+                                                    bNewLine=true;
+                                                }
+                                                
+                                                //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
                                                 if(aprsmsg.msg_destination_path == "*" || aprsmsg.msg_destination_path == "WLNK-1" || aprsmsg.msg_destination_path == "APRS2SOTA" || CheckGroup(aprsmsg.msg_destination_path) > 0)
                                                 {
                                                     // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
@@ -543,8 +575,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                     {
                                                         Serial.print(getTimeString());
                                                         Serial.printf(" ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                                                        bNewLine=true;
                                                     }
-                                                    
+                                                                                                
                                                     unsigned long mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
 
                                                     bool bServerFlag = false;
@@ -621,7 +654,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                     aprsmsg.max_hop--;
 
-                                    aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+                                    aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node   last sending node (0x80)
+                                    aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
                                 
                                     if(bSHORTPATH)
                                     {
@@ -678,12 +712,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         iWrite=0;
                                     
                                     if(bDisplayInfo)
+                                    {
                                         Serial.println(" This packet to mesh");
+                                        bNewLine=true;
+                                    }
                                 }
                             }
                             else
                             {
-                                if(bDisplayInfo && !bGATEWAY)
+                                if(bDisplayInfo && !bNewLine)
                                     Serial.println("");
                             }
                         }

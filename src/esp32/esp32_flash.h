@@ -133,6 +133,7 @@ struct s_meshcom_settings
 	int max_hop_text = 0;
 	int max_hop_pos = 0;
 
+	char node_update[20] = {0};
 };
 
 extern s_meshcom_settings meshcom_settings;

@@ -9,7 +9,7 @@ definitions for TLORA_V2_1_1p6
 
 
 // TLORA_V2_1_1p6 specific config
-
+#define ESP32
 #define MODUL_HARDWARE TLORA_V2_1_1p6
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz

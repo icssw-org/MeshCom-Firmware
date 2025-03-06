@@ -22,7 +22,7 @@ NTPClient timeClient(Udp);
 // byte macaddr[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEC}; // Set the MAC address, do not repeat in a network.
 uint8_t macaddr[6] = {0};
 
-unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE]; // Buffer to hold incoming packet.
+unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE+5]; // Buffer to hold incoming packet.
 
 String s_node_ip;
 String s_node_hostip;
@@ -144,8 +144,11 @@ bool NrfETH::sendUDP(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_buf_size)
 {
   Udp.beginPacket(udp_dest_addr, UDP_PORT);
   
-  //Serial.println("UDP Out Buff:");
-  //printBuffer(buffer, rx_buf_size);
+  if(bDEBUG)
+  {
+    Serial.print("UDP Out Buff:");
+    printBuffer(buffer, rx_buf_size);
+  }
 
   for (int i=0; i<rx_buf_size; i++)
   {
@@ -184,7 +187,7 @@ int NrfETH::getUDP()
   char source_call[20] = {0};
   char destination_call[20] = {0};
 
-  uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
+  uint8_t convBuffer[UDP_TX_BUF_SIZE+5]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
   udp_is_busy = true;   //setting the busy flag
 
@@ -213,6 +216,9 @@ int NrfETH::getUDP()
         zerocount = 0;
     }
 
+    if(packetSize > 0 && bDEBUG)// && bDEBUG)
+      Serial.printf("[UDP_ETH] UDP zerocount: %i ? > 6\n", zerocount);
+
     if (zerocount <= MAX_ZEROS)
     {
       /* we now need to distinguish if we got a LoRa packet to send from the server
@@ -233,7 +239,8 @@ int NrfETH::getUDP()
       if (memcmp(indicator_b, gate, UDP_MSG_INDICATOR_LEN) == 0)
       {
 
-        //Serial.printf("[GATE] Received a LoRa packet to transmit\n");
+        if(bDEBUG)
+          Serial.printf("[GATE] Received a LoRa packet to transmit\n");
 
         last_upd_timer = millis();
 
@@ -283,12 +290,24 @@ int NrfETH::getUDP()
 
             aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
 
+            if(bDEBUG)
+            {
+              Serial.printf("RX-UDP Source-Path:%s\n",  aprsmsg.msg_source_path.c_str());
+            }
+
+
             memset(convBuffer, 0x00, UDP_TX_BUF_SIZE);
 
-            uint8_t size = encodeAPRS(convBuffer, aprsmsg);
+            uint16_t size = encodeAPRS(convBuffer, aprsmsg);
 
             if(size > UDP_TX_BUF_SIZE)
                 size = UDP_TX_BUF_SIZE;
+
+
+            if(bDEBUG)
+            {
+              Serial.printf("RX-UDP Check-payload (%i):%02X \n", size, msg_type_b);
+            }
 
             if(msg_type_b == 0x3A)
             {
@@ -384,6 +403,11 @@ int NrfETH::getUDP()
             }
 
 
+            if(bDEBUG)
+            {
+              Serial.printf("RX-UDP prepare message - send:%i\n", bUDPtoLoraSend);
+            }
+
             // resend only Packet
             if(bUDPtoLoraSend)
             {
@@ -405,27 +429,32 @@ int NrfETH::getUDP()
               if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
                 iWrite = 0;
 
+              if(bDEBUG)
+              {
+                Serial.printf("RX-UDP addLoraRxBuffer\n");
+              }
+
               addLoraRxBuffer(aprsmsg.msg_id, true);
 
               // add rcvMsg to BLE out Buff
               // size message is int -> uint16_t buffer size
               if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
               {
+                  if(bDEBUG)
+                  {
+                    Serial.printf("RX-UDP addBLEOutBuffer\n");
+                  }
+                  
                   addBLEOutBuffer(convBuffer, size);
               }
             }
           }
         }
-
-        // zero out the inc buffer  
-        memset(inc_udp_buffer, 0, UDP_TX_BUF_SIZE);
-
-        return 0;
       }
       else if (memcmp(indicator_b, conf, UDP_MSG_INDICATOR_LEN) == 0)
       {
 
-        if(bDEBUG)
+        if(bDisplayInfo)
         {
           Serial.print(getTimeString());
           Serial.printf("[CONF] received from server\n");
@@ -517,10 +546,6 @@ int NrfETH::getUDP()
         {
             Serial.printf("[ERROR] Incoming config message not known! Discarding!\n");
         }
-
-        // zero out the inc buffer
-        memset(inc_udp_buffer, 0, UDP_TX_BUF_SIZE);
-        return 0;
       }
       else if (memcmp(indicator_b, beat, UDP_MSG_INDICATOR_LEN) == 0)
       {
@@ -529,7 +554,7 @@ int NrfETH::getUDP()
         if(bDEBUG)
         {
           Serial.print(getTimeString());
-          Serial.printf("[BEAT] Heartbeat from server\n");
+          Serial.printf(" [BEAT] Heartbeat from server\n");
         }
 
         last_upd_timer = millis();
@@ -545,6 +570,12 @@ int NrfETH::getUDP()
         Serial.printf("[ERROR] Received udp message without indicator\n");
         last_upd_timer = millis();
       }
+
+      // zero out the inc buffer
+      memset(inc_udp_buffer, 0, UDP_TX_BUF_SIZE);
+      
+      udp_is_busy = false;   //setting the busy flag
+      return 0;
     } 
     else
     {

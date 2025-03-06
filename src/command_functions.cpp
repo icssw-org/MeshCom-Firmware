@@ -2756,8 +2756,8 @@ void commandAction(char *msg_text, bool ble)
             if(ibt == 0)
                 ibt = BUTTON_PIN;
 
-            Serial.printf("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...Call: <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s\n...PASSWD <%s>\n",
-                    SOURCE_VERSION, SOURCE_VERSION_SUB,__DATE__,__TIME__,
+            Serial.printf("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s\n...PASSWD <%s>\n",
+                    SOURCE_VERSION, SOURCE_VERSION_SUB , __DATE__ , __TIME__ , meshcom_settings.node_update,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
                     (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 

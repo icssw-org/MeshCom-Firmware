@@ -24,7 +24,7 @@ uint8_t shortVERSION()
 
 int CheckGroup(String callsign)
 {
-	if(callsign.length() <= 0 || callsign.length() > 5)
+	if(callsign.length() < 1 || callsign.length() > 5)
 		return 0;
 	
 	for(int ic=0;ic<(int)callsign.length();ic++)
@@ -38,7 +38,7 @@ int CheckGroup(String callsign)
 
 	int ig=callsign.toInt();
 
-	if(ig <= 0 || ig > 99999)
+	if(ig < 1 || ig > 99999)
 		return 0;
 	
 	return ig;
@@ -55,7 +55,7 @@ bool CheckOwnGroup(String callsign)
     if(bDisplayInfo)
         Serial.printf("[INFO]...Check GRC %i for own-node\n", checkgroup);
 
-    if(checkgroup <= 0)
+    if(checkgroup == 0)
         return false;
 
     bool bHasGroup=false;
@@ -105,32 +105,11 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
     aprsmsg.msg_fcs = 0;
     aprsmsg.msg_source_hw = BOARD_HARDWARE;
     
-    aprsmsg.msg_source_mod = 3; // MeshCom SF 11 CR 4/6 BW 250 ... medium
-
-
-    if(meshcom_settings.node_sf == 12 && getCR() == 8 && getBW() == 125.0)
-        aprsmsg.msg_source_mod = 4; // MeshCom SF 12 CR 4/8 BW 125 ... slow
-   
-    if(meshcom_settings.node_sf == 12 && getCR() == 6 && getBW() == 125.0)
-        aprsmsg.msg_source_mod = 5; // MeshCom SF 12 CR 4/6 BW 125 ... longslow
-
-    if(meshcom_settings.node_sf == 10 && getCR() == 6 && getBW() == 125.0)
-        aprsmsg.msg_source_mod = 6; // MeshCom SF 10 CR 4/6 BW 125 ... smallslow
-
-    if(meshcom_settings.node_sf == 11 && getCR() == 5 && getBW() == 250.0)
-        aprsmsg.msg_source_mod = 7; // MeshCom SF 11 CR 4/5 BW 250 ... fast
-
-    if(meshcom_settings.node_sf == 11 && getCR() == 6 && getBW() == 250.0)
-        aprsmsg.msg_source_mod = 8; // MeshCom SF 11 CR 4/6 BW 250 ... fastslow
-
-    aprsmsg.msg_source_mod = aprsmsg.msg_source_mod | (meshcom_settings.node_country << 4);
-
-    //if(bLORADEBUG)
-    //    Serial.printf("sf:%i cr:%i bw:%f ... mod:%i\n", meshcom_settings.node_sf, getCR(), getBW(), aprsmsg.msg_source_mod);
+    aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4);
 
     aprsmsg.msg_source_fw_version = shortVERSION();
     aprsmsg.msg_source_fw_sub_version = shortSUBVERSION();
-    aprsmsg.msg_last_hw = BOARD_HARDWARE;
+    aprsmsg.msg_last_hw = 0x80 | BOARD_HARDWARE;    // mit lastHeard Bit
     aprsmsg.msg_source_last = "";
     aprsmsg.msg_last_path_cnt = 0;
 }
@@ -212,18 +191,6 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                     
                     bSourceCall=false;
 
-                    if(aprsmsg.msg_source_last.length() > 0)
-                    {
-                        if(!checkRegexCall(aprsmsg.msg_source_last))
-                        {
-                            if(bLORADEBUG)
-                            {
-                                Serial.printf("APRS decode - Source-CallSign Error [%s]\n", aprsmsg.msg_source_last.c_str());
-                            }
-                            bCallsignOk=false;
-                        }
-                    }
-
                     aprsmsg.msg_source_last="";
                 }
                 else
@@ -251,6 +218,16 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             return 0x00;
         }
 
+        if(!checkRegexCall(aprsmsg.msg_source_last))
+        {
+            if(bLORADEBUG)
+            {
+                Serial.printf("APRS decode - Source-Last-CallSign Error [%s]\n", aprsmsg.msg_source_last.c_str());
+            }
+
+            bCallsignOk=false;
+        }
+
         if(!checkRegexCall(aprsmsg.msg_source_call))
         {
             if(bLORADEBUG)
@@ -270,7 +247,6 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         bool bDestinationEndOk=false;
         bool bDestinationCall=true;
         uint16_t inextstart=inext;
-        String msg_dest_last="";
 
         for(ib=inextstart; ib < rsize; ib++)
         {
@@ -288,26 +264,11 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 {
                     bDestinationCall=false;
 
-                    if(msg_dest_last.length() > 0)
-                    {
-                        if(!CheckGroup(msg_dest_last))
-                        {
-                            if(!checkRegexCall(msg_dest_last))
-                            {
-                                if(bLORADEBUG)
-                                {
-                                    Serial.printf("APRS decode - Destination-CallSign Error [%s]\n", msg_dest_last.c_str());
-                                }
-                                bCallsignOk=false;
-                            }
-                        }
-                    }
-
-                    msg_dest_last="";
+                    aprsmsg.msg_destination_last="";
                 }
                 else
                 {
-                    msg_dest_last.concat((char)RcvBuffer[ib]);
+                    aprsmsg.msg_destination_last.concat((char)RcvBuffer[ib]);
                 }
 
                 if(bDestinationCall)
@@ -330,7 +291,19 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             return 0x00;
         }
 
-        if(!CheckGroup(msg_dest_last))
+        if(CheckGroup(aprsmsg.msg_destination_last) == 0)
+        {
+            if(!checkRegexCall(aprsmsg.msg_destination_last))
+            {
+                if(bLORADEBUG)
+                {
+                    Serial.printf("APRS decode - Destination-Last-CallSign Error [%s]\n", aprsmsg.msg_destination_last.c_str());
+                }
+                bCallsignOk=false;
+            }
+        }
+
+        if(CheckGroup(aprsmsg.msg_destination_call) == 0)
         {
             if(!checkRegexCall(aprsmsg.msg_destination_call))
             {
@@ -439,9 +412,12 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         }
 
-        if(RcvBuffer[inext] == 0x7e)
+        if(inext < rsize)
         {
-            inext++;
+            if(RcvBuffer[inext] == 0x7e)
+            {
+                inext++;
+            }
         }
 
         aprsmsg.msg_len = inext;
@@ -1032,8 +1008,8 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     inext = inext + inext_payload;
 
     // max posible payload (LoRa MSG max 255 byte)
-    if((inext + 8) >= UDP_TX_BUF_SIZE)
-        inext = UDP_TX_BUF_SIZE - 8;
+    if((inext + 10) >= UDP_TX_BUF_SIZE)
+        inext = UDP_TX_BUF_SIZE - 10;
 
     msg_buffer[inext] = 0x00;
     inext++;

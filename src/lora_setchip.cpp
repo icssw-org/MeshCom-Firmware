@@ -147,6 +147,30 @@ int8_t getPower()
     return power;
 }
 
+int getMOD()
+{
+
+    int iMod = 3; // MeshCom SF 11 CR 4/6 BW 250 ... medium
+
+
+    if(getSF() == 12 && getCR() == 8 && getBW() == 125.0)
+        iMod = 4; // MeshCom SF 12 CR 4/8 BW 125 ... slow
+
+    if(getSF() == 12 && getCR() == 6 && getBW() == 125.0)
+        iMod = 5; // MeshCom SF 12 CR 4/6 BW 125 ... longslow
+
+    if(getSF() == 10 && getCR() == 6 && getBW() == 125.0)
+        iMod = 6; // MeshCom SF 10 CR 4/6 BW 125 ... smallslow
+
+    if(getSF() == 11 && getCR() == 5 && getBW() == 250.0)
+        iMod = 7; // MeshCom SF 11 CR 4/5 BW 250 ... fast
+
+    if(getSF() == 11 && getCR() == 6 && getBW() == 250.0)
+        iMod = 8; // MeshCom SF 11 CR 4/6 BW 250 ... fastslow
+
+    return iMod;
+}
+
 void lora_setcountry(int iCtry)
 {
     float dec_bandwith = 0;

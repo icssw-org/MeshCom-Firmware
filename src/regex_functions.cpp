@@ -12,25 +12,28 @@ int ret_call;
 
 bool checkRegexCall(String callsign)
 {
-	if(callsign == "*") // TOALL message
+	if(callsign.length() < 1)
+		return false;
+
+	if(callsign.compareTo("*") == 0) // TOALL message
 		return true;
 	
-	if(callsign == "H")	// HEY Message
+	if(callsign.compareTo("H") == 0)	// HEY Message
 		return true;
 
-	if(callsign == "BOT GATE")
+	if(callsign.compareTo("BOT GATE") == 0)
 		return true;
 
-	if(callsign == "TEST")
+	if(callsign.compareTo("TEST") == 0)
 		return true;
 
-	if(callsign == "TESTER")
+	if(callsign.compareTo("TESTER") == 0)
 		return true;
 
-	if(callsign == "WLNK-1")
+	if(callsign.compareTo("WLNK-1") == 0)
 		return true;
 
-	if(callsign == "APRS2SOTA")
+	if(callsign.compareTo("APRS2SOTA") == 0)
 		return true;
 
 	regex_call.Target((char*)callsign.c_str());

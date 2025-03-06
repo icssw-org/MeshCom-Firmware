@@ -460,6 +460,8 @@ void esp32setup()
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
 
+    memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
+
     iButtonPin = BUTTON_PIN;
     if(meshcom_settings.node_button_pin > 0)
         iButtonPin = meshcom_settings.node_button_pin;
@@ -1430,6 +1432,13 @@ void esp32loop()
         meshcom_settings.node_date_hour = MyClock.Hour();
         meshcom_settings.node_date_minute = MyClock.Minute();
         meshcom_settings.node_date_second = MyClock.Second();
+
+        // Starttime setzen
+        if(meshcom_settings.node_date_year > 2023 && meshcom_settings.node_update[0] == 0x00)
+        {
+            snprintf(meshcom_settings.node_update, sizeof(meshcom_settings.node_update), "%04i-%02i-%02i %02i:%02i:%02i",
+             meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+        }
     }
 
     // SOFTSER
