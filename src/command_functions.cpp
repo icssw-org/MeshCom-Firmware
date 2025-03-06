@@ -2879,6 +2879,10 @@ void commandAction(char *msg_text, bool ble)
     else
     if(bSensSetting)
     {
+        int ibt = meshcom_settings.node_button_pin;
+        if(ibt == 0)
+            ibt = BUTTON_PIN;
+
         /*{"TYP":"SE", "BME":false,"BMP":false,"680":true,"811":false,"LPS33":false,"OW":false,"OWPIN":4}*/
         JsonDocument sensdoc;
 
@@ -2892,7 +2896,7 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["LPS33"] = bLPS33;
         sensdoc["OW"] = bONEWIRE;
         sensdoc["OWPIN"] = meshcom_settings.node_owgpio;
-        sensdoc["USERPIN"] = meshcom_settings.node_button_pin;
+        sensdoc["USERPIN"] = ibt;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
