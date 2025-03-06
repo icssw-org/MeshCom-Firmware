@@ -32,6 +32,7 @@ struct aprsMessage
     String msg_source_last;
     String msg_destination_path;
     String msg_destination_call;
+    String msg_destination_last;
     String msg_payload;
     String msg_gateway_call;
     unsigned int msg_fcs;

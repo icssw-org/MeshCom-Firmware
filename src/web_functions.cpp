@@ -1159,9 +1159,8 @@ String work_webpage(bool bget_password, int webid)
 
                                 web_client.printf("<td>%-10.10s</td>", mheardLine.mh_date.c_str());
                                 web_client.printf("<td>%-8.8s</td>", mheardLine.mh_time.c_str());
-                                //web_client.printf("<td>%-3.3s</td>", getPayloadType(mheardLine.mh_payload_type));
                                 web_client.printf("<td>%-13.13s</td>", getHardwareLong(mheardLine.mh_hw).c_str());
-                                web_client.printf("<td>%01i", (mheardLine.mh_mod >> 4));
+                                web_client.printf("<td>%01X", (mheardLine.mh_mod >> 4));
                                 web_client.printf("/%01i</td>", mheardLine.mh_mod & 0x0f);
                                 web_client.printf("<td>%4i</td>", mheardLine.mh_rssi);
                                 web_client.printf("<td>%4i</td>", mheardLine.mh_snr);
@@ -1506,9 +1505,15 @@ String work_webpage(bool bget_password, int webid)
                                         msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{'));
 
                                     if(strcmp(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()) == 0)
-                                        web_client.printf("<tr><td class=\"td2\"></td><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small><b>%s</b></td></tr>\n", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str(), msgtxt.c_str());
+                                    {
+                                        web_client.printf("<tr><td class=\"td2\"></td><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small>", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str());
+                                        web_client.printf("<b>%s</b></td></tr>\n", msgtxt.c_str());
+                                    }
                                     else
-                                        web_client.printf("<tr><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small><b>%s</b></td><td class=\"td2\"></td></tr>\n", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str(), msgtxt.c_str());
+                                    {
+                                        web_client.printf("<tr><td colspan=\"3\"><small>%s<br /><b>%s%s%s%s</b><br /></small>\n", timestamp, ccheck.c_str(), aprsmsg.msg_source_path.c_str(), (char*)">", aprsmsg.msg_destination_path.c_str());
+                                        web_client.printf("<b>%s</b></td><td class=\"td2\"></td></tr>\n", msgtxt.c_str());
+                                    }
                                 }
                             }
                         }
@@ -1688,8 +1693,11 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<col style=\"width: 75%;\">");
                     web_client.println("</colgroup>");
 
-                    web_client.printf("<tr><td style=\"width:40px\"><b>Firmware</b></td><td>MeshCom %-4.4s%-1.1s (build: %s / %s)</td><tr><td><b>Call</b></td><td>%s ...%s</td></tr><tr><td><b>UTC-OFF</b></td><td>%.1f</td></tr>\n",
-                        SOURCE_VERSION, SOURCE_VERSION_SUB,__DATE__,__TIME__,meshcom_settings.node_call, getHardwareLong(BOARD_HARDWARE).c_str(), meshcom_settings.node_utcoff);
+                    web_client.printf("<tr><td style=\"width:40px\"><b>Firmware</b></td><td>MeshCom %-4.4s%-1.1s (build: %s / %s)</td><tr><td><b>Start-Date</b></td><td>%s</td><tr><tr></tr><td><b>Call</b></td><td>%s ...%s</td></tr>\n",
+                        SOURCE_VERSION, SOURCE_VERSION_SUB,__DATE__,__TIME__, meshcom_settings.node_update, meshcom_settings.node_call, getHardwareLong(BOARD_HARDWARE).c_str());
+
+                    web_client.printf("<tr><td><b>UTC-OFF</b></td><td>%.1f</td></tr>\n",
+                        meshcom_settings.node_utcoff);
                     
                     web_client.printf("<tr><td><b>BATT</b></td><td>%.2f V %d %% max %.2f V</td></tr><tr><td><b>Setting</b></td><td>GATEWAY %s %s ...MESH %s</td></tr><tr><td></td><td>BUTTON  %s ...DEBUG %s</td></tr>\n",
                         global_batt/1000.0, global_proz, meshcom_settings.node_maxv, (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"));

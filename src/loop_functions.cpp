@@ -149,7 +149,7 @@ uint8_t own_msg_id[MAX_RING][5] = {0};
 int iWriteOwn=0;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
-unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE] = {0};
+unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5] = {0};
 int iWrite=0;
 int iRead=0;
 int iRetransmit=-1;
@@ -159,17 +159,22 @@ uint8_t ringBufferLoraRX[MAX_RING][5] = {0};
 uint8_t loraWrite = 0;   // counter for ringbuffer
 
 // RINGBUFFER RAW LoRa RX
-unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE] = {0};
+unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5] = {0};
 int RAWLoRaWrite=0;
 int RAWLoRaRead=0;
 
+// RINGBUFFER for outgoing UDP lora packets for lora TX
+uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE+20];
+uint8_t udpWrite=0;
+uint8_t udpRead=0;
+
 // RINGBUFFER BLE to phone
-unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE] = {0};
+unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE+5] = {0};
 int toPhoneWrite=0;
 int toPhoneRead=0;
 
 // RINGBUFFER BLE Commandos to phone
-unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE] = {0};
+unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE+5] = {0};
 int ComToPhoneWrite=0;
 int ComToPhoneRead=0;
 
@@ -403,7 +408,7 @@ void insertOwnTx(unsigned int msg_id)
     if(bDisplayInfo)
     {
         Serial.print(getTimeString());
-        Serial.printf("Insert own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
+        Serial.printf(" Insert own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
     }
 
     iWriteOwn++;
@@ -514,6 +519,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             pageLine[pageLineAnz][2] = 20;
             memcpy(pageText[pageLineAnz], text, 25);
             pageLineAnz++;
+            if(pageLineAnz >= 7)
+                pageLineAnz = 6;
         }
     }
 
@@ -621,7 +628,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             pagePointer=pageLastPointer;
 
             pageLastPointer++;
-            if(pageLastPointer > PAGE_MAX-1)
+            if(pageLastPointer >= PAGE_MAX)
                 pageLastPointer=0;
 
             pageLastLineAnz[pageLastPointer] = 0;   // nächsten Ringplatz frei machen
@@ -1169,6 +1176,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                 words[iwords][ipos+1]=0x00;
             }
             iwords++;
+            if(iwords >= 100)
+                iwords=99;
             ipos=0;
         }
         else
@@ -1176,6 +1185,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         {
             words[iwords][20]=0x00;
             iwords++;
+            if(iwords >= 100)
+                iwords=99;
             words[iwords][0]=aprsmsg.msg_payload.charAt(itxt);
             ipos=1;
         }
@@ -1185,6 +1196,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     words[iwords][ipos]=0x00;
     iwords++;
+    if(iwords >= 100)
+    iwords=99;
 
     memset(line_text, 0x00, 21);
     strcat(line_text, words[0]);
@@ -1847,8 +1860,8 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
         ilpayload=60;
 
     //snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %02X %i %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
-    snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %02X %i%i%i %s>%s %c%s",  msgSource, getTimeString().c_str(),
-        aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh,
+    snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %1u %i%i%i %01X/%1u LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
+        aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_last_hw,
         //aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
         aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(),
         aprsmsg.payload_type, aprsmsg.msg_payload.substring(0, ilpayload).c_str());
@@ -1862,9 +1875,9 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
     Serial.print(getTimeString());
-    Serial.printf(" %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%02i FCS:%04X FW:%02i:%c LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+    Serial.printf(" %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
-        aprsmsg.msg_source_hw, aprsmsg.msg_source_mod, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
+        aprsmsg.msg_source_hw, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
 
 void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_t size)

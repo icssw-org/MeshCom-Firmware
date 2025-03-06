@@ -32,12 +32,7 @@ unsigned long updateTimeClient = 0;
 // timers
 uint32_t dhcp_timer = 0;         // dhcp refresh timer
 
-// RINGBUFFER for outgoing UDP lora packets for lora TX
-extern uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
-extern uint8_t udpWrite;   // counter for ringbuffer
-extern uint8_t udpRead;    // counter for ringbuffer
-
-static uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
+static uint8_t convBuffer[UDP_TX_BUF_SIZE+50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 // ETH Prototypes
 void sendUDP();                                      // UDP tx routine
@@ -427,6 +422,8 @@ void nrf52setup()
         bEXTUDP=false;
     }
 
+    memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
+    
     #ifndef ENABLE_SOFTSER
         bSOFTSERON=false;
     #endif
@@ -947,6 +944,13 @@ void nrf52loop()
         meshcom_settings.node_date_hour = MyClock.Hour();
         meshcom_settings.node_date_minute = MyClock.Minute();
         meshcom_settings.node_date_second = MyClock.Second();
+
+        // Starttime setzen
+        if(meshcom_settings.node_date_year > 2023 && meshcom_settings.node_update[0] == 0x00)
+        {
+            snprintf(meshcom_settings.node_update, sizeof(meshcom_settings.node_update), "%04i-%02i-%02i %02i:%02i:%02i",
+             meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+        }
     }
 
     if(!bGATEWAY)
@@ -1184,68 +1188,87 @@ if (isPhoneReady == 1)
     // get UDP & send UDP message from ringBufferOut if there is one to tx
     if(bGATEWAY)
     {
+        int bUDPReceived = false;
+
         // check if we received a UDP packet
         if (neth.hasIPaddress)
         {
-            neth.getUDP();
+            if(neth.getUDP() == 1)  // 1...no udp-paket received
+            {
+                sendUDP(); 
+            }
+            else
+            {
+                bUDPReceived=true;
 
-            sendUDP(); 
+                if(bDEBUG)
+                    Serial.println("LOOP GATEWAY actions UDP received");
+            }
         }
         else
         {
             neth.last_upd_timer = 0; // ETH new
         }
 
-        meshcom_settings.node_hasIPaddress = neth.hasIPaddress;
-        meshcom_settings.node_last_upd_timer = neth.last_upd_timer;
-        
-        // check HB response (we also check successful sending KEEP. check if they work together!)
-        if((neth.last_upd_timer + (MAX_HB_RX_TIME * 1000)) < millis())
+        // UDP Action for next loop
+        if(!bUDPReceived)
         {
-            // avoid TX and UDP
-            if(!neth.hasIPaddress)
+            meshcom_settings.node_hasIPaddress = neth.hasIPaddress;
+            meshcom_settings.node_last_upd_timer = neth.last_upd_timer;
+            
+            // check HB response (we also check successful sending KEEP. check if they work together!)
+            if((neth.last_upd_timer + (MAX_HB_RX_TIME * 1000)) < millis())
             {
-                neth.hasIPaddress = false;
-                cmd_counter = 50;
+                if(bDEBUG)
+                    Serial.println("LOOP GATEWAY last_upd_timer actions");
 
-                if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+                neth.last_upd_timer = millis();
+
+                // avoid TX and UDP
+                if(!neth.hasIPaddress)
+                {
+                    neth.hasIPaddress = false;
+                    cmd_counter = 50;
+
+                    if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+                    {
+                        if(bDEBUG)
+                        {
+                            Serial.print(getTimeString());
+                            Serial.println(" [MAIN] initethETH fix-IP");
+                        }
+
+                        neth.initethfixIP();
+                    }
+                    else
+                    {
+                        {
+                            Serial.print(getTimeString());
+                            Serial.println(" [MAIN] initethETH DHCP");
+                        }
+
+                        neth.initethDHCP();
+                    }
+                }
+            }
+            
+            // DHCP refresh
+            if ((dhcp_timer + (DHCP_REFRESH * 60000)) < millis())
+            {
+                // no need on static IPs
+                if(!(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6))
                 {
                     if(bDEBUG)
                     {
                         Serial.print(getTimeString());
-                        Serial.println(" [MAIN] initethETH fix-IP");
+                        Serial.println(" [MAIN] checkDHCP");
                     }
-
-                    neth.initethfixIP();
+                    
+                    neth.checkDHCP();
                 }
-                else
-                {
-                    {
-                        Serial.print(getTimeString());
-                        Serial.println(" [MAIN] initethETH DHCP");
-                    }
 
-                    neth.initethDHCP();
-                }
+                dhcp_timer = millis();
             }
-        }
-        
-        // DHCP refresh
-        if ((dhcp_timer + (DHCP_REFRESH * 60000)) < millis())
-        {
-            // no need on static IPs
-            if(!(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6))
-            {
-                if(bDEBUG)
-                {
-                    Serial.print(getTimeString());
-                    Serial.println(" [MAIN] checkDHCP");
-                }
-                
-                neth.checkDHCP();
-            }
-
-            dhcp_timer = millis();
         }
     }
 
@@ -1527,7 +1550,7 @@ if (isPhoneReady == 1)
     {
         if ((hb_timer + (HEARTBEAT_INTERVAL * 1000)) < millis())
         {
-            if(bDEBUG)
+            if(bDisplayInfo)
             {
                 Serial.print(getTimeString());
                 Serial.printf(" [UDP] sending Heartbeat\n");
@@ -1783,6 +1806,8 @@ void checkSerialCommand(void)
                         msg_buffer[inext]=msg_text[itx];
                         msg_buffer[inext+1]=0x00;
                         inext++;
+                        if(inext >= (int)sizeof(msg_buffer)-2)
+                            inext=(int)sizeof(msg_buffer)-2;
                     }
                 }
 
@@ -1816,6 +1841,9 @@ void sendUDP()
 {
     if(udpWrite != udpRead)
     {
+        if(bDEBUG)
+            Serial.printf("udpWrite:%i udpRead:%i neth.udp_is_busy:%i\n", udpWrite, udpRead, neth.udp_is_busy);
+
         if(!neth.udp_is_busy)
         {
             uint8_t msg_len = ringBufferUDPout[udpRead][0];

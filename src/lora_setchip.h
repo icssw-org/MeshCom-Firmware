@@ -13,6 +13,8 @@ float getBW();
 int getSF();
 int getCR();
 
+int getMOD();
+
 String getCountry(int iCtry);
 int getCountryID(String strCtry);
 void lora_setcountry(int iCtry);

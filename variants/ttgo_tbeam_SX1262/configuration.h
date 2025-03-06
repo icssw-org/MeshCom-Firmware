@@ -9,8 +9,7 @@ definitions for TBEAM 1262
 
 
 // TBEAM_1262 specific config
-
-
+#define ESP32
 #define MODUL_HARDWARE TBEAM_1262
 #define MODUL_FW_TBEAM  TBEAM_1262
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz

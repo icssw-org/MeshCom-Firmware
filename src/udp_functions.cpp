@@ -8,13 +8,9 @@
 #include <command_functions.h>
 #include <loop_functions_extern.h>
 #include <time_functions.h>
+#include <lora_setchip.h>
 
-static uint8_t txBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
-
-// RINGBUFFER for outgoing UDP lora packets for lora TX
-uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE];
-uint8_t udpWrite=0;
-uint8_t udpRead=0;
+static uint8_t txBuffer[UDP_TX_BUF_SIZE+50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 #ifdef ESP32
 
@@ -62,6 +58,22 @@ uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
 
 int waitRestartUDP = 0;
 int waitRestartUDPCounter = 5;
+
+String strEsc(String strInput)
+{
+  String strOutput = "";
+  for(int ip=0; ip<strInput.length(); ip++)
+  {
+    if(strInput.charAt(ip) == '"' || strInput.charAt(ip) == '\\')
+    {
+      strOutput.concat('\\');
+    }
+
+    strOutput.concat(strInput.charAt(ip));
+  }
+
+  return strOutput;
+}
 
 void getMeshComUDP()
 {
@@ -284,7 +296,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
                 uint8_t tempRcvBuffer[UDP_TX_BUF_SIZE];
 
-                aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+                aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node
+                aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
 
                 uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
@@ -1015,7 +1028,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
   if(msg_type_b_lora == 0x3A)
   {
     snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"msg\",\"src\":\"%s\",\"dst\":\"%s\",\"msg\":\"%s\",\"msg_id\":\"%08X\"}",
-    src_type, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str(), aprsmsg.msg_id);
+    src_type, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), strEsc(aprsmsg.msg_payload).c_str(), aprsmsg.msg_id);
 
     memcpy(u_json, c_json, strlen(c_json));
   }
@@ -1139,7 +1152,7 @@ void addNodeData(uint8_t msg_buffer[300], uint16_t size, int16_t rssi, int8_t sn
 
 }
 
-void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
+void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
 {
     if (len > UDP_TX_BUF_SIZE)
         len = UDP_TX_BUF_SIZE; // just for safety
@@ -1161,6 +1174,8 @@ void addUdpOutBuffer(uint8_t *buffer, uint16_t len)
 
 void sendKEEP()
 {
+    uint8_t hb_buffer[UDP_TX_BUF_SIZE+50];
+
     String keep = "KEEP";
     String cfw = SOURCE_VERSION;
     cfw.concat(SOURCE_VERSION_SUB);
@@ -1179,7 +1194,8 @@ void sendKEEP()
 
     uint8_t longname_len = strlen(meshcom_settings.node_call);
     uint16_t hb_buffer_size = longname_len + 1 + sizeof(_GW_ID) + keep.length() + firmware.length() + grc_ids.length();
-    uint8_t hb_buffer[hb_buffer_size];
+
+//    uint8_t hb_buffer[hb_buffer_size];
 
     // Serial.print("\nHB buffer size: ");
     // Serial.println(hb_buffer_size);
@@ -1208,6 +1224,11 @@ void sendKEEP()
     //also avoid UDP tx when UDP is getting a packet
     // add HB message to the ringbuffer
     //DEBUG_MSG("UDP", "HB Buffer");
-    //neth.printBuffer(hb_buffer, hb_buffer_size);
+    if(bDEBUG)
+    {
+      Serial.print("KEEP-BUFFER:");
+      printBuffer(hb_buffer, hb_buffer_size);
+    }
+
     addUdpOutBuffer(hb_buffer, hb_buffer_size);
 }

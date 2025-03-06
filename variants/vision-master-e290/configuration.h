@@ -8,7 +8,7 @@ definitions for HELTEC E290
 #include <configuration_global.h>
 
 // HELTEC_E290 specifig config
-
+#define ESP32
 #define MODUL_HARDWARE HELTEC_E290
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
