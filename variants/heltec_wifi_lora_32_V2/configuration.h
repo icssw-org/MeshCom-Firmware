@@ -8,7 +8,6 @@ definitions for HELTEC_V2_1
 #include <configuration_global.h>
 
 // HELTEC_V2_1 specific config
-#define ESP32
 #define MODUL_HARDWARE HELTEC_V2_1
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
