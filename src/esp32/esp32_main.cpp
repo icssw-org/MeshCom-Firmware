@@ -1687,13 +1687,18 @@ void esp32loop()
                     global_proz = (int)PMU->getBatteryPercent();
 
                     // no BATT
-                    if(global_proz <= 0)
+                    if(global_proz < 0)
                     {
                         if(bDEBUG)
                             Serial.println("no battery is connected");
                             
                         global_batt = (float)PMU->getVbusVoltage();
                         global_proz=100.0;
+                    }
+                    else
+                    {
+                        if(global_proz < 1.0 && global_batt < 3200.0)
+                            global_proz = 2;
                     }
                 }
                 else

@@ -1,5 +1,3 @@
-#include <configuration.h>
-
 #include <Arduino.h>
 
 #include <udp_functions.h>
@@ -9,6 +7,7 @@
 #include <loop_functions_extern.h>
 #include <time_functions.h>
 #include <lora_setchip.h>
+#include <configuration.h>
 
 static uint8_t txBuffer[UDP_TX_BUF_SIZE+50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
@@ -210,7 +209,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
           aprsmsg.msg_server = true;
 
-          aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+          aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node
+          aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
 
           memset(convBuffer, 0x00, UDP_TX_BUF_SIZE);
 

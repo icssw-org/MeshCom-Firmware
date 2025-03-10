@@ -11,6 +11,7 @@
 #include <loop_functions_extern.h>
 #include <command_functions.h>
 #include <time_functions.h>
+#include <lora_setchip.h>
 
 #include <NTPClient.h>
 #include <time.h>
@@ -288,7 +289,8 @@ int NrfETH::getUDP()
 
             aprsmsg.msg_server = true;
 
-            aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+            aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node
+            aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
 
             if(bDEBUG)
             {
@@ -378,14 +380,28 @@ int NrfETH::getUDP()
                     aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
                   }
 
+                  if(bDEBUG)
+                  {
+                    Serial.println("RX-UDP vor sendDisplayText");
+                  }
+
                   if(iAckPos <= 0)
-                    sendDisplayText(aprsmsg, (int16_t)99, (int8_t)0);
+                  {
+                    if(!bGATEWAY)
+                      sendDisplayText(aprsmsg, (int16_t)99, (int8_t)0);
+                  }
 
                   aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
 
                   uint8_t tempRcvBuffer[UDP_TX_BUF_SIZE];
 
-                  aprsmsg.msg_last_hw = BOARD_HARDWARE; // hardware  last sending node
+                  aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node
+                  aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
+
+                  if(bDEBUG)
+                  {
+                    Serial.println("RX-UDP vor encodeAPRS");
+                  }
 
                   uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
@@ -393,11 +409,21 @@ int NrfETH::getUDP()
 
                   bBLELoopOut=false;
 
+                  if(bDEBUG)
+                  {
+                    Serial.println("RX-UDP vor SendAckMessage");
+                  }
+
                   // DM message for lokal Node 
                   if(iAckId > 0)
                   {
                     String strSource_call = source_call;
                     SendAckMessage(strSource_call, iAckId);
+                  }
+
+                  if(bDEBUG)
+                  {
+                    Serial.println("RX-UDP nach SendAckMessage");
                   }
               }
             }
