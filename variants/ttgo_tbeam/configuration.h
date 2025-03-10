@@ -8,7 +8,6 @@ definitions for T-Beam
 #include <configuration_global.h>
 
 // T-Beam specific config
-#define ESP32
 #define MODUL_HARDWARE TBEAM
 #define MODUL_FW_TBEAM TBEAM
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz

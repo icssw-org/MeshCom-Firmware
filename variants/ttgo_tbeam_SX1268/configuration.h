@@ -8,7 +8,6 @@ definitions for TBEAM 1268
 #include <configuration_global.h>
 
 // TBEAM 1268 specific config
-#define ESP32
 #define MODUL_HARDWARE TBEAM_1268
 #define MODUL_FW_TBEAM  TBEAM_1268
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
