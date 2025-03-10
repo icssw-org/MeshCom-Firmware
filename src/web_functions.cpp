@@ -1693,7 +1693,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<col style=\"width: 75%;\">");
                     web_client.println("</colgroup>");
 
-                    web_client.printf("<tr><td style=\"width:40px\"><b>Firmware</b></td><td>MeshCom %-4.4s%-1.1s (build: %s / %s)</td><tr><td><b>Start-Date</b></td><td>%s</td><tr><tr></tr><td><b>Call</b></td><td>%s ...%s</td></tr>\n",
+                    web_client.printf("<tr><td style=\"width:40px\"><b>Firmware</b></td><td>MeshCom %-4.4s%-1.1s (build: %s / %s)</td><tr><td><b>Start-Date</b></td><td>%s</td></tr><tr><td><b>Call</b></td><td>%s ...%s</td></tr>\n",
                         SOURCE_VERSION, SOURCE_VERSION_SUB,__DATE__,__TIME__, meshcom_settings.node_update, meshcom_settings.node_call, getHardwareLong(BOARD_HARDWARE).c_str());
 
                     web_client.printf("<tr><td><b>UTC-OFF</b></td><td>%.1f</td></tr>\n",
