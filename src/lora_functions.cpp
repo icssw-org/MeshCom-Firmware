@@ -632,7 +632,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     bMeshDestination = false;
                                 if(aprsmsg.payload_type == '!' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_pos+1)    // POS
                                     bMeshDestination = false;
-                                if(aprsmsg.payload_type == '@')    // HEY no Mesh on GATEWAYs
+                                if(aprsmsg.payload_type == '@' && meshcom_settings.node_hasIPaddress)    // HEY no Mesh on GATEWAYs with Server-Connected
                                     bMeshDestination = false;
                             }
 
@@ -649,7 +649,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 // MESH only max. hops (default 3...TEXT 1...POS)
                                 if(aprsmsg.max_hop > 0)
                                 {
-                                    if(bGATEWAY)
+                                    // only set Serverflag if connection to MeshCom-Server
+                                    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
                                         aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server
 
                                     aprsmsg.max_hop--;

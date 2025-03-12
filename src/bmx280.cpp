@@ -138,11 +138,19 @@ void setupBMX280(bool bNewStart)
 
     Serial.printf("[INIT]...setupBMX280 - I2C:%02X\n", bmx_i2c_address);
 
+	bmx_found = false;
+
+	fTemp = 0.0;
+	fPress = 0.0;	
+	fHum = 0.0;
+		
 	//begin() checks the Interface, reads the sensor ID (to differentiate between BMP280 and BME280)
 	//and reads compensation parameters.
+	Serial.printf("[INIT]...");
 	if (!bmx280.begin())
 	{
 		Serial.println("[INIT]...begin() failed. check your BMx280 Interface and I2C Address.");
+		return;
 	}
 
 	//reset sensor to default parameters.
@@ -158,16 +166,22 @@ void setupBMX280(bool bNewStart)
 	if (bmx280.isBME280())
 		bmx280.writeOversamplingHumidity(BMx280MI::OSRS_H_x16);
 
-  if(bBMEON)
-    Serial.printf("[INIT]...BME280 startet\n");
+	
+	if(bBMEON)
+    	Serial.printf("[INIT]...BME280 startet\n");
 
-  if(bBMPON)
-    Serial.printf("[INIT]...BMP280 startet\n");
+	if(bBMPON)
+    	Serial.printf("[INIT]...BMP280 startet\n");
+
+	bmx_found = true;
 }
 
 bool loopBMX280()
 {
 	if(!bBMEON && !bBMPON)
+		return false;
+
+	if(!bmx_found)
 		return false;
 
 	Wire.endTransmission(true);

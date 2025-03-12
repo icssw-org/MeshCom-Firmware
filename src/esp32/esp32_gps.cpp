@@ -361,13 +361,8 @@ unsigned int readGPS(void)
 
     if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 800)
     {
-        double dlat, dlon;
-
-        dlat = tinyGPSPlus.location.lat();
-        dlon = tinyGPSPlus.location.lng();
-
-        meshcom_settings.node_lat = cround4(dlat);
-        meshcom_settings.node_lon = cround4(dlon);
+        meshcom_settings.node_lat = cround4abs(tinyGPSPlus.location.lat());
+        meshcom_settings.node_lon = cround4abs(tinyGPSPlus.location.lng());
 
         if(tinyGPSPlus.location.rawLat().negative)
             meshcom_settings.node_lat_c = 'S';
@@ -381,7 +376,8 @@ unsigned int readGPS(void)
 
         meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)tinyGPSPlus.altitude.meters()) / 11;
 
-        MyClock.setCurrentTime(meshcom_settings.node_utcoff, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
+        if(tinyGPSPlus.date.year() > 2023)
+            MyClock.setCurrentTime(meshcom_settings.node_utcoff, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
         
         if(bGPSDEBUG)
         {
@@ -396,7 +392,7 @@ unsigned int readGPS(void)
         posinfo_hdop = tinyGPSPlus.hdop.value();
         posinfo_fix = true;
 
-        return setSMartBeaconing(dlat, dlon);
+        return setSMartBeaconing(meshcom_settings.node_lat, meshcom_settings.node_lon);
 
     }
     else

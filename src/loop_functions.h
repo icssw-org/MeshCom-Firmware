@@ -67,6 +67,7 @@ String convertCallToShort(char callsign[10]);
 uint8_t shortVERSION();
 
 double cround4(double dvar);
+double cround4abs(double dvar);
 
 int conv_fuss(int alt_meter);
 

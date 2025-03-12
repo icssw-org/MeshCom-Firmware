@@ -284,7 +284,7 @@ float read_batt(void)
 		float floatVoltage = factor * analogValue;
 		uint16_t voltage = (int)(floatVoltage * 1000.0);
 
-		if(bDEBUG)
+		if(bDEBUG && bDisplayInfo)
 		{
 			Serial.print("[readBatteryVoltage] ADC : ");
 			Serial.println(analogValue);
@@ -338,7 +338,7 @@ float read_batt(void)
 		raw = raw * 24.80;
 	#endif
 
-	if(bDEBUG)
+	if(bDEBUG && bDisplayInfo)
 	{
 		Serial.print("[readBatteryVoltage] raw mV : ");
 		Serial.println(raw);

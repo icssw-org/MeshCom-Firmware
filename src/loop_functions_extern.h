@@ -56,7 +56,7 @@ extern bool bONEWIRE;
 extern bool bLPS33;
 
 extern bool bme680_found;
-extern bool bme680_enabled;
+extern bool bmx_found;
 
 extern bool bSHORTPATH;
 extern bool bGPSDEBUG;
