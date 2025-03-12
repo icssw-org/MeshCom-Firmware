@@ -1447,7 +1447,7 @@ if (isPhoneReady == 1)
 
     // read BMP Sensor
     #if defined(ENABLE_BMX280)
-    if((BMPON || bBMEON) && bmx_found)
+    if((bBMPON || bBMEON) && bmx_found)
     {
         if(BMXTimeWait == 0)
             BMXTimeWait = millis() - 10000;
