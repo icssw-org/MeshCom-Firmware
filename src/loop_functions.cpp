@@ -1075,8 +1075,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     bSetDisplay=true;
 
     // wenn Display ausgeschalten werden bei GATWAYs keine Anzeigen gemaacht
-    if(bDisplayOff && bGATEWAY)
-        return;
+    // ist nicht gewünscht
+    //if(bDisplayOff && bGATEWAY)
+    //    return;
 
     if(bDisplayOff)
     {
