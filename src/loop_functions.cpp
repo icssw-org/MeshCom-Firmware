@@ -58,7 +58,7 @@ bool bONEWIRE = false;
 bool bLPS33 = false;
 
 bool bme680_found = false;
-bool bme680_enabled = false;
+bool bmx_found = false;;
 
 bool bGATEWAY = false;
 bool bGATEWAY_NOPOS = false;
@@ -273,7 +273,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     else
         BLEtoPhoneBuff[toPhoneWrite][0] = len;
 
-    if(bDEBUG)
+    if(bBLEDEBUG)
     {
         Serial.printf("<%02X>BLEtoPhone RingBuff added len=%i to element: %u\n", buffer[0], len, toPhoneWrite);
         printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1 + 4);
@@ -1057,7 +1057,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             Minute = (uint16_t)aprsmsg.msg_payload.substring(19, 21).toInt();
             Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
 
-            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+            if(Year > 2023)
+                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
         }
 
         return;
@@ -1567,7 +1568,8 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         meshcom_settings.node_date_minute = Minute;
         meshcom_settings.node_date_second = Second;
 
-        MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+        if(Year > 2023)
+            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
     }
 
     sendDisplayMainline();
@@ -2019,7 +2021,10 @@ void sendMessage(char *msg_text, int len)
     // store last message to compare later on
     insertOwnTx(aprsmsg.msg_id);
 
-    addLoraRxBuffer(aprsmsg.msg_id, true);
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+        addLoraRxBuffer(aprsmsg.msg_id, true);
+    else
+        addLoraRxBuffer(aprsmsg.msg_id, false);
 
     // Master RingBuffer for transmission
     // local messages send to LoRa TX
@@ -2135,6 +2140,9 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         char csftemp[15]={0};
         char csfbatt[15]={0};
 
+        char cinaU[15]={0};
+        char cinaI[15]={0};
+        
         bool bSOFTSERAPPPOS=false;
 
         #if defined(ENABLE_SOFTSER)
@@ -2157,140 +2165,160 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
             }
         }
 
-        if(global_proz > 0 && !bSOFTSERAPPPOS)
+        // send INA226 Werte abwechselnd zu normal Pos
+        //////////
+        // TEST
+        //bINA226ON=true;
+        //meshcom_settings.node_vbus=meshcom_settings.node_vbus+1.0;
+        //meshcom_settings.node_vcurrent=meshcom_settings.node_vcurrent+1.0;
+        //////////
+
+        if(bINA226ON)
         {
-            snprintf(cbatt, sizeof(cbatt), "/B=%03d", global_proz);
+            snprintf(cversion, sizeof(cversion), "%s", "/V=5");
+            snprintf(cbatt, sizeof(cbatt), "/B=%i", global_proz);
+            snprintf(cinaU, sizeof(cinaU), "/U=%.1f", meshcom_settings.node_vbus);
+            snprintf(cinaI, sizeof(cinaI), "/I=%.1f", meshcom_settings.node_vcurrent);
+
+            //////////
+            // TEST
+            //bINA226ON=false;
+            //////////
         }
-
-        if(alt > 0)
+        else
         {
-            // auf Fuss umrechnen
-            if(bFuss)
-                snprintf(calt, sizeof(calt), "/A=%06i", conv_fuss(alt));
-            else
-                snprintf(calt, sizeof(calt), "/A=%05i", alt);
-        }
-
-        if(press > 0)
-        {
-            snprintf(cpress, sizeof(cpress), "/P=%.1f", press);
-            if(memcmp(cpress, "/P=nan", 6) == 0)
-                return "";
-        }
-
-        if(hum > 0)
-        {
-            snprintf(chum, sizeof(chum), "/H=%.1f", hum);
-            if(memcmp(cpress, "/H=nan", 6) == 0)
-                return "";
-        }
-
-        if(temp != 0)
-        {
-            snprintf(ctemp, sizeof(ctemp), "/T=%.1f", temp);
-            if(memcmp(cpress, "/T=nan", 6) == 0)
-                return "";
-        }
-
-        if(temp2 != 0 && !bSOFTSERAPPPOS)
-        {
-            snprintf(ctemp2, sizeof(ctemp2), "/O=%.1f", temp2);
-            if(memcmp(cpress, "/O=nan", 6) == 0)
-                return "";
-        }
-
-        if(qfe > 0)
-        {
-            snprintf(cqfe, sizeof(cqfe), "/F=%i", qfe);
-            if(memcmp(cpress, "/F=nan", 6) == 0)
-                return "";
-        }
-
-        if(qnh > 0 && !bMCU811ON && !bBME680ON)
-        {
-            snprintf(cqnh, sizeof(cqnh), "/Q=%.1f", qnh);
-            if(memcmp(cpress, "/Q=nan", 6) == 0)
-                return "";
-        }
-
-        if(gasres > 0 && bBME680ON)
-        {
-            snprintf(cversion, sizeof(cversion), "%s", "/V=3");
-
-            snprintf(cgasres, sizeof(cgasres), "/G=%.1f", gasres);
-            if(memcmp(cpress, "/G=nan", 6) == 0)
-                return "";
-        }
-
-        if(co2 > 0 && bMCU811ON)
-        {
-            snprintf(cversion, sizeof(cversion),  "%s", "/V=2");
-
-            snprintf(cco2, sizeof(cco2), "/C=%.0f", co2);
-            if(memcmp(cpress, "/C=nan", 6) == 0)
-                return "";
-        }
-
-        #if defined(ENABLE_SOFTSER)
-        if(bSOFTSERAPPPOS)
-        {
-            snprintf(cversion, sizeof(cversion), "%s", "/V=4");
-
-            if(strSOFTSERAPP_PEGEL.length() > 1 || strSOFTSERAPP_FIXPEGEL.length() > 1)
+            if(global_proz > 0 && !bSOFTSERAPPPOS)
             {
-                if(strSOFTSERAPP_FIXPEGEL.length() < 1)
-                    snprintf(csfpegel, sizeof(csfpegel), "/1=%s", strSOFTSERAPP_PEGEL.c_str());
+                snprintf(cbatt, sizeof(cbatt), "/B=%03d", global_proz);
+            }
+
+            if(alt > 0)
+            {
+                // auf Fuss umrechnen
+                if(bFuss)
+                    snprintf(calt, sizeof(calt), "/A=%06i", conv_fuss(alt));
                 else
-                    snprintf(csfpegel, sizeof(csfpegel), "/1=%s", strSOFTSERAPP_FIXPEGEL.c_str());
+                    snprintf(calt, sizeof(calt), "/A=%05i", alt);
             }
 
-            if(strSOFTSERAPP_TEMP.length() > 1 || strSOFTSERAPP_FIXTEMP.length() > 1)
+            if(press > 0)
             {
-                if(strSOFTSERAPP_FIXTEMP.length() < 1)
-                    snprintf(csftemp, sizeof(csftemp), "/2=%s", strSOFTSERAPP_TEMP.c_str());
-                else
-                    snprintf(csftemp, sizeof(csftemp), "/2=%s", strSOFTSERAPP_FIXTEMP.c_str());
+                snprintf(cpress, sizeof(cpress), "/P=%.1f", press);
+                if(memcmp(cpress, "/P=nan", 6) == 0)
+                    return "";
             }
 
-            if(strSOFTSERAPP_BATT.length() > 1)
+            if(hum > 0)
             {
-                snprintf(csfbatt, sizeof(csfbatt), "/3=%s", strSOFTSERAPP_BATT.c_str());
+                snprintf(chum, sizeof(chum), "/H=%.1f", hum);
+                if(memcmp(cpress, "/H=nan", 6) == 0)
+                    return "";
             }
 
-            if(bONEWIRE)
+            if(temp != 0)
+            {
+                snprintf(ctemp, sizeof(ctemp), "/T=%.1f", temp);
+                if(memcmp(cpress, "/T=nan", 6) == 0)
+                    return "";
+            }
+
+            if(temp2 != 0 && !bSOFTSERAPPPOS)
             {
                 snprintf(ctemp2, sizeof(ctemp2), "/O=%.1f", temp2);
                 if(memcmp(cpress, "/O=nan", 6) == 0)
-                    memset(ctemp2, 0x00, sizeof(ctemp2));
+                    return "";
             }
-        }
-        else
-        #endif
-        {
-            /////////////////////////////////////////////////////////////////
-            // send Group-Call settings zu MesCom-Server
-            String strGRC="";
 
-            char cGC[8];
-            for(int igrc=0;igrc<6;igrc++)
+            if(qfe > 0)
             {
-                if(meshcom_settings.node_gcb[igrc] > 0 && meshcom_settings.node_gcb[igrc] < 100000)
+                snprintf(cqfe, sizeof(cqfe), "/F=%i", qfe);
+                if(memcmp(cpress, "/F=nan", 6) == 0)
+                    return "";
+            }
+
+            if(qnh > 0 && !bMCU811ON && !bBME680ON)
+            {
+                snprintf(cqnh, sizeof(cqnh), "/Q=%.1f", qnh);
+                if(memcmp(cpress, "/Q=nan", 6) == 0)
+                    return "";
+            }
+
+            if(gasres > 0 && bBME680ON)
+            {
+                snprintf(cversion, sizeof(cversion), "%s", "/V=3");
+
+                snprintf(cgasres, sizeof(cgasres), "/G=%.1f", gasres);
+                if(memcmp(cpress, "/G=nan", 6) == 0)
+                    return "";
+            }
+
+            if(co2 > 0 && bMCU811ON)
+            {
+                snprintf(cversion, sizeof(cversion),  "%s", "/V=2");
+
+                snprintf(cco2, sizeof(cco2), "/C=%.0f", co2);
+                if(memcmp(cpress, "/C=nan", 6) == 0)
+                    return "";
+            }
+
+            #if defined(ENABLE_SOFTSER)
+            if(bSOFTSERAPPPOS)
+            {
+                snprintf(cversion, sizeof(cversion), "%s", "/V=4");
+
+                if(strSOFTSERAPP_PEGEL.length() > 1 || strSOFTSERAPP_FIXPEGEL.length() > 1)
                 {
-                    snprintf(cGC, sizeof(cGC), "%i;", meshcom_settings.node_gcb[igrc]);
-                    strGRC.concat(cGC);
+                    if(strSOFTSERAPP_FIXPEGEL.length() < 1)
+                        snprintf(csfpegel, sizeof(csfpegel), "/1=%s", strSOFTSERAPP_PEGEL.c_str());
+                    else
+                        snprintf(csfpegel, sizeof(csfpegel), "/1=%s", strSOFTSERAPP_FIXPEGEL.c_str());
+                }
+
+                if(strSOFTSERAPP_TEMP.length() > 1 || strSOFTSERAPP_FIXTEMP.length() > 1)
+                {
+                    if(strSOFTSERAPP_FIXTEMP.length() < 1)
+                        snprintf(csftemp, sizeof(csftemp), "/2=%s", strSOFTSERAPP_TEMP.c_str());
+                    else
+                        snprintf(csftemp, sizeof(csftemp), "/2=%s", strSOFTSERAPP_FIXTEMP.c_str());
+                }
+
+                if(strSOFTSERAPP_BATT.length() > 1)
+                {
+                    snprintf(csfbatt, sizeof(csfbatt), "/3=%s", strSOFTSERAPP_BATT.c_str());
+                }
+
+                if(bONEWIRE)
+                {
+                    snprintf(ctemp2, sizeof(ctemp2), "/O=%.1f", temp2);
+                    if(memcmp(cpress, "/O=nan", 6) == 0)
+                        memset(ctemp2, 0x00, sizeof(ctemp2));
                 }
             }
-
-            if(strGRC.length() > 0)
-            {
-                snprintf(cgrc, sizeof(cgrc), "/R=%s", strGRC.c_str());
-            }
-            //
-            /////////////////////////////////////////////////////////////////
+            #endif
         }
 
-        snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc, csfpegel, csftemp, csfbatt, cversion);
+        /////////////////////////////////////////////////////////////////
+        // send Group-Call settings zu MesCom-Server
+        String strGRC="";
 
+        char cGC[8];
+        for(int igrc=0;igrc<6;igrc++)
+        {
+            if(meshcom_settings.node_gcb[igrc] > 0 && meshcom_settings.node_gcb[igrc] < 100000)
+            {
+                snprintf(cGC, sizeof(cGC), "%i;", meshcom_settings.node_gcb[igrc]);
+                strGRC.concat(cGC);
+            }
+        }
+
+        if(strGRC.length() > 0)
+        {
+            snprintf(cgrc, sizeof(cgrc), "/R=%s", strGRC.c_str());
+        }
+        //
+        /////////////////////////////////////////////////////////////////
+
+        snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc, csfpegel, csftemp, csfbatt, cversion, cinaU, cinaI);
     }
 
     return String(msg_start);
@@ -2777,6 +2805,18 @@ double cround4(double dvar)
     snprintf(cvar, sizeof(cvar), "%.4lf", dvar);
     double rvar;
     sscanf(cvar, "%lf", &rvar);
+
+    return rvar;
+}
+
+double cround4abs(double dvar)
+{
+    char cvar[20];
+    snprintf(cvar, sizeof(cvar), "%.4lf", dvar);
+    double rvar;
+    sscanf(cvar, "%lf", &rvar);
+
+    rvar = abs(rvar);
 
     return rvar;
 }

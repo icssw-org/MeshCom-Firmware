@@ -77,11 +77,14 @@ void startWebserver()
 
     if(strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
     {
+        /*
         if(bDEBUG)
         {
             Serial.print("[WEB]...no ip set :");
             Serial.println(meshcom_settings.node_ip);
         }
+         */
+
         return;
     }
 
@@ -141,11 +144,13 @@ void loopWebserver()
 
     if(strlen(meshcom_settings.node_ip) < 7)
     {
+        /*
         if(bDEBUG)
         {
             Serial.print("[WEBLOOP]...no ip set :");
             Serial.println(meshcom_settings.node_ip);
         }
+        */
         return;
     }
 
@@ -1727,6 +1732,11 @@ String work_webpage(bool bget_password, int webid)
                         //web_client.printf("<tr><td><b>PASSWORD</b></td><td>%s</td></tr>\n", meshcom_settings.node_pwd);
                         web_client.printf("<tr><td><b>WIFI-AP</b></td><td>%s</td></tr>\n", (bWIFIAP?"yes":"no"));
                     #endif
+
+                    // wenn WIFI unterbrochen wird
+                    if(meshcom_settings.node_hasIPaddress && strcmp(meshcom_settings.node_ip, "0.0.0.0") == 0)
+                        meshcom_settings.node_hasIPaddress = false;
+
                     web_client.printf("<tr><td><b>hasIpAddress</b></td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
 
                     if(meshcom_settings.node_hasIPaddress)

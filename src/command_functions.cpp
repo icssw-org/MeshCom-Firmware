@@ -1162,6 +1162,13 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"webtimer 0") == 0)
+    {
+        web_timer = 0;
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"setname ") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
@@ -1833,9 +1840,12 @@ void commandAction(char *msg_text, bool ble)
 
         if(((strlen(meshcom_settings.node_pwd) > 1 || strcmp(meshcom_settings.node_pwd, "none") == 0) && strlen(meshcom_settings.node_ssid) > 1))
         {
-            Serial.println("Auto. Reboot after 15 sec.");
+            if(!bDEBUG)
+            {
+                Serial.println("Auto. Reboot after 15 sec.");
 
-            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+                rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+            }
         }
 
         return;
@@ -2648,8 +2658,16 @@ void commandAction(char *msg_text, bool ble)
 
         if(!bRxFromPhone)
         {
-            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s\n...BME280: %s\n...BME680: %s\n...MCU811: %s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
-            (bBMPON?"on":"off"), (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio);
+            char cbme[10]={0};
+            if(bBMPON || bBMEON)
+                snprintf(cbme, sizeof(cbme), " (%s)", (bmx_found?"found":"error"));
+
+            char c680[10]={0};
+            if(bBME680ON)
+                snprintf(c680, sizeof(c680), " (%s)",  (bme680_found?"found":"error"));
+
+            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BME680: %s%s\n...MCU811: %s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
+            (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio);
 
             Serial.printf("...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", 
             meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
@@ -2889,7 +2907,9 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["TYP"] = "SE";
         sensdoc["BME"] = bBMEON;
         sensdoc["BMP"] = bBMPON;
+        sensdoc["BMXF"] = bmx_found;
         sensdoc["680"] = bBME680ON;
+        sensdoc["680F"] = bme680_found;
         sensdoc["811"] = bMCU811ON;
         sensdoc["SMALL"] = bSMALLDISPLAY;
         sensdoc["SS"] = bSOFTSERON;

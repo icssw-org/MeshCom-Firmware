@@ -1404,7 +1404,7 @@ void esp32loop()
         uint16_t Second = (uint16_t)strTime.substring(6, 8).toInt();
     
         // check valid Date & Time
-        if(Year > 2020 && strTime.compareTo("none") != 0)
+        if(Year > 2023 && strTime.compareTo("none") != 0)
         {
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
             bNTPDateTimeValid = true;
@@ -1423,15 +1423,15 @@ void esp32loop()
         MyClock.CheckEvent();
         
         if(MyClock.Year() > 2023)
+        {
             meshcom_settings.node_date_year = MyClock.Year();
-        else
-            meshcom_settings.node_date_year = 0;
-        meshcom_settings.node_date_month = MyClock.Month();
-        meshcom_settings.node_date_day = MyClock.Day();
+            meshcom_settings.node_date_month = MyClock.Month();
+            meshcom_settings.node_date_day = MyClock.Day();
 
-        meshcom_settings.node_date_hour = MyClock.Hour();
-        meshcom_settings.node_date_minute = MyClock.Minute();
-        meshcom_settings.node_date_second = MyClock.Second();
+            meshcom_settings.node_date_hour = MyClock.Hour();
+            meshcom_settings.node_date_minute = MyClock.Minute();
+            meshcom_settings.node_date_second = MyClock.Second();
+        }
 
         // Starttime setzen
         if(meshcom_settings.node_date_year > 2023 && meshcom_settings.node_update[0] == 0x00)
@@ -1713,7 +1713,7 @@ void esp32loop()
                 global_batt = read_batt();
                 global_proz = mv_to_percent(global_batt);
                 
-                if(bDEBUG)
+                if(bDEBUG && bDisplayInfo)
                 {
             		Serial.print("[readBatteryVoltage] : ");
                     Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
@@ -1749,7 +1749,7 @@ void esp32loop()
 
     // read BMP Sensor
     #if defined(ENABLE_BMX280)
-    if(bBMPON || bBMEON)
+    if((bBMPON || bBMEON) && bmx_found)
     {
         if ((BMXTimeWait + 60000) < millis())   // 60 sec
         {
@@ -1805,7 +1805,7 @@ void esp32loop()
 
         if ((INA226TimeWait + 15000) < millis())   // 15 sec
         {
-            // read MCU-811 Sensor
+            // read INA226 Sensor
             if(loopINA226())
             {
                 meshcom_settings.node_vbus = getvBUS();

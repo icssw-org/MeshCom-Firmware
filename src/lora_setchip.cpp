@@ -574,7 +574,6 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     if (radio.setFrequency(rf_freq) == RADIOLIB_ERR_INVALID_FREQUENCY)
     {
         Serial.println(F("Selected frequency is invalid for this module!"));
-        lora_setchip_meshcom();
         return false;
     }
 
@@ -584,7 +583,6 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     if (radio.setBandwidth(rf_bw) == RADIOLIB_ERR_INVALID_BANDWIDTH)
     {
         Serial.println(F("Selected bandwidth is invalid for this module!"));
-        lora_setchip_meshcom();
         return false;
     }
 
@@ -594,7 +592,6 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     if (radio.setSpreadingFactor(rf_sf) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR)
     {
         Serial.println(F("Selected spreading factor is invalid for this module!"));
-        lora_setchip_meshcom();
         return false;
     }
 
@@ -604,14 +601,12 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     if (radio.setCodingRate(rf_cr) == RADIOLIB_ERR_INVALID_CODING_RATE)
     {
         Serial.println(F("Selected coding rate is invalid for this module!"));
-        lora_setchip_meshcom();
         return false;
     }
 
     if (radio.setSyncWord(rf_syncword) != RADIOLIB_ERR_NONE)
     {
         Serial.println(F("Unable to set sync word!"));
-        lora_setchip_meshcom();
         return false;
     }
 

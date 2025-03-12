@@ -26,6 +26,10 @@ bool setupINA226()
     {
         bINA226ON = false;
         Serial.println("[INIT]...INA226 not found");
+        meshcom_settings.node_vbus=0;
+        meshcom_settings.node_vshunt=0;
+        meshcom_settings.node_vcurrent=0;
+        meshcom_settings.node_vpower=0;
         return false;
     }
 

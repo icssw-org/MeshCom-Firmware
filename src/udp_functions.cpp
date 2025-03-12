@@ -494,6 +494,9 @@ bool startWIFI()
   WiFi.disconnect(true);
 	delay(500);
 
+  if(bDEBUG)
+    Serial.println("WiFi.disconnect(true)");
+
   // Scan for AP with best RSSI
 	int nrAps = WiFi.scanNetworks();
   int best_rssi = -200;
@@ -697,12 +700,13 @@ void startMeshComUDP()
     }
     else
     {
-      DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 89.185.97.38");
-      node_hostip = IPAddress(89, 185, 97, 38);
+      WiFi.hostByName("meshcom.oevsv.at", node_hostip);
+      DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST meshcom.oevsv.at");
       s_node_hostip = node_hostip.toString();
 
-      //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
-      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+      IPAddress ntpServer;
+      WiFi.hostByName("pool.ntp.org", ntpServer);
+      timeClient.setPoolServerIP(ntpServer);
 
     }
 
@@ -1016,10 +1020,10 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
 
     if(strcmp(src_type, "node") == 0)
       snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i}",
-      src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, mv_to_percent(global_batt));
+      src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, global_proz);
     else
       snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i,\"firmware\":\"%-4.4s\"}",
-      src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, mv_to_percent(global_batt), SOURCE_VERSION);
+      src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, global_proz, SOURCE_VERSION);
 
     memcpy(u_json, c_json, strlen(c_json));
   }
