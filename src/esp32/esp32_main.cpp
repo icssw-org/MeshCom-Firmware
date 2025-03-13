@@ -1423,15 +1423,16 @@ void esp32loop()
         MyClock.CheckEvent();
         
         if(MyClock.Year() > 2023)
-        {
             meshcom_settings.node_date_year = MyClock.Year();
-            meshcom_settings.node_date_month = MyClock.Month();
-            meshcom_settings.node_date_day = MyClock.Day();
+        else
+            meshcom_settings.node_date_year = 2025;
 
-            meshcom_settings.node_date_hour = MyClock.Hour();
-            meshcom_settings.node_date_minute = MyClock.Minute();
-            meshcom_settings.node_date_second = MyClock.Second();
-        }
+        meshcom_settings.node_date_month = MyClock.Month();
+        meshcom_settings.node_date_day = MyClock.Day();
+
+        meshcom_settings.node_date_hour = MyClock.Hour();
+        meshcom_settings.node_date_minute = MyClock.Minute();
+        meshcom_settings.node_date_second = MyClock.Second();
 
         // Starttime setzen
         if(meshcom_settings.node_date_year > 2023 && meshcom_settings.node_update[0] == 0x00)
@@ -1689,8 +1690,7 @@ void esp32loop()
                     // no BATT
                     if(global_proz < 0)
                     {
-                        if(bDEBUG)
-                            Serial.println("no battery is connected");
+                        Serial.println("[readBatteryVoltage]...no battery is connected");
                             
                         global_batt = (float)PMU->getVbusVoltage();
                         global_proz=100.0;
@@ -1707,15 +1707,15 @@ void esp32loop()
                     global_proz = 0;
                 }
 
-                if(bDEBUG)
-                    Serial.printf("PMU.volt %.1f PMU.proz %i %i\n", global_batt, global_proz, pmu_proz);
+                if(bDEBUG && bDisplayInfo)
+                    Serial.printf("[readBatteryVoltage]...PMU.volt %.1f PMU.proz %i %i\n", global_batt, global_proz, pmu_proz);
             #else
                 global_batt = read_batt();
                 global_proz = mv_to_percent(global_batt);
                 
                 if(bDEBUG && bDisplayInfo)
                 {
-            		Serial.print("[readBatteryVoltage] : ");
+            		Serial.print("[readBatteryVoltage]...");
                     Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
                 }
             #endif
@@ -1898,7 +1898,67 @@ void esp32loop()
                         startWIFI();
                     }
                     else
+                    {
                         doWiFiConnect();
+
+                        if(iWlanWait == -2);
+                        {
+                            iWlanWait = 0;
+
+                            Serial.println("[WIFI]...SET but no Wifi connect");
+                
+                            #ifdef BOARD_E290
+                    
+                            e290_display.clear();
+                            e290_display.fastmodeOn();
+                        
+                            e290_display.landscape();
+                        
+                            e290_display.setRotation(270);
+                        
+                            e290_display.fillCircle(10, 10,
+                                10,                             // Radius: 10px
+                                BLACK                           // Color: black
+                                );
+                        
+                            e290_display.setFont( &FreeSansBold12pt7b );
+                            e290_display.setCursor(20, 50);
+                            e290_display.printf("MeshCom %s\n", cvers);
+                            e290_display.setCursor(65, 80);
+                            e290_display.setFont( &FreeSans12pt7b );
+                            e290_display.println("HELTEC E290");
+                        
+                            e290_display.setFont( &FreeSans9pt7b );
+                            e290_display.setCursor(30, 18);
+                            e290_display.println("...starting now");
+                            e290_display.setCursor(80, 100);
+                            e290_display.println("@by icssw.org");
+                            e290_display.setCursor(65, 120);
+                            e290_display.println("OE1KBC, OE1KFR");
+                        
+                            e290_display.update();
+                        
+                            #else
+                        
+                            u8g2->clearDisplay();
+                            u8g2->setFont(u8g2_font_6x10_mf);
+                            u8g2->firstPage();
+                            do
+                            {
+                                u8g2->setFont(u8g2_font_10x20_mf);
+                                u8g2->drawStr(5, 15, "MeshCom 4.0");
+                                u8g2->setFont(u8g2_font_6x10_mf);
+                                char cvers[20];
+                                sprintf(cvers, "FW %s/%s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+                                u8g2->drawStr(5, 25, cvers);
+                                u8g2->drawStr(5, 35, "WiFi not found");
+                                u8g2->drawStr(5, 45, meshcom_settings.node_ssid);
+                                u8g2->drawStr(5, 55, "...wait please");
+                            } while (u8g2->nextPage());
+                        
+                            #endif
+                        }
+                    }
                 }
                 else
                     iWlanWait = 0;
