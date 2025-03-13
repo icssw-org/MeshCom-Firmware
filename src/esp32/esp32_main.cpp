@@ -1907,6 +1907,9 @@ void esp32loop()
 
                             Serial.println("[WIFI]...SET but no Wifi connect");
                 
+                            char cvers[10];
+                            sprintf(cvers, "%s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+
                             #ifdef BOARD_E290
                     
                             e290_display.clear();
