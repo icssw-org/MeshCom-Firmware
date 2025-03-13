@@ -469,13 +469,13 @@ bool startWIFI()
 
   if(bWIFIAP)
   {
-    WiFi.disconnect(true);
+    WiFi.disconnect();
     delay(500);
 
     WiFi.mode(WIFI_AP);
     WiFi.softAP(meshcom_settings.node_call);
     
-    Serial.printf("WiFI AP mode ssid<%s> connected\n", meshcom_settings.node_call);
+    Serial.printf("[WIFI]...AP mode ssid<%s> connected\n", meshcom_settings.node_call);
 
     startMeshComUDP();
     
@@ -485,17 +485,17 @@ bool startWIFI()
   {
     if(strcmp(meshcom_settings.node_ssid, "none") == 0)
     {
-      Serial.printf("WiFI ST no ssid<%s> pwd<%s> not connected\n", meshcom_settings.node_ssid, meshcom_settings.node_pwd);
+      Serial.printf("[WIFI]...ST no ssid<%s> pwd<%s> not connected\n", meshcom_settings.node_ssid, meshcom_settings.node_pwd);
       return false;
     }
   }
 
 #ifdef ESP32
-  WiFi.disconnect(true);
+  WiFi.disconnect();
 	delay(500);
 
   if(bDEBUG)
-    Serial.println("WiFi.disconnect(true)");
+    Serial.println("[WIFI]...disconnect");
 
   // Scan for AP with best RSSI
 	int nrAps = WiFi.scanNetworks();
@@ -586,7 +586,7 @@ bool doWiFiConnect()
     if(iWlanWait > 15)
     {
       Serial.printf("\n[WIFI]...ssid<%s> connection error\n", meshcom_settings.node_ssid);
-      iWlanWait = 0;
+      iWlanWait = -2;
     }
 
     return false;
