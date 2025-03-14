@@ -494,9 +494,6 @@ bool startWIFI()
   WiFi.disconnect();
 	delay(500);
 
-  if(bDEBUG)
-    Serial.println("[WIFI]...disconnect");
-
   // Scan for AP with best RSSI
 	int nrAps = WiFi.scanNetworks();
   int best_rssi = -200;
@@ -586,7 +583,6 @@ bool doWiFiConnect()
     if(iWlanWait > 15)
     {
       Serial.printf("\n[WIFI]...ssid<%s> connection error\n", meshcom_settings.node_ssid);
-      iWlanWait = -2;
     }
 
     return false;
