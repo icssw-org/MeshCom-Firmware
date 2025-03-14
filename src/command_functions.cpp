@@ -11,6 +11,10 @@
 #include "lora_setchip.h"
 #include "spectral_scan.h"
 
+#ifdef ESP32
+#include <esp32\esp32_functions.h>
+#endif
+
 // Sensors
 #include "bmx280.h"
 #include "mcu811.h"
@@ -272,6 +276,24 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"setcont off") == 0)
+    {
+        Serial.println("\nsetcont off");
+
+        bDisplayCont=false;
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setcont on") == 0)
+    {
+        Serial.println("\nsetcont on");
+
+        bDisplayCont=true;
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"setretx off") == 0)
     {
         Serial.println("\nsetretx off");
@@ -351,23 +373,31 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+#ifdef ESP32
     else
     if(commandCheck(msg_text+2, (char*)"ota-update") == 0)
     {
-        #ifdef ESP32
+        if((bWEBSERVER || bGATEWAY) && meshcom_settings.node_hasIPaddress)
+            startDisplay((char*)"OTA using WiFi", meshcom_settings.node_ip, meshcom_settings.node_gw);
+        else
+            startDisplay((char*)"OTA starting as AP", (char*)"192.168.4.1", (char*)"255.255.255.0");
+
         delay(2000);
         const esp_partition_t* partition = esp_partition_find_first(esp_partition_type_t::ESP_PARTITION_TYPE_APP, esp_partition_subtype_t::ESP_PARTITION_SUBTYPE_APP_FACTORY, "safeboot");
-        if (partition) {
+        if (partition)
+        {
             esp_ota_set_boot_partition(partition);
             esp_restart();
             return;
-        } else {
+        }
+        else
+        {
             return;
         }
-        #endif
 
         return;
     }
+#endif
     else
     if(commandCheck(msg_text+2, (char*)"help") == 0)
     {
