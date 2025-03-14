@@ -683,39 +683,49 @@ void startMeshComUDP()
   // no gateway activity
   if(!bWIFIAP)
   {
-    if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
+    Udp.begin(LOCAL_PORT);
+
+    if(strcmp(s_node_ip.c_str(), "0.0.0.0") == 0)
     {
-      DEBUG_MSG("UDP-DEST", "Setting Hamnet UDP-DEST 44.143.8.143");
-      node_hostip = IPAddress(44, 143, 8, 143);
-      s_node_hostip = node_hostip.toString();
-
-      // MeshCom Test-Server
-
-      DEBUG_MSG("NTP", "Setting Hamnet NTP");
-      timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+      hasIPaddress=false;
+      Serial.printf("[WIFI]..vot connected for UDP port %d\n",  LOCAL_PORT);
     }
     else
     {
-      WiFi.hostByName("meshcom.oevsv.at", node_hostip);
-      DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST meshcom.oevsv.at");
-      s_node_hostip = node_hostip.toString();
-
-      IPAddress ntpServer;
-      WiFi.hostByName("pool.ntp.org", ntpServer);
-      timeClient.setPoolServerIP(ntpServer);
-
+      hasIPaddress=true;
+      Serial.printf("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
     }
 
-    Udp.begin(LOCAL_PORT);
-
-    Serial.printf("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
-  
-    hasIPaddress=true;
     meshcom_settings.node_hasIPaddress = hasIPaddress;
 
-    // gateway activity
-    sendMeshComHeartbeat();
+    if(hasIPaddress)
+    {
+      if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
+      {
+        Serial.printf("[WIFI]...Hamnet UDP-DEST 44.143.8.143");
+        node_hostip = IPAddress(44, 143, 8, 143);
+        s_node_hostip = node_hostip.toString();
 
+        // MeshCom Test-Server
+
+        Serial.printf("[WIFI]...Hamnet NTP-DEST 44.143.0.9");
+        timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+      }
+      else
+      {
+        Serial.printf("[WIFI]...Internet UDP-DEST meshcom.oevsv.at");
+        WiFi.hostByName("meshcom.oevsv.at", node_hostip);
+        s_node_hostip = node_hostip.toString();
+
+        Serial.printf("[WIFI]...Internet NTP-DEST pool.ntp.org");
+        IPAddress ntpServer;
+        WiFi.hostByName("pool.ntp.org", ntpServer);
+        timeClient.setPoolServerIP(ntpServer);
+      }
+
+      // gateway activity
+      sendMeshComHeartbeat();
+    }
   }
   else
   {

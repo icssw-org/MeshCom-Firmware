@@ -181,9 +181,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         size = aprsmsg.msg_len;
 
+        if(bDisplayCont)
+        {
+            printBuffer_aprs((char*)"RX-LoRa-All", aprsmsg);
+            Serial.println("");
+        }
+
         if(msg_type_b_lora == 0x00)
         {
-            //Serial.printf("%03i RCV:%s\n", size, RcvBuffer+6);
+            if(bDisplayCont)
+                Serial.printf("[LORA-ERROR]...%03i RCV:%s\n", size, RcvBuffer+6);
         }
         else
         {

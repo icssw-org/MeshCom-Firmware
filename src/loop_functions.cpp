@@ -37,6 +37,7 @@ bool bPosDisplay = true;
 bool bDisplayOff = false;
 bool bDisplayVolt = false;
 bool bDisplayInfo = false;
+bool bDisplayCont = false;
 bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
