@@ -12,7 +12,7 @@
 #include "spectral_scan.h"
 
 #ifdef ESP32
-#include "esp32\esp32_functions.h"
+#include "esp32/esp32_functions.h"
 #endif
 
 // Sensors
