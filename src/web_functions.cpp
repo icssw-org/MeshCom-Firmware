@@ -1213,7 +1213,7 @@ String work_webpage(bool bget_password, int webid)
                                 unsigned long lt = mheardPathEpoch[iset] + ((60 * 60 + 24) * (int)meshcom_settings.node_utcoff);
                 
                                 web_client.printf("<td>%-19.19s</td>", convertUNIXtoString(lt).substring(5).c_str());
-                                web_client.printf("<td>%-60.60s</td></tr>\n", mheardPath[iset]);
+                                web_client.printf("<td>%01u%s/%-57.57s</td></tr>\n", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "),  mheardPath[iset]);
                             }
                         }
                     }

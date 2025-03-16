@@ -21,6 +21,9 @@ bool checkRegexCall(String callsign)
 	if(callsign.compareTo("H") == 0)	// HEY Message
 		return true;
 
+	if(callsign.compareTo("HG") == 0)	// HEY Message from Gateway
+		return true;
+
 	if(callsign.compareTo("BOT GATE") == 0)
 		return true;
 

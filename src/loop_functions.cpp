@@ -2649,7 +2649,12 @@ void sendHey()
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
     aprsmsg.msg_source_path = meshcom_settings.node_call;
-    aprsmsg.msg_destination_path = "H";
+    
+    if(bGATEWAY)
+        aprsmsg.msg_destination_path = "HG";
+    else
+        aprsmsg.msg_destination_path = "H";
+
     aprsmsg.msg_payload = "R";
    
     meshcom_settings.node_msgid++;
@@ -2675,7 +2680,8 @@ void sendHey()
 	    // UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
     }
-    else
+
+    // and also to LoRa
     {
         // Master RingBuffer for transmission
         // local messages send to LoRa TX

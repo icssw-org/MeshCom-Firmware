@@ -82,6 +82,7 @@ struct mheardLine
     String mh_time;
     String mh_sourcecallsign;
     String mh_sourcepath;
+    String mh_destinationpath;
     char mh_payload_type;
     uint8_t mh_hw;
     uint8_t mh_mod;

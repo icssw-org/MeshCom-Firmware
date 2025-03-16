@@ -7,12 +7,14 @@
 
 char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
-char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
-char mheardPath[MAX_MHPATH][60]; //Ringbuffer for MHeard Sourcepath
 double mheardLat[MAX_MHEARD];
 double mheardLon[MAX_MHEARD];
 unsigned long mheardEpoch[MAX_MHEARD];
+
+char mheardPath[MAX_MHPATH][60]; //Ringbuffer for MHeard Sourcepath
+char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 unsigned long mheardPathEpoch[MAX_MHPATH];
+uint8_t mheardPathLen[MAX_MHPATH];
 
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 uint8_t mheardPathWrite = 0;   // counter for ringbuffer
@@ -38,6 +40,7 @@ void initMheard()
         memset(mheardPathCalls[iset], 0x00, sizeof(mheardPathCalls[iset]));
         memset(mheardPath[iset], 0x00, sizeof(mheardPath[iset]));
         mheardPathEpoch[iset]=0;
+        mheardPathLen[iset]=0;
     }
 
     mheardWrite=0;
@@ -50,6 +53,7 @@ void initMheardLine(struct mheardLine &mheardLine)
     mheardLine.mh_callsign = "";
     mheardLine.mh_sourcecallsign = "";
     mheardLine.mh_sourcepath = "";
+    mheardLine.mh_destinationpath = "";
     mheardLine.mh_date = "";
     mheardLine.mh_time = "";
     mheardLine.mh_payload_type = 0x00;
@@ -191,7 +195,6 @@ void updateHeyPath(struct mheardLine &mheardLine)
                 ipos=iset;
                 break;
             }
-
         }
     }
 
@@ -205,9 +208,29 @@ void updateHeyPath(struct mheardLine &mheardLine)
         if(mheardPathWrite >= MAX_MHPATH)
             mheardPathWrite=0;
     }
+    else
+    {
+        // check Path-Count
+        if((mheardPathLen[ipos] & 0x7F) < mheardLine.mh_path_len)
+        {
+            // leave old record active
+            return;
+        }
+    }
 
     strcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str());
-    strcpy(mheardPath[ipos], mheardLine.mh_sourcepath.substring(0, 60).c_str());
+
+    int ips = mheardLine.mh_sourcepath.indexOf(',') + 1;
+    if(ips > 0)
+        strcpy(mheardPath[ipos], mheardLine.mh_sourcepath.substring(ips, 59).c_str());
+    else
+        memset(mheardPath[ipos], 0x00, sizeof(mheardPath[ipos]));
+
+    // check HEY! comming from gateway
+    if(mheardLine.mh_destinationpath == "HG")
+        mheardPathLen[ipos] = mheardLine.mh_path_len | 0x80;
+    else
+        mheardPathLen[ipos] = mheardLine.mh_path_len;
     
     mheardPathEpoch[ipos] = getUnixClock();
 }
@@ -351,7 +374,7 @@ void showPath()
                 
                 Serial.printf("%-19.19s | ", convertUNIXtoString(lt).c_str()); // yyyy.mm.dd hh:mm:ss
 
-                Serial.printf("%-60.60s|\n", mheardPath[iset]);
+                Serial.printf("%01u%s/%-57.57s|\n", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPath[iset]);
             }
         }
     }

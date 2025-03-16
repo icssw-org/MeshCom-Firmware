@@ -171,6 +171,7 @@ extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Upd
 extern char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardPathEpoch[MAX_MHPATH];  //Ringbuffer for MHeard EPoch Update Time
 extern char mheardPath[MAX_MHPATH][60]; //Ringbuffer for MHeard Sourcepath
+extern uint8_t mheardPathLen[MAX_MHPATH];
 
 extern char cBLEName[50];
 

@@ -1573,8 +1573,7 @@ void esp32loop()
     {
         bHeyFirst = false;
         
-        if(!bGATEWAY)
-            sendHey();
+        sendHey();
 
         heyinfo_timer = millis();
     }

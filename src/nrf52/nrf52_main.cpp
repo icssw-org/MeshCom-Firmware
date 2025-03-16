@@ -1179,8 +1179,7 @@ if (isPhoneReady == 1)
     {
         bHeyFirst = false;
         
-        if(!bGATEWAY)
-            sendHey();
+        sendHey();
 
         heyinfo_timer = millis();
     }

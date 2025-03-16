@@ -2526,7 +2526,7 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"heypath") == 0 || commandCheck(msg_text+2, (char*)"hey") == 0)
+    if(commandCheck(msg_text+2, (char*)"path") == 0 || commandCheck(msg_text+2, (char*)"hey") == 0)
     {
         showPath();
 

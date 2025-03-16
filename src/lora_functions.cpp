@@ -207,8 +207,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     RAWLoRaRead=0;
             }
 
-            ///////////////////////////////////////////////
-            // MHeard
             if(aprsmsg.msg_source_last != meshcom_settings.node_call)
             {
                 struct mheardLine mheardLine;
@@ -218,6 +216,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_callsign = aprsmsg.msg_source_last;
                 mheardLine.mh_sourcepath = aprsmsg.msg_source_path;
                 mheardLine.mh_sourcecallsign = aprsmsg.msg_source_call;
+                mheardLine.mh_destinationpath = aprsmsg.msg_destination_path;
                 mheardLine.mh_hw = aprsmsg.msg_last_hw & 0x7F;
                 
                 if((aprsmsg.msg_last_hw & 0x80) == 0x80)    // Last-Sending
@@ -233,67 +232,82 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_dist = 0;
                 mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
                 mheardLine.mh_mesh = aprsmsg.msg_mesh;
-                
-                // check MHeard exists already
-                int ipos=-1;
-                double lat=0.0;
-                double lon=0.0;
 
-                for(int iset=0; iset<MAX_MHEARD; iset++)
+                if(aprsmsg.payload_type == '@')
                 {
-                    if(mheardCalls[iset][0] != 0x00)
-                    {
-                        if(strcmp(mheardCalls[iset], aprsmsg.msg_source_last.c_str()) == 0)
-                        {
-                            ipos=iset;
-                            lat = mheardLat[ipos];
-                            lon = mheardLon[ipos];
-                            break;
-                        }
-                    }
+                    ///////////////////////////////////////////////
+                    // Path
+                    updateHeyPath(mheardLine);
+                    //
+                    ///////////////////////////////////////////////
                 }
 
-                if(aprsmsg.msg_source_call == aprsmsg.msg_source_last)
+                // Mheard immer auch bei Hey
                 {
-                    if(msg_type_b_lora == 0x21) // Position
+                    ///////////////////////////////////////////////
+                    // MHeard
+                    
+                    // check MHeard exists already
+                    int ipos=-1;
+                    double lat=0.0;
+                    double lon=0.0;
+
+                    for(int iset=0; iset<MAX_MHEARD; iset++)
                     {
-                        struct aprsPosition aprspos;
-
-                        if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
+                        if(mheardCalls[iset][0] != 0x00)
                         {
-                            // Display Distance, Direction
-                            lat = conv_coord_to_dec(aprspos.lat);
-                            if(aprspos.lat_c == 'S')
-                                lat = lat * -1.0;
-                            lon = conv_coord_to_dec(aprspos.lon);
-                            if(aprspos.lon_c == 'W')
-                                lon = lon * -1.0;
-
-                            if(ipos >= 0)
+                            if(strcmp(mheardCalls[iset], aprsmsg.msg_source_last.c_str()) == 0)
                             {
-                                mheardLat[ipos]=lat;
-                                mheardLon[ipos]=lon;
+                                ipos=iset;
+                                lat = mheardLat[ipos];
+                                lon = mheardLon[ipos];
+                                break;
                             }
                         }
                     }
-                }
 
-                if(lat != 0.0 && lon != 0.0 && meshcom_settings.node_lat != 0.0 && meshcom_settings.node_lon != 0.0)
-                    mheardLine.mh_dist = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+                    if(aprsmsg.msg_source_call == aprsmsg.msg_source_last)
+                    {
+                        if(msg_type_b_lora == 0x21) // Position
+                        {
+                            struct aprsPosition aprspos;
 
-                updateMheard(mheardLine, isPhoneReady);
+                            if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
+                            {
+                                // Display Distance, Direction
+                                lat = conv_coord_to_dec(aprspos.lat);
+                                if(aprspos.lat_c == 'S')
+                                    lat = lat * -1.0;
+                                lon = conv_coord_to_dec(aprspos.lon);
+                                if(aprspos.lon_c == 'W')
+                                    lon = lon * -1.0;
 
-                updateHeyPath(mheardLine);
+                                if(ipos >= 0)
+                                {
+                                    mheardLat[ipos]=lat;
+                                    mheardLon[ipos]=lon;
+                                }
+                            }
+                        }
+                    }
 
-                // last heard LoRa MeshCom-Packet
-                lastHeardTime = millis();
+                    if(lat != 0.0 && lon != 0.0 && meshcom_settings.node_lat != 0.0 && meshcom_settings.node_lon != 0.0)
+                        mheardLine.mh_dist = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
 
-                // print aprs message
-                if(bLORADEBUG && bDisplayInfo)
-                {
-                    printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
-                    Serial.println();
-                    bNewLine=true;
+                    updateMheard(mheardLine, isPhoneReady);
+
+                    // last heard LoRa MeshCom-Packet
+                    lastHeardTime = millis();
+
+                    // print aprs message
+                    if(bLORADEBUG && bDisplayInfo)
+                    {
+                        printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
+                        Serial.println();
+                        bNewLine=true;
+                    }
+                    //
+                    ///////////////////////////////////////////////
                 }
             }
 
@@ -826,7 +840,7 @@ bool doTX()
         cmd_counter--;
         
         //if(bLORADEBUG)
-        //    Serial.printf("cmd_counter > 0:%i \n", cmd_counter);
+        //Serial.printf("cmd_counter > 0:%i \n", cmd_counter);
 
         return false;
     }
@@ -920,6 +934,8 @@ bool doTX()
                 uint8_t msg_type_b_lora = 0x00;
                 
                 msg_type_b_lora = decodeAPRS(lora_tx_buffer, sendlng, aprsmsg);
+
+                //Serial.printf("msg_type_b_lora:%02X tx_waiting:%02X sendlng:%i bDisplayInfo:%i\n", msg_type_b_lora, tx_waiting, sendlng, bDisplayInfo);
 
                 if(msg_type_b_lora != 0x00) // 0x41 ACK
                 {
