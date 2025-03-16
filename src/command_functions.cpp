@@ -2526,6 +2526,13 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"heypath") == 0 || commandCheck(msg_text+2, (char*)"hey") == 0)
+    {
+        showPath();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"showi2c") == 0)
     {
         String stri2c = "not available";

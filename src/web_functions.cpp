@@ -17,6 +17,8 @@
 
 #include <rtc_functions.h>
 
+#include <time_functions.h>
+
 #ifdef ESP32
     // WIFI
     #include <WiFi.h>
@@ -543,6 +545,11 @@ String work_webpage(bool bget_password, int webid)
                 if (web_header.indexOf("GET /mheard") >= 0)
                 {
                     web_page_state=2;
+                }
+                else
+                if (web_header.indexOf("GET /heypath") >= 0)
+                {
+                    web_page_state=9;
                 }
                 else
                 if (web_header.indexOf("GET /wx") >= 0)
@@ -1148,7 +1155,7 @@ String work_webpage(bool bget_password, int webid)
                 {
                     web_client.println("<table class=\"table\">");
 
-                    web_client.printf("<tr><th>LHeard call</th><th>date</th><th>time</th><th>LHEARD hardware</th><th>mod</th><th>rssi</th><th>snr</th><th>dist</th><th>pl</th><th>m</th></tr>\n");
+                    web_client.printf("<tr><th>LHeard call</th><th>date</th><th>time</th><th>type</th><th>hardware</th><th>mod</th><th>rssi</th><th>snr</th><th>dist</th><th>pl</th><th>m</th></tr>\n");
 
                     mheardLine mheardLine;
 
@@ -1164,6 +1171,7 @@ String work_webpage(bool bget_password, int webid)
 
                                 web_client.printf("<td>%-10.10s</td>", mheardLine.mh_date.c_str());
                                 web_client.printf("<td>%-8.8s</td>", mheardLine.mh_time.c_str());
+                                web_client.printf("<td>%-3.3s</td>", getPayloadType(mheardLine.mh_payload_type));
                                 web_client.printf("<td>%-13.13s</td>", getHardwareLong(mheardLine.mh_hw).c_str());
                                 web_client.printf("<td>%01X", (mheardLine.mh_mod >> 4));
                                 web_client.printf("/%01i</td>", mheardLine.mh_mod & 0x0f);
@@ -1172,6 +1180,40 @@ String work_webpage(bool bget_password, int webid)
                                 web_client.printf("<td>%5.1lf</td>", mheardLine.mh_dist);
                                 web_client.printf("<td>%i</td>", mheardLine.mh_path_len);
                                 web_client.printf("<td>%i</td></tr>\n", mheardLine.mh_mesh);
+                            }
+                        }
+                    }
+
+                    web_client.println("</table>");
+                }
+                else
+                // HEYPATH
+                if(web_page_state == 9)
+                {
+                    web_client.println("<table class=\"table\">");
+
+                    web_client.println("<colgroup>");
+                    web_client.println("<col style=\"width: 20%;\">");
+                    web_client.println("<col style=\"width: 20%;\">");
+                    web_client.println("<col style=\"width: 60%;\">");
+                    web_client.println("</colgroup>");
+
+                    web_client.printf("<tr><th>PATH call</th><th>date/time</th><th>source-path</th></tr>\n");
+
+                    mheardLine mheardLine;
+
+                    for(int iset=0; iset<MAX_MHPATH; iset++)
+                    {
+                        if(mheardPathCalls[iset][0] != 0x00)
+                        {
+                            if((mheardPathEpoch[iset]+60*60*6) > getUnixClock())
+                            {
+                                web_client.printf("<tr><td>%-10.10s</td>", mheardPathCalls[iset]);
+                                
+                                unsigned long lt = mheardPathEpoch[iset] + ((60 * 60 + 24) * (int)meshcom_settings.node_utcoff);
+                
+                                web_client.printf("<td>%-19.19s</td>", convertUNIXtoString(lt).substring(5).c_str());
+                                web_client.printf("<td>%-60.60s</td></tr>\n", mheardPath[iset]);
                             }
                         }
                     }
@@ -1983,8 +2025,10 @@ String work_webpage(bool bget_password, int webid)
                 web_client.println("<tr><td><a href=\"/setup\"><button class=\"button\"><b>SETUP</b></button></a></td>");      //page 4
                 web_client.println("<td><a href=\"/message\"><button class=\"button\"><b>MESSAGE</b></button></a></td>");      //page 5
                 
-                web_client.println("<td><a href=\"/logprint\"><button class=\"button\"><b>RX-LOG</b></button></a></td>");       //page 6
+                web_client.println("<td><a href=\"/logprint\"><button class=\"button\"><b>RX-LOG</b></button></a></td>");      //page 6
                 web_client.printf("<td><a href=\"/sendpos%i\"><button class=\"button\"><b>SENDPOS</b></button></a></td></tr>\n", web_page_state);
+
+                web_client.println("<td><a href=\"/heypath\"><button class=\"button\"><b>PATH</b></button></a></td>");         //page 9
 
                 if(bMCP23017)
                     web_client.println("<tr><td><a href=\"/mcpstatus\"><button class=\"button\"><b>MCP-STATUS</b></button></a></td>");       //page 7
@@ -2245,7 +2289,7 @@ void main_webpage()
     web_client.println("</style></head>");
     
     // Web Page Heading
-    web_client.printf("<body><h3 style=\"margin-bottom: 0px;\">MeshCom 4.0 &nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT</h3>\n", meshcom_settings.node_call,
+    web_client.printf("<body><h3 style=\"margin-bottom: 0px;\">MeshCom 4.0 %-4.4s%-1.1s&nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT</h3>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call,
         meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 
     web_client.println("<table class=\"table\">");

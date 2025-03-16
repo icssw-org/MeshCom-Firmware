@@ -688,7 +688,7 @@ void startMeshComUDP()
     if(strcmp(s_node_ip.c_str(), "0.0.0.0") == 0)
     {
       hasIPaddress=false;
-      Serial.printf("[WIFI]..vot connected for UDP port %d\n",  LOCAL_PORT);
+      Serial.printf("[WIFI]..not connected for UDP port %d\n",  LOCAL_PORT);
     }
     else
     {
@@ -708,16 +708,16 @@ void startMeshComUDP()
 
         // MeshCom Test-Server
 
-        Serial.printf("[WIFI]...Hamnet NTP-DEST 44.143.0.9");
+        Serial.println("[WIFI]...Hamnet NTP-DEST 44.143.0.9");
         timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
       }
       else
       {
-        Serial.printf("[WIFI]...Internet UDP-DEST meshcom.oevsv.at");
+        Serial.println("[WIFI]...Internet UDP-DEST meshcom.oevsv.at");
         WiFi.hostByName("meshcom.oevsv.at", node_hostip);
         s_node_hostip = node_hostip.toString();
 
-        Serial.printf("[WIFI]...Internet NTP-DEST pool.ntp.org");
+        Serial.println("[WIFI]...Internet NTP-DEST pool.ntp.org");
         IPAddress ntpServer;
         WiFi.hostByName("pool.ntp.org", ntpServer);
         timeClient.setPoolServerIP(ntpServer);

@@ -206,7 +206,7 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
 
 
 #ifdef SX127X
-// RadioModule SX1278 
+// RadioModule SX1276 
 SX1276 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 // SyncWord - 1byte for SX127x, 2 bytes for SX126x
 // Check which chip is used !!!
@@ -218,7 +218,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 #endif
 
 #ifdef SX1262X
-    // RadioModule SX1268 
+    // RadioModule SX1262
     // cs - irq - reset - interrupt gpio
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
@@ -629,8 +629,31 @@ void esp32setup()
 
     //TEST #ifndef BOARD_E290
 
-    // initialize SX12xx with default settings
-    Serial.print(F("[INIT]...LoRa Modem Initializing ... "));
+    #ifdef SX127X
+    Serial.print(F("[LoRa]...SX1276 Chip"));
+    #endif
+    
+    #ifdef BOARD_E220
+    Serial.print(F("[LoRa]...LLCC68 chip"));
+    #endif
+    
+    #ifdef SX1262X
+    Serial.print(F("[LoRa]...SX1262 chip"));
+    #endif
+    
+    #ifdef SX126X
+    Serial.print(F("[LoRa]...SX1268 chip"));
+    #endif
+    
+    #ifdef SX126X_V3
+    Serial.print(F("[LoRa]...SX1262 V3 chip"));
+    #endif
+    
+    #ifdef SX1262_E290
+    Serial.print(F("[LoRa]...SX1262 E290 chip"));
+    #endif
+
+    Serial.print(F(" Initializing ... "));
 
     int state = RADIOLIB_ERR_UNKNOWN;
     
@@ -642,12 +665,12 @@ void esp32setup()
     
     if (state == RADIOLIB_ERR_NONE)
     {
-        Serial.println(F("LoRa-Chip success!"));
+        Serial.println(F("success"));
         bRadio=true;
     }
     else
     {
-        Serial.print(F("LoRa-Chip failed, code "));
+        Serial.print(F("failed, code "));
         Serial.println(state);
         bRadio=false;
     }
@@ -775,16 +798,16 @@ void esp32setup()
         // radio.setDio1Action(setFlagDetected, RISING);
 
         // start scanning the channel
-        Serial.print(F("[SX127x] Starting to listen ... "));
+        Serial.print(F("[LoRa]...Starting to listen ... "));
         state = radio.startReceive();
         if (state == RADIOLIB_ERR_NONE)
         {
-            Serial.println(F("success!"));
+            Serial.println(F("success"));
         }
         else
         {
-                Serial.print(F("failed, code "));
-                Serial.println(state);
+            Serial.print(F("failed, code "));
+            Serial.println(state);
         }        
 
         // enable CRC
@@ -811,16 +834,16 @@ void esp32setup()
         // radio.setDio1Action(setFlagDetected, RISING);
 
         // start scanning the channel
-        Serial.print(F("[SX126x/SX1262X] Starting to listen ... "));
+        Serial.print(F("[LoRa] Starting to listen ... "));
         state = radio.startReceive();
         if (state == RADIOLIB_ERR_NONE)
         {
-            Serial.println(F("success!"));
+            Serial.println(F("success"));
         }
         else
         {
-                Serial.print(F("failed, code "));
-                Serial.println(state);
+            Serial.print(F("failed, code "));
+            Serial.println(state);
         }        
 
         // enable CRC
@@ -842,20 +865,21 @@ void esp32setup()
             //KBC 0801 radio.setDio1Action(setFlagSent);
 
             // start scanning the channel
-            Serial.print(F("[SX126x/E290] Starting to listen (0) ... "));
+            Serial.print(F("[LoRa]...Starting to listen ... "));
             state = radio.startReceive();
             if (state == RADIOLIB_ERR_NONE)
             {
-                Serial.println(F("success!"));
+                Serial.println(F("success"));
             }
             else
             {
-                    Serial.print(F("failed, code "));
-                    Serial.println(state);
+                Serial.print(F("failed, code "));
+                Serial.println(state);
             }        
     
             // enablee CRC
-            if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
+            if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
+            {
                 Serial.println(F("Selected CRC is invalid for this module!"));
                 while (true);
             }
@@ -889,7 +913,7 @@ void esp32setup()
         #endif
     }
 
-    Serial.println(F("[SX12xx] All settings successfully changed!"));
+    Serial.println(F("[LoRa]...All settings successfully changed"));
 
     //#endif
 
@@ -907,11 +931,11 @@ void esp32setup()
     const std::__cxx11::string strBLEName = cBLEName;
     const std::__cxx11::string strBLEManufData = cManufData;
 
-    Serial.printf("[INIT]...BLE-Device started with BLE-Name <%s>\n", strBLEName.c_str());
+    Serial.printf("[BLE ]...Device started with BLE-Name <%s>\n", strBLEName.c_str());
 
     NimBLEDevice::init(strBLEName);
 
-    Serial.printf("[INIT]...BLE Devicename <%s>\n", NimBLEDevice::toString().c_str());
+    Serial.printf("[BLE ]...Devicename <%s>\n", NimBLEDevice::toString().c_str());
     
     //NimBLEDevice::setDeviceName(strBLEName);
 
@@ -986,7 +1010,7 @@ void esp32setup()
     
     pAdvertising->start();
  
-    Serial.println("[INIT]...Waiting a client connection to notify...");
+    Serial.println("[BLE ]...Waiting a client connection to notify...");
     
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;
@@ -1006,6 +1030,7 @@ void esp32setup()
 
         if(startWIFI())
         {
+            /*
             if(bWEBSERVER)
             {
                 delay(500);
@@ -1017,6 +1042,7 @@ void esp32setup()
 
             if(bEXTUDP)
                 startExternUDP();
+            */
         }
     }
     //
@@ -1048,7 +1074,7 @@ void esp32loop()
             if(bLORADEBUG)
             {
                 Serial.print(getTimeString());
-                Serial.println(" [SX12xx] Receive Timeout > 6.5 min. just for info");
+                Serial.println(" [LoRa]...Receive Timeout > 6.5 min. just for info");
             }
 
             /*
@@ -1095,7 +1121,7 @@ void esp32loop()
                 if(bLORADEBUG)
                 {
                     Serial.print(getTimeString());
-                    Serial.println(" [SX12xx] Receive Timeout, startReceive again with sucess");
+                    Serial.println(" [LoRa]...Receive Timeout, startReceive again with sucess");
                 }
             }
             else
@@ -1103,7 +1129,7 @@ void esp32loop()
                 if(bLORADEBUG)
                 {
                     Serial.print(getTimeString());
-                    Serial.print(" [SX12xx] Receive Timeout, startReceive again with error = ");
+                    Serial.print(" [LoRa]...Receive Timeout, startReceive again with error = ");
                     Serial.println(state);
                 }
             }        
@@ -1198,7 +1224,7 @@ void esp32loop()
             {
                 if(bLORADEBUG)
                 {
-                    Serial.print(F("[SX127x] Starting to listen again (1)... "));
+                    Serial.print(F("[LoRa]...Starting to listen again (1)... "));
                     Serial.print(F("failed, code "));
                     Serial.println(state);
                 }
@@ -1237,7 +1263,7 @@ void esp32loop()
             else
             {
                 if(bLORADEBUG)
-                    Serial.print(F("[SX127x] Starting to listen again... "));
+                    Serial.print(F("[LoRa]...Starting to listen again... "));
 
                 // clear Transmit Interrupt
                 bEnableInterruptReceive = false; // KBC 0801
@@ -1765,7 +1791,7 @@ void esp32loop()
 
     ////////////////////////////////////////////////
     // WIFI Gateway functions
-    if(bGATEWAY)
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
     {
         getMeshComUDP();
 
@@ -1793,7 +1819,7 @@ void esp32loop()
 
     checkButtonState();
 
-    if(bWEBSERVER)
+    if(bWEBSERVER || bEXTUDP || bGATEWAY)
     {
         if (web_timer == 0 || (iWlanWait > 0 && ((web_timer + 1000) < millis())) || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 10)) < millis()))   // repeat 5 minutes
         {
@@ -1806,7 +1832,8 @@ void esp32loop()
                     if(iWlanWait == 0)
                     {
                         // restart WEB-Client
-                        stopWebserver();
+                        if(bWEBSERVER)
+                            stopWebserver();
 
                         startWIFI();
                     }
@@ -1827,9 +1854,12 @@ void esp32loop()
             #endif
         }
 
-        startWebserver();
+        if(bWEBSERVER)
+        {
+            startWebserver();
 
-        loopWebserver();
+            loopWebserver();
+        }
     }
 
     //
@@ -1867,7 +1897,7 @@ int checkRX(void)
         if(bLORADEBUG)
         {
             // packet was successfully received
-            Serial.print(F("[SX12xx] Received packet: "));
+            Serial.print(F("[LoRa]...Received packet: "));
 
             // print RSSI (Received Signal Strength Indicator)
             Serial.print(F("RSSI:\t\t"));
@@ -1892,12 +1922,12 @@ int checkRX(void)
     {
         // packet was received, but is malformed
         if(bLORADEBUG)
-            Serial.println(F("[SX12xx] CRC error!"));
+            Serial.println(F("[LoRa]...CRC error!"));
     }
     else
     {
         // some other error occurred
-        Serial.print(F("[SX12xx] Failed, code <2>"));
+        Serial.print(F("[LoRa]...Failed, code <2>"));
         Serial.println(state);
     }
 
@@ -1911,7 +1941,7 @@ void checkSerialCommand(void)
     //  Check Serial connected
     if(!Serial)
     {
-        DEBUG_MSG("SERIAL", "not connected");
+        Serial.println(F("[SERIAL]...not connected"));
         return;
     }
 

@@ -2,15 +2,20 @@
 #include <loop_functions.h>
 #include <debugconf.h>
 #include <ArduinoJson.h>
+#include <time_functions.h>
 #include <mheard_functions.h>
 
 char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
+char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
+char mheardPath[MAX_MHPATH][70]; //Ringbuffer for MHeard Sourcepath
 double mheardLat[MAX_MHEARD];
 double mheardLon[MAX_MHEARD];
 unsigned long mheardEpoch[MAX_MHEARD];
+unsigned long mheardPathEpoch[MAX_MHPATH];
 
 uint8_t mheardWrite = 0;   // counter for ringbuffer
+uint8_t mheardPathWrite = 0;   // counter for ringbuffer
 
 #define max_hardware 18
 String HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "TDECK", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "TBEAM_AXP2101", "EBYTE_E22", "HELTEC_V3", "HELTEC_E290", "TBEAM_1262", "TDECK_PLUS"};
@@ -21,19 +26,29 @@ void initMheard()
 
     for(int iset=0; iset<MAX_MHEARD; iset++)
     {
-        memset(mheardBuffer[iset], 0x00, 60);
-        memset(mheardCalls[iset], 0x00, 10);
+        memset(mheardBuffer[iset], 0x00, sizeof(mheardBuffer[iset]));
+        memset(mheardCalls[iset], 0x00, sizeof(mheardCalls[iset]));
         mheardLat[iset]=0;
         mheardLon[iset]=0;
+    }
+
+    for(int iset=0; iset<MAX_MHPATH; iset++)
+    {
+        memset(mheardPathCalls[iset], 0x00, sizeof(mheardPathCalls[iset]));
+        memset(mheardPath[iset], 0x00, sizeof(mheardPath[iset]));
         mheardEpoch[iset]=0;
     }
 
     mheardWrite=0;
+    mheardPathWrite = 0;
+
 }
 
 void initMheardLine(struct mheardLine &mheardLine)
 {
     mheardLine.mh_callsign = "";
+    mheardLine.mh_sourcecallsign = "";
+    mheardLine.mh_sourcepath = "";
     mheardLine.mh_date = "";
     mheardLine.mh_time = "";
     mheardLine.mh_payload_type = 0x00;
@@ -125,6 +140,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     }
 
     strcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str());
+    strcpy(mheardPath[ipos], mheardLine.mh_sourcepath.c_str());
     
     mheardEpoch[ipos] = getUnixClock();
     /*
@@ -161,6 +177,39 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
     if(isPhoneReady == 1)
         addBLEOutBuffer(bleBuffer, measureJson(mhdoc)+1);
+}
+
+void updateHeyPath(struct mheardLine &mheardLine)
+{
+    int ipos=-1;
+    for(int iset=0; iset<MAX_MHPATH; iset++)
+    {
+        if(mheardPathCalls[iset][0] != 0x00)
+        {
+            if(strcmp(mheardPathCalls[iset], mheardLine.mh_sourcecallsign.c_str()) == 0)
+            {
+                ipos=iset;
+                break;
+            }
+
+        }
+    }
+
+    if(ipos == -1)
+    {
+        ipos=mheardPathWrite;
+        mheardPathWrite++;
+        
+        //Serial.printf("mheardPathWrite:%i\n", mheardPathWrite);
+
+        if(mheardPathWrite >= MAX_MHPATH)
+            mheardPathWrite=0;
+    }
+
+    strcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str());
+    strcpy(mheardPath[ipos], mheardLine.mh_sourcepath.c_str());
+    
+    mheardPathEpoch[ipos] = getUnixClock();
 }
 
 String getValue(String data, char separator, int index)
@@ -276,6 +325,33 @@ void showMHeard()
                 Serial.printf("%5.1lf |", mheardLine.mh_dist);
                 Serial.printf("%3i |", mheardLine.mh_path_len);
                 Serial.printf("%2i |\n", mheardLine.mh_mesh);
+            }
+        }
+    }
+
+    Serial.printf("\\------------------------------------------------------------------------------------------------/\n");
+}
+
+void showPath()
+{
+    Serial.printf("/------------------------------------------------------------------------------------------------\\\n");
+    Serial.printf("|MHeard call |       date          |                                                             |\n");
+
+    for(int iset=0; iset<MAX_MHPATH; iset++)
+    {
+        if(mheardPathCalls[iset][0] != 0x00)
+        {
+            if((mheardPathEpoch[iset]+60*60*6) > getUnixClock())
+            {
+                Serial.printf("|------------|---------------------|-------------------------------------------------------------|\n");
+
+                Serial.printf("| %-10.10s | ", mheardPathCalls[iset]);
+
+                unsigned long lt = mheardPathEpoch[iset] + ((60 * 60 + 24) * (int)meshcom_settings.node_utcoff);
+                
+                Serial.printf("%-19.19s | ", convertUNIXtoString(lt).c_str()); // yyyy.mm.dd hh:mm:ss
+
+                Serial.printf("%-60.60s|\n", mheardPath[iset]);
             }
         }
     }
