@@ -673,7 +673,7 @@ void sendDisplayHead(bool bInit)
 
     sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
-    snprintf(print_text, sizeof(print_text), "IP %s%s %s", (bGATEWAY?"G":""), (bWEBSERVER?"W":""), meshcom_settings.node_ip);
+    snprintf(print_text, sizeof(print_text), "IP%s%s %s", (bGATEWAY?"G":""), (bWEBSERVER?"W":""), meshcom_settings.node_ip);
     sendDisplay1306(false, true, 3, dzeile[5], print_text);
 
     bSetDisplay=false;

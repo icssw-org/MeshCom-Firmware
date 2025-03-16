@@ -8,7 +8,7 @@
 char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
-char mheardPath[MAX_MHPATH][70]; //Ringbuffer for MHeard Sourcepath
+char mheardPath[MAX_MHPATH][60]; //Ringbuffer for MHeard Sourcepath
 double mheardLat[MAX_MHEARD];
 double mheardLon[MAX_MHEARD];
 unsigned long mheardEpoch[MAX_MHEARD];
@@ -30,13 +30,14 @@ void initMheard()
         memset(mheardCalls[iset], 0x00, sizeof(mheardCalls[iset]));
         mheardLat[iset]=0;
         mheardLon[iset]=0;
+        mheardEpoch[iset]=0;
     }
 
     for(int iset=0; iset<MAX_MHPATH; iset++)
     {
         memset(mheardPathCalls[iset], 0x00, sizeof(mheardPathCalls[iset]));
         memset(mheardPath[iset], 0x00, sizeof(mheardPath[iset]));
-        mheardEpoch[iset]=0;
+        mheardPathEpoch[iset]=0;
     }
 
     mheardWrite=0;
@@ -140,7 +141,6 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     }
 
     strcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str());
-    strcpy(mheardPath[ipos], mheardLine.mh_sourcepath.c_str());
     
     mheardEpoch[ipos] = getUnixClock();
     /*
@@ -207,7 +207,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
     }
 
     strcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str());
-    strcpy(mheardPath[ipos], mheardLine.mh_sourcepath.c_str());
+    strcpy(mheardPath[ipos], mheardLine.mh_sourcepath.substring(0, 60).c_str());
     
     mheardPathEpoch[ipos] = getUnixClock();
 }
