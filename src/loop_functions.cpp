@@ -511,7 +511,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     }
     else
     {
-        if(pageLineAnz < 7 && strlen(text) < 25)
+        if(pageLineAnz < 7)
         {
             //Serial.printf("pageLineAnz:%i text:%s\n", pageLineAnz, text);
 
@@ -520,8 +520,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             pageLine[pageLineAnz][2] = 20;
             memcpy(pageText[pageLineAnz], text, 25);
             pageLineAnz++;
-            if(pageLineAnz >= 7)
-                pageLineAnz = 6;
+            if(pageLineAnz > 7)
+                pageLineAnz = 7;
         }
     }
 
@@ -657,23 +657,23 @@ void sendDisplayHead(bool bInit)
 
     sendDisplayMainline();
 
-    snprintf(print_text, sizeof(print_text), "Call:  %s", meshcom_settings.node_call);
+    snprintf(print_text, sizeof(print_text), "CALL : %s", meshcom_settings.node_call);
     sendDisplay1306(false, false, 3, dzeile[1], print_text);
 
-    snprintf(print_text, sizeof(print_text), "Short: %s", meshcom_settings.node_short);
+    snprintf(print_text, sizeof(print_text), "MAC  : %08X", _GW_ID);
     sendDisplay1306(false, false, 3, dzeile[2], print_text);
 
-    snprintf(print_text, sizeof(print_text), "MAC:   %08X", _GW_ID);
+    snprintf(print_text, sizeof(print_text), "BLE-C: %06i", meshcom_settings.bt_code);
     sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-    snprintf(print_text, sizeof(print_text), "BT-Code: %06i", meshcom_settings.bt_code);
+    if(bWIFIAP)
+        snprintf(print_text, sizeof(print_text), "AP   : %-13.13s", meshcom_settings.node_call);
+    else
+        snprintf(print_text, sizeof(print_text), "SSID : %-15.15s", meshcom_settings.node_ssid);
+
     sendDisplay1306(false, false, 3, dzeile[4], print_text);
 
-    if(bWIFIAP)
-        snprintf(print_text, sizeof(print_text), "AP-ssid: %-13.13s", meshcom_settings.node_call);
-    else
-        snprintf(print_text, sizeof(print_text), "ssid:  %-15.15s", meshcom_settings.node_ssid);
-
+    snprintf(print_text, sizeof(print_text), "IP%s%s %s", (bGATEWAY?"G":""), (bWEBSERVER?"W":""), meshcom_settings.node_ip);
     sendDisplay1306(false, true, 3, dzeile[5], print_text);
 
     bSetDisplay=false;
@@ -1098,7 +1098,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     e290_display.setCursor(0, dzeile[1]);
     e290_display.setFont(&FreeSans9pt7b);
 
-    String strPath = aprsmsg.msg_source_path;
+    String strPath = "M* <" + aprsmsg.msg_source_call + ">";
     // DM
     if(CheckGroup(aprsmsg.msg_destination_path))
     {
@@ -1766,11 +1766,11 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                             snprintf(msg_text, sizeof(msg_text), "ALT:%im", alt);
                             msg_text[20]=0x00;
                             sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+                        #else
+                            snprintf(msg_text, sizeof(msg_text), "ALT:%im rssi:%i", alt, rssi);
+                            msg_text[20]=0x00;
+                            sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
                         #endif
-                    
-                        snprintf(msg_text, sizeof(msg_text), "ALT:%im rssi:%i", alt, rssi);
-                        msg_text[20]=0x00;
-                        sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
 
                         break;
                     }
@@ -2649,7 +2649,12 @@ void sendHey()
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
     aprsmsg.msg_source_path = meshcom_settings.node_call;
-    aprsmsg.msg_destination_path = "H";
+    
+    if(bGATEWAY)
+        aprsmsg.msg_destination_path = "HG";
+    else
+        aprsmsg.msg_destination_path = "H";
+
     aprsmsg.msg_payload = "R";
    
     meshcom_settings.node_msgid++;
@@ -2675,7 +2680,8 @@ void sendHey()
 	    // UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
     }
-    else
+
+    // and also to LoRa
     {
         // Master RingBuffer for transmission
         // local messages send to LoRa TX

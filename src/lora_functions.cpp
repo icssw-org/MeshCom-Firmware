@@ -207,37 +207,50 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     RAWLoRaRead=0;
             }
 
-            ///////////////////////////////////////////////
-            // MHeard
-            if(aprsmsg.payload_type != '@')
+            if(aprsmsg.msg_source_last != meshcom_settings.node_call)
             {
-                if(aprsmsg.msg_source_last != meshcom_settings.node_call)
+                struct mheardLine mheardLine;
+
+                initMheardLine(mheardLine);
+
+                mheardLine.mh_callsign = aprsmsg.msg_source_last;
+                mheardLine.mh_sourcepath = aprsmsg.msg_source_path;
+                mheardLine.mh_sourcecallsign = aprsmsg.msg_source_call;
+                mheardLine.mh_destinationpath = aprsmsg.msg_destination_path;
+                mheardLine.mh_hw = aprsmsg.msg_last_hw & 0x7F;
+                
+                if((aprsmsg.msg_last_hw & 0x80) == 0x80)    // Last-Sending
+                    mheardLine.mh_mod = aprsmsg.msg_source_mod;
+                else
+                    mheardLine.mh_mod = aprsmsg.msg_source_mod | 0xF0;  // set mod not from last
+
+                mheardLine.mh_rssi = rssi;
+                mheardLine.mh_snr = snr;
+                mheardLine.mh_date = getDateString();
+                mheardLine.mh_time = getTimeString();
+                mheardLine.mh_payload_type = aprsmsg.payload_type;
+                mheardLine.mh_dist = 0;
+                mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
+                mheardLine.mh_mesh = aprsmsg.msg_mesh;
+
+                if(aprsmsg.payload_type == '@')
                 {
-                    struct mheardLine mheardLine;
+                    ///////////////////////////////////////////////
+                    // Path
+                    updateHeyPath(mheardLine);
+                    //
+                    ///////////////////////////////////////////////
+                }
 
-                    initMheardLine(mheardLine);
-
-                    mheardLine.mh_callsign = aprsmsg.msg_source_last;
-                    mheardLine.mh_hw = aprsmsg.msg_last_hw & 0x7F;
-                    
-                    if((aprsmsg.msg_last_hw & 0x80) == 0x80)    // Last-Sending
-                        mheardLine.mh_mod = aprsmsg.msg_source_mod;
-                    else
-                        mheardLine.mh_mod = aprsmsg.msg_source_mod | 0xF0;  // set mod not from last
-
-                    mheardLine.mh_rssi = rssi;
-                    mheardLine.mh_snr = snr;
-                    mheardLine.mh_date = getDateString();
-                    mheardLine.mh_time = getTimeString();
-                    mheardLine.mh_payload_type = aprsmsg.payload_type;
-                    mheardLine.mh_dist = 0;
-                    mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
-                    mheardLine.mh_mesh = aprsmsg.msg_mesh;
+                // Mheard immer auch bei Hey
+                {
+                    ///////////////////////////////////////////////
+                    // MHeard
                     
                     // check MHeard exists already
                     int ipos=-1;
-                    double lat=0;
-                    double lon=0;
+                    double lat=0.0;
+                    double lon=0.0;
 
                     for(int iset=0; iset<MAX_MHEARD; iset++)
                     {
@@ -293,6 +306,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         Serial.println();
                         bNewLine=true;
                     }
+                    //
+                    ///////////////////////////////////////////////
                 }
             }
 
@@ -825,7 +840,7 @@ bool doTX()
         cmd_counter--;
         
         //if(bLORADEBUG)
-        //    Serial.printf("cmd_counter > 0:%i \n", cmd_counter);
+        //Serial.printf("cmd_counter > 0:%i \n", cmd_counter);
 
         return false;
     }
@@ -919,6 +934,8 @@ bool doTX()
                 uint8_t msg_type_b_lora = 0x00;
                 
                 msg_type_b_lora = decodeAPRS(lora_tx_buffer, sendlng, aprsmsg);
+
+                //Serial.printf("msg_type_b_lora:%02X tx_waiting:%02X sendlng:%i bDisplayInfo:%i\n", msg_type_b_lora, tx_waiting, sendlng, bDisplayInfo);
 
                 if(msg_type_b_lora != 0x00) // 0x41 ACK
                 {
