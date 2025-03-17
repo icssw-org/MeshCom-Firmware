@@ -362,9 +362,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // Extern Server
                         if(bEXTUDP)
                             sendExtern(true, (char*)"lora", RcvBuffer, size);
-
-                        if(bEXTSER)
-                            sendExtern(false, (char*)"lora", RcvBuffer, size);
                     #endif
 
                     // print aprs message

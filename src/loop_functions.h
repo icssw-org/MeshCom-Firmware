@@ -51,7 +51,7 @@ bool checkServerRx(uint8_t compBuffer[4]);
 int checkOwnTx(uint8_t compBuffer[4]);
 void insertOwnTx(unsigned int id);
 
-bool esp32_isSSD1306(int address);
+int esp32_isSSD1306(int address);
 
 void sendMessage(char *msg_text, int len);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);

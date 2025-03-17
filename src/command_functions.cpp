@@ -125,22 +125,6 @@ void commandAction(char *msg_text, bool ble)
     if(bBLEDEBUG && ble)
         Serial.printf("commandAction [%s] ble:%i\n", msg_text, ble);
 
-    #ifdef ESP32
-    if(memcmp(msg_text, "{", 1) == 0)
-    {
-        if(bEXTSER)
-        {
-            unsigned char msg_uchar[300];
-
-            memcpy(msg_uchar, msg_text, strlen(msg_text));
-
-            getExtern(msg_uchar, strlen(msg_text));
-        }
-
-        return;
-    }
-    #endif
-
     if(memcmp(msg_text, "--", 2) != 0)
     {
         if(ble)
@@ -413,7 +397,7 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
 
 #ifndef BOARD_RAK4630
-            Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--setownip ip:255.255.255.255\n--setowngw gw:255.255.255.255\n--setownms mask:255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 1.2.3.4\n--extser  on/off\n--extudpip 99.99.99.99\n");
+            Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255\n");
             delay(100);
 #endif
             Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n");
@@ -1287,38 +1271,6 @@ void commandAction(char *msg_text, bool ble)
         if(ble)
         {
             addBLECommandBack((char*)"--extudp off");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"extser on") == 0)
-    {
-        bEXTSER=true;
-        
-        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x04000;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--extser on");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"extser off") == 0)
-    {
-        bEXTSER=false;
-        
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x3FFF;   // mask 0x4000
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--extser off");
         }
 
         save_settings();
@@ -2820,7 +2772,7 @@ void commandAction(char *msg_text, bool ble)
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
 #ifndef BOARD_RAK4630
-            Serial.printf("...EXTUDP %s ...EXTSERUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), (bEXTSER?"on":"off"), meshcom_settings.node_extern);
+            Serial.printf("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
 #endif
             Serial.printf("...BTCODE %06i\n", meshcom_settings.bt_code);
             Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",

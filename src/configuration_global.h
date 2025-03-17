@@ -1,5 +1,5 @@
 #define SOURCE_VERSION "4.34"
-#define SOURCE_VERSION_SUB "u"
+#define SOURCE_VERSION_SUB "v"
 
 //Hardware Types
 #define TLORA_V2 1
