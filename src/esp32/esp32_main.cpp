@@ -419,7 +419,7 @@ void esp32setup()
     bBLElong = meshcom_settings.node_sset & 0x0800;
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
-    bEXTSER =  meshcom_settings.node_sset & 0x4000;
+    //bEXTSER =  meshcom_settings.node_sset & 0x4000; // frei
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
@@ -1859,7 +1859,12 @@ void esp32loop()
 
             loopWebserver();
         }
-    }
+
+        if(bEXTUDP)
+        {
+            startExternUDP();
+        }
+}
 
     //
     ////////////////////////////////////////////////
@@ -1940,7 +1945,9 @@ void checkSerialCommand(void)
     //  Check Serial connected
     if(!Serial)
     {
-        Serial.println(F("[SERIAL]...not connected"));
+        if(bDisplayCont)
+            Serial.println(F("[SERIAL]...not connected"));
+            
         return;
     }
 

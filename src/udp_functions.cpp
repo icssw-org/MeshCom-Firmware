@@ -171,9 +171,6 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           {
             if(bEXTUDP)
               sendExtern(true, (char*)"udp", convBuffer, (uint8_t)lora_tx_msg_len);
-
-            if(bEXTSER)
-              sendExtern(true, (char*)"udp", convBuffer, (uint8_t)lora_tx_msg_len);
           }
           
           struct aprsMessage aprsmsg;
@@ -796,6 +793,9 @@ void startExternUDP()
   if(!bEXTUDP)
     return;
 
+  if(hasExternIPaddress)
+    return;
+
   extern_node_ip = WiFi.localIP();
 
   s_extern_node_ip = extern_node_ip.toString();
@@ -803,6 +803,7 @@ void startExternUDP()
   UdpExtern.begin(EXTERN_PORT);
 
   Serial.printf("[EXTUDP]...now listening at IP %s, UDP port %d\n",  s_extern_node_ip.c_str(), EXTERN_PORT);
+  Serial.printf("[EXTUDP]...now sending   to IP %s, UDP port %d\n",  meshcom_settings.node_extern, EXTERN_PORT);
 
   hasExternIPaddress=true;
 
@@ -948,7 +949,7 @@ void getExternUDP()
   if(bWIFIAP)
     return;
 
-    if(!bEXTUDP && !bEXTSER)
+    if(!bEXTUDP)
     return;
 
   if(!hasExternIPaddress && bEXTUDP)
@@ -981,7 +982,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
   if(bWIFIAP)
     return;
 
-  if(!bEXTUDP && !bEXTSER)
+  if(!bEXTUDP)
     return;
 
   if(!hasExternIPaddress && bEXTUDP)
@@ -1063,7 +1064,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
 
     if (!UdpExtern.write(u_json, strlen(c_json)))
     {
-      resetMeshComUDP();
+      resetExternUDP();
     }
 
     UdpExtern.endPacket();
@@ -1073,7 +1074,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     
     if(!UdpExtern.write(buffer, buflen))
     {
-       resetMeshComUDP();
+      resetExternUDP();
     }
 +   
 +   UdpExtern.endPacket();
@@ -1095,8 +1096,10 @@ void resetExternUDP()
   if(bWIFIAP)
     return;
 
-    UdpExtern.stop();
+  UdpExtern.stop();
 
+  hasExternIPaddress = false;
+  
   if(bEXTUDP)
   {
     startExternUDP();

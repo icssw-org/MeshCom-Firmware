@@ -67,7 +67,6 @@ bool bMESH = false;
 bool bWEBSERVER = false;
 bool bWIFIAP = false;
 bool bEXTUDP = false;
-bool bEXTSER = false;
 
 bool bSHORTPATH = false;
 bool bGPSDEBUG = false;
@@ -438,7 +437,7 @@ bool bSetDisplay = false;
 
 // detect oled-display type
 // see https://github.com/olikraus/u8g2/discussions/2088
-bool esp32_isSSD1306(int address)
+int esp32_isSSD1306(int address)
 {
     byte buffer[1];
 
@@ -451,12 +450,21 @@ bool esp32_isSSD1306(int address)
         Wire.requestFrom(address, 1);
     #endif
 
-    
+    bool bFound=false;
+
     if (Wire.available() > 0)
     {
         Wire.readBytes(buffer, 1);
+        bFound=true;
     }
     Wire.endTransmission();
+
+    // no display found
+    if(!bFound)
+    {
+        Serial.println("[INIT]...Display not found");
+        return -1;
+    }
 
     Serial.printf("[INIT]...Display type: %02X\n", buffer[0]);
 
@@ -469,14 +477,25 @@ bool esp32_isSSD1306(int address)
     // 0x3F == HELTEC V3 type 2
     // 0x16 == T-BEAM 1.3" 1306
 
+    // check 1.3"
     if((buffer[0] & 0x03f) == 0x08 || (buffer[0] & 0x03f) == 0x00 || (buffer[0] & 0x3f) == 0x16)
-        return true;
+    {
+        Serial.println(F("[INIT]...OLED Display is SSD1306"));
+        return 1;
+    }
 
-    return false;
+    // state 0,9"
+    Serial.println(F("[INIT]...OLED Display is SH1106"));
+    return 0;
 }
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
+    #ifndef BOARD_E290
+        if(u8g2 == NULL)
+            return;
+    #endif
+
 	if(bClear || (x == 0 && y== 0) || (x == 0 && memcmp(text, "#F", 2) == 0))
     {
         #ifdef BOARD_E290
@@ -768,6 +787,11 @@ void sendDisplayTime()
         if(pagePointer < 0)
             pagePointer=PAGE_MAX-1;
     }
+
+    #ifndef BOARD_E290
+        if(u8g2 == NULL)
+            return;
+    #endif
 
     #ifdef BOARD_E290
         return;
@@ -2065,9 +2089,6 @@ void sendMessage(char *msg_text, int len)
         // Extern Server
         if(bEXTUDP)
             sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
-
-        if(bEXTSER)
-            sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
     #endif
 }
 
@@ -2506,9 +2527,6 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             // Extern Server
             if(bEXTUDP)
                 sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
-
-            if(bEXTSER)
-                sendExtern(false, (char*)"node", msg_buffer, aprsmsg.msg_len);
         #endif
     }
 

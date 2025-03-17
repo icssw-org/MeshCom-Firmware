@@ -7,6 +7,7 @@
 #include <SX126x-RAK4630.h>
 #include <debugconf.h>
 #include <time.h>
+#include <nrf52_functions.h>
 
 #include <TinyGPSPlus.h>
 
@@ -386,7 +387,7 @@ void nrf52setup()
     bSHORTPATH = meshcom_settings.node_sset & 0x0400;
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
-    bEXTSER =  meshcom_settings.node_sset & 0x4000;
+    //bEXTSER =  meshcom_settings.node_sset & 0x4000; // frei
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
@@ -418,7 +419,6 @@ void nrf52setup()
     if(bWIFIAP && bGATEWAY)
     {
         bGATEWAY=false;
-        bEXTSER=false;
         bEXTUDP=false;
     }
 
@@ -675,36 +675,9 @@ void nrf52setup()
         setupSOFTSER();
     #endif
 
-    Serial.println(F("[INIT]...Auto detecting display:"));
+    initDisplay();
     
-    if (esp32_isSSD1306(0x3C))
-    { //Address of the display to be checked
-        Serial.println(F("[INIT]...OLED Display is SSD1306"));
-        u8g2 = &u8g2_2;
-    }
-    else
-    {
-        Serial.println(F("[INIT]...OLED Display is SH1106"));
-        u8g2 = &u8g2_1;
-    }
-
-    u8g2->begin();
-
-    u8g2->clearDisplay();
-    u8g2->setFont(u8g2_font_6x10_mf);
-    u8g2->firstPage();
-    do
-    {
-        u8g2->setFont(u8g2_font_10x20_mf);
-        u8g2->drawStr(5, 15, "MeshCom 4.0");
-        u8g2->setFont(u8g2_font_6x10_mf);
-        char cvers[20];
-        snprintf(cvers, sizeof(cvers), "FW %s/%s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
-        u8g2->drawStr(5, 25, cvers);
-        u8g2->drawStr(5, 35, "by icssw.org");
-        u8g2->drawStr(5, 45, "OE1KFR, OE1KBC");
-        u8g2->drawStr(5, 55, "...starting now");
-    } while (u8g2->nextPage());
+    startDisplay((char*)"...starting now", (char*)"@by icssw.org", (char*)"OE1KBC, OE1KFR");
 
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;

@@ -43,15 +43,19 @@ void initDisplay()
 #ifndef BOARD_E290
     Serial.println(F("[INIT]...Auto detecting display:"));
         
-    if (esp32_isSSD1306(0x3C))
-    {
-        //Address of the display to be checked
-        Serial.println(F("[INIT]...OLED Display is SSD1306"));
+    int idtype = esp32_isSSD1306(0x3C);
+
+    u8g2 = NULL;
+
+    if(idtype < 0)
+        return;
+
+    if (idtype == 1)
+    { //Address of the display to be checked
         u8g2 = &u8g2_2;
     }
     else
     {
-        Serial.println(F("[INIT]...OLED Display is SH1106"));
         u8g2 = &u8g2_1;
     }
 
@@ -99,6 +103,9 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     e290_display.update();
 
     #else
+
+    if(u8g2 == NULL)
+        return;
 
     u8g2->clearDisplay();
     u8g2->setFont(u8g2_font_6x10_mf);

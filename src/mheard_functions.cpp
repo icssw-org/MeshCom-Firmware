@@ -185,6 +185,10 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
 void updateHeyPath(struct mheardLine &mheardLine)
 {
+    // exclude the owncall
+    if(mheardLine.mh_sourcecallsign == meshcom_settings.node_call)
+        return;
+
     int ipos=-1;
     for(int iset=0; iset<MAX_MHPATH; iset++)
     {
