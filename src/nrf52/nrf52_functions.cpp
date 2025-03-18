@@ -7,6 +7,7 @@
 #include <configuration.h>
 
 #include <loop_functions.h>
+#include <loop_functions_extern.h>
 #include <lora_setchip.h>
 
 #include <U8g2lib.h>
@@ -26,7 +27,10 @@ void initDisplay()
     u8g2 = NULL;
 
     if(idtype < 0)
+    {
+        bDisplayOff = true;
         return;
+    }
 
     if (idtype == 1)
     { //Address of the display to be checked
