@@ -577,7 +577,7 @@ bool doWiFiConnect()
     if(iWlanWait == 7)
       WiFi.reconnect();
 
-    if(iWlanWait > 15)
+    if(iWlanWait > 30)
     {
       Serial.printf("\n[WIFI]...ssid<%s> connection error\n", meshcom_settings.node_ssid);
     }

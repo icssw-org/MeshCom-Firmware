@@ -1840,7 +1840,7 @@ void esp32loop()
                     {
                         doWiFiConnect();
 
-                        if(iWlanWait > 15)
+                        if(iWlanWait > 30)
                         {
                             iWlanWait = 0;
 
