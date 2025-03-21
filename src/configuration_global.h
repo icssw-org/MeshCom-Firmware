@@ -47,8 +47,8 @@
 #define ALIVERESET_INTERVAL 2 * 10 * 30    // 1/2 Stunde
 #define BLEBLINK_INTERVAL 3000             // BLEBLINK interval in milliseconds
 
-#define MAX_MHEARD 25                      // max count of messages in mheard ringbuffer
-#define MAX_MHPATH 25                      // max count of messages in mpath ringbuffer
+#define MAX_MHEARD 20                      // max count of messages in mheard ringbuffer
+#define MAX_MHPATH 20                      // max count of messages in mhpath ringbuffer
 #define MAX_RING 40                        // max count of messages in ringbuffer
 #define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa

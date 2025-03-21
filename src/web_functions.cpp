@@ -1163,7 +1163,7 @@ String work_webpage(bool bget_password, int webid)
                     {
                         if(mheardCalls[iset][0] != 0x00)
                         {
-                            if((mheardEpoch[iset]+60*60*6) > getUnixClock())
+                            if((mheardEpoch[iset]+60*60*3) > getUnixClock()) // 3h
                             {
                                 web_client.printf("<tr><td>%-10.10s</td>", mheardCalls[iset]);
                                 
@@ -1206,7 +1206,7 @@ String work_webpage(bool bget_password, int webid)
                     {
                         if(mheardPathCalls[iset][0] != 0x00)
                         {
-                            if((mheardPathEpoch[iset]+60*60*6) > getUnixClock())
+                            if((mheardPathEpoch[iset]+60*60*3) > getUnixClock()) // 3h
                             {
                                 web_client.printf("<tr><td>%-10.10s</td>", mheardPathCalls[iset]);
                                 
@@ -1522,12 +1522,14 @@ String work_webpage(bool bget_password, int webid)
                             // print which message type we got
                             uint8_t msg_type_b_lora = decodeAPRS(toPhoneBuff, blelen, aprsmsg);
 
-                            int icheck = checkOwnTx(toPhoneBuff+1);
+                            int icheck = checkOwnTx(aprsmsg.msg_id);
 
                             String ccheck="";
                             
                             if(icheck >= 0)
                             {
+                                Serial.printf("checkownTx: %i [4]%i\n", icheck, own_msg_id[icheck][4]);
+                                
                                 if(own_msg_id[icheck][4] == 1)   // 00...not heard, 01...heard, 02...ACK
                                 {
                                     ccheck="&#x2713&nbsp;";

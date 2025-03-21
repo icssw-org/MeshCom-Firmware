@@ -384,12 +384,27 @@ bool checkServerRx(uint8_t compBuffer[4])
     return false;
 }
 
-int checkOwnTx(uint8_t compBuffer[4])
+int checkOwnTx(unsigned int msg_id)
 {
+    if(msg_id == 0)
+        return -1;
+
+    unsigned int own_id=0;
+
     for(int ilo=0; ilo<MAX_RING; ilo++)
     {
-        if(memcmp(own_msg_id[ilo], compBuffer, 4) == 0)
+        own_id = own_msg_id[ilo][0] | (own_msg_id[ilo][1] << 8) | (own_msg_id[ilo][2] << 16) | (own_msg_id[ilo][3] << 24);
+
+        if(own_id == msg_id)
+        {
+            if(bDisplayInfo)
+            {
+                Serial.print(getTimeString());
+                Serial.printf(" checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X>\n", msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0]);
+            }
+
             return ilo;
+        }
     }
 
     return -1;
@@ -397,7 +412,10 @@ int checkOwnTx(uint8_t compBuffer[4])
 
 void insertOwnTx(unsigned int msg_id)
 {
-    // byte 0-3 msg_id
+    if(msg_id == 0)
+        return;
+
+        // byte 0-3 msg_id
     own_msg_id[iWriteOwn][3] = msg_id >> 24;
     own_msg_id[iWriteOwn][2] = msg_id >> 16;
     own_msg_id[iWriteOwn][1] = msg_id >> 8;
@@ -408,7 +426,7 @@ void insertOwnTx(unsigned int msg_id)
     if(bDisplayInfo)
     {
         Serial.print(getTimeString());
-        Serial.printf(" Insert own_msg_id:%02X%02X%02X%02X\n", own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
+        Serial.printf(" Insert own_msg_id:%08X <%02X%02X%02X%02X>\n", msg_id, own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
     }
 
     iWriteOwn++;
@@ -2005,14 +2023,14 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen    
-    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max in real only 0-999
     
     aprsmsg.msg_source_path = meshcom_settings.node_call;
-    aprsmsg.msg_destination_path = strDestinationCall;
+    aprsmsg.msg_destination_path = strDestinationCall;  //Later FW insert PATH from HEY! collecting
     aprsmsg.msg_payload = strMsg;
 
     
-    // ACK request anhängen noly DM Call
+    // ACK add request only DM Calls
     if(bDM)
     {
         char cAckId[4] = {0};
@@ -2023,6 +2041,10 @@ void sendMessage(char *msg_text, int len)
     meshcom_settings.node_msgid++;
     if(meshcom_settings.node_msgid > 999)
         meshcom_settings.node_msgid=0;
+
+    // only set Serverflag if connection to MeshCom-Server
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+        aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server and do not reply
 
     // Flash rewrite
     save_settings();
@@ -2040,10 +2062,10 @@ void sendMessage(char *msg_text, int len)
     {
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
 
-        if(bGATEWAY)
+        if(bGATEWAY && meshcom_settings.node_hasIPaddress)
         {
-            // gleich Wolke mit Hackerl setzen
-            if(aprsmsg.msg_destination_path == "*" || CheckGroup(strDestinationCall))
+            // set Info message send and Server reached, not on DM
+            if(!bDM && (aprsmsg.msg_destination_path == "*" || CheckGroup(strDestinationCall)))
             {
                 uint8_t print_buff[8];
 
@@ -2052,7 +2074,7 @@ void sendMessage(char *msg_text, int len)
                 print_buff[2]=(aprsmsg.msg_id >> 8) & 0xFF;
                 print_buff[3]=(aprsmsg.msg_id >> 16) & 0xFF;
                 print_buff[4]=(aprsmsg.msg_id >> 24) & 0xFF;
-                print_buff[5]=0x01;     // switch ack GW / Node currently fixed to 0x00 
+                print_buff[5]=0x01;     // 0x01 ... server reached
                 print_buff[6]=0x00;     // msg always 0x00 at the end
                 
                 addBLEOutBuffer(print_buff, (uint16_t)7);
@@ -2095,7 +2117,7 @@ void sendMessage(char *msg_text, int len)
     if(iWrite >= MAX_RING)
         iWrite=0;
     
-    if(bGATEWAY)
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
     {
 	    // UDP out
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
@@ -2501,6 +2523,10 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
         if(meshcom_settings.node_msgid > 999)
             meshcom_settings.node_msgid=0;
             
+        // only set Serverflag if connection to MeshCom-Server
+        if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+            aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server
+
         // Flash rewrite
         save_settings();
 
@@ -2617,8 +2643,9 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     // MSG ID zusammen setzen    
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
     
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    aprsmsg.msg_source_path = meshcom_settings.node_call;   // own Call
     aprsmsg.msg_destination_path = dest_call;
+    aprsmsg.msg_destination_call = dest_call;
 
     char cackmsg[20];
     if(strcmp(dest_call.c_str(), "WLNK-1") == 0)
@@ -2630,11 +2657,24 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     meshcom_settings.node_msgid++;
     if(meshcom_settings.node_msgid > 999)
         meshcom_settings.node_msgid=0;
+
+    // only set Serverflag if connection to MeshCom-Server
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+        aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server and do not reply
+
     // Flash rewrite
     save_settings();
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
     
+    // store last message to compare later on
+    insertOwnTx(aprsmsg.msg_id);
+
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+        addLoraRxBuffer(aprsmsg.msg_id, true);
+    else
+        addLoraRxBuffer(aprsmsg.msg_id, false);
+
     encodeAPRS(msg_buffer, aprsmsg);
 
     // ACK-Message send to LoRa TX
@@ -2644,28 +2684,21 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
         Serial.println();
     }
 
-    if(strcmp(dest_call.c_str(), meshcom_settings.node_call) == 0)
-    {
-        ringBuffer[iWrite][0]=aprsmsg.msg_len;
-        ringBuffer[iWrite][2]=0xFF;    // Status byte for retransmission 0xFF no retransmission
-        memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
-        iWrite++;
-        if(iWrite >= MAX_RING)
-            iWrite=0;
-    }
+    ringBuffer[iWrite][0]=aprsmsg.msg_len;
+    ringBuffer[iWrite][1]=0x00;    // ACK-Status byte 0x00 for retransmission
+    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
+    iWrite++;
+    if(iWrite >= MAX_RING)
+        iWrite=0;
     
-    if(bGATEWAY)
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
     {
 		// UDP out
-		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+        if(aprsmsg.msg_destination_call != meshcom_settings.node_call)
+        {
+            addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+        }
     }
-
-    // store last message to compare later on
-    memcpy(own_msg_id[iWriteOwn], msg_buffer+1, 4);
-    own_msg_id[iWriteOwn][4]=0x00;
-    iWriteOwn++;
-    if(iWriteOwn >= MAX_RING)
-        iWriteOwn=0;
 }
 
 // Send Hey-Message
@@ -2869,6 +2902,11 @@ int conv_fuss(int alt_meter)
     fuss = fuss * 3.28084;
     int ifuss = fuss + 5;
     return ifuss / 10;
+}
+
+bool checkMesh()
+{
+    return bMESH;
 }
 
 // ****** UTF8-Decoder: convert UTF8-string to extended ASCII *******

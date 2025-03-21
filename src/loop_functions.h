@@ -48,7 +48,7 @@ void addLoraRxBuffer(unsigned int msg_id, bool msg_server);
 
 int checkOwnRx(uint8_t compBuffer[4]);
 bool checkServerRx(uint8_t compBuffer[4]);
-int checkOwnTx(uint8_t compBuffer[4]);
+int checkOwnTx(unsigned int msg_id);
 void insertOwnTx(unsigned int id);
 
 int esp32_isSSD1306(int address);
@@ -59,6 +59,8 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
 void SendAckMessage(String dest_call, unsigned int iAckId);
 void sendHey();
+
+bool checkMesh();
 
 unsigned int setSMartBeaconing(double flat, double flon);
 

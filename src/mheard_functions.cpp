@@ -120,22 +120,31 @@ void decodeMHeard(char mh_buffer[], struct mheardLine &mheardLine)
 void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 {
     int ipos=-1;
+    int inext=-1;
     for(int iset=0; iset<MAX_MHEARD; iset++)
     {
+        if((mheardEpoch[iset]+60*60*3) > getUnixClock())    // 3h
+        {
+            mheardCalls[iset][0] = 0x00;
+        }
+
         if(mheardCalls[iset][0] != 0x00)
         {
             if(strcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str()) == 0)
             {
                 ipos=iset;
-                break;
             }
 
         }
+        else
+        {
+            inext=iset;
+        }
     }
 
-    if(ipos == -1)
+    if(inext == -1 && ipos == -1)
     {
-        ipos=mheardWrite;
+        inext=mheardWrite;
         mheardWrite++;
         
         //Serial.printf("mheardWrite:%i\n", mheardWrite);
@@ -190,36 +199,50 @@ void updateHeyPath(struct mheardLine &mheardLine)
         return;
 
     int ipos=-1;
+    int inext=-1;
     for(int iset=0; iset<MAX_MHPATH; iset++)
     {
+        if((mheardPathEpoch[iset]+60*60*3) > getUnixClock())
+        {
+            mheardPathCalls[iset][0] = 0x00;
+        }
+
         if(mheardPathCalls[iset][0] != 0x00)
         {
             if(strcmp(mheardPathCalls[iset], mheardLine.mh_sourcecallsign.c_str()) == 0)
             {
                 ipos=iset;
-                break;
             }
+        }
+        else
+        {
+            if(inext < 0)
+                inext=iset;
         }
     }
 
-    if(ipos == -1)
+    if(inext == -1 && ipos == -1)
     {
-        ipos=mheardPathWrite;
+        inext=mheardPathWrite;
         mheardPathWrite++;
         
-        //Serial.printf("mheardPathWrite:%i\n", mheardPathWrite);
+        //Serial.printf("mheardWrite:%i\n", mheardWrite);
 
         if(mheardPathWrite >= MAX_MHPATH)
             mheardPathWrite=0;
     }
-    else
+
+    if(ipos == -1)
     {
-        // check Path-Count
-        if((mheardPathLen[ipos] & 0x7F) < mheardLine.mh_path_len)
-        {
-            // leave old record active
-            return;
-        }
+        ipos = inext;
+        mheardPathLen[ipos] = 0x7F;
+    }
+
+    // check Path-Count
+    if((mheardPathLen[ipos] & 0x7F) < mheardLine.mh_path_len)
+    {
+        // leave old record active
+        return;
     }
 
     strcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str());
@@ -263,7 +286,7 @@ void sendMheard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+60*60*6) > getUnixClock())
+            if((mheardEpoch[iset]+60*60*3) > getUnixClock()) // 3h
             {
                 initMheardLine(mheardLine);
 
@@ -368,7 +391,7 @@ void showPath()
     {
         if(mheardPathCalls[iset][0] != 0x00)
         {
-            if((mheardPathEpoch[iset]+60*60*6) > getUnixClock())
+            if((mheardPathEpoch[iset]+60*60*3) > getUnixClock())    // 3h
             {
                 Serial.printf("|------------|---------------------|-------------------------------------------------------------|\n");
 
@@ -379,6 +402,10 @@ void showPath()
                 Serial.printf("%-19.19s | ", convertUNIXtoString(lt).c_str()); // yyyy.mm.dd hh:mm:ss
 
                 Serial.printf("%01u%s/%-57.57s|\n", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPath[iset]);
+            }
+            else
+            {
+                mheardPathCalls[iset][0] = 0x00;
             }
         }
     }

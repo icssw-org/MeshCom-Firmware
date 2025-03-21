@@ -463,13 +463,17 @@ void esp32setup()
     {
         bBMEON=false;
         bBME680ON=false;
+        bmx_found=false;
     }
     else
     if(bBMEON)
     {
         bBMPON=false;
         bBME680ON=false;
+        bmx_found=false;
     }
+
+    bme680_found=false;
 
     bDisplayInfo = bLORADEBUG;
 

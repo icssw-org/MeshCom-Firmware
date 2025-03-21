@@ -263,9 +263,9 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                     print_buff[6]=0x00;
                     
                     if(bDisplayInfo)
-                        Serial.printf("\n[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[1], print_buff[2], print_buff[3], print_buff[4]);
+                        Serial.printf("\n[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1]);
 
-                    int iackcheck = checkOwnTx(print_buff+1);
+                    int iackcheck = checkOwnTx(msg_counter);
                     if(iackcheck >= 0)
                     {
                         own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
