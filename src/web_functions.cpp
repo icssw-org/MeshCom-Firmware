@@ -1163,7 +1163,7 @@ String work_webpage(bool bget_password, int webid)
                     {
                         if(mheardCalls[iset][0] != 0x00)
                         {
-                            if((mheardEpoch[iset]+60*60*6) > getUnixClock())
+                            if((mheardEpoch[iset]+60*60*3) > getUnixClock()) // 3h
                             {
                                 web_client.printf("<tr><td>%-10.10s</td>", mheardCalls[iset]);
                                 
@@ -1206,7 +1206,7 @@ String work_webpage(bool bget_password, int webid)
                     {
                         if(mheardPathCalls[iset][0] != 0x00)
                         {
-                            if((mheardPathEpoch[iset]+60*60*6) > getUnixClock())
+                            if((mheardPathEpoch[iset]+60*60*3) > getUnixClock()) // 3h
                             {
                                 web_client.printf("<tr><td>%-10.10s</td>", mheardPathCalls[iset]);
                                 
