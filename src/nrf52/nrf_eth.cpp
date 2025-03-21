@@ -362,7 +362,7 @@ int NrfETH::getUDP()
                       if(bDisplayInfo)
                           Serial.printf("\n[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[1], print_buff[2], print_buff[3], print_buff[4]);
 
-                      int iackcheck = checkOwnTx(print_buff+1);
+                      int iackcheck = checkOwnTx(msg_counter);
                       if(iackcheck >= 0)
                       {
                           own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
@@ -382,11 +382,6 @@ int NrfETH::getUDP()
                     aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
                   }
 
-                  if(bDEBUG)
-                  {
-                    Serial.println("RX-UDP vor sendDisplayText");
-                  }
-
                   if(iAckPos <= 0)
                   {
                     if(!bGATEWAY)
@@ -400,21 +395,11 @@ int NrfETH::getUDP()
                   aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node
                   aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
 
-                  if(bDEBUG)
-                  {
-                    Serial.println("RX-UDP vor encodeAPRS");
-                  }
-
                   uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
                   addBLEOutBuffer(tempRcvBuffer, tempsize);
 
                   bBLELoopOut=false;
-
-                  if(bDEBUG)
-                  {
-                    Serial.println("RX-UDP vor SendAckMessage");
-                  }
 
                   // DM message for lokal Node 
                   if(iAckId > 0)
@@ -422,18 +407,7 @@ int NrfETH::getUDP()
                     String strSource_call = source_call;
                     SendAckMessage(strSource_call, iAckId);
                   }
-
-                  if(bDEBUG)
-                  {
-                    Serial.println("RX-UDP nach SendAckMessage");
-                  }
               }
-            }
-
-
-            if(bDEBUG)
-            {
-              Serial.printf("RX-UDP prepare message - send:%i\n", bUDPtoLoraSend);
             }
 
             // resend only Packet

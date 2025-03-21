@@ -88,7 +88,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         if((print_buff[5] & 0x80) == 0x80)
             bServerFlag=true;
 
-        int itxcheck = checkOwnTx(print_buff+6);
+        unsigned msg_id = print_buff[6] | (print_buff[7] << 8) | (print_buff[8] << 16) | (print_buff[9] << 24);
+        int itxcheck = checkOwnTx(msg_id);
         bool bIsNew = is_new_packet(print_buff+1);
 
         if(bIsNew || itxcheck >= 0)
@@ -121,7 +122,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             else
             {
                 // ACK nur weitersenden wenn es eine neue MSG-ID ist && MESH = on && nicht eine MSG-ID ist welche nicht selbst ausgesendet wurde
-                if((print_buff[5] & 0x7F) > 0x00 && bMESH && itxcheck < 0 && !checkServerRx(print_buff+6))
+                if((print_buff[5] & 0x7F) > 0x00 && checkMesh() && itxcheck < 0 && !checkServerRx(print_buff+6))
                 {
                     print_buff[5]--;
 
@@ -172,14 +173,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             }
         }
 
-        int icheck = checkOwnTx(RcvBuffer+1);
-
         struct aprsMessage aprsmsg;
         
         // print which message type we got
         uint8_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
 
         size = aprsmsg.msg_len;
+
+        int icheck = checkOwnTx(aprsmsg.msg_id);
 
         if(bDisplayCont)
         {
@@ -388,361 +389,362 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     // Wiederaussendung via LORA
                     // Ringbuffer filling
 
-                    bool bMsg=false;
-                    unsigned int lmsg_id = 0;
-
-                    for(int iop=0;iop<MAX_RING;iop++)
+                    if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40))
                     {
-                        lmsg_id = ringBufferLoraRX[iop][3] << 24 | ringBufferLoraRX[iop][2] << 16 | ringBufferLoraRX[iop][1] << 8 | ringBufferLoraRX[iop][0];
+                        // add RXMsg-ID to ringbuffer
+                        addLoraRxBuffer(aprsmsg.msg_id, aprsmsg.msg_server);
 
-                        if(lmsg_id == aprsmsg.msg_id)
+                        // add rcvMsg to BLE out Buff
+                        // size message is int -> uint16_t buffer size
+
+                        // destinalion_pah
+                        // *
+                        // 99999
+                        // XX0XXX-99
+                        //
+                        // with path
+                        // *,AA00AAA-99,...
+                        // 99999.AA0AAA-99,.....
+                        // XX0XXX-999,AA0AAA-99,...
+
+                        char destination_call[20];
+                        snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
+
+                        if(msg_type_b_lora == 0x3A)    // text message store&forward
                         {
-                            // MSG bereits einmal gehört
-                            bMsg=true;
-                            
-                            if(bDisplayInfo)
+                            if(strcmp(destination_call, meshcom_settings.node_call) == 0)
                             {
-                                Serial.println("bMsg = true");
-                                bNewLine=true;
-                            }
-
-                            break;
-                        }
-                    }
-
-                    if(!bMsg)
-                    {
-                        if ((msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40))
-                        {
-                            // add RXMsg-ID to ringbuffer
-                            addLoraRxBuffer(aprsmsg.msg_id, aprsmsg.msg_server);
-
-                            // add rcvMsg to BLE out Buff
-                            // size message is int -> uint16_t buffer size
-
-                            char destination_call[20];
-                            snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
-
-                            if(msg_type_b_lora == 0x3A)    // text message store&forward
-                            {
-                                if(strcmp(destination_call, meshcom_settings.node_call) == 0)
-                                {
-                                    int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
-                                    int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
-                                    
-                                    if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
-                                    {
-                                        unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
-                                        msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
-
-                                        print_buff[0]=0x41;
-                                        print_buff[1]=msg_counter & 0xFF;
-                                        print_buff[2]=(msg_counter >> 8) & 0xFF;
-                                        print_buff[3]=(msg_counter >> 16) & 0xFF;
-                                        print_buff[4]=(msg_counter >> 24) & 0xFF;
-                                        print_buff[5]=0x01;  // ACK
-                                        print_buff[6]=0x00;
-                                        
-                                        if(bDisplayInfo)
-                                        {
-                                            Serial.println();
-                                            Serial.print(getTimeString());
-                                            Serial.printf("[ACK-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1]);
-                                            bNewLine=true;
-                                        }
+                                int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
+                                int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
                                 
-                                        int iackcheck = checkOwnTx(print_buff+1);
-                                        if(iackcheck >= 0)
-                                        {
-                                            own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
-                                        }
-
-                                        addBLEOutBuffer(print_buff, 7);
-                                    }
-                                    else
-                                    if(iEnqPos > 0)
-                                    {
-                                        unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
-                                        
-                                        if(bDisplayInfo)
-                                        {
-                                            Serial.println("");
-                                            bNewLine=true;
-                                        }
-                                            
-                                        SendAckMessage(aprsmsg.msg_source_call, iAckId);
-
-                                        aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
-                                        
-                                        uint8_t tempRcvBuffer[255];
-
-                                        uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
-
-                                        sendDisplayText(aprsmsg, rssi, snr);
-
-                                        addBLEOutBuffer(tempRcvBuffer, tempsize);
-                                    }
-                                    else
-                                    {
-                                        sendDisplayText(aprsmsg, rssi, snr);
-
-                                        addBLEOutBuffer(RcvBuffer, size);
-                                    }
-                                }
-                                else
+                                if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
                                 {
-                                    bool bSendAckGateway=true;
-                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{MCP}", 5) == 0)
-                                    {
-                                        sendDisplayText(aprsmsg, rssi, snr);
-                                        bSendAckGateway=false;
-                                    }
-                                    else
-                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
-                                    {
-                                        sendDisplayText(aprsmsg, rssi, snr);
-                                        bSendAckGateway=false;
-                                    }
-                                    else
-                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
-                                    {
-                                        sendDisplayText(aprsmsg, rssi, snr);
-                                        bSendAckGateway=false;
-                                    }
-                                    else
-                                    {
-                                        if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || CheckOwnGroup(destination_call))
-                                        {
-                                            sendDisplayText(aprsmsg, rssi, snr);
+                                    //
+                                    // next sequence only to mark a massage to node_call with ACK
+                                    //
+                                    unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
+                                    msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
 
-                                            // APP Offline
-                                            if(isPhoneReady == 0)
-                                            {
-                                                aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline = true
-
-                                                uint8_t tempRcvBuffer[255];
-
-                                                uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
-
-                                                addBLEOutBuffer(tempRcvBuffer, tempsize);
-                                            }
-                                            else
-                                            {
-                                                addBLEOutBuffer(RcvBuffer, size);
-                                            }
-                                        }
-
-                                        // Wenn Meldung bereits von einem gateway/Server kommt kein ACK von einem anderen Gateway
-                                        if(aprsmsg.msg_server)
-                                            bSendAckGateway=false;
-                                    }
-
-                                    if(bGATEWAY)
-                                    {
-                                        if(bSendAckGateway)
-                                        {
-                                            print_buff[6]=aprsmsg.msg_id & 0xFF;
-                                            print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
-                                            print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
-                                            print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
-
-                                            // nur bei Meldungen an fremde mit ACK
-                                            if(checkOwnTx(print_buff+6) >= 0)
-                                            {
-                                                // und an alle geht Wolke mit Hackerl an BLE senden
-                                                if(aprsmsg.msg_destination_path == "*")
-                                                {
-                                                    print_buff[5]=0x41;
-                                                    print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
-                                                    print_buff[11]=0x00;     // msg always 0x00 at the end
-                                                    addBLEOutBuffer(print_buff+5, 7);
-                                                }
-                                            }
-                                            else
-                                            {
-                                                if(bDisplayInfo)
-                                                {
-                                                    Serial.println("");
-                                                    bNewLine=true;
-                                                }
-                                                
-                                                //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
-                                                if(aprsmsg.msg_destination_path == "*" || aprsmsg.msg_destination_path == "WLNK-1" || aprsmsg.msg_destination_path == "APRS2SOTA" || CheckGroup(aprsmsg.msg_destination_path) > 0)
-                                                {
-                                                    // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
-                                                    msg_counter=millis();   // ACK mit neuer msg_id versenden
-
-                                                    print_buff[0]=0x41;
-                                                    print_buff[1]=msg_counter & 0xFF;
-                                                    print_buff[2]=(msg_counter >> 8) & 0xFF;
-                                                    print_buff[3]=(msg_counter >> 16) & 0xFF;
-                                                    print_buff[4]=(msg_counter >> 24) & 0xFF;
-                                                    print_buff[5]=0x80;      // server & max hop
-                                                    print_buff[5] = print_buff[5] | meshcom_settings.max_hop_text;
-                                                    print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
-                                                    print_buff[11]=0x00;     // msg always 0x00 at the end
-                                                    
-                                                    ringBuffer[iWrite][0]=12;
-                                                    ringBuffer[iWrite][1]=0xFF; // retransmission Status ...0xFF no retransmission
-                                                    memcpy(ringBuffer[iWrite]+2, print_buff, 12);
-
-                                                    iWrite++;
-                                                    if(iWrite >= MAX_RING)
-                                                        iWrite=0;
-
-                                                    if(bDisplayInfo)
-                                                    {
-                                                        Serial.print(getTimeString());
-                                                        Serial.printf(" ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
-                                                        bNewLine=true;
-                                                    }
-                                                                                                
-                                                    unsigned long mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
-
-                                                    bool bServerFlag = false;
-                                                    if((print_buff[5] & 0x80) == 0x80)
-                                                        bServerFlag=true;
-
-                                                    addLoraRxBuffer(mid, bServerFlag);
-
-                                                    msg_counter=millis();   // ACK mit neuer msg_id versenden
-
-                                                    print_buff[1]=msg_counter & 0xFF;
-                                                    print_buff[2]=(msg_counter >> 8) & 0xFF;
-                                                    print_buff[3]=(msg_counter >> 16) & 0xFF;
-                                                    print_buff[4]=(msg_counter >> 24) & 0xFF;
-
-                                                    memcpy(ringBuffer[iWrite]+2, print_buff, 12);
-
-                                                    iWrite++;
-                                                    if(iWrite >= MAX_RING)
-                                                        iWrite=0;
-
-                                                    mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
-                                                    
-                                                    addLoraRxBuffer(mid, bServerFlag);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            else
-                            if(msg_type_b_lora == 0x21)
-                            {
-                                sendDisplayPosition(aprsmsg, rssi, snr);
-
-                                if(isPhoneReady > 0)
-                                    addBLEOutBuffer(RcvBuffer, size);
-                            }
-
-                            bool bMeshDestination = true;
-
-                            // messages to WLNK-1 or APRS2SOTA no need to MESH via a gateWay
-                            if(bGATEWAY && (aprsmsg.msg_destination_path.c_str(), "WLNK-1") == 0)
-                                bMeshDestination = false;
-                            if(bGATEWAY && (aprsmsg.msg_destination_path.c_str(), "APRS2SOTA") == 0)
-                                bMeshDestination = false;
-
-                            // more then 4 callsigns within source_path no need to MESH via a gateWay
-                            if(bGATEWAY)
-                            {
-                                if(aprsmsg.payload_type == ':' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_text+1)    // TEXT
-                                    bMeshDestination = false;
-                                if(aprsmsg.payload_type == '!' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_pos+1)    // POS
-                                    bMeshDestination = false;
-                                if(aprsmsg.payload_type == '@' && meshcom_settings.node_hasIPaddress)    // HEY no Mesh on GATEWAYs with Server-Connected
-                                    bMeshDestination = false;
-                            }
-
-                            // GATEWAY action before MESH
-                            // and not MESHed from another Gateways
-                            if(bGATEWAY && !aprsmsg.msg_server) 
-                            {
-                                addNodeData(RcvBuffer, size, rssi, snr);
-                            }
-
-                            // resend only Packet to all and !owncall 
-                            if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && bMESH && bMeshDestination)
-                            {
-                                // MESH only max. hops (default 3...TEXT 1...POS)
-                                if(aprsmsg.max_hop > 0)
-                                {
-                                    // only set Serverflag if connection to MeshCom-Server
-                                    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
-                                        aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server
-
-                                    aprsmsg.max_hop--;
-
-                                    aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node   last sending node (0x80)
-                                    aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
-                                
-                                    if(bSHORTPATH)
-                                    {
-                                        /* short path */
-                                        aprsmsg.msg_source_path=aprsmsg.msg_source_call;    //call last sending node
-                                        aprsmsg.msg_source_path.concat(',');
-                                        aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-                                    }
-                                    else
-                                    {
-                                        /*long path*/
-                                        aprsmsg.msg_source_path.concat(',');
-                                        aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-                                    }
-
-                                    if(aprsmsg.payload_type == '@')
-                                    {
-                                        char csmeter[10];
-                                        snprintf(csmeter, sizeof(csmeter), "%.0f", rssi*-1.0);
-                                        aprsmsg.msg_payload.concat(csmeter);
-                                        aprsmsg.msg_payload.concat(',');
-                                        snprintf(csmeter, sizeof(csmeter), "%i", snr);
-                                        aprsmsg.msg_payload.concat(csmeter);
-                                        aprsmsg.msg_payload.concat(';');
-                                    }
-                                    
-                                    memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
-
-                                    size = encodeAPRS(RcvBuffer, aprsmsg);
-
-                                    if(size + 1 > UDP_TX_BUF_SIZE)
-                                        size = UDP_TX_BUF_SIZE - 1;
-
-                                    ringBuffer[iWrite][0]=size;
-                                    memcpy(ringBuffer[iWrite]+2, RcvBuffer, size);
-                                    if (ringBuffer[iWrite][2] == 0x3A) // only Messages
-                                    {
-                                        if(aprsmsg.msg_payload.startsWith("{") > 0)
-                                            ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
-                                        else
-                                            ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
-                                    }
-                                    else
-                                        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
-
-                                    if(bDisplayRetx)
-                                    {
-                                        unsigned int ring_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
-                                        Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iWrite, ringBuffer[iWrite][1], ringBuffer[iWrite][0], ringBuffer[iWrite][2], ring_msg_id);
-                                    }
-
-                                    iWrite++;
-                                    if(iWrite >= MAX_RING)
-                                        iWrite=0;
+                                    print_buff[0]=0x41;
+                                    print_buff[1]=msg_counter & 0xFF;
+                                    print_buff[2]=(msg_counter >> 8) & 0xFF;
+                                    print_buff[3]=(msg_counter >> 16) & 0xFF;
+                                    print_buff[4]=(msg_counter >> 24) & 0xFF;
+                                    print_buff[5]=0x01;  // ACK
+                                    print_buff[6]=0x00;
                                     
                                     if(bDisplayInfo)
                                     {
-                                        Serial.println(" This packet to mesh");
+                                        Serial.println();
+                                        Serial.print(getTimeString());
+                                        Serial.printf("[ACK-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1]);
                                         bNewLine=true;
                                     }
+                            
+                                    int iackcheck = checkOwnTx(msg_counter);
+                                    if(iackcheck >= 0)
+                                    {
+                                        own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
+                                    }
+
+                                    addBLEOutBuffer(print_buff, 7);
+                                }
+                                else
+                                if(iEnqPos > 0)
+                                {
+                                    //
+                                    // next sequence only reply to a DM-Message
+                                    //
+                                    unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
+                                    
+                                    if(bDisplayInfo)
+                                    {
+                                        Serial.println("");
+                                        bNewLine=true;
+                                    }
+                                        
+                                    SendAckMessage(aprsmsg.msg_source_call, iAckId);
+
+                                    aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
+                                    
+                                    uint8_t tempRcvBuffer[255];
+
+                                    uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                                    sendDisplayText(aprsmsg, rssi, snr);
+
+                                    addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                }
+                                else
+                                {
+                                    //
+                                    // next sequence to send incomming DM-Message to Display and/or APP via BLE
+                                    //
+                                    sendDisplayText(aprsmsg, rssi, snr);
+
+                                    addBLEOutBuffer(RcvBuffer, size);
                                 }
                             }
                             else
                             {
-                                if(bDisplayInfo && !bNewLine)
-                                    Serial.println("");
+                                //
+                                // next sequence to decode special broadcast messages
+                                //
+                                bool bSendAckGateway=true;
+                                if(memcmp(aprsmsg.msg_payload.c_str(), "{MCP}", 5) == 0)
+                                {
+                                    sendDisplayText(aprsmsg, rssi, snr);
+                                    bSendAckGateway=false;
+                                }
+                                else
+                                if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
+                                {
+                                    sendDisplayText(aprsmsg, rssi, snr);
+                                    bSendAckGateway=false;
+                                }
+                                else
+                                if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
+                                {
+                                    sendDisplayText(aprsmsg, rssi, snr);
+                                    bSendAckGateway=false;
+                                }
+                                else
+                                {
+                                    //
+                                    // next sequence to send incomming "Messages to All" to Display and/or APP via BLE
+                                    //
+                                    if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || CheckOwnGroup(destination_call))
+                                    {
+                                        sendDisplayText(aprsmsg, rssi, snr);
+
+                                        // APP Offline
+                                        if(isPhoneReady == 0)
+                                        {
+                                            aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline = true
+
+                                            uint8_t tempRcvBuffer[255];
+
+                                            uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                                            addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                        }
+                                        else
+                                        {
+                                            addBLEOutBuffer(RcvBuffer, size);
+                                        }
+                                    }
+
+                                    // If message already comes from one gateway/server no ACK from another gateway
+                                    if(aprsmsg.msg_server)
+                                        bSendAckGateway=false;
+                                }
+
+                                if(bGATEWAY)
+                                {
+                                    if(bSendAckGateway)
+                                    {
+                                        print_buff[6]=aprsmsg.msg_id & 0xFF;
+                                        print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
+                                        print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
+                                        print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
+
+                                        // nur bei Meldungen an fremde mit ACK
+                                        if(checkOwnTx(aprsmsg.msg_id) >= 0)
+                                        {
+                                            // und an alle geht Wolke mit Hackerl an BLE senden
+                                            if(aprsmsg.msg_destination_path == "*")
+                                            {
+                                                print_buff[5]=0x41;
+                                                print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
+                                                print_buff[11]=0x00;     // msg always 0x00 at the end
+                                                addBLEOutBuffer(print_buff+5, 7);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            if(bDisplayInfo)
+                                            {
+                                                Serial.println("");
+                                                bNewLine=true;
+                                            }
+                                            
+                                            //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
+                                            if(destination_call == "*" || destination_call == "WLNK-1" || destination_call == "APRS2SOTA" || CheckGroup(destination_call) > 0)
+                                            {
+                                                // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
+                                                msg_counter=millis();   // ACK mit neuer msg_id versenden
+
+                                                print_buff[0]=0x41;
+                                                print_buff[1]=msg_counter & 0xFF;
+                                                print_buff[2]=(msg_counter >> 8) & 0xFF;
+                                                print_buff[3]=(msg_counter >> 16) & 0xFF;
+                                                print_buff[4]=(msg_counter >> 24) & 0xFF;
+                                                print_buff[5]=0x80;      // server & max hop
+                                                print_buff[5] = print_buff[5] | meshcom_settings.max_hop_text;
+                                                print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
+                                                print_buff[11]=0x00;     // msg always 0x00 at the end
+                                                
+                                                ringBuffer[iWrite][0]=12;
+                                                ringBuffer[iWrite][1]=0xFF; // retransmission Status ...0xFF no retransmission
+                                                memcpy(ringBuffer[iWrite]+2, print_buff, 12);
+
+                                                iWrite++;
+                                                if(iWrite >= MAX_RING)
+                                                    iWrite=0;
+
+                                                if(bDisplayInfo)
+                                                {
+                                                    Serial.print(getTimeString());
+                                                    Serial.printf(" ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                                                    bNewLine=true;
+                                                }
+                                                                                            
+                                                unsigned long mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
+
+                                                bool bServerFlag = false;
+                                                if((print_buff[5] & 0x80) == 0x80)
+                                                    bServerFlag=true;
+
+                                                addLoraRxBuffer(mid, bServerFlag);
+
+                                                msg_counter=millis();   // ACK mit neuer msg_id versenden
+
+                                                print_buff[1]=msg_counter & 0xFF;
+                                                print_buff[2]=(msg_counter >> 8) & 0xFF;
+                                                print_buff[3]=(msg_counter >> 16) & 0xFF;
+                                                print_buff[4]=(msg_counter >> 24) & 0xFF;
+
+                                                memcpy(ringBuffer[iWrite]+2, print_buff, 12);
+
+                                                iWrite++;
+                                                if(iWrite >= MAX_RING)
+                                                    iWrite=0;
+
+                                                mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
+                                                
+                                                addLoraRxBuffer(mid, bServerFlag);
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        }
+                        else
+                        if(msg_type_b_lora == 0x21)
+                        {
+                            sendDisplayPosition(aprsmsg, rssi, snr);
+
+                            if(isPhoneReady > 0)
+                                addBLEOutBuffer(RcvBuffer, size);
+                        }
+
+                        bool bMeshDestination = true;
+
+                        // messages to WLNK-1 or APRS2SOTA no need to MESH via a gateWay
+                        if(bGATEWAY && strcmp(destination_call, "WLNK-1") == 0)
+                            bMeshDestination = false;
+                        if(bGATEWAY && strcmp(destination_call, "APRS2SOTA") == 0)
+                            bMeshDestination = false;
+
+                        // more then 4 callsigns within source_path no need to MESH via a gateWay
+                        if(bGATEWAY)
+                        {
+                            if(aprsmsg.payload_type == ':' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_text+1)    // TEXT
+                                bMeshDestination = false;
+                            if(aprsmsg.payload_type == '!' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_pos+1)    // POS
+                                bMeshDestination = false;
+                            if(aprsmsg.payload_type == '@' && meshcom_settings.node_hasIPaddress)    // HEY no Mesh on GATEWAYs with Server-Connected
+                                bMeshDestination = false;
+                        }
+
+                        // GATEWAY action before MESH
+                        // and not MESHed from another Gateways
+                        if(bGATEWAY && !aprsmsg.msg_server) 
+                        {
+                            addNodeData(RcvBuffer, size, rssi, snr);
+                        }
+
+                        // resend only Packet to all and !owncall
+                        // bSetLoRaAPRS = APRS via 433.775 usw.
+                        if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && checkMesh() && bMeshDestination)
+                        {
+                            // MESH only max. hops (default 3...TEXT 1...POS)
+                            if(aprsmsg.max_hop > 0)
+                            {
+                                // only set Serverflag if connection to MeshCom-Server
+                                if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+                                    aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server
+
+                                aprsmsg.max_hop--;
+
+                                aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node   last sending node (0x80)
+                                aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
+                            
+                                if(bSHORTPATH)
+                                {
+                                    /* short path */
+                                    aprsmsg.msg_source_path=aprsmsg.msg_source_call;    //call last sending node
+                                    aprsmsg.msg_source_path.concat(',');
+                                    aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                                }
+                                else
+                                {
+                                    /*long path*/
+                                    aprsmsg.msg_source_path.concat(',');
+                                    aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                                }
+
+                                if(aprsmsg.payload_type == '@')
+                                {
+                                    char csmeter[10];
+                                    snprintf(csmeter, sizeof(csmeter), "%.0f", rssi*-1.0);
+                                    aprsmsg.msg_payload.concat(csmeter);
+                                    aprsmsg.msg_payload.concat(',');
+                                    snprintf(csmeter, sizeof(csmeter), "%i", snr);
+                                    aprsmsg.msg_payload.concat(csmeter);
+                                    aprsmsg.msg_payload.concat(';');
+                                }
+                                
+                                memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
+
+                                size = encodeAPRS(RcvBuffer, aprsmsg);
+
+                                if(size + 1 > UDP_TX_BUF_SIZE)
+                                    size = UDP_TX_BUF_SIZE - 1;
+
+                                ringBuffer[iWrite][0]=size;
+                                memcpy(ringBuffer[iWrite]+2, RcvBuffer, size);
+                                if (ringBuffer[iWrite][2] == 0x3A) // only Messages
+                                {
+                                    if(aprsmsg.msg_payload.startsWith("{") > 0)
+                                        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+                                    else
+                                        ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+                                }
+                                else
+                                    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+
+                                if(bDisplayRetx)
+                                {
+                                    unsigned int ring_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
+                                    Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iWrite, ringBuffer[iWrite][1], ringBuffer[iWrite][0], ringBuffer[iWrite][2], ring_msg_id);
+                                }
+
+                                iWrite++;
+                                if(iWrite >= MAX_RING)
+                                    iWrite=0;
+                                
+                                if(bDisplayInfo)
+                                {
+                                    Serial.println(" This packet to mesh");
+                                    bNewLine=true;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if(bDisplayInfo && !bNewLine)
+                                Serial.println("");
                         }
                     }
                 }
