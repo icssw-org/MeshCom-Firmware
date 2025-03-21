@@ -422,6 +422,22 @@ void nrf52setup()
         bEXTUDP=false;
     }
 
+    if(bBMPON)
+    {
+        bBMEON=false;
+        bBME680ON=false;
+        bmx_found=false;
+    }
+    else
+    if(bBMEON)
+    {
+        bBMPON=false;
+        bBME680ON=false;
+        bmx_found=false;
+    }
+
+    bme680_found=false;
+
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
     
     #ifndef ENABLE_SOFTSER

@@ -727,9 +727,12 @@ void commandAction(char *msg_text, bool ble)
             return; 
         }
 
-        bBMPON=true;
+        bBMPON = true;
+        bBMEON = false;
+        bmx_found = false;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0080;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7EFF;   // BME280 off
 
         if(ble)
         {
@@ -752,9 +755,12 @@ void commandAction(char *msg_text, bool ble)
             return; 
         }
 
-        bBMEON=true;
+        bBMPON = false;
+        bBMEON = true;
+        bmx_found = false;
         
-        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x00100;
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0100;
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7F7F;   // BMP280 off
 
         if(ble)
         {
@@ -775,12 +781,13 @@ void commandAction(char *msg_text, bool ble)
         // BMx280 and BME680 share same addresses - only one can be used
         if(bBMPON || bBMEON)
         {
-            Serial.println("BME680 and BMx280 can't be used together!");
+            Serial.println("BME680 and BMP or BME can't be used together!");
             return; 
         }
 
         bBME680ON=true;
-        
+        bme680_found=false;
+
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0004;
 
         if(ble)
@@ -855,6 +862,7 @@ void commandAction(char *msg_text, bool ble)
     {
         bBMPON=false;
         bBMEON=false;
+        bmx_found=false;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;   // BME280/BMP280 off
 
@@ -871,6 +879,7 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"680 off") == 0)
     {
         bBME680ON=false;
+        bme680_found=false;
         
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FFB; // BME680 off
 
