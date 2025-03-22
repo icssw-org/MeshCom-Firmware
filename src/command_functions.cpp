@@ -408,6 +408,8 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n");
             delay(100);
+            Serial.printf("--setgrc 9;..9;  set groups\n--nomsgall on/off  '*'-msg on display\n");
+            delay(100);
             Serial.printf("--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n");
             delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
@@ -2603,25 +2605,6 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
-    else
-    if(commandCheck(msg_text+2, (char*)"nodeset") == 0)
-    {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+8);
-
-        String strCallSign = _owner_c;
-    
-        if(checkRegexCall(strCallSign))
-        {
-            Serial.printf("\n%s match\n", strCallSign.c_str());
-        }
-        else
-        {
-            Serial.printf("\n%s no match\n", strCallSign.c_str());
-        }
-
-        return;
-    }
-
 
     if(bWeather)
     {
