@@ -2042,10 +2042,6 @@ void sendMessage(char *msg_text, int len)
     if(meshcom_settings.node_msgid > 999)
         meshcom_settings.node_msgid=0;
 
-    // only set Serverflag if connection to MeshCom-Server
-    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
-        aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server and do not reply
-
     // Flash rewrite
     save_settings();
 
@@ -2523,10 +2519,6 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
         if(meshcom_settings.node_msgid > 999)
             meshcom_settings.node_msgid=0;
             
-        // only set Serverflag if connection to MeshCom-Server
-        if(bGATEWAY && meshcom_settings.node_hasIPaddress)
-            aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server
-
         // Flash rewrite
         save_settings();
 
@@ -2657,10 +2649,6 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     meshcom_settings.node_msgid++;
     if(meshcom_settings.node_msgid > 999)
         meshcom_settings.node_msgid=0;
-
-    // only set Serverflag if connection to MeshCom-Server
-    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
-        aprsmsg.msg_server = true;  // signal to another gateway not to send to MESHCOM-Server and do not reply
 
     // Flash rewrite
     save_settings();

@@ -123,31 +123,42 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     int inext=-1;
     for(int iset=0; iset<MAX_MHEARD; iset++)
     {
-        if((mheardEpoch[iset]+60*60*3) > getUnixClock())    // 3h
-        {
-            mheardCalls[iset][0] = 0x00;
-        }
-
         if(mheardCalls[iset][0] != 0x00)
         {
-            if(strcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str()) == 0)
-            {
-                ipos=iset;
-            }
+            /*
+            Serial.printf("mheardEpoch[iset]:%ld getUnixClock():%ld\n", mheardEpoch[iset], getUnixClock());
 
+            if((mheardEpoch[iset]+60*60*3) > getUnixClock())    // 3h
+            {
+                mheardCalls[iset][0] = 0x00;
+            }
+            else
+            */
+            {
+                if(strcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str()) == 0)
+                {
+                    ipos=iset;
+                }
+            }
         }
         else
         {
-            inext=iset;
+            if(inext < 0)
+                inext=iset;
         }
     }
 
+    //Serial.printf("inext:%i ipos:%i\n", inext, ipos);
+
+    if(inext >= 0 && ipos == -1)
+    {
+        ipos=inext;
+    }
+    else
     if(inext == -1 && ipos == -1)
     {
-        inext=mheardWrite;
-        mheardWrite++;
-        
-        //Serial.printf("mheardWrite:%i\n", mheardWrite);
+        ipos=mheardWrite;
+            mheardWrite++;
 
         if(mheardWrite >= MAX_MHEARD)
             mheardWrite=0;
@@ -202,13 +213,15 @@ void updateHeyPath(struct mheardLine &mheardLine)
     int inext=-1;
     for(int iset=0; iset<MAX_MHPATH; iset++)
     {
-        if((mheardPathEpoch[iset]+60*60*3) > getUnixClock())
-        {
-            mheardPathCalls[iset][0] = 0x00;
-        }
-
         if(mheardPathCalls[iset][0] != 0x00)
         {
+            /*
+            if((mheardPathEpoch[iset]+60*60*3) > getUnixClock())
+            {
+                mheardPathCalls[iset][0] = 0x00;
+            }
+            else
+            */
             if(strcmp(mheardPathCalls[iset], mheardLine.mh_sourcecallsign.c_str()) == 0)
             {
                 ipos=iset;
@@ -221,21 +234,19 @@ void updateHeyPath(struct mheardLine &mheardLine)
         }
     }
 
+    if(inext >= 0 && ipos == -1)
+    {
+        ipos=inext;
+        mheardPathLen[ipos] = 0x7F;
+    }
+    else
     if(inext == -1 && ipos == -1)
     {
-        inext=mheardPathWrite;
+        ipos=mheardPathWrite;
         mheardPathWrite++;
-        
-        //Serial.printf("mheardWrite:%i\n", mheardWrite);
 
         if(mheardPathWrite >= MAX_MHPATH)
             mheardPathWrite=0;
-    }
-
-    if(ipos == -1)
-    {
-        ipos = inext;
-        mheardPathLen[ipos] = 0x7F;
     }
 
     // check Path-Count

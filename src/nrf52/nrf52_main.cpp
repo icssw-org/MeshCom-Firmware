@@ -1538,7 +1538,7 @@ if (isPhoneReady == 1)
     {
         if ((hb_timer + (HEARTBEAT_INTERVAL * 1000)) < millis())
         {
-            if(bDisplayInfo)
+            if(bDisplayCont)
             {
                 Serial.print(getTimeString());
                 Serial.printf(" [UDP] sending Heartbeat\n");
