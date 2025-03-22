@@ -826,7 +826,7 @@ void NrfETH::startUDP()
 
   if (local_addr[0] == 44 || meshcom_settings.node_hamnet_only)
   {
-    if(bDEBUG)
+    if(bDisplayCont)
       Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
 
     udp_dest_addr = IPAddress(44, 143, 8, 143);
@@ -836,7 +836,9 @@ void NrfETH::startUDP()
   }
   else
   {
-    Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
+    if(bDisplayCont)
+      Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
+
     //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
     udp_dest_addr = IPAddress(89, 185, 97, 38);
 
@@ -890,7 +892,7 @@ void NrfETH::startFIXUDP()
 
   if (memcmp(meshcom_settings.node_ip, "44", 2) == 0 || meshcom_settings.node_hamnet_only)
   {
-    if(bDEBUG)
+    if(bDisplayCont)
       Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
 
     udp_dest_addr = IPAddress(44, 143, 8, 143);
@@ -900,7 +902,9 @@ void NrfETH::startFIXUDP()
   }
   else
   {
-    Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
+    if(bDisplayCont)
+      Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
+      
     udp_dest_addr = IPAddress(89, 185, 97, 38);
 
     //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
