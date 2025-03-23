@@ -1231,8 +1231,24 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("<col style=\"width: 75%;\">");
                     web_client.println("</colgroup>");
 
-                    web_client.printf("<tr><td><b>BME(P)280</b></td><td>%s</td><tr><td><b>BME680</b></td><td>%s</td><tr><td><b>MCU811</b></td><td>%s</td><tr><td><b>LPS33</b></td><td>%s (RAK)</td><tr><td><b>ONEWIRE</b></td><td>%s (%i)</td><tr>\n",
-                    (bBMEON?"on":"off"), (bBME680ON?"on":"off"), (bMCU811ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio);
+                    bool bBMX=false;
+                    if(bBMEON || bBMPON)
+                        bBMX=true;
+
+                    char cbme[10]={0};
+                    if(bBMX)
+                        snprintf(cbme, sizeof(cbme), " (%s)", (bmx_found?"found":"error"));
+        
+                    char c680[10]={0};
+                    if(bBME680ON)
+                        snprintf(c680, sizeof(c680), " (%s)",  (bme680_found?"found":"error"));
+        
+                    char c811[10]={0};
+                    if(bMCU811ON)
+                        snprintf(c811, sizeof(c811), " (%s)",  (mcu811_found?"found":"error"));
+
+                    web_client.printf("<tr><td><b>BME(P)280</b></td><td>%s%s</td><tr><td><b>BME680</b></td><td>%s%s</td><tr><td><b>MCU811</b></td><td>%s%s</td><tr><td><b>LPS33</b></td><td>%s (RAK)</td><tr><td><b>ONEWIRE</b></td><td>%s (%i)</td><tr>\n",
+                    (bBMX?"on":"off"), cbme, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio);
                     web_client.printf("<td><b>TEMP</b></td><td>%.1f °C</td><tr><td><b>TOUT</b></td><td>%.1f °C</td><tr><td><b>HUM</b></td><td>%.1f%% rH</td><tr><td><b>QFE</b></td><td>%.1f hPa</td><tr><td><b>QNH</b></td><td>%.1f hPa</td><tr>\n",
                     meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl);
                     web_client.printf("<td><b>ALT asl</b></td><td>%i m</td><tr><td><b>GAS</b></td><td>%.1f kOhm</td><tr><td><b>eCO2</b></td><td>%.0f ppm</td></tr>\n",
