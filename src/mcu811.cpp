@@ -28,6 +28,8 @@ int maxMCU811ValideCount=0;
 
 bool setupMCU811()
 {  
+    mcu811_found=false;
+
     if(!bMCU811ON)
     {
         meshcom_settings.node_co2=0.0;
@@ -58,6 +60,8 @@ bool setupMCU811()
     ccs.setTempOffset(temp - 25.0);
 
     Serial.println("[INIT]...MCU-811 set");
+    
+    mcu811_found=true;
 
     return true;
 }
@@ -65,7 +69,7 @@ bool setupMCU811()
 
 bool loopMCU811()
 {
-    if(!bMCU811ON)
+    if(!bMCU811ON || !mcu811_found)
     {
         meshcom_settings.node_co2=0.0;
         return false;

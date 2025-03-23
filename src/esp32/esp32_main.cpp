@@ -1717,8 +1717,8 @@ void esp32loop()
 
     checkButtonState();
 
-    #if defined(ENABLE_BMX280)
-    if(bMCU811ON)
+    #if defined(ENABLE_MC811)
+    if(bMCU811ON && mcu811_found)
     {
         if ((MCU811TimeWait + 60000) < millis())   // 60 sec
         {

@@ -125,15 +125,11 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            /*
-            Serial.printf("mheardEpoch[iset]:%ld getUnixClock():%ld\n", mheardEpoch[iset], getUnixClock());
-
-            if((mheardEpoch[iset]+60*60*3) > getUnixClock())    // 3h
+            if((mheardEpoch[iset]+60*60*3) < getUnixClock())    // 3h
             {
                 mheardCalls[iset][0] = 0x00;
             }
             else
-            */
             {
                 if(strcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str()) == 0)
                 {
@@ -215,13 +211,11 @@ void updateHeyPath(struct mheardLine &mheardLine)
     {
         if(mheardPathCalls[iset][0] != 0x00)
         {
-            /*
-            if((mheardPathEpoch[iset]+60*60*3) > getUnixClock())
+            if((mheardPathEpoch[iset]+60*60*3) < getUnixClock())
             {
                 mheardPathCalls[iset][0] = 0x00;
             }
             else
-            */
             if(strcmp(mheardPathCalls[iset], mheardLine.mh_sourcecallsign.c_str()) == 0)
             {
                 ipos=iset;

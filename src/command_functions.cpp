@@ -408,6 +408,8 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n");
             delay(100);
+            Serial.printf("--setgrc 9;..9;  set groups\n--nomsgall on/off  '*'-msg on display\n");
+            delay(100);
             Serial.printf("--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n");
             delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
@@ -720,20 +722,6 @@ void commandAction(char *msg_text, bool ble)
     #if defined(ENABLE_BMX280)
     if(commandCheck(msg_text+2, (char*)"bmp on") == 0)
     {
-        // BMx280 and BME680 share same addresses - only one can be used
-        if(bBME680ON)
-        {
-            Serial.println("BME680 and BMx280 can't be used together!");
-            return; 
-        }
-
-        bBMPON = true;
-        bBMEON = false;
-        bmx_found = false;
-        
-        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0080;
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7EFF;   // BME280 off
-
         if(ble)
         {
             bSensSetting = true;
@@ -741,55 +729,61 @@ void commandAction(char *msg_text, bool ble)
 
         bReturn = true;
 
-        save_settings();
+        // BMx280 and BME680 share same addresses - only one can be used
+        if(bBME680ON)
+        {
+            Serial.println("BME680 and BMx280 can't be used together!");
+        }
+        else
+        {
+            bBMPON = true;
+            bBMEON = false;
+            bmx_found = false;
+            
+            meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0080;
+            meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7EFF;   // BME280 off
 
-        setupBMX280(false);
+            save_settings();
+
+            #if defined(ENABLE_BMX280)
+                setupBMX280(false);
+            #endif
+        }
     }
     else
     if(commandCheck(msg_text+2, (char*)"bme on") == 0)
     {
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        bReturn = true;
+
         // BMx280 and BME680 share same addresses - only one can be used
         if(bBME680ON)
         {
             Serial.println("BME680 and BMx280 can't be used together!");
-            return; 
         }
-
-        bBMPON = false;
-        bBMEON = true;
-        bmx_found = false;
-        
-        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0100;
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7F7F;   // BMP280 off
-
-        if(ble)
+        else
         {
-            bSensSetting = true;
+            bBMPON = false;
+            bBMEON = true;
+            bmx_found = false;
+            
+            meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0100;
+            meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7F7F;   // BMP280 off
+
+            save_settings();
+
+            #if defined(ENABLE_BMX280)
+                setupBMX280(false);
+            #endif
         }
-
-        bReturn = true;
-
-        save_settings();
-
-        #if defined(ENABLE_BMX280)
-            setupBMX280(false);
-        #endif
     }
     else
     if(commandCheck(msg_text+2, (char*)"680 on") == 0)
     {
-        // BMx280 and BME680 share same addresses - only one can be used
-        if(bBMPON || bBMEON)
-        {
-            Serial.println("BME680 and BMP or BME can't be used together!");
-            return; 
-        }
-
-        bBME680ON=true;
-        bme680_found=false;
-
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0004;
-
         if(ble)
         {
             bSensSetting = true;
@@ -797,16 +791,30 @@ void commandAction(char *msg_text, bool ble)
 
         bReturn = true;
 
-        save_settings();
+        // BMx280 and BME680 share same addresses - only one can be used
+        if(bBMPON || bBMEON)
+        {
+            Serial.println("BME680 and BMP or BME can't be used together!");
+        }
+        else
+        {
+            bBME680ON=true;
+            bme680_found=false;
 
-        #if defined(ENABLE_BMX680)
-            setupBME680();
-        #endif
+            meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0004;
+
+            save_settings();
+
+            #if defined(ENABLE_BMX680)
+                setupBME680();
+            #endif
+        }
     }
     else
     if(commandCheck(msg_text+2, (char*)"811 on") == 0)
     {
         bMCU811ON=true;
+        mcu811_found=false;
         
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0008;
 
@@ -896,6 +904,7 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"811 off") == 0)
     {
         bMCU811ON=false;
+        mcu811_found=false;
         
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FF7; // MCU811 off
 
@@ -2603,25 +2612,6 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
-    else
-    if(commandCheck(msg_text+2, (char*)"nodeset") == 0)
-    {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+8);
-
-        String strCallSign = _owner_c;
-    
-        if(checkRegexCall(strCallSign))
-        {
-            Serial.printf("\n%s match\n", strCallSign.c_str());
-        }
-        else
-        {
-            Serial.printf("\n%s no match\n", strCallSign.c_str());
-        }
-
-        return;
-    }
-
 
     if(bWeather)
     {
@@ -2664,8 +2654,12 @@ void commandAction(char *msg_text, bool ble)
             if(bBME680ON)
                 snprintf(c680, sizeof(c680), " (%s)",  (bme680_found?"found":"error"));
 
-            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BME680: %s%s\n...MCU811: %s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
-            (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio);
+            char c811[10]={0};
+            if(bMCU811ON)
+                snprintf(c811, sizeof(c811), " (%s)",  (mcu811_found?"found":"error"));
+
+            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
+            (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio);
 
             Serial.printf("...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", 
             meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
@@ -2909,6 +2903,7 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["680"] = bBME680ON;
         sensdoc["680F"] = bme680_found;
         sensdoc["811"] = bMCU811ON;
+        sensdoc["811F"] = mcu811_found;
         sensdoc["SMALL"] = bSMALLDISPLAY;
         sensdoc["SS"] = bSOFTSERON;
         sensdoc["LPS33"] = bLPS33;

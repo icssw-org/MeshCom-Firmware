@@ -60,6 +60,7 @@ bool bLPS33 = false;
 
 bool bme680_found = false;
 bool bmx_found = false;;
+bool mcu811_found = false;;
 
 bool bGATEWAY = false;
 bool bGATEWAY_NOPOS = false;

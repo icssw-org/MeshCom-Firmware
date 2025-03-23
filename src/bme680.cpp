@@ -50,7 +50,8 @@ void setupBME680()
   if(bBME680ON && (bBMEON || bBMPON))
   {
     Serial.println("[INIT]...BME680 and BMx280 can't be used together!");
-    return; 
+    bBME680ON=false;
+    bme680_found=false;
   }
 
   if(!bBME680ON)
@@ -112,7 +113,7 @@ void setupBME680()
 // get the time when the sensor reading will be completed
 int bme680_get_endTime()
 {
-  if(!bBME680ON)
+  if(!bBME680ON || !bme680_found)
     return 0;
 
   return bme.beginReading();
@@ -123,7 +124,7 @@ int bme680_get_endTime()
 void getBME680()
 {
   
-  if(!bBME680ON)
+  if(!bBME680ON || !bme680_found)
     return;
 
   if (!bme.endReading()) {

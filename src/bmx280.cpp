@@ -119,6 +119,9 @@ void setupBMX280(bool bNewStart)
 	if(bBME680ON && (bBMPON || bBMEON))
 	{
 		Serial.println("[INIT]...BME680 and BMx280 can't be used together!");
+		bBMPON=false;
+		bBMEON=false;
+		bmx_found=false;
 		return; 
 	}
 

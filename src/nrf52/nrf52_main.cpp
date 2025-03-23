@@ -663,6 +663,9 @@ void nrf52setup()
 
     #if defined(ENABLE_BMX280)
         setupBMX280(true);
+    #endif
+
+    #if defined(ENABLE_MC811)
         setupMCU811();
     #endif
 
@@ -1462,7 +1465,8 @@ if (isPhoneReady == 1)
     }
     #endif
 
-    if(bMCU811ON)
+    #if defined(ENABLE_MC811)
+    if(bMCU811ON && mcu811_found)
     {
         if(MCU811TimeWait == 0)
             MCU811TimeWait = millis() - 10000;
@@ -1484,6 +1488,7 @@ if (isPhoneReady == 1)
             MCU811TimeWait = millis(); // wait for next messurement
         }
     }
+    #endif
 
     #if defined(ENABLE_INA226)
     if(bINA226ON)
@@ -1493,7 +1498,7 @@ if (isPhoneReady == 1)
 
         if ((INA226TimeWait + 60000) < millis())   // 60 sec
         {
-            // read MCU-811 Sensor
+            // read INA Sensor
             if(loopINA226())
             {
                 meshcom_settings.node_vbus = getvBUS();
