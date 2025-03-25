@@ -1300,13 +1300,15 @@ void esp32loop()
     // RTC hat Vorrang zu Zeit via MeshCom-Server
     bool bMyClock = true;
 
+    // !posinfo_fix && !bNTPDateTimeValid
+
     if(bRTCON)
     {
         bMyClock = false;
 
         loopRTC();
 
-        if(!bGPSON) // GPS hat Vorang zur RTC
+        if(!posinfo_fix) // GPS hat Vorang zur RTC
         {
             DateTime utc = getRTCNow();
 

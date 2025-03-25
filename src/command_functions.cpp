@@ -388,8 +388,8 @@ void commandAction(char *msg_text, bool ble)
 
         if(ble)
         {
-            snprintf(print_buff, sizeof(print_buff), "--MeshCom %-4.4s%-1.1s commands\n--info show info\n--reboot  Node reboot\n--pos show lat/lon/alt/time info\n--sendpos send pos now\n--sendtrack send LORAAprs now\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
-            addBLECommandBack(print_buff);
+            //snprintf(print_buff, sizeof(print_buff), "--MeshCom %-4.4s%-1.1s commands\n--info show info\n--reboot  Node reboot\n--pos show lat/lon/alt/time info\n--sendpos send pos now\n--sendtrack send LORAAprs now\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
+            //addBLECommandBack(print_buff);
         }
 //        else
         {
@@ -2658,10 +2658,14 @@ void commandAction(char *msg_text, bool ble)
             if(bMCU811ON)
                 snprintf(c811, sizeof(c811), " (%s)",  (mcu811_found?"found":"error"));
 
-            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
-            (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio);
+            char cone[10]={0};
+            if(bONEWIRE)
+                snprintf(cone, sizeof(cone), " (%s)",  (one_found?"found":"error"));
 
-            Serial.printf("...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%% rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", 
+            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s%s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
+            (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), cone, meshcom_settings.node_owgpio);
+
+            Serial.printf("...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f%%rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", 
             meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
         }
 
@@ -2893,7 +2897,6 @@ void commandAction(char *msg_text, bool ble)
         if(ibt == 0)
             ibt = BUTTON_PIN;
 
-        /*{"TYP":"SE", "BME":false,"BMP":false,"680":true,"811":false,"LPS33":false,"OW":false,"OWPIN":4}*/
         JsonDocument sensdoc;
 
         sensdoc["TYP"] = "SE";
@@ -2909,6 +2912,7 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["LPS33"] = bLPS33;
         sensdoc["OW"] = bONEWIRE;
         sensdoc["OWPIN"] = meshcom_settings.node_owgpio;
+        sensdoc["OWF"] = one_found;
         sensdoc["USERPIN"] = ibt;
 
         // reset print buffer
@@ -2931,7 +2935,6 @@ void commandAction(char *msg_text, bool ble)
     else
     if (bWifiSetting)
     {
-        /*{"TYP":"SW", "SSID":"string up to 30 chars?","PW":"also a long string"}*/
         JsonDocument swdoc;
 
         swdoc["TYP"] = "SW";

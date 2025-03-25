@@ -60,7 +60,8 @@ bool bLPS33 = false;
 
 bool bme680_found = false;
 bool bmx_found = false;;
-bool mcu811_found = false;;
+bool mcu811_found = false;
+bool one_found = false;
 
 bool bGATEWAY = false;
 bool bGATEWAY_NOPOS = false;
@@ -1083,7 +1084,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
     {
         // CET Meldungen nur annehmen wenn nichr GPS, RTC oder Handyverbindung vorhanden ist
-        if(!bRTCON && !posinfo_fix && !bNTPDateTimeValid && !bPhoneTimeValid)
+        if(!bRTCON && !posinfo_fix && !bNTPDateTimeValid) // !!!! erst aktivieren wenn PHone regelmässig zeit liefert  && !bPhoneTimeValid)
         {
             uint16_t Year=2000;
             uint16_t Month=1;

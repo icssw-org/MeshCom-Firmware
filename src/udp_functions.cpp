@@ -699,14 +699,24 @@ void startMeshComUDP()
     {
       if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
       {
+        // MeshCom Test-Server
         Serial.printf("[WIFI]...Hamnet UDP-DEST 44.143.8.143");
         node_hostip = IPAddress(44, 143, 8, 143);
         s_node_hostip = node_hostip.toString();
 
-        // MeshCom Test-Server
-
-        Serial.println("[WIFI]...Hamnet NTP-DEST 44.143.0.9");
-        timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+        // MeshCom NDP-Server
+        // Austria
+        if(node_ip[1] == 143)
+        {
+          Serial.println("[WIFI]...Hamnet NTP-DEST 44.143.0.9");
+          timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
+        }
+        // other
+        else
+        {
+          Serial.println("[WIFI]...Hamnet NTP-DEST 44.148.224.123");
+          timeClient.setPoolServerIP(IPAddress(44, 148, 224, 123));
+        }
       }
       else
       {
