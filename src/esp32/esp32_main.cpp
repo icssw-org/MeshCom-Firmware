@@ -80,6 +80,11 @@ extern XPowersLibInterface *PMU;
 bool bPosFirst = true;
 bool bHeyFirst = true;
 
+String strTime;
+String strDate;
+String strText = "";
+String str;
+
 /*
     Video: https://www.youtube.com/watch?v=oCMOYS71NIU
     Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
@@ -358,8 +363,6 @@ void checkSerialCommand(void);
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
-
-String strText="";
 
 unsigned int getMacAddr(void)
 {
@@ -1326,7 +1329,7 @@ void esp32loop()
     else
     if(meshcom_settings.node_hasIPaddress)
     {
-        String strTime = "none";
+        strTime = "none";
 
         // every five minutes
         if((updateTimeClient + 1000 * 60 * 5) < millis() || updateTimeClient == 0)
@@ -1338,7 +1341,7 @@ void esp32loop()
         else
             strTime = udpGetTimeClient();
 
-        String strDate = udpGetDateClient();
+        strDate = udpGetDateClient();
 
         uint16_t Year = (uint16_t)strDate.substring(0, 4).toInt();
         uint16_t Month = (uint16_t)strDate.substring(5, 7).toInt();
@@ -1895,8 +1898,6 @@ int checkRX(void)
     is_receiving=true;
 
     uint8_t payload[UDP_TX_BUF_SIZE+10];
-
-    String str;
     
     size_t ibytes = UDP_TX_BUF_SIZE;
 

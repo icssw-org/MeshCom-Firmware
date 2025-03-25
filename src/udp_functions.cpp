@@ -11,6 +11,11 @@
 
 static uint8_t txBuffer[UDP_TX_BUF_SIZE+50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
+String keep;
+String cfw;
+String firmware;
+String grc_ids;
+
 #ifdef ESP32
 
 #include <NTPClient.h>
@@ -30,8 +35,11 @@ IPAddress extern_node_ip = IPAddress(0,0,0,0);
 
 String s_node_ip = "";
 String s_node_hostip = "";
-
 String s_extern_node_ip = "";
+
+String strOutput;
+String strSource_call;
+String str_ip;
 
 bool hasIPaddress = false;
 
@@ -60,7 +68,7 @@ int waitRestartUDPCounter = 5;
 
 String strEsc(String strInput)
 {
-  String strOutput = "";
+  strOutput = "";
   for(int ip=0; ip<strInput.length(); ip++)
   {
     if(strInput.charAt(ip) == '"' || strInput.charAt(ip) == '\\')
@@ -305,7 +313,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 // DM message for lokal Node 
                 if(iAckId > 0)
                 {
-                  String strSource_call = source_call;
+                  strSource_call = source_call;
                   SendAckMessage(strSource_call, iAckId);
                 }
             }
@@ -619,9 +627,7 @@ String udpGetTimeClient()
 
 String udpGetDateClient()
 {
-  String strDate = getDateTime(timeClient.getEpochTime());
-
-  return strDate;
+  return getDateTime(timeClient.getEpochTime());
 }
 
 void startMeshComUDP()
@@ -1060,7 +1066,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
   {
     IPAddress apip;
     
-    String str_ip = meshcom_settings.node_extern;
+    str_ip = meshcom_settings.node_extern;
 
     //Serial.println(str_ip.c_str());
 
@@ -1199,12 +1205,12 @@ void sendKEEP()
 {
     uint8_t hb_buffer[UDP_TX_BUF_SIZE+50];
 
-    String keep = "KEEP";
-    String cfw = SOURCE_VERSION;
+    keep = "KEEP";
+    cfw = SOURCE_VERSION;
     cfw.concat(SOURCE_VERSION_SUB);
-    String firmware = "GW";
+    firmware = "GW";
     firmware.concat(cfw);
-    String grc_ids = "";
+    grc_ids = "";
     
     for(int igrc=0; igrc<6; igrc++)
     {

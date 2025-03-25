@@ -27,6 +27,7 @@ unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE+5]; // Buffer to hold incoming pack
 
 String s_node_ip;
 String s_node_hostip;
+String strSource_call;
 
 String NrfETH::getNodeIP()
 {
@@ -404,7 +405,7 @@ int NrfETH::getUDP()
                   // DM message for lokal Node 
                   if(iAckId > 0)
                   {
-                    String strSource_call = source_call;
+                    strSource_call = source_call;
                     SendAckMessage(strSource_call, iAckId);
                   }
               }
@@ -879,9 +880,7 @@ String NrfETH::udpGetTimeClient()
 
 String NrfETH::udpGetDateClient()
 {
-  String strDate = getDateTime(timeClient.getEpochTime());
-
-  return strDate;
+  return getDateTime(timeClient.getEpochTime());
 }
 
 void NrfETH::startFIXUDP()
