@@ -74,6 +74,9 @@ SFE_UBLOX_GNSS myGPS;
 int state = 0; // only for gps reset
 bool bMitHardReset = false;  // only for gps reset
 
+String strTime;
+String strDate;
+
 /*
     RAK4631 PIN DEFINITIONS
 
@@ -883,7 +886,7 @@ void nrf52loop()
     else
     if(meshcom_settings.node_hasIPaddress)
     {
-        String strTime = "none";
+        strTime = "none";
 
         // every five minutes
         if((updateTimeClient + 1000 * 60 * 5) < millis() || updateTimeClient == 0)
@@ -895,7 +898,7 @@ void nrf52loop()
         else
             strTime = neth.udpGetTimeClient();
 
-        String strDate = neth.udpGetDateClient();
+        strDate = neth.udpGetDateClient();
 
         uint16_t Year = (uint16_t)strDate.substring(0, 4).toInt();
         uint16_t Month = (uint16_t)strDate.substring(5, 7).toInt();
