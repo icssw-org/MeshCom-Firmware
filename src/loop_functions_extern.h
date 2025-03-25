@@ -59,6 +59,7 @@ extern bool bLPS33;
 extern bool bme680_found;
 extern bool bmx_found;
 extern bool mcu811_found;
+extern bool one_found;
 
 extern bool bSHORTPATH;
 extern bool bGPSDEBUG;

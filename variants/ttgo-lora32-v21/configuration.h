@@ -67,4 +67,4 @@ definitions for TLORA_V2_1_1p6
 #define I2C_SDA    21
 #define I2C_SCL    22
 
-#define OneWire_GPIO 25 // getestet OE5HWN
+#define OneWire_GPIO 4 // getestet OE5HWN

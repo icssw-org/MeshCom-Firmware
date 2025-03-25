@@ -21,6 +21,8 @@ void PrintBytes(const uint8_t* addr, uint8_t count, bool newline=false)
 
 void init_onewire(void)
 {
+    one_found = false;
+
     if(!bONEWIRE)
         return;
 
@@ -65,7 +67,7 @@ void loop_onewire()
     byte addr[8];
     float celsius, fahrenheit;
 
-    if ( !ds.search(addr))
+    if (!ds.search(addr))
     {
         if(bWXDEBUG)
         {
@@ -90,6 +92,7 @@ void loop_onewire()
     if (OneWire::crc8(addr, 7) != addr[7])
     {
         Serial.println("OneWire CRC is not valid!");
+        one_found=false;
         return;
     }
 
@@ -119,6 +122,7 @@ void loop_onewire()
         default:
             if(bWXDEBUG)
                 Serial.println("Device is not a DS18x20 family device.");
+            one_found=false;
             return;
     } 
 
@@ -157,6 +161,11 @@ void loop_onewire()
         Serial.print(OneWire::crc8(data, 8), HEX);
         Serial.println();
     }
+
+    if(OneWire::crc8(data, 8) == 0)
+        one_found=false;
+    else
+        one_found=true;
 
     // Convert the data to actual temperature
     // because the result is a 16 bit signed integer, it should

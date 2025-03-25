@@ -865,7 +865,7 @@ void nrf52loop()
 
         loopRTC();
 
-        if(!bGPSON) // GPS hat Vorang zur RTC
+        if(!posinfo_fix) // GPS hat Vorang zur RTC
         {
             DateTime utc = getRTCNow();
 

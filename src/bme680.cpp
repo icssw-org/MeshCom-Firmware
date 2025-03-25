@@ -146,7 +146,7 @@ void getBME680()
     Serial.print("BME680: ");
     Serial.print(F("Temperature = "));
     Serial.print(meshcom_settings.node_temp);
-    Serial.println(F(" *C"));
+    Serial.println(F(" °C"));
 
     Serial.print(F("Pressure = "));
     Serial.print(meshcom_settings.node_press);
@@ -154,11 +154,11 @@ void getBME680()
 
     Serial.print(F("Humidity = "));
     Serial.print(meshcom_settings.node_hum);
-    Serial.println(F(" %"));
+    Serial.println(F(" %rH"));
 
     Serial.print(F("Gas = "));
     Serial.print(meshcom_settings.node_gas_res);
-    Serial.println(F(" KOhms"));
+    Serial.println(F(" KOhm"));
 
     Serial.print(F("Approx. Altitude = "));
     Serial.print(bme_alt);
