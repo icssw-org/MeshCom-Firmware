@@ -49,6 +49,12 @@ uint32_t vbat_pin = BATTERY_PIN;
 
 #endif
 
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+
+uint32_t vbat_pin = BATTERY_PIN;
+
+#endif
+
 #if defined(BOARD_RAK4630) || defined(BOARD_T_ECHO)
 //nothing
 #else
@@ -79,10 +85,15 @@ adc_channel_t channel = ADC_CHANNEL_6;     //GPIO34 if ADC1, GPIO14 if ADC2
 //static const
 adc_bits_width_t width = ADC_WIDTH_BIT_12;
 #elif CONFIG_IDF_TARGET_ESP32S2
-//static const
+//static const 
 adc_channel_t channel = ADC_CHANNEL_6;     // GPIO7 if ADC1, GPIO17 if ADC2
 //static const
 adc_bits_width_t width = ADC_WIDTH_BIT_13;
+#elif CONFIG_IDF_TARGET_ESP32S3
+//static const
+adc_channel_t channel = ADC_CHANNEL_6;
+//static const
+adc_bits_width_t width = ADC_WIDTH_BIT_12;
 #endif
 
 #if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
@@ -127,8 +138,21 @@ void check_efuse(void)
     } else {
         Serial.printf("Cannot retrieve eFuse Two Point calibration values. Default calibration values will be used.\n");
     }
+#elif CONFIG_IDF_TARGET_ESP32S3
+	//Check if TP is burned into eFuse
+	if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
+		Serial.printf("eFuse Two Point: Supported\n");
+	} else {
+		Serial.printf("eFuse Two Point: NOT supported\n");
+	}
+	//Check Vref is burned into eFuse
+	if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK) {
+		Serial.printf("eFuse Vref: Supported\n");
+	} else {
+		Serial.printf("eFuse Vref: NOT supported\n");
+	}
 #else
-#error "This example is configured for ESP32/ESP32S2."
+#error "This example is configured for ESP32/ESP32S2/ESP32S3."
 #endif
 }
 

@@ -74,7 +74,9 @@ int iCount_weiss=0;
 bool bLED = true;
 #endif
 
-
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#include <t-deck/tdeck_main.h>
+#endif
 
 /**
  * RadioLib Infos und Examples:
@@ -458,6 +460,11 @@ void esp32setup()
 	// Get LoRa parameter
 	init_flash();
 
+    // Initialize T-Deck Hardware
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    initTDeck();
+    #endif
+
     bDisplayVolt = meshcom_settings.node_sset & 0x0001;
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
     bPosDisplay = meshcom_settings.node_sset & 0x0004;
@@ -794,7 +801,6 @@ void esp32setup()
         }
         #endif
 
-
         // set carrier frequency
         Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", meshcom_settings.node_freq);
         if (radio.setFrequency(meshcom_settings.node_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
@@ -808,7 +814,6 @@ void esp32setup()
             Serial.println(F("Selected bandwidth is invalid for this module!"));
             while (true);
         }
-
 
         // set spreading factor 
         Serial.printf("[LoRa]...RF_SF: %i\n", meshcom_settings.node_sf);

@@ -14,6 +14,11 @@
 
 #include <Wire.h> 
 
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#include <lvgl.h>
+#include <t-deck/tdeck_main.h>
+#endif 
+
 // TinyGPS
 extern TinyGPSPlus tinyGPSPLus;
 
@@ -1445,7 +1450,12 @@ bool bShowHead=false;
 
 void checkButtonState()
 {
-    #ifdef BUTTON_PIN
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    
+    button.check();
+    lv_task_handler();
+
+    #elif defined(BUTTON_PIN)
 
     if(bcheckBottonRun)
         return;
@@ -1628,7 +1638,6 @@ void checkButtonState()
     }
 
     bcheckBottonRun = false;
-
     #endif
 }
 
