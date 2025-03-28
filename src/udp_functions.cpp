@@ -827,115 +827,19 @@ void startExternUDP()
   sendExternHeartbeat();
 }
 
-String getJSON(unsigned char incoming[300], int len, char *iname)
-{
-  if(incoming[0] != '{')
-    return "none";
 
-  int is=0;
-  
-  char collect[len];
-  int ic=0;
-  memset(collect, 0x00, len);
-
-  char collect_value[len];
-  int icv=0;
-  memset(collect_value, 0x00, len);
-
-  // {"type": "msg", "dst": "OE5BYE-1", "msg": "Test 1 2 3"}
-
-  for(int ip=1; ip<len; ip++)
-  {
-    if((is == 0 || is == 2 || is == 3 || is == 5) && incoming[ip] == 0x20)
-    {
-
-    }
-    else
-    if(is == 0 && incoming[ip] == 0x22)
-    {
-      is = 1;
-    }
-    else
-    if(is == 1)
-    {
-      if(incoming[ip] == 0x22)
-      {
-        is = 2;
-      }
-      else
-      {
-        collect[ic]=incoming[ip];
-        ic++;
-      }
-    }
-    else
-    if(is == 2)
-    {
-      if(incoming[ip] == 0x2C) // ,
-      {
-        is = 0;
-      }
-      else
-      if(incoming[ip] == 0x3A) // :
-      {
-        if(strcmp(collect, iname) == 0)
-        {
-          is = 3;
-        }
-        else
-        {
-          ic=0;
-          memset(collect, 0x00, len);
-
-          is = 5;
-        }
-      }
-    }
-    else
-    if(is == 3)
-    {
-      if(incoming[ip] == 0x22)
-      {
-        is = 4;
-      }
-    }
-    else
-    if(is == 4)
-    {
-      if(incoming[ip] == 0x22)
-      {
-        return (String)collect_value;
-      }
-      else
-      {
-        collect_value[icv]=incoming[ip];
-        icv++;
-      }
-    }
-    else
-    if(is == 5)
-    {
-      if(incoming[ip] == 0x2C)
-      {
-        is = 0;
-      }
-    }
-  }
-
-  return "none";
-
-}
 
 void getExtern(unsigned char incoming[], int len)
 {
   if(bWIFIAP)
     return;
 
-    char val[160+1];
+    char val[160+1] = {0};
   struct aprsMessage aprsmsg;
 
   // Decode
   // {"type":"msg","dst":"*","msg":"Meldungstext"}
+  // {"type": "msg", "dst": "OE5BYE-1", "msg": "Test 1 2 3"}
 
   initAPRS(aprsmsg, ':');
 
@@ -945,8 +849,20 @@ void getExtern(unsigned char incoming[], int len)
 
   //Serial.printf("len:%i icomming:%s vgldst:%s vglmsg:%s\n", len, incoming, vgldst, vglmsg);
 
-  aprsmsg.msg_destination_path = getJSON(incoming, len, (char*)"dst");
-  aprsmsg.msg_payload = getJSON(incoming, len, (char*)"msg");
+  // decode the incomning message
+  JsonDocument inputJson;
+  DeserializationError error = deserializeJson(inputJson, incoming, len);
+  if (error)
+  {
+    Serial.printf("[EXTUDP] deserializeJson() failed: %s\n", error.c_str());
+    return;
+  }
+
+  const char* dst = inputJson["dst"]; // "OE5BYE-1"
+  const char* msg = inputJson["msg"]; // "Test 1 2 3"
+  aprsmsg.msg_destination_path = dst;
+  aprsmsg.msg_payload = msg;
+  Serial.printf("[EXTUDP] Incoming dst:%s msg:%s\n", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
 
   //Serial.printf("aprsmsg.msg_destination_path:%s aprsmsg.msg_payload:%s\n", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
@@ -1129,7 +1045,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
 
     UdpExtern.beginPacket(apip , EXTERN_PORT);
 
-    Serial.printf("[EXTUDP]: %s Len: %i\n", c_json, strlen(c_json));
+    Serial.printf("[EXTUDP] Out: %s Len: %i\n", c_json, strlen(c_json));
 
     if (!UdpExtern.write(u_json, strlen(c_json)))
     {
