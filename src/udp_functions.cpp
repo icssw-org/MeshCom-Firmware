@@ -988,13 +988,17 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     cJson["hw_id"] = aprsmsg.msg_source_hw;
     cJson["msg_id"] = _msgId;
     cJson["alt"] = aprspos.alt;
-    cJson["batt"] = global_proz;
-
+    
     // add firmware version if not a node
-    if(strcmp(src_type, "node") != 0)
+    if(strcmp(src_type, "node") == 0)
     {
+      cJson["batt"] = global_proz;
       cJson["firmware"] = SOURCE_VERSION;
       cJson["fw_sub"] = SOURCE_VERSION_SUB;
+    }
+    else
+    {
+      cJson["batt"] = aprspos.bat;
     }
     // clear the buffer
     memset(c_json, 0x00, sizeof(c_json));
