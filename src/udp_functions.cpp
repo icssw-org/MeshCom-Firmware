@@ -8,6 +8,7 @@
 #include <time_functions.h>
 #include <lora_setchip.h>
 #include <configuration.h>
+#include "ArduinoJson.h"
 
 static uint8_t txBuffer[UDP_TX_BUF_SIZE+50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
@@ -826,115 +827,19 @@ void startExternUDP()
   sendExternHeartbeat();
 }
 
-String getJSON(unsigned char incoming[300], int len, char *iname)
-{
-  if(incoming[0] != '{')
-    return "none";
 
-  int is=0;
-  
-  char collect[len];
-  int ic=0;
-  memset(collect, 0x00, len);
-
-  char collect_value[len];
-  int icv=0;
-  memset(collect_value, 0x00, len);
-
-  // {"type": "msg", "dst": "OE5BYE-1", "msg": "Test 1 2 3"}
-
-  for(int ip=1; ip<len; ip++)
-  {
-    if((is == 0 || is == 2 || is == 3 || is == 5) && incoming[ip] == 0x20)
-    {
-
-    }
-    else
-    if(is == 0 && incoming[ip] == 0x22)
-    {
-      is = 1;
-    }
-    else
-    if(is == 1)
-    {
-      if(incoming[ip] == 0x22)
-      {
-        is = 2;
-      }
-      else
-      {
-        collect[ic]=incoming[ip];
-        ic++;
-      }
-    }
-    else
-    if(is == 2)
-    {
-      if(incoming[ip] == 0x2C) // ,
-      {
-        is = 0;
-      }
-      else
-      if(incoming[ip] == 0x3A) // :
-      {
-        if(strcmp(collect, iname) == 0)
-        {
-          is = 3;
-        }
-        else
-        {
-          ic=0;
-          memset(collect, 0x00, len);
-
-          is = 5;
-        }
-      }
-    }
-    else
-    if(is == 3)
-    {
-      if(incoming[ip] == 0x22)
-      {
-        is = 4;
-      }
-    }
-    else
-    if(is == 4)
-    {
-      if(incoming[ip] == 0x22)
-      {
-        return (String)collect_value;
-      }
-      else
-      {
-        collect_value[icv]=incoming[ip];
-        icv++;
-      }
-    }
-    else
-    if(is == 5)
-    {
-      if(incoming[ip] == 0x2C)
-      {
-        is = 0;
-      }
-    }
-  }
-
-  return "none";
-
-}
 
 void getExtern(unsigned char incoming[], int len)
 {
   if(bWIFIAP)
     return;
 
-    char val[160+1];
+    char val[160+1] = {0};
   struct aprsMessage aprsmsg;
 
   // Decode
   // {"type":"msg","dst":"*","msg":"Meldungstext"}
+  // {"type": "msg", "dst": "OE5BYE-1", "msg": "Test 1 2 3"}
 
   initAPRS(aprsmsg, ':');
 
@@ -944,8 +849,20 @@ void getExtern(unsigned char incoming[], int len)
 
   //Serial.printf("len:%i icomming:%s vgldst:%s vglmsg:%s\n", len, incoming, vgldst, vglmsg);
 
-  aprsmsg.msg_destination_path = getJSON(incoming, len, (char*)"dst");
-  aprsmsg.msg_payload = getJSON(incoming, len, (char*)"msg");
+  // decode the incomning message
+  JsonDocument inputJson;
+  DeserializationError error = deserializeJson(inputJson, incoming, len);
+  if (error)
+  {
+    Serial.printf("[EXTUDP] deserializeJson() failed: %s\n", error.c_str());
+    return;
+  }
+
+  const char* dst = inputJson["dst"]; // "OE5BYE-1"
+  const char* msg = inputJson["msg"]; // "Test 1 2 3"
+  aprsmsg.msg_destination_path = dst;
+  aprsmsg.msg_payload = msg;
+  Serial.printf("[EXTUDP] Incoming dst:%s msg:%s\n", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
 
   //Serial.printf("aprsmsg.msg_destination_path:%s aprsmsg.msg_payload:%s\n", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
@@ -1014,14 +931,18 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     return;
   }
 
-  char c_json[500];
+  char c_json[500] = {0};
   char escape_symbol[3];
   char escape_group[3];
 
   memset(escape_symbol, 0x00, 3);
   memset(escape_group, 0x00, 3);
 
-  uint8_t u_json[500];
+  uint8_t u_json[500] = {0};
+
+  // convert the mesgid to 8 digits hex
+  char _msgId[9];
+  sniprintf(_msgId, sizeof(_msgId), "%08X", aprsmsg.msg_id);
 
   // Position
   if(msg_type_b_lora == 0x21)
@@ -1041,23 +962,71 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     else
       escape_group[1] = 0x00;
 
-    if(strcmp(src_type, "node") == 0)
-      snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i}",
-      src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, global_proz);
-    else
-      snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"pos\",\"src\":\"%s\",\"msg\":\"\",\"lat\":%.4lf,\"lat_dir\":\"%c\",\"long\":%.4lf,\"long_dir\":\"%c\",\"aprs_symbol\":\"%s\",\"aprs_symbol_group\":\"%s\",\"hw_id\":\"%i\",\"msg_id\":\"%08X\",\"alt\":%i,\"batt\":%i,\"firmware\":\"%-4.4s\"}",
-      src_type, aprsmsg.msg_source_path.c_str(), aprspos.lat_d, aprspos.lat_c, aprspos.lon_d, aprspos.lon_c, escape_symbol, escape_group, aprsmsg.msg_source_hw, aprsmsg.msg_id, aprspos.alt, global_proz, SOURCE_VERSION);
+    // limit lat/long to 4 digits
+    double a_lat = (int)(aprspos.lat_d * 10000) / 10000.0;
+    double a_long = (int)(aprspos.lon_d * 10000) / 10000.0;
+    
+    char _lat_c[3] = {0};
+    char _long_c[3] = {0};
+    sniprintf(_lat_c, sizeof(_lat_c), "%c", aprspos.lat_c);
+    sniprintf(_long_c, sizeof(_long_c), "%c", aprspos.lon_c);
 
-    memcpy(u_json, c_json, strlen(c_json));
+    JsonDocument cJson;
+    int json_len = 0;
+
+    // build the json with Arduino JSON
+    cJson["src_type"] = src_type;
+    cJson["type"] = "pos";
+    cJson["src"] = aprsmsg.msg_source_path.c_str();
+    cJson["msg"] = "";
+    cJson["lat"] = a_lat;
+    cJson["lat_dir"] = _lat_c;
+    cJson["long"] = a_long;
+    cJson["long_dir"] = _long_c;
+    cJson["aprs_symbol"] = escape_symbol;
+    cJson["aprs_symbol_group"] = escape_group;
+    cJson["hw_id"] = aprsmsg.msg_source_hw;
+    cJson["msg_id"] = _msgId;
+    cJson["alt"] = aprspos.alt;
+    cJson["batt"] = global_proz;
+
+    // add firmware version if not a node
+    if(strcmp(src_type, "node") != 0)
+    {
+      cJson["firmware"] = SOURCE_VERSION;
+      cJson["fw_sub"] = SOURCE_VERSION_SUB;
+    }
+    // clear the buffer
+    memset(c_json, 0x00, sizeof(c_json));
+    // serialize the json
+    json_len = measureJson(cJson);
+    serializeJson(cJson, c_json, json_len + 1);
+
+    memcpy(u_json, c_json, json_len + 1);
   }
   else
   // Text
   if(msg_type_b_lora == 0x3A)
   {
-    snprintf(c_json, sizeof(c_json), "{\"src_type\":\"%s\",\"type\":\"msg\",\"src\":\"%s\",\"dst\":\"%s\",\"msg\":\"%s\",\"msg_id\":\"%08X\"}",
-    src_type, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), strEsc(aprsmsg.msg_payload).c_str(), aprsmsg.msg_id);
 
-    memcpy(u_json, c_json, strlen(c_json));
+    JsonDocument cJson;
+    int json_len = 0;
+
+    // build the json with Arduino JSON
+    cJson["src_type"] = src_type;
+    cJson["type"] = "msg";
+    cJson["src"] = aprsmsg.msg_source_path.c_str();
+    cJson["dst"] = aprsmsg.msg_destination_path.c_str();
+    cJson["msg"] = strEsc(aprsmsg.msg_payload).c_str();
+    cJson["msg_id"] = _msgId;
+    
+    // clear the buffer
+    memset(c_json, 0x00, sizeof(c_json));
+    // serialize the json
+    json_len = measureJson(cJson);
+    serializeJson(cJson, c_json, json_len + 1);
+
+    memcpy(u_json, c_json, json_len + 1);
   }
   else
     return;
@@ -1076,7 +1045,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
 
     UdpExtern.beginPacket(apip , EXTERN_PORT);
 
-    Serial.printf("c_json:%s %i\n", c_json, strlen(c_json));
+    Serial.printf("[EXTUDP] Out: %s Len: %i\n", c_json, strlen(c_json));
 
     if (!UdpExtern.write(u_json, strlen(c_json)))
     {
@@ -1084,16 +1053,6 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     }
 
     UdpExtern.endPacket();
-
-+   // write raw data
-+   UdpExtern.beginPacket(apip , EXTERN_RAW_PORT); 
-    
-    if(!UdpExtern.write(buffer, buflen))
-    {
-      resetExternUDP();
-    }
-+   
-+   UdpExtern.endPacket();
 
   }
   else

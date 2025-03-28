@@ -153,7 +153,9 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
     {
         deviceConnected = false;
-        Serial.printf("BLE disconnected. Reason: %i\n", reason);
+        // print the reason for the disconnection in hex
+        // https://github.com/apache/mynewt-nimble/blob/master/docs/ble_hs/ble_hs_return_codes.rst
+        Serial.printf("BLE disconnected. Reason: 0x%04x\n", reason);
         //NimBLEDevice::startAdvertising();
     }
 
