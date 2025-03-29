@@ -944,6 +944,10 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
   char _msgId[9];
   sniprintf(_msgId, sizeof(_msgId), "%08X", aprsmsg.msg_id);
 
+  // convert the mesgid to 8 digits hex
+  char _msgId[9];
+  sniprintf(_msgId, sizeof(_msgId), "%08X", aprsmsg.msg_id);
+
   // Position
   if(msg_type_b_lora == 0x21)
   {
@@ -1000,6 +1004,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     {
       cJson["batt"] = aprspos.bat;
     }
+
     // clear the buffer
     memset(c_json, 0x00, sizeof(c_json));
     // serialize the json
@@ -1057,7 +1062,6 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     }
 
     UdpExtern.endPacket();
-
   }
   else
   {

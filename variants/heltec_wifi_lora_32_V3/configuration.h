@@ -89,3 +89,5 @@ definitions for HELTEC_V3
 
 #define SDA_PIN 17
 #define SCL_PIN 18
+
+#define OneWire_GPIO 17 // getestet ???
