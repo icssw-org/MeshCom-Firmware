@@ -1785,8 +1785,8 @@ void checkSerialCommand(void)
                 strText.trim();
                 strcpy(msg_text, strText.c_str());
 
-                int inext=0;
-                char msg_buffer[300];
+                int inext = 0;
+                char msg_buffer[600];
                 for(int itx=0; itx<(int)strText.length(); itx++)
                 {
                     if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
@@ -1802,8 +1802,10 @@ void checkSerialCommand(void)
                         msg_buffer[inext]=msg_text[itx];
                         msg_buffer[inext+1]=0x00;
                         inext++;
-                        if(inext >= (int)sizeof(msg_buffer)-2)
-                            inext=(int)sizeof(msg_buffer)-2;
+
+                        // buffer size reached
+                        if(inext > sizeof(msg_buffer)-2)
+                            break;
                     }
                 }
 
