@@ -1000,6 +1000,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     {
       cJson["batt"] = aprspos.bat;
     }
+
     // clear the buffer
     memset(c_json, 0x00, sizeof(c_json));
     // serialize the json
@@ -1057,7 +1058,6 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     }
 
     UdpExtern.endPacket();
-
   }
   else
   {
