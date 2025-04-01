@@ -174,6 +174,8 @@ extern unsigned long mheardPathEpoch[MAX_MHPATH];  //Ringbuffer for MHeard EPoch
 extern char mheardPath[MAX_MHPATH][60]; //Ringbuffer for MHeard Sourcepath
 extern uint8_t mheardPathLen[MAX_MHPATH];
 
+extern char cTimeSource[10];
+
 extern char cBLEName[50];
 
 // SOFTSER global variables

@@ -614,6 +614,7 @@ void esp32setup()
 	// initialize clock
 	boResult = MyClock.Init();
 	Serial.printf("[INIT]...Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
+    snprintf(cTimeSource, sizeof(cTimeSource), (char*)"INIT");
 
     DisplayTimeWait=0;
     //
@@ -1319,13 +1320,21 @@ void esp32loop()
 
             DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
 
-            meshcom_settings.node_date_year = now.year();
-            meshcom_settings.node_date_month = now.month();
-            meshcom_settings.node_date_day = now.day();
+            uint16_t Year = now.year();
+            uint16_t Month = now.month();
+            uint16_t Day = now.day();
 
-            meshcom_settings.node_date_hour = now.hour();
-            meshcom_settings.node_date_minute = now.minute();
-            meshcom_settings.node_date_second = now.second();
+            uint16_t Hour = now.hour();
+            uint16_t Minute = now.minute();
+            uint16_t Second = now.second();
+
+
+            // check valid Date & Time
+            if(Year > 2023)
+            {
+                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+                snprintf(cTimeSource, sizeof(cTimeSource), (char*)"RTC");
+            }
         }
     }
     else
@@ -1358,6 +1367,8 @@ void esp32loop()
         {
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
             bNTPDateTimeValid = true;
+
+            snprintf(cTimeSource, sizeof(cTimeSource), (char*)"NTP");
         }
         else
             bNTPDateTimeValid = false;
@@ -1977,7 +1988,7 @@ void checkSerialCommand(void)
                 strcpy(msg_text, strText.c_str());
 
                 int inext=0;
-                char msg_buffer[300];
+                char msg_buffer[600];
                 for(int itx=0; itx<(int)strText.length(); itx++)
                 {
                     if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
@@ -1993,6 +2004,10 @@ void checkSerialCommand(void)
                         msg_buffer[inext]=msg_text[itx];
                         msg_buffer[inext+1]=0x00;
                         inext++;
+
+                        // buffer size reached
+                        if(inext > sizeof(msg_buffer)-2)
+                            break;
                     }
                 }
 

@@ -92,6 +92,8 @@ int iDisplayChange = 0;
 unsigned long lastHeardTime = 0;
 unsigned long posfixinterall = 0;
 
+char cTimeSource[10];
+
 char cBLEName[50]={0};
 
 // SOFTSER global variables
@@ -1103,7 +1105,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
 
             if(Year > 2023)
+            {
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+                snprintf(cTimeSource, sizeof(cTimeSource), (char*)"{CET}");
+            }
         }
 
         return;
@@ -1631,7 +1636,10 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         meshcom_settings.node_date_second = Second;
 
         if(Year > 2023)
+        {
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+            snprintf(cTimeSource, sizeof(cTimeSource), (char*)"SER");
+        }
     }
 
     sendDisplayMainline();
@@ -2235,8 +2243,16 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         if(bINA226ON)
         {
             snprintf(cversion, sizeof(cversion), "%s", "/V=5");
+            if(alt > 0)
+            {
+                // auf Fuss umrechnen
+                if(bFuss)
+                    snprintf(calt, sizeof(calt), "/A=%06i", conv_fuss(alt));
+                else
+                    snprintf(calt, sizeof(calt), "/A=%05i", alt);
+            }
             snprintf(cbatt, sizeof(cbatt), "/B=%i", global_proz);
-            snprintf(cinaU, sizeof(cinaU), "/U=%.1f", meshcom_settings.node_vbus);
+            snprintf(cinaU, sizeof(cinaU), "/U=%.2f", meshcom_settings.node_vbus);
             snprintf(cinaI, sizeof(cinaI), "/I=%.1f", meshcom_settings.node_vcurrent);
 
             //////////

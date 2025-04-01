@@ -47,6 +47,8 @@ void sendGpsJson();
 void sendAPRSset();
 void sendConfigFinish();
 
+String strMore;
+
 int casecmp(const char *s1, const char *s2)
 {
 	while (*s1 != 0 && tolower(*s1) == tolower(*s2))
@@ -78,6 +80,7 @@ int commandCheck(char *msg, char *command)
 char print_buff[600];
 
 uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+char msg_detail[300];
 
 bool bRxFromPhone = false;
 
@@ -85,13 +88,65 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 {
     bRxFromPhone = rxFromPhone;
 
+    bool ble=false;
+    
     if(iphone == 1)
-        commandAction(msg_text, true);
+        ble=true;
+
+    // loop more commands from one string
+    // --setcall OE3WAS-10 --setpwd 12345678 --setssid Drei_H288A_24G_yAFG --webserver on --button gpio 12 --button on ......
+    if(bDisplayCont)
+    {
+        Serial.println("");
+        Serial.println("START CHECK:");
+    }
+
+    int inext = 0;
+    for(int ipos=2; ipos<strlen(msg_text); ipos++)
+    {
+        if(memcmp(msg_text+ipos, "--", 2) == 0)
+        {
+            memset(msg_detail, 0x00, sizeof(msg_detail));
+            memcpy(msg_detail, msg_text+inext, ipos-inext);
+
+            if(bDisplayCont)
+            {
+                Serial.print("MORE:");
+                Serial.println(msg_detail);
+            }
+
+            commandAction(msg_detail, ble);
+
+            inext = ipos;
+        }
+    }
+
+    // only one command
+    if(inext > 0)
+    {
+        memset(msg_detail, 0x00, sizeof(msg_detail));
+        memcpy(msg_detail, msg_text+inext, strlen(msg_text)-inext);
+
+        if(bDisplayCont)
+        {
+            Serial.print("MORE:");
+            Serial.println(msg_detail);
+        }
+
+        commandAction(msg_detail, ble);
+}
     else
-        commandAction(msg_text, false);
+    {
+        if(bDisplayCont)
+        {
+            Serial.print("ONE:");
+            Serial.println(msg_text);
+        }
+
+        commandAction(msg_text, ble);
+    }
 
     bRxFromPhone = false;
-
 }
 
 void commandAction(char *msg_text, bool ble)
@@ -2519,7 +2574,7 @@ void commandAction(char *msg_text, bool ble)
         }
         else
         {
-            printf("showi2c %s\n", print_buff);
+            printf("\n\n%s", print_buff);
         }
 
         return;
@@ -2629,7 +2684,11 @@ void commandAction(char *msg_text, bool ble)
             wdoc["ALT"] = meshcom_settings.node_press_alt;
             wdoc["GAS"] = meshcom_settings.node_gas_res;
             wdoc["CO2"] = meshcom_settings.node_co2;
-
+            wdoc["VBUS"] = meshcom_settings.node_vbus;
+            wdoc["VSHUNT"] = meshcom_settings.node_vshunt;
+            wdoc["VAMP"] = meshcom_settings.node_vcurrent;
+            wdoc["VPOW"] = meshcom_settings.node_vpower;
+    
             // reset print buffer
             memset(print_buff, 0, sizeof(print_buff));
 
@@ -2770,9 +2829,9 @@ void commandAction(char *msg_text, bool ble)
             if(ibt == 0)
                 ibt = BUTTON_PIN;
 
-            Serial.printf("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i ...UTC-OFF %f\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s\n...PASSWD <%s>\n",
+            Serial.printf("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i ...UTC-OFF %f [%s]\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s\n...PASSWD <%s>\n",
                     SOURCE_VERSION, SOURCE_VERSION_SUB , __DATE__ , __TIME__ , meshcom_settings.node_update,
-                    meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
+                    meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
                     (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",

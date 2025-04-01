@@ -1761,8 +1761,8 @@ String work_webpage(bool bget_password, int webid)
                     web_client.printf("<tr><td style=\"width:40px\"><b>Firmware</b></td><td>MeshCom %-4.4s%-1.1s (build: %s / %s)</td><tr><td><b>Start-Date</b></td><td>%s</td></tr><tr><td><b>Call</b></td><td>%s ...%s</td></tr>\n",
                         SOURCE_VERSION, SOURCE_VERSION_SUB,__DATE__,__TIME__, meshcom_settings.node_update, meshcom_settings.node_call, getHardwareLong(BOARD_HARDWARE).c_str());
 
-                    web_client.printf("<tr><td><b>UTC-OFF</b></td><td>%.1f</td></tr>\n",
-                        meshcom_settings.node_utcoff);
+                    web_client.printf("<tr><td><b>UTC-OFF</b></td><td>%.1f [%s]</td></tr>\n",
+                        meshcom_settings.node_utcoff, cTimeSource);
                     
                     web_client.printf("<tr><td><b>BATT</b></td><td>%.2f V %d %% max %.2f V</td></tr><tr><td><b>Setting</b></td><td>GATEWAY %s %s ...MESH %s</td></tr><tr><td></td><td>BUTTON  %s ...DEBUG %s</td></tr>\n",
                         global_batt/1000.0, global_proz, meshcom_settings.node_maxv, (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"));
@@ -2307,8 +2307,8 @@ void main_webpage()
     web_client.println("</style></head>");
     
     // Web Page Heading
-    web_client.printf("<body><h3 style=\"margin-bottom: 0px;\">MeshCom 4.0 %-4.4s%-1.1s&nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT</h3>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call,
-        meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+    web_client.printf("<body><h3 style=\"margin-bottom: 0px;\">MeshCom 4.0 %-4.4s%-1.1s&nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT&nbsp;[%s]</h3>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call,
+        meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cTimeSource);
 
     web_client.println("<table class=\"table\">");
     web_client.println("<colgroup>");

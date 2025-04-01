@@ -17,7 +17,7 @@ String strInfo = "";
 
     Serial.println("[I2C] ... Scanner started");
 
-    sprintf(cInfo, "--[I2C] ... Scanner\n");
+    sprintf(cInfo, "--[I2C] ...\n");
     strInfo.concat(cInfo);
 
     for (address = 1; address < 127; address++)
@@ -70,21 +70,21 @@ String strInfo = "";
             if(address == 0x71)strDev="TCA9548A/1";
             if(address == 0x76)strDev="BME280/BMP280/BME680";
             if(address == 0x77)strDev="BME280/BMP280/BME680";
-            sprintf(cInfo, "[I2C] ... device found at address 0x%02X %s\n", address, strDev.c_str());
+            sprintf(cInfo, "[I2C] ... device at 0x%02X %s\n", address, strDev.c_str());
             strInfo.concat(cInfo);
 
             nDevices++;
         }
         else if (error == 4)
         {
-            sprintf(cInfo, "[I2C] ... Unknown error at address 0x%02X\n", address);
+            sprintf(cInfo, "[I2C] ... Unknown error at 0x%02X\n", address);
             strInfo.concat(cInfo);
         }
     }
 
     if (nDevices == 0)
     {
-        sprintf(cInfo, "[I2C] ... No devices found\n");
+        sprintf(cInfo, "[I2C] ... no devices found\n");
         strInfo.concat(cInfo);
     }
 
