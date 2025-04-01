@@ -128,87 +128,83 @@ uint8_t iPhoneState=0;
 // Bluetooth UUIDs are standardized. For more info: https://www.bluetooth.com/specifications/assigned-numbers/
 // Nordic UUID DB is here: https://github.com/NordicSemiconductor/bluetooth-numbers-database
 
-
 class MyServerCallbacks: public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override 
+    void onConnect(NimBLEServer* pServer)
     {
         deviceConnected = true;
         config_to_phone_prepare = true;
-        
-        Serial.printf("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
-        /**
-         *  We can use the connection handle here to ask for different connection parameters.
-         *  Args: connection handle, min connection interval, max connection interval
-         *  latency, supervision timeout.
-         *  Units; Min/Max Intervals: 1.25 millisecond increments.
-         *  Latency: number of intervals allowed to skip.
-         *  Timeout: 10 millisecond increments.
-         */
-        pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
         // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-        commandAction((char*)"--conffin", isPhoneReady, true);
-
+        commandAction((char*)"--conffin", true);
+        Serial.println("[BLE] connected");
+        // get the connected count
+        if(bBLEDEBUG){
+            Serial.print("[BLE] Connected devices: ");
+            Serial.println(pServer->getConnectedCount());
+        }
     };
 
-    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
+    void onDisconnect(NimBLEServer* pServer)
     {
         deviceConnected = false;
-        // print the reason for the disconnection in hex
-        // https://github.com/apache/mynewt-nimble/blob/master/docs/ble_hs/ble_hs_return_codes.rst
-        Serial.printf("BLE disconnected. Reason: 0x%04x\n", reason);
-        //NimBLEDevice::startAdvertising();
+        Serial.println("[BLE] disconnected");
     }
 
-	/********************* Security handled here *********************/
-	uint32_t onPassKeyDisplay() override 
+	/***************** New - Security handled here ********************
+	****** Note: these are the same return values as defaults ********/
+	uint32_t onPassKeyRequest()
     {
-        if(meshcom_settings.bt_code > 0 && meshcom_settings.bt_code <= 999999)
+        if(meshcom_settings.bt_code >= 100000 && meshcom_settings.bt_code <= 999999)
         {
-    		Serial.printf("Server PassKeyRequest <%06i>\n", meshcom_settings.bt_code);
+    		Serial.printf("[BLE] Server PassKeyRequest <%06i>\n", meshcom_settings.bt_code);
 	    	return (uint32_t)meshcom_settings.bt_code;
         }
 
-		Serial.printf("Server PassKeyRequest <%06i>\n", PIN);
+		Serial.printf("[BLE] Server PassKeyRequest <%06i>\n", PIN);
 		return PIN;
 	}
-	/*******************************************************************/
 
-    void onAuthenticationComplete(NimBLEConnInfo& connInfo) override {
-        /** Check that encryption was successful, if not we disconnect the client */
-        if (!connInfo.isEncrypted()) {
-            NimBLEDevice::getServer()->disconnect(connInfo.getConnHandle());
-            Serial.printf("Encrypt connection failed - disconnecting client\n");
-            return;
+    void onAuthenticationComplete(ble_gap_conn_desc* desc)
+    {
+        if (desc->sec_state.encrypted)
+        {
+            //Serial.println("BLE pairing complete");
+            Serial.println("[BLE] pairing complete, encrypted");
         }
-
-        Serial.printf("Secured connection to: %s\n", connInfo.getAddress().toString().c_str());
+        else
+        {
+            Serial.println("[BLE] pairing complete, not encrypted");
+        }
+        // get bonding information
+        if(bBLEDEBUG)
+        {
+            Serial.print("[BLE] Bonded devices: ");
+            Serial.println(NimBLEDevice::getNumBonds());
+            Serial.print("[BLE] Bonded address: ");
+            Serial.println(NimBLEDevice::getBondedAddress(0).toString().c_str());
+        }
+        
     }
-} serverCallbacks;
+	/*******************************************************************/
+};
 
-
-/** Handler class for characteristic actions */
-class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
-    /*void onRead(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
-        Serial.printf("%s : onRead(), value: %s\n",
-               pCharacteristic->getUUID().toString().c_str(),
-               pCharacteristic->getValue().c_str());
-    }*/
-
-    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
-
+class MyCallbacks: public NimBLECharacteristicCallbacks 
+{
+    void onWrite(NimBLECharacteristic *pCharacteristic)
+    {
+        // Forward data from Mobile to our peripheral
         uint8_t conf_data[MAX_MSG_LEN_PHONE] = {0};
         size_t conf_length=0;
-        conf_length = pCharacteristic->getLength(); // getLength();
+
+        conf_length = pCharacteristic->getDataLength(); // getLength();
 
         if (conf_length <= 0)
             return;
-        
+
         memcpy(conf_data, pCharacteristic->getValue() , conf_length);
 
-        readPhoneCommand(conf_data);
-    }
-
-} chrCallbacks;
+    	readPhoneCommand(conf_data);
+    };
+};
 
 
 
@@ -949,11 +945,11 @@ void esp32setup()
     
     //NimBLEDevice::setDeviceName(strBLEName);
 
-    NimBLEDevice::setPower(9); // +9dbm
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9); // +9dbm
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     NimBLEDevice::setSecurityAuth(true, true, true);
     
-    if(meshcom_settings.bt_code > 0 && meshcom_settings.bt_code <= 999999)
+    if(meshcom_settings.bt_code >= 100000 && meshcom_settings.bt_code <= 999999)
         NimBLEDevice::setSecurityPasskey(meshcom_settings.bt_code);
     else
         NimBLEDevice::setSecurityPasskey(PIN);
@@ -964,7 +960,7 @@ void esp32setup()
 
     // Create the BLE Server
     pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(&serverCallbacks);
+    pServer->setCallbacks(new MyServerCallbacks());
     pServer->advertiseOnDisconnect(true);
 
     // Create the BLE Service
@@ -1001,7 +997,7 @@ void esp32setup()
 #endif
                         NIMBLE_PROPERTY::NOTIFY );
 
-    pRxCharacteristic->setCallbacks(&chrCallbacks);
+    pRxCharacteristic->setCallbacks(new MyCallbacks());
 
     // Start the service
     pService->start();
@@ -1014,9 +1010,9 @@ void esp32setup()
     pAdvertising->addServiceUUID(SERVICE_UUID);
 
     if(bBLElong)
-        pAdvertising->enableScanResponse(true);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
+        pAdvertising->setScanResponse(true);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
     else
-        pAdvertising->enableScanResponse(false);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
+        pAdvertising->setScanResponse(false);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
     
     pAdvertising->start();
  
