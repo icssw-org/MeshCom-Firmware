@@ -21,7 +21,7 @@ definitions for T-Beam
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
 #define SX127X
-#define TX_POWER_MAX 17  // max 17 dBm
+#define TX_POWER_MAX 20  // max 20 dBm
 #define TX_POWER_MIN 2
 
 // Defined using AXP192
@@ -31,7 +31,7 @@ definitions for T-Beam
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
-#define TX_OUTPUT_POWER 17
+#define TX_OUTPUT_POWER 20
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
 /**

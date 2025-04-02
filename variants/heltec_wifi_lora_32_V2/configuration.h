@@ -20,13 +20,13 @@ definitions for HELTEC_V2_1
 #define ENABLE_MC811
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
-#define TX_POWER_MAX 17  // max 17dBm
+#define TX_POWER_MAX 20  // max 20dBm
 #define TX_POWER_MIN 2
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
-#define TX_OUTPUT_POWER 17
+#define TX_OUTPUT_POWER 20
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
 
