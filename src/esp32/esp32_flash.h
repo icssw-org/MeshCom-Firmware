@@ -115,6 +115,9 @@ struct s_meshcom_settings
 	char node_ssid[33] = {0};
 	char node_pwd[64] = {0};
 
+	int node_analog_pin = 32;
+	float node_analog_faktor = 1.0;
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;

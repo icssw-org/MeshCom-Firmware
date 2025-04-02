@@ -444,14 +444,14 @@ String work_webpage(bool bget_password, int webid)
                     commandAction((char*)"--small off", bPhoneReady);
                 }
                 else
-                if (web_header.indexOf("GET /nopos/on") >= 0)
+                if (web_header.indexOf("GET /checkanalog/on") >= 0)
                 {
-                    commandAction((char*)"--gateway nopos", bPhoneReady);
+                    commandAction((char*)"--analogcheck on", bPhoneReady);
                 }
                 else
-                if (web_header.indexOf("GET /nopos/off") >= 0)
+                if (web_header.indexOf("GET /checkanalog/off") >= 0)
                 {
-                    commandAction((char*)"--gateway pos", bPhoneReady);
+                    commandAction((char*)"--analogcheck off", bPhoneReady);
                 }
                 else
                 if (web_header.indexOf("GET /softser/on") >= 0)
@@ -781,6 +781,38 @@ String work_webpage(bool bget_password, int webid)
                         message = hex2ascii(web_header.substring(idx_text, idx_text_end));
 
                     snprintf(message_text, sizeof(message_text), "--maxv %s", message.c_str());
+                    
+                    commandAction(message_text, bPhoneReady);
+                }
+                else
+                if (web_header.indexOf("?angpio=") >= 0)
+                {
+                    idx_text=web_header.indexOf("=") + 1;
+
+                    String message="";
+
+                    if(idx_text_end <= 0)
+                        message = hex2ascii(web_header.substring(idx_text));
+                    else
+                        message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                    snprintf(message_text, sizeof(message_text), "--analog gpio %s", message.c_str());
+                    
+                    commandAction(message_text, bPhoneReady);
+                }
+                else
+                if (web_header.indexOf("?afactor=") >= 0)
+                {
+                    idx_text=web_header.indexOf("=") + 1;
+
+                    String message="";
+
+                    if(idx_text_end <= 0)
+                        message = hex2ascii(web_header.substring(idx_text));
+                    else
+                        message = hex2ascii(web_header.substring(idx_text, idx_text_end));
+
+                    snprintf(message_text, sizeof(message_text), "--analog factor %s", message.c_str());
                     
                     commandAction(message_text, bPhoneReady);
                 }
@@ -1423,6 +1455,24 @@ String work_webpage(bool bget_password, int webid)
 
                     web_client.println("<form action=\"/#\">");
                     web_client.println("<tr><td>");
+                    web_client.println("<label for=\"fname\"><b>ANALOG-PIN:</b></label>");
+                    web_client.println("</td><td>");
+                    web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"2\" size=\"2\" id=\"angpio\" name=\"angpio\">\n", meshcom_settings.node_analog_pin);
+                    web_client.println("<input type=\"submit\" value=\"set\">");
+                    web_client.println("</td></tr>");
+                    web_client.println("</form>");
+
+                    web_client.println("<form action=\"/#\">");
+                    web_client.println("<tr><td>");
+                    web_client.println("<label for=\"fname\"><b>A-FACTOR:</b></label>");
+                    web_client.println("</td><td>");
+                    web_client.printf("<input type=\"text\" value=\"%.4f\" maxlength=\"8\" size=\"5\" id=\"afactor\" name=\"afactor\">\n", meshcom_settings.node_analog_faktor);
+                    web_client.println("<input type=\"submit\" value=\"set\">");
+                    web_client.println("</td></tr>");
+                    web_client.println("</form>");
+
+                    web_client.println("<form action=\"/#\">");
+                    web_client.println("<tr><td>");
                     web_client.println("<label for=\"fname\"><b>LISTEN-TO:</b></label>");
                     web_client.println("</td><td>");
                     web_client.printf("<input type=\"text\" value=\"%i\" maxlength=\"5\" size=\"5\" id=\"listento0\" name=\"listento0\">\n", meshcom_settings.node_gcb[0]);
@@ -1765,7 +1815,7 @@ String work_webpage(bool bget_password, int webid)
                         meshcom_settings.node_utcoff, cTimeSource);
                     
                     web_client.printf("<tr><td><b>BATT</b></td><td>%.2f V %d %% max %.2f V</td></tr><tr><td><b>Setting</b></td><td>GATEWAY %s %s ...MESH %s</td></tr><tr><td></td><td>BUTTON  %s ...DEBUG %s</td></tr>\n",
-                        global_batt/1000.0, global_proz, meshcom_settings.node_maxv, (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"));
+                        global_batt/1000.0, global_proz, meshcom_settings.node_maxv, (bGATEWAY?"on":"off"), (bAnalogCheck?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"));
                     
                     
                     web_client.printf("<tr><td></td><td>LORADEBUG %s ...GPSDEBUG  %s</td></tr><tr><td></td><td>WXDEBUG %s ... BLEDEBUG %s</td></tr><tr><td><b>APRS-TXT</b></td><td>%s</td></tr>\n",
@@ -1818,6 +1868,14 @@ String work_webpage(bool bget_password, int webid)
                         web_client.printf("<tr><td><b>vSHUNT</b></td><td>%.2f mV</td></tr>\n", meshcom_settings.node_vshunt);
                         web_client.printf("<tr><td><b>vCURRENT</b></td><td>%.1f mA</td></tr>\n", meshcom_settings.node_vcurrent);
                         web_client.printf("<tr><td><b>vPOWER</b></td><td>%.1f mW</td></tr>\n", meshcom_settings.node_vpower);
+                    }
+
+                    if(bAnalogCheck)
+                    {
+                        web_client.println("<tr><td>&nbsp;</td><td>&nbsp;</td></tr>");
+                        web_client.printf("<tr><td><b>ANALOG GPIO</b></td><td>%i</td></tr>\n", meshcom_settings.node_analog_pin);
+                        web_client.printf("<tr><td><b>Factor</b></td><td>%.4f V</td></tr>\n", meshcom_settings.node_analog_faktor);
+                        web_client.printf("<tr><td><b>Value</b></td><td>%.2f V</td></tr>\n", fAnalogValue);
                     }
 
                     if(bRTCON)
@@ -1964,14 +2022,14 @@ String work_webpage(bool bget_password, int webid)
                         web_client.println("<td><a href=\"/ina226/on\"><button class=\"button\"><b>INA226</b></button></a></td></tr>");
                     }
 
-                    // GATEWAY_NOPOS
-                    if (bGATEWAY_NOPOS)
+                    // ANALOG CHECK
+                    if (bAnalogCheck)
                     {
-                        web_client.println("<tr><td><a href=\"/nopos/off\"><button class=\"button button2\"<b>GW NOPOS</b></button></a></td>");
+                        web_client.println("<tr><td><a href=\"/checkanalog/off\"><button class=\"button button2\"<b>ANALOG</b></button></a></td>");
                     }
                     else
                     {
-                        web_client.println("<tr><td><a href=\"/nopos/on\"><button class=\"button\"><b>GW NOPOS</b></button></a></td>");
+                        web_client.println("<tr><td><a href=\"/checkanalog/on\"><button class=\"button\"><b>ANALOG</b></button></a></td>");
                     }
 
                     // SMALLDISPLAY
