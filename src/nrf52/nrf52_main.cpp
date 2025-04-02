@@ -1804,7 +1804,7 @@ void checkSerialCommand(void)
                         inext++;
 
                         // buffer size reached
-                        if(inext > sizeof(msg_buffer)-2)
+                        if(inext > (int)sizeof(msg_buffer)-2)
                             break;
                     }
                 }

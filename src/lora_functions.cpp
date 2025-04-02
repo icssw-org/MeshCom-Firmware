@@ -569,7 +569,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                             }
                                             
                                             //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
-                                            if(destination_call == "*" || destination_call == "WLNK-1" || destination_call == "APRS2SOTA" || CheckGroup(destination_call) > 0)
+                                            if(strcmp(destination_call, "*") == 0 || strcmp(destination_call, "WLNK-1") == 0 || strcmp(destination_call, "APRS2SOTA") == 0 || CheckGroup(destination_call) > 0)
                                             {
                                                 // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
                                                 msg_counter=millis();   // ACK mit neuer msg_id versenden
