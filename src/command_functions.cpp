@@ -102,7 +102,7 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     }
 
     int inext = 0;
-    for(int ipos=2; ipos<strlen(msg_text); ipos++)
+    for(int ipos=2; ipos<(int)strlen(msg_text); ipos++)
     {
         if(memcmp(msg_text+ipos, "--", 2) == 0)
         {
