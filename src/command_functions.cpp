@@ -102,7 +102,7 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     }
 
     int inext = 0;
-    for(int ipos=2; ipos<strlen(msg_text); ipos++)
+    for(int ipos=2; ipos<(int)strlen(msg_text); ipos++)
     {
         if(memcmp(msg_text+ipos, "--", 2) == 0)
         {
@@ -455,7 +455,7 @@ void commandAction(char *msg_text, bool ble)
             Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255\n");
             delay(100);
 #endif
-            Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n");
+            Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analogcheck on/off\n");
             delay(100);
             Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
             delay(100);
@@ -626,6 +626,88 @@ void commandAction(char *msg_text, bool ble)
         initButtonPin();
     }
     else
+    #if defined (ANALOG_PIN)
+    if(commandCheck(msg_text+2, (char*)"analog gpio ") == 0)
+    {
+        int iap = meshcom_settings.node_analog_pin;
+
+        sscanf(msg_text+14, "%d", &meshcom_settings.node_analog_pin);
+
+        if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin > 99)
+        {
+            Serial.printf("Wrong ANALOG GPIO PIN only > 1 and <= 99");
+            
+            meshcom_settings.node_analog_pin = iap;
+
+            return;
+        }
+
+        save_settings();
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+
+        initAnalogPin();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"analog factor ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+16);
+        sscanf(_owner_c, "%lf", &dVar);
+
+        //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
+
+        meshcom_settings.node_analog_faktor=dVar;
+
+        save_settings();
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"analogcheck on") == 0)
+    {
+        bAnalogCheck=true;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0008;
+
+        save_settings();
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+
+        initAnalogPin();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"analogcheck off") == 0)
+    {
+        bAnalogCheck=false;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FF7;
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    #endif
     if(commandCheck(msg_text+2, (char*)"track on") == 0)
     {
         bDisplayTrack=true;
@@ -2867,11 +2949,18 @@ void commandAction(char *msg_text, bool ble)
 
             if(bINA226ON)
             {
-                Serial.printf("\nINA226\n");
+                Serial.printf("\n...INA226\n");
                 Serial.printf("...vBUS     %.2f V\n", meshcom_settings.node_vbus);
                 Serial.printf("...vSHUNT   %.2f mV\n", meshcom_settings.node_vshunt);
                 Serial.printf("...vCURRENT %.1f mA\n", meshcom_settings.node_vcurrent);
                 Serial.printf("...vPOWER   %.1f mW\n", meshcom_settings.node_vpower);
+                Serial.println("");
+            }
+
+            if(bAnalogCheck)
+            {
+                Serial.printf("\n...ANALOG PIN %i factor %.4f\n", meshcom_settings.node_analog_pin, meshcom_settings.node_analog_faktor);
+                Serial.printf("...Value %.2f V\n", fAnalogValue);
                 Serial.println("");
             }
 
@@ -3163,6 +3252,8 @@ void sendNodeSetting()
     nsetdoc["MBW"] = meshcom_settings.node_bw;
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
     nsetdoc["NOALL"] = bNoMSGtoALL;
+    nsetdoc["ANAFAC"] = meshcom_settings.node_analog_faktor;
+    nsetdoc["ANAPIN"] = meshcom_settings.node_analog_pin;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));

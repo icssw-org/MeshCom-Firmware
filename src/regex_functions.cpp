@@ -15,6 +15,12 @@ bool checkRegexCall(String callsign)
 	if(callsign.length() < 1)
 		return false;
 
+	// not legal
+	// DE ... Germany SWL-Callsign
+	if(callsign.compareTo("DE") == 0)
+		return false;
+
+	// legal
 	if(callsign.compareTo("*") == 0) // TOALL message
 		return true;
 	

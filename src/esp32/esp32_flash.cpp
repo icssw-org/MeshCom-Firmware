@@ -157,6 +157,10 @@ void init_flash(void)
     sprintf(meshcom_settings.node_ssid, "%s", strVar.c_str());
     strVar = preferences.getString("node_lpwd", "none");
     sprintf(meshcom_settings.node_pwd, "%s", strVar.c_str());
+
+    meshcom_settings.node_analog_pin = preferences.getInt("node_apin", 32);
+    meshcom_settings.node_analog_faktor = preferences.getFloat("node_afakt", 1.0);
+
 }
 
 void save_settings(void)
@@ -308,6 +312,9 @@ void save_settings(void)
     preferences.putString("node_lssid", strVar); 
     strVar = meshcom_settings.node_pwd;
     preferences.putString("node_lpwd", strVar); 
+
+    preferences.putInt("node_apin", meshcom_settings.node_analog_pin);
+    preferences.putFloat("node_afakt", meshcom_settings.node_analog_faktor);
 
     preferences.end();
 

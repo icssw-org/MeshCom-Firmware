@@ -438,6 +438,7 @@ void esp32setup()
     // nicht mehr notwendig bMHONLY =  bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
+    bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
 
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 
@@ -1419,7 +1420,13 @@ void esp32loop()
         }
     #endif
 
-    checkButtonState();
+    #if defined (BUTTON_PIN)
+        checkButtonState();
+    #endif
+
+    #if defined (ANALOG_PIN)
+        checkAnalogValue();
+    #endif
 
     // BLE
     if (deviceConnected)

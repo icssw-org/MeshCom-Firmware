@@ -86,6 +86,9 @@ bool bButtonCheck = false;
 bool bcheckBottonRun = false;
 uint8_t iButtonPin = 0;
 
+bool bAnalogCheck = false;
+float fAnalogValue = 0.0;
+
 int iInitDisplay = 0;
 int iDisplayChange = 0;
 
@@ -1321,6 +1324,40 @@ void init_loop_function()
     posinfo_satcount = 0;
     posinfo_hdop = 0;
     posinfo_fix = false;
+}
+
+// ANALOG
+void initAnalogPin()
+{
+    #if defined (ANALOG_PIN)
+
+    if(bAnalogCheck)
+    {
+        pinMode(meshcom_settings.node_analog_pin, INPUT);
+    }
+    
+    #endif
+}
+
+void checkAnalogValue()
+{
+    #if defined (ANALOG_PIN)
+
+    if(bAnalogCheck)
+    {
+        float raw = (float)(analogRead(meshcom_settings.node_analog_pin));
+        fAnalogValue = raw  * meshcom_settings.node_analog_faktor;
+        
+        if(bDisplayInfo)
+        {
+            Serial.print(getTimeString());
+            Serial.printf("[ANALOG]...GPIO%i %.0f * %.4f = %.2f\n", meshcom_settings.node_analog_pin, raw, meshcom_settings.node_analog_faktor, fAnalogValue);
+        }
+    }
+    else
+        fAnalogValue = 0.0;
+
+    #endif
 }
 
 // BUTTON

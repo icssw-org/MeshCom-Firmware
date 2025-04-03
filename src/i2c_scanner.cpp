@@ -70,14 +70,14 @@ String strInfo = "";
             if(address == 0x71)strDev="TCA9548A/1";
             if(address == 0x76)strDev="BME280/BMP280/BME680";
             if(address == 0x77)strDev="BME280/BMP280/BME680";
-            sprintf(cInfo, "[I2C] ... device at 0x%02X %s\n", address, strDev.c_str());
+            sprintf(cInfo, "[I2C] ... 0x%02X %s\n", address, strDev.c_str());
             strInfo.concat(cInfo);
 
             nDevices++;
         }
         else if (error == 4)
         {
-            sprintf(cInfo, "[I2C] ... Unknown error at 0x%02X\n", address);
+            sprintf(cInfo, "[I2C] ... unknown error at 0x%02X\n", address);
             strInfo.concat(cInfo);
         }
     }
