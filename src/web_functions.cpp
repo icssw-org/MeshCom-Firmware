@@ -1175,8 +1175,8 @@ String work_webpage(bool bget_password, int webid)
                     web_client.printf("<tr><td><b>RATE</b></td><td>%i</td></tr><tr><td><b>NEXT</b></td><td>%i sec</td></tr><tr><td><b>DIST</b></td><td>%im</td></tr><tr><td><b>DIRn:</b></td><td>%i°</td></tr><tr><td><b>DIRo</b></td><td>%i°</td></tr>\n",
                     (int)posinfo_interval, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction);
                     
-                    web_client.printf("<tr><td><b>DATE</b></td><td>%i.%02i.%02i %02i:%02i:%02i LT</td></tr>\n",
-                    meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+                    web_client.printf("<tr><td><b>DATE</b></td><td>%i.%02i.%02i %02i:%02i:%02i %s</td></tr>\n",
+                    meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str());
                     web_client.printf("<tr><td><b>SYMB</b></td><td>%c %c</td></tr><tr><td><b>GPS</b></td><td>%s</td></tr><tr><td><b>Track</b></td><td>%s</td></tr>\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"));
 
                     web_client.println("</table>");
@@ -2365,8 +2365,8 @@ void main_webpage()
     web_client.println("</style></head>");
     
     // Web Page Heading
-    web_client.printf("<body><h3 style=\"margin-bottom: 0px;\">MeshCom 4.0 %-4.4s%-1.1s&nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;LT&nbsp;[%s]</h3>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call,
-        meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cTimeSource);
+    web_client.printf("<body><h3 style=\"margin-bottom: 0px;\">MeshCom 4.0 %-4.4s%-1.1s&nbsp;&nbsp;%s<br />%i-%02i-%02i&nbsp;%02i:%02i:%02i&nbsp;%s&nbsp;[%s]</h3>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call,
+        meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str(), cTimeSource);
 
     web_client.println("<table class=\"table\">");
     web_client.println("<colgroup>");

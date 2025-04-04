@@ -3059,3 +3059,11 @@ void utf8ascii(char* s)
         }
         s[k]=0;
 }
+
+String getTimeZone()
+{
+    if(meshcom_settings.node_utcoff == 0)
+        return "UTC";
+
+    return "LT";
+}
