@@ -359,6 +359,7 @@ uint8_t dmac[6] = {0};
 
 unsigned long gps_refresh_timer = 0;
 unsigned long softser_refresh_timer = 0;
+unsigned long analog_refresh_timer = 0;
 
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
 void checkSerialCommand(void);
@@ -694,6 +695,10 @@ void esp32setup()
     // and check if the configuration was changed successfully
     if(bRadio)
     {
+        // 4.34w we use EU8 instead of EU
+        if(meshcom_settings.node_country == 0)
+            meshcom_settings.node_country = 8;
+
         lora_setcountry(meshcom_settings.node_country);
 
         // set boosted gain
@@ -1329,12 +1334,13 @@ void esp32loop()
             uint16_t Minute = now.minute();
             uint16_t Second = now.second();
 
-
             // check valid Date & Time
             if(Year > 2023)
             {
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"RTC");
+
+                bMyClock = true;
             }
         }
     }
@@ -1429,7 +1435,12 @@ void esp32loop()
     #endif
 
     #if defined (ANALOG_PIN)
-        checkAnalogValue();
+        if ((analog_refresh_timer + (ANALOG_REFRESH_INTERVAL * 1000)) < millis())
+        {
+            checkAnalogValue();
+
+            analog_refresh_timer = millis();
+        }
     #endif
 
     // BLE

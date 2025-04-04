@@ -86,4 +86,6 @@ byte utf8ascii(byte ascii);
 String utf8ascii(String s);
 void utf8ascii(char* s);
 
+String getTimeZone();
+
 #endif // _LOOP_FUNCTIONS_H_
