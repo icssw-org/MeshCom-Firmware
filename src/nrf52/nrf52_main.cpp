@@ -855,7 +855,12 @@ void nrf52setup()
             save_settings();
         }
     }
-}
+    else
+    {
+        meshcom_settings.node_hasIPaddress = false;
+        neth.hasETHHardware = false;
+    }
+}   
 
 void nrf52loop()
 {
@@ -889,6 +894,7 @@ void nrf52loop()
             {
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"RTC");
+                bMyClock = true;
             }
         }
     }
