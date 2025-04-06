@@ -2480,7 +2480,6 @@ void commandAction(char *msg_text, bool ble)
 
             if(ble)
             {
-                addBLECommandBack((char*)msg_text);
                 sendNodeSetting();
             }
 

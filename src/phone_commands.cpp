@@ -249,6 +249,12 @@ void sendToPhone()
 		uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
 		// MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
 		uint8_t blelen = BLEtoPhoneBuff[toPhoneRead][0];
+		// throw an error message when we have a too long message
+		if(blelen > 245)
+		{
+			Serial.println("[ERR BLE] Message too long to send to phone!");
+			return;
+		}
 
 		//Mheard
 		if(BLEtoPhoneBuff[toPhoneRead][1] == 0x91)

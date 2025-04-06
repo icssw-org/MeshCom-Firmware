@@ -962,7 +962,7 @@ void esp32setup()
     // Create the BLE Server
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new MyServerCallbacks());
-    pServer->advertiseOnDisconnect(true);
+    pServer->advertiseOnDisconnect(false);
 
     // Create the BLE Service
     pService = pServer->createService(SERVICE_UUID);
