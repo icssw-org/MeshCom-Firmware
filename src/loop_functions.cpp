@@ -7,6 +7,7 @@
 
 #include "batt_functions.h"
 #include "udp_functions.h"
+#include "extudp_functions.h"
 #include "configuration.h"
 
 #include "TinyGPSPlus.h"
@@ -1333,7 +1334,11 @@ void initAnalogPin()
 
     if(bAnalogCheck)
     {
-        pinMode(meshcom_settings.node_analog_pin, INPUT);
+        int ANAGPIO = meshcom_settings.node_analog_pin;
+        if(meshcom_settings.node_analog_pin)
+            ANAGPIO = ANALOG_PIN;
+
+        pinMode(ANAGPIO, INPUT);
     }
     
     #endif
@@ -1345,13 +1350,17 @@ void checkAnalogValue()
 
     if(bAnalogCheck)
     {
-        float raw = (float)(analogRead(meshcom_settings.node_analog_pin));
+        int ANAGPIO = meshcom_settings.node_analog_pin;
+        if(meshcom_settings.node_analog_pin)
+            ANAGPIO = ANALOG_PIN;
+
+        float raw = (float)(analogRead(ANAGPIO));
         fAnalogValue = raw  * meshcom_settings.node_analog_faktor;
         
         if(bDisplayInfo)
         {
             Serial.print(getTimeString());
-            Serial.printf("[ANALOG]...GPIO%i %.0f * %.4f = %.2f\n", meshcom_settings.node_analog_pin, raw, meshcom_settings.node_analog_faktor, fAnalogValue);
+            Serial.printf("[ANALOG]...GPIO%i %.0f * %.4f = %.2f\n", ANAGPIO, raw, meshcom_settings.node_analog_faktor, fAnalogValue);
         }
     }
     else
@@ -2166,11 +2175,9 @@ void sendMessage(char *msg_text, int len)
 		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
     }
 
-    #ifdef ESP32
-        // Extern Server
-        if(bEXTUDP)
-            sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
-    #endif
+    // Extern Server
+    if(bEXTUDP)
+        sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
 }
 
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, char lat_c, double plon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
@@ -2612,11 +2619,9 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
         }
 
-        #ifdef ESP32
-            // Extern Server
-            if(bEXTUDP)
-                sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
-        #endif
+        // Extern Server
+        if(bEXTUDP)
+            sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
     }
 
 }

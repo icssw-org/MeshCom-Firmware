@@ -20,6 +20,8 @@ definitions for T-Beam
 #define ENABLE_MC811
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
+#define ANALOG_PIN 25
+#define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 #define SX127X
 #define TX_POWER_MAX 20  // max 20 dBm
 #define TX_POWER_MIN 2

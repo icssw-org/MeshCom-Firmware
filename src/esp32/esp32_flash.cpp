@@ -158,7 +158,7 @@ void init_flash(void)
     strVar = preferences.getString("node_lpwd", "none");
     sprintf(meshcom_settings.node_pwd, "%s", strVar.c_str());
 
-    meshcom_settings.node_analog_pin = preferences.getInt("node_apin", 32);
+    meshcom_settings.node_analog_pin = preferences.getInt("node_apin", 99);
     meshcom_settings.node_analog_faktor = preferences.getFloat("node_afakt", 1.0);
 
 }

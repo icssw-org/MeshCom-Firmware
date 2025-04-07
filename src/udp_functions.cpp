@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include <udp_functions.h>
+#include <extudp_functions.h>
 #include <debugconf.h>
 #include <batt_functions.h>
 #include <command_functions.h>
@@ -10,12 +11,12 @@
 #include <configuration.h>
 #include "ArduinoJson.h"
 
-static uint8_t txBuffer[UDP_TX_BUF_SIZE+50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
-
 String keep;
 String cfw;
 String firmware;
 String grc_ids;
+
+static uint8_t txBuffer[UDP_TX_BUF_SIZE+50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 #ifdef ESP32
 
@@ -32,23 +33,16 @@ IPAddress node_ms = IPAddress(0,0,0,0);
 
 IPAddress node_hostip = IPAddress(0,0,0,0);
 
-IPAddress extern_node_ip = IPAddress(0,0,0,0);
-
 String s_node_ip = "";
 String s_node_hostip = "";
-String s_extern_node_ip = "";
 
-String strOutput;
 String strSource_call;
-String str_ip;
 
 bool hasIPaddress = false;
 
-bool hasExternIPaddress = false;
+extern bool hasExternIPaddress;
 
 WiFiUDP Udp;
-
-WiFiUDP UdpExtern;
 
 NTPClient timeClient(Udp);
 
@@ -66,22 +60,6 @@ uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
 
 int waitRestartUDP = 0;
 int waitRestartUDPCounter = 5;
-
-String strEsc(String strInput)
-{
-  strOutput = "";
-  for(int ip=0; ip<strInput.length(); ip++)
-  {
-    if(strInput.charAt(ip) == '"' || strInput.charAt(ip) == '\\')
-    {
-      strOutput.concat('\\');
-    }
-
-    strOutput.concat(strInput.charAt(ip));
-  }
-
-  return strOutput;
-}
 
 void getMeshComUDP()
 {
@@ -801,291 +779,91 @@ void resetMeshComUDP()
   }
 }
 
-// Extern JSON UDP
-void startExternUDP()
-{
-  if(bWIFIAP)
-    return;
-
-  if(!bEXTUDP)
-    return;
-
-  if(hasExternIPaddress)
-    return;
-
-  extern_node_ip = WiFi.localIP();
-
-  s_extern_node_ip = extern_node_ip.toString();
-
-  UdpExtern.begin(EXTERN_PORT);
-
-  Serial.printf("[EXTUDP]...now listening at IP %s, UDP port %d\n",  s_extern_node_ip.c_str(), EXTERN_PORT);
-  Serial.printf("[EXTUDP]...now sending   to IP %s, UDP port %d\n",  meshcom_settings.node_extern, EXTERN_PORT);
-
-  hasExternIPaddress=true;
-
-  sendExternHeartbeat();
-}
-
-
-
-void getExtern(unsigned char incoming[], int len)
-{
-  if(bWIFIAP)
-    return;
-
-    char val[160+1] = {0};
-  struct aprsMessage aprsmsg;
-
-  // Decode
-  // {"type":"msg","dst":"*","msg":"Meldungstext"}
-  // {"type": "msg", "dst": "OE5BYE-1", "msg": "Test 1 2 3"}
-
-  initAPRS(aprsmsg, ':');
-
-  aprsmsg.msg_source_path="HOME";
-  aprsmsg.msg_destination_path="*";
-  aprsmsg.msg_payload="none";
-
-  //Serial.printf("len:%i icomming:%s vgldst:%s vglmsg:%s\n", len, incoming, vgldst, vglmsg);
-
-  // decode the incomning message
-  JsonDocument inputJson;
-  DeserializationError error = deserializeJson(inputJson, incoming, len);
-  if (error)
-  {
-    Serial.printf("[EXTUDP] deserializeJson() failed: %s\n", error.c_str());
-    return;
-  }
-
-  const char* dst = inputJson["dst"]; // "OE5BYE-1"
-  const char* msg = inputJson["msg"]; // "Test 1 2 3"
-  aprsmsg.msg_destination_path = dst;
-  aprsmsg.msg_payload = msg;
-  Serial.printf("[EXTUDP] Incoming dst:%s msg:%s\n", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
-
-  //Serial.printf("aprsmsg.msg_destination_path:%s aprsmsg.msg_payload:%s\n", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
-
-  if(aprsmsg.msg_payload == "none")
-  {
-    Serial.println("wrong JSON to send message");
-    return;
-  }
-  
-  snprintf(val,160, ":{%s}%s", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
-
-  sendMessage(val, strlen(val));
-}
-
-void getExternUDP()
-{
-  if(bWIFIAP)
-    return;
-
-    if(!bEXTUDP)
-    return;
-
-  if(!hasExternIPaddress && bEXTUDP)
-    return;
-
-  int len=0;
-
-  if(bEXTUDP)
-  {
-    // check if we received a UDP packet
-    packetSize = UdpExtern.parsePacket();
-    
-    if (packetSize > 0)
-    {
-      len = UdpExtern.read(incomingPacket, UDP_TX_BUF_SIZE);
-    }
-  }
-
-  if (len > 0)
-  {
-    incomingPacket[len] = 0;
-
-    getExtern(incomingPacket, len);
-
-  }
-}
-
-void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
-{
-  if(bWIFIAP)
-    return;
-
-  if(!bEXTUDP)
-    return;
-
-  if(!hasExternIPaddress && bEXTUDP)
-    return;
-
-  struct aprsMessage aprsmsg;
-  struct aprsPosition aprspos;
-
-  uint8_t msg_type_b_lora = decodeAPRS(buffer, (uint16_t)buflen, aprsmsg);
-
-  if(msg_type_b_lora == 0x00)
-  {
-    return;
-  }
-
-  char c_json[500] = {0};
-  char escape_symbol[3];
-  char escape_group[3];
-
-  memset(escape_symbol, 0x00, 3);
-  memset(escape_group, 0x00, 3);
-
-  uint8_t u_json[500] = {0};
-
-  // convert the mesgid to 8 digits hex
-  char _msgId[9];
-  snprintf(_msgId, sizeof(_msgId), "%08X", aprsmsg.msg_id);
-
-  // Position
-  if(msg_type_b_lora == 0x21)
-  {
-    decodeAPRSPOS(aprsmsg.msg_payload, aprspos);
-
-    escape_symbol[0] = aprspos.aprs_symbol;
-    if(aprspos.aprs_symbol == 0x5c)
-      escape_symbol[1] = aprspos.aprs_symbol;
-    else
-      escape_symbol[1] = 0x00;
-
-
-    escape_group[0] = aprspos.aprs_group;
-    if(aprspos.aprs_group == 0x5c)
-      escape_group[1] = aprspos.aprs_group;
-    else
-      escape_group[1] = 0x00;
-
-    // limit lat/long to 4 digits
-    double a_lat = (int)(aprspos.lat_d * 10000) / 10000.0;
-    double a_long = (int)(aprspos.lon_d * 10000) / 10000.0;
-    
-    char _lat_c[3] = {0};
-    char _long_c[3] = {0};
-    sniprintf(_lat_c, sizeof(_lat_c), "%c", aprspos.lat_c);
-    sniprintf(_long_c, sizeof(_long_c), "%c", aprspos.lon_c);
-
-    JsonDocument cJson;
-    int json_len = 0;
-
-    // build the json with Arduino JSON
-    cJson["src_type"] = src_type;
-    cJson["type"] = "pos";
-    cJson["src"] = aprsmsg.msg_source_path.c_str();
-    cJson["msg"] = "";
-    cJson["lat"] = a_lat;
-    cJson["lat_dir"] = _lat_c;
-    cJson["long"] = a_long;
-    cJson["long_dir"] = _long_c;
-    cJson["aprs_symbol"] = escape_symbol;
-    cJson["aprs_symbol_group"] = escape_group;
-    cJson["hw_id"] = aprsmsg.msg_source_hw;
-    cJson["msg_id"] = _msgId;
-    cJson["alt"] = aprspos.alt;
-    
-    // add firmware version if not a node
-    if(strcmp(src_type, "node") == 0)
-    {
-      cJson["batt"] = global_proz;
-      cJson["firmware"] = SOURCE_VERSION;
-      cJson["fw_sub"] = SOURCE_VERSION_SUB;
-    }
-    else
-    {
-      cJson["batt"] = aprspos.bat;
-    }
-
-    // clear the buffer
-    memset(c_json, 0x00, sizeof(c_json));
-    // serialize the json
-    json_len = measureJson(cJson);
-    serializeJson(cJson, c_json, json_len + 1);
-
-    memcpy(u_json, c_json, json_len + 1);
-  }
-  else
-  // Text
-  if(msg_type_b_lora == 0x3A)
-  {
-
-    JsonDocument cJson;
-    int json_len = 0;
-
-    // build the json with Arduino JSON
-    cJson["src_type"] = src_type;
-    cJson["type"] = "msg";
-    cJson["src"] = aprsmsg.msg_source_path.c_str();
-    cJson["dst"] = aprsmsg.msg_destination_path.c_str();
-    cJson["msg"] = strEsc(aprsmsg.msg_payload).c_str();
-    cJson["msg_id"] = _msgId;
-    
-    // clear the buffer
-    memset(c_json, 0x00, sizeof(c_json));
-    // serialize the json
-    json_len = measureJson(cJson);
-    serializeJson(cJson, c_json, json_len + 1);
-
-    memcpy(u_json, c_json, json_len + 1);
-  }
-  else
-    return;
-
-  if(bUDP)
-  {
-    IPAddress apip;
-    
-    str_ip = meshcom_settings.node_extern;
-
-    //Serial.println(str_ip.c_str());
-
-    apip.fromString(str_ip);
-
-    //Serial.println(apip.toString());
-
-    UdpExtern.beginPacket(apip , EXTERN_PORT);
-
-    Serial.printf("[EXTUDP] Out: %s Len: %i\n", c_json, strlen(c_json));
-
-    if (!UdpExtern.write(u_json, strlen(c_json)))
-    {
-      resetExternUDP();
-    }
-
-    UdpExtern.endPacket();
-  }
-  else
-  {
-    Serial.printf("%s\n", c_json);
-  }
-}
-
-void  sendExternHeartbeat()
-{
-
-}
-
-void resetExternUDP()
-{
-  if(bWIFIAP)
-    return;
-
-  UdpExtern.stop();
-
-  hasExternIPaddress = false;
-  
-  if(bEXTUDP)
-  {
-    startExternUDP();
-  }
-}
-
 #endif
+
+///////////////////////////////////////////////////////////////////////////////
+// ESP32 & RAK
+
+void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
+{
+    if (len > UDP_TX_BUF_SIZE)
+        len = UDP_TX_BUF_SIZE; // just for safety
+
+    // first byte is always the message length
+    // LoRa/Internal messages send to UDP TX
+    ringBufferUDPout[udpWrite][0] = len;
+    memcpy(ringBufferUDPout[udpWrite] + 1, buffer, len + 1);
+
+    //Serial.printf("UDP out Ringbuffer added element: %u\n", udpWrite);
+    //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
+    //neth.printBuffer(ringBufferUDPout[udpWrite], len + 1);
+
+    udpWrite++;
+    if (udpWrite >= MAX_RING_UDP) // if the buffer is full we start at index 0 -> take care of overwriting!
+        udpWrite = 0;
+
+}
+
+void sendKEEP()
+{
+    uint8_t hb_buffer[UDP_TX_BUF_SIZE+50];
+
+    keep = "KEEP";
+    cfw = SOURCE_VERSION;
+    cfw.concat(SOURCE_VERSION_SUB);
+    firmware = "GW";
+    firmware.concat(cfw);
+    grc_ids = "";
+    
+    for(int igrc=0; igrc<6; igrc++)
+    {
+        if(meshcom_settings.node_gcb[igrc] > 0)
+        {
+            grc_ids.concat(meshcom_settings.node_gcb[igrc]);
+            grc_ids.concat(";");
+        }
+    }
+
+    uint8_t longname_len = strlen(meshcom_settings.node_call);
+    uint16_t hb_buffer_size = longname_len + 1 + sizeof(_GW_ID) + keep.length() + firmware.length() + grc_ids.length();
+
+//    uint8_t hb_buffer[hb_buffer_size];
+
+    // Serial.print("\nHB buffer size: ");
+    // Serial.println(hb_buffer_size);
+
+    char longname_c[longname_len + 1];
+    strcpy(longname_c, meshcom_settings.node_call);
+    longname_c[longname_len] = 0x00;
+
+    char keep_c[keep.length()];
+    strcpy(keep_c, keep.c_str());
+
+    char firmware_c[firmware.length()];
+    strcpy(firmware_c, firmware.c_str());
+
+    char grc_ids_c[grc_ids.length()];
+    strcpy(grc_ids_c, grc_ids.c_str());
+
+    // copying all together
+    memcpy(&hb_buffer, &meshcom_settings.node_call, longname_len + 1);
+    memcpy(&hb_buffer[longname_len + 1], &_GW_ID, sizeof(_GW_ID));
+    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID)], &keep_c, sizeof(keep_c));
+    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID) + sizeof(keep_c)], &firmware_c, sizeof(firmware_c));
+    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID) + sizeof(keep_c) + sizeof(firmware_c)], &grc_ids_c, sizeof(grc_ids_c));
+    
+    // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
+    //also avoid UDP tx when UDP is getting a packet
+    // add HB message to the ringbuffer
+    //DEBUG_MSG("UDP", "HB Buffer");
+    if(bDEBUG)
+    {
+      Serial.print("KEEP-BUFFER:");
+      printBuffer(hb_buffer, hb_buffer_size);
+    }
+
+    addUdpOutBuffer(hb_buffer, hb_buffer_size);
+}
 
 /**@brief Function to write our additional data into the UDP tx buffer
  * we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
@@ -1143,6 +921,9 @@ void addNodeData(uint8_t msg_buffer[300], uint16_t size, int16_t rssi, int8_t sn
     }
 
 }
+
+//
+///////////////////////////////////////////////////////////////////////////////
 
 void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
 {
