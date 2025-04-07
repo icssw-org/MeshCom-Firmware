@@ -44,6 +44,7 @@
 #include <batt_functions.h>
 #include <mheard_functions.h>
 #include <udp_functions.h>
+#include <extudp_functions.h>
 #include <lora_setchip.h>
 
 // flag to indicate if we are after receiving
@@ -359,11 +360,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 // txtmessage, position
                 if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40)
                 {
-                    #ifdef ESP32
-                        // Extern Server
-                        if(bEXTUDP)
-                            sendExtern(true, (char*)"lora", RcvBuffer, size);
-                    #endif
+                    // Extern Server
+                    if(bEXTUDP)
+                        sendExtern(true, (char*)"lora", RcvBuffer, size);
 
                     // print aprs message
                     if(bDisplayInfo)

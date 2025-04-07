@@ -2170,8 +2170,8 @@ String hex2ascii(String ustring)
     string.replace("%F0%9F%98%AC", ";-#");
     */
 
-    char pbuff[200];
-    char nbuff[200];
+    char pbuff[250];
+    char nbuff[250];
     char dbuff[3];
     int ihex=0;
 
@@ -2180,7 +2180,7 @@ String hex2ascii(String ustring)
     int in=0;
     int il=0;
 
-    memset(nbuff, 0x00, 200);
+    memset(nbuff, 0x00, sizeof(nbuff));
 
     // %F0%XX%XX%XX
     for(int ip=0; ip<(int)ustring.length(); ip++)
@@ -2197,7 +2197,7 @@ String hex2ascii(String ustring)
 
             for(int ih=0;ih<3;ih++)
             {
-                memset(dbuff, 0x00, 3);
+                memset(dbuff, 0x00, sizeof(dbuff));
                 memcpy(dbuff, pbuff+ip+4+(3*ih), 2);
                 sscanf(dbuff, "%X", &ihex);
 
@@ -2214,7 +2214,7 @@ String hex2ascii(String ustring)
 
             for(int ih=0;ih<2;ih++)
             {
-                memset(dbuff, 0x00, 3);
+                memset(dbuff, 0x00, sizeof(dbuff));
                 memcpy(dbuff, pbuff+ip+4+(3*ih), 2);
                 sscanf(dbuff, "%X", &ihex);
 
@@ -2232,7 +2232,7 @@ String hex2ascii(String ustring)
 
             for(int ih=0;ih<2;ih++)
             {
-                memset(dbuff, 0x00, 3);
+                memset(dbuff, 0x00, sizeof(dbuff));
                 memcpy(dbuff, pbuff+ip+4+(3*ih), 2);
                 sscanf(dbuff, "%X", &ihex);
 

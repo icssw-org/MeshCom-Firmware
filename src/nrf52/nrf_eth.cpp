@@ -12,6 +12,7 @@
 #include <command_functions.h>
 #include <time_functions.h>
 #include <lora_setchip.h>
+#include <extudp_functions.h>
 
 #include <NTPClient.h>
 #include <time.h>
@@ -254,6 +255,10 @@ int NrfETH::getUDP()
 
         memcpy(RcvBuffer, inc_udp_buffer+UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);
 
+        // send JSON to Extern IP
+        if(bEXTUDP)
+          sendExtern(true, (char*)"udp", RcvBuffer, (uint8_t)lora_tx_msg_len);
+
         // printout message type
         uint8_t msg_type_b = RcvBuffer[0];
 
@@ -307,7 +312,6 @@ int NrfETH::getUDP()
 
             if(size > UDP_TX_BUF_SIZE)
                 size = UDP_TX_BUF_SIZE;
-
 
             if(bDEBUG)
             {

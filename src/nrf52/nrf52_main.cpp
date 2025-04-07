@@ -8,6 +8,7 @@
 #include <debugconf.h>
 #include <time.h>
 #include <nrf52_functions.h>
+#include <extudp_functions.h>
 
 #include <TinyGPSPlus.h>
 
@@ -843,6 +844,11 @@ void nrf52setup()
             {
                 startWebserver();
             }
+
+            if(bEXTUDP)
+            {
+                startExternUDP();
+            }
         }
         else
         {
@@ -1576,7 +1582,12 @@ if (isPhoneReady == 1)
 
     checkButtonState();
 
-    if(bWEBSERVER)
+    if(bEXTUDP)
+    {
+        getExternUDP();
+    }
+
+    if(bWEBSERVER || bEXTUDP)
     {
         if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 30)) < millis()))   // repeat 15 minutes
         {
@@ -1592,10 +1603,22 @@ if (isPhoneReady == 1)
                     startWIFI();
             #endif
 
-            startWebserver();
+            if(bWEBSERVER)
+            {
+                startWebserver();
+
+            }
+
+            if(bEXTUDP)
+            {
+                startExternUDP();
+            }
         }
 
-        loopWebserver(); 
+        if(bWEBSERVER)
+        {
+            loopWebserver(); 
+        }
 
     }
 

@@ -32,6 +32,7 @@
 #include <batt_functions.h>
 #include <lora_functions.h>
 #include <udp_functions.h>
+#include <extudp_functions.h>
 #include <web_functions.h>
 #include <mheard_functions.h>
 #include <clock.h>
@@ -337,10 +338,6 @@ void setFlagSent(void)
     }
 }
 
-void enableRX(void);    // for Modules with RXEN / TXEN Pin
-void enableTX(void);    // for Modules with RXEN / TXEN Pin
-
-
 asm(".global _scanf_float");
 asm(".global _printf_float");
 
@@ -596,7 +593,12 @@ void esp32setup()
         setupSOFTSER();
     #endif
 
-	// Initialize temp sensor
+    // ANALOG
+    #if defined (ANALOG_PIN)
+        initAnalogPin();
+    #endif
+
+    // Initialize temp sensor
     if(bONEWIRE)
         init_onewire();
 
@@ -1435,11 +1437,14 @@ void esp32loop()
     #endif
 
     #if defined (ANALOG_PIN)
-        if ((analog_refresh_timer + (ANALOG_REFRESH_INTERVAL * 1000)) < millis())
+        if(bAnalogCheck)
         {
-            checkAnalogValue();
+            if ((analog_refresh_timer + (ANALOG_REFRESH_INTERVAL * 1000)) < millis())
+            {
+                checkAnalogValue();
 
-            analog_refresh_timer = millis();
+                analog_refresh_timer = millis();
+            }
         }
     #endif
 
@@ -1913,7 +1918,6 @@ void esp32loop()
 
     yield();
 }
-
 
 
 int checkRX(void)
