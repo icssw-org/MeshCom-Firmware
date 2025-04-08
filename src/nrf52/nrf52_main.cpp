@@ -1203,9 +1203,14 @@ if (isPhoneReady == 1)
     }
 
     // TELEMETRY_INTERVAL in Seconds == 5 minutes
-    unsigned long akt_timer = TELEMETRY_INTERVAL * 1000;
-    if(iNextTelemetry < 4)
-        akt_timer = 10 * 1000; // 10 Seconds
+    unsigned long akt_timer = meshcom_settings.node_parm_time;
+    if(akt_timer < 5 || akt_timer > 120)
+    {
+        akt_timer = TELEMETRY_INTERVAL;
+    }
+    
+    akt_timer = akt_timer * 1000; // seconds
+
     if (((telemetry_timer + akt_timer) < millis()) || bHeyFirst)
     {
         bHeyFirst = false;
