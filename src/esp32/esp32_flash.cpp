@@ -161,6 +161,22 @@ void init_flash(void)
     meshcom_settings.node_analog_pin = preferences.getInt("node_apin", 99);
     meshcom_settings.node_analog_faktor = preferences.getFloat("node_afakt", 1.0);
 
+    strVar = preferences.getString("node_parm", "none");
+    sprintf(meshcom_settings.node_parm, "%s", strVar.c_str());
+
+    strVar = preferences.getString("node_unit", "none");
+    sprintf(meshcom_settings.node_unit, "%s", strVar.c_str());
+
+    strVar = preferences.getString("node_format", "none");
+    sprintf(meshcom_settings.node_format, "%s", strVar.c_str());
+
+    strVar = preferences.getString("node_eqns", "none");
+    sprintf(meshcom_settings.node_eqns, "%s", strVar.c_str());
+
+    strVar = preferences.getString("node_values", "none");
+    sprintf(meshcom_settings.node_values, "%s", strVar.c_str());
+ 
+    meshcom_settings.node_parm_time = preferences.getInt("node_ptime", 15);
 }
 
 void save_settings(void)
@@ -315,6 +331,23 @@ void save_settings(void)
 
     preferences.putInt("node_apin", meshcom_settings.node_analog_pin);
     preferences.putFloat("node_afakt", meshcom_settings.node_analog_faktor);
+
+    strVar = meshcom_settings.node_parm;
+    preferences.putString("node_parm", strVar); 
+
+    strVar = meshcom_settings.node_unit;
+    preferences.putString("node_unit", strVar);
+
+    strVar = meshcom_settings.node_format;
+    preferences.putString("node_format", strVar);
+
+    strVar = meshcom_settings.node_eqns;
+    preferences.putString("node_eqns", strVar);
+
+    strVar = meshcom_settings.node_values;
+    preferences.putString("node_values", strVar);
+
+    preferences.putInt("node_ptime", meshcom_settings.node_parm_time);
 
     preferences.end();
 

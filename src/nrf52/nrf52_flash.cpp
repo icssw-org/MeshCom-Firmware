@@ -194,6 +194,14 @@ void init_flash(void)
 		meshcom_settings.node_analog_pin = old_struct.node_analog_pin;
 		meshcom_settings.node_analog_faktor = old_struct.node_analog_faktor;
 
+		memcpy(meshcom_settings.node_parm, old_struct.node_parm, 50);
+		memcpy(meshcom_settings.node_unit, old_struct.node_unit, 50);
+		memcpy(meshcom_settings.node_format, old_struct.node_format, 50);
+		memcpy(meshcom_settings.node_eqns, old_struct.node_eqns, 50);
+		memcpy(meshcom_settings.node_values, old_struct.node_values, 50);
+
+		meshcom_settings.node_parm_time = old_struct.node_parm_time;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
