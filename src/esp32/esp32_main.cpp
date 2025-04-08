@@ -1693,7 +1693,8 @@ void esp32loop()
                     // no BATT
                     if(global_proz < 0)
                     {
-                        Serial.println("[readBatteryVoltage]...no battery is connected");
+                        if(bDEBUG && bDisplayInfo)
+                            Serial.println("[readBatteryVoltage]...no battery is connected");
                             
                         global_batt = (float)PMU->getVbusVoltage();
                         global_proz=100.0;
