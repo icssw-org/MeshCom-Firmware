@@ -4,6 +4,7 @@
 #include "batt_functions.h"
 #include "mheard_functions.h"
 #include "udp_functions.h"
+#include "extudp_functions.h"
 #include "i2c_scanner.h"
 #include "ArduinoJson.h"
 #include "configuration.h"
@@ -451,10 +452,9 @@ void commandAction(char *msg_text, bool ble)
             Serial.printf("MeshCom %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setname  set first name\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
             delay(100);
 
-#ifndef BOARD_RAK4630
             Serial.printf("--setssid  WLAN SSID\n--setpwd   WLAN PASSWORD\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255\n");
             delay(100);
-#endif
+
             Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analogcheck on/off\n");
             delay(100);
             Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
@@ -1397,8 +1397,6 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
     }
     else
-
-#ifndef BOARD_RAK4630
     if(commandCheck(msg_text+2, (char*)"extudp on") == 0)
     {
         bEXTUDP=true;
@@ -1455,8 +1453,6 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
     else
-#endif
-
     if(commandCheck(msg_text+2, (char*)"debug on") == 0)
     {
         bDEBUG=true;
@@ -1777,8 +1773,8 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"passwd ") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
-        _owner_c[14] = 0x00;    // max. 14 chars
 
+        _owner_c[14] = 0x00;    // max. 14 chars
         snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%s", _owner_c);
 
         save_settings();
@@ -2473,6 +2469,11 @@ void commandAction(char *msg_text, bool ble)
             Serial.printf("txpower %i dBm not between %i and max %i dBm\n", iVar, TX_POWER_MIN, TX_POWER_MAX);
         }
         else
+        if(TX_POWER_MAX == 20 && (iVar == 17 || iVar == 18))
+        {
+            Serial.printf("txpower %i dBm not possible with this loRa-Chip\n", iVar);
+        }
+        else
         {
             meshcom_settings.node_power=iVar;
 
@@ -2816,6 +2817,53 @@ void commandAction(char *msg_text, bool ble)
     {
         if(ble)
         {
+            // OE3WAS addition
+            uint16_t t_io = meshcom_settings.node_mcp17io;
+            uint16_t t_out = meshcom_settings.node_mcp17out;
+            uint16_t t_in = meshcom_settings.node_mcp17in;
+
+            // reset print buffer
+            memset(print_buff, 0, sizeof(print_buff));
+            
+            String iooutA="";
+            String iovalA="";
+            String iooutB="";
+            String iovalB="";
+
+            for(int io=0;io<16;io++)
+            {
+                bool bOut = ((t_io & 0x0001) == 0x0001);
+                bool bOutValue =((t_out & 0x0001) == 0x0001);
+                bool bInValue = ((t_in & 0x0001) == 0x0001);
+
+                if(io < 8) {
+                    iooutA = iooutA + (bOut ? "1":"0");
+                    iovalA = iovalA + (bOut ? (bOutValue ? "1":"0"):(bInValue ? "1":"0"));
+                } else {
+                    iooutB = iooutB + (bOut ? "1":"0");
+                    iovalB = iovalB + (bOut ? (bOutValue ? "1":"0"):(bInValue ? "1":"0"));
+                }
+                t_io = t_io >> 1;
+                t_out = t_out >> 1;
+                t_in = t_in >> 1;
+            }
+
+            JsonDocument iodoc;
+            iodoc["TYP"] = "IO";
+            iodoc["MCP23017"] = bMCP23017;
+            iodoc["AxOUT"] = iooutA;
+            iodoc["AxVAL"] = iovalA;
+            iodoc["BxOUT"] = iooutB;
+            iodoc["BxVAL"] = iovalB;
+            serializeJson(iodoc, print_buff, measureJson(iodoc));
+
+            // clear buffer
+            memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+
+            // set data message flag and tx ble
+            msg_buffer[0] = 0x44;
+            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
+            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
         }
 
         if(!bRxFromPhone)
@@ -2910,17 +2958,18 @@ void commandAction(char *msg_text, bool ble)
             if(ibt == 0)
                 ibt = BUTTON_PIN;
 
-            Serial.printf("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i ...UTC-OFF %f [%s]\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s\n...PASSWD <%s>\n",
+            Serial.printf("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i ...UTC-OFF %f [%s]\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n", 
                     SOURCE_VERSION, SOURCE_VERSION_SUB , __DATE__ , __TIME__ , meshcom_settings.node_update,
-                    meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv , millis(), 
-                    (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
+                    meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv, millis());
+
+            Serial.printf("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s\n...PASSWD <%s>\n",
+                (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), meshcom_settings.node_passwd);
 
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
-#ifndef BOARD_RAK4630
             Serial.printf("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
-#endif
+
             Serial.printf("...BTCODE %06i\n", meshcom_settings.bt_code);
             Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
                     meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"),  (bDisplayOff?"off":"on"),
@@ -3027,10 +3076,11 @@ void commandAction(char *msg_text, bool ble)
         {
             if(bShowPos)
             {
-                printf("\n\nMeshCom %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %i\n...RATE: %i (%i)\n...NEXT: %i sec\n...DIST: %im\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %04i.%02i.%02i %02i:%02i:%02i LT\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
+                printf("\n\nMeshCom %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %i\n...RATE: %i (%i)\n...NEXT: %i sec\n...DIST: %im\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %04i.%02i.%02i %02i:%02i:%02i %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
                 meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
                 (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, meshcom_settings.node_postime, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
-                meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+                meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str());
+
                 printf("...SYMB: %c %c\n...GPS: %s\n...Track: %s\n...SOFTSER: %s APP:%i\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"), (bSOFTSERON?"on":"off"), SOFTSER_APP_ID);
             }
         }

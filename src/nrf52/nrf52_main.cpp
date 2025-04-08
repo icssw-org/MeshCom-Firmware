@@ -8,6 +8,7 @@
 #include <debugconf.h>
 #include <time.h>
 #include <nrf52_functions.h>
+#include <extudp_functions.h>
 
 #include <TinyGPSPlus.h>
 
@@ -514,6 +515,7 @@ void nrf52setup()
 	// initialize clock
 	boResult = MyClock.Init();
 	Serial.printf("[INIT]...Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
+    snprintf(cTimeSource, sizeof(cTimeSource), (char*)"INIT");
 
     DisplayTimeWait=0;
     //
@@ -842,6 +844,11 @@ void nrf52setup()
             {
                 startWebserver();
             }
+
+            if(bEXTUDP)
+            {
+                startExternUDP();
+            }
         }
         else
         {
@@ -854,7 +861,12 @@ void nrf52setup()
             save_settings();
         }
     }
-}
+    else
+    {
+        meshcom_settings.node_hasIPaddress = false;
+        neth.hasETHHardware = false;
+    }
+}   
 
 void nrf52loop()
 {
@@ -874,13 +886,22 @@ void nrf52loop()
 
             DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
 
-            meshcom_settings.node_date_year = now.year();
-            meshcom_settings.node_date_month = now.month();
-            meshcom_settings.node_date_day = now.day();
+            uint16_t Year = now.year();
+            uint16_t Month = now.month();
+            uint16_t Day = now.day();
 
-            meshcom_settings.node_date_hour = now.hour();
-            meshcom_settings.node_date_minute = now.minute();
-            meshcom_settings.node_date_second = now.second();
+            uint16_t Hour = now.hour();
+            uint16_t Minute = now.minute();
+            uint16_t Second = now.second();
+
+
+            // check valid Date & Time
+            if(Year > 2023)
+            {
+                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+                snprintf(cTimeSource, sizeof(cTimeSource), (char*)"RTC");
+                bMyClock = true;
+            }
         }
     }
     else
@@ -909,14 +930,15 @@ void nrf52loop()
         uint16_t Second = (uint16_t)strTime.substring(6, 8).toInt();
     
         // check valid Date & Time
-        if(Year > 2020 && strTime.compareTo("none") != 0)
+        if(Year > 2023 && strTime.compareTo("none") != 0)
         {
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
             bNTPDateTimeValid = true;
+
+            snprintf(cTimeSource, sizeof(cTimeSource), (char*)"NTP");
         }
         else
             bNTPDateTimeValid = false;
-
     }
     else
     {
@@ -1560,7 +1582,12 @@ if (isPhoneReady == 1)
 
     checkButtonState();
 
-    if(bWEBSERVER)
+    if(bEXTUDP)
+    {
+        getExternUDP();
+    }
+
+    if(bWEBSERVER || bEXTUDP)
     {
         if (web_timer == 0 || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 30)) < millis()))   // repeat 15 minutes
         {
@@ -1576,10 +1603,22 @@ if (isPhoneReady == 1)
                     startWIFI();
             #endif
 
-            startWebserver();
+            if(bWEBSERVER)
+            {
+                startWebserver();
+
+            }
+
+            if(bEXTUDP)
+            {
+                startExternUDP();
+            }
         }
 
-        loopWebserver(); 
+        if(bWEBSERVER)
+        {
+            loopWebserver(); 
+        }
 
     }
 

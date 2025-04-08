@@ -330,10 +330,7 @@ void sendComToPhone()
 		// Data Message (JSON)
 		if(BLEComToPhoneBuff[ComToPhoneRead][1] == 0x44)
 		{
-			
 			memcpy(ComToPhoneBuff, BLEComToPhoneBuff[ComToPhoneRead]+1, blelen);
-
-			
 		} 
 		else
 		// Text Message
@@ -359,9 +356,9 @@ void sendComToPhone()
 		if(bBLEDEBUG)
 		{
 			if(ComToPhoneBuff[0] == ':' || ComToPhoneBuff[0] == '!' || ComToPhoneBuff[0] == '@')
-				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%-200.200s lng:%i\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff+7, blelen);
+				Serial.printf("[BLE]...%-250.250s lng:%i\n", ComToPhoneBuff+7, blelen);
 			else
-				Serial.printf("ComToPhoneWrite:%i ComToPhoneRead:%i buff:%-200.200s lng:%i\n", ComToPhoneWrite, ComToPhoneRead, ComToPhoneBuff, blelen);
+				Serial.printf("[BLE]...%-250.250s lng:%i\n", ComToPhoneBuff, blelen);
 		}
     }
     
