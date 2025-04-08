@@ -50,7 +50,7 @@
 // flag to indicate if we are after receiving
 extern unsigned long iReceiveTimeOutTime;
 
-extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
+extern unsigned char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern double mheardLat[MAX_MHEARD];
 extern double mheardLon[MAX_MHEARD];
 
@@ -258,7 +258,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     {
                         if(mheardCalls[iset][0] != 0x00)
                         {
-                            if(strcmp(mheardCalls[iset], aprsmsg.msg_source_last.c_str()) == 0)
+                            if(memcmp(mheardCalls[iset], aprsmsg.msg_source_last.c_str(), aprsmsg.msg_source_last.length()) == 0)
                             {
                                 ipos=iset;
                                 lat = mheardLat[ipos];
@@ -357,7 +357,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         break;
                 }
 
-                // txtmessage, position
+                // txtmessage, position, hey
                 if(msg_type_b_lora == 0x3A || msg_type_b_lora == 0x21 || msg_type_b_lora == 0x40)
                 {
                     // Extern Server

@@ -433,7 +433,8 @@ void esp32setup()
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
-    bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
+    bSMALLDISPLAY =  false;
+    //free !! meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
 
@@ -1613,7 +1614,7 @@ void esp32loop()
         posinfo_timer = millis();
     }
 
-    // heysinfo_interval in Seconds == 15 minutes
+    // HEYINFO_INTERVAL in Seconds == 15 minutes
     if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
     {
         bHeyFirst = false;
@@ -1621,6 +1622,25 @@ void esp32loop()
         sendHey();
 
         heyinfo_timer = millis();
+    }
+
+    // TELEMETRY_INTERVAL in Seconds == 5 minutes
+    unsigned long akt_timer = meshcom_settings.node_parm_time;
+    if(akt_timer < 5 || akt_timer > 120)
+    {
+        akt_timer = TELEMETRY_INTERVAL;
+    }
+    
+    akt_timer = akt_timer * 1000; // seconds
+
+    if(iNextTelemetry < 4)
+        akt_timer= 10 * 1000; // 10 Seconds
+        
+    if (((telemetry_timer + akt_timer) < millis()) || bHeyFirst)
+    {
+        sendTelemetry();
+
+        telemetry_timer = millis();
     }
 
     mainStartTimeLoop();

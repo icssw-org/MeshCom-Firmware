@@ -172,6 +172,7 @@ void commandAction(char *msg_text, bool ble)
     bool bPos=false;
     bool bShowPos=false;
     bool bWeather=false;
+    bool bTelemetry=false;
     bool bIO=false;
     bool bReturn=false;
     bool bSensSetting=false;
@@ -465,22 +466,47 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--setgrc 9;..9;  set groups\n--nomsgall on/off  '*'-msg on display\n");
             delay(100);
-            Serial.printf("--maxv    100% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n");
+            Serial.printf("--maxv    100%% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n");
             delay(100);
             Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
             delay(100);
-            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--SMALL on  use small Display\n--SS on  use SS\n--bmx BME/BMP/680 off\n");
+            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--SS on  use SS\n--bmx BME/BMP/680 off\n");
             delay(100);
-            Serial.printf("--onewire on/off  use DSxxxx\n--onewire gpio 99\n--lps33 on/off (RAK only)\n");
+            Serial.printf("--onewire on/off  use DSxxxx\n--onewire gpio 99\n");
             delay(100);
-            Serial.printf("--info     show info\n--mheard   show MHeard\n--gateway on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx\n--mesh    on/off\n");
+            
+            #ifdef BOARD_RAK4630
+                Serial.printf("--lps33 on/off (RAK only)\n");
+                delay(100);
+            #endif
+
+            Serial.printf("--info      show info\n--mheard    show MHeard\n--gateway   on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx\n--mesh      on/off\n");
             delay(100);
-            Serial.printf("--softser on/off/send/app/baud/fixpegel/fixtemp\n");
+            Serial.printf("--softser   on/off/send/app/baud/fixpegel/fixtemp\n");
             delay(100);
-            Serial.printf("--spectrum   run spectral scan\n");
+            Serial.printf("--spectrum  run spectral scan\n");
+            delay(100);
+            //own-call-ssid:PARM.VOLT,AMPERE,BATT,,,track,-,-,-,-,-,-,-
+            Serial.printf("--parm tm1,tm2,tm3,tm4,tm5 (measured value name ... not used leave blank)\n");
+            delay(100);
+            //own-call-ssid:%-9.9s:UNIT.V,A,V,,,Y/N,O/N,O/N,O/N,O/N,O/N,O/N,O/N
+            Serial.printf("--unit tm1,tm2,tm3,tm4,tm5 (unit like V,A,mV, ... not used leave blank)\n");
+            delay(100);
+            //#%03i,%.1f,%.1f,0,0,0,%01i0000000
+            Serial.printf("--format 1,1,1,1,1 (decimal places ... not used leave 0)\n");
+            delay(100);
+            //own-call-ssid:EQNS.0,1,0,0,1,0,0,1,0,0,1,0,0,1,0
+            Serial.printf("--eqns 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0 (default is set)\n");
+            delay(100);
+            //internal value names
+            Serial.printf("--values onewire,co2,tin,hpa,batt (see project pages)\n");
+            delay(100);
+            //value timer
+            Serial.printf("--ptime 99 messuring interval minutes\n");
+
             #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
-            delay(100);
-            Serial.printf("--setboostedgain    on/off  enable/disable boosted rx gain\n");
+                delay(100);
+                Serial.printf("--setboostedgain    on/off  enable/disable boosted rx gain\n");
             #endif
         }
 
@@ -971,22 +997,6 @@ void commandAction(char *msg_text, bool ble)
     else
     #endif
 
-    if(commandCheck(msg_text+2, (char*)"small on") == 0)
-    {
-        bSMALLDISPLAY=true;
-        
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x0200;
-
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"nomsgall on") == 0)
     {
         bNoMSGtoALL=true;
@@ -1045,22 +1055,6 @@ void commandAction(char *msg_text, bool ble)
         
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7FF7; // MCU811 off
 
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"small off") == 0)
-    {
-        bSMALLDISPLAY=false;
-        
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7DFF;
-        
         if(ble)
         {
             bSensSetting = true;
@@ -2751,6 +2745,113 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
 
+    //////////////////////////////////////////////////////////////////////////////
+    // telemetry settings
+    else
+    if(commandCheck(msg_text+2, (char*)"parm ") == 0)
+    {
+        // max. 50 char
+        msg_text[57]=0x00;
+
+        snprintf(meshcom_settings.node_parm, sizeof(meshcom_settings.node_parm), "%s", msg_text+7);
+
+        String strCheck = meshcom_settings.node_parm;
+
+        if(count_char(strCheck, ',') > 4)
+        {
+            Serial.println("PARM wro9ng format");
+
+            sprintf(meshcom_settings.node_parm, "%s", "none");
+        }
+        else
+        {
+            save_settings();
+        }
+
+        bReturn = true;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"unit ") == 0)
+    {
+        // max. 50 char
+        msg_text[57]=0x00;
+
+        snprintf(meshcom_settings.node_unit, sizeof(meshcom_settings.node_unit), "%s", msg_text+7);
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"format ") == 0)
+    {
+        // max. 50 char
+        msg_text[59]=0x00;
+
+        snprintf(meshcom_settings.node_format, sizeof(meshcom_settings.node_format), "%s", msg_text+9);
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"eqns ") == 0)
+    {
+        // max. 50 char
+        msg_text[57]=0x00;
+
+        snprintf(meshcom_settings.node_eqns, sizeof(meshcom_settings.node_eqns), "%s", msg_text+7);
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"values ") == 0)
+    {
+        // max. 50 char
+        msg_text[59]=0x00;
+
+        snprintf(meshcom_settings.node_values, sizeof(meshcom_settings.node_values), "%s", msg_text+9);
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"ptime ") == 0)
+    {
+        sscanf(msg_text+8, "%d", &meshcom_settings.node_parm_time);
+
+        if(meshcom_settings.node_parm_time < 5 || meshcom_settings.node_parm_time > 120)
+        {
+            meshcom_settings.node_parm_time = TELEMETRY_INTERVAL;
+        }
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"tel") == 0)
+    {
+        bTelemetry=true;
+    }
+    //
+    //////////////////////////////////////////////////////////////////////////////
+
+    if(bTelemetry)
+    {
+        if(!bRxFromPhone)
+        {
+            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
+
+            Serial.printf("PARM:   %s\nUINT:   %s\nFORMAT: %s\nEQNS:   %s\nVALUES: %s\nPTIME:  %i\n\n", meshcom_settings.node_parm, meshcom_settings.node_unit, meshcom_settings.node_format, meshcom_settings.node_eqns, meshcom_settings.node_values, meshcom_settings.node_parm_time);
+        }
+
+        return;
+    }
+    else
     if(bWeather)
     {
 
@@ -3105,7 +3206,6 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["680F"] = bme680_found;
         sensdoc["811"] = bMCU811ON;
         sensdoc["811F"] = mcu811_found;
-        sensdoc["SMALL"] = bSMALLDISPLAY;
         sensdoc["SS"] = bSOFTSERON;
         sensdoc["LPS33"] = bLPS33;
         sensdoc["OW"] = bONEWIRE;
