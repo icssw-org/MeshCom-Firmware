@@ -63,6 +63,7 @@ bool bme680_found = false;
 bool bmx_found = false;;
 bool mcu811_found = false;
 bool one_found = false;
+bool ina226_found = false;
 
 bool bGATEWAY = false;
 bool bGATEWAY_NOPOS = false;
@@ -237,7 +238,7 @@ unsigned long web_timer = 0;
 // Function that gets current epoch time
 unsigned long getUnixClock()
 {
-	struct tm timeinfo = {0};
+	struct tm timeinfo;
 
 
     timeinfo.tm_year = meshcom_settings.node_date_year - 1900;
@@ -1455,6 +1456,7 @@ void checkButtonState()
         }
         else
         {
+
             checkButtoExtraLong = 0;
 
             bPressed = false;
@@ -1470,12 +1472,12 @@ void checkButtonState()
 
                     bDisplayTrack=!bDisplayTrack;
 
+                    bDisplayOff=false;
+
                     if(bDisplayTrack)
                         commandAction((char*)"--track on", false);
                     else
                         commandAction((char*)"--track off", false);
-
-                    bDisplayOff=false;
 
                     sendDisplayHead(false);
 
@@ -1537,6 +1539,8 @@ void checkButtonState()
                     else
                     {
                         bDisplayOff=false;
+
+                        commandAction((char*)"--display on", isPhoneReady, false);
 
                         pageLineAnz = pageLastLineAnz[pagePointer];
                         for(int its=0;its<pageLineAnz;its++)
@@ -2845,18 +2849,6 @@ void sendTelemetry()
     {
         strTelemetry=meshcom_settings.node_parm;
         
-        /*
-        int ic = count_char(strTelemetry, ',');
-
-        if(ic > 5)
-            return;
-
-        for(int iset=0; iset < 5-ic; iset++)
-            strTelemetry.concat(',');
-
-        strTelemetry.concat("-,-,-,-,-,-,-,-");
-        */
-
         snprintf(msg_text, sizeof(msg_text), "%-9.9s:PARM.%s", meshcom_settings.node_call, strTelemetry.c_str());
 
         iNextTelemetry=1;
@@ -2869,18 +2861,6 @@ void sendTelemetry()
 
         strTelemetry=meshcom_settings.node_unit;
         
-        /*
-        int ic = count_char(strTelemetry, ',');
-
-        if(ic > 5)
-            return;
-
-        for(int iset=0; iset < 5-ic; iset++)
-            strTelemetry.concat(',');
-
-        strTelemetry.concat("O/N,O/N,O/N,O/N,O/N,O/N,O/N,O/N");
-        */
-
         snprintf(msg_text, sizeof(msg_text), "%-9.9s:UNIT.%s", meshcom_settings.node_call, strTelemetry.c_str());
 
         iNextTelemetry=2;
@@ -2923,6 +2903,20 @@ void sendTelemetry()
 
                 strTelemetry.concat(",");
 
+                strValue.trim();
+
+                if(strValue == "press")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "hum")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_hum);
+                    strTelemetry.concat(cv);
+                }
+                else
                 if(strValue == "temp")
                 {
                     snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_temp);
@@ -2932,6 +2926,18 @@ void sendTelemetry()
                 if(strValue == "onewire")
                 {
                     snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_temp2);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "gasres")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_gas_res);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "co2")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_co2);
                     strTelemetry.concat(cv);
                 }
                 else
@@ -2959,33 +2965,9 @@ void sendTelemetry()
                     strTelemetry.concat(cv);
                 }
                 else
-                if(strValue == "press")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "hum")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_hum);
-                    strTelemetry.concat(cv);
-                }
-                else
                 if(strValue == "qnh")
                 {
                     snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press_asl);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "gasres")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_gas_res);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "co2")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_co2);
                     strTelemetry.concat(cv);
                 }
 

@@ -499,7 +499,7 @@ void commandAction(char *msg_text, bool ble)
             Serial.printf("--eqns 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0 (default is set)\n");
             delay(100);
             //internal value names
-            Serial.printf("--values onewire,co2,tin,hpa,batt (see project pages)\n");
+            Serial.printf("--values press,hum,temp,onewire,co2 (see project pages)\n");
             delay(100);
             //value timer
             Serial.printf("--ptime 99 messuring interval minutes\n");
@@ -2842,11 +2842,32 @@ void commandAction(char *msg_text, bool ble)
 
     if(bTelemetry)
     {
+        if(ble)
+        {
+            JsonDocument tmdoc;
+            tmdoc["TYP"] = "TM";
+            tmdoc["PARM"] = meshcom_settings.node_parm;
+            tmdoc["UNIT"] = meshcom_settings.node_unit;
+            tmdoc["FORMAT"] = meshcom_settings.node_format;
+            tmdoc["EQNS"] = meshcom_settings.node_eqns;
+            tmdoc["VALES"] = meshcom_settings.node_values;
+            tmdoc["PTIME"] = meshcom_settings.node_values;
+            serializeJson(tmdoc, print_buff, measureJson(tmdoc));
+
+            // clear buffer
+            memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+
+            // set data message flag and tx ble
+            msg_buffer[0] = 0x44;
+            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
+            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        }
+
         if(!bRxFromPhone)
         {
             Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
 
-            Serial.printf("PARM:   %s\nUINT:   %s\nFORMAT: %s\nEQNS:   %s\nVALUES: %s\nPTIME:  %i\n\n", meshcom_settings.node_parm, meshcom_settings.node_unit, meshcom_settings.node_format, meshcom_settings.node_eqns, meshcom_settings.node_values, meshcom_settings.node_parm_time);
+            Serial.printf("PARM:   %s\nUNIT:   %s\nFORMAT: %s\nEQNS:   %s\nVALUES: %s\nPTIME:  %i\n\n", meshcom_settings.node_parm, meshcom_settings.node_unit, meshcom_settings.node_format, meshcom_settings.node_eqns, meshcom_settings.node_values, meshcom_settings.node_parm_time);
         }
 
         return;
@@ -3212,6 +3233,7 @@ void commandAction(char *msg_text, bool ble)
         sensdoc["OWPIN"] = meshcom_settings.node_owgpio;
         sensdoc["OWF"] = one_found;
         sensdoc["USERPIN"] = ibt;
+        sensdoc["INA226"] = ina226_found;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
@@ -3388,7 +3410,7 @@ void sendNodeSetting()
     nsetdoc["GW"] = bGATEWAY;
     nsetdoc["WS"] = bWEBSERVER;
     //KBC/KFR
-     nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
+    nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc["DISP"] =  bDisplayOff;
     nsetdoc["BTN"] = bButtonCheck;
     nsetdoc["MSH"] = bMESH;
