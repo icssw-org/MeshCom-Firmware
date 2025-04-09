@@ -402,7 +402,8 @@ void nrf52setup()
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
-    bSMALLDISPLAY =  meshcom_settings.node_sset2 & 0x0200;
+    bSMALLDISPLAY =  false;
+    //free !! meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
 
@@ -1191,7 +1192,7 @@ if (isPhoneReady == 1)
         }
     }
 
-    // heysinfo_interval in Seconds == 15 minutes
+    // HEYINFO_INTERVAL in Seconds == 15 minutes
     if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
     {
         bHeyFirst = false;
@@ -1201,6 +1202,24 @@ if (isPhoneReady == 1)
         heyinfo_timer = millis();
     }
 
+    // TELEMETRY_INTERVAL in Seconds == 5 minutes
+    unsigned long akt_timer = meshcom_settings.node_parm_time;
+    if(akt_timer < 5 || akt_timer > 120)
+    {
+        akt_timer = TELEMETRY_INTERVAL;
+    }
+    
+    akt_timer = akt_timer * 1000; // seconds
+
+    if (((telemetry_timer + akt_timer) < millis()) || bHeyFirst)
+    {
+        bHeyFirst = false;
+        
+        sendTelemetry();
+
+        telemetry_timer = millis();
+    }
+    
     // get UDP & send UDP message from ringBufferOut if there is one to tx
     if(bGATEWAY)
     {

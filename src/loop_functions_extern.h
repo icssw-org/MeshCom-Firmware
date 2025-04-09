@@ -99,6 +99,10 @@ extern uint8_t RcvBuffer[UDP_TX_BUF_SIZE * 2];
 
 extern uint8_t own_msg_id[MAX_RING][5];
 
+// TELEMTRY global variables
+extern int iNextTelemetry;
+extern String strTelemetry;
+
 // RINGBUFFER for incoming UDP lora packets for lora TX
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5];
 extern int iWrite;
@@ -160,6 +164,7 @@ extern int no_gps_reset_counter;
 
 extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long heyinfo_timer;      // we check periodically to send HEY
+extern unsigned long telemetry_timer;    // we check periodically to send TELEMETRY
 extern unsigned long temphum_timer;      // we check periodically get TEMP/HUM
 extern unsigned long druck_timer;        // we check periodically get AIRPRESURE
 extern unsigned long hb_timer;           // GW Server-Heartbeat-Timer
@@ -169,13 +174,13 @@ extern unsigned long web_timer;          // Refreshtime WEbServer
 extern float global_batt;
 extern int global_proz;
 
-extern char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
-extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
+extern unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
+extern unsigned char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Update Time
 
-extern char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
+extern unsigned char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardPathEpoch[MAX_MHPATH];  //Ringbuffer for MHeard EPoch Update Time
-extern char mheardPath[MAX_MHPATH][60]; //Ringbuffer for MHeard Sourcepath
+extern unsigned char mheardPathBuffer1[MAX_MHPATH][30]; //Ringbuffer for MHeard Sourcepath
 extern uint8_t mheardPathLen[MAX_MHPATH];
 
 extern char cTimeSource[10];

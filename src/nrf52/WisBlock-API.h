@@ -285,8 +285,16 @@ struct s_meshcom_settings
 	char node_ssid[33] = {0};
 	char node_pwd[64] = {0};
 
-	int node_analog_pin = 32;
+	int node_analog_pin = 99;
 	float node_analog_faktor = 1.0;
+
+	char node_parm[50] = {0};
+	char node_unit[50] = {0};
+	char node_format[50] = {0};
+	char node_eqns[50] = {0};
+	char node_values[50] = {0};
+
+	int node_parm_time = 15;
 
 	// nicht im Flash
 	int node_press_alt = 0;
@@ -448,6 +456,14 @@ struct s_meshcomcompat_settings
 
 	int node_analog_pin = 99;
 	float node_analog_faktor = 1.0;
+
+	char node_parm[50] = {0};
+	char node_unit[50] = {0};
+	char node_format[50] = {0};
+	char node_eqns[50] = {0};
+	char node_values[50] = {0};
+
+	int node_parm_time = 15;
 
 	// nicht im Flash
 	int node_press_alt = 0;

@@ -5,14 +5,14 @@
 #include <time_functions.h>
 #include <mheard_functions.h>
 
-char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
-char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
+unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
+unsigned char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 double mheardLat[MAX_MHEARD];
 double mheardLon[MAX_MHEARD];
 unsigned long mheardEpoch[MAX_MHEARD];
 
-char mheardPath[MAX_MHPATH][60]; //Ringbuffer for MHeard Sourcepath
-char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
+unsigned char mheardPathBuffer1[MAX_MHPATH][30]; //Ringbuffer for MHeard Sourcepath
+unsigned char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 unsigned long mheardPathEpoch[MAX_MHPATH];
 uint8_t mheardPathLen[MAX_MHPATH];
 
@@ -37,8 +37,8 @@ void initMheard()
 
     for(int iset=0; iset<MAX_MHPATH; iset++)
     {
+        memset(mheardPathBuffer1[iset], 0x00, sizeof(mheardPathBuffer1[iset]));
         memset(mheardPathCalls[iset], 0x00, sizeof(mheardPathCalls[iset]));
-        memset(mheardPath[iset], 0x00, sizeof(mheardPath[iset]));
         mheardPathEpoch[iset]=0;
         mheardPathLen[iset]=0;
     }
@@ -66,8 +66,11 @@ void initMheardLine(struct mheardLine &mheardLine)
     mheardLine.mh_mesh = 0;
 }
 
-void decodeMHeard(char mh_buffer[], struct mheardLine &mheardLine)
+void decodeMHeard(unsigned char u_mh_buffer[sizeof(mheardBuffer[0])], struct mheardLine &mheardLine)
 {
+    char mh_buffer[sizeof(mheardBuffer[0])];
+    memcpy(mh_buffer, u_mh_buffer, sizeof(mheardBuffer[0]));
+    
     initMheardLine(mheardLine);
 
     int itype=1;
@@ -131,7 +134,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
             }
             else
             {
-                if(strcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str()) == 0)
+                if(memcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str(), mheardLine.mh_callsign.length()) == 0)
                 {
                     ipos=iset;
                 }
@@ -160,7 +163,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
             mheardWrite=0;
     }
 
-    strcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str());
+    memset(mheardCalls[ipos], 0x00, sizeof(mheardCalls[ipos]));
+    memcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str(), mheardLine.mh_callsign.length());
     
     mheardEpoch[ipos] = getUnixClock();
     /*
@@ -171,8 +175,10 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     int16_t mh_rssi;
     int8_t mh_snr;
     */
-    snprintf(mheardBuffer[ipos], sizeof(mheardBuffer[ipos]), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
-     mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh);
+    char cBuffer[60];
+    snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
+     mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh); 
+    memcpy(mheardBuffer[ipos], cBuffer, 60);
 
     // generate JSON
     JsonDocument mhdoc;
@@ -216,7 +222,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
                 mheardPathCalls[iset][0] = 0x00;
             }
             else
-            if(strcmp(mheardPathCalls[iset], mheardLine.mh_sourcecallsign.c_str()) == 0)
+            if(memcmp(mheardPathCalls[iset], mheardLine.mh_sourcecallsign.c_str(), mheardLine.mh_sourcecallsign.length()) == 0)
             {
                 ipos=iset;
             }
@@ -250,13 +256,21 @@ void updateHeyPath(struct mheardLine &mheardLine)
         return;
     }
 
-    strcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str());
+    memset(mheardPathCalls[ipos], 0x00, sizeof(mheardPathCalls[ipos]));
+    memcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str(), mheardLine.mh_sourcecallsign.length());
+    mheardPathCalls[ipos][9]=0x00;
 
     int ips = mheardLine.mh_sourcepath.indexOf(',') + 1;
     if(ips > 0)
-        strcpy(mheardPath[ipos], mheardLine.mh_sourcepath.substring(ips, 59).c_str());
+    {
+        memcpy(mheardPathBuffer1[ipos], mheardLine.mh_sourcepath.substring(ips, 29).c_str(), sizeof(mheardPathBuffer1[ipos]));
+        mheardPathBuffer1[ipos][29] = 0x00;
+        // TODO second 30 chars
+    }
     else
-        memset(mheardPath[ipos], 0x00, sizeof(mheardPath[ipos]));
+    {
+        memset(mheardPathBuffer1[ipos], 0x00, sizeof(mheardPathBuffer1[ipos]));
+    }
 
     // check HEY! comming from gateway
     if(mheardLine.mh_destinationpath == "HG")
@@ -295,8 +309,8 @@ void sendMheard()
             {
                 initMheardLine(mheardLine);
 
-                mheardLine.mh_callsign = mheardCalls[iset];
-                String mhstringdec = mheardBuffer[iset];
+                mheardLine.mh_callsign = (char *)mheardCalls[iset];
+                String mhstringdec = (char *)mheardBuffer[iset];
 
                 mheardLine.mh_date = getValue(mhstringdec, '|', 0);
                 mheardLine.mh_time = getValue(mhstringdec, '|', 1);
@@ -389,8 +403,8 @@ void showMHeard()
 
 void showPath()
 {
-    Serial.printf("/------------------------------------------------------------------------------------------------\\\n");
-    Serial.printf("|MHeard call |       date          |                                                             |\n");
+    Serial.printf("/-------------------------------------------------------------------------------------------------\\\n");
+    Serial.printf("|MHeard call |       date          | lng/Gate/Path                                                |\n");
 
     for(int iset=0; iset<MAX_MHPATH; iset++)
     {
@@ -398,7 +412,7 @@ void showPath()
         {
             if((mheardPathEpoch[iset]+60*60*3) > getUnixClock())    // 3h
             {
-                Serial.printf("|------------|---------------------|-------------------------------------------------------------|\n");
+                Serial.printf("|------------|---------------------|--------------------------------------------------------------|\n");
 
                 Serial.printf("| %-10.10s | ", mheardPathCalls[iset]);
 
@@ -406,7 +420,7 @@ void showPath()
                 
                 Serial.printf("%-19.19s | ", convertUNIXtoString(lt).c_str()); // yyyy.mm.dd hh:mm:ss
 
-                Serial.printf("%01u%s/%-57.57s|\n", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPath[iset]);
+                Serial.printf("%01u%s/%-29.29s                             |\n", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathBuffer1[iset]);
             }
             else
             {
@@ -415,7 +429,7 @@ void showPath()
         }
     }
 
-    Serial.printf("\\------------------------------------------------------------------------------------------------/\n");
+    Serial.printf("\\-------------------------------------------------------------------------------------------------/\n");
 }
 
 char* getPayloadType(char ptype)

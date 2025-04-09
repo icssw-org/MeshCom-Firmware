@@ -104,6 +104,10 @@ char cBLEName[50]={0};
 String strSOFTSER_BUF;
 bool bSOFTSER_APP = false;
 
+// TELEMTRY global variables
+int iNextTelemetry=0;
+String strTelemetry="";
+
 // common variables
 char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
 
@@ -224,6 +228,7 @@ int no_gps_reset_counter = 0;
 // Loop timers
 unsigned long posinfo_timer = 0;    // we check periodically to send GPS
 unsigned long heyinfo_timer = 0;    // we check periodically to send HEY
+unsigned long telemetry_timer = 0;  // we check periodically to send TELEMETRY
 unsigned long temphum_timer = 0;    // we check periodically get TEMP/HUM
 unsigned long druck_timer = 0;      // we check periodically get AIRPRESURE
 unsigned long hb_timer = 0;
@@ -2284,6 +2289,11 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         //meshcom_settings.node_vcurrent=meshcom_settings.node_vcurrent+1.0;
         //////////
 
+        if(strlen(meshcom_settings.node_parm) != 0 && strcmp(meshcom_settings.node_parm, "none") != 0)
+        {
+            // keine automatischen Werte
+        }
+        else
         if(bINA226ON)
         {
             snprintf(cversion, sizeof(cversion), "%s", "/V=5");
@@ -2810,6 +2820,234 @@ void sendHey()
     }
 }
 
+// Telemetry with own Parameters
+void sendTelemetry()
+{
+    if(strlen(meshcom_settings.node_parm) == 0 || strcmp(meshcom_settings.node_parm, "none") == 0)
+        return;
+
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+
+    struct aprsMessage aprsmsg;
+
+    initAPRS(aprsmsg, ':');
+
+    aprsmsg.msg_len = 0;
+
+    // MSG ID zusammen setzen    
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
+    
+    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    
+    aprsmsg.msg_destination_path = "100001";
+
+    if(iNextTelemetry == 0)
+    {
+        strTelemetry=meshcom_settings.node_parm;
+        
+        /*
+        int ic = count_char(strTelemetry, ',');
+
+        if(ic > 5)
+            return;
+
+        for(int iset=0; iset < 5-ic; iset++)
+            strTelemetry.concat(',');
+
+        strTelemetry.concat("-,-,-,-,-,-,-,-");
+        */
+
+        snprintf(msg_text, sizeof(msg_text), "%-9.9s:PARM.%s", meshcom_settings.node_call, strTelemetry.c_str());
+
+        iNextTelemetry=1;
+    }
+    else
+    if(iNextTelemetry == 1)
+    {
+        if(strlen(meshcom_settings.node_unit) == 0 || strcmp(meshcom_settings.node_unit, "none") == 0)
+            return;
+
+        strTelemetry=meshcom_settings.node_unit;
+        
+        /*
+        int ic = count_char(strTelemetry, ',');
+
+        if(ic > 5)
+            return;
+
+        for(int iset=0; iset < 5-ic; iset++)
+            strTelemetry.concat(',');
+
+        strTelemetry.concat("O/N,O/N,O/N,O/N,O/N,O/N,O/N,O/N");
+        */
+
+        snprintf(msg_text, sizeof(msg_text), "%-9.9s:UNIT.%s", meshcom_settings.node_call, strTelemetry.c_str());
+
+        iNextTelemetry=2;
+    }
+    else
+    if(iNextTelemetry == 2)
+    {
+        if(strlen(meshcom_settings.node_eqns) == 0 || strcmp(meshcom_settings.node_eqns, "none") == 0)
+            strTelemetry = "0,1,0,0,1,0,0,1,0,0,1,0,0,1,0";
+        else
+            strTelemetry=meshcom_settings.node_eqns;
+        
+        if(count_char(strTelemetry, ',') != 14)
+            strTelemetry = "0,1,0,0,1,0,0,1,0,0,1,0,0,1,0";
+
+        snprintf(msg_text, sizeof(msg_text), "%-9.9s:EQNS.%s", meshcom_settings.node_call, strTelemetry.c_str());
+
+        iNextTelemetry=3;
+    }
+    else
+    // Values to APRS.FI
+    if(iNextTelemetry >= 3)
+    {
+        char cv[10];
+        snprintf(cv, sizeof(cv), "T#%03i", meshcom_settings.node_msgid);
+
+        strTelemetry = cv;
+
+        String strValue="";
+        int ivcount=0;
+
+        for(int ival=0;ival<=(int)strlen(meshcom_settings.node_values); ival++)
+        {
+            if(meshcom_settings.node_values[ival] == ',' || meshcom_settings.node_values[ival] == 0x00)
+            {
+                // max. 5 values
+                ivcount++;
+                if(ivcount > 5)
+                    break;
+
+                strTelemetry.concat(",");
+
+                if(strValue == "temp")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_temp);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "onewire")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_temp2);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "batt")
+                {
+                    snprintf(cv, sizeof(cv), "%.2f", global_batt/1000.);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "proz")
+                {
+                    snprintf(cv, sizeof(cv), "%i", global_proz);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "vbus")
+                {
+                    snprintf(cv, sizeof(cv), "%.2f", meshcom_settings.node_vbus);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "vcurrent")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_vcurrent);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "press")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "hum")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_hum);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "qnh")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press_asl);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "gasres")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_gas_res);
+                    strTelemetry.concat(cv);
+                }
+                else
+                if(strValue == "co2")
+                {
+                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_co2);
+                    strTelemetry.concat(cv);
+                }
+
+                strValue="";
+            }
+            else
+            {
+                snprintf(cv, sizeof(cv), "%c", meshcom_settings.node_values[ival]);
+
+                strValue.concat(cv);
+            }
+        }
+
+        
+        snprintf(msg_text, sizeof(msg_text), "%s", strTelemetry.c_str());
+
+        iNextTelemetry++;
+        // PARM, UNIT. EQNS neuerlich senden
+        if(iNextTelemetry > 14)
+            iNextTelemetry=0;
+    }
+
+    aprsmsg.msg_payload = msg_text;
+    
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 999)
+        meshcom_settings.node_msgid=0;
+
+    // Flash rewrite
+    save_settings();
+
+    encodeAPRS(msg_buffer, aprsmsg);
+
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-TMY", aprsmsg);
+        Serial.println();
+    }
+
+    // store last message to compare later on
+    insertOwnTx(aprsmsg.msg_id);
+
+    // if GATEWAY only to Server
+    if(bGATEWAY)
+    {
+        // UDP out
+        addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+    }
+    else
+    {
+        // Master RingBuffer for transmission
+        // local messages send to LoRa TX
+        ringBuffer[iWrite][0] = aprsmsg.msg_len;
+        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+        memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
+
+        iWrite++;
+        if(iWrite >= MAX_RING)
+            iWrite=0;
+    }       
+}
+
 int GetHeadingDifference(int heading1, int heading2)
 {   
     int  difference = heading1 - heading2;
@@ -3071,4 +3309,14 @@ String getTimeZone()
         return "UTC";
 
     return "LT";
+}
+
+int count_char(String s, char c)
+{
+    int count = 0;
+  
+    for (int i = 0; i < (int)s.length(); i++)
+      if (s.charAt(i) == c) count++;
+  
+    return count;
 }

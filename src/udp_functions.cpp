@@ -198,7 +198,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
           memset(convBuffer, 0x00, UDP_TX_BUF_SIZE);
 
-          uint8_t size = encodeAPRS(convBuffer, aprsmsg);
+          uint16_t size = encodeAPRS(convBuffer, aprsmsg);
 
           if(size > UDP_TX_BUF_SIZE)
               size = UDP_TX_BUF_SIZE;
