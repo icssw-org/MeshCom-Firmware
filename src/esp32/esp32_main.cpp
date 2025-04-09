@@ -121,8 +121,8 @@ uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Ken
 bool config_to_phone_prepare = false;
 unsigned long config_to_phone_prepare_timer = 0;
 unsigned long config_to_phone_datetime_timer = 0;
-const uint8_t json_configs_cnt = 7;
-const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset"};
+const uint8_t json_configs_cnt = 9;
+const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset", "--io", "--tel"};
 uint8_t config_cmds_index = 0;
 uint8_t iPhoneState=0;
 
@@ -1802,7 +1802,7 @@ void esp32loop()
     #endif
 
     #if defined(ENABLE_INA226)
-    if(bINA226ON)
+    if(bINA226ON && ina226_found)
     {
         if(INA226TimeWait == 0)
             INA226TimeWait = millis() - 10000;

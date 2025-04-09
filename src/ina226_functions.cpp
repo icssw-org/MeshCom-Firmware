@@ -21,7 +21,9 @@ float vCURRENT=0.0;
 float vPOWER=0.0;
 
 bool setupINA226()
-{  
+{
+    ina226_found = false;
+
     if (!INA0.begin() )
     {
         bINA226ON = false;
@@ -40,13 +42,15 @@ bool setupINA226()
 
     bINA226ON = true;
 
+    ina226_found = true;
+
     return true;
 }
 
 
 bool loopINA226()
 {
-    if(!bINA226ON)
+    if(!bINA226ON || !ina226_found)
         return false;
 
     /*
