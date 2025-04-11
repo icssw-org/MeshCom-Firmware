@@ -620,13 +620,14 @@ unsigned int getGPS(void)
             
             state++;
             bMitHardReset=false;
+
+            break;
         
-        case 4: // print position info
-        
-        if(GPS.available())
-        {
-            return readGPS();
-        }
+        case 4:
+            if(GPS.available())
+            {
+                return readGPS();
+            }
 
     }
 

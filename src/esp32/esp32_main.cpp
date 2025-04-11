@@ -1458,8 +1458,11 @@ void esp32loop()
     // disconnecting
     if (!deviceConnected && oldDeviceConnected)
     {
+        /* KBC/KFR TEST 2025-04-10
         delay(2000); // give the bluetooth stack the chance to get things ready
         pServer->startAdvertising(); // restart advertising
+        */
+
         oldDeviceConnected = deviceConnected;
 
         g_ble_uart_is_connected = false;
@@ -1624,17 +1627,17 @@ void esp32loop()
         heyinfo_timer = millis();
     }
 
-    // TELEMETRY_INTERVAL in Seconds == 5 minutes
+    // TELEMETRY_INTERVAL in Minutes == 15 minutes default
     unsigned long akt_timer = meshcom_settings.node_parm_time;
     if(akt_timer < 5 || akt_timer > 120)
     {
         akt_timer = TELEMETRY_INTERVAL;
     }
     
-    akt_timer = akt_timer * 1000; // seconds
+    akt_timer = akt_timer * 1000 * 60; // convert to minutes
 
-    if(iNextTelemetry < 4)
-        akt_timer= 10 * 1000; // 10 Seconds
+    if(iNextTelemetry < 5)
+        akt_timer= 15 * 1000; // 15 Seconds PARM, UNIT, EQNS and 1st T-Message
         
     if (((telemetry_timer + akt_timer) < millis()) || bHeyFirst)
     {

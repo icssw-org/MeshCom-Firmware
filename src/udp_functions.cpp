@@ -11,12 +11,7 @@
 #include <configuration.h>
 #include "ArduinoJson.h"
 
-String keep;
-String cfw;
-String firmware;
 String grc_ids;
-
-static uint8_t txBuffer[UDP_TX_BUF_SIZE+50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 #ifdef ESP32
 
@@ -410,10 +405,7 @@ void sendMeshComUDP()
 
             Udp.endPacket();
 
-            uint8_t longname_len = strlen(meshcom_settings.node_call);
-            uint8_t offset_params = longname_len + 8 + 2;
-
-            memcpy(convBuffer, ringBufferUDPout[udpRead] + offset_params, msg_len);
+            memcpy(convBuffer, ringBufferUDPout[udpRead] + 1 + 27, msg_len);
 
             if(convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40)
             {
@@ -806,63 +798,39 @@ void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
 
 void sendKEEP()
 {
-    uint8_t hb_buffer[UDP_TX_BUF_SIZE+50];
+  int hb_buffer_size=0;
+  uint8_t hb_buffer[UDP_TX_BUF_SIZE+50];
 
-    keep = "KEEP";
-    cfw = SOURCE_VERSION;
-    cfw.concat(SOURCE_VERSION_SUB);
-    firmware = "GW";
-    firmware.concat(cfw);
-    grc_ids = "";
-    
-    for(int igrc=0; igrc<6; igrc++)
-    {
-        if(meshcom_settings.node_gcb[igrc] > 0)
-        {
-            grc_ids.concat(meshcom_settings.node_gcb[igrc]);
-            grc_ids.concat(";");
-        }
-    }
+  grc_ids = "";
+  
+  for(int igrc=0; igrc<6; igrc++)
+  {
+      if(meshcom_settings.node_gcb[igrc] > 0)
+      {
+          grc_ids.concat(meshcom_settings.node_gcb[igrc]);
+          grc_ids.concat(";");
+      }
+  }
 
-    uint8_t longname_len = strlen(meshcom_settings.node_call);
-    uint16_t hb_buffer_size = longname_len + 1 + sizeof(_GW_ID) + keep.length() + firmware.length() + grc_ids.length();
+  char keep_buffer[60];
+  memset(keep_buffer, 0x00, sizeof(keep_buffer));
 
-//    uint8_t hb_buffer[hb_buffer_size];
+  // KEEPFFFFFFFFOE1KBC-124.34w20;232;262;0x00
+  snprintf(keep_buffer, sizeof(keep_buffer), "KEEP%08X%-9.9s%-4.4s%-1.1s%s", _GW_ID, meshcom_settings.node_call,SOURCE_VERSION, SOURCE_VERSION_SUB, grc_ids.c_str());
 
-    // Serial.print("\nHB buffer size: ");
-    // Serial.println(hb_buffer_size);
+  hb_buffer_size = strlen(keep_buffer)+1;
+  memcpy(hb_buffer, keep_buffer, hb_buffer_size);
+  
+  // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
+  //also avoid UDP tx when UDP is getting a packet
+  // add HB message to the ringbuffer
+  if(bDEBUG)
+  {
+    Serial.print("[KEEP]...");
+    printBuffer(hb_buffer, hb_buffer_size);
+  }
 
-    char longname_c[longname_len + 1];
-    strcpy(longname_c, meshcom_settings.node_call);
-    longname_c[longname_len] = 0x00;
-
-    char keep_c[keep.length()];
-    strcpy(keep_c, keep.c_str());
-
-    char firmware_c[firmware.length()];
-    strcpy(firmware_c, firmware.c_str());
-
-    char grc_ids_c[grc_ids.length()];
-    strcpy(grc_ids_c, grc_ids.c_str());
-
-    // copying all together
-    memcpy(&hb_buffer, &meshcom_settings.node_call, longname_len + 1);
-    memcpy(&hb_buffer[longname_len + 1], &_GW_ID, sizeof(_GW_ID));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID)], &keep_c, sizeof(keep_c));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID) + sizeof(keep_c)], &firmware_c, sizeof(firmware_c));
-    memcpy(&hb_buffer[longname_len + 1 + sizeof(_GW_ID) + sizeof(keep_c) + sizeof(firmware_c)], &grc_ids_c, sizeof(grc_ids_c));
-    
-    // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
-    //also avoid UDP tx when UDP is getting a packet
-    // add HB message to the ringbuffer
-    //DEBUG_MSG("UDP", "HB Buffer");
-    if(bDEBUG)
-    {
-      Serial.print("KEEP-BUFFER:");
-      printBuffer(hb_buffer, hb_buffer_size);
-    }
-
-    addUdpOutBuffer(hb_buffer, hb_buffer_size);
+  addUdpOutBuffer(hb_buffer, hb_buffer_size);
 }
 
 /**@brief Function to write our additional data into the UDP tx buffer
@@ -870,56 +838,32 @@ void sendKEEP()
  * MODE BYTE: LongSlow = 1, MediumSlow = 3
  * 8 byte offset = ID+RSSI+SNR
  */
-void addNodeData(uint8_t msg_buffer[300], uint16_t size, int16_t rssi, int8_t snr)
+void addNodeData(uint8_t msg_buffer[UDP_TX_BUF_SIZE], uint16_t size, int16_t rssi, int8_t snr)
 {
-
-    #ifdef ESP32
+  #ifdef ESP32
+  
+  if(!hasIPaddress)
+    return;
     
-    if(!hasIPaddress)
-      return;
-      
-    #endif
+  #endif
 
-    uint8_t longname_len = strlen(meshcom_settings.node_call);
+  int dt_buffer_size=0;
+  uint8_t dt_buffer[UDP_TX_BUF_SIZE+50];
 
-    uint8_t offset = 8 + longname_len + 1; // offset for the payload written into tx udp buffer. We add 0x00 after Longanme
+  char data_buffer[60];
+  memset(data_buffer, 0x00, sizeof(data_buffer));
 
-    if (longname_len <= LONGNAME_MAXLEN)
-    {
-        memcpy(&txBuffer, &meshcom_settings.node_call, longname_len);
-        txBuffer[longname_len] = 0x00; // we add a trailing 0x00 to mark the end of longname
-    }
-    else
-    {
-        DEBUG_MSG("ERROR", "LongName is too long!");
-        longname_len = LONGNAME_MAXLEN;
-    }
+  // DATAFFFFFFFFOE1KBC-124.34w2-123-12303
+  // 03...MOD
+  snprintf(data_buffer, sizeof(data_buffer), "DATA%08X%-9.9s%-4.4s%-1.1s%4i%4i03", _GW_ID, meshcom_settings.node_call,SOURCE_VERSION, SOURCE_VERSION_SUB,rssi,(int)snr);
 
-    uint8_t offset_params = longname_len + 1;
-    memcpy(&txBuffer[offset_params], &_GW_ID, sizeof(_GW_ID));
-    memcpy(&txBuffer[offset_params + 4], &rssi, sizeof(rssi));
-    txBuffer[offset_params + 6] = snr;
-    txBuffer[offset_params + 7] = 0x03; // manually set to 0x03 because we are on MediumSlow per default
+  dt_buffer_size = strlen(data_buffer);
+  memcpy(dt_buffer, data_buffer, dt_buffer_size);
+  memcpy(dt_buffer+dt_buffer_size, msg_buffer, size);
+  
+  addUdpOutBuffer(dt_buffer, dt_buffer_size+size);
 
-    // now copy the rcvbuffer into txbuffer
-    if ((size + 8 + offset) < UDP_TX_BUF_SIZE)
-    {
-        for (int i = 0; i < size; i++)
-        {
-            txBuffer[i + offset] = msg_buffer[i];
-        }
-        // add it to the outgoing udp buffer
-        // TODO change txBuffer with ringbuffer
-        //DEBUG_MSG("UDP", "UDP out Buffer");
-        //neth.printBuffer(txBuffer, (size + offset));
-
-        addUdpOutBuffer(txBuffer, (size + offset));
-    }
-    else
-    {
-        DEBUG_MSG("ERROR", "Exceeding Buffer length!");
-    }
-
+  Serial.printf("dt_buffer_size %i size %i\n", dt_buffer_size, size);
 }
 
 //
