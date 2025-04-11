@@ -265,37 +265,40 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
   // Text
   if(msg_type_b_lora == 0x3A)
   {
-
-    JsonDocument cJson;
-    int json_len = 0;
-
-    // build the json with Arduino JSON
-    cJson["src_type"] = src_type;
-    cJson["type"] = "msg";
-    cJson["src"] = aprsmsg.msg_source_path.c_str();
-    cJson["dst"] = aprsmsg.msg_destination_path.c_str();
-    cJson["msg"] = strEsc(aprsmsg.msg_payload).c_str();
-    cJson["msg_id"] = _msgId;
-    
-    // add firmware version if not a node
-    if(strcmp(src_type, "node") == 0)
+    // no telemetry
+    if(aprsmsg.msg_destination_path != "100001")
     {
-      cJson["firmware"] = SOURCE_VERSION;
-      cJson["fw_sub"] = SOURCE_VERSION_SUB;
-    }
-    else
-    {
-      cJson["firmware"] = aprsmsg.msg_source_fw_version;
-      cJson["fw_sub"] = c_fw_sub;
-    }
+      JsonDocument cJson;
+      int json_len = 0;
 
-    // clear the buffer
-    memset(c_json, 0x00, sizeof(c_json));
-    // serialize the json
-    json_len = measureJson(cJson);
-    serializeJson(cJson, c_json, json_len + 1);
+      // build the json with Arduino JSON
+      cJson["src_type"] = src_type;
+      cJson["type"] = "msg";
+      cJson["src"] = aprsmsg.msg_source_path.c_str();
+      cJson["dst"] = aprsmsg.msg_destination_path.c_str();
+      cJson["msg"] = strEsc(aprsmsg.msg_payload).c_str();
+      cJson["msg_id"] = _msgId;
+      
+      // add firmware version if not a node
+      if(strcmp(src_type, "node") == 0)
+      {
+        cJson["firmware"] = SOURCE_VERSION;
+        cJson["fw_sub"] = SOURCE_VERSION_SUB;
+      }
+      else
+      {
+        cJson["firmware"] = aprsmsg.msg_source_fw_version;
+        cJson["fw_sub"] = c_fw_sub;
+      }
 
-    memcpy(u_json, c_json, json_len + 1);
+      // clear the buffer
+      memset(c_json, 0x00, sizeof(c_json));
+      // serialize the json
+      json_len = measureJson(cJson);
+      serializeJson(cJson, c_json, json_len + 1);
+
+      memcpy(u_json, c_json, json_len + 1);
+      }
   }
   else
     return;

@@ -1341,10 +1341,16 @@ void initAnalogPin()
     if(bAnalogCheck)
     {
         int ANAGPIO = meshcom_settings.node_analog_pin;
-        if(meshcom_settings.node_analog_pin)
+        if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin > 99)
             ANAGPIO = ANALOG_PIN;
 
         pinMode(ANAGPIO, INPUT);
+
+        if(bDisplayInfo)
+        {
+            Serial.print(getTimeString());
+            Serial.printf("[ANALOG]...GPIO%i SET\n", ANAGPIO);
+        }
     }
     
     #endif
@@ -1357,7 +1363,7 @@ void checkAnalogValue()
     if(bAnalogCheck)
     {
         int ANAGPIO = meshcom_settings.node_analog_pin;
-        if(meshcom_settings.node_analog_pin)
+        if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin > 99)
             ANAGPIO = ANALOG_PIN;
 
         float raw = (float)(analogRead(ANAGPIO));
@@ -2828,6 +2834,12 @@ void sendHey()
 void sendTelemetry()
 {
     if(strlen(meshcom_settings.node_parm) == 0 || strcmp(meshcom_settings.node_parm, "none") == 0)
+        return;
+
+    if(strlen(meshcom_settings.node_unit) == 0 || strcmp(meshcom_settings.node_unit, "none") == 0)
+        return;
+
+    if(strlen(meshcom_settings.node_values) == 0 || strcmp(meshcom_settings.node_values, "none") == 0)
         return;
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];

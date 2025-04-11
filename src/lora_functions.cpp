@@ -536,6 +536,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     // If message already comes from one gateway/server no ACK from another gateway
                                     if(aprsmsg.msg_server)
                                         bSendAckGateway=false;
+
+                                    // Telemetry no ACK
+                                    if(strcmp(destination_call, "100001") == 0)
+                                        bSendAckGateway=false;
                                 }
 
                                 if(bGATEWAY)
@@ -640,12 +644,21 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         bool bMeshDestination = true;
 
                         // messages to WLNK-1 or APRS2SOTA no need to MESH via a gateWay
-                        if(bGATEWAY && strcmp(destination_call, "WLNK-1") == 0)
-                            bMeshDestination = false;
-                        if(bGATEWAY && strcmp(destination_call, "APRS2SOTA") == 0)
-                            bMeshDestination = false;
-
-                        // more then 4 callsigns within source_path no need to MESH via a gateWay
+                        if(bGATEWAY)
+                        {
+                            if(strcmp(destination_call, "WLNK-1") == 0)
+                                bMeshDestination = false;
+                            else
+                            if(strcmp(destination_call, "APRS2SOTA") == 0)
+                                bMeshDestination = false;
+                            else
+                            if(strcmp(destination_call, "APRS2SOTA") == 0)
+                                bMeshDestination = false;
+                            else
+                            if(strcmp(destination_call, "100001") == 0)
+                                bMeshDestination = false;
+                        }
+                            // more then 4 callsigns within source_path no need to MESH via a gateWay
                         if(bGATEWAY)
                         {
                             if(aprsmsg.payload_type == ':' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_text+1)    // TEXT

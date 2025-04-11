@@ -721,6 +721,10 @@ void nrf52setup()
     //RadioEvents.PreAmpDetect = OnPreambleDetect;
     RadioEvents.PreAmpDetect = OnHeaderDetect;
     
+    // 4.34w we use EU8 instead of EU
+    if(meshcom_settings.node_country == 0)
+        meshcom_settings.node_country = 8;
+
     lora_setcountry(meshcom_settings.node_country);
 
     //  Initialize the LoRa Transceiver
@@ -1202,14 +1206,17 @@ if (isPhoneReady == 1)
         heyinfo_timer = millis();
     }
 
-    // TELEMETRY_INTERVAL in Seconds == 5 minutes
+    // TELEMETRY_INTERVAL in Minutes == 15 minutes default
     unsigned long akt_timer = meshcom_settings.node_parm_time;
     if(akt_timer < 5 || akt_timer > 120)
     {
         akt_timer = TELEMETRY_INTERVAL;
     }
     
-    akt_timer = akt_timer * 1000; // seconds
+    akt_timer = akt_timer * 1000 * 60; // in minutes
+
+    if(iNextTelemetry < 5)
+        akt_timer= 15 * 1000; // 15 Seconds PARM, UNIT, EQNS and 1st T-Message
 
     if (((telemetry_timer + akt_timer) < millis()) || bHeyFirst)
     {
@@ -1936,9 +1943,8 @@ void sendUDP()
             }
             else
             {
-                memcpy(convBuffer, ringBufferUDPout[udpRead] + 1 + 18, msg_len);
-
-                //Serial.printf("convBuffer[0] %02X\n", convBuffer[0]);
+                // UDP DATA Header 27 byte
+                memcpy(convBuffer, ringBufferUDPout[udpRead] + 1 + 27, msg_len);
 
                 if(convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40)
                 {

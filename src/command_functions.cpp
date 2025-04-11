@@ -2475,7 +2475,6 @@ void commandAction(char *msg_text, bool ble)
 
             if(ble)
             {
-                addBLECommandBack((char*)msg_text);
                 sendNodeSetting();
             }
 
@@ -2759,7 +2758,7 @@ void commandAction(char *msg_text, bool ble)
 
         if(count_char(strCheck, ',') > 4)
         {
-            Serial.println("PARM wro9ng format");
+            Serial.println("PARM wrong format");
 
             sprintf(meshcom_settings.node_parm, "%s", "none");
         }
@@ -2851,7 +2850,11 @@ void commandAction(char *msg_text, bool ble)
             tmdoc["FORMAT"] = meshcom_settings.node_format;
             tmdoc["EQNS"] = meshcom_settings.node_eqns;
             tmdoc["VALES"] = meshcom_settings.node_values;
-            tmdoc["PTIME"] = meshcom_settings.node_values;
+            tmdoc["PTIME"] = meshcom_settings.node_parm_time;
+
+            // reset print buffer
+            memset(print_buff, 0, sizeof(print_buff));
+
             serializeJson(tmdoc, print_buff, measureJson(tmdoc));
 
             // clear buffer
@@ -2978,6 +2981,10 @@ void commandAction(char *msg_text, bool ble)
             iodoc["AxVAL"] = iovalA;
             iodoc["BxOUT"] = iooutB;
             iodoc["BxVAL"] = iovalB;
+
+            // reset print buffer
+            memset(print_buff, 0, sizeof(print_buff));
+
             serializeJson(iodoc, print_buff, measureJson(iodoc));
 
             // clear buffer
@@ -3034,9 +3041,6 @@ void commandAction(char *msg_text, bool ble)
     {
         if(ble)
         {
-            // reset print buffer
-            memset(print_buff, 0, sizeof(print_buff));
-
             JsonDocument idoc;
 
             char fwver[20];
@@ -3063,6 +3067,9 @@ void commandAction(char *msg_text, bool ble)
             idoc["GCB5"] = meshcom_settings.node_gcb[5];
             idoc["CTRY"] = ctrycode;
             idoc["BOOST"] = bBOOSTEDGAIN;
+
+            // reset print buffer
+            memset(print_buff, 0, sizeof(print_buff));
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 
@@ -3424,6 +3431,7 @@ void sendNodeSetting()
     nsetdoc["MBW"] = meshcom_settings.node_bw;
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
     nsetdoc["NOALL"] = bNoMSGtoALL;
+    nsetdoc["ANACHK"] = bAnalogCheck;
     nsetdoc["ANAFAC"] = meshcom_settings.node_analog_faktor;
     nsetdoc["ANAPIN"] = meshcom_settings.node_analog_pin;
 

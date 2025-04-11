@@ -21,7 +21,7 @@ definitions for TBEAM 1262
 #define ENABLE_MC811
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
-#define ANALOG_PIN 25
+#define ANALOG_PIN 35
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 #define SX1262X
 #define TX_POWER_MAX 22  // max 22dBm
