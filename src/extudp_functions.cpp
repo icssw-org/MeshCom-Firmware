@@ -192,7 +192,10 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
 
   // convert aprsmsg.msg_source_fw_sub_version
   char c_fw_sub[2];
-  snprintf(c_fw_sub, sizeof(c_fw_sub), "%c", aprsmsg.msg_source_fw_sub_version);
+  if(strcmp(src_type, "node") == 0)
+    snprintf(c_fw_sub, sizeof(c_fw_sub), "%-1.1s", SOURCE_VERSION_SUB);
+  else
+    snprintf(c_fw_sub, sizeof(c_fw_sub), "%c", aprsmsg.msg_source_fw_sub_version);
 
   // Position
   if(msg_type_b_lora == 0x21)
@@ -244,7 +247,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
     {
       cJson["batt"] = global_proz;
       cJson["firmware"] = SOURCE_VERSION;
-      cJson["fw_sub"] = SOURCE_VERSION_SUB;
+      cJson["fw_sub"] = c_fw_sub;
     }
     else
     {
@@ -283,13 +286,13 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
       if(strcmp(src_type, "node") == 0)
       {
         cJson["firmware"] = SOURCE_VERSION;
-        cJson["fw_sub"] = SOURCE_VERSION_SUB;
       }
       else
       {
         cJson["firmware"] = aprsmsg.msg_source_fw_version;
-        cJson["fw_sub"] = c_fw_sub;
       }
+
+      cJson["fw_sub"] = c_fw_sub;
 
       // clear the buffer
       memset(c_json, 0x00, sizeof(c_json));

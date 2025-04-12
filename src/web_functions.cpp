@@ -1814,7 +1814,7 @@ String work_webpage(bool bget_password, int webid)
                     web_client.printf("<tr><td><b>UTC-OFF</b></td><td>%.1f [%s]</td></tr>\n",
                         meshcom_settings.node_utcoff, cTimeSource);
                     
-                    web_client.printf("<tr><td><b>BATT</b></td><td>%.2f V %d %% max %.2f V</td></tr><tr><td><b>Setting</b></td><td>GATEWAY %s %s ...MESH %s</td></tr><tr><td></td><td>BUTTON  %s ...DEBUG %s</td></tr>\n",
+                    web_client.printf("<tr><td><b>BATT</b></td><td>%.2f V %d %% max %.2f V</td></tr><tr><td><b>Setting</b></td><td>GATEWAY %s ...ANALOG %s ...MESH %s</td></tr><tr><td></td><td>BUTTON  %s ...DEBUG %s</td></tr>\n",
                         global_batt/1000.0, global_proz, meshcom_settings.node_maxv, (bGATEWAY?"on":"off"), (bAnalogCheck?"on":"off"), (bMESH?"on":"off"), (bButtonCheck?"on":"off"), (bDEBUG?"on":"off"));
                     
                     

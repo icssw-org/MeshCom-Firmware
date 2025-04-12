@@ -1582,6 +1582,11 @@ void esp32loop()
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
     {
         bPosFirst = false;
+
+        int interval = posinfo_interval;
+        if(posinfo_shot)
+            interval = 0;
+
         posinfo_shot=false;
         
         if(bSOFTSERON && SOFTSER_APP_ID == 1)

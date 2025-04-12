@@ -8,8 +8,8 @@
 
 char shortSUBVERSION()
 {
-    char csfw[5]={0};
-    memcpy(csfw, SOURCE_VERSION_SUB, 1);
+    char csfw[2]={0};
+    snprintf(csfw, sizeof(csfw), "%-1.1s", SOURCE_VERSION_SUB);
     return csfw[0];
 }
 
