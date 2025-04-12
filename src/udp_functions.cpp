@@ -405,7 +405,7 @@ void sendMeshComUDP()
 
             Udp.endPacket();
 
-            memcpy(convBuffer, ringBufferUDPout[udpRead] + 1 + 27, msg_len);
+            memcpy(convBuffer, ringBufferUDPout[udpRead] + 1 + 36, msg_len);
 
             if(convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40)
             {
@@ -862,8 +862,6 @@ void addNodeData(uint8_t msg_buffer[UDP_TX_BUF_SIZE], uint16_t size, int16_t rss
   memcpy(dt_buffer+dt_buffer_size, msg_buffer, size);
   
   addUdpOutBuffer(dt_buffer, dt_buffer_size+size);
-
-  Serial.printf("dt_buffer_size %i size %i\n", dt_buffer_size, size);
 }
 
 //

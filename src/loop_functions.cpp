@@ -1346,7 +1346,7 @@ void initAnalogPin()
 
         pinMode(ANAGPIO, INPUT);
 
-        if(bDisplayInfo)
+        if(bDEBUG && bDisplayInfo)
         {
             Serial.print(getTimeString());
             Serial.printf("[ANALOG]...GPIO%i SET\n", ANAGPIO);
@@ -1369,7 +1369,7 @@ void checkAnalogValue()
         float raw = (float)(analogRead(ANAGPIO));
         fAnalogValue = raw  * meshcom_settings.node_analog_faktor;
         
-        if(bDisplayInfo)
+        if(bDEBUG && bDisplayInfo)
         {
             Serial.print(getTimeString());
             Serial.printf("[ANALOG]...GPIO%i %.0f * %.4f = %.2f\n", ANAGPIO, raw, meshcom_settings.node_analog_faktor, fAnalogValue);

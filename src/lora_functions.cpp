@@ -75,12 +75,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     //Serial.printf("Start OnRxDone:<%-20.20s> %i\n", payload, size);
 
+    bNewLine=false;
+
     if(payload[0] == 0x41)
     {
         if(bDisplayInfo)
         {
             printBuffer_ack((char*)"RX-Lora1", payload, size);
-            bNewLine=false;
         }
 
         memcpy(print_buff, payload, 12);
@@ -114,7 +115,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         Serial.println();
                         Serial.print(getTimeString());
                         Serial.printf(" ACK to Phone  %02X %02X%02X%02X%02X %02X %02X", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
-                        bNewLine=false;
                     }
                                 
                     own_msg_id[itxcheck][4] = 0x02;   // 02...ACK
@@ -138,13 +138,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     if(bDisplayInfo)
                     {
                         Serial.print(" This packet to mesh");
-                        bNewLine=false;
                     }
-                            }
+                }
             }
         }
 
-        if(bDisplayInfo)
+        if(bDisplayInfo && !bNewLine)
         {
             Serial.println("");
             bNewLine = true;
@@ -368,7 +367,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     if(bDisplayInfo)
                     {
                         printBuffer_aprs((char*)"RX-LoRa2", aprsmsg);
-                        bNewLine=false;
                     }
             
                     // we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
@@ -456,7 +454,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     //
                                     unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
                                     
-                                    if(bDisplayInfo)
+                                    if(bDisplayInfo && !bNewLine)
                                     {
                                         Serial.println("");
                                         bNewLine=true;
@@ -565,7 +563,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         }
                                         else
                                         {
-                                            if(bDisplayInfo)
+                                            if(bDisplayInfo && !bNewLine)
                                             {
                                                 Serial.println("");
                                                 bNewLine=true;

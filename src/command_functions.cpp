@@ -195,8 +195,6 @@ void commandAction(char *msg_text, bool ble)
         return;
     }
 
-    //Serial.printf("\nMeshCom %-4.4s%-1.1s Client\n...command %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
-
     /* TEST
     if(commandCheck(msg_text+2, (char*)"compress ") == 0)
     {
@@ -244,6 +242,13 @@ void commandAction(char *msg_text, bool ble)
         save_settings();
 
         return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"posshot") == 0)
+    {
+        posinfo_shot = true;
+
+        bReturn=true;
     }
     else
     if(commandCheck(msg_text+2, (char*)"postime ") == 0)
@@ -3044,7 +3049,7 @@ void commandAction(char *msg_text, bool ble)
             JsonDocument idoc;
 
             char fwver[20];
-            snprintf(fwver, sizeof(fwver), "%s %s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+            snprintf(fwver, sizeof(fwver), "%-4.4s %-1.1s", SOURCE_VERSION, SOURCE_VERSION_SUB);
 
             char ctrycode[5];
             snprintf(ctrycode, sizeof(ctrycode), "%s", getCountry(meshcom_settings.node_country).c_str());
@@ -3315,16 +3320,13 @@ void commandAction(char *msg_text, bool ble)
     }
     else
     {
-        snprintf(print_buff, sizeof(print_buff), "\n--MeshCom %-4.4s%s ...wrong command %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
-
         if(ble)
         {
+            snprintf(print_buff, sizeof(print_buff), "--wrong command %s\n", msg_text);
             addBLECommandBack(print_buff);
         }
-        //else
-        {
-            printf("\n\n%s", print_buff+2);
-        }
+
+        Serial.printf("\nMeshCom %-4.4s%-1.1s Client\n...wrong command %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
     }
 }
 
