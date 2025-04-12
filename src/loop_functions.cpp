@@ -1958,14 +1958,20 @@ void printBuffer(uint8_t *buffer, int len)
 
 void printAsciiBuffer(uint8_t *buffer, int len)
 {
-  for (int i = 0; i < len; i++)
-  {
+    if(buffer[0] == 0xFF)
+    {
+        	Serial.printf("LoRa starting with 0xFF and %02X%02X%02X ,,, no decode\n", buffer[1], buffer[2], buffer[3]);
+    }
+
+    for (int i = 0; i < len; i++)
+    {
     if(buffer[i] == 0x00)
         Serial.printf("#");
     else
         Serial.printf("%c", buffer[i]);
-  }
-  Serial.println("");
+    }
+
+    Serial.println("");
 }
 
 String getDateString()
