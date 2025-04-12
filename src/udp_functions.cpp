@@ -43,10 +43,10 @@ NTPClient timeClient(Udp);
 
 unsigned char incomingPacket[UDP_TX_BUF_SIZE];  // buffer for incoming packets
 int packetSize=0;
-static uint8_t convBuffer[UDP_TX_BUF_SIZE]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
+uint8_t convBuffer[UDP_TX_BUF_SIZE + 50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
 
 bool udp_is_busy = false;
-int lora_tx_msg_len = 0;
+uint16_t lora_tx_msg_len = 0;
 
 unsigned long last_upd_timer = 0; // last time we got a HB
 bool had_initial_udp_conn = false;  // indicator that we had already a udp connection
@@ -152,13 +152,13 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           if(hasExternIPaddress)
           {
             if(bEXTUDP)
-              sendExtern(true, (char*)"udp", convBuffer, (uint8_t)lora_tx_msg_len);
+              sendExtern(true, (char*)"udp", convBuffer, lora_tx_msg_len);
           }
           
           struct aprsMessage aprsmsg;
           
           // print which message type we got
-          uint8_t msg_type_b_lora = decodeAPRS(convBuffer, (uint8_t)lora_tx_msg_len, aprsmsg);
+          uint16_t msg_type_b_lora = decodeAPRS(convBuffer, lora_tx_msg_len, aprsmsg);
 
           snprintf(source_call, sizeof(source_call), "%s", aprsmsg.msg_source_call.c_str());
           snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
@@ -377,7 +377,7 @@ void sendMeshComUDP()
     {
         if(!udp_is_busy)
         {
-            uint8_t msg_len = ringBufferUDPout[udpRead][0];
+            uint16_t msg_len = (uint16_t)ringBufferUDPout[udpRead][0];
 
             // send it over UDP
 
@@ -412,7 +412,7 @@ void sendMeshComUDP()
               struct aprsMessage aprsmsg;
               
               // print which message type we got
-              uint8_t msg_type_b_lora = decodeAPRS(convBuffer, (uint8_t)msg_len, aprsmsg);
+              uint16_t msg_type_b_lora = decodeAPRS(convBuffer, msg_len, aprsmsg);
 
               // print aprs message
               if(bDisplayInfo)
