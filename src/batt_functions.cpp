@@ -57,38 +57,53 @@ uint32_t vbat_pin = BATTERY_PIN;
 #define DEFAULT_VREF    1100        //Use adc2_vref_to_gpio() to obtain a better estimate
 #define NO_OF_SAMPLES   64          //Multisampling
 
-static esp_adc_cal_characteristics_t adc_chars[sizeof(esp_adc_cal_characteristics_t)];
+//static
+esp_adc_cal_characteristics_t adc_chars[sizeof(esp_adc_cal_characteristics_t)];
 
 #if defined(SX126X_V3) || defined(SX1262_E290)
-static const adc_channel_t channel = ADC_CHANNEL_0;     //GPIO34 if ADC1, GPIO14 if ADC2
-static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+//static const
+adc_channel_t channel = ADC_CHANNEL_0;     //GPIO34 if ADC1, GPIO14 if ADC2
+//static const
+adc_bits_width_t width = ADC_WIDTH_BIT_12;
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32
 #ifdef BOARD_TLORA_OLV216
-static const adc_channel_t channel = ADC_CHANNEL_7;	 //GPIO35
+//static const
+adc_channel_t channel = ADC_CHANNEL_7;	 //GPIO35
 #else
-static const adc_channel_t channel = ADC_CHANNEL_6;     //GPIO34 if ADC1, GPIO14 if ADC2
+//static const
+adc_channel_t channel = ADC_CHANNEL_6;     //GPIO34 if ADC1, GPIO14 if ADC2
 #endif
-static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+//static const
+adc_bits_width_t width = ADC_WIDTH_BIT_12;
 #elif CONFIG_IDF_TARGET_ESP32S2
-static const adc_channel_t channel = ADC_CHANNEL_6;     // GPIO7 if ADC1, GPIO17 if ADC2
-static const adc_bits_width_t width = ADC_WIDTH_BIT_13;
+//static const
+adc_channel_t channel = ADC_CHANNEL_6;     // GPIO7 if ADC1, GPIO17 if ADC2
+//static const
+adc_bits_width_t width = ADC_WIDTH_BIT_13;
 #endif
 
 #if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
-static const adc_atten_t atten = ADC_ATTEN_DB_0;
-static const adc_unit_t unit = ADC_UNIT_2;
+//static const
+adc_atten_t atten = ADC_ATTEN_DB_0;
+//static const
+adc_unit_t unit = ADC_UNIT_2;
 #elif defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
-static const adc_atten_t atten = ADC_ATTEN_DB_0;
-static const adc_unit_t unit = ADC_UNIT_1;
+//static const
+adc_atten_t atten = ADC_ATTEN_DB_0;
+//static const
+adc_unit_t unit = ADC_UNIT_1;
 #else
-static const adc_atten_t atten = ADC_ATTEN_DB_0;
-static const adc_unit_t unit = ADC_UNIT_1;
+//static const
+adc_atten_t atten = ADC_ATTEN_DB_0;
+//static const
+adc_unit_t unit = ADC_UNIT_1;
 #endif
 
 
-static void check_efuse(void)
+//static
+void check_efuse(void)
 {
 #if defined(SX126X_V3) || defined(SX1262_E290)
 	// NOT TESTED
@@ -116,7 +131,8 @@ static void check_efuse(void)
 #endif
 }
 
-static void print_char_val_type(esp_adc_cal_value_t val_type)
+//static
+void print_char_val_type(esp_adc_cal_value_t val_type)
 {
     if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
         Serial.printf("Characterized using Two Point Value\n");

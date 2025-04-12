@@ -176,7 +176,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         struct aprsMessage aprsmsg;
         
         // print which message type we got
-        uint8_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
+        uint16_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
 
         size = aprsmsg.msg_len;
 
@@ -940,9 +940,9 @@ bool doTX()
                 struct aprsMessage aprsmsg;
                 
                 // print which message type we got
-                uint8_t msg_type_b_lora = 0x00;
+                uint16_t msg_type_b_lora = 0x00;
                 
-                msg_type_b_lora = decodeAPRS(lora_tx_buffer, sendlng, aprsmsg);
+                msg_type_b_lora = decodeAPRS(lora_tx_buffer, (uint16_t)sendlng, aprsmsg);
 
                 //Serial.printf("msg_type_b_lora:%02X tx_waiting:%02X sendlng:%i bDisplayInfo:%i\n", msg_type_b_lora, tx_waiting, sendlng, bDisplayInfo);
 

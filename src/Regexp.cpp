@@ -256,25 +256,29 @@ PATTERNS
 #include "Regexp.h"
 
 // for throwing errors
-static jmp_buf regexp_error_return;
+//static
+jmp_buf regexp_error_return;
 typedef unsigned char byte;
 
 // error codes raised during regexp processing
-static byte error (const char err)
+//static
+byte error (const char err)
 {
   // does not return
   longjmp (regexp_error_return, err);
   return 0;  // keep compiler happy
 }  // end of error
 
-static int check_capture (MatchState *ms, int l) {
+//static
+int check_capture (MatchState *ms, int l) {
   l -= '1';
   if (l < 0 || l >= ms->level || ms->capture[l].len == CAP_UNFINISHED)
     return error(ERR_INVALID_CAPTURE_INDEX);
   return l;
 } // end of check_capture
 
-static int capture_to_close (MatchState *ms) {
+//static
+int capture_to_close (MatchState *ms) {
   int level = ms->level;
   for (level--; level>=0; level--)
     if (ms->capture[level].len == CAP_UNFINISHED) return level;
@@ -305,7 +309,8 @@ static const char *classend (MatchState *ms, const char *p) {
 } // end of classend
 
 
-static int match_class (int c, int cl) {
+//static
+int match_class (int c, int cl) {
   int res;
   switch (tolower(cl)) {
     case 'a' : res = isalpha(c); break;
@@ -324,7 +329,8 @@ static int match_class (int c, int cl) {
 } // end of match_class
 
 
-static int matchbracketclass (int c, const char *p, const char *ec) {
+//static
+int matchbracketclass (int c, const char *p, const char *ec) {
   int sig = 1;
   if (*(p+1) == '^') {
     sig = 0;
@@ -347,7 +353,8 @@ static int matchbracketclass (int c, const char *p, const char *ec) {
 } // end of matchbracketclass
 
 
-static int singlematch (int c, const char *p, const char *ep) {
+//static
+int singlematch (int c, const char *p, const char *ep) {
   switch (*p) {
     case '.': return 1;  /* matches any char */
     case REGEXP_ESC: return match_class(c, uchar(*(p+1)));

@@ -80,6 +80,9 @@ extern XPowersLibInterface *PMU;
 
 bool bPosFirst = true;
 bool bHeyFirst = true;
+bool bTeleFirst = true;
+
+bool bAllStarted = true;
 
 String strTime;
 String strDate;
@@ -1045,6 +1048,8 @@ void esp32setup()
     // WIFI
     if(bGATEWAY || bEXTUDP || bWEBSERVER)
     {
+        bAllStarted=false;
+
         delay(500);
 
         if(startWIFI())
@@ -1623,7 +1628,7 @@ void esp32loop()
     }
 
     // HEYINFO_INTERVAL in Seconds == 15 minutes
-    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
+    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || (bHeyFirst && bAllStarted))
     {
         bHeyFirst = false;
         
@@ -1644,8 +1649,10 @@ void esp32loop()
     if(iNextTelemetry < 5)
         akt_timer= 15 * 1000; // 15 Seconds PARM, UNIT, EQNS and 1st T-Message
         
-    if (((telemetry_timer + akt_timer) < millis()) || bHeyFirst)
+    if (((telemetry_timer + akt_timer) < millis()) || (bTeleFirst && bAllStarted))
     {
+        bTeleFirst=false;
+
         sendTelemetry();
 
         telemetry_timer = millis();
@@ -1919,11 +1926,16 @@ void esp32loop()
                             iWlanWait = 0;
 
                             Serial.println("[WIFI]...SET but no Wifi connect ...please wait for next try (5 min)");
+
+                            bAllStarted=true;
                         }
                     }
                 }
                 else
+                {
                     iWlanWait = 0;
+                    bAllStarted=true;
+                }
             #endif
         }
 

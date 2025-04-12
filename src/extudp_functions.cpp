@@ -154,7 +154,7 @@ void getExternUDP()
   }
 }
 
-void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
+void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
 {
   #ifdef ESP32
     if(bWIFIAP)
@@ -170,7 +170,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint8_t buflen)
   struct aprsMessage aprsmsg;
   struct aprsPosition aprspos;
 
-  uint8_t msg_type_b_lora = decodeAPRS(buffer, (uint16_t)buflen, aprsmsg);
+  uint16_t msg_type_b_lora = decodeAPRS(buffer, buflen, aprsmsg);
 
   if(msg_type_b_lora == 0x00)
   {

@@ -1909,7 +1909,7 @@ void sendUDP()
 
         if(!neth.udp_is_busy)
         {
-            uint8_t msg_len = ringBufferUDPout[udpRead][0];
+            uint16_t msg_len = ringBufferUDPout[udpRead][0];
             
             
             if(msg_len != 23)
@@ -1951,7 +1951,7 @@ void sendUDP()
                     struct aprsMessage aprsmsg;
                     
                     // print which message type we got
-                    decodeAPRS(convBuffer, (uint8_t)msg_len, aprsmsg);
+                    decodeAPRS(convBuffer, msg_len, aprsmsg);
 
                     // print aprs message
                     if(bDisplayInfo)
