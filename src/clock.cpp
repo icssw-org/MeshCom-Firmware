@@ -25,7 +25,8 @@
 //---| definitions |----------------------------------------------------------
 
 //---|debugging |---------------------------------------------------------------
-
+#define TEST
+//#define SETTEST
 //---| definitions |------------------------------------------------------------
 #define       ADDR_ALARM_ENABLE	0x00
 #define       ADDR_ALARM_HOUR	0x01
@@ -45,7 +46,7 @@
 #include "clock.h"
 
 //---| globals |----------------------------------------------------------------
-/*static*/ const char* Clock::Months[] = {
+const char* Clock::Months[] = {
   "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 };
 
@@ -80,7 +81,7 @@ Clock::EEvent Clock::CheckEvent()
 		tsClock_m += u32Diff;
 		localtime_r(&tsClock_m, &suClock_m);
 #if defined(TEST)
-		Serial.printf("[clock] clock %2u:%02u:%02u\n",
+		Serial.printf("[clock] clock %02u:%02u:%02u\n",
 		              suClock_m.tm_hour, suClock_m.tm_min, suClock_m.tm_sec);
 #endif
 
@@ -120,7 +121,7 @@ Clock::EEvent Clock::CheckEvent()
 		u32Start_m = millis();
 		u32Next_m  = u32Start_m + 1000; //((60 - suClock_m.tm_sec) * 1000);
 #if defined(TEST)
-		Serial.printf("[clock] now %lu -> then %lu)\n", u32Start_m, u32Next_m);
+		Serial.printf("[clock] now %lu -> then %lu\n", u32Start_m, u32Next_m);
 #endif
 	}
 
@@ -131,7 +132,7 @@ Clock::EEvent Clock::CheckEvent()
 //----------------------------------------------------------------------------
 // enable or disable alarm
 //----------------------------------------------------------------------------
-bool Clock::EnableAlarm(const bool boEnable /*= true*/)
+bool Clock::EnableAlarm(/*const*/ bool boEnable /*= true*/)
 {
 	bool boReturnValue = boAlarmEnable_m;
 
@@ -147,7 +148,8 @@ bool Clock::EnableAlarm(const bool boEnable /*= true*/)
 //----------------------------------------------------------------------------
 // get date string
 //----------------------------------------------------------------------------
-const char* Clock::GetDateStr()
+//const
+char* Clock::GetDateStr()
 {
 	snprintf(szDateStr_m, sizeof(szDateStr_m), "%2u. %s. %04u", suClock_m.tm_mday, Months[suClock_m.tm_mon], 1900 + suClock_m.tm_year);
 	return szDateStr_m;
@@ -156,7 +158,8 @@ const char* Clock::GetDateStr()
 //----------------------------------------------------------------------------
 // get alarm time
 //----------------------------------------------------------------------------
-const char* Clock::GetAlarmTime()
+//const
+char* Clock::GetAlarmTime()
 {
 	if (boAlarmEnable_m)
 	{
@@ -174,7 +177,7 @@ const char* Clock::GetAlarmTime()
 		strncpy(szAlarmTime_m, "      ", sizeof(szAlarmTime_m));
 	}
 
-	return (const char*)&szAlarmTime_m;
+	return (/*const*/ char*)&szAlarmTime_m;
 }
 
 //----------------------------------------------------------------------------
@@ -219,7 +222,7 @@ bool Clock::SaveClock()
 //----------------------------------------------------------------------------
 // set alarm
 //----------------------------------------------------------------------------
-bool Clock::SetAlarm(const int iHour, const int iMin)
+bool Clock::SetAlarm(/*const*/ int iHour, /*const*/ int iMin)
 {
 	// disable alarm next
 	au8AlarmNext_m[0] = 0xFF;
@@ -247,7 +250,7 @@ bool Clock::SetAlarm(const int iHour, const int iMin)
 //----------------------------------------------------------------------------
 // set alarm
 //----------------------------------------------------------------------------
-bool Clock::SetAlarm(const char* pszAlarm)
+bool Clock::SetAlarm(/*const*/ char* pszAlarm)
 {
 	bool boResult = false;
 	int  iHour    = 0;
@@ -271,7 +274,7 @@ bool Clock::SetAlarm(const char* pszAlarm)
 //----------------------------------------------------------------------------
 // set alarm relative
 //----------------------------------------------------------------------------
-bool Clock::SetAlarmRelative(const int iHourRel /*= 0*/, const int iMinRel /*= 1*/)
+bool Clock::SetAlarmRelative(/*const*/ int iHourRel /*= 0*/, /*const*/ int iMinRel /*= 1*/)
 {
 	// get current settings
 	int iHour   = au8Alarm_m[0];
@@ -318,7 +321,7 @@ bool Clock::SetAlarmRelative(const int iHourRel /*= 0*/, const int iMinRel /*= 1
 //----------------------------------------------------------------------------
 // set (hardware) clock
 //----------------------------------------------------------------------------
-bool Clock::SetClock(const struct tm suNow)
+bool Clock::SetClock(/*const*/ struct tm suNow)
 {
 #if defined(TEST)
 	Serial.printf("[clock] new date/time: %04u/%02u/%02u %2u:%02u:%02u\n",
@@ -333,12 +336,12 @@ bool Clock::SetClock(const struct tm suNow)
 //----------------------------------------------------------------------------
 // set (hardware) clock
 //----------------------------------------------------------------------------
-bool Clock::SetClock(const time_t tsNow, const bool boUseUTC /*= true*/)
+bool Clock::SetClock(/*const*/ time_t tsNow, /*const*/ bool boUseUTC /*= true*/)
 {
 	tsClock_m = tsNow;
 	(boUseUTC) ? gmtime_r(&tsClock_m, &suClock_m)
 	           : localtime_r(&tsClock_m, &suClock_m);
-#if defined(TEST)
+#if defined(SETTEST)
 	Serial.printf("[clock] new date/time: %04u/%02u/%02u %2u:%02u:%02u\n",
                       1900 + suClock_m.tm_year, 1 + suClock_m.tm_mon,
 		      suClock_m.tm_mday, suClock_m.tm_hour,
@@ -355,7 +358,7 @@ bool Clock::SetClock()
 	// set new update cycle
 	u32Start_m = millis();
 	u32Next_m  = u32Start_m + 1000; //((60 - suClock_m.tm_sec) * 1000);
-#if defined(TEST)
+#if defined(SETTEST)
 	Serial.printf("[clock] set clock %02u:%02u:%02u (%lu -> %lu)\n",
 	              suClock_m.tm_hour, suClock_m.tm_min, suClock_m.tm_sec,
 		      u32Start_m, u32Next_m);

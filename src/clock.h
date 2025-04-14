@@ -41,7 +41,8 @@ public:
 	static const char* Months[];
 	
 	// snooze time (minutes)
-	static const uint8_t SnoozeMinutes = 5;
+	//static const
+	uint8_t SnoozeMinutes = 5;
   
 protected:
 	uint8_t		au8Alarm_m[2];
@@ -76,26 +77,30 @@ public:
 	
 	// return current day
 	// @return day (1..31)
-	const int Day() { return suClock_m.tm_mday; }
+	//const
+	int Day() { return suClock_m.tm_mday; }
 
 	// enable or disable alarm
 	// @param boEnable true to enable, false to disable
 	// @return true if enabled, false if disabled
-	bool EnableAlarm(const bool boEnable = true);
+	bool EnableAlarm(/*const*/ bool boEnable = true);
 	
 	// get alarm time as string
 	// @return empty string if no alarm is set
 	// @return string ' HH:MM' for alarm time
 	// @return string '*HH:MM' for snoozed alarm time
-	const char* GetAlarmTime();
+	//const
+	char* GetAlarmTime();
 	
 	// get current date as string 'day. month year'
 	// @return string
-	const char* GetDateStr();
+	//const
+	char* GetDateStr();
 	
 	// return current hour
 	// @return hour (0..23)
-	const int Hour() { return suClock_m.tm_hour; }
+	//const
+	int Hour() { return suClock_m.tm_hour; }
 
 	// initialize class
 	// @return true on success, false on error
@@ -122,11 +127,13 @@ public:
 	
 	// return current minute
 	// @return minute (0..59)
-	const int Minute() { return suClock_m.tm_min; }
+	//const
+	int Minute() { return suClock_m.tm_min; }
 
 	// return current month
 	// @return month (1..12)
-	const int Month() { return suClock_m.tm_mon + 1; }
+	//const
+	int Month() { return suClock_m.tm_mon + 1; }
 
 	// save clock date and time to EEPROM
 	// @return true on success, false on error
@@ -134,35 +141,36 @@ public:
 
 	// return current second
 	// @return second (0..59)
-	const int Second() { return suClock_m.tm_sec; }
+	//const
+	int Second() { return suClock_m.tm_sec; }
 
 	// set alarm time
 	// @param iHour hour (0..23)
 	// @param iMin minute (0..59)
 	// @return true on success, false on error
-	bool SetAlarm(const int iHour, const int iMin);
+	bool SetAlarm(/*const*/ int iHour, /*const*/ int iMin);
 	
 	// set alarm time
 	// @param pszAlarm string 'hh:mm'
 	// @return true on success, false on error
-	bool SetAlarm(const char* pszAlarm);
+	bool SetAlarm(/*const*/ char* pszAlarm);
 	
 	// set alarm time (relative)
 	// @param iHourRel relative hour (-1, 0, +1)
 	// @param iMinRel relative minute (-59..0..+59)
 	// @return true on success, false on error
-	bool SetAlarmRelative(const int iHourRel = 0, const int iMinRel = 1);
+	bool SetAlarmRelative(/*const*/ int iHourRel = 0, /*const*/ int iMinRel = 1);
 	
 	// set (hardware) clock
 	// @param suNow current date and time
 	// @return true on success, false on error
-	bool SetClock(const struct tm suNow);
+	bool SetClock(/*const*/ struct tm suNow);
 	
 	// set (hardware) clock
 	// @param tsNow current timestamp for date and time
 	// @param boUseUTC true for UTC, false for localtime
 	// @return true on success, false on error
-	bool SetClock(const time_t tsNow, const bool boUseUTC = true);
+	bool SetClock(/*const*/ time_t tsNow, /*const*/ bool boUseUTC = true);
 	
 	// set (hardware) clock
 	// @return true on success, false on error
@@ -180,7 +188,8 @@ public:
 
 	// return current year
 	// @return year (1970..2099)
-	const int Year() { return suClock_m.tm_year + 1900; }
+	//const
+	int Year() { return suClock_m.tm_year + 1900; }
 
 };
 

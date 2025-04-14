@@ -1943,7 +1943,7 @@ void sendUDP()
             }
             else
             {
-                // UDP DATA Header 27 byte
+                // UDP DATA Header 36 byte
                 memcpy(convBuffer, ringBufferUDPout[udpRead] + 1 + 36, msg_len);
 
                 if(convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40)
