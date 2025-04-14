@@ -1139,7 +1139,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     //if(bDisplayOff && bGATEWAY)
     //    return;
 
-    if(bDisplayOff)
+    //if(bDisplayOff) // issue #287
     {
         DisplayOffWait = millis() + (30 * 1000); // 30 seconds
         bDisplayOff=false;
@@ -1958,17 +1958,18 @@ void printBuffer(uint8_t *buffer, int len)
 
 void printAsciiBuffer(uint8_t *buffer, int len)
 {
-    if(buffer[0] == 0xFF)
+    if(buffer[0] != 0x21 && buffer[0] != 0x3A && buffer[0] != 0x40 && buffer[0] != 0x41)
     {
-        	Serial.printf("LoRa starting with 0xFF and %02X%02X%02X ,,, no decode\n", buffer[1], buffer[2], buffer[3]);
+        Serial.printf("LoRa starting with 0x%02X and %02X%02X%02X ... no decode\n", buffer[0], buffer[1], buffer[2], buffer[3]);
+        return;
     }
 
     for (int i = 0; i < len; i++)
     {
-    if(buffer[i] == 0x00)
-        Serial.printf("#");
-    else
-        Serial.printf("%c", buffer[i]);
+        if(buffer[i] == 0x00)
+            Serial.printf("#");
+        else
+            Serial.printf("%c", buffer[i]);
     }
 
     Serial.println("");

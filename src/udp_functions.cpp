@@ -61,7 +61,7 @@ void getMeshComUDP()
   if(bWIFIAP)
     return;
 
-    meshcom_settings.node_hasIPaddress = hasIPaddress;
+  meshcom_settings.node_hasIPaddress = hasIPaddress;
   
   if(!hasIPaddress)
     return;
@@ -826,8 +826,7 @@ void sendKEEP()
   // add HB message to the ringbuffer
   if(bDEBUG)
   {
-    Serial.print("[KEEP]...");
-    printBuffer(hb_buffer, hb_buffer_size);
+    Serial.printf("[KEEP]...%s\n", keep_buffer);
   }
 
   addUdpOutBuffer(hb_buffer, hb_buffer_size);

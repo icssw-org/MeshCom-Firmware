@@ -2736,6 +2736,8 @@ void commandAction(char *msg_text, bool ble)
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+8);
 
         String strCallSign = _owner_c;
+        
+        strCallSign.toUpperCase();
     
         if(checkRegexCall(strCallSign))
         {

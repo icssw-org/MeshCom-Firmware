@@ -262,7 +262,7 @@ typedef unsigned char byte;
 
 // error codes raised during regexp processing
 //static
-byte error (const char err)
+byte error (/*const*/ char err)
 {
   // does not return
   longjmp (regexp_error_return, err);
@@ -285,7 +285,8 @@ int capture_to_close (MatchState *ms) {
   return error(ERR_INVALID_PATTERN_CAPTURE);
 } // end of capture_to_close
 
-static const char *classend (MatchState *ms, const char *p) {
+//static const
+char *classend (MatchState *ms, /*const*/ char *p) {
   switch (*p++) {
     case REGEXP_ESC: {
       if (*p == '\0')
@@ -330,7 +331,7 @@ int match_class (int c, int cl) {
 
 
 //static
-int matchbracketclass (int c, const char *p, const char *ec) {
+int matchbracketclass (int c, /*const*/ char *p, /*const*/ char *ec) {
   int sig = 1;
   if (*(p+1) == '^') {
     sig = 0;
@@ -354,7 +355,7 @@ int matchbracketclass (int c, const char *p, const char *ec) {
 
 
 //static
-int singlematch (int c, const char *p, const char *ep) {
+int singlematch (int c, /*const*/ char *p, /*const*/ char *ep) {
   switch (*p) {
     case '.': return 1;  /* matches any char */
     case REGEXP_ESC: return match_class(c, uchar(*(p+1)));
@@ -364,11 +365,13 @@ int singlematch (int c, const char *p, const char *ep) {
 } // end of singlematch
 
 
-static const char *match (MatchState *ms, const char *s, const char *p);
+//static const
+char *match (MatchState *ms, /*const*/ char *s, /*const*/ char *p);
 
 
-static const char *matchbalance (MatchState *ms, const char *s,
-                                 const char *p) {
+//static const
+char *matchbalance (MatchState *ms, /*const*/ char *s,
+                                 /*const*/ char *p) {
   if (*p == 0 || *(p+1) == 0)
     error(ERR_UNBALANCED_PATTERN);
   if (*s != *p) return NULL;
@@ -387,14 +390,16 @@ static const char *matchbalance (MatchState *ms, const char *s,
 } //  end of matchbalance
 
 
-static const char *max_expand (MatchState *ms, const char *s,
-                               const char *p, const char *ep) {
+//static const
+char *max_expand (MatchState *ms, /*const*/ char *s,
+                               /*const*/ char *p, /*const*/ char *ep) {
   int i = 0;  /* counts maximum expand for item */
   while ((s+i)<ms->src_end && singlematch(uchar(*(s+i)), p, ep))
     i++;
   /* keeps trying to match with the maximum repetitions */
   while (i>=0) {
-    const char *res = match(ms, (s+i), ep+1);
+    //const
+    char *res = match(ms, (s+i), ep+1);
     if (res) return res;
     i--;  /* else didn't match; reduce 1 repetition to try again */
   }
@@ -402,10 +407,12 @@ static const char *max_expand (MatchState *ms, const char *s,
 } // end of max_expand
 
 
-static const char *min_expand (MatchState *ms, const char *s,
-                               const char *p, const char *ep) {
+//static const
+char *min_expand (MatchState *ms, /*const*/ char *s,
+                               /*const*/ char *p, /*const*/ char *ep) {
   for (;;) {
-    const char *res = match(ms, s, ep+1);
+    //const
+    char *res = match(ms, s, ep+1);
     if (res != NULL)
       return res;
     else if (s<ms->src_end && singlematch(uchar(*s), p, ep))
@@ -415,9 +422,11 @@ static const char *min_expand (MatchState *ms, const char *s,
 } // end of min_expand
 
 
-static const char *start_capture (MatchState *ms, const char *s,
-                                  const char *p, int what) {
-  const char *res;
+//static const
+char *start_capture (MatchState *ms, /*const*/ char *s,
+                                  /*const*/ char *p, int what) {
+  //const
+  char *res;
   int level = ms->level;
   if (level >= MAXCAPTURES) error(ERR_TOO_MANY_CAPTURES);
   ms->capture[level].init = s;
@@ -429,10 +438,12 @@ static const char *start_capture (MatchState *ms, const char *s,
 } // end of start_capture
 
 
-static const char *end_capture (MatchState *ms, const char *s,
-                                const char *p) {
+//static const
+char *end_capture (MatchState *ms, /*const*/ char *s,
+                                /*const*/ char *p) {
   int l = capture_to_close(ms);
-  const char *res;
+  //const
+  char *res;
   ms->capture[l].len = s - ms->capture[l].init;  /* close capture */
   if ((res = match(ms, s, p)) == NULL)  /* match failed? */
     ms->capture[l].len = CAP_UNFINISHED;  /* undo capture */
@@ -440,7 +451,8 @@ static const char *end_capture (MatchState *ms, const char *s,
 } // end of end_capture
 
 
-static const char *match_capture (MatchState *ms, const char *s, int l) {
+//static const
+char *match_capture (MatchState *ms, /*const*/ char *s, int l) {
   size_t len;
   l = check_capture(ms, l);
   len = ms->capture[l].len;
@@ -451,7 +463,8 @@ static const char *match_capture (MatchState *ms, const char *s, int l) {
 } // end of match_capture
 
 
-static const char *match (MatchState *ms, const char *s, const char *p) {
+//static const
+char *match (MatchState *ms, /*const*/ char *s, /*const*/ char *p) {
 init: /* using goto's to optimize tail recursion */
   switch (*p) {
     case '(': {  /* start capture */
@@ -471,7 +484,8 @@ init: /* using goto's to optimize tail recursion */
           p+=4; goto init;  /* else return match(ms, s, p+4); */
         }
         case 'f': {  /* frontier? */
-          const char *ep; char previous;
+          //const
+          char *ep; char previous;
           p += 2;
           if (*p != '[')
             error(ERR_MISSING_LH_SQUARE_BRACKET_AFTER_ESC_F);
@@ -500,11 +514,13 @@ init: /* using goto's to optimize tail recursion */
       else goto dflt;
     }
     default: dflt: {  /* it is a pattern item */
-      const char *ep = classend(ms, p);  /* points to what is next */
+      //const
+      char *ep = classend(ms, p);  /* points to what is next */
       int m = s<ms->src_end && singlematch(uchar(*s), p, ep);
       switch (*ep) {
         case '?': {  /* optional */
-          const char *res;
+          //const
+          char *res;
           if (m && ((res=match(ms, s+1, ep+1)) != NULL))
             return res;
           p=ep+1; goto init;  /* else return match(ms, s, ep+1); */
@@ -530,7 +546,7 @@ init: /* using goto's to optimize tail recursion */
 
 // functions below written by Nick Gammon ...
 
-char MatchState::Match (const char * pattern, unsigned int index)
+char MatchState::Match (/*const*/ char * pattern, unsigned int index)
 {
   // set up for throwing errors
   char rtn = setjmp (regexp_error_return);
@@ -546,12 +562,14 @@ char MatchState::Match (const char * pattern, unsigned int index)
     index = src_len;
 
   int anchor = (*pattern == '^') ? (pattern++, 1) : 0;
-  const char *s1 =src + index;
+  //const
+  char *s1 =src + index;
   src_end = src + src_len;
 
   // iterate through target string, character by character unless anchored
   do {
-    const char *res;
+    //const
+    char *res;
     level = 0;
     if ((res=match(this, s1, pattern)) != NULL)
     {
@@ -571,7 +589,7 @@ void MatchState::Target (char * s)
   Target (s, strlen (s));
   }  // end of MatchState::Target
 
-void MatchState::Target (char * s, const unsigned int len)
+void MatchState::Target (char * s, /*const*/ unsigned int len)
   {
   src = s;
   src_len = len;
@@ -594,7 +612,7 @@ char * MatchState::GetMatch (char * s) const
 
 // get one of the capture strings (zero-relative level)
 // buffer must be large enough to hold it
-char * MatchState::GetCapture (char * s, const int n) const
+char * MatchState::GetCapture (char * s, /*const*/ int n) const
 {
   if (result != REGEXP_MATCHED || n >= level || capture [n].len <= 0)
     s [0] = 0;
@@ -607,7 +625,7 @@ char * MatchState::GetCapture (char * s, const int n) const
 } // end of MatchState::GetCapture
 
 // match repeatedly on a string, return count of matches
-unsigned int MatchState::MatchCount (const char * pattern)
+unsigned int MatchState::MatchCount (/*const*/ char * pattern)
 {
   unsigned int count = 0;
 
@@ -624,7 +642,7 @@ unsigned int MatchState::MatchCount (const char * pattern)
 } // end of MatchState::MatchCount
 
 // match repeatedly on a string, call function f for each match
-unsigned int MatchState::GlobalMatch (const char * pattern, GlobalMatchCallback f)
+unsigned int MatchState::GlobalMatch (/*const*/ char * pattern, GlobalMatchCallback f)
 {
   unsigned int count = 0;
 
@@ -645,7 +663,7 @@ unsigned int MatchState::GlobalMatch (const char * pattern, GlobalMatchCallback 
 //  f sets replacement string, incorporate replacement and continue
 // maximum of max_count replacements if max_count > 0
 // replacement string in GlobalReplaceCallback must stay in scope (eg. static string or literal)
-unsigned int MatchState::GlobalReplace (const char * pattern, GlobalReplaceCallback f, const unsigned int max_count)
+unsigned int MatchState::GlobalReplace (/*const*/ char * pattern, GlobalReplaceCallback f, /*const*/ unsigned int max_count)
 {
   unsigned int count = 0;
 
@@ -657,7 +675,8 @@ unsigned int MatchState::GlobalReplace (const char * pattern, GlobalReplaceCallb
        count++)
     {
     // default is to replace with self
-    const char * replacement = &src [MatchStart];
+    //const
+    char * replacement = &src [MatchStart];
     unsigned int replacement_length = MatchLength;
 
     // increment index ready for next time, go forwards at least one byte
@@ -696,7 +715,7 @@ unsigned int MatchState::GlobalReplace (const char * pattern, GlobalReplaceCallb
 // match repeatedly on a string, replaces with replacement string for each match
 // maximum of max_count replacements if max_count > 0
 // replacement string in GlobalReplaceCallback must stay in scope (eg. static string or literal)
-unsigned int MatchState::GlobalReplace (const char * pattern, const char * replacement, const unsigned int max_count)
+unsigned int MatchState::GlobalReplace (/*const*/ char * pattern, /*const*/ char * replacement, /*const*/ unsigned int max_count)
 {
   unsigned int count = 0;
   unsigned int replacement_length = strlen (replacement);
