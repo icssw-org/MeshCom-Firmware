@@ -487,7 +487,7 @@ void commandAction(char *msg_text, bool ble)
 
             Serial.printf("--info      show info\n--mheard    show MHeard\n--gateway   on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx\n--mesh      on/off\n");
             delay(100);
-            Serial.printf("--softser   on/off/send/app/baud/fixpegel/fixtemp\n");
+            Serial.printf("--softser   on/off/send/app/baud/fixpegel/fixpegel2/fixtemp\n");
             delay(100);
             Serial.printf("--spectrum  run spectral scan\n");
             delay(100);
@@ -1753,6 +1753,16 @@ void commandAction(char *msg_text, bool ble)
         msg_text[50]=0x00;
 
         strSOFTSERAPP_FIXPEGEL=msg_text+19;
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"softser fixpegel2 ") == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        strSOFTSERAPP_FIXPEGEL2=msg_text+20;
 
         return;
     }
