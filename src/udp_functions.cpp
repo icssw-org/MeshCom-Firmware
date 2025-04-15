@@ -244,14 +244,15 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                     print_buff[5]=0x01;  // ACK
                     print_buff[6]=0x00;
                     
-                    if(bDisplayInfo)
-                        Serial.printf("\n[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1]);
-
                     int iackcheck = checkOwnTx(msg_counter);
                     if(iackcheck >= 0)
                     {
                         own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
-                    }
+                        print_buff[5]=0x02;  // 02...ACK
+                      }
+
+                    if(bDisplayInfo)
+                      Serial.printf("[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X ACK...%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5]);
 
                     addBLEOutBuffer(print_buff, 7);
 
@@ -824,7 +825,7 @@ void sendKEEP()
   // if sending fails via UDP.endpacket() for a maximum of counts reset UDP stack
   //also avoid UDP tx when UDP is getting a packet
   // add HB message to the ringbuffer
-  if(bDEBUG)
+  if(bLORADEBUG)
   {
     Serial.printf("[KEEP]...%s\n", keep_buffer);
   }
@@ -861,6 +862,11 @@ void addNodeData(uint8_t msg_buffer[UDP_TX_BUF_SIZE], uint16_t size, int16_t rss
   memcpy(dt_buffer+dt_buffer_size, msg_buffer, size);
   
   addUdpOutBuffer(dt_buffer, dt_buffer_size+size);
+
+  if(bLORADEBUG)
+  {
+    Serial.printf("[DATA]...%s\n", data_buffer);
+  }
 }
 
 //

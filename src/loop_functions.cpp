@@ -1657,7 +1657,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     dist_to = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
 
-    if(aprspos.softser3 > 0)
+    if(aprspos.softser4 > 0)
     {
         uint16_t Year;
         uint16_t Month;
@@ -1709,7 +1709,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
     #endif
 
-    if(aprspos.softser3 > 0)
+    if(aprspos.softser4 > 0)
         snprintf(msg_text, sizeof(msg_text), "#%s", aprspos.pos_atxt.substring(0, 17).c_str());
     else
         snprintf(msg_text, sizeof(msg_text), "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
@@ -1833,12 +1833,12 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #endif
 
-    // check Altitute
-    if(aprspos.softser3 > 0)
+    // check Batterie
+    if(aprspos.softser4 > 0)
     {
         for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
         {
-            if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == '3' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
+            if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == '4' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
             {
                 for(unsigned int id=itxt+3;id<=aprsmsg.msg_payload.length();id++)
                 {
@@ -1849,18 +1849,19 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                             DrawRssi(3, 117, rssi);
                         #endif
 
-                        snprintf(msg_text, sizeof(msg_text), "%.0fcm %.1fC %.1fV", aprspos.softser1, aprspos.softser2, aprspos.softser3);
+                        snprintf(msg_text, sizeof(msg_text), "%.0fmuA %.0fcm %.1fC", aprspos.softser1, aprspos.softser2, aprspos.softser3);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
 
                         char cDateTime[50];
                         snprintf(cDateTime, sizeof(cDateTime), "%04i-%02i-%02iT%02i:%02i:%02i", meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 
-                        Serial.printf("\n<StationData stationId=\"%s\">\n", aprspos.pos_atxt.substring(0 , 9).c_str());
-                        Serial.printf("<ChannelData channelId\"0060\" unit=\"cm\"><VT t=%s>%.0f</VT></ChannelData>\n", cDateTime, aprspos.softser1);
-                        Serial.printf("<ChannelData channelId\"0065\" unit=\"°C\"><VT t=%s>%.1f</VT></ChannelData>\n", cDateTime, aprspos.softser2);
-                        Serial.printf("<ChannelData channelId\"0050\" unit=\"V\"><VT t=%s>%.1f</VT></ChannelData>\n", cDateTime, aprspos.softser3);
-                        Serial.printf("</StationData>\n\n");
+                        Serial.printf("\n<SD Id=\"%s\">\n", aprspos.pos_atxt.substring(0 , 9).c_str());
+                        Serial.printf("<CD id=\"0059\" name=\"Wasserstand\" unit=\"muA\"><VT t=%s>%.0f</VT></CD>\n", cDateTime, aprspos.softser1);
+                        Serial.printf("<CD id=\"0061\" name=\"Wasserstand 2\" unit=\"cm\"><VT t=%s>%.0f</VT></CD>\n", cDateTime, aprspos.softser2);
+                        Serial.printf("<CD id=\"0065\" name=\"Wassertemperatur\" unit=\"grad\"><VT t=%s>%.1f</VT></CD>\n", cDateTime, aprspos.softser3);
+                        Serial.printf("<CD id=\"0051\" name=\"Batteriespanung\" unit=\"V\"><VT t=%s>%.1f</VT></CD>\n", cDateTime, aprspos.softser4);
+                        Serial.printf("</SD>\n\n");
 
                         break;
                     }
@@ -2090,6 +2091,13 @@ void sendMessage(char *msg_text, int len)
                 if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "*" && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call
                     bDM=true;
         }
+
+        // check no message to own-call
+        if(strDestinationCall.compareTo(meshcom_settings.node_call) == 0)
+        {
+            Serial.println("[ERROR]...DM to own-all not allowed");
+            return;
+        }
     }
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
@@ -2270,6 +2278,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         char cgrc[50]={0};
 
         char csfpegel[15]={0};
+        char csfpegel2[15]={0};
         char csftemp[15]={0};
         char csfbatt[15]={0};
 
@@ -2420,17 +2429,25 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
                         snprintf(csfpegel, sizeof(csfpegel), "/1=%s", strSOFTSERAPP_FIXPEGEL.c_str());
                 }
 
+                if(strSOFTSERAPP_PEGEL2.length() > 1 || strSOFTSERAPP_FIXPEGEL2.length() > 1)
+                {
+                    if(strSOFTSERAPP_FIXPEGEL2.length() < 1)
+                        snprintf(csfpegel2, sizeof(csfpegel2), "/2=%s", strSOFTSERAPP_PEGEL2.c_str());
+                    else
+                        snprintf(csfpegel2, sizeof(csfpegel2), "/2=%s", strSOFTSERAPP_FIXPEGEL2.c_str());
+                }
+
                 if(strSOFTSERAPP_TEMP.length() > 1 || strSOFTSERAPP_FIXTEMP.length() > 1)
                 {
                     if(strSOFTSERAPP_FIXTEMP.length() < 1)
-                        snprintf(csftemp, sizeof(csftemp), "/2=%s", strSOFTSERAPP_TEMP.c_str());
+                        snprintf(csftemp, sizeof(csftemp), "/3=%s", strSOFTSERAPP_TEMP.c_str());
                     else
-                        snprintf(csftemp, sizeof(csftemp), "/2=%s", strSOFTSERAPP_FIXTEMP.c_str());
+                        snprintf(csftemp, sizeof(csftemp), "/3=%s", strSOFTSERAPP_FIXTEMP.c_str());
                 }
 
                 if(strSOFTSERAPP_BATT.length() > 1)
                 {
-                    snprintf(csfbatt, sizeof(csfbatt), "/3=%s", strSOFTSERAPP_BATT.c_str());
+                    snprintf(csfbatt, sizeof(csfbatt), "/4=%s", strSOFTSERAPP_BATT.c_str());
                 }
 
                 if(bONEWIRE)
@@ -2464,7 +2481,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         //
         /////////////////////////////////////////////////////////////////
 
-        snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc, csfpegel, csftemp, csfbatt, cversion, cinaU, cinaI);
+        snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, cbatt, calt, cpress, chum, ctemp, ctemp2, cqfe, cqnh, cgasres, cco2, cgrc, csfpegel, csfpegel2, csftemp, csfbatt, cversion, cinaU, cinaI);
     }
 
     return String(msg_start);

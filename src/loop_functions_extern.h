@@ -189,10 +189,12 @@ extern bool bSOFTSER_APP;
 
 extern String strSOFTSERAPP_ID;
 extern String strSOFTSERAPP_PEGEL;
+extern String strSOFTSERAPP_PEGEL2;
 extern String strSOFTSERAPP_TEMP;
 extern String strSOFTSERAPP_BATT;
 
 extern String strSOFTSERAPP_FIXPEGEL;
+extern String strSOFTSERAPP_FIXPEGEL2;
 extern String strSOFTSERAPP_FIXTEMP;
 
 extern byte c1;

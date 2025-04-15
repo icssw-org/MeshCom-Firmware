@@ -407,6 +407,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         char destination_call[20];
                         snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
 
+                        bool bMeshDestination = true;
+
                         if(msg_type_b_lora == 0x3A)    // text message store&forward
                         {
                             if(strcmp(destination_call, meshcom_settings.node_call) == 0)
@@ -502,7 +504,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 else
                                 if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
                                 {
-                                    sendDisplayText(aprsmsg, rssi, snr);
+                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}<", 6) == 0)
+                                        bMeshDestination = false;   // falsche Zeit nicht weiter geben
+                                    else
+                                        sendDisplayText(aprsmsg, rssi, snr);
+
                                     bSendAckGateway=false;
                                 }
                                 else
@@ -638,8 +644,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(isPhoneReady > 0)
                                 addBLEOutBuffer(RcvBuffer, size);
                         }
-
-                        bool bMeshDestination = true;
 
                         // messages to WLNK-1 or APRS2SOTA no need to MESH via a gateWay
                         if(bGATEWAY)
