@@ -957,18 +957,18 @@ void esp32setup()
 
     NimBLEDevice::init(strBLEName);
 
-    Serial.printf("[BLE ]...Devicename <%s>\n", NimBLEDevice::toString().c_str());
+    Serial.printf("[BLE ]...Device-Address <%s>\n", NimBLEDevice::toString().c_str());
     
     //NimBLEDevice::setDeviceName(strBLEName);
 
     NimBLEDevice::setPower(9); // +9dbm
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
-    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setSecurityAuth(false, false, false);
     
-    if(meshcom_settings.bt_code > 0 && meshcom_settings.bt_code <= 999999)
+    /*if(meshcom_settings.bt_code >= 100000 && meshcom_settings.bt_code <= 999999)
         NimBLEDevice::setSecurityPasskey(meshcom_settings.bt_code);
     else
-        NimBLEDevice::setSecurityPasskey(PIN);
+        NimBLEDevice::setSecurityPasskey(PIN);*/
 
 #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
@@ -986,31 +986,23 @@ void esp32setup()
     pTxCharacteristic = pService->createCharacteristic(
                         CHARACTERISTIC_UUID_TX,
                         NIMBLE_PROPERTY::WRITE  |
-#if not defined(BOARD_HELTEC_V3)
                         // Require a secure connection for read and write access
-                        NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
-                        NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
-#endif
+                        //NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
+                        //NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
                         NIMBLE_PROPERTY::READ   |
-#if not defined(BOARD_HELTEC_V3)
-                        NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
-                        NIMBLE_PROPERTY::READ_AUTHEN |
-#endif
+                        //NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
+                        //NIMBLE_PROPERTY::READ_AUTHEN |
                         NIMBLE_PROPERTY::NOTIFY );
 
     NimBLECharacteristic* pRxCharacteristic = pService->createCharacteristic(
                         CHARACTERISTIC_UUID_RX,
                         NIMBLE_PROPERTY::WRITE  |
-#if not defined(BOARD_HELTEC_V3)
                         // Require a secure connection for read and write access
-                        NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
-                        NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
-#endif
+                        //NIMBLE_PROPERTY::WRITE_AUTHEN |  // only allow writing if paired / encrypted
+                        //NIMBLE_PROPERTY::WRITE_ENC |  // only allow writing if paired / encrypted
                         NIMBLE_PROPERTY::READ   |
-#if not defined(BOARD_HELTEC_V3)
-                        NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
-                        NIMBLE_PROPERTY::READ_AUTHEN |
-#endif
+                        //NIMBLE_PROPERTY::READ_ENC |  // only allow reading if paired / encrypted
+                        //NIMBLE_PROPERTY::READ_AUTHEN |
                         NIMBLE_PROPERTY::NOTIFY );
 
     pRxCharacteristic->setCallbacks(&chrCallbacks);
