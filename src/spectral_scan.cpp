@@ -34,9 +34,7 @@ using namespace std;
 // this file contains binary patch for the SX1262
 #include <modules/SX126x/patches/SX126x_patch_scan.h>
 
-// frequency range in MHz to scan
-const float freqStart = 430.0;
-const float freqEnd = 440.2;
+
 
 /**
  * ###########################################################################################################################
@@ -81,7 +79,7 @@ int sx126x_spectral_init_scan(float freq)
  * We need to set back our default LoRa Modem configuration
  *
  */
-void finish_scan()
+void sx126x_spectral_finish_scan()
 {
   radio.begin(); // Set modem back to LoRa mode
   // int state = lora_setchip_meshcom();
@@ -323,7 +321,7 @@ void finish_scan()
  * @param freq the starting frequency of the 200kHz span to scan
  * @return an array containing the results
  */
-uint16_t *scan_freq(float freq)
+uint16_t *sx126x_spectral_scan_freq(float freq)
 {
   uint16_t *results = new uint16_t[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE]; // initialize array with zeros, we will return the array containing zeros if anything goes wrong
 
@@ -360,8 +358,12 @@ uint16_t *scan_freq(float freq)
  */
 void sx126x_spectral_scan()
 {
+  // frequency range in MHz to scan
+  const float freqStart = 430.0;
+  const float freqEnd = 440.2;
+
   float freq = freqStart;
-  Serial.print(F("[SX1262] Starting spectral scan ... "));
+ 
 
   sx126x_spectral_init_scan(freq);
 
@@ -369,10 +371,10 @@ void sx126x_spectral_scan()
   {
     Serial.print("FREQ ");
     Serial.println(freq, 2);
-
+    Serial.print(F("[SX1262] Starting spectral scan ... \n"));
     // get the results
     uint16_t *res;
-    res = scan_freq(freq);
+    res = sx126x_spectral_scan_freq(freq);
 
     // we have some results, print it
     Serial.print("SCAN ");
@@ -395,7 +397,7 @@ void sx126x_spectral_scan()
   }
   Serial.println("SCAN END");
 
-  finish_scan();
+  sx126x_spectral_finish_scan();
 }
 
 #else
