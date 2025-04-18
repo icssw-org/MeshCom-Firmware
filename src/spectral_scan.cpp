@@ -44,7 +44,7 @@ const float freqEnd = 440.2;
  * @param freq the initial frequency - this does not need to be the first frequency we start scanning with
  * @return a result code - see RadioLib's TypeDef.h
  */
-int init_scan(float freq)
+int sx126x_spectral_init_scan(float freq)
 {
   // initialize SX1262 FSK modem at the initial frequency
   int state = radio.beginFSK(freq);
@@ -363,7 +363,7 @@ void sx126x_spectral_scan()
   float freq = freqStart;
   Serial.print(F("[SX1262] Starting spectral scan ... "));
 
-  init_scan(freq);
+  sx126x_spectral_init_scan(freq);
 
   while (freq <= freqEnd)
   {

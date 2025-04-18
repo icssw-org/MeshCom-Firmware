@@ -18,7 +18,7 @@
     #include <RadioLib.h>
     extern SX1262 radio;
 #endif
-void sx126x_spectral_init_scan();               //initializes the scanning
+void sx126x_spectral_init_scan(float freq);               //initializes the scanning
 void sx126x_spectral_scan_freq(float freq);     //scans a certain frequency range
 void sx126x_spectral_finish_scan();             //returns to normal working conditions
 
