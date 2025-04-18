@@ -21,9 +21,12 @@
   https://jgromes.github.io/RadioLib/
 */
 #include "spectral_scan.h"
+#include "lora_setchip.h"
+#include "esp32/esp32_flash.h"
 
+using namespace std;
 
-#if defined(SX1262X) || defined(SX126X)  || defined(SX126X_V3) || defined(SX1262_E290)
+#if defined(SX1262X) || defined(SX126X) || defined(SX126X_V3) || defined(SX1262_E290)
 
 // include the library
 #include <RadioLib.h>
@@ -31,90 +34,354 @@
 // this file contains binary patch for the SX1262
 #include <modules/SX126x/patches/SX126x_patch_scan.h>
 
-
 // frequency range in MHz to scan
-const float freqStart = 430;
+const float freqStart = 430.0;
 const float freqEnd = 440.2;
 
-void sx1262_spectral_setup() {
-
+/**
+ * ###########################################################################################################################
+ * Initializes the scanning
+ * @param freq the initial frequency - this does not need to be the first frequency we start scanning with
+ * @return a result code - see RadioLib's TypeDef.h
+ */
+int init_scan(float freq)
+{
   // initialize SX1262 FSK modem at the initial frequency
-  Serial.print(F("[SX1262] Initializing ... "));
-  int state = radio.beginFSK(freqStart);
-  if(state == RADIOLIB_ERR_NONE) {
-    Serial.println(F("success!"));
-  } else {
-    Serial.print(F("failed, code "));
-    Serial.println(state);
-    while (true) { delay(10); }
+  int state = radio.beginFSK(freq);
+  if (state != RADIOLIB_ERR_NONE)
+  {
+    return state;
   }
 
   // upload a patch to the SX1262 to enable spectral scan
   // NOTE: this patch is uploaded into volatile memory,
   //       and must be re-uploaded on every power up
-  Serial.print(F("[SX1262] Uploading patch ... "));
   state = radio.uploadPatch(sx126x_patch_scan, sizeof(sx126x_patch_scan));
-  if(state == RADIOLIB_ERR_NONE) {
-    Serial.println(F("success!"));
-  } else {
-    Serial.print(F("failed, code "));
-    Serial.println(state);
-    while (true) { delay(10); }
+  if (state != RADIOLIB_ERR_NONE)
+  {
+    return state;
   }
 
   // configure scan bandwidth to 234.4 kHz
   // and disable the data shaping
-  Serial.print(F("[SX1262] Setting scan parameters ... "));
   state = radio.setRxBandwidth(234.3);
   state |= radio.setDataShaping(RADIOLIB_SHAPING_NONE);
-  if(state == RADIOLIB_ERR_NONE) {
-    Serial.println(F("success!"));
-  } else {
-    Serial.print(F("failed, code "));
-    Serial.println(state);
-    while (true) { delay(10); }
+  if (state != RADIOLIB_ERR_NONE)
+  {
+    return state;
   }
+
+  // if we reach this point, everythung should be okay
+  return RADIOLIB_ERR_NONE;
 }
 
-void sx126x_spectral_scan() {
-  
-  sx1262_spectral_setup();
+/**
+ * ###########################################################################################################################
+ * Once the scan has finished, we wish ro return to a normal working state.
+ * We need to set back our default LoRa Modem configuration
+ *
+ */
+void finish_scan()
+{
+  radio.begin(); // Set modem back to LoRa mode
+  // int state = lora_setchip_meshcom();
+  // Serial.println("LoRa Setchip state "+state);
 
-  // perform scan over the entire frequency range
+  // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  // !!!!!!!! we need to unify the radio setup !!!!!!!!
+  // !!!!!!!! this is copied from esp32_main.cpp 702-908 !!!!!!!!
+  // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  // 4.34w we use EU8 instead of EU
+  if (meshcom_settings.node_country == 0)
+    meshcom_settings.node_country = 8;
+  lora_setcountry(meshcom_settings.node_country);
+
+  // set boosted gain
+#if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+  Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 & 0x0800) == 0x0800);
+  if (radio.setRxBoostedGainMode(meshcom_settings.node_sset2 & 0x0800) != RADIOLIB_ERR_NONE)
+  {
+    Serial.println(F("Boosted Gain is not available for this module!"));
+    while (true)
+      ;
+  }
+#endif
+
+  // set carrier frequency
+  Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", meshcom_settings.node_freq);
+  if (radio.setFrequency(meshcom_settings.node_freq) == RADIOLIB_ERR_INVALID_FREQUENCY)
+  {
+    Serial.println(F("Selected frequency is invalid for this module!"));
+    while (true)
+      ;
+  }
+
+  // set bandwidth
+  Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", meshcom_settings.node_bw);
+  if (radio.setBandwidth(meshcom_settings.node_bw) == RADIOLIB_ERR_INVALID_BANDWIDTH)
+  {
+    Serial.println(F("Selected bandwidth is invalid for this module!"));
+    while (true)
+      ;
+  }
+
+  // set spreading factor
+  Serial.printf("[LoRa]...RF_SF: %i\n", meshcom_settings.node_sf);
+  if (radio.setSpreadingFactor(meshcom_settings.node_sf) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR)
+  {
+    Serial.println(F("Selected spreading factor is invalid for this module!"));
+    while (true)
+      ;
+  }
+
+  // set coding rate
+  Serial.printf("[LoRa]...RF_CR: 4/%i\n", meshcom_settings.node_cr);
+  if (radio.setCodingRate(meshcom_settings.node_cr) == RADIOLIB_ERR_INVALID_CODING_RATE)
+  {
+    Serial.println(F("Selected coding rate is invalid for this module!"));
+    while (true)
+      ;
+  }
+
+  // set LoRa sync word
+  // NOTE: value 0x34 is reserved for LoRaWAN networks and should not be used
+  if (radio.setSyncWord(SYNC_WORD_SX127x) != RADIOLIB_ERR_NONE)
+  {
+    Serial.println(F("Unable to set sync word!"));
+    while (true)
+      ;
+  }
+
+  // set output power to 10 dBm (accepted range is -3 - 17 dBm)
+  // NOTE: 20 dBm value allows high power operation, but transmission
+  //       duty cycle MUST NOT exceed 1%
+
+  int8_t tx_power = TX_OUTPUT_POWER;
+
+  if (meshcom_settings.node_power <= 0)
+    meshcom_settings.node_power = TX_OUTPUT_POWER;
+  else
+    tx_power = meshcom_settings.node_power; // set by command
+
+  if (tx_power > TX_POWER_MAX)
+    tx_power = TX_POWER_MAX;
+
+  if (tx_power < TX_POWER_MIN)
+    tx_power = TX_POWER_MIN;
+
+  Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
+
+  if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER)
+  {
+    Serial.println(F("Selected output power is invalid for this module!"));
+    while (true)
+      ;
+  }
+
+  // set over current protection limit (accepted range is 45 - 240 mA)
+  // NOTE: set value to 0 to disable overcurrent protection
+  if (radio.setCurrentLimit(CURRENT_LIMIT) == RADIOLIB_ERR_INVALID_CURRENT_LIMIT)
+  {
+    Serial.println(F("Selected current limit is invalid for this module!"));
+    while (true)
+      ;
+  }
+
+  // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
+  Serial.printf("[LoRa]...PREAMBLE: %i symbols\n", meshcom_settings.node_preamplebits);
+
+  if (radio.setPreambleLength(meshcom_settings.node_preamplebits) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH)
+  {
+    Serial.println(F("Selected preamble length is invalid for this module!"));
+    while (true)
+      ;
+  }
+
+#if defined(SX127X)
+  // set amplifier gain  (accepted range is 1 - 6, where 1 is maximum gain)
+  // NOTE: set value to 0 to enable automatic gain control
+  //       leave at 0 unless you know what you're doing
+  if (radio.setGain(0) == RADIOLIB_ERR_INVALID_GAIN)
+  {
+    Serial.println(F("Selected gain is invalid for this module!"));
+    while (true)
+      ;
+  }
+
+  // set the function that will be called
+  // when LoRa preamble is not detected within CAD timeout period
+  // or when a packet is received
+
+  // set Receive Interupt
+  bEnableInterruptReceive = true;                // KBC 0801
+  radio.setPacketReceivedAction(setFlagReceive); // KBC 0801
+
+  // KBC 0801 radio.setPacketSentAction(setFlagSent);
+
+  // KBC 0801 radio.setDio0Action(setFlagReceive, RISING);
+  // KBC 0801 radio.setDio1Action(setFlagSent, RISING);
+
+  // set the function that will be called
+  // when LoRa preamble is detected
+  // radio.setDio1Action(setFlagDetected, RISING);
+
+  // start scanning the channel
+  Serial.print(F("[LoRa]...Starting to listen ... "));
+  state = radio.startReceive();
+  if (state == RADIOLIB_ERR_NONE)
+  {
+    Serial.println(F("success"));
+  }
+  else
+  {
+    Serial.print(F("failed, code "));
+    Serial.println(state);
+  }
+
+  // enable CRC
+  if (radio.setCRC(true) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
+  {
+    Serial.println(F("Selected CRC is invalid for this module!"));
+    while (true)
+      ;
+  }
+
+#endif
+
+// setup for SX126x Radios
+#if defined(SX126X) || defined(SX1262X)
+  // set the function that will be called
+  // when LoRa preamble is not detected within CAD timeout period
+  // or when a packet is received
+  radio.setPacketReceivedAction(setFlagReceive);
+  radio.setPacketSentAction(setFlagSent);
+
+  radio.setDio1Action(setFlagSent);
+
+  // set the function that will be called
+  // when LoRa preamble is detected
+  // radio.setDio1Action(setFlagDetected, RISING);
+
+  // start scanning the channel
+  Serial.print(F("[LoRa] Starting to listen ... "));
+  state = radio.startReceive();
+  if (state == RADIOLIB_ERR_NONE)
+  {
+    Serial.println(F("success"));
+  }
+  else
+  {
+    Serial.print(F("failed, code "));
+    Serial.println(state);
+  }
+
+  // enable CRC
+  if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
+  {
+    Serial.println(F("Selected CRC is invalid for this module!"));
+    while (true)
+      ;
+  }
+#endif
+
+#if defined(SX126X_V3) || defined(SX1262_E290)
+
+  // set Receive Interupt
+  // radio.setPacketReceivedAction(setFlagReceive); // KBC 0801
+
+  // KBC 0801 radio.setPacketSentAction(setFlagSent);
+
+  // KBC 0801 radio.setDio1Action(setFlagSent);
+
+  // start scanning the channel
+  Serial.print(F("[LoRa]...Starting to listen ... "));
+  int state = radio.startReceive();
+  if (state == RADIOLIB_ERR_NONE)
+  {
+    Serial.println(F("success"));
+  }
+  else
+  {
+    Serial.print(F("failed, code "));
+    Serial.println(state);
+  }
+
+  // enablee CRC
+  if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
+  {
+    Serial.println(F("Selected CRC is invalid for this module!"));
+    while (true)
+      ;
+  }
+#endif
+}
+
+/**
+ * ###########################################################################################################################
+ * Starts the scan of a small frequency span beginning with the frequency defined as parameter "freq" and the scan width of 200kHz
+ * @param freq the starting frequency of the 200kHz span to scan
+ * @return an array containing the results
+ */
+uint16_t *scan_freq(float freq)
+{
+  uint16_t *results = new uint16_t[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE]; // initialize array with zeros, we will return the array containing zeros if anything goes wrong
+
+  if (radio.setFrequency(freq) == RADIOLIB_ERR_NONE)
+  {
+    // start spectral scan
+    // number of samples: 2048 (fewer samples = better temporal resolution)
+    if (radio.spectralScanStart(2048) == RADIOLIB_ERR_NONE)
+    { // if scan started without an error
+      // wait for spectral scan to finish
+      while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
+      {
+        delay(10);
+      }
+
+      // read the results
+      if (radio.spectralScanGetResult(results) == RADIOLIB_ERR_NONE)
+      {
+        return results;
+      }
+    }
+  }
+
+  // if we reach this point, something went wrong
+  return results; // return an array with zeros
+}
+
+/**
+ * ###########################################################################################################################
+ * Performs a spectrum scan over the defined fequency range (freqStart to freqEnd)
+ * Formats the output to be compatible wuth RadioLib's Example.
+ *
+ * This function might be removed later.
+ */
+void sx126x_spectral_scan()
+{
   float freq = freqStart;
-  while(freq <= freqEnd) {
+  Serial.print(F("[SX1262] Starting spectral scan ... "));
+
+  init_scan(freq);
+
+  while (freq <= freqEnd)
+  {
     Serial.print("FREQ ");
     Serial.println(freq, 2);
 
-    // start spectral scan
-    // number of samples: 2048 (fewer samples = better temporal resolution)
-    Serial.print(F("[SX1262] Starting spectral scan ... "));
-    int state = radio.spectralScanStart(2048);
-    if(state == RADIOLIB_ERR_NONE) {
-      Serial.println(F("success!"));
-    } else {
-      Serial.print(F("failed, code "));
-      Serial.println(state);
-      while (true) { delay(10); }
-    }
+    // get the results
+    uint16_t *res;
+    res = scan_freq(freq);
 
-    // wait for spectral scan to finish
-    while(radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE) {
-      delay(10);
+    // we have some results, print it
+    Serial.print("SCAN ");
+    for (uint8_t i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++)
+    {
+      Serial.print(res[i]);
+      Serial.print(',');
     }
-
-    // read the results
-    uint16_t results[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE];
-    state = radio.spectralScanGetResult(results);
-    if(state == RADIOLIB_ERR_NONE) {
-      // we have some results, print it
-      Serial.print("SCAN ");
-      for(uint8_t i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++) {
-        Serial.print(results[i]);
-        Serial.print(',');
-      }
-      Serial.println(" END");
-    }
+    Serial.println(" END");
 
     // wait a little bit before the next scan
     delay(100);
@@ -123,17 +390,30 @@ void sx126x_spectral_scan() {
     // the frequency step should be slightly smaller
     // or the same as the Rx bandwidth set in setup
     freq += 0.2;
-    radio.setFrequency(freq);
+
+    // yield();    //pet the watchdog so it stays calm
   }
-  
+  Serial.println("SCAN END");
+
+  finish_scan();
 }
 
 #else
 // DUMMY FOR NON-SX1262
 void sx126x_spectral_scan()
 {
-    Serial.print(F("Spectral scan not implemented for this plattform ... "));
-    return;
+  Serial.print(F("Spectral scan not implemented for this plattform ... "));
+  return;
+}
+
+uint16_t *scan_freq(float freq)[
+    // Serial.print(F("Spectral scan not implemented for this plattform ... "));
+    return (uint16_t[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE]){0}; // return an array with zeros
+]
+
+    int init_scan(float freq)
+{
+  return RADIOLIB_ERR_WRONG_MODEM;
 }
 
 #endif

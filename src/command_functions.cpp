@@ -408,13 +408,12 @@ void commandAction(char *msg_text, bool ble)
     {
         
         sx126x_spectral_scan();
-        
         #ifdef ESP32
-            ESP.restart();
+            //ESP.restart();
         #endif
         
         #if defined NRF52_SERIES
-            NVIC_SystemReset();     // resets the device
+            //NVIC_SystemReset();     // resets the device
         #endif
 
         return;
