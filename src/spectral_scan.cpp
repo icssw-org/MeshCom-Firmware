@@ -62,7 +62,8 @@ int sx126x_spectral_init_scan(float freq)
 
   // configure scan bandwidth to 234.4 kHz
   // and disable the data shaping
-  state = radio.setRxBandwidth(234.3);
+  state = radio.setRxBandwidth(234.3);  //any other frequwency does not work - maybe those values are somehow fixed in the binary blob of the scan patch
+  //ToDo: check if that patch can be recompiled allowing a narrower bandwidth, see: https://github.com/Lora-net/sx1302_hal/blob/master/util_spectral_scan/src/spectral_scan.c
   state |= radio.setDataShaping(RADIOLIB_SHAPING_NONE);
   if (state != RADIOLIB_ERR_NONE)
   {
@@ -73,11 +74,14 @@ int sx126x_spectral_init_scan(float freq)
   return RADIOLIB_ERR_NONE;
 }
 
+
+
+
 /**
  * ###########################################################################################################################
  * Once the scan has finished, we wish ro return to a normal working state.
  * We need to set back our default LoRa Modem configuration
- *
+ * 
  */
 void sx126x_spectral_finish_scan()
 {
@@ -93,9 +97,10 @@ void sx126x_spectral_finish_scan()
   // 4.34w we use EU8 instead of EU
   if (meshcom_settings.node_country == 0)
     meshcom_settings.node_country = 8;
+
   lora_setcountry(meshcom_settings.node_country);
 
-  // set boosted gain
+// set boosted gain
 #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
   Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 & 0x0800) == 0x0800);
   if (radio.setRxBoostedGainMode(meshcom_settings.node_sset2 & 0x0800) != RADIOLIB_ERR_NONE)
@@ -315,6 +320,9 @@ void sx126x_spectral_finish_scan()
 #endif
 }
 
+
+
+
 /**
  * ###########################################################################################################################
  * Starts the scan of a small frequency span beginning with the frequency defined as parameter "freq" and the scan width of 200kHz
@@ -363,7 +371,7 @@ void sx126x_spectral_scan()
   const float freqEnd = 440.2;
 
   float freq = freqStart;
- 
+
 
   sx126x_spectral_init_scan(freq);
 

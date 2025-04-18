@@ -2,22 +2,17 @@
 
 #include <configuration.h>
 #include <debugconf.h>
-
 #include <web_functions.h>
-
 #include <command_functions.h>
 #include <mheard_functions.h>
-
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
-
 #include <time.h>
-
 #include <lora_setchip.h>
-
 #include <rtc_functions.h>
-
 #include <time_functions.h>
+#include <spectral_scan.h>
+
 
 #ifdef ESP32
     // WIFI
@@ -632,6 +627,12 @@ String work_webpage(bool bget_password, int webid)
                 {
                     web_page_state=6;
                     bRefresh=true;
+                }
+                else
+                if (web_header.indexOf("GET /spectrum") >= 0)
+                {
+                    web_page_state=10;
+                    //bRefresh=true;
                 }
 
                 idx_text_end=web_header.indexOf(" HTTP/1.1");
@@ -1799,6 +1800,87 @@ String work_webpage(bool bget_password, int webid)
                     web_client.println("</table>");
                 }
                 else
+
+                // SPECTRUM
+                if(web_page_state == 10)
+                {
+                    #if defined(SX1262X) || defined(SX126X) || defined(SX126X_V3) || defined(SX1262_E290)
+                    float fStart = 432.0;   //scan start frequency
+                    float fEnd = 434.0;     //scan end frequency
+                    float fStep = 0.025;      //scan frequency step (the scanner will scan a frequency span of 234.4kHz so we need to use the same or a lower step width)
+                    uint16_t step_pixel_width = 10;  //the amout of pixel we use for a single frequency step
+                    uint16_t step_pixel_height = 10; //the amout of pixel we use for a single frequency step
+
+
+                    uint16_t num_fsteps = roundf((fEnd-fStart) / fStep);
+                    uint16_t current_fStep = 0;
+                    uint16_t start_x = 60;   //x-position
+                    uint16_t start_y = 10;
+                    uint16_t end_x = start_x + (num_fsteps*step_pixel_width);
+                    uint16_t end_y = start_y + (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE * step_pixel_height);
+                    
+                    
+                    
+                    uint16_t own_freq_marker_width = round(((meshcom_settings.node_bw/1000) / fStep) * step_pixel_width);
+                    uint16_t own_freq_marker_center = start_x + (((meshcom_settings.node_freq - fStart) / fStep) * step_pixel_width);
+                    uint16_t own_freq_marker_start = own_freq_marker_center - (own_freq_marker_width/2);
+
+                    if(sx126x_spectral_init_scan(fStart) != RADIOLIB_ERR_NONE) {
+                        web_client.println("<span>unable to initialize spectrum scan</span>");
+                    } else {
+                        web_client.println("<svg width=\"900\" height=\"400\" id=\"spectrum_display\">");
+                
+                        web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:black;stroke-width:1\"/>\n", start_x, end_y, end_x, end_y);   //X-Line at bottom
+                        web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:black;stroke-width:1\"/>\n", start_x, start_y, start_x, end_y);   //Y-Line at left
+                        web_client.printf("<text x=\"%d\" y=\"%d\" style=\"font-size: 12px; color: black;\">Freq [MHz]</text>\n", start_x, end_y+40);    //caption for X-Line (frequency)
+                        web_client.printf("<text x=\"0\" y=\"0\" f style=\"font-size: 12px; color: black;\" transform=\"translate(10, %d) rotate(-90)\")>RSSI [dBm]</text>\n", end_y);    //caption for Y-Line (power bins)
+
+                        web_client.printf("<rect width=\"%d\" height=\"%d\" x=\"%d\" y=\"%d\" fill=\"rgba(0, 110, 129, 0.2)\" />", own_freq_marker_width, end_y-start_y,  own_freq_marker_start,  start_y);     //mark the frequency we are on
+                        web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:rgba(114, 0, 129, 0.2); stroke-width:1\"/>\n", own_freq_marker_center, start_y, own_freq_marker_center, end_y);
+
+                        for(uint8_t i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++) {
+                            if(i % 3 == 0) {
+                            web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:black;stroke-width:1\"/>\n", start_x-10, start_y+(i*step_pixel_height), start_x, start_y+(i*step_pixel_height));   //Scale lines on Y axis
+                            web_client.printf("<text x=\"%d\" y=\"%d\" style=\"font-size: 12px; color: black;\">-%d</text>\n", start_x-40, start_y+(i*step_pixel_height)+6, 11+(i*4) );    //caption for X-Line (frequency)
+                            }
+                        }
+
+
+                        while(fStart < fEnd) {
+                            uint16_t *res;
+                            res = sx126x_spectral_scan_freq(fStart);
+                            
+                            for (uint8_t i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++){
+                              if(res[i] > 0) {          //did the scan found anything above zero?
+                                float alpha = (res[i]/2048.0);
+                                if(alpha < 0.2) alpha = 0.2;
+                                //Serial.printf("%0.3f", alpha);
+                                web_client.printf("<rect width=\"%d\" height=\"%d\" x=\"%d\" y=\"%d\" fill=\"rgba(0,0,0,%0.3f)\" />", step_pixel_width, step_pixel_height,  start_x+(current_fStep*step_pixel_width),  start_y+(i*step_pixel_height), alpha);
+                              }
+                            }
+
+
+                            if(current_fStep % 5 == 0)   //draw scale lineavery 5 freq steps
+                                web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:black;stroke-width:1\"/>\n", start_x+(current_fStep*step_pixel_width), end_y, start_x+(current_fStep*step_pixel_width), end_y+10);   //Y-Line at left
+                            if(current_fStep % 10 == 0)   //draw scale value every 10 steps
+                                web_client.printf("<text x=\"%d\" y=\"%d\" style=\"font-size: 12px; color: black;\">%.3f</text>\n", start_x+(current_fStep*step_pixel_width)-10, end_y+25, fStart );    //caption for X-Line (frequency)
+                            
+
+                            delay(50);
+                            current_fStep++;
+                            fStart+=fStep;
+                        }
+
+                        web_client.println("</svg>");
+                        sx126x_spectral_finish_scan();
+                    }
+
+                    #else
+                    web_client.println("<span>spectrum scan not supported on this device</span>");
+                    #endif
+                }
+                else
+
                 // INFO
                 {
                     web_client.println("<table class=\"table\">");
