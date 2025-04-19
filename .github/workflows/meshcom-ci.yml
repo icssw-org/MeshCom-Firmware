@@ -27,6 +27,9 @@ jobs:
     - name: Install PlatformIO Core
       run: pip install --upgrade platformio
 
+    - name: Patch PlatformIO for T-BEAM supreme
+      run: "cp .github/t-beams3-supreme.json ~/.platformio/platforms/espressif32/boards" 
+
     - name: Install RAK Deps
       run: pio platform install nordicnrf52
 
@@ -39,9 +42,6 @@ jobs:
 
     - name: Patch PlatformIO for RAK2
       run: "cd${{ github.workspace }} && ~/.platformio/RAK_PATCH && python rak_patch.py"
-
-    - name: Patch PlatformIO for T-BEAM supreme
-      run: "cp .github/t-beams3-supreme.json ~/.platformio/platforms/espressif32/boards" 
 
     - name: Build all Projects
       run: "cd ${{ github.workspace }} && pio run"
