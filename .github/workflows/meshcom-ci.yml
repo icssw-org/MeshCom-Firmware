@@ -42,7 +42,7 @@ jobs:
       run: "cd ${{ github.workspace }} && pio run -e wiscore_rak4631 && exit 0"
 
     - name: Patch PlatformIO for RAK2
-      run: "cd${{ github.workspace }} && ~/.platformio/RAK_PATCH && python rak_patch.py"
+      run: "cd ~/.platformio/RAK_PATCH && python rak_patch.py"
 
     - name: Build all Projects
       run: "cd ${{ github.workspace }} && pio run"
