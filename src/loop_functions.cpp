@@ -146,8 +146,7 @@ U8G2 *u8g2;
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 #elif defined(BOARD_TBEAM_V3)
-    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
-    //U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
+    U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
     U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, 18, 17, U8X8_PIN_NONE);
 #else
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
@@ -838,6 +837,8 @@ void sendDisplayTime()
         return;
     #endif
 
+    //TEST ONLY Serial.printf("Time bDisplayOff:%i iDisplayType:%i bSetDisplay:%i\n", bDisplayOff, iDisplayType, bSetDisplay);
+
     if(bDisplayOff)
         return;
 
@@ -874,9 +875,7 @@ void sendDisplayTime()
     pageLine[0][1] = dzeile[0];
 
     #ifndef BOARD_E290
-        u8g2->setCursor(pageLine[0][0], pageLine[0][1]);
-        u8g2->print(print_text);
-        u8g2->sendBuffer();
+        sendDisplay1306(false, true, 3, dzeile[0], print_text);
     #endif
 
     bSetDisplay = false;
