@@ -27,9 +27,8 @@ jobs:
     - name: Install PlatformIO Core
       run: pip install --upgrade platformio
 
-    - name: Patch PlatformIO for T-BEAM supreme
-      continue-on-error: true
-      run: "cp .github/t-beams3-supreme.json ~/.platformio/platforms/espressif32/boards/t-beams3-supreme.json" 
+    - name: Install T-BEAM S3 Supreme
+      run: pio pkg update -g -p espressif32
 
     - name: Install RAK Deps
       run: pio platform install nordicnrf52
@@ -63,7 +62,7 @@ jobs:
       mv .pio/build/wiscore_rak4631/firmware.zip .pio/build/wiscore_rak4631/wiscore_rak4631.zip &
       mv .pio/build/esp32-S3-safeboot/safeboot.bin .pio/build/esp32-S3-safeboot/safeboot-s3.bin &
       mv .pio/build/esp32-S3-safeboot/bootloader.bin .pio/build/esp32-S3-safeboot/bootloader-s3.bin"
-        
+
     - uses: ncipollo/release-action@v1
       with:
         allowUpdates: true
@@ -86,5 +85,5 @@ jobs:
         .pio/build/esp32-safeboot/bootloader.bin,
         .pio/build/esp32-safeboot/partitions.bin,
         otadata.bin"
-        
+
         bodyFile: "release.md"
