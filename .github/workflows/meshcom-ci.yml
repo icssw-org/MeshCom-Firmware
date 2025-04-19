@@ -28,7 +28,8 @@ jobs:
       run: pip install --upgrade platformio
 
     - name: Patch PlatformIO for T-BEAM supreme
-      run: "cp .github/t-beams3-supreme.json ~/.platformio/platforms/espressif32/boards" 
+      continue-on-error: true
+      run: "cp .github/t-beams3-supreme.json ~/.platformio/platforms/espressif32/boards/t-beams3-supreme.json" 
 
     - name: Install RAK Deps
       run: pio platform install nordicnrf52
