@@ -583,7 +583,7 @@ void esp32setup()
     #endif
 
     #if defined(ENABLE_BMX280)
-        //setupBMX280(true);
+        setupBMX280(true);
     #endif
 
     #if defined(ENABLE_MC811)
