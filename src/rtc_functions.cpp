@@ -3,10 +3,16 @@
 #include "loop_functions_extern.h"
 
 #include <Arduino.h>
+#include <Wire.h>               
 
 #include <rtc_functions.h>
 
-RTC_DS3231 rtc;
+#ifdef BOARD_TBEAM_V3
+    RTC_PCF8563 rtc;
+#else
+    RTC_DS3231 rtc; 
+#endif
+
 
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
@@ -14,9 +20,15 @@ DateTime now;
 
 bool setupRTC()
 {  
-    Wire.begin();
+    TwoWire *w = NULL;
 
-    if (!rtc.begin())
+    #ifdef BOARD_TBEAM_V3
+        w = &Wire1;
+    #else
+        w = &Wire;
+    #endif
+
+    if (!rtc.begin(w))
     {
         Serial.println("[INIT]...RTC not found");
         Serial.flush();
@@ -56,31 +68,6 @@ bool loopRTC()
 
     now = rtc.now();
 
-    // calculate a date which is 7 days, 12 hours, 30 minutes, 6 seconds into the future
-    /*
-    DateTime future (now + TimeSpan(7,12,30,6));
-
-    Serial.print(" now + 7d + 12h + 30m + 6s: ");
-    Serial.print(future.year(), DEC);
-    Serial.print('/');
-    Serial.print(future.month(), DEC);
-    Serial.print('/');
-    Serial.print(future.day(), DEC);
-    Serial.print(' ');
-    Serial.print(future.hour(), DEC);
-    Serial.print(':');
-    Serial.print(future.minute(), DEC);
-    Serial.print(':');
-    Serial.print(future.second(), DEC);
-    Serial.println();
-
-    Serial.print("Temperature: ");
-    Serial.print(rtc.getTemperature());
-    Serial.println(" C");
-
-    Serial.println();
-    */
-
     return true;
 }
 
@@ -109,29 +96,6 @@ DateTime getRTCNow()
 
 String getStringRTCNow()
 {
-    /*
-    Serial.print(now.year(), DEC);
-    Serial.print('/');
-    Serial.print(now.month(), DEC);
-    Serial.print('/');
-    Serial.print(now.day(), DEC);
-    Serial.print(" (");
-    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
-    Serial.print(") ");
-    Serial.print(now.hour(), DEC);
-    Serial.print(':');
-    Serial.print(now.minute(), DEC);
-    Serial.print(':');
-    Serial.print(now.second(), DEC);
-    Serial.println();
-
-    Serial.print(" since midnight 1/1/1970 = ");
-    Serial.print(now.unixtime());
-    Serial.print("s = ");
-    Serial.print(now.unixtime() / 86400L);
-    Serial.println("d");
-    */
-
     char cdate[40];
     sprintf(cdate, "%02i.%02i.%i %02i:%02i:%02i", now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
     

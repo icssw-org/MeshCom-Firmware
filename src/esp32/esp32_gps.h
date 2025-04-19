@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-void setupGPS(bool bGPSON);
+void setupPMU(bool bGPSPOWER);
 unsigned int readGPS(void);
 unsigned int getGPS(void);
 void direction_parse(String tmp);

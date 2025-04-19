@@ -60,7 +60,7 @@ uint32_t vbat_pin = BATTERY_PIN;
 //static
 esp_adc_cal_characteristics_t adc_chars[sizeof(esp_adc_cal_characteristics_t)];
 
-#if defined(SX126X_V3) || defined(SX1262_E290)
+#if defined(SX1262_V3) || defined(SX1262_E290)
 //static const
 adc_channel_t channel = ADC_CHANNEL_0;     //GPIO34 if ADC1, GPIO14 if ADC2
 //static const
@@ -105,7 +105,7 @@ adc_unit_t unit = ADC_UNIT_1;
 //static
 void check_efuse(void)
 {
-#if defined(SX126X_V3) || defined(SX1262_E290)
+#if defined(SX1262_V3) || defined(SX1262_E290)
 	// NOT TESTED
 #elif CONFIG_IDF_TARGET_ESP32
     //Check if TP is burned into eFuse
