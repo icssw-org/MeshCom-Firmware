@@ -41,7 +41,7 @@ jobs:
       run: "cd${{ github.workspace }} && ~/.platformio/RAK_PATCH && python rak_patch.py"
 
     - name: Patch PlatformIO for T-BEAM supreme
-      run: "cp .github/BOARDS/t-beams3-supreme.json ~/.platformio/platforms/espressif32/boards" 
+      run: "cp .github/t-beams3-supreme.json ~/.platformio/platforms/espressif32/boards" 
 
     - name: Build all Projects
       run: "cd ${{ github.workspace }} && pio run"
