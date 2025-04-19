@@ -145,6 +145,10 @@ U8G2 *u8g2;
 #elif defined(BOARD_TLORA_OLV216)
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+#elif defined(BOARD_TBEAM_V3)
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
+    //U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
+    U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, 18, 17, U8X8_PIN_NONE);
 #else
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
@@ -475,21 +479,25 @@ int esp32_isSSD1306(int address)
 
     #ifdef BOARD_HELTEC_V3
         return false;
-    #else
-        Wire.beginTransmission(address);
-        Wire.write(0x00);
-        Wire.endTransmission(false);
-        Wire.requestFrom(address, 1);
     #endif
+        
+    TwoWire *w = NULL;
+
+    w = &Wire;
+
+    w->beginTransmission(address);
+    w->write(0x00);
+    w->endTransmission(false);
+    w->requestFrom(address, 1);
 
     bool bFound=false;
 
-    if (Wire.available() > 0)
+    if (w->available() > 0)
     {
-        Wire.readBytes(buffer, 1);
+        w->readBytes(buffer, 1);
         bFound=true;
     }
-    Wire.endTransmission();
+    w->endTransmission();
 
     // no display found
     if(!bFound)
@@ -498,7 +506,7 @@ int esp32_isSSD1306(int address)
         return -1;
     }
 
-    Serial.printf("[INIT]...Display type: %02X\n", buffer[0]);
+    Serial.printf("[INIT]...Display type: 0x%02X\n", buffer[0]);
 
     // 0x00 == T-BEAM 1.3" 1306
     // 0x03 == T-BEAM 0.9"
@@ -508,9 +516,10 @@ int esp32_isSSD1306(int address)
     // 0x09 == HELTEC V3 type 1
     // 0x3F == HELTEC V3 type 2
     // 0x16 == T-BEAM 1.3" 1306
+    // 0x48 == T-BEAM 1.3" SUPREME SH1106
 
     // check 1.3"
-    if((buffer[0] & 0x03f) == 0x08 || (buffer[0] & 0x03f) == 0x00 || (buffer[0] & 0x3f) == 0x16)
+    if((buffer[0] & 0x04f) == 0x08 || (buffer[0] & 0x03f) == 0x00 || (buffer[0] & 0x3f) == 0x16)
     {
         Serial.println(F("[INIT]...OLED Display is SSD1306"));
         return 1;
@@ -841,24 +850,24 @@ void sendDisplayTime()
     bSetDisplay = true;
 
     char print_text[500];
-    char cbatt[5];
+    char cbatt[6];
 
     if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.2f", global_batt/1000.0);
+        snprintf(cbatt, sizeof(cbatt), "%4.2fV", global_batt/1000.0);
     else
-        snprintf(cbatt, sizeof(cbatt), "%3d%%", global_proz);
+        snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
 
  #if defined(XPOWERS_CHIP_AXP192)
     if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+        snprintf(cbatt, sizeof(cbatt), "  USB");
  #endif
 
  #if defined(XPOWERS_CHIP_AXP2101)
     if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+        snprintf(cbatt, sizeof(cbatt), "  USB");
  #endif
 
-    snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+    snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-5.5s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
 
     memcpy(pageText[0], print_text, 20);
     pageLine[0][0] = 3;
@@ -876,14 +885,14 @@ void sendDisplayTime()
 void sendDisplayMainline()
 {
     char print_text[500];
-    char cbatt[5];
+    char cbatt[6];
     char nodetype[5];
 
 
     if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.2f", global_batt/1000.0);
+        snprintf(cbatt, sizeof(cbatt), "%4.2fV", global_batt/1000.0);
     else
-        snprintf(cbatt, sizeof(cbatt), "%3d%%", global_proz);
+        snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
 
  #if defined(XPOWERS_CHIP_AXP192)
     if(global_batt == 0.0)
@@ -902,11 +911,11 @@ void sendDisplayMainline()
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
-        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s         %-4.4s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s         %-5.5s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
     }
     else
     {
-        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-4.4s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-5.5s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
     sendDisplay1306(true, false, 3, dzeile[0], print_text);

@@ -23,7 +23,7 @@
 #include "spectral_scan.h"
 
 
-#if defined(SX1262X) || defined(SX126X)  || defined(SX126X_V3) || defined(SX1262_E290)
+#if defined(SX1262X) || defined(SX126X) || defined(SX1262_E290)
 
 // include the library
 #include <RadioLib.h>

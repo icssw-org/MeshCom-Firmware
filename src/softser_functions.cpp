@@ -11,7 +11,6 @@
 
 #ifdef ESP32
 #include "SoftwareSerial.h"
-
 SoftwareSerial SOFTSER;
 #else
 #include "Wire.h"
