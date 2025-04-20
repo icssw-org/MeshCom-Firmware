@@ -1804,7 +1804,7 @@ String work_webpage(bool bget_password, int webid)
                 // SPECTRUM
                 if(web_page_state == 10)
                 {
-                    #if defined(SX1262X) || defined(SX126X) || defined(SX126X_V3) || defined(SX1262_E290)
+                    #if defined(SX1262X) || defined(SX126X) || defined(SX1262_V3) || defined(SX1262_E290)
                     float spec_curr_freq = meshcom_settings.node_specstart;       // scan start frequency
                     
                     uint16_t step_pixel_width = 10;     // the amout of pixel we use for a single frequency step
