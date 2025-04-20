@@ -60,7 +60,7 @@ uint32_t vbat_pin = BATTERY_PIN;
 //static
 esp_adc_cal_characteristics_t adc_chars[sizeof(esp_adc_cal_characteristics_t)];
 
-#if defined(SX126X_V3) || defined(SX1262_E290)
+#if defined(SX1262_V3) || defined(SX1262_E290)
 //static const
 adc_channel_t channel = ADC_CHANNEL_0;     //GPIO34 if ADC1, GPIO14 if ADC2
 //static const
@@ -105,7 +105,7 @@ adc_unit_t unit = ADC_UNIT_1;
 //static
 void check_efuse(void)
 {
-#if defined(SX126X_V3) || defined(SX1262_E290)
+#if defined(SX1262_V3) || defined(SX1262_E290)
 	// NOT TESTED
 #elif CONFIG_IDF_TARGET_ESP32
     //Check if TP is burned into eFuse
@@ -261,13 +261,13 @@ float read_batt(void)
 		pinMode(23, OUTPUT);
   		pinMode(vbat_pin, INPUT);
   
-   		raw = (float)(analogRead(vbat_pin)) / 4095*2*3.3*1.1;
+   		raw = (float)(analogReadMilliVolts(vbat_pin)) / 4095*2*3.3*1.1;
 		
 		// Serial.printf("ADC analog value = <%f>\n", raw);
 
 	#elif defined(BOARD_E290)
 
-   		uint16_t battery_levl = analogRead(vbat_pin);
+   		uint16_t battery_levl = analogReadMilliVolts(vbat_pin);
 		
 		//Serial.printf("ADC analog value = <%i>\n", battery_levl);
 	
@@ -292,7 +292,7 @@ float read_batt(void)
 		digitalWrite(ADC_CTRL_PIN,HIGH);
 
 		delay(100);
-		int analogValue = analogRead(vbat_pin);
+		int analogValue = analogReadMilliVolts(vbat_pin);
 		
 		//V3.1 digitalWrite(ADC_CTRL_PIN, HIGH);
 		digitalWrite(ADC_CTRL_PIN, LOW);

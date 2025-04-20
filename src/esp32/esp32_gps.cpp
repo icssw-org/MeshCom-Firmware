@@ -6,15 +6,13 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <clock.h>
+#include <Wire.h>               
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <TinyGPSPlus.h>
 #include <command_functions.h>
 
-#if defined(MODUL_FW_TBEAM)
-    #define GPS_RX_PIN 34
-    #define GPS_TX_PIN 12
-#elif defined(BOARD_HELTEC)
+#if defined(BOARD_HELTEC)
     //For heltec these are the pins: 
     #define GPS_RX_PIN 23
     #define GPS_TX_PIN 3
@@ -29,6 +27,13 @@
     //For heltec these are the pins:
     #define GPS_RX_PIN 16
     #define GPS_TX_PIN 17
+#elif defined(BOARD_TBEAM_V3)
+    #define GPS_RX_PIN 9
+    #define GPS_TX_PIN 8
+    #define GPS_WAKEUP 7
+#elif defined(MODUL_FW_TBEAM)
+    #define GPS_RX_PIN 34
+    #define GPS_TX_PIN 12
 #else
     #define GPS_RX_PIN 34
     #define GPS_TX_PIN 12
@@ -68,7 +73,7 @@ bool bMitHardReset = false;
     
 int maxStateCount=1;
 
-void setupGPS(bool bGPSON)
+void setupPMU(bool bGPSPOWER)
 {
 /*
 | CHIP       | AXP173            | AXP192            | AXP202            | AXP2101                                |
@@ -109,6 +114,8 @@ void setupGPS(bool bGPSON)
      * just input the wire, because the wire has been initialized in main.cpp
      */
 
+     Serial.printf("[INIT]...Start check AXP\n");
+
     if (!PMU)
     {
         PMU = new XPowersAXP2101(*w);
@@ -146,10 +153,6 @@ void setupGPS(bool bGPSON)
          * In order not to affect other devices, if the initialization of the PMU fails, Wire needs to be re-initialized once,
          * if there are multiple devices sharing the bus.
          * * */
-        #ifndef PMU_USE_WIRE1
-            w->begin(I2C_SDA, I2C_SCL);
-        #endif
-        
         return;
     }
 
@@ -194,6 +197,72 @@ void setupGPS(bool bGPSON)
     else
     if(PMU->getChipModel() == XPOWERS_AXP2101)
     {
+        #if defined(BOARD_TBEAM_V3)
+
+        Serial.printf("[INIT]...AXP2101 SUPREME chip\n");
+
+        //t-beam m.2 inface
+        //gps
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO4);
+
+        // lora
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO3);
+
+        // In order to avoid bus occupation, during initialization, the SD card and QMC sensor are powered off and restarted
+        /*
+        if (ESP_SLEEP_WAKEUP_UNDEFINED == esp_sleep_get_wakeup_cause()) {
+            Serial.println("Power off and restart ALDO BLDO..");
+            PMU->disablePowerOutput(XPOWERS_ALDO1);
+            PMU->disablePowerOutput(XPOWERS_ALDO2);
+            PMU->disablePowerOutput(XPOWERS_BLDO1);
+            delay(250);
+        }
+        */
+
+        // Sensor
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO1);
+
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO2);
+
+        //Sdcard
+
+        PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
+        PMU->enablePowerOutput(XPOWERS_BLDO1);
+
+        PMU->setPowerChannelVoltage(XPOWERS_BLDO2, 3300);
+        PMU->enablePowerOutput(XPOWERS_BLDO2);
+
+        //face m.2
+        PMU->setPowerChannelVoltage(XPOWERS_DCDC3, 3300);
+        PMU->enablePowerOutput(XPOWERS_DCDC3);
+
+        PMU->setPowerChannelVoltage(XPOWERS_DCDC4, XPOWERS_AXP2101_DCDC4_VOL2_MAX);
+        PMU->enablePowerOutput(XPOWERS_DCDC4);
+
+        PMU->setPowerChannelVoltage(XPOWERS_DCDC5, 3300);
+        PMU->enablePowerOutput(XPOWERS_DCDC5);
+
+
+        //not use channel
+        PMU->disablePowerOutput(XPOWERS_DCDC2);
+        // PMU->disablePowerOutput(XPOWERS_DCDC4);
+        // PMU->disablePowerOutput(XPOWERS_DCDC5);
+        PMU->disablePowerOutput(XPOWERS_DLDO1);
+        PMU->disablePowerOutput(XPOWERS_DLDO2);
+        PMU->disablePowerOutput(XPOWERS_VBACKUP);
+
+        // Set constant current charge current limit
+        PMU->setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_500MA);
+
+        // Set charge cut-off voltage
+        PMU->setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V2);
+        
+        #else
+
         Serial.printf("[INIT]...AXP2101 chip\n");
         // Unuse power channel
         PMU->disablePowerOutput(XPOWERS_DCDC2);
@@ -242,6 +311,8 @@ void setupGPS(bool bGPSON)
         // PMU->enableSystemVoltageMeasure();
         PMU->enableVbusVoltageMeasure();
         PMU->enableBattVoltageMeasure();
+
+        #endif
 
         Serial.printf("=======================================================================\n");
         if (PMU->isChannelAvailable(XPOWERS_DCDC1)) {
@@ -298,7 +369,9 @@ void setupGPS(bool bGPSON)
         }
         Serial.printf("=======================================================================\n");
 
-        BOARD_HARDWARE = TBEAM_AXP2101;
+        #ifndef BOARD_TBEAM_V3
+            BOARD_HARDWARE = TBEAM_AXP2101;
+        #endif
         
         Serial.println("[INIT]...All AXP2101 started");
     }
@@ -317,6 +390,12 @@ void setupGPS(bool bGPSON)
 unsigned int readGPS(void)
 {
     //Serial.println("readGPS");
+
+    #if defined(GPS_WAKEUP)
+        pinMode(GPS_WAKEUP, OUTPUT);
+        digitalWrite(GPS_WAKEUP, HIGH);
+        delay(200);
+    #endif
     
     String tmp_data = "";
 

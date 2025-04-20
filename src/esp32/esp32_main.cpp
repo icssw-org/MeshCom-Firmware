@@ -14,6 +14,8 @@
 #include "esp32_gps.h"
 #include "esp32_flash.h"
 
+#include "gps_l76k.h"
+
 // Sensors
 #include "bmx280.h"
 #include "bme680.h"
@@ -248,14 +250,14 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 
 #endif
 
-#ifdef SX126X_V3
+#ifdef SX1262_V3
     // RadioModule SX1262
     // cs - irq - reset - interrupt gpio
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
     //  begin(sck, miso, mosi, ss).
-    SX1262 radio = new Module(SX126X_CS, SX126X_IRQ, SX126X_RST, LORA_DIO2);
+    SX1262 radio = new Module(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
 
 #endif
 
@@ -296,6 +298,8 @@ unsigned long retransmit_timer = 0;
 
 // flag to update NTP Time
 unsigned long updateTimeClient = 0;
+
+bool bLED=true;
 
 #if defined(ESP8266) || defined(ESP32)
   ICACHE_RAM_ATTR
@@ -392,15 +396,32 @@ int delay_bme680 = 0;
 void esp32setup()
 {
     Serial.begin(MONITOR_SPEED);
-    //while(!Serial);
+    int isc=10;
+    while(!Serial && isc > 0)
+    {
+        delay(1000);
 
-    delay(1500);
+        isc--;
+    }
+
+    Wire.begin(I2C_SDA, I2C_SCL);
+    
+    #ifdef PMU_USE_WIRE1
+        Wire1.begin(I2C1_SDA, I2C1_SCL);
+    #endif
+
+    delay(4500);
 
     Serial.println("");
     Serial.println("");
     Serial.println("============");
     Serial.println("CLIENT SETUP");
     Serial.println("============");
+
+    heap = ESP.getFreeHeap();
+    Serial.printf("[HEAP]...%d\n", heap);
+
+    initDisplay();
 
     // init nach Reboot
     init_loop_function();
@@ -557,11 +578,11 @@ void esp32setup()
         bSETGPS_POWER=true;
     #endif
 
-    #if defined(MODUL_FW_TBEAM)
-        setupGPS(bSETGPS_POWER);
+    #ifdef BOARD_TBEAM_V3
+        setupPMU(bSETGPS_POWER);
+        setupL76KGPS();
     #else
-        Wire.begin(I2C_SDA, I2C_SCL);
-        //Wire.begin();
+        setupPMU(bSETGPS_POWER);
     #endif
 
     #if defined(ENABLE_BMX280)
@@ -607,10 +628,6 @@ void esp32setup()
         init_onewire();
 
 
-    //#if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)  || defined(BOARD_E22)
-    //    Wire.setPins(I2C_SDA, I2C_SCL);
-    //#endif
-
     initButtonPin();
     
     Serial.printf("[INIT]..._GW_ID: %08X\n", _GW_ID);
@@ -639,8 +656,6 @@ void esp32setup()
     radio.setRfSwitchPins(RXEN, TXEN);
 #endif
 
-    initDisplay();
-    
     startDisplay((char*)"...starting now", (char*)"@by icssw.org", (char*)"OE1KBC, OE1KFR");
 
     bool bRadio=false;
@@ -663,7 +678,7 @@ void esp32setup()
     Serial.print(F("[LoRa]...SX1268 chip"));
     #endif
     
-    #ifdef SX126X_V3
+    #ifdef SX1262_V3
     Serial.print(F("[LoRa]...SX1262 V3 chip"));
     #endif
     
@@ -708,7 +723,7 @@ void esp32setup()
         lora_setcountry(meshcom_settings.node_country);
 
         // set boosted gain
-        #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+        #if defined(SX1262_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
         Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
         if (radio.setRxBoostedGainMode(meshcom_settings.node_sset2 & 0x0800)  != RADIOLIB_ERR_NONE ) {
             Serial.println(F("Boosted Gain is not available for this module!"));
@@ -876,7 +891,7 @@ void esp32setup()
         }
         #endif
 
-        #if defined(SX126X_V3) || defined(SX1262_E290)
+        #if defined(SX1262_V3) || defined(SX1262_E290)
 
             // set Receive Interupt
             bEnableInterruptReceive = true; //KBC 0801
@@ -1064,6 +1079,10 @@ void esp32setup()
     //
     ///////////////////////////////////////////////////////
 
+    #ifdef BOARD_LED
+        pinMode(BOARD_LED, OUTPUT);
+    #endif
+
 }
 
 // BLE TX Function -> Node to Client
@@ -1080,6 +1099,15 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
+    #ifdef BOARD_LED
+        if(bLED)
+            digitalWrite(BOARD_LED, HIGH);
+        else
+            digitalWrite(BOARD_LED, LOW);
+
+        bLED = !bLED;
+    #endif
+
     if(inoReceiveTimeOutTime > 0)
     {
         // Timeout RECEIVE_TIMEOUT
@@ -1556,7 +1584,13 @@ void esp32loop()
         }
 
         #ifdef ENABLE_GPS
-            unsigned int igps = (unsigned int)getGPS();
+            
+            #ifdef BOARD_TBEAM_V3
+                unsigned int igps = loopL76KGPS();
+            #else
+                unsigned int igps = (unsigned int)getGPS();
+            #endif
+
             if(igps > 0)
                 posinfo_interval = igps;
             else
@@ -1657,9 +1691,11 @@ void esp32loop()
         if (millis() > DisplayOffWait)
         {
             DisplayOffWait = 0;
-            bDisplayOff=true;
-            commandAction((char*)"--display off", isPhoneReady, false);
-            sendDisplay1306(true, true, 0, 0, (char*)"#C");
+            if(bDisplayOff)
+            {
+                bDisplayIsOff=true;
+                sendDisplay1306(true, true, 0, 0, (char*)"#C");
+            }
         }
     }
 
@@ -1730,6 +1766,12 @@ void esp32loop()
                     Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
                 }
             #endif
+
+            if(bDisplayCont)
+            {
+                heap = ESP.getFreeHeap();
+                Serial.printf("[HEAP]...%d\n", heap);
+            }
 
             BattTimeWait = millis();
         }
