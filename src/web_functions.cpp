@@ -1804,27 +1804,24 @@ String work_webpage(bool bget_password, int webid)
                 // SPECTRUM
                 if(web_page_state == 10)
                 {
-                    #if defined(SX1262X) || defined(SX126X) || defined(SX126X_V3) || defined(SX1262_E290)
-                    float node_specstart = 432.0;       // scan start frequency
-                    float node_specend = 434.0;         // scan end frequency
-                    float node_specstep = 0.025;        // scan frequency step (the scanner will scan a frequency span of 234.4kHz so we need to use the same or a lower step width)
-                    uint16_t node_specsamples = 2048;   // amount of samples taken for each frequency step
+                    #if defined(SX1262X) || defined(SX126X) || defined(SX1262_V3) || defined(SX1262_E290)
+                    float spec_curr_freq = meshcom_settings.node_specstart;       // scan start frequency
                     
                     uint16_t step_pixel_width = 10;     // the amout of pixel we use for a single frequency step
                     uint16_t step_pixel_height = 10;    // the amout of pixel we use for a single frequency step
 
-                    uint16_t num_fsteps = roundf((node_specend-node_specstart) / node_specstep);
+                    uint16_t num_fsteps = roundf((meshcom_settings.node_specend-spec_curr_freq) / meshcom_settings.node_specstep);
                     uint16_t current_fStep = 0;         // current iteration  counter
                     uint16_t start_x = 60;              // x-position where the diagramm starts
                     uint16_t start_y = 10;              // y-position where the diagramm starts
                     uint16_t end_x = start_x + ((num_fsteps+1)*step_pixel_width);   //calculate the end. Use one more fstep as the last frequency step also starts a scan and giving a result 
                     uint16_t end_y = start_y + (RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE * step_pixel_height);
                     
-                    uint16_t own_freq_marker_width = round(((meshcom_settings.node_bw/1000) / node_specstep) * step_pixel_width);
-                    uint16_t own_freq_marker_center = start_x + (((meshcom_settings.node_freq - node_specstart) / node_specstep) * step_pixel_width);
+                    uint16_t own_freq_marker_width = round(((meshcom_settings.node_bw/1000) / meshcom_settings.node_specstep) * step_pixel_width);
+                    uint16_t own_freq_marker_center = start_x + (((meshcom_settings.node_freq - spec_curr_freq) / meshcom_settings.node_specstep) * step_pixel_width);
                     uint16_t own_freq_marker_start = own_freq_marker_center - (own_freq_marker_width/2);
 
-                    if(sx126x_spectral_init_scan(node_specstart) != RADIOLIB_ERR_NONE) {
+                    if(sx126x_spectral_init_scan(spec_curr_freq) != RADIOLIB_ERR_NONE) {
                         web_client.println("<p>unable to initialize spectrum scan</p>");
                     } else {
                         web_client.printf("<svg viewbox=\"0, 0, %d, %d\" id=\"spectrum_display\">", end_x+40, end_y+60);
@@ -1846,11 +1843,11 @@ String work_webpage(bool bget_password, int webid)
                         }
 
 
-                        while(node_specstart < node_specend) {                                                  // loop through the frequency range
-                            uint16_t *res = sx126x_spectral_scan_freq(node_specstart, node_specsamples);        // get spectrum analysis for this given frequency
+                        while(spec_curr_freq < meshcom_settings.node_specend) {                                                  // loop through the frequency range
+                            uint16_t *res = sx126x_spectral_scan_freq(spec_curr_freq, meshcom_settings.node_specsamples);        // get spectrum analysis for this given frequency
                             for (uint8_t i = 0; i < RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE; i++){               // loop through the power bins (usually 33)
                               if(res[i] > 0) {                                                                  // did the scan found anything above zero?
-                                float alpha = (res[i]/node_specsamples);                                        // calculate the alpha-value (transperancy) ranging 0.0 - 1.0
+                                float alpha = (res[i]/meshcom_settings.node_specsamples);                                        // calculate the alpha-value (transperancy) ranging 0.0 - 1.0
                                 if(alpha < 0.2) alpha = 0.2;                                                    // use a minimum of alpha. Smaller values might be hard to see   
                                 web_client.printf("<rect width=\"%d\" height=\"%d\" x=\"%d\" y=\"%d\" fill=\"rgba(0,0,0,%0.3f)\"/>", step_pixel_width, step_pixel_height,  start_x+(current_fStep*step_pixel_width),  start_y+(i*step_pixel_height), alpha);
                               }
@@ -1860,13 +1857,13 @@ String work_webpage(bool bget_password, int webid)
                             if(current_fStep % 5 == 0)                                                          // draw axis line every 5 steps
                                 web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:grey; stroke-width:1\"/>\n", start_x+(current_fStep*step_pixel_width), end_y, start_x+(current_fStep*step_pixel_width), end_y+10);   //axis lines for X-axis
                             if(current_fStep % 10 == 0)                                                         // draw axis title every 10 steps
-                                web_client.printf("<text x=\"%d\" y=\"%d\" style=\"font-size: 12px; color: black;\">%.3f</text>\n", start_x+(current_fStep*step_pixel_width)-10, end_y+25, node_specstart );    //axis title for X-axis (frequency)
+                                web_client.printf("<text x=\"%d\" y=\"%d\" style=\"font-size: 12px; color: black;\">%.3f</text>\n", start_x+(current_fStep*step_pixel_width)-10, end_y+25, spec_curr_freq );    //axis title for X-axis (frequency)
                             
 
                             delay(50);  //lets wait for a moment (the example code used 100ms but 50ms seems to work, too)
                             yield();    //this loop runs for a long time, pet the watchdog and give other tasks a chance to operate
                             current_fStep++;                                                                                
-                            node_specstart+=node_specstep;
+                            spec_curr_freq+=meshcom_settings.node_specstep;
                         }
 
                         web_client.println("</svg>");
