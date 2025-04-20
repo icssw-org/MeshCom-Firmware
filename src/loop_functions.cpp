@@ -21,6 +21,8 @@ int BOARD_HARDWARE = MODUL_HARDWARE;
 
 extern unsigned long rebootAuto;
 
+uint32_t heap = 0;
+
 int iWlanWait = 0;
 
 extern float global_batt;
@@ -36,6 +38,7 @@ bool bIODEBUG = false;
 
 bool bPosDisplay = true;
 bool bDisplayOff = false;
+bool bDisplayIsOff = false;
 bool bDisplayVolt = false;
 bool bDisplayInfo = false;
 bool bDisplayCont = false;
@@ -703,7 +706,7 @@ void sendDisplayHead(bool bInit)
 
     bSetDisplay=true;
 
-    if(bDisplayOff)
+    if(bDisplayIsOff)
     {
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
@@ -745,7 +748,7 @@ void sendDisplayTrack()
 
     bSetDisplay=true;
 
-    if(bDisplayOff)
+    if(bDisplayIsOff)
     {
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
@@ -784,7 +787,7 @@ void sendDisplayWX()
 
     bSetDisplay=true;
 
-    if(bDisplayOff)
+    if(bDisplayIsOff)
     {
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
@@ -839,7 +842,7 @@ void sendDisplayTime()
 
     //TEST ONLY Serial.printf("Time bDisplayOff:%i iDisplayType:%i bSetDisplay:%i\n", bDisplayOff, iDisplayType, bSetDisplay);
 
-    if(bDisplayOff)
+    if(bDisplayIsOff)
         return;
 
     if(iDisplayType == 0)
@@ -943,13 +946,11 @@ void mainStartTimeLoop()
     {
         if(iInitDisplay == 4)
         {
-            bool bsDisplayOff = bDisplayOff;
-
-            bDisplayOff = false;
+            bDisplayIsOff = false;
 
             sendDisplayHead(true);
 
-            bDisplayOff = bsDisplayOff;
+            bDisplayIsOff = bDisplayOff;
 
             DisplayTimeWait=0;
         }
@@ -1142,17 +1143,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     bSetDisplay=true;
 
-    // wenn Display ausgeschalten werden bei GATWAYs keine Anzeigen gemaacht
-    // ist nicht gewünscht
-    //if(bDisplayOff && bGATEWAY)
-    //    return;
-
-    //if(bDisplayOff) // issue #287
-    {
-        DisplayOffWait = millis() + (30 * 1000); // 30 seconds
-        bDisplayOff=false;
-        commandAction((char*)"--display on", isPhoneReady, false);
-    }
+    ///////////////////////////////////////////////////////////
+    // text immer 30 sec stehenlassen und Display immer ON
+    DisplayOffWait = millis() + (30 * 1000); // 30 seconds
+    bDisplayIsOff=false;
+    //
+    ///////////////////////////////////////////////////////////
     
     iDisplayType = 0;
 
@@ -1374,7 +1370,7 @@ void checkAnalogValue()
         if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin > 99)
             ANAGPIO = ANALOG_PIN;
 
-        float raw = (float)(analogRead(ANAGPIO));
+        float raw = (float)(analogReadMilliVolts(ANAGPIO));
         fAnalogValue = raw  * meshcom_settings.node_analog_faktor;
         
         if(bDEBUG && bDisplayInfo)
@@ -1384,7 +1380,9 @@ void checkAnalogValue()
         }
     }
     else
+    {
         fAnalogValue = 0.0;
+    }
 
     #endif
 }
@@ -1486,7 +1484,7 @@ void checkButtonState()
 
                     bDisplayTrack=!bDisplayTrack;
 
-                    bDisplayOff=false;
+                    bDisplayIsOff=false;
 
                     if(bDisplayTrack)
                         commandAction((char*)"--track on", false);
@@ -1522,7 +1520,7 @@ void checkButtonState()
                                 pagePointer = PAGE_MAX - 1;
 
                             if(bDisplayCont)
-                                Serial.printf("BUTTON singel press bShowHead %i bDisplayOff:%i\n", pagePointer, bDisplayOff);
+                                Serial.printf("BUTTON singel press bShowHead %i bDisplayIsOff:%i\n", pagePointer, bDisplayIsOff);
 
                             sendDisplayHead(true);
                             bShowHead=true;
@@ -1552,9 +1550,7 @@ void checkButtonState()
                     }
                     else
                     {
-                        bDisplayOff=false;
-
-                        commandAction((char*)"--display on", isPhoneReady, false);
+                        bDisplayIsOff=false;
 
                         pageLineAnz = pageLastLineAnz[pagePointer];
                         for(int its=0;its<pageLineAnz;its++)
@@ -1625,7 +1621,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     bSetDisplay=true;
 
-    if(bDisplayOff)
+    if(bDisplayIsOff)
     {
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;

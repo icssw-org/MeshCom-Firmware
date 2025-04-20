@@ -9,6 +9,8 @@ extern unsigned long rebootAuto;
 
 extern int iWlanWait;
 
+extern uint32_t heap;
+
 extern bool bSetLoRaAPRS;
 
 extern bool bDEBUG;
@@ -19,6 +21,7 @@ extern bool bIODEBUG;
 
 extern bool bPosDisplay;
 extern bool bDisplayOff;
+extern bool bDisplayIsOff;
 extern bool bDisplayVolt;
 extern bool bDisplayInfo;
 extern bool bDisplayCont;

@@ -261,13 +261,13 @@ float read_batt(void)
 		pinMode(23, OUTPUT);
   		pinMode(vbat_pin, INPUT);
   
-   		raw = (float)(analogRead(vbat_pin)) / 4095*2*3.3*1.1;
+   		raw = (float)(analogReadMilliVolts(vbat_pin)) / 4095*2*3.3*1.1;
 		
 		// Serial.printf("ADC analog value = <%f>\n", raw);
 
 	#elif defined(BOARD_E290)
 
-   		uint16_t battery_levl = analogRead(vbat_pin);
+   		uint16_t battery_levl = analogReadMilliVolts(vbat_pin);
 		
 		//Serial.printf("ADC analog value = <%i>\n", battery_levl);
 	
@@ -292,7 +292,7 @@ float read_batt(void)
 		digitalWrite(ADC_CTRL_PIN,HIGH);
 
 		delay(100);
-		int analogValue = analogRead(vbat_pin);
+		int analogValue = analogReadMilliVolts(vbat_pin);
 		
 		//V3.1 digitalWrite(ADC_CTRL_PIN, HIGH);
 		digitalWrite(ADC_CTRL_PIN, LOW);

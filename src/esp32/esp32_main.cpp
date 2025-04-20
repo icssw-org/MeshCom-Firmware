@@ -418,6 +418,9 @@ void esp32setup()
     Serial.println("CLIENT SETUP");
     Serial.println("============");
 
+    heap = ESP.getFreeHeap();
+    Serial.printf("[HEAP]...%d\n", heap);
+
     initDisplay();
 
     // init nach Reboot
@@ -1688,9 +1691,11 @@ void esp32loop()
         if (millis() > DisplayOffWait)
         {
             DisplayOffWait = 0;
-            bDisplayOff=true;
-            commandAction((char*)"--display off", isPhoneReady, false);
-            sendDisplay1306(true, true, 0, 0, (char*)"#C");
+            if(bDisplayOff)
+            {
+                bDisplayIsOff=true;
+                sendDisplay1306(true, true, 0, 0, (char*)"#C");
+            }
         }
     }
 
@@ -1761,6 +1766,12 @@ void esp32loop()
                     Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
                 }
             #endif
+
+            if(bDisplayCont)
+            {
+                heap = ESP.getFreeHeap();
+                Serial.printf("[HEAP]...%d\n", heap);
+            }
 
             BattTimeWait = millis();
         }
