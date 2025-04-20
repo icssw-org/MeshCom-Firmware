@@ -23,13 +23,14 @@
 #include "spectral_scan.h"
 #include "lora_setchip.h"
 #include "esp32/esp32_flash.h"
+#include <RadioLib.h>
 
 using namespace std;
 
-#if defined(SX1262X) || defined(SX126X) || defined(SX1262_E290)
+#if defined(SX1262X) || defined(SX126X) || defined(SX126X_V3) || defined(SX1262_E290)
 
 // include the library
-#include <RadioLib.h>
+
 
 // this file contains binary patch for the SX1262
 #include <modules/SX126x/patches/SX126x_patch_scan.h>
@@ -180,10 +181,11 @@ void sx126x_spectral_scan()
   return;
 }
 
-uint16_t *scan_freq(float freq)[
+uint16_t *scan_freq(float freq) {
     // Serial.print(F("Spectral scan not implemented for this plattform ... "));
-    return (uint16_t[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE]){0}; // return an array with zeros
-]
+    uint16_t *results = new uint16_t[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE]{0};
+    return results; // return an array with zeros
+};
 
     int init_scan(float freq)
 {
