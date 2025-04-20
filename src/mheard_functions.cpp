@@ -19,8 +19,8 @@ uint8_t mheardPathLen[MAX_MHPATH];
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 uint8_t mheardPathWrite = 0;   // counter for ringbuffer
 
-#define max_hardware 18
-String HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "TDECK", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "TBEAM_AXP2101", "EBYTE_E22", "HELTEC_V3", "HELTEC_E290", "TBEAM_1262", "TDECK_PLUS"};
+#define max_hardware 19
+String HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "TDECK", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "TBEAM_AXP2101", "EBYTE_E22", "HELTEC_V3", "HELTEC_E290", "TBEAM_1262", "TDECK_PLUS", "TBEAM_SL76K"};
 
 void initMheard()
 {
@@ -459,6 +459,8 @@ String getHardwareLong(uint8_t hwid)
         ihw=16;
     if(ihw == 46)
         ihw=17;
+    if(ihw == 47)
+        ihw=18;
     if(ihw < 0 || ihw >= max_hardware)
         ihw=0;
 

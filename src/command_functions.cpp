@@ -561,6 +561,7 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"display on") == 0)
     {
         bDisplayOff=false;
+        bDisplayIsOff=false;
         bPosDisplay=true;
 
         meshcom_settings.node_sset = (meshcom_settings.node_sset & 0x7FFD) | 0x0004;   // both off + set bDisplyOff
@@ -580,6 +581,7 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"display off") == 0)
     {
         bDisplayOff=true;
+        bDisplayIsOff=true;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0002;   // both off + set bDisplyOff
 
@@ -2912,7 +2914,8 @@ void commandAction(char *msg_text, bool ble)
             wdoc["VSHUNT"] = meshcom_settings.node_vshunt;
             wdoc["VAMP"] = meshcom_settings.node_vcurrent;
             wdoc["VPOW"] = meshcom_settings.node_vpower;
-    
+            wdoc["ADC"] = fAnalogValue;
+             
             // reset print buffer
             memset(print_buff, 0, sizeof(print_buff));
 

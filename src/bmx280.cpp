@@ -126,10 +126,26 @@ void setupBMX280(bool bNewStart)
 	}
 
   	if(bBMPON)
-    	bmx_i2c_address = I2C_ADDRESS_BMP;
+	{
+		#ifdef BOARD_TBEAM_V3
+			bmx_i2c_address = 0x77;
+			Wire.end();
+			Wire.begin(I2C_SDA, I2C_SCL);
+		#else
+			bmx_i2c_address = I2C_ADDRESS_BMP;
+		#endif
+	}
   	else
     	if(bBMEON)
-      		bmx_i2c_address = I2C_ADDRESS_BME;
+		{
+			#ifdef BOARD_TBEAM_V3
+				bmx_i2c_address = 0x77;
+				Wire.end();
+				Wire.begin(I2C_SDA, I2C_SCL);
+			#else
+      			bmx_i2c_address = I2C_ADDRESS_BME;
+			#endif
+		}
     	else
       		return;
 
@@ -187,7 +203,13 @@ bool loopBMX280()
 	if(!bmx_found)
 		return false;
 
-	Wire.endTransmission(true);
+	#ifdef BOARD_TBEAM_V3
+		Wire.end();
+		Wire.begin(I2C_SDA, I2C_SCL);
+	#else
+		Wire.endTransmission(true);
+	#endif
+
 
 	//start a measurement
 	if (!bmx280.measure())
