@@ -1019,6 +1019,10 @@ void mainStartTimeLoop()
                     sendDisplayTime(); // Time only
                 }
 
+                #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+                tdeck_update_time_label();
+                #endif
+
                 DisplayTimeWait = meshcom_settings.node_date_second;
             }
             else
@@ -3157,6 +3161,11 @@ int conv_fuss(int alt_meter)
     fuss = fuss * 3.28084;
     int ifuss = fuss + 5;
     return ifuss / 10;
+}
+
+int conv_meter(int alt_fuss)
+{
+    return (int)((float)alt_fuss * 0.3048);
 }
 
 bool checkMesh()

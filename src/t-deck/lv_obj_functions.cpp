@@ -14,6 +14,7 @@
 #include "tdeck_extern.h"
 #include "lv_obj_functions_extern.h"
 #include "tdeck_helpers.h"
+#include <loop_functions_extern.h>
 
 #include "event_functions.h"
 #include <lora_setchip.h>
@@ -950,18 +951,18 @@ int getMapDropboxID(String strMap)
  */
 
 /**
- * TODO
+ * add a point to the map
  */
 void add_map_point(String callsign, double dlat, double dlon, bool bHome)
 {
-    if(DO_DEBUG)
-        Serial.printf("[MAP]...check add call:%s\n", callsign.c_str());
+    if(bDEBUG)
+        Serial.printf("[MAP]...check add call: %s\n", callsign.c_str());
  
     int ipoint = 0;
  
     bool bFound = false;
 
-    for(int ip =0; ip<MAX_POINTS; ip++)
+    for(int ip = 0; ip < MAX_POINTS; ip++)
     {
         if(map_point_call[ip] == callsign)
         {
@@ -986,12 +987,12 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     // check on map
     if(dlat > map_lat_min[meshcom_settings.node_map] || dlat < map_lat_max[meshcom_settings.node_map])
     {
-        Serial.printf("[MAP]...LAT:%.4lf not on map:%.4lf\n");
+        Serial.printf("[MAP]...LAT: %.4lf not on map: %i\n", dlat, meshcom_settings.node_map);
     }
 
     if(dlon < map_lon_min[meshcom_settings.node_map] || dlon > map_lon_max[meshcom_settings.node_map])
     {
-        Serial.printf("[MAP]...LON:%.4lf not on map:%.4lf\n");
+        Serial.printf("[MAP]...LON: %.4lf not on map: %i\n", dlon, meshcom_settings.node_map);
     }
 
     double latdiff = map_lat_min[meshcom_settings.node_map] - map_lat_max[meshcom_settings.node_map];
@@ -1053,10 +1054,11 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 1, 0);
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     */
+    refresh_map(meshcom_settings.node_map);
 }
 
 /**
- * TODO
+ * initializes the default maps
  */
 void init_map()
 {
@@ -1103,19 +1105,20 @@ void init_map()
         map_pos_call[im] = "";
     }
 
-    map_point_count=0;
+    map_point_count = 0;
 
 }
+
 /**
- * 
+ * redraws the map
  */
 void refresh_map(int iMap)
 {
-    if(DO_DEBUG)
+    if(bDEBUG)
         Serial.printf("[MAP]...set to %i - %s\n", iMap, getMap(iMap).c_str());
 
     // pos update
-    for(int im=0; im<MAX_POINTS; im++)
+    for(int im = 0; im < MAX_POINTS; im++)
     {
         if(map_pos_call[im].length() > 0)
         {
@@ -1129,13 +1132,13 @@ void refresh_map(int iMap)
 }
 
 /**
- * TODO
+ * sets a map as active
  */
 void set_map(int iMap)
 {
     // strMaps[max_map] = {"Europe", "Germany", "Austria", "OE3"};
 
-    if(DO_DEBUG)
+    if(bDEBUG)
         Serial.printf("[MAP]...set to %i - %s\n", iMap, getMap(iMap).c_str());
 
     switch (iMap)
@@ -1190,7 +1193,7 @@ void set_map(int iMap)
 void tft_on()
 {
     resetBrightness();
-    tft_timer = millis();
+    tdeck_tft_timer = millis();
 }
 
 /**
@@ -1199,4 +1202,153 @@ void tft_on()
 void tft_off()
 {
     setBrightness(0);
+}
+
+
+/**
+ * update the battery label
+ */
+void tdeck_update_batt_label(float batt, float proz)
+{
+    char vChar[35];
+
+    if (posinfo_fix)
+    {
+        snprintf(vChar, sizeof(vChar), "Batt: %.2fV (%i%%) SAT:%i", batt, proz, posinfo_satcount);
+    }
+    else
+    {
+        snprintf(vChar, sizeof(vChar), "Batt: %.2fV (%i%%)", batt, proz);
+    }
+
+    if(batt > meshcom_settings.node_maxv)
+    {
+        if(posinfo_fix > 0)
+        {
+            snprintf(vChar, sizeof(vChar), "Batt: USB SAT:%i", posinfo_satcount);
+        }
+        else
+        {
+            snprintf(vChar, sizeof(vChar), "Batt: USB");
+        }
+    }
+
+    lv_label_set_text(btn_batt_label, vChar);
+    lv_label_set_text(btn_batt_label1, vChar);
+    lv_label_set_text(btn_batt_label2, vChar);
+}
+
+/**
+ * update the time label
+ */
+void tdeck_update_time_label()
+{
+    char cTime[50];
+    sprintf(cTime, "%i-%02i-%02i %02i:%02i:%02i", 
+        meshcom_settings.node_date_year,
+        meshcom_settings.node_date_month,
+        meshcom_settings.node_date_day,
+        meshcom_settings.node_date_hour,
+        meshcom_settings.node_date_minute,
+        meshcom_settings.node_date_second);
+
+    lv_label_set_text(btn_time_label, cTime);
+    lv_label_set_text(btn_time_label1, cTime);
+    lv_label_set_text(btn_time_label2, cTime);
+    //lv_label_set_text(btn_time_label3, cTime);
+}
+
+/**
+ * add a point to map position
+ */
+void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c)
+{
+    if (bDEBUG)
+    {
+        Serial.printf("[MAP]...add position point call:%s\n", callsign.c_str());
+    }
+
+    double dlat = u_dlat;
+    if(lat_c == 'W')
+        dlat = u_dlat * -1.0;
+
+    double dlon = u_dlon;
+    if(lon_c == 'S')
+        dlon = u_dlon * -1.0;
+
+    for(int ip = 0; ip < MAX_POINTS; ip++)
+    {
+        if(map_pos_call[ip] == callsign)
+        {
+            if(map_pos_lat[ip] == dlat && map_pos_lon[ip] == dlon)
+                return;
+
+            map_pos_lat[ip] = dlat;
+            map_pos_lon[ip] = dlon;
+
+            bool bHome=false;
+            if (map_pos_call[map_pos_count].compareTo(meshcom_settings.node_call) == 0)
+                bHome=true;
+
+            add_map_point(callsign, dlat, dlon, bHome);
+
+            return;
+        }
+    }
+
+    map_pos_call[map_pos_count] = callsign;
+    map_pos_lat[map_pos_count] = dlat;
+    map_pos_lon[map_pos_count] = dlon;
+
+    bool bHome=false;
+    if(map_pos_call[map_pos_count].compareTo(meshcom_settings.node_call) == 0)
+        bHome=true;
+    
+    add_map_point(callsign, dlat, dlon, bHome);
+    
+    map_pos_count++;
+    if (map_pos_count >= MAX_POINTS)
+        map_pos_count = 1;
+}
+
+/**
+ * adds a position to the POS view
+ */
+void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c, int alt)
+{
+    char buf[2000];
+
+    double dlat = u_dlat;
+    if(lat_c == 'W')
+        dlat = u_dlat * -1.0;
+
+    double dlon = u_dlon;
+    if(lon_c == 'S')
+        dlon = u_dlon * -1.0;
+
+    // Tabelle push down
+    if(posrow < MAX_POSROW)
+    {
+        posrow++;
+        lv_table_set_row_cnt(position_ta, posrow);
+    }
+
+    if(posrow > 2)
+    {
+        for(int pos_push = posrow - 1; pos_push > 1; pos_push--)
+        {
+            lv_table_set_cell_value(position_ta, pos_push + 1, 0, lv_table_get_cell_value(position_ta, pos_push, 0));
+            lv_table_set_cell_value(position_ta, pos_push + 1, 1, lv_table_get_cell_value(position_ta, pos_push, 1));
+            lv_table_set_cell_value(position_ta, pos_push + 1, 2, lv_table_get_cell_value(position_ta, pos_push, 2));
+        }
+    }
+
+    snprintf(buf, 10, "%s", callsign);
+    lv_table_set_cell_value(position_ta, 2, 0, buf);
+
+    snprintf(buf, 6, "%02i:%02i", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute);
+    lv_table_set_cell_value(position_ta, 2, 1, buf);
+
+    snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", dlat, lat_c, dlon, lon_c, alt);
+    lv_table_set_cell_value(position_ta, 2, 2, buf);
 }

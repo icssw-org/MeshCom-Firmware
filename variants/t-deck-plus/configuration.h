@@ -25,6 +25,7 @@
 #define TX_POWER_MIN 5
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
+#define TDECK_TFT_TIMEOUT 30  // time until display turns dark in seconds
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 #define TX_OUTPUT_POWER 21  // SX1268 have up to +22dBm
@@ -115,6 +116,7 @@
 // T-Deck GUI configuration
 #define MAX_MAP 5                          // max count of maps
 #define MAX_POINTS 30                      // max count of points
+#define MAX_POSROW 40                       // max numbers of rows in POS view
 
 
 // OE3GJC TODO replace

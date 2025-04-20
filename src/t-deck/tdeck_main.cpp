@@ -32,6 +32,7 @@ using namespace ace_button;
 #include "lv_obj_functions.h"
 #include "lv_obj_functions_extern.h"
 #include "tdeck_helpers.h"
+#include <loop_functions_extern.h>
 
 #define I2S_CH I2S_NUM_1
 
@@ -39,9 +40,6 @@ AceButton button;
 SemaphoreHandle_t xSemaphore = NULL;
 TFT_eSPI tft;
 TouchDrvGT911 touch;
-
-uint16_t posrow;
-#define MAX_POSROW 40
 
 bool kbDected = false;
 
@@ -600,7 +598,7 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
                 act_key = 0x2e;
         }
     
-        if(DO_DEBUG)
+        if(bDEBUG)
             Serial.printf("Key pressed : iKeyBoardType:%i 0x%x\n", iKeyBoardType, act_key);
 
         if(!bKBLOCK)
