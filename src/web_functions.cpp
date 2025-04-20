@@ -2196,6 +2196,12 @@ String work_webpage(bool bget_password, int webid)
                         // OTA-UPDATE
                         web_client.println("<td><a href=\"/otaupdate\"><button class=\"button\"><b>OTA-UPDATE</b></button></a></td>");
                     }
+
+                    if(web_page_state == 0 || web_page_state == 10)
+                    {
+                        // OTA-UPDATE
+                        web_client.println("<td><a href=\"/spectrum\"><button class=\"button\"><b>SPECTRUM</b></button></a></td>");
+                    }
                 #endif
 
                 // REBOOT
