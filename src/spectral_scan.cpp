@@ -322,40 +322,37 @@ void sx126x_spectral_finish_scan()
 
 
 
-
 /**
  * ###########################################################################################################################
  * Starts the scan of a small frequency span beginning with the frequency defined as parameter "freq" and the scan width of 200kHz
  * @param freq the starting frequency of the 200kHz span to scan
+ * @param samples the amount of samples taken (fewer samples = better temporal resolution)
  * @return an array containing the results
  */
-uint16_t *sx126x_spectral_scan_freq(float freq)
+uint16_t *sx126x_spectral_scan_freq(float freq, uint16_t samples)
 {
   uint16_t *results = new uint16_t[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE]; // initialize array with zeros, we will return the array containing zeros if anything goes wrong
-
   if (radio.setFrequency(freq) == RADIOLIB_ERR_NONE)
   {
     // start spectral scan
-    // number of samples: 2048 (fewer samples = better temporal resolution)
-    if (radio.spectralScanStart(2048) == RADIOLIB_ERR_NONE)
-    { // if scan started without an error
-      // wait for spectral scan to finish
-      while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE)
-      {
+    if (radio.spectralScanStart(samples) == RADIOLIB_ERR_NONE)
+    { // if scan started without an error, wait for spectral scan to finish
+      while (radio.spectralScanGetStatus() != RADIOLIB_ERR_NONE){
         delay(10);
       }
 
       // read the results
-      if (radio.spectralScanGetResult(results) == RADIOLIB_ERR_NONE)
-      {
+      if (radio.spectralScanGetResult(results) == RADIOLIB_ERR_NONE){
         return results;
       }
     }
   }
 
   // if we reach this point, something went wrong
-  return results; // return an array with zeros
+  return results; // return an array of zeros
 }
+
+
 
 /**
  * ###########################################################################################################################
@@ -366,23 +363,21 @@ uint16_t *sx126x_spectral_scan_freq(float freq)
  */
 void sx126x_spectral_scan()
 {
-  // frequency range in MHz to scan
-  const float freqStart = 430.0;
-  const float freqEnd = 440.2;
+  
+  float freqStart = 430.0;          // scan start frequency in MHz 
+  const float freqEnd = 440.2;      // scan end frequency in MHz 
+  const float samples = 2048;       // amount of samples to be taken
 
-  float freq = freqStart;
+  sx126x_spectral_init_scan(freqStart);
 
-
-  sx126x_spectral_init_scan(freq);
-
-  while (freq <= freqEnd)
+  while (freqStart <= freqEnd)
   {
     Serial.print("FREQ ");
-    Serial.println(freq, 2);
+    Serial.println(freqStart, 2);
     Serial.print(F("[SX1262] Starting spectral scan ... \n"));
     // get the results
     uint16_t *res;
-    res = sx126x_spectral_scan_freq(freq);
+    res = sx126x_spectral_scan_freq(freqStart, samples);
 
     // we have some results, print it
     Serial.print("SCAN ");
@@ -399,7 +394,7 @@ void sx126x_spectral_scan()
     // set the next frequency
     // the frequency step should be slightly smaller
     // or the same as the Rx bandwidth set in setup
-    freq += 0.2;
+    freqStart += 0.2;
 
     // yield();    //pet the watchdog so it stays calm
   }

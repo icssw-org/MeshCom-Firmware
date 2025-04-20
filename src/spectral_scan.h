@@ -19,10 +19,9 @@
     extern SX1262 radio;
 #endif
 
-int sx126x_spectral_init_scan(float freq);               //initializes the scanning
-uint16_t *sx126x_spectral_scan_freq(float freq);     //scans a certain frequency range
-void sx126x_spectral_finish_scan();             //returns to normal working conditions
-
-void sx126x_spectral_scan();                    //performs a scan over a wider frequency range (430.0 MHZ-440.2 MHz)
+int sx126x_spectral_init_scan(float freq);                          // initializes the scan
+uint16_t *sx126x_spectral_scan_freq(float freq, uint16_t samples);  // scan a certain frequency range
+void sx126x_spectral_finish_scan();                                 // returns to normal LoRa working conditions
+void sx126x_spectral_scan();                                        // performs a scan over a wider frequency range (430.0 MHZ-440.2 MHz)
 
 #endif // _COMMAND_FUNCTIONS_H_
