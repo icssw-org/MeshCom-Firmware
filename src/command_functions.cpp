@@ -488,7 +488,7 @@ void commandAction(char *msg_text, bool ble)
             delay(100);
             Serial.printf("--softser   on/off/send/app/baud/fixpegel/fixpegel2/fixtemp\n");
             delay(100);
-            Serial.printf("--spectrum  run spectral scan\n");
+            Serial.printf("--spectrum  run spectral scan  --specstart MHz --specend MHz  --specstep MHz  --specsamples 500-2048\n");
             delay(100);
             //own-call-ssid:PARM.VOLT,AMPERE,BATT,,,track,-,-,-,-,-,-,-
             Serial.printf("--parm tm1,tm2,tm3,tm4,tm5 (measured value name ... not used leave blank)\n");
