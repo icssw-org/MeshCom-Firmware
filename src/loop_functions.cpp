@@ -132,7 +132,11 @@ int dzeile[6] = {16, 41, 61, 81, 101, 121};
 
 #else
 
+#ifdef BOARD_TBEAM_V3
+int dzeile[6] = {11, 24, 34, 44, 54, 64};
+#else
 int dzeile[6] = {8, 21, 31, 41, 51, 61};
+#endif
 
 U8G2 *u8g2;
 

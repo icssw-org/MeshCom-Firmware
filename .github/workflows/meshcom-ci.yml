@@ -27,9 +27,6 @@ jobs:
     - name: Install PlatformIO Core
       run: pip install --upgrade platformio
 
-    - name: Install T-BEAM S3 Supreme
-      run: pio pkg update -g -p espressif32
-
     - name: Install RAK Deps
       run: pio platform install nordicnrf52
 
