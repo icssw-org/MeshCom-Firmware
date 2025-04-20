@@ -2618,6 +2618,100 @@ void commandAction(char *msg_text, bool ble)
 
         return;
     }
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // spectrum parameter
+    // 	float node_specstart = 432.0;
+	//  float node_specend = 434.0;
+	//  float node_specstep = 0.025;
+	//  int node_specsamples = 2048;
+    //
+    else
+    if(commandCheck(msg_text+2, (char*)"specstart ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+12);
+        sscanf(_owner_c, "%f", &fVar);
+
+        if(!((fVar >= 430.0 && fVar <= (439.000)) || (fVar >= 869.4 && fVar <= 869.65)))
+        {
+            Serial.printf("Start-Frequency %.3f MHz not within Band\n", fVar);
+        }
+        else
+        {
+            Serial.printf("set Start-Frequency to %.2f MHz\n", fVar);
+
+            meshcom_settings.node_specstart=fVar;
+
+            save_settings();
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"specend ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
+        sscanf(_owner_c, "%f", &fVar);
+
+        if(!((fVar >= 430.0 && fVar <= 439.000) || (fVar >= 869.4 && fVar <= 869.65)))
+        {
+            Serial.printf("End-Frequency %.3f MHz not within Band\n", fVar);
+        }
+        else
+        {
+            Serial.printf("set End-Frequency to %.2f MHz\n", fVar);
+
+            meshcom_settings.node_specend=fVar;
+
+            save_settings();
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"specstep ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+11);
+        sscanf(_owner_c, "%f", &fVar);
+
+        if(!(fVar >= 0.1 && fVar <= 2.0))
+        {
+            Serial.printf("Step-Frequency %.3f MHz max. 2.0 MHz\n", fVar);
+        }
+        else
+        {
+            Serial.printf("set Step-Frequency to %.3f MHz\n", fVar);
+
+            meshcom_settings.node_specsamples=fVar;
+
+            save_settings();
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"specsamples ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
+        sscanf(_owner_c, "%i", &iVar);
+
+        if(!(iVar >= 500 && iVar <= 2048))
+        {
+            Serial.printf("Sampled %i (min. 500 - max. 2048)\n", iVar);
+        }
+        else
+        {
+            Serial.printf("set Samples to %i MHz\n", iVar);
+
+            meshcom_settings.node_specstep=iVar;
+
+            save_settings();
+        }
+
+        return;
+    }
+    //
+    ///////////////////////////////////////////////////////////////////////////
     else
     if(commandCheck(msg_text+2, (char*)"lora") == 0)
     {

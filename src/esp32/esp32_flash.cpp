@@ -177,6 +177,11 @@ void init_flash(void)
     sprintf(meshcom_settings.node_values, "%s", strVar.c_str());
  
     meshcom_settings.node_parm_time = preferences.getInt("node_ptime", 15);
+
+    meshcom_settings.node_specstart = preferences.getFloat("node_spstart", 432.0);
+    meshcom_settings.node_specend = preferences.getFloat("node_spend", 434.0);
+    meshcom_settings.node_specstep = preferences.getFloat("node_spstep", 0.025);
+    meshcom_settings.node_specsamples = preferences.getInt("node_spsamp", 2048);
 }
 
 void save_settings(void)
@@ -348,6 +353,11 @@ void save_settings(void)
     preferences.putString("node_values", strVar);
 
     preferences.putInt("node_ptime", meshcom_settings.node_parm_time);
+
+    preferences.putFloat("node_spstart", meshcom_settings.node_specstart);
+    preferences.putFloat("node_spend", meshcom_settings.node_specend);
+    preferences.putFloat("node_spstep", meshcom_settings.node_specstep);
+    preferences.putInt("node_spsamp", meshcom_settings.node_specsamples);
 
     preferences.end();
 
