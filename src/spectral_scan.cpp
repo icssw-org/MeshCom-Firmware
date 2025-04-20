@@ -27,7 +27,7 @@
 
 using namespace std;
 
-#if defined(SX1262X) || defined(SX126X) || defined(SX126X_V3) || defined(SX1262_E290)
+#if defined(SX1262X) || defined(SX126X) || defined(SX1262_V3) || defined(SX1262_E290)
 
 // include the library
 
