@@ -39,6 +39,11 @@ jobs:
 
     - name: Patch PlatformIO for RAK2
       run: "cd ~/.platformio/RAK_PATCH && python rak_patch.py"
+			
+		- name: Add T-Beam Supreme board definition
+		  run: |
+		  	mkdir -p ~/.platformio/platforms/espressif32/boards
+		  	wget -O ~/.platformio/platforms/espressif32/boards/t-beams3-supreme.json https://raw.githubusercontent.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/master/boards/t-beams3-supreme.json
 
     - name: Build all Projects
       run: "cd ${{ github.workspace }} && pio run"
