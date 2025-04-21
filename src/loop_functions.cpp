@@ -1374,7 +1374,7 @@ void checkAnalogValue()
         if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin > 99)
             ANAGPIO = ANALOG_PIN;
 
-        float raw = (float)(analogReadMilliVolts(ANAGPIO));
+        float raw = (float)(analogRead(ANAGPIO));
         fAnalogValue = raw  * meshcom_settings.node_analog_faktor;
         
         if(bDEBUG && bDisplayInfo)
