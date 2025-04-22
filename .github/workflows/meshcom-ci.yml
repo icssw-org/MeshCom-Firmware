@@ -28,7 +28,7 @@ jobs:
       run: pip install --upgrade platformio
 
     - name: Install RAK Deps
-      run: pio platform install nordicnrf52
+      run: pio pkg install nordicnrf52
 
     - name: Patch PlatformIO for RAK1
       run: "mkdir ~/.platformio/RAK_PATCH && cd ~/.platformio/RAK_PATCH && wget https://raw.githubusercontent.com/RAKWireless/WisBlock/master/PlatformIO/RAK_PATCH.zip && unzip RAK_PATCH.zip && python rak_patch.py"
@@ -41,7 +41,7 @@ jobs:
       run: "cd ~/.platformio/RAK_PATCH && python rak_patch.py"
 
     - name: Install ESP32 platform
-      run: "pio platform install espressif32"
+      run: "pio pkg install espressif32"
 
     - name: Add T-Beam Supreme board definition
       run: "mkdir -p ~/.platformio/platforms/espressif32/boards && wget -O ~/.platformio/platforms/espressif32/boards/t-beams3-supreme.json https://raw.githubusercontent.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/master/boards/t-beams3-supreme.json && cat ~/.platformio/platforms/espressif32/boards/t-beams3-supreme.json"
