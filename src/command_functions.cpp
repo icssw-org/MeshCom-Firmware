@@ -112,8 +112,9 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 
             if(bDisplayCont)
             {
-                Serial.print("MORE:");
-                Serial.println(msg_detail);
+                Serial.print("MORE:<");
+                Serial.print(msg_detail);
+                Serial.println(">");
             }
 
             commandAction(msg_detail, ble);
@@ -150,7 +151,7 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     bRxFromPhone = false;
 }
 
-void commandAction(char *msg_text, bool ble)
+void commandAction(char *umsg_text, bool ble)
 {
     //char print_buff[600];
 
@@ -159,11 +160,14 @@ void commandAction(char *msg_text, bool ble)
     // -info
     // -set-owner
 
-    char _owner_c[100];
+    char msg_text[300];
+    char _owner_c[300];
     double dVar=0.0;
     int iVar;
     float fVar=0.0;
-    String sVar;
+
+    String sVar = umsg_text;
+    sVar.trim();
 
     // copying the contents of the
     // string to char array
@@ -180,19 +184,23 @@ void commandAction(char *msg_text, bool ble)
     bool bNodeSetting=false;
 
     if(bBLEDEBUG && ble)
-        Serial.printf("commandAction [%s] ble:%i\n", msg_text, ble);
+        Serial.printf("commandAction [%s] ble:%i\n", sVar.c_str(), ble);
 
-    if(memcmp(msg_text, "--", 2) != 0)
+    if(memcmp(sVar.c_str(), "--", 2) != 0)
     {
         if(ble)
         {
-            snprintf(print_buff, sizeof(print_buff), "--wrong command %s\n", msg_text);
+            snprintf(print_buff, sizeof(print_buff), "--wrong command %s\n", sVar.c_str());
             addBLECommandBack(print_buff);
         }
 
-        Serial.printf("\nMeshCom %-4.4s%-1.1s Client\n...wrong command %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB, msg_text);
+        Serial.printf("\nMeshCom %-4.4s%-1.1s Client\n...wrong command %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB, sVar.c_str());
 
         return;
+    }
+    else
+    {
+        snprintf(msg_text, sizeof(msg_text), "%s", sVar.c_str());
     }
 
     /* TEST
@@ -1939,12 +1947,14 @@ void commandAction(char *msg_text, bool ble)
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
         if(_owner_c[strlen(_owner_c)-1] == 0x0a)
             _owner_c[strlen(_owner_c)-1] = 0x00;
+        
         sVar = _owner_c;
+        sVar.trim();
         sVar.toUpperCase();
 
         if(!checkRegexCall(sVar))
         {
-            Serial.printf("\n[ERR]..Callsign <&%s> not valid\n", sVar.c_str());
+            Serial.printf("\n[ERR]..Callsign <%s> not valid\n", sVar.c_str());
             return;
         }
 
