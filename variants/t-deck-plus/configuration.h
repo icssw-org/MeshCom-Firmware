@@ -12,8 +12,8 @@
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define SX1262X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
+#define ENABLE_GPS
 #define GPS_L76K
-//#define ENABLE_GPS
 //#define ENABLE_BMX280
 //#define ENABLE_BMX680
 //#define ENABLE_MCP23017
@@ -70,6 +70,9 @@
 #define TDECK_TFT_DC        11
 #define TDECK_TFT_BACKLIGHT 42
 
+#define GPS_RX_PIN        44
+#define GPS_TX_PIN        43
+
 #define LORA_RST  17
 #define LORA_DIO0 13 // aka BUSY Pin
 #define LORA_DIO1 45
@@ -119,12 +122,6 @@
 #define MAX_POSROW 40                       // max numbers of rows in POS view
 
 
-// OE3GJC TODO replace
-
-#define BOARD_EXT_RX        44
-#define BOARD_EXT_TX        43
 
 #define TDECK_KEYBOARD_INT  46
-
-
 #define TDECK_BL_PIN        42
