@@ -1054,7 +1054,6 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 1, 0);
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     */
-    refresh_map(meshcom_settings.node_map);
 }
 
 /**
@@ -1318,6 +1317,12 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
 {
     char buf[2000];
 
+    if (bDEBUG)
+    {
+        Serial.printf("[POSVIEW]...add %s - posrow: %i\n", callsign, posrow);
+
+    }
+
     double dlat = u_dlat;
     if(lat_c == 'W')
         dlat = u_dlat * -1.0;
@@ -1330,13 +1335,22 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     if(posrow < MAX_POSROW)
     {
         posrow++;
-        lv_table_set_row_cnt(position_ta, posrow);
+        if (bDEBUG)
+        {
+            Serial.printf("[POSVIEW]...add row - new total: %i\n", posrow);
+        }
+        // 2025-04-23, OE3GJC: not required, autoextends on write to row
+        // lv_table_set_row_cnt(position_ta, posrow);
     }
 
     if(posrow > 2)
     {
-        for(int pos_push = posrow - 1; pos_push > 1; pos_push--)
+        for(int pos_push = posrow - 2; pos_push >= 1; pos_push--)
         {
+            if (bDEBUG)
+            {
+                Serial.printf("[POSVIEW]...moving row %i to %i (%s)\n", pos_push, pos_push + 1, lv_table_get_cell_value(position_ta, pos_push, 0));
+            }
             lv_table_set_cell_value(position_ta, pos_push + 1, 0, lv_table_get_cell_value(position_ta, pos_push, 0));
             lv_table_set_cell_value(position_ta, pos_push + 1, 1, lv_table_get_cell_value(position_ta, pos_push, 1));
             lv_table_set_cell_value(position_ta, pos_push + 1, 2, lv_table_get_cell_value(position_ta, pos_push, 2));
@@ -1344,11 +1358,11 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     }
 
     snprintf(buf, 10, "%s", callsign);
-    lv_table_set_cell_value(position_ta, 2, 0, buf);
+    lv_table_set_cell_value(position_ta, 1, 0, buf);
 
     snprintf(buf, 6, "%02i:%02i", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute);
-    lv_table_set_cell_value(position_ta, 2, 1, buf);
+    lv_table_set_cell_value(position_ta, 1, 1, buf);
 
     snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", dlat, lat_c, dlon, lon_c, alt);
-    lv_table_set_cell_value(position_ta, 2, 2, buf);
+    lv_table_set_cell_value(position_ta, 1, 2, buf);
 }
