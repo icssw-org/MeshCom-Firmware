@@ -289,86 +289,91 @@ void btn_event_handler_switch(lv_event_t * e)
     if(code == LV_EVENT_VALUE_CHANGED)
     {
         // WEBSERVER
-        if (lv_obj_has_state(web_sw, LV_STATE_CHECKED))
+        if (lv_event_get_target(e) == web_sw)
         {
-            commandAction((char*)"--webserver on", false);
-            // bWEBSERVER=true;
-        }
-        else
-        {
-            commandAction((char*)"--webserver off", false);
-            // bWEBSERVER=false;
+            if (lv_obj_has_state(web_sw, LV_STATE_CHECKED))
+            {
+                commandAction((char*)"--webserver on", false);
+                // bWEBSERVER=true;
+            }
+            else
+            {
+                commandAction((char*)"--webserver off", false);
+                // bWEBSERVER=false;
+            }
+
+            return;
         }
 
         // MESH
-        if (lv_obj_has_state(mesh_sw, LV_STATE_CHECKED))
+        if (lv_event_get_target(e) == mesh_sw)
         {
-            commandAction((char*)"--mesh on", false);
-            // bMESH=true;
-        }
-        else
-        {
-            commandAction((char*)"--mesh off", false);
-            // bMESH=false;
+            if (lv_obj_has_state(mesh_sw, LV_STATE_CHECKED))
+            {
+                commandAction((char*)"--mesh on", false);
+                // bMESH=true;
+            }
+            else
+            {
+                commandAction((char*)"--mesh off", false);
+                // bMESH=false;
+            }
+
+            return;
         }
 
         // NOALLMSG
-        if (lv_obj_has_state(noallmsg_sw, LV_STATE_CHECKED))
+        if (lv_event_get_target(e) == noallmsg_sw)
         {
-            commandAction((char*)"--nomsgall on", false);
-            // bNoMSGtoALL = true;
-        }
-        else
-        {
-            commandAction((char*)"--nomsgall off", false);
-            // bNoMSGtoALL = false;
+            if (lv_obj_has_state(noallmsg_sw, LV_STATE_CHECKED))
+            {
+                commandAction((char*)"--nomsgall on", false);
+                // bNoMSGtoALL = true;
+            }
+            else
+            {
+                commandAction((char*)"--nomsgall off", false);
+                // bNoMSGtoALL = false;
+            }
+
+            return;
         }
 
         // GPSON
-        if (lv_obj_has_state(gpson_sw, LV_STATE_CHECKED))
+        if (lv_event_get_target(e) == gpson_sw)
         {
-            commandAction((char*)"--gps on", false);
-            // bGPSON=true;
-        }
-        else
-        {
-            commandAction((char*)"--gps off", false);
-            // bGPSON=false;
+            if (lv_obj_has_state(gpson_sw, LV_STATE_CHECKED))
+            {
+                commandAction((char*)"--gps on", false);
+                // bGPSON=true;
+            }
+            else
+            {
+                commandAction((char*)"--gps off", false);
+                // bGPSON=false;
+            }
+
+            return;
         }
 
         // TRACKON
-        if (lv_obj_has_state(track_sw, LV_STATE_CHECKED))
+        if (lv_event_get_target(e) == track_sw)
         {
-            commandAction((char*)"--gps on", false);
-            commandAction((char*)"--track on", false);
-            // bTRACK=true;
-            // bGPSON=true;
-        }
-        else
-        {
-            commandAction((char*)"--track off", false);
-            // bTRACK=false;
-        }
+            if (lv_obj_has_state(track_sw, LV_STATE_CHECKED))
+            {
+                commandAction((char*)"--gps on", false);
+                commandAction((char*)"--track on", false);
+                // bTRACK=true;
+                // bGPSON=true;
+            }
+            else
+            {
+                commandAction((char*)"--track off", false);
+                // bTRACK=false;
+            }
 
-        //lv_tabview_set_act(tv, 0, LV_ANIM_ON);
-
-        if (bGPSON)
-        {
-            #ifdef GPS_L76K
-                switchL76KGPS();
-            #else
-                switchGPSON();
-            #endif
+            return;
         }
-        else
-        {
-            #ifdef GPS_L76K
-                stopL76KGPS();
-            #else
-                stopGPSON();
-            #endif
-        }
-
     }
 }
 
@@ -624,10 +629,24 @@ void tabview_event_cb(lv_event_t * e)
     if(lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
         int tab_idx = lv_tabview_get_tab_act(tv);
 
-        if (bDEBUG)
-            Serial.printf("[TDECK]...active Tab: %d\n", tab_idx);
-
-        if (tab_idx == 1) // SND tab
-            lv_group_focus_obj(text_input);
+        switch (tab_idx)
+        {
+            case 0: // MSG
+                break;
+            case 1: // SND
+                lv_group_focus_obj(text_input);
+                break;
+            case 2: // POS
+                break;
+            case 3: // MAP
+                break;
+            case 4: // TRK
+                tdeck_refresh_TRK_view();
+                break;
+            case 5: // MHD
+                break;
+            case 6: // SET
+                break;
+        }
     }
 }

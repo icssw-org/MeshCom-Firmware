@@ -1441,3 +1441,98 @@ void tdeck_refresh_SET_view()
     else
         lv_obj_clear_state(track_sw, LV_STATE_CHECKED);
 }
+
+/**
+ * refresh TRK view
+ */
+void tdeck_refresh_TRK_view()
+{
+    if (lv_tabview_get_tab_act(tv) != 4) // TRK screen not active
+        return;
+
+    int pos_seconds = (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000);
+
+    char cDatum[20];
+    sprintf(cDatum, "%04i-%02i-%02i",
+        meshcom_settings.node_date_year,
+        meshcom_settings.node_date_month,
+        meshcom_settings.node_date_day);
+    char cZeit[20];
+    sprintf(cZeit, "%02i:%02i:%02i",
+        meshcom_settings.node_date_hour,
+        meshcom_settings.node_date_minute,
+        meshcom_settings.node_date_second);
+
+    char ctrack[300];
+
+    if(bGPSON)
+    {
+        if(posinfo_fix)
+        {
+            char ctype[10];
+
+            if(bGPSON)
+                snprintf(ctype, sizeof(ctype), "GPS  :on");
+            else
+                snprintf(ctype, sizeof(ctype), "GPS  :off");
+                
+            if(bDisplayTrack)
+                snprintf(ctype, sizeof(ctype), "TRACK:on");
+            else
+                snprintf(ctype, sizeof(ctype), "TRACK:off");
+
+            snprintf(ctrack, sizeof(ctrack), "%s %s %i\nDATE :%s\nTIME :%s\nLAT  :%008.4lf %c\nLON  :%08.4lf %c\nDIST :%i m\nDIR  :old %.0lf\nDIR  :new %.0lf\nRATE :%4i %isec",
+                ctype, 
+                (posinfo_fix ? "fix" : "nofix"), 
+                posinfo_hdop, 
+                cDatum, 
+                cZeit, 
+                meshcom_settings.node_lat, 
+                meshcom_settings.node_lat_c, 
+                meshcom_settings.node_lon, 
+                meshcom_settings.node_lon_c, 
+                posinfo_distance, 
+                posinfo_last_direction, 
+                posinfo_direction, 
+                posinfo_interval,
+                pos_seconds);
+
+            lv_textarea_set_text(track_ta, ctrack);
+        }
+    
+    }
+
+    if(!bGPSON || (bGPSON && !posinfo_fix))
+    {
+        // normal TRACK screen
+        char ctypegps[10];
+        char ctypetrack[10];
+
+        if(bGPSON)
+            snprintf(ctypegps, sizeof(ctypegps), "GPS  :on");
+        else
+            snprintf(ctypegps, sizeof(ctypegps), "GPS  :off");
+        
+        if(bDisplayTrack)
+            snprintf(ctypetrack, sizeof(ctypetrack), "TRACK:on");
+        else
+            snprintf(ctypetrack, sizeof(ctypetrack), "TRACK:off");
+
+        snprintf(ctrack, sizeof(ctrack), "%s %s %i\n%s\nDATE :%s\nTIME :%s\nLAT  :%008.4lf %c\nLON  :%08.4lf %c\nALT  :%4i m\nRATE :%4i sec\nNEXT :%4i sec",
+            ctypegps,
+            (posinfo_fix ? "fix" : "nofix"),
+            posinfo_hdop,
+            ctypetrack,
+            cDatum,
+            cZeit,
+            meshcom_settings.node_lat,
+            meshcom_settings.node_lat_c,
+            meshcom_settings.node_lon,
+            meshcom_settings.node_lon_c,
+            meshcom_settings.node_alt,
+            posinfo_interval,
+            pos_seconds);
+
+        lv_textarea_set_text(track_ta, ctrack);
+    }
+}

@@ -1785,6 +1785,10 @@ void esp32loop()
             }
         }
 
+
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        tdeck_refresh_TRK_view();
+        #endif
         #endif
 
         gps_refresh_timer = millis();

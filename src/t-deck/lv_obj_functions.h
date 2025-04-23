@@ -35,5 +35,6 @@ String getMapDropbox();
 int getMapDropboxID(String strMap);
 
 void tdeck_refresh_SET_view();
+void tdeck_refresh_TRK_view();
 
 #endif // _LV_OBJ_FUNCTIONS_H_
