@@ -31,4 +31,6 @@ void handleTrackballPressEvent(AceButton *, uint8_t eventType, uint8_t);
 
 void tv_event_cb(lv_event_t * e);
 
+void tabview_event_cb(lv_event_t * e);
+
 #endif // _EVENT_FUNCTIONS_H_

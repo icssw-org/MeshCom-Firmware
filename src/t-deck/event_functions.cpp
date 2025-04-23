@@ -578,6 +578,8 @@ void btn_event_handler_clear(lv_event_t * e)
         Serial.println("clear Clicked");
         lv_textarea_set_text(text_input, (char*)"");
         lv_textarea_set_text(dm_callsign, (char*)"");
+
+        lv_group_focus_obj(text_input);
     }
 }
 
@@ -598,37 +600,34 @@ void btn_event_handler_up(lv_event_t * e)
         if(iKeyBoardType == 1)
         {
             lv_label_set_text(btnlabelup, "abc");
-            //lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_LOWER);
         }
         else
         if(iKeyBoardType == 2)
         {
             lv_label_set_text(btnlabelup, "ABC");
-            //lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_UPPER);
         }
         else
         if(iKeyBoardType == 3)
         {
             lv_label_set_text(btnlabelup, "123");
-            //lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_NUMBER);
         }
 
-        //lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_SPECIAL);
+        lv_group_focus_obj(text_input);
+    }
+}
 
-        //lv_event_send(text_input, LV_EVENT_REFRESH, NULL);
+/**
+ * event handler for tabview changes
+ */
+void tabview_event_cb(lv_event_t * e)
+{
+    if(lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
+        int tab_idx = lv_tabview_get_tab_act(tv);
 
-        lv_event_send(text_input, LV_EVENT_PRESSED, NULL);
-        //lv_event_send(text_input, LV_EVENT_REFR_EXT_DRAW_SIZE, NULL);
-        lv_event_send(text_input, LV_EVENT_FOCUSED, NULL);
+        if (bDEBUG)
+            Serial.printf("[TDECK]...active Tab: %d\n", tab_idx);
 
-        //lv_event_send(text_input, LV_EVENT_PRESSING, NULL);
-        //lv_event_send(text_input, LV_EVENT_GET_SELF_SIZE, NULL);
-        //lv_event_send(text_input, LV_EVENT_GET_SELF_SIZE, NULL);
-        
-        //lv_event_send(text_input, LV_EVENT_PRESSING, NULL);
-        //lv_event_send(text_input, LV_EVENT_GET_SELF_SIZE, NULL);
-        //lv_event_send(text_input, LV_EVENT_GET_SELF_SIZE, NULL);
-
-        //kb??? lv_keyboard_set_textarea(kb, text_input);
+        if (tab_idx == 1) // SND tab
+            lv_group_focus_obj(text_input);
     }
 }

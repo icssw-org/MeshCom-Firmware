@@ -140,6 +140,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t *t4 = lv_tabview_add_tab(tv, "MHD");
     lv_obj_t *t1 = lv_tabview_add_tab(tv, "SET");
 
+    lv_obj_add_event_cb(tv, tabview_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     static lv_style_t ta_style;
     lv_style_init(&ta_style);
