@@ -462,11 +462,6 @@ void esp32setup()
 	// Get LoRa parameter
 	init_flash();
 
-    // Initialize T-Deck Hardware
-    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    initTDeck();
-    #endif
-
     bDisplayVolt = meshcom_settings.node_sset & 0x0001;
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
     bPosDisplay = meshcom_settings.node_sset & 0x0004;
