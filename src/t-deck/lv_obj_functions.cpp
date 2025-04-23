@@ -1059,7 +1059,6 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 1, 0);
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     */
-    refresh_map(meshcom_settings.node_map);
 }
 
 /**
