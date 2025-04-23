@@ -492,6 +492,8 @@ void btn_event_handler_setup(lv_event_t * e)
  */
 void btn_event_handler_send(lv_event_t * e)
 {
+    char message_text[200] = {0};
+
     lv_event_code_t code = lv_event_get_code(e);
 
     if(code == LV_EVENT_CLICKED)
@@ -502,12 +504,22 @@ void btn_event_handler_send(lv_event_t * e)
         String strText = lv_textarea_get_text(text_input);
         String strDMText = lv_textarea_get_text(dm_callsign);
 
-        /*if(sendMessage(strText, strDMText, ':'))
+        if (strDMText.length() > 0)
+            snprintf(message_text, sizeof(message_text), ":{%s}%s", strDMText.c_str(), strText.c_str());
+        else
+            snprintf(message_text, sizeof(message_text), ":%s", strText.c_str());
+
+        int iml = strlen(message_text);
+        if (iml>150)
         {
-            lv_textarea_set_text(text_input, "");
-            
-            lv_tabview_set_act(tv, 0, LV_ANIM_ON);
-        }*/
+            iml = 150;
+            message_text[iml] = 0x00;
+        }
+
+        sendMessage(message_text, iml);
+        
+        lv_textarea_set_text(text_input, "");
+        lv_tabview_set_act(tv, 0, LV_ANIM_ON);
     }
     else if(code == LV_EVENT_VALUE_CHANGED)
     {
