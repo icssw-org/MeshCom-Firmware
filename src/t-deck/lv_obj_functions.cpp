@@ -661,7 +661,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     lv_obj_t * label_btnsetup_version = lv_label_create(btnsetup_version);
     char sv[50];
-    sprintf(sv, "MeshCom V%s/%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+    sprintf(sv, "MeshCom %s/%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
     lv_label_set_text(label_btnsetup_version, sv);
     lv_obj_center(label_btnsetup_version);
 
@@ -1365,4 +1365,78 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
 
     snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", dlat, lat_c, dlon, lon_c, alt);
     lv_table_set_cell_value(position_ta, 1, 2, buf);
+}
+
+/**
+ * refresh SET view with current values
+ */
+void tdeck_refresh_SET_view()
+{
+    lv_textarea_set_text(setup_callsign, meshcom_settings.node_call);
+    char vChar[10];
+    sprintf(vChar, "%.4lf", meshcom_settings.node_lat);
+    lv_textarea_set_text(setup_lat, vChar);
+    sprintf(vChar, "%c", meshcom_settings.node_lat_c);
+    lv_textarea_set_text(setup_lat_c, vChar);
+    
+    sprintf(vChar, "%.4lf", meshcom_settings.node_lon);
+    lv_textarea_set_text(setup_lon, vChar);
+    sprintf(vChar, "%c", meshcom_settings.node_lon_c);
+    lv_textarea_set_text(setup_lon_c, vChar);
+
+    sprintf(vChar, "%i", meshcom_settings.node_alt);
+    lv_textarea_set_text(setup_alt, vChar);
+
+    lv_textarea_set_text(setup_stone, setStartAudio.c_str());
+    lv_textarea_set_text(setup_mtone, setMessageAudio.c_str());
+    lv_textarea_set_text(setup_name, meshcom_settings.node_name);
+
+    sprintf(vChar, "%i", meshcom_settings.node_gcb[0]);
+    lv_textarea_set_text(setup_grc0, vChar);
+    sprintf(vChar, "%i", meshcom_settings.node_gcb[1]);
+    lv_textarea_set_text(setup_grc1, vChar);
+    sprintf(vChar, "%i", meshcom_settings.node_gcb[2]);
+    lv_textarea_set_text(setup_grc2, vChar);
+    sprintf(vChar, "%i", meshcom_settings.node_gcb[3]);
+    lv_textarea_set_text(setup_grc3, vChar);
+    sprintf(vChar, "%i", meshcom_settings.node_gcb[4]);
+    lv_textarea_set_text(setup_grc4, vChar);
+    sprintf(vChar, "%i", meshcom_settings.node_gcb[5]);
+    lv_textarea_set_text(setup_grc5, vChar);
+
+    /* OE3GJC ID
+    sprintf(vChar, "%08X",  (baseMAC[WL_MAC_ADDR_LENGTH - 3] << 24) | (baseMAC[WL_MAC_ADDR_LENGTH - 2] << 16)  | (baseMAC[WL_MAC_ADDR_LENGTH-1] << 8) | (next_msg_id & 0xFF));
+    lv_label_set_text(btn_msg_id_label, vChar);
+    sprintf(vChar, "%d", next_ack_id);
+    lv_label_set_text(btn_ack_id_label, vChar);
+    */
+
+    //WEB
+    if (bWEBSERVER)
+        lv_obj_add_state(web_sw, LV_STATE_CHECKED);
+    else
+        lv_obj_clear_state(web_sw, LV_STATE_CHECKED);
+    //MESH
+    if (bMESH)
+        lv_obj_add_state(mesh_sw, LV_STATE_CHECKED);
+    else
+        lv_obj_clear_state(mesh_sw, LV_STATE_CHECKED);
+    //NOALL
+    if (bNoMSGtoALL)
+        lv_obj_add_state(noallmsg_sw, LV_STATE_CHECKED);
+    else
+        lv_obj_clear_state(noallmsg_sw, LV_STATE_CHECKED);
+    //GPS
+    if (bGPSON)
+        lv_obj_add_state(gpson_sw, LV_STATE_CHECKED);
+    else
+        lv_obj_clear_state(gpson_sw, LV_STATE_CHECKED);
+    // UTC offset        
+    sprintf(vChar, "%.1f", meshcom_settings.node_utcoff);
+    lv_textarea_set_text(setup_utc, vChar);
+    //TRACK
+    if (bDisplayTrack)
+        lv_obj_add_state(track_sw, LV_STATE_CHECKED);
+    else
+        lv_obj_clear_state(track_sw, LV_STATE_CHECKED);
 }

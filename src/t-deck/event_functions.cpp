@@ -288,20 +288,31 @@ void btn_event_handler_switch(lv_event_t * e)
 
     if(code == LV_EVENT_VALUE_CHANGED)
     {
-        // bWEBSERVER
+        // WEBSERVER
         if (lv_obj_has_state(web_sw, LV_STATE_CHECKED))
-
-            bWEBSERVER=true;
+        {
+            commandAction((char*)"--webserver on", false);
+            // bWEBSERVER=true;
+        }
         else
-            bWEBSERVER=false;
+        {
+            commandAction((char*)"--webserver off", false);
+            // bWEBSERVER=false;
+        }
 
-        // bMESH
+        // MESH
         if (lv_obj_has_state(mesh_sw, LV_STATE_CHECKED))
-            bMESH=true;
+        {
+            commandAction((char*)"--mesh on", false);
+            // bMESH=true;
+        }
         else
-            bMESH=false;
+        {
+            commandAction((char*)"--mesh off", false);
+            // bMESH=false;
+        }
 
-        // bNOALLMSG
+        // NOALLMSG
         if (lv_obj_has_state(noallmsg_sw, LV_STATE_CHECKED))
         {
             commandAction((char*)"--nomsgall on", false);
@@ -313,7 +324,7 @@ void btn_event_handler_switch(lv_event_t * e)
             // bNoMSGtoALL = false;
         }
 
-        // bGPSON
+        // GPSON
         if (lv_obj_has_state(gpson_sw, LV_STATE_CHECKED))
         {
             commandAction((char*)"--gps on", false);
@@ -322,10 +333,10 @@ void btn_event_handler_switch(lv_event_t * e)
         else
         {
             commandAction((char*)"--gps off", false);
-            bGPSON=false;
+            // bGPSON=false;
         }
 
-        // bGPSON
+        // TRACKON
         if (lv_obj_has_state(track_sw, LV_STATE_CHECKED))
         {
             commandAction((char*)"--gps on", false);
@@ -341,7 +352,7 @@ void btn_event_handler_switch(lv_event_t * e)
 
         //lv_tabview_set_act(tv, 0, LV_ANIM_ON);
 
-        if(bGPSON)
+        if (bGPSON)
         {
             #ifdef GPS_L76K
                 switchL76KGPS();

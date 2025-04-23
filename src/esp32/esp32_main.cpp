@@ -462,11 +462,6 @@ void esp32setup()
 	// Get LoRa parameter
 	init_flash();
 
-    // Initialize T-Deck Hardware
-    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    initTDeck();
-    #endif
-
     bDisplayVolt = meshcom_settings.node_sset & 0x0001;
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
     bPosDisplay = meshcom_settings.node_sset & 0x0004;
@@ -513,6 +508,11 @@ void esp32setup()
     iButtonPin = BUTTON_PIN;
     if(meshcom_settings.node_button_pin > 0)
         iButtonPin = meshcom_settings.node_button_pin;
+
+    // Initialize T-Deck GUI
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    initTDeck();
+    #endif
 
     // if Node not set --> WifiAP Mode on
     if(memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0 || meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)

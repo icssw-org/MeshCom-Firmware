@@ -214,51 +214,7 @@ void initTDeck()
         delay(500);
     }
 
-    lv_textarea_set_text(setup_callsign, meshcom_settings.node_call);
-    char vChar[10];
-    sprintf(vChar, "%.4lf", meshcom_settings.node_lat);
-    lv_textarea_set_text(setup_lat, vChar);
-    sprintf(vChar, "%c", meshcom_settings.node_lat_c);
-    lv_textarea_set_text(setup_lat_c, vChar);
-    
-    sprintf(vChar, "%.4lf", meshcom_settings.node_lon);
-    lv_textarea_set_text(setup_lon, vChar);
-    sprintf(vChar, "%c", meshcom_settings.node_lon_c);
-    lv_textarea_set_text(setup_lon_c, vChar);
-
-    sprintf(vChar, "%i", meshcom_settings.node_alt);
-    lv_textarea_set_text(setup_alt, vChar);
-    
-    sprintf(vChar, "%.1f", meshcom_settings.node_utcoff);
-    lv_textarea_set_text(setup_utc, vChar);
-
-    lv_textarea_set_text(setup_stone, setStartAudio.c_str());
-    lv_textarea_set_text(setup_mtone, setMessageAudio.c_str());
-    lv_textarea_set_text(setup_name, meshcom_settings.node_name);
-
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[0]);
-    lv_textarea_set_text(setup_grc0, vChar);
-
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[1]);
-    lv_textarea_set_text(setup_grc1, vChar);
-
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[2]);
-    lv_textarea_set_text(setup_grc2, vChar);
-
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[3]);
-    lv_textarea_set_text(setup_grc3, vChar);
-
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[4]);
-    lv_textarea_set_text(setup_grc4, vChar);
-    
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[5]);
-    lv_textarea_set_text(setup_grc5, vChar);
-
-    // GJC ?
-    /*sprintf(vChar, "%08X",  (baseMAC[WL_MAC_ADDR_LENGTH - 3] << 24) | (baseMAC[WL_MAC_ADDR_LENGTH - 2] << 16)  | (baseMAC[WL_MAC_ADDR_LENGTH-1] << 8) | (next_msg_id & 0xFF));
-    lv_label_set_text(btn_msg_id_label, vChar);
-    sprintf(vChar, "%d", next_ack_id);
-    lv_label_set_text(btn_ack_id_label, vChar);*/
+    tdeck_refresh_SET_view();
 
     lv_textarea_set_text(text_ta, "");
 
