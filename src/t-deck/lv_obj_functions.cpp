@@ -662,7 +662,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     lv_obj_t * label_btnsetup_version = lv_label_create(btnsetup_version);
     char sv[50];
-    sprintf(sv, "MeshCom %s/%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+    sprintf(sv, "MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
     lv_label_set_text(label_btnsetup_version, sv);
     lv_obj_center(label_btnsetup_version);
 
@@ -712,6 +712,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_table_set_col_width(position_ta, 0, 84); // call
     lv_table_set_col_width(position_ta, 1, 40); // time
     lv_table_set_col_width(position_ta, 2, 174); // postxt
+
+    lv_obj_add_event_cb(position_ta, position_ta_draw_event, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
     lv_obj_set_height(position_ta, LV_VER_RES * 0.6);
 
@@ -777,6 +779,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_table_set_col_width(mheard_ta, 5, 38);
 
     lv_obj_set_height(mheard_ta, LV_VER_RES * 0.6);
+
+    lv_obj_add_event_cb(mheard_ta, mheard_ta_draw_event, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
     // TIME
     lv_obj_t * btn_time2 = lv_btn_create(t4);    /*Add a button the current screen*/
@@ -1320,7 +1324,7 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
 
     if (bDEBUG)
     {
-        Serial.printf("[POSVIEW]...add %s - posrow: %i\n", callsign, posrow);
+        Serial.printf("[POSVIEW]...add %s\n", callsign);
 
     }
 
@@ -1336,10 +1340,6 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     if(posrow < MAX_POSROW)
     {
         posrow++;
-        if (bDEBUG)
-        {
-            Serial.printf("[POSVIEW]...add row - new total: %i\n", posrow);
-        }
         // 2025-04-23, OE3GJC: not required, autoextends on write to row
         // lv_table_set_row_cnt(position_ta, posrow);
     }
@@ -1405,12 +1405,11 @@ void tdeck_refresh_SET_view()
     sprintf(vChar, "%i", meshcom_settings.node_gcb[5]);
     lv_textarea_set_text(setup_grc5, vChar);
 
-    /* OE3GJC ID
-    sprintf(vChar, "%08X",  (baseMAC[WL_MAC_ADDR_LENGTH - 3] << 24) | (baseMAC[WL_MAC_ADDR_LENGTH - 2] << 16)  | (baseMAC[WL_MAC_ADDR_LENGTH-1] << 8) | (next_msg_id & 0xFF));
+    sprintf(vChar, "%08X", _GW_ID);
     lv_label_set_text(btn_msg_id_label, vChar);
-    sprintf(vChar, "%d", next_ack_id);
+    sprintf(vChar, "%d", meshcom_settings.node_ackid);
     lv_label_set_text(btn_ack_id_label, vChar);
-    */
+
 
     //WEB
     if (bWEBSERVER)
