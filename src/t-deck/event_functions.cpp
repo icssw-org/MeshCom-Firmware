@@ -384,17 +384,24 @@ void btn_event_handler_setup(lv_event_t * e)
 {
     String strVar;
     char cVar[5];
+    char cCmd[100];
 
     lv_event_code_t code = lv_event_get_code(e);
 
     if(code == LV_EVENT_CLICKED)
     {
         // CALL
-        strVar = lv_textarea_get_text(setup_callsign);
         char cNewCall[10] = {0};
+        strVar = lv_textarea_get_text(setup_callsign);
         strVar.toUpperCase();
-        sprintf(cNewCall, "%s", strVar.c_str());
-        sscanf(cNewCall, "%lf", &meshcom_settings.node_call);
+        snprintf(cNewCall, sizeof(cNewCall), "%s", strVar.c_str());
+        if(memcmp(cNewCall, meshcom_settings.node_call, 10) != 0)
+        {
+            if (bDEBUG)
+                Serial.printf("[TDECK]...changing call from '%s' to '%s'\n", meshcom_settings.node_call, cNewCall);
+            sprintf(cCmd, "--setcall %s", cNewCall);
+            commandAction(cCmd, false);
+        }
 
         // LAT
         strVar = lv_textarea_get_text(setup_lat);
@@ -441,7 +448,13 @@ void btn_event_handler_setup(lv_event_t * e)
         strVar = lv_textarea_get_text(setup_name);
         char cNewName[20] = {0};
         sprintf(cNewName, "%s", strVar.c_str());
-        sscanf(cNewName, "%lf", &meshcom_settings.node_name);
+        if (memcmp(cNewName, meshcom_settings.node_name, sizeof(cNewName)) != 0)
+        {
+            if (bDEBUG)
+                Serial.printf("[TDECK]...changing name from '%s' to '%s'\n", meshcom_settings.node_name, cNewName);
+            sprintf(cCmd, "--setname %s", cNewName);
+            commandAction(cCmd, false);
+        }
 
         // GRC
         String strNewGrc = lv_textarea_get_text(setup_grc0);
@@ -646,7 +659,44 @@ void tabview_event_cb(lv_event_t * e)
             case 5: // MHD
                 break;
             case 6: // SET
+                tdeck_refresh_SET_view();
                 break;
         }
     }
+}
+
+/**
+ * center first row of lvgl table on draw callback
+ */
+void table_center_first_row(lv_event_t * e)
+{
+    lv_obj_t * obj = lv_event_get_target(e);
+    lv_obj_draw_part_dsc_t * dsc = lv_event_get_draw_part_dsc(e);
+
+    // If the cells are drawn...
+    if(dsc->part == LV_PART_ITEMS) {
+        uint32_t row = dsc->id /  lv_table_get_col_cnt(obj);
+        uint32_t col = dsc->id - row * lv_table_get_col_cnt(obj);
+
+        // align the first row centered
+        if (row == 0) {
+            dsc->label_dsc->align = LV_TEXT_ALIGN_CENTER;
+        }
+    }
+}
+
+/**
+ * callback when position table is drawn
+ */
+void position_ta_draw_event(lv_event_t * e)
+{
+    table_center_first_row(e);
+}
+
+/**
+ * callback when mheard table is drawn
+ */
+void mheard_ta_draw_event(lv_event_t * e)
+{
+    table_center_first_row(e);
 }
