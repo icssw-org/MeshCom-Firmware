@@ -8,11 +8,10 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #include <configuration_global.h>
 
 // E22 specifig config
-#define MODUL_HARDWARE ESP32_S3
+#define MODUL_HARDWARE EBYTE_E22
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define ENABLE_GPS
-//#define GPS_L76K
 #define ENABLE_BMX280
 #define ENABLE_BMX680
 #define ENABLE_MCP23017
@@ -20,10 +19,10 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ENABLE_MC811
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
-#define ANALOG_PIN 32
-#define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
 #define SX1262_V3
+
+#define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
 #define TX_POWER_MAX 22  // max 22 dBm
 #define TX_POWER_MIN 2
@@ -32,7 +31,6 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
 #define TX_OUTPUT_POWER 22
-#define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
 /**
  * RadioLib Coding Rate: Allowed values range from 5 to 8.
@@ -57,35 +55,39 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 */
 #define LORA_SF 11
 
-#define LED_PIN 38
+// =============================================
+// Custom Board homemade E22-Ebyte Module + ESP32-S3 DevKitC-1-N16R8V
+// ===== GPIOs =====
+#define ANALOG_PIN 1
+#define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
-#define RESET_OLED RST_OLED
-
-#define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
+#define LED_PIN LED_BUILTIN   // 38
+#define BOARD_LED LED_BUILTIN  // 38
 
-#define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_MULTIPLIER 4.9245
+#define OneWire_GPIO 42
 
-#define LORA_DIO0
-#define LORA_RESET 34
-#define LORA_RST 34   // inkonsequent 2 verschiedene Namen OE3WAS
-#define LORA_DIO1 35
-#define LORA_DIO2 33
-#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
-#define LORA_NSS 10     // CS SX1262 CS
+// I2C GPIOs
+#define I2C_SDA  8
+#define I2C_SCL  9
 
-#define RXEN 41
-#define TXEN 40
+// SPI GPIOs
+#define SCK 12
+#define MISO 13
+#define MOSI 11
+#define SS 10
 
-#define SX1262X_CS LORA_NSS
-#define SX1262X_IRQ LORA_DIO1
-#define SX1262X_RST LORA_RESET
-#define SX1262X_GPIO LORA_DIO2
+// E22 Module
+#define E22_RXEN 4
+#define E22_TXEN 5
+#define E22_DIO1 6
+#define E22_BUSY 7
+#define E22_NRST 17
+#define E22_SCK SCK
+#define E22_NSS SS
 
-#define SDA_PIN 8
-#define SCL_PIN 9
-#define I2C_SDA  SDA_PIN
-#define I2C_SCL  SCL_PIN
-
-#define OneWire_GPIO 4
+// alternative definitions - duplicates
+#define SX1262X_CS E22_NSS
+#define SX1262X_IRQ E22_DIO1
+#define SX1262X_RST E22_NRST
+#define SX1262X_GPIO E22_NRST

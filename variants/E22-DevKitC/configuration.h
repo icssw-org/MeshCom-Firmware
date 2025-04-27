@@ -64,8 +64,8 @@ definitions for E22 Board
 #define LORA_DIO1 33
 #define LORA_DIO2 32
 #define LORA_CS 5
-#define RXEN 14
-#define TXEN 13
+#define E22_RXEN 14
+#define E22_TXEN 13
 #define LED 2
 
 #define I2C_SDA 21

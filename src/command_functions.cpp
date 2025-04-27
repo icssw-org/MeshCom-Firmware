@@ -336,6 +336,8 @@ void commandAction(char *umsg_text, bool ble)
 
         bDisplayCont=false;
 
+        save_settings();
+
         return;
     }
     else
@@ -344,6 +346,8 @@ void commandAction(char *umsg_text, bool ble)
         Serial.println("\nsetcont on");
 
         bDisplayCont=true;
+
+        save_settings();
 
         return;
     }
