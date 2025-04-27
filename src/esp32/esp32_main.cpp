@@ -446,7 +446,7 @@ void esp32setup()
     bBLElong = meshcom_settings.node_sset & 0x0800;
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
-    //bEXTSER =  meshcom_settings.node_sset & 0x4000; // frei
+    bDisplayCont = meshcom_settings.node_sset & 0x4000;
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
@@ -645,7 +645,7 @@ void esp32setup()
     //
     ////////////////////////////////////////////////////////////////////
 
-#if defined(BOARD_E22) || defined(BOARD_E220)
+#if defined(BOARD_E22)  || defined(BOARD_E22_V3) || defined(BOARD_E220)
     // if RESET Pin is connected
     pinMode(LORA_RST, PULLUP);
     digitalWrite(LORA_RST, LOW);
@@ -658,7 +658,8 @@ void esp32setup()
 
     startDisplay((char*)"...starting now", (char*)"@by icssw.org", (char*)"OE1KBC, OE1KFR");
 
-    bool bRadio=false;
+    //LORA CHIP present
+    bRadio = false;
 
     //TEST #ifndef BOARD_E290
 
@@ -1140,6 +1141,8 @@ void esp32loop()
         }
     }
 
+    if(bRadio)
+    {
     if(iReceiveTimeOutTime > 0)
     {
         // Timeout RECEIVE_TIMEOUT
@@ -1335,6 +1338,7 @@ void esp32loop()
             }
         }
     }
+    } // bRadio active
     
     // get RTC Now
     // RTC hat Vorrang zu Zeit via MeshCom-Server
@@ -2002,6 +2006,9 @@ int checkRX(void)
     //       See example ReceiveInterrupt for details
     //       on non-blocking reception method.
 
+    if(!bRadio)
+        return -1;
+        
     if(is_receiving)    // receive in action
         return -1;
 

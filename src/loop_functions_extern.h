@@ -7,6 +7,8 @@ extern int BOARD_HARDWARE;
 
 extern unsigned long rebootAuto;
 
+extern bool bRadio;
+
 extern int iWlanWait;
 
 extern uint32_t heap;
