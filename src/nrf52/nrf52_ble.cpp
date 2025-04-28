@@ -129,7 +129,7 @@ void init_ble(void)
 	ble_dis.begin();
 
 	// Permission / Pairing
-	g_ble_uart.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
+	// KBC 28.04.2025 g_ble_uart.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
 	// Start the UART service
 	g_ble_uart.begin();
 	g_ble_uart.setRxCallback(bleuart_rx_callback);

@@ -309,17 +309,11 @@ void setFlagReceive(void)
     if(bEnableInterruptReceive)
     {
         receiveFlag = true;
-
-        if(bLORADEBUG)
-            Serial.println("receiveFlag");
     }
 
     if(bEnableInterruptTransmit)
     {
         transmittedFlag = true;
-
-        if(bLORADEBUG)
-            Serial.println("transmittedFlag");
     }
 }
 
@@ -331,17 +325,11 @@ void setFlagSent(void)
     if(bEnableInterruptReceive)
     {
         receiveFlag = true;
-
-        if(bLORADEBUG)
-            Serial.println("receiveFlag");
     }
 
     if(bEnableInterruptTransmit)
     {
         transmittedFlag = true;
-
-        if(bLORADEBUG)
-            Serial.println("transmittedFlag");
     }
 }
 
@@ -1109,6 +1097,12 @@ void esp32loop()
         bLED = !bLED;
     #endif
 
+    if(bLORADEBUG && receiveFlag)
+        Serial.println("receiveflag");
+
+    if(bLORADEBUG && transmittedFlag)
+        Serial.println("transmittedFlag");
+
     if(inoReceiveTimeOutTime > 0)
     {
         // Timeout RECEIVE_TIMEOUT
@@ -1141,179 +1135,21 @@ void esp32loop()
         }
     }
 
+    // LoRa-Chip found
     if(bRadio)
     {
-    if(iReceiveTimeOutTime > 0)
-    {
-        // Timeout RECEIVE_TIMEOUT
-        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
+        if(iReceiveTimeOutTime > 0)
         {
-            iReceiveTimeOutTime=0;
-
-            // clear Receive Interrupt
-            bEnableInterruptReceive = false; //KBC 0801
-            radio.clearPacketReceivedAction(); // KBC 0801
-
-            // clear Transmit Interrupt
-            bEnableInterruptTransmit = false; // KBC 0801
-            radio.clearPacketSentAction();  //KBC 0801
-
-            // set Receive Interupt
-            bEnableInterruptReceive = true; //KBC 0801
-            radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
-
-            int state = radio.startReceive();
-            if (state == RADIOLIB_ERR_NONE)
+            // Timeout RECEIVE_TIMEOUT
+            if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
             {
-                if(bLORADEBUG)
-                {
-                    Serial.print(getTimeString());
-                    Serial.println(" [LoRa]...Receive Timeout, startReceive again with sucess");
-                }
-            }
-            else
-            {
-                if(bLORADEBUG)
-                {
-                    Serial.print(getTimeString());
-                    Serial.print(" [LoRa]...Receive Timeout, startReceive again with error = ");
-                    Serial.println(state);
-                }
-            }        
-        }
-    }
-    
-    if(receiveFlag || transmittedFlag)
-    {
-        int state = RADIOLIB_ERR_NONE;
+                iReceiveTimeOutTime=0;
 
-        // check ongoing reception
-        if(receiveFlag)
-        {
-            // reset flags first
-            bEnableInterruptReceive = false;
-            receiveFlag = false;
-
-            // DIO triggered while reception is ongoing
-            // that means we got a packet
-
-            checkRX();
-
-            // clear Receive Interrupt
-            bEnableInterruptReceive = false; // KBC 0801
-            radio.clearPacketReceivedAction(); // KBC 0801
-
-            // clear Transmit Interrupt
-            bEnableInterruptTransmit = false; // KBC 0801
-            radio.clearPacketSentAction();  //KBC 0801
-
-            // set Receive Interupt
-            bEnableInterruptReceive = true; //KBC 0801
-            radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
-
-            inoReceiveTimeOutTime=millis();
-        }
-        else
-        if(transmittedFlag)
-        {
-            // reset flags first
-            bEnableInterruptTransmit = false;
-            bEnableInterruptReceive = false;
-
-            transmittedFlag = false;
-
-            if (transmissionState == RADIOLIB_ERR_NONE)
-            {
-                // packet was successfully sent
-                if(bLORADEBUG)
-                    Serial.println(F("transmission finished!"));
-            }
-            else
-            {
-                if(bLORADEBUG)
-                {
-                    Serial.print(F("failed, code <3> "));
-                    Serial.println(transmissionState);
-                }
-            }
-
-            // clean up after transmission is finished
-            // this will ensure transmitter is disabled,
-            // RF switch is powered down etc.
-            radio.finishTransmit();
-
-            #ifndef BOARD_TLORA_OLV216
-            // reset MeshCom now
-            if(bSetLoRaAPRS)
-            {
-                lora_setchip_meshcom();
-                bSetLoRaAPRS = false;
-            }
-            #endif
-
-            OnTxDone();
-
-            // clear Transmit Interrupt
-            bEnableInterruptTransmit = false; // KBC 0801
-            radio.clearPacketSentAction();  //KBC 0801
-
-            // clear Receive Interrupt
-            bEnableInterruptReceive = false; // KBC 0801
-            radio.clearPacketReceivedAction();  //KBC 0801
-
-            // set Receive Interupt
-            bEnableInterruptReceive = true;
-            radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
-
-            int state = radio.startReceive();
-
-            if (state != RADIOLIB_ERR_NONE)
-            {
-                if(bLORADEBUG)
-                {
-                    Serial.print(F("[LoRa]...Starting to listen again (1)... "));
-                    Serial.print(F("failed, code "));
-                    Serial.println(state);
-                }
-            }        
-
-            inoReceiveTimeOutTime=millis();
-
-            iReceiveTimeOutTime = millis(); // start to wait for next transmit
-        }
-    }
-
-    // Check transmit now
-    if(iReceiveTimeOutTime == 0 && !bEnableInterruptTransmit)
-    {
-        // channel is free
-        // nothing was detected
-        // do not print anything, it just spams the console
-        if (iWrite != iRead)
-        {
-            // save transmission state between loops
-            cmd_counter=0;
-            tx_waiting=true;
-
-            // clear Receive Interrupt
-            bEnableInterruptReceive = false;
-            radio.clearPacketReceivedAction();  //KBC 0801
-
-            // set Transmit Interupt
-            bEnableInterruptTransmit = true; //KBC 0801
-            radio.setPacketSentAction(setFlagSent); //KBC 0801
-
-            if(doTX())
-            {
-                //KBC 0801 bEnableInterruptTransmit = true;
-            }
-            else
-            {
-                if(bLORADEBUG)
-                    Serial.print(F("[LoRa]...Starting to listen again... "));
+                // clear Receive Interrupt
+                bEnableInterruptReceive = false; //KBC 0801
+                radio.clearPacketReceivedAction(); // KBC 0801
 
                 // clear Transmit Interrupt
-                bEnableInterruptReceive = false; // KBC 0801
                 bEnableInterruptTransmit = false; // KBC 0801
                 radio.clearPacketSentAction();  //KBC 0801
 
@@ -1325,19 +1161,178 @@ void esp32loop()
                 if (state == RADIOLIB_ERR_NONE)
                 {
                     if(bLORADEBUG)
-                        Serial.println(F("success!"));
+                    {
+                        Serial.print(getTimeString());
+                        Serial.println(" [LoRa]...Receive Timeout, startReceive again with sucess");
+                    }
                 }
                 else
                 {
                     if(bLORADEBUG)
                     {
-                        Serial.print(F("failed, code "));
+                        Serial.print(getTimeString());
+                        Serial.print(" [LoRa]...Receive Timeout, startReceive again with error = ");
                         Serial.println(state);
                     }
                 }        
             }
         }
-    }
+        
+        if(receiveFlag || transmittedFlag)
+        {
+            int state = RADIOLIB_ERR_NONE;
+
+            // check ongoing reception
+            if(receiveFlag)
+            {
+                // reset flags first
+                bEnableInterruptReceive = false;
+                receiveFlag = false;
+
+                // DIO triggered while reception is ongoing
+                // that means we got a packet
+
+                checkRX();
+
+                // clear Receive Interrupt
+                bEnableInterruptReceive = false; // KBC 0801
+                radio.clearPacketReceivedAction(); // KBC 0801
+
+                // clear Transmit Interrupt
+                bEnableInterruptTransmit = false; // KBC 0801
+                radio.clearPacketSentAction();  //KBC 0801
+
+                // set Receive Interupt
+                bEnableInterruptReceive = true; //KBC 0801
+                radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
+
+                inoReceiveTimeOutTime=millis();
+            }
+            else
+            if(transmittedFlag)
+            {
+                // reset flags first
+                bEnableInterruptTransmit = false;
+                bEnableInterruptReceive = false;
+
+                transmittedFlag = false;
+
+                if (transmissionState == RADIOLIB_ERR_NONE)
+                {
+                    // packet was successfully sent
+                    if(bLORADEBUG)
+                        Serial.println(F("transmission finished!"));
+                }
+                else
+                {
+                    if(bLORADEBUG)
+                    {
+                        Serial.print(F("failed, code <3> "));
+                        Serial.println(transmissionState);
+                    }
+                }
+
+                // clean up after transmission is finished
+                // this will ensure transmitter is disabled,
+                // RF switch is powered down etc.
+                radio.finishTransmit();
+
+                #ifndef BOARD_TLORA_OLV216
+                // reset MeshCom now
+                if(bSetLoRaAPRS)
+                {
+                    lora_setchip_meshcom();
+                    bSetLoRaAPRS = false;
+                }
+                #endif
+
+                OnTxDone();
+
+                // clear Transmit Interrupt
+                bEnableInterruptTransmit = false; // KBC 0801
+                radio.clearPacketSentAction();  //KBC 0801
+
+                // clear Receive Interrupt
+                bEnableInterruptReceive = false; // KBC 0801
+                radio.clearPacketReceivedAction();  //KBC 0801
+
+                // set Receive Interupt
+                bEnableInterruptReceive = true;
+                radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
+
+                int state = radio.startReceive();
+
+                if (state != RADIOLIB_ERR_NONE)
+                {
+                    if(bLORADEBUG)
+                    {
+                        Serial.print(F("[LoRa]...Starting to listen again (1)... "));
+                        Serial.print(F("failed, code "));
+                        Serial.println(state);
+                    }
+                }        
+
+                inoReceiveTimeOutTime=millis();
+
+                iReceiveTimeOutTime = millis(); // start to wait for next transmit
+            }
+        }
+
+        // Check transmit now
+        if(iReceiveTimeOutTime == 0 && !bEnableInterruptTransmit)
+        {
+            // channel is free
+            // nothing was detected
+            // do not print anything, it just spams the console
+            if (iWrite != iRead)
+            {
+                // save transmission state between loops
+                cmd_counter=0;
+                tx_waiting=true;
+
+                // clear Receive Interrupt
+                bEnableInterruptReceive = false;
+                radio.clearPacketReceivedAction();  //KBC 0801
+
+                // set Transmit Interupt
+                bEnableInterruptTransmit = true; //KBC 0801
+                radio.setPacketSentAction(setFlagSent); //KBC 0801
+
+                if(doTX())
+                {
+                    //KBC 0801 bEnableInterruptTransmit = true;
+                }
+                else
+                {
+                    if(bLORADEBUG)
+                        Serial.print(F("[LoRa]...Starting to listen again... "));
+
+                    // clear Transmit Interrupt
+                    bEnableInterruptReceive = false; // KBC 0801
+                    bEnableInterruptTransmit = false; // KBC 0801
+                    radio.clearPacketSentAction();  //KBC 0801
+
+                    // set Receive Interupt
+                    bEnableInterruptReceive = true; //KBC 0801
+                    radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
+
+                    int state = radio.startReceive();
+                    if (state == RADIOLIB_ERR_NONE)
+                    {
+                        if(bLORADEBUG)
+                            Serial.println(F("success!"));
+                    }
+                    else
+                    {
+                        if(bLORADEBUG)
+                        {
+                            Serial.print(F("failed, code "));
+                            Serial.println(state);
+                        }
+                    }        
+                }
+            }
+        }
     } // bRadio active
     
     // get RTC Now

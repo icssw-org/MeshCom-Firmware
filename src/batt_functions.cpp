@@ -182,7 +182,6 @@ void init_batt(void)
 	pinMode(ADC_CTRL_PIN, OUTPUT);
 
 	analogReadResolution(12);
-
 #endif
 
 #if defined(NRF52_SERIES)
@@ -200,6 +199,11 @@ void init_batt(void)
 	VextON();
 
 	analogReadResolution(12); // Can be 8, 10, 12 or 14
+
+#elif defined(BOARD_E22_S3)
+	analogSetAttenuation(ADC_0db);
+
+	analogReadResolution(12);
 
 #else
 	//only for Test check_efuse();
@@ -290,7 +294,7 @@ float read_batt(void)
 		const float factor = (adcMaxVoltage / adcMax) * ((R1 + R2)/(float)R2) * (measuredVoltage / reportedVoltage);
 		
 		//V3.1 digitalWrite(ADC_CTRL_PIN,LOW);
-		digitalWrite(ADC_CTRL_PIN,HIGH);
+		digitalWrite(ADC_CTRL_PIN, HIGH);
 
 		delay(100);
 		int analogValue = analogRead(vbat_pin);
@@ -312,6 +316,20 @@ float read_batt(void)
 		}
 
 		raw = floatVoltage * 1000.0;
+
+		#elif defined(BOARD_E22_S3)
+
+		uint16_t analogValue = analogReadMilliVolts(BATTERY_PIN);
+
+		if(bDisplayCont)
+		{
+			Serial.printf("[BATT]...reading: %lumV\n", analogValue);
+			Serial.printf("[BATT]...voltage: %lumV\n", analogValue * (10000 + 2200) / 2200);
+			delay(1000); 
+		}
+
+		raw = (analogValue * (10000 + 2200)) / 2200;
+
 	#else
 
 	int imax=1;
@@ -347,6 +365,8 @@ float read_batt(void)
 		raw = raw * 24.80;
 	#elif defined(BOARD_HELTEC_V3)
 		// al done
+	#elif defined(BOARD_E22_S3)
+		// al done
 	#elif defined(BOARD_TLORA_OLV216)
 		raw = raw * 1000.0; // convert to volt
 	#elif defined(BOARD_E290)
@@ -355,7 +375,7 @@ float read_batt(void)
 		raw = raw * 24.80;
 	#endif
 
-	if(bDEBUG && bDisplayInfo)
+	if(bDisplayCont)
 	{
 		Serial.print("[readBatteryVoltage] raw mV : ");
 		Serial.println(raw);
