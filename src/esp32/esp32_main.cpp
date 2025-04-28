@@ -701,16 +701,16 @@ void esp32setup()
         bRadio = false; // no detailed setting
     #endif
 
+    // > 4.34w we use EU8 instead of EU
+    if(meshcom_settings.node_country == 0)
+        meshcom_settings.node_country = 8;
+
+    lora_setcountry(meshcom_settings.node_country);
+
     // you can also change the settings at runtime
     // and check if the configuration was changed successfully
     if(bRadio)
     {
-        // 4.34w we use EU8 instead of EU
-        if(meshcom_settings.node_country == 0)
-            meshcom_settings.node_country = 8;
-
-        lora_setcountry(meshcom_settings.node_country);
-
         // set boosted gain
         #if defined(SX1262_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
         Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
@@ -1088,6 +1088,7 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
+    /*
     #ifdef BOARD_LED
         if(bLED)
             digitalWrite(BOARD_LED, HIGH);
@@ -1096,48 +1097,49 @@ void esp32loop()
 
         bLED = !bLED;
     #endif
-
-    if(bLORADEBUG && receiveFlag)
-        Serial.println("receiveflag");
-
-    if(bLORADEBUG && transmittedFlag)
-        Serial.println("transmittedFlag");
-
-    if(inoReceiveTimeOutTime > 0)
-    {
-        // Timeout RECEIVE_TIMEOUT
-        if((inoReceiveTimeOutTime + (60 * 6 * 1000)) < millis())  // 6 Minuten
-        {
-            inoReceiveTimeOutTime=0;
-
-            if(bLORADEBUG)
-            {
-                Serial.print(getTimeString());
-                Serial.println(" [LoRa]...Receive Timeout > 6.5 min. just for info");
-            }
-
-            /*
-            char tmessage[50];
-            sprintf(tmessage, ":%s", (char*)"test restart LoRa-Loop");
-
-            sendMessage(tmessage, strlen(tmessage));
-            */
-        }
-    }
-
-    if(!bGATEWAY)
-    {
-        if ((retransmit_timer + (1000 * 2)) < millis())   // repeat 2 seconds
-        {
-            updateRetransmissionStatus();
-
-            retransmit_timer = millis();
-        }
-    }
+    */
 
     // LoRa-Chip found
     if(bRadio)
     {
+        if(bLORADEBUG && receiveFlag)
+            Serial.println("receiveflag");
+
+        if(bLORADEBUG && transmittedFlag)
+            Serial.println("transmittedFlag");
+
+        if(inoReceiveTimeOutTime > 0)
+        {
+            // Timeout RECEIVE_TIMEOUT
+            if((inoReceiveTimeOutTime + (60 * 6 * 1000)) < millis())  // 6 Minuten
+            {
+                inoReceiveTimeOutTime=0;
+
+                if(bLORADEBUG)
+                {
+                    Serial.print(getTimeString());
+                    Serial.println(" [LoRa]...Receive Timeout > 6.5 min. just for info");
+                }
+
+                /*
+                char tmessage[50];
+                sprintf(tmessage, ":%s", (char*)"test restart LoRa-Loop");
+
+                sendMessage(tmessage, strlen(tmessage));
+                */
+            }
+        }
+
+        if(!bGATEWAY)
+        {
+            if ((retransmit_timer + (1000 * 2)) < millis())   // repeat 2 seconds
+            {
+                updateRetransmissionStatus();
+
+                retransmit_timer = millis();
+            }
+        }
+
         if(iReceiveTimeOutTime > 0)
         {
             // Timeout RECEIVE_TIMEOUT
@@ -1334,7 +1336,7 @@ void esp32loop()
             }
         }
     } // bRadio active
-    
+
     // get RTC Now
     // RTC hat Vorrang zu Zeit via MeshCom-Server
     bool bMyClock = true;
