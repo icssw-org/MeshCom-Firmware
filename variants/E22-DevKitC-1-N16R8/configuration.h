@@ -61,12 +61,11 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ANALOG_PIN 1
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
-#define BUTTON_PIN 0
-
-#define BATTERY_PIN 7 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define BATTERY_PIN 2 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_MULTIPLIER (10000 + 2200) / 2200
 
-#define LED_PIN 38
+#define BUTTON_PIN 0
+#define LED_PIN 38      //LED_BUILTIN
 #define BOARD_LED 38
 
 #define OneWire_GPIO 42

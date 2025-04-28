@@ -16,14 +16,18 @@ String scanI2C()
 
     char cInfo[100] = {0};
 
+    int idw=1;
+
     TwoWire *w = NULL;
 
     #ifdef BOARD_TBEAM_V3
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
+        idw=2;
     #endif
 
-    for(int i2=0; i2<2; i2++)
+
+    for(int i2=0; i2<idw; i2++)
     {
         if(i2 == 0)
         {

@@ -10,7 +10,7 @@
         "-DARDUINO_ESP32S3_DEV",
         "-DBOARD_HAS_PSRAM",
         "-DARDUINO_USB_MODE=1",
-        "-DARDUINO_USB_CDC_ON_BOOT=1"
+        "-DARDUINO_USB_CDC_ON_BOOT=0"
       ],
       "f_cpu": "240000000L",
       "f_flash": "80000000L",
