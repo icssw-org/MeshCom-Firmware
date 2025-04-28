@@ -89,6 +89,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define E22_NRST 17
 #define E22_SCK SCK
 #define E22_NSS SS
+#define LORA_RST E22_NRST // do be compatible with other config.h  
 
 // alternative definitions - duplicates
 #define SX1262X_CS E22_NSS
