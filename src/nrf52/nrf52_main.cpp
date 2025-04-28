@@ -391,7 +391,7 @@ void nrf52setup()
     bSHORTPATH = meshcom_settings.node_sset & 0x0400;
     bGATEWAY =  meshcom_settings.node_sset & 0x1000;
     bEXTUDP =  meshcom_settings.node_sset & 0x2000;
-    //bEXTSER =  meshcom_settings.node_sset & 0x4000; // frei
+    bDisplayCont =  meshcom_settings.node_sset & 0x4000;
 
     bONEWIRE =  meshcom_settings.node_sset2 & 0x0001;
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;

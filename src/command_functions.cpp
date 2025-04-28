@@ -336,6 +336,8 @@ void commandAction(char *umsg_text, bool ble)
 
         bDisplayCont=false;
 
+        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x3FFF;
+
         save_settings();
 
         return;
@@ -346,6 +348,8 @@ void commandAction(char *umsg_text, bool ble)
         Serial.println("\nsetcont on");
 
         bDisplayCont=true;
+
+        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x4000;
 
         save_settings();
 
@@ -3225,6 +3229,9 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
+            Serial.printf("...DisplayInfo %s ...DisplayCont %s\n",
+                    (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"));
+
             Serial.printf("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
 
             Serial.printf("...BTCODE %06i\n", meshcom_settings.bt_code);
