@@ -75,8 +75,6 @@ definitions for HELTEC E290
 #define SDA_PIN 39
 #define SCL_PIN 38
 
-//#define LED_PIN 25
-
 //#define RESET_OLED RST_OLED
 #define I2C_SDA SDA_PIN // I2C pins for this board
 #define I2C_SCL SCL_PIN

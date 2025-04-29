@@ -62,7 +62,7 @@ extern XPowersLibInterface *PMU;
 #include <Adafruit_NeoPixel.h> 
 
 Adafruit_NeoPixel pixels(LED_PIXEL, LED_PIN, NEO_GRB + NEO_KHZ800);
-#define DELAYVAL 200
+#define DELAYVAL 100
 
 bool bLED_WEISS=false;
 int iCount_weiss=0;
@@ -418,7 +418,7 @@ void esp32setup()
     Serial.println("============");
 
     heap = ESP.getFreeHeap();
-    Serial.printf("[HEAP]...%d\n", heap);
+    Serial.printf("[HEAP]...%d (free)\n", heap);
 
     initDisplay();
 
@@ -1111,19 +1111,19 @@ void esp32loop()
             for(int i=0; i<LED_PIXEL; i++)
             {
                 if(bLED_GREEN)
-                    pixels.setPixelColor(i, pixels.Color(150, 0, 0));
+                    pixels.setPixelColor(i, pixels.Color(50, 0, 0));
                 else
                 if(bLED_RED)
-                    pixels.setPixelColor(i, pixels.Color(0, 150, 0));
+                    pixels.setPixelColor(i, pixels.Color(0, 50, 0));
                 else
                 if(bLED_BLUE)
-                    pixels.setPixelColor(i, pixels.Color(0, 0, 150));
+                    pixels.setPixelColor(i, pixels.Color(0, 0, 50));
                 else
                 if(bLED_ORANGE)
-                    pixels.setPixelColor(i, pixels.Color(255, 165, 0));
+                    pixels.setPixelColor(i, pixels.Color(50, 25, 0));
                 else
                 if(bLED_WEISS)
-                    pixels.setPixelColor(i, pixels.Color(255, 255, 255));
+                    pixels.setPixelColor(i, pixels.Color(50, 50, 50));
                 else
                 if(bLED_CLEAR)
                     pixels.setPixelColor(i, pixels.Color(0, 0, 0));
@@ -1136,6 +1136,8 @@ void esp32loop()
 
                 bLED_CLEAR=!bLED_CLEAR;
             }
+
+            pixels.setBrightness(25);
 
             pixels.show();
 
@@ -1833,7 +1835,7 @@ void esp32loop()
             if(bDisplayCont)
             {
                 heap = ESP.getFreeHeap();
-                Serial.printf("[HEAP]...%d\n", heap);
+                Serial.printf("[HEAP]...%d (free)\n", heap);
             }
 
             BattTimeWait = millis();
