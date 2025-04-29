@@ -21,6 +21,12 @@ int BOARD_HARDWARE = MODUL_HARDWARE;
 
 bool bRadio=false;
 
+bool bLED_RED=false;
+bool bLED_BLUE=false;
+bool bLED_GREEN=false;
+bool bLED_ORANGE=false;
+bool bLED_CLEAR=true;
+
 extern unsigned long rebootAuto;
 
 uint32_t heap = 0;

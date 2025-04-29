@@ -9,6 +9,11 @@ extern unsigned long rebootAuto;
 
 extern bool bRadio;
 
+extern bool bLED_RED;
+extern bool bLED_BLUE;
+extern bool bLED_GREEN;
+extern bool bLED_ORANGE;
+
 extern int iWlanWait;
 
 extern uint32_t heap;
@@ -20,6 +25,7 @@ extern bool bLORADEBUG;
 extern bool bBLEDEBUG;
 extern bool bWXDEBUG;
 extern bool bIODEBUG;
+extern bool bLED_CLEAR;
 
 extern bool bPosDisplay;
 extern bool bDisplayOff;

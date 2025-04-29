@@ -16,10 +16,10 @@ void init_flash(void)
     preferences.begin("Credentials", false);
 
     String strVar = preferences.getString("node_call");
-    sprintf(meshcom_settings.node_call, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", strVar.c_str());
 
     strVar = preferences.getString("node_short");
-    sprintf(meshcom_settings.node_short, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", strVar.c_str());
 
     meshcom_settings.node_symid = preferences.getChar("node_symid", '/');
     meshcom_settings.node_symcd = preferences.getChar("node_symcd", '#');
@@ -35,9 +35,9 @@ void init_flash(void)
     meshcom_settings.node_press = preferences.getFloat("node_press", 0.0);
 
     strVar = preferences.getString("node_ssid", "none");
-    sprintf(meshcom_settings.node_ossid, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_ossid, sizeof(meshcom_settings.node_ossid), "%s", strVar.c_str());
     strVar = preferences.getString("node_pwd", "none");
-    sprintf(meshcom_settings.node_opwd, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_opwd, sizeof(meshcom_settings.node_opwd), "%s", strVar.c_str());
 
     meshcom_settings.node_hamnet_only = preferences.getInt("node_honly", 0);
 
@@ -46,7 +46,7 @@ void init_flash(void)
     meshcom_settings.node_maxv = preferences.getFloat("node_maxv", 4.125);
 
     strVar = preferences.getString("node_extern", "none");
-    sprintf(meshcom_settings.node_extern, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", strVar.c_str());
 
     meshcom_settings.node_msgid = preferences.getInt("node_msgid", 0);
     meshcom_settings.node_ackid = preferences.getInt("node_ackid", 0);
@@ -58,7 +58,7 @@ void init_flash(void)
     meshcom_settings.node_cr = preferences.getInt("node_cr", 0);
 
     strVar = preferences.getString("node_atxt");
-    sprintf(meshcom_settings.node_atxt, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_atxt, sizeof(meshcom_settings.node_atxt), "%s", strVar.c_str());
 
     meshcom_settings.node_sset2 = preferences.getInt("node_sset2", 0x0000);
     meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 36);
@@ -79,38 +79,38 @@ void init_flash(void)
     meshcom_settings.node_mcp17in = preferences.getInt("node_mcp17i", 0);
 
     strVar = preferences.getString("node_mcp170");
-    sprintf(meshcom_settings.node_mcp17t[0], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[0], sizeof(meshcom_settings.node_mcp17t[0]), "%s", strVar.c_str());
     strVar = preferences.getString("node_mcp171");
-    sprintf(meshcom_settings.node_mcp17t[1], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[1], sizeof(meshcom_settings.node_mcp17t[1]), "%s", strVar.c_str());
     strVar = preferences.getString("node_mcp172");
-    sprintf(meshcom_settings.node_mcp17t[2], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[2], sizeof(meshcom_settings.node_mcp17t[2]), "%s", strVar.c_str());
     strVar = preferences.getString("node_mcp173");
-    sprintf(meshcom_settings.node_mcp17t[3], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[3], sizeof(meshcom_settings.node_mcp17t[3]), "%s", strVar.c_str());
     strVar = preferences.getString("node_mcp174");
-    sprintf(meshcom_settings.node_mcp17t[4], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[4], sizeof(meshcom_settings.node_mcp17t[4]), "%s", strVar.c_str());
     strVar = preferences.getString("node_mcp175");
-    sprintf(meshcom_settings.node_mcp17t[5], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[5], sizeof(meshcom_settings.node_mcp17t[5]), "%s", strVar.c_str());
     strVar = preferences.getString("node_mcp176");
-    sprintf(meshcom_settings.node_mcp17t[6], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[6], sizeof(meshcom_settings.node_mcp17t[6]), "%s", strVar.c_str());
     strVar = preferences.getString("node_mcp177");
-    sprintf(meshcom_settings.node_mcp17t[7], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[7], sizeof(meshcom_settings.node_mcp17t[7]), "%s", strVar.c_str());
 
     strVar = preferences.getString("node_mcp178");
-    sprintf(meshcom_settings.node_mcp17t[8], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[8], sizeof(meshcom_settings.node_mcp17t[8]), "%s", strVar.c_str());
     strVar = preferences.getString("node_mcp179");
-    sprintf(meshcom_settings.node_mcp17t[9], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[9], sizeof(meshcom_settings.node_mcp17t[9]),"%s", strVar.c_str());
     strVar = preferences.getString("node_mcp1710");
-    sprintf(meshcom_settings.node_mcp17t[10], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[10], sizeof(meshcom_settings.node_mcp17t[10]),"%s", strVar.c_str());
     strVar = preferences.getString("node_mcp1711");
-    sprintf(meshcom_settings.node_mcp17t[11], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[11], sizeof(meshcom_settings.node_mcp17t[11]),"%s", strVar.c_str());
     strVar = preferences.getString("node_mcp1712");
-    sprintf(meshcom_settings.node_mcp17t[12], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[12], sizeof(meshcom_settings.node_mcp17t[12]),"%s", strVar.c_str());
     strVar = preferences.getString("node_mcp1713");
-    sprintf(meshcom_settings.node_mcp17t[13], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[13], sizeof(meshcom_settings.node_mcp17t[13]),"%s", strVar.c_str());
     strVar = preferences.getString("node_mcp1714");
-    sprintf(meshcom_settings.node_mcp17t[14], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[14], sizeof(meshcom_settings.node_mcp17t[14]),"%s", strVar.c_str());
     strVar = preferences.getString("node_mcp1715");
-    sprintf(meshcom_settings.node_mcp17t[15], "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_mcp17t[15], sizeof(meshcom_settings.node_mcp17t[15]),"%s", strVar.c_str());
 
 	// GM Fields
     meshcom_settings.node_gcb[0] = preferences.getInt("node_gcb0");
@@ -132,7 +132,7 @@ void init_flash(void)
     meshcom_settings.node_postime = preferences.getInt("node_postime", 0);
 
     strVar = preferences.getString("node_passwd");
-    sprintf(meshcom_settings.node_passwd, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%s", strVar.c_str());
 
     meshcom_settings.node_sset3 = preferences.getInt("node_sset3", 0x0000);
 
@@ -141,40 +141,40 @@ void init_flash(void)
     meshcom_settings.node_button_pin = preferences.getInt("node_bpin", 0);
 
     strVar = preferences.getString("node_ownip");
-    sprintf(meshcom_settings.node_ownip, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_ownip, sizeof(meshcom_settings.node_ownip), "%s", strVar.c_str());
     strVar = preferences.getString("node_owngw");
-    sprintf(meshcom_settings.node_owngw, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_owngw, sizeof(meshcom_settings.node_owngw), "%s", strVar.c_str());
     strVar = preferences.getString("node_ownms");
-    sprintf(meshcom_settings.node_ownms, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_ownms, sizeof(meshcom_settings.node_ownms), "%s", strVar.c_str());
 
     strVar = preferences.getString("node_name");
-    sprintf(meshcom_settings.node_name, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_name, sizeof(meshcom_settings.node_name), "%s", strVar.c_str());
 
     strVar = preferences.getString("node_webpwd");
-    sprintf(meshcom_settings.node_webpwd, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_webpwd, sizeof(meshcom_settings.node_webpwd), "%s", strVar.c_str());
 
     strVar = preferences.getString("node_lssid", "none");
-    sprintf(meshcom_settings.node_ssid, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid), "%s", strVar.c_str());
     strVar = preferences.getString("node_lpwd", "none");
-    sprintf(meshcom_settings.node_pwd, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_pwd, sizeof(meshcom_settings.node_pwd), "%s", strVar.c_str());
 
     meshcom_settings.node_analog_pin = preferences.getInt("node_apin", 99);
     meshcom_settings.node_analog_faktor = preferences.getFloat("node_afakt", 1.0);
 
     strVar = preferences.getString("node_parm", "none");
-    sprintf(meshcom_settings.node_parm, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_parm, sizeof(meshcom_settings.node_parm), "%s", strVar.c_str());
 
     strVar = preferences.getString("node_unit", "none");
-    sprintf(meshcom_settings.node_unit, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_unit, sizeof(meshcom_settings.node_unit), "%s", strVar.c_str());
 
     strVar = preferences.getString("node_format", "none");
-    sprintf(meshcom_settings.node_format, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_format, sizeof(meshcom_settings.node_format), "%s", strVar.c_str());
 
     strVar = preferences.getString("node_eqns", "none");
-    sprintf(meshcom_settings.node_eqns, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_eqns, sizeof(meshcom_settings.node_eqns), "%s", strVar.c_str());
 
     strVar = preferences.getString("node_values", "none");
-    sprintf(meshcom_settings.node_values, "%s", strVar.c_str());
+    snprintf(meshcom_settings.node_values, sizeof(meshcom_settings.node_values), "%s", strVar.c_str());
  
     meshcom_settings.node_parm_time = preferences.getInt("node_ptime", 15);
 

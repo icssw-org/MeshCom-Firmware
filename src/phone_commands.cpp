@@ -213,6 +213,8 @@ void sendConfigToPhone ()
 
 	//printBuffer(confBuff, conf_len);
 
+	bLED_BLUE = true;
+
 	// send to phone
 	#if defined(ESP8266) || defined(ESP32)
 		esp32_write_ble(confBuff, conf_len);
@@ -270,6 +272,8 @@ void sendToPhone()
 
 		// send to phone
 		// why do we need to add 2 bytes??
+		bLED_BLUE = true;
+
 		#if defined(ESP8266) || defined(ESP32)
 			blelen=blelen + 2;
 			esp32_write_ble(toPhoneBuff, blelen);
@@ -336,6 +340,8 @@ void sendComToPhone()
 
 		// send to phone
 		// why do we need to add 2 bytes??
+		bLED_BLUE = true;
+		
 		#if defined(ESP8266) || defined(ESP32)
 			blelen=blelen + 2;
 			esp32_write_ble(ComToPhoneBuff, blelen);

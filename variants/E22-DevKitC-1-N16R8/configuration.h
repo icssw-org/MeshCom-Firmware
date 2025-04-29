@@ -8,7 +8,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #include <configuration_global.h>
 
 // E22 specifig config
-#define MODUL_HARDWARE EBYTE_E22
+#define MODUL_HARDWARE ESP32_S3_EBYTE_E22
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define ENABLE_GPS
@@ -65,8 +65,9 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ADC_MULTIPLIER (10000 + 2200) / 2200
 
 #define BUTTON_PIN 0
-#define LED_PIN 38      //LED_BUILTIN
-#define BOARD_LED 38
+
+#define LED_PIXEL 1     //NEOPIXEL
+#define LED_PIN 48      //NEOPIXEL
 
 #define OneWire_GPIO 42
 

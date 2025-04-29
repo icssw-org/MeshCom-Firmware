@@ -77,6 +77,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     bNewLine=false;
 
+    bLED_GREEN = true;
+
     if(payload[0] == 0x41)
     {
         if(bDisplayInfo)
@@ -905,6 +907,7 @@ bool doTX()
                     #if defined BOARD_RAK4630
                         Radio.Send(lora_tx_buffer, sendlng);
                     #else
+                        bLED_RED = true;
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                     #endif
 
