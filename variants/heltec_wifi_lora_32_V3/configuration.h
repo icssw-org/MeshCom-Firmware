@@ -53,9 +53,6 @@ definitions for HELTEC_V3
 */
 #define LORA_SF 11
 
-
-#define LED_PIN 25
-
 #define RESET_OLED RST_OLED
 //issue #108 #define I2C_SDA 17 // I2C pins for this board
 //issue #108 #define I2C_SCL 18
