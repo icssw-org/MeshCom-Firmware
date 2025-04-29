@@ -20,12 +20,18 @@ String scanI2C()
 
     TwoWire *w = NULL;
 
+    //Serial.printf("[I2C] ... Scanner started\n");
+
     #ifdef BOARD_TBEAM_V3
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
         idw=2;
     #endif
 
+    #ifdef BOARD_E22_S3
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+    #endif
 
     for(int i2=0; i2<idw; i2++)
     {
@@ -42,7 +48,6 @@ String scanI2C()
             #endif
         }
 
-        //Serial.printf("[I2C-%i] ... Scanner started\n", i2);
 
         sprintf(cInfo, "[I2C-%i]...start\n", i2);
         strInfo.concat(cInfo);
@@ -90,11 +95,16 @@ String scanI2C()
 
                     //Serial.printf("[OLED]...RESULT: %i\n", buffer[0]);
 
+                    char dtype[5];
+                    snprintf(dtype, sizeof(dtype), "0x%02X", buffer[0]);
+
                     buffer[0] &= 0x0f;        // mask off power on/off bit
                     if(buffer[0] == 0x8 || buffer[0] == 0x0)
-                        strDev="OLED SSD1306";
+                        strDev="OLED SSD1306 ";
                     else
-                        strDev="OLED SH1106";
+                        strDev="OLED SH1106 ";
+                    
+                    strDev.concat(dtype);
                 }
 
                 if(address == 0x40)strDev="INA226";

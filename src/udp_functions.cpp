@@ -183,6 +183,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             Serial.println();
           }
 
+          bLED_ORANGE = true;
+
           aprsmsg.msg_source_path.concat(',');
           aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
 

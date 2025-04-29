@@ -57,6 +57,19 @@ extern XPowersLibInterface *PMU;
 
 #endif
 
+// NEOPIXEL
+#ifdef LED_PIN
+#include <Adafruit_NeoPixel.h> 
+
+Adafruit_NeoPixel pixels(LED_PIXEL, LED_PIN, NEO_GRB + NEO_KHZ800);
+#define DELAYVAL 200
+
+bool bLED_WEISS=false;
+int iCount_weiss=0;
+
+#endif
+
+
 
 /**
  * RadioLib Infos und Examples:
@@ -299,8 +312,6 @@ unsigned long retransmit_timer = 0;
 // flag to update NTP Time
 unsigned long updateTimeClient = 0;
 
-bool bLED=true;
-
 #if defined(ESP8266) || defined(ESP32)
   ICACHE_RAM_ATTR
 #endif
@@ -500,6 +511,10 @@ void esp32setup()
     // Initialize battery reading
 	init_batt();
 
+    #ifdef LED_PIN
+        pixels.begin();
+        Serial.println("[INIT]...NEOPIXEL set");
+    #endif
 
     #ifndef ENABLE_SOFTSER
         bSOFTSERON=false;
@@ -1088,16 +1103,63 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
-    /*
+    #ifdef LED_PIN
+        if(bLED_GREEN || bLED_RED || bLED_BLUE || bLED_ORANGE || bLED_WEISS || bLED_CLEAR)
+        {
+            pixels.clear();
+
+            for(int i=0; i<LED_PIXEL; i++)
+            {
+                if(bLED_GREEN)
+                    pixels.setPixelColor(i, pixels.Color(150, 0, 0));
+                else
+                if(bLED_RED)
+                    pixels.setPixelColor(i, pixels.Color(0, 150, 0));
+                else
+                if(bLED_BLUE)
+                    pixels.setPixelColor(i, pixels.Color(0, 0, 150));
+                else
+                if(bLED_ORANGE)
+                    pixels.setPixelColor(i, pixels.Color(255, 165, 0));
+                else
+                if(bLED_WEISS)
+                    pixels.setPixelColor(i, pixels.Color(255, 255, 255));
+                else
+                if(bLED_CLEAR)
+                    pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+
+                bLED_RED=false;
+                bLED_GREEN=false;
+                bLED_BLUE=false;
+                bLED_ORANGE=false;
+                bLED_WEISS=false;
+
+                bLED_CLEAR=!bLED_CLEAR;
+            }
+
+            pixels.show();
+
+            delay(DELAYVAL);
+        }
+        else
+        {
+            iCount_weiss++;
+            if(iCount_weiss > 120)
+            {
+                bLED_WEISS=true;
+                iCount_weiss=0;
+            }
+        }
+    #endif
+
     #ifdef BOARD_LED
+        // TODO
         if(bLED)
             digitalWrite(BOARD_LED, HIGH);
         else
             digitalWrite(BOARD_LED, LOW);
-
         bLED = !bLED;
     #endif
-    */
 
     // LoRa-Chip found
     if(bRadio)
