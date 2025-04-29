@@ -15,16 +15,7 @@
 bool clicked = false;
 bool bInputSelected = false;
 bool bTouchDected = false;
-bool bKBLOCK = false;
-bool bLIGHT = false;
-
 unsigned long tdeck_tft_timer = 0;
 
-int node_modus = 0;
-
 String strMaps[MAX_MAP] = {"Europe", "Germany", "Austria", "OE3", "OE1"};
-
-String setStartAudio = "/";
-String setMessageAudio = "/";
-
 uint16_t posrow = 0;

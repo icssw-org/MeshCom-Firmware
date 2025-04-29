@@ -164,6 +164,11 @@ struct s_meshcom_settings
 
 	#if defined(BOARD_T_DECK) || defined (BOARD_T_DECK_PLUS)
 	int node_map = 0;
+	String node_audio_start = "/";
+	String node_audio_msg = "/";
+	bool node_keyboardlock = false;
+	bool node_backlightlock = false;
+	int node_modus = 0;
 	#endif
 };
 

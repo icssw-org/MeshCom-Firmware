@@ -17,18 +17,8 @@
 extern bool clicked;
 extern bool bInputSelected;
 extern bool bTouchDected;
-extern bool bKBLOCK;
-extern bool bLIGHT;
-
 extern unsigned long tdeck_tft_timer;
-
-extern int node_modus;
-
 extern String strMaps[MAX_MAP];
-
-extern String setStartAudio;
-extern String setMessageAudio;
-
 extern uint16_t posrow;
 
 #endif // _TDECK_EXTERN_H_

@@ -557,7 +557,7 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
         if(bDEBUG)
             Serial.printf("Key pressed : iKeyBoardType:%i 0x%x\n", iKeyBoardType, act_key);
 
-        if(!bKBLOCK)
+        if(!meshcom_settings.node_keyboardlock)
             tft_on();
 
         bool bSPEC=false;
@@ -567,8 +567,8 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
             // spezial Keys
             if(act_key == 0x22) // SYM + L
             {
-                bLIGHT = !bLIGHT;
-                if(!bLIGHT)
+                meshcom_settings.node_backlightlock = !meshcom_settings.node_backlightlock;
+                if(!meshcom_settings.node_backlightlock)
                     tft_off();
 
                 bSPEC=true;
@@ -576,9 +576,9 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
 
             if(act_key == 0x27) // SYM + K
             {
-                bKBLOCK = !bKBLOCK;
+                meshcom_settings.node_keyboardlock = !meshcom_settings.node_keyboardlock;
 
-                if(bKBLOCK)
+                if(meshcom_settings.node_keyboardlock)
                     tft_off();
                 else
                     tft_on();
@@ -606,7 +606,7 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
                 bSPEC=true;
             }
 
-            if ((act_key == 0x21) && (!bKBLOCK)) // SYM + B
+            if ((act_key == 0x21) && (!meshcom_settings.node_keyboardlock)) // SYM + B
             {
                 cycleBrightness();
                 bSPEC=true;
@@ -615,7 +615,7 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
 
         last_key = act_key;
 
-        if(bSPEC || bKBLOCK)
+        if(bSPEC || meshcom_settings.node_keyboardlock)
         {
             data->state = LV_INDEV_STATE_REL;
         }
@@ -653,7 +653,7 @@ static void mouse_read(lv_indev_drv_t *indev, lv_indev_data_t *data)
         bool dir = digitalRead(dir_pins[i]);
         if (dir != last_dir[i])
         {
-            if (!bKBLOCK)
+            if (!meshcom_settings.node_keyboardlock)
                 tft_on();
 
             last_dir[i] = dir;
@@ -704,7 +704,7 @@ static void touchpad_read( lv_indev_drv_t *indev_driver, lv_indev_data_t *data )
     if (touch.isPressed())
     {
         uint8_t touched = touch.getPoint(x, y, 1);
-        if (!bKBLOCK)
+        if (!meshcom_settings.node_keyboardlock)
         {
             tft_on();
             if (touched > 0)

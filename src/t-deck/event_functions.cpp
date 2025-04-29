@@ -143,23 +143,41 @@ void btn_event_handler_dropdown_modusselect(lv_event_t * e)
             Serial.printf("DROPDOWN_MODUSSELECT:%s\n", buf);
 
         if(strcmp(buf, "OFF") == 0)
-            node_modus = 0;
+        {
+            meshcom_settings.node_modus = 0;
+            meshcom_settings.node_keyboardlock = false;
+            meshcom_settings.node_backlightlock = false;
+        }
         else
         if(strcmp(buf, "KB LOCK") == 0)
-            node_modus = 1;
+        {
+            meshcom_settings.node_modus = 1;
+            meshcom_settings.node_keyboardlock = true;
+            meshcom_settings.node_backlightlock = false;
+            lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
+        }
         else
         if(strcmp(buf, "LIGHT ON") == 0)
-            node_modus = 2;
+        {
+            meshcom_settings.node_modus = 2;
+            meshcom_settings.node_keyboardlock = false;
+            meshcom_settings.node_backlightlock = true;
+        }
         else
         if(strcmp(buf, "KBL&LIGHT") == 0)
-            node_modus = 3;
+        {
+            meshcom_settings.node_modus = 3;
+            meshcom_settings.node_keyboardlock = true;
+            meshcom_settings.node_backlightlock = true;
+            lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
+        }
 
         if(DO_DEBUG)
-            Serial.printf("node_modusselect:%i\n", node_modus);
+            Serial.printf("node_modusselect:%i\n", meshcom_settings.node_modus);
 
-        if(node_modus < 0)
+        if(meshcom_settings.node_modus < 0)
         {
-            node_modus = 0;
+            meshcom_settings.node_modus = 0;
         }
 
         lv_dropdown_close(dropdown_modusselect);
@@ -168,17 +186,17 @@ void btn_event_handler_dropdown_modusselect(lv_event_t * e)
     if(code == LV_EVENT_CLICKED)
     {
         String strModus = "OFF";
-        if(node_modus == 1)
+        if(meshcom_settings.node_modus == 1)
             strModus = "KB LOCK";
-        if(node_modus == 2)
+        if(meshcom_settings.node_modus == 2)
             strModus = "LIGHT ON";
-        if(node_modus == 3)
+        if(meshcom_settings.node_modus == 3)
             strModus = "KB&LIGHT";
 
         if(DO_DEBUG)
-            Serial.printf("node_modus:%i strModus:%s isel:%i\n", node_modus, strModus.c_str(), node_modus);
+            Serial.printf("node_modus:%i strModus:%s isel:%i\n", meshcom_settings.node_modus, strModus.c_str(), meshcom_settings.node_modus);
 
-        lv_dropdown_set_selected(dropdown_modusselect, node_modus);
+        lv_dropdown_set_selected(dropdown_modusselect, meshcom_settings.node_modus);
 
         lv_dropdown_open(dropdown_modusselect);
     }
@@ -432,16 +450,16 @@ void btn_event_handler_setup(lv_event_t * e)
 
         // START TONE
         strVar = lv_textarea_get_text(setup_stone);
-        if(setStartAudio.compareTo(strVar) != 0)
+        if(meshcom_settings.node_audio_start.compareTo(strVar) != 0)
         {
-            setStartAudio = strVar;
+            meshcom_settings.node_audio_start = strVar;
         }
 
         // MESSAGE TONE
         strVar = lv_textarea_get_text(setup_mtone);
-        if (setMessageAudio.compareTo(strVar) != 0)
+        if (meshcom_settings.node_audio_msg.compareTo(strVar) != 0)
         {
-            setMessageAudio = strVar;
+            meshcom_settings.node_audio_msg = strVar;
         }
 
         // NAME

@@ -10,7 +10,9 @@
 
 #include "lv_obj_functions.h"
 #include <configuration.h>
+#include <aprs_structures.h>
 #include <debugconf.h>
+#include <loop_functions.h>
 #include "tdeck_extern.h"
 #include "lv_obj_functions_extern.h"
 #include "tdeck_helpers.h"
@@ -1205,7 +1207,8 @@ void tft_on()
  */
 void tft_off()
 {
-    setBrightness(0);
+    if (!meshcom_settings.node_backlightlock)
+        setBrightness(0);
 }
 
 
@@ -1388,8 +1391,8 @@ void tdeck_refresh_SET_view()
     sprintf(vChar, "%i", meshcom_settings.node_alt);
     lv_textarea_set_text(setup_alt, vChar);
 
-    lv_textarea_set_text(setup_stone, setStartAudio.c_str());
-    lv_textarea_set_text(setup_mtone, setMessageAudio.c_str());
+    lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start.c_str());
+    lv_textarea_set_text(setup_mtone, meshcom_settings.node_audio_msg.c_str());
     lv_textarea_set_text(setup_name, meshcom_settings.node_name);
 
     sprintf(vChar, "%i", meshcom_settings.node_gcb[0]);
@@ -1534,4 +1537,72 @@ void tdeck_refresh_TRK_view()
 
         lv_textarea_set_text(track_ta, ctrack);
     }
+}
+
+/**
+ * adds an message to the MSG view
+ */
+void tdeck_add_MSG(aprsMessage aprsmsg)
+{
+    int iackpos = aprsmsg.msg_payload.indexOf('{');
+    String strAscii = "";//aprsmsg.msg_payload;
+
+    if(iackpos > 0)
+        strAscii = utf8ascii(aprsmsg.msg_payload.substring(0, iackpos));
+    else
+        strAscii = utf8ascii(aprsmsg.msg_payload);
+
+    tdeck_add_MSG(aprsmsg.msg_destination_call, aprsmsg.msg_source_path, strAscii);
+}
+
+/**
+ * adds an message to the MSG view
+ */
+void tdeck_add_MSG(String callsign, String path, String message)
+{
+    char buf[256];
+
+    snprintf(buf, 256, "%02i:%02i %s>%s\n%s\n",
+        meshcom_settings.node_date_hour, 
+        meshcom_settings.node_date_minute, 
+        path.c_str(), callsign.c_str(), message.c_str());
+                                            
+    if (strlen(lv_textarea_get_text(text_ta)) + 200 >= lv_textarea_get_max_length(text_ta))
+    {
+        String strText_ta = lv_textarea_get_text(text_ta);
+        String strResttext_ta = "";
+
+        int ixpc = 0;
+        int ixp=0;
+        for(ixp=0; ixp<strText_ta.length()+1; ixp++)
+        {
+            if(strText_ta.charAt(ixp) == 0x0a)
+            {
+                ixpc++;
+            }
+            
+            if(ixpc > 30)
+            {
+                strResttext_ta = strText_ta.substring(ixp+1);
+                break;
+            }
+        }
+
+        if(strResttext_ta.length() > 0)
+        {
+            lv_textarea_set_text(text_ta, strResttext_ta.c_str());
+        }
+    }
+
+    lv_textarea_add_text(text_ta, buf);
+
+    if (lv_tabview_get_tab_act(tv) != 1 && lv_tabview_get_tab_act(tv) != 6)
+        lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
+
+    if (!meshcom_settings.node_keyboardlock)
+    {
+        tft_on();
+    }
+
+    // play_sound
 }

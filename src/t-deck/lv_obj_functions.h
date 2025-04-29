@@ -12,6 +12,7 @@
 #define _LV_OBJ_FUNCTIONS_H_
 
 #include <Arduino.h>
+#include <aprs_structures.h>
 #include <lvgl.h>
 
 void setDisplayLayout(lv_obj_t *parent);
@@ -36,5 +37,7 @@ int getMapDropboxID(String strMap);
 
 void tdeck_refresh_SET_view();
 void tdeck_refresh_TRK_view();
+void tdeck_add_MSG(aprsMessage aprsmsg);
+void tdeck_add_MSG(String callsign, String path, String message);
 
 #endif // _LV_OBJ_FUNCTIONS_H_

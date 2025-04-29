@@ -503,6 +503,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     sendDisplayText(aprsmsg, rssi, snr);
 
                                     addBLEOutBuffer(RcvBuffer, size);
+
+                                    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+                                    tdeck_add_MSG(aprsmsg); 
+                                    #endif
                                 }
                             }
                             else
@@ -556,6 +560,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         {
                                             addBLEOutBuffer(RcvBuffer, size);
                                         }
+
+                                        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+                                        tdeck_add_MSG(aprsmsg); 
+                                        #endif
                                     }
 
                                     // If message already comes from one gateway/server no ACK from another gateway
@@ -710,7 +718,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(strcmp(destination_call, "100001") == 0)
                                 bMeshDestination = false;
                         }
-                            // more then 4 callsigns within source_path no need to MESH via a gateWay
+                        // more then 4 callsigns within source_path no need to MESH via a gateWay
                         if(bGATEWAY)
                         {
                             if(aprsmsg.payload_type == ':' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_text+1)    // TEXT

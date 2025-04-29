@@ -191,6 +191,15 @@ void init_flash(void)
     snprintf(meshcom_settings.node_lora_call, sizeof(meshcom_settings.node_lora_call), "%s", strVar.c_str());
 
     meshcom_settings.node_analog_alpha = preferences.getFloat("node_aak", 0.0);
+    
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    meshcom_settings.node_map = preferences.getInt("node_map", 0);
+    meshcom_settings.node_audio_start = preferences.getString("node_audstart", "/");
+    meshcom_settings.node_audio_msg = preferences.getString("node_audmsg", "/");
+    meshcom_settings.node_keyboardlock = preferences.getBool("node_kblock", false);
+    meshcom_settings.node_backlightlock = preferences.getBool("node_bllock", false);
+    meshcom_settings.node_modus = preferences.getInt("node_modus", 0);
+    #endif
 }
 
 void save_settings(void)
@@ -369,6 +378,15 @@ void save_settings(void)
     preferences.putInt("node_spsamp", meshcom_settings.node_specsamples);
 
     preferences.putFloat("node_bfakt", meshcom_settings.node_analog_batt_faktor);
+    
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    preferences.putInt("node_map", meshcom_settings.node_map);
+    preferences.putString("node_audstart", meshcom_settings.node_audio_start);
+    preferences.putString("node_audmsg", meshcom_settings.node_audio_msg);
+    preferences.putBool("node_kblock", meshcom_settings.node_keyboardlock);
+    preferences.putBool("node_bllock", meshcom_settings.node_backlightlock);
+    preferences.putInt("node_modus", meshcom_settings.node_modus);
+    #endif 
 
     preferences.putInt("node_wifip", meshcom_settings.node_wifi_power);
 
