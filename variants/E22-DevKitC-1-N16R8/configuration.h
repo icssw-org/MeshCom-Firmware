@@ -20,7 +20,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
 
-#define SX1262_V3
+#define SX1268_V3
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
@@ -92,7 +92,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define LORA_RST E22_NRST // do be compatible with other config.h  
 
 // alternative definitions - duplicates
-#define SX1262X_CS E22_NSS
-#define SX1262X_IRQ E22_DIO1
-#define SX1262X_RST E22_NRST
-#define SX1262X_GPIO E22_NRST
+#define SX1268X_CS E22_NSS
+#define SX1268X_IRQ E22_DIO1
+#define SX1268X_RST E22_NRST
+#define SX1268X_GPIO E22_BUSY
