@@ -263,6 +263,16 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 
 #endif
 
+#ifdef SX1268_V3
+    // RadioModule SX1268 
+    // cs - irq - reset - interrupt gpio
+    // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
+    // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
+
+    SX1268 radio = new Module(SX1268X_CS, SX1268X_IRQ, SX1268X_RST, SX1268X_GPIO);
+
+#endif
+
 #ifdef SX1262_V3
     // RadioModule SX1262
     // cs - irq - reset - interrupt gpio
@@ -686,6 +696,10 @@ void esp32setup()
     Serial.print(F("[LoRa]...SX1262 V3 chip"));
     #endif
     
+    #ifdef SX1268_V3
+    Serial.print(F("[LoRa]...SX1268 V3 chip"));
+    #endif
+
     #ifdef SX1262_E290
     Serial.print(F("[LoRa]...SX1262 E290 chip"));
     #endif
@@ -727,7 +741,7 @@ void esp32setup()
     if(bRadio)
     {
         // set boosted gain
-        #if defined(SX1262_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+        #if defined(SX1262_V3) || defined(SX1268_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
         Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
         if (radio.setRxBoostedGainMode(meshcom_settings.node_sset2 & 0x0800)  != RADIOLIB_ERR_NONE ) {
             Serial.println(F("Boosted Gain is not available for this module!"));
@@ -860,8 +874,8 @@ void esp32setup()
 
         #endif
 
-        // setup for SX126x Radios
-        #if defined(SX126X) || defined(SX1262X)
+        // setup for SX126x, 1268_V3 Radios
+        #if defined(SX126X) || defined(SX1268_V3) || defined(SX1262X)
         // set the function that will be called
         // when LoRa preamble is not detected within CAD timeout period
         // or when a packet is received
