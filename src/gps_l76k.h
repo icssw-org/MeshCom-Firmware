@@ -9,6 +9,9 @@
  
     unsigned int displayInfo();
     bool GPS_Recovery();
+
+    bool beginGPS();
+
 #endif
 
 #endif
