@@ -583,7 +583,7 @@ void esp32setup()
 
     #ifdef BOARD_TBEAM_V3
         setupPMU(bSETGPS_POWER);
-        setupL76KGPS();
+        beginGPS(); //switchL76KGPS();
     #else
         setupPMU(bSETGPS_POWER);
     #endif

@@ -41,6 +41,73 @@
 // TinyGPS
 extern TinyGPSPlus tinyGPSPlus;
  
+bool l76kProbe()
+{
+    bool result = false;
+    uint32_t startTimeout ;
+    SerialGPS.write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
+    delay(5);
+    // Get version information
+    startTimeout = millis() + 3000;
+    Serial.print("Try to init L76K . Wait stop .");
+    // SerialGPS.flush();
+    while (SerialGPS.available()) {
+        int c = SerialGPS.read();
+        // Serial.write(c);
+        // Serial.print(".");
+        // Serial.flush();
+        // SerialGPS.flush();
+        if (millis() > startTimeout) {
+            Serial.println("Wait L76K stop NMEA timeout!");
+            return false;
+        }
+    };
+    Serial.println();
+    SerialGPS.flush();
+    delay(200);
+
+    SerialGPS.write("$PCAS06,0*1B\r\n");
+    startTimeout = millis() + 500;
+    String ver = "";
+    while (!SerialGPS.available()) {
+        if (millis() > startTimeout) {
+            Serial.println("Get L76K timeout!");
+            return false;
+        }
+    }
+    SerialGPS.setTimeout(10);
+    ver = SerialGPS.readStringUntil('\n');
+    if (ver.startsWith("$GPTXT,01,01,02")) {
+        Serial.println("L76K GNSS init succeeded, using L76K GNSS Module\n");
+        result = true;
+    }
+    delay(500);
+
+    // Initialize the L76K Chip, use GPS + GLONASS
+    SerialGPS.write("$PCAS04,5*1C\r\n");
+    delay(250);
+    // only ask for RMC and GGA
+    SerialGPS.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+    delay(250);
+    // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
+    SerialGPS.write("$PCAS11,3*1E\r\n");
+    return result;
+}
+
+bool beginGPS()
+{
+    SerialGPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    bool result = false;
+    for ( int i = 0; i < 3; ++i) {
+        result = l76kProbe();
+        if (result) {
+            return result;
+        }
+    }
+    return result;
+}
+
+/*
 void switchL76KGPS()
 {
     Serial.println("[L76K]...switchL76KGPS");
@@ -65,6 +132,7 @@ void switchL76KGPS()
         }
     }
 }
+*/
 
 void stopL76KGPS()
 {
@@ -75,9 +143,10 @@ void stopL76KGPS()
     posinfo_hdop = 0;
 }
 
+/*
 bool setupL76KGPS()
 {
-     // L76K GPS USE 9600 BAUDRATE
+    // L76K GPS USE 9600 BAUDRATE
      SerialGPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
      bool result = false;
      uint32_t startTimeout;
@@ -153,26 +222,31 @@ bool setupL76KGPS()
      SerialGPS.write("$PCAS11,3*1E\r\n");
 
      return result;
- }
- 
+}
+*/ 
 unsigned int loopL76KGPS()
 {
     if(bGPSDEBUG)
-        Serial.println("\n[L76K]...loopL76KGPS start");
+        Serial.println("[L76K]...loopL76KGPS start");
+
+    bool bGPSAVAIL=false;
 
     while (SerialGPS.available())
     {
         char c = SerialGPS.read();
         
         if(bGPSDEBUG && bDEBUG)
+        {
             Serial.print(c);
+            bGPSAVAIL=true;
+        }
 
         if (tinyGPSPlus.encode(c))
         {
         }
     }
 
-    if(bGPSDEBUG && bDEBUG)
+    if(bGPSDEBUG && bDEBUG && bGPSAVAIL)
         Serial.println("");
 
     return displayInfo();

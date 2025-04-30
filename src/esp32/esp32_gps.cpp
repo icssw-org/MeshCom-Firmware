@@ -211,7 +211,6 @@ void setupPMU(bool bGPSPOWER)
         PMU->enablePowerOutput(XPOWERS_ALDO3);
 
         // In order to avoid bus occupation, during initialization, the SD card and QMC sensor are powered off and restarted
-        /*
         if (ESP_SLEEP_WAKEUP_UNDEFINED == esp_sleep_get_wakeup_cause()) {
             Serial.println("Power off and restart ALDO BLDO..");
             PMU->disablePowerOutput(XPOWERS_ALDO1);
@@ -219,7 +218,6 @@ void setupPMU(bool bGPSPOWER)
             PMU->disablePowerOutput(XPOWERS_BLDO1);
             delay(250);
         }
-        */
 
         // Sensor
         PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
@@ -254,12 +252,6 @@ void setupPMU(bool bGPSPOWER)
         PMU->disablePowerOutput(XPOWERS_DLDO1);
         PMU->disablePowerOutput(XPOWERS_DLDO2);
         PMU->disablePowerOutput(XPOWERS_VBACKUP);
-
-        // Set constant current charge current limit
-        PMU->setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_500MA);
-
-        // Set charge cut-off voltage
-        PMU->setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V2);
         
         #else
 
