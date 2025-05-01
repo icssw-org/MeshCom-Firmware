@@ -708,11 +708,11 @@ void esp32setup()
 
     int state = RADIOLIB_ERR_UNKNOWN;
     
-    #if defined(BOARD_E220)
-        state = radio.begin(434.0F, 125.0F, 9, 7, SYNC_WORD_SX127x, 10, LORA_PREAMBLE_LENGTH, /*float tcxoVoltage = 0*/ 0, /*bool useRegulatorLDO = false*/ false);
-    #else
-        state = radio.begin();
-    #endif
+    //#if defined(BOARD_E220) || defined(SX1268_V3)
+        state = radio.begin(434.0F, 125.0F, 9, 7, SYNC_WORD_SX127x, 10, LORA_PREAMBLE_LENGTH, /*float tcxoVoltage = 0*/ 1.6F, /*bool useRegulatorLDO = false*/ false);
+    //#else
+    //    state = radio.begin();
+    //#endif
     
     if (state == RADIOLIB_ERR_NONE)
     {
