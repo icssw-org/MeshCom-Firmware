@@ -658,16 +658,16 @@ void esp32setup()
     //
     ////////////////////////////////////////////////////////////////////
 
-#if defined(BOARD_E22)  || defined(BOARD_E22_S3) || defined(BOARD_E220)
-    // if RESET Pin is connected
-    pinMode(LORA_RST, PULLUP);
-    digitalWrite(LORA_RST, LOW);
-    delay(200);
-    digitalWrite(LORA_RST, HIGH);
+    #if defined(BOARD_E22) || defined(BOARD_E220)  || defined(BOARD_E22_S3)
+        // if RESET Pin is connected
+        pinMode(LORA_RST, PULLUP);
+        digitalWrite(LORA_RST, LOW);
+        delay(200);
+        digitalWrite(LORA_RST, HIGH);
 
-    // we have TXEN and RXEN Pin connected
-    radio.setRfSwitchPins(E22_RXEN, E22_TXEN);
-#endif
+        // we have TXEN and RXEN Pin connected
+        radio.setRfSwitchPins(E22_RXEN, E22_TXEN);
+    #endif
 
     startDisplay((char*)"...starting now", (char*)"@by icssw.org", (char*)"OE1KBC, OE1KFR");
 
