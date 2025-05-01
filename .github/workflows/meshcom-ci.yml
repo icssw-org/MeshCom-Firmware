@@ -54,6 +54,7 @@ jobs:
 
     - name: Rename Files
       run: "mv .pio/build/E22-DevKitC/firmware.bin .pio/build/E22-DevKitC/E22-DevKitC.bin & 
+      mv .pio/build/E22-DevKitC-1-N16R8/firmware.bin .pio/build/E22-DevKitC-1-N16R8/E22-DevKitC-1-N16R8.bin & 
       mv .pio/build/heltec_wifi_lora_32_V2/firmware.bin .pio/build/heltec_wifi_lora_32_V2/heltec_wifi_lora_32_V2.bin &
       mv .pio/build/heltec_wifi_lora_32_V3/firmware.bin .pio/build/heltec_wifi_lora_32_V3/heltec_wifi_lora_32_V3.bin &
       mv .pio/build/ttgo-lora32-v21/firmware.bin .pio/build/ttgo-lora32-v21/ttgo-lora32-v21.bin &
@@ -72,6 +73,7 @@ jobs:
         removeArtifacts: true
         replacesArtifacts: true
         artifacts: ".pio/build/E22-DevKitC/E22-DevKitC.bin,
+        .pio/build/E22-DevKitC-1-N16R8/E22-DevKitC-1-N16R8.bin,
         .pio/build/heltec_wifi_lora_32_V2/heltec_wifi_lora_32_V2.bin,
         .pio/build/heltec_wifi_lora_32_V3/heltec_wifi_lora_32_V3.bin,
         .pio/build/ttgo-lora32-v21/ttgo-lora32-v21.bin,
