@@ -610,13 +610,11 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
         return false;
     }
 
-    /*
     if (radio.setSyncWord(rf_syncword) != RADIOLIB_ERR_NONE)
     {
         Serial.println(F("Unable to set sync word!"));
         return false;
     }
-    */
 
     // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
     if (radio.setPreambleLength(rf_preamble_length) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH)

@@ -591,9 +591,9 @@ void esp32setup()
         bSETGPS_POWER=true;
     #endif
 
-    #ifdef BOARD_TBEAM_V3
+    #ifdef GPS_L76K
         setupPMU(bSETGPS_POWER);
-        beginGPS(); //switchL76KGPS();
+        beginGPS();
     #else
         setupPMU(bSETGPS_POWER);
     #endif
@@ -708,11 +708,11 @@ void esp32setup()
 
     int state = RADIOLIB_ERR_UNKNOWN;
     
-    //#if defined(BOARD_E220) || defined(SX1268_V3)
+    #if defined(BOARD_E220)
         state = radio.begin(434.0F, 125.0F, 9, 7, SYNC_WORD_SX127x, 10, LORA_PREAMBLE_LENGTH, /*float tcxoVoltage = 0*/ 1.6F, /*bool useRegulatorLDO = false*/ false);
-    //#else
-    //    state = radio.begin();
-    //#endif
+    #else
+        state = radio.begin();
+    #endif
     
     if (state == RADIOLIB_ERR_NONE)
     {
@@ -1427,7 +1427,11 @@ void esp32loop()
 
         loopRTC();
 
-        if(!posinfo_fix) // GPS hat Vorang zur RTC
+        if(posinfo_fix) // GPS hat Vorang zur RTC und setzt RTC
+        {
+            setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+        }
+        else
         {
             DateTime utc = getRTCNow();
 
@@ -1663,24 +1667,45 @@ void esp32loop()
         }
 
         #ifdef ENABLE_GPS
-            
-            #ifdef BOARD_TBEAM_V3
-                unsigned int igps = loopL76KGPS();
-            #else
-                unsigned int igps = (unsigned int)getGPS();
-            #endif
 
-            if(igps > 0)
-                posinfo_interval = igps;
+        unsigned int igps=0;
+            
+        if(!bGPSON)
+        {
+            if(meshcom_settings.node_postime > 0)
+            {
+                igps = (unsigned int)meshcom_settings.node_postime;
+            }
             else
             {
-                no_gps_reset_counter++;
-                if(no_gps_reset_counter > 10)
-                {
-                    posinfo_interval = POSINFO_INTERVAL;
-                    no_gps_reset_counter = 0;
-                }
+                posinfo_fix = false;
+                posinfo_satcount = 0;
+                posinfo_hdop = 0;
+        
+                igps =  POSINFO_INTERVAL;
             }
+        }
+        else
+        {
+            #ifdef GPS_L76K
+                igps = loopL76KGPS();
+            #else
+                igps = getGPS();
+            #endif
+        }
+
+        if(igps > 0)
+            posinfo_interval = igps;
+        else
+        {
+            no_gps_reset_counter++;
+            if(no_gps_reset_counter > 10)
+            {
+                posinfo_interval = POSINFO_INTERVAL;
+                no_gps_reset_counter = 0;
+            }
+        }
+
         #endif
 
         gps_refresh_timer = millis();
