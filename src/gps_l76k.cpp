@@ -15,12 +15,6 @@
     #define SerialGPS Serial1
 #endif
 
-#ifdef BOARD_TBEAM_V3
-    #define GPS_RX_PIN 9
-    #define GPS_TX_PIN 8
-    #define GPS_WAKEUP 7
-#endif
-
 #include <TinyGPSPlus.h>
 
 // TinyGPS
