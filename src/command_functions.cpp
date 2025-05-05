@@ -3328,7 +3328,9 @@ void commandAction(char *umsg_text, bool ble)
                 Serial.println("");
             }
 
-            Serial.printf("\n...BATTERY PIN %i factor %.4f\n", BATTERY_PIN, fBattFaktor);
+            #ifdef BATTERY_PIN
+                Serial.printf("\n...BATTERY PIN %i factor %.4f\n", BATTERY_PIN, fBattFaktor);
+            #endif
 
             Serial.printf("\n...Webserver %s", (bWEBSERVER?"on":"off"));
             Serial.printf(" / Webpwd <%s>", meshcom_settings.node_webpwd);
