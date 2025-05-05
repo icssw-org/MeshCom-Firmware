@@ -13,6 +13,7 @@
 #include <aprs_structures.h>
 #include <debugconf.h>
 #include <loop_functions.h>
+#include "tdeck_main.h"
 #include "tdeck_extern.h"
 #include "lv_obj_functions_extern.h"
 #include "tdeck_helpers.h"
@@ -79,6 +80,7 @@ lv_obj_t    *mesh_sw;
 lv_obj_t    *noallmsg_sw;
 lv_obj_t    *gpson_sw;
 lv_obj_t    *track_sw;
+lv_obj_t    *mute_sw;
 
 //////////////////////////////////////////////
 // MAP variables
@@ -646,10 +648,24 @@ void setDisplayLayout(lv_obj_t *parent)
 
     lv_obj_add_event_cb(track_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
 
+    // MUTE
+    lv_obj_t * btnsetup_mute = lv_btn_create(t1);
+    lv_obj_set_pos(btnsetup_mute, 0, 375);
+    lv_obj_set_size(btnsetup_mute, 50, 25);
+
+    lv_obj_t * btnsetup_mute_label = lv_label_create(btnsetup_mute);
+    lv_label_set_text(btnsetup_mute_label, "MUTE");
+    lv_obj_center(btnsetup_mute_label);
+
+    mute_sw = lv_switch_create(t1);
+    lv_obj_set_pos(mute_sw, 55, 375);
+    lv_obj_set_size(mute_sw, 45, 25);
+
+    lv_obj_add_event_cb(mute_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
 
     // BTN SETUP
     lv_obj_t * btnsetup = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup, 0, 375);
+    lv_obj_set_pos(btnsetup, 0, 410);
     lv_obj_set_size(btnsetup, 100, 30);
     lv_obj_add_event_cb(btnsetup, btn_event_handler_setup, LV_EVENT_ALL, NULL);
 
@@ -659,7 +675,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     // VERSION
     lv_obj_t * btnsetup_version = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_version, 185, 375);
+    lv_obj_set_pos(btnsetup_version, 185, 410);
     lv_obj_set_size(btnsetup_version, 105, 30);
 
     lv_obj_t * label_btnsetup_version = lv_label_create(btnsetup_version);
@@ -1414,22 +1430,22 @@ void tdeck_refresh_SET_view()
     lv_label_set_text(btn_ack_id_label, vChar);
 
 
-    //WEB
+    // WEB
     if (bWEBSERVER)
         lv_obj_add_state(web_sw, LV_STATE_CHECKED);
     else
         lv_obj_clear_state(web_sw, LV_STATE_CHECKED);
-    //MESH
+    // MESH
     if (bMESH)
         lv_obj_add_state(mesh_sw, LV_STATE_CHECKED);
     else
         lv_obj_clear_state(mesh_sw, LV_STATE_CHECKED);
-    //NOALL
+    // NOALL
     if (bNoMSGtoALL)
         lv_obj_add_state(noallmsg_sw, LV_STATE_CHECKED);
     else
         lv_obj_clear_state(noallmsg_sw, LV_STATE_CHECKED);
-    //GPS
+    // GPS
     if (bGPSON)
         lv_obj_add_state(gpson_sw, LV_STATE_CHECKED);
     else
@@ -1437,11 +1453,16 @@ void tdeck_refresh_SET_view()
     // UTC offset        
     sprintf(vChar, "%.1f", meshcom_settings.node_utcoff);
     lv_textarea_set_text(setup_utc, vChar);
-    //TRACK
+    // TRACK
     if (bDisplayTrack)
         lv_obj_add_state(track_sw, LV_STATE_CHECKED);
     else
         lv_obj_clear_state(track_sw, LV_STATE_CHECKED);
+    // MUTE
+    if (meshcom_settings.node_mute)
+        lv_obj_add_state(mute_sw, LV_STATE_CHECKED);
+    else
+        lv_obj_clear_state(mute_sw, LV_STATE_CHECKED);
 }
 
 /**
@@ -1553,7 +1574,7 @@ void tdeck_add_MSG(aprsMessage aprsmsg)
         strAscii = utf8ascii(aprsmsg.msg_payload);
 
     tdeck_add_MSG(aprsmsg.msg_destination_call, aprsmsg.msg_source_path, strAscii);
-}
+}                  
 
 /**
  * adds an message to the MSG view
@@ -1605,4 +1626,5 @@ void tdeck_add_MSG(String callsign, String path, String message)
     }
 
     // play_sound
+    //play_message_sound();
 }

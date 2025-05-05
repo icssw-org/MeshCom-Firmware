@@ -199,6 +199,7 @@ void init_flash(void)
     meshcom_settings.node_keyboardlock = preferences.getBool("node_kblock", false);
     meshcom_settings.node_backlightlock = preferences.getBool("node_bllock", false);
     meshcom_settings.node_modus = preferences.getInt("node_modus", 0);
+    meshcom_settings.node_mute = preferences.getBool("node_mute", false);
     #endif
 }
 
@@ -386,6 +387,7 @@ void save_settings(void)
     preferences.putBool("node_kblock", meshcom_settings.node_keyboardlock);
     preferences.putBool("node_bllock", meshcom_settings.node_backlightlock);
     preferences.putInt("node_modus", meshcom_settings.node_modus);
+    preferences.putBool("node_mute", meshcom_settings.node_mute);
     #endif 
 
     preferences.putInt("node_wifip", meshcom_settings.node_wifi_power);

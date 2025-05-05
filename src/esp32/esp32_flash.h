@@ -169,6 +169,7 @@ struct s_meshcom_settings
 	bool node_keyboardlock = false;
 	bool node_backlightlock = false;
 	int node_modus = 0;
+	bool node_mute = false;
 	#endif
 };
 
