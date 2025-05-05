@@ -62,4 +62,8 @@ definitions for HELTEC_V2_1
 
 #define I2C_SDA 4       // getestet OE5HWN
 #define I2C_SCL 15      // getestet OE5HWN
+
 #define OneWire_GPIO 17 // getestet OE5HWN
+
+#define GPS_RX_PIN 23
+#define GPS_TX_PIN 3

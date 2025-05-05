@@ -84,3 +84,6 @@ definitions for TBEAM 1268
 
 #define I2C_SDA    SDA_PIN
 #define I2C_SCL    SCL_PIN
+
+#define GPS_RX_PIN 34
+#define GPS_TX_PIN 12

@@ -478,7 +478,7 @@ void esp32setup()
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
-    bBMP3ON =  meshcom_settings.node_sset & 0x0010;
+    bBMP3ON =  meshcom_settings.node_sset3 & 0x0010;
 
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 
@@ -657,7 +657,7 @@ void esp32setup()
 
     initButtonPin();
     
-    Serial.printf("[INIT]..._GW_ID: %08X\n", _GW_ID);
+    Serial.printf("[INIT].._GW_ID: %08X\n", _GW_ID);
 
     ////////////////////////////////////////////////////////////////////
     // Initialize time
@@ -903,7 +903,7 @@ void esp32setup()
         // radio.setDio1Action(setFlagDetected, RISING);
 
         // start scanning the channel
-        Serial.print(F("[LoRa] Starting to listen ... "));
+        Serial.print(F("[LoRa]...Starting to listen ... "));
         state = radio.startReceive();
         if (state == RADIOLIB_ERR_NONE)
         {
@@ -1950,9 +1950,13 @@ void esp32loop()
     {
         if ((BMP3TimeWait + 60000) < millis())   // 60 sec
         {
-                if(loopBMP390())
-                {
-                }
+            if(loopBMP390())
+            {
+                meshcom_settings.node_press = getPress3();
+                meshcom_settings.node_temp = getTemp3();
+                meshcom_settings.node_press_asl = getPressASL3();
+                meshcom_settings.node_press_alt = getAltitude3();
+            }
 
             BMP3TimeWait = millis(); // wait for next messurement
         }

@@ -12,36 +12,6 @@
 #include <TinyGPSPlus.h>
 #include <command_functions.h>
 
-#if defined(BOARD_HELTEC)
-    //For heltec these are the pins: 
-    #define GPS_RX_PIN 23
-    #define GPS_TX_PIN 3
-#elif defined(BOARD_HELTEC_V3) || defined(BOARD_E290)
-    //For heltec these are the pins:
-    #define GPS_RX_PIN 47
-    #define GPS_TX_PIN 48
-#elif defined(BOARD_TLORA_OLV216)
-    #define GPS_RX_PIN 13
-    #define GPS_TX_PIN 15
-#elif defined(BOARD_E22)
-    //For heltec these are the pins:
-    #define GPS_RX_PIN 16
-    #define GPS_TX_PIN 17
-#elif defined(BOARD_TBEAM_V3)
-    #define GPS_RX_PIN 9
-    #define GPS_TX_PIN 8
-    #define GPS_WAKEUP 7
-#elif defined(MODUL_FW_TBEAM)
-    #define GPS_RX_PIN 34
-    #define GPS_TX_PIN 12
-#elif defined(BOARD_E22_S3)
-    // look at variants/E22-DevKitC-1-N16R8/configuration.h 
-#else
-    #define GPS_RX_PIN 34
-    #define GPS_TX_PIN 12
-#endif
-
-
 #define GPS_BAUDRATE 9600
 
 //    #define GPS_SERIAL_NUM 2

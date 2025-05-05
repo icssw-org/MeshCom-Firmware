@@ -35,8 +35,13 @@ unsigned long BMP3TimeWait = 0;
 //#define BMP_CS 10
 
 #define SEALEVELPRESSURE_HPA (1013.25)
+#define STANDARD_ALTITUDE (180.0) // in meters, see note
 
 Adafruit_BMP3XX bmp;
+
+double dTemp = 0.0;
+double dPress = 0.0;
+float fAltidude = 0;
 
 void setupBMP390(bool bInit)
 {
@@ -45,9 +50,14 @@ void setupBMP390(bool bInit)
     if(!bBMP3ON)
 		return;
 		
-    if (!bmp.begin_I2C())
+    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+    #endif
+
+    if (!bmp.begin_I2C(0x77, &Wire))
     {
-        Serial.println("Could not find a valid BMP3 sensor, check wiring!");
+        Serial.println("[INIT]...Could not find a valid BMP3 sensor, check wiring");
         return;
     }
 
@@ -56,6 +66,8 @@ void setupBMP390(bool bInit)
     bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
     bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
     bmp.setOutputDataRate(BMP3_ODR_50_HZ);
+
+    Serial.printf("[INIT]...BMP390 startet\n");
 
     bmp3_found = true;
 }
@@ -68,38 +80,62 @@ bool loopBMP390()
 	if(!bmp3_found)
 		return false;
 
-	#ifdef BOARD_TBEAM_V3
-		Wire.end();
-		Wire.begin(I2C_SDA, I2C_SCL);
-	#else
-		Wire.endTransmission(true);
-	#endif
-
+    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+    #endif
 
     if (!bmp.performReading())
     {
-        Serial.println("Failed to perform reading BMP390");
+        if(bWXDEBUG)
+            Serial.println("Failed to perform reading BMP390");
+
         return false;
     }
 
-	if(bWXDEBUG)
+    dTemp = bmp.temperature;
+    dPress = bmp.pressure / 100.0;
+    fAltidude = bmp.readAltitude(SEALEVELPRESSURE_HPA);
+
+    if(bWXDEBUG)
     {	
         Serial.print("Temperature = ");
-        Serial.print(bmp.temperature);
+        Serial.print(dTemp);
         Serial.println(" *C");
 
         Serial.print("Pressure = ");
-        Serial.print(bmp.pressure / 100.0);
+        Serial.print(dPress);
         Serial.println(" hPa");
 
         Serial.print("Approx. Altitude = ");
-        Serial.print(bmp.readAltitude(SEALEVELPRESSURE_HPA));
+        Serial.print(fAltidude);
         Serial.println(" m");
 
         Serial.println();
     }
 
     return true;
+}
+
+double getTemp3()
+{
+	return dTemp;
+}
+
+double getPress3()
+{
+	return dPress;
+}
+
+float getAltitude3()
+{
+	return fAltidude;
+}
+
+double getPressASL3()
+{
+	return dPress / powf(1 - ((0.0065 * fAltidude) /
+        (dTemp + (0.0065 * STANDARD_ALTITUDE) + 273.15)), 5.257); // in hPa
 }
 
 #endif

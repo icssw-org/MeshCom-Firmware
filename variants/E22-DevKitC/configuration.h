@@ -77,3 +77,6 @@ definitions for E22 Board
 #define SX1268_GPIO LORA_DIO0
 
 #define OneWire_GPIO 25 // getestet OE5HWN
+
+#define GPS_RX_PIN 16
+#define GPS_TX_PIN 17

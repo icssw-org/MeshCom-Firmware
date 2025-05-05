@@ -88,3 +88,6 @@ definitions for HELTEC_V3
 #define SCL_PIN 18
 
 #define OneWire_GPIO 17 // getestet ???
+
+#define GPS_RX_PIN 47
+#define GPS_TX_PIN 48
