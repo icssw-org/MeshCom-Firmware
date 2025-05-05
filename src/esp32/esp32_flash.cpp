@@ -182,6 +182,8 @@ void init_flash(void)
     meshcom_settings.node_specend = preferences.getFloat("node_spend", 434.0);
     meshcom_settings.node_specstep = preferences.getFloat("node_spstep", 0.025);
     meshcom_settings.node_specsamples = preferences.getInt("node_spsamp", 2048);
+
+    meshcom_settings.node_analog_batt_faktor = preferences.getFloat("node_bfakt", 0.0);
 }
 
 void save_settings(void)
@@ -358,6 +360,8 @@ void save_settings(void)
     preferences.putFloat("node_spend", meshcom_settings.node_specend);
     preferences.putFloat("node_spstep", meshcom_settings.node_specstep);
     preferences.putInt("node_spsamp", meshcom_settings.node_specsamples);
+
+    preferences.putFloat("node_bfakt", meshcom_settings.node_analog_batt_faktor);
 
     preferences.end();
 

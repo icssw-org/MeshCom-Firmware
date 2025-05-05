@@ -18,6 +18,7 @@
 
 // Sensors
 #include "bmx280.h"
+#include "bmp390.h"
 #include "bme680.h"
 #include "mcu811.h"
 #include "io_functions.h"
@@ -66,6 +67,8 @@ Adafruit_NeoPixel pixels(LED_PIXEL, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 bool bLED_WEISS=false;
 int iCount_weiss=0;
+
+bool bLED = false;
 
 #endif
 
@@ -475,6 +478,7 @@ void esp32setup()
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
+    bBMP3ON =  meshcom_settings.node_sset & 0x0010;
 
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 
@@ -517,6 +521,12 @@ void esp32setup()
 
     meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
     meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
+
+    #if defined(BOARD_E22_S3)
+        fBattFaktor = ADC_MULTIPLIER;   // default
+        if(meshcom_settings.node_analog_batt_faktor > 0.0)
+            fBattFaktor = meshcom_settings.node_analog_batt_faktor;
+    #endif
 
     // Initialize battery reading
 	init_batt();
@@ -600,6 +610,10 @@ void esp32setup()
 
     #if defined(ENABLE_BMX280)
         setupBMX280(true);
+    #endif
+
+    #if defined(ENABLE_BMP390)
+        setupBMP390(true);
     #endif
 
     #if defined(ENABLE_MC811)
@@ -932,7 +946,7 @@ void esp32setup()
                 Serial.println(state);
             }        
     
-            // enablee CRC
+            // enable CRC
             if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
             {
                 Serial.println(F("Selected CRC is invalid for this module!"));
@@ -1926,6 +1940,21 @@ void esp32loop()
                 }
 
             BMXTimeWait = millis(); // wait for next messurement
+        }
+    }
+    #endif
+
+    // read BMP390 Sensor
+    #if defined(ENABLE_BMP390)
+    if(bBMP3ON && bmp3_found)
+    {
+        if ((BMP3TimeWait + 60000) < millis())   // 60 sec
+        {
+                if(loopBMP390())
+                {
+                }
+
+            BMP3TimeWait = millis(); // wait for next messurement
         }
     }
     #endif

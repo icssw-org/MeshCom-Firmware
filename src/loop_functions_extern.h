@@ -39,6 +39,7 @@ extern int DisplayTimeWait;
 extern unsigned long BattTimeWait;
 extern unsigned long BattTimeAPP;
 extern unsigned long BMXTimeWait;
+extern unsigned long BMP3TimeWait;
 extern unsigned long MCU811TimeWait;
 extern unsigned long INA226TimeWait;
 extern bool bButtonCheck;
@@ -47,9 +48,12 @@ extern uint8_t iButtonPin;
 extern bool bAnalogCheck;
 extern float fAnalogValue;
 
+extern float fBattFaktor;
+
 extern bool bDisplayTrack;
 extern bool bGPSON;
 extern bool bBMPON;
+extern bool bBMP3ON;
 extern bool bBMEON;
 extern bool bBME680ON;
 extern bool bMCU811ON;
@@ -68,6 +72,7 @@ extern bool bLPS33;
 
 extern bool bme680_found;
 extern bool bmx_found;
+extern bool bmp3_found;
 extern bool mcu811_found;
 extern bool one_found;
 extern bool ina226_found;

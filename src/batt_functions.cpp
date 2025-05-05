@@ -321,14 +321,14 @@ float read_batt(void)
 
 		uint16_t analogValue = analogReadMilliVolts(BATTERY_PIN);
 
+		raw = (float)analogValue * fBattFaktor;
+
 		if(bDisplayCont)
 		{
-			Serial.printf("[BATT]...reading: %lumV\n", analogValue);
-			Serial.printf("[BATT]...voltage: %lumV\n", analogValue * (10000 + 2200) / 2200);
+			Serial.printf("[BATT]...reading: %lu factor: %.4f\n", analogValue, fBattFaktor);
+			Serial.printf("[BATT]...voltage: %.2f mV\n", raw);
 			delay(1000); 
 		}
-
-		raw = (analogValue * (10000 + 2200)) / 2200;
 
 	#else
 

@@ -913,7 +913,8 @@ bool doTX()
                     #if defined BOARD_RAK4630
                         Radio.Send(lora_tx_buffer, sendlng);
                     #else
-                        bLED_RED = true;
+                        if(!bLED_GREEN)
+                            bLED_RED = true;
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                     #endif
 

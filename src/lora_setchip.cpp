@@ -640,34 +640,18 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     }
 
     // CRC
+    #if defined(SX127X) || defined(SX1262_V3) || defined(SX1262_E290) || defined(SX126X) || defined(SX1268_V3) || defined(SX1262X)
+    uint8_t icrc = 0;
     #if defined(SX127X)
-    if (radio.setCRC(rf_crc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
-    {
+        icrc = rf_crc;
+    #else
+        if(rf_crc)
+            icrc = 2;
+    #endif
+
+    if (radio.setCRC(icrc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
         Serial.println(F("Selected CRC is invalid for this module!"));
         return false;
-    }
-    #endif
-
-    #if defined(SX1262_V3) || defined(SX1262_E290)
-
-    uint8_t icrc = 0;
-    if(rf_crc)
-        icrc = 2;
-
-    if (radio.setCRC(icrc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
-        Serial.println(F("Selected CRC is invalid for this module!"));
-        while (true);
-    }
-    #endif
-
-    #if defined(SX126X) || defined(SX1268_V3) || defined(SX1262X)
-    uint8_t icrc = 0;
-    if(rf_crc)
-        icrc = 2;
-
-    if (radio.setCRC(icrc) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
-        Serial.println(F("Selected CRC is invalid for this module!"));
-        while (true);
     }
     #endif
 

@@ -18,6 +18,7 @@
 
 // Sensors
 #include "bmx280.h"
+#include "bmp390.h"
 #include "mcu811.h"
 #include "io_functions.h"
 #include "softser_functions.h"
@@ -154,8 +155,6 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 void commandAction(char *umsg_text, bool ble)
 {
     //char print_buff[600];
-
-    //uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
     // -info
     // -set-owner
@@ -671,6 +670,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bReturn = true;
 
+        iButtonPin = ibt;
         initButtonPin();
     }
     else
@@ -753,6 +753,27 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
 
         save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"batt factor ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
+        sscanf(_owner_c, "%lf", &dVar);
+
+        //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
+
+        meshcom_settings.node_analog_batt_faktor=dVar;
+
+        fBattFaktor = dVar;
+
+        save_settings();
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
     }
     else
     #endif
@@ -1019,6 +1040,30 @@ void commandAction(char *umsg_text, bool ble)
     else
     #endif
 
+    #if defined(ENABLE_BMP390)
+    if(commandCheck(msg_text+2, (char*)"bmp3 on") == 0)
+    {
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        bReturn = true;
+
+        bBMP3ON = true;
+        bmp3_found = false;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0010;
+
+        save_settings();
+
+        #if defined(ENABLE_BMP390)
+            setupBMP390(false);
+        #endif
+    }
+    else
+    #endif
+
     if(commandCheck(msg_text+2, (char*)"nomsgall on") == 0)
     {
         bNoMSGtoALL=true;
@@ -1039,9 +1084,12 @@ void commandAction(char *umsg_text, bool ble)
     {
         bBMPON=false;
         bBMEON=false;
+        bBMP3ON=false;
         bmx_found=false;
+        bmp3_found=false;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;   // BME280/BMP280 off
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FEF;   // BMP390 off
 
         if(ble)
         {
@@ -2988,7 +3036,7 @@ void commandAction(char *umsg_text, bool ble)
             serializeJson(tmdoc, print_buff, measureJson(tmdoc));
 
             // clear buffer
-            memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+            memset(msg_buffer, 0, sizeof(msg_buffer));
 
             // set data message flag and tx ble
             msg_buffer[0] = 0x44;
@@ -3034,7 +3082,7 @@ void commandAction(char *umsg_text, bool ble)
             serializeJson(wdoc, print_buff, measureJson(wdoc));
 
             // clear buffer
-            memset(msg_buffer, 0, MAX_MSG_LEN_PHONE); 
+            memset(msg_buffer, 0, sizeof(msg_buffer)); 
 
             // set data message flag and tx ble
             msg_buffer[0] = 0x44;
@@ -3048,6 +3096,10 @@ void commandAction(char *umsg_text, bool ble)
             if(bBMPON || bBMEON)
                 snprintf(cbme, sizeof(cbme), " (%s)", (bmx_found?"found":"error"));
 
+            char cbmp3[10]={0};
+            if(bBMP3ON)
+                snprintf(cbmp3, sizeof(cbmp3), " (%s)", (bmp3_found?"found":"error"));
+
             char c680[10]={0};
             if(bBME680ON)
                 snprintf(c680, sizeof(c680), " (%s)",  (bme680_found?"found":"error"));
@@ -3060,8 +3112,8 @@ void commandAction(char *umsg_text, bool ble)
             if(bONEWIRE)
                 snprintf(cone, sizeof(cone), " (%s)",  (one_found?"found":"error"));
 
-            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s%s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
-            (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), cone, meshcom_settings.node_owgpio);
+            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BMP390: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s%s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
+            (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBMP3ON?"on":"off"), cbmp3, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), cone, meshcom_settings.node_owgpio);
 
             Serial.printf("...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f %%rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", 
             meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
@@ -3119,7 +3171,7 @@ void commandAction(char *umsg_text, bool ble)
             serializeJson(iodoc, print_buff, measureJson(iodoc));
 
             // clear buffer
-            memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+            memset(msg_buffer, 0, sizeof(msg_buffer));
 
             // set data message flag and tx ble
             msg_buffer[0] = 0x44;
@@ -3205,7 +3257,7 @@ void commandAction(char *umsg_text, bool ble)
             serializeJson(idoc, print_buff, measureJson(idoc));
 
             // clear buffer
-            memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+            memset(msg_buffer, 0, sizeof(msg_buffer));
 
             // set data message flag and tx ble
             msg_buffer[0] = 0x44;
@@ -3275,6 +3327,8 @@ void commandAction(char *umsg_text, bool ble)
                 Serial.printf("...Value %.2f V\n", fAnalogValue);
                 Serial.println("");
             }
+
+            Serial.printf("\n...BATTERY PIN %i factor %.4f\n", BATTERY_PIN, fBattFaktor);
 
             Serial.printf("\n...Webserver %s", (bWEBSERVER?"on":"off"));
             Serial.printf(" / Webpwd <%s>", meshcom_settings.node_webpwd);
@@ -3363,6 +3417,7 @@ void commandAction(char *umsg_text, bool ble)
         sensdoc["TYP"] = "SE";
         sensdoc["BME"] = bBMEON;
         sensdoc["BMP"] = bBMPON;
+        sensdoc["BMP3"] = bBMP3ON;
         sensdoc["BMXF"] = bmx_found;
         sensdoc["680"] = bBME680ON;
         sensdoc["680F"] = bme680_found;
@@ -3384,7 +3439,7 @@ void commandAction(char *umsg_text, bool ble)
         // no flag needed anymore - json comes as is
 
         // clear buffer
-        memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+        memset(msg_buffer, 0, sizeof(msg_buffer));
 
         // set data message flag and tx ble
         msg_buffer[0] = 0x44;
@@ -3426,7 +3481,7 @@ void commandAction(char *umsg_text, bool ble)
         serializeJson(swdoc, print_buff, measureJson(swdoc));
 
         // clear buffer
-        memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+        memset(msg_buffer, 0, sizeof(msg_buffer));
 
         // set data message flag and tx ble
         msg_buffer[0] = 0x44;
@@ -3493,7 +3548,7 @@ void sendGpsJson()
     serializeJson(pdoc, print_buff, measureJson(pdoc));
 
     // clear buffer
-    memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+    memset(msg_buffer, 0, sizeof(msg_buffer));
 
     // set data message flag and tx ble
     msg_buffer[0] = 0x44;
@@ -3572,7 +3627,7 @@ void sendNodeSetting()
     serializeJson(nsetdoc, print_buff, measureJson(nsetdoc));
 
     // clear buffer
-    memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+    memset(msg_buffer, 0, sizeof(msg_buffer));
 
     // set data message flag and tx ble
     msg_buffer[0] = 0x44;
@@ -3603,7 +3658,7 @@ void sendAPRSset()
     serializeJson(aprsdoc, print_buff, measureJson(aprsdoc));
 
     // clear buffer
-    memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+    memset(msg_buffer, 0, sizeof(msg_buffer));
 
     // set data message flag and tx ble
     msg_buffer[0] = 0x44;
@@ -3626,7 +3681,7 @@ void sendConfigFinish()
     serializeJson(cdoc, print_buff, measureJson(cdoc));
 
     // clear buffer
-    memset(msg_buffer, 0, MAX_MSG_LEN_PHONE);
+    memset(msg_buffer, 0, sizeof(msg_buffer));
 
     // set data message flag and tx ble
     msg_buffer[0] = 0x44;

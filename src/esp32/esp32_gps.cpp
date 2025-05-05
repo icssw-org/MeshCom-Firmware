@@ -34,6 +34,8 @@
 #elif defined(MODUL_FW_TBEAM)
     #define GPS_RX_PIN 34
     #define GPS_TX_PIN 12
+#elif defined(BOARD_E22_S3)
+    // look at variants/E22-DevKitC-1-N16R8/configuration.h 
 #else
     #define GPS_RX_PIN 34
     #define GPS_TX_PIN 12

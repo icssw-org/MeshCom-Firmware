@@ -13,6 +13,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define ENABLE_GPS
 #define ENABLE_BMX280
+#define ENABLE_BMP390
 #define ENABLE_BMX680
 #define ENABLE_MCP23017
 #define ENABLE_INA226
@@ -62,14 +63,19 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
 #define BATTERY_PIN 2 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_MULTIPLIER (10000 + 2200) / 2200
+#define ADC_MULTIPLIER (10000 + 2200) / 2200    // default and can be overwritten with Flash variable node_analog_batt_faktor 
 
-#define BUTTON_PIN 0
+#define BUTTON_PIN  0
+#define BUTTON_EXT  14  // TODO
 
-#define LED_PIXEL 1     //NEOPIXEL
-#define LED_PIN 48      //NEOPIXEL
+#define LED_PIXEL 1     // NEOPIXEL
+#define LED_PIN 48      // NEOPIXEL
+#define BOARD_LED 38    // LED_BUILTIN
 
-#define OneWire_GPIO 42
+#define OneWire_GPIO 47
+
+#define GPS_TX_PIN  15
+#define GPS_RX_PIN  16
 
 // I2C GPIOs
 #define I2C_SDA  8
