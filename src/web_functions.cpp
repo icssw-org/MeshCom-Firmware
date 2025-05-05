@@ -53,8 +53,8 @@ int idx_text=0;
 int idx_text_call_end=0;
 int idx_text_end=0;
 
-char message_text[200];
-char web_last_message_sent[200];
+char message_text[500];
+char web_last_message_sent[160];
 
 int web_page_state = 0;
 
@@ -288,7 +288,7 @@ String work_webpage(bool bget_password, int webid)
             if(bDEBUG)
                 Serial.write(c);                    // print it out the serial monitor
             
-            web_header += c;
+            web_header.concat(c);
 
             if (c == '\n')
             {
@@ -678,6 +678,7 @@ String work_webpage(bool bget_password, int webid)
                             
                             
                             int iml=strlen(message_text);
+
                             if(iml>150)
                             {
                                 iml=150;
@@ -2258,7 +2259,11 @@ String hex2ascii(String ustring)
     char dbuff[3];
     int ihex=0;
 
-    snprintf(pbuff, sizeof(pbuff), "%s", ustring.c_str());
+    int iulng=ustring.length();
+    if(ustring.length() > sizeof(pbuff))
+        iulng=sizeof(pbuff)-1;
+
+    snprintf(pbuff, sizeof(pbuff), "%s", ustring.substring(0, iulng).c_str());
 
     int in=0;
     int il=0;
@@ -2266,7 +2271,7 @@ String hex2ascii(String ustring)
     memset(nbuff, 0x00, sizeof(nbuff));
 
     // %F0%XX%XX%XX
-    for(int ip=0; ip<(int)ustring.length(); ip++)
+    for(int ip=0; ip<(int)strlen(pbuff); ip++)
     {
         if(il > 0)
         {
@@ -2277,6 +2282,8 @@ String hex2ascii(String ustring)
         {
             nbuff[in] = 0xF0;
             in++;
+            if(in >= sizeof(nbuff))
+                break;
 
             for(int ih=0;ih<3;ih++)
             {
@@ -2286,14 +2293,19 @@ String hex2ascii(String ustring)
 
                 nbuff[in] = ihex;
                 in++;
+                if(in >= sizeof(nbuff))
+                    break;
             }
 
             il=11;
         }
+        else
         if(memcmp(pbuff+ip, "%EF%", 4) == 0)
         {
             nbuff[in] = 0xEF;
             in++;
+            if(in >= sizeof(nbuff))
+                break;
 
             for(int ih=0;ih<2;ih++)
             {
@@ -2303,6 +2315,8 @@ String hex2ascii(String ustring)
 
                 nbuff[in] = ihex;
                 in++;
+                if(in >= sizeof(nbuff))
+                    break;
             }
 
             il=8;
@@ -2312,6 +2326,8 @@ String hex2ascii(String ustring)
         {
             nbuff[in] = 0xE2;
             in++;
+            if(in >= sizeof(nbuff))
+                break;
 
             for(int ih=0;ih<2;ih++)
             {
@@ -2321,6 +2337,8 @@ String hex2ascii(String ustring)
 
                 nbuff[in] = ihex;
                 in++;
+                if(in >= sizeof(nbuff))
+                    break;
             }
 
             il=8;
@@ -2329,6 +2347,8 @@ String hex2ascii(String ustring)
         {
             nbuff[in] = pbuff[ip];
             in++;
+            if(in >= sizeof(nbuff))
+                break;
         }
 
     }

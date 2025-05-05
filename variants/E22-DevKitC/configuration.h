@@ -62,7 +62,7 @@ definitions for E22 Board
 #define LORA_RST  27
 #define LORA_DIO0 26 // aka BUSY Pin
 #define LORA_DIO1 33
-#define LORA_DIO2 32
+//#define LORA_DIO2 not used
 #define LORA_CS 5
 #define E22_RXEN 14
 #define E22_TXEN 13

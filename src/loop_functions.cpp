@@ -55,6 +55,7 @@ unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
 bool bGPSON = false;
 bool bBMPON = false;
+bool bBMP3ON = false;
 bool bBMEON = false;
 bool bBME680ON = false;
 bool bMCU811ON = false;
@@ -71,7 +72,8 @@ bool bONEWIRE = false;
 bool bLPS33 = false;
 
 bool bme680_found = false;
-bool bmx_found = false;;
+bool bmx_found = false;
+bool bmp3_found = false;
 bool mcu811_found = false;
 bool one_found = false;
 bool ina226_found = false;
@@ -101,6 +103,8 @@ uint8_t iButtonPin = 0;
 
 bool bAnalogCheck = false;
 float fAnalogValue = 0.0;
+
+float fBattFaktor = 0.0;
 
 int iInitDisplay = 0;
 int iDisplayChange = 0;

@@ -13,6 +13,9 @@
 
 String grc_ids;
 
+///////////////////////////////////////////////////////////////////////////////
+// ESP32
+
 #ifdef ESP32
 
 #include <NTPClient.h>
@@ -388,7 +391,8 @@ void sendMeshComUDP()
 
             if (!Udp.write(ringBufferUDPout[udpRead] + 1, msg_len))
             {
-                DEBUG_MSG("ERROR", "Sending UDP Packet failed!");
+                if(bDisplayCont)
+                  Serial.println("[ERROR]...Sending UDP Packet failed");
 
                 err_cnt_udp_tx++;
                 // if we have too much errors sending, reset UDP
@@ -399,7 +403,9 @@ void sendMeshComUDP()
                     meshcom_settings.node_hasIPaddress = hasIPaddress;
                     //cmd_counter = 50;
 
-                    DEBUG_MSG("MAIN", "resetDHCP");
+                    if(bDisplayCont)
+                      Serial.println("[ERROR]...resetMeshComUDP");
+
                     err_cnt_udp_tx = 0;
                     
                     resetMeshComUDP();
@@ -469,7 +475,6 @@ bool startWIFI()
     }
   }
 
-#ifdef ESP32
   WiFi.disconnect();
 	delay(500);
 
@@ -530,13 +535,6 @@ bool startWIFI()
   delay(500);
 
   Serial.printf("[WIFI]...power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
-#else
-  // RAK WIFI connect
-  if(strcmp(meshcom_settings.node_pwd, "none") == 0)
-    WiFi.begin(meshcom_settings.node_ssid, NULL);
-  else
-    WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
-#endif
 
   iWlanWait = 1;
 
