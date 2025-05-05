@@ -1041,7 +1041,7 @@ void commandAction(char *umsg_text, bool ble)
     #endif
 
     #if defined(ENABLE_BMP390)
-    if(commandCheck(msg_text+2, (char*)"bmp3 on") == 0)
+    if(commandCheck(msg_text+2, (char*)"390 on") == 0)
     {
         if(ble)
         {
@@ -1090,6 +1090,22 @@ void commandAction(char *umsg_text, bool ble)
         
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;   // BME280/BMP280 off
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FEF;   // BMP390 off
+
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"390 off") == 0)
+    {
+        bBMP3ON=false;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FEF; // BMP390 off
 
         if(ble)
         {
