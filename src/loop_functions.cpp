@@ -17,6 +17,7 @@
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <lvgl.h>
 #include <t-deck/tdeck_main.h>
+#include <t-deck/lv_obj_functions.h>
 #endif 
 
 // TinyGPS
@@ -1222,6 +1223,11 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     strcpy(pageLastTextLong2[pagePointer], strAscii.c_str());
 
     e290_display.update();
+
+    #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    
+    tdeck_add_MSG(aprsmsg);
+    
     #else
     
     int izeile=0;
@@ -2113,6 +2119,10 @@ void sendMessage(char *msg_text, int len)
                 addBLEOutBuffer(print_buff, (uint16_t)7);
             }
         }
+
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        tdeck_add_MSG(aprsmsg);
+        #endif
     }
 
     // store last message to compare later on
