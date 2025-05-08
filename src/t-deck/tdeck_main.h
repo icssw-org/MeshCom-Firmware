@@ -14,4 +14,5 @@ void initTDeck();
 
 void tdeck_update_batt_label(float batt, float proz);
 void tdeck_update_time_label();
+
 #endif // _TDECK_MAIN_H_

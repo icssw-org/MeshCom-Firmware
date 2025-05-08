@@ -94,7 +94,6 @@
 #define I2C_SDA 18
 #define I2C_SCL 8
 
-
 // lora radio
 #define SX1262X_CS LORA_CS
 #define SX1262X_IRQ LORA_DIO1
@@ -106,11 +105,11 @@
 #define BATTERY_PIN       4
 #define BUTTON_PIN TDECK_BOOT_PIN
 
-#define TDECK_I2S_WS        5
-#define TDECK_I2S_BCK       7
-#define TDECK_I2S_DOUT      6
+#define I2S_BCLK            7
+#define I2S_LRC             5
+#define I2S_DOUT            6
 
-// Audio
+// Audio input
 #define TDECK_ES7210_MCLK   48
 #define TDECK_ES7210_LRCK   21
 #define TDECK_ES7210_SCK    47

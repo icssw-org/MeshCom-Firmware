@@ -18,10 +18,6 @@
 #include <RadioLib.h>
 #include <Wire.h>
 #include <SD.h>
-// audio
-#include <es7210.h>
-#include <Audio.h>
-#include <driver/i2s.h>
 
 #include <AceButton.h>
 using namespace ace_button;
@@ -31,15 +27,15 @@ using namespace ace_button;
 #include <lvgl.h>
 #include "lv_obj_functions.h"
 #include "lv_obj_functions_extern.h"
-#include "tdeck_helpers.h"
 #include <loop_functions_extern.h>
 
 #define I2S_CH I2S_NUM_1
 
-AceButton button;
-SemaphoreHandle_t xSemaphore = NULL;
-TFT_eSPI tft;
-TouchDrvGT911 touch;
+TFT_eSPI            tft;
+TouchDrvGT911       touch;
+
+AceButton           button;
+SemaphoreHandle_t   xSemaphore = NULL;
 
 bool kbDected = false;
 
@@ -152,59 +148,16 @@ void initTDeck()
     snprintf(buf, 256, "%s: %s\n", "SDCard", ret == true ? "OK" : "ERROR");
     addMessage(buf);
 
-    ret = setupCoder();
-    Serial.print("[INIT]...Decoder: ");
-    Serial.println(ret == true ? "OK" : "ERROR");
-    snprintf(buf, 256, "%s: %s\n", "Decoder", ret == true ? "OK" : "ERROR");
-    addMessage(buf);
-
     Serial.print("[INIT]...Keyboard: ");
     Serial.println(kbDected == true ? "OK" : "ERROR");
     snprintf(buf, 256, "%s: %s\n", "Keyboard", kbDected == true ? "OK" : "ERROR");
     addMessage(buf);
+    
+    // play_start_sound();
 
     // SET Map
     set_map(meshcom_settings.node_map);
 
-    // MODUS setzen - GJC weg
-    /*node_modus = save_node_modus;
-    if(node_modus == 1 || node_modus == 3)
-        bKBLOCK=true;
-    if(node_modus == 2 || node_modus == 3)
-        bLIGHT=true;*/
-
-    i2s_config_t i2s_config = {
-        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
-        .sample_rate = 16000,
-        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-        .channel_format = I2S_CHANNEL_FMT_ALL_LEFT,
-        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count = 8,
-        .dma_buf_len = 64,
-        .use_apll = false,
-        .tx_desc_auto_clear = true,
-        .fixed_mclk = 0,
-        .mclk_multiple = I2S_MCLK_MULTIPLE_256,
-        .bits_per_chan = I2S_BITS_PER_CHAN_16BIT,
-        .chan_mask =
-        (i2s_channel_t)(I2S_TDM_ACTIVE_CH0 | I2S_TDM_ACTIVE_CH1 |
-                        I2S_TDM_ACTIVE_CH2 | I2S_TDM_ACTIVE_CH3),
-        .total_chan = 4,
-    };
-
-    i2s_pin_config_t pin_config = {
-        .mck_io_num = TDECK_ES7210_MCLK,
-        .bck_io_num = TDECK_ES7210_SCK,
-        .ws_io_num = TDECK_ES7210_LRCK,
-        .data_in_num = TDECK_ES7210_DIN,
-    };
-
-    i2s_driver_install(I2S_CH, &i2s_config, 0, NULL);
-    i2s_set_pin(I2S_CH, &pin_config);
-    i2s_zero_dma_buffer(I2S_CH);
-
-    i2s_driver_uninstall(I2S_CH);
 
     pinMode(TDECK_BOOT_PIN, INPUT);
 
@@ -228,44 +181,7 @@ void initTDeck()
 }
 
 /**
- * TODO
- */
-bool setupCoder()
-{
-    uint32_t ret_val = ESP_OK;
-
-    Wire.beginTransmission(ES7210_ADDR);
-    uint8_t error = Wire.endTransmission();
-    if (error != 0) {
-        Serial.println("ES7210 address not found"); return false;
-    }
-
-    audio_hal_codec_config_t cfg = {
-        .adc_input = AUDIO_HAL_ADC_INPUT_ALL,
-        .codec_mode = AUDIO_HAL_CODEC_MODE_ENCODE,
-        .i2s_iface =
-        {
-            .mode = AUDIO_HAL_MODE_SLAVE,
-            .fmt = AUDIO_HAL_I2S_NORMAL,
-            .samples = AUDIO_HAL_16K_SAMPLES,
-            .bits = AUDIO_HAL_BIT_LENGTH_16BITS,
-        },
-    };
-
-    ret_val |= es7210_adc_init(&Wire, &cfg);
-    ret_val |= es7210_adc_config_i2s(cfg.codec_mode, &cfg.i2s_iface);
-    ret_val |= es7210_adc_set_gain(
-                   (es7210_input_mics_t)(ES7210_INPUT_MIC1 | ES7210_INPUT_MIC2),
-                   (es7210_gain_value_t)GAIN_0DB);
-    ret_val |= es7210_adc_set_gain(
-                   (es7210_input_mics_t)(ES7210_INPUT_MIC3 | ES7210_INPUT_MIC4),
-                   (es7210_gain_value_t)GAIN_37_5DB);
-    ret_val |= es7210_adc_ctrl_state(cfg.codec_mode, AUDIO_HAL_CTRL_START);
-    return ret_val == ESP_OK;
-}
-
-/**
- * 
+ * initializes SD card
  */
 bool setupSD()
 {
@@ -610,6 +526,11 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
             {
                 cycleBrightness();
                 bSPEC=true;
+            }
+
+            if ((act_key == 0x2e) && (!meshcom_settings.node_keyboardlock)) // SYM + M
+            {
+                meshcom_settings.node_mute = !meshcom_settings.node_mute;
             }
         }
 
