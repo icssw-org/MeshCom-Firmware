@@ -23,7 +23,13 @@
     extern int transmissionState;
 #endif
 
-#ifdef SX1268_V3
+#ifdef SX1262_E22
+    #include <RadioLib.h>
+    extern SX1262 radio;
+    extern int transmissionState;
+#endif
+
+#ifdef SX1268_E22
     #include <RadioLib.h>
     extern SX1268 radio;
     extern int transmissionState;
@@ -640,7 +646,7 @@ bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_s
     }
 
     // CRC
-    #if defined(SX127X) || defined(SX1262_V3) || defined(SX1262_E290) || defined(SX126X) || defined(SX1268_V3) || defined(SX1262X)
+    #if defined(SX127X) || defined(SX1262_V3) || defined(SX1262_E290) || defined(SX126X) || defined(SX126x_V3) || defined(SX1262X)
     uint8_t icrc = 0;
     #if defined(SX127X)
         icrc = rf_crc;

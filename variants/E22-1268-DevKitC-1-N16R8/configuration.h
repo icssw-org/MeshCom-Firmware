@@ -14,6 +14,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ENABLE_GPS
 #define ENABLE_BMX280
 #define ENABLE_BMP390
+#define ENABLE_AHT20
 #define ENABLE_BMX680
 #define ENABLE_MCP23017
 #define ENABLE_INA226
@@ -21,7 +22,8 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
 
-#define SX1268_V3
+#define SX126x_V3
+#define SX1268_E22  // E22 400M30S/400M33S
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
@@ -97,8 +99,8 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define E22_NSS SS
 #define LORA_RST E22_NRST // do be compatible with other config.h  
 
-// alternative definitions - duplicates
-#define SX1268X_CS E22_NSS
-#define SX1268X_IRQ E22_DIO1
-#define SX1268X_RST E22_NRST
-#define SX1268X_GPIO E22_BUSY
+// SX126x_V3 alternative definitions - duplicates 433MHz/868MHz
+#define SX126x_CS E22_NSS
+#define SX126x_IRQ E22_DIO1
+#define SX126x_RST E22_NRST
+#define SX126x_GPIO E22_BUSY

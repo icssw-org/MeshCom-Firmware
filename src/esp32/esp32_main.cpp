@@ -19,6 +19,7 @@
 // Sensors
 #include "bmx280.h"
 #include "bmp390.h"
+#include "aht20.h"
 #include "bme680.h"
 #include "mcu811.h"
 #include "io_functions.h"
@@ -266,13 +267,23 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 
 #endif
 
-#ifdef SX1268_V3
+#ifdef SX1262_E22
     // RadioModule SX1268 
     // cs - irq - reset - interrupt gpio
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
-    SX1268 radio = new Module(SX1268X_CS, SX1268X_IRQ, SX1268X_RST, SX1268X_GPIO);
+    SX1262 radio = new Module(SX126x_CS, SX126x_IRQ, SX126x_RST, SX126x_GPIO);
+
+#endif
+
+#ifdef SX1268_E22
+    // RadioModule SX1268 
+    // cs - irq - reset - interrupt gpio
+    // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
+    // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
+
+    SX1268 radio = new Module(SX126x_CS, SX126x_IRQ, SX126x_RST, SX126x_GPIO);
 
 #endif
 
@@ -376,6 +387,7 @@ uint8_t dmac[6] = {0};
 unsigned long gps_refresh_timer = 0;
 unsigned long softser_refresh_timer = 0;
 unsigned long analog_refresh_timer = 0;
+unsigned long rtc_refresh_timer = 0;
 
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
 void checkSerialCommand(void);
@@ -479,6 +491,7 @@ void esp32setup()
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
     bBMP3ON =  meshcom_settings.node_sset3 & 0x0010;
+    bAHT20ON =  meshcom_settings.node_sset3 & 0x0020;
 
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 
@@ -616,6 +629,10 @@ void esp32setup()
         setupBMP390(true);
     #endif
 
+    #if defined(ENABLE_AHT20)
+        setupAHT20(true);
+    #endif
+
     #if defined(ENABLE_MC811)
         setupMCU811();
     #endif
@@ -710,7 +727,11 @@ void esp32setup()
     Serial.print(F("[LoRa]...SX1262 V3 chip"));
     #endif
     
-    #ifdef SX1268_V3
+    #ifdef SX1262_E22
+    Serial.print(F("[LoRa]...SX1262 V3 chip"));
+    #endif
+
+    #ifdef SX1268_E22
     Serial.print(F("[LoRa]...SX1268 V3 chip"));
     #endif
 
@@ -755,7 +776,7 @@ void esp32setup()
     if(bRadio)
     {
         // set boosted gain
-        #if defined(SX1262_V3) || defined(SX1268_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+        #if defined(SX1262_V3) || defined(SX126x_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
         Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
         if (radio.setRxBoostedGainMode(meshcom_settings.node_sset2 & 0x0800)  != RADIOLIB_ERR_NONE ) {
             Serial.println(F("Boosted Gain is not available for this module!"));
@@ -889,7 +910,7 @@ void esp32setup()
         #endif
 
         // setup for SX126x, 1268_V3 Radios
-        #if defined(SX126X) || defined(SX1268_V3) || defined(SX1262X)
+        #if defined(SX126X) || defined(SX126x_V3) || defined(SX1262X)
         // set the function that will be called
         // when LoRa preamble is not detected within CAD timeout period
         // or when a packet is received
@@ -1434,42 +1455,7 @@ void esp32loop()
     bool bMyClock = true;
 
     // !posinfo_fix && !bNTPDateTimeValid
-
-    if(bRTCON)
-    {
-        bMyClock = false;
-
-        loopRTC();
-
-        if(posinfo_fix) // GPS hat Vorang zur RTC und setzt RTC
-        {
-            setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
-        }
-        else
-        {
-            DateTime utc = getRTCNow();
-
-            DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
-
-            uint16_t Year = now.year();
-            uint16_t Month = now.month();
-            uint16_t Day = now.day();
-
-            uint16_t Hour = now.hour();
-            uint16_t Minute = now.minute();
-            uint16_t Second = now.second();
-
-            // check valid Date & Time
-            if(Year > 2023)
-            {
-                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-                snprintf(cTimeSource, sizeof(cTimeSource), (char*)"RTC");
-
-                bMyClock = true;
-            }
-        }
-    }
-    else
+    // Time NTP
     if(meshcom_settings.node_hasIPaddress)
     {
         strTime = "none";
@@ -1507,6 +1493,48 @@ void esp32loop()
 
     }
     else
+    if(bRTCON)
+    {
+        bMyClock = false;
+
+        loopRTC();
+
+        if(posinfo_fix) // GPS hat Vorang zur RTC und setzt RTC
+        {
+            if((rtc_refresh_timer + 60000) > millis())
+            {
+                //only every minute
+                setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+                rtc_refresh_timer = millis();
+            }
+        }
+        else
+        {
+            DateTime utc = getRTCNow();
+
+            DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
+
+            uint16_t Year = now.year();
+            uint16_t Month = now.month();
+            uint16_t Day = now.day();
+
+            uint16_t Hour = now.hour();
+            uint16_t Minute = now.minute();
+            uint16_t Second = now.second();
+
+            //Serial.printf("%04i.%02i.%02i %02i:%02i:%02i\n", Year, Month, Day, Hour, Minute, Second);
+
+            // check valid Date & Time
+            if(Year > 2013)
+            {
+                MyClock.setCurrentTime(0.0, Year, Month, Day, Hour, Minute, Second);
+                snprintf(cTimeSource, sizeof(cTimeSource), (char*)"RTC");
+
+                bMyClock = true;
+            }
+        }
+    }
+    else
     {
         bNTPDateTimeValid = false;
     }
@@ -1532,6 +1560,17 @@ void esp32loop()
         {
             snprintf(meshcom_settings.node_update, sizeof(meshcom_settings.node_update), "%04i-%02i-%02i %02i:%02i:%02i",
              meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+
+            if(bRTCON && bNTPDateTimeValid) // NTP hat Vorang zur RTC und setzt RTC
+            {
+                if((rtc_refresh_timer + 60000) > millis())
+                {
+                    //only every minute
+                    setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+
+                    rtc_refresh_timer = millis();
+                }
+            }
         }
     }
 
@@ -1944,9 +1983,9 @@ void esp32loop()
     }
     #endif
 
-    // read BMP390 Sensor
+    // read BMP390/AHT20 Sensor
     #if defined(ENABLE_BMP390)
-    if(bBMP3ON && bmp3_found)
+    if((bBMP3ON && bmp3_found) || (bAHT20ON && aht20_found))
     {
         if ((BMP3TimeWait + 60000) < millis())   // 60 sec
         {
@@ -1957,6 +1996,12 @@ void esp32loop()
                 meshcom_settings.node_press_asl = getPressASL3();
                 meshcom_settings.node_press_alt = getAltitude3();
             }
+
+            #if defined(ENABLE_AHT20)
+                if(loopAHT20())
+                {
+                }
+            #endif
 
             BMP3TimeWait = millis(); // wait for next messurement
         }
