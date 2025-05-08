@@ -105,7 +105,7 @@ adc_unit_t unit = ADC_UNIT_1;
 //static
 void check_efuse(void)
 {
-#if defined(SX1262_V3) || defined(SX1262_E290) || defined(SX1268_V3)
+#if defined(SX1262_V3) || defined(SX1262_E290) || defined(SX126x_V3)
 	// NOT TESTED
 #elif CONFIG_IDF_TARGET_ESP32
     //Check if TP is burned into eFuse
@@ -204,7 +204,6 @@ void init_batt(void)
 	analogSetAttenuation(ADC_0db);
 
 	analogReadResolution(12);
-
 #else
 	//only for Test check_efuse();
 

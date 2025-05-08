@@ -132,6 +132,7 @@ void setupBMX280(bool bNewStart)
 			Wire.end();
 			Wire.begin(I2C_SDA, I2C_SCL);
 		#else
+			Wire.endTransmission(true);
 			bmx_i2c_address = I2C_ADDRESS_BMP;
 		#endif
 	}
@@ -143,7 +144,8 @@ void setupBMX280(bool bNewStart)
 				Wire.end();
 				Wire.begin(I2C_SDA, I2C_SCL);
 			#else
-      			bmx_i2c_address = I2C_ADDRESS_BME;
+				Wire.endTransmission(true);
+				bmx_i2c_address = I2C_ADDRESS_BME;
 			#endif
 		}
     	else
@@ -163,9 +165,13 @@ void setupBMX280(bool bNewStart)
 	fPress = 0.0;	
 	fHum = 0.0;
 		
+	#if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+		Wire.end();
+		Wire.begin(I2C_SDA, I2C_SCL);
+	#endif
+
 	//begin() checks the Interface, reads the sensor ID (to differentiate between BMP280 and BME280)
 	//and reads compensation parameters.
-	Serial.printf("[INIT]...");
 	if (!bmx280.begin())
 	{
 		Serial.println("[INIT]...begin() failed. check your BMx280 Interface and I2C Address.");
@@ -203,13 +209,10 @@ bool loopBMX280()
 	if(!bmx_found)
 		return false;
 
-	#ifdef BOARD_TBEAM_V3
+	#if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
 		Wire.end();
 		Wire.begin(I2C_SDA, I2C_SCL);
-	#else
-		Wire.endTransmission(true);
 	#endif
-
 
 	//start a measurement
 	if (!bmx280.measure())

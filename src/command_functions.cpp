@@ -11,6 +11,7 @@
 #include "regex_functions.h"
 #include "lora_setchip.h"
 #include "spectral_scan.h"
+#include "rtc_functions.h"
 
 #ifdef ESP32
 #include "esp32/esp32_functions.h"
@@ -19,6 +20,7 @@
 // Sensors
 #include "bmx280.h"
 #include "bmp390.h"
+#include "aht20.h"
 #include "mcu811.h"
 #include "io_functions.h"
 #include "softser_functions.h"
@@ -1064,6 +1066,30 @@ void commandAction(char *umsg_text, bool ble)
     else
     #endif
 
+    #if defined(ENABLE_AHT20)
+    if(commandCheck(msg_text+2, (char*)"aht20 on") == 0)
+    {
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        bReturn = true;
+
+        bAHT20ON = true;
+        aht20_found = false;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0020;
+
+        save_settings();
+
+        #if defined(ENABLE_AHT20)
+            setupAHT20(false);
+        #endif
+    }
+    else
+    #endif
+
     if(commandCheck(msg_text+2, (char*)"nomsgall on") == 0)
     {
         bNoMSGtoALL=true;
@@ -1106,6 +1132,22 @@ void commandAction(char *umsg_text, bool ble)
         bBMP3ON=false;
         
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FEF; // BMP390 off
+
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"aht20 off") == 0)
+    {
+        bAHT20ON=false;
+        
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FDF; // AHT20 off
 
         if(ble)
         {
@@ -2331,6 +2373,20 @@ void commandAction(char *umsg_text, bool ble)
         bPos=true;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"setrtc ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
+
+        String rtcmsg = _owner_c;
+
+        setRTCNow(rtcmsg);
+
+        Serial.println("");
+        Serial.println(getStringRTCNow());
+
+        bPos=true;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"io") == 0)
     {
         bIO=true;
@@ -3116,6 +3172,10 @@ void commandAction(char *umsg_text, bool ble)
             if(bBMP3ON)
                 snprintf(cbmp3, sizeof(cbmp3), " (%s)", (bmp3_found?"found":"error"));
 
+            char caht20[10]={0};
+            if(bAHT20ON)
+                snprintf(caht20, sizeof(caht20), " (%s)", (aht20_found?"found":"error"));
+                
             char c680[10]={0};
             if(bBME680ON)
                 snprintf(c680, sizeof(c680), " (%s)",  (bme680_found?"found":"error"));
@@ -3128,8 +3188,8 @@ void commandAction(char *umsg_text, bool ble)
             if(bONEWIRE)
                 snprintf(cone, sizeof(cone), " (%s)",  (one_found?"found":"error"));
 
-            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BMP390: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s%s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
-            (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBMP3ON?"on":"off"), cbmp3, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), cone, meshcom_settings.node_owgpio);
+            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BMP390: %s%s\n...AHT200: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n...ONEWIRE: %s%s (%i)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
+            (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBMP3ON?"on":"off"), cbmp3, (bAHT20ON?"on":"off"), caht20, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bINA226ON?"on":"off"), (bLPS33?"on":"off"), (bONEWIRE?"on":"off"), cone, meshcom_settings.node_owgpio);
 
             Serial.printf("...TEMP: %.1f °C\n...TOUT: %.1f °C\n...HUM: %.1f %%rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kOhm\n...eCO2: %.0f ppm\n", 
             meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
@@ -3412,10 +3472,10 @@ void commandAction(char *umsg_text, bool ble)
         {
             if(bShowPos)
             {
-                printf("\n\nMeshCom %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %i\n...RATE: %i (%i)\n...NEXT: %i sec\n...DIST: %im\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %04i.%02i.%02i %02i:%02i:%02i %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
+                printf("\n\nMeshCom %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %i\n...RATE: %i (%i)\n...NEXT: %i sec\n...DIST: %im\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %04i.%02i.%02i %02i:%02i:%02i %s [%s]\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
                 meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
                 (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, meshcom_settings.node_postime, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
-                meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str());
+                meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str(), cTimeSource);
 
                 printf("...SYMB: %c %c\n...GPS: %s\n...Track: %s\n...SOFTSER: %s APP:%i\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"), (bSOFTSERON?"on":"off"), SOFTSER_APP_ID);
             }

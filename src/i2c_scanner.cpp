@@ -107,6 +107,7 @@ String scanI2C()
                     strDev.concat(dtype);
                 }
 
+                if(address == 0x38)strDev="AHT20";
                 if(address == 0x40)strDev="INA226";
                 if(address == 0x51)strDev="RTC PCF8563";
                 if(address == 0x57)strDev="[RTC DS3231 EPROM]";
@@ -115,7 +116,7 @@ String scanI2C()
                 if(address == 0x70)strDev="TCA9548A/0";
                 if(address == 0x71)strDev="TCA9548A/1";
                 if(address == 0x76)strDev="BME280/BMP280/BME680";
-                if(address == 0x77)strDev="BME280/BMP280/BME680";
+                if(address == 0x77)strDev="BME280/BMP280/BME680/BMP390";
                 sprintf(cInfo, "[I2C-%i]...0x%02X %s\n", i2, address, strDev.c_str());
                 strInfo.concat(cInfo);
 

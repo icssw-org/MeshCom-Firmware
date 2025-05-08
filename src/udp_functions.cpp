@@ -24,6 +24,7 @@ String grc_ids;
 // WIFI
 #include <WiFi.h>
 #include <WiFiClient.h>
+#include "esp_wifi.h"
 
 IPAddress node_ip = IPAddress(0,0,0,0);
 IPAddress node_gw = IPAddress(0,0,0,0);
@@ -460,6 +461,8 @@ bool startWIFI()
     WiFi.mode(WIFI_AP);
     WiFi.softAP(meshcom_settings.node_call);
     
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+
     Serial.printf("[WIFI]...AP mode ssid<%s> connected\n", meshcom_settings.node_call);
 
     startMeshComUDP();
@@ -512,7 +515,8 @@ bool startWIFI()
       WiFi.begin(meshcom_settings.node_ssid, NULL);
     else
       WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
-  
+    
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
   }
   else
   {
@@ -524,12 +528,19 @@ bool startWIFI()
       if (i < 5) Serial.print(":");
       }
     Serial.println("");
+
+    //esp_wifi_set_max_tx_power(16);  //OE3WAS testweise verringert
+
     WiFi.mode(WIFI_STA);
-    
+
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+
     if(strcmp(meshcom_settings.node_pwd, "none") == 0)
       WiFi.begin(meshcom_settings.node_ssid, NULL, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
     else
       WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
+
+    //WiFi.setTxPower(WIFI_POWER_8_5dBm);
   }
   
   delay(500);
@@ -554,8 +565,10 @@ bool doWiFiConnect()
 
     iWlanWait++;
     
-    if(iWlanWait == 7)
+    if(iWlanWait == 3 || iWlanWait == 7 || iWlanWait == 11)
+    {
       WiFi.reconnect();
+    }
 
     if(iWlanWait > 30)
     {
@@ -609,6 +622,8 @@ void startMeshComUDP()
     WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
 
     node_ip = WiFi.softAPIP();
+    
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
     snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
     snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "255.255.255.0");

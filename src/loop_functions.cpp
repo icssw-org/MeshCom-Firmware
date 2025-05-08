@@ -56,6 +56,7 @@ bool bDisplayTrack = false;
 bool bGPSON = false;
 bool bBMPON = false;
 bool bBMP3ON = false;
+bool bAHT20ON = false;
 bool bBMEON = false;
 bool bBME680ON = false;
 bool bMCU811ON = false;
@@ -74,6 +75,7 @@ bool bLPS33 = false;
 bool bme680_found = false;
 bool bmx_found = false;
 bool bmp3_found = false;
+bool aht20_found =false;
 bool mcu811_found = false;
 bool one_found = false;
 bool ina226_found = false;
@@ -439,7 +441,7 @@ int checkOwnTx(unsigned int msg_id)
             if(bDisplayInfo)
             {
                 Serial.print(getTimeString());
-                Serial.printf(" checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X>\n", msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0]);
+                Serial.printf(" checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X> %02X\n", msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0], own_msg_id[ilo][4]);
             }
 
             return ilo;
@@ -2800,7 +2802,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     }
 
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
-    ringBuffer[iWrite][1]=0x00;    // ACK-Status byte 0x00 for retransmission
+    ringBuffer[iWrite][1]=0xFF;    // ACK-Status byte 0xFF for no retransmission
     memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
     iWrite++;
     if(iWrite >= MAX_RING)

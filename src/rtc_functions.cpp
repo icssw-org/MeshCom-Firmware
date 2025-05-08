@@ -20,15 +20,12 @@ DateTime now;
 
 bool setupRTC()
 {  
-    TwoWire *w = NULL;
-
-    #ifdef BOARD_TBEAM_V3
-        w = &Wire1;
-    #else
-        w = &Wire;
+    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
     #endif
 
-    if (!rtc.begin(w))
+    if (!rtc.begin(&Wire))
     {
         Serial.println("[INIT]...RTC not found");
         Serial.flush();
@@ -66,6 +63,11 @@ bool loopRTC()
     if(!bRTCON)
         return false;
 
+    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+    #endif
+
     now = rtc.now();
 
     return true;
@@ -73,6 +75,11 @@ bool loopRTC()
 
 void setRTCNow(String strDate)
 {
+    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+    #endif
+
     int day, month, year, hour, minute, second;
 
     sscanf(strDate.c_str(), "%d.%d.%d %d:%d:%d", &day, &month, &year, &hour, &minute, &second);
@@ -84,6 +91,11 @@ void setRTCNow(String strDate)
 
 void setRTCNow(int year, int month, int day, int hour, int minute, int second)
 {
+    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+        Wire.end();
+        Wire.begin(I2C_SDA, I2C_SCL);
+    #endif
+
     rtc.adjust(DateTime(year, month, day, hour, minute, second));
 
     now = rtc.now();
