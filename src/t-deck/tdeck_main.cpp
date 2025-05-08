@@ -11,6 +11,7 @@
 #include <debugconf.h>
 #include "tdeck_main.h"
 #include "tdeck_extern.h"
+#include "tdeck_helpers.h"
 #include <esp32/esp32_flash.h>
 
 #include <Arduino.h>
