@@ -1112,21 +1112,9 @@ void esp32setup()
 
         delay(500);
 
-        if(startWIFI())
+        if(!startWIFI())
         {
-            /*
-            if(bWEBSERVER)
-            {
-                delay(500);
-                
-                startWebserver();
-        
-                loopWebserver();
-            }
-
-            if(bEXTUDP)
-                startExternUDP();
-            */
+            Serial.println("[WIFI]...no connection");
         }
     }
     //

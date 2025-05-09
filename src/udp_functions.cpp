@@ -511,12 +511,12 @@ bool startWIFI()
     Serial.printf("[WIFI]...try connecting to SSID: %s \n",meshcom_settings.node_ssid);	
     WiFi.mode(WIFI_STA);
     
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+
     if(strcmp(meshcom_settings.node_pwd, "none") == 0)
       WiFi.begin(meshcom_settings.node_ssid, NULL);
     else
-      WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);
-    
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+      WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);  
   }
   else
   {
@@ -533,14 +533,12 @@ bool startWIFI()
 
     WiFi.mode(WIFI_STA);
 
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    WiFi.setTxPower(WIFI_POWER_5dBm); //WIFI_POWER_8_5dBm);
 
     if(strcmp(meshcom_settings.node_pwd, "none") == 0)
       WiFi.begin(meshcom_settings.node_ssid, NULL, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
     else
       WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
-
-    //WiFi.setTxPower(WIFI_POWER_8_5dBm);
   }
   
   delay(500);
@@ -564,13 +562,15 @@ bool doWiFiConnect()
     Serial.print(".");
 
     iWlanWait++;
-    
+
+    /*
     if(iWlanWait == 3 || iWlanWait == 7 || iWlanWait == 11)
     {
       WiFi.reconnect();
     }
+    */
 
-    if(iWlanWait > 30)
+    if(iWlanWait > 20)
     {
       Serial.printf("\n[WIFI]...ssid<%s> connection error\n", meshcom_settings.node_ssid);
     }
