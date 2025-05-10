@@ -45,6 +45,7 @@ extern uint8_t iButtonPin;
 
 extern bool bAnalogCheck;
 extern float fAnalogValue;
+extern bool bAnalogFilter;
 
 extern float fBattFaktor;
 

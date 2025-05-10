@@ -444,7 +444,7 @@ void esp32setup()
     Serial.println("============");
 
     Serial.printf("[HEAP]...%d (free)\n", ESP.getFreeHeap());
-    Serial.printf("[PSRM]...%s\n", ESP.getFreePsram());
+    //Serial.printf("[PSRM]...%s\n", ESP.getFreePsram());
 
     initDisplay();
 
@@ -491,8 +491,9 @@ void esp32setup()
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
-    bBMP3ON =  meshcom_settings.node_sset3 & 0x0010;
-    bAHT20ON =  meshcom_settings.node_sset3 & 0x0020;
+    bBMP3ON = meshcom_settings.node_sset3 & 0x0010;
+    bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
+    bAnalogFilter = meshcom_settings.node_sset3 & 0x0040;
 
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 
@@ -1920,7 +1921,7 @@ void esp32loop()
             if(bDisplayCont)
             {
                 Serial.printf("[HEAP]<%s> %d (free)\n", getTimeString().c_str(), ESP.getFreeHeap());
-                Serial.printf("[PSRM]<%s> %d\n", getTimeString().c_str(), ESP.getFreePsram());
+                //Serial.printf("[PSRM]<%s> %d\n", getTimeString().c_str(), ESP.getFreePsram());
             }
 
             BattTimeWait = millis();

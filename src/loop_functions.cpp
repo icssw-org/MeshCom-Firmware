@@ -103,6 +103,7 @@ uint8_t iButtonPin = 0;
 
 bool bAnalogCheck = false;
 float fAnalogValue = 0.0;
+bool bAnalogFilter = false;
 
 float fBattFaktor = 0.0;
 

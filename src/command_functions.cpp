@@ -723,6 +723,38 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"analog filter on") == 0)
+    {
+        bAnalogFilter = true;
+
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0040;
+
+        save_settings();
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"analog filter off") == 0)
+    {
+        bAnalogFilter = false;
+
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x7FBF;
+
+        save_settings();
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"analogcheck on") == 0)
     {
         bAnalogCheck=true;
