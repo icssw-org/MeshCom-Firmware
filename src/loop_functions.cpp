@@ -2597,6 +2597,12 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
                 aprsmsg.msg_track=true;
 
             aprsmsg.msg_source_path = meshcom_settings.node_call;
+            
+            if(strlen(meshcom_settings.node_lora_call) != 0 && strcmp(meshcom_settings.node_lora_call, "none") != 0)
+            {
+                aprsmsg.msg_source_path = meshcom_settings.node_lora_call;
+            }
+
             aprsmsg.msg_destination_path = "*";
             aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, co2, qfe, qnh);
             
@@ -2610,6 +2616,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
                 addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
             }
 
+            // Sonderfall für langstrecken track - LoRa-Track mit Sonderrufzeichen bringt auch MeshCom-Track via Gateway
             if(bGATEWAY)
             {
                 if(bDisplayInfo)

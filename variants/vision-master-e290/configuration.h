@@ -82,7 +82,8 @@ definitions for HELTEC E290
 #define I2C_SDA SDA_PIN // I2C pins for this board
 #define I2C_SCL SCL_PIN
 
-//#define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
+#define VEXT_ENABLE_1 18 // active high, powers the EPaper display
+#define VEXT_ENABLE_2 46 // active high, powers the EPaper display
 
 #define BUTTON_PIN 21
 
