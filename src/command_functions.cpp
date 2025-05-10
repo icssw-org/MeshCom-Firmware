@@ -1294,7 +1294,14 @@ void commandAction(char *umsg_text, bool ble)
         }
         #endif
 
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
         Serial.printf("\nonewire gpio:%i\n", meshcom_settings.node_owgpio);
+
+        bReturn = true;
 
         save_settings();
 
@@ -1302,8 +1309,6 @@ void commandAction(char *umsg_text, bool ble)
         {
             init_onewire();
         }
-
-        return;
     }
     else
     #if defined (ENABLE_BMX280)
