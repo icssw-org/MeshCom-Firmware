@@ -461,7 +461,10 @@ bool startWIFI()
     WiFi.mode(WIFI_AP);
     WiFi.softAP(meshcom_settings.node_call);
     
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    if(meshcom_settings.node_wifi_power > 0)
+      esp_wifi_set_max_tx_power((int8_t)meshcom_settings.node_wifi_power);
+    else
+      WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
     Serial.printf("[WIFI]...AP mode ssid<%s> connected\n", meshcom_settings.node_call);
 
@@ -511,7 +514,10 @@ bool startWIFI()
     Serial.printf("[WIFI]...try connecting to SSID: %s \n",meshcom_settings.node_ssid);	
     WiFi.mode(WIFI_STA);
     
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    if(meshcom_settings.node_wifi_power > 0)
+      esp_wifi_set_max_tx_power((int8_t)meshcom_settings.node_wifi_power);
+    else
+      WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
     if(strcmp(meshcom_settings.node_pwd, "none") == 0)
       WiFi.begin(meshcom_settings.node_ssid, NULL);
@@ -533,7 +539,10 @@ bool startWIFI()
 
     WiFi.mode(WIFI_STA);
 
-    WiFi.setTxPower(WIFI_POWER_5dBm); //WIFI_POWER_8_5dBm);
+    if(meshcom_settings.node_wifi_power > 0)
+      esp_wifi_set_max_tx_power((int8_t)meshcom_settings.node_wifi_power);
+    else
+      WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
     if(strcmp(meshcom_settings.node_pwd, "none") == 0)
       WiFi.begin(meshcom_settings.node_ssid, NULL, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
@@ -623,7 +632,10 @@ void startMeshComUDP()
 
     node_ip = WiFi.softAPIP();
     
-    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    if(meshcom_settings.node_wifi_power > 0)
+      esp_wifi_set_max_tx_power((int8_t)meshcom_settings.node_wifi_power);
+    else
+      WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
     snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
     snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "255.255.255.0");

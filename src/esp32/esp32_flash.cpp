@@ -184,6 +184,11 @@ void init_flash(void)
     meshcom_settings.node_specsamples = preferences.getInt("node_spsamp", 2048);
 
     meshcom_settings.node_analog_batt_faktor = preferences.getFloat("node_bfakt", 0.0);
+
+    meshcom_settings.node_wifi_power = preferences.getInt("node_wifip", 60);
+
+    strVar = preferences.getString("node_ucall", "none");
+    snprintf(meshcom_settings.node_lora_call, sizeof(meshcom_settings.node_lora_call), "%s", strVar.c_str());
 }
 
 void save_settings(void)
@@ -363,6 +368,11 @@ void save_settings(void)
 
     preferences.putFloat("node_bfakt", meshcom_settings.node_analog_batt_faktor);
 
+    preferences.putInt("node_wifip", meshcom_settings.node_wifi_power);
+
+    strVar = meshcom_settings.node_lora_call;
+    preferences.putString("node_ucall", strVar);
+    
     preferences.end();
 
     //Test only Serial.println("flash save...");

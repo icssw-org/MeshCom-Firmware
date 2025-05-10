@@ -2086,6 +2086,32 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"setudpcall ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+13);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        
+        sVar = _owner_c;
+        sVar.trim();
+        sVar.toUpperCase();
+
+        if(!checkRegexCall(sVar))
+        {
+            Serial.printf("\n[ERR]..UDP-Callsign <%s> not valid\n", sVar.c_str());
+            return;
+        }
+
+        snprintf(meshcom_settings.node_lora_call, sizeof(meshcom_settings.node_lora_call), "%s", sVar.c_str());
+
+
+        Serial.printf("UDP-Call:%s set\n", meshcom_settings.node_lora_call);
+
+        save_settings();
+
+        return;
+    }
+    else
 
 #ifndef BOARD_RAK4630
     if(commandCheck(msg_text+2, (char*)"setssid ") == 0)
@@ -2602,6 +2628,27 @@ void commandAction(char *umsg_text, bool ble)
             Serial.println("Auto. Reboot after 15 sec.");
 
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"wifitxpower ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
+        sscanf(_owner_c, "%d", &iVar);
+
+        if(iVar < 0 || iVar > 78)
+        {
+            Serial.printf("wifitxpower %i not between %i (factor) and max %i (factor) \n", iVar, TX_POWER_MIN, TX_POWER_MAX);
+        }
+        else
+        {
+            meshcom_settings.node_wifi_power=iVar;
+
+            Serial.printf("set wifitxpower to % (factor)\n", meshcom_settings.node_wifi_power);
+
+            save_settings();
         }
 
         return;

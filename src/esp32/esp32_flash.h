@@ -131,6 +131,10 @@ struct s_meshcom_settings
 	int node_specsamples = 2048;
 
 	float node_analog_batt_faktor = 0.0;
+	
+	int node_wifi_power = 60;
+
+	char node_lora_call[10] = {0x00};
 
 	// nicht im Flash
 	int node_press_alt = 0;

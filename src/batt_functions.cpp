@@ -146,21 +146,24 @@ void print_char_val_type(esp_adc_cal_value_t val_type)
 
 #endif
 
+#if defined(BOARD_E290)
+
 void VextON(void)
 {
-	pinMode(18,OUTPUT);
-	digitalWrite(18, HIGH);
-	pinMode(46,OUTPUT);
-	digitalWrite(46, HIGH);
+	pinMode(VEXT_ENABLE_1,OUTPUT);
+	digitalWrite(VEXT_ENABLE_1, HIGH);
+	pinMode(VEXT_ENABLE_2,OUTPUT);
+	digitalWrite(VEXT_ENABLE_2, HIGH);
 }
 
 void VextOFF(void)  // Vext default OFF
 {
-	pinMode(18,OUTPUT);
-	digitalWrite(18, LOW);
-	pinMode(46,OUTPUT);
-	digitalWrite(46, LOW);
+	pinMode(VEXT_ENABLE_1,OUTPUT);
+	digitalWrite(VEXT_ENABLE_1, LOW);
+	pinMode(VEXT_ENABLE_2,OUTPUT);
+	digitalWrite(VEXT_ENABLE_2, LOW);
 }
+#endif
 
 /**
  * @brief Initialize the battery analog input
