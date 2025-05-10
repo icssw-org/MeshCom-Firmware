@@ -16,8 +16,6 @@ extern bool bLED_ORANGE;
 
 extern int iWlanWait;
 
-extern uint32_t heap;
-
 extern bool bSetLoRaAPRS;
 
 extern bool bDEBUG;

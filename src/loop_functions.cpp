@@ -29,8 +29,6 @@ bool bLED_CLEAR=true;
 
 extern unsigned long rebootAuto;
 
-uint32_t heap = 0;
-
 int iWlanWait = 0;
 
 extern float global_batt;

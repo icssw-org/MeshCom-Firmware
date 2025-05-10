@@ -56,7 +56,6 @@
 #include "XPowersAXP2101.tpp"
 #include "XPowersLibInterface.hpp"
 extern XPowersLibInterface *PMU;
-
 #endif
 
 // NEOPIXEL
@@ -70,7 +69,10 @@ bool bLED_WEISS=false;
 int iCount_weiss=0;
 
 bool bLED = false;
+#endif
 
+#ifdef BOARD_LED
+bool bLED = true;
 #endif
 
 
@@ -442,8 +444,8 @@ void esp32setup()
     Serial.println("CLIENT SETUP");
     Serial.println("============");
 
-    heap = ESP.getFreeHeap();
-    Serial.printf("[HEAP]...%d (free)\n", heap);
+    Serial.printf("[HEAP]...%d (free)\n", ESP.getFreeHeap());
+    Serial.printf("[PSRM]...%s\n", ESP.getFreePsram());
 
     initDisplay();
 
@@ -768,6 +770,10 @@ void esp32setup()
     // > 4.34w we use EU8 instead of EU
     if(meshcom_settings.node_country == 0)
         meshcom_settings.node_country = 8;
+
+    #ifdef BOARD_COUNTRY
+        meshcom_settings.node_country = BOARD_COUNTRY;
+    #endif
 
     lora_setcountry(meshcom_settings.node_country);
 
@@ -1914,8 +1920,8 @@ void esp32loop()
 
             if(bDisplayCont)
             {
-                heap = ESP.getFreeHeap();
-                Serial.printf("[HEAP]...%d (free)\n", heap);
+                Serial.printf("[HEAP]<%s> %d (free)\n", getTimeString().c_str(), ESP.getFreeHeap());
+                Serial.printf("[PSRM]<%s> %d\n", getTimeString().c_str(), ESP.getFreePsram());
             }
 
             BattTimeWait = millis();
