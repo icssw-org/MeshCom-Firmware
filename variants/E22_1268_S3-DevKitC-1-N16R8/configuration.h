@@ -65,7 +65,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
 #define BATTERY_PIN 2 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_MULTIPLIER (10000 + 2200) / 2200    // default and can be overwritten with Flash variable node_analog_batt_faktor 
+#define ADC_MULTIPLIER 5.7    // default and can be overwritten with Flash variable node_analog_batt_faktor Spannungsteiler 47k+10k
 
 #define BUTTON_PIN  0
 #define BUTTON_EXT  14  // TODO

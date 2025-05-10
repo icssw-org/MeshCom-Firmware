@@ -9,8 +9,14 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 
 // E22 specifig config
 #define MODUL_HARDWARE ESP32_S3_EBYTE_E22
+
+// bleibt auch bei E22-900 --> BOARD_COUNTRY schaltet um
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
+//
+
+#define BOARD_COUNTRY 5   // E22-900 -> 868
+
 #define ENABLE_GPS
 #define ENABLE_BMX280
 #define ENABLE_BMP390
@@ -65,7 +71,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
 #define BATTERY_PIN 2 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_MULTIPLIER (10000 + 2200) / 2200    // default and can be overwritten with Flash variable node_analog_batt_faktor 
+#define ADC_MULTIPLIER 5.7    // default and can be overwritten with Flash variable node_analog_batt_faktor Spannungsteiler 47k+10k
 
 #define BUTTON_PIN  0
 #define BUTTON_EXT  14  // TODO

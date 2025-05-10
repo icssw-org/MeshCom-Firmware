@@ -32,6 +32,7 @@ definitions for T-Beam
 #define XPOWERS_CHIP_AXP192
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
+#define BOARD_LED 4    // LED_BUILTIN
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 

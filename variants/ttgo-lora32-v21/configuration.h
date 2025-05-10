@@ -27,6 +27,8 @@ definitions for TLORA_V2_1_1p6
 #define TX_POWER_MIN 2
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
+#define BOARD_LED 25    // LED_BUILTIN
+
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
 #define TX_OUTPUT_POWER 20
