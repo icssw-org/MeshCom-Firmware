@@ -296,6 +296,10 @@ struct s_meshcom_settings
 
 	int node_parm_time = 15;
 
+	int node_wifi_power = 60;
+	char node_lora_call[10] = {0x00};
+
+	// nicht im Flash
 	float node_specstart = 432.0;
 	float node_specend = 434.0;
 	float node_specstep = 0.025;
@@ -303,7 +307,7 @@ struct s_meshcom_settings
 
 	float node_analog_batt_faktor = 0.0;
 
-	// nicht im Flash
+
 	int node_press_alt = 0;
 	float node_press_asl = 0;
 	float node_vbus = 0;
@@ -472,6 +476,9 @@ struct s_meshcomcompat_settings
 
 	int node_parm_time = 15;
 
+	int node_wifi_power = 60;
+	char node_lora_call[10] = {0x00};
+
 	// not within RAK Flash
 	float node_specstart = 432.0;
 	float node_specend = 434.0;
@@ -479,9 +486,6 @@ struct s_meshcomcompat_settings
 	int node_specsamples = 2048;
 
 	float node_analog_batt_faktor = 0.0;
-
-	int node_wifi_power = 60;
-	char node_lora_call[10] = {0x00};
 
 	// nicht im Flash
 	int node_press_alt = 0;
