@@ -202,6 +202,9 @@ void init_flash(void)
 
 		meshcom_settings.node_parm_time = old_struct.node_parm_time;
 
+		meshcom_settings.node_wifi_power = old_struct.node_wifi_power;
+		memcpy(meshcom_settings.node_lora_call, old_struct.node_lora_call, 10);
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
