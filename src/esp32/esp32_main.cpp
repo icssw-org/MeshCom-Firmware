@@ -68,7 +68,6 @@ Adafruit_NeoPixel pixels(LED_PIXEL, LED_PIN, NEO_GRB + NEO_KHZ800);
 bool bLED_WEISS=false;
 int iCount_weiss=0;
 
-bool bLED = false;
 #endif
 
 #ifdef BOARD_LED
