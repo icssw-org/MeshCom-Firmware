@@ -299,6 +299,8 @@ struct s_meshcom_settings
 	int node_wifi_power = 60;
 	char node_lora_call[10] = {0x00};
 
+	float node_analog_alpha = 0.0;
+
 	// nicht im Flash
 	float node_specstart = 432.0;
 	float node_specend = 434.0;
@@ -478,6 +480,8 @@ struct s_meshcomcompat_settings
 
 	int node_wifi_power = 60;
 	char node_lora_call[10] = {0x00};
+
+	float node_analog_alpha = 0.0;
 
 	// not within RAK Flash
 	float node_specstart = 432.0;

@@ -4,6 +4,7 @@
 // 20230326: Version 4.00: START
 
 extern int BOARD_HARDWARE;
+extern bool bUSER_BOARD_LED;
 
 extern unsigned long rebootAuto;
 
