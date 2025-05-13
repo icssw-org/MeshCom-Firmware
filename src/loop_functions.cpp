@@ -18,6 +18,7 @@
 extern TinyGPSPlus tinyGPSPLus;
 
 int BOARD_HARDWARE = MODUL_HARDWARE;
+bool bUSER_BOARD_LED = false;
 
 bool bRadio=false;
 
@@ -1365,7 +1366,7 @@ void initAnalogPin()
     if(bAnalogCheck)
     {
         int ANAGPIO = meshcom_settings.node_analog_pin;
-        if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin > 99)
+        if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin >= 99)
             ANAGPIO = ANALOG_PIN;
 
         pinMode(ANAGPIO, INPUT);
@@ -1873,7 +1874,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                             DrawRssi(3, 117, rssi);
                         #endif
 
-                        snprintf(msg_text, sizeof(msg_text), "%.0fmuA %.0fcm %.1fC", aprspos.softser1, aprspos.softser2, aprspos.softser3);
+                        snprintf(msg_text, sizeof(msg_text), "%.0fcm %.0fcm %.1fC", aprspos.softser1, aprspos.softser2, aprspos.softser3);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
 

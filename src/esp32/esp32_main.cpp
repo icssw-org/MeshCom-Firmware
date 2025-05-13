@@ -144,8 +144,8 @@ uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Ken
 bool config_to_phone_prepare = false;
 unsigned long config_to_phone_prepare_timer = 0;
 unsigned long config_to_phone_datetime_timer = 0;
-const uint8_t json_configs_cnt = 9;
-const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset", "--io", "--tel"};
+const uint8_t json_configs_cnt = 10;
+const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset", "--io", "--tel", "--analogset"};
 uint8_t config_cmds_index = 0;
 uint8_t iPhoneState=0;
 
@@ -257,6 +257,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     SX1262 radio = new Module(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
 
 #endif
+
 
 #ifdef SX126X
     // RadioModule SX1268 
@@ -494,6 +495,7 @@ void esp32setup()
     bBMP3ON = meshcom_settings.node_sset3 & 0x0010;
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
     bAnalogFilter = meshcom_settings.node_sset3 & 0x0040;
+    bUSER_BOARD_LED = meshcom_settings.node_sset3 & 0x0080;
 
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 
@@ -1198,12 +1200,14 @@ void esp32loop()
     #endif
 
     #ifdef BOARD_LED
-        // TODO
-        if(bLED)
-            digitalWrite(BOARD_LED, HIGH);
-        else
-            digitalWrite(BOARD_LED, LOW);
-        bLED = !bLED;
+        if(bUSER_BOARD_LED)
+        {
+            if(bLED)
+                digitalWrite(BOARD_LED, HIGH);
+            else
+                digitalWrite(BOARD_LED, LOW);
+            bLED = !bLED;
+        }
     #endif
 
     // LoRa-Chip found

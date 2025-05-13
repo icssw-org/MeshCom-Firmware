@@ -8,6 +8,7 @@
 #if defined(ENABLE_SOFTSER)
 
 #include <softser_functions.h>
+#include <tinyxml_functions.h>
 
 #ifdef ESP32
 #include "SoftwareSerial.h"
@@ -93,14 +94,15 @@ bool loopSOFTSER(int ID, int iFunction)
 }
 
 String strSOFTSERAPP_ID;
+String strSOFTSERAPP_NAME;
 String strSOFTSERAPP_PEGEL;
 String strSOFTSERAPP_PEGEL2;
 String strSOFTSERAPP_TEMP;
 String strSOFTSERAPP_BATT;
 
-String strSOFTSERAPP_FIXPEGEL = "";
-String strSOFTSERAPP_FIXPEGEL2 = "";
-String strSOFTSERAPP_FIXTEMP = "";
+String strSOFTSERAPP_FIXPEGEL="";
+String strSOFTSERAPP_FIXPEGEL2="";
+String strSOFTSERAPP_FIXTEMP="";
 
 bool appSOFTSER(int ID)
 {
@@ -119,6 +121,7 @@ bool appSOFTSER(int ID)
     // got time
     if(ID == 1) // Pegelmesser
     {
+#if defined(ENABLE_XML)
         if(strSOFTSER_BUF.indexOf("<0x03>") > 0)
         {
             loopSOFTSER(ID, 1);
@@ -127,103 +130,18 @@ bool appSOFTSER(int ID)
         // got Data
         if(strSOFTSER_BUF.indexOf("?xml") > 0)
         {
-            String strtemp;
-            String strtemp1;
+            int sindex = strSOFTSER_BUF.indexOf("<StationDataList>");
 
-            if(bSOFTSERDEBUG)
+            if(sindex > 0)
             {
-                Serial.printf("SOFTSERDATA\n%s\n", strSOFTSER_BUF.substring(strSOFTSER_BUF.indexOf("?xml"), strSOFTSER_BUF.indexOf("firmware")).c_str());
+                char* decodexml;
+                sprintf(decodexml, "%s", strSOFTSER_BUF.substring(sindex).c_str());
+                decodeTinyXML(decodexml);
             }
-
-            if(strSOFTSER_BUF.indexOf("stationId=") > 0)
-            {
-                strtemp = strSOFTSER_BUF.substring(strSOFTSER_BUF.indexOf("stationId="));
-
-                strSOFTSERAPP_ID = strtemp.substring(11, 21);
-                
-                Serial.printf("Station...%s\n", strSOFTSERAPP_ID.c_str());
-            }
-
-            if(strSOFTSER_BUF.indexOf("Wasserstand") > 0 && strSOFTSER_BUF.indexOf("0059") > 0)
-            {
-                strtemp = strSOFTSER_BUF.substring(strSOFTSER_BUF.indexOf("Wasserstand"));
-
-                if(strtemp.indexOf("<VT t=") > 0)
-                {
-                    strtemp1 = strtemp.substring(strtemp.indexOf("<VT t=")+1);
-
-                    strSOFTSERAPP_PEGEL = strtemp1.substring(strtemp1.indexOf(">")+1, strtemp1.indexOf("<")).c_str();
-
-                    Serial.printf("Pegel....%s cm\n", strSOFTSERAPP_PEGEL.c_str());
-                }
-                else
-                    strSOFTSERAPP_PEGEL = "";
-            }
-
-            if(strSOFTSER_BUF.indexOf("Wasserstand 2") > 0 && strSOFTSER_BUF.indexOf("0061") > 0)
-            {
-                strtemp = strSOFTSER_BUF.substring(strSOFTSER_BUF.indexOf("Wasserstand 2"));
-
-                if(strtemp.indexOf("<VT t=") > 0)
-                {
-                    strtemp1 = strtemp.substring(strtemp.indexOf("<VT t=")+1);
-
-                    strSOFTSERAPP_PEGEL2 = strtemp1.substring(strtemp1.indexOf(">")+1, strtemp1.indexOf("<")).c_str();
-
-                    Serial.printf("Pegel2...%s cm\n", strSOFTSERAPP_PEGEL2.c_str());
-                }
-                else
-                    strSOFTSERAPP_PEGEL2 = "";
-            }
-
-
-            if(strSOFTSER_BUF.indexOf("Wassertemperatur") > 0)
-            {
-                strtemp = strSOFTSER_BUF.substring(strSOFTSER_BUF.indexOf("Wassertemperatur"));
-
-                if(strtemp.indexOf("<VT t=") > 0)
-                {
-                    strtemp1 = strtemp.substring(strtemp.indexOf("<VT t=")+1);
-
-                    strSOFTSERAPP_TEMP = strtemp1.substring(strtemp1.indexOf(">")+1, strtemp1.indexOf("<")).c_str();
-
-                    Serial.printf("Temp.....%s °C\n", strSOFTSERAPP_TEMP.c_str());
-                }
-                else
-                    strSOFTSERAPP_TEMP = "";
-            }
-
-            if(strSOFTSER_BUF.indexOf("Batteriespannung") > 0)
-            {
-                strtemp = strSOFTSER_BUF.substring(strSOFTSER_BUF.indexOf("Batteriespannung"));
-
-                if(strtemp.indexOf("<VT t=") > 0)
-                {
-                    strtemp1 = strtemp.substring(strtemp.indexOf("<VT t=")+1);
-
-                    strSOFTSERAPP_BATT = strtemp1.substring(strtemp1.indexOf(">")+1, strtemp1.indexOf("<")).c_str();
-
-                    Serial.printf("BATT.....%s V\n", strSOFTSERAPP_BATT.c_str());
-                }
-                else
-                    strSOFTSERAPP_BATT = "";
-            }
-
-            if(strSOFTSERAPP_FIXPEGEL.length() > 0)
-                Serial.printf("PEGEL(F).%s muA\n", strSOFTSERAPP_FIXPEGEL.c_str());
-            if(strSOFTSERAPP_FIXPEGEL2.length() > 0)
-                Serial.printf("PEGEL2(F).%s cm\n", strSOFTSERAPP_FIXPEGEL2.c_str());
-            if(strSOFTSERAPP_FIXPEGEL.length() > 0)
-                Serial.printf("TEMP(F)..%s °C\n", strSOFTSERAPP_FIXTEMP.c_str());
-
-            sendAPPPosition(meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_temp2);
-        
-            strSOFTSER_BUF = "";
         }
-        else
-        {
-            strSOFTSER_BUF = "";
-        }
+
+#endif
+        strSOFTSER_BUF = "";
     }
     else
     {

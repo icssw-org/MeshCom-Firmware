@@ -12,6 +12,7 @@
 #include "lora_setchip.h"
 #include "spectral_scan.h"
 #include "rtc_functions.h"
+#include "tinyxml_functions.h"
 
 #ifdef ESP32
 #include "esp32/esp32_functions.h"
@@ -47,6 +48,7 @@ extern bool bMitHardReset;
 
 uint16_t json_len = 0;
 void sendNodeSetting();
+void sendAnalogSetting();
 void sendGpsJson();
 void sendAPRSset();
 void sendConfigFinish();
@@ -183,6 +185,7 @@ void commandAction(char *umsg_text, bool ble)
     bool bSensSetting=false;
     bool bWifiSetting=false;
     bool bNodeSetting=false;
+    bool bAnalogSetting=false;
 
     if(bBLEDEBUG && ble)
         Serial.printf("commandAction [%s] ble:%i\n", sVar.c_str(), ble);
@@ -696,7 +699,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting=true;
+            bAnalogSetting=true;
         }
 
         bReturn = true;
@@ -717,7 +720,26 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting=true;
+            bAnalogSetting=true;
+        }
+
+        bReturn = true;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"analog alpha ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+15);
+        sscanf(_owner_c, "%lf", &dVar);
+
+        //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
+
+        meshcom_settings.node_analog_alpha=dVar;
+
+        save_settings();
+
+        if(ble)
+        {
+            bAnalogSetting=true;
         }
 
         bReturn = true;
@@ -733,7 +755,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting=true;
+            bAnalogSetting=true;
         }
 
         bReturn = true;
@@ -749,7 +771,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting=true;
+            bAnalogSetting=true;
         }
 
         bReturn = true;
@@ -765,7 +787,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting=true;
+            bAnalogSetting=true;
         }
 
         bReturn = true;
@@ -781,7 +803,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            bNodeSetting=true;
+            bAnalogSetting=true;
         }
 
         bReturn = true;
@@ -811,6 +833,38 @@ void commandAction(char *umsg_text, bool ble)
     }
     else
     #endif
+    if(commandCheck(msg_text+2, (char*)"board led on") == 0)
+    {
+        bUSER_BOARD_LED = true;
+
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0080;
+
+        save_settings();
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"board led off") == 0)
+    {
+        bUSER_BOARD_LED = false;
+
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x7F7F;
+
+        save_settings();
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"track on") == 0)
     {
         bDisplayTrack=true;
@@ -1938,6 +1992,15 @@ void commandAction(char *umsg_text, bool ble)
     }
 #endif
 
+#if defined(ENABLE_XML)
+    if(commandCheck(msg_text+2, (char*)"softser xml") == 0)
+    {
+        testTinyXML();
+        
+        return;
+    }
+#endif
+
     else
     if(commandCheck(msg_text+2, (char*)"passwd ") == 0)
     {
@@ -3046,6 +3109,11 @@ void commandAction(char *umsg_text, bool ble)
         bNodeSetting=true;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"analogset") == 0)
+    {
+        bAnalogSetting=true;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"aprsset") == 0)
     {
         sendAPRSset();
@@ -3660,6 +3728,13 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(bAnalogSetting)
+    {
+        sendAnalogSetting();
+
+        return;
+    }
+    else
     if(bReturn)
     {
 
@@ -3779,6 +3854,8 @@ void sendNodeSetting()
     nsetdoc["MBW"] = meshcom_settings.node_bw;
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
     nsetdoc["NOALL"] = bNoMSGtoALL;
+    nsetdoc["BLED"] = bUSER_BOARD_LED;
+
     nsetdoc["ANACHK"] = bAnalogCheck;
     nsetdoc["ANAFAC"] = meshcom_settings.node_analog_faktor;
     nsetdoc["ANAPIN"] = meshcom_settings.node_analog_pin;
@@ -3787,6 +3864,31 @@ void sendNodeSetting()
     memset(print_buff, 0, sizeof(print_buff));
 
     serializeJson(nsetdoc, print_buff, measureJson(nsetdoc));
+
+    // clear buffer
+    memset(msg_buffer, 0, sizeof(msg_buffer));
+
+    // set data message flag and tx ble
+    msg_buffer[0] = 0x44;
+    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
+    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+}
+
+void sendAnalogSetting()
+{
+    JsonDocument asetdoc;
+
+    asetdoc["TYP"] = "AN";
+    asetdoc["APN"] = meshcom_settings.node_analog_pin;
+    asetdoc["AFC"] = meshcom_settings.node_analog_faktor;
+    asetdoc["AK"] = meshcom_settings.node_analog_alpha;
+    asetdoc["AFL"] = bAnalogFilter;
+    asetdoc["ACK"] = bAnalogCheck;
+
+    // reset print buffer
+    memset(print_buff, 0, sizeof(print_buff));
+
+    serializeJson(asetdoc, print_buff, measureJson(asetdoc));
 
     // clear buffer
     memset(msg_buffer, 0, sizeof(msg_buffer));

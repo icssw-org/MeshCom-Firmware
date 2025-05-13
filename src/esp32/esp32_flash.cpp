@@ -189,6 +189,8 @@ void init_flash(void)
 
     strVar = preferences.getString("node_ucall", "none");
     snprintf(meshcom_settings.node_lora_call, sizeof(meshcom_settings.node_lora_call), "%s", strVar.c_str());
+
+    meshcom_settings.node_analog_alpha = preferences.getFloat("node_aak", 0.0);
 }
 
 void save_settings(void)
@@ -373,6 +375,8 @@ void save_settings(void)
     strVar = meshcom_settings.node_lora_call;
     preferences.putString("node_ucall", strVar);
     
+    preferences.putFloat("node_aak", meshcom_settings.node_analog_alpha);
+
     preferences.end();
 
     //Test only Serial.println("flash save...");

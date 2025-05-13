@@ -50,11 +50,19 @@
 #define ALIVERESET_INTERVAL 2 * 10 * 30    // 1/2 Stunde
 #define BLEBLINK_INTERVAL 3000             // BLEBLINK interval in milliseconds
 
+#ifdef ENABLE_XML
+#define MAX_MHEARD 5                       // max count of messages in mheard ringbuffer
+#define MAX_MHPATH 5                       // max count of messages in mhpath ringbuffer
+#define MAX_RING 20                        // max count of messages in ringbuffer
+#define MAX_LOG 20                         // max count of messages in ringbuffer
+#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
+#else
 #define MAX_MHEARD 20                      // max count of messages in mheard ringbuffer
 #define MAX_MHPATH 20                      // max count of messages in mhpath ringbuffer
 #define MAX_RING 35                        // max count of messages in ringbuffer
 #define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
+#endif
 
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message
 #define MAX_ERR_UDP_TX 10                  // maximum of errors on sending KEEP messages via UDP (derived from Udp.endPacket())
