@@ -7,7 +7,7 @@
 void testTinyXML();
 
 // SOFTSER APP=1
-void decodeTinyXML(char* document);
+void decodeTinyXML(String document);
 
 #endif
 

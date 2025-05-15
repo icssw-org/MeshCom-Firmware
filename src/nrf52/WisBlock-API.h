@@ -329,6 +329,10 @@ struct s_meshcom_settings
 
 	// 9999-99-99 00:00:00
 	char node_update[20] = {0};
+
+	char node_parm_1[100] = {0};
+	char node_parm_t[25] = {0};
+	char node_parm_id[100] = {0};
 };
 
 extern s_meshcom_settings meshcom_settings;
@@ -494,6 +498,11 @@ struct s_meshcomcompat_settings
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
+
+	char node_parm_1[100] = {0};
+	char node_parm_t[25] = {0};
+	char node_parm_id[100] = {0};
+
 };
 
 // Flash

@@ -157,6 +157,10 @@ struct s_meshcom_settings
 	int max_hop_pos = 0;
 
 	char node_update[20] = {0};
+
+	char node_parm_1[100] = {0};
+	char node_parm_t[25] = {0};
+	char node_parm_id[100] = {0};
 };
 
 extern s_meshcom_settings meshcom_settings;

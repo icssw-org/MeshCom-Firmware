@@ -62,7 +62,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
 void SendAckMessage(String dest_call, unsigned int iAckId);
 void sendHey();
-void sendTelemetry();
+void sendTelemetry(int ID);
 
 bool checkMesh();
 

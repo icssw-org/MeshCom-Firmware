@@ -59,7 +59,9 @@
 #include <extudp_functions.h>
 #include <lora_setchip.h>
 
-// flag to indicate if we are after receiving
+#include "softser_functions.h"
+
+                                        // flag to indicate if we are after receiving
 extern unsigned long iReceiveTimeOutTime;
 
 extern unsigned char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
@@ -558,7 +560,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                     // Telemetry no ACK
                                     if(strcmp(destination_call, "100001") == 0)
+                                    {
                                         bSendAckGateway=false;
+
+                                        #if defined(ENABLE_SOFTSER)
+                                            displaySOFTSER(aprsmsg);
+                                        #endif
+                                    }
                                 }
 
                                 if(bGATEWAY)

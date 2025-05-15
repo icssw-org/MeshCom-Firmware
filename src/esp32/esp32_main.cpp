@@ -1458,8 +1458,8 @@ void esp32loop()
     {
         strTime = "none";
 
-        // every five minutes
-        if((updateTimeClient + 1000 * 60 * 5) < millis() || updateTimeClient == 0)
+        // every 15 minutes
+        if((updateTimeClient + 1000 * 60 * 15) < millis() || updateTimeClient == 0)
         {
             strTime = udpUpdateTimeClient();
 
@@ -1834,7 +1834,7 @@ void esp32loop()
     {
         bTeleFirst=false;
 
-        sendTelemetry();
+        sendTelemetry(SOFTSER_APP_ID);
 
         telemetry_timer = millis();
     }
