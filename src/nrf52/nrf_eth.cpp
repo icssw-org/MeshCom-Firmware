@@ -866,7 +866,20 @@ void NrfETH::startUDP()
 
 String NrfETH::udpUpdateTimeClient()
 {
-  timeClient.update();
+  if(!timeClient.update())
+  {
+    Serial.print("TimeClient no update posible");
+
+    if(!timeClient.forceUpdate())
+    {
+      Serial.print("TimeClient no force update posible");
+
+      timeClient.end();
+      delay(2000);
+      timeClient.begin();
+      return "none";
+    }
+  }
 
   if(bDisplayInfo)
   {

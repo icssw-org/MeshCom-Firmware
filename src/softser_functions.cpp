@@ -93,16 +93,15 @@ bool loopSOFTSER(int ID, int iFunction)
     return true;
 }
 
-String strSOFTSERAPP_ID;
-String strSOFTSERAPP_NAME;
-String strSOFTSERAPP_PEGEL;
-String strSOFTSERAPP_PEGEL2;
-String strSOFTSERAPP_TEMP;
-String strSOFTSERAPP_BATT;
-
 String strSOFTSERAPP_FIXPEGEL="";
 String strSOFTSERAPP_FIXPEGEL2="";
 String strSOFTSERAPP_FIXTEMP="";
+
+String strTELE_PARM="";
+String strTELE_UNIT="";
+String strTELE_VALUES="";
+String strTELE_DATETIME="";
+String strTELE_CH_ID="";
 
 bool appSOFTSER(int ID)
 {
@@ -122,21 +121,33 @@ bool appSOFTSER(int ID)
     if(ID == 1) // Pegelmesser
     {
 #if defined(ENABLE_XML)
+    // just for test
         if(strSOFTSER_BUF.indexOf("<0x03>") > 0)
         {
             loopSOFTSER(ID, 1);
         }
         else
         // got Data
-        if(strSOFTSER_BUF.indexOf("?xml") > 0)
+        if(strSOFTSER_BUF.indexOf("<StationDataList>") >= 0)
         {
             int sindex = strSOFTSER_BUF.indexOf("<StationDataList>");
 
-            if(sindex > 0)
+            if(sindex >= 0)
             {
                 char* decodexml;
                 sprintf(decodexml, "%s", strSOFTSER_BUF.substring(sindex).c_str());
-                decodeTinyXML(decodexml);
+
+                //decodeTinyXML(decodexml);
+                testTinyXML();
+
+                // fill Telemetry
+                snprintf(meshcom_settings.node_parm_1, sizeof(meshcom_settings.node_parm_1), "%s", strTELE_PARM.c_str());
+                snprintf(meshcom_settings.node_unit, sizeof(meshcom_settings.node_unit), "%s", strTELE_UNIT.c_str());
+                snprintf(meshcom_settings.node_values, sizeof(meshcom_settings.node_values), "T:%s", strTELE_VALUES.c_str());
+
+                // TEST
+                sendTelemetry(ID);
+
             }
         }
 
@@ -252,6 +263,185 @@ bool sendSOFTSER(char cText[100])
     getSOFTSER();
     
     return true;
+}
+
+/*
+2025-05-15 10:05:37 CEST: OE3XIR-81>APRSMC,TCPIP*,qAR,OE1KBC-86::077234567:PARM.60 Wasserstand,65 Wassertemperatur,50 Batteriespannung
+2025-05-15 08:08:35 CEST: OE3XIR-81>APRSMC,TCPIP*,qAR,OE1KBC-86::007723456:UNIT.cm,C,V
+2025-05-15 10:05:57 CEST: OE3XIR-81>APRSMC,TCPIP*,qAR,OE1KBC-86::077234567:EQNS.0,1,0,0,1,0,0,1,0,0,1,0,0,1,0
+2025-05-15 10:06:12 CEST: OE3XIR-81>APRSMC,TCPIP*,qAR,OE1KBC-86::077234567:BITS.00000000DemoStationNetDL500
+2025-05-15 10:06:28 CEST: OE3XIR-81>APRSMC,TCPIP*,qAR,OE1KBC-86::077234567:T#249,28.5,25.0,13.4,0,0,00000000,2025-04-22T13:00:00,60,65,50
+*/
+
+#define MAX_ID 10
+
+String strSID[MAX_ID];
+
+String strSNAME[MAX_ID];
+String strPARM[MAX_ID][5];
+String strPARM_ID[MAX_ID][5];
+String strUNIT[MAX_ID][5];
+
+int next_id = 0;
+
+int getSOFTSER_ID(String ID)
+{
+    for(int iid=0; iid<MAX_ID; iid++)
+    {
+        if(strSID[iid].compareTo(ID) == 0)
+            return iid;
+    }
+
+    int retid = next_id;
+
+    strSID[next_id] = ID;
+
+    next_id++;
+    if(next_id >= MAX_ID)
+        next_id=0;
+
+    return retid;
+}
+
+String getSOFTSER_PARM(int iID, int icd)
+{
+    return strPARM[iID][icd];
+}
+
+String getSOFTSER_UNIT(int iID, int icd)
+{
+    return strUNIT[iID][icd];
+}
+
+void setSOFTSER_PARM(int iID, int icd, String val, String valname)
+{
+    strPARM[iID][icd] = valname;
+    strPARM_ID[iID][icd] = val;
+}
+
+void setSOFTSER_UNIT(int iID, int icd, String sDecode)
+{
+    strUNIT[iID][icd] = sDecode;
+}
+
+void setSOFTSER_SNAME(int iID, String sDecode)
+{
+    strSNAME[iID] = sDecode;
+}
+
+void displaySOFTSER(struct aprsMessage &aprsmsg)
+{
+    if(!bSOFTSERON)
+    {
+        return;
+    }
+
+    strSOFTSERAPP_ID = aprsmsg.msg_payload.substring(0, 9);
+    strSOFTSERAPP_ID.trim();
+
+    int iID = getSOFTSER_ID(strSOFTSERAPP_ID);
+
+    if(iID < 0)
+        return;
+
+    int ipos=0;
+    int impos=0;
+    String sDecode="";
+
+    if(aprsmsg.msg_payload.charAt(10) == 'P')
+    {
+        ipos=15;
+        for(int icd=0; icd<5; icd++)
+        {
+            sDecode = aprsmsg.msg_payload.substring(ipos);
+            impos = sDecode.indexOf(',');
+            if(impos >= 0)
+            {
+                sDecode = sDecode.substring(0, impos);
+            }
+
+            if(sDecode.length() <= 0)
+                break;
+                
+            setSOFTSER_PARM(iID, icd, sDecode.substring(0, 2), sDecode.substring(3));
+
+            ipos = ipos + sDecode.length() + 1;
+        }
+
+        return;
+    }
+    else
+    if(aprsmsg.msg_payload.charAt(10) == 'U')
+    {
+        ipos=15;
+        for(int icd=0; icd<5; icd++)
+        {
+            sDecode = aprsmsg.msg_payload.substring(ipos);
+            impos = sDecode.indexOf(',');
+            if(impos >= 0)
+            {
+                sDecode = sDecode.substring(0, impos);
+            }
+
+            if(sDecode.length() <= 0)
+                break;
+
+            setSOFTSER_UNIT(iID, icd, sDecode);
+
+            ipos = ipos + sDecode.length() + 1;
+        }
+
+        return;
+    }
+    else
+    if(aprsmsg.msg_payload.charAt(10) == 'E')
+    {
+        return;
+    }
+    else
+    if(aprsmsg.msg_payload.charAt(10) == 'B')
+    {
+        ipos=23;
+        sDecode = aprsmsg.msg_payload.substring(ipos);
+
+        setSOFTSER_SNAME(iID, sDecode);
+
+        return;
+    }
+    else
+    // VALUES receiced
+    if(aprsmsg.msg_payload.charAt(10) == 'T')
+    {
+        String strValue[12] = {""};
+
+        ipos=16;
+        for(int icd=0; icd<12; icd++)
+        {
+            sDecode = aprsmsg.msg_payload.substring(ipos);
+            impos = sDecode.indexOf(',');
+            if(impos >= 0)
+            {
+                sDecode = sDecode.substring(0, impos);
+            }
+
+            if(sDecode.length() <= 0)
+                break;
+                
+            strValue[icd] = sDecode;
+
+            ipos = ipos + sDecode.length() + 1;
+        }
+
+        //2025-05-15 10:06:28 CEST: OE3XIR-81>APRSMC,TCPIP*,qAR,OE1KBC-86::077234567:T#249,28.5,25.0,13.4,0,0,00000000,2025-04-22T13:00:00,60,65,50
+
+        Serial.printf("\n<SD Id=\"0%s\" name=\"%s\">\n", strSOFTSERAPP_ID.c_str(), strSNAME[iID].c_str());
+        for(int icd=0;icd<5;icd++)
+        {
+            if(strValue[icd+7].length() > 0)
+                Serial.printf("<CD id=\"00%s\" name=\"%s\" unit=\"%s\"><VT t=%s>%s</VT></CD>\n", strValue[icd+7].c_str(), getSOFTSER_PARM(iID, icd).c_str(), getSOFTSER_UNIT(iID, icd).c_str(), strValue[6].c_str(), strValue[icd].c_str());
+        }
+        Serial.printf("</SD>\n\n");
+    }
 }
 
 #endif

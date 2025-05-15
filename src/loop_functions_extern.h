@@ -205,6 +205,9 @@ extern char cBLEName[50];
 extern String strSOFTSER_BUF;
 extern bool bSOFTSER_APP;
 
+extern String strSOFTSERAPP_ID;    // ID der Messstelle
+extern String strSOFTSERAPP_NAME;  // Name der Messstelle
+
 extern String strSOFTSERAPP_ID;
 extern String strSOFTSERAPP_PEGEL;
 extern String strSOFTSERAPP_PEGEL2;

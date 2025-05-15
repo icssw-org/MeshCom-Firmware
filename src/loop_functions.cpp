@@ -122,6 +122,9 @@ char cBLEName[50]={0};
 String strSOFTSER_BUF;
 bool bSOFTSER_APP = false;
 
+String strSOFTSERAPP_ID = "";    // ID der Messstelle
+String strSOFTSERAPP_NAME = "";  // Name der Messstelle
+
 // TELEMTRY global variables
 int iNextTelemetry=0;
 String strTelemetry="";
@@ -170,8 +173,8 @@ U8G2 *u8g2;
     U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
     U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, 18, 17, U8X8_PIN_NONE);
 #elif defined(BOARD_E22_S3)
-    U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, I2C_SCL, I2C_SDA, U8X8_PIN_NONE);
-    U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, I2C_SCL, I2C_SDA, U8X8_PIN_NONE);
+    U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2_1(U8G2_R0);
+    U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2_2(U8G2_R0);
 #else
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
@@ -1366,8 +1369,12 @@ void initAnalogPin()
     if(bAnalogCheck)
     {
         int ANAGPIO = meshcom_settings.node_analog_pin;
-        if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin >= 99)
+        if(meshcom_settings.node_analog_pin <= 0 || meshcom_settings.node_analog_pin >= 99)
+        {
             ANAGPIO = ANALOG_PIN;
+            meshcom_settings.node_analog_pin = ANALOG_PIN;
+            save_settings();
+        }
 
         pinMode(ANAGPIO, INPUT);
 
@@ -1388,10 +1395,15 @@ void checkAnalogValue()
     if(bAnalogCheck)
     {
         int ANAGPIO = meshcom_settings.node_analog_pin;
-        if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin > 99)
+        if(meshcom_settings.node_analog_pin <= 0 || meshcom_settings.node_analog_pin >= 99)
             ANAGPIO = ANALOG_PIN;
 
+        #if defined(BOARD_E22_S3)
+        float raw = (float)(analogReadMilliVolts(ANAGPIO)); // some ESP32 have ADC facto5ry-cal
+        #else
         float raw = (float)(analogRead(ANAGPIO));
+        #endif
+
         fAnalogValue = raw  * meshcom_settings.node_analog_faktor;
         
         if(bDEBUG && bDisplayInfo)
@@ -1602,8 +1614,6 @@ void checkButtonState()
                         strcpy(pageTextLong1, pageLastTextLong1[pagePointer]);
                         strcpy(pageTextLong2, pageLastTextLong2[pagePointer]);
 
-                        //Serial.printf("pageLineAnz:%i pagePointer:%i <%i %i %i> pageText<%s><%s><%s><%s>\n", pageLineAnz, pagePointer, pageLine[2][0], pageLine[2][1], pageLine[2][2], pageText[0], pageText[1], pageText[2], pageTextLong2);
-
                         sendDisplay1306(false, true, 0, 0, (char*)"#N");
 
                         pagePointer--;
@@ -1682,63 +1692,11 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     dist_to = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
 
-    if(aprspos.softser4 > 0)
-    {
-        uint16_t Year;
-        uint16_t Month;
-        uint16_t Day;
-        uint16_t Hour;
-        uint16_t Minute;
-        uint16_t Second;
-
-        char ctime_buf[30];
-
-        snprintf(ctime_buf, sizeof(ctime_buf), "%s", aprspos.pos_atxt.substring(11, 23).c_str());
-
-        String strSerTime = ctime_buf;
-
-        Year = (uint16_t)strSerTime.substring(0, 2).toInt();
-        Month = (uint16_t)strSerTime.substring(2, 4).toInt();
-        Day = (uint16_t)strSerTime.substring(4, 6).toInt();
-        Hour = (uint16_t)strSerTime.substring(6, 8).toInt();
-        Minute = (uint16_t)strSerTime.substring(8, 10).toInt();
-        Second = (uint16_t)strSerTime.substring(10, 12).toInt();
-
-        //sscanf(ctime_buf, "%02u%02u%02u%02u%02u%02u", &year, &month, &day, &hour, &minute, &second);
-
-        Year = Year + 2000;
-
-        meshcom_settings.node_date_year = Year;
-        meshcom_settings.node_date_month = Month;
-        meshcom_settings.node_date_day = Day;
-        meshcom_settings.node_date_hour = Hour + meshcom_settings.node_utcoff;
-        if(meshcom_settings.node_date_hour > 24)
-        {
-            meshcom_settings.node_date_hour=meshcom_settings.node_date_hour-24;
-            meshcom_settings.node_date_day++;
-
-        }
-        meshcom_settings.node_date_minute = Minute;
-        meshcom_settings.node_date_second = Second;
-
-        if(Year > 2023)
-        {
-            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-            snprintf(cTimeSource, sizeof(cTimeSource), (char*)"SER");
-        }
-    }
-
     sendDisplayMainline();
 
     #ifdef BOARD_E290
         sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
     #endif
-
-    if(aprspos.softser4 > 0)
-        snprintf(msg_text, sizeof(msg_text), "#%s", aprspos.pos_atxt.substring(0, 17).c_str());
-    else
-        snprintf(msg_text, sizeof(msg_text), "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
-
 
     msg_text[20]=0x00;
     sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
@@ -1858,84 +1816,40 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #endif
 
-    // check Batterie
-    if(aprspos.softser4 > 0)
+    for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
     {
-        for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
+        if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == 'A' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
         {
-            if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == '4' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
+            for(unsigned int id=itxt+3;id<=aprsmsg.msg_payload.length();id++)
             {
-                for(unsigned int id=itxt+3;id<=aprsmsg.msg_payload.length();id++)
+                // ENDE
+                if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
                 {
-                    // ENDE
-                    if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
-                    {
-                        #ifdef BOARD_E290
-                            DrawRssi(3, 117, rssi);
-                        #endif
+                    sscanf(decode_text, "%d", &alt);
 
-                        snprintf(msg_text, sizeof(msg_text), "%.0fcm %.0fcm %.1fC", aprspos.softser1, aprspos.softser2, aprspos.softser3);
+                    if(aprsmsg.msg_source_fw_version > 13)
+                        alt = (int)((float)alt * 0.3048);
+
+                    #ifdef BOARD_E290
+                        DrawRssi(3, 117, rssi);
+
+                        snprintf(msg_text, sizeof(msg_text), "ALT:%im", alt);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+                    #else
+                        snprintf(msg_text, sizeof(msg_text), "ALT:%im rssi:%i", alt, rssi);
+                        msg_text[20]=0x00;
+                        sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+                    #endif
 
-                        char cDateTime[50];
-                        snprintf(cDateTime, sizeof(cDateTime), "%04i-%02i-%02iT%02i:%02i:%02i", meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
-
-                        Serial.printf("\n<SD Id=\"%s\">\n", aprspos.pos_atxt.substring(0 , 9).c_str());
-                        Serial.printf("<CD id=\"0059\" name=\"Wasserstand\" unit=\"muA\"><VT t=%s>%.0f</VT></CD>\n", cDateTime, aprspos.softser1);
-                        Serial.printf("<CD id=\"0061\" name=\"Wasserstand 2\" unit=\"cm\"><VT t=%s>%.0f</VT></CD>\n", cDateTime, aprspos.softser2);
-                        Serial.printf("<CD id=\"0065\" name=\"Wassertemperatur\" unit=\"grad\"><VT t=%s>%.1f</VT></CD>\n", cDateTime, aprspos.softser3);
-                        Serial.printf("<CD id=\"0051\" name=\"Batteriespanung\" unit=\"V\"><VT t=%s>%.1f</VT></CD>\n", cDateTime, aprspos.softser4);
-                        Serial.printf("</SD>\n\n");
-
-                        break;
-                    }
-
-                    decode_text[ipt]=aprsmsg.msg_payload.charAt(id);
-                    ipt++;
+                    break;
                 }
 
-                break;
+                decode_text[ipt]=aprsmsg.msg_payload.charAt(id);
+                ipt++;
             }
-        }
-    }
-    else
-    {
-        for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
-        {
-            if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == 'A' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
-            {
-                for(unsigned int id=itxt+3;id<=aprsmsg.msg_payload.length();id++)
-                {
-                    // ENDE
-                    if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
-                    {
-                        sscanf(decode_text, "%d", &alt);
 
-                        if(aprsmsg.msg_source_fw_version > 13)
-                            alt = (int)((float)alt * 0.3048);
-
-                        #ifdef BOARD_E290
-                            DrawRssi(3, 117, rssi);
-
-                            snprintf(msg_text, sizeof(msg_text), "ALT:%im", alt);
-                            msg_text[20]=0x00;
-                            sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
-                        #else
-                            snprintf(msg_text, sizeof(msg_text), "ALT:%im rssi:%i", alt, rssi);
-                            msg_text[20]=0x00;
-                            sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
-                        #endif
-
-                        break;
-                    }
-
-                    decode_text[ipt]=aprsmsg.msg_payload.charAt(id);
-                    ipt++;
-                }
-
-                break;
-            }
+            break;
         }
     }
     
@@ -2310,26 +2224,14 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         char cinaU[15]={0};
         char cinaI[15]={0};
         
-        bool bSOFTSERAPPPOS=false;
-
-        #if defined(ENABLE_SOFTSER)
-        if(bSOFTSERON && strSOFTSERAPP_ID.length() > 0)
+        if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
         {
-            bSOFTSERAPPPOS=true;
-            snprintf(catxt, sizeof(catxt), "%s:%02i%02i%02i%02i%02i%02i ", strSOFTSERAPP_ID.c_str(), meshcom_settings.node_date_year - 2000, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+            snprintf(catxt,  sizeof(catxt), "%s", meshcom_settings.node_atxt);
         }
-        else
-        #endif
-        {
-            if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
-            {
-                snprintf(catxt,  sizeof(catxt), "%s", meshcom_settings.node_atxt);
-            }
 
-            if(strcmp(meshcom_settings.node_name, "none") != 0 && meshcom_settings.node_name[0] != 0x00)
-            {
-                snprintf(cname,  sizeof(cname), "#%s", meshcom_settings.node_name);
-            }
+        if(strcmp(meshcom_settings.node_name, "none") != 0 && meshcom_settings.node_name[0] != 0x00)
+        {
+            snprintf(cname,  sizeof(cname), "#%s", meshcom_settings.node_name);
         }
 
         // send INA226 Werte abwechselnd zu normal Pos
@@ -2367,7 +2269,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
         }
         else
         {
-            if(global_proz > 0 && !bSOFTSERAPPPOS)
+            if(global_proz > 0)
             {
                 snprintf(cbatt, sizeof(cbatt), "/B=%03d", global_proz);
             }
@@ -2402,7 +2304,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
                     return "";
             }
 
-            if(temp2 != 0 && !bSOFTSERAPPPOS)
+            if(temp2 != 0)
             {
                 snprintf(ctemp2, sizeof(ctemp2), "/O=%.1f", temp2);
                 if(memcmp(cpress, "/O=nan", 6) == 0)
@@ -2440,49 +2342,6 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double plat, cha
                 if(memcmp(cpress, "/C=nan", 6) == 0)
                     return "";
             }
-
-            #if defined(ENABLE_SOFTSER)
-            if(bSOFTSERAPPPOS)
-            {
-                snprintf(cversion, sizeof(cversion), "%s", "/V=4");
-
-                if(strSOFTSERAPP_PEGEL.length() > 1 || strSOFTSERAPP_FIXPEGEL.length() > 1)
-                {
-                    if(strSOFTSERAPP_FIXPEGEL.length() < 1)
-                        snprintf(csfpegel, sizeof(csfpegel), "/1=%s", strSOFTSERAPP_PEGEL.c_str());
-                    else
-                        snprintf(csfpegel, sizeof(csfpegel), "/1=%s", strSOFTSERAPP_FIXPEGEL.c_str());
-                }
-
-                if(strSOFTSERAPP_PEGEL2.length() > 1 || strSOFTSERAPP_FIXPEGEL2.length() > 1)
-                {
-                    if(strSOFTSERAPP_FIXPEGEL2.length() < 1)
-                        snprintf(csfpegel2, sizeof(csfpegel2), "/2=%s", strSOFTSERAPP_PEGEL2.c_str());
-                    else
-                        snprintf(csfpegel2, sizeof(csfpegel2), "/2=%s", strSOFTSERAPP_FIXPEGEL2.c_str());
-                }
-
-                if(strSOFTSERAPP_TEMP.length() > 1 || strSOFTSERAPP_FIXTEMP.length() > 1)
-                {
-                    if(strSOFTSERAPP_FIXTEMP.length() < 1)
-                        snprintf(csftemp, sizeof(csftemp), "/3=%s", strSOFTSERAPP_TEMP.c_str());
-                    else
-                        snprintf(csftemp, sizeof(csftemp), "/3=%s", strSOFTSERAPP_FIXTEMP.c_str());
-                }
-
-                if(strSOFTSERAPP_BATT.length() > 1)
-                {
-                    snprintf(csfbatt, sizeof(csfbatt), "/4=%s", strSOFTSERAPP_BATT.c_str());
-                }
-
-                if(bONEWIRE)
-                {
-                    snprintf(ctemp2, sizeof(ctemp2), "/O=%.1f", temp2);
-                    if(memcmp(cpress, "/O=nan", 6) == 0)
-                        memset(ctemp2, 0x00, sizeof(ctemp2));
-                }
-            }
-            #endif
         }
 
         /////////////////////////////////////////////////////////////////
@@ -2887,10 +2746,26 @@ void sendHey()
 }
 
 // Telemetry with own Parameters
-void sendTelemetry()
+void sendTelemetry(int ID)
 {
-    if(strlen(meshcom_settings.node_parm) == 0 || strcmp(meshcom_settings.node_parm, "none") == 0)
-        return;
+    String stationCall = meshcom_settings.node_call;
+
+    if(ID == 1)
+    {
+        if(strlen(meshcom_settings.node_parm_1) == 0 || strcmp(meshcom_settings.node_parm_1, "none") == 0)
+            return;
+    
+        int iipos=0;
+        iipos = strSOFTSERAPP_ID.length() - 9;
+        if(iipos < 0)
+            iipos=0;
+        stationCall = strSOFTSERAPP_ID.substring(iipos);    // APRS max. 9 chars
+    }
+    else
+    {
+        if(strlen(meshcom_settings.node_parm) == 0 || strcmp(meshcom_settings.node_parm, "none") == 0)
+            return;
+    }
 
     if(strlen(meshcom_settings.node_unit) == 0 || strcmp(meshcom_settings.node_unit, "none") == 0)
         return;
@@ -2915,9 +2790,10 @@ void sendTelemetry()
 
     if(iNextTelemetry == 0)
     {
-        strTelemetry=meshcom_settings.node_parm;
-        
-        snprintf(msg_text, sizeof(msg_text), "%-9.9s:PARM.%s", meshcom_settings.node_call, strTelemetry.c_str());
+        if(ID == 1)
+            snprintf(msg_text, sizeof(msg_text), "%-9.9s:PARM.%s", stationCall.c_str(), meshcom_settings.node_parm_1);
+        else
+            snprintf(msg_text, sizeof(msg_text), "%-9.9s:PARM.%s", stationCall.c_str(), meshcom_settings.node_parm);
 
         iNextTelemetry=1;
     }
@@ -2927,9 +2803,7 @@ void sendTelemetry()
         if(strlen(meshcom_settings.node_unit) == 0 || strcmp(meshcom_settings.node_unit, "none") == 0)
             return;
 
-        strTelemetry=meshcom_settings.node_unit;
-        
-        snprintf(msg_text, sizeof(msg_text), "%-9.9s:UNIT.%s", meshcom_settings.node_call, strTelemetry.c_str());
+        snprintf(msg_text, sizeof(msg_text), "%-9.9s:UNIT.%s", stationCall.c_str(), meshcom_settings.node_unit);
 
         iNextTelemetry=2;
     }
@@ -2944,108 +2818,135 @@ void sendTelemetry()
         if(count_char(strTelemetry, ',') != 14)
             strTelemetry = "0,1,0,0,1,0,0,1,0,0,1,0,0,1,0";
 
-        snprintf(msg_text, sizeof(msg_text), "%-9.9s:EQNS.%s", meshcom_settings.node_call, strTelemetry.c_str());
+        snprintf(msg_text, sizeof(msg_text), "%-9.9s:EQNS.%s", stationCall.c_str(), strTelemetry.c_str());
 
         iNextTelemetry=3;
     }
     else
-    // Values to APRS.FI
-    if(iNextTelemetry >= 3)
+    if(iNextTelemetry == 3)
     {
-        char cv[10];
-        snprintf(cv, sizeof(cv), "T#%03i", meshcom_settings.node_msgid);
+        memset(msg_text, 0x00, sizeof(msg_text));
+
+        if(strlen(meshcom_settings.node_parm_t) > 0 && ID == 1)
+        {
+            snprintf(msg_text, sizeof(msg_text), "%-9.9s:BITS.00000000%s", stationCall.c_str(), strSOFTSERAPP_NAME.c_str());
+        }
+
+        iNextTelemetry=4;
+    }
+    else
+    // Values to APRS.FI
+    if(iNextTelemetry >= 4)
+    {
+        char cv[20];
+        snprintf(cv, sizeof(cv), "%-9.9s:T#%03i", stationCall.c_str(), meshcom_settings.node_msgid);
 
         strTelemetry = cv;
 
         String strValue="";
         int ivcount=0;
 
-        for(int ival=0;ival<=(int)strlen(meshcom_settings.node_values); ival++)
+        if(memcmp(meshcom_settings.node_values, "T:", 2) == 0)
         {
-            if(meshcom_settings.node_values[ival] == ',' || meshcom_settings.node_values[ival] == 0x00)
+            strValue = meshcom_settings.node_values;
+            
+            strTelemetry.concat(",");
+            strTelemetry.concat(strValue.substring(2));
+
+            strTelemetry.concat(",0,0,00000000,");  // + zwei Messwerte
+            strTelemetry.concat(meshcom_settings.node_parm_t);
+            strTelemetry.concat(",");
+            strTelemetry.concat(meshcom_settings.node_parm_id);
+        }
+        else
+        {
+            for(int ival=0;ival<=(int)strlen(meshcom_settings.node_values); ival++)
             {
-                // max. 5 values
-                ivcount++;
-                if(ivcount > 5)
-                    break;
+                if(meshcom_settings.node_values[ival] == ',' || meshcom_settings.node_values[ival] == 0x00)
+                {
+                    // max. 5 values
+                    ivcount++;
+                    if(ivcount > 5)
+                        break;
 
-                strTelemetry.concat(",");
+                    strTelemetry.concat(",");
 
-                strValue.trim();
+                    strValue.trim();
 
-                if(strValue == "press")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "hum")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_hum);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "temp")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_temp);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "onewire")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_temp2);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "gasres")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_gas_res);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "co2")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_co2);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "batt")
-                {
-                    snprintf(cv, sizeof(cv), "%.2f", global_batt/1000.);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "proz")
-                {
-                    snprintf(cv, sizeof(cv), "%i", global_proz);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "vbus")
-                {
-                    snprintf(cv, sizeof(cv), "%.2f", meshcom_settings.node_vbus);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "vcurrent")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_vcurrent);
-                    strTelemetry.concat(cv);
-                }
-                else
-                if(strValue == "qnh")
-                {
-                    snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press_asl);
-                    strTelemetry.concat(cv);
-                }
+                    if(strValue == "press")
+                    {
+                        snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "hum")
+                    {
+                        snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_hum);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "temp")
+                    {
+                        snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_temp);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "onewire")
+                    {
+                        snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_temp2);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "gasres")
+                    {
+                        snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_gas_res);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "co2")
+                    {
+                        snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_co2);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "batt")
+                    {
+                        snprintf(cv, sizeof(cv), "%.2f", global_batt/1000.);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "proz")
+                    {
+                        snprintf(cv, sizeof(cv), "%i", global_proz);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "vbus")
+                    {
+                        snprintf(cv, sizeof(cv), "%.2f", meshcom_settings.node_vbus);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "vcurrent")
+                    {
+                        snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_vcurrent);
+                        strTelemetry.concat(cv);
+                    }
+                    else
+                    if(strValue == "qnh")
+                    {
+                        snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press_asl);
+                        strTelemetry.concat(cv);
+                    }
 
-                strValue="";
-            }
-            else
-            {
-                snprintf(cv, sizeof(cv), "%c", meshcom_settings.node_values[ival]);
+                    strValue="";
+                }
+                else
+                {
+                    snprintf(cv, sizeof(cv), "%c", meshcom_settings.node_values[ival]);
 
-                strValue.concat(cv);
+                    strValue.concat(cv);
+                }
             }
         }
 
@@ -3058,44 +2959,50 @@ void sendTelemetry()
             iNextTelemetry=0;
     }
 
-    aprsmsg.msg_payload = msg_text;
-    
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 999)
-        meshcom_settings.node_msgid=0;
-
-    // Flash rewrite
-    save_settings();
-
-    encodeAPRS(msg_buffer, aprsmsg);
-
-    if(bDisplayInfo)
+    if(strlen(msg_text) > 0)
     {
-        printBuffer_aprs((char*)"NEW-TMY", aprsmsg);
-        Serial.println();
+        aprsmsg.msg_payload = msg_text;
+        
+        if(iNextTelemetry >= 4)
+        {
+            meshcom_settings.node_msgid++;
+            if(meshcom_settings.node_msgid > 999)
+                meshcom_settings.node_msgid=0;
+        }
+
+        // Flash rewrite
+        save_settings();
+
+        encodeAPRS(msg_buffer, aprsmsg);
+
+        if(bDisplayInfo)
+        {
+            printBuffer_aprs((char*)"NEW-TMY", aprsmsg);
+            Serial.println();
+        }
+
+        // store last message to compare later on
+        insertOwnTx(aprsmsg.msg_id);
+
+        // if GATEWAY only to Server
+        if(bGATEWAY)
+        {
+            // UDP out
+            addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+        }
+        else
+        {
+            // Master RingBuffer for transmission
+            // local messages send to LoRa TX
+            ringBuffer[iWrite][0] = aprsmsg.msg_len;
+            ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+            memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
+
+            iWrite++;
+            if(iWrite >= MAX_RING)
+                iWrite=0;
+        }
     }
-
-    // store last message to compare later on
-    insertOwnTx(aprsmsg.msg_id);
-
-    // if GATEWAY only to Server
-    if(bGATEWAY)
-    {
-        // UDP out
-        addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
-    }
-    else
-    {
-        // Master RingBuffer for transmission
-        // local messages send to LoRa TX
-        ringBuffer[iWrite][0] = aprsmsg.msg_len;
-        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-        memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
-
-        iWrite++;
-        if(iWrite >= MAX_RING)
-            iWrite=0;
-    }       
 }
 
 int GetHeadingDifference(int heading1, int heading2)

@@ -811,6 +811,7 @@ void commandAction(char *umsg_text, bool ble)
         save_settings();
     }
     else
+    #endif
     if(commandCheck(msg_text+2, (char*)"batt factor ") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
@@ -832,7 +833,6 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
     }
     else
-    #endif
     if(commandCheck(msg_text+2, (char*)"board led on") == 0)
     {
         bUSER_BOARD_LED = true;
@@ -1952,6 +1952,18 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+#if defined(ENABLE_XML)
+    if(commandCheck(msg_text+2, (char*)"softser test") == 0)
+    {
+        // TEST
+        testTinyXML();
+        
+        sendTelemetry(SOFTSER_APP_ID);
+
+        return;
+    }
+    else
+#endif
     if(commandCheck(msg_text+2, (char*)"softser baud ") == 0)
     {
         sscanf(msg_text+15, "%d", &meshcom_settings.node_ss_baud);
@@ -3855,10 +3867,6 @@ void sendNodeSetting()
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
     nsetdoc["NOALL"] = bNoMSGtoALL;
     nsetdoc["BLED"] = bUSER_BOARD_LED;
-
-    nsetdoc["ANACHK"] = bAnalogCheck;
-    nsetdoc["ANAFAC"] = meshcom_settings.node_analog_faktor;
-    nsetdoc["ANAPIN"] = meshcom_settings.node_analog_pin;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));

@@ -914,8 +914,8 @@ void nrf52loop()
     {
         strTime = "none";
 
-        // every five minutes
-        if((updateTimeClient + 1000 * 60 * 5) < millis() || updateTimeClient == 0)
+        // every 15 minutes
+        if((updateTimeClient + 1000 * 60 * 15) < millis() || updateTimeClient == 0)
         {
             strTime = neth.udpUpdateTimeClient();
 
@@ -1222,7 +1222,7 @@ if (isPhoneReady == 1)
     {
         bHeyFirst = false;
         
-        sendTelemetry();
+        sendTelemetry(SOFTSER_APP_ID);
 
         telemetry_timer = millis();
     }

@@ -10,6 +10,8 @@ bool setupSOFTSER();
 bool loopSOFTSER(int ID, int iFunction);
 bool appSOFTSER(int ID);
 bool sendSOFTSER(char cText[100]);
+void displaySOFTSER(struct aprsMessage &aprsmsg);
+
 
 #endif
 

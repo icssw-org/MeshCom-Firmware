@@ -58,12 +58,6 @@ struct aprsPosition
     float qnh;
     float gasres;
     float co2;
-
-    // softser
-    float softser1; // muA
-    float softser2; // cm
-    float softser3; // grad
-    float softser4; // Volt
 };
 
 struct mheardLine

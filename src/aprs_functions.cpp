@@ -71,7 +71,7 @@ bool CheckOwnGroup(String callsign)
         if(meshcom_settings.node_gcb[ig] == checkgroup)
         {
             if(bDisplayInfo && checkgroup <= 99999)
-                Serial.printf("[INFO]...GRC %i unsed on own-node\n", checkgroup);
+                Serial.printf("[INFO]...GRC %i used on own-node\n", checkgroup);
 
             return true;
         }
@@ -471,13 +471,6 @@ void initAPRSPOS(struct aprsPosition &aprspos)
     aprspos.qnh = 0.0;
     aprspos.gasres = 0.0;
     aprspos.co2 = 0.0;
-
-    // softser
-    aprspos.softser1 = 0.0;
-    aprspos.softser2 = 0.0;
-    aprspos.softser3 = 0.0;
-    aprspos.softser4 = 0.0;
-
 }
 
 uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
@@ -832,118 +825,6 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
                 {
                     sscanf(decode_text, "%f", &aprspos.co2);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
-
-    // check softser1
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == '1' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.softser1);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
-
-    // check softser2
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == '2' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.softser2);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
-
-    // check softser3
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == '3' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.softser3);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
-
-    // check softser4
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == '4' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.softser4);
                     break;
                 }
 
