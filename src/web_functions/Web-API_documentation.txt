@@ -1,0 +1,135 @@
+============================================
+Generic
+============================================
+
+The Web-API is following the REST (Representational State Transfer) paradigm.
+
+Parameter names are considered to be lowercase (the backend at the node will convert them to lowercase).
+Values are case-sensitive.
+
+The Web-API is currently using the GET - request method. We may change that to POST later.
+The Web-API is not yet finished or stable. We will add or change things. Please stay in touch with us if you rely on the Web-API. 
+
+
+
+============================================
+Setting Parameters
+============================================
+To set a parameter to the node, use:
+
+	/setparam/?setcall=AB1CDE-12			Sets the nodes call-sign 
+	/setparam/?onewiregpio=XX			Sets the GPIO to be used for the 1-Wire bus
+	/setparam/?onewire=on|off			Enables 1-Wire at the configured GPIO
+	/setparam/?buttongpio=XX			Sets the GPIO to be used for the User Button
+	/setparam/?button=on|off			Enables a user-button at the configured GPIO
+	/setparam/?setctry=XXX				Sets the country-specific LoRa Parameters (frequency, etc)
+	/setparam/?txpower=XX				Sets the Power (in dBm) to be used by the nodes radio
+	/setparam/?utcoffset=X.X			Sets the UTC offset (e.G. 1.5 or -3.0)
+	/setparam/?maxv=X.XXX				Sets the maxV-parameter (ToDo: define what it is good for)
+	/setparam/?display=on|off			Set permanent activated display to on or off
+	/setparam/?small=on|off				Set if displayed content should be reduced to fit small displays
+	/setparam/?volt=on|off				If set to on, battery SOC will be displayed as voltage instead of percentage
+	/setparam/?mesh=on|off				Enables mesh / forwarding of received LoRa messages via radio
+	/setparam/?gateway=on|off			Enables the gateway function
+	/setparam/?setlat=XX.xxxxxx			Sets the latitude in decimal degrees (D.D°)
+	/setparam/?setlon=XX.xxxxxx			Sets the longitude in decimal degrees (D.D°)
+	/setparam/?setalt=XXX				Sets the altitude (in meters)
+	/setparam/?gps=on|off				Enables using gps location
+	/setparam/?track=on|off				Enables the display of SmartBeaconing
+	/setparam/?setname=XXXX				Sets the desired APRS name
+	/setparam/?atxt=XXXX				Sets the desired APRS text
+	/setparam/?symid=C				Sets the desired APRS Symbol ID
+	/setparam/?symcd=C				Sets the desired APRS Group ID
+	/setparam/?angpio=XX				Sets the GPIO to be used for analog input
+	/setparam/?checkanalog=on|off			Enables the analog measurement at the configured GPIO
+	/setparam/?bmp=on|off				Enables BMP280 sensor support
+	/setparam/?bme=on|off				Enables BME280 sensor support
+	/setparam/?680=on|off				Enables BME680 sensor support
+	/setparam/?811=on|off				Enables CMCU811 sensor support
+	/setparam/?ina226=on|off			Enables INA226 sensor support
+	/setparam/?softser=on|off			Enables the software Serial interface
+	/setparam/?setgrc=XXX;XXX;XXX;XXX;XXX;XXX	Sets a List of six groups we wish to listen to.
+
+
+The Node will return a http return message.
+The Status Code will be 200 if the parameter was set, 422 if the parameter could not be set (value was not accepted or parameter was not known).
+The HTML Body will contain a JSON Object with a content body like: 
+
+	{"returncode":0, "setcall":"AB1CDE-12"}
+	
+The returncodes are defined as:
+
+	WS_RETURNCODE_OKAY 0			The parameter was set to the new value
+	WS_RETURNCODE_FAIL 1			The parameter was NOT set to the new value
+	WS_RETURNCODE_UNKNOWN 2			The parameter was not known
+	
+The JSON Object will also contain the parameter name that has been requested to set as well as the current value used by the node (or an empty string if the parameter was not found).
+So if the parameter could be set to the new value, the returned value will contain the new value.
+If the parameter could not be set (e.g. the value was not accepted) the returned value will contain the previous value that is still be used by the node.
+This is to make sure your frontend stays synchron with the node.
+
+	
+
+============================================
+Getting Parameters
+============================================
+To get parameter from the node, use:
+
+	/getparam/?setcall
+
+Replace "setcall" with any parameter name as listed in "Setting Parameters".
+
+The Node will return a http return message.
+The Status Code will be 200 if the Parameter was known and 422 if the parameter is not known.
+The HTML Body will contain a JSON Object with a content body like: 
+
+	{"returncode":0, "setcall":"AB1CDE-12"}
+
+witch is the same as described in "Setting Parameters".
+
+
+
+
+============================================
+Calling Functions
+============================================
+
+A function is simply something that can be called but won't affect any setting or is considered to return any results.
+We will return a http status code (200 or 422) depending on if the command was known or not
+
+To call a function, use:
+
+	/callfunction/?functionName=functionParameter
+
+The function parameter is optional.
+Not all functions require a parameter.
+
+
+Functions available so far:
+
+	/callfunction/?sendpos				The node will send its position or path 
+
+
+
+
+
+
+
+
+============================================
+Send a Message
+============================================
+
+To send a message using the Web-API, use:
+
+/?sendmessage&tocall=AB1CDE-12&message=This%20is%20an%20example%20message.
+
+
+This API call is most likely to be changed soon.
+
+
+
+
+
+
+
