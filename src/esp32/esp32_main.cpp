@@ -37,7 +37,7 @@
 #include <lora_functions.h>
 #include <udp_functions.h>
 #include <extudp_functions.h>
-#include <web_functions.h>
+#include <web_functions/web_functions.h>
 #include <mheard_functions.h>
 #include <clock.h>
 #include <onewire_functions.h>
