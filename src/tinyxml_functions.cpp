@@ -51,7 +51,7 @@ String testDocument = "<StationDataList><StationData stationId=\"0077234567\" na
 <VT t=\"2025-04-22T12:45:00\">25.0</VT> \
 <VT t=\"2025-04-22T12:50:00\">25.0</VT> \
 <VT t=\"2025-04-22T12:55:00\">22.0</VT> \
-<VT t=\"2025-04-22T13:00:00\">25.0</VT> \
+<VT t=\"2025-04-22T13:00:00\">22.7</VT> \
 </Values> \
 </ChannelData> \
 <ChannelData channelId=\"0050\" name=\"Batteriespannung\" unit=\"V\" samplingInterval=\"300\" storageInterval=\"300\" configuredSamplingInterval=\"300\" configuredStorageInterval=\"300\"  > \
@@ -68,7 +68,7 @@ String testDocument = "<StationDataList><StationData stationId=\"0077234567\" na
 <VT t=\"2025-04-22T12:45:00\">13.2</VT> \
 <VT t=\"2025-04-22T12:50:00\">13.2</VT> \
 <VT t=\"2025-04-22T12:55:00\">13.4</VT> \
-<VT t=\"2025-04-22T13:00:00\">13.4</VT> \
+<VT t=\"2025-04-22T13:00:00\">12.9</VT> \
 </Values> \
 </ChannelData> \
 </StationData> \

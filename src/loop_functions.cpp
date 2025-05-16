@@ -2954,8 +2954,8 @@ void sendTelemetry(int ID)
         snprintf(msg_text, sizeof(msg_text), "%s", strTelemetry.c_str());
 
         iNextTelemetry++;
-        // PARM, UNIT. EQNS neuerlich senden
-        if(iNextTelemetry > 14)
+        // Alle 10 Werte - PARM, UNIT. EQNS. BITS. neuerlich senden
+        if(iNextTelemetry > 13)
             iNextTelemetry=0;
     }
 
@@ -2963,12 +2963,9 @@ void sendTelemetry(int ID)
     {
         aprsmsg.msg_payload = msg_text;
         
-        if(iNextTelemetry >= 4)
-        {
-            meshcom_settings.node_msgid++;
-            if(meshcom_settings.node_msgid > 999)
-                meshcom_settings.node_msgid=0;
-        }
+        meshcom_settings.node_msgid++;
+        if(meshcom_settings.node_msgid > 999)
+            meshcom_settings.node_msgid=0;
 
         // Flash rewrite
         save_settings();
