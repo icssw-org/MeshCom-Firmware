@@ -6,8 +6,6 @@ definitions for E22 Board
 
 #include <Arduino.h>
 
-#define ENABLE_XML
-
 #include <configuration_global.h>
 
 // E22 specifig config

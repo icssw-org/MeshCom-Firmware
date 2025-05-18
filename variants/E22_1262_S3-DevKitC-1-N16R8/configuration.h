@@ -74,7 +74,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ADC_MULTIPLIER 5.7    // default and can be overwritten with Flash variable node_analog_batt_faktor Spannungsteiler 47k+10k
 
 #define BUTTON_PIN  0
-#define BUTTON_EXT  14  // TODO
+#define BUTTON_EXT  21
 
 #define LED_PIXEL 1     // NEOPIXEL
 #define LED_PIN 48      // NEOPIXEL

@@ -686,9 +686,9 @@ void commandAction(char *umsg_text, bool ble)
 
         sscanf(msg_text+14, "%d", &meshcom_settings.node_analog_pin);
 
-        if(meshcom_settings.node_analog_pin < 0 || meshcom_settings.node_analog_pin > 99)
+        if(meshcom_settings.node_analog_pin <= 0 || meshcom_settings.node_analog_pin >= 99)
         {
-            Serial.printf("Wrong ANALOG GPIO PIN only > 1 and <= 99");
+            Serial.printf("Wrong ANALOG GPIO PIN only > 0 and < 99");
             
             meshcom_settings.node_analog_pin = iap;
 
@@ -1880,10 +1880,14 @@ void commandAction(char *umsg_text, bool ble)
     {
         bSOFTSERDEBUG=true;
 
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0100;
+
         if(ble)
         {
             addBLECommandBack((char*)"--softserdebug on");
         }
+
+        save_settings();
 
         return;
     }
@@ -1892,10 +1896,14 @@ void commandAction(char *umsg_text, bool ble)
     {
         bSOFTSERDEBUG=false;
 
+        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7EFF;
+
         if(ble)
         {
             addBLECommandBack((char*)"-softserdebug off");
         }
+
+        save_settings();
 
         return;
     }
@@ -1952,7 +1960,28 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"softser app0") == 0)
+    {
+        iNextTelemetry = 0;
+
+        bSOFTSER_APP = true;
+        
+        return;
+    }
+    else
 #if defined(ENABLE_XML)
+    if(commandCheck(msg_text+2, (char*)"softser test0") == 0)
+    {
+        iNextTelemetry = 0;
+        
+        // TEST
+        testTinyXML();
+        
+        sendTelemetry(SOFTSER_APP_ID);
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"softser test") == 0)
     {
         // TEST

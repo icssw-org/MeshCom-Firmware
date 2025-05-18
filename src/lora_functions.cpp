@@ -564,7 +564,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         bSendAckGateway=false;
 
                                         #if defined(ENABLE_SOFTSER)
-                                            displaySOFTSER(aprsmsg);
+                                            if(bSOFTSERON)
+                                            {
+                                                sendDisplayText(aprsmsg, rssi, snr);
+                                                displaySOFTSER(aprsmsg);
+                                            }
                                         #endif
                                     }
                                 }

@@ -605,11 +605,11 @@ String udpUpdateTimeClient()
 {
   if(!timeClient.update())
   {
-    Serial.print("TimeClient no update posible");
+    Serial.println("TimeClient no update possible");
 
     if(!timeClient.forceUpdate())
     {
-      Serial.print("TimeClient no force update posible");
+      Serial.println("TimeClient no force update possible");
 
       timeClient.end();
       delay(2000);
