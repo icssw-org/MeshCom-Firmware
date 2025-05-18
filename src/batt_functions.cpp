@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <configuration.h>
 
+#include <loop_functions.h>
 #include <loop_functions_extern.h>
 
 float global_batt = 0;
@@ -327,9 +328,8 @@ float read_batt(void)
 
 		if(bDisplayCont)
 		{
-			Serial.printf("[BATT]...reading: %lu factor: %.4f\n", analogValue, fBattFaktor);
-			Serial.printf("[BATT]...voltage: %.2f mV\n", raw);
-			delay(1000); 
+			Serial.printf("%s [BATT]...reading: %lu factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), fBattFaktor, raw);
+			delay(500); 
 		}
 
 	#else

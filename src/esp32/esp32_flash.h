@@ -159,7 +159,7 @@ struct s_meshcom_settings
 	char node_update[20] = {0};
 
 	char node_parm_1[100] = {0};
-	char node_parm_t[25] = {0};
+	char node_parm_t[150] = {0};
 	char node_parm_id[100] = {0};
 };
 

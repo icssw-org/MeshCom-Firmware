@@ -126,10 +126,3 @@ To send a message using the Web-API, use:
 
 
 This API call is most likely to be changed soon.
-
-
-
-
-
-
-

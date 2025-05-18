@@ -17,13 +17,16 @@ void webFunctionCall(funCallStruct* functionData) {
         functionData->returnCode = WF_RETURNCODE_OKAY;
         if(bDisplayTrack) {
             commandAction((char*)"--sendtrack", bPhoneReady);
-            Serial.println("SendTrack");
+            //Serial.println("SendTrack");
         } else {
             commandAction((char*)"--sendpos", bPhoneReady);
-            Serial.println("SendPos");
+            //Serial.println("SendPos");
         }
         functionData->returnCode = WF_RETURNCODE_OKAY;
         return;
+    } else
+    if(functionData->functionName.compareTo("reboot")==0) {
+                commandAction((char*)"--reboot", bPhoneReady);
     }
 
 

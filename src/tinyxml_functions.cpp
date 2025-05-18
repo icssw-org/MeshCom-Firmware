@@ -88,16 +88,16 @@ extern String strTELE_CH_ID;
 
 String strChannelId="";
 
-void decodeTinyXML(String document)
+bool decodeTinyXML(String document)
 {
-  Serial.println("decodeTinyXML started....");
+  if(bSOFTSERDEBUG)Serial.println("decodeTinyXML started....");
 
-//  Serial.println(document);
+//  if(bSOFTSERDEBUG)Serial.println(document);
 
   if(xmlDocument.Parse(document.c_str())!= XML_SUCCESS)
   {
-    Serial.println("Error parsing"); 
-    return; 
+    Serial.println("[APP]...Error parsing"); 
+    return false; 
   }
 
   strTELE_PARM = "";
@@ -114,21 +114,21 @@ void decodeTinyXML(String document)
   {
 
     strSOFTSERAPP_ID = station->Attribute("stationId");
-    Serial.printf("Station...%s\n", strSOFTSERAPP_ID.c_str());
+    if(bSOFTSERDEBUG)if(bSOFTSERDEBUG)Serial.printf("Station...%s\n", strSOFTSERAPP_ID.c_str());
 
     strSOFTSERAPP_NAME = station->Attribute("name");
-    Serial.printf("Station Name...%s\n", strSOFTSERAPP_NAME.c_str());
+    if(bSOFTSERDEBUG)Serial.printf("Station Name...%s\n", strSOFTSERAPP_NAME.c_str());
 
-    Serial.println(station->Attribute("timezone"));
+    if(bSOFTSERDEBUG)Serial.println(station->Attribute("timezone"));
 
-    Serial.print("  while ChannelData:");
-    Serial.print(station->ChildElementCount("ChannelData"));
+    if(bSOFTSERDEBUG)Serial.print("  while ChannelData:");
+    if(bSOFTSERDEBUG)Serial.print(station->ChildElementCount("ChannelData"));
 
     XMLElement * channel = station->FirstChildElement("ChannelData");
 
     while(channel != NULL)
     {
-      Serial.print(" ");
+      if(bSOFTSERDEBUG)Serial.print(" ");
       
       strChannelId = channel->Attribute("channelId");
 
@@ -142,43 +142,52 @@ void decodeTinyXML(String document)
         strTELE_CH_ID.concat(",");
       strTELE_CH_ID.concat(strChannelId.substring(2));
 
-      Serial.print(strChannelId);
-      Serial.print(" ");
-      
-      Serial.print(channel->Attribute("name"));
-      Serial.print(" ");
+      if(bSOFTSERDEBUG)
+      {
+        Serial.print(strChannelId);
+        Serial.print(" ");
+        Serial.print(channel->Attribute("name"));
+        Serial.print(" ");
+      }
 
       if(strTELE_UNIT.length() > 0)
         strTELE_UNIT.concat(",");
       strTELE_UNIT.concat(channel->Attribute("unit"));
 
-      Serial.println(channel->Attribute("unit"));
+      if(bSOFTSERDEBUG)Serial.println(channel->Attribute("unit"));
 
-      Serial.print("   while values:");
-      Serial.println(channel->ChildElementCount("Values"));
+      if(bSOFTSERDEBUG)
+      {
+        Serial.print("   while values:");
+        Serial.println(channel->ChildElementCount("Values"));
+      }
 
       XMLElement * values = channel->FirstChildElement("Values");
 
       while(values != NULL)
       {
-        Serial.print("    while VT:");
-        Serial.println(values->ChildElementCount("VT"));
+        if(bSOFTSERDEBUG)Serial.print("    while VT:");
+        if(bSOFTSERDEBUG)Serial.println(values->ChildElementCount("VT"));
 
         XMLElement * vt = values->LastChildElement("VT");
 
         while(vt != NULL)
         {
-          Serial.print("    VAL:");
-          Serial.print(vt->Attribute("t"));
-          Serial.print(" ");
+          if(bSOFTSERDEBUG)
+          {
+            Serial.print("    VAL:");
+            Serial.print(vt->Attribute("t"));
+            Serial.print(" ");
+          }
 
-          strTELE_DATETIME = vt->Attribute("t");
+          if(strTELE_DATETIME.length() < 1)
+            strTELE_DATETIME.concat(vt->Attribute("t"));
 
           float val;
 
           vt->QueryFloatText(&val);
 
-          Serial.println(val);
+          if(bSOFTSERDEBUG)Serial.println(val);
 
           char cval[10];
           snprintf(cval, sizeof(cval), "%.1f", val);
@@ -190,35 +199,37 @@ void decodeTinyXML(String document)
           vt = vt->NextSiblingElement("VT");
         }
 
-        Serial.println("   next Values");
+        if(bSOFTSERDEBUG)Serial.println("   next Values");
 
         values = values->NextSiblingElement("Values");
       }
 
 
-      Serial.println("  next ChannelData");
+      if(bSOFTSERDEBUG)Serial.println("  next ChannelData");
 
       channel = channel->NextSiblingElement("ChannelData");
     }
 
-    Serial.println(" next StationData");
+    if(bSOFTSERDEBUG)Serial.println(" next StationData");
 
     station = station->NextSiblingElement("StationData");
   }
 
-  Serial.println("next StationDataList");
+  if(bSOFTSERDEBUG)Serial.println("next StationDataList");
 
   // fill Telemetry
   snprintf(meshcom_settings.node_parm_1, sizeof(meshcom_settings.node_parm_1), "%s", strTELE_PARM.c_str());
-  Serial.println(meshcom_settings.node_parm_1);
+  if(bSOFTSERDEBUG)Serial.println(meshcom_settings.node_parm_1);
   snprintf(meshcom_settings.node_unit, sizeof(meshcom_settings.node_unit), "%s", strTELE_UNIT.c_str());
-  Serial.println(meshcom_settings.node_unit);
+  if(bSOFTSERDEBUG)Serial.println(meshcom_settings.node_unit);
   snprintf(meshcom_settings.node_values, sizeof(meshcom_settings.node_values), "T:%s", strTELE_VALUES.c_str());
-  Serial.println(meshcom_settings.node_values);
+  if(bSOFTSERDEBUG)Serial.println(meshcom_settings.node_values);
   snprintf(meshcom_settings.node_parm_t, sizeof(meshcom_settings.node_parm_t), "%s", strTELE_DATETIME.c_str());
-  Serial.println(meshcom_settings.node_parm_t);
+  if(bSOFTSERDEBUG)Serial.println(meshcom_settings.node_parm_t);
   snprintf(meshcom_settings.node_parm_id, sizeof(meshcom_settings.node_parm_id), "%s", strTELE_CH_ID.c_str());
-  Serial.println(meshcom_settings.node_parm_id);
+  if(bSOFTSERDEBUG)Serial.println(meshcom_settings.node_parm_id);
+
+  return true;
   
 }
 

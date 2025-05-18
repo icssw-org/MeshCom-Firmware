@@ -868,11 +868,11 @@ String NrfETH::udpUpdateTimeClient()
 {
   if(!timeClient.update())
   {
-    Serial.print("TimeClient no update posible");
+    Serial.println("TimeClient no update posible");
 
     if(!timeClient.forceUpdate())
     {
-      Serial.print("TimeClient no force update posible");
+      Serial.println("TimeClient no force update posible");
 
       timeClient.end();
       delay(2000);

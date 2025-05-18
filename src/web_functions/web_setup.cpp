@@ -80,9 +80,9 @@ void webSetup_setParam(setupStruct *setupData){
     } else
     
     if(setupData->paramName.equals("utcoffset")) {
-        snprintf(message_text, sizeof(message_text), "--utcoffset %s", setupData->paramValue.c_str());
+        snprintf(message_text, sizeof(message_text), "--utcoff %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        setupData->returnCode = (meshcom_settings.node_utcoff  == setupData->paramValue.toFloat())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnCode = (fabs(meshcom_settings.node_utcoff)  == fabs(setupData->paramValue.toFloat()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = String(meshcom_settings.node_utcoff, 1);
         return;
     } else
@@ -90,7 +90,7 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("maxv")) {
         snprintf(message_text, sizeof(message_text), "--maxv %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        setupData->returnCode = (meshcom_settings.node_maxv  == setupData->paramValue.toFloat())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnCode = (fabs(meshcom_settings.node_maxv)  == fabs(setupData->paramValue.toFloat()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = String(meshcom_settings.node_maxv,3);
         return;
     } else
@@ -145,7 +145,7 @@ void webSetup_setParam(setupStruct *setupData){
         snprintf(message_text, sizeof(message_text), "--setlat %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
         #ifdef ESP32
-        setupData->returnCode = (meshcom_settings.node_lat == setupData->paramValue.toDouble())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnCode = (fabs(meshcom_settings.node_lat) == fabs(setupData->paramValue.toDouble()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         #else
         setupData->returnCode = (meshcom_settings.node_lat == setupData->paramValue.toFloat())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         #endif
@@ -157,7 +157,7 @@ void webSetup_setParam(setupStruct *setupData){
         snprintf(message_text, sizeof(message_text), "--setlon %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
         #ifdef ESP32
-        setupData->returnCode = (meshcom_settings.node_lon == setupData->paramValue.toDouble())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnCode = (fabs(meshcom_settings.node_lon) == fabs(setupData->paramValue.toDouble()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         #else
         setupData->returnCode = (meshcom_settings.node_lon == setupData->paramValue.toFloat())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         #endif
@@ -232,7 +232,7 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("afactor")) {        
         snprintf(message_text, sizeof(message_text), "--afactor %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        setupData->returnCode = (meshcom_settings.node_analog_faktor == setupData->paramValue.toFloat())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnCode = (fabs(meshcom_settings.node_analog_faktor) == fabs(setupData->paramValue.toFloat()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = String(meshcom_settings.node_analog_faktor);
         return;
     } else

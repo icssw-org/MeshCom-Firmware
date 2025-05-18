@@ -20,8 +20,10 @@ definitions for TBEAM 1268
 #define ENABLE_MC811
 #define ENABLE_RTC
 #define ENABLE_SOFTSER
-#define ANALOG_PIN 35
+
+#define ANALOG_PIN 36
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
+
 #define SX126X
 #define TX_POWER_MAX 22  // max 22dBm
 #define TX_POWER_MIN 2
