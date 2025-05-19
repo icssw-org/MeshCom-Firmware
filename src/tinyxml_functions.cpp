@@ -85,6 +85,7 @@ extern String strTELE_UNIT;
 extern String strTELE_VALUES;
 extern String strTELE_DATETIME;
 extern String strTELE_CH_ID;
+extern String strTELE_UTCOFF;
 
 String strChannelId="";
 
@@ -105,7 +106,8 @@ bool decodeTinyXML(String document)
   strTELE_VALUES = "";
   strTELE_DATETIME = "";
   strTELE_CH_ID = "";
-  
+  strTELE_UTCOFF = "";
+
   XMLNode * root = xmlDocument.FirstChild();
 
   XMLElement * station = root->FirstChildElement("StationData");
@@ -119,7 +121,8 @@ bool decodeTinyXML(String document)
     strSOFTSERAPP_NAME = station->Attribute("name");
     if(bSOFTSERDEBUG)Serial.printf("Station Name...%s\n", strSOFTSERAPP_NAME.c_str());
 
-    if(bSOFTSERDEBUG)Serial.println(station->Attribute("timezone"));
+    strTELE_UTCOFF = station->Attribute("timezone");
+    if(bSOFTSERDEBUG)Serial.printf("Station timezone...%s\n", strTELE_UTCOFF.c_str());
 
     if(bSOFTSERDEBUG)Serial.print("  while ChannelData:");
     if(bSOFTSERDEBUG)Serial.print(station->ChildElementCount("ChannelData"));
@@ -228,7 +231,9 @@ bool decodeTinyXML(String document)
   if(bSOFTSERDEBUG)Serial.println(meshcom_settings.node_parm_t);
   snprintf(meshcom_settings.node_parm_id, sizeof(meshcom_settings.node_parm_id), "%s", strTELE_CH_ID.c_str());
   if(bSOFTSERDEBUG)Serial.println(meshcom_settings.node_parm_id);
-
+  
+  strTELE_UTCOFF.replace(":", ".");
+  meshcom_settings.node_utcoff = strTELE_UTCOFF.toDouble();
   return true;
   
 }

@@ -23,6 +23,14 @@ void webSetup_setParam(setupStruct *setupData){
     Serial.println("Processing Param: "+setupData->paramName+" with value: "+setupData->paramValue);
 
 
+    if(setupData->paramName.equals("manualcommand")) {        
+        snprintf(message_text, sizeof(message_text), "%s", setupData->paramValue.c_str());                             // set command string
+        commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
+        setupData->returnCode = WS_RETURNCODE_OKAY;                                                                    // we can not check if that comamnd was valid (at the moment)
+        setupData->returnValue = "";                                                                                   // send back empty string
+        return;
+    } else
+
     if(setupData->paramName.equals("setcall")) {        
         snprintf(message_text, sizeof(message_text), "--setcall %s", setupData->paramValue.c_str());                   // set command string
         commandAction(message_text, bPhoneReady);                                                                      // try to execute the command

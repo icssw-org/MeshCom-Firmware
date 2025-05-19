@@ -121,6 +121,8 @@ char cBLEName[50]={0};
 // SOFTSER global variables
 String strSOFTSER_BUF = "";
 bool bSOFTSER_APP = false;
+int lastSOFTSER_MINUTE = -1;
+int softserFunktion=0;
 
 String strSOFTSERAPP_ID = "";    // ID der Messstelle
 String strSOFTSERAPP_NAME = "";  // Name der Messstelle

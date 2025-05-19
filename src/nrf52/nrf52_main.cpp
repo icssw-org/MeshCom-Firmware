@@ -274,7 +274,7 @@ void checkSerialCommand(void);
 
 
 unsigned long gps_refresh_timer = 0;
-unsigned long softser_refresh_time = 0;
+unsigned long softser_refresh_timer = 0;
 
 // Client basic variables
 uint8_t dmac[6];
@@ -1014,22 +1014,41 @@ void nrf52loop()
 
     // SOFTSER
     #if defined(ENABLE_SOFTSER)
-        if(bSOFTSERON)
+    if(bSOFTSERON)
+    {
+        // check every 5 seconds to ready next telemetry via serial interface
+        if ((softser_refresh_timer + 5000) < millis() && softserFunktion == 0)
         {
-            if (bSOFTSER_APP || ((softser_refresh_time + ((SOFTSER_REFRESH_INTERVAL * 1000) - 3000)) < millis()))
+            if(lastSOFTSER_MINUTE != meshcom_settings.node_date_minute)
             {
-                // start SOFTSER APP
-                loopSOFTSER(SOFTSER_APP_ID, 0);
+                if(meshcom_settings.node_date_minute % SOFTSER_REFRESH_INTERVAL  == 0)
+                {
+                    lastSOFTSER_MINUTE = meshcom_settings.node_date_minute;
 
-                softser_refresh_time = millis();
+                    // start SOFTSER APP
+                    loopSOFTSER(SOFTSER_APP_ID);
+                }
+            }
 
-                bSOFTSER_APP = false;
-            }
-            else
-            {
-                appSOFTSER(SOFTSER_APP_ID);
-            }
+            softser_refresh_timer = millis();
         }
+        else
+        if (bSOFTSER_APP)
+        {
+            bSOFTSER_APP = false;
+
+            softserFunktion = 0;
+
+            lastSOFTSER_MINUTE = meshcom_settings.node_date_minute;
+            
+            // start SOFTSER APP
+            loopSOFTSER(SOFTSER_APP_ID);
+        }
+        else
+        {
+            appSOFTSER(SOFTSER_APP_ID);
+        }
+    }
     #endif
 
     checkButtonState();

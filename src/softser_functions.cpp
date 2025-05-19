@@ -48,13 +48,13 @@ bool setupSOFTSER()
     return true;
 }
 
-bool loopSOFTSER(int ID, int iFunction)
+bool loopSOFTSER(int ID)
 {
     if(!bSOFTSERON)
         return false;
         
     // last query running
-    if(iFunction == 0 && strSOFTSER_BUF.length() > 0)
+    if(softserFunktion == 0 && strSOFTSER_BUF.length() > 0)
         return false;
 
     char cText[100] = {0};
@@ -62,12 +62,14 @@ bool loopSOFTSER(int ID, int iFunction)
     // Pegestandsmesser
     if(ID == 1)
     {
-        if(iFunction == 0)
+        if(softserFunktion == 0)
         {
             snprintf(cText, sizeof(cText), "%s", "/cl/time/get");
+
+            softserFunktion = 1;
         }
         else
-        if(iFunction == 1)
+        if(softserFunktion == 1)
         {
             snprintf(cText, sizeof(cText), "/cl/data/get/%s", strSOFTSER_BUF.substring(6, 20).c_str());
 
@@ -86,6 +88,9 @@ bool loopSOFTSER(int ID, int iFunction)
 
             MyClock.setCurrentTime(meshcom_settings.node_utcoff, year, month, day, hour, minute, second);
 
+            snprintf(cTimeSource, sizeof(cTimeSource), (char*)"SER");
+
+            softserFunktion = 2;
         }
 
         strSOFTSER_BUF = "";
@@ -115,6 +120,7 @@ String strTELE_UNIT="";
 String strTELE_VALUES="";
 String strTELE_DATETIME="";
 String strTELE_CH_ID="";
+String strTELE_UTCOFF="";
 
 bool appSOFTSER(int ID)
 {
@@ -132,10 +138,17 @@ bool appSOFTSER(int ID)
     if(ID == 1) // Pegelmesser
     {
 #if defined(ENABLE_XML)
+
     // just for test
-        if(strSOFTSER_BUF.indexOf("<0x03>") > 0)
+        if(softserFunktion == 1)
         {
-            loopSOFTSER(ID, 1);
+            if(strSOFTSER_BUF.indexOf("<0x03>") < 0)
+            {
+                softserFunktion = 0; // restart
+                return false;
+            }
+
+            loopSOFTSER(ID);
         }
         else
         {
@@ -164,6 +177,8 @@ bool appSOFTSER(int ID)
                         if(decodeTinyXML(strSOFTSER_BUF))
                         {
                             sendTelemetry(ID);
+
+                            softserFunktion = 0;
                         }
                     }
 
