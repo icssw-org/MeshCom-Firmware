@@ -19,7 +19,7 @@ definitions for RAK4631
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
-#define ENABLE_SOFTSER
+// #define ENABLE_SOFTSER
 #define ENABLE_MCP23017
 #define BUTTON_PIN WB_IO6       // only in combination with RAK13002
 #define OneWire_GPIO WB_IO1     // only in combination with RAK13002

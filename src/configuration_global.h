@@ -57,9 +57,9 @@
 #define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #else
-#define MAX_MHEARD 20                      // max count of messages in mheard ringbuffer
-#define MAX_MHPATH 20                      // max count of messages in mhpath ringbuffer
-#define MAX_RING 35                        // max count of messages in ringbuffer
+#define MAX_MHEARD 40                      // max count of messages in mheard ringbuffer
+#define MAX_MHPATH 50                      // max count of messages in mhpath ringbuffer
+#define MAX_RING 30                        // max count of messages in ringbuffer
 #define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #endif
@@ -78,7 +78,7 @@
 #define RADIOLIB_SX126X_DETPEAK 25         // default 25
 
 // SOFTSERIEL
-#define SOFTSER_REFRESH_INTERVAL 5*60      // SOFTSER Refresh in seconds
+#define SOFTSER_REFRESH_INTERVAL 5         // SOFTSER Refresh alle 5 Minuten
 #define SOFTSER_APP_ID 1                   // SOFTSER ID...0 -> no active APP,  1 -> Pegelmesser
 
 // NTP

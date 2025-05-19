@@ -287,22 +287,27 @@ String work_webpage(bool bget_password, int webid)
 
                     if (web_header.indexOf("/callfunction/") >= 0)
                     { // user requested to invoke a function
+                        // ### !!function will generate a HTML header itself
                         call_function(web_header);
                     }
                     else if (web_header.indexOf("/?sendmessage") >= 0)
                     { // user requested to send a message to the mesh
+                        send_http_header(200, RESPONSE_TYPE_TEXT);
                         send_message(web_header);
                     }
                     else if (web_header.indexOf("/?getmessages") >= 0)
                     { // user requested to retrieve the stored messages
+                        send_http_header(200, RESPONSE_TYPE_TEXT);
                         sub_content_messages();
                     }
                     else if (web_header.indexOf("/setparam/") >= 0)
                     { // user requested to set a parameter
+                        // ### !!function will generate a HTML header itself
                         setparam(web_header);
                     }
                     else if (web_header.indexOf("/getparam/") >= 0)
                     { // user requested to get a parameter
+                        // ### !!function will generate a HTML header itself
                         getparam(web_header);
                     }
                     else if (web_header.indexOf("/?page=setup") >= 0)
@@ -685,6 +690,7 @@ void deliver_scaffold()
     // this function is an ayncronous loader that is used to update the received messages without re-loading the whole page
     //MIT LOADER-Kreisel   web_client.println("function updateMessages() {document.getElementById(\"messages_panel\").innerHTML=\"<span class=\\\"loader\\\"></span>\";var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"messages_panel\").innerHTML=this.responseText;}};xhttp.open(\"GET\",\"/?getmessages\",true);xhttp.send();};\n");
     web_client.println("function updateMessages() {var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"messages_panel\").innerHTML=this.responseText;}};xhttp.open(\"GET\",\"/?getmessages\",true);xhttp.send();};\n");
+    //web_client.println("function updateMessages() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){document.getElementById(\"messages_panel\").innerHTML=this.responseText;};xhttp.open(\"GET\",\"/?getmessages\",true);xhttp.send();};\n");
 
     // this function sends a parameter:value request to the backend
     web_client.println("function setvalue(param,value) {fetch(\"/setparam/?\"+param+\"=\"+value).then(function(response){return response.json();}).then(function(jsonResponse){if(jsonResponse['returncode']==1)alert(\"Value could not be set.\");if(jsonResponse['returncode']==2)alert(\"Parameter unknown to node.\");if(jsonResponse['returncode']>0){loadPage(cpage, csender)}});}\n");
@@ -795,7 +801,7 @@ void deliver_scaffold()
     web_client.print("jAuNTQxNyAxNC45NzY3IDIwLjI4MTUgMTQuOTkwOSAxOS45MDJDMTUuMDExNyAxOS4zNDQzIDE1LjI5NzcgMTguODI4MSAxNS43ODEgMTguNTQ5QzE2LjI2NDMgMTguMjY5OSAxNi44NTQ0IDE4LjI4MDQgMTcuMzQ3OSAxOC41NDEyQzE3LjY4MzYgMTguNzE4NiAxNy45MjcgMTguODE3MiAxOC4xNjcgMTguODQ4OEMxOC42OTI5IDE4LjkxODEgMTkuMjI0OCAxOC43NzU2IDE5LjY0NTYgMTguNDUyN0MxOS45NjEyIDE4LjIxMDUgMjAuMTk0MiAxNy44MDcgMjAuNjYwMSAxNi45OTk5QzIxLjEyNjEgMTYuMTkyOSAyMS4zNTkxIDE1Ljc4OTQgMjEuNDExIDE1LjM5NUMyMS40ODAyIDE0Ljg2OTEgMjEuMzM3NyAxNC4zMzcyIDIxLjAxNDggMTMuOTE2NEMyMC44Njc0IDEzLjcyNDMgMjAuNjYwMiAxMy41NjI4IDIwLjMzODcgMTMuMzYwOEMxOS44NjYyIDEzLjA2MzkgMTkuNTYyMSAxMi41NTggMTkuNTYyMSAxMS45OTk5QzE5LjU2MjEgMTEuNDQxOCAxOS44NjYyIDEwLjkzNjEgMjAuMzM4NyAxMC42MzkyQzIwLjY2MDMgMTAuNDM3MSAyMC44Njc1IDEwLjI3NTcgMjEuMDE0OSAxMC4wODM1QzIxLjMzNzggOS42NjI3MyAyMS40ODAzIDkuMTMwODcgMjEuNDExMSA4LjYwNDk3QzIxLjM1OTIgOC4yMTA1NSAyMS4xMjYyIDcuODA3MDMgMjAuNjYwMiA3QzIwLjE5NDMgNi4xOTI5NyAxOS45NjEzIDUuNzg5NDUgMTkuNjQ1NyA1LjU0NzI3QzE5LjIyNDkgNS4yMjQzNiAxOC42OTMgNS4wODE4NSAxOC4xNjcxIDUuMTUxMDlDMTcuOTI3MSA1LjE4MjY5IDE3LjY4MzcgNS4y");
     web_client.println("ODEzNiAxNy4zNDc5IDUuNDU4OEMxNi44NTQ1IDUuNzE5NTkgMTYuMjY0NCA1LjczMDAyIDE1Ljc4MTEgNS40NTA5NkMxNS4yOTc3IDUuMTcxOTEgMTUuMDExNyA0LjY1NTY2IDE0Ljk5MDkgNC4wOTc5NEMxNC45NzY3IDMuNzE4NDggMTQuOTQwNCAzLjQ1ODMzIDE0Ljg0NzcgMy4yMzQ2M0MxNC42NDQ4IDIuNzQ0NTggMTQuMjU1NCAyLjM1NTIzIDEzLjc2NTQgMi4xNTIyNFoiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiPjwvcGF0aD48L2c+PC9zdmc+\"></Button>\n");
     
-    web_client.println("<Button class=\"nav_button extra_space\" onclick=\"callfunction('reboot','')\"><svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke=\"#FFFFFF\" stroke-width=\"0.032\"></g><g><path d=\"m 8 0 c -0.550781 0 -1 0.449219 -1 1 v 5 c 0 0.550781 0.449219 1 1 1 s 1 -0.449219 1 -1 v -5 c 0 -0.550781 -0.449219 -1 -1 -1 z m -7 1 l 2.050781 2.050781 c -2.117187 2.117188 -2.652343 5.355469 -1.332031 8.039063 c 1.324219 2.683594 4.214844 4.238281 7.179688 3.851562 c 2.96875 -0.386718 5.367187 -2.625 5.960937 -5.554687 c 0.59375 -2.933594 -0.75 -5.929688 -3.335937 -7.433594 c -0.476563 -0.28125 -1.089844 -0.117187 -1.367188 0.359375 s -0.117188 1.089844 0.359375 1.367188 c 1.851563 1.078124 2.808594 3.207031 2.382813 5.3125 c -0.421876 2.101562 -2.128907 3.691406 -4.253907 3.96875 c -2.128906 0.273437 -4.183593 -0.828126 -5.128906 -2.753907 s -0.566406 -4.226562 0.949219 -5.742187 l 1.535156 1.535156 v -4.003906 c 0 -0.519532 -0.449219 -0.996094 -1 -0.996094 z m 0 0 \" fill=\"#FFFFFF\"></path></g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button extra_space\" onclick=\"if(confirm('Node will reboot, are you sure?') == true){callfunction('reboot','');}\"><svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke=\"#FFFFFF\" stroke-width=\"0.032\"></g><g><path d=\"m 8 0 c -0.550781 0 -1 0.449219 -1 1 v 5 c 0 0.550781 0.449219 1 1 1 s 1 -0.449219 1 -1 v -5 c 0 -0.550781 -0.449219 -1 -1 -1 z m -7 1 l 2.050781 2.050781 c -2.117187 2.117188 -2.652343 5.355469 -1.332031 8.039063 c 1.324219 2.683594 4.214844 4.238281 7.179688 3.851562 c 2.96875 -0.386718 5.367187 -2.625 5.960937 -5.554687 c 0.59375 -2.933594 -0.75 -5.929688 -3.335937 -7.433594 c -0.476563 -0.28125 -1.089844 -0.117187 -1.367188 0.359375 s -0.117188 1.089844 0.359375 1.367188 c 1.851563 1.078124 2.808594 3.207031 2.382813 5.3125 c -0.421876 2.101562 -2.128907 3.691406 -4.253907 3.96875 c -2.128906 0.273437 -4.183593 -0.828126 -5.128906 -2.753907 s -0.566406 -4.226562 0.949219 -5.742187 l 1.535156 1.535156 v -4.003906 c 0 -0.519532 -0.449219 -0.996094 -1 -0.996094 z m 0 0 \" fill=\"#FFFFFF\"></path></g></svg></Button>\n");
     //web_client.println("<Button class=\"nav_button extra_space\"><svg fill=\"#ffffff\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path d=\"M7.707,8.707,5.414,11H17a1,1,0,0,1,0,2H5.414l2.293,2.293a1,1,0,1,1-1.414,1.414l-4-4a1,1,0,0,1,0-1.414l4-4A1,1,0,1,1,7.707,8.707ZM21,1H13a1,1,0,0,0,0,2h7V21H13a1,1,0,0,0,0,2h8a1,1,0,0,0,1-1V2A1,1,0,0,0,21,1Z\"></path></g></svg></Button>\n");
     web_client.printf("</div>\n<div id=\"head_layer\"><p class=\"font-small\">Meshcom 4.0 %s%s</p><p class=\"font-bold\">%s</p></div>\n</div>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call);
     web_client.println("<div id=\"content_layer\">\n");
@@ -1022,10 +1028,20 @@ void sub_page_setup()
 {
     _create_meshcom_subheader("Node Setup");
     web_client.println("<div id=\"content_inner\">");
+
+    // Manual Command Section
+    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<label class=\"cardlabel\">Manual Command</label>");
+    web_client.println("<div class=\"grid\">");
+    web_client.println("<span>Enter manual command:</span>");
+    web_client.println("<input type=\"text\" id=\"manualcommand\" maxlength=\"40\" size=\"20\" style=\"width:100%\">");
+    web_client.println("<button onclick=\"setvalue('manualcommand', document.getElementById('manualcommand').value); document.getElementById('manualcommand').value='';\" style=\"justify-self:self-end;\">send command</button>");
+    web_client.println("</div></div>");
+
+    // Common Settings Section
     web_client.println("<div class=\"cardlayout\">");
     web_client.println("<label class=\"cardlabel\">Common Settings</label>");
     web_client.println("<div class=\"grid grid3\">");
-
     _create_setup_textinput_element("nodecall", "Call-Sign", meshcom_settings.node_call, "AB1CDE-12", "setcall", 9); // create Textinput-Element including Label and Button
 
     web_client.println("<label for=\"country\">Country</label>");
@@ -1052,7 +1068,12 @@ void sub_page_setup()
     _create_setup_switch_element("mesh", "Mesh", "enable mesh/forwarding of received LoRa messages", bMESH);    // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);                             // create Switch-Element inclucing Label and Description
 
+    web_client.println("<span>Reboot into OTA Updater</span>");
+    web_client.println("<button onclick=\"if(confirm('Node will reboot to OTA Updater, are you sure?') == true){callfunction('otaupdate', '');setTimeout(function(){window.location.reload();},10000);}\"><i class=\"btncheckmark\"></i></button>");
+
     web_client.println("</div></div>");
+
+    // Position Settings Section
     web_client.println("<div class=\"cardlayout\">");
     web_client.println("<label class=\"cardlabel\">Position Settings</label>");
     web_client.println("<div class=\"grid grid3\">");
@@ -1067,6 +1088,8 @@ void sub_page_setup()
     _create_setup_switch_element("track", "Track", "enable display of SmartBeaconing", bDisplayTrack); // create Switch-Element inclucing Label and Description
 
     web_client.println("</div></div>");
+
+    // APRS Settings Section
     web_client.println("<div class=\"cardlayout\">");
     web_client.println("<label class=\"cardlabel\">APRS Settings</label>");
     web_client.println("<div class=\"grid grid3\">");
@@ -1077,6 +1100,8 @@ void sub_page_setup()
     _create_setup_textinput_element("aprssymbol", "APRS Symbol", String(meshcom_settings.node_symcd), "S", "symcd", 1);      // create Textinput-Element including Label and Button
 
     web_client.println("</div></div>");
+
+    // Hardware Settings Section
     web_client.println("<div class=\"cardlayout\">");
     web_client.println("<label class=\"cardlabel\">External Hardware Settings</label>");
     web_client.println("<div class=\"grid grid3\">");
@@ -1118,6 +1143,7 @@ void sub_page_setup()
     web_client.println("</div>");
     web_client.println("</div>");
 
+    // Groups Settings Section
     web_client.println("<div class=\"cardlayout\">");
     web_client.println("<label class=\"cardlabel\">Groups / Messaging</label>");
 
@@ -1523,8 +1549,6 @@ void _create_setup_switch_element(const char id[], const char labelText[], const
  */
 void send_message(String web_header)
 {
-    send_http_header(200, RESPONSE_TYPE_TEXT);
-
     if ((web_header.indexOf("&tocall=") >= 0) && (web_header.indexOf("&message=") >= 0))
     { // check if all neccessary parameters are there
         if (web_header.lastIndexOf(" HTTP/1.1") >= 0)

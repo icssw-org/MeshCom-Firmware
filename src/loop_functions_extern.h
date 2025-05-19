@@ -204,6 +204,8 @@ extern char cBLEName[50];
 // SOFTSER global variables
 extern String strSOFTSER_BUF;
 extern bool bSOFTSER_APP;
+extern int lastSOFTSER_MINUTE;
+extern int softserFunktion;
 
 extern String strSOFTSERAPP_ID;    // ID der Messstelle
 extern String strSOFTSERAPP_NAME;  // Name der Messstelle

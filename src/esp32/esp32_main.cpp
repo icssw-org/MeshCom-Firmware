@@ -1578,14 +1578,33 @@ void esp32loop()
     #if defined(ENABLE_SOFTSER)
         if(bSOFTSERON)
         {
-            if (bSOFTSER_APP || ((softser_refresh_timer + ((SOFTSER_REFRESH_INTERVAL * 1000) - 3000)) < millis()))
+            // check every 5 seconds to ready next telemetry via serial interface
+            if ((softser_refresh_timer + 5000) < millis() && softserFunktion == 0)
             {
-                // start SOFTSER APP
-                loopSOFTSER(SOFTSER_APP_ID, 0);
+                if(lastSOFTSER_MINUTE != meshcom_settings.node_date_minute)
+                {
+                    if(meshcom_settings.node_date_minute % SOFTSER_REFRESH_INTERVAL  == 0)
+                    {
+                        lastSOFTSER_MINUTE = meshcom_settings.node_date_minute;
+
+                        // start SOFTSER APP
+                        loopSOFTSER(SOFTSER_APP_ID);
+                    }
+                }
 
                 softser_refresh_timer = millis();
-
+            }
+            else
+            if (bSOFTSER_APP)
+            {
                 bSOFTSER_APP = false;
+
+                softserFunktion = 0;
+
+                lastSOFTSER_MINUTE = meshcom_settings.node_date_minute;
+                
+                // start SOFTSER APP
+                loopSOFTSER(SOFTSER_APP_ID);
             }
             else
             {
