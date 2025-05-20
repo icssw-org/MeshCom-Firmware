@@ -232,8 +232,12 @@ bool decodeTinyXML(String document)
   snprintf(meshcom_settings.node_parm_id, sizeof(meshcom_settings.node_parm_id), "%s", strTELE_CH_ID.c_str());
   if(bSOFTSERDEBUG)Serial.println(meshcom_settings.node_parm_id);
   
+  /*
   strTELE_UTCOFF.replace(":", ".");
   meshcom_settings.node_utcoff = strTELE_UTCOFF.toDouble();
+  */
+  meshcom_settings.node_utcoff = 0.0;
+
   return true;
   
 }

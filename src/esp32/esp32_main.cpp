@@ -1581,7 +1581,7 @@ void esp32loop()
             // check every 5 seconds to ready next telemetry via serial interface
             if ((softser_refresh_timer + 5000) < millis() && softserFunktion == 0)
             {
-                if(lastSOFTSER_MINUTE != meshcom_settings.node_date_minute)
+                if(lastSOFTSER_MINUTE != meshcom_settings.node_date_minute && meshcom_settings.node_date_second > 20)
                 {
                     if(meshcom_settings.node_date_minute % SOFTSER_REFRESH_INTERVAL  == 0)
                     {
@@ -1796,34 +1796,22 @@ void esp32loop()
 
         posinfo_shot=false;
         
-        if(bSOFTSERON && SOFTSER_APP_ID == 1)
+        if(bDisplayInfo)
         {
-            // no normal positons sent
-            if(bDisplayInfo)
-            {
-                Serial.print(getTimeString());
-                Serial.println("[POS]...NO sendPosition on bSOFTSERON");
-            }
+            Serial.print(getTimeString());
+            Serial.println("[POS]...sendPostion initialized");
         }
-        else
+
+        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+
+        posinfo_last_lat=posinfo_lat;
+        posinfo_last_lon=posinfo_lon;
+        posinfo_last_direction=posinfo_direction;
+
+        if(pos_shot)
         {
-            if(bDisplayInfo)
-            {
-                Serial.print(getTimeString());
-                Serial.println("[POS]...sendPostion initialized");
-            }
-
-            sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
-
-            posinfo_last_lat=posinfo_lat;
-            posinfo_last_lon=posinfo_lon;
-            posinfo_last_direction=posinfo_direction;
-
-            if(pos_shot)
-            {
-                commandAction((char*)"--pos", isPhoneReady, false);
-                pos_shot = false;
-            }
+            commandAction((char*)"--pos", isPhoneReady, false);
+            pos_shot = false;
         }
 
         posinfo_timer = millis();
@@ -1848,8 +1836,8 @@ void esp32loop()
     
     akt_timer = akt_timer * 1000 * 60; // convert to minutes
 
-    if(iNextTelemetry < 5)
-        akt_timer= 15 * 1000; // 15 Seconds PARM, UNIT, EQNS and 1st T-Message
+    if(bSOFTSERON)
+        akt_timer= 10 * 1000; // 10 Seconds PARM, UNIT, EQNS and 1st T-Message
         
     if (((telemetry_timer + akt_timer) < millis()) || (bTeleFirst && bAllStarted))
     {

@@ -2856,6 +2856,13 @@ void sendTelemetry(int ID)
             strTelemetry.concat(meshcom_settings.node_parm_t);
             strTelemetry.concat(",");
             strTelemetry.concat(meshcom_settings.node_parm_id);
+
+            memset(meshcom_settings.node_parm_1, 0x00, sizeof(meshcom_settings.node_parm_1));
+            memset(meshcom_settings.node_unit, 0x00, sizeof(meshcom_settings.node_unit));
+            memset(meshcom_settings.node_values, 0x00, sizeof(meshcom_settings.node_values));
+            memset(meshcom_settings.node_parm_t, 0x00, sizeof(meshcom_settings.node_parm_t));
+            memset(meshcom_settings.node_parm_id, 0x00, sizeof(meshcom_settings.node_parm_id));
+
         }
         else
         {
