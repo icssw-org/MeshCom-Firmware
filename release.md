@@ -3,11 +3,11 @@
 
 ### Supported Hardware:
 
-E22_1262-DevKitC.bin
-E22_1268-DevKitC.bin
-E22_1268_XML-DevKitC.bin
-E22_1262_S3-DevKitC.bin
-E22_1268_S3-DevKitC.bin
+E22-DevKitC.bin (433 MHz)
+E22_XML-DevKitC.bin (433 MHz)
+E22_1268_S3-DevKitC.bin (433 MHz)
+E22_1262-DevKitC.bin (868 MHz)
+E22_1262_S3-DevKitC.bin (868 MHz)
 heltec_wifi_lora_32_V2.bin
 heltec_wifi_lora_32_V3.bin
 ttgo-lora32-v21.bin
