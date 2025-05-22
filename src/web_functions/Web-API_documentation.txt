@@ -17,7 +17,7 @@ Setting Parameters
 ============================================
 To set a parameter to the node, use:
 
-	/setparam/?setcall=AB1CDE-12			Sets the nodes call-sign 
+	/setparam/?setcall=AB1CDE-12		Sets the nodes call-sign 
 	/setparam/?onewiregpio=XX			Sets the GPIO to be used for the 1-Wire bus
 	/setparam/?onewire=on|off			Enables 1-Wire at the configured GPIO
 	/setparam/?buttongpio=XX			Sets the GPIO to be used for the User Button
@@ -38,10 +38,10 @@ To set a parameter to the node, use:
 	/setparam/?track=on|off				Enables the display of SmartBeaconing
 	/setparam/?setname=XXXX				Sets the desired APRS name
 	/setparam/?atxt=XXXX				Sets the desired APRS text
-	/setparam/?symid=C				Sets the desired APRS Symbol ID
-	/setparam/?symcd=C				Sets the desired APRS Group ID
+	/setparam/?symid=C					Sets the desired APRS Symbol ID
+	/setparam/?symcd=C					Sets the desired APRS Group ID
 	/setparam/?angpio=XX				Sets the GPIO to be used for analog input
-	/setparam/?checkanalog=on|off			Enables the analog measurement at the configured GPIO
+	/setparam/?checkanalog=on|off		Enables the analog measurement at the configured GPIO
 	/setparam/?bmp=on|off				Enables BMP280 sensor support
 	/setparam/?bme=on|off				Enables BME280 sensor support
 	/setparam/?680=on|off				Enables BME680 sensor support
@@ -49,6 +49,14 @@ To set a parameter to the node, use:
 	/setparam/?ina226=on|off			Enables INA226 sensor support
 	/setparam/?softser=on|off			Enables the software Serial interface
 	/setparam/?setgrc=XXX;XXX;XXX;XXX;XXX;XXX	Sets a List of six groups we wish to listen to.
+	/setparam/?setssid=SSID				Sets the WiFi SSID
+	/setparam/?setpwd=PWD				Sets the WiFi Password
+	/setparam/?setownip=XXX.XXX.XXX.XXX sets an IP adress
+	/setparam/?setownms=XXX.XXX.XXX.XXX sets a subnet mask
+	/setparam/?setowngw=XXX.XXX.XXX.XXX sets a gateway
+	/setparam/?extudpip=XXX.XXX.XXX.XXX sets an external UDP adress
+	/setparam/?extudp=on|off 			Enables the usage of an ext. UDP adres
+	/setparam/?manualcommand=COMMAND	Executes a Command. The commands parameters are usually seperated by space. You may need to percent-code spaces and other characters that otherwise are not allowed in a GET request
 
 
 The Node will return a http return message.
@@ -108,9 +116,8 @@ Not all functions require a parameter.
 Functions available so far:
 
 	/callfunction/?sendpos				The node will send its position or path 
-
-
-
+	/callfunction/?reboot				The node will reboot 
+	/callfunction/?otaupdate			The node will binto the OTA updater
 
 
 

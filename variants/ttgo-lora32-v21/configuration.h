@@ -65,7 +65,7 @@ definitions for TLORA_V2_1_1p6
 #define LORA_DIO1 LORA_D1
 //#define LORA_CS  //already defined
 
-#define BUTTON_PIN 12   // GIO12
+#define BUTTON_PIN 12
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
 #define I2C_SDA    21

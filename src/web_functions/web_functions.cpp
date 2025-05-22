@@ -691,11 +691,13 @@ void deliver_scaffold()
     //MIT LOADER-Kreisel   web_client.println("function updateMessages() {document.getElementById(\"messages_panel\").innerHTML=\"<span class=\\\"loader\\\"></span>\";var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"messages_panel\").innerHTML=this.responseText;}};xhttp.open(\"GET\",\"/?getmessages\",true);xhttp.send();};\n");
     web_client.println("function updateMessages() {var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"messages_panel\").innerHTML=this.responseText;}};xhttp.open(\"GET\",\"/?getmessages\",true);xhttp.send();};\n");
     //web_client.println("function updateMessages() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){document.getElementById(\"messages_panel\").innerHTML=this.responseText;};xhttp.open(\"GET\",\"/?getmessages\",true);xhttp.send();};\n");
-
     // this function sends a parameter:value request to the backend
     web_client.println("function setvalue(param,value) {fetch(\"/setparam/?\"+param+\"=\"+value).then(function(response){return response.json();}).then(function(jsonResponse){if(jsonResponse['returncode']==1)alert(\"Value could not be set.\");if(jsonResponse['returncode']==2)alert(\"Parameter unknown to node.\");if(jsonResponse['returncode']>0){loadPage(cpage, csender)}});}\n");
     // this function invokes a function call to the backend passing the function name and an optional parameter (e.g. sendpos)
     web_client.println("function callfunction(functionname,functionparameter){fetch(\"/callfunction/?\"+functionname+\"=\"+functionparameter).then(function(response){return response.json();}).then(function (jsonResponse) {/*Nothing todo yet.*/})};\n");
+    //This function is used to toggle a css class so setup cars can collapse / expand    
+    web_client.println("function togglecard(element){element.parentElement.classList.toggle(\"cardopen\");};");
+
     web_client.println("</script>\n\n");
 
     // css style definitions
@@ -708,7 +710,7 @@ void deliver_scaffold()
     web_client.println("@media screen and (min-width:801px) {* {font-size:14px;} :root{--widthfactor:1.0;}}\n");
     web_client.println("body {background:var(--mcbg);padding:0px;margin:0px 0px;height:100%;width:100%;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;color:var(--mcgray);font-family:sans-serif;}\n");
     web_client.println(".font-small {font-size:x-small;}\n");
-    web_client.println(".font-large {font-size: large;}\n");
+    web_client.println(".font-large {font-size:large;}\n");
     web_client.println(".font-xlarge {font-size:x-large;}\n");
     web_client.println(".font-bold {font-weight:bold;}\n");
     web_client.println(".no-wrap {white-space:nowrap;}\n");
@@ -719,7 +721,7 @@ void deliver_scaffold()
     web_client.println(".nav_button {background-color:var(--mcgray);border:solid 6px var(--mcgray);box-shadow:none;border-radius:10px 0px 0px 10px;cursor:pointer; width:100%; aspect-ratio:1/1; margin:calc(20px*var(--widthfactor)) auto; display:block;}\n");
     web_client.println(".nav_button>svg {display:block;width:90%;height:90%;margin:auto auto;}\n");
     web_client.println(".nav_button.nbactive {background-color:var(--mcbg);-webkit-transition:0.5s;transition:0.5s; border-right-color:var(--mcbg);}\n");
-    web_client.println(".nav_button.nbactive>svg {filter: invert(1);}\n");
+    web_client.println(".nav_button.nbactive>svg, .nav_button.nbactive>img {filter:invert(1);}\n");
     web_client.println(".nav_button.extra_space {margin-top:40px !important;}\n");
     web_client.println("select,input,textarea {font-family:monospace;border-radius:7px;padding:3px 5px;box-sizing:border-box;border:solid 1px #7c7c7c;-webkit-transition:0.5s;transition:0.5s;}\n");
     web_client.println("select:focus,input:focus,textarea:focus {border:solid 1px var(--mcred);background-color:var(--mclightred);outline:none;}\n");
@@ -734,8 +736,8 @@ void deliver_scaffold()
 
     // content definitions
     web_client.println("#content_title {padding:0px 30px 0px 0px;margin:0px 0px 10px 0px;text-align:right;top:0px;overflow:hidden;background-color:#FCEDF0;}\n");
-    web_client.println("#content_layer {margin-left: calc(60px*var(--widthfactor));top:0px;overflow:hidden;}");
-    web_client.println("#content_inner {margin: 20px 10px 30px 4%;}\n");
+    web_client.println("#content_layer {margin-left:calc(60px*var(--widthfactor));top:0px;overflow:hidden;}");
+    web_client.println("#content_inner {margin:20px 10px 30px 4%;}\n");
 
     // content definitions -> tables
     web_client.println("#content_inner > table {border-collapse:separate;overflow:hidden;border-spacing:0;border:solid 1px #7c7c7c;border-radius:10px;width:100%;background:#f9f9f9;}\n");
@@ -756,13 +758,13 @@ void deliver_scaffold()
     web_client.println("#messagetext {width:100%;}\n");
     web_client.println("#sendcall {min-width:8em;}\n");
 
-    web_client.println(".message {--r:1em;--t: 1.5em;max-width:300px;padding:15px;margin-bottom:20px;border-inline:var(--t) solid #0000; border-radius: calc(var(--r) + var(--t))/var(--r);mask:radial-gradient(100% 100% at var(--_p) 0,#0000 99%,#000 102%) var(--_p) 100%/var(--t) var(--t) no-repeat, linear-gradient(#000 0 0) padding-box;color:#000;}\n");
+    web_client.println(".message {--r:1em;--t:1.5em;max-width:300px;padding:15px;margin-bottom:20px;border-inline:var(--t) solid #0000; border-radius:calc(var(--r) + var(--t))/var(--r);mask:radial-gradient(100% 100% at var(--_p) 0,#0000 99%,#000 102%) var(--_p) 100%/var(--t) var(--t) no-repeat, linear-gradient(#000 0 0) padding-box;color:#000;}\n");
     web_client.println(".message>div>p {padding:0px;margin:0px;}\n");
     web_client.println(".message-received{--_p:0;border-bottom-left-radius:0 0;place-self:start;background-color:var(--mclightgreen);border-color:var(--mclightgreen);}\n");
     web_client.println(".message-send{--_p:100%;border-bottom-right-radius:0 0;place-self:end;background-color:var(--mclightblue);border-color:var(--mclightblue);}\n");
 
     // content definitions -> commonly used cards
-    web_client.println(".cardlayout {border:solid 1px var(--mcgray);border-radius:7px;padding:7px;padding-top:16px;margin:20px 0px;position:relative;max-width:600px;}\n");
+    web_client.println(".cardlayout {min-height:20px;border:solid 1px var(--mcgray);border-radius:7px;padding:7px;padding-top:16px;margin:30px 0px;position:relative;max-width:600px;}\n");
     web_client.println(".cardlabel {position:absolute;font-weight:bold;margin:0 5px;left:6px;top:-1px;transform:translateY(-50%);z-index:10;background-color:#fff;padding:0 2px;}\n");
 
     web_client.println(".grid {display:grid;align-items:center;grid-column-gap:8px;grid-row-gap:7px;margin:7px;}\n");
@@ -776,6 +778,14 @@ void deliver_scaffold()
     web_client.println("input:where([type=\"checkbox\"][role=\"switch\"]):checked {background-color:rgb(102, 214, 102);}\n");
     web_client.println("input:where([type=\"checkbox\"][role=\"switch\"])::before {content:\"\";position:absolute;top:50%;left:0;transform:translate(0,-50%);box-sizing:border-box;width:1.1em;height:1.1em;margin:0 0.15em;border-radius:50%;background:var(--mcbg);-webkit-transition:0.5s;transition:0.5s;}\n");
     web_client.println("input:where([type=\"checkbox\"][role=\"switch\"]):checked::before {left:1.8em;}\n");
+
+    //content definitions -> setup collapsable cards
+    web_client.println(".cardlayout>.cardtoggle {position:absolute;right:8px;top:-1px;transform:translateY(-50%);z-index:10;width:36px;height:36px;border-radius:50% !important;disjplay:none;}\n");
+    web_client.println(".cardlayout>.cardtoggle>i {padding:4px;margin:auto;border:solid black;border-width:2px 0 0 2px;display:block;-webkit-transform:rotate(-135deg);transform:rotate(-135deg);-webkit-transition:0.5s;transition:0.5s;}\n");
+    web_client.println(".cardopen>.cardtoggle>i {-webkit-transform: rotate(45deg);transform: rotate(45deg);}\n");
+    web_client.println(".cardlayout>div {max-height:0px;-webkit-transition:opacity .15s .0s,max-height .25s .10s;transition:opacity .15s .0s,max-height .25s .10s,margin .0s .50s;	opacity:0.0;overflow:hidden;margin:0px;}\n");
+    web_client.println(".cardopen>div {-webkit-transition:opacity .15s .10s,max-height .25s .0s;transition:opacity .15s .10s,max-height .25s .0s;max-height:1000px;opacity:1;margin:7px;}\n");
+    web_client.println(".cardopen>span:first-of-type {display:none;}\n");
 
     web_client.println("</style>\n\n");
 
@@ -801,7 +811,7 @@ void deliver_scaffold()
     web_client.print("jAuNTQxNyAxNC45NzY3IDIwLjI4MTUgMTQuOTkwOSAxOS45MDJDMTUuMDExNyAxOS4zNDQzIDE1LjI5NzcgMTguODI4MSAxNS43ODEgMTguNTQ5QzE2LjI2NDMgMTguMjY5OSAxNi44NTQ0IDE4LjI4MDQgMTcuMzQ3OSAxOC41NDEyQzE3LjY4MzYgMTguNzE4NiAxNy45MjcgMTguODE3MiAxOC4xNjcgMTguODQ4OEMxOC42OTI5IDE4LjkxODEgMTkuMjI0OCAxOC43NzU2IDE5LjY0NTYgMTguNDUyN0MxOS45NjEyIDE4LjIxMDUgMjAuMTk0MiAxNy44MDcgMjAuNjYwMSAxNi45OTk5QzIxLjEyNjEgMTYuMTkyOSAyMS4zNTkxIDE1Ljc4OTQgMjEuNDExIDE1LjM5NUMyMS40ODAyIDE0Ljg2OTEgMjEuMzM3NyAxNC4zMzcyIDIxLjAxNDggMTMuOTE2NEMyMC44Njc0IDEzLjcyNDMgMjAuNjYwMiAxMy41NjI4IDIwLjMzODcgMTMuMzYwOEMxOS44NjYyIDEzLjA2MzkgMTkuNTYyMSAxMi41NTggMTkuNTYyMSAxMS45OTk5QzE5LjU2MjEgMTEuNDQxOCAxOS44NjYyIDEwLjkzNjEgMjAuMzM4NyAxMC42MzkyQzIwLjY2MDMgMTAuNDM3MSAyMC44Njc1IDEwLjI3NTcgMjEuMDE0OSAxMC4wODM1QzIxLjMzNzggOS42NjI3MyAyMS40ODAzIDkuMTMwODcgMjEuNDExMSA4LjYwNDk3QzIxLjM1OTIgOC4yMTA1NSAyMS4xMjYyIDcuODA3MDMgMjAuNjYwMiA3QzIwLjE5NDMgNi4xOTI5NyAxOS45NjEzIDUuNzg5NDUgMTkuNjQ1NyA1LjU0NzI3QzE5LjIyNDkgNS4yMjQzNiAxOC42OTMgNS4wODE4NSAxOC4xNjcxIDUuMTUxMDlDMTcuOTI3MSA1LjE4MjY5IDE3LjY4MzcgNS4y");
     web_client.println("ODEzNiAxNy4zNDc5IDUuNDU4OEMxNi44NTQ1IDUuNzE5NTkgMTYuMjY0NCA1LjczMDAyIDE1Ljc4MTEgNS40NTA5NkMxNS4yOTc3IDUuMTcxOTEgMTUuMDExNyA0LjY1NTY2IDE0Ljk5MDkgNC4wOTc5NEMxNC45NzY3IDMuNzE4NDggMTQuOTQwNCAzLjQ1ODMzIDE0Ljg0NzcgMy4yMzQ2M0MxNC42NDQ4IDIuNzQ0NTggMTQuMjU1NCAyLjM1NTIzIDEzLjc2NTQgMi4xNTIyNFoiIHN0cm9rZT0iI2ZmZmZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiPjwvcGF0aD48L2c+PC9zdmc+\"></Button>\n");
     
-    web_client.println("<Button class=\"nav_button extra_space\" onclick=\"if(confirm('Node will reboot, are you sure?') == true){callfunction('reboot','');}\"><svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke=\"#FFFFFF\" stroke-width=\"0.032\"></g><g><path d=\"m 8 0 c -0.550781 0 -1 0.449219 -1 1 v 5 c 0 0.550781 0.449219 1 1 1 s 1 -0.449219 1 -1 v -5 c 0 -0.550781 -0.449219 -1 -1 -1 z m -7 1 l 2.050781 2.050781 c -2.117187 2.117188 -2.652343 5.355469 -1.332031 8.039063 c 1.324219 2.683594 4.214844 4.238281 7.179688 3.851562 c 2.96875 -0.386718 5.367187 -2.625 5.960937 -5.554687 c 0.59375 -2.933594 -0.75 -5.929688 -3.335937 -7.433594 c -0.476563 -0.28125 -1.089844 -0.117187 -1.367188 0.359375 s -0.117188 1.089844 0.359375 1.367188 c 1.851563 1.078124 2.808594 3.207031 2.382813 5.3125 c -0.421876 2.101562 -2.128907 3.691406 -4.253907 3.96875 c -2.128906 0.273437 -4.183593 -0.828126 -5.128906 -2.753907 s -0.566406 -4.226562 0.949219 -5.742187 l 1.535156 1.535156 v -4.003906 c 0 -0.519532 -0.449219 -0.996094 -1 -0.996094 z m 0 0 \" fill=\"#FFFFFF\"></path></g></svg></Button>\n");
+    web_client.println("<Button class=\"nav_button extra_space\" onclick=\"if(confirm('Node will reboot, are you sure?')){callfunction('reboot','');}\"><svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke=\"#FFFFFF\" stroke-width=\"0.032\"></g><g><path d=\"m 8 0 c -0.550781 0 -1 0.449219 -1 1 v 5 c 0 0.550781 0.449219 1 1 1 s 1 -0.449219 1 -1 v -5 c 0 -0.550781 -0.449219 -1 -1 -1 z m -7 1 l 2.050781 2.050781 c -2.117187 2.117188 -2.652343 5.355469 -1.332031 8.039063 c 1.324219 2.683594 4.214844 4.238281 7.179688 3.851562 c 2.96875 -0.386718 5.367187 -2.625 5.960937 -5.554687 c 0.59375 -2.933594 -0.75 -5.929688 -3.335937 -7.433594 c -0.476563 -0.28125 -1.089844 -0.117187 -1.367188 0.359375 s -0.117188 1.089844 0.359375 1.367188 c 1.851563 1.078124 2.808594 3.207031 2.382813 5.3125 c -0.421876 2.101562 -2.128907 3.691406 -4.253907 3.96875 c -2.128906 0.273437 -4.183593 -0.828126 -5.128906 -2.753907 s -0.566406 -4.226562 0.949219 -5.742187 l 1.535156 1.535156 v -4.003906 c 0 -0.519532 -0.449219 -0.996094 -1 -0.996094 z m 0 0 \" fill=\"#FFFFFF\"></path></g></svg></Button>\n");
     //web_client.println("<Button class=\"nav_button extra_space\"><svg fill=\"#ffffff\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path d=\"M7.707,8.707,5.414,11H17a1,1,0,0,1,0,2H5.414l2.293,2.293a1,1,0,1,1-1.414,1.414l-4-4a1,1,0,0,1,0-1.414l4-4A1,1,0,1,1,7.707,8.707ZM21,1H13a1,1,0,0,0,0,2h7V21H13a1,1,0,0,0,0,2h8a1,1,0,0,0,1-1V2A1,1,0,0,0,21,1Z\"></path></g></svg></Button>\n");
     web_client.printf("</div>\n<div id=\"head_layer\"><p class=\"font-small\">Meshcom 4.0 %s%s</p><p class=\"font-bold\">%s</p></div>\n</div>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call);
     web_client.println("<div id=\"content_layer\">\n");
@@ -1030,8 +1040,10 @@ void sub_page_setup()
     web_client.println("<div id=\"content_inner\">");
 
     // Manual Command Section
-    web_client.println("<div class=\"cardlayout\">");
-    web_client.println("<label class=\"cardlabel\">Manual Command</label>");
+    web_client.println("<div class=\"cardlayout cardopen\">\n");
+    web_client.println("<label class=\"cardlabel\">Manual Command</label>\n");
+    web_client.println("<span>Open this for executing commands manually.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid\">");
     web_client.println("<span>Enter manual command:</span>");
     web_client.println("<input type=\"text\" id=\"manualcommand\" maxlength=\"40\" size=\"20\" style=\"width:100%\">");
@@ -1039,10 +1051,12 @@ void sub_page_setup()
     web_client.println("</div></div>");
 
     // Common Settings Section
-    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<div class=\"cardlayout cardopen\">");
     web_client.println("<label class=\"cardlabel\">Common Settings</label>");
+    web_client.println("<span>Open this for common settings.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid grid3\">");
-    _create_setup_textinput_element("nodecall", "Call-Sign", meshcom_settings.node_call, "AB1CDE-12", "setcall", 9); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("nodecall", "Call-Sign", meshcom_settings.node_call, "AB1CDE-12", "setcall", 9, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("<label for=\"country\">Country</label>");
     web_client.println("<select id=\"country\" name=\"country\">");
@@ -1056,9 +1070,9 @@ void sub_page_setup()
     web_client.println("</select>");
     web_client.println("<button onclick=\"setvalue('setctry', document.getElementById('country').value)\"><i class=\"btncheckmark\"></i></button>");
 
-    _create_setup_textinput_element("txpower", "TX Power", String(meshcom_settings.node_power), "15", "txpower", 2);                    // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("utcoffset", "UTC Offset", String(meshcom_settings.node_utcoff, 1).c_str(), "1.0", "utcoffset", 4); // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("maxv", "max. Voltage", String(meshcom_settings.node_maxv, 3), "4.125", "maxv", 5);                 // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("txpower", "TX Power", String(meshcom_settings.node_power), "15", "txpower", 2, false, false);                    // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("utcoffset", "UTC Offset", String(meshcom_settings.node_utcoff, 1).c_str(), "1.0", "utcoffset", 4, false, false); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("maxv", "max. Voltage", String(meshcom_settings.node_maxv, 3), "4.125", "maxv", 5, false, false);                 // create Textinput-Element including Label and Button
 
     web_client.println("</div><div class=\"grid grid2\">");
 
@@ -1066,21 +1080,45 @@ void sub_page_setup()
     _create_setup_switch_element("small", "small Display", "reduce content for small displays", bSMALLDISPLAY); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("volt", "Voltage", "show batt. voltage, not percent", bDisplayVolt);           // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("mesh", "Mesh", "enable mesh/forwarding of received LoRa messages", bMESH);    // create Switch-Element inclucing Label and Description
-    _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);                             // create Switch-Element inclucing Label and Description
 
     web_client.println("<span>Reboot into OTA Updater</span>");
-    web_client.println("<button onclick=\"if(confirm('Node will reboot to OTA Updater, are you sure?') == true){callfunction('otaupdate', '');setTimeout(function(){window.location.reload();},10000);}\"><i class=\"btncheckmark\"></i></button>");
+    web_client.println("<button onclick=\"if(confirm('Node will reboot to OTA Updater, are you sure?')){callfunction('otaupdate', '');setTimeout(function(){window.location.reload();},10000);}\"><i class=\"btncheckmark\"></i></button>");
 
     web_client.println("</div></div>");
+
+    // IP Network Settings Section
+    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<label class=\"cardlabel\">IP Network Settings</label>");
+    web_client.println("<span>Open this for network-specific settings.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
+    web_client.println("<div class=\"grid grid3\">");
+
+    _create_setup_textinput_element("wifissid", "SSID", String(meshcom_settings.node_ssid), "wifi-name", "setssid", 50, false, true);   // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("wifipassword", "WiFi Password", String(meshcom_settings.node_pwd), "", "setpwd", 50, true, true); // create Textinput-Element including Label and Button
+   
+    _create_setup_textinput_element("ownip", "fixed IP", String(meshcom_settings.node_ip), "192.168.1.100", "setownip", 50, false, true); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("ownsn", "Subnet Mask", String(meshcom_settings.node_subnet), "255.255.255.0", "setownms", 50, false, true); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("owngw", "Gateway", String(meshcom_settings.node_gw), "192.168.1.1", "setowngw", 50, false, true); // create Textinput-Element including Label and Button
+
+    _create_setup_textinput_element("extudp", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
+
+    web_client.println("</div><div class=\"grid grid2\">");
+    _create_setup_switch_element("useextudp", "ext UDP", "enable ext. UDP", bEXTUDP);                             // create Switch-Element inclucing Label and Description
+    _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);                             // create Switch-Element inclucing Label and Description
+ 
+    web_client.println("</div></div>");
+
 
     // Position Settings Section
     web_client.println("<div class=\"cardlayout\">");
     web_client.println("<label class=\"cardlabel\">Position Settings</label>");
+    web_client.println("<span>Open this for position-specific settings.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid grid3\">");
 
-    _create_setup_textinput_element("latitude", "Position Latitude (+/-)", String(meshcom_settings.node_lat, 8), "48.26940877", "setlat", 12);   // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("longitude", "Position Longitude (+/-)", String(meshcom_settings.node_lon, 8), "16.40922749", "setlon", 12); // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("altitude", "Position Altitude (meter)", String(meshcom_settings.node_alt), "300", "setalt", 5);             // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("latitude", "Position Latitude (+/-)", String(meshcom_settings.node_lat, 8), "48.26940877", "setlat", 12, false, false);   // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("longitude", "Position Longitude (+/-)", String(meshcom_settings.node_lon, 8), "16.40922749", "setlon", 12, false, false); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("altitude", "Position Altitude (meter)", String(meshcom_settings.node_alt), "300", "setalt", 5, false, false);             // create Textinput-Element including Label and Button
 
     web_client.println("</div><div class=\"grid grid2\">");
 
@@ -1092,21 +1130,25 @@ void sub_page_setup()
     // APRS Settings Section
     web_client.println("<div class=\"cardlayout\">");
     web_client.println("<label class=\"cardlabel\">APRS Settings</label>");
+    web_client.println("<span>Open this for APRS-specific settings.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid grid3\">");
 
-    _create_setup_textinput_element("nametext", "APRS Name", String(meshcom_settings.node_name), "aprsname", "setname", 25); // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("aprstext", "APRS Text", String(meshcom_settings.node_atxt), "aprstext", "atxt", 25);    // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("aprsgroup", "APRS Group", String(meshcom_settings.node_symid), "/", "symid", 1);        // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("aprssymbol", "APRS Symbol", String(meshcom_settings.node_symcd), "S", "symcd", 1);      // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("nametext", "APRS Name", String(meshcom_settings.node_name), "aprsname", "setname", 25, false, false); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("aprstext", "APRS Text", String(meshcom_settings.node_atxt), "aprstext", "atxt", 25, false, false);    // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("aprsgroup", "APRS Group", String(meshcom_settings.node_symid), "/", "symid", 1, false, false);        // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("aprssymbol", "APRS Symbol", String(meshcom_settings.node_symcd), "S", "symcd", 1, false, false);      // create Textinput-Element including Label and Button
 
     web_client.println("</div></div>");
 
     // Hardware Settings Section
     web_client.println("<div class=\"cardlayout\">");
     web_client.println("<label class=\"cardlabel\">External Hardware Settings</label>");
+    web_client.println("<span>Open this for hardware-related settings like sensors.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid grid3\">");
 
-    _create_setup_textinput_element("owgpio", "1-Wire GPIO", String(meshcom_settings.node_owgpio), "36", "onewiregpio", 3); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("owgpio", "1-Wire GPIO", String(meshcom_settings.node_owgpio), "36", "onewiregpio", 3, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("</div><div class=\"grid grid2\">");
 
@@ -1115,7 +1157,7 @@ void sub_page_setup()
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid3\">");
 
-    _create_setup_textinput_element("ubgpio", "Userbutton GPIO", String(meshcom_settings.node_button_pin), "0", "buttongpio", 3); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("ubgpio", "Userbutton GPIO", String(meshcom_settings.node_button_pin), "0", "buttongpio", 3, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid2\">");
@@ -1126,8 +1168,8 @@ void sub_page_setup()
 
     web_client.println("<div class=\"grid grid3\">");
 
-    _create_setup_textinput_element("angpio", "Analog GPIO", String(meshcom_settings.node_analog_pin), "2", "angpio", 3);                // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("afactor", "Analog Factor", String(meshcom_settings.node_analog_faktor, 6), "1.000", "afactor", 10); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("angpio", "Analog GPIO", String(meshcom_settings.node_analog_pin), "2", "angpio", 3, false, false);                // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("afactor", "Analog Factor", String(meshcom_settings.node_analog_faktor, 6), "1.000", "afactor", 10, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid2\">");
@@ -1146,7 +1188,8 @@ void sub_page_setup()
     // Groups Settings Section
     web_client.println("<div class=\"cardlayout\">");
     web_client.println("<label class=\"cardlabel\">Groups / Messaging</label>");
-
+    web_client.println("<span>Open this for messaging-groups-related settings.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid grid2\">");
 
     for (int i = 0; i < (int)sizeof(meshcom_settings.node_gcb) / (int)sizeof(meshcom_settings.node_gcb[0]); i++)
@@ -1489,11 +1532,14 @@ void send_http_header(uint16_t http_status_code, uint8_t content_type)
         web_client.println("Content-type:application/json");
     else
         web_client.println("Content-type:text/html");
-    web_client.println("Access-Control-Allow-Origin: *"); // tell modern browsers that CORS is okay for us
+    web_client.println("Access-Control-Allow-Origin: *");   // tell modern browsers that CORS is okay for us
     web_client.println("Access-Control-Allow-Methods: GET, POST, OPTIONS");
     web_client.println("Access-Control-Allow-Headers: access-control-allow-headers,access-control-allow-methods,access-control-allow-origin, Origin, Content-Type, Accept");
-    web_client.println("Connection: close"); // tell broser that the connection will be closed (in opposite to keep-alive)
-    web_client.println();                    // two CR-LF marks the end of the header
+    web_client.println("Connection: close");                // tell broser that the connection will be closed (in opposite to keep-alive)
+    web_client.println("Cache-Control: no-cache, no-store, must-revalidate");   // set caching policy
+    web_client.println("Pragma: no-cache");                 // Disable caching or request/respinse
+    web_client.println("Expires: 0");                       // set cache expiring time to 0
+    web_client.println();                                   // two CR-LF marks the end of the header
 }
 
 
@@ -1518,12 +1564,17 @@ void _create_meshcom_subheader(String title){
  * @param placeHolder the placeholder that is displayed if the textinput is empty
  * @param parameterName the name of the parameter wich is used to identify the parameter
  * @param maxlength the maximum allowed input length
+ * @param isPassword if set to TRUE, the input will be a password-type input
  */
-void _create_setup_textinput_element(const char id[], const char labelText[], String inputValue, const char placeHolder[], const char parameterName[], uint8_t maxlength)
+void _create_setup_textinput_element(const char id[], const char labelText[], String inputValue, const char placeHolder[], const char parameterName[], uint8_t maxlength, bool isPassword, bool needConfirm)
 {
     web_client.printf("\t<label for=\"%s\">%s :</label>\n", id, labelText);
-    web_client.printf("\t<input type=\"text\" name=\"%s\" id=\"%s\" value=\"%s\" maxlength=\"%i\" size=\"10\" placeholder=\"%s\">\n", id, id, inputValue.c_str(), maxlength, placeHolder);
-    web_client.printf("\t<button onclick=\"setvalue('%s', document.getElementById('%s').value)\"><i class=\"btncheckmark\"></i></button>\n", parameterName, id);
+    String confirmStub = "";
+    if(needConfirm){
+        confirmStub = "if(confirm('Are you sure you want to set &quot;"+String(labelText)+"&quot; to &quot;'+document.getElementById('"+String(id)+"').value+'&quot;?'))";
+    }
+    web_client.printf("\t<input type=\"%s\" name=\"%s\" id=\"%s\" value=\"%s\" maxlength=\"%i\" size=\"10\" placeholder=\"%s\">\n", isPassword?"password":"text", id, id, inputValue.c_str(), maxlength, placeHolder);
+    web_client.printf("\t<button onclick=\"%ssetvalue('%s', document.getElementById('%s').value)\"><i class=\"btncheckmark\"></i></button>\n", confirmStub.c_str(), parameterName, id);
 }
 
 /**
@@ -1666,7 +1717,7 @@ void setparam(String web_header)
     else
         send_http_header(422, RESPONSE_TYPE_JSON);
     // build a json object literal and return it. Example:  {"returncode":1, "setcall":"AB1CDE-12"}    rembemer: keys have to be strings
-    web_client.printf("{\"returncode\":%i, \"%s\":\"%s\"}\n", setupData.returnCode, setupData.paramName, setupData.returnValue);
+    web_client.printf("{\"returncode\":%i, \"%s\":\"%s\"}\n", setupData.returnCode, setupData.paramName.c_str(), setupData.returnValue.c_str());
 }
 
 /**
@@ -1705,5 +1756,5 @@ void getparam(String web_header)
     else
         send_http_header(422, RESPONSE_TYPE_JSON);
     // build a json object literal and return it. Example:  {"returncode":1, "setcall":"AB1CDE-12"}    rembemer: keys have to be strings
-    web_client.printf("{\"returncode\":%i, \"%s\":\"%s\"}\n", setupData.returnCode, setupData.paramName, setupData.returnValue);
+    web_client.printf("{\"returncode\":%i, \"%s\":\"%s\"}\n", setupData.returnCode, setupData.paramName.c_str(), setupData.returnValue.c_str());
 }

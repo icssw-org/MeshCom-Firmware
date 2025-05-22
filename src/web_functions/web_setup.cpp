@@ -327,7 +327,63 @@ void webSetup_setParam(setupStruct *setupData){
         setupData->returnCode = (bNoMSGtoALL == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = bNoMSGtoALL?"on":"off";
         return;
-    } 
+    } else 
+
+    if(setupData->paramName.equals("setssid")) {
+        snprintf(message_text, sizeof(message_text), "--setssid %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_ssid, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_ssid;    
+        return;
+    } else 
+
+    if(setupData->paramName.equals("setpwd")) {
+        snprintf(message_text, sizeof(message_text), "--setpwd %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_pwd, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_pwd;    
+        return;
+    } else 
+
+    if(setupData->paramName.equals("setownip")) {
+        snprintf(message_text, sizeof(message_text), "--setownip %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_ownip, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_ownip;
+        return;
+    } else 
+
+    if(setupData->paramName.equals("setownms")) {
+        snprintf(message_text, sizeof(message_text), "--setownms %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_ownms, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_ownms;    
+        return;
+    } else
+
+    if(setupData->paramName.equals("setowngw")) {
+        snprintf(message_text, sizeof(message_text), "--setowngw %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_owngw, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_owngw;    
+        return;
+    } else
+    
+    if(setupData->paramName.equals("extudpip")) {
+        snprintf(message_text, sizeof(message_text), "--extudpip %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_extern, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_extern;    
+        return;
+    } else
+
+    if(setupData->paramName.equals("extudp")) {        
+        snprintf(message_text, sizeof(message_text), "--extudp %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bEXTUDP == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bEXTUDP?"on":"off";
+        return;
+    }
 
     //if nothing matches the parameter name, we assume that we do not know the request, so we telling the caller.
     setupData->returnCode =  WS_RETURNCODE_UNKNOWN;
@@ -517,7 +573,42 @@ void webSetup_getParam(setupStruct *setupData){
     if(setupData->paramName.equals("nomsgall")) {
         setupData->returnValue = bNoMSGtoALL?"on":"off";
         return;
-    } 
+    } else 
+
+    if(setupData->paramName.equals("setssid")) {
+        setupData->returnValue = String(meshcom_settings.node_ssid);    
+        return;
+    } else 
+
+    if(setupData->paramName.equals("setpwd")) {
+        setupData->returnValue = String(meshcom_settings.node_pwd);    
+        return;
+    } else 
+
+    if(setupData->paramName.equals("setownip")) {
+        setupData->returnValue = String(meshcom_settings.node_ownip);    
+        return;
+    } else 
+
+    if(setupData->paramName.equals("setownms")) {
+        setupData->returnValue = String(meshcom_settings.node_ownms);    
+        return;
+    } else
+
+    if(setupData->paramName.equals("setowngw")) {
+        setupData->returnValue = String(meshcom_settings.node_owngw);    
+        return;
+    } else
+    
+    if(setupData->paramName.equals("extudpip")) {
+        setupData->returnValue = String(meshcom_settings.node_extern);    
+        return;
+    } else
+
+    if(setupData->paramName.equals("extudp")) {        
+        setupData->returnValue = bEXTUDP?"on":"off";
+        return;
+    }
 
     //if nothing matches the parameter name, we assume that we do not know the request, so we telling the caller.
     setupData->returnCode =  WS_RETURNCODE_UNKNOWN;

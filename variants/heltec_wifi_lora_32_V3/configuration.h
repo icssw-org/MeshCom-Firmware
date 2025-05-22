@@ -5,6 +5,9 @@ definitions for HELTEC_V3
 #pragma once
 
 #include <Arduino.h>
+
+#define ENABLE_SBUFFER
+
 #include <configuration_global.h>
 
 // HELTEC_V3 specific config
@@ -87,7 +90,7 @@ definitions for HELTEC_V3
 #define SDA_PIN 17
 #define SCL_PIN 18
 
-#define OneWire_GPIO 17 // getestet ???
+#define OneWire_GPIO 99 // getestet ???
 
 #define GPS_RX_PIN 47
 #define GPS_TX_PIN 48
