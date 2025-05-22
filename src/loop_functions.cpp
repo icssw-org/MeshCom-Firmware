@@ -439,8 +439,7 @@ int checkOwnTx(unsigned int msg_id)
         {
             if(bDisplayInfo)
             {
-                Serial.print(getTimeString());
-                Serial.printf(" checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X> %02X\n", msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0], own_msg_id[ilo][4]);
+                Serial.printf("%s checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X> %02X\n", getTimeString(), msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0], own_msg_id[ilo][4]);
             }
 
             return ilo;
@@ -465,8 +464,7 @@ void insertOwnTx(unsigned int msg_id)
 
     if(bDisplayInfo)
     {
-        Serial.print(getTimeString());
-        Serial.printf(" Insert own_msg_id:%08X <%02X%02X%02X%02X>\n", msg_id, own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
+        Serial.printf("%s Insert own_msg_id:%08X <%02X%02X%02X%02X>\n", getTimeString(), msg_id, own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
     }
 
     iWriteOwn++;
@@ -1376,8 +1374,7 @@ void initAnalogPin()
 
         if(bDEBUG && bDisplayInfo)
         {
-            Serial.print(getTimeString());
-            Serial.printf("[ANALOG]...GPIO%i SET\n", ANAGPIO);
+            Serial.printf("%s [ANALOG]...GPIO%i SET\n", getTimeString(), ANAGPIO);
         }
     }
     
@@ -1404,8 +1401,7 @@ void checkAnalogValue()
         
         if(bDEBUG && bDisplayInfo)
         {
-            Serial.print(getTimeString());
-            Serial.printf("[ANALOG]...GPIO%i %.0f * %.4f = %.2f\n", ANAGPIO, raw, meshcom_settings.node_analog_faktor, fAnalogValue);
+            Serial.printf("%s [ANALOG]...GPIO%i %.0f * %.4f = %.2f\n", getTimeString(), ANAGPIO, raw, meshcom_settings.node_analog_faktor, fAnalogValue);
         }
     }
     else
@@ -2428,8 +2424,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
         if(bDisplayInfo)
         {
-            Serial.print(getTimeString());
-            Serial.printf(" LO-APRS:%s\n", msg_buffer+3);
+            Serial.printf("%s [LO-APRS]...%s\n", getTimeString(), msg_buffer+3);
         }
 
         // local LoRa-APRS position-messages send to LoRa TX
@@ -2479,8 +2474,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             {
                 if(bDisplayInfo)
                 {
-                    Serial.print(getTimeString());
-                    Serial.printf(" NEW-UDP:%s\n", msg_buffer+3);
+                    Serial.printf("%s [NEW-UDP]...%s\n", getTimeString(), msg_buffer+3);
                 }
 
                 // UDP out
@@ -3091,8 +3085,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     {
         if(bGPSDEBUG)
         {
-            Serial.print(getTimeString());
-            Serial.printf(" POSINFO one-shot set - direction_diff:%i last_lat:%.1lf last_lon:%.1lf\n", direction_diff, posinfo_last_lat, posinfo_last_lon);
+            Serial.printf("%s [POSINFO]... one-shot set - direction_diff:%i last_lat:%.1lf last_lon:%.1lf\n", getTimeString(), direction_diff, posinfo_last_lat, posinfo_last_lon);
         }
     }
 

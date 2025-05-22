@@ -328,7 +328,7 @@ float read_batt(void)
 
 		if(bDisplayCont)
 		{
-			Serial.printf("%s [BATT]...reading: %lu factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), fBattFaktor, raw);
+			Serial.printf("%s [BATT]...reading: %lu factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), analogValue, fBattFaktor, raw);
 			delay(500); 
 		}
 
