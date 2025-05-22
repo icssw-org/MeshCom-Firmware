@@ -74,7 +74,11 @@ int iCount_weiss=0;
 bool bLED = true;
 #endif
 
-
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#include <t-deck/tdeck_main.h>
+#include <t-deck/tdeck_extern.h>
+#include <t-deck/lv_obj_functions.h>
+#endif
 
 /**
  * RadioLib Infos und Examples:
@@ -505,6 +509,11 @@ void esp32setup()
     if(meshcom_settings.node_button_pin > 0)
         iButtonPin = meshcom_settings.node_button_pin;
 
+    // Initialize T-Deck GUI
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    initTDeck();
+    #endif
+
     // if Node not set --> WifiAP Mode on
     if(memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0 || meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
     {
@@ -794,7 +803,6 @@ void esp32setup()
         }
         #endif
 
-
         // set carrier frequency
         Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", meshcom_settings.node_freq);
         if (radio.setFrequency(meshcom_settings.node_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
@@ -808,7 +816,6 @@ void esp32setup()
             Serial.println(F("Selected bandwidth is invalid for this module!"));
             while (true);
         }
-
 
         // set spreading factor 
         Serial.printf("[LoRa]...RF_SF: %i\n", meshcom_settings.node_sf);
@@ -1778,6 +1785,10 @@ void esp32loop()
             }
         }
 
+
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        tdeck_refresh_TRK_view();
+        #endif
         #endif
 
         gps_refresh_timer = millis();
@@ -1929,6 +1940,10 @@ void esp32loop()
             		Serial.print("[readBatteryVoltage]...");
                     Serial.printf("volt %.1f proz %i\n", global_batt, global_proz);
                 }
+
+                #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+                tdeck_update_batt_label(global_batt, global_proz);
+                #endif 
             #endif
 
             if(bDisplayCont)
@@ -2173,7 +2188,20 @@ void esp32loop()
         {
             startExternUDP();
         }
-}
+    }
+
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+
+    if ((tdeck_tft_timer + (TDECK_TFT_TIMEOUT * 1000)) < millis())
+    {
+        tft_off();
+    }
+
+    lv_task_handler();
+
+    
+
+    #endif
 
     //
     ////////////////////////////////////////////////

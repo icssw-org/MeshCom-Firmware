@@ -22,7 +22,7 @@
 void setup()
 {
 
-#if defined(BOARD_T_ECHO)
+#if defined(BOARD_T_ECHO) || defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #else
   SPI.begin();
 #endif

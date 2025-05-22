@@ -161,6 +161,16 @@ struct s_meshcom_settings
 	char node_parm_1[100] = {0};
 	char node_parm_t[150] = {0};
 	char node_parm_id[100] = {0};
+
+	#if defined(BOARD_T_DECK) || defined (BOARD_T_DECK_PLUS)
+	int node_map = 0;
+	String node_audio_start = "/";
+	String node_audio_msg = "/";
+	bool node_keyboardlock = false;
+	bool node_backlightlock = false;
+	int node_modus = 0;
+	bool node_mute = false;
+	#endif
 };
 
 extern s_meshcom_settings meshcom_settings;

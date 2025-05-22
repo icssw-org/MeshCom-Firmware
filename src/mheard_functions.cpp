@@ -5,6 +5,10 @@
 #include <time_functions.h>
 #include <mheard_functions.h>
 
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#include <t-deck/lv_obj_functions_extern.h>
+#endif
+
 unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 unsigned char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 double mheardLat[MAX_MHEARD];
@@ -203,6 +207,10 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
     if(isPhoneReady == 1)
         addBLEOutBuffer(bleBuffer, measureJson(mhdoc)+1);
+
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    showMHeardTDECK();
+    #endif
 }
 
 void updateHeyPath(struct mheardLine &mheardLine)
@@ -468,3 +476,89 @@ String getHardwareLong(uint8_t hwid)
 
     return HardWare[ihw];
 }
+
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+/**
+ * displays MHeard on T-Deck
+ */
+void showMHeardTDECK()
+{
+    char buf[200];
+
+    //snprintf(buf, 200, "|   MHeard  | time  | typ |    HW   | rssi | snr |\n");
+
+    mheardLine mheardLine;
+
+    uint16_t row=0;
+
+    lv_table_set_cell_value(mheard_ta, row, 0, (char*)"Call");
+    lv_table_set_cell_value(mheard_ta, row, 1, (char*)"Time");
+    lv_table_set_cell_value(mheard_ta, row, 2, (char*)"Type");
+    lv_table_set_cell_value(mheard_ta, row, 3, (char*)"HW");
+    lv_table_set_cell_value(mheard_ta, row, 4, (char*)"RSSI");
+    lv_table_set_cell_value(mheard_ta, row, 5, (char*)"SNR");
+
+    row++;
+
+    int anzrow=1;
+
+    for(int iset=0; iset<MAX_MHEARD; iset++)
+    {
+        if(mheardCalls[iset][0] != 0x00)
+            anzrow++;
+    }
+
+    lv_table_set_row_cnt(mheard_ta, anzrow);
+
+    for(int iset=0; iset<MAX_MHEARD; iset++)
+    {
+        if(mheardCalls[iset][0] != 0x00)
+        {
+            snprintf(buf, 10, "%s", mheardCalls[iset]);
+            lv_table_set_cell_value(mheard_ta, row, 0, buf);
+            
+            decodeMHeard(mheardBuffer[iset], mheardLine);
+
+            snprintf(buf, 6, "%s", mheardLine.mh_time.substring(0, 5).c_str());
+            lv_table_set_cell_value(mheard_ta, row, 1, buf);
+
+            if(mheardLine.mh_payload_type == ':')
+            {
+                snprintf(buf, 4, "TXT");
+                lv_table_set_cell_value(mheard_ta, row, 2, buf);
+            }
+            else
+            if(mheardLine.mh_payload_type == '!')
+            {
+                snprintf(buf, 4, "POS");
+                lv_table_set_cell_value(mheard_ta, row, 2, buf);
+            }
+            else
+            if(mheardLine.mh_payload_type == '@')
+            {
+                snprintf(buf, 4, "WX");
+                lv_table_set_cell_value(mheard_ta, row, 2, buf);
+            }
+            else
+            {
+                snprintf(buf, 4, "???");
+                lv_table_set_cell_value(mheard_ta, row, 2, buf);
+            }
+
+            snprintf(buf, 8, "%s", getHardwareLong(mheardLine.mh_hw).c_str());
+            lv_table_set_cell_value(mheard_ta, row, 3, buf);
+
+            //snprintf(buf, 200, "%3i | ", mheardLine.mh_mod);
+            //strRet.concat(buf);
+
+            snprintf(buf, 5, "%4i", mheardLine.mh_rssi);
+            lv_table_set_cell_value(mheard_ta, row, 4, buf);
+
+            snprintf(buf, 5, "%4i", mheardLine.mh_snr);
+            lv_table_set_cell_value(mheard_ta, row, 5, buf);
+
+            row++;
+        }
+    }
+}
+#endif

@@ -41,7 +41,7 @@ extern U8G2 u8g2_2;
 
 void initDisplay()
 {
-#ifndef BOARD_E290
+#if ! defined(BOARD_E290) && ! defined(BOARD_T_DECK) && ! defined(BOARD_T_DECK_PLUS)
     Serial.println(F("[INIT]...Auto detecting display:"));
         
     int idtype = esp32_isSSD1306(0x3C);
@@ -73,7 +73,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 {
     char cvers[20];
 
-    #ifdef BOARD_E290
+    #if defined(BOARD_E290)
 
     sprintf(cvers, "%s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
 
@@ -106,6 +106,8 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 
     e290_display.update();
 
+    #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    // do nothing
     #else
 
     if(u8g2 == NULL)

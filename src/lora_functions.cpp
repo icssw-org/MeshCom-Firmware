@@ -61,6 +61,10 @@
 
 #include "softser_functions.h"
 
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#include <t-deck/lv_obj_functions.h>
+#endif
+
                                         // flag to indicate if we are after receiving
 extern unsigned long iReceiveTimeOutTime;
 
@@ -670,6 +674,25 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                             if(isPhoneReady > 0)
                                 addBLEOutBuffer(RcvBuffer, size);
+
+                            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+                            struct aprsPosition aprspos;
+
+                            if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
+                            {
+                                tdeck_add_pos_point(aprsmsg.msg_source_call, 
+                                    conv_coord_to_dec(aprspos.lat), 
+                                    aprspos.lat_c, 
+                                    conv_coord_to_dec(aprspos.lon), 
+                                    aprspos.lon_c);
+                                tdeck_add_to_pos_view(aprsmsg.msg_source_call, 
+                                    conv_coord_to_dec(aprspos.lat), 
+                                    aprspos.lat_c, 
+                                    conv_coord_to_dec(aprspos.lon), 
+                                    aprspos.lon_c,
+                                    conv_meter(aprspos.alt));
+                            }
+                            #endif
                         }
 
                         // messages to WLNK-1 or APRS2SOTA no need to MESH via a gateWay
@@ -687,7 +710,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(strcmp(destination_call, "100001") == 0)
                                 bMeshDestination = false;
                         }
-                            // more then 4 callsigns within source_path no need to MESH via a gateWay
+                        // more then 4 callsigns within source_path no need to MESH via a gateWay
                         if(bGATEWAY)
                         {
                             if(aprsmsg.payload_type == ':' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_text+1)    // TEXT

@@ -7,6 +7,9 @@
 #include <configuration.h>
 #include <debugconf.h>
 
+#define max_country 16
+extern String strCountry[max_country];
+
 float getFreq();
 int8_t getPower();
 float getBW();

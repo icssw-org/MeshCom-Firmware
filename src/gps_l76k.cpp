@@ -75,14 +75,25 @@ bool l76kProbe()
 
 bool beginGPS()
 {
-    SerialGPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     bool result = false;
+
+    SerialGPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     for ( int i = 0; i < 3; ++i) {
         result = l76kProbe();
         if (result) {
             return result;
         }
     }
+
+    // 9600 not working, trying 38400
+    SerialGPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    for ( int i = 0; i < 3; ++i) {
+        result = l76kProbe();
+        if (result) {
+            return result;
+        }
+    }
+
     return result;
 }
 

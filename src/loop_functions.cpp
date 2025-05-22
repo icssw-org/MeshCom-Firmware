@@ -14,6 +14,12 @@
 
 #include <Wire.h> 
 
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#include <lvgl.h>
+#include <t-deck/tdeck_main.h>
+#include <t-deck/lv_obj_functions.h>
+#endif 
+
 // TinyGPS
 extern TinyGPSPlus tinyGPSPLus;
 
@@ -1012,6 +1018,10 @@ void mainStartTimeLoop()
                     sendDisplayTime(); // Time only
                 }
 
+                #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+                tdeck_update_time_label();
+                #endif
+
                 DisplayTimeWait = meshcom_settings.node_date_second;
             }
             else
@@ -1211,6 +1221,11 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     strcpy(pageLastTextLong2[pagePointer], strAscii.c_str());
 
     e290_display.update();
+
+    #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    
+    tdeck_add_MSG(aprsmsg);
+    
     #else
     
     int izeile=0;
@@ -1441,7 +1456,12 @@ bool bShowHead=false;
 
 void checkButtonState()
 {
-    #ifdef BUTTON_PIN
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    
+    button.check();
+    lv_task_handler();
+
+    #elif defined(BUTTON_PIN)
 
     if(bcheckBottonRun)
         return;
@@ -1624,7 +1644,6 @@ void checkButtonState()
     }
 
     bcheckBottonRun = false;
-
     #endif
 }
 
@@ -2096,6 +2115,10 @@ void sendMessage(char *msg_text, int len)
                 addBLEOutBuffer(print_buff, (uint16_t)7);
             }
         }
+
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        tdeck_add_MSG(aprsmsg);
+        #endif
     }
 
     // store last message to compare later on
@@ -3141,6 +3164,11 @@ int conv_fuss(int alt_meter)
     fuss = fuss * 3.28084;
     int ifuss = fuss + 5;
     return ifuss / 10;
+}
+
+int conv_meter(int alt_fuss)
+{
+    return (int)((float)alt_fuss * 0.3048);
 }
 
 bool checkMesh()
