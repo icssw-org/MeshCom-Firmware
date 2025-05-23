@@ -2860,17 +2860,20 @@ void commandAction(char *umsg_text, bool ble)
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
         sscanf(_owner_c, "%d", &iVar);
 
-        if(iVar < 0 || iVar > 78)
+        if(iVar < 2 || iVar > 20)
         {
-            Serial.printf("wifitxpower %i not between %i (factor) and max %i (factor) \n", iVar, TX_POWER_MIN, TX_POWER_MAX);
+            Serial.printf("wifitxpower %i not between 2dBm and max 20 dBm\n", iVar);
         }
         else
         {
-            meshcom_settings.node_wifi_power=iVar;
+            meshcom_settings.node_wifi_power= iVar;
 
-            Serial.printf("set wifitxpower to % (factor)\n", meshcom_settings.node_wifi_power);
+            Serial.printf("set wifitxpower to %i dBm (factor:%i)\n", iVar, meshcom_settings.node_wifi_power, iVar * 4);
 
             save_settings();
+            
+            Serial.println("Auto. Reboot after 15 sec.");
+            rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
 
         return;

@@ -780,10 +780,11 @@ void deliver_scaffold()
     web_client.println("input:where([type=\"checkbox\"][role=\"switch\"]):checked::before {left:1.8em;}\n");
 
     //content definitions -> setup collapsable cards
-    web_client.println(".cardlayout>.cardtoggle {position:absolute;right:8px;top:-1px;transform:translateY(-50%);z-index:10;width:36px;height:36px;border-radius:50% !important;disjplay:none;}\n");
-    web_client.println(".cardlayout>.cardtoggle>i {padding:4px;margin:auto;border:solid black;border-width:2px 0 0 2px;display:block;-webkit-transform:rotate(-135deg);transform:rotate(-135deg);-webkit-transition:0.5s;transition:0.5s;}\n");
+    
+    web_client.println(".collapsablecard>.cardtoggle {position:absolute;right:8px;top:-1px;transform:translateY(-50%);z-index:10;width:36px;height:36px;border-radius:50% !important;disjplay:none;}\n");
+    web_client.println(".collapsablecard>.cardtoggle>i {padding:4px;margin:auto;border:solid black;border-width:2px 0 0 2px;display:block;-webkit-transform:rotate(-135deg);transform:rotate(-135deg);-webkit-transition:0.5s;transition:0.5s;}\n");
     web_client.println(".cardopen>.cardtoggle>i {-webkit-transform: rotate(45deg);transform: rotate(45deg);}\n");
-    web_client.println(".cardlayout>div {max-height:0px;-webkit-transition:opacity .15s .0s,max-height .25s .10s;transition:opacity .15s .0s,max-height .25s .10s,margin .0s .50s;	opacity:0.0;overflow:hidden;margin:0px;}\n");
+    web_client.println(".collapsablecard>div {max-height:0px;-webkit-transition:opacity .15s .0s,max-height .25s .10s;transition:opacity .15s .0s,max-height .25s .10s,margin .0s .50s;	opacity:0.0;overflow:hidden;margin:0px;}\n");
     web_client.println(".cardopen>div {-webkit-transition:opacity .15s .10s,max-height .25s .0s;transition:opacity .15s .10s,max-height .25s .0s;max-height:1000px;opacity:1;margin:7px;}\n");
     web_client.println(".cardopen>span:first-of-type {display:none;}\n");
 
@@ -1040,10 +1041,8 @@ void sub_page_setup()
     web_client.println("<div id=\"content_inner\">");
 
     // Manual Command Section
-    web_client.println("<div class=\"cardlayout cardopen\">\n");
+    web_client.println("<div class=\"cardlayout\">\n");
     web_client.println("<label class=\"cardlabel\">Manual Command</label>\n");
-    web_client.println("<span>Open this for executing commands manually.</span>\n");
-    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid\">");
     web_client.println("<span>Enter manual command:</span>");
     web_client.println("<input type=\"text\" id=\"manualcommand\" maxlength=\"40\" size=\"20\" style=\"width:100%\">");
@@ -1051,7 +1050,7 @@ void sub_page_setup()
     web_client.println("</div></div>");
 
     // Common Settings Section
-    web_client.println("<div class=\"cardlayout cardopen\">");
+    web_client.println("<div class=\"cardlayout collapsablecard cardopen\">");
     web_client.println("<label class=\"cardlabel\">Common Settings</label>");
     web_client.println("<span>Open this for common settings.</span>\n");
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
@@ -1087,7 +1086,7 @@ void sub_page_setup()
     web_client.println("</div></div>");
 
     // IP Network Settings Section
-    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<div class=\"cardlayout collapsablecard\">");
     web_client.println("<label class=\"cardlabel\">IP Network Settings</label>");
     web_client.println("<span>Open this for network-specific settings.</span>\n");
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
@@ -1110,7 +1109,7 @@ void sub_page_setup()
 
 
     // Position Settings Section
-    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<div class=\"cardlayout collapsablecard\">");
     web_client.println("<label class=\"cardlabel\">Position Settings</label>");
     web_client.println("<span>Open this for position-specific settings.</span>\n");
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
@@ -1128,7 +1127,7 @@ void sub_page_setup()
     web_client.println("</div></div>");
 
     // APRS Settings Section
-    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<div class=\"cardlayout collapsablecard\">");
     web_client.println("<label class=\"cardlabel\">APRS Settings</label>");
     web_client.println("<span>Open this for APRS-specific settings.</span>\n");
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
@@ -1142,7 +1141,7 @@ void sub_page_setup()
     web_client.println("</div></div>");
 
     // Hardware Settings Section
-    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<div class=\"cardlayout collapsablecard\">");
     web_client.println("<label class=\"cardlabel\">External Hardware Settings</label>");
     web_client.println("<span>Open this for hardware-related settings like sensors.</span>\n");
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
@@ -1186,7 +1185,7 @@ void sub_page_setup()
     web_client.println("</div>");
 
     // Groups Settings Section
-    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<div class=\"cardlayout collapsablecard\">");
     web_client.println("<label class=\"cardlabel\">Groups / Messaging</label>");
     web_client.println("<span>Open this for messaging-groups-related settings.</span>\n");
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");

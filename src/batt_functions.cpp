@@ -84,6 +84,7 @@ adc_channel_t channel = ADC_CHANNEL_6;     //GPIO34 if ADC1, GPIO14 if ADC2
 #endif
 //static const
 adc_bits_width_t width = ADC_WIDTH_BIT_12;
+/*
 #elif CONFIG_IDF_TARGET_ESP32S2
 //static const 
 adc_channel_t channel = ADC_CHANNEL_6;     // GPIO7 if ADC1, GPIO17 if ADC2
@@ -94,6 +95,7 @@ adc_bits_width_t width = ADC_WIDTH_BIT_13;
 adc_channel_t channel = ADC_CHANNEL_6;
 //static const
 adc_bits_width_t width = ADC_WIDTH_BIT_12;
+*/
 #endif
 
 #if defined(BOARD_TBEAM) || defined(BOARD_SX1268)
@@ -352,7 +354,7 @@ float read_batt(void)
 
 		if(bDisplayCont)
 		{
-			Serial.printf("%s [BATT]...reading: %lu factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), analogValue, fBattFaktor, raw);
+			Serial.printf("%s [BATT]...reading: %u factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), analogValue, fBattFaktor, raw);
 			delay(500); 
 		}
 

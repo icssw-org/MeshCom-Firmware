@@ -15,7 +15,7 @@
 #include <Wire.h> 
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-#include <lvgl.h>
+#include <t-deck/lib/lvgl/lvgl.h>
 #include <t-deck/tdeck_main.h>
 #include <t-deck/lv_obj_functions.h>
 #endif 
@@ -175,8 +175,8 @@ U8G2 *u8g2;
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0);  //RESET CLOCK DATA
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0);  //RESET CLOCK DATA
 #elif defined(BOARD_TBEAM_V3)
-    U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
     U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, 18, 17, U8X8_PIN_NONE);
+    U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
 #else
     U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2_1(U8G2_R0);
     U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2_2(U8G2_R0);
@@ -445,7 +445,7 @@ int checkOwnTx(unsigned int msg_id)
         {
             if(bDisplayInfo)
             {
-                Serial.printf("%s checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X> %02X\n", getTimeString(), msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0], own_msg_id[ilo][4]);
+                Serial.printf("%s checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X> %02X\n", getTimeString().c_str(), msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0], own_msg_id[ilo][4]);
             }
 
             return ilo;
@@ -470,7 +470,7 @@ void insertOwnTx(unsigned int msg_id)
 
     if(bDisplayInfo)
     {
-        Serial.printf("%s Insert own_msg_id:%08X <%02X%02X%02X%02X>\n", getTimeString(), msg_id, own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
+        Serial.printf("%s Insert own_msg_id:%08X <%02X%02X%02X%02X>\n", getTimeString().c_str(), msg_id, own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
     }
 
     iWriteOwn++;
@@ -1389,7 +1389,7 @@ void initAnalogPin()
 
         if(bDEBUG && bDisplayInfo)
         {
-            Serial.printf("%s [ANALOG]...GPIO%i SET\n", getTimeString(), ANAGPIO);
+            Serial.printf("%s [ANALOG]...GPIO%i SET\n", getTimeString().c_str(), ANAGPIO);
         }
     }
     
@@ -1416,7 +1416,7 @@ void checkAnalogValue()
         
         if(bDEBUG && bDisplayInfo)
         {
-            Serial.printf("%s [ANALOG]...GPIO%i %.0f * %.4f = %.2f\n", getTimeString(), ANAGPIO, raw, meshcom_settings.node_analog_faktor, fAnalogValue);
+            Serial.printf("%s [ANALOG]...GPIO%i %.0f * %.4f = %.2f\n", getTimeString().c_str(), ANAGPIO, raw, meshcom_settings.node_analog_faktor, fAnalogValue);
         }
     }
     else
@@ -1954,7 +1954,7 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
         ilpayload=60;
 
     //snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %02X %i %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
-    snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %1u %i%i%i %01X/%1u LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
+    snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %1u %i%i%i %01X/%1u LH:%02X %s>%s %c%s",  getTimeString().c_str(), msgSource,
         aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_last_hw,
         //aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
         aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(),
@@ -1968,19 +1968,17 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-    Serial.print(getTimeString());
-    Serial.printf(" %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X", msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+    Serial.printf(" %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
         aprsmsg.msg_source_hw, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
 
 void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_t size)
 {
-    Serial.print(getTimeString());
     if(size == 7)
-        Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X", msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
+        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
     else
-        Serial.printf(" %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X", msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
+        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
 }
 
 
@@ -2447,7 +2445,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
 
         if(bDisplayInfo)
         {
-            Serial.printf("%s [LO-APRS]...%s\n", getTimeString(), msg_buffer+3);
+            Serial.printf("%s [LO-APRS]...%s\n", getTimeString().c_str(), msg_buffer+3);
         }
 
         // local LoRa-APRS position-messages send to LoRa TX
@@ -2497,7 +2495,7 @@ void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, ch
             {
                 if(bDisplayInfo)
                 {
-                    Serial.printf("%s [NEW-UDP]...%s\n", getTimeString(), msg_buffer+3);
+                    Serial.printf("%s [NEW-UDP]...%s\n", getTimeString().c_str(), msg_buffer+3);
                 }
 
                 // UDP out
@@ -3108,7 +3106,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     {
         if(bGPSDEBUG)
         {
-            Serial.printf("%s [POSINFO]... one-shot set - direction_diff:%i last_lat:%.1lf last_lon:%.1lf\n", getTimeString(), direction_diff, posinfo_last_lat, posinfo_last_lon);
+            Serial.printf("%s [POSINFO]... one-shot set - direction_diff:%i last_lat:%.1lf last_lon:%.1lf\n", getTimeString().c_str(), direction_diff, posinfo_last_lat, posinfo_last_lon);
         }
     }
 
