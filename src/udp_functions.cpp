@@ -646,10 +646,10 @@ void startMeshComUDP()
     node_ip = WiFi.softAPIP();
     
     if(meshcom_settings.node_wifi_power > 0)
-      esp_wifi_set_max_tx_power((int8_t)meshcom_settings.node_wifi_power);
+      esp_wifi_set_max_tx_power((int8_t)meshcom_settings.node_wifi_power*4);  //parameter = dBm * 4
     else
       WiFi.setTxPower(WIFI_POWER_8_5dBm);
-
+      
     snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", node_ip[0], node_ip[1], node_ip[2], node_ip[3]);
     snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "255.255.255.0");
   }

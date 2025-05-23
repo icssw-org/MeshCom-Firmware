@@ -13,7 +13,7 @@
 
 #include <Arduino.h>
 #include <aprs_structures.h>
-#include <lvgl.h>
+#include <t-deck/lib/lvgl/lvgl.h>
 
 void setDisplayLayout(lv_obj_t *parent);
 void lv_msgbox(char* hinweis, char* mtext);
