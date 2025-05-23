@@ -543,7 +543,9 @@ void btn_event_handler_send(lv_event_t * e)
 
     if(code == LV_EVENT_CLICKED)
     {
-        Serial.println("Clicked");
+        if(bDisplayCont)
+            Serial.println("Clicked");
+            
         Serial.println(lv_textarea_get_text(text_input));
 
         String strText = lv_textarea_get_text(text_input);
@@ -620,7 +622,9 @@ void btn_event_handler_clear(lv_event_t * e)
 
     if(code == LV_EVENT_CLICKED)
     {
-        Serial.println("clear Clicked");
+        if(bDisplayCont)
+            Serial.println("clear Clicked");
+
         lv_textarea_set_text(text_input, (char*)"");
         lv_textarea_set_text(dm_callsign, (char*)"");
 
@@ -637,7 +641,9 @@ void btn_event_handler_up(lv_event_t * e)
 
     if(code == LV_EVENT_CLICKED)
     {
-        Serial.println("up Clicked");
+        if(bDisplayCont)
+            Serial.println("up Clicked");
+
         iKeyBoardType++;
         if(iKeyBoardType>3)
             iKeyBoardType=1;

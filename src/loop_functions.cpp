@@ -15,7 +15,7 @@
 #include <Wire.h> 
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-#include <t-deck/lib/lvgl/lvgl.h>
+#include <lvgl.h>
 #include <t-deck/tdeck_main.h>
 #include <t-deck/lv_obj_functions.h>
 #endif 
@@ -2114,11 +2114,12 @@ void sendMessage(char *msg_text, int len)
             }
         }
 
-        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-        tdeck_add_MSG(aprsmsg);
-        #endif
     }
 
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    tdeck_add_MSG(aprsmsg);
+    #endif
+    
     // store last message to compare later on
     insertOwnTx(aprsmsg.msg_id);
 

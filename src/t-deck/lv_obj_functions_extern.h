@@ -13,7 +13,7 @@
 
 #include <configuration.h>
 #include <debugconf.h>
-#include <t-deck/lib/lvgl/lvgl.h>
+#include <lvgl.h>
 
 extern int         iKeyBoardType;
 
