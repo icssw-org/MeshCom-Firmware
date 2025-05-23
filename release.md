@@ -17,6 +17,8 @@ ttgo_tbeam_SX1268.bin
 ttgo_tbeam_supreme_l76k.bin
 vision-master-e290.bin
 wiscore_rak4631.bin
+t_deck.bin
+t_deck_plus.bin
 
 
 [MeshCom Changelog](https://icssw.org/meshcom-versionen/)
