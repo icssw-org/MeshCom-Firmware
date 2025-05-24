@@ -1445,6 +1445,7 @@ void sub_page_info()
     web_client.printf("<tr><td>Coding Rate (CR)</td><td>%i</td></tr>\n", getCR());
     web_client.printf("<tr><td>TX Power</td><td>%i dBm (%.2f mW)</td></tr>\n", getPower(), 1000 * powf(10, ((float)getPower() - 30) / 10));
 
+
 #ifndef BOARD_RAK4630
     if (bWIFIAP)
         web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", cBLEName);
@@ -1492,7 +1493,7 @@ void sub_page_info()
 
     if (bRTCON)
     {
-        web_client.printf("<tr><td>RTC UTC Date/Time</td><td></td></tr>\n", getStringRTCNow().c_str());
+        web_client.printf("<tr><td>RTC UTC Date/Time</td><td>%s</td></tr>\n", getStringRTCNow().c_str());
     }
 
     // web_client.printf("<tr><td></td><td></td></tr>\n", );
@@ -1682,7 +1683,7 @@ void call_function(String web_header)
     webFunctionCall(&functionData); // try to execute that command
 
     send_http_header(functionData.returnCode == WF_RETURNCODE_OKAY ? 200 : 422, RESPONSE_TYPE_JSON);                                      // send header, either 200 if command was executed or 422 if not
-    web_client.printf("{\"%s\":\"%s\"}\n\n", functionData.functionName, functionData.returnCode == WF_RETURNCODE_OKAY ? "ok" : "failed"); // send JSON status response containting {"functionName":"ok|failed"}
+    web_client.printf("{\"%s\":\"%s\"}\n\n", functionData.functionName.c_str(), functionData.returnCode == WF_RETURNCODE_OKAY ? "ok" : "failed"); // send JSON status response containting {"functionName":"ok|failed"}
 }
 
 /**
