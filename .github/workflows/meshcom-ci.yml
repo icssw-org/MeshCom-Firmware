@@ -53,7 +53,7 @@ jobs:
       run: "wget https://raw.githubusercontent.com/microsoft/uf2/refs/heads/master/utils/uf2conv.py && wget https://raw.githubusercontent.com/microsoft/uf2/refs/heads/master/utils/uf2families.json && python3 uf2conv.py .pio/build/wiscore_rak4631/firmware.hex -c -o .pio/build/wiscore_rak4631/wiscore_rak4631.uf2 -f 0xADA52840"
 
     - name: Rename Files
-      run: "mv .pio/build/E22_1262-DevKitC/firmware.bin .pio/build/E22_1262-DevKitC/E22_1262-DevKitC.bin & 4
+      run: "mv .pio/build/E22_1262-DevKitC/firmware.bin .pio/build/E22_1262-DevKitC/E22_1262-DevKitC.bin &
       mv .pio/build/E22-DevKitC/firmware.bin .pio/build/E22-DevKitC/E22-DevKitC.bin & 
       mv .pio/build/E22_XML-DevKitC/firmware.bin .pio/build/E22_XML-DevKitC/E22_XML-DevKitC.bin & 
       mv .pio/build/E22_1262_S3-DevKitC-1-N16R8/firmware.bin .pio/build/E22_1262_S3-DevKitC-1-N16R8/E22_1262_S3-DevKitC-1-N16R8.bin & 

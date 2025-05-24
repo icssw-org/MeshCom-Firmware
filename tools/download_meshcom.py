@@ -32,25 +32,27 @@ def get_target_hardware(asset):
     "vision-master-e290.bin": "heltec_e290",
     "heltec_wifi_lora_32_V2.bin": "heltecv2",
     "heltec_wifi_lora_32_V3.bin": "heltecv3",
+    "E22-DevKitC.bin": "e22",
+    "E22_XML-DevKitC.bin": "e22-XML",
     "E22_1262-DevKitC.bin": "e22-1262",
-    "E22_1268-DevKitC.bin": "e22-1268",
     "E22_1262_S3-DevKitC-1-N16R8.bin": "e22-1262-s3",
     "E22_1268_S3-DevKitC-1-N16R8.bin": "e22-1268-s3",
     "ttgo_tbeam.bin": "tbeam",
     "ttgo_tbeam_SX1262.bin" : "tbeamSX1262",
     "ttgo_tbeam_SX1268.bin" : "tbeamSX1268",
-    "ttgo_tbeam_supreme_l76k.bin" : "tbeam_supreme_l76k",
+    "ttgo_tbeam_supreme_l76k.bin" : "tbeamSupreme",
     "ttgo-lora32-v21.bin" : "tlora",
-    "wiscore_rak4631.uf2" : "rak4631_uf2",
-    "wiscore_rak4631.zip" : "rak4631_zip",
+    "t_deck.bin" : "tdeck",
+    "t_deck_plus.bin" : "tdeck_plus",
     }
 
     bootloader_dict = {
     "vision-master-e290.bin": "bootloader-s3.bin",
     "heltec_wifi_lora_32_V2.bin": "bootloader.bin",
     "heltec_wifi_lora_32_V3.bin": "bootloader-s3.bin",
+    "E22-DevKitC.bin": "bootloader.bin",
+    "E22_XML-DevKitC.bin": "bootloader.bin",
     "E22_1262-DevKitC.bin": "bootloader.bin",
-    "E22_1268-DevKitC.bin": "bootloader.bin",
     "E22_1262_S3-DevKitC-1-N16R8.bin": "bootloader-s3.bin",
     "E22_1268_S3-DevKitC-1-N16R8.bin": "bootloader-s3.bin",
     "ttgo_tbeam.bin": "bootloader.bin",
@@ -58,14 +60,17 @@ def get_target_hardware(asset):
     "ttgo_tbeam_SX1268.bin" : "bootloader.bin",
     "ttgo_tbeam_supreme_l76k.bin" : "bootloader-s3.bin",
     "ttgo-lora32-v21.bin" : "bootloader.bin",
+    "t_deck.bin" : "bootloader-s3.bin",
+    "t_deck_plus.bin" : "bootloader-s3.bin",
     }
 
     safeboot_dict = {
     "vision-master-e290.bin": "safeboot-s3.bin",
     "heltec_wifi_lora_32_V2.bin": "safeboot.bin",
     "heltec_wifi_lora_32_V3.bin": "safeboot-s3.bin",
+    "E22-DevKitC.bin": "safeboot.bin",
     "E22_1262-DevKitC.bin": "safeboot.bin",
-    "E22_1268-DevKitC.bin": "safeboot.bin",
+    "E22_XML-DevKitC.bin": "safeboot.bin",
     "E22_1262_S3-DevKitC-1-N16R8.bin": "safeboot-s3.bin",
     "E22_1268_S3-DevKitC-1-N16R8.bin": "safeboot-s3.bin",
     "ttgo_tbeam.bin": "safeboot.bin",
@@ -73,6 +78,8 @@ def get_target_hardware(asset):
     "ttgo_tbeam_SX1268.bin" : "safeboot.bin",
     "ttgo_tbeam_supreme_l76k.bin" : "safeboot-s3.bin",
     "ttgo-lora32-v21.bin" : "safeboot.bin",
+    "t_deck.bin" : "safeboot-s3.bin",
+    "t_deck_plus.bin" : "safeboot-s3.bin",
     }
 
 
@@ -127,5 +134,3 @@ if __name__ == "__main__":
                 download_asset(release['assets'],target_safeboot,target_asset_path + "safeboot.bin")
                 download_asset(release['assets'],"partitions.bin",target_asset_path + "partitions.bin")
                 download_asset(release['assets'],"otadata.bin",target_asset_path + "otadata.bin")
-
-                                    
