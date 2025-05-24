@@ -42,10 +42,10 @@ def get_target_hardware(asset):
     "ttgo_tbeam_SX1268.bin" : "tbeamSX1268",
     "ttgo_tbeam_supreme_l76k.bin" : "tbeamSupreme",
     "ttgo-lora32-v21.bin" : "tlora",
-    "wiscore_rak4631.uf2" : "rak4631_uf2",
-    "wiscore_rak4631.zip" : "rak4631_zip",
     "t_deck.bin" : "tdeck",
     "t_deck_plus.bin" : "tdeck_plus",
+    "wiscore_rak4631.uf2" : "rak4631_uf2",
+    "wiscore_rak4631.zip" : "rak4631_zip",
     }
 
     bootloader_dict = {
@@ -71,8 +71,8 @@ def get_target_hardware(asset):
     "heltec_wifi_lora_32_V2.bin": "safeboot.bin",
     "heltec_wifi_lora_32_V3.bin": "safeboot-s3.bin",
     "E22-DevKitC.bin": "safeboot.bin",
-    "E22_1262-DevKitC.bin": "safeboot.bin",
     "E22_XML-DevKitC.bin": "safeboot.bin",
+    "E22_1262-DevKitC.bin": "safeboot.bin",
     "E22_1262_S3-DevKitC-1-N16R8.bin": "safeboot-s3.bin",
     "E22_1268_S3-DevKitC-1-N16R8.bin": "safeboot-s3.bin",
     "ttgo_tbeam.bin": "safeboot.bin",
