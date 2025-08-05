@@ -15,7 +15,7 @@ wiscore_rak4631.bin
 tdeck.bin
 tdeck_plus.bin
 
-please use WEBFlasher https://esptools.oevsv.at for tdeck and tdeck_plus coming from old version (4.30q)
+please use WEBFlasher https://esptool.oevsv.at for tdeck and tdeck_plus coming from old version (4.30q)
 
 [MeshCom Changelog](https://icssw.org/meshcom-versionen/)
 
