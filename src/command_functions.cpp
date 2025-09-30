@@ -1826,7 +1826,7 @@ void commandAction(char *msg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"setpwd ") == 0)
     {
         // max. 63 char
-        msg_text[63]=0x00;
+        msg_text[63+9]=0x00;
 
         snprintf(meshcom_settings.node_pwd, sizeof(meshcom_settings.node_pwd), "%s", msg_text+9);
 
