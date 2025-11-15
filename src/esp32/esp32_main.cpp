@@ -55,6 +55,8 @@
 #include "esp32_functions.h"
 #include "tft_display_functions.h"
 
+#include "botCommands.h"
+
 #ifndef BOARD_TLORA_OLV216
     #include <lora_setchip.h>
 #endif
@@ -1297,6 +1299,10 @@ void esp32setup()
     Serial.println("CLIENT STARTED");
     Serial.println("==============");
 
+// Wifi watchdog DA6SRM: (later, do only if Wifi is even configured)
+    WifiWatchdogSetup();
+
+
     ///////////////////////////////////////////////////////
     // WIFI
     if(bGATEWAY || bEXTUDP || bWEBSERVER)
@@ -1450,25 +1456,12 @@ void esp32loop()
 
     if(bRadio)
     {
-        if(bLORADEBUG && receiveFlag)
-            Serial.println("receiveflag");
-
-        if(bLORADEBUG && transmittedFlag)
-            Serial.println("transmittedFlag");
-
         if(inoReceiveTimeOutTime > 0)
         {
             // Timeout RECEIVE_TIMEOUT
             if((inoReceiveTimeOutTime + (60 * 6 * 1000)) < millis())  // 6 Minuten
             {
                 inoReceiveTimeOutTime=0;
-
-                if(bLORADEBUG)
-                {
-                    Serial.print(getTimeString());
-                    Serial.println(" [LoRa]...Receive Timeout > 6.5 min. just for info");
-                }
-
             }
         }
 
@@ -1502,15 +1495,7 @@ void esp32loop()
                 radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
 
                 int state = radio.startReceive();
-                if (state == RADIOLIB_ERR_NONE)
-                {
-                    if(bLORADEBUG)
-                    {
-                        Serial.print(getTimeString());
-                        Serial.println(" [LoRa]...Receive Timeout, startReceive again with sucess");
-                    }
-                }
-                else
+                if (state != RADIOLIB_ERR_NONE)
                 {
                     if(bLORADEBUG)
                     {
@@ -1559,13 +1544,7 @@ void esp32loop()
 
                 transmittedFlag = false;
 
-                if (transmissionState == RADIOLIB_ERR_NONE)
-                {
-                    // packet was successfully sent
-                    if(bLORADEBUG)
-                        Serial.println(F("transmission finished!"));
-                }
-                else
+                if (transmissionState != RADIOLIB_ERR_NONE)
                 {
                     if(bLORADEBUG)
                     {
@@ -1825,6 +1804,7 @@ void esp32loop()
                     stopWebserver();
 
                 startWIFI();
+                ReportBadPing();
 
                 ifalseping = 5;
                 
@@ -2660,14 +2640,14 @@ int checkRX(bool bRadio)
             Serial.println(F(" Hz"));
         }
 
-        OnRxDone(payload, (uint16_t)ibytes, (int16_t)radio.getRSSI(), (int8_t)radio.getSNR());
+        OnRxDone(payload, (uint16_t)ibytes, radio.getRSSI(), radio.getSNR());
     }
     else
     if (state == RADIOLIB_ERR_CRC_MISMATCH)
     {
         // packet was received, but is malformed
-        if(bLORADEBUG)
-            Serial.println(F("[LoRa]...CRC error!"));
+        //if(bLORADEBUG)
+        //    Serial.println(F("[LoRa]...CRC error!"));
     }
     else
     {

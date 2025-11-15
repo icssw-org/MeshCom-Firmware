@@ -17,6 +17,7 @@
 #include "web_nodefunctioncalls.h"
 #include "web_commonServer.h"
 
+#include "botCommands.h"
 
 CommonWebServer web_server(80);
 CommonWebClient web_client;
@@ -820,6 +821,7 @@ void sub_page_mheard()
     {
         if (mheardCalls[iset][0] != 0x00)
         {
+            String callsign((char *)mheardCalls[iset]);
             if ((mheardEpoch[iset] + 60 * 60 * 3) > getUnixClock()) // 3h {
                 isShowing = true;
             decodeMHeard(mheardBuffer[iset], mheardLine);
@@ -830,7 +832,7 @@ void sub_page_mheard()
             web_client.printf("<div><span class=\"font-bold\">Hardware:</span><br><span>%s</span></div>", getHardwareLong(mheardLine.mh_hw).c_str());
             web_client.printf("<div><span class=\"font-bold\">Mod:</span><br><span>%01X/%01X</span></div>", (mheardLine.mh_mod >> 4), (mheardLine.mh_mod & 0x0f));
             web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span>%4idBm</span></div>", mheardLine.mh_rssi);
-            web_client.printf("<div><span class=\"font-bold\">SNR:</span><br><span>%4idB</span></div>", mheardLine.mh_snr);
+            web_client.printf("<div><span class=\"font-bold\">SNR:</span><br><span>%5.1lfdB/%i</span></div>", mheardLine.mh_snr, collectedSamples(callsign));
             web_client.printf("<div><span class=\"font-bold\">Dist:</span><br><span>%5.1lf</span></div>", mheardLine.mh_dist);
             web_client.printf("</div></div>");
         }

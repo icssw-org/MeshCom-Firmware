@@ -100,7 +100,7 @@ void decodeMHeard(unsigned char u_mh_buffer[sizeof(mheardBuffer[0])], struct mhe
                 case 4: mheardLine.mh_hw = strdec.toInt(); break;
                 case 5: mheardLine.mh_mod = strdec.toInt(); break;
                 case 6: mheardLine.mh_rssi = strdec.toInt(); break;
-                case 7: mheardLine.mh_snr = strdec.toInt(); break;
+                case 7: mheardLine.mh_snr = strdec.toFloat(); break;
                 case 8: mheardLine.mh_dist = strdec.toFloat(); break;
                 case 9: mheardLine.mh_path_len = strdec.toInt(); break;
                 case 10: mheardLine.mh_mesh = strdec.toInt(); break;
@@ -198,7 +198,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     int8_t mh_snr;
     */
     char cBuffer[60];
-    snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
+    snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%.1lf|%.1lf|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
      mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh); 
     memcpy(mheardBuffer[ipos], cBuffer, sizeof(cBuffer));
 
@@ -457,7 +457,7 @@ void showMHeard()
 
                 Serial.printf("%01X/%01i | ", (mheardLine.mh_mod>>4), (mheardLine.mh_mod & 0xf));
                 Serial.printf("%4i | ", mheardLine.mh_rssi);
-                Serial.printf("%4i |", mheardLine.mh_snr);
+                Serial.printf("%4.1lf |", mheardLine.mh_snr);
                 Serial.printf("%5.1lf |", mheardLine.mh_dist);
                 Serial.printf("%3i |", mheardLine.mh_path_len);
                 Serial.printf("%2i |\n", mheardLine.mh_mesh);

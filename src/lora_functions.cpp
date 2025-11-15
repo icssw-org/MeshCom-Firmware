@@ -1,5 +1,6 @@
 #include "Arduino.h"
 #include "configuration.h"
+#include "botCommands.h"
 
 #ifdef SX127X
     #include <RadioLib.h>
@@ -92,7 +93,7 @@ bool bNewLine = false;
 //////////////////////////////////////////////////////////////////////////
 // LoRa RX functions
 
-void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
+void OnRxDone(uint8_t *payload, uint16_t size, float rssi, float snr)
 {
     // only for Test T5_EPAPER
     //bDisplayInfo=true;
@@ -209,6 +210,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         // print which message type we got
         uint16_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
 
+        if(msg_type_b_lora>0) AvgSNR_Update(aprsmsg.msg_source_last, snr, rssi);
+
         size = aprsmsg.msg_len;
 
         int icheck = checkOwnTx(aprsmsg.msg_id);
@@ -258,8 +261,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 else
                     mheardLine.mh_mod = aprsmsg.msg_source_mod | 0xF0;  // set mod not from last
 
-                mheardLine.mh_rssi = rssi;
-                mheardLine.mh_snr = snr;
+                    // mod DA6SRM: use averaged values for what will be shown in the APP
+       //       mheardLine.mh_rssi = (int16_t)rssi;
+                mheardLine.mh_rssi = (int16_t)getAverageRSSI(aprsmsg.msg_source_last);
+      //        mheardLine.mh_snr = (int8_t)snr;
+                mheardLine.mh_snr = (double)getAverageSNR(aprsmsg.msg_source_last);
                 mheardLine.mh_date = getDateString();
                 mheardLine.mh_time = getTimeString();
                 mheardLine.mh_payload_type = aprsmsg.payload_type;
@@ -447,15 +453,19 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         if(msg_type_b_lora == 0x3A)    // text message store&forward
                         {
+                            // check if bot command:
+                            HandleBotCommands(aprsmsg.msg_payload, aprsmsg.msg_source_call, destination_call);
+
                             if(strcmp(destination_call, meshcom_settings.node_call) == 0)
                             {
+
                                 int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
                                 int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
                                 
                                 if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
                                 {
                                     //
-                                    // next sequence only to mark a massage to node_call with ACK
+                                    // next sequence only to mark a message to node_call with ACK
                                     //
                                     unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
                                     msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
@@ -789,7 +799,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     snprintf(csmeter, sizeof(csmeter), "%.0f", rssi*-1.0);
                                     aprsmsg.msg_payload.concat(csmeter);
                                     aprsmsg.msg_payload.concat(',');
-                                    snprintf(csmeter, sizeof(csmeter), "%i", snr);
+                                    snprintf(csmeter, sizeof(csmeter), "%i", (int)snr);
                                     aprsmsg.msg_payload.concat(csmeter);
                                     aprsmsg.msg_payload.concat(';');
                                 }
