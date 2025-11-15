@@ -1,6 +1,7 @@
 # MeshCom-TH
 special Thüringen edition of the latest MeshCom firmware
 v4.35g
+maintained by DA6SRM
 
 ## Features of Meshcom-TH:
 - several bot commands can be sent via Lora to the device
