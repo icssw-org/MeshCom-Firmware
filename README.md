@@ -1,9 +1,8 @@
 # MeshCom-TH
-
-## special Thüringen edition of the latest MeshCom firmware
+special Thüringen edition of the latest MeshCom firmware
 v4.35g
 
-# Features of Meshcom-TH:
+## Features of Meshcom-TH:
 - several bot commands can be sent via Lora to the device
 - increased Hops count (+1)
 - Watchdog for WiFi. If it fails to reconnect for several minutes, the device will reboot
@@ -24,7 +23,7 @@ the bot currently support the following commands:
 - !rebootnow    Accepted via DM only. Will reboot the node. Useful for debugging purposes or when WiFi is stuck, etc...
 - more to follow. Post wishes in Bug Report for this GitHub
 
--- END MeshCom-TH --
+##-- END MeshCom-TH --
 
 original README from Meshcom:
 # MeshCom
