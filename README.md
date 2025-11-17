@@ -24,7 +24,7 @@ the bot currently support the following commands:
 - !rebootnow    Accepted via DM only. Will reboot the node. Useful for debugging purposes or when WiFi is stuck, etc...
 - more to follow. Post wishes in Bug Report for this GitHub
 
-##-- END MeshCom-TH --
+# -- END MeshCom-TH-README --
 
 original README from Meshcom:
 # MeshCom
