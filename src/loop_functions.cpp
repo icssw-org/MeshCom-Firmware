@@ -3428,22 +3428,23 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
 
     if(distance_per_sec > 1.1)  // seit letzter position
     {
-        if(distance_per_sec < 4.0)  // fuss
-            gps_send_rate = 35; // seconds intervall
+        // schnellere Positionsauslösung bei Bewegung (APRS & Mesh)
+        if(distance_per_sec < 4.0)          // Fuß > 1.1 m/s
+            gps_send_rate = 25;             // ~25 s
         else
-        if(distance_per_sec < 14.0)  // rad < 40 km/h
-            gps_send_rate = 35;
+        if(distance_per_sec < 14.0)         // Fahrrad < 50 km/h
+            gps_send_rate = 20;
         else
-        if(distance_per_sec < 22.0) // auto stadt
-            gps_send_rate = 45;
+        if(distance_per_sec < 22.0)         // Auto Stadtverkehr
+            gps_send_rate = 18;
         else
-        if(distance_per_sec < 36.0) // auto land
-            gps_send_rate = 55;
+        if(distance_per_sec < 36.0)         // Landstraße
+            gps_send_rate = 16;
         else
-            gps_send_rate = 65; // auto autobahn
+            gps_send_rate = 15;             // Autobahn / sehr schnell
 
         if(bGPSDEBUG)
-            Serial.printf("%s [POSINFO]... dist/s:%.lf rate:%i\n", getTimeString().c_str(), distance_per_sec, (int)gps_send_rate);
+            Serial.printf("%s [POSINFO]... dist/s:%.1lf -> fast rate:%i\n", getTimeString().c_str(), distance_per_sec, (int)gps_send_rate);
     }
     else
     {
