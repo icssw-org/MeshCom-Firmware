@@ -18,6 +18,7 @@
 #include "lv_obj_functions_extern.h"
 #include "tdeck_helpers.h"
 #include <loop_functions_extern.h>
+#include <math.h>
 
 #include "event_functions.h"
 #include <lora_setchip.h>
@@ -87,6 +88,106 @@ lv_obj_t    *gpson_sw;
 lv_obj_t    *track_sw;
 lv_obj_t    *wifiap_sw;
 lv_obj_t    *mute_sw;
+lv_obj_t    *tab_menu_header;
+lv_obj_t    *tab_menu_button;
+lv_obj_t    *tab_menu_icon_label;
+lv_obj_t    *header_time_label;
+lv_obj_t    *header_sat_icon;
+lv_obj_t    *header_sat_label;
+lv_obj_t    *header_batt_icon;
+lv_obj_t    *header_batt_label;
+lv_obj_t    *header_locator_label;
+
+static bool tab_menu_visible = false;
+
+static void tab_menu_button_event_cb(lv_event_t * e);
+static void tdeck_set_tab_menu_visible(bool show);
+static void update_header_sat_indicator(void);
+static void update_header_batt_indicator(float batt, int proz);
+static void update_header_locator_label(void);
+static bool compute_locator_from_settings(char *buffer, size_t len);
+static bool compute_maidenhead_locator(double lat, double lon, char *buffer, size_t len);
+static int clamp_int(int value, int min_val, int max_val);
+static void apply_tab_bar_styles(void);
+static const char DEFAULT_LOCATOR_TEXT[] = "JJ00AAAA";
+static void update_header_locator_label(void);
+static bool compute_locator_from_settings(char *buffer, size_t len);
+static bool compute_maidenhead_locator(double lat, double lon, char *buffer, size_t len);
+
+static lv_obj_t *get_tab_bar()
+{
+    if(tv == NULL)
+        return NULL;
+
+    return lv_tabview_get_tab_btns(tv);
+}
+
+static void update_tab_button_state(bool show)
+{
+    if(tab_menu_button != NULL)
+    {
+        if(show)
+            lv_obj_add_state(tab_menu_button, LV_STATE_CHECKED);
+        else
+            lv_obj_clear_state(tab_menu_button, LV_STATE_CHECKED);
+    }
+
+    if(tab_menu_icon_label != NULL)
+    {
+        lv_color_t color = show ? lv_palette_main(LV_PALETTE_RED)
+                                : lv_palette_main(LV_PALETTE_LIGHT_GREEN);
+        lv_obj_set_style_text_color(tab_menu_icon_label, color, LV_PART_MAIN);
+    }
+}
+
+static void tdeck_set_tab_menu_visible(bool show)
+{
+    lv_obj_t *tab_bar = get_tab_bar();
+
+    if(tab_bar == NULL)
+        return;
+
+    if(show)
+    {
+        lv_obj_clear_flag(tab_bar, LV_OBJ_FLAG_HIDDEN);
+        tab_menu_visible = true;
+    }
+    else
+    {
+        lv_obj_add_flag(tab_bar, LV_OBJ_FLAG_HIDDEN);
+        tab_menu_visible = false;
+    }
+
+    update_tab_button_state(show);
+}
+
+void tdeck_hide_tab_menu(void)
+{
+    tdeck_set_tab_menu_visible(false);
+}
+
+void tdeck_show_tab_menu(void)
+{
+    tdeck_set_tab_menu_visible(true);
+}
+
+void tdeck_toggle_tab_menu(void)
+{
+    tdeck_set_tab_menu_visible(!tab_menu_visible);
+}
+
+bool tdeck_tab_menu_is_visible(void)
+{
+    return tab_menu_visible;
+}
+
+static void tab_menu_button_event_cb(lv_event_t * e)
+{
+    if(lv_event_get_code(e) == LV_EVENT_CLICKED)
+    {
+        tdeck_toggle_tab_menu();
+    }
+}
 
 //////////////////////////////////////////////
 // MAP variables
@@ -138,27 +239,91 @@ void setDisplayLayout(lv_obj_t *parent)
     //lv_style_set_bg_img_src(&bg_style, &image);
     lv_style_set_bg_opa(&bg_style, LV_OPA_100);
 
-    tv = lv_tabview_create(parent, LV_DIR_TOP, 50);
+    const lv_coord_t screen_w = lv_disp_get_hor_res(NULL);
+    const lv_coord_t screen_h = lv_disp_get_ver_res(NULL);
+    const lv_coord_t header_height = 32;
+
+    tab_menu_header = lv_obj_create(parent);
+    lv_obj_set_size(tab_menu_header, screen_w, header_height);
+    lv_obj_set_style_bg_color(tab_menu_header, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(tab_menu_header, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(tab_menu_header, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(tab_menu_header, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(tab_menu_header, 4, LV_PART_MAIN);
+    lv_obj_clear_flag(tab_menu_header, LV_OBJ_FLAG_SCROLLABLE);
+
+    tab_menu_button = lv_btn_create(tab_menu_header);
+    lv_obj_set_size(tab_menu_button, 40, header_height - 8);
+    lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_add_event_cb(tab_menu_button, tab_menu_button_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_color_t header_blue = lv_palette_main(LV_PALETTE_BLUE);
+    lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_set_style_border_width(tab_menu_button, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(tab_menu_button, 4, LV_PART_MAIN);
+
+    tab_menu_icon_label = lv_label_create(tab_menu_button);
+    lv_label_set_text(tab_menu_icon_label, LV_SYMBOL_LIST);
+    lv_obj_set_style_text_color(tab_menu_icon_label, lv_palette_main(LV_PALETTE_LIGHT_GREEN), LV_PART_MAIN);
+    lv_obj_center(tab_menu_icon_label);
+
+    header_time_label = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_time_label, "--:--");
+    lv_label_set_long_mode(header_time_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(header_time_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_align(header_time_label, LV_ALIGN_LEFT_MID, 48, 0);
+
+    header_sat_label = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_sat_label, "0");
+    lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(header_sat_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_align(header_sat_label, LV_ALIGN_RIGHT_MID, 0, 0);
+
+    header_sat_icon = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_sat_icon, LV_SYMBOL_GPS); // Symbol stammt von WpZoom (CC BY-SA 3.0, siehe README)
+    lv_obj_align_to(header_sat_icon, header_sat_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
+
+    header_batt_label = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_batt_label, "0%");
+    lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(header_batt_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_align_to(header_batt_label, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -20, 0);
+
+    header_batt_icon = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_batt_icon, LV_SYMBOL_BATTERY_EMPTY);
+    lv_obj_align_to(header_batt_icon, header_batt_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
+
+    header_locator_label = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_locator_label, "JJ00AAAA");
+    lv_label_set_long_mode(header_locator_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(header_locator_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_align(header_locator_label, LV_ALIGN_CENTER, 0, 0);
+
+    update_header_batt_indicator(global_batt > 0.0f ? global_batt / 1000.0f : 0.0f, global_proz);
+    update_header_sat_indicator();
+    update_header_locator_label();
+
+    tv = lv_tabview_create(parent, LV_DIR_TOP, 42);
+    lv_obj_set_size(tv, screen_w, LV_MAX(0, screen_h - header_height));
+    lv_obj_set_pos(tv, 0, header_height);
     lv_obj_add_style(tv, &bg_style, LV_PART_MAIN);
     lv_obj_add_event_cb(tv, tv_event_cb, LV_EVENT_ALL, NULL);
 
-    // Disable swipe-based tab changes so switching only happens via the menu buttons
     lv_obj_t *tab_content = lv_tabview_get_content(tv);
     if(tab_content != NULL)
     {
         lv_obj_set_scroll_dir(tab_content, LV_DIR_NONE);
     }
 
-    lv_obj_t *t2 = lv_tabview_add_tab(tv, "MSG");
+    lv_obj_t *t2 = lv_tabview_add_tab(tv, LV_SYMBOL_ENVELOPE);
     lv_obj_t *t5 = lv_tabview_add_tab(tv, "SND");
     lv_obj_t *t3 = lv_tabview_add_tab(tv, "POS");
     lv_obj_t *t7 = lv_tabview_add_tab(tv, "MAP");
     lv_obj_t *t6 = lv_tabview_add_tab(tv, "GPS");
     lv_obj_t *t4 = lv_tabview_add_tab(tv, "MHD");
     lv_obj_t *t8 = lv_tabview_add_tab(tv, "PATH");
-    lv_obj_t *t1 = lv_tabview_add_tab(tv, "SET");
+    lv_obj_t *t1 = lv_tabview_add_tab(tv, LV_SYMBOL_SETTINGS);
 
-    // prevent horizontal scrolling inside each tab page
     lv_obj_set_scroll_dir(t2, LV_DIR_VER);
     lv_obj_set_scroll_dir(t5, LV_DIR_VER);
     lv_obj_set_scroll_dir(t3, LV_DIR_VER);
@@ -169,6 +334,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_scroll_dir(t1, LV_DIR_VER);
 
     lv_obj_add_event_cb(tv, tabview_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    tdeck_hide_tab_menu();
+    apply_tab_bar_styles();
 
     static lv_style_t ta_style;
     lv_style_init(&ta_style);
@@ -1332,13 +1499,195 @@ void tft_off()
 }
 
 
+static void update_header_sat_indicator(void)
+{
+    if(header_sat_label == NULL || header_sat_icon == NULL)
+        return;
+
+    char sat_text[8];
+    snprintf(sat_text, sizeof(sat_text), "%u", (unsigned int)posinfo_satcount);
+    lv_label_set_text(header_sat_label, sat_text);
+
+    lv_color_t icon_color = posinfo_fix ? lv_palette_main(LV_PALETTE_GREEN)
+                                        : lv_palette_main(LV_PALETTE_RED);
+    lv_obj_set_style_text_color(header_sat_icon, icon_color, LV_PART_MAIN);
+}
+
+static void update_header_batt_indicator(float batt, int proz)
+{
+    if(header_batt_label == NULL || header_batt_icon == NULL)
+        return;
+
+    const float usb_voltage_threshold = 4.2f;
+    const bool usb_powered = (batt > usb_voltage_threshold);
+
+    if(usb_powered)
+    {
+        lv_label_set_text(header_batt_label, "USB");
+        lv_label_set_text(header_batt_icon, LV_SYMBOL_USB);
+        lv_obj_set_style_text_color(header_batt_icon, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_MAIN);
+        return;
+    }
+
+    int clamped_proz = clamp_int(proz, 0, 100);
+    char percent_text[8];
+    snprintf(percent_text, sizeof(percent_text), "%d%%", clamped_proz);
+    lv_label_set_text(header_batt_label, percent_text);
+
+    const char *icon = LV_SYMBOL_BATTERY_EMPTY;
+    lv_color_t icon_color = lv_palette_main(LV_PALETTE_LIGHT_GREEN);
+
+    if(clamped_proz >= 80)
+    {
+        icon = LV_SYMBOL_BATTERY_FULL;
+    }
+    else if(clamped_proz >= 60)
+    {
+        icon = LV_SYMBOL_BATTERY_3;
+    }
+    else if(clamped_proz >= 40)
+    {
+        icon = LV_SYMBOL_BATTERY_2;
+    }
+    else if(clamped_proz >= 20)
+    {
+        icon = LV_SYMBOL_BATTERY_1;
+    }
+
+    lv_label_set_text(header_batt_icon, icon);
+    lv_obj_set_style_text_color(header_batt_icon, icon_color, LV_PART_MAIN);
+}
+
+static void apply_tab_bar_styles(void)
+{
+    lv_obj_t *tab_bar = get_tab_bar();
+    if(tab_bar == NULL)
+        return;
+
+    lv_obj_set_style_text_color(tab_bar, lv_palette_main(LV_PALETTE_LIGHT_GREEN), LV_PART_ITEMS);
+    lv_obj_set_style_text_color(tab_bar, lv_palette_main(LV_PALETTE_RED), LV_PART_ITEMS | LV_STATE_CHECKED);
+
+    lv_obj_set_style_bg_color(tab_bar, lv_color_black(), LV_PART_ITEMS | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_opa(tab_bar, LV_OPA_80, LV_PART_ITEMS | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(tab_bar, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_ITEMS);
+    lv_obj_set_style_bg_opa(tab_bar, LV_OPA_60, LV_PART_ITEMS);
+
+    lv_obj_set_style_border_width(tab_bar, 0, LV_PART_ITEMS);
+    lv_obj_set_style_pad_all(tab_bar, 4, LV_PART_ITEMS);
+}
+
+static void update_header_locator_label(void)
+{
+    if(header_locator_label == NULL)
+        return;
+
+    char locator[9];
+    if(compute_locator_from_settings(locator, sizeof(locator)))
+    {
+        lv_label_set_text(header_locator_label, locator);
+    }
+    else
+    {
+        lv_label_set_text(header_locator_label, DEFAULT_LOCATOR_TEXT);
+    }
+}
+
+static bool compute_locator_from_settings(char *buffer, size_t len)
+{
+    if(buffer == NULL || len < 9)
+        return false;
+
+    bool lat_valid = (meshcom_settings.node_lat_c == 'N' || meshcom_settings.node_lat_c == 'S');
+    bool lon_valid = (meshcom_settings.node_lon_c == 'E' || meshcom_settings.node_lon_c == 'W');
+
+    if(!lat_valid || !lon_valid)
+        return false;
+
+    double lat = meshcom_settings.node_lat;
+    double lon = meshcom_settings.node_lon;
+
+    if(meshcom_settings.node_lat_c == 'S')
+        lat *= -1.0;
+
+    if(meshcom_settings.node_lon_c == 'W')
+        lon *= -1.0;
+
+    if(lat == 0.0 && lon == 0.0)
+        return false;
+
+    return compute_maidenhead_locator(lat, lon, buffer, len);
+}
+
+static int clamp_int(int value, int min_val, int max_val)
+{
+    if(value < min_val)
+        return min_val;
+    if(value > max_val)
+        return max_val;
+    return value;
+}
+
+static bool compute_maidenhead_locator(double lat, double lon, char *buffer, size_t len)
+{
+    if(buffer == NULL || len < 9)
+        return false;
+
+    if(lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0)
+        return false;
+
+    double adj_lon = lon + 180.0;
+    double adj_lat = lat + 90.0;
+
+    if(adj_lon < 0.0 || adj_lon >= 360.0 || adj_lat < 0.0 || adj_lat >= 180.0)
+        return false;
+
+    int field_lon = (int)floor(adj_lon / 20.0);
+    int field_lat = (int)floor(adj_lat / 10.0);
+
+    double remainder_lon = adj_lon - (field_lon * 20.0);
+    double remainder_lat = adj_lat - (field_lat * 10.0);
+
+    int square_lon = (int)floor(remainder_lon / 2.0);
+    int square_lat = (int)floor(remainder_lat / 1.0);
+
+    remainder_lon -= square_lon * 2.0;
+    remainder_lat -= square_lat * 1.0;
+
+    const double subsquare_lon_span = 2.0 / 24.0;
+    const double subsquare_lat_span = 1.0 / 24.0;
+
+    int subsquare_lon = (int)floor(remainder_lon / subsquare_lon_span);
+    int subsquare_lat = (int)floor(remainder_lat / subsquare_lat_span);
+
+    remainder_lon -= subsquare_lon * subsquare_lon_span;
+    remainder_lat -= subsquare_lat * subsquare_lat_span;
+
+    const double extended_lon_span = subsquare_lon_span / 24.0;
+    const double extended_lat_span = subsquare_lat_span / 24.0;
+
+    int extended_lon = (int)floor(remainder_lon / extended_lon_span);
+    int extended_lat = (int)floor(remainder_lat / extended_lat_span);
+
+    buffer[0] = 'A' + clamp_int(field_lon, 0, 17);
+    buffer[1] = 'A' + clamp_int(field_lat, 0, 17);
+    buffer[2] = '0' + clamp_int(square_lon, 0, 9);
+    buffer[3] = '0' + clamp_int(square_lat, 0, 9);
+    buffer[4] = 'A' + clamp_int(subsquare_lon, 0, 23);
+    buffer[5] = 'A' + clamp_int(subsquare_lat, 0, 23);
+    buffer[6] = 'A' + clamp_int(extended_lon, 0, 23);
+    buffer[7] = 'A' + clamp_int(extended_lat, 0, 23);
+    buffer[8] = '\0';
+
+    return true;
+}
+
+
 /**
  * update the battery label
  */
 void tdeck_update_batt_label(float batt, int proz)
 {
     char vChar[35];
-
     if (posinfo_fix)
     {
         snprintf(vChar, sizeof(vChar), "Batt: %.2fV (%i%%) SAT:%i", batt, proz, posinfo_satcount);
@@ -1364,6 +1713,9 @@ void tdeck_update_batt_label(float batt, int proz)
     lv_label_set_text(btn_batt_label1, vChar);
     lv_label_set_text(btn_batt_label2, vChar);
     lv_label_set_text(btn_batt_label4, vChar);
+
+    update_header_batt_indicator(batt, proz);
+    update_header_sat_indicator();
 }
 
 /**
@@ -1384,6 +1736,19 @@ void tdeck_update_time_label()
     lv_label_set_text(btn_time_label1, cTime);
     lv_label_set_text(btn_time_label2, cTime);
     lv_label_set_text(btn_time_label4, cTime);
+
+    if(header_time_label != NULL)
+    {
+        char header_time[8];
+        snprintf(header_time, sizeof(header_time), "%02i:%02i",
+            meshcom_settings.node_date_hour,
+            meshcom_settings.node_date_minute);
+        lv_label_set_text(header_time_label, header_time);
+    }
+
+    update_header_locator_label();
+    update_header_batt_indicator(global_batt > 0.0f ? global_batt / 1000.0f : 0.0f, global_proz);
+    update_header_sat_indicator();
 }
 
 /**
