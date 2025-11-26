@@ -61,6 +61,10 @@ static void touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data);
 
 LV_IMG_DECLARE(mouse_cursor_icon); 
 
+static lv_obj_t *trackball_cursor_obj = NULL;
+static uint32_t trackball_cursor_visible_until_ms = 0;
+static const uint32_t TRACKBALL_CURSOR_SHOW_TIME_MS = 750;
+
 /**
  * initialization of T-Deck hardware
  */
@@ -351,10 +355,11 @@ void setupLvgl()
     //lv_indev_set_group(mouse_indev, lv_group_get_default());
     lv_indev_set_group(mouse_indev, lv_group_get_default());
 
-    lv_obj_t *cursor_obj;
-    cursor_obj = lv_img_create(lv_scr_act());         /*Create an image object for the cursor */
-    lv_img_set_src(cursor_obj, &mouse_cursor_icon);   /*Set the image source*/
-    lv_indev_set_cursor(mouse_indev, cursor_obj);           /*Connect the image  object to the driver*/
+    trackball_cursor_obj = lv_img_create(lv_scr_act());
+    lv_img_set_src(trackball_cursor_obj, &mouse_cursor_icon);
+    lv_obj_add_flag(trackball_cursor_obj, LV_OBJ_FLAG_HIDDEN);
+    trackball_cursor_visible_until_ms = 0;
+    lv_indev_set_cursor(mouse_indev, trackball_cursor_obj);
 
     if (kbDected)
     {
@@ -563,6 +568,7 @@ static void mouse_read(lv_indev_drv_t *indev, lv_indev_data_t *data)
     static  int16_t last_x;
     static int16_t last_y;
     bool left_button_down = false;
+    bool activity_detected = false;
     const uint8_t dir_pins[5] = {TDECK_TBOX_G02,
                                  TDECK_TBOX_G01,
                                  TDECK_TBOX_G04,
@@ -570,6 +576,14 @@ static void mouse_read(lv_indev_drv_t *indev, lv_indev_data_t *data)
                                  TDECK_BOOT_PIN
                                 };
     static bool last_dir[5];
+    static bool last_dir_initialized = false;
+
+    if(!last_dir_initialized)
+    {
+        for(int i = 0; i < 5; ++i)
+            last_dir[i] = digitalRead(dir_pins[i]);
+        last_dir_initialized = true;
+    }
 
     uint8_t pos = 10;
     for (int i = 0; i < 5; i++) {
@@ -584,31 +598,49 @@ static void mouse_read(lv_indev_drv_t *indev, lv_indev_data_t *data)
             case 0:
                 if (last_x < (lv_disp_get_hor_res(NULL) - mouse_cursor_icon.header.w)) {
                     last_x += pos;
+                    activity_detected = true;
                 }
                 break;
             case 1:
                 if (last_y > mouse_cursor_icon.header.h) {
                     last_y -= pos;
+                    activity_detected = true;
                 }
                 break;
             case 2:
                 if (last_x > mouse_cursor_icon.header.w) {
                     last_x -= pos;
+                    activity_detected = true;
                 }
                 break;
             case 3:
                 if (last_y < (lv_disp_get_ver_res(NULL) - mouse_cursor_icon.header.h)) {
                     last_y += pos;
+                    activity_detected = true;
                 }
                 break;
             case 4:
                 left_button_down = true;
+                activity_detected = true;
                 break;
             default:
                 break;
             }
         }
     }
+
+    const uint32_t now_ms = millis();
+    if(activity_detected)
+    {
+        trackball_cursor_visible_until_ms = now_ms + TRACKBALL_CURSOR_SHOW_TIME_MS;
+        if(trackball_cursor_obj != NULL)
+            lv_obj_clear_flag(trackball_cursor_obj, LV_OBJ_FLAG_HIDDEN);
+    }
+    else if(trackball_cursor_obj != NULL && now_ms > trackball_cursor_visible_until_ms)
+    {
+        lv_obj_add_flag(trackball_cursor_obj, LV_OBJ_FLAG_HIDDEN);
+    }
+
     // Serial.printf("indev:X:%04d  Y:%04d \n", last_x, last_y);
     /*Store the collected data*/
     data->point.x = last_x;

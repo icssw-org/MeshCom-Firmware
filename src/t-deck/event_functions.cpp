@@ -765,6 +765,8 @@ void tabview_event_cb(lv_event_t * e)
                 tdeck_refresh_SET_view();
                 break;
         }
+
+        tdeck_hide_tab_menu();
     }
 }
 
