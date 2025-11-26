@@ -1717,6 +1717,8 @@ void init_loop_function()
     posinfo_satcount = 0;
     posinfo_hdop = 0;
     posinfo_fix = false;
+
+    meshcom_settings.node_vbus = 0.0f;
 }
 
 // ANALOG
