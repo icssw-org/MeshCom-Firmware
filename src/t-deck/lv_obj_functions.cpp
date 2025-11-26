@@ -142,6 +142,13 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_style(tv, &bg_style, LV_PART_MAIN);
     lv_obj_add_event_cb(tv, tv_event_cb, LV_EVENT_ALL, NULL);
 
+    // Disable swipe-based tab changes so switching only happens via the menu buttons
+    lv_obj_t *tab_content = lv_tabview_get_content(tv);
+    if(tab_content != NULL)
+    {
+        lv_obj_set_scroll_dir(tab_content, LV_DIR_NONE);
+    }
+
     lv_obj_t *t2 = lv_tabview_add_tab(tv, "MSG");
     lv_obj_t *t5 = lv_tabview_add_tab(tv, "SND");
     lv_obj_t *t3 = lv_tabview_add_tab(tv, "POS");
@@ -150,6 +157,16 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t *t4 = lv_tabview_add_tab(tv, "MHD");
     lv_obj_t *t8 = lv_tabview_add_tab(tv, "PATH");
     lv_obj_t *t1 = lv_tabview_add_tab(tv, "SET");
+
+    // prevent horizontal scrolling inside each tab page
+    lv_obj_set_scroll_dir(t2, LV_DIR_VER);
+    lv_obj_set_scroll_dir(t5, LV_DIR_VER);
+    lv_obj_set_scroll_dir(t3, LV_DIR_VER);
+    lv_obj_set_scroll_dir(t7, LV_DIR_VER);
+    lv_obj_set_scroll_dir(t6, LV_DIR_VER);
+    lv_obj_set_scroll_dir(t4, LV_DIR_VER);
+    lv_obj_set_scroll_dir(t8, LV_DIR_VER);
+    lv_obj_set_scroll_dir(t1, LV_DIR_VER);
 
     lv_obj_add_event_cb(tv, tabview_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
