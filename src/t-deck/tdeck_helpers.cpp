@@ -14,6 +14,9 @@
 #include <Wire.h>
 #include "lv_obj_functions.h"
 #include <esp32/esp32_flash.h>
+#include <TFT_eSPI.h>
+
+extern TFT_eSPI tft;
 
 #define _BRIGHTNESS_DEBUG_ true
 
@@ -71,6 +74,10 @@ void setBrightness(uint8_t value)
     if (current_brightness_level == 0)
     {
         // display off - turn on first
+        tft.writecommand(TFT_SLPOUT);
+        tft.writecommand(TFT_DISPON);
+        delay(100);
+
         digitalWrite(TDECK_TFT_BACKLIGHT, 1);
         current_brightness_level = BRIGHTNESS_STEPS;
         delayMicroseconds(30);
