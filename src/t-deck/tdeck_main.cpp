@@ -3,9 +3,10 @@
  * @brief       general functions for T-Deck
  * @author      Ing. Jakob Gurnhofer (OE3GJC)
  * @author      Ing. Kurt Baumann (OE1KBC)
+ * @author      Ralph Weich (DD5RW)
  * @license     MIT
  * @copyright   Copyright (c) 2025 ICSSW.org
- * @date        2025-03-24
+ * @date        2025-12-03
  */
 #include <configuration.h>
 #include <debugconf.h>
@@ -70,6 +71,8 @@ static const uint32_t TRACKBALL_CURSOR_SHOW_TIME_MS = 750;
  */
 void initTDeck()
 {
+    setCpuFrequencyMhz(160);
+
     Serial.println("[INIT]...initTDeck");
 
     //! The board peripheral power control pin needs to be set to HIGH when using the peripheral
@@ -224,7 +227,7 @@ bool setupSD()
  */
 void addMessage(const char *str)
 {
-    lv_textarea_add_text(text_ta, str);
+    tdeck_add_system_message(str);
     uint32_t run = millis() + 200;
     while (millis() < run)
     {
@@ -476,9 +479,53 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
             if(act_key == 0x6d)
                 act_key = 0x2e;
         }
+        else if(iKeyBoardType == 4)
+        {
+            if(act_key >= 0x61 && act_key <= 0x7a)
+            {
+                // Index 0..25 corresponds to 'a'..'z'.
+                static const char sym_map[26] = {
+                    '*', // a  -> keyboard_symbol[0][3]
+                    '!', // b  -> keyboard_symbol[3][4]
+                    '9', // c  -> keyboard_symbol[2][5]
+                    '5', // d  -> keyboard_symbol[1][2]
+                    '2', // e  -> keyboard_symbol[1][0]
+                    '6', // f  -> keyboard_symbol[2][6]
+                    '/', // g  -> keyboard_symbol[2][1]
+                    ':', // h  -> keyboard_symbol[3][1]
+                    '-', // i  -> keyboard_symbol[4][2]
+                    ';', // j  -> keyboard_symbol[3][6]
+                    '\'',// k  -> keyboard_symbol[4][6] (apostrophe)
+                    '"',// l  -> keyboard_symbol[4][1]
+                    '.', // m  -> keyboard_symbol[4][5]
+                    ',', // n  -> keyboard_symbol[3][5]
+                    '+', // o  -> keyboard_symbol[4][0]
+                    '@', // p  -> keyboard_symbol[1][3]
+                    '#', // q  -> keyboard_symbol[0][0]
+                    '3', // r  -> keyboard_symbol[2][0]
+                    '4', // s  -> keyboard_symbol[1][1]
+                    '(', // t  -> keyboard_symbol[2][2]
+                    '_', // u  -> keyboard_symbol[3][0]
+                    '?', // v  -> keyboard_symbol[2][4]
+                    '1', // w  -> keyboard_symbol[0][1]
+                    '8', // x  -> keyboard_symbol[1][4]
+                    ')', // y  -> keyboard_symbol[3][2]
+                    '7'  // z  -> keyboard_symbol[1][5]
+                };
+
+                act_key = (uint32_t)sym_map[act_key - 0x61];
+            }
+            else
+            {
+                // keep dot/comma mapping too
+                if(act_key == 0x6d)
+                    act_key = 0x2e;
+                else if(act_key == 0x6e)
+                    act_key = 0x2c;
+            }
+        }
     
-        if(bDEBUG)
-            Serial.printf("Key pressed : iKeyBoardType:%i 0x%x\n", iKeyBoardType, act_key);
+        
 
         if(!meshcom_settings.node_keyboardlock)
             tft_on();
@@ -537,7 +584,11 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
 
             if ((act_key == 0x2e) && (!meshcom_settings.node_keyboardlock)) // SYM + M
             {
+                #if defined(ENABLE_AUDIO)
+                audio_set_mute(!meshcom_settings.node_mute);
+                #else
                 meshcom_settings.node_mute = !meshcom_settings.node_mute;
+                #endif
             }
         }
 
@@ -661,7 +712,11 @@ static void touchpad_read( lv_indev_drv_t *indev_driver, lv_indev_data_t *data )
         uint8_t touched = touch.getPoint(x, y, 1);
         if (!meshcom_settings.node_keyboardlock)
         {
-            tft_on();
+            if(current_brightness_level == 0)
+                tft_on();
+            else
+                tdeck_tft_timer = millis();
+
             if (touched > 0)
             {
                 data->state = LV_INDEV_STATE_PR;
@@ -697,6 +752,6 @@ void tdeck_addMessage(bool bSuccess)
  */
 void tdeck_clear_text_ta()
 {
-    lv_textarea_set_text(text_ta, "");
+    tdeck_reset_msg_tabs();
 }
 

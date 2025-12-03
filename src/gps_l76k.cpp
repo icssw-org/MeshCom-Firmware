@@ -83,8 +83,9 @@ bool l76kProbe()
     return result;
 }
 
-bool beginGPS()
-{
+static TaskHandle_t gpsInitTaskHandle = NULL;
+
+void gpsInitTask(void *parameter) {
     bool result = false;
 
     if(bGPSDEBUG)
@@ -94,39 +95,43 @@ bool beginGPS()
     for ( int i = 0; i < 3; ++i)
     {
         result = l76kProbe();
-        if (result)
+        if (result) break;
+    }
+
+    if (!result) {
+        if(bGPSDEBUG)
+            Serial.println("[L76K]...check 38400baud");
+
+        SerialGPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        for ( int i = 0; i < 3; ++i)
         {
-            return result;
+            result = l76kProbe();
+            if (result) break;
         }
     }
 
-    if(bGPSDEBUG)
-        Serial.println("[L76K]...check 38400baud");
+    if (!result) {
+        if(bGPSDEBUG)
+            Serial.println("[L76K]...check 115200baud");
 
-    SerialGPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-    for ( int i = 0; i < 3; ++i)
-    {
-        result = l76kProbe();
-        if (result)
+        SerialGPS.begin(115200, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        for ( int i = 0; i < 3; ++i)
         {
-            return result;
+            result = l76kProbe();
+            if (result) break;
         }
     }
+    
+    gpsInitTaskHandle = NULL;
+    vTaskDelete(NULL);
+}
 
-    if(bGPSDEBUG)
-        Serial.println("[L76K]...check 115200baud");
-
-    SerialGPS.begin(115200, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-    for ( int i = 0; i < 3; ++i)
-    {
-        result = l76kProbe();
-        if (result)
-        {
-            return result;
-        }
-    }
-
-    return result;
+bool beginGPS()
+{
+    if (gpsInitTaskHandle != NULL) return true;
+    
+    xTaskCreate(gpsInitTask, "GPSInit", 4096, NULL, 1, &gpsInitTaskHandle);
+    return true;
 }
 
 void stopL76KGPS()
@@ -140,6 +145,8 @@ void stopL76KGPS()
 
 unsigned int loopL76KGPS()
 {
+    if (gpsInitTaskHandle != NULL) return POSINFO_INTERVAL;
+
     if(bGPSDEBUG)
         Serial.println("[L76K]...loopL76KGPS start");
 

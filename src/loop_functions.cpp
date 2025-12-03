@@ -150,7 +150,7 @@ unsigned long previousWiFiMillis = 0;
 
 char cTimeSource[10];
 
-char cBLEName[50]={0};
+char cBLEName[60]={0};
 
 // SOFTSER global variables
 String strSOFTSER_BUF = "";

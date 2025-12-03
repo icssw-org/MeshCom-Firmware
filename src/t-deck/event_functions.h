@@ -23,6 +23,7 @@ void btn_event_handler_switch(lv_event_t * e);
 void btn_event_handler_dropdown_country(lv_event_t * e);
 void btn_event_handler_dropdown_mapselect(lv_event_t * e);
 void btn_event_handler_dropdown_modusselect(lv_event_t * e);
+void btn_event_handler_kbl_sync_sw(lv_event_t * e);
 void btn_event_handler_send(lv_event_t * e);
 void btn_event_handler_clear(lv_event_t * e);
 void btn_event_handler_up(lv_event_t * e);

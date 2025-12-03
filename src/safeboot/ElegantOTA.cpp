@@ -177,11 +177,11 @@ void ElegantOTAClass::begin(ELEGANTOTA_WEBSERVER *server, const char * username,
         // Gather FS Size
         if (mode == OTA_MODE_FILESYSTEM) {
           update_size = ((size_t)&_FS_end - (size_t)&_FS_start);
-          LittleFS.end();
+          SPIFFS.end();
         } else {
           FSInfo i;
-          LittleFS.begin();
-          LittleFS.info(i);
+          SPIFFS.begin();
+          SPIFFS.info(i);
           update_size = i.totalBytes - i.usedBytes;
         }
         // Start update process

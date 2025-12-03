@@ -2,7 +2,10 @@
 // (C) 2016, 2017, 2018, 2018, 2019, 2020 OE1KBC Kurt Baumann
 //
 // 20230326: Version 4.00: START
-
+/**
+ *  @author      Ralph Weich (DD5RW)
+ *  @date        2025-12-03
+ */
 extern bool bnextread;
 
 extern int ifalseping;
@@ -242,7 +245,7 @@ extern uint8_t mheardPathLen[MAX_MHPATH];
 
 extern char cTimeSource[10];
 
-extern char cBLEName[50];
+extern char cBLEName[60];
 
 // SOFTSER global variables
 extern String strSOFTSER_BUF;
