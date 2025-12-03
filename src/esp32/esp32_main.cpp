@@ -2629,6 +2629,7 @@ void esp32loop()
 
     if ((tdeck_tft_timer + (TDECK_TFT_TIMEOUT * 1000)) < millis())
     {
+        // Serial.printf("Loop: Timeout reached. Timer: %lu, Millis: %lu\n", tdeck_tft_timer, millis());
         tft_off();
     }
 

@@ -22,6 +22,7 @@ extern TFT_eSPI tft;
 
 uint8_t current_brightness_level = 0;
 uint8_t pre_sleep_brightness_level = BRIGHTNESS_STEPS;
+bool tft_is_sleeping = false;
 
 /**
  * cycles through brightness levels
@@ -44,6 +45,10 @@ void resetBrightness()
  */
 void setBrightness(uint8_t value)
 {
+    #ifdef _BRIGHTNESS_DEBUG_
+    Serial.printf("setBrightness: %d (current: %d)\n", value, current_brightness_level);
+    #endif
+
     if (current_brightness_level == value) {
         // just reset to same level - nothing to do
         return;
@@ -56,6 +61,9 @@ void setBrightness(uint8_t value)
 
     if (value == 0)
     {
+        #ifdef _BRIGHTNESS_DEBUG_
+        Serial.println("setBrightness: Turning OFF");
+        #endif
         // turn display off
         digitalWrite(TDECK_TFT_BACKLIGHT, 0);
         delay(3);
@@ -63,29 +71,51 @@ void setBrightness(uint8_t value)
         // Also turn off the TFT display itself to save power
         tft_off();
 
-        // Sync keyboard backlight if enabled
-        if(meshcom_settings.node_kbl_sync) {
-            setKeyboardBacklight(0);
-        }
+        // Sync keyboard backlight (always)
+        setKeyboardBacklight(0);
 
         return;
     }
 
     if (current_brightness_level == 0)
     {
+        #ifdef _BRIGHTNESS_DEBUG_
+        Serial.println("setBrightness: Waking up from 0");
+        #endif
+        
+        // Ensure other SPI devices are inactive to prevent bus conflict
+        digitalWrite(TDECK_SDCARD_CS, HIGH);
+        #ifdef LORA_CS
+        digitalWrite(LORA_CS, HIGH);
+        #endif
+        
+        delay(5); // Allow CS lines to settle
+
         // display off - turn on first
-        tft.writecommand(TFT_SLPOUT);
+        #ifdef _BRIGHTNESS_DEBUG_
+        Serial.println("setBrightness: Initializing TFT (Wakeup)");
+        #endif
+        
+        // Use full init to ensure display is correctly configured and woken up
+        tft.init();
+        tft.setRotation(1);
+        
+        // tft.init() already sends SLPOUT and DISPON, but we can ensure it
         tft.writecommand(TFT_DISPON);
-        delay(100);
+        delay(50);
 
         digitalWrite(TDECK_TFT_BACKLIGHT, 1);
         current_brightness_level = BRIGHTNESS_STEPS;
+        tft_is_sleeping = false;
         delayMicroseconds(30);
     }
     
-    // Sync keyboard backlight if enabled and not locked
-    if(meshcom_settings.node_kbl_sync && !meshcom_settings.node_keyboardlock) {
+    // Sync keyboard backlight if not locked
+    if(!meshcom_settings.node_keyboardlock) {
         uint8_t kbl_val = (value >= BRIGHTNESS_STEPS) ? 255 : (value * 16);
+        #ifdef _BRIGHTNESS_DEBUG_
+        Serial.printf("setBrightness: Syncing KBL to %d\n", kbl_val);
+        #endif
         setKeyboardBacklight(kbl_val); 
     }
 

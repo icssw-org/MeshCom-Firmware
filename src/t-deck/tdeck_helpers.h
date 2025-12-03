@@ -18,6 +18,7 @@
 
 extern uint8_t current_brightness_level;
 extern uint8_t pre_sleep_brightness_level;
+extern bool tft_is_sleeping; // Add this line
 
 void cycleBrightness();
 void resetBrightness();

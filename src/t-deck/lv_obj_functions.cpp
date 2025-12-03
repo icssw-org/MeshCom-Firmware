@@ -1653,16 +1653,14 @@ void set_map(int iMap)
  */
 void tft_on()
 {
-    tft.writecommand(TFT_SLPOUT);
-    tft.writecommand(TFT_DISPON);
-    
+    Serial.println("tft_on: Called");
     // Ensure we have a valid brightness to restore
     if(pre_sleep_brightness_level == 0) pre_sleep_brightness_level = BRIGHTNESS_STEPS;
 
     resetBrightness();
 
     // Force sync keyboard backlight
-    if(meshcom_settings.node_kbl_sync && !meshcom_settings.node_keyboardlock) {
+    if(!meshcom_settings.node_keyboardlock) {
         // Force ON like the button
         setKeyboardBacklight(255);
         
@@ -1674,6 +1672,7 @@ void tft_on()
     }
 
     tdeck_tft_timer = millis();
+    Serial.printf("tft_on: Timer updated to %lu\n", tdeck_tft_timer);
 }
 
 /**
@@ -1686,7 +1685,17 @@ void tft_off()
         // Only turn off if not already off to avoid recursion loop with setBrightness(0)
         if(current_brightness_level > 0) {
              setBrightness(0);
+             // setBrightness(0) calls tft_off() recursively, so we return here to let that call handle the rest
+             return;
         }
+        
+        // If we are here, current_brightness_level is 0.
+        // Check if we are already sleeping to avoid spamming the SPI bus
+        if (tft_is_sleeping) {
+            return;
+        }
+
+        Serial.println("tft_off: Sending Sleep Commands");
         setKeyboardBacklight(0);
 
         // Update state and UI to reflect that KBL is now OFF
@@ -1697,6 +1706,7 @@ void tft_off()
 
         tft.writecommand(TFT_DISPOFF);
         tft.writecommand(TFT_SLPIN);
+        tft_is_sleeping = true;
     }
 }
 
@@ -3217,8 +3227,9 @@ char ctrack[300];
 
 static void msg_focus_and_alert(bool bWithAudio)
 {
-    if(!meshcom_settings.node_keyboardlock)
-        tft_on();
+    Serial.println("msg_focus_and_alert: Called");
+    // Always wake up display on message, even if keyboard is locked
+    tft_on();
 
     // Only switch to MSG tab if it's an important message (with audio/alert)
     // This prevents System messages (bWithAudio=false) from hijacking the view
@@ -3229,15 +3240,22 @@ static void msg_focus_and_alert(bool bWithAudio)
         if(active != 1 && active != 7)
         {
             lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
+            
+            // Force a full screen redraw to ensure the display buffer is flushed to the hardware
+            lv_obj_invalidate(lv_scr_act());
+            // Force a task handler run to update the UI before playing audio
+            lv_task_handler();
         }
     }
 
     if(bWithAudio)
     {
+        Serial.println("msg_focus_and_alert: Playing audio...");
         if (!play_file_from_sd_blocking(meshcom_settings.node_audio_msg.c_str(), 12))
         {
             play_cw_start();
         }
+        Serial.println("msg_focus_and_alert: Audio finished.");
     }
 }
 
