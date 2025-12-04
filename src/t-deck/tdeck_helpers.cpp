@@ -18,7 +18,7 @@
 
 extern TFT_eSPI tft;
 
-#define _BRIGHTNESS_DEBUG_ true
+#define _BRIGHTNESS_DEBUG_ false
 
 uint8_t current_brightness_level = 0;
 uint8_t pre_sleep_brightness_level = BRIGHTNESS_STEPS;
