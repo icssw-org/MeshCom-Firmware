@@ -76,7 +76,7 @@ struct mheardLine
     uint8_t mh_hw;
     uint8_t mh_mod;
     int16_t mh_rssi;
-    int8_t mh_snr;
+    double mh_snr;
     double mh_dist;
     uint8_t mh_path_len;
     uint8_t mh_mesh;

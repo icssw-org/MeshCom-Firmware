@@ -1,3 +1,32 @@
+# MeshCom-TH
+special Thüringen edition of the latest MeshCom firmware
+v4.35g
+maintained by DA6SRM
+
+## Features of Meshcom-TH:
+- several bot commands can be sent via Lora to the device
+- increased Hops count (+1)
+- Watchdog for WiFi. If it fails to reconnect for several minutes, the device will reboot
+- SNR Averaging
+
+
+## SNR Averaging:
+For every station (up to a max of 30 stations) the last 40 SNR and RSSI values will be collected and averaged to form a slowly moving average, to represent an accurate RX strength for each received node. The App and Webserver will reflect those values in the Mheard pages, also they will show these values with increased accuracy (1 decimal place instead of 0)
+
+## Bot Commands:
+Bot commands will be executed when received either via HF only (group 9) or via a DM direct message. It depends on the command.
+the bot currently support the following commands:
+- !getsnr    Accepted via DM or group 9. will report the averaged SNR to the requester, if packets are directly received from him. Will post result per DM if command is received per DM. Will post result to group 9 if received via group 9.
+- !getsnr=CALLSIGN    Accepted via DM or group 9. Will report the SNR of the station CALLSIGN, if we received packets from him. Will post result to group 9.
+- !heard   Accepted via DM or group 9. Will post a list of received nodes to group 9.
+- !repeat=TEXT    Accepted via DM. will retransmit TEXT as if we are the origin, but preceeded by the original callsign. Useful to send commands to own node, or for debugging purposes.
+- !ping      Accepted via DM or Group 9. Will respond with "Pong!" followed by the uptime of our node.
+- !rebootnow    Accepted via DM only. Will reboot the node. Useful for debugging purposes or when WiFi is stuck, etc...
+- more to follow. Post wishes in Bug Report for this GitHub
+
+# -- END MeshCom-TH-README --
+
+original README from Meshcom:
 # MeshCom
 MeshCom is indeed an exciting project of the Institute of Citizen Science for Space & Wireless communication (www.icssw.org)  aimed at creating a resilient, text-based communication tool for amateur radio operators. It utilizes LORA™ modulation technology and the APRS protocol to establish a mesh network in the 70cm band. The main objectives of MeshCom are to realize a connected off-grid messaging system with low energy consumption and cost-effective hardware. The technical implementation is based on LORA™  radio modules, which can transmit messages, positions, measurements, and more over long distances with low transmit power. MeshCom modules can be connected to form a mesh network or establish a messaging network via MeshCom gateways, ideally connected through HAMNET.
 

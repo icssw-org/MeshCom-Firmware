@@ -63,6 +63,7 @@ String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char
 void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
 void SendAckMessage(String dest_call, unsigned int iAckId);
+void SendSNRMessage(String dest_call, bool requestPerGroup);
 void sendHey();
 void sendTelemetry(int ID);
 
