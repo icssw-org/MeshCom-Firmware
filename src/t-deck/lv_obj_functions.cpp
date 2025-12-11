@@ -23,6 +23,8 @@
 #include <cstring>
 #include <cctype>
 #include <vector>
+#include <SD.h>
+#include <SPI.h>
 
 #include "event_functions.h"
 #include <lora_setchip.h>
@@ -157,7 +159,7 @@ static const size_t MSG_TAB_MAX_MESSAGES = 50;
 static std::vector<std::pair<String, MsgBubble>> persisted_msgs;
 static bool loading_messages_from_file = false;
 static const size_t PERSISTED_MSG_LIMIT = 1000;
-static const char *PERSISTED_MSG_FILE = "/messages.jsonl";
+static const char *PERSISTED_MSG_FILE = "/messages.json";
 static int unsaved_msgs_count = 0;
 static const int FLUSH_THRESHOLD = 10;
 static unsigned long last_flush_millis = 0;
@@ -170,7 +172,6 @@ static void msg_flush_timer_cb(lv_timer_t *t);
 static lv_timer_t *msg_flush_timer = NULL;
 static lv_timer_t *track_clear_timer = NULL;
 
-static String escape_json(const String &s);
 static String unescape_json(const String &s);
 static void save_persisted_messages(void);
 static void load_persisted_messages(void);
@@ -2227,6 +2228,22 @@ static MsgTabEntry *msg_tabs_get_or_create_entry(const String &group, int *index
     return &msg_tab_entries.back();
 }
 
+static void log_message_to_sd(const String &group, const MsgBubble &bubble)
+{
+    String type = "incoming";
+    if(bubble.type == MsgBubbleType::Outgoing) type = "outgoing";
+    else if(bubble.type == MsgBubbleType::System) type = "system";
+
+    String line = "{";
+    line += "\"group\":\"" + escape_json(group) + "\",";
+    line += "\"type\":\"" + type + "\",";
+    line += "\"timestamp\":\"" + escape_json(bubble.timestamp) + "\",";
+    line += "\"header\":\"" + escape_json(bubble.header) + "\",";
+    line += "\"body\":\"" + escape_json(bubble.body) + "\"}";
+
+    log_json_to_sd("/messages.json", line);
+}
+
 static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
 {
     String normalized = group;
@@ -2240,12 +2257,47 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
     if(entry == NULL)
         return;
 
+    // Check if we can merge with the last bubble (System messages only)
+    if (bubble.type == MsgBubbleType::System && !entry->bubbles.empty())
+    {
+        MsgBubble &last = entry->bubbles.back();
+        if (last.type == MsgBubbleType::System)
+        {
+            // Merge bodies
+            last.body += "\n" + bubble.body;
+            
+            // Update UI if this tab is active and we are not loading from file
+            if (!loading_messages_from_file && index == msg_active_tab_index)
+            {
+                lv_obj_t *last_wrapper = lv_obj_get_child(msg_list, -1);
+                if(last_wrapper)
+                {
+                    lv_obj_t *bubble_obj = lv_obj_get_child(last_wrapper, 0);
+                    if(bubble_obj)
+                    {
+                        // Body label is at index 1 (0 is header_row)
+                        lv_obj_t *body_label = lv_obj_get_child(bubble_obj, 1);
+                        if(body_label)
+                        {
+                            lv_label_set_text(body_label, last.body.c_str());
+                            lv_obj_scroll_to_view(last_wrapper, LV_ANIM_ON);
+                        }
+                    }
+                }
+            }
+            return; // Done, merged
+        }
+    }
+
     entry->bubbles.push_back(bubble);
     msg_tabs_trim_history(entry->bubbles);
 
     /* Persist non-system messages into messages.jsonl */
     if(!loading_messages_from_file && bubble.type != MsgBubbleType::System)
     {
+        // Log to SD card immediately (append)
+        log_message_to_sd(normalized, bubble);
+
         persisted_msgs.push_back(std::make_pair(normalized, bubble));
         if(persisted_msgs.size() > PERSISTED_MSG_LIMIT)
         {
@@ -2275,9 +2327,20 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
     // or if we don't have any active tab yet.
     // This prevents System logs from pulling focus away from user conversations.
     // Also do NOT switch tabs if we are currently loading messages from file.
-    if (!loading_messages_from_file && (bubble.type != MsgBubbleType::System || msg_active_tab_index < 0))
+    if (!loading_messages_from_file)
     {
-        msg_tabs_select_index(index);
+        if (index == msg_active_tab_index)
+        {
+            // Already active, just append to view
+            msg_list_append_bubble(bubble);
+            lv_obj_t *last = lv_obj_get_child(msg_list, -1);
+            if(last != NULL)
+                lv_obj_scroll_to_view(last, LV_ANIM_ON);
+        }
+        else if (bubble.type != MsgBubbleType::System || msg_active_tab_index < 0)
+        {
+            msg_tabs_select_index(index);
+        }
     }
 }
 
@@ -2662,23 +2725,6 @@ static void msg_tabs_clear_all(void)
 
 // -- Persistence implementation -------------------------------------------------
 
-static String escape_json(const String &s)
-{
-    String out;
-    out.reserve(s.length() * 2 + 8);
-    for(size_t i = 0; i < s.length(); ++i)
-    {
-        char c = s[i];
-        if(c == '"') out += "\\\"";
-        else if(c == '\\') out += "\\\\";
-        else if(c == '\n') out += "\\n";
-        else if(c == '\r') out += "\\r";
-        else if(c == '\t') out += "\\t";
-        else out += c;
-    }
-    return out;
-}
-
 static String unescape_json(const String &s)
 {
     String out;
@@ -2726,19 +2772,34 @@ static void save_persisted_messages(void)
             Serial.println("[MSG] SPIFFS begin failed (save) — partition not found");
         }
     }
+    
     if(!spiffs_available)
         return;
 
-    const char *tmp = "/messages.jsonl.tmp";
-    File f = SPIFFS.open(tmp, FILE_WRITE);
-    if(!f)
+    const char *tmp = "/messages.json.tmp";
+    File f;
+    if(spiffs_available)
     {
-        Serial.println("[MSG] Failed to open temp messages file for writing");
-        return;
+        f = SPIFFS.open(tmp, FILE_WRITE);
+        if(!f)
+        {
+            Serial.println("[MSG] Failed to open temp messages file for writing");
+        }
+        else
+        {
+            f.println("[");
+        }
     }
+
+    if(!f)
+        return;
+
+    size_t count = 0;
+    size_t total = persisted_msgs.size();
 
     for(const auto &p : persisted_msgs)
     {
+        count++;
         const String &group = p.first;
         const MsgBubble &b = p.second;
         String type = "incoming";
@@ -2752,16 +2813,23 @@ static void save_persisted_messages(void)
         line += "\"header\":\"" + escape_json(b.header) + "\",";
         line += "\"body\":\"" + escape_json(b.body) + "\"}";
 
-        f.println(line);
+        if(count < total)
+            line += ",";
+
+        if(f) f.println(line);
     }
 
-    f.flush();
-    f.close();
+    if(f)
+    {
+        f.println("]");
+        f.flush();
+        f.close();
 
-    // rename tmp -> final
-    if(SPIFFS.exists(PERSISTED_MSG_FILE))
-        SPIFFS.remove(PERSISTED_MSG_FILE);
-    SPIFFS.rename(tmp, PERSISTED_MSG_FILE);
+        // rename tmp -> final
+        if(SPIFFS.exists(PERSISTED_MSG_FILE))
+            SPIFFS.remove(PERSISTED_MSG_FILE);
+        SPIFFS.rename(tmp, PERSISTED_MSG_FILE);
+    }
 
     // SPIFFS.end(); // Do not unmount
     // update flush timestamp and reset unsaved counter
@@ -2817,6 +2885,8 @@ static void load_persisted_messages(void)
         String line = f.readStringUntil('\n');
         line.trim();
         if(line.length() == 0) continue;
+        if(line == "[" || line == "]") continue;
+        if(line.endsWith(",")) line.remove(line.length()-1);
 
         // naive parse because we wrote a controlled JSON format
         auto extract = [&](const char *key)->String{
@@ -3124,6 +3194,16 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
 
     snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", dlat, lat_c, dlon, lon_c, alt);
     lv_table_set_cell_value(position_ta, 1, 2, buf);
+
+    // Log position to SD
+    String json = "{";
+    json += "\"call\":\"" + escape_json(callsign) + "\",";
+    json += "\"time\":\"" + escape_json(String(meshcom_settings.node_date_hour) + ":" + String(meshcom_settings.node_date_minute)) + "\",";
+    json += "\"lat\":" + String(dlat, 6) + ",";
+    json += "\"lon\":" + String(dlon, 6) + ",";
+    json += "\"alt\":" + String(alt);
+    json += "}";
+    log_json_to_sd("/positions.json", json);
 }
 
 /**
@@ -3306,7 +3386,13 @@ void tdeck_add_system_message(const char *text)
     bubble.timestamp = build_timestamp_string();
     bubble.body = String(text);
 
-    msg_tabs_add_message("SYSTEM", bubble);
+    String group = "SYSTEM";
+    if(msg_active_tab_index >= 0 && msg_active_tab_index < (int)msg_tab_entries.size())
+    {
+        group = msg_tab_entries[msg_active_tab_index].group;
+    }
+
+    msg_tabs_add_message(group, bubble);
     msg_focus_and_alert(false);
 }
 

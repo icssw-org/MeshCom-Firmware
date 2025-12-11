@@ -228,7 +228,7 @@ bool setupSD()
 void addMessage(const char *str)
 {
     tdeck_add_system_message(str);
-    uint32_t run = millis() + 200;
+    uint32_t run = millis() + 500;
     while (millis() < run)
     {
         lv_task_handler();

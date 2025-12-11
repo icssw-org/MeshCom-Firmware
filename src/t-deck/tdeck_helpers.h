@@ -25,4 +25,7 @@ void resetBrightness();
 void setBrightness(uint8_t);
 void setKeyboardBacklight(uint8_t value);
 
+void log_json_to_sd(const char* filename, const String& json_object_str);
+String escape_json(const String &s);
+
 #endif // _TDECK_HELPERS_H_

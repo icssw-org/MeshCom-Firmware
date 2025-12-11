@@ -577,6 +577,10 @@ void esp32setup()
     // Initialize T-Deck GUI
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         initTDeck();
+        if(bGPSON)
+            addMessage("GPS enabled");
+        else
+            addMessage("GPS disabled");
     #endif
 
     // Initialize T-Deck GUI
@@ -1328,7 +1332,22 @@ void esp32setup()
         if(!startWIFI())
         {
             Serial.println("[WIFI]...no connection");
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            addMessage("WiFi connection failed");
+            #endif
         }
+        else
+        {
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            addMessage("WiFi connected");
+            #endif
+        }
+    }
+    else
+    {
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        addMessage("WiFi deactivated");
+        #endif
     }
     //
     ///////////////////////////////////////////////////////

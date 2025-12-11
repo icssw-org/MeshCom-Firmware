@@ -15,6 +15,8 @@
 #include "lv_obj_functions.h"
 #include <esp32/esp32_flash.h>
 #include <TFT_eSPI.h>
+#include <SD.h>
+#include "tdeck_extern.h"
 
 extern TFT_eSPI tft;
 
@@ -142,4 +144,134 @@ void setKeyboardBacklight(uint8_t value)
     Wire.write(0x01);
     Wire.write(value);
     Wire.endTransmission();
+}
+
+/**
+ * Escapes a string for JSON
+ */
+String escape_json(const String &s)
+{
+    String out;
+    out.reserve(s.length() + 10);
+    for(unsigned int i = 0; i < s.length(); ++i)
+    {
+        char c = s[i];
+        if(c == '"') out += "\\\"";
+        else if(c == '\\') out += "\\\\";
+        else if(c == '\b') out += "\\b";
+        else if(c == '\f') out += "\\f";
+        else if(c == '\n') out += "\\n";
+        else if(c == '\r') out += "\\r";
+        else if(c == '\t') out += "\\t";
+        else if((unsigned char)c < 32)
+        {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)c);
+            out += buf;
+        }
+        else
+        {
+            out += c;
+        }
+    }
+    return out;
+}
+
+/**
+ * Appends a JSON object to a JSON array file on SD card
+ */
+void log_json_to_sd(const char* filename, const String& json_object_str)
+{
+    if(!bSDDected) return;
+
+    // Ensure file exists and has initial array structure
+    if(!SD.exists(filename))
+    {
+        File f = SD.open(filename, FILE_WRITE);
+        if(f) {
+            f.print("[\n]");
+            f.close();
+        } else {
+            return;
+        }
+    }
+
+    File f = SD.open(filename, "r+"); // Read/Update mode
+    if(!f) return;
+
+    // Find the closing ']'
+    size_t size = f.size();
+    if(size == 0) { 
+        f.close();
+        // Recreate if empty
+        f = SD.open(filename, FILE_WRITE);
+        if(f) { f.print("[\n]"); f.close(); }
+        return;
+    }
+
+    const int BUF_SIZE = 32;
+    uint8_t buf[BUF_SIZE];
+    long pos = size;
+    bool found_bracket = false;
+    long bracket_pos = -1;
+    
+    // Scan backwards for ']'
+    while(pos > 0 && !found_bracket)
+    {
+        int to_read = (pos > BUF_SIZE) ? BUF_SIZE : pos;
+        pos -= to_read;
+        f.seek(pos);
+        f.read(buf, to_read);
+        
+        for(int i = to_read - 1; i >= 0; i--)
+        {
+            if(buf[i] == ']')
+            {
+                bracket_pos = pos + i;
+                found_bracket = true;
+                break;
+            }
+            else if(!isspace(buf[i]))
+            {
+                // Found unexpected char, abort
+                f.close();
+                return;
+            }
+        }
+    }
+
+    if(found_bracket)
+    {
+        // Check if array is empty (scan back for '[')
+        bool is_empty = false;
+        long scan_pos = bracket_pos - 1;
+        bool found_start = false;
+        
+        while(scan_pos >= 0 && !found_start)
+        {
+            int to_read = (scan_pos >= BUF_SIZE) ? BUF_SIZE : (scan_pos + 1);
+            long read_start = scan_pos - to_read + 1;
+            f.seek(read_start);
+            f.read(buf, to_read);
+            
+            for(int i = to_read - 1; i >= 0; i--)
+            {
+                if(buf[i] == '[') { is_empty = true; found_start = true; break; }
+                if(!isspace(buf[i])) { is_empty = false; found_start = true; break; }
+            }
+            scan_pos -= to_read;
+        }
+
+        f.seek(bracket_pos);
+        
+        if(!is_empty)
+            f.print(",\n");
+        else
+            f.print("\n"); // Just newline if empty
+
+        f.print(json_object_str);
+        f.print("\n]");
+    }
+    
+    f.close();
 }

@@ -7,6 +7,7 @@
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions_extern.h>
+#include <t-deck/tdeck_helpers.h>
 #endif
 
 #if defined(BOARD_T_DECK_PRO)
@@ -230,6 +231,19 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     showMHeardTDECK();
+    
+    // Log MHeard to SD
+    String json = "{";
+    json += "\"call\":\"" + escape_json(mheardLine.mh_callsign) + "\",";
+    json += "\"date\":\"" + escape_json(mheardLine.mh_date) + "\",";
+    json += "\"time\":\"" + escape_json(mheardLine.mh_time) + "\",";
+    json += "\"hw\":" + String(mheardLine.mh_hw) + ",";
+    json += "\"mod\":" + String(mheardLine.mh_mod) + ",";
+    json += "\"rssi\":" + String(mheardLine.mh_rssi) + ",";
+    json += "\"snr\":" + String(mheardLine.mh_snr) + ",";
+    json += "\"dist\":" + String(mheardLine.mh_dist, 1);
+    json += "}";
+    log_json_to_sd("/mheard.json", json);
     #endif
 
     #if defined(BOARD_T_DECK_PRO)
