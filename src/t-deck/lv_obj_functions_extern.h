@@ -28,6 +28,8 @@ extern lv_obj_t    *setup_callsign;
 extern lv_obj_t    *setup_lat;
 extern lv_obj_t    *setup_lon;
 extern lv_obj_t    *setup_lat_c;
+
+unsigned long getLatestMessageTimestamp();
 extern lv_obj_t    *setup_lon_c;
 extern lv_obj_t    *setup_alt;
 extern lv_obj_t    *setup_aprsgroup;

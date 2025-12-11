@@ -4,6 +4,8 @@
 #include <ArduinoJson.h>
 #include <time_functions.h>
 #include <mheard_functions.h>
+#include <SD.h>
+#include <SPI.h>
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions_extern.h>
@@ -246,6 +248,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     log_json_to_sd("/mheard.json", json);
     #endif
 
+    saveMHeardPersistence();
+
     #if defined(BOARD_T_DECK_PRO)
     TDeck_pro_mheard_disp();
     #endif
@@ -361,6 +365,8 @@ void updateHeyPath(struct mheardLine &mheardLine)
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     showPathTDECK();
     #endif
+
+    savePathPersistence();
 }
 
 String getValue(String data, char separator, int index)
@@ -678,26 +684,89 @@ void showPathTDECK()
     {
         if(mheardPathCalls[iset][0] != 0x00)
         {
-            if((mheardPathEpoch[iset]+60*60*12) > getUnixClock())    // 12h
-            {
-                snprintf(buf, 11, "%s", mheardPathCalls[iset]);
-                lv_table_set_cell_value(path_ta, row, 0, buf);
-            
-                unsigned long lt = mheardPathEpoch[iset] + ((60 * 60 + 24) * (int)meshcom_settings.node_utcoff);
+            snprintf(buf, 11, "%s", mheardPathCalls[iset]);
+            lv_table_set_cell_value(path_ta, row, 0, buf);
+        
+            unsigned long lt = mheardPathEpoch[iset] + ((60 * 60 + 24) * (int)meshcom_settings.node_utcoff);
 
-                snprintf(buf, 20, "%s", convertUNIXtoString(lt).substring(11, 16).c_str());
-                lv_table_set_cell_value(path_ta, row, 1, buf);
+            snprintf(buf, 20, "%s", convertUNIXtoString(lt).substring(11, 16).c_str());
+            lv_table_set_cell_value(path_ta, row, 1, buf);
 
-                snprintf(buf, 40, "%01u%s/%s", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathBuffer1[iset]);
-                lv_table_set_cell_value(path_ta, row, 2, buf);
-            }
-            else
-            {
-                mheardPathCalls[iset][0] = 0x00;
-            }
+            snprintf(buf, 40, "%01u%s/%s", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathBuffer1[iset]);
+            lv_table_set_cell_value(path_ta, row, 2, buf);
 
             row++;
         }
     }
 }
 #endif
+
+void saveMHeardPersistence() {
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    if(SD.exists("/mheard.dat")) SD.remove("/mheard.dat");
+    File file = SD.open("/mheard.dat", FILE_WRITE);
+    if(!file) return;
+    file.write((uint8_t*)mheardCalls, sizeof(mheardCalls));
+    file.write((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
+    file.write((uint8_t*)mheardLat, sizeof(mheardLat));
+    file.write((uint8_t*)mheardLon, sizeof(mheardLon));
+    file.write((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
+    file.close();
+    #endif
+}
+
+void loadMHeardPersistence() {
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    if(!SD.exists("/mheard.dat")) return;
+    File file = SD.open("/mheard.dat", FILE_READ);
+    if(!file) return;
+    file.read((uint8_t*)mheardCalls, sizeof(mheardCalls));
+    file.read((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
+    file.read((uint8_t*)mheardLat, sizeof(mheardLat));
+    file.read((uint8_t*)mheardLon, sizeof(mheardLon));
+    file.read((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
+    file.close();
+    showMHeardTDECK();
+    #endif
+}
+
+void savePathPersistence() {
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    if(SD.exists("/mhpath.dat")) SD.remove("/mhpath.dat");
+    File file = SD.open("/mhpath.dat", FILE_WRITE);
+    if(!file) return;
+    file.write((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
+    file.write((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
+    file.write((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
+    file.write((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
+    file.close();
+    #endif
+}
+
+void loadPathPersistence() {
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    if(!SD.exists("/mhpath.dat")) return;
+    File file = SD.open("/mhpath.dat", FILE_READ);
+    if(!file) return;
+    file.read((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
+    file.read((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
+    file.read((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
+    file.read((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
+    file.close();
+    showPathTDECK();
+    #endif
+}
+
+unsigned long getLatestMHeardTimestamp()
+{
+    unsigned long max_ts = 0;
+    for(int i=0; i<MAX_MHEARD; i++)
+    {
+        if(mheardEpoch[i] > max_ts) max_ts = mheardEpoch[i];
+    }
+    for(int i=0; i<MAX_MHPATH; i++)
+    {
+        if(mheardPathEpoch[i] > max_ts) max_ts = mheardPathEpoch[i];
+    }
+    return max_ts;
+}

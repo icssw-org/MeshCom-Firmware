@@ -14,6 +14,8 @@
 #include "tdeck_extern.h"
 #include "tdeck_helpers.h"
 #include <esp32/esp32_flash.h>
+#include <mheard_functions.h>
+#include <time_functions.h>
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -151,6 +153,13 @@ void initTDeck()
     Serial.print("[INIT]...SDCard: ");
     Serial.println(bSDDected == true ? "OK" : "ERROR");
 
+    if(bSDDected)
+    {
+        loadMHeardPersistence();
+        loadPathPersistence();
+        loadTimePersistence();
+    }
+
     Serial.print("[INIT]...Keyboard: ");
     Serial.println(kbDected == true ? "OK" : "ERROR");
     
@@ -183,7 +192,7 @@ void initTDeck()
 
 void startAudio()
 {
-    if (!play_file_from_sd_blocking(meshcom_settings.node_audio_start.c_str(), 12))
+    if (!play_file_from_sd(meshcom_settings.node_audio_start.c_str(), 12))
     {
         play_cw_start();
     }
@@ -228,7 +237,7 @@ bool setupSD()
 void addMessage(const char *str)
 {
     tdeck_add_system_message(str);
-    uint32_t run = millis() + 500;
+    uint32_t run = millis() + 2000;
     while (millis() < run)
     {
         lv_task_handler();

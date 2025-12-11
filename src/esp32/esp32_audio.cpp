@@ -16,6 +16,7 @@
 #include <SD.h>
 #include <driver/i2s.h>
 #include <esp32/esp32_flash.h>
+#include <t-deck/tdeck_extern.h>
 
 #include <loop_functions_extern.h>
  
@@ -63,6 +64,12 @@ bool play_file_from_sd(const char *filename, int volume)
 
     if (xSemaphoreTake(audioSemaphore, 0) == pdTRUE)
     {
+        if(!bSDDected)
+        {
+            xSemaphoreGive(audioSemaphore);
+            return false;
+        }
+
         String strAudioWithType = filename;
         if(!strAudioWithType.startsWith("/"))
         {
@@ -83,14 +90,13 @@ bool play_file_from_sd(const char *filename, int volume)
                 Serial.printf("[audio]...playing %s in background\n", strAudioWithType.c_str());
             }
 
-            xTaskCreatePinnedToCore(
+            xTaskCreate(
                 play_function,
                 "audio play task",
-                4 * 1024,
+                16 * 1024,
                 NULL,
-                1,
-                NULL,
-                1
+                10,
+                NULL
             );
             return true;
         }
@@ -129,6 +135,8 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
         return true;
     }
     
+    if(!bSDDected) return false;
+
     String strAudioWithType = filename;
     if(!strAudioWithType.startsWith("/"))
     {

@@ -4,6 +4,14 @@
 #include <time.h>
 
 #include <time_functions.h>
+#include <Preferences.h>
+#include <loop_functions.h>
+#include <clock.h>
+#include <mheard_functions.h>
+
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#include <t-deck/lv_obj_functions_extern.h>
+#endif
 
 #define SECONDS_PER_MINUTE 60
 #define SECONDS_PER_HOUR   60 * SECONDS_PER_MINUTE
@@ -86,4 +94,39 @@ String convertUNIXtoString(uint32_t timestamp)
     String strDateTime=buffer;
 
     return strDateTime;
+}
+
+Preferences timePrefs;
+
+void saveTimePersistence() {
+    unsigned long current_time = getUnixClock();
+    if (current_time < 1000000000) return; // Ignore invalid times
+
+    timePrefs.begin("meshcom_time", false);
+    timePrefs.putULong("last_time", current_time);
+    timePrefs.end();
+}
+
+void loadTimePersistence() {
+    timePrefs.begin("meshcom_time", true);
+    unsigned long saved_time = timePrefs.getULong("last_time", 0);
+    timePrefs.end();
+
+    unsigned long mheard_time = 0;
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    mheard_time = getLatestMHeardTimestamp();
+    #endif
+
+    unsigned long msg_time = 0;
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    msg_time = getLatestMessageTimestamp();
+    #endif
+
+    unsigned long max_time = saved_time;
+    if(mheard_time > max_time) max_time = mheard_time;
+    if(msg_time > max_time) max_time = msg_time;
+
+    if(max_time > 1000000000) {
+        MyClock.SetClock((time_t)max_time, true);
+    }
 }
