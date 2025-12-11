@@ -1,5 +1,9 @@
 #include "Arduino.h"
 
+#if defined(ESP32)
+#include <WiFi.h>
+#endif
+
 #include "loop_functions.h"
 #include "command_functions.h"
 
@@ -33,7 +37,7 @@
 #include "tft_display_functions.h"
 #endif
 // TinyGPS
-extern TinyGPSPlus tinyGPSPLus;
+extern TinyGPSPlus tinyGPSPlus;
 
 bool bnextread=false;
 
@@ -1803,10 +1807,10 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     lat = conv_coord_to_dec(aprspos.lat);
     lon = conv_coord_to_dec(aprspos.lon);
 
-    d_dir_to = tinyGPSPLus.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
+    d_dir_to = tinyGPSPlus.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
     dir_to = d_dir_to;
 
-    dist_to = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
+    dist_to = tinyGPSPlus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
 
     sendDisplayMainline();
 
@@ -3360,7 +3364,7 @@ int GetHeadingDifference(int heading1, int heading2)
 
 unsigned int setSMartBeaconing(double dlat, double dlon)
 {
-    extern TinyGPSPlus tinyGPSPLus;
+    extern TinyGPSPlus tinyGPSPlus;
 
     unsigned int gps_send_rate = posinfo_last_rate;  // seconds
 
@@ -3373,7 +3377,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         posinfo_last_lon = dlon;
     }
 
-    double distance = tinyGPSPLus.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
+    double distance = tinyGPSPlus.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
 
     
     //posinfo_distance += distance;
@@ -3388,85 +3392,127 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     }
     else
     {
-        posinfo_direction = tinyGPSPLus.courseTo(posinfo_prev_lat, posinfo_prev_lon, dlat, dlon);    // Grad
+        posinfo_direction = tinyGPSPlus.courseTo(posinfo_prev_lat, posinfo_prev_lon, dlat, dlon);    // Grad
     }
 
-    // to little distance
-    if(distance < 55)
+    // Use GPS speed if available (more accurate than distance/interval)
+    double speed_mps = 0.0;
+    if(tinyGPSPlus.speed.isValid())
+        speed_mps = tinyGPSPlus.speed.mps();
+    else
+        speed_mps = distance / gps_refresh_intervall; // Fallback
+
+    // Stationary / Drift suppression
+    // If speed is very low (< 1.0 m/s), we assume stationary.
+    // We only send if distance is LARGE (> 100m) to handle drift or slow creep.
+    if (speed_mps < 1.0)
     {
-        posinfo_last_rate = 1800;
+        if(distance < 100)
+        {
+            posinfo_last_rate = 1800;
 
-        if(bGPSDEBUG)
-            Serial.printf("%s [POSINFO]... LITTLE (%.0lf m) --> DISTANCE RATE:%i\n", getTimeString().c_str(), distance, (int)posinfo_last_rate);
+            if(bGPSDEBUG)
+                Serial.printf("%s [POSINFO]... STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", getTimeString().c_str(), speed_mps, distance, (int)posinfo_last_rate);
 
-        return posinfo_last_rate;
+            return posinfo_last_rate;
+        }
     }
-
-    // TEST
-    /*
-    distance = 6.5;
-    posinfo_direction = 90.0;
-    */
-
-    double distance_per_sec = distance / gps_refresh_intervall; // m/s
 
     if(bGPSDEBUG)
-        Serial.printf("%s [POSINFO]... dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", getTimeString().c_str(), posinfo_direction, distance, distance_per_sec, gps_refresh_intervall);
+        Serial.printf("%s [POSINFO]... dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", getTimeString().c_str(), posinfo_direction, distance, speed_mps, gps_refresh_intervall);
 
-    // gps_refresh_intervall default 10
-    // get gps distance every 100 seconds
-    // gps_send_rate 30 minutes default
-    // bDisplayTrack = true Smartbeaconing used
+    // Moving Logic & Symbol Switching with Hysteresis
+    static unsigned long last_car_speed_ts = 0;
+    static unsigned long last_bike_speed_ts = 0;
 
-    // distanz in m pro gps_refresh_intervall (default 2) sekunden
-    // Bewegung                     m / rate
-    // zu fuss       1.1 m/s ca.   40
-    // fahrrad       4.0 m/s ca.  180
-    // auto stadt   14.0 m/s ca.  910
-    // auto land    22.0 m/s ca. 2090
-    // autobahn     36.0 m/s ca. 4500
-
-    if(distance_per_sec > 1.1)  // seit letzter position
+    // Update timestamps based on current speed
+    if (speed_mps > 7.0) // > 25 km/h -> Car range
     {
-        // schnellere Positionsauslösung bei Bewegung (APRS & Mesh)
-        if(distance_per_sec < 4.0)          // Fuß > 1.1 m/s
-            gps_send_rate = 25;             // ~25 s
-        else
-        if(distance_per_sec < 14.0)         // Fahrrad < 50 km/h
-            gps_send_rate = 20;
-        else
-        if(distance_per_sec < 22.0)         // Auto Stadtverkehr
-            gps_send_rate = 18;
-        else
-        if(distance_per_sec < 36.0)         // Landstraße
-            gps_send_rate = 16;
-        else
-            gps_send_rate = 15;             // Autobahn / sehr schnell
-
-        if(bGPSDEBUG)
-            Serial.printf("%s [POSINFO]... dist/s:%.1lf -> fast rate:%i\n", getTimeString().c_str(), distance_per_sec, (int)gps_send_rate);
+        last_car_speed_ts = millis();
+        last_bike_speed_ts = millis(); // Also implies bike speed threshold passed
     }
-    else
+    else if (speed_mps > 1.4) // > 5 km/h -> Bike range
     {
-        // 30 sec no new smartbeacon
-        if(gps_send_rate == 15)
-            gps_send_rate = 16;
-        else
-        if(gps_send_rate == 16)
-            gps_send_rate = 18;
-        else
-        if(gps_send_rate == 18)
-            gps_send_rate = 20;
-        else
-        if(gps_send_rate == 20)
-            gps_send_rate = 25;
-        else
+        last_bike_speed_ts = millis();
+    }
+
+    // Determine Symbol based on history (2 minutes hysteresis)
+    char target_symbol = 0;
+    if (meshcom_settings.node_symid == '/') // Only auto-switch if using primary table
+    {
+        // Check if we are currently using one of the auto-switchable symbols
+        if (meshcom_settings.node_symcd == '[' || meshcom_settings.node_symcd == 'b' || meshcom_settings.node_symcd == '>')
         {
-            if(meshcom_settings.node_postime > 0)
-                gps_send_rate = meshcom_settings.node_postime;
+            if ((millis() - last_car_speed_ts) < 120000) // Car speed seen in last 2 mins
+            {
+                target_symbol = '>';
+            }
+            else if ((millis() - last_bike_speed_ts) < 120000) // Bike speed seen in last 2 mins
+            {
+                target_symbol = 'b';
+            }
             else
-                gps_send_rate = POSINFO_INTERVAL;
+            {
+                target_symbol = '['; // Runner/Hiker default
+            }
+
+            if (target_symbol != 0 && meshcom_settings.node_symcd != target_symbol)
+            {
+                meshcom_settings.node_symcd = target_symbol;
+                if(bGPSDEBUG) Serial.printf("Auto-Symbol switch to '%c'\n", target_symbol);
+            }
         }
+    }
+
+    // WiFi Stationary Check
+    // If connected to WiFi AND speed is low, we assume we are indoors/stationary to prevent GPS drift
+    // But if moving (e.g. in car with hotspot), we still want updates.
+    #if defined(ESP32)
+    if(WiFi.status() == WL_CONNECTED && speed_mps < 1.0)
+    {
+        // Relax update rate significantly if on WiFi and not moving
+        gps_send_rate = 1800; // 30 minutes
+        
+        // Also suppress distance triggers unless very large (e.g. moving to another building)
+        if(distance < 200.0) 
+        {
+            if(bGPSDEBUG) Serial.println("[POSINFO]... WiFi connected & Stationary -> Suppressing drift (Rate: 1800s)");
+            return 1800;
+        }
+    }
+    #endif
+
+    // Set Update Rate based on current speed (immediate reaction for tracking accuracy)
+    if(speed_mps < 4.0)             // Walking / Slow cycling (< 14 km/h)
+    {
+        gps_send_rate = 20;         // 20s
+    }
+    else if(speed_mps < 14.0)       // Cycling / City (< 50 km/h)
+    {
+        gps_send_rate = 15;         // 15s
+    }
+    else if(speed_mps < 22.0)       // Fast driving (< 80 km/h)
+    {
+        gps_send_rate = 12;         // 12s
+    }
+    else                            // Highway (> 80 km/h)
+    {
+        gps_send_rate = 10;         // 10s
+    }
+
+    if(bGPSDEBUG)
+        Serial.printf("%s [POSINFO]... speed:%.1lf -> fast rate:%i\n", getTimeString().c_str(), speed_mps, (int)gps_send_rate);
+
+    // Distance Trigger: Force send if distance threshold exceeded
+    double dist_threshold = 500.0;
+    if (speed_mps < 4.0) dist_threshold = 50.0;      // Walking: 50m
+    else if (speed_mps < 22.0) dist_threshold = 200.0; // City/Cycling: 200m
+    
+    if (distance > dist_threshold)
+    {
+        posinfo_shot = true;
+        if(bGPSDEBUG)
+            Serial.printf("%s [POSINFO]... one-shot set - distance > %.0fm (%.1lf)\n", getTimeString().c_str(), dist_threshold, distance);
     }
 
     if(gps_send_rate < 200)  // seit letzter position
@@ -3477,12 +3523,19 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         {
             direction_diff=GetHeadingDifference((int)posinfo_last_direction, (int)posinfo_direction);
 
-            if(direction_diff > 15)
+            // Variable turn threshold based on speed (SmartCornering)
+            // Slow: Needs large turn (25°) to trigger (avoid wobble)
+            // Fast: Needs small turn (10°) to trigger (highway curves)
+            int turn_threshold = 25; 
+            if (speed_mps > 15.0) turn_threshold = 10;      // > 54 km/h
+            else if (speed_mps > 5.0) turn_threshold = 15;  // > 18 km/h
+
+            if(direction_diff > turn_threshold)
             {
                 posinfo_shot=true;
 
                 if(bGPSDEBUG)
-                    Serial.printf("%s [POSINFO]... one-shot set - direction_diff:%i last_lat:%.1lf last_lon:%.1lf\n", getTimeString().c_str(), direction_diff, posinfo_prev_lat, posinfo_prev_lon);
+                    Serial.printf("%s [POSINFO]... one-shot set - direction_diff:%i (thresh:%i) last_lat:%.1lf last_lon:%.1lf\n", getTimeString().c_str(), direction_diff, turn_threshold, posinfo_prev_lat, posinfo_prev_lon);
             }
         }
     }
