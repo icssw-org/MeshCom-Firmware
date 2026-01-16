@@ -30,7 +30,7 @@ void webSetup_setParam(setupStruct *setupData){
             memcpy(message_text, "--", 2);
 
         commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
-        setupData->returnCode = WS_RETURNCODE_OKAY;                                                                    // we can not check if that comamnd was valid (at the moment)
+        setupData->returnCode = WS_RETURNCODE_OKAY;                                                                    // we can not check if that command was valid (at the moment)
         setupData->returnValue = "";                                                                                   // send back empty string
         return;
     } else
@@ -38,7 +38,7 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("setcall")) {        
         snprintf(message_text, sizeof(message_text), "--setcall %s", setupData->paramValue.c_str());                   // set command string
         commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
-        setupData->returnCode = strcmp(meshcom_settings.node_call, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnCode = strcmp(meshcom_settings.node_call, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parameter was accepted, return with corresponding code
         setupData->returnValue = meshcom_settings.node_call;                                                           // send back the current used value
         return;
     } else
@@ -249,6 +249,22 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    if(setupData->paramName.equals("aslope")) {        
+        snprintf(message_text, sizeof(message_text), "--analog slope %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (fabs(meshcom_settings.node_analog_slope) == fabs(setupData->paramValue.toFloat()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_analog_slope);
+        return;
+    } else
+
+    if(setupData->paramName.equals("aoffset")) {        
+        snprintf(message_text, sizeof(message_text), "--analog offset %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (fabs(meshcom_settings.node_analog_offset) == fabs(setupData->paramValue.toFloat()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_analog_offset);
+        return;
+    } else
+
     if(setupData->paramName.equals("analogcheck")) {        
         snprintf(message_text, sizeof(message_text), "--analog check %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
@@ -289,15 +305,29 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
-    /*
     if(setupData->paramName.equals("ina226")) {        
-        snprintf(message_text, sizeof(message_text), "--226 %s", setupData->paramValue.c_str());
+        snprintf(message_text, sizeof(message_text), "--ina226 %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        setupData->returnCode = (bINA226ON == setupData->paramValue.compareTo("on")==0)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnCode = (bINA226ON == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = bINA226ON?"on":"off";
         return;
     } else
-     */
+
+    if(setupData->paramName.equals("aht20")) {        
+        snprintf(message_text, sizeof(message_text), "--aht20 %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bAHT20ON == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bAHT20ON?"on":"off";
+        return;
+    } else
+
+    if(setupData->paramName.equals("sht21")) {        
+        snprintf(message_text, sizeof(message_text), "--sht21 %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bSHT21ON == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bSHT21ON?"on":"off";
+        return;
+    } else
 
     if(setupData->paramName.equals("softser")) {        
         snprintf(message_text, sizeof(message_text), "--softser %s", setupData->paramValue.c_str());
@@ -482,7 +512,7 @@ void webSetup_setParam(setupStruct *setupData){
     /// ###################################### Indoor Temperature Offset ######################################
     if(setupData->paramName.equals("tempoffsetindoor")) {
         float offset = 0.0;
-        if(sscanf(setupData->paramValue.c_str(), "%f", &offset) == 1) {     //was there exactly ONE flaot value in this string?
+        if(sscanf(setupData->paramValue.c_str(), "%f", &offset) == 1) {     //was there exactly ONE float value in this string?
             meshcom_settings.node_tempi_off = offset;
             setupData->returnCode = WS_RETURNCODE_OKAY;
             setupData->returnValue = setupData->paramValue;
@@ -497,7 +527,7 @@ void webSetup_setParam(setupStruct *setupData){
     /// ###################################### Outdoor Temperature Offset ######################################
     if(setupData->paramName.equals("tempoffsetoutdoor")) {
         float offset = 0.0;
-        if(sscanf(setupData->paramValue.c_str(), "%f", &offset) == 1) {     //was there exactly ONE flaot value in this string?
+        if(sscanf(setupData->paramValue.c_str(), "%f", &offset) == 1) {     //was there exactly ONE float value in this string?
             meshcom_settings.node_tempo_off = offset;
             setupData->returnCode = WS_RETURNCODE_OKAY;
             setupData->returnValue = setupData->paramValue;
@@ -524,7 +554,7 @@ void webSetup_setParam(setupStruct *setupData){
 
 /**
  * ###########################################################################################################################
- * REturns a value for the requested parameter 
+ * Returns a value for the requested parameter 
  * It will return a code that correspondens to wether the parameter was known or not known
  * 
  * @param setupData a pointer to a struct that contains the parameter name and will contain the return code and return value
@@ -657,6 +687,16 @@ void webSetup_getParam(setupStruct *setupData){
         return;
     } else
 
+    if(setupData->paramName.equals("aslope")) {        
+        setupData->returnValue = String(meshcom_settings.node_analog_slope);
+        return;
+    } else
+
+    if(setupData->paramName.equals("aoffset")) {        
+        setupData->returnValue = String(meshcom_settings.node_analog_offset);
+        return;
+    } else
+
     if(setupData->paramName.equals("analogcheck")) {        
         setupData->returnValue = bAnalogCheck?"on":"off";
         return;
@@ -748,6 +788,16 @@ void webSetup_getParam(setupStruct *setupData){
         setupData->returnValue = bEXTUDP?"on":"off";
         return;
     }
+
+    if(setupData->paramName.equals("tempoffsetindoor")) {
+        setupData->returnValue = String(meshcom_settings.node_tempi_off);    
+        return;
+    } else
+
+    if(setupData->paramName.equals("tempoffsetindoor")) {
+        setupData->returnValue = String(meshcom_settings.node_tempo_off);    
+        return;
+    } else
 
     //if nothing matches the parameter name, we assume that we do not know the request, so we telling the caller.
     setupData->returnCode =  WS_RETURNCODE_UNKNOWN;

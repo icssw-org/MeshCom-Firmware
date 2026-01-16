@@ -115,11 +115,11 @@ void loop_ADCFunctions()
                 analog_show_timer = millis();
                 SampleCount = 0;
 
+                fAnalogValue = ADCexp2 / 1000.0;
+
                 commandAction((char*)"--analogset", isPhoneReady, true);  // BLE-Übertragung vom TYP = AN
             }
         }
-    
-        fAnalogValue = ADCexp2 / 1000.0;
     #endif
 }
 

@@ -17,6 +17,7 @@ unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 double mheardLat[MAX_MHEARD];
 double mheardLon[MAX_MHEARD];
+int mheardAlt[MAX_MHEARD];
 unsigned long mheardEpoch[MAX_MHEARD];
 
 unsigned char mheardPathBuffer1[MAX_MHPATH][38]; //Ringbuffer for MHeard Sourcepath
@@ -45,6 +46,7 @@ void initMheard()
         memset(mheardCalls[iset], 0x00, sizeof(mheardCalls[iset]));
         mheardLat[iset]=0;
         mheardLon[iset]=0;
+        mheardAlt[iset]=0;
         mheardEpoch[iset]=0;
     }
 
