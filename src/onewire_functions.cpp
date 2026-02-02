@@ -318,55 +318,60 @@ bool loop_onewire_ds18()
         Serial.println();
     }
 
-    if(OneWire::crc8(data, 8) == 0)
-        one_found=false;
-    else
-        one_found=true;
-
-    // Convert the data to actual temperature
-    // because the result is a 16 bit signed integer, it should
-    // be stored to an "int16_t" type, which is always 16 bits
-    // even when compiled on a 32 bit processor.
-    
-    byte MSB = data[1];
-    byte LSB = data[0];
-
-    float tempRead = (int16_t)((MSB << 8) | LSB); //using two's compliment
-    float TemperatureSum = tempRead / 16.0;
-  
-  /*
-    if (type_s)
+    if(OneWire::crc8(data, 8) == (uint8_t)data[8])
     {
-        raw = raw << 3; // 9 bit resolution default
-        if (data[7] == 0x10)
+        // Convert the data to actual temperature
+        // because the result is a 16 bit signed integer, it should
+        // be stored to an "int16_t" type, which is always 16 bits
+        // even when compiled on a 32 bit processor.
+        
+        byte MSB = data[1];
+        byte LSB = data[0];
+
+        float tempRead = (int16_t)((MSB << 8) | LSB); //using two's compliment
+        float TemperatureSum = tempRead / 16.0;
+    
+    /*
+        if (type_s)
         {
-            // "count remain" gives full 12 bit resolution
-            raw = (raw & 0xFFF0) + 12 - data[6];
+            raw = raw << 3; // 9 bit resolution default
+            if (data[7] == 0x10)
+            {
+                // "count remain" gives full 12 bit resolution
+                raw = (raw & 0xFFF0) + 12 - data[6];
+            }
+        }
+        else
+        {
+            byte cfg = (data[4] & 0x60);
+            // at lower res, the low bits are undefined, so let's zero them
+            if (cfg == 0x00) raw = raw & ~7;  // 9 bit resolution, 93.75 ms
+            else if (cfg == 0x20) raw = raw & ~3; // 10 bit res, 187.5 ms
+            else if (cfg == 0x40) raw = raw & ~1; // 11 bit res, 375 ms
+            //// default is 12 bit resolution, 750 ms conversion time
+        }
+    */
+        celsius = TemperatureSum + meshcom_settings.node_tempo_off;
+        fahrenheit = celsius * 1.8 + 32.0;
+
+        if(bWXDEBUG)
+        {
+            Serial.print("Temperature (DS18) = ");
+            Serial.print(celsius);
+            Serial.print(" Celsius, ");
+            Serial.print(fahrenheit);
+            Serial.println(" Fahrenheit");
+        }
+
+        meshcom_settings.node_temp2 = celsius;
+    }
+    else
+    {
+        if(bWXDEBUG)
+        {
+            Serial.println("Temperature (DS18) = CRC ERROR");
         }
     }
-    else
-    {
-        byte cfg = (data[4] & 0x60);
-        // at lower res, the low bits are undefined, so let's zero them
-        if (cfg == 0x00) raw = raw & ~7;  // 9 bit resolution, 93.75 ms
-        else if (cfg == 0x20) raw = raw & ~3; // 10 bit res, 187.5 ms
-        else if (cfg == 0x40) raw = raw & ~1; // 11 bit res, 375 ms
-        //// default is 12 bit resolution, 750 ms conversion time
-    }
-*/
-    celsius = TemperatureSum + meshcom_settings.node_tempo_off;
-    fahrenheit = celsius * 1.8 + 32.0;
-
-    if(bWXDEBUG)
-    {
-        Serial.print("Temperature (DS18) = ");
-        Serial.print(celsius);
-        Serial.print(" Celsius, ");
-        Serial.print(fahrenheit);
-        Serial.println(" Fahrenheit");
-    }
-
-    meshcom_settings.node_temp2 = celsius;
 
     return true;
 }

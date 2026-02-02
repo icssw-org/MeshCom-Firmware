@@ -76,7 +76,13 @@ void loop_ADCFunctions()
 
                 // optimal wäre es, den Wert von Vref aus der EFUSE auslesen zu können
                 // aber nicht jeder ESP32/ESP32-S3 enthält so einen Wert
-                float vref = 1100.0;  // bereich 1000 .. 1200 [mV]
+                //KORR DL1MX  float vref = 1100.0;  // bereich 1000 .. 1200 [mV]
+                #if defined(BOARD_E22)
+                    float vref = 3300.0; // ESP32 DevKitC v4 has 3.3 V
+                #else
+                    float vref = 1100.0; // bereich 1000 .. 1200 [mV]
+                #endif
+                
                 ADCalpha = meshcom_settings.node_analog_alpha - (int)meshcom_settings.node_analog_alpha; // 0.001 .. 0.999
 
                 ADCraw = analogReadRaw(meshcom_settings.node_analog_pin);
@@ -108,6 +114,8 @@ void loop_ADCFunctions()
                     SampleCount, ADCalpha, ADCraw, ADCexp1, ADCexp2);
                 analog_show_timer = millis();
                 SampleCount = 0;
+
+                fAnalogValue = ADCexp2 / 1000.0;
 
                 commandAction((char*)"--analogset", isPhoneReady, true);  // BLE-Übertragung vom TYP = AN
             }

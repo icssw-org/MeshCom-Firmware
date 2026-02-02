@@ -35,6 +35,15 @@ bool bweb_server_running = false;
 char web_ip[10][20];
 long web_ip_passwd_time[10];
 
+extern double mheardLat[MAX_MHEARD];
+extern double mheardLon[MAX_MHEARD];
+extern int mheardAlt[MAX_MHEARD];
+
+double dlat;
+double dlon;
+char clat;
+char clon;
+
 /**
  * ###########################################################################################################################
  * initialize the Web Server
@@ -841,6 +850,25 @@ void sub_page_mheard()
             web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span>%4idBm</span></div>", mheardLine.mh_rssi);
             web_client.printf("<div><span class=\"font-bold\">SNR:</span><br><span>%4idB</span></div>", mheardLine.mh_snr);
             web_client.printf("<div><span class=\"font-bold\">Dist:</span><br><span>%5.1lf</span></div>", mheardLine.mh_dist);
+            
+            dlat = mheardLat[iset];
+            clat = 'N';
+            if(dlat < 0)
+            {
+                dlat = dlat * (-1);
+                clat = 'S';
+            }
+            dlon = mheardLon[iset];
+            clon = 'E';
+            if(dlon < 0)
+            {
+                dlon = dlon * (-1);
+                clon = 'W';
+            }
+
+            web_client.printf("<div><span class=\"font-bold\">Lat:</span><br><span>%c%06.3lf</span></div>", clat, dlat);
+            web_client.printf("<div><span class=\"font-bold\">Lon:</span><br><span>%c%07.3lf</span></div>", clon, dlon);
+            web_client.printf("<div><span class=\"font-bold\">Alt:</span><br><span>%4i</span></div>", mheardAlt[iset]);
             web_client.printf("</div></div>");
         }
     }

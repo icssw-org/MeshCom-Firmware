@@ -114,7 +114,9 @@
 
 #define BOARD_I2S_WS        I2S_LRC
 #define BOARD_I2S_BCK       I2S_BCLK
+#ifndef BOARD_I2S_DOUT
 #define BOARD_I2S_DOUT      I2S_DOUT
+#endif
 
 // T-Deck GUI configuration
 #define MAX_MAP 5                          // max count of maps

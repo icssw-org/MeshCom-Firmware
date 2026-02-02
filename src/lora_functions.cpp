@@ -76,6 +76,7 @@ extern unsigned long iReceiveTimeOutTime;
 extern unsigned char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern double mheardLat[MAX_MHEARD];
 extern double mheardLon[MAX_MHEARD];
+extern int mheardAlt[MAX_MHEARD];
 
 #include "TinyGPSPlus.h"
 
@@ -285,6 +286,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     int ipos=-1;
                     double lat=0.0;
                     double lon=0.0;
+                    int alt=0;
 
                     for(int iset=0; iset<MAX_MHEARD; iset++)
                     {
@@ -295,6 +297,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 ipos=iset;
                                 lat = mheardLat[ipos];
                                 lon = mheardLon[ipos];
+                                alt = mheardAlt[ipos];
                                 break;
                             }
                         }
@@ -316,10 +319,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 if(aprspos.lon_c == 'W')
                                     lon = lon * -1.0;
 
+                                alt = aprspos.alt;
+                                
+                                if(aprsmsg.msg_source_fw_version > 13)
+                                    alt = (int)((float)alt * 0.3048);
+
                                 if(ipos >= 0)
                                 {
                                     mheardLat[ipos]=lat;
                                     mheardLon[ipos]=lon;
+                                    mheardAlt[ipos]=alt;
                                 }
                             }
                         }

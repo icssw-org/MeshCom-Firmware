@@ -79,9 +79,12 @@ static const char *line_full_format(int max_c, const char *str1, const char *str
     strncpy(global_buf, str1, len1);
 
     len2 = (int)strlen(str2);
-    for(j = len1; j < max_c -1 - len2; j++){
+
+    for(j = len1; j < max_c -1 - len2; j++)
+    {
         global_buf[j] = ' ';
     }
+
     strncpy(global_buf + j, str2, len2);
     j = j + len2;
     
@@ -618,16 +621,18 @@ static void create2_1(lv_obj_t *parent)
     str += line_full_format(28, "HD Version:", ui_setting_get_hd_ver());
     str += "\n                           \n";
 
-    char buf[30];
+    /* KBC
+    char buf[GLOBAL_BUF_LEN];
     uint64_t total=0, used=0;
     ui_setting_get_sd_capacity(&total, &used);
-    lv_snprintf(buf, 30, "%lluMB", total);
+    lv_snprintf(buf, GLOBAL_BUF_LEN, "%lluMB", total);
     str += line_full_format(28, "SD total:", (const char *)buf);
     str += "\n                           \n";
 
-    lv_snprintf(buf, 30, "%lluMB", used);
+    lv_snprintf(buf, GLOBAL_BUF_LEN, "%lluMB", used);
     str += line_full_format(28, "SD used:", (const char *)buf);
     str += "\n                           \n";
+    */
 
 
     lv_label_set_text_fmt(info, "%s", str.c_str());
@@ -1870,8 +1875,8 @@ static void check_active_dm(lv_event_t * e)
 {
     if(e->code == LV_EVENT_PRESSING)
     {
-        lv_obj_clear_state(input_keypad, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
-        lv_obj_add_state(dm_keypad, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
+        //lv_obj_clear_state(input_keypad, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
+        //lv_obj_add_state(dm_keypad, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
         bDM=true;
         bTEXT=false;
         ui_input_set_keypay_layer(2);    // set SYM chars
@@ -1883,8 +1888,8 @@ static void check_active_input(lv_event_t * e)
 {
     if(e->code == LV_EVENT_PRESSING)
     {
-        lv_obj_clear_state(dm_keypad, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
-        lv_obj_add_state(input_keypad, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
+        //KBC lv_obj_clear_state(dm_keypad, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
+        //KBC lv_obj_add_state(input_keypad, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
         bDM=false;
         bTEXT=true;
         ui_input_set_keypay_layer(0);    // set small chars
@@ -2524,7 +2529,7 @@ static void check_active_cap(lv_event_t * e)
     {
         obj_keyboard = (lv_obj_t *)e->target;
 
-        lv_obj_add_state(obj_keyboard, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
+        //lv_obj_add_state(obj_keyboard, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
         ui_input_set_keypay_layer(1);    // set CAP chars
     }
 }
@@ -2535,7 +2540,7 @@ static void check_active_sym(lv_event_t * e)
     {
         obj_keyboard = (lv_obj_t *)e->target;
 
-        lv_obj_add_state(obj_keyboard, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
+        //lv_obj_add_state(obj_keyboard, LV_STATE_FOCUSED); /*To be sure the cursor is visible*/
         ui_input_set_keypay_layer(2);    // set SYM chars
     }
 }
@@ -2717,8 +2722,8 @@ static void create9(lv_obj_t *parent)
 
     lv_obj_set_style_text_font(lat_ta, FONT_BOLD_MONO_SIZE_15, LV_PART_MAIN);
 
-    lv_textarea_set_cursor_click_pos(lat_ta, true);
-    lv_textarea_set_text_selection(lat_ta, true);
+    lv_textarea_set_cursor_click_pos(lat_ta, false);
+    lv_textarea_set_text_selection(lat_ta, false);
     lv_textarea_set_cursor_pos(lat_ta, 0);
     char ctemp[10];
     snprintf(ctemp, sizeof(ctemp), "%.4lf", meshcom_settings.node_lat);
@@ -2735,8 +2740,8 @@ static void create9(lv_obj_t *parent)
 
     lv_obj_set_style_text_font(lat_c_ta, FONT_BOLD_MONO_SIZE_15, LV_PART_MAIN);
 
-    lv_textarea_set_cursor_click_pos(lat_c_ta, true);
-    lv_textarea_set_text_selection(lat_c_ta, true);
+    lv_textarea_set_cursor_click_pos(lat_c_ta, false);
+    lv_textarea_set_text_selection(lat_c_ta, false);
     lv_textarea_set_cursor_pos(lat_c_ta, 0);
     strg = meshcom_settings.node_lat_c;
     lv_textarea_set_text(lat_c_ta, strg.c_str());
@@ -2762,8 +2767,8 @@ static void create9(lv_obj_t *parent)
 
     lv_obj_set_style_text_font(lon_ta, FONT_BOLD_MONO_SIZE_15, LV_PART_MAIN);
 
-    lv_textarea_set_cursor_click_pos(lon_ta, true);
-    lv_textarea_set_text_selection(lon_ta, true);
+    lv_textarea_set_cursor_click_pos(lon_ta, false);
+    lv_textarea_set_text_selection(lon_ta, false);
     lv_textarea_set_cursor_pos(lon_ta, 0);
     snprintf(ctemp, sizeof(ctemp), "%.4lf", meshcom_settings.node_lon);
     lv_textarea_set_text(lon_ta, ctemp);
@@ -2779,8 +2784,8 @@ static void create9(lv_obj_t *parent)
 
     lv_obj_set_style_text_font(lon_c_ta, FONT_BOLD_MONO_SIZE_15, LV_PART_MAIN);
 
-    lv_textarea_set_cursor_click_pos(lon_c_ta, true);
-    lv_textarea_set_text_selection(lon_c_ta, true);
+    lv_textarea_set_cursor_click_pos(lon_c_ta, false);
+    lv_textarea_set_text_selection(lon_c_ta, false);
     lv_textarea_set_cursor_pos(lon_c_ta, 0);
     strg = meshcom_settings.node_lon_c;
     lv_textarea_set_text(lon_c_ta, strg.c_str());

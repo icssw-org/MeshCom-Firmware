@@ -82,8 +82,12 @@
 #define PLATFORM_SPI_TYPE               SPIClass
 #define PLATFORM_WIRE_TYPE              TwoWire
 #define SPI_DATA_ORDER                  SPI_MSBFIRST
+#ifndef DEFAULT_SDA
 #define DEFAULT_SDA                     (SDA)
+#endif
+#ifndef DEFAULT_SCL
 #define DEFAULT_SCL                     (SCL)
+#endif
 #define DEFAULT_SPISETTING              SPISettings(__freq, __dataOrder, __dataMode);
 #endif
 

@@ -8,8 +8,13 @@
 #include "bq27220_def.h"
 #include "bq27220_data_memory.h"
 
+#ifndef DEFAULT_SCL
 #define DEFAULT_SCL  40
+#endif
+
+#ifndef DEFAULT_SDA
 #define DEFAULT_SDA  39
+#endif
 
 typedef union ControlStatus{
     struct __reg

@@ -18,7 +18,7 @@
 #define DISP_REFR_MODE_FULL 0
 #define DISP_REFR_MODE_PART 1
 
-#define TINY_GSM_MODEM_SIM7672
+//KBC #define TINY_GSM_MODEM_SIM7672
 #define TINY_GSM_RX_BUFFER 1024 // Set RX buffer to 1Kb
 #define MODEM_GPS_ENABLE_GPIO               (-1)
 

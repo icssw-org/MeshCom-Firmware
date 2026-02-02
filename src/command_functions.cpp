@@ -1817,6 +1817,11 @@ void commandAction(char *umsg_text, bool ble)
 
         sprintf(meshcom_settings.node_gwsrv, "%s", strCtry.c_str());
 
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
         bReturn = true;
 
         save_settings();
@@ -4490,6 +4495,7 @@ void sendNodeSetting()
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
     nsetdoc["NOALL"] = bNoMSGtoALL;
     nsetdoc["BLED"] = bUSER_BOARD_LED;
+    nsetdoc["GWS"] = meshcom_settings.node_gwsrv;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));
