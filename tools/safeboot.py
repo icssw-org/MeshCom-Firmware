@@ -5,6 +5,7 @@
 Import("env")
 import os
 import sys
+import shutil
 
 quiet = False
 
@@ -36,4 +37,21 @@ def safeboot(source, target, env):
     status("SafeBoot firmware created: %s" % env.subst("$BUILD_DIR/${PROGNAME}.bin"))
 
 
+def copy_safeboot_binary(source, target, env):
+    # copy the safeboot binary to the project source folder
+    print("Copying safeboot binary to project folder...")
+    safeboot_bin_source = os.path.join(env.subst("$BUILD_DIR"), "%s.bin" % env.subst("${PROGNAME}"))
+    print("Source: %s" % safeboot_bin_source)
+    try:
+        shutil.copy2(safeboot_bin_source, env.subst("$PROJECT_DIR"))
+    except Exception as e:
+        critical("Failed to copy safeboot binary: %s" % str(e))
+        sys.exit(1)
+    print("Copied to: %s" % env.subst("$PROJECT_DIR"))
+
+
 env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", safeboot)
+env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", copy_safeboot_binary)
+
+
+

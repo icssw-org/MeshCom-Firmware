@@ -1,78 +1,114 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * Copyright (C) 2023-2024 Mathieu Carbou
- */
+* Copyright (C) 2023-2024 Mathieu Carbou
+*/
 
- #include "ElegantOTA.h"
- #include <WiFi.h>
+#include "ElegantOTA.h"
+#include <WiFi.h>
  
- #include <ESPAsyncWebServer.h>
- #include <ESPmDNS.h>
+#include <ESPAsyncWebServer.h>
+#include <ESPmDNS.h>
  
- #include <esp_ota_ops.h>
- #include <esp_partition.h>
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
  
- #include <Preferences.h>
- #include "../esp32/esp32_flash.h"
+#include <Preferences.h>
+#include "../esp32/esp32_flash.h"
  
- #define TAG "SafeBoot"
+#define TAG "SafeBoot"
  
- const unsigned int port = 80;
- AsyncWebServer webServer(port);
- String hostname = "MeshCom-OTA";
+const unsigned int port = 80;
+AsyncWebServer webServer(port);
+String hostname = "MeshCom-OTA";
  
- extern Preferences preferences;
- extern s_meshcom_settings meshcom_settings;
+extern Preferences preferences;
+extern s_meshcom_settings meshcom_settings;
  
- bool updateInProgress = false;  // Flag to indicate if an update is in progress
+bool updateInProgress = false;  // Flag to indicate if an update is in progress
  
- unsigned int ota_timeout_timer = 0; // Timer to check if OTA was started. If not, reboot to app/ota partition
- unsigned int last_timer_update = 0; // Timer to update the last time the OTA was updated
- int wait_ota_timeout = 180 * 1000; // OTA Timeout in seconds
+unsigned int ota_timeout_timer = 0; // Timer to check if OTA was started. If not, reboot to app/ota partition
+unsigned int last_timer_update = 0; // Timer to update the last time the OTA was updated
+int wait_ota_timeout = 180 * 1000; // OTA Timeout in seconds
+boolean reboot_after_cancel = false; // Reboot after cancelling OTA if no update was started
  
- void startMDNS();
- 
- 
- void wifiConnect() {
-   
-   // read wlan credentials from flash
-   init_flash();
- 
-   const char* ssid = meshcom_settings.node_ssid;
-   const char* pass = meshcom_settings.node_pwd;
-   bool bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
-   bool bGATEWAY =  meshcom_settings.node_sset & 0x1000;
-   bool bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
- 
-   Serial.printf("\nNVS Flash Settings:\n");
-   Serial.printf("Callsign: %s\n", meshcom_settings.node_call);
-   Serial.printf("Wifi SSID: %s\n", ssid);
-   Serial.printf("Webserver: %d\n", bWEBSERVER);
-   Serial.printf("Gateway: %d\n", bGATEWAY);
-   Serial.printf("WIFI AP: %d\n", bWIFIAP);
- 
-   // Set the hostname from the callsign. If the callsign is not set, use the default hostname
-   if(!((meshcom_settings.node_call[0] == 0x00) || (memcmp(meshcom_settings.node_call, "none", 4) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX-00", 9) == 0)))
-   {
-     hostname = meshcom_settings.node_call;
-   }
+void startMDNS();
  
  
-   // When there is no SSID or WIFI-AP is enabled, start AP
-   if(strcmp(ssid, "none") == 0 || bWIFIAP)
-   {
-     Serial.println("\nStarting Wifi AP");
-     WiFi.mode(WIFI_AP);
-     WiFi.softAP(hostname);
-     delay(300);
-     Serial.printf("AP IP: %s\n", WiFi.softAPIP().toString().c_str());
-     // start mDNS responder
-     startMDNS();
-     return;
-   }
- 
+void wifiConnect() {
+
+  // read wlan credentials from flash
+  init_flash();
+
+  const char *ssid = meshcom_settings.node_ssid;
+  const char *pass = meshcom_settings.node_pwd;
+  bool bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
+  bool bGATEWAY = meshcom_settings.node_sset & 0x1000;
+  bool bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
+
+  Serial.printf("\nNVS Flash Settings:\n");
+  Serial.printf("Callsign: %s\n", meshcom_settings.node_call);
+  Serial.printf("Wifi SSID: %s\n", ssid);
+  Serial.printf("Webserver: %d\n", bWEBSERVER);
+  Serial.printf("Gateway: %d\n", bGATEWAY);
+  Serial.printf("WIFI AP: %d\n", bWIFIAP);
+
+  
+
+  // Set the hostname from the callsign. If the callsign is not set, use the default hostname
+  if (!((meshcom_settings.node_call[0] == 0x00) || (memcmp(meshcom_settings.node_call, "none", 4) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX-00", 9) == 0)))
+  {
+    hostname = meshcom_settings.node_call;
+  }
+
+  // When there is no SSID or WIFI-AP is enabled, start AP
+  if (strcmp(ssid, "none") == 0 || bWIFIAP)
+  {
+    Serial.println("\nStarting Wifi AP");
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(hostname);
+    delay(300);
+    Serial.printf("AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+    // start mDNS responder
+    startMDNS();
+    return;
+  }
+
    WiFi.mode(WIFI_STA);
    WiFi.disconnect(true);
+
+   // Static IP settings
+  IPAddress node_ip = IPAddress(0,0,0,0);
+  IPAddress node_gw = IPAddress(0,0,0,0);
+  IPAddress node_ms = IPAddress(0,0,0,0);
+  IPAddress node_dns = IPAddress(0,0,0,0);
+
+  if (strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7 && bWIFIAP == false)
+  {
+    Serial.printf("Static IP settings:\n");
+    Serial.printf("IP: %s\n", meshcom_settings.node_ownip);
+    Serial.printf("GW: %s\n", meshcom_settings.node_owngw);
+    Serial.printf("MS: %s\n", meshcom_settings.node_ownms);
+    Serial.printf("DNS: %s\n", meshcom_settings.node_owndns);
+
+    // Set your Static IP address
+    node_ip.fromString(meshcom_settings.node_ownip);
+    // Set your Gateway IP address
+    node_gw.fromString(meshcom_settings.node_owngw);
+    // Set your Gateway IP mask
+    node_ms.fromString(meshcom_settings.node_ownms);
+    // Set your DNS IP
+    if (strlen(meshcom_settings.node_owndns) >= 7)
+      node_dns.fromString(meshcom_settings.node_owndns);
+    else
+      node_dns.fromString("8.8.8.8");
+
+    // Configures static IP address
+    if (!WiFi.config(node_ip, node_gw, node_ms, node_dns))
+    {
+      Serial.println("[Error] STA Failed to configure static IP!");
+    }
+  }
+
    delay(500);
  
    // Scan for AP with best RSSI
@@ -268,7 +304,7 @@
      else
      {
        request->send(200, "text/plain", "OTA update canceled.");
-       setBootPartition_APP();
+       reboot_after_cancel = true;
      }
    });
  
@@ -282,11 +318,11 @@
  void loop() {
    ElegantOTA.loop();
    // Check if OTA was started. If not, reboot to app/ota partition
-   if(!updateInProgress && (ota_timeout_timer > wait_ota_timeout))
+   if((!updateInProgress && (ota_timeout_timer > wait_ota_timeout)) || reboot_after_cancel)
    {
      Serial.println("OTA Start Timeout. Rebooting to app partition.");
      setBootPartition_APP();
-     delay(500);
+     delay(1000);
      ESP.restart();
    } 
    

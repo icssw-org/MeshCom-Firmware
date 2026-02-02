@@ -1817,6 +1817,11 @@ void commandAction(char *umsg_text, bool ble)
 
         sprintf(meshcom_settings.node_gwsrv, "%s", strCtry.c_str());
 
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
         bReturn = true;
 
         save_settings();
@@ -4302,26 +4307,19 @@ void commandAction(char *umsg_text, bool ble)
         {
             swdoc["SSID"] = cBLEName;
             //KBC/KFR
-             swdoc["PW"] = "";
+            //swdoc["PW"] = "";
         }
         else
         {
             swdoc["SSID"] = meshcom_settings.node_ssid;
             //KBC/KFR
-             swdoc["PW"] = meshcom_settings.node_pwd;
+            //swdoc["PW"] = meshcom_settings.node_pwd;
         }
         swdoc["IP"] = meshcom_settings.node_ip;
         swdoc["GW"] = meshcom_settings.node_gw;     // IP GW Address
         swdoc["AP"] = bWIFIAP;
         swdoc["DNS"] = meshcom_settings.node_dns;
         swdoc["SUB"] = meshcom_settings.node_subnet;
-        swdoc["OWNIP"] = meshcom_settings.node_ownip;
-        swdoc["OWNGW"] = meshcom_settings.node_owngw;
-        swdoc["OWNMS"] = meshcom_settings.node_ownms;
-        swdoc["OWNDNS"] = meshcom_settings.node_owndns;
-        //swdoc["EUDP"] = bEXTUDP;
-        //swdoc["EUDPIP"] = meshcom_settings.node_extern;
-        //swdoc["TXPOW"] = meshcom_settings.node_wifi_power;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
@@ -4339,6 +4337,10 @@ void commandAction(char *umsg_text, bool ble)
         JsonDocument swdoc2;
 
         swdoc2["TYP"] = "S2";
+        swdoc2["OWNIP"] = meshcom_settings.node_ownip;
+        swdoc2["OWNGW"] = meshcom_settings.node_owngw;
+        swdoc2["OWNMS"] = meshcom_settings.node_ownms;
+        swdoc2["OWNDNS"] = meshcom_settings.node_owndns;
         swdoc2["EUDP"] = bEXTUDP;
         swdoc2["EUDPIP"] = meshcom_settings.node_extern;
         swdoc2["TXPOW"] = meshcom_settings.node_wifi_power;
@@ -4493,6 +4495,7 @@ void sendNodeSetting()
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
     nsetdoc["NOALL"] = bNoMSGtoALL;
     nsetdoc["BLED"] = bUSER_BOARD_LED;
+    nsetdoc["GWS"] = meshcom_settings.node_gwsrv;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));

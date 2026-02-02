@@ -246,13 +246,13 @@ bool loopBMX280(void)
 
 	//important: measurement data is read from the sensor in function hasValue() only. 
 	//make sure to call get*() functions only after hasValue() has returned true.
-  	if(bmx280.getTemperature() == (float)NAN)
+  	if(isnan(bmx280.getTemperature()))
 		fTemp = 0.0;
 	else
   		fTemp = bmx280.getTemperature() + meshcom_settings.node_tempi_off;
 
 
-  	if(bmx280.getPressure() == (float)NAN)
+  	if(isnan(bmx280.getPressure()))
 		fPress = 0.0;
 	else
 		fPress = bmx280.getPressure() / 100.0;
@@ -266,7 +266,7 @@ bool loopBMX280(void)
 
 	if (bmx280.isBME280())
 	{
-	  	if(bmx280.getHumidity() == (float)NAN)
+	  	if(isnan(bmx280.getHumidity()))
 			fHum = 0.0;
 		else
 			fHum = bmx280.getHumidity();
