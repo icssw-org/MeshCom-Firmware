@@ -553,6 +553,7 @@ void esp32setup()
     bSOFTSERDEBUG = meshcom_settings.node_sset3 & 0x0100;
     bWXDEBUG = meshcom_settings.node_sset3 & 0x0200;
     bSHT21ON = meshcom_settings.node_sset3 & 0x0400;
+    bINA226ON = meshcom_settings.node_sset3 & 0x0800;
 
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 

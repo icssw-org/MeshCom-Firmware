@@ -724,7 +724,7 @@ void sub_page_login()
     web_client.println("<label class=\"cardlabel\">Enter Password</label>");
     web_client.println("<div class=\"grid\">");
     web_client.println("<span>In order to continue, you need to log in.</span>");
-    web_client.println("<input type=\"text\" maxlength=\"20\" size=\"20\" id=\"nodepassword\" name=\"nodepassword\">");
+    web_client.println("<input type=\"password\" maxlength=\"20\" size=\"20\" id=\"nodepassword\" name=\"nodepassword\">");
     web_client.println("<button onclick=\"login(document.getElementById('nodepassword').value)\" style=\"justify-self:self-end;\">Login</button");
     web_client.println("</div></div></div>");
     web_client.println(); // The HTTP response ends with another blank line
@@ -1086,11 +1086,13 @@ void sub_page_setup()
 
     _create_setup_textinput_element("angpio", "Analog GPIO", String(meshcom_settings.node_analog_pin), "2", "angpio", 3, false, false);                // create Textinput-Element including Label and Button
     _create_setup_textinput_element("afactor", "Analog Factor", String(meshcom_settings.node_analog_faktor, 6), "1.000", "afactor", 10, false, false); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("aslope", "Analog Slope", String(meshcom_settings.node_analog_slope, 6), "1.000", "aslope", 10, false, false); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("aoffset", "Analog Offset", String(meshcom_settings.node_analog_offset, 6), "0", "aoffset", 3, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid2\">");
 
-    _create_setup_switch_element("analogcheck", "Analog", "enable analog GPIO measurement", bButtonCheck); // create Switch-Element inclucing Label and Description
+    _create_setup_switch_element("analogcheck", "Analog", "enable analog GPIO measurement", bAnalogCheck); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("bmp", "BMP280", "enable BMP280 sensor", bBMPON);                         // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("bme", "BME280", "enable BME280 sensor", bBMEON);                         // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("680", "BME680", "enable BME680 sensor", bBME680ON);                      // create Switch-Element inclucing Label and Description
