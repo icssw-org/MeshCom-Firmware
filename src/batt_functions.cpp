@@ -43,7 +43,7 @@ uint32_t vbat_pin = BATTERY_PIN;
 
 #endif
 
-#if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3)
+#if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
 
 uint32_t vbat_pin = BATTERY_PIN;
 
@@ -198,8 +198,8 @@ void init_batt(void)
 {
     Serial.println("[INIT]...init_batt");
 
-// getht für HELTEC V3 und für V3.2  wichtig für Display
-#if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3)
+// getht für HELTEC V3/V4 und für V3.2  wichtig für Display
+#if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
 	pinMode(36,OUTPUT);
 	digitalWrite(36, LOW);
 
@@ -334,7 +334,7 @@ float read_batt(void)
 			is_receiving = false;
 			return (float)0.0;
 		#endif
-	#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3)
+	#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
 
 		// ADC resolution
 		const int resolution = 12;
@@ -416,7 +416,7 @@ float read_batt(void)
 		raw = raw * 10.7687;
 	#elif defined(BOARD_HELTEC)
 		raw = raw * 24.80;
-	#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_TRACKER)
+	#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_TRACKER) || defined(BOARD_HELTEC_V4)
 		// all done
 	#elif defined(BOARD_E22_S3)
 		// all done
