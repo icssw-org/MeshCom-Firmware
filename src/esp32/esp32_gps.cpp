@@ -7,6 +7,8 @@
 #include <loop_functions_extern.h>
 #include <clock.h>
 #include <Wire.h>               
+#include "esp32_flash.h"
+#include <math.h>
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <TinyGPSPlus.h>
@@ -47,6 +49,8 @@ int state = 0; // steps through auto-baud, reset, etc states
 bool bMitHardReset = false;
     
 int maxStateCount=1;
+
+static void persist_last_position_if_needed(void);
 
 void setupPMU(bool bGPSPOWER)
 {
@@ -362,6 +366,36 @@ void setupPMU(bool bGPSPOWER)
     #endif
 }
 
+static void persist_last_position_if_needed(void)
+{
+    static double last_saved_lat = NAN;
+    static double last_saved_lon = NAN;
+    static unsigned long last_position_save_ms = 0;
+
+    if(isnan(last_saved_lat))
+        last_saved_lat = meshcom_settings.node_lat;
+    if(isnan(last_saved_lon))
+        last_saved_lon = meshcom_settings.node_lon;
+
+    double diff_lat = fabs(meshcom_settings.node_lat - last_saved_lat);
+    double diff_lon = fabs(meshcom_settings.node_lon - last_saved_lon);
+
+    const double delta_threshold = 0.00005; // ~5-6 meters
+    const unsigned long min_interval_ms = 60000UL;
+
+    unsigned long now = millis();
+    bool moved_far = (diff_lat >= delta_threshold) || (diff_lon >= delta_threshold);
+    bool interval_elapsed = (last_position_save_ms == 0) || ((now - last_position_save_ms) >= min_interval_ms);
+
+    if(!moved_far && !interval_elapsed)
+        return;
+
+    save_settings();
+    last_saved_lat = meshcom_settings.node_lat;
+    last_saved_lon = meshcom_settings.node_lon;
+    last_position_save_ms = now;
+}
+
 unsigned int readGPS(void)
 {
     #if defined(GPS_WAKEUP)
@@ -442,6 +476,8 @@ unsigned int readGPS(void)
         posinfo_satcount = tinyGPSPlus.satellites.value();
         posinfo_hdop = tinyGPSPlus.hdop.value();
         posinfo_fix = true;
+
+        persist_last_position_if_needed();
 
         return setSMartBeaconing(meshcom_settings.node_lat, meshcom_settings.node_lon);
 

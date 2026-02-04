@@ -2,9 +2,10 @@
  * @file        esp32_audio.h
  * @brief       functions for handling audio playback on ESP32
  * @author      Ing. Jakob Gurnhofer (OE3GJC)
+ * @author      Ralph Weich (DD5RW)
  * @license     MIT
  * @copyright   Copyright (c) 2025 ICSSW.org
- * @date        2025-05-28
+ * @date        2025-12-03
  */
 
 #ifndef _ESP32_AUDIO_H_
@@ -37,5 +38,6 @@ void play_cw(const char character);
 void play_cw(const char character, int volume);
 void play_cw_start();
 void play_function(void *parameter);
+void audio_set_mute(bool mute);
 
 #endif

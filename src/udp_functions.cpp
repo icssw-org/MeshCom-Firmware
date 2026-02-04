@@ -1,3 +1,7 @@
+/**
+ *  @author      Ralph Weich (DD5RW)
+ *  @date        2025-12-03
+ */
 #include <Arduino.h>
 
 #include <udp_functions.h>
@@ -26,6 +30,7 @@ String grc_ids;
 #include <WiFiClient.h>
 #include "esp_wifi.h"
 #include <ESP32Ping.h>
+#include <Preferences.h>
 
 IPAddress node_ip = IPAddress(0,0,0,0);
 IPAddress node_gw = IPAddress(0,0,0,0);
@@ -459,6 +464,19 @@ void sendMeshComUDP()
 
 bool startWIFI()
 {
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+  {
+    Preferences pref;
+    pref.begin("Credentials", false);
+    bool node_wifion = pref.getBool("node_wifion", true);
+    pref.end();
+    if(!node_wifion)
+    {
+      Serial.println("[WIFI]...disabled by Settings (node_wifion=false)");
+      return false;
+    }
+  }
+#endif
   if(hasIPaddress)
     return false;
 

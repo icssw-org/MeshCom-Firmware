@@ -2,7 +2,10 @@
 // (C) 2016, 2017, 2018, 2018, 2019, 2020 OE1KBC Kurt Baumann
 //
 // 20230326: Version 4.00: START
-
+/**
+ *  @author      Ralph Weich (DD5RW)
+ *  @date        2025-12-03
+ */
 #include <Arduino.h>
 #include <configuration.h>
 #include <RadioLib.h>
@@ -47,6 +50,7 @@
 #include <extudp_functions.h>
 #include <web_functions/web_functions.h>
 #include <mheard_functions.h>
+#include <time_functions.h>
 #include <clock.h>
 #include <onewire_functions.h>
 #include <onebutton_functions.h>
@@ -93,6 +97,7 @@ bool bLED = true;
 #include <t-deck/tdeck_main.h>
 #include <t-deck/tdeck_extern.h>
 #include <t-deck/lv_obj_functions.h>
+#include <t-deck/lv_obj_functions_extern.h>
 #endif
 
 #if defined(BOARD_T_DECK_PRO)
@@ -573,6 +578,10 @@ void esp32setup()
     // Initialize T-Deck GUI
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         initTDeck();
+        if(bGPSON)
+            addMessage("GPS enabled");
+        else
+            addMessage("GPS disabled");
     #endif
 
     // Initialize T-Deck GUI
@@ -1203,7 +1212,7 @@ void esp32setup()
 
     // Create the BLE Device & WiFiAP
     sprintf(cBLEName, "M%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
-    char cManufData[50]={0};
+    char cManufData[60]={0};
     sprintf(cManufData, "MCM%s-%02x%02x-%s", g_ble_dev_name,  dmac[1], dmac[0], meshcom_settings.node_call);
     
     
@@ -1270,14 +1279,28 @@ void esp32setup()
     // Start advertising
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
-    pAdvertising->setName(strBLEName);  //BLE Local Name
-    pAdvertising->setManufacturerData(strBLEManufData);
-    pAdvertising->addServiceUUID(SERVICE_UUID);
 
-    if(bBLElong)
-        pAdvertising->enableScanResponse(true);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
+    std::string advName = strBLEName;
+    if(!bBLElong && advName.size() > 26)
+      advName = advName.substr(0, 26); // keep first 26 chars for short adverts
+
+    pAdvertising->setName(advName);  // BLE Local Name (possibly shortened)
+
+    if (bBLElong)
+    {
+        pAdvertising->setManufacturerData(strBLEManufData);
+        pAdvertising->addServiceUUID(SERVICE_UUID);
+    }
     else
-        pAdvertising->enableScanResponse(false);    // true ANDROID  false IPhone ab 4.25 sollte true für beiden abgedeckt sein
+    {
+        // For short adverts we skip adding the 128-bit service UUID which
+    
+    }
+
+    if (bBLElong)
+        pAdvertising->enableScanResponse(true);
+    else
+        pAdvertising->enableScanResponse(false);
     
     pAdvertising->start();
  
@@ -1291,7 +1314,10 @@ void esp32setup()
 
     // Start Audio on T-Deck
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    startAudio();
+    // Only start audio if not muted, to avoid unnecessary task creation
+    if (!meshcom_settings.node_mute) {
+        startAudio();
+    }
     #endif
 
     Serial.println("==============");
@@ -1307,7 +1333,22 @@ void esp32setup()
         if(!startWIFI())
         {
             Serial.println("[WIFI]...no connection");
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            addMessage("WiFi connection failed");
+            #endif
         }
+        else
+        {
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            addMessage("WiFi connected");
+            #endif
+        }
+    }
+    else
+    {
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        addMessage("WiFi deactivated");
+        #endif
     }
     //
     ///////////////////////////////////////////////////////
@@ -1335,6 +1376,13 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
+    static unsigned long last_time_save = 0;
+    if(millis() - last_time_save > 900000) // Save every 15 minutes
+    {
+        saveTimePersistence();
+        last_time_save = millis();
+    }
+
     // loop T-Deck GUI
     #if defined(BOARD_T_DECK_PRO)
         loopTDeck_pro();
@@ -1924,15 +1972,23 @@ void esp32loop()
 
         g_ble_uart_is_connected = false;
         isPhoneReady = 0;
+
+        // Update T-Deck header so BT icon reflects disconnected state
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        tdeck_update_header_bt();
+        #endif
     }
 
     // connecting
     if (deviceConnected && !oldDeviceConnected) {
-		// do stuff here on connecting
+ 		// do stuff here on connecting
         oldDeviceConnected = deviceConnected;
-    }
 
-    // check if message from phone to send
+        // Update T-Deck header so BT icon reflects connected state
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        tdeck_update_header_bt();
+        #endif
+    }    // check if message from phone to send
     if(hasMsgFromPhone)
     {
         if(bBLEDEBUG)
@@ -2600,6 +2656,7 @@ void esp32loop()
 
     if ((tdeck_tft_timer + (TDECK_TFT_TIMEOUT * 1000)) < millis())
     {
+        // Serial.printf("Loop: Timeout reached. Timer: %lu, Millis: %lu\n", tdeck_tft_timer, millis());
         tft_off();
     }
 
@@ -2612,7 +2669,8 @@ void esp32loop()
 
     // WOR/KBC not necesary     delay(100);
 
-    yield();
+    // yield();
+    delay(5); // Save power by allowing IDLE task to run
 }
 
 

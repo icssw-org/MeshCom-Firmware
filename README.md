@@ -191,3 +191,7 @@ https://github.com/microsoft/uf2/blob/master/utils/uf2conv.py<br/>
 Please follow the instructions here: https://icssw.org/en/rak-wisblock-anleitung/<br/>
 
 
+## Icon Licensing
+MeshCom nutzt im UI ein GPS-Symbol sowie die Menü- (grün/rot) und Settings-Symbole von [WpZoom](https://www.wpzoom.com), die unter der [Creative Commons Attribution-Share Alike 3.0 Lizenz](https://creativecommons.org/licenses/by-sa/3.0/) bereitgestellt werden. Diese Symbole dürfen kopiert, angepasst und auch kommerziell verwendet werden, sofern auf jeder Seite, auf der die Symbole verwendet werden, ein Link zu [wpzoom.com](https://www.wpzoom.com) gesetzt wird.
+
+
