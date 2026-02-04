@@ -484,7 +484,7 @@ void esp32setup()
         }
     #endif
 
-// Heltec V2: Enable Vext (GPIO 21) to power OLED and reset display
+    // Heltec V2: Enable Vext (GPIO 21) to power OLED and reset display
     #if defined(BOARD_HELTEC)
         Serial.println(F("[INIT]...Enabling Vext for OLED power"));
         pinMode(21, OUTPUT);
