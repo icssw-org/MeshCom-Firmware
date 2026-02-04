@@ -484,6 +484,22 @@ void esp32setup()
         }
     #endif
 
+// Heltec V2: Enable Vext (GPIO 21) to power OLED and reset display
+    #if defined(BOARD_HELTEC)
+        Serial.println(F("[INIT]...Enabling Vext for OLED power"));
+        pinMode(21, OUTPUT);
+        digitalWrite(21, LOW);   // Vext ON (active low)
+        delay(50);
+
+        // Reset OLED (RST_OLED = GPIO 16)
+        Serial.println(F("[INIT]...Resetting OLED display"));
+        pinMode(16, OUTPUT);
+        digitalWrite(16, LOW);   // Reset active
+        delay(50);
+        digitalWrite(16, HIGH);  // Reset release
+        delay(50);
+    #endif
+    
     #if not defined(BOARD_T_DECK_PRO)
         #ifndef BOARD_T5_EPAPER
             Wire.begin(I2C_SDA, I2C_SCL);
