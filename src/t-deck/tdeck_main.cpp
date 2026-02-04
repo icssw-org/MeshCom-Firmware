@@ -743,16 +743,16 @@ void tdeck_addMessage(bool bSuccess)
 {
     char buf[50];
 
-    snprintf(buf, 50, "%s: %s\n", "Touch", bTouchDected == true ? "OK" : "ERROR");
+    snprintf(buf, 50, "%s: %s", "Touch", bTouchDected == true ? "OK" : "ERROR");
     addMessage(buf);
 
-    snprintf(buf, 50, "%s: %s\n", "SDCard", bSDDected == true ? "OK" : "ERROR");
+    snprintf(buf, 50, "%s: %s", "SDCard", bSDDected == true ? "OK" : "ERROR");
     addMessage(buf);
 
-    snprintf(buf, 50, "%s: %s\n", "Keyboard", kbDected == true ? "OK" : "ERROR");
+    snprintf(buf, 50, "%s: %s", "Keyboard", kbDected == true ? "OK" : "ERROR");
     addMessage(buf);
 
-    snprintf(buf, 50, "%s: %s\n", "Radio", bSuccess == true ? "OK" : "ERROR");
+    snprintf(buf, 50, "%s: %s", "Radio", bSuccess == true ? "OK" : "ERROR");
     addMessage(buf);
 }
 

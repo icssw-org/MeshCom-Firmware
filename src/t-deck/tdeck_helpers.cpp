@@ -10,6 +10,7 @@
 
 #include "tdeck_helpers.h"
 #include <loop_functions.h>
+#include <loop_functions_extern.h>
 #include <Arduino.h>
 #include <Wire.h>
 #include "lv_obj_functions.h"
@@ -19,9 +20,6 @@
 #include "tdeck_extern.h"
 
 extern TFT_eSPI tft;
-
-#define _BRIGHTNESS_DEBUG_ false
-
 uint8_t current_brightness_level = 0;
 uint8_t pre_sleep_brightness_level = BRIGHTNESS_STEPS;
 bool tft_is_sleeping = false;
@@ -47,9 +45,8 @@ void resetBrightness()
  */
 void setBrightness(uint8_t value)
 {
-    #ifdef _BRIGHTNESS_DEBUG_
-    Serial.printf("setBrightness: %d (current: %d)\n", value, current_brightness_level);
-    #endif
+    if (bDEBUG)
+        Serial.printf("[TDECK]...setBrightness: %d (current: %d)\n", value, current_brightness_level);
 
     if (current_brightness_level == value) {
         // just reset to same level - nothing to do
@@ -63,9 +60,9 @@ void setBrightness(uint8_t value)
 
     if (value == 0)
     {
-        #ifdef _BRIGHTNESS_DEBUG_
-        Serial.println("setBrightness: Turning OFF");
-        #endif
+        if (bDEBUG)
+            Serial.println("[TDECK]...setBrightness: Turning OFF");
+        
         // turn display off
         digitalWrite(TDECK_TFT_BACKLIGHT, 0);
         delay(3);
@@ -81,9 +78,8 @@ void setBrightness(uint8_t value)
 
     if (current_brightness_level == 0)
     {
-        #ifdef _BRIGHTNESS_DEBUG_
-        Serial.println("setBrightness: Waking up from 0");
-        #endif
+        if (bDEBUG)
+            Serial.println("[TDECK]...setBrightness: Waking up from 0");
         
         // Ensure other SPI devices are inactive to prevent bus conflict
         digitalWrite(TDECK_SDCARD_CS, HIGH);
@@ -94,9 +90,8 @@ void setBrightness(uint8_t value)
         delay(5); // Allow CS lines to settle
 
         // display off - turn on first
-        #ifdef _BRIGHTNESS_DEBUG_
-        Serial.println("setBrightness: Initializing TFT (Wakeup)");
-        #endif
+        if (bDEBUG)
+            Serial.println("[TDECK]...setBrightness: Initializing TFT (Wakeup)");
         
         // Use full init to ensure display is correctly configured and woken up
         tft.init();
@@ -115,9 +110,9 @@ void setBrightness(uint8_t value)
     // Sync keyboard backlight if not locked
     if(!meshcom_settings.node_keyboardlock) {
         uint8_t kbl_val = (value >= BRIGHTNESS_STEPS) ? 255 : (value * 16);
-        #ifdef _BRIGHTNESS_DEBUG_
-        Serial.printf("setBrightness: Syncing KBL to %d\n", kbl_val);
-        #endif
+        if (bDEBUG)
+            Serial.printf("[TDECK]...setBrightness: Syncing KBL to %d\n", kbl_val);
+
         setKeyboardBacklight(kbl_val); 
     }
 

@@ -1413,12 +1413,14 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     // check on map
     if(dlat > map_lat_min[meshcom_settings.node_map] || dlat < map_lat_max[meshcom_settings.node_map])
     {
-        Serial.printf("[MAP]...LAT: %.4lf not on map: %i\n", dlat, meshcom_settings.node_map);
+        if (bDEBUG)
+            Serial.printf("[ MAP ]...LAT: %.4lf not on map: %i\n", dlat, meshcom_settings.node_map);
     }
 
     if(dlon < map_lon_min[meshcom_settings.node_map] || dlon > map_lon_max[meshcom_settings.node_map])
     {
-        Serial.printf("[MAP]...LON: %.4lf not on map: %i\n", dlon, meshcom_settings.node_map);
+        if (bDEBUG)
+            Serial.printf("[ MAP ]...LON: %.4lf not on map: %i\n", dlon, meshcom_settings.node_map);
     }
 
     double latdiff = map_lat_min[meshcom_settings.node_map] - map_lat_max[meshcom_settings.node_map];
@@ -1461,7 +1463,8 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
         map_point_lon[map_point_count] = 0.0;
     }
 
-    Serial.printf("\n[MAP]...%-10.10s point:%2i node_lat:%.4lf node_lon:%.4lf latd:%.4lf lonf:%.4lf xe:%.4lf, ye:%.4lf <%3i/%3i)\n", callsign.c_str(), ipoint, dlat, dlon, latdiff, londiff, xe, ye, x, y);
+    if (bDEBUG)
+        Serial.printf("\n[ MAP ]...%-10.10s point:%2i node_lat:%.4lf node_lon:%.4lf latd:%.4lf lonf:%.4lf xe:%.4lf, ye:%.4lf <%3i/%3i)\n", callsign.c_str(), ipoint, dlat, dlon, latdiff, londiff, xe, ye, x, y);
 
     map_point[ipoint] = lv_obj_create(map_ta);
     lv_obj_set_size(map_point[ipoint],10, 10);
@@ -1540,7 +1543,7 @@ void init_map()
 void refresh_map(int iMap)
 {
     if(bDEBUG)
-        Serial.printf("[MAP]...set to %i - %s\n", iMap, getMap(iMap).c_str());
+        Serial.printf("[ MAP ]...set to %i - %s\n", iMap, getMap(iMap).c_str());
 
     // pos update
     for(int im = 0; im < MAX_POINTS; im++)
@@ -1564,7 +1567,7 @@ void set_map(int iMap)
     // strMaps[max_map] = {"Europe", "Germany", "Austria", "OE3"};
 
     if(bDEBUG)
-        Serial.printf("[MAP]...set to %i - %s\n", iMap, getMap(iMap).c_str());
+        Serial.printf("[ MAP ]...set to %i - %s\n", iMap, getMap(iMap).c_str());
 
     switch (iMap)
     {
@@ -1617,7 +1620,8 @@ void set_map(int iMap)
  */
 void tft_on()
 {
-    Serial.println("tft_on: Called");
+    if (bDEBUG)
+        Serial.println("[TDECK]...tft_on: called");
     // Ensure we have a valid brightness to restore
     if(pre_sleep_brightness_level == 0) pre_sleep_brightness_level = BRIGHTNESS_STEPS;
 
@@ -1636,7 +1640,8 @@ void tft_on()
     }
 
     tdeck_tft_timer = millis();
-    Serial.printf("tft_on: Timer updated to %lu\n", tdeck_tft_timer);
+    if (bDEBUG)
+        Serial.printf("[TDECK]...tft_on: Timer updated to %lu\n", tdeck_tft_timer);
 }
 
 /**
@@ -1659,7 +1664,8 @@ void tft_off()
             return;
         }
 
-        Serial.println("tft_off: Sending Sleep Commands");
+        if (bDEBUG)
+            Serial.println("[TDECK]...tft_off: sending sleep commands");
         setKeyboardBacklight(0);
 
         // Update state and UI to reflect that KBL is now OFF
@@ -1766,10 +1772,9 @@ static void update_header_wifi_indicator(void)
 
         if(!node_wifion)
         {
-            if(bDEBUG)
-            {
+            if (bDEBUG)
                 Serial.printf("[TDECK]...update_header_wifi_indicator: node_wifion=false, WiFi.status=%d, ssid='%s'\n", (int)WiFi.status(), meshcom_settings.node_ssid);
-            }
+            
             lv_obj_set_style_text_color(header_wifi_icon, lv_color_white(), LV_PART_MAIN);
             lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
             return;
@@ -1790,7 +1795,7 @@ static void update_header_wifi_indicator(void)
 
     // If configured/enabled but not yet connected/active -> Red
     // Only if global switch is ON (which we checked above, but double check logic)
-    if(bWIFIAP || bWEBSERVER || (strlen(meshcom_settings.node_ssid) > 1))
+    if (bWIFIAP || bWEBSERVER || (strlen(meshcom_settings.node_ssid) > 1))
     {
         lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
@@ -2804,17 +2809,17 @@ static void save_persisted_messages(void)
     // flooding the serial console when no SPIFFS partition is present.
     static bool spiffs_init_attempted = false;
     static bool spiffs_available = false;
-    if(!spiffs_init_attempted)
+    if (!spiffs_init_attempted)
     {
         spiffs_init_attempted = true;
-        if(SPIFFS.begin(true))
+        if (SPIFFS.begin(true))
         {
             spiffs_available = true;
         }
         else
         {
             spiffs_available = false;
-            Serial.println("[MSG] SPIFFS begin failed (save) — partition not found");
+            Serial.println("[ MSG ]...SPIFFS begin failed (save) — partition not found");
         }
     }
     
@@ -2823,12 +2828,12 @@ static void save_persisted_messages(void)
 
     const char *tmp = "/messages.json.tmp";
     File f;
-    if(spiffs_available)
+    if (spiffs_available)
     {
         f = SPIFFS.open(tmp, FILE_WRITE);
-        if(!f)
+        if (!f)
         {
-            Serial.println("[MSG] Failed to open temp messages file for writing");
+            Serial.println("[ MSG ]...Failed to open temp messages file for writing");
         }
         else
         {
@@ -2890,17 +2895,17 @@ static void load_persisted_messages(void)
     // Use the same one-time SPIFFS init logic as save_persisted_messages
     static bool spiffs_init_attempted = false;
     static bool spiffs_available = false;
-    if(!spiffs_init_attempted)
+    if (!spiffs_init_attempted)
     {
         spiffs_init_attempted = true;
-        if(SPIFFS.begin(true))
+        if (SPIFFS.begin(true))
         {
             spiffs_available = true;
         }
         else
         {
             spiffs_available = false;
-            Serial.println("[MSG] SPIFFS begin failed (load) — partition not found");
+            Serial.println("[ MSG ]...SPIFFS begin failed (load) — partition not found");
         }
     }
     if(!spiffs_available)
@@ -2917,9 +2922,9 @@ static void load_persisted_messages(void)
     }
 
     File f = SPIFFS.open(PERSISTED_MSG_FILE, FILE_READ);
-    if(!f)
+    if (!f)
     {
-        Serial.println("[MSG] Failed to open messages file for reading");
+        Serial.println("[ MSG ]...Failed to open messages file for reading");
         // SPIFFS.end(); // Do not unmount
         loading_messages_from_file = false;
         return;
@@ -3141,9 +3146,7 @@ void tdeck_update_time_label()
 void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c)
 {
     if (bDEBUG)
-    {
-        Serial.printf("[MAP]...add position point call:%s\n", callsign.c_str());
-    }
+        Serial.printf("[ MAP ]...add position point call:%s\n", callsign.c_str());
 
     double dlat = u_dlat;
     if(lat_c == 'W')
@@ -3196,10 +3199,7 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     char buf[2000];
 
     if (bDEBUG)
-    {
         Serial.printf("[POSVIEW]...add %s\n", callsign.c_str());
-
-    }
 
     double dlat = u_dlat;
     if(lat_c == 'W')
@@ -3222,9 +3222,8 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
         for(int pos_push = posrow - 2; pos_push >= 1; pos_push--)
         {
             if (bDEBUG)
-            {
                 Serial.printf("[POSVIEW]...moving row %i to %i (%s)\n", pos_push, pos_push + 1, lv_table_get_cell_value(position_ta, pos_push, 0));
-            }
+
             lv_table_set_cell_value(position_ta, pos_push + 1, 0, lv_table_get_cell_value(position_ta, pos_push, 0));
             lv_table_set_cell_value(position_ta, pos_push + 1, 1, lv_table_get_cell_value(position_ta, pos_push, 1));
             lv_table_set_cell_value(position_ta, pos_push + 1, 2, lv_table_get_cell_value(position_ta, pos_push, 2));
@@ -3352,7 +3351,8 @@ char ctrack[300];
 
 static void msg_focus_and_alert(bool bWithAudio)
 {
-    Serial.println("msg_focus_and_alert: Called");
+    if (bDEBUG)
+        Serial.println("[TDECK]...msg_focus_and_alert: Called");
     // Always wake up display on message, even if keyboard is locked
     tft_on();
 
@@ -3375,12 +3375,14 @@ static void msg_focus_and_alert(bool bWithAudio)
 
     if(bWithAudio)
     {
-        Serial.println("msg_focus_and_alert: Playing audio...");
+        if (bDEBUG)
+            Serial.println("[TDECK]...msg_focus_and_alert: Playing audio...");
         if (!play_file_from_sd(meshcom_settings.node_audio_msg.c_str(), 12))
         {
-            play_cw_start();
+            play_cw('r');
         }
-        Serial.println("msg_focus_and_alert: Audio finished.");
+        if (bDEBUG)
+            Serial.println("[TDECK]...msg_focus_and_alert: Audio finished.");
     }
 }
 
