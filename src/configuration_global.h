@@ -27,7 +27,7 @@
 #define TLORA_PAGER 49
 #define T_DECK_PRO 50
 #define TBEAM_1W 51
-
+#define RESERVED 52
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 

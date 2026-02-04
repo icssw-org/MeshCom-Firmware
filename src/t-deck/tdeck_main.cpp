@@ -3,9 +3,10 @@
  * @brief       general functions for T-Deck
  * @author      Ing. Jakob Gurnhofer (OE3GJC)
  * @author      Ing. Kurt Baumann (OE1KBC)
+ * @author      Ralph Weich (DD5RW)
  * @license     MIT
  * @copyright   Copyright (c) 2025 ICSSW.org
- * @date        2025-03-24
+ * @date        2025-12-03
  */
 #include <configuration.h>
 #include <debugconf.h>
@@ -13,6 +14,8 @@
 #include "tdeck_extern.h"
 #include "tdeck_helpers.h"
 #include <esp32/esp32_flash.h>
+#include <mheard_functions.h>
+#include <time_functions.h>
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -61,11 +64,17 @@ static void touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data);
 
 LV_IMG_DECLARE(mouse_cursor_icon); 
 
+static lv_obj_t *trackball_cursor_obj = NULL;
+static uint32_t trackball_cursor_visible_until_ms = 0;
+static const uint32_t TRACKBALL_CURSOR_SHOW_TIME_MS = 750;
+
 /**
  * initialization of T-Deck hardware
  */
 void initTDeck()
 {
+    setCpuFrequencyMhz(160);
+
     Serial.println("[INIT]...initTDeck");
 
     //! The board peripheral power control pin needs to be set to HIGH when using the peripheral
@@ -144,6 +153,13 @@ void initTDeck()
     Serial.print("[INIT]...SDCard: ");
     Serial.println(bSDDected == true ? "OK" : "ERROR");
 
+    if(bSDDected)
+    {
+        loadMHeardPersistence();
+        loadPathPersistence();
+        loadTimePersistence();
+    }
+
     Serial.print("[INIT]...Keyboard: ");
     Serial.println(kbDected == true ? "OK" : "ERROR");
     
@@ -176,7 +192,7 @@ void initTDeck()
 
 void startAudio()
 {
-    if (!play_file_from_sd_blocking(meshcom_settings.node_audio_start.c_str(), 12))
+    if (!play_file_from_sd(meshcom_settings.node_audio_start.c_str(), 12))
     {
         play_cw_start();
     }
@@ -220,8 +236,8 @@ bool setupSD()
  */
 void addMessage(const char *str)
 {
-    lv_textarea_add_text(text_ta, str);
-    uint32_t run = millis() + 200;
+    tdeck_add_system_message(str);
+    uint32_t run = millis() + 2000;
     while (millis() < run)
     {
         lv_task_handler();
@@ -351,10 +367,11 @@ void setupLvgl()
     //lv_indev_set_group(mouse_indev, lv_group_get_default());
     lv_indev_set_group(mouse_indev, lv_group_get_default());
 
-    lv_obj_t *cursor_obj;
-    cursor_obj = lv_img_create(lv_scr_act());         /*Create an image object for the cursor */
-    lv_img_set_src(cursor_obj, &mouse_cursor_icon);   /*Set the image source*/
-    lv_indev_set_cursor(mouse_indev, cursor_obj);           /*Connect the image  object to the driver*/
+    trackball_cursor_obj = lv_img_create(lv_scr_act());
+    lv_img_set_src(trackball_cursor_obj, &mouse_cursor_icon);
+    lv_obj_add_flag(trackball_cursor_obj, LV_OBJ_FLAG_HIDDEN);
+    trackball_cursor_visible_until_ms = 0;
+    lv_indev_set_cursor(mouse_indev, trackball_cursor_obj);
 
     if (kbDected)
     {
@@ -471,9 +488,53 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
             if(act_key == 0x6d)
                 act_key = 0x2e;
         }
+        else if(iKeyBoardType == 4)
+        {
+            if(act_key >= 0x61 && act_key <= 0x7a)
+            {
+                // Index 0..25 corresponds to 'a'..'z'.
+                static const char sym_map[26] = {
+                    '*', // a  -> keyboard_symbol[0][3]
+                    '!', // b  -> keyboard_symbol[3][4]
+                    '9', // c  -> keyboard_symbol[2][5]
+                    '5', // d  -> keyboard_symbol[1][2]
+                    '2', // e  -> keyboard_symbol[1][0]
+                    '6', // f  -> keyboard_symbol[2][6]
+                    '/', // g  -> keyboard_symbol[2][1]
+                    ':', // h  -> keyboard_symbol[3][1]
+                    '-', // i  -> keyboard_symbol[4][2]
+                    ';', // j  -> keyboard_symbol[3][6]
+                    '\'',// k  -> keyboard_symbol[4][6] (apostrophe)
+                    '"',// l  -> keyboard_symbol[4][1]
+                    '.', // m  -> keyboard_symbol[4][5]
+                    ',', // n  -> keyboard_symbol[3][5]
+                    '+', // o  -> keyboard_symbol[4][0]
+                    '@', // p  -> keyboard_symbol[1][3]
+                    '#', // q  -> keyboard_symbol[0][0]
+                    '3', // r  -> keyboard_symbol[2][0]
+                    '4', // s  -> keyboard_symbol[1][1]
+                    '(', // t  -> keyboard_symbol[2][2]
+                    '_', // u  -> keyboard_symbol[3][0]
+                    '?', // v  -> keyboard_symbol[2][4]
+                    '1', // w  -> keyboard_symbol[0][1]
+                    '8', // x  -> keyboard_symbol[1][4]
+                    ')', // y  -> keyboard_symbol[3][2]
+                    '7'  // z  -> keyboard_symbol[1][5]
+                };
+
+                act_key = (uint32_t)sym_map[act_key - 0x61];
+            }
+            else
+            {
+                // keep dot/comma mapping too
+                if(act_key == 0x6d)
+                    act_key = 0x2e;
+                else if(act_key == 0x6e)
+                    act_key = 0x2c;
+            }
+        }
     
-        if(bDEBUG)
-            Serial.printf("Key pressed : iKeyBoardType:%i 0x%x\n", iKeyBoardType, act_key);
+        
 
         if(!meshcom_settings.node_keyboardlock)
             tft_on();
@@ -532,7 +593,11 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
 
             if ((act_key == 0x2e) && (!meshcom_settings.node_keyboardlock)) // SYM + M
             {
+                #if defined(ENABLE_AUDIO)
+                audio_set_mute(!meshcom_settings.node_mute);
+                #else
                 meshcom_settings.node_mute = !meshcom_settings.node_mute;
+                #endif
             }
         }
 
@@ -563,6 +628,7 @@ static void mouse_read(lv_indev_drv_t *indev, lv_indev_data_t *data)
     static  int16_t last_x;
     static int16_t last_y;
     bool left_button_down = false;
+    bool activity_detected = false;
     const uint8_t dir_pins[5] = {TDECK_TBOX_G02,
                                  TDECK_TBOX_G01,
                                  TDECK_TBOX_G04,
@@ -570,6 +636,14 @@ static void mouse_read(lv_indev_drv_t *indev, lv_indev_data_t *data)
                                  TDECK_BOOT_PIN
                                 };
     static bool last_dir[5];
+    static bool last_dir_initialized = false;
+
+    if(!last_dir_initialized)
+    {
+        for(int i = 0; i < 5; ++i)
+            last_dir[i] = digitalRead(dir_pins[i]);
+        last_dir_initialized = true;
+    }
 
     uint8_t pos = 10;
     for (int i = 0; i < 5; i++) {
@@ -584,31 +658,49 @@ static void mouse_read(lv_indev_drv_t *indev, lv_indev_data_t *data)
             case 0:
                 if (last_x < (lv_disp_get_hor_res(NULL) - mouse_cursor_icon.header.w)) {
                     last_x += pos;
+                    activity_detected = true;
                 }
                 break;
             case 1:
                 if (last_y > mouse_cursor_icon.header.h) {
                     last_y -= pos;
+                    activity_detected = true;
                 }
                 break;
             case 2:
                 if (last_x > mouse_cursor_icon.header.w) {
                     last_x -= pos;
+                    activity_detected = true;
                 }
                 break;
             case 3:
                 if (last_y < (lv_disp_get_ver_res(NULL) - mouse_cursor_icon.header.h)) {
                     last_y += pos;
+                    activity_detected = true;
                 }
                 break;
             case 4:
                 left_button_down = true;
+                activity_detected = true;
                 break;
             default:
                 break;
             }
         }
     }
+
+    const uint32_t now_ms = millis();
+    if(activity_detected)
+    {
+        trackball_cursor_visible_until_ms = now_ms + TRACKBALL_CURSOR_SHOW_TIME_MS;
+        if(trackball_cursor_obj != NULL)
+            lv_obj_clear_flag(trackball_cursor_obj, LV_OBJ_FLAG_HIDDEN);
+    }
+    else if(trackball_cursor_obj != NULL && now_ms > trackball_cursor_visible_until_ms)
+    {
+        lv_obj_add_flag(trackball_cursor_obj, LV_OBJ_FLAG_HIDDEN);
+    }
+
     // Serial.printf("indev:X:%04d  Y:%04d \n", last_x, last_y);
     /*Store the collected data*/
     data->point.x = last_x;
@@ -629,7 +721,11 @@ static void touchpad_read( lv_indev_drv_t *indev_driver, lv_indev_data_t *data )
         uint8_t touched = touch.getPoint(x, y, 1);
         if (!meshcom_settings.node_keyboardlock)
         {
-            tft_on();
+            if(current_brightness_level == 0)
+                tft_on();
+            else
+                tdeck_tft_timer = millis();
+
             if (touched > 0)
             {
                 data->state = LV_INDEV_STATE_PR;
@@ -647,16 +743,16 @@ void tdeck_addMessage(bool bSuccess)
 {
     char buf[50];
 
-    snprintf(buf, 50, "%s: %s\n", "Touch", bTouchDected == true ? "OK" : "ERROR");
+    snprintf(buf, 50, "%s: %s", "Touch", bTouchDected == true ? "OK" : "ERROR");
     addMessage(buf);
 
-    snprintf(buf, 50, "%s: %s\n", "SDCard", bSDDected == true ? "OK" : "ERROR");
+    snprintf(buf, 50, "%s: %s", "SDCard", bSDDected == true ? "OK" : "ERROR");
     addMessage(buf);
 
-    snprintf(buf, 50, "%s: %s\n", "Keyboard", kbDected == true ? "OK" : "ERROR");
+    snprintf(buf, 50, "%s: %s", "Keyboard", kbDected == true ? "OK" : "ERROR");
     addMessage(buf);
 
-    snprintf(buf, 50, "%s: %s\n", "Radio", bSuccess == true ? "OK" : "ERROR");
+    snprintf(buf, 50, "%s: %s", "Radio", bSuccess == true ? "OK" : "ERROR");
     addMessage(buf);
 }
 
@@ -665,6 +761,6 @@ void tdeck_addMessage(bool bSuccess)
  */
 void tdeck_clear_text_ta()
 {
-    lv_textarea_set_text(text_ta, "");
+    tdeck_reset_msg_tabs();
 }
 

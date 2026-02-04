@@ -682,9 +682,6 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 				char ssid_arr [ssid_len +1] = {0};
 				char pwd_arr [pwd_len +1] = {0};
 
-				ssid_arr[ssid_len +1] = '\0';
-				pwd_arr[ssid_len +1] = '\0';
-				
 				memcpy(ssid_arr, conf_data + 3, ssid_len);
 				memcpy(pwd_arr, conf_data + (4 + ssid_len), pwd_len);
 

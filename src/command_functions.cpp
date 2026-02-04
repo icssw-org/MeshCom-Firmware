@@ -30,14 +30,15 @@
 #include "softser_functions.h"
 #include <onewire_functions.h>
 #include <onebutton_functions.h>
+#include "ina226_functions.h"
 
 #include "INA226.h"
 //TEST #include "compress_functions.h"
 
 // For display contrast control
 #if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
-#include <U8g2lib.h>
-extern U8G2 *u8g2;
+    #include <U8g2lib.h>
+    extern U8G2 *u8g2;
 #endif
 
 #if defined(ENABLE_BMX680)
@@ -1018,6 +1019,8 @@ void commandAction(char *umsg_text, bool ble)
     }
     else
     #endif
+
+    #if defined (ENABLE_INA226)
     if(commandCheck(msg_text+2, (char*)"shunt ") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+8);
@@ -1093,6 +1096,42 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"ina226 on") == 0)
+    {
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        bReturn = true;
+
+        bINA226ON = true;
+
+        meshcom_settings.node_sset3 |= 0x0800;
+
+        save_settings();
+
+        setupINA226();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"ina226 off") == 0)
+    {
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        bReturn = true;
+
+        bINA226ON = false;
+        ina226_found = false;
+
+        meshcom_settings.node_sset3 &= ~0x0800;
+
+        save_settings();
+    }
+    else
+    #endif
     if(commandCheck(msg_text+2, (char*)"batt factor ") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
@@ -4168,7 +4207,7 @@ void commandAction(char *umsg_text, bool ble)
 
             if(bAnalogCheck)
             {
-                Serial.printf("\n...ANALOG PIN %i factor %.4f\n", meshcom_settings.node_analog_pin, meshcom_settings.node_analog_faktor);
+                Serial.printf("\n...ANALOG PIN %i factor %.4f slope %.4f offset %.0f\n", meshcom_settings.node_analog_pin, meshcom_settings.node_analog_faktor, meshcom_settings.node_analog_slope, meshcom_settings.node_analog_offset);
                 Serial.printf("...Value %.2f V\n", fAnalogValue);
                 Serial.println("");
             }
@@ -4287,6 +4326,8 @@ void commandAction(char *umsg_text, bool ble)
         sensdoc["680F"] = bme680_found;
         sensdoc["811"] = bMCU811ON;
         sensdoc["811F"] = mcu811_found;
+        sensdoc["226"] = bINA226ON;
+        sensdoc["226F"] = ina226_found;
         sensdoc["AHT"] = bAHT20ON;
         sensdoc["AHTF"] = aht20_found;
         sensdoc["SS"] = bSOFTSERON;
