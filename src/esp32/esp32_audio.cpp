@@ -85,17 +85,15 @@ bool play_file_from_sd(const char *filename, int volume)
             audio.setVolume(volume);
             audio.connecttoFS(SD, strAudioWithType.c_str());
 
-            if (bDisplayCont)
-            {
+            if (bDEBUG)
                 Serial.printf("[audio]...playing %s in background\n", strAudioWithType.c_str());
-            }
 
             xTaskCreate(
                 play_function,
                 "audio play task",
                 16 * 1024,
                 NULL,
-                10,
+                50,
                 NULL
             );
             return true;
@@ -103,6 +101,7 @@ bool play_file_from_sd(const char *filename, int volume)
         else
         {
             Serial.printf("[audio]...file %s not found on SD\n", filename);
+            xSemaphoreGive(audioSemaphore);
             return false;
         }
     }
@@ -129,9 +128,7 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
     if (meshcom_settings.node_mute)
     {
         if (bDEBUG)
-        {
             Serial.println("[audio]...muted");
-        }
         return true;
     }
     
@@ -152,9 +149,7 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
         audio.setVolume(volume);
         audio.connecttoFS(SD, strAudioWithType.c_str());
         if (bDEBUG)
-        {
             Serial.printf("[audio]...playing %s\n", strAudioWithType.c_str());
-        }
 
         while (audio.isRunning())
         {
@@ -213,7 +208,8 @@ void playTone(int duration_ms, int volume_percent) {
         // Use a timeout instead of portMAX_DELAY to prevent freezing if I2S is not consuming data
         esp_err_t err = i2s_write(i2s_num, buffer, sizeof(buffer), &bytes_written, 100 / portTICK_PERIOD_MS);
         if (err != ESP_OK) {
-            if (bDEBUG) Serial.printf("[audio]...i2s_write failed: %d\n", err);
+            if (bDEBUG) 
+                Serial.printf("[audio]...i2s_write failed: %d\n", err);
             break; // Exit loop on error to prevent freeze
         }
         total_ms--;
@@ -228,9 +224,7 @@ void play_cw(const char character, int volume)
     if (meshcom_settings.node_mute)
     {
         if (bDEBUG)
-        {
             Serial.println("[audio]...muted");
-        }
         return;
     }
 
@@ -427,13 +421,12 @@ void play_cw_start()
     if (meshcom_settings.node_mute)
     {
         if (bDEBUG)
-        {
             Serial.println("[audio]...muted");
-        }
         return;
     }
 
-    if (bDEBUG) Serial.println("[audio]...playing CW start");
+    if (bDEBUG)
+        Serial.println("[audio]...playing CW start");
 
     const char *morseCode = "-.-.-";
 
@@ -479,7 +472,8 @@ void audio_set_mute(bool mute) {
     meshcom_settings.node_mute = mute;
     
     if (mute) {
-        if (bDEBUG) Serial.println("[audio]...muting and disabling hardware");
+        if (bDEBUG)
+            Serial.println("[audio]...muting and disabling hardware");
         // Stop any playing audio
         if (audio.isRunning()) {
             audio.stopSong();
@@ -487,7 +481,8 @@ void audio_set_mute(bool mute) {
         // Uninstall I2S driver to save power
         i2s_driver_uninstall(i2s_num);
     } else {
-        if (bDEBUG) Serial.println("[audio]...unmuting and enabling hardware");
+        if (bDEBUG)
+            Serial.println("[audio]...unmuting and enabling hardware");
         // Re-install I2S driver with default settings (same as Audio lib default)
         i2s_config_t i2s_config = {
             .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
