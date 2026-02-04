@@ -3,8 +3,11 @@
 #include <Arduino.h>
 #include <time.h>
 
-#include <time_functions.h>
+#if defined(ESP32)
 #include <Preferences.h>
+#endif 
+
+#include <time_functions.h>
 #include <loop_functions.h>
 #include <clock.h>
 #include <mheard_functions.h>
@@ -96,6 +99,7 @@ String convertUNIXtoString(uint32_t timestamp)
     return strDateTime;
 }
 
+#if defined(ESP32)
 Preferences timePrefs;
 
 void saveTimePersistence() {
@@ -130,3 +134,4 @@ void loadTimePersistence() {
         MyClock.SetClock((time_t)max_time, true);
     }
 }
+#endif 

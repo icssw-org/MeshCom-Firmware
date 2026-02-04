@@ -4,10 +4,10 @@
 #include <ArduinoJson.h>
 #include <time_functions.h>
 #include <mheard_functions.h>
-#include <SD.h>
-#include <SPI.h>
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#include <SD.h>
+#include <SPI.h>
 #include <t-deck/lv_obj_functions_extern.h>
 #include <t-deck/tdeck_helpers.h>
 #endif
