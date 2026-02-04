@@ -65,6 +65,7 @@ void initDisplay()
     }
 
     u8g2->begin();
+    u8g2->setContrast(0);  // Default to minimum brightness
 
 #endif
 
