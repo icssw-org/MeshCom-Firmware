@@ -3447,17 +3447,17 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     else
     {
         // 30 sec no new smartbeacon
-        if(gps_send_rate == 35)
-            gps_send_rate = 45;
+        if(gps_send_rate == 15)
+            gps_send_rate = 16;
         else
-        if(gps_send_rate == 45)
-            gps_send_rate = 55;
+        if(gps_send_rate == 16)
+            gps_send_rate = 18;
         else
-        if(gps_send_rate == 55)
-            gps_send_rate = 65;
+        if(gps_send_rate == 18)
+            gps_send_rate = 20;
         else
-        if(gps_send_rate == 65)
-            gps_send_rate = 75;
+        if(gps_send_rate == 20)
+            gps_send_rate = 25;
         else
         {
             if(meshcom_settings.node_postime > 0)
