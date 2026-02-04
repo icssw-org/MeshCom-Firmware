@@ -34,6 +34,12 @@
 #include "INA226.h"
 //TEST #include "compress_functions.h"
 
+// For display contrast control
+#if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
+#include <U8g2lib.h>
+extern U8G2 *u8g2;
+#endif
+
 #if defined(ENABLE_BMX680)
 #include "bme680.h"
 #endif
@@ -713,6 +719,36 @@ void commandAction(char *umsg_text, bool ble)
         save_settings();
 
         sendDisplayHead(false);
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"contrast ") == 0)
+    {
+        #if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
+        int contrast_value = atoi(msg_text + 11);  // "--" + "contrast " = 2 + 9 = 11
+        if(contrast_value < 0) contrast_value = 0;
+        if(contrast_value > 255) contrast_value = 255;
+
+        if(u8g2 != NULL)
+        {
+            u8g2->setContrast(contrast_value);
+            Serial.printf("[DISP]...Contrast set to %d\n", contrast_value);
+
+            if(ble)
+            {
+                char response[40];
+                snprintf(response, sizeof(response), "Contrast set to %d", contrast_value);
+                addBLECommandBack(response);
+            }
+        }
+        else
+        {
+            Serial.println("[DISP]...Display not initialized");
+        }
+        #else
+        Serial.println("[DISP]...Contrast not supported on this display");
+        #endif
+
+        bReturn = true;
     }
     else
     if(commandCheck(msg_text+2, (char*)"button on") == 0)
