@@ -1,10 +1,10 @@
 /**
- * PA Control implementation for Heltec V4
+ * PA Control implementation for Heltec V4 (868/915MHz with PA only)
  */
 
 #include "pa_control.h"
 
-#ifdef BOARD_HELTEC_V4
+#if defined(BOARD_HELTEC_V4) && defined(HELTEC_V4_HAS_PA)
 
 void initPAControl() {
     // Set up PA power enable - keeps PA powered
