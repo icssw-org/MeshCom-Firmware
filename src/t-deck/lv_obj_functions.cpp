@@ -3442,7 +3442,7 @@ void tdeck_add_system_message(const char *text)
     bubble.sd = bSDDected;
     bubble.wlan = bWIFIAP;
 
-    String group = "SYSTEM";
+    String group = "booting...";
     if(msg_active_tab_index >= 0 && msg_active_tab_index < (int)msg_tab_entries.size())
     {
         group = msg_tab_entries[msg_active_tab_index].group;
