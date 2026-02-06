@@ -681,6 +681,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_size(dropdown_modusselect, 110, 25);
     lv_dropdown_set_options(dropdown_modusselect, (char*)"OFF\nKB LOCK\nLIGHT ON\nKBL&LIGHT");
     lv_obj_add_event_cb(dropdown_modusselect, btn_event_handler_dropdown_modusselect, LV_EVENT_ALL, NULL);
+    lv_dropdown_close(dropdown_modusselect);
 
     // MAP-SELECT TAB
     dropdown_mapselect = lv_dropdown_create(t1);
@@ -689,6 +690,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_size(dropdown_mapselect, 110, 25);
     lv_dropdown_set_options(dropdown_mapselect, getMapDropbox().c_str());
     lv_obj_add_event_cb(dropdown_mapselect, btn_event_handler_dropdown_mapselect, LV_EVENT_ALL, NULL);
+    lv_dropdown_close(dropdown_mapselect);
 
     // COUNTRY
     dropdown_country = lv_dropdown_create(t1);
@@ -697,6 +699,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_size(dropdown_country, 110, 25);
     lv_dropdown_set_options(dropdown_country, getCountryDropbox().c_str());
     lv_obj_add_event_cb(dropdown_country, btn_event_handler_dropdown_country, LV_EVENT_ALL, NULL);
+    lv_dropdown_close(dropdown_country);
 
     // APRS TAB
     dropdown_aprs = lv_dropdown_create(t1);
@@ -705,6 +708,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_size(dropdown_aprs, 110, 25);
     lv_dropdown_set_options(dropdown_aprs, (char*)"Runner\nCar\nCycle\nBike\nWX\nPhone\nBulli\nHouse\nNode");
     lv_obj_add_event_cb(dropdown_aprs, btn_event_handler_aprs, LV_EVENT_ALL, NULL);
+    lv_dropdown_close(dropdown_aprs);
     
     // START TONE
     lv_obj_t * btnsetup_stone = lv_btn_create(t1);
@@ -3267,8 +3271,9 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
  */
 void tdeck_refresh_SET_view()
 {
-    lv_textarea_set_text(setup_callsign, meshcom_settings.node_call);
     char vChar[10];
+
+    lv_textarea_set_text(setup_callsign, meshcom_settings.node_call);
     sprintf(vChar, "%.4lf", meshcom_settings.node_lat);
     lv_textarea_set_text(setup_lat, vChar);
     sprintf(vChar, "%c", meshcom_settings.node_lat_c);
