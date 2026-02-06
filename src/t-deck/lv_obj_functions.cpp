@@ -123,7 +123,7 @@ lv_obj_t    *header_batt_icon;
 lv_obj_t    *header_batt_label;
 lv_obj_t    *header_wifi_icon;
 lv_obj_t    *header_bt_icon;
-lv_obj_t    *header_locator_label;
+// lv_obj_t    *header_locator_label;
 
 static bool tab_menu_visible = false;
 
@@ -185,7 +185,7 @@ static void update_header_sat_indicator(void);
 static void update_header_batt_indicator(float batt, int proz);
 static void update_header_wifi_indicator(void);
 static void update_header_bt_indicator(void);
-static void update_header_locator_label(void);
+// static void update_header_locator_label(void);
 static bool compute_locator_from_settings(char *buffer, size_t len);
 static bool compute_maidenhead_locator(double lat, double lon, char *buffer, size_t len);
 static int clamp_int(int value, int min_val, int max_val);
@@ -224,7 +224,7 @@ static void ensure_msg_styles(void);
 static String build_timestamp_string(void);
 static bool is_numeric_string(const String &value);
 static void msg_focus_and_alert(bool bWithAudio);
-static void update_header_locator_label(void);
+// static void update_header_locator_label(void);
 static bool compute_locator_from_settings(char *buffer, size_t len);
 static bool compute_maidenhead_locator(double lat, double lon, char *buffer, size_t len);
 
@@ -423,49 +423,50 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_label_set_text(header_time_label, "--:--");
     lv_label_set_long_mode(header_time_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_time_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_align(header_time_label, LV_ALIGN_LEFT_MID, 60, 0);
+    lv_obj_align(header_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
-    header_sat_label = lv_label_create(tab_menu_header);
-    lv_label_set_text(header_sat_label, "0");
-    lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_sat_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_align(header_sat_label, LV_ALIGN_RIGHT_MID, 0, 0);
-
-    header_sat_icon = lv_label_create(tab_menu_header);
-    lv_label_set_text(header_sat_icon, LV_SYMBOL_GPS); // Symbol stammt von WpZoom (CC BY-SA 3.0, siehe README)
-    lv_obj_align_to(header_sat_icon, header_sat_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
     header_batt_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_label, "0%");
     lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_batt_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_align_to(header_batt_label, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -20, 0);
+    lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -20, 0);
 
     header_batt_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_icon, LV_SYMBOL_BATTERY_EMPTY);
     lv_obj_align_to(header_batt_icon, header_batt_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
+    header_sat_label = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_sat_label, "0");
+    lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(header_sat_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_align_to(header_sat_label, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -6, 0);
+
+    header_sat_icon = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_sat_icon, LV_SYMBOL_GPS); // Symbol stammt von WpZoom (CC BY-SA 3.0, siehe README)
+    lv_obj_align_to(header_sat_icon, header_sat_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
+    
     /* wifi + bluetooth icons (left of battery) */
     header_wifi_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
     // Slightly increase left offset so wifi icon sits closer to battery icon
-    lv_obj_align_to(header_wifi_icon, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
+    lv_obj_align_to(header_wifi_icon, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
 
     header_bt_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_bt_icon, LV_SYMBOL_BLUETOOTH);
     // Match spacing with wifi icon (leave a comfortable gap)
     lv_obj_align_to(header_bt_icon, header_wifi_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
 
-    header_locator_label = lv_label_create(tab_menu_header);
+    /*header_locator_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_locator_label, "JJ00AAAA");
     lv_label_set_long_mode(header_locator_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_locator_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_align(header_locator_label, LV_ALIGN_CENTER, -18, 0);
+    lv_obj_align(header_locator_label, LV_ALIGN_CENTER, -18, 0);*/
 
     update_header_batt_indicator(global_batt > 0.0f ? global_batt / 1000.0f : 0.0f, global_proz);
     update_header_sat_indicator();
     update_header_wifi_indicator();
     update_header_bt_indicator();
-    update_header_locator_label();
+    //update_header_locator_label();
 
     tv = lv_tabview_create(parent, LV_DIR_TOP, 42);
     lv_obj_set_size(tv, screen_w, LV_MAX(0, screen_h - header_height));
@@ -1913,7 +1914,7 @@ static void apply_tab_bar_styles(void)
     lv_obj_set_style_pad_all(tab_bar, 4, LV_PART_ITEMS);
 }
 
-static void update_header_locator_label(void)
+/*static void update_header_locator_label(void)
 {
     if(header_locator_label == NULL)
         return;
@@ -1927,7 +1928,7 @@ static void update_header_locator_label(void)
     {
         lv_label_set_text(header_locator_label, DEFAULT_LOCATOR_TEXT);
     }
-}
+}*/
 
 static bool compute_locator_from_settings(char *buffer, size_t len)
 {
@@ -3151,7 +3152,7 @@ void tdeck_update_time_label()
         lv_label_set_text(header_time_label, header_time);
     }
 
-    update_header_locator_label();
+    // update_header_locator_label();
     update_header_batt_indicator(global_batt > 0.0f ? global_batt / 1000.0f : 0.0f, global_proz);
     update_header_sat_indicator();
 }
