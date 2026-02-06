@@ -2175,6 +2175,7 @@ static MsgTabEntry *msg_tabs_get_or_create_entry(const String &group, int *index
     lv_obj_set_style_border_width(new_entry.button, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(new_entry.button, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(new_entry.button, 6, LV_PART_MAIN);
+    lv_obj_set_style_min_width(new_entry.button, 35, LV_PART_MAIN);
     lv_obj_add_flag(new_entry.button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_event_cb(new_entry.button, msg_tab_button_event_cb, LV_EVENT_CLICKED, NULL);
 
