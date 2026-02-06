@@ -66,6 +66,8 @@ definitions for HELTEC_V2_1
 #define I2C_SDA 4       // getestet OE5HWN
 #define I2C_SCL 15      // getestet OE5HWN
 
+#define BATTERY_PIN 37  // Battery voltage via voltage divider on GPIO 37
+
 #define OneWire_GPIO 17 // getestet OE5HWN
 
 #define GPS_RX_PIN 23

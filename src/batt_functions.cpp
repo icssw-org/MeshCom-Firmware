@@ -49,6 +49,12 @@ uint32_t vbat_pin = BATTERY_PIN;
 
 #endif
 
+#if defined(BOARD_HELTEC)
+
+uint32_t vbat_pin = BATTERY_PIN;
+
+#endif
+
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 
 uint32_t vbat_pin = BATTERY_PIN;
@@ -64,7 +70,7 @@ uint32_t vbat_pin = BATTERY_PIN;
 #define DEFAULT_VREF    1100        //Use adc2_vref_to_gpio() to obtain a better estimate
 #define NO_OF_SAMPLES   64          //Multisampling
 
-#ifndef BOARD_TRACKER
+#if !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC)
 //static
 esp_adc_cal_characteristics_t adc_chars[sizeof(esp_adc_cal_characteristics_t)];
 
@@ -102,7 +108,7 @@ adc_atten_t atten = ADC_ATTEN_DB_0;
 //static const
 adc_unit_t unit = ADC_UNIT_2;
 #elif defined(BOARD_TRACKER)
-#elif defined(BOARD_HELTEC) || defined(BOARD_STICK_V3)
+#elif defined(BOARD_STICK_V3)
 //static const
 adc_atten_t atten = ADC_ATTEN_DB_0;
 //static const
@@ -237,6 +243,10 @@ void init_batt(void)
 
 #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 // NONE
+
+#elif defined(BOARD_HELTEC)
+	// Heltec V2: simple analogRead on GPIO 37
+	pinMode(vbat_pin, INPUT);
 
 #else
 	//only for Test check_efuse();
@@ -384,6 +394,19 @@ float read_batt(void)
 			Serial.printf("%s [BATT]...reading: %u factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), analogValue, fBattFaktor, raw);
 		}
 
+	#elif defined(BOARD_HELTEC)
+		// Heltec V2: GPIO 37 via 220K/100K voltage divider (3.2:1 ratio)
+		analogReadResolution(12);
+
+		uint32_t adc_reading = 0;
+		for (int i = 0; i < 8; i++) {
+			adc_reading += analogReadMilliVolts(vbat_pin);
+		}
+		adc_reading /= 8;
+
+		// Multiply by voltage divider ratio: (220K + 100K) / 100K = 3.2
+		raw = (float)adc_reading * 3.2;
+
 	#else
 
 	int adc_value = 0;
@@ -415,7 +438,7 @@ float read_batt(void)
 	#elif defined(BOARD_TBEAM) || defined(BOARD_SX1268)
 		raw = raw * 10.7687;
 	#elif defined(BOARD_HELTEC)
-		raw = raw * 24.80;
+		// all done - millivolts computed directly in read path
 	#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_TRACKER) || defined(BOARD_HELTEC_V4)
 		// all done
 	#elif defined(BOARD_E22_S3)
