@@ -299,14 +299,14 @@ bool tdeck_tab_menu_is_visible(void)
     return tab_menu_visible;
 }
 
-static bool kbl_on = false;
+static bool kbd_light_on = false;
 
 static void tab_kbl_button_event_cb(lv_event_t * e)
 {
     if(lv_event_get_code(e) == LV_EVENT_CLICKED)
     {
-        kbl_on = !kbl_on;
-        if(kbl_on)
+        kbd_light_on = !kbd_light_on;
+        if (kbd_light_on)
         {
             setKeyboardBacklight(255);
             lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
@@ -1628,14 +1628,20 @@ void tft_on()
     resetBrightness();
 
     // Force sync keyboard backlight
-    if(!meshcom_settings.node_keyboardlock) {
-        // Force ON like the button
-        setKeyboardBacklight(255);
-        
-        // Update button state visual
-        if(tab_kbl_icon_label) {
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
-            kbl_on = true;
+    if (!meshcom_settings.node_keyboardlock) {
+        if (kbd_light_on)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...tft_on: turn on keyboard backlight");
+
+            // turn on keyboard backlight
+            setKeyboardBacklight(255);
+
+            // Update button state visual
+            if (tab_kbl_icon_label)
+            {
+                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+            }
         }
     }
 
@@ -1666,12 +1672,17 @@ void tft_off()
 
         if (bDEBUG)
             Serial.println("[TDECK]...tft_off: sending sleep commands");
-        setKeyboardBacklight(0);
 
-        // Update state and UI to reflect that KBL is now OFF
-        kbl_on = false;
-        if(tab_kbl_icon_label) {
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+        if (kbd_light_on)
+        {
+            // turn off keyboard backlight
+            setKeyboardBacklight(0);
+
+            // Update UI to reflect that KBL is now OFF
+            if(tab_kbl_icon_label)
+            {
+                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+            }
         }
 
         tft.writecommand(TFT_DISPOFF);
