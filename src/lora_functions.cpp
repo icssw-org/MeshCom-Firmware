@@ -38,10 +38,14 @@
     extern int transmissionState;
 #endif
 
-#if defined(SX1262_V3) || defined(SX1262_E290)
+#if defined(SX1262_V3) || defined(SX1262_E290) || defined(SX1262_V4)
     #include <RadioLib.h>
     extern SX1262 radio;
     extern int transmissionState;
+#endif
+
+#ifdef BOARD_HELTEC_V4
+    #include "esp32/pa_control.h"
 #endif
 
 #ifdef BOARD_T_ECHO
@@ -996,6 +1000,9 @@ bool doTX()
                         Radio.Send(lora_tx_buffer, sendlng);
                     #else
                         #ifndef BOARD_T5_EPAPER
+                        #ifdef BOARD_HELTEC_V4
+                        enablePATransmit();
+                        #endif
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                         #endif
                         bLED_RED = true;
@@ -1018,6 +1025,9 @@ bool doTX()
                     Radio.Send(lora_tx_buffer, sendlng);
                 #else
                     #ifndef BOARD_T5_EPAPER
+                    #ifdef BOARD_HELTEC_V4
+                    enablePATransmit();
+                    #endif
                     transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                     #endif
                     bLED_ORANGE = true;
@@ -1079,6 +1089,9 @@ bool doTX()
                         Radio.Send(lora_tx_buffer, sendlng);
                     #else
                         #ifndef BOARD_T5_EPAPER
+                        #ifdef BOARD_HELTEC_V4
+                        enablePATransmit();
+                        #endif
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                         #endif
                         bLED_RED = true;

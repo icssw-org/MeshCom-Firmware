@@ -59,6 +59,10 @@
 #include "esp32_functions.h"
 #include "tft_display_functions.h"
 
+#ifdef BOARD_HELTEC_V4
+    #include "pa_control.h"
+#endif
+
 #ifndef BOARD_TLORA_OLV216
     #include <lora_setchip.h>
 #endif
@@ -342,11 +346,18 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 #ifdef SX1262_E290
     // RadioModule SX1262
     // cs - irq - reset - interrupt gpio
-    // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
+    // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle,
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
     //  begin(sck, miso, mosi, ss).
     SX1262 radio = new Module(PIN_LORA_NSS, PIN_LORA_DIO_1, PIN_LORA_NRST, PIN_LORA_BUSY);
+
+#endif
+
+#ifdef SX1262_V4
+    // RadioModule SX1262 for Heltec V4 (with external PA)
+    // Same pins as V3, but requires PA control during transmit
+    SX1262 radio = new Module(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
 
 #endif
 
@@ -754,6 +765,11 @@ void esp32setup()
         SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     #endif
 
+    #ifdef BOARD_HELTEC_V4
+        SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+        initPAControl();
+    #endif
+
     bool bSETGPS_POWER=false;
 
     #if defined(ENABLE_GPS)
@@ -924,6 +940,10 @@ void esp32setup()
     Serial.print(F("[LoRa]...SX1262 E290 chip"));
     #endif
 
+    #ifdef SX1262_V4
+    Serial.print(F("[LoRa]...SX1262 V4 chip (with PA)"));
+    #endif
+
 
     #if defined (BOARD_TRACKER)
         SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
@@ -995,7 +1015,7 @@ void esp32setup()
     if(bRadio)
     {
         // set boosted gain
-        #if defined(SX1262_V3) || defined(SX126x_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X)
+        #if defined(SX1262_V3) || defined(SX126x_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || defined(SX1262_V4)
         Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
         if (radio.setRxBoostedGainMode(meshcom_settings.node_sset2 & 0x0800)  != RADIOLIB_ERR_NONE ) {
             Serial.println(F("Boosted Gain is not available for this module!"));
@@ -1155,7 +1175,7 @@ void esp32setup()
         }
         #endif
 
-        #if defined(SX1262_V3) || defined(SX1262_E290)
+        #if defined(SX1262_V3) || defined(SX1262_E290) || defined(SX1262_V4)
 
             // set Receive Interupt
             bEnableInterruptReceive = true; //KBC 0801
@@ -1644,6 +1664,10 @@ void esp32loop()
                 // RF switch is powered down etc.
                 radio.finishTransmit();
 
+                #ifdef BOARD_HELTEC_V4
+                disablePATransmit();
+                #endif
+
                 #ifndef BOARD_TLORA_OLV216
                 // reset MeshCom now
                 if(bSetLoRaAPRS)
@@ -1705,12 +1729,19 @@ void esp32loop()
                 bEnableInterruptTransmit = true; //KBC 0801
                 radio.setPacketSentAction(setFlagSent); //KBC 0801
 
+                #ifdef BOARD_HELTEC_V4
+                enablePATransmit();
+                #endif
+
                 if(doTX())
                 {
                     //KBC 0801 bEnableInterruptTransmit = true;
                 }
                 else
                 {
+                    #ifdef BOARD_HELTEC_V4
+                    disablePATransmit();
+                    #endif
                     if(bLORADEBUG)
                         Serial.print(F("[LoRa]...Starting to listen again... "));
 
