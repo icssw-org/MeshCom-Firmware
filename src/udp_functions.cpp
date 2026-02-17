@@ -466,11 +466,7 @@ bool startWIFI()
 {
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
   {
-    Preferences pref;
-    pref.begin("Credentials", false);
-    bool node_wifion = pref.getBool("node_wifion", true);
-    pref.end();
-    if(!node_wifion)
+    if (!meshcom_settings.node_wifion)
     {
       Serial.println("[WIFI]...disabled by Settings (node_wifion=false)");
       return false;
@@ -480,7 +476,7 @@ bool startWIFI()
   if(hasIPaddress)
     return false;
 
-  if(bWIFIAP)
+  if (bWIFIAP)
   {
     WiFi.disconnect(true, true);
     delay(500);
