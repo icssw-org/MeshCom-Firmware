@@ -18,11 +18,14 @@ using namespace ace_button;
 
 void box_event_cb(lv_event_t * e);
 void btn_event_handler_aprs(lv_event_t * e);
+void btn_event_handler_clear_messages(lv_event_t * e);
+void btn_event_handler_clear_mheards(lv_event_t * e);
+void btn_event_handler_clear_nodes(lv_event_t * e);
 void btn_event_handler_setup(lv_event_t * e);
-void btn_event_handler_switch(lv_event_t * e);
+void btn_event_handler_reboot(lv_event_t * e);
+void btn_event_handler_setup_btn(lv_event_t * e);
 void btn_event_handler_dropdown_country(lv_event_t * e);
 void btn_event_handler_dropdown_mapselect(lv_event_t * e);
-void btn_event_handler_dropdown_modusselect(lv_event_t * e);
 void btn_event_handler_kbl_sync_sw(lv_event_t * e);
 void btn_event_handler_send(lv_event_t * e);
 void btn_event_handler_clear(lv_event_t * e);

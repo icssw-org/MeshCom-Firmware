@@ -1997,6 +1997,10 @@ void esp32loop()
         }
     #endif
 
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    tdeck_update_header_standby();
+    #endif
+
     #if defined (ANALOG_PIN)
     loop_ADCFunctions();    // OE3WAS
     #endif

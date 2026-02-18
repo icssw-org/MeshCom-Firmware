@@ -182,12 +182,15 @@ struct s_meshcom_settings
 	String node_audio_msg = "/";
 	bool node_keyboardlock = false;
 	bool node_backlightlock = false;
-	int node_modus = 0;
+	int node_modus = 0; // 0..OFF, 1..KB LOCK, 2..LIGHT ON, 3.. KBL&LIGHT
 	bool node_mute = false;
 	// When true: persist every incoming non-system message immediately
 	// (useful for long-running tests; may increase flash wear).
+	bool node_persist_to_flash = true;
+	bool node_persist_to_sd = true;
 	bool node_immediate_save = false;
 	bool node_kbl_sync = true;
+	bool node_wifion = true;
 	#endif
 };
 
