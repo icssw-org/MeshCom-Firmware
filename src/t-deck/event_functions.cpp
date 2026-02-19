@@ -273,6 +273,10 @@ void btn_event_handler_setup_btn(lv_event_t * e)
 
         if (meshcom_settings.node_wifion)
         {
+            // turn webserver on and AP off
+            commandAction((char*)"--wifiap off", false);
+            commandAction((char*)"--webserver on", false);
+
             // attempt to start WiFi immediately
             startWIFI();
         }
@@ -280,6 +284,7 @@ void btn_event_handler_setup_btn(lv_event_t * e)
         {
             // turn webserver and AP off (makes no sense without wifi)
             commandAction((char*)"--webserver off", false);
+            commandAction((char*)"--gateway off", false);
             commandAction((char*)"--wifiap off", false);
             // disable WiFi and update header
             WiFi.disconnect(true, true);
