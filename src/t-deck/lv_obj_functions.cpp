@@ -2007,6 +2007,8 @@ static void update_header_sat_indicator(void)
     {
         lv_label_set_text(header_sat_label, "0");
         lv_obj_set_style_text_color(header_sat_icon, lv_color_white(), LV_PART_MAIN);
+        lv_obj_add_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
@@ -2018,6 +2020,8 @@ static void update_header_sat_indicator(void)
     lv_color_t icon_color = (posinfo_fix || posinfo_satcount > 0) ? lv_palette_main(LV_PALETTE_GREEN)
                                                                          : lv_palette_main(LV_PALETTE_RED);
     lv_obj_set_style_text_color(header_sat_icon, icon_color, LV_PART_MAIN);
+    lv_obj_clear_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void update_header_batt_indicator(float batt, int proz)
@@ -2088,6 +2092,7 @@ static void update_header_wifi_indicator(void)
             
             lv_obj_set_style_text_color(header_wifi_icon, lv_color_white(), LV_PART_MAIN);
             lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+            lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
             return;
         }
     }
@@ -2101,6 +2106,7 @@ static void update_header_wifi_indicator(void)
     {
         lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+        lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
@@ -2110,12 +2116,14 @@ static void update_header_wifi_indicator(void)
     {
         lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+        lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
     else
     {
         // Not enabled/configured -> White
         lv_obj_set_style_text_color(header_wifi_icon, lv_color_white(), LV_PART_MAIN);
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+        lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -3667,7 +3675,8 @@ void tdeck_refresh_SET_view()
         lv_obj_add_state(btn_gps, LV_STATE_CHECKED);
     else
         lv_obj_clear_state(btn_gps, LV_STATE_CHECKED);
-    // UTC offset        
+
+        // UTC offset        
     sprintf(vChar, "%.1f", meshcom_settings.node_utcoff);
     lv_textarea_set_text(setup_utc, vChar);
     // TRACK
@@ -3697,9 +3706,13 @@ void tdeck_refresh_SET_view()
         lv_obj_clear_state(btn_persist_immediate, LV_STATE_CHECKED);
     // WIFI
     if (meshcom_settings.node_wifion)
+    {
         lv_obj_add_state(btn_wifi, LV_STATE_CHECKED);
+    }
     else
+    {
         lv_obj_clear_state(btn_wifi, LV_STATE_CHECKED);
+    }
     // WIFIAP
     if (meshcom_settings.node_wifion && bWIFIAP)  // bWIFIAP
     {
@@ -3707,7 +3720,9 @@ void tdeck_refresh_SET_view()
         lv_obj_add_state(btn_wifi, LV_STATE_CHECKED);
     }
     else
+    {
         lv_obj_clear_state(btn_wifiap, LV_STATE_CHECKED);
+    }
 
     // BTN LOCK
     /*
