@@ -276,6 +276,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
       // build the json with Arduino JSON
       ctJson["src_type"] = src_type;
       ctJson["type"] = "tele";
+      ctJson["src"] = aprsmsg.msg_source_path.c_str();
       ctJson["temp1"] = meshcom_settings.node_temp;
       ctJson["temp2"] = meshcom_settings.node_temp2;
       ctJson["hum"] = meshcom_settings.node_hum;
@@ -283,6 +284,29 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
       ctJson["qnh"] = meshcom_settings.node_press_asl;
       ctJson["gas"] = meshcom_settings.node_gas_res;
       ctJson["co2"] = meshcom_settings.node_co2;
+
+      // clear the buffer
+      memset(t_json, 0x00, sizeof(t_json));
+      // serialize the json
+      tjson_len = measureJson(ctJson);
+      serializeJson(ctJson, c_tjson, tjson_len + 1);
+
+      memcpy(t_json, c_tjson, tjson_len + 1);
+    }
+    if(strcmp(src_type, "lora") == 0)
+    {
+      // build the json with Arduino JSON
+      ctJson["src_type"] = src_type;
+      ctJson["type"] = "tele";
+      ctJson["src"] = aprsmsg.msg_source_path.c_str();
+      ctJson["batt"] = aprspos.bat;
+      ctJson["temp1"] = aprspos.temp;
+      ctJson["temp2"] = aprspos.temp2;
+      ctJson["hum"] = aprspos.hum;
+      ctJson["qfe"] = aprspos.qfe;
+      ctJson["qnh"] = aprspos.qnh;
+      ctJson["gas"] = aprspos.gasres;
+      ctJson["co2"] = aprspos.co2;
 
       // clear the buffer
       memset(t_json, 0x00, sizeof(t_json));
@@ -358,7 +382,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
 
     UdpExtern.endPacket();
 
-    if(strcmp(src_type, "node") == 0 && strlen(c_tjson) > 0)
+    if((strcmp(src_type, "node") == 0 || strcmp(src_type, "lora") == 0) && strlen(c_tjson) > 0)
     {
       // Telemetrie
       UdpExtern.beginPacket(apip , EXTERN_PORT);
