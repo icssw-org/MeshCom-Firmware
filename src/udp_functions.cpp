@@ -474,10 +474,18 @@ bool startWIFI()
   }
 #endif
   if(hasIPaddress)
+  {
+    if (bDEBUG)
+        Serial.println("[WIFI]...hasIPaddress=true");
+
     return false;
+  }
 
   if (bWIFIAP)
   {
+    if (bDEBUG)
+        Serial.println("[WIFI]...bWIFIAP=true");
+
     WiFi.disconnect(true, true);
     delay(500);
 
@@ -499,12 +507,18 @@ bool startWIFI()
   }
   else
   {
+    if (bDEBUG)
+        Serial.println("[WIFI]...bWIFIAP=false");
+
     if(strcmp(meshcom_settings.node_ssid, "none") == 0)
     {
       Serial.printf("[WIFI]...ST no ssid<%s> pwd<%s> not connected\n", meshcom_settings.node_ssid, meshcom_settings.node_pwd);
       return false;
     }
   }
+
+  if (bDEBUG)
+      Serial.println("[WIFI]...WiFi.disconnect(true, true)");
 
   WiFi.disconnect(true, true);
 	delay(500);
