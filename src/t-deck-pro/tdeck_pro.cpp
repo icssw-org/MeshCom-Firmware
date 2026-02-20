@@ -26,6 +26,11 @@
 #include <configuration.h>
 #include <clock.h>
 
+#include "TinyGPSPlus.h"
+
+// TinyGPS
+TinyGPSPlus tinyGPSPlus;
+
 TinyGsm modem(SerialAT);
 TaskHandle_t a7682_handle;
 

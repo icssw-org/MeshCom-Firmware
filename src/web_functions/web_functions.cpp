@@ -21,7 +21,6 @@
 #include "web_nodefunctioncalls.h"
 #include "web_commonServer.h"
 
-
 CommonWebServer web_server(80);
 CommonWebClient web_client;
 
@@ -79,7 +78,11 @@ void startWebserver()
     }
 
     web_server.stop();
+
+    #if not defined(BOARD_T_DECK) && not defined(BOARD_T_DECK_PLUS)
+        
     MDNS.end();
+
 
     // Set up mDNS responder:
     // - first argument is the domain name, in this example
@@ -89,7 +92,7 @@ void startWebserver()
     if (!MDNS.begin(meshcom_settings.node_call))
     {
         Serial.print(getTimeString());
-        Serial.println("[Web]...Error setting up MDNS responder!");
+        Serial.printf("[Web]...Error setting up MDNS responder to call:%s!\n", meshcom_settings.node_call);
         return;
     }
 
@@ -99,8 +102,9 @@ void startWebserver()
         Serial.println("[Web]...mDNS responder started");
     }
 
-    web_server.begin();
+    #endif
 
+    web_server.begin();
 
 #else
     if (web_server.server_port[1] == 0)
@@ -118,7 +122,9 @@ void startWebserver()
 void stopWebserver()
 {
 #ifdef ESP32
+    #if not defined(BOARD_T_DECK) && not defined(BOARD_T_DECK_PLUS)
     MDNS.end();
+    #endif
     web_server.stop();
 #endif
     bweb_server_running = false;
@@ -270,6 +276,7 @@ String work_webpage(bool bget_password, int webid)
        
     while (web_client.connected() && (web_currentTime - web_previousTime) <= WEB_TIMEOUT_TIME)
     { // loop while the client's connected
+
         yield();
         web_currentTime = millis();
         if (web_client.available())
@@ -277,8 +284,8 @@ String work_webpage(bool bget_password, int webid)
             // if there's bytes to read from the client,
             char c = web_client.read(); // read a byte, then
 
-            if (bDEBUG)
-                Serial.write(c); // print it out the serial monitor
+            //if (bDEBUG)
+            //    Serial.write(c); // print it out the serial monitor
 
             web_header += c;
 
@@ -289,8 +296,8 @@ String work_webpage(bool bget_password, int webid)
                 // that's the end of the client HTTP request, so send a response:
                 if (web_currentLine.length() == 0)
                 {
-
-                    // Serial.println(web_header);
+                    if (bDEBUG)
+                        Serial.println(web_header);
 
                     // user sends authentication
                     if (web_header.indexOf("/?nodepassword") >= 0)
@@ -315,6 +322,9 @@ String work_webpage(bool bget_password, int webid)
                     // in every other case, we check if authentication is required but not yet provided
                     if (bget_password)
                     {
+                        if(bDEBUG)
+                            Serial.println("WebUI bget_password");
+
                         // user requested a page ? Send a login page instead.
                         if (web_header.indexOf("/?page=") >= 0)
                         {
@@ -423,7 +433,11 @@ String work_webpage(bool bget_password, int webid)
                         {
                             deliver_scaffold(bget_password);
                         }
+
                     } // if (bget_password)
+
+                    if(bDEBUG)
+                        Serial.println("web_client.stop");
 
                     web_client.stop();
                 }
@@ -535,33 +549,50 @@ void deliver_scaffold(bool bget_password)
     web_client.println("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
     web_client.printf("<title>%s - Meshcom</title>\n",  meshcom_settings.node_call);
 
+Serial.println("loop f1");
+
     // ECMA-Script/Javascript
     web_client.println("<script type=\"text/javascript\">\n");
+
+Serial.println("loop f11");
     // these variables will hold the last loaded page name and sender in order to force a refresh
     web_client.println("cpage=\"info\";csender=undefined;\nsetInterval(autorefresh,10000);");
+Serial.println("loop f12");
     // This function will be called in intervalls - can be used to auto-refresh content depending on what page is loaded
     web_client.println("function autorefresh() {if(cpage=='messages')updateMessages();if(cpage=='wx')loadPage('wx',csender,false);if(cpage=='position')loadPage('position',csender,false);if(cpage=='mheard')loadPage('mheard',csender,false);if(cpage=='path')loadPage('path',csender,false);if(cpage=='rxlog')loadPage('rxlog',csender,false);};");
+Serial.println("loop f13");
     // this function is used for login and logout
     web_client.println("function login(pwd){var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){window.location.reload(true);}};xhttp.open(\"GET\",\"?nodepassword=\"+pwd,true);xhttp.send();}\n");
+Serial.println("loop f14");
     // this function is used to load content depending on the navigation button pressed
     web_client.println("function loadPage(page,sender,useSpinner) {cpage=page;csender=sender;if(useSpinner){document.getElementById(\"content_layer\").innerHTML=\"<span class=\\\"loader\\\"></span>\"};var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"content_layer\").innerHTML=this.responseText;}};xhttp.open(\"GET\",\"?page=\"+page,true);xhttp.send();Array.from(document.querySelectorAll('.nav_button.nbactive ')).forEach((el) => el.classList.remove('nbactive')); sender.classList.add('nbactive');}\n");
+Serial.println("loop f15");
     // this function is used to send a message from the browser via node to the mesh
     web_client.println("function sendMessage() {var xhttp=new XMLHttpRequest();xhttp.open(\"GET\",\"/?sendmessage&tocall=\"+document.getElementById(\"sendcall\").value+\"&message=\"+encodeURI(document.getElementById(\"messagetext\").value),true);xhttp.send();document.getElementById(\"sendcall\").value=\"\"; document.getElementById(\"messagetext\").value=\"\";}\n");
+Serial.println("loop f16");
     // this functions is counting and displaying the amount of chars left that the user can use to write a message
     web_client.println("function updateCharsLeft() {let maxlength=149;if(document.getElementById(\"sendcall\").value.length>0) {maxlength-=(document.getElementById(\"sendcall\").value.length)+2;}let msglength=document.getElementById(\"messagetext\").value.length;if(msglength>maxlength){document.getElementById(\"messagetext\").value=document.getElementById(\"messagetext\").value.substring(0,maxlength);msglength=maxlength;}document.getElementById(\"indicator_charsleft\").innerHTML=maxlength-msglength;}\n");
+Serial.println("loop f17");
     // this function is an ayncronous loader that is used to update the received messages without re-loading the whole page, it will re-call itself after a timeout as long as the message-page is displayed
     web_client.println("function updateMessages() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){if(document.getElementById(\"messages_panel\")!=null)document.getElementById(\"messages_panel\").innerHTML=decodeURIComponent(this.responseText);}};setTimeout(function(){xhttp.open(\"GET\",\"/?getmessages\",true);xhttp.send();},1000);}\n");
+Serial.println("loop f18");
     //  this function sends a parameter:value request to the backend
     web_client.println("function setvalue(param,value,refresh) {fetch(\"/setparam/?\"+param+\"=\"+value).then(function(response){return response.json();}).then(function(jsonResponse){if(jsonResponse['returncode']==1)alert(\"Value could not be set.\");if(jsonResponse['returncode']==2)alert(\"Parameter unknown to node.\");if(jsonResponse['returncode']>0){loadPage(cpage,csender,false)}if(refresh)loadPage(cpage,csender,false);});}\n");
+Serial.println("loop f19");
     // this function invokes a function call to the backend passing the function name and an optional parameter (e.g. sendpos)
-    web_client.println("function callfunction(functionname,functionparameter){fetch(\"/callfunction/?\"+functionname+\"=\"+functionparameter).then(function(response){return response.json();}).then(function (jsonResponse) {/*Nothing todo yet.*/})}\n");
+    web_client.println("function callfunction(functionname,functionparameter){fetch(\"/callfunction/?\"+functionname+\"=\"+functionparameter).then(function(response){return response.json();}).then(function (jsonResponse)})}\n");
+Serial.println("loop f20");
     // This function is used to toggle a css class so setup cars can collapse / expand
     web_client.println("function togglecard(element){element.parentElement.classList.toggle(\"cardopen\");}");
+Serial.println("loop f21");
 
     web_client.println("</script>\n\n");
+Serial.println("loop f22");
 
     // css style definitions
     web_client.println("<style>\n");
+
+Serial.println("loop f2");
 
     // basic definitions
     web_client.println(":root {--mcbg:#FFFFFF;--mcgray:#252323;--mcred:#A2182F;--mclightred:#FCEDF0;--mcmidred:#FFA5B4;--mclightblue:#CADFEA;--mclightgreen:#CBFBD4;--widthfactor:1.0;}\n");
@@ -576,6 +607,7 @@ void deliver_scaffold(bool bget_password)
     web_client.println(".no-wrap {white-space:nowrap;}\n");
     web_client.println(".mw-600 {max-width:600px;}");
 
+Serial.println("loop f3");
     // nav-bar definitions
     web_client.println("#nav_layer {height:100%;width:calc(60px*var(--widthfactor));background-color:var(--mcgray);position:fixed !important;overflow:auto;top:0px;}\n");
     web_client.println("#mc_logo {width:100%;aspect-ratio:1/1;margin:0px auto 75px auto;padding:5px 0px;display:block;background-color:#000;}\n");
@@ -606,6 +638,7 @@ void deliver_scaffold(bool bget_password)
     web_client.println("#content_inner > table tr:nth-child(even) {background-color:#f0f0f0;}\n");
     web_client.println("#content_inner > table td {vertical-align:top;padding:0.5em 0.5em 0.5em 0.5em;border-bottom:solid 1px #e0e0e0;}\n");
 
+Serial.println("loop f4");
     // content definitions -> anchors
     web_client.println("#content_inner a {color:var(--mcred);}\n");
 
@@ -628,6 +661,7 @@ void deliver_scaffold(bool bget_password)
     web_client.println(".cardlayout {min-height:20px;border:solid 1px var(--mcgray);border-radius:7px;padding:7px;padding-top:16px;margin:30px 0px;position:relative;max-width:600px;}\n");
     web_client.println(".cardlabel {position:absolute;font-weight:bold;margin:0 5px;left:6px;top:-1px;transform:translateY(-50%);z-index:10;background-color:#fff;padding:0 2px;}\n");
 
+Serial.println("loop f5");
     web_client.println(".grid {display:grid;align-items:center;grid-column-gap:8px;grid-row-gap:7px;margin:7px;}\n");
     web_client.println(".grid3{grid-template-columns:minmax(min-content,400px) minmax(min-content,150px) minmax(min-content,50px)}\n");
     web_client.println(".grid2 {grid-template-columns:minmax(min-content,550px) minmax(min-content,50px)}\n");
@@ -651,10 +685,12 @@ void deliver_scaffold(bool bget_password)
 
     web_client.println("</style>\n\n");
 
+Serial.println("loop f6");
     // scaffold body
     web_client.println("</head>\n<body>\n");
     web_client.println("<div id=\"nav_layer\">\n");
     // MC Logo (Image as base64 and split to several print() to adress limited print buffer
+
     web_client.print("<svg id=\"mc_logo\" width=\"48px\" height=\"48px\" viewBox=\"0 0 270.93332 270.93332\" xmlns=\"http://www.w3.org/2000/svg\"><g transform=\"translate(21.572702,-6.7150369)\">");
     web_client.print("<path style=\"fill:none;stroke:#ff0000;stroke-width:6.00001;stroke-dasharray:none\" d=\"M 43.312893,84.905251 C 59.073749,118.8832 128.87181,227.98106 128.87181,227.98106 L 136.6499,64.641293 36.353556,");
     web_client.print("184.58753 192.73397,156.95486 Z M 30.622336,75.899048 25.505175,189.50001 124.98278,237.806 206.65266,155.52206 146.06547,48.880441 c 0,0 -75.488902,17.574879 -115.443134,27.018607 z\"/>");
@@ -698,6 +734,8 @@ void deliver_scaffold(bool bget_password)
     web_client.printf("</div>\n<div id=\"head_layer\"><p class=\"font-small\">Meshcom 4.0 %s%s</p><p class=\"font-bold\">%s</p></div>\n</div>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_call);
     web_client.println("<div id=\"content_layer\">\n");
 
+Serial.println("loop f7");
+
     // initial content
     if (bget_password)
     {
@@ -707,9 +745,11 @@ void deliver_scaffold(bool bget_password)
     {
         sub_page_info();
     }
+Serial.println("loop f8");
 
     web_client.println("</div>\n</body>\n</html>");
     web_client.println(); // The HTTP response ends with another blank line
+Serial.println("loop f9");
 }
 
 /**

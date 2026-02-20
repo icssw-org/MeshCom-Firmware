@@ -658,7 +658,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_width(setup_version_label, 100);
     lv_obj_set_style_text_align(setup_version_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     char sv[50];
-    sprintf(sv, "MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+    sprintf(sv, "MeshCom %s%s (build: %s / %s)", SOURCE_VERSION, SOURCE_VERSION_SUB, __DATE__, __TIME__);
     lv_label_set_text(setup_version_label, sv);
 
     // Locator
