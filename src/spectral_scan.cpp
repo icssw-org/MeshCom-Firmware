@@ -139,8 +139,15 @@ void sx126x_spectral_scan()
 {
   
   float freqStart = 430.0;          // scan start frequency in MHz 
-  const float freqEnd = 440.2;      // scan end frequency in MHz 
-  const float samples = 2048;       // amount of samples to be taken
+  float freqEnd = 440.2;      // scan end frequency in MHz 
+  float samples = 2048;       // amount of samples to be taken
+
+  if(getFreq() > 400)
+  {
+    freqStart = 863.0;          // scan start frequency in MHz 
+    freqEnd = 870.0;      // scan end frequency in MHz 
+    samples = 2048;       // amount of samples to be taken
+  }
 
   sx126x_spectral_init_scan(freqStart);
 

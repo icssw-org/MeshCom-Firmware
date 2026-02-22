@@ -10,14 +10,16 @@
       "-DARDUINO_TWATCH_S3_M10Q",
       "-DARDUINO_USB_MODE=1",
       "-DARDUINO_RUNNING_CORE=1",
-      "-DARDUINO_EVENT_RUNNING_CORE=1"
+      "-DARDUINO_EVENT_RUNNING_CORE=1",
+      "-DBOARD_HAS_PSRAM"
     ],
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
     "flash_mode": "qio",
     "hwids": [["0x303A", "0x1001"]],
     "mcu": "esp32s3",
-    "variant": "esp32s3"
+    "variant": "esp32s3",
+    "psram_type": "opi"
   },
   "connectivity": ["wifi"],
   "debug": {

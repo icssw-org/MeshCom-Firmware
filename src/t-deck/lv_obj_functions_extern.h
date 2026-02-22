@@ -37,6 +37,9 @@ extern lv_obj_t    *setup_aprssymbol;
 extern lv_obj_t    *setup_stone;
 extern lv_obj_t    *setup_mtone;
 extern lv_obj_t    *setup_name;
+extern lv_obj_t    *setup_comment;
+extern lv_obj_t    *setup_wifissid;
+extern lv_obj_t    *setup_wifipassword;
 extern lv_obj_t    *setup_grc0;
 extern lv_obj_t    *setup_grc1;
 extern lv_obj_t    *setup_grc2;
@@ -46,8 +49,8 @@ extern lv_obj_t    *setup_grc5;
 extern lv_obj_t    *setup_utc;
 extern lv_obj_t    *setup_txpower;
 
-extern lv_obj_t    *btn_msg_id_label;
-extern lv_obj_t    *btn_ack_id_label;
+extern lv_obj_t    *setup_id_label;
+extern lv_obj_t    *setup_locator_label;
 extern lv_obj_t    *track_ta;
 
 extern lv_obj_t    *btn_time_label;
@@ -69,20 +72,27 @@ extern lv_obj_t    *msg_controls;
 extern lv_obj_t    *dropdown_aprs;
 extern lv_obj_t    *dropdown_country;
 extern lv_obj_t    *dropdown_mapselect;
-extern lv_obj_t    *dropdown_modusselect;
-extern lv_obj_t    *web_sw;
-extern lv_obj_t    *mesh_sw;
-extern lv_obj_t    *noallmsg_sw;
-extern lv_obj_t    *gpson_sw;
-extern lv_obj_t    *track_sw;
-extern lv_obj_t    *wifiap_sw;
-extern lv_obj_t    *wifi_sw;
-extern lv_obj_t    *mute_sw;
-extern lv_obj_t    *immediate_save_sw;
+extern lv_obj_t    *btn_clear_messages;
+extern lv_obj_t    *btn_clear_mheards;
+extern lv_obj_t    *btn_clear_nodes;
+extern lv_obj_t     *btn_gps;
+extern lv_obj_t     *btn_mesh;
+extern lv_obj_t     *btn_noallmsg;
+extern lv_obj_t     *btn_persist_immediate;
+extern lv_obj_t     *btn_persist_to_flash;
+extern lv_obj_t     *btn_persist_to_SD;
+extern lv_obj_t     *btn_soundon;
+extern lv_obj_t     *btn_track;
+extern lv_obj_t     *btn_wifi;
+extern lv_obj_t     *btn_wifiap;
+extern lv_obj_t     *btn_webserver;
+// extern lv_obj_t    *mute_sw;
+// extern lv_obj_t    *immediate_save_sw;
 
 /* helper functions to update header icons from other modules */
 void tdeck_update_header_wifi(void);
 void tdeck_update_header_bt(void);
+void tdeck_update_header_standby(void);
 void tdeck_pause_lv_timers(void);
 void tdeck_resume_lv_timers(void);
 

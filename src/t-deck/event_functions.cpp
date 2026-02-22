@@ -48,12 +48,14 @@ void btn_event_handler_aprs(lv_event_t * e)
 
     switch (code)
     {
+        default:
+            break;
         case LV_EVENT_VALUE_CHANGED:
             char buf[50];
 
             lv_dropdown_get_selected_str(dropdown_aprs, buf, 20);
 
-            if(DO_DEBUG)
+            if (DO_DEBUG)
                 Serial.printf("DROPDOWN_APRS:%s\n", buf);
 
             meshcom_settings.node_symid = '/';
@@ -91,7 +93,7 @@ void btn_event_handler_aprs(lv_event_t * e)
 
             lv_dropdown_close(dropdown_aprs);
             break;
-
+    
         case LV_EVENT_CLICKED:
             int isel = 0;
 
@@ -137,83 +139,6 @@ void btn_event_handler_aprs(lv_event_t * e)
     }
 }
 
-/**
- * handler for modusselect dropdown
- */
-void btn_event_handler_dropdown_modusselect(lv_event_t * e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-
-    if(code == LV_EVENT_VALUE_CHANGED)
-    {
-        char buf[50];
-
-        lv_dropdown_get_selected_str(dropdown_modusselect, buf, 20);
-
-        if (DO_DEBUG)
-            Serial.printf("DROPDOWN_MODUSSELECT:%s\n", buf);
-
-        if(strcmp(buf, "OFF") == 0)
-        {
-            meshcom_settings.node_modus = 0;
-            meshcom_settings.node_keyboardlock = false;
-            meshcom_settings.node_backlightlock = false;
-        }
-        else
-        if(strcmp(buf, "KB LOCK") == 0)
-        {
-            meshcom_settings.node_modus = 1;
-            meshcom_settings.node_keyboardlock = true;
-            meshcom_settings.node_backlightlock = false;
-            setKeyboardBacklight(0);
-            lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
-        }
-        else
-        if(strcmp(buf, "LIGHT ON") == 0)
-        {
-            meshcom_settings.node_modus = 2;
-            meshcom_settings.node_keyboardlock = false;
-            meshcom_settings.node_backlightlock = true;
-        }
-        else
-        if(strcmp(buf, "KBL&LIGHT") == 0)
-        {
-            meshcom_settings.node_modus = 3;
-            meshcom_settings.node_keyboardlock = true;
-            meshcom_settings.node_backlightlock = true;
-            setKeyboardBacklight(0);
-            lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
-        }
-
-        if(DO_DEBUG)
-            Serial.printf("node_modusselect:%i\n", meshcom_settings.node_modus);
-
-        if(meshcom_settings.node_modus < 0)
-        {
-            meshcom_settings.node_modus = 0;
-        }
-
-        lv_dropdown_close(dropdown_modusselect);
-    }
-    else
-    if(code == LV_EVENT_CLICKED)
-    {
-        String strModus = "OFF";
-        if(meshcom_settings.node_modus == 1)
-            strModus = "KB LOCK";
-        if(meshcom_settings.node_modus == 2)
-            strModus = "LIGHT ON";
-        if(meshcom_settings.node_modus == 3)
-            strModus = "KB&LIGHT";
-
-        if(DO_DEBUG)
-            Serial.printf("node_modus:%i strModus:%s isel:%i\n", meshcom_settings.node_modus, strModus.c_str(), meshcom_settings.node_modus);
-
-        lv_dropdown_set_selected(dropdown_modusselect, meshcom_settings.node_modus);
-
-        lv_dropdown_open(dropdown_modusselect);
-    }
-}
 
 /**
  * handler for kbl sync switch
@@ -334,157 +259,227 @@ void btn_event_handler_dropdown_country(lv_event_t * e)
 }
 
 /**
- * handler for setup switches
+ * handler for setup buttons
  */
-void btn_event_handler_switch(lv_event_t * e)
+void btn_event_handler_setup_btn(lv_event_t * e)
 {
-    lv_event_code_t code = lv_event_get_code(e);
-
-    if(code == LV_EVENT_VALUE_CHANGED)
+    // WIFI (overall enable/disable)
+    if (lv_event_get_target(e) == btn_wifi)
     {
-        // WEBSERVER
-        if (lv_event_get_target(e) == web_sw)
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_wifi pressed");
+
+        meshcom_settings.node_wifion = lv_obj_has_state(btn_wifi, LV_STATE_CHECKED);
+
+        if (meshcom_settings.node_wifion)
         {
-            if (lv_obj_has_state(web_sw, LV_STATE_CHECKED))
-            {
-                commandAction((char*)"--webserver on", false);
-                // bWEBSERVER=true;
-            }
-            else
-            {
-                commandAction((char*)"--webserver off", false);
-                // bWEBSERVER=false;
-            }
+            // turn webserver on and AP off
+            commandAction((char*)"--wifiap off", false);
+            commandAction((char*)"--webserver on", false);
 
-            return;
+            // attempt to start WiFi immediately
+            startWIFI();
         }
-
-        // MESH
-        if (lv_event_get_target(e) == mesh_sw)
+        else
         {
-            if (lv_obj_has_state(mesh_sw, LV_STATE_CHECKED))
-            {
-                commandAction((char*)"--mesh on", false);
-                // bMESH=true;
-            }
-            else
-            {
-                commandAction((char*)"--mesh off", false);
-                // bMESH=false;
-            }
-
-            return;
+            // turn webserver and AP off (makes no sense without wifi)
+            commandAction((char*)"--webserver off", false);
+            commandAction((char*)"--gateway off", false);
+            commandAction((char*)"--wifiap off", false);
+            // disable WiFi and update header
+            WiFi.disconnect(true, true);
+            WiFi.mode(WIFI_OFF); // Explicitly turn off radio
         }
+        save_settings();
+        tdeck_update_header_wifi();
 
-        // NOALLMSG
-        if (lv_event_get_target(e) == noallmsg_sw)
-        {
-            if (lv_obj_has_state(noallmsg_sw, LV_STATE_CHECKED))
-            {
-                commandAction((char*)"--nomsgall on", false);
-                // bNoMSGtoALL = true;
-            }
-            else
-            {
-                commandAction((char*)"--nomsgall off", false);
-                // bNoMSGtoALL = false;
-            }
+        tdeck_refresh_SET_view();
 
-            return;
-        }
+        return;
+    }
+    else if (lv_event_get_target(e) == btn_gps)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_gps pressed");
 
         // GPSON
-        if (lv_event_get_target(e) == gpson_sw)
+        if (lv_obj_has_state(btn_gps, LV_STATE_CHECKED))
         {
-            if (lv_obj_has_state(gpson_sw, LV_STATE_CHECKED))
-            {
-                commandAction((char*)"--gps on", false);
-                // bGPSON=true;
-            }
-            else
-            {
-                commandAction((char*)"--gps off", false);
-                // bGPSON=false;
-            }
-
-            return;
+            commandAction((char*)"--gps on", false);
+        }
+        else
+        {
+            commandAction((char*)"--gps off", false);
         }
 
-        // TRACKON
-        if (lv_event_get_target(e) == track_sw)
-        {
-            if (lv_obj_has_state(track_sw, LV_STATE_CHECKED))
-            {
-                commandAction((char*)"--gps on", false);
-                commandAction((char*)"--track on", false);
-            }
-            else
-            {
-                commandAction((char*)"--track off", false);
-            }
-
-            return;
-        }
+        return;
+    }
+    else if (lv_event_get_target(e) == btn_soundon)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_soundon pressed");
 
         // MUTE
-        if (lv_event_get_target(e) == mute_sw)
-        {
-            audio_set_mute(lv_obj_has_state(mute_sw, LV_STATE_CHECKED));
-            save_settings();
+        audio_set_mute(! lv_obj_has_state(btn_soundon, LV_STATE_CHECKED));
+        save_settings();
 
-            return;
-        }
-
-        // IMMEDIATE SAVE (persist each incoming non-system message immediately)
-        if (lv_event_get_target(e) == immediate_save_sw)
-        {
-            meshcom_settings.node_immediate_save = lv_obj_has_state(immediate_save_sw, LV_STATE_CHECKED);
-            save_settings();
-
-            return;
-        }
-
-        // WIFIAP
-        if (lv_event_get_target(e) == wifiap_sw)
-        {
-            if (lv_obj_has_state(wifiap_sw, LV_STATE_CHECKED))
-            {
-                commandAction((char*)"--wifiap on", false);
-            }
-            else
-            {
-                commandAction((char*)"--wifiap off", false);
-            }
-
-            return;
-        }
-
-        // WIFI (overall enable/disable)
-        if (lv_event_get_target(e) == wifi_sw)
-        {
-            bool enabled = lv_obj_has_state(wifi_sw, LV_STATE_CHECKED);
-            // Persist the WiFi enable flag in Preferences to avoid changing global struct
-            Preferences pref;
-            pref.begin("Credentials", false);
-            pref.putBool("node_wifion", enabled);
-            pref.end();
-
-            if (enabled)
-            {
-                // attempt to start WiFi immediately
-                startWIFI();
-            }
-            else
-            {
-                // disable WiFi and update header
-                WiFi.disconnect(true, true);
-                WiFi.mode(WIFI_OFF); // Explicitly turn off radio
-                tdeck_update_header_wifi();
-            }
-
-            return;
-        }
+        return;
     }
+    else if (lv_event_get_target(e) == btn_track)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_track pressed");
+
+        // TRACKON
+        if (lv_obj_has_state(btn_track, LV_STATE_CHECKED))
+        {
+            commandAction((char*)"--gps on", false);
+            commandAction((char*)"--track on", false);
+        }
+        else
+        {
+            commandAction((char*)"--track off", false);
+        }
+
+        return;
+    }
+    else if (lv_event_get_target(e) == btn_wifiap)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_wifiap pressed");
+
+        if (!meshcom_settings.node_wifion)
+        {
+            Serial.println("[TDECK]...WIFI disabled - no AP possible!");
+            commandAction((char*)"--wifiap off", false);
+            return;
+        }
+
+        if (lv_obj_has_state(btn_wifiap, LV_STATE_CHECKED))
+        {
+            commandAction((char*)"--wifiap on", false);
+        }
+        else
+        {
+            commandAction((char*)"--wifiap off", false);
+        }
+
+        return;
+
+    }
+    else if (lv_event_get_target(e) == btn_webserver)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_webserver pressed");
+
+        if (lv_obj_has_state(btn_webserver, LV_STATE_CHECKED))
+        {
+            commandAction((char*)"--webserver on", false);
+        }
+        else
+        {
+            commandAction((char*)"--webserver off", false);
+        }
+
+        return;
+    }
+    else if (lv_event_get_target(e) == btn_mesh)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_mesh pressed");
+
+        if (lv_obj_has_state(btn_mesh, LV_STATE_CHECKED))
+        {
+            commandAction((char*)"--mesh on", false);
+        }
+        else
+        {
+            commandAction((char*)"--mesh off", false);
+        }
+
+        return;
+    }
+    else if (lv_event_get_target(e) == btn_noallmsg)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_noallmsg pressed");
+
+        if (lv_obj_has_state(btn_noallmsg, LV_STATE_CHECKED))
+        {
+            commandAction((char*)"--nomsgall on", false);
+        }
+        else
+        {
+            commandAction((char*)"--nomsgall off", false);
+        }
+
+        return;
+    }
+    else if (lv_event_get_target(e) == btn_persist_to_flash)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_persist_to_flash pressed");
+
+        meshcom_settings.node_persist_to_flash = lv_obj_has_state(btn_persist_to_flash, LV_STATE_CHECKED);
+        save_settings();
+
+        return;
+    }
+    else if (lv_event_get_target(e) == btn_persist_to_SD)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_persist_to_SD pressed");
+
+        meshcom_settings.node_persist_to_sd = lv_obj_has_state(btn_persist_to_SD, LV_STATE_CHECKED);
+        save_settings();
+
+        return;
+    }
+    else if (lv_event_get_target(e) == btn_persist_immediate)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...btn_event_handler - btn_persist_immediate pressed");
+
+        meshcom_settings.node_immediate_save = lv_obj_has_state(btn_persist_immediate, LV_STATE_CHECKED);
+        save_settings();
+
+        return;
+    }
+    else
+        Serial.println("[TDECK]...btn_event_handler - button not found!");
+}
+
+
+/**
+ *  handler for clearing nodes
+ */
+void btn_event_handler_clear_nodes(lv_event_t * e)
+{
+
+}
+
+/**
+ *  handler for clearing messages
+ */
+void btn_event_handler_clear_messages(lv_event_t * e)
+{
+
+}
+
+/**
+ *  handler for clearing mheards
+ */
+void btn_event_handler_clear_mheards(lv_event_t * e)
+{
+
+}
+
+/**
+ * handler for rebooting
+ */
+void btn_event_handler_reboot(lv_event_t * e)
+{
+    commandAction((char*)"--reboot", false);
 }
 
 /**
@@ -564,6 +559,43 @@ void btn_event_handler_setup(lv_event_t * e)
             sprintf(cCmd, "--setname %s", cNewName);
             commandAction(cCmd, false);
         }
+
+        // Comment
+        strVar = lv_textarea_get_text(setup_comment);
+        char cNewComment[40] = {0};
+        sprintf(cNewComment, "%s", strVar.c_str());
+        if (memcmp(cNewComment, meshcom_settings.node_atxt, sizeof(cNewComment)) != 0)
+        {
+            if (bDEBUG)
+                Serial.printf("[TDECK]...changing comment from '%s' to '%s'\n", meshcom_settings.node_atxt, cNewComment);
+            sprintf(cCmd, "--atxt %s", cNewComment);
+            commandAction(cCmd, false);
+        }
+
+        // Wifi SSID
+        strVar = lv_textarea_get_text(setup_wifissid);
+        char cNewSSID[33] = {0};
+        sprintf(cNewSSID, "%s", strVar.c_str());
+        if (memcmp(cNewSSID, meshcom_settings.node_ssid, sizeof(cNewSSID)) != 0)
+        {
+            if (bDEBUG)
+                Serial.printf("[TDECK]...changing SSID from '%s' to '%s'\n", meshcom_settings.node_ssid, cNewSSID);
+            sprintf(cCmd, "--setssid %s", cNewSSID);
+            commandAction(cCmd, false);
+        }
+
+        // Wifi Password
+        strVar = lv_textarea_get_text(setup_wifipassword);
+        char cNewPassword[64] = {0};
+        sprintf(cNewPassword, "%s", strVar.c_str());
+        if (memcmp(cNewPassword, meshcom_settings.node_passwd, sizeof(cNewPassword)) != 0)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...changing Wifi password");
+            sprintf(cCmd, "--setpwd %s", cNewPassword);
+            commandAction(cCmd, false);
+        }
+
 
         // GRC
         String strNewGrc = lv_textarea_get_text(setup_grc0);

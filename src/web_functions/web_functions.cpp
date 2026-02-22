@@ -1033,7 +1033,7 @@ void sub_page_setup()
     _create_setup_textinput_element("extudp", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("</div><div class=\"grid grid2\">");
-    _create_setup_switch_element("useextudp", "ext UDP", "enable ext. UDP", bEXTUDP); // create Switch-Element inclucing Label and Description
+    _create_setup_switch_element("extudp", "ext UDP", "enable ext. UDP", bEXTUDP); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);   // create Switch-Element inclucing Label and Description
 
     web_client.println("</div></div>");
@@ -1263,6 +1263,20 @@ void sub_page_spectrum()
     _create_meshcom_subheader("Spectrum Scan");
     web_client.println("<div id=\"content_inner\">");
 #if defined(SX1262X) || defined(SX126X) || defined(SX1262_V3) || defined(SX1262_E290)
+
+    meshcom_settings.node_specstart = 432.0;
+    meshcom_settings.node_specend = 434.0;
+    meshcom_settings.node_specstep = 0.025;
+    meshcom_settings.node_specsamples = 2048;
+
+    if(getFreq() > 860)
+    {
+        meshcom_settings.node_specstart = 863.0;
+        meshcom_settings.node_specend = 870.0;
+        meshcom_settings.node_specstep = 0.100;
+        meshcom_settings.node_specsamples = 2048;
+    }
+
     float spec_curr_freq = meshcom_settings.node_specstart; // scan start frequency
 
     uint16_t step_pixel_width = 10;  // the amout of pixel we use for a single frequency step

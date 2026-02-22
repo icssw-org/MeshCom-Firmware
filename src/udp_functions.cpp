@@ -464,24 +464,31 @@ void sendMeshComUDP()
 
 bool startWIFI()
 {
-#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+  #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
   {
-    Preferences pref;
-    pref.begin("Credentials", false);
-    bool node_wifion = pref.getBool("node_wifion", true);
-    pref.end();
-    if(!node_wifion)
+    if (!meshcom_settings.node_wifion)
     {
       Serial.println("[WIFI]...disabled by Settings (node_wifion=false)");
       return false;
     }
-  }
-#endif
-  if(hasIPaddress)
-    return false;
 
-  if(bWIFIAP)
+      Serial.println("[WIFI]...enabled by Settings (node_wifion=true)");
+  }
+  #endif
+
+  if(hasIPaddress)
   {
+    if (bDEBUG)
+        Serial.println("[WIFI]...hasIPaddress=true");
+
+    return false;
+  }
+
+  if (bWIFIAP)
+  {
+    if (bDEBUG)
+        Serial.println("[WIFI]...bWIFIAP=true");
+
     WiFi.disconnect(true, true);
     delay(500);
 
@@ -503,12 +510,18 @@ bool startWIFI()
   }
   else
   {
+    if (bDEBUG)
+        Serial.println("[WIFI]...bWIFIAP=false");
+
     if(strcmp(meshcom_settings.node_ssid, "none") == 0)
     {
       Serial.printf("[WIFI]...ST no ssid<%s> pwd<%s> not connected\n", meshcom_settings.node_ssid, meshcom_settings.node_pwd);
       return false;
     }
   }
+
+  if (bDEBUG)
+      Serial.println("[WIFI]...WiFi.disconnect(true, true)");
 
   WiFi.disconnect(true, true);
 	delay(500);
@@ -758,6 +771,11 @@ void startMeshComUDP()
     snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", WiFi.gatewayIP()[0], WiFi.gatewayIP()[1], WiFi.gatewayIP()[2], WiFi.gatewayIP()[3]);
     snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%i.%i.%i.%i", WiFi.dnsIP()[0], WiFi.dnsIP()[1], WiFi.dnsIP()[2], WiFi.dnsIP()[3]);
     snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%i.%i.%i.%i", WiFi.subnetMask()[0], WiFi.subnetMask()[1], WiFi.subnetMask()[2], WiFi.subnetMask()[3]);
+
+    if(bDEBUG)
+    {
+      printf("[localIP] %i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
+    }
   }
 
   // update phone status

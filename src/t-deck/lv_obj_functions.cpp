@@ -60,6 +60,9 @@ lv_obj_t    *setup_aprssymbol;
 lv_obj_t    *setup_stone;
 lv_obj_t    *setup_mtone;
 lv_obj_t    *setup_name;
+lv_obj_t    *setup_comment;
+lv_obj_t    *setup_wifissid;
+lv_obj_t    *setup_wifipassword;
 lv_obj_t    *setup_grc0;
 lv_obj_t    *setup_grc1;
 lv_obj_t    *setup_grc2;
@@ -69,8 +72,8 @@ lv_obj_t    *setup_grc5;
 lv_obj_t    *setup_utc;
 lv_obj_t    *setup_txpower;
 
-lv_obj_t    *btn_msg_id_label;
-lv_obj_t    *btn_ack_id_label;
+lv_obj_t    *setup_id_label;
+lv_obj_t    *setup_locator_label;
 
 lv_obj_t    *msg_list = NULL;
 lv_obj_t    *track_ta;
@@ -100,22 +103,32 @@ lv_obj_t    *msg_controls;
 lv_obj_t    *dropdown_aprs;
 lv_obj_t    *dropdown_country;
 lv_obj_t    *dropdown_mapselect;
-lv_obj_t    *dropdown_modusselect;
-lv_obj_t    *web_sw;
-lv_obj_t    *mesh_sw;
-lv_obj_t    *noallmsg_sw;
-lv_obj_t    *gpson_sw;
-lv_obj_t    *track_sw;
-lv_obj_t    *wifiap_sw;
-lv_obj_t    *wifi_sw;
-lv_obj_t    *mute_sw;
-lv_obj_t    *immediate_save_sw;
-//lv_obj_t    *kbl_sync_sw;
+lv_obj_t    *btn_clear_messages;
+lv_obj_t    *btn_clear_mheards;
+lv_obj_t    *btn_clear_nodes;
+lv_obj_t    *btn_gps;
+lv_obj_t    *btn_mesh;
+lv_obj_t    *btn_noallmsg;
+lv_obj_t    *btn_persist_immediate;
+lv_obj_t    *btn_persist_to_flash;
+lv_obj_t    *btn_persist_to_SD;
+lv_obj_t    *btn_soundon;
+lv_obj_t    *btn_track;
+lv_obj_t    *btn_webserver;
+lv_obj_t    *btn_wifi;
+lv_obj_t    *btn_wifiap;
+// lv_obj_t    *immediate_save_sw;
+
 lv_obj_t    *tab_menu_header;
 lv_obj_t    *tab_menu_button;
 lv_obj_t    *tab_menu_icon_label;
+
 lv_obj_t    *tab_kbl_button;
 lv_obj_t    *tab_kbl_icon_label;
+
+lv_obj_t    *tab_standby_button;
+lv_obj_t    *tab_standby_icon_label;
+
 lv_obj_t    *header_time_label;
 lv_obj_t    *header_sat_icon;
 lv_obj_t    *header_sat_label;
@@ -123,7 +136,7 @@ lv_obj_t    *header_batt_icon;
 lv_obj_t    *header_batt_label;
 lv_obj_t    *header_wifi_icon;
 lv_obj_t    *header_bt_icon;
-lv_obj_t    *header_locator_label;
+// lv_obj_t    *header_locator_label;
 
 static bool tab_menu_visible = false;
 
@@ -185,7 +198,7 @@ static void update_header_sat_indicator(void);
 static void update_header_batt_indicator(float batt, int proz);
 static void update_header_wifi_indicator(void);
 static void update_header_bt_indicator(void);
-static void update_header_locator_label(void);
+// static void update_header_locator_label(void);
 static bool compute_locator_from_settings(char *buffer, size_t len);
 static bool compute_maidenhead_locator(double lat, double lon, char *buffer, size_t len);
 static int clamp_int(int value, int min_val, int max_val);
@@ -224,7 +237,7 @@ static void ensure_msg_styles(void);
 static String build_timestamp_string(void);
 static bool is_numeric_string(const String &value);
 static void msg_focus_and_alert(bool bWithAudio);
-static void update_header_locator_label(void);
+// static void update_header_locator_label(void);
 static bool compute_locator_from_settings(char *buffer, size_t len);
 static bool compute_maidenhead_locator(double lat, double lon, char *buffer, size_t len);
 
@@ -299,14 +312,35 @@ bool tdeck_tab_menu_is_visible(void)
     return tab_menu_visible;
 }
 
-static bool kbl_on = false;
+static bool kbd_light_on = false;
+
+static void tab_standby_button_event_cb(lv_event_t * e)
+{
+    if (bDEBUG)
+        Serial.println("[TDECK]...standby_button_event - pressed");
+
+    meshcom_settings.node_backlightlock = !meshcom_settings.node_backlightlock;
+    meshcom_settings.node_modus = (meshcom_settings.node_modus + 2) % 4;
+
+    if (meshcom_settings.node_backlightlock)
+    {
+        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+    }
+    else
+    {
+        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+    }
+}
 
 static void tab_kbl_button_event_cb(lv_event_t * e)
 {
+    if (bDEBUG)
+        Serial.println("[TDECK]...kbl_button_event - pressed");
+
     if(lv_event_get_code(e) == LV_EVENT_CLICKED)
     {
-        kbl_on = !kbl_on;
-        if(kbl_on)
+        kbd_light_on = !kbd_light_on;
+        if (kbd_light_on)
         {
             setKeyboardBacklight(255);
             lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
@@ -363,6 +397,30 @@ int map_pos_count = 0;
 String getCountryDropbox();
 
 /**
+ * SET view new line
+ */
+lv_obj_t * SET_new_line(lv_obj_t * parent, lv_obj_t * last_line, lv_coord_t distance)
+{
+    lv_obj_t * new_line = lv_obj_create(parent);
+    if (last_line != NULL)
+    {
+        lv_obj_align_to(new_line, last_line, LV_ALIGN_OUT_BOTTOM_LEFT, 0, distance);
+    } 
+    else 
+    {
+        lv_obj_align(new_line, LV_ALIGN_TOP_LEFT, 0, 0);
+    }
+    lv_obj_set_width(new_line, LV_PCT(100));
+    lv_obj_set_height(new_line, 35);
+    lv_obj_set_scrollbar_mode(new_line, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_pad_all(new_line, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(new_line, 0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(new_line, 0, LV_PART_MAIN);
+
+    return new_line;
+}
+
+/**
  * defines GUI layout
  */
 void setDisplayLayout(lv_obj_t *parent)
@@ -391,8 +449,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_clear_flag(tab_menu_header, LV_OBJ_FLAG_SCROLLABLE);
 
     tab_menu_button = lv_btn_create(tab_menu_header);
-    lv_obj_set_size(tab_menu_button, 40, header_height - 8);
-    lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_size(tab_menu_button, 40, header_height - 4);
+    lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 8, 0);
     lv_obj_add_event_cb(tab_menu_button, tab_menu_button_event_cb, LV_EVENT_CLICKED, NULL);
     lv_color_t header_blue = lv_palette_main(LV_PALETTE_BLUE);
     lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN);
@@ -406,8 +464,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_center(tab_menu_icon_label);
 
     tab_kbl_button = lv_btn_create(tab_menu_header);
-    lv_obj_set_size(tab_kbl_button, 40, header_height - 8);
-    lv_obj_align(tab_kbl_button, LV_ALIGN_LEFT_MID, 25, 0);
+    lv_obj_set_size(tab_kbl_button, 40, header_height - 4);
+    lv_obj_align_to(tab_kbl_button, tab_menu_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
     lv_obj_add_event_cb(tab_kbl_button, tab_kbl_button_event_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_set_style_bg_color(tab_kbl_button, header_blue, LV_PART_MAIN);
     lv_obj_set_style_bg_color(tab_kbl_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
@@ -419,53 +477,68 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_kbl_icon_label);
 
+    tab_standby_button = lv_btn_create(tab_menu_header);
+    lv_obj_set_size(tab_standby_button, 40, header_height - 4);
+    lv_obj_align_to(tab_standby_button, tab_kbl_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
+    lv_obj_add_event_cb(tab_standby_button, tab_standby_button_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_set_style_bg_color(tab_standby_button, header_blue, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(tab_standby_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_set_style_border_width(tab_standby_button, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(tab_standby_button, 4, LV_PART_MAIN);
+
+    tab_standby_icon_label = lv_label_create(tab_standby_button);
+    lv_label_set_text(tab_standby_icon_label, LV_SYMBOL_EYE_OPEN);
+    lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+    lv_obj_center(tab_standby_icon_label);
+
     header_time_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_time_label, "--:--");
     lv_label_set_long_mode(header_time_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_time_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_align(header_time_label, LV_ALIGN_LEFT_MID, 60, 0);
+    lv_obj_align(header_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
+
+    header_batt_label = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_batt_label, "0%");
+    lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(header_batt_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -22, 0);
+
+    header_batt_icon = lv_label_create(tab_menu_header);
+    lv_label_set_text(header_batt_icon, LV_SYMBOL_BATTERY_EMPTY);
+    lv_obj_align_to(header_batt_icon, header_batt_label, LV_ALIGN_OUT_LEFT_MID, -4, 0);
 
     header_sat_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_sat_label, "0");
     lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_sat_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_align(header_sat_label, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_align_to(header_sat_label, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     header_sat_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_sat_icon, LV_SYMBOL_GPS); // Symbol stammt von WpZoom (CC BY-SA 3.0, siehe README)
     lv_obj_align_to(header_sat_icon, header_sat_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
-    header_batt_label = lv_label_create(tab_menu_header);
-    lv_label_set_text(header_batt_label, "0%");
-    lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_batt_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_align_to(header_batt_label, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -20, 0);
-
-    header_batt_icon = lv_label_create(tab_menu_header);
-    lv_label_set_text(header_batt_icon, LV_SYMBOL_BATTERY_EMPTY);
-    lv_obj_align_to(header_batt_icon, header_batt_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
-
+    
     /* wifi + bluetooth icons (left of battery) */
     header_wifi_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
     // Slightly increase left offset so wifi icon sits closer to battery icon
-    lv_obj_align_to(header_wifi_icon, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
+    lv_obj_align_to(header_wifi_icon, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
 
     header_bt_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_bt_icon, LV_SYMBOL_BLUETOOTH);
     // Match spacing with wifi icon (leave a comfortable gap)
     lv_obj_align_to(header_bt_icon, header_wifi_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
 
-    header_locator_label = lv_label_create(tab_menu_header);
+    /*header_locator_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_locator_label, "JJ00AAAA");
     lv_label_set_long_mode(header_locator_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_locator_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_align(header_locator_label, LV_ALIGN_CENTER, -18, 0);
+    lv_obj_align(header_locator_label, LV_ALIGN_CENTER, -18, 0);*/
 
     update_header_batt_indicator(global_batt > 0.0f ? global_batt / 1000.0f : 0.0f, global_proz);
     update_header_sat_indicator();
     update_header_wifi_indicator();
     update_header_bt_indicator();
-    update_header_locator_label();
+    //update_header_locator_label();
 
     tv = lv_tabview_create(parent, LV_DIR_TOP, 42);
     lv_obj_set_size(tv, screen_w, LV_MAX(0, screen_h - header_height));
@@ -571,498 +644,730 @@ void setDisplayLayout(lv_obj_t *parent)
     ////////////////////////////////////////////////////////////////////////////
     // SETUP
 
-    // CALL
-    lv_obj_t * btnsetup_callsign = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_callsign, 0, 0);
-    lv_obj_set_size(btnsetup_callsign, 50, 25);
+    lv_obj_set_scrollbar_mode(t1, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_pad_left(t1, 10, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(t1, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(t1, 5, LV_PART_MAIN);
 
-    lv_obj_t * label_btnsetup_callsign = lv_label_create(btnsetup_callsign);
-    lv_label_set_text(label_btnsetup_callsign, "CALL");
-    lv_obj_center(label_btnsetup_callsign);
+    // Line Info
+    lv_obj_t * setup_line_info = SET_new_line(t1, NULL, 0);
 
-    setup_callsign = lv_textarea_create(t1);
+    // Version
+    lv_obj_t * setup_version_label = lv_label_create(setup_line_info);
+    lv_obj_align(setup_version_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_version_label, 100);
+    lv_obj_set_style_text_align(setup_version_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+    char sv[50];
+    sprintf(sv, "MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+    lv_label_set_text(setup_version_label, sv);
+
+    // Locator
+    setup_locator_label = lv_label_create(setup_line_info);
+    lv_obj_align(setup_locator_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_width(setup_locator_label, 75);
+    lv_obj_set_style_text_align(setup_locator_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_label_set_text(setup_locator_label, "LOCATOR");
+
+    // ID
+    setup_id_label = lv_label_create(setup_line_info);
+    lv_obj_align(setup_id_label, LV_ALIGN_RIGHT_MID, -10, 0);
+    lv_obj_set_width(setup_id_label, 75);
+    lv_obj_set_style_text_align(setup_id_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    lv_label_set_text(setup_id_label, "");
+
+    // Line Callsign
+    lv_obj_t * setup_line_callsign = SET_new_line(t1, setup_line_info, 0);
+
+    // Callsign
+    lv_obj_t * setup_callsign_label = lv_label_create(setup_line_callsign);
+    lv_obj_align(setup_callsign_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_callsign_label, 65);
+    lv_label_set_text(setup_callsign_label, "Callsign: ");
+    lv_obj_set_style_text_align(setup_callsign_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    
+    setup_callsign = lv_textarea_create(setup_line_callsign);
     lv_textarea_set_one_line(setup_callsign, true);
     lv_textarea_set_text_selection(setup_callsign, false);
-    lv_obj_align(setup_callsign, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_callsign, 55, 0);
-    lv_obj_set_size(setup_callsign, 100, 30);
+    lv_obj_align(setup_callsign, LV_ALIGN_LEFT_MID, 65, 0);
+    lv_obj_set_width(setup_callsign, 100);
+    lv_obj_set_height(setup_callsign, 35);
+    lv_obj_set_style_pad_all(setup_callsign, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_callsign, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_callsign, LV_SCROLLBAR_MODE_OFF);
     lv_textarea_set_text(setup_callsign, "");
     lv_textarea_set_max_length(setup_callsign, 9);
     lv_obj_add_style(setup_callsign, &ta_style, LV_PART_MAIN);
     lv_obj_add_style(setup_callsign, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_accepted_chars(setup_callsign, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-");
+    
+    // USER BUTTONS - WIFI, GPS, MUTE 
 
-    // LAT
-    lv_obj_t * btnsetup_lat = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_lat, 0, 32);
-    lv_obj_set_size(btnsetup_lat, 50, 25);
+    // WIFI ON/OFF (overall Wi-Fi enable/disable)
+    btn_wifi = lv_btn_create(setup_line_callsign);
+    lv_obj_align_to(btn_wifi, setup_callsign, LV_ALIGN_OUT_RIGHT_TOP, 2, 2);
 
-    lv_obj_t * label_btnsetup_lat = lv_label_create(btnsetup_lat);
-    lv_label_set_text(label_btnsetup_lat, "LAT");
-    lv_obj_center(label_btnsetup_lat);
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_wifi, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_wifi, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_wifi, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_wifi, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
-    setup_lat = lv_textarea_create(t1);
-    lv_textarea_set_text_selection(setup_lat, false);
-    lv_obj_align(setup_lat, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_lat, 55, 30);
-    lv_obj_set_size(setup_lat, 100, 30);
-    lv_textarea_set_text(setup_lat, "");
-    lv_textarea_set_max_length(setup_lat, 8);
-    lv_obj_add_style(setup_lat, &ta_style, LV_PART_MAIN);
-    lv_obj_add_style(setup_lat, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_accepted_chars(setup_lat, "0123456789.");
+    lv_obj_t * btn_wifi_label = lv_label_create(btn_wifi);
+    lv_label_set_text(btn_wifi_label, LV_SYMBOL_WIFI);
+    lv_obj_center(btn_wifi_label);
 
-    setup_lat_c = lv_textarea_create(t1);
-    lv_textarea_set_text_selection(setup_lat_c, false);
-    lv_obj_align(setup_lat_c, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_lat_c, 155, 30);
-    lv_obj_set_size(setup_lat_c, 40, 30);
-    lv_textarea_set_text(setup_lat_c, "");
-    lv_textarea_set_max_length(setup_lat_c, 1);
-    lv_obj_add_style(setup_lat_c, &ta_style, LV_PART_MAIN);
-    lv_obj_add_style(setup_lat_c, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_accepted_chars(setup_lat_c, "NS");
+    // GPS ON/OFF (overall Wi-Fi enable/disable)
+    btn_gps = lv_btn_create(setup_line_callsign);
+    lv_obj_align_to(btn_gps, btn_wifi, LV_ALIGN_OUT_RIGHT_TOP, 4, 0);
 
-    // LON
-    lv_obj_t * btnsetup_lon = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_lon, 0, 62);
-    lv_obj_set_size(btnsetup_lon, 50, 25);
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_gps, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_gps, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_gps, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_gps, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
-    lv_obj_t * label_btnsetup_lon = lv_label_create(btnsetup_lon);
-    lv_label_set_text(label_btnsetup_lon, "LON");
-    lv_obj_center(label_btnsetup_lon);
+    lv_obj_t * btn_gps_label = lv_label_create(btn_gps);
+    lv_label_set_text(btn_gps_label, LV_SYMBOL_GPS);
+    lv_obj_center(btn_gps_label);
 
-    setup_lon = lv_textarea_create(t1);
-    lv_textarea_set_text_selection(setup_lon, false);
-    lv_obj_align(setup_lon, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_lon, 55, 60);
-    lv_obj_set_size(setup_lon, 100, 30);
-    lv_textarea_set_text(setup_lon, "");
-    lv_textarea_set_max_length(setup_lon, 9);
-    lv_obj_add_style(setup_lon, &ta_style, LV_PART_MAIN);
-    lv_obj_add_style(setup_lon, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_accepted_chars(setup_lon, "0123456789.");
+    // MUTE
+    btn_soundon = lv_btn_create(setup_line_callsign);
+    lv_obj_align_to(btn_soundon, btn_gps, LV_ALIGN_OUT_RIGHT_TOP, 4, 0);
 
-    setup_lon_c = lv_textarea_create(t1);
-    lv_textarea_set_text_selection(setup_lon_c, false);
-    lv_obj_align(setup_lon_c, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_lon_c, 155, 60);
-    lv_obj_set_size(setup_lon_c, 40, 30);
-    lv_textarea_set_text(setup_lon_c, "");
-    lv_textarea_set_max_length(setup_lon_c, 1);
-    lv_obj_add_style(setup_lon_c, &ta_style, LV_PART_MAIN);
-    lv_obj_add_style(setup_lon_c, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_accepted_chars(setup_lon_c, "EW");
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_soundon, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_soundon, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_soundon, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_soundon, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // ALT
-    lv_obj_t * btnsetup_alt = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_alt, 0, 92);
-    lv_obj_set_size(btnsetup_alt, 50, 25);
+    lv_obj_t * btn_soundon_label = lv_label_create(btn_soundon);
+    lv_label_set_text(btn_soundon_label, LV_SYMBOL_VOLUME_MAX);
+    lv_obj_center(btn_soundon_label);
 
-    lv_obj_t * label_btnsetup_alt = lv_label_create(btnsetup_alt);
-    lv_label_set_text(label_btnsetup_alt, "ALT");
-    lv_obj_center(label_btnsetup_alt);
+    // Line APRS
+    lv_obj_t * setup_line_aprs = SET_new_line(t1, setup_line_callsign, 5);
 
-    setup_alt = lv_textarea_create(t1);
-    lv_textarea_set_text_selection(setup_alt, false);
-    lv_obj_align(setup_alt, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_alt, 55, 90);
-    lv_obj_set_size(setup_alt, 100, 30);
-    lv_textarea_set_text(setup_alt, "");
-    lv_textarea_set_max_length(setup_alt, 4);
-    lv_obj_add_style(setup_alt, &ta_style, LV_PART_MAIN);
-    lv_obj_add_style(setup_alt, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_accepted_chars(setup_alt, "01234567890");
-
-    // MODUS
-    dropdown_modusselect = lv_dropdown_create(t1);
-    lv_dropdown_set_text(dropdown_modusselect, (char*)"MODUS");
-    lv_obj_set_pos(dropdown_modusselect, 195, 0);
-    lv_obj_set_size(dropdown_modusselect, 110, 25);
-    lv_dropdown_set_options(dropdown_modusselect, (char*)"OFF\nKB LOCK\nLIGHT ON\nKBL&LIGHT");
-    lv_obj_add_event_cb(dropdown_modusselect, btn_event_handler_dropdown_modusselect, LV_EVENT_ALL, NULL);
-
-    // MAP-SELECT TAB
-    dropdown_mapselect = lv_dropdown_create(t1);
-    lv_dropdown_set_text(dropdown_mapselect, (char*)"MAPS");
-    lv_obj_set_pos(dropdown_mapselect, 195, 30);
-    lv_obj_set_size(dropdown_mapselect, 110, 25);
-    lv_dropdown_set_options(dropdown_mapselect, getMapDropbox().c_str());
-    lv_obj_add_event_cb(dropdown_mapselect, btn_event_handler_dropdown_mapselect, LV_EVENT_ALL, NULL);
-
-    // COUNTRY
-    dropdown_country = lv_dropdown_create(t1);
-    lv_dropdown_set_text(dropdown_country, (char*)"CTRY");
-    lv_obj_set_pos(dropdown_country, 195, 60);
-    lv_obj_set_size(dropdown_country, 110, 25);
-    lv_dropdown_set_options(dropdown_country, getCountryDropbox().c_str());
-    lv_obj_add_event_cb(dropdown_country, btn_event_handler_dropdown_country, LV_EVENT_ALL, NULL);
-
-    // APRS TAB
-    dropdown_aprs = lv_dropdown_create(t1);
+    // APRS Symbol
+    dropdown_aprs = lv_dropdown_create(setup_line_aprs);
     lv_dropdown_set_text(dropdown_aprs, (char*)"APRS");
-    lv_obj_set_pos(dropdown_aprs, 195, 92);
-    lv_obj_set_size(dropdown_aprs, 110, 25);
+    lv_obj_align(dropdown_aprs, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_set_size(dropdown_aprs, 75, 35);
     lv_dropdown_set_options(dropdown_aprs, (char*)"Runner\nCar\nCycle\nBike\nWX\nPhone\nBulli\nHouse\nNode");
     lv_obj_add_event_cb(dropdown_aprs, btn_event_handler_aprs, LV_EVENT_ALL, NULL);
+    lv_dropdown_close(dropdown_aprs);
+
+    // APRS Name
+    lv_obj_t * setup_name_label = lv_label_create(setup_line_aprs);
+    lv_obj_align_to(setup_name_label, dropdown_aprs, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+    lv_obj_set_width(setup_name_label, 50);
+    lv_label_set_text(setup_name_label, "Name: ");
+    lv_obj_set_style_text_align(setup_name_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
-    // START TONE
-    lv_obj_t * btnsetup_stone = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_stone, 0, 122);
-    lv_obj_set_size(btnsetup_stone, 50, 25);
-
-    lv_obj_t * label_btnsetup_stone = lv_label_create(btnsetup_stone);
-    lv_label_set_text(label_btnsetup_stone, "START");
-    lv_obj_center(label_btnsetup_stone);
-
-    setup_stone = lv_textarea_create(t1);
-    lv_textarea_set_one_line(setup_stone, true);
-    lv_textarea_set_text_selection(setup_stone, false);
-    lv_obj_align(setup_stone, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_stone, 55, 120);
-    lv_obj_set_size(setup_stone, 135, 30);
-    lv_textarea_set_text(setup_stone, "");
-    lv_textarea_set_max_length(setup_stone, 100);
-    lv_obj_add_style(setup_stone, &ta_style, LV_PART_MAIN);
-    lv_obj_add_style(setup_stone, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
-
-    // TX POWER
-    lv_obj_t * btnsetup_txp = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_txp, 195, 122);
-    lv_obj_set_size(btnsetup_txp, 50, 25);
-
-    lv_obj_t * label_btnsetup_txp = lv_label_create(btnsetup_txp);
-    lv_label_set_text(label_btnsetup_txp, "TX P");
-    lv_obj_center(label_btnsetup_txp);
-
-    setup_txpower = lv_textarea_create(t1);
-    lv_textarea_set_text_selection(setup_txpower, false);
-    lv_obj_align(setup_txpower, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_txpower, 250, 120);
-    lv_obj_set_size(setup_txpower, 55, 30);
-    lv_textarea_set_text(setup_txpower, "");
-    lv_textarea_set_max_length(setup_txpower, 2);
-    lv_obj_add_style(setup_txpower, &ta_style, LV_PART_MAIN);
-    lv_obj_add_style(setup_txpower, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_accepted_chars(setup_txpower, "0123456789");
-
-    // MESSAGE TONE
-    lv_obj_t * btnsetup_mtone = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_mtone, 0, 152);
-    lv_obj_set_size(btnsetup_mtone, 50, 25);
-
-    lv_obj_t * label_btnsetup_mtone = lv_label_create(btnsetup_mtone);
-    lv_label_set_text(label_btnsetup_mtone, "MESS");
-    lv_obj_center(label_btnsetup_mtone);
-
-    setup_mtone = lv_textarea_create(t1);
-    lv_textarea_set_one_line(setup_mtone, true);
-    lv_textarea_set_text_selection(setup_mtone, false);
-    lv_obj_align(setup_mtone, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_mtone, 55, 150);
-    lv_obj_set_size(setup_mtone, 220, 30);
-    lv_textarea_set_text(setup_mtone, "");
-    lv_textarea_set_max_length(setup_mtone, 100);
-    lv_obj_add_style(setup_mtone, &ta_style, LV_PART_MAIN);
-    lv_obj_add_style(setup_mtone, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
-
-    // NAME
-    lv_obj_t * btnsetup_name = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_name, 0, 182);
-    lv_obj_set_size(btnsetup_name, 50, 25);
-
-    lv_obj_t * label_btnsetup_name = lv_label_create(btnsetup_name);
-    lv_label_set_text(label_btnsetup_name, "NAME");
-    lv_obj_center(label_btnsetup_name);
-
-    setup_name = lv_textarea_create(t1);
+    setup_name = lv_textarea_create(setup_line_aprs);
     lv_textarea_set_one_line(setup_name, true);
     lv_textarea_set_text_selection(setup_name, false);
-    lv_obj_align(setup_name, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_name, 55, 180);
-    lv_obj_set_size(setup_name, 220, 30);
+    lv_obj_align_to(setup_name, setup_name_label, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+    lv_obj_set_size(setup_name, 160, 35);
+    lv_obj_set_style_pad_all(setup_callsign, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_callsign, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_name, LV_SCROLLBAR_MODE_OFF);
     lv_textarea_set_text(setup_name, "");
     lv_textarea_set_max_length(setup_name, 20);
     lv_obj_add_style(setup_name, &ta_style, LV_PART_MAIN);
     lv_obj_add_style(setup_name, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
 
 
+    // Line APRS2
+    lv_obj_t * setup_line_aprs2 = SET_new_line(t1, setup_line_aprs, 0);
+
+    // APRS Comment
+    lv_obj_t * setup_comment_label = lv_label_create(setup_line_aprs2);
+    lv_obj_align(setup_comment_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_comment_label, 75);
+    lv_label_set_text(setup_comment_label, "Comment: ");
+    lv_obj_set_style_text_align(setup_comment_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    
+    setup_comment = lv_textarea_create(setup_line_aprs2);
+    lv_textarea_set_one_line(setup_comment, true);
+    lv_textarea_set_text_selection(setup_comment, false);
+    lv_obj_align(setup_comment, LV_ALIGN_LEFT_MID, 75, 0);
+    lv_obj_set_size(setup_comment, 210, 35);
+    lv_obj_set_style_pad_all(setup_callsign, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_callsign, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_comment, LV_SCROLLBAR_MODE_OFF);
+    lv_textarea_set_text(setup_comment, "");
+    lv_textarea_set_max_length(setup_comment, 40);
+    lv_obj_add_style(setup_comment, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_comment, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+
+
+    // Line Location
+    lv_obj_t * setup_line_location = SET_new_line(t1, setup_line_aprs2, 5);
+
+    // LAT
+    lv_obj_t * setup_lat_label = lv_label_create(setup_line_location);
+    lv_obj_align(setup_lat_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_lat_label, 75);
+    lv_label_set_text(setup_lat_label, "Latitude: ");
+    lv_obj_set_style_text_align(setup_lat_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    
+    setup_lat = lv_textarea_create(setup_line_location);
+    lv_textarea_set_one_line(setup_lat, true);
+    lv_textarea_set_text_selection(setup_lat, false);
+    lv_obj_align(setup_lat, LV_ALIGN_LEFT_MID, 75, 0);
+    lv_obj_set_size(setup_lat, 75, 35);
+    lv_obj_set_style_pad_all(setup_lat, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_lat, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_lat, LV_SCROLLBAR_MODE_OFF);
+    lv_textarea_set_text(setup_lat, "");
+    lv_textarea_set_max_length(setup_lat, 9);
+    lv_obj_add_style(setup_lat, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_lat, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_textarea_set_accepted_chars(setup_lat, "0123456789.");
+
+    setup_lat_c = lv_textarea_create(setup_line_location);
+    lv_textarea_set_one_line(setup_lat_c, true);
+    lv_textarea_set_text_selection(setup_lat_c, false);
+    lv_obj_align_to(setup_lat_c, setup_lat, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+    lv_obj_set_size(setup_lat_c, 40, 35);
+    lv_obj_set_style_pad_all(setup_lat_c, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_lat_c, 8, LV_PART_MAIN);
+    lv_textarea_set_text(setup_lat_c, "");
+    lv_textarea_set_max_length(setup_lat_c, 1);
+    lv_obj_add_style(setup_lat_c, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_lat_c, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_textarea_set_accepted_chars(setup_lat_c, "NS");
+
+    // ALT
+    lv_obj_t * setup_alt_label = lv_label_create(setup_line_location);
+    lv_obj_align_to(setup_alt_label, setup_lat_c, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+    lv_obj_set_width(setup_alt_label, 30);
+    lv_label_set_text(setup_alt_label, "ALT: ");
+    lv_obj_set_style_text_align(setup_alt_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    setup_alt = lv_textarea_create(setup_line_location);
+    lv_textarea_set_one_line(setup_alt, true);
+    lv_textarea_set_text_selection(setup_alt, false);
+    lv_obj_align_to(setup_alt, setup_alt_label, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+    lv_obj_set_size(setup_alt, 60, 35);
+    lv_textarea_set_text(setup_alt, "");
+    lv_textarea_set_max_length(setup_alt, 4);
+    lv_obj_add_style(setup_alt, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_alt, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_textarea_set_accepted_chars(setup_alt, "01234567890");
+
+
+    // Line Location2
+    lv_obj_t * setup_line_location2 = SET_new_line(t1, setup_line_location, 0);
+
+    // LON
+    lv_obj_t * setup_lon_label = lv_label_create(setup_line_location2);
+    lv_obj_align(setup_lon_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_lon_label, 75);
+    lv_label_set_text(setup_lon_label, "Longitude: ");
+    lv_obj_set_style_text_align(setup_lon_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    
+    setup_lon = lv_textarea_create(setup_line_location2);
+    lv_textarea_set_one_line(setup_lon, true);
+    lv_textarea_set_text_selection(setup_lon, false);
+    lv_obj_align(setup_lon, LV_ALIGN_LEFT_MID, 75, 0);
+    lv_obj_set_size(setup_lon, 75, 35);
+    lv_obj_set_style_pad_all(setup_lon, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_lon, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_lon, LV_SCROLLBAR_MODE_OFF);
+    lv_textarea_set_text(setup_lon, "");
+    lv_textarea_set_max_length(setup_lon, 9);
+    lv_obj_add_style(setup_lon, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_lon, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_textarea_set_accepted_chars(setup_lon, "0123456789.");
+
+    setup_lon_c = lv_textarea_create(setup_line_location2);
+    lv_textarea_set_one_line(setup_lon_c, true);
+    lv_textarea_set_text_selection(setup_lon_c, false);
+    lv_obj_align_to(setup_lon_c, setup_lon, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+    lv_obj_set_size(setup_lon_c, 40, 35);
+    lv_obj_set_style_pad_all(setup_lon_c, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_lon_c, 8, LV_PART_MAIN);
+    lv_textarea_set_text(setup_lon_c, "");
+    lv_textarea_set_max_length(setup_lon_c, 1);
+    lv_obj_add_style(setup_lon_c, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_lon_c, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_textarea_set_accepted_chars(setup_lon_c, "EW");
+
+    // TRACK
+    btn_track = lv_btn_create(setup_line_location2);
+    lv_obj_align_to(btn_track, setup_lon_c, LV_ALIGN_OUT_RIGHT_TOP, 2, 2);
+    lv_obj_set_width(btn_track, 90);
+
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_track, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_track, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_track, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_track, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t * btn_track_label = lv_label_create(btn_track);
+    lv_label_set_text(btn_track_label, "TRACK");
+    lv_obj_center(btn_track_label);
+
+
+    // Line Wifi
+    lv_obj_t * setup_line_wifi = SET_new_line(t1, setup_line_location2, 5);
+
+    // WIFI SSID
+    lv_obj_t * setup_wifissid_label = lv_label_create(setup_line_wifi);
+    lv_obj_align(setup_wifissid_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_wifissid_label, 75);
+    lv_label_set_text(setup_wifissid_label, "WIFI SSID: ");
+    lv_obj_set_style_text_align(setup_wifissid_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    
+    setup_wifissid = lv_textarea_create(setup_line_wifi);
+    lv_textarea_set_one_line(setup_wifissid, true);
+    lv_textarea_set_text_selection(setup_wifissid, false);
+    lv_obj_align(setup_wifissid, LV_ALIGN_LEFT_MID, 75, 0);
+    lv_obj_set_width(setup_wifissid, 155);
+    lv_obj_set_height(setup_wifissid, 35);
+    lv_obj_set_style_pad_all(setup_wifissid, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_wifissid, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_wifissid, LV_SCROLLBAR_MODE_AUTO);
+    lv_textarea_set_text(setup_wifissid, "");
+    lv_textarea_set_max_length(setup_wifissid, 33);
+    lv_obj_add_style(setup_wifissid, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_wifissid, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+
+    // Webserver
+    btn_webserver = lv_btn_create(setup_line_wifi);
+    lv_obj_align(btn_webserver, LV_ALIGN_RIGHT_MID, -15, 0);
+    lv_obj_set_width(btn_webserver, 60);
+
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_webserver, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_webserver, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_webserver, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_webserver, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t * btn_webserver_label = lv_label_create(btn_webserver);
+    lv_label_set_text(btn_webserver_label, "Web");
+    lv_obj_center(btn_webserver_label);
+
+
+    // Line Wifi2
+    lv_obj_t * setup_line_wifi2 = SET_new_line(t1, setup_line_wifi, 0);
+
+    // WIFI Password
+    lv_obj_t * setup_wifipassword_label = lv_label_create(setup_line_wifi2);
+    lv_obj_align(setup_wifipassword_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_wifipassword_label, 75);
+    lv_label_set_text(setup_wifipassword_label, "Password: ");
+    lv_obj_set_style_text_align(setup_wifipassword_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    
+    setup_wifipassword = lv_textarea_create(setup_line_wifi2);
+    lv_textarea_set_one_line(setup_wifipassword, true);
+    lv_textarea_set_text_selection(setup_wifipassword, false);
+    lv_obj_align(setup_wifipassword, LV_ALIGN_LEFT_MID, 75, 0);
+    lv_obj_set_width(setup_wifipassword, 155);
+    lv_obj_set_height(setup_wifipassword, 35);
+    lv_obj_set_style_pad_all(setup_wifipassword, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_wifipassword, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_wifipassword, LV_SCROLLBAR_MODE_AUTO);
+    lv_textarea_set_text(setup_wifipassword, "");
+    lv_textarea_set_max_length(setup_wifipassword, 64);
+    lv_obj_add_style(setup_wifipassword, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_wifipassword, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    
+    // WIFIAP
+    btn_wifiap = lv_btn_create(setup_line_wifi2);
+    lv_obj_align(btn_wifiap, LV_ALIGN_RIGHT_MID, -15, 0);
+    lv_obj_set_width(btn_wifiap, 60);
+
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_wifiap, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_wifiap, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_wifiap, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_wifiap, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t * btn_wifiap_label = lv_label_create(btn_wifiap);
+    lv_label_set_text(btn_wifiap_label, "AP");
+    lv_obj_center(btn_wifiap_label);
+
+    // Fixed IP Settings
+    // Ext. UDP Interface
+
+
+    // Line Groups
+    lv_obj_t * setup_line_groups = SET_new_line(t1, setup_line_wifi2, 5);
+
     // GRUPPEN
-    lv_obj_t * btnsetup_grc = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_grc, 0, 214);
-    lv_obj_set_size(btnsetup_grc, 50, 25);
+    lv_obj_t * setup_groups_label = lv_label_create(setup_line_groups);
+    lv_obj_align(setup_groups_label, LV_ALIGN_TOP_LEFT, 0, 10);
+    lv_obj_set_width(setup_groups_label, 50);
+    lv_label_set_text(setup_groups_label, "Groups: ");
+    lv_obj_set_style_text_align(setup_groups_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
-    lv_obj_t * label_btnsetup_grc = lv_label_create(btnsetup_grc);
-    lv_label_set_text(label_btnsetup_grc, "GRC");
-    lv_obj_center(label_btnsetup_grc);
-
-    setup_grc0 = lv_textarea_create(t1);
+    setup_grc0 = lv_textarea_create(setup_line_groups);
+    lv_textarea_set_one_line(setup_grc0, true);
     lv_textarea_set_text_selection(setup_grc0, false);
-    lv_obj_align(setup_grc0, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_grc0, 55, 212);
-    lv_obj_set_size(setup_grc0, 80, 30);
+    lv_obj_align(setup_grc0, LV_ALIGN_TOP_LEFT, 55, 0);
+    lv_obj_set_size(setup_grc0, 80, 35);
+    lv_obj_set_style_pad_all(setup_grc0, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_grc0, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_grc0, LV_SCROLLBAR_MODE_OFF);
     lv_textarea_set_text(setup_grc0, "");
     lv_textarea_set_max_length(setup_grc0, 5);
     lv_obj_add_style(setup_grc0, &ta_style, LV_PART_MAIN);
     lv_obj_add_style(setup_grc0, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_accepted_chars(setup_grc0, "0123456789");
 
-    setup_grc1 = lv_textarea_create(t1);
+    setup_grc1 = lv_textarea_create(setup_line_groups);
+    lv_textarea_set_one_line(setup_grc1, true);
     lv_textarea_set_text_selection(setup_grc1, false);
-    lv_obj_align(setup_grc1, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_grc1, 135, 212);
-    lv_obj_set_size(setup_grc1, 80, 30);
+    lv_obj_align(setup_grc1, LV_ALIGN_TOP_LEFT, 135, 0);
+    lv_obj_set_size(setup_grc1, 80, 35);
+    lv_obj_set_style_pad_all(setup_grc1, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_grc1, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_grc1, LV_SCROLLBAR_MODE_OFF);
     lv_textarea_set_text(setup_grc1, "");
     lv_textarea_set_max_length(setup_grc1, 5);
     lv_obj_add_style(setup_grc1, &ta_style, LV_PART_MAIN);
     lv_obj_add_style(setup_grc1, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_accepted_chars(setup_grc1, "0123456789");
 
-    setup_grc2 = lv_textarea_create(t1);
+    setup_grc2 = lv_textarea_create(setup_line_groups);
+    lv_textarea_set_one_line(setup_grc2, true);
     lv_textarea_set_text_selection(setup_grc2, false);
-    lv_obj_align(setup_grc2, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_grc2, 215, 212);
-    lv_obj_set_size(setup_grc2, 80, 30);
+    lv_obj_align(setup_grc2, LV_ALIGN_TOP_LEFT, 215, 0);
+    lv_obj_set_size(setup_grc2, 80, 35);
+    lv_obj_set_style_pad_all(setup_grc2, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_grc2, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_grc2, LV_SCROLLBAR_MODE_OFF);
     lv_textarea_set_text(setup_grc2, "");
     lv_textarea_set_max_length(setup_grc2, 5);
     lv_obj_add_style(setup_grc2, &ta_style, LV_PART_MAIN);
     lv_obj_add_style(setup_grc2, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_accepted_chars(setup_grc2, "0123456789");
 
-    setup_grc3 = lv_textarea_create(t1);
+    // Line Groups2
+    lv_obj_t * setup_line_groups2 = SET_new_line(t1, setup_line_groups, 0);
+    
+    setup_grc3 = lv_textarea_create(setup_line_groups2);
+    lv_textarea_set_one_line(setup_grc3, true);
     lv_textarea_set_text_selection(setup_grc3, false);
-    lv_obj_align(setup_grc3, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_grc3, 55, 242);
-    lv_obj_set_size(setup_grc3, 80, 30);
+    lv_obj_align(setup_grc3, LV_ALIGN_TOP_LEFT, 55, 0);
+    lv_obj_set_size(setup_grc3, 80, 35);
+    lv_obj_set_style_pad_all(setup_grc3, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_grc3, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_grc3, LV_SCROLLBAR_MODE_OFF);
     lv_textarea_set_text(setup_grc3, "");
     lv_textarea_set_max_length(setup_grc3, 5);
     lv_obj_add_style(setup_grc3, &ta_style, LV_PART_MAIN);
     lv_obj_add_style(setup_grc3, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_accepted_chars(setup_grc3, "0123456789");
 
-    setup_grc4 = lv_textarea_create(t1);
+    setup_grc4 = lv_textarea_create(setup_line_groups2);
+    lv_textarea_set_one_line(setup_grc4, true);
     lv_textarea_set_text_selection(setup_grc4, false);
-    lv_obj_align(setup_grc4, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_grc4, 135, 242);
-    lv_obj_set_size(setup_grc4, 80, 30);
+    lv_obj_align(setup_grc4, LV_ALIGN_TOP_LEFT, 135, 0);
+    lv_obj_set_size(setup_grc4, 80, 35);
+    lv_obj_set_style_pad_all(setup_grc4, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_grc4, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_grc4, LV_SCROLLBAR_MODE_OFF);
     lv_textarea_set_text(setup_grc4, "");
     lv_textarea_set_max_length(setup_grc4, 5);
     lv_obj_add_style(setup_grc4, &ta_style, LV_PART_MAIN);
     lv_obj_add_style(setup_grc4, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_accepted_chars(setup_grc4, "0123456789");
     
-    setup_grc5 = lv_textarea_create(t1);
+    setup_grc5 = lv_textarea_create(setup_line_groups2);
+    lv_textarea_set_one_line(setup_grc5, true);
     lv_textarea_set_text_selection(setup_grc5, false);
     lv_obj_align(setup_grc5, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_grc5, 215, 242);
-    lv_obj_set_size(setup_grc5, 80, 30);
+    lv_obj_align(setup_grc5, LV_ALIGN_TOP_LEFT, 215, 0);
+    lv_obj_set_size(setup_grc5, 80, 35);
+    lv_obj_set_style_pad_all(setup_grc5, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_grc5, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_grc5, LV_SCROLLBAR_MODE_OFF);
     lv_textarea_set_text(setup_grc5, "");
     lv_textarea_set_max_length(setup_grc5, 5);
     lv_obj_add_style(setup_grc5, &ta_style, LV_PART_MAIN);
     lv_obj_add_style(setup_grc5, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_accepted_chars(setup_grc5, "0123456789");
-    
-    // INFO
-    lv_obj_t * btn_msg_id_info = lv_btn_create(t1);
-    lv_obj_set_pos(btn_msg_id_info, 0, 276);
-    lv_obj_set_size(btn_msg_id_info, 50, 25);
 
-    lv_obj_t * btn_msg_id_info_label = lv_label_create(btn_msg_id_info);
-    lv_label_set_text(btn_msg_id_info_label, "ID");
-    lv_obj_center(btn_msg_id_info_label);
 
-    lv_obj_t * btn_msg_id = lv_btn_create(t1);
-    lv_obj_set_pos(btn_msg_id, 55, 276);
-    lv_obj_set_size(btn_msg_id, 80, 25);
-
-    btn_msg_id_label = lv_label_create(btn_msg_id);
-    lv_label_set_text(btn_msg_id_label, "");
-    lv_obj_center(btn_msg_id_label);
-
-    lv_obj_t * btn_ack_id = lv_btn_create(t1);
-    lv_obj_set_pos(btn_ack_id, 140, 276);
-    lv_obj_set_size(btn_ack_id, 40, 25);
-
-    btn_ack_id_label = lv_label_create(btn_ack_id);
-    lv_label_set_text(btn_ack_id_label, "");
-    lv_obj_center(btn_ack_id_label);
-
-    // WEBSERVER ON/OFF
-    lv_obj_t * btn_web = lv_btn_create(t1);
-    lv_obj_set_pos(btn_web, 200, 276);
-    lv_obj_set_size(btn_web, 35, 25);
-
-    lv_obj_t * btn_web_label = lv_label_create(btn_web);
-    lv_label_set_text(btn_web_label, "WEB");
-    lv_obj_center(btn_web_label);
-
-    web_sw = lv_switch_create(t1);
-    lv_obj_set_pos(web_sw, 245, 276);
-    lv_obj_set_size(web_sw, 45, 25);
-
-    lv_obj_add_event_cb(web_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
-
-    // MESH ON/OFF
-    lv_obj_t * btn_mesh = lv_btn_create(t1);
-    lv_obj_set_pos(btn_mesh, 0, 307);
-    lv_obj_set_size(btn_mesh, 50, 25);
-
-    lv_obj_t * btn_mesh_label = lv_label_create(btn_mesh);
-    lv_label_set_text(btn_mesh_label, "MESH");
-    lv_obj_center(btn_mesh_label);
-
-    mesh_sw = lv_switch_create(t1);
-    lv_obj_set_pos(mesh_sw, 55, 307);
-    lv_obj_set_size(mesh_sw, 45, 25);
-
-    lv_obj_add_event_cb(mesh_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
-
-    // NOALLMSG ON/OFF
-    lv_obj_t * btn_noallmsg = lv_btn_create(t1);
-    lv_obj_set_pos(btn_noallmsg, 100, 307);
-    lv_obj_set_size(btn_noallmsg, 50, 25);
-
-    lv_obj_t * btn_noallmsg_label = lv_label_create(btn_noallmsg);
-    lv_label_set_text(btn_noallmsg_label, "NO ALL");
-    lv_obj_center(btn_noallmsg_label);
-
-    noallmsg_sw = lv_switch_create(t1);
-    lv_obj_set_pos(noallmsg_sw, 155, 307);
-    lv_obj_set_size(noallmsg_sw, 45, 25);
-
-    lv_obj_add_event_cb(noallmsg_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
-
-    // GPS ON/OFF
-    lv_obj_t * btn_gps = lv_btn_create(t1);
-    lv_obj_set_pos(btn_gps, 200, 307);
-    lv_obj_set_size(btn_gps, 35, 25);
-
-    lv_obj_t * btn_gps_label = lv_label_create(btn_gps);
-    lv_label_set_text(btn_gps_label, "GPS");
-    lv_obj_center(btn_gps_label);
-
-    gpson_sw = lv_switch_create(t1);
-    lv_obj_set_pos(gpson_sw, 245, 307);
-    lv_obj_set_size(gpson_sw, 45, 25);
-
-    lv_obj_add_event_cb(gpson_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
-
-    // WIFI ON/OFF (overall Wi-Fi enable/disable)
-    lv_obj_t * btn_wifi = lv_btn_create(t1);
-    lv_obj_set_pos(btn_wifi, 185, 342);
-    lv_obj_set_size(btn_wifi, 50, 25);
-
-    lv_obj_t * btn_wifi_label = lv_label_create(btn_wifi);
-    lv_label_set_text(btn_wifi_label, "WIFI");
-    lv_obj_center(btn_wifi_label);
-
-    wifi_sw = lv_switch_create(t1);
-    lv_obj_set_pos(wifi_sw, 245, 342);
-    lv_obj_set_size(wifi_sw, 45, 25);
-
-    lv_obj_add_event_cb(wifi_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
+    // line time and lora settings
+    lv_obj_t * setup_line_timelora = SET_new_line(t1, setup_line_groups2, 5);
 
     // UTC
-    lv_obj_t * btnsetup_utc = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_utc, 0, 342);
-    lv_obj_set_size(btnsetup_utc, 50, 25);
-
-    lv_obj_t * label_btnsetup_utc = lv_label_create(btnsetup_utc);
-    lv_label_set_text(label_btnsetup_utc, "UTC");
-    lv_obj_center(label_btnsetup_utc);
-
-    setup_utc = lv_textarea_create(t1);
+    lv_obj_t * setup_utc_label = lv_label_create(setup_line_timelora);
+    lv_obj_align(setup_utc_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_utc_label, 50);
+    lv_label_set_text(setup_utc_label, "UTC: ");
+    lv_obj_set_style_text_align(setup_utc_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    
+    setup_utc = lv_textarea_create(setup_line_timelora);
+    lv_textarea_set_one_line(setup_utc, true);
     lv_textarea_set_text_selection(setup_utc, false);
-    lv_obj_align(setup_utc, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_set_pos(setup_utc, 55, 340);
-    lv_obj_set_size(setup_utc, 60, 30);
+    lv_obj_align_to(setup_utc, setup_utc_label, LV_ALIGN_OUT_RIGHT_MID, 5, 0);
+    lv_obj_set_width(setup_utc, 40);
+    lv_obj_set_height(setup_utc, 35);
+    lv_obj_set_style_pad_all(setup_utc, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_utc, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_utc, LV_SCROLLBAR_MODE_AUTO);
     lv_textarea_set_text(setup_utc, "");
     lv_textarea_set_max_length(setup_utc, 8);
     lv_obj_add_style(setup_utc, &ta_style, LV_PART_MAIN);
     lv_obj_add_style(setup_utc, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_accepted_chars(setup_utc, "01234567890.-");
 
+    // COUNTRY
+    dropdown_country = lv_dropdown_create(setup_line_timelora);
+    lv_dropdown_set_text(dropdown_country, (char*)"CTRY");
+    lv_obj_align_to(dropdown_country, setup_utc, LV_ALIGN_OUT_RIGHT_TOP, 2, 0);
+    lv_obj_set_size(dropdown_country, 80, 35);
+    lv_dropdown_set_options(dropdown_country, getCountryDropbox().c_str());
+    lv_obj_add_event_cb(dropdown_country, btn_event_handler_dropdown_country, LV_EVENT_ALL, NULL);
+    lv_dropdown_close(dropdown_country);
 
-    // TRACK ON/OFF
-    lv_obj_t * btn_track = lv_btn_create(t1);
-    lv_obj_set_pos(btn_track, 210, 410); 
-    lv_obj_set_size(btn_track, 50, 25);
+    // TX POWER
+    lv_obj_t * setup_txpower_label = lv_label_create(setup_line_timelora);
+    lv_obj_align_to(setup_txpower_label, dropdown_country, LV_ALIGN_OUT_RIGHT_MID, 2, 0);
+    lv_obj_set_width(setup_txpower_label, 60);
+    lv_label_set_text(setup_txpower_label, "TXPower: ");
+    lv_obj_set_style_text_align(setup_txpower_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
-    lv_obj_t * btn_track_label = lv_label_create(btn_track);
-    lv_label_set_text(btn_track_label, "TRACK");
-    lv_obj_center(btn_track_label);
+    setup_txpower = lv_textarea_create(setup_line_timelora);
+    lv_textarea_set_one_line(setup_txpower, true);
+    lv_textarea_set_text_selection(setup_txpower, false);
+    lv_obj_align_to(setup_txpower, setup_txpower_label, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+    lv_obj_set_size(setup_txpower, 55, 35);
+    lv_obj_set_style_pad_all(setup_txpower, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_txpower, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_txpower, LV_SCROLLBAR_MODE_AUTO);
+    lv_textarea_set_text(setup_txpower, "");
+    lv_textarea_set_max_length(setup_txpower, 2);
+    lv_obj_add_style(setup_txpower, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_txpower, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_textarea_set_accepted_chars(setup_txpower, "0123456789");
 
-    track_sw = lv_switch_create(t1);
-    lv_obj_set_pos(track_sw, 265, 410); 
-    lv_obj_set_size(track_sw, 45, 25);
+    // Gateway
+    /*lv_obj_t * setup_gateway = lv_obj_create(t1);
+    lv_obj_align_to(setup_gateway, setup_timelora, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 2);
+    lv_obj_set_width(setup_gateway, LV_PCT(100));
+    lv_obj_set_height(setup_gateway, 80);
+    lv_obj_set_scrollbar_mode(setup_gateway, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_pad_all(setup_gateway, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(setup_gateway, 0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(setup_gateway, 0, LV_PART_MAIN);*/
 
-    lv_obj_add_event_cb(track_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
+    // Gateway Btn,  Gateway Server (Austria-OE, Germany-DL)
 
 
-    // MUTE
-    lv_obj_t * btnsetup_mute = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_mute, 0, 375);
-    lv_obj_set_size(btnsetup_mute, 50, 25);
+    // Line User Buttons
+    lv_obj_t * setup_line_buttons = SET_new_line(t1, setup_line_timelora, 5);
 
-    lv_obj_t * btnsetup_mute_label = lv_label_create(btnsetup_mute);
-    lv_label_set_text(btnsetup_mute_label, "MUTE");
-    lv_obj_center(btnsetup_mute_label);
+    // MESH
+    btn_mesh = lv_btn_create(setup_line_buttons);
+    lv_obj_align(btn_mesh, LV_ALIGN_TOP_LEFT, 2, 0);
+    lv_obj_set_width(btn_mesh, 70);
+    lv_obj_set_height(btn_mesh, 35);
 
-    mute_sw = lv_switch_create(t1);
-    lv_obj_set_pos(mute_sw, 55, 375);
-    lv_obj_set_size(mute_sw, 45, 25);
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_mesh, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_mesh, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_mesh, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_mesh, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
-    lv_obj_add_event_cb(mute_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
+    lv_obj_t * btn_mesh_label = lv_label_create(btn_mesh);
+    lv_label_set_text(btn_mesh_label, "MESH");
+    lv_obj_center(btn_mesh_label);
 
-    // IMMEDIATE SAVE switch (below MUTE)
-    lv_obj_t * btn_immsave = lv_btn_create(t1);
-    lv_obj_set_pos(btn_immsave, 0, 410);
-    lv_obj_set_size(btn_immsave, 150, 25);
+    // NOALL
+    btn_noallmsg = lv_btn_create(setup_line_buttons);
+    lv_obj_align_to(btn_noallmsg, btn_mesh, LV_ALIGN_OUT_RIGHT_TOP, 5, 0);
+    lv_obj_set_width(btn_noallmsg, 100);
+    lv_obj_set_height(btn_noallmsg, 35);
 
-    lv_obj_t * btn_immsave_label = lv_label_create(btn_immsave);
-    lv_label_set_text(btn_immsave_label, "SAVE MSG");
-    lv_obj_center(btn_immsave_label);
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_noallmsg, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_noallmsg, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_noallmsg, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_noallmsg, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
-    immediate_save_sw = lv_switch_create(t1);
-    lv_obj_set_pos(immediate_save_sw, 155, 410);
-    lv_obj_set_size(immediate_save_sw, 45, 25);
-    lv_obj_add_event_cb(immediate_save_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
+    lv_obj_t * btn_noallmsg_label = lv_label_create(btn_noallmsg);
+    lv_label_set_text(btn_noallmsg_label, "No * Messages");
+    lv_obj_center(btn_noallmsg_label);
 
-    // WIFIAP ON/OFF
-    lv_obj_t * btn_wifiap = lv_btn_create(t1);
-    lv_obj_set_pos(btn_wifiap, 185, 375);
-    lv_obj_set_size(btn_wifiap, 50, 25);
+    // MAP-SELECT TAB
+    dropdown_mapselect = lv_dropdown_create(setup_line_buttons);
+    lv_dropdown_set_text(dropdown_mapselect, (char*)"MAPS");
+    lv_obj_align_to(dropdown_mapselect, btn_noallmsg, LV_ALIGN_OUT_RIGHT_TOP, 5, 0);
+    lv_obj_set_size(dropdown_mapselect, 110, 35);
+    lv_dropdown_set_options(dropdown_mapselect, getMapDropbox().c_str());
+    lv_obj_add_event_cb(dropdown_mapselect, btn_event_handler_dropdown_mapselect, LV_EVENT_ALL, NULL);
+    lv_dropdown_close(dropdown_mapselect);
 
-    lv_obj_t * btn_wifiap_label = lv_label_create(btn_wifiap);
-    lv_label_set_text(btn_wifiap_label, "WIFAP");
-    lv_obj_center(btn_wifiap_label);
+    // StartupTone
+    lv_obj_t * setup_line_starttone = SET_new_line(t1, setup_line_buttons, 5);
 
-    wifiap_sw = lv_switch_create(t1);
-    lv_obj_set_pos(wifiap_sw, 245, 375);
-    lv_obj_set_size(wifiap_sw, 45, 25);
+    // StartupTone
+    lv_obj_t * setup_stone_label = lv_label_create(setup_line_starttone);
+    lv_obj_align(setup_stone_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_stone_label, 75);
+    lv_label_set_text(setup_stone_label, "StartTone: ");
+    lv_obj_set_style_text_align(setup_stone_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    
+    setup_stone = lv_textarea_create(setup_line_starttone);
+    lv_textarea_set_one_line(setup_stone, true);
+    lv_textarea_set_text_selection(setup_stone, false);
+    lv_obj_align(setup_stone, LV_ALIGN_LEFT_MID, 75, 0);
+    lv_obj_set_size(setup_stone, 220, 35);
+    lv_obj_set_style_pad_all(setup_stone, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_stone, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_stone, LV_SCROLLBAR_MODE_AUTO);
+    lv_textarea_set_text(setup_stone, "");
+    lv_textarea_set_max_length(setup_stone, 100);
+    lv_obj_add_style(setup_stone, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_stone, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
 
-    lv_obj_add_event_cb(wifiap_sw, btn_event_handler_switch, LV_EVENT_ALL, NULL);
+    // MessageTones
+    lv_obj_t * setup_line_messagetone = SET_new_line(t1, setup_line_starttone, 0);
+
+    // Message Tone
+    lv_obj_t * setup_mtone_label = lv_label_create(setup_line_messagetone);
+    lv_obj_align(setup_mtone_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_mtone_label, 75);
+    lv_label_set_text(setup_mtone_label, "Msg.Tone: ");
+    lv_obj_set_style_text_align(setup_mtone_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    
+    setup_mtone = lv_textarea_create(setup_line_messagetone);
+    lv_textarea_set_one_line(setup_mtone, true);
+    lv_textarea_set_text_selection(setup_mtone, false);
+    lv_obj_align(setup_mtone, LV_ALIGN_LEFT_MID, 75, 0);
+    lv_obj_set_size(setup_mtone, 220, 35);
+    lv_obj_set_style_pad_all(setup_mtone, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(setup_mtone, 8, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(setup_mtone, LV_SCROLLBAR_MODE_AUTO);
+    lv_textarea_set_text(setup_mtone, "");
+    lv_textarea_set_max_length(setup_mtone, 100);
+    lv_obj_add_style(setup_mtone, &ta_style, LV_PART_MAIN);
+    lv_obj_add_style(setup_mtone, &ta_input_cursor, LV_PART_CURSOR | LV_STATE_FOCUSED);
+
+    // Line Persist
+    lv_obj_t * setup_line_persist = SET_new_line(t1, setup_line_messagetone, 5);
+
+    lv_obj_t * setup_save_label = lv_label_create(setup_line_persist);
+    lv_obj_align(setup_save_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_save_label, 50);
+    lv_label_set_text(setup_save_label, "Save ... ");
+    lv_obj_set_style_text_align(setup_save_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    // to Flash
+    btn_persist_to_flash = lv_btn_create(setup_line_persist);
+    lv_obj_align_to(btn_persist_to_flash, setup_save_label, LV_ALIGN_OUT_RIGHT_TOP, 5, -10);
+    lv_obj_set_size(btn_persist_to_flash, 75, 35);
+
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_persist_to_flash, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_persist_to_flash, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_persist_to_flash, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_persist_to_flash, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t * btn_persist_to_flash_label = lv_label_create(btn_persist_to_flash);
+    lv_label_set_text(btn_persist_to_flash_label, "to Flash");
+    lv_obj_center(btn_persist_to_flash_label);
+
+    // to SD
+    btn_persist_to_SD = lv_btn_create(setup_line_persist);
+    lv_obj_align_to(btn_persist_to_SD, btn_persist_to_flash, LV_ALIGN_OUT_RIGHT_TOP, 5, 0);
+    lv_obj_set_size(btn_persist_to_SD, 75, 35);
+
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_persist_to_SD, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_persist_to_SD, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_persist_to_SD, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_persist_to_SD, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t * btn_persist_to_SD_label = lv_label_create(btn_persist_to_SD);
+    lv_label_set_text(btn_persist_to_SD_label, "to SD");
+    lv_obj_center(btn_persist_to_SD_label);
+
+    // IMMEDIATE
+    btn_persist_immediate = lv_btn_create(setup_line_persist);
+    lv_obj_align_to(btn_persist_immediate, btn_persist_to_SD, LV_ALIGN_OUT_RIGHT_TOP, 5, 0);
+    lv_obj_set_size(btn_persist_immediate, 75, 35);
+
+    /* Make the button checkable (like a toggle) */
+    lv_obj_add_flag(btn_persist_immediate, LV_OBJ_FLAG_CHECKABLE);
+    lv_obj_set_style_bg_color(btn_persist_immediate, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn_persist_immediate, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(btn_persist_immediate, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t * btn_persist_immediate_label = lv_label_create(btn_persist_immediate);
+    lv_label_set_text(btn_persist_immediate_label, "immediate");
+    lv_obj_center(btn_persist_immediate_label);
+
+
+    // Line Clear
+    /*lv_obj_t * setup_line_clear = SET_new_line(t1, setup_line_persist, 5);
+
+    lv_obj_t * setup_clear_label = lv_label_create(setup_line_clear);
+    lv_obj_align(setup_clear_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_clear_label, 50);
+    lv_label_set_text(setup_clear_label, "Clear ... ");
+    lv_obj_set_style_text_align(setup_clear_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    // Received Nodes
+    btn_clear_nodes = lv_btn_create(setup_line_clear);
+    lv_obj_align_to(btn_clear_nodes, setup_clear_label, LV_ALIGN_OUT_RIGHT_TOP, 5, -10);
+    lv_obj_set_size(btn_clear_nodes, 75, 35);
+    lv_obj_add_event_cb(btn_clear_nodes, btn_event_handler_clear_nodes, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t * btn_clear_nodes_label = lv_label_create(btn_clear_nodes);
+    lv_label_set_text(btn_clear_nodes_label, "Rec.Nodes");
+    lv_obj_center(btn_clear_nodes_label);
+
+    // Messages
+    btn_clear_messages = lv_btn_create(setup_line_clear);
+    lv_obj_align_to(btn_clear_messages, btn_clear_nodes, LV_ALIGN_OUT_RIGHT_TOP, 5, -10);
+    lv_obj_set_size(btn_clear_messages, 75, 35);
+    lv_obj_add_event_cb(btn_clear_messages, btn_event_handler_clear_messages, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t * btn_clear_messages_label = lv_label_create(btn_clear_messages);
+    lv_label_set_text(btn_clear_messages_label, "Messages");
+    lv_obj_center(btn_clear_messages_label);
+
+    // MHeards
+    btn_clear_mheards = lv_btn_create(setup_line_clear);
+    lv_obj_align_to(btn_clear_mheards, btn_clear_messages, LV_ALIGN_OUT_RIGHT_TOP, 5, -10);
+    lv_obj_set_size(btn_clear_mheards, 75, 35);
+    lv_obj_add_event_cb(btn_clear_mheards, btn_event_handler_clear_mheards, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t * btn_clear_mheards_label = lv_label_create(btn_clear_mheards);
+    lv_label_set_text(btn_clear_mheards_label, "MHeards");
+    lv_obj_center(btn_clear_mheards_label);*/
+
+
+    // Save / REBOOT
+    // lv_obj_t * setup_line_save = SET_new_line(t1, setup_line_clear, 5);
+    lv_obj_t * setup_line_save = SET_new_line(t1, setup_line_persist, 5);
 
     // BTN SETUP
-    lv_obj_t * btnsetup = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup, 0, 445);
-    lv_obj_set_size(btnsetup, 100, 30);
+    lv_obj_t * btnsetup = lv_btn_create(setup_line_save);
+    lv_obj_align(btnsetup, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_set_size(btnsetup, 140, 35);
     lv_obj_add_event_cb(btnsetup, btn_event_handler_setup, LV_EVENT_ALL, NULL);
 
     lv_obj_t * btnlabel_setup = lv_label_create(btnsetup);
-    lv_label_set_text(btnlabel_setup, "save setting");
+    lv_label_set_text(btnlabel_setup, "Save Setting");
     lv_obj_center(btnlabel_setup);
 
-    // VERSION
-    lv_obj_t * btnsetup_version = lv_btn_create(t1);
-    lv_obj_set_pos(btnsetup_version, 110, 445);
-    lv_obj_set_size(btnsetup_version, 180, 30);
+    // BTN Reboot
+    lv_obj_t * btnreboot = lv_btn_create(setup_line_save);
+    lv_obj_align(btnreboot, LV_ALIGN_TOP_RIGHT, -10, 0);
+    lv_obj_set_size(btnreboot, 140, 35);
+    lv_obj_add_event_cb(btnreboot, btn_event_handler_reboot, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_t * label_btnsetup_version = lv_label_create(btnsetup_version);
-    char sv[50];
-    sprintf(sv, "MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
-    lv_label_set_text(label_btnsetup_version, sv);
-    lv_obj_center(btnlabel_setup);
+    lv_obj_t * btnreboot_setup = lv_label_create(btnreboot);
+    lv_label_set_text(btnreboot_setup, "Reboot");
+    lv_obj_center(btnreboot_setup);
 
     ////////////////////////////////////////////////////////////////////////////
     // TEXT OUTPUT
@@ -1382,7 +1687,7 @@ int getMapDropboxID(String strMap)
 void add_map_point(String callsign, double dlat, double dlon, bool bHome)
 {
     if(bDEBUG)
-        Serial.printf("[MAP]...check add call: %s\n", callsign.c_str());
+        Serial.printf("[ MAP ]...check add call: %s\n", callsign.c_str());
  
     int ipoint = 0;
  
@@ -1628,14 +1933,20 @@ void tft_on()
     resetBrightness();
 
     // Force sync keyboard backlight
-    if(!meshcom_settings.node_keyboardlock) {
-        // Force ON like the button
-        setKeyboardBacklight(255);
-        
-        // Update button state visual
-        if(tab_kbl_icon_label) {
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
-            kbl_on = true;
+    if (!meshcom_settings.node_keyboardlock) {
+        if (kbd_light_on)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...tft_on: turn on keyboard backlight");
+
+            // turn on keyboard backlight
+            setKeyboardBacklight(255);
+
+            // Update button state visual
+            if (tab_kbl_icon_label)
+            {
+                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+            }
         }
     }
 
@@ -1666,12 +1977,17 @@ void tft_off()
 
         if (bDEBUG)
             Serial.println("[TDECK]...tft_off: sending sleep commands");
-        setKeyboardBacklight(0);
 
-        // Update state and UI to reflect that KBL is now OFF
-        kbl_on = false;
-        if(tab_kbl_icon_label) {
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+        if (kbd_light_on)
+        {
+            // turn off keyboard backlight
+            setKeyboardBacklight(0);
+
+            // Update UI to reflect that KBL is now OFF
+            if(tab_kbl_icon_label)
+            {
+                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+            }
         }
 
         tft.writecommand(TFT_DISPOFF);
@@ -1691,6 +2007,8 @@ static void update_header_sat_indicator(void)
     {
         lv_label_set_text(header_sat_label, "0");
         lv_obj_set_style_text_color(header_sat_icon, lv_color_white(), LV_PART_MAIN);
+        lv_obj_add_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
@@ -1702,6 +2020,8 @@ static void update_header_sat_indicator(void)
     lv_color_t icon_color = (posinfo_fix || posinfo_satcount > 0) ? lv_palette_main(LV_PALETTE_GREEN)
                                                                          : lv_palette_main(LV_PALETTE_RED);
     lv_obj_set_style_text_color(header_sat_icon, icon_color, LV_PART_MAIN);
+    lv_obj_clear_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void update_header_batt_indicator(float batt, int proz)
@@ -1765,18 +2085,14 @@ static void update_header_wifi_indicator(void)
     // If the user explicitly disabled Wi‑Fi via the T‑Deck Settings, show
     // the Wi‑Fi icon as 'off' (white) regardless of configured SSID.
     {
-        Preferences pref;
-        pref.begin("Credentials", false);
-        bool node_wifion = pref.getBool("node_wifion", true);
-        pref.end();
-
-        if(!node_wifion)
+        if(!meshcom_settings.node_wifion)
         {
             if (bDEBUG)
                 Serial.printf("[TDECK]...update_header_wifi_indicator: node_wifion=false, WiFi.status=%d, ssid='%s'\n", (int)WiFi.status(), meshcom_settings.node_ssid);
             
             lv_obj_set_style_text_color(header_wifi_icon, lv_color_white(), LV_PART_MAIN);
             lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+            lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
             return;
         }
     }
@@ -1790,6 +2106,7 @@ static void update_header_wifi_indicator(void)
     {
         lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+        lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
@@ -1799,12 +2116,14 @@ static void update_header_wifi_indicator(void)
     {
         lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+        lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
     else
     {
         // Not enabled/configured -> White
         lv_obj_set_style_text_color(header_wifi_icon, lv_color_white(), LV_PART_MAIN);
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+        lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -1827,19 +2146,18 @@ static void update_header_bt_indicator(void)
     lv_obj_set_style_radius(header_bt_icon, 12, LV_PART_MAIN);
 
     // deviceConnected is set by NimBLE callbacks
-    if(deviceConnected)
+    if (deviceConnected)
     {
-        // Connected: white glyph with green ring
-        lv_obj_set_style_border_width(header_bt_icon, 2, LV_PART_MAIN);
-        lv_obj_set_style_border_color(header_bt_icon, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
+        // Connected: blue logo
+        lv_obj_set_style_text_color(header_bt_icon, lv_color_make(0x00, 0x00, 0xff), LV_PART_MAIN);
     }
     else
     {
-        // BLE advertising active: white glyph with blue ring
-        if(strlen(cBLEName) > 1)
+        // BLE advertising active: white glyph with white ring
+        if (strlen(cBLEName) > 1)
         {
             lv_obj_set_style_border_width(header_bt_icon, 2, LV_PART_MAIN);
-            lv_obj_set_style_border_color(header_bt_icon, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+            lv_obj_set_style_border_color(header_bt_icon, lv_color_white(), LV_PART_MAIN);
         }
         else
         {
@@ -1857,6 +2175,21 @@ void tdeck_update_header_wifi(void)
 void tdeck_update_header_bt(void)
 {
     update_header_bt_indicator();
+}
+
+void tdeck_update_header_standby(void)
+{  
+    meshcom_settings.node_backlightlock = meshcom_settings.node_modus >= 2;
+
+    if (meshcom_settings.node_backlightlock)
+    {
+        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+    }
+    else
+    {
+        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+    }
+
 }
 
 /* Pause/resume a small set of UI timers when the display is turned off/on.
@@ -1898,7 +2231,7 @@ static void apply_tab_bar_styles(void)
     lv_obj_set_style_pad_all(tab_bar, 4, LV_PART_ITEMS);
 }
 
-static void update_header_locator_label(void)
+/*static void update_header_locator_label(void)
 {
     if(header_locator_label == NULL)
         return;
@@ -1912,7 +2245,7 @@ static void update_header_locator_label(void)
     {
         lv_label_set_text(header_locator_label, DEFAULT_LOCATOR_TEXT);
     }
-}
+}*/
 
 static bool compute_locator_from_settings(char *buffer, size_t len)
 {
@@ -2175,6 +2508,7 @@ static MsgTabEntry *msg_tabs_get_or_create_entry(const String &group, int *index
     lv_obj_set_style_border_width(new_entry.button, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(new_entry.button, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(new_entry.button, 6, LV_PART_MAIN);
+    lv_obj_set_style_min_width(new_entry.button, 35, LV_PART_MAIN);
     lv_obj_add_flag(new_entry.button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_event_cb(new_entry.button, msg_tab_button_event_cb, LV_EVENT_CLICKED, NULL);
 
@@ -2198,6 +2532,13 @@ static MsgTabEntry *msg_tabs_get_or_create_entry(const String &group, int *index
 
 static void log_message_to_sd(const String &group, const MsgBubble &bubble, const char* filename = "/messages.json")
 {
+    if (!meshcom_settings.node_persist_to_sd)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...Not persisting to SD");
+        return;
+    }
+
     String type = "incoming";
     if(bubble.type == MsgBubbleType::Outgoing) type = "outgoing";
     else if(bubble.type == MsgBubbleType::System) type = "system";
@@ -2802,6 +3143,13 @@ static String unescape_json(const String &s)
 
 static void save_persisted_messages(void)
 {
+    if (! meshcom_settings.node_persist_to_flash)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...not persisting to flash");
+        return;
+    }
+
     if(persisted_msgs.empty())
         return;
 
@@ -3135,7 +3483,7 @@ void tdeck_update_time_label()
         lv_label_set_text(header_time_label, header_time);
     }
 
-    update_header_locator_label();
+    // update_header_locator_label();
     update_header_batt_indicator(global_batt > 0.0f ? global_batt / 1000.0f : 0.0f, global_proz);
     update_header_sat_indicator();
 }
@@ -3255,8 +3603,9 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
  */
 void tdeck_refresh_SET_view()
 {
-    lv_textarea_set_text(setup_callsign, meshcom_settings.node_call);
     char vChar[10];
+
+    lv_textarea_set_text(setup_callsign, meshcom_settings.node_call);
     sprintf(vChar, "%.4lf", meshcom_settings.node_lat);
     lv_textarea_set_text(setup_lat, vChar);
     sprintf(vChar, "%c", meshcom_settings.node_lat_c);
@@ -3276,6 +3625,9 @@ void tdeck_refresh_SET_view()
     lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start.c_str());
     lv_textarea_set_text(setup_mtone, meshcom_settings.node_audio_msg.c_str());
     lv_textarea_set_text(setup_name, meshcom_settings.node_name);
+    lv_textarea_set_text(setup_comment, meshcom_settings.node_atxt);
+    lv_textarea_set_text(setup_wifissid, meshcom_settings.node_ssid);
+    lv_textarea_set_text(setup_wifipassword, meshcom_settings.node_pwd);
 
     sprintf(vChar, "%i", meshcom_settings.node_gcb[0]);
     lv_textarea_set_text(setup_grc0, vChar);
@@ -3291,53 +3643,87 @@ void tdeck_refresh_SET_view()
     lv_textarea_set_text(setup_grc5, vChar);
 
     sprintf(vChar, "%08X", _GW_ID);
-    lv_label_set_text(btn_msg_id_label, vChar);
-    sprintf(vChar, "%d", meshcom_settings.node_ackid);
-    lv_label_set_text(btn_ack_id_label, vChar);
+    lv_label_set_text(setup_id_label, vChar);
+
+    char locator[9];
+    if(compute_locator_from_settings(locator, sizeof(locator)))
+    {
+        lv_label_set_text(setup_locator_label, locator);
+    }
+    else
+    {
+        lv_label_set_text(setup_locator_label, DEFAULT_LOCATOR_TEXT);
+    }
 
     // WEB
-    if (bWEBSERVER)
-        lv_obj_add_state(web_sw, LV_STATE_CHECKED);
+    if (meshcom_settings.node_wifion && bWEBSERVER)
+        lv_obj_add_state(btn_webserver, LV_STATE_CHECKED);
     else
-        lv_obj_clear_state(web_sw, LV_STATE_CHECKED);
+        lv_obj_clear_state(btn_webserver, LV_STATE_CHECKED);
     // MESH
     if (bMESH)
-        lv_obj_add_state(mesh_sw, LV_STATE_CHECKED);
+        lv_obj_add_state(btn_mesh, LV_STATE_CHECKED);
     else
-        lv_obj_clear_state(mesh_sw, LV_STATE_CHECKED);
+        lv_obj_clear_state(btn_mesh, LV_STATE_CHECKED);
     // NOALL
     if (bNoMSGtoALL)
-        lv_obj_add_state(noallmsg_sw, LV_STATE_CHECKED);
+        lv_obj_add_state(btn_noallmsg, LV_STATE_CHECKED);
     else
-        lv_obj_clear_state(noallmsg_sw, LV_STATE_CHECKED);
+        lv_obj_clear_state(btn_noallmsg, LV_STATE_CHECKED);
     // GPS
     if (bGPSON)
-        lv_obj_add_state(gpson_sw, LV_STATE_CHECKED);
+        lv_obj_add_state(btn_gps, LV_STATE_CHECKED);
     else
-        lv_obj_clear_state(gpson_sw, LV_STATE_CHECKED);
-    // UTC offset        
+        lv_obj_clear_state(btn_gps, LV_STATE_CHECKED);
+
+        // UTC offset        
     sprintf(vChar, "%.1f", meshcom_settings.node_utcoff);
     lv_textarea_set_text(setup_utc, vChar);
     // TRACK
     if (bDisplayTrack)
-        lv_obj_add_state(track_sw, LV_STATE_CHECKED);
+        lv_obj_add_state(btn_track, LV_STATE_CHECKED);
     else
-        lv_obj_clear_state(track_sw, LV_STATE_CHECKED);
+        lv_obj_clear_state(btn_track, LV_STATE_CHECKED);
     // MUTE
     if (meshcom_settings.node_mute)
-        lv_obj_add_state(mute_sw, LV_STATE_CHECKED);
+        lv_obj_clear_state(btn_soundon, LV_STATE_CHECKED);
     else
-        lv_obj_clear_state(mute_sw, LV_STATE_CHECKED);
+        lv_obj_add_state(btn_soundon, LV_STATE_CHECKED);
+    // Save to Flash
+    if (meshcom_settings.node_persist_to_flash)
+        lv_obj_add_state(btn_persist_to_flash, LV_STATE_CHECKED);
+    else
+        lv_obj_clear_state(btn_persist_to_flash, LV_STATE_CHECKED);
+    // Save to SD
+    if (meshcom_settings.node_persist_to_sd)
+        lv_obj_add_state(btn_persist_to_SD, LV_STATE_CHECKED);
+    else
+        lv_obj_clear_state(btn_persist_to_SD, LV_STATE_CHECKED);
     // IMMEDIATE SAVE
     if (meshcom_settings.node_immediate_save)
-        lv_obj_add_state(immediate_save_sw, LV_STATE_CHECKED);
+        lv_obj_add_state(btn_persist_immediate, LV_STATE_CHECKED);
     else
-        lv_obj_clear_state(immediate_save_sw, LV_STATE_CHECKED);
+        lv_obj_clear_state(btn_persist_immediate, LV_STATE_CHECKED);
+    // WIFI
+    if (meshcom_settings.node_wifion)
+    {
+        lv_obj_add_state(btn_wifi, LV_STATE_CHECKED);
+    }
+    else
+    {
+        lv_obj_clear_state(btn_wifi, LV_STATE_CHECKED);
+    }
     // WIFIAP
-    if (bWIFIAP)
-        lv_obj_add_state(wifiap_sw, LV_STATE_CHECKED);
+    if (meshcom_settings.node_wifion && bWIFIAP)  // bWIFIAP
+    {
+        lv_obj_add_state(btn_wifiap, LV_STATE_CHECKED);
+        lv_obj_add_state(btn_wifi, LV_STATE_CHECKED);
+    }
     else
-        lv_obj_clear_state(wifiap_sw, LV_STATE_CHECKED);
+    {
+        lv_obj_clear_state(btn_wifiap, LV_STATE_CHECKED);
+    }
+
     // BTN LOCK
     /*
     if (meshcom_settings.node_keyboardlock)
@@ -3442,7 +3828,7 @@ void tdeck_add_system_message(const char *text)
     bubble.sd = bSDDected;
     bubble.wlan = bWIFIAP;
 
-    String group = "SYSTEM";
+    String group = "booting...";
     if(msg_active_tab_index >= 0 && msg_active_tab_index < (int)msg_tab_entries.size())
     {
         group = msg_tab_entries[msg_active_tab_index].group;
