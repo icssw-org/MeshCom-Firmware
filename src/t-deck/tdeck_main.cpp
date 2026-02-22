@@ -38,6 +38,9 @@ using namespace ace_button;
 #include <esp32/esp32_audio.h>
 #endif
 
+#include "nvs.h"
+#include "nvs_flash.h"
+
 #define I2S_CH I2S_NUM_1
 
 TFT_eSPI            tft;
@@ -184,10 +187,12 @@ void initTDeck()
 
     lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
 
-    char buf[20];
-    snprintf(buf, 20, "MeshCom %s%s\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
+    char buf[40];
+    snprintf(buf, 40, "MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
     addMessage(buf);
 
+    snprintf(buf, 40, "(build: %s / %s)\n", __DATE__, __TIME__);
+    addMessage(buf);
 }
 
 void startAudio()

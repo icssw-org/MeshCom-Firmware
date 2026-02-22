@@ -222,6 +222,8 @@ void init_flash(void)
 
     strVar = preferences.getString("node_owndns");
     snprintf(meshcom_settings.node_owndns, sizeof(meshcom_settings.node_owndns), "%s", strVar.c_str());
+
+    preferences.end();
 }
 
 void save_settings(void)
