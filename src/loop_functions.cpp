@@ -3753,9 +3753,12 @@ void addRingPointer(int &pWrite, int &pRead, int iMAX)
         if(pRead == pWrite)
         {
             pRead = pWrite+1;
-            
+
             if (pRead >= iMAX) // if the buffer is full we start at index 0 -> take care of overwriting!
                 pRead = 0;
+
+            // Debug M: RING_OVERFLOW — NOT gated by bLORADEBUG, always visible
+            Serial.println(F("[MC-DBG] RING_OVERFLOW"));
         }
     }
 
