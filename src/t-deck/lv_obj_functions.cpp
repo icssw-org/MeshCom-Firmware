@@ -3627,7 +3627,7 @@ void tdeck_refresh_SET_view()
     lv_textarea_set_text(setup_name, meshcom_settings.node_name);
     lv_textarea_set_text(setup_comment, meshcom_settings.node_atxt);
     lv_textarea_set_text(setup_wifissid, meshcom_settings.node_ssid);
-    lv_textarea_set_text(setup_wifipassword, meshcom_settings.node_pwd);
+    lv_textarea_set_text(setup_wifipassword, "***********************");
 
     sprintf(vChar, "%i", meshcom_settings.node_gcb[0]);
     lv_textarea_set_text(setup_grc0, vChar);
