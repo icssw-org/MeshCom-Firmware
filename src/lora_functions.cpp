@@ -652,7 +652,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 print_buff[4]=(msg_counter >> 24) & 0xFF;
                                                 print_buff[5]=0x80;      // server & max hop
                                                 print_buff[5] = print_buff[5] | meshcom_settings.max_hop_text;
-                                                print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00 
+                                                // FIX BUG #6: Include original msg_id so sender can match ACK and stop retransmitting
+                                                print_buff[6]=aprsmsg.msg_id & 0xFF;
+                                                print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
+                                                print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
+                                                print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
+                                                print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00
                                                 print_buff[11]=0x00;     // msg always 0x00 at the end
                                                 
                                                 ringBuffer[iWrite][0]=12;
