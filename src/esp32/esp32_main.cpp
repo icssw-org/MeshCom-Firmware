@@ -1572,38 +1572,58 @@ void esp32loop()
             // Timeout RECEIVE_TIMEOUT
             if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
             {
-                iReceiveTimeOutTime=0;
+                // Debug A: RX_TIMEOUT_FIRE
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu last_event=%lu delta=%lu\n",
+                        millis(), iReceiveTimeOutTime, millis() - iReceiveTimeOutTime);
 
-                // clear Receive Interrupt
-                bEnableInterruptReceive = false; //KBC 0801
-                radio.clearPacketReceivedAction(); // KBC 0801
-
-                // clear Transmit Interrupt
-                bEnableInterruptTransmit = false; // KBC 0801
-                radio.clearPacketSentAction();  //KBC 0801
-
-                // set Receive Interupt
-                bEnableInterruptReceive = true; //KBC 0801
-                radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
-
-                int state = radio.startReceive();
-                if (state == RADIOLIB_ERR_NONE)
+                // FIX BUG #1: Do not reset radio if a received packet is pending
+                if(receiveFlag)
                 {
+                    // A packet arrived just before timeout — let the receiveFlag
+                    // handler process it. Just reset the timer.
+                    iReceiveTimeOutTime = millis();
+
                     if(bLORADEBUG)
                     {
                         Serial.print(getTimeString());
-                        Serial.println(" [LoRa]...Receive Timeout, startReceive again with sucess");
+                        Serial.println(F(" [MC-DBG] RX_TIMEOUT skipped: receiveFlag pending"));
                     }
                 }
                 else
                 {
+                    iReceiveTimeOutTime=0;
+
+                    // FIX BUG #1: Call startReceive FIRST, then re-wire interrupts.
+                    // Disable interrupt gating while we reconfigure
+                    bEnableInterruptReceive = false;
+                    bEnableInterruptTransmit = false;
+
+                    int state = radio.startReceive();
+
+                    // Now re-wire the interrupt callback
+                    radio.clearPacketReceivedAction();
+                    radio.clearPacketSentAction();
+                    radio.setPacketReceivedAction(setFlagReceive);
+
+                    bEnableInterruptReceive = true;
+
+                    // Debug B: RX_RESTART after timeout
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] RX_RESTART src=timeout state=%d\n", state);
+
                     if(bLORADEBUG)
                     {
                         Serial.print(getTimeString());
-                        Serial.print(" [LoRa]...Receive Timeout, startReceive again with error = ");
-                        Serial.println(state);
+                        if (state == RADIOLIB_ERR_NONE)
+                            Serial.println(F(" [LoRa]...Receive Timeout, startReceive again with sucess"));
+                        else
+                        {
+                            Serial.print(F(" [LoRa]...Receive Timeout, startReceive again with error = "));
+                            Serial.println(state);
+                        }
                     }
-                }        
+                }
             }
         }
         
@@ -1612,6 +1632,10 @@ void esp32loop()
             // check ongoing reception
             if(receiveFlag)
             {
+                // Debug C: RX_FLAG_PROCESS
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] RX_FLAG_PROCESS ts=%lu\n", millis());
+
                 // reset flags first
                 bEnableInterruptReceive = false;
                 receiveFlag = false;
@@ -1621,19 +1645,11 @@ void esp32loop()
 
                 checkRX(bRadio);
 
-                // clear Receive Interrupt
-                bEnableInterruptReceive = false; // KBC 0801
-                radio.clearPacketReceivedAction(); // KBC 0801
-
-                // clear Transmit Interrupt
-                bEnableInterruptTransmit = false; // KBC 0801
-                radio.clearPacketSentAction();  //KBC 0801
-
-                // set Receive Interupt
-                bEnableInterruptReceive = true; //KBC 0801
-                radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
-
+                // FIX BUG #2: checkRX() now restarts RX internally.
+                // Remove redundant interrupt rewiring that would double-reconfigure.
+                // Only reset the timeout timers here.
                 inoReceiveTimeOutTime=millis();
+                iReceiveTimeOutTime = millis();
             }
             else
             if(transmittedFlag)
@@ -1643,6 +1659,10 @@ void esp32loop()
                 bEnableInterruptReceive = false;
 
                 transmittedFlag = false;
+
+                // Debug G: TX_DONE
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] TX_DONE state=%d ts=%lu\n", transmissionState, millis());
 
                 if (transmissionState == RADIOLIB_ERR_NONE)
                 {
@@ -1693,6 +1713,10 @@ void esp32loop()
 
                 int state = radio.startReceive();
 
+                // Debug H: RX_RESTARTED after TX
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] RX_RESTARTED src=after_tx state=%d\n", state);
+
                 if (state != RADIOLIB_ERR_NONE)
                 {
                     if(bLORADEBUG)
@@ -1701,7 +1725,7 @@ void esp32loop()
                         Serial.print(F("failed, code "));
                         Serial.println(state);
                     }
-                }        
+                }
 
                 inoReceiveTimeOutTime=millis();
 
@@ -1717,6 +1741,12 @@ void esp32loop()
             // do not print anything, it just spams the console
             if (iWrite != iRead)
             {
+                // Debug E: TX_GATE_ENTER
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cmd_ctr=%d tx_wait=%d\n",
+                        (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite),
+                        cmd_counter, tx_waiting);
+
                 // save transmission state between loops
                 cmd_counter=0;
                 tx_waiting=true;
@@ -1736,6 +1766,11 @@ void esp32loop()
                 if(doTX())
                 {
                     //KBC 0801 bEnableInterruptTransmit = true;
+
+                    // Debug F: TX_START
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] TX_START qlen=%d\n",
+                            (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite));
                 }
                 else
                 {
@@ -2748,6 +2783,28 @@ int checkRX(bool bRadio)
 
     if (state == RADIOLIB_ERR_LORA_HEADER_DAMAGED || state == RADIOLIB_ERR_NONE)
     {
+        // FIX BUG #2: Save RSSI/SNR/FreqError BEFORE restarting RX.
+        // These read from SX1262 hardware registers via SPI and would be
+        // invalidated once startReceive() transitions the radio to standby+RX.
+        int16_t saved_rssi = (int16_t)radio.getRSSI();
+        int8_t  saved_snr  = (int8_t)radio.getSNR();
+        float   saved_ferr = radio.getFrequencyError();
+
+        // FIX BUG #2: Restart RX immediately after reading FIFO, BEFORE processing.
+        // The packet data is already in our local payload buffer.
+        // The radio can now listen for the next packet while we process this one.
+        {
+            radio.clearPacketReceivedAction();
+            radio.clearPacketSentAction();
+            bEnableInterruptReceive = true;
+            radio.setPacketReceivedAction(setFlagReceive);
+            int rxstate = radio.startReceive();
+
+            // Debug D: RX_RESTARTED after readData
+            if(bLORADEBUG)
+                Serial.printf("[MC-DBG] RX_RESTARTED src=after_readData state=%d\n", rxstate);
+        }
+
         if(bLORADEBUG)
         {
             // packet was successfully received
@@ -2755,25 +2812,34 @@ int checkRX(bool bRadio)
 
             // print RSSI (Received Signal Strength Indicator)
             Serial.print(F("RSSI:\t\t"));
-            Serial.print(radio.getRSSI());
+            Serial.print(saved_rssi);
             Serial.print(F(" dBm / "));
 
             // print SNR (Signal-to-Noise Ratio)
             Serial.print(F("SNR:\t\t"));
-            Serial.print(radio.getSNR());
+            Serial.print(saved_snr);
             Serial.print(F(" dB / "));
 
             // print frequency error
             Serial.print(F("Frequency error:\t"));
-            Serial.print(radio.getFrequencyError());
+            Serial.print(saved_ferr);
             Serial.println(F(" Hz"));
         }
 
-        OnRxDone(payload, (uint16_t)ibytes, (int16_t)radio.getRSSI(), (int8_t)radio.getSNR());
+        OnRxDone(payload, (uint16_t)ibytes, saved_rssi, saved_snr);
     }
     else
     if (state == RADIOLIB_ERR_CRC_MISMATCH)
     {
+        // FIX BUG #2: Also restart RX after CRC error
+        {
+            radio.clearPacketReceivedAction();
+            radio.clearPacketSentAction();
+            bEnableInterruptReceive = true;
+            radio.setPacketReceivedAction(setFlagReceive);
+            radio.startReceive();
+        }
+
         // packet was received, but is malformed
         if(bLORADEBUG)
             Serial.println(F("[LoRa]...CRC error!"));

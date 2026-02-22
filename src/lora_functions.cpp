@@ -99,6 +99,9 @@ bool bNewLine = false;
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
+    // Debug I: OnRxDone timing — capture start time
+    unsigned long _onrxdone_start = millis();
+
     // only for Test T5_EPAPER
     //bDisplayInfo=true;
 
@@ -874,6 +877,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     #endif
 
 
+    // Debug I: ONRXDONE_TIME — measure processing duration
+    if(bLORADEBUG)
+        Serial.printf("[MC-DBG] ONRXDONE_TIME ms=%lu\n", millis() - _onrxdone_start);
+
     if(bLORADEBUG)
         Serial.println("OnRxDone");
 
@@ -944,10 +951,11 @@ bool doTX()
     // next TX new TX-DELAY
     if(cmd_counter > 0)
     {
+        // Debug J: CAD_WAIT
+        if(bLORADEBUG)
+            Serial.printf("[MC-DBG] CAD_WAIT remaining=%d\n", cmd_counter);
+
         cmd_counter--;
-        
-        //if(bLORADEBUG)
-        //Serial.printf("cmd_counter > 0:%i \n", cmd_counter);
 
         return false;
     }
@@ -1092,6 +1100,11 @@ bool doTX()
                         #ifdef BOARD_HELTEC_V4
                         enablePATransmit();
                         #endif
+
+                        // Debug K: RADIO_TX
+                        if(bLORADEBUG)
+                            Serial.printf("[MC-DBG] RADIO_TX len=%d\n", sendlng);
+
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                         #endif
                         bLED_RED = true;
@@ -1255,12 +1268,12 @@ void OnPreambleDetect(void)
  */
 void OnHeaderDetect(void)
 {
-    // Suche nach freiem Kanal unterbrechen
-    tx_waiting=false;
-    cmd_counter=0;
-
+    // FIX BUG #3: Only block TX during active reception.
+    // Do NOT reset cmd_counter or tx_waiting.
+    // The CAD wait will resume after this packet is processed.
     is_receiving = true;
-    
+
+    // Debug L: HDR_DETECT with state context
     if(bLORADEBUG)
-        Serial.println("OnHeaderDetect");
+        Serial.printf("[MC-DBG] HDR_DETECT tx_wait=%d cmd_ctr=%d\n", tx_waiting, cmd_counter);
 }
