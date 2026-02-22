@@ -567,7 +567,7 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("--setssid  WLAN SSID/none\n--setpwd   WLAN PASSWORD/none\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--setowndns 255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255/none\n");
             delay(100);
 
-            Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analogcheck on/off\n");
+            Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analog check on/off\n");
             delay(100);
             Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
             delay(100);
