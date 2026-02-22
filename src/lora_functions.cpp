@@ -1014,6 +1014,11 @@ bool doTX()
         if (iRead >= MAX_RING)
             iRead = 0;
 
+        // NOTE: Slot clearing (Bug 1 fix) is deferred until after the transmit
+        // decision. Two rollback paths (CAD wait, APRS chip-switch failure)
+        // restore iRead to save_read and retry the same slot on the next call.
+        // Clearing here would destroy the slot data before those paths execute.
+
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
@@ -1074,6 +1079,11 @@ bool doTX()
                 }
 
                 bSetLoRaAPRS = true;
+
+                // FIX Bug 4: Clear consumed slot only after successful transmit
+                ringBuffer[save_read][0] = 0;
+                ringBuffer[save_read][1] = 0xFF;
+                retryCount[save_read] = 0;
 
                 return true;
             }
@@ -1147,6 +1157,11 @@ bool doTX()
                         }
                     }
 
+                    // FIX Bug 4: Clear consumed slot only after successful transmit
+                    ringBuffer[save_read][0] = 0;
+                    ringBuffer[save_read][1] = 0xFF;
+                    retryCount[save_read] = 0;
+
                     return true;
                 }
             }
@@ -1155,6 +1170,14 @@ bool doTX()
         {
             DEBUG_MSG("RADIO", "TX DISABLED");
         }
+
+        // FIX Bug 4: Clear consumed slot on non-rollback drop paths
+        // (TX disabled, or msg_type_b_lora == 0x00 decode failure).
+        // The slot is consumed (iRead advanced) but will never be sent,
+        // so clear it to prevent deadlock accumulation.
+        ringBuffer[save_read][0] = 0;
+        ringBuffer[save_read][1] = 0xFF;
+        retryCount[save_read] = 0;
     }
 
     //#endif
@@ -1167,12 +1190,19 @@ bool doTX()
 // unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE] = {0};
 
 // Maximum retransmit attempts per message
-#define MAX_RETRANSMIT 5
+#define MAX_RETRANSMIT 3
 
 bool updateRetransmissionStatus()
 {
-    for(int ircheck=0; ircheck < MAX_RING; ircheck++)
+    // FIX: Only scan slots in the active iRead→iWrite range.
+    // Consumed slots behind iRead are cleared by doTX() (Bug 1 fix),
+    // but this defense-in-depth prevents ghost retransmits from stale data.
+    int count = (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite);
+
+    for(int q = 0; q < count; q++)
     {
+        int ircheck = (iRead + q) % MAX_RING;
+
         // Non-text messages: force no-retransmit
         if(ringBuffer[ircheck][2] != 0x3A)
         {
@@ -1185,9 +1215,9 @@ bool updateRetransmissionStatus()
         {
             ringBuffer[ircheck][1]++;
 
-            // Fixed-interval retransmit: 30s per retry (15 ticks × 2s)
-            //   Retry 1-5: each waits 30s → total max 150s (2.5 min)
-            uint8_t threshold = 0x10;
+            // Fixed-interval retransmit: 40s per retry (20 ticks × 2s)
+            //   Retry 1-3: each waits 40s → total max 120s (2 min)
+            uint8_t threshold = 0x15;
 
             if(ringBuffer[ircheck][1] == threshold)
             {
