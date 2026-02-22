@@ -1137,7 +1137,7 @@ bool doTX()
 // unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE] = {0};
 
 // Maximum retransmit attempts per message
-#define MAX_RETRANSMIT 3
+#define MAX_RETRANSMIT 5
 
 bool updateRetransmissionStatus()
 {
@@ -1155,11 +1155,9 @@ bool updateRetransmissionStatus()
         {
             ringBuffer[ircheck][1]++;
 
-            // Retransmit threshold with exponential backoff:
-            //   Retry 1: 0x10 (15 ticks x 2s = 30s)
-            //   Retry 2: 0x20 (31 ticks x 2s = 62s)
-            //   Retry 3: 0x30 (47 ticks x 2s = 94s)
-            uint8_t threshold = 0x10 * (retryCount[ircheck] + 1);
+            // Fixed-interval retransmit: 30s per retry (15 ticks × 2s)
+            //   Retry 1-5: each waits 30s → total max 150s (2.5 min)
+            uint8_t threshold = 0x10;
 
             if(ringBuffer[ircheck][1] == threshold)
             {
