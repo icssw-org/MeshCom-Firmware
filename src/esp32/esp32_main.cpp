@@ -2842,7 +2842,11 @@ int checkRX(bool bRadio)
 
         // packet was received, but is malformed
         if(bLORADEBUG)
-            Serial.println(F("[LoRa]...CRC error!"));
+        {
+            Serial.printf("[MC-DBG] CRC_ERROR rssi=%.1f snr=%.1f freq_err=%.1f size=%d ts=%lu\n",
+                radio.getRSSI(), radio.getSNR(), radio.getFrequencyError(),
+                (int)ibytes, millis());
+        }
     }
     else
     {
