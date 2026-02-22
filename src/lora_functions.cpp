@@ -167,6 +167,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     ringBuffer[iWrite][1]=0xFF; // retransmission Status ...0xFF no retransmission
                     memcpy(ringBuffer[iWrite]+2, print_buff, 12);
 
+                    retryCount[iWrite] = 0;
                     addRingPointer(iWrite, iRead, MAX_RING);
                     /*
                     iWrite++;
@@ -203,6 +204,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 if(memcmp(ringBuffer[ircheck]+3, RcvBuffer+1, 4) == 0)
                 {
                     ringBuffer[ircheck][1] = 0xFF; // no retransmission
+                    retryCount[ircheck] = 0; // clear retry counter
 
                     if(bDisplayRetx)
                     {
@@ -821,22 +823,19 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                 ringBuffer[iWrite][0]=size;
                                 memcpy(ringBuffer[iWrite]+2, RcvBuffer, size);
-                                if (ringBuffer[iWrite][2] == 0x3A) // only Messages
-                                {
-                                    if(aprsmsg.msg_payload.startsWith("{") > 0)
-                                        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
-                                    else
-                                        ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
-                                }
-                                else
-                                    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
 
-                                if(bDisplayRetx)
+                                // FIX: Relay messages are fire-and-forget.
+                                // Only the ORIGINATING node should retransmit.
+                                ringBuffer[iWrite][1] = 0xFF; // no retransmission for ANY relay message
+
+                                if(bLORADEBUG)
                                 {
-                                    unsigned int ring_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
-                                    Serial.printf("\n[RETX] insert iWrite:%i status:%02X lng;%02X msg-id: %c-%08X\n", iWrite, ringBuffer[iWrite][1], ringBuffer[iWrite][0], ringBuffer[iWrite][2], ring_msg_id);
+                                    unsigned int relay_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
+                                    Serial.printf("[MC-DBG] RELAY_QUEUED msg_id=%08X type=%02X len=%d\n",
+                                        relay_msg_id, ringBuffer[iWrite][2], size);
                                 }
 
+                                retryCount[iWrite] = 0;
                                 addRingPointer(iWrite, iRead, MAX_RING);
 
                                 /*
@@ -979,16 +978,8 @@ bool doTX()
         if(ringBuffer[iRead][1] == 0x00) // mark open to send
             ringBuffer[iRead][1] = 0x01; // mark as sent
 
-        if(ringBuffer[iRead][1] == 0x7F)
-        {
-            if(bDisplayRetx)
-            {
-                unsigned int ring_msg_id = (ringBuffer[iRead][6]<<24) | (ringBuffer[iRead][5]<<16) | (ringBuffer[iRead][4]<<8) | ringBuffer[iRead][3];
-                Serial.printf("\n[RETX] resend   retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iRead, ringBuffer[iRead][1], ringBuffer[iRead][0], ringBuffer[iRead][2], ring_msg_id);
-            }
-
-            ringBuffer[iRead][1] = 0xFF; // mark as resent
-        }
+        // FIX: 0x7F handling removed. Retransmit copies now use status 0x01
+        // and re-enter the normal timer cycle with retryCount tracking.
 
         iRead++;
         if (iRead >= MAX_RING)
@@ -1146,15 +1137,14 @@ bool doTX()
 // based on:
 // unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE] = {0};
 
+// Maximum retransmit attempts per message
+#define MAX_RETRANSMIT 3
+
 bool updateRetransmissionStatus()
 {
-//    Serial.println("update retransmit");
-
     for(int ircheck=0; ircheck < MAX_RING; ircheck++)
     {
-        // Status == ringBuffer[ircheck][1]
-        //   0x00 not yet sent
-        //   0xFF no retransmission
+        // Non-text messages: force no-retransmit
         if(ringBuffer[ircheck][2] != 0x3A)
         {
             ringBuffer[ircheck][1] = 0xFF;
@@ -1166,22 +1156,44 @@ bool updateRetransmissionStatus()
         {
             ringBuffer[ircheck][1]++;
 
-            // stoppen da kein Empfang über längere Zeit
-            if(ringBuffer[ircheck][1] == 0x10)    // FIX BUG #5: 15 x 2sec = 30sec retransmit (was 0x20 = 62sec)
+            // Retransmit threshold with exponential backoff:
+            //   Retry 1: 0x10 (15 ticks x 2s = 30s)
+            //   Retry 2: 0x20 (31 ticks x 2s = 62s)
+            //   Retry 3: 0x30 (47 ticks x 2s = 94s)
+            uint8_t threshold = 0x10 * (retryCount[ircheck] + 1);
+
+            if(ringBuffer[ircheck][1] == threshold)
             {
-                // Debug: RETRANSMIT
+                // Check retry cap
+                if(retryCount[ircheck] >= MAX_RETRANSMIT)
+                {
+                    // Give up — max retries exhausted
+                    ringBuffer[ircheck][1] = 0xFF;
+
+                    if(bLORADEBUG)
+                    {
+                        unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
+                        Serial.printf("[MC-DBG] RETRANSMIT_GIVEUP retries=%d msg_id=%08X\n",
+                            retryCount[ircheck], ring_msg_id);
+                    }
+
+                    continue;
+                }
+
                 if(bLORADEBUG)
                 {
                     unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
-                    Serial.printf("[MC-DBG] RETRANSMIT after_sec=%d msg_id=%08X\n",
-                        (ringBuffer[ircheck][1] - 1) * 2, ring_msg_id);
+                    Serial.printf("[MC-DBG] RETRANSMIT retry=%d after_sec=%d msg_id=%08X\n",
+                        retryCount[ircheck] + 1, (ringBuffer[ircheck][1] - 1) * 2, ring_msg_id);
                 }
+
                 int ring_msg_lng = ringBuffer[ircheck][0];
 
                 if(bDisplayRetx)
                 {
                     unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
-                    Serial.printf("\n[RETX] Retransmit retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
+                    Serial.printf("\n[RETX] Retransmit retid:%i status:%02X lng;%02X msg-id: %c-%08X retry:%d\n",
+                        ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id, retryCount[ircheck] + 1);
 
                     for(int iq=0;iq<ring_msg_lng+2;iq++)
                     {
@@ -1191,26 +1203,21 @@ bool updateRetransmissionStatus()
                     Serial.println("");
                 }
 
-                // origimalmeldung markieren
+                // Mark original as done
                 ringBuffer[ircheck][1] = 0xFF;
 
-                // Neuen Eintrag im Ringbuffer zur Wiederholung anlegen
+                // Copy message to new slot at iWrite
                 memcpy(ringBuffer[iWrite], ringBuffer[ircheck], size + 2);
 
-                // KB hier das retransmitt
-                if (ringBuffer[iWrite][2] == 0x3A) // only Messages
-                    ringBuffer[iWrite][1] = 0x7F; // retransmission Status ...0x7F retransmission
+                if (ringBuffer[iWrite][2] == 0x3A) // text messages
+                    ringBuffer[iWrite][1] = 0x01;  // start timer immediately
                 else
-                    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-                
-                
-                addRingPointer(iWrite, iRead, MAX_RING);
+                    ringBuffer[iWrite][1] = 0xFF;
 
-                /*
-                iWrite++;
-                if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-                    iWrite = 0;
-                */
+                // Transfer and increment retry count
+                retryCount[iWrite] = retryCount[ircheck] + 1;
+
+                addRingPointer(iWrite, iRead, MAX_RING);
 
                 return true;
             }

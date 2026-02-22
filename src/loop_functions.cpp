@@ -249,6 +249,9 @@ int iWrite=0;
 int iRead=0;
 int iRetransmit=-1;
 
+// FIX: Per-slot retry counter for retransmit cap
+uint8_t retryCount[MAX_RING] = {0};
+
 // RINGBUFFER for incomming LoRa RX msg_id
 uint8_t ringBufferLoraRX[MAX_RING][5] = {0};
 uint8_t loraWrite = 0;   // counter for ringbuffer
@@ -2362,6 +2365,7 @@ void sendMessage(char *msg_text, int len)
         Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iWrite, ringBuffer[iWrite][1], ringBuffer[iWrite][0], ringBuffer[iWrite][2], ring_msg_id);
     }
 
+    retryCount[iWrite] = 0;
     addRingPointer(iWrite, iRead, MAX_RING);
 
     /*
@@ -2369,7 +2373,7 @@ void sendMessage(char *msg_text, int len)
     if(iWrite >= MAX_RING)
         iWrite=0;
     */
-    
+
     if(bGATEWAY && meshcom_settings.node_hasIPaddress)
     {
 	    // UDP out
