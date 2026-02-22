@@ -329,6 +329,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
               ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
             memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
 
+            retryCount[iWrite] = 0;
             addRingPointer(iWrite, iRead, MAX_RING);
 
             /*
