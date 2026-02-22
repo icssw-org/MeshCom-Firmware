@@ -38,6 +38,9 @@ using namespace ace_button;
 #include <esp32/esp32_audio.h>
 #endif
 
+#include "nvs.h"
+#include "nvs_flash.h"
+
 #define I2S_CH I2S_NUM_1
 
 TFT_eSPI            tft;

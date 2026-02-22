@@ -112,7 +112,7 @@ void saveTimePersistence() {
 }
 
 void loadTimePersistence() {
-    timePrefs.begin("meshcom_time", true);
+    timePrefs.begin("meshcom_time", false);
     unsigned long saved_time = timePrefs.getULong("last_time", 0);
     timePrefs.end();
 
