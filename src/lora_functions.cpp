@@ -1078,13 +1078,10 @@ bool doTX()
                     }
                     else
                     {
-                        //vor jeden senden 7 aufeinander folgende CAD abwarten
+                        //vor jeden senden CAD abwarten
                         //if(aprsmsg.msg_payload.indexOf(":ack") > 0)
                         {
-                            cmd_counter=7;
-                            
-                            //if(bLORADEBUG)
-                            //    Serial.printf("cmd_counter = 7:%i \n", cmd_counter);
+                            cmd_counter=3;    // FIX BUG #4: Reduced from 7 — blind delay, not real CAD
 
                             iRead=save_read;
                             ringBuffer[iRead][1] = save_ring_status;
@@ -1170,8 +1167,15 @@ bool updateRetransmissionStatus()
             ringBuffer[ircheck][1]++;
 
             // stoppen da kein Empfang über längere Zeit
-            if(ringBuffer[ircheck][1] == 0x20)    // 32 x 10sec = 320sec (5min 20sec) Wartezeit
+            if(ringBuffer[ircheck][1] == 0x10)    // FIX BUG #5: 15 x 2sec = 30sec retransmit (was 0x20 = 62sec)
             {
+                // Debug: RETRANSMIT
+                if(bLORADEBUG)
+                {
+                    unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
+                    Serial.printf("[MC-DBG] RETRANSMIT after_sec=%d msg_id=%08X\n",
+                        (ringBuffer[ircheck][1] - 1) * 2, ring_msg_id);
+                }
                 int ring_msg_lng = ringBuffer[ircheck][0];
 
                 if(bDisplayRetx)
