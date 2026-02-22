@@ -79,6 +79,7 @@ void startWebserver()
     }
 
     web_server.stop();
+
     MDNS.end();
 
     // Set up mDNS responder:
@@ -86,6 +87,7 @@ void startWebserver()
     //   the fully-qualified domain name is "esp32.local"
     // - second argument is the IP address to advertise
     //   we send our IP address on the WiFi network
+    #ifndef T_DECK_PLUS
     if (!MDNS.begin(meshcom_settings.node_call))
     {
         Serial.print(getTimeString());
@@ -98,6 +100,7 @@ void startWebserver()
         Serial.print(getTimeString());
         Serial.println("[Web]...mDNS responder started");
     }
+    #endif
 
     web_server.begin();
 
