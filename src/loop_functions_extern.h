@@ -160,6 +160,7 @@ extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5];
 extern int iWrite;
 extern int iRead;
 extern int iRetransmit;
+extern uint8_t retryCount[MAX_RING];
 
 extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5];
 extern int RAWLoRaWrite;
