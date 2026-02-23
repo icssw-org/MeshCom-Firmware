@@ -1194,14 +1194,8 @@ bool doTX()
 
 bool updateRetransmissionStatus()
 {
-    // FIX: Only scan slots in the active iRead→iWrite range.
-    // Consumed slots behind iRead are cleared by doTX() (Bug 1 fix),
-    // but this defense-in-depth prevents ghost retransmits from stale data.
-    int count = (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite);
-
-    for(int q = 0; q < count; q++)
+    for(int ircheck = 0; ircheck < MAX_RING; ircheck++)
     {
-        int ircheck = (iRead + q) % MAX_RING;
 
         // Non-text messages: force no-retransmit
         if(ringBuffer[ircheck][2] != 0x3A)
