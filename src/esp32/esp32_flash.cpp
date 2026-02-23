@@ -219,9 +219,23 @@ void init_flash(void)
     meshcom_settings.node_shunt = preferences.getFloat("node_shunt", 0.002);
     meshcom_settings.node_imax = preferences.getFloat("node_imax", 20.0);
     meshcom_settings.node_isamp = preferences.getInt("node_isamp", 7);
+    meshcom_settings.node_isamp = preferences.getInt("node_isamp", 7);
 
     strVar = preferences.getString("node_owndns");
     snprintf(meshcom_settings.node_owndns, sizeof(meshcom_settings.node_owndns), "%s", strVar.c_str());
+
+    meshcom_settings.node_contrast = preferences.getInt("node_contrast", 255);
+
+    meshcom_settings.node_fversion = preferences.getInt("node_fversion", 0);
+
+    preferences.end();
+}
+
+void clear_flash(void)
+{
+    preferences.begin("Credentials", false);
+
+    preferences.clear();
 
     preferences.end();
 }
@@ -441,6 +455,9 @@ void save_settings(void)
     strVar = meshcom_settings.node_owndns;
     preferences.putString("node_owndns", strVar); 
 
+    preferences.putInt("node_contrast", meshcom_settings.node_contrast);
+
+    preferences.putInt("node_fversion", meshcom_settings.node_fversion);
 
     preferences.end();
 

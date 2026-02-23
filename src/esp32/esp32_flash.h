@@ -152,6 +152,11 @@ struct s_meshcom_settings
 
 	char node_owndns[20] = {0};
 
+	int node_contrast = 255;
+
+	int node_fversion = 1;
+
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
@@ -199,5 +204,7 @@ extern s_meshcom_settings meshcom_settings;
 void save_settings(void);
 // Get LoRa parameter
 void init_flash(void);
+// LoRa parameter zurück setzen
+void clear_flash(void);
 
 #endif
