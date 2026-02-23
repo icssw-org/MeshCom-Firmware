@@ -1080,10 +1080,14 @@ bool doTX()
 
                 bSetLoRaAPRS = true;
 
-                // FIX Bug 4: Clear consumed slot only after successful transmit
-                ringBuffer[save_read][0] = 0;
-                ringBuffer[save_read][1] = 0xFF;
-                retryCount[save_read] = 0;
+                // Clear slot immediately only for fire-and-forget (relay/ACK/beacon).
+                // Text messages (0x3A) are retained for retransmit tracking.
+                if(save_ring_status == 0xFF || ringBuffer[save_read][2] != 0x3A)
+                {
+                    ringBuffer[save_read][0] = 0;
+                    ringBuffer[save_read][1] = 0xFF;
+                    retryCount[save_read] = 0;
+                }
 
                 return true;
             }
@@ -1157,10 +1161,14 @@ bool doTX()
                         }
                     }
 
-                    // FIX Bug 4: Clear consumed slot only after successful transmit
-                    ringBuffer[save_read][0] = 0;
-                    ringBuffer[save_read][1] = 0xFF;
-                    retryCount[save_read] = 0;
+                    // Clear slot immediately only for fire-and-forget (relay/ACK/beacon).
+                    // Text messages (0x3A) are retained for retransmit tracking.
+                    if(save_ring_status == 0xFF || ringBuffer[save_read][2] != 0x3A)
+                    {
+                        ringBuffer[save_read][0] = 0;
+                        ringBuffer[save_read][1] = 0xFF;
+                        retryCount[save_read] = 0;
+                    }
 
                     return true;
                 }
@@ -1171,13 +1179,16 @@ bool doTX()
             DEBUG_MSG("RADIO", "TX DISABLED");
         }
 
-        // FIX Bug 4: Clear consumed slot on non-rollback drop paths
+        // Clear consumed slot on non-rollback drop paths
         // (TX disabled, or msg_type_b_lora == 0x00 decode failure).
-        // The slot is consumed (iRead advanced) but will never be sent,
-        // so clear it to prevent deadlock accumulation.
-        ringBuffer[save_read][0] = 0;
-        ringBuffer[save_read][1] = 0xFF;
-        retryCount[save_read] = 0;
+        // Clear slot immediately only for fire-and-forget (relay/ACK/beacon).
+        // Text messages (0x3A) are retained for retransmit tracking.
+        if(save_ring_status == 0xFF || ringBuffer[save_read][2] != 0x3A)
+        {
+            ringBuffer[save_read][0] = 0;
+            ringBuffer[save_read][1] = 0xFF;
+            retryCount[save_read] = 0;
+        }
     }
 
     //#endif
