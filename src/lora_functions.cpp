@@ -168,7 +168,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     memcpy(ringBuffer[iWrite]+2, print_buff, 12);
 
                     retryCount[iWrite] = 0;
-                    addRingPointer(iWrite, iRead, MAX_RING);
+                    addRingPointer(iWrite, iRead, MAX_RING, "tx");
                     /*
                     iWrite++;
                     if(iWrite >= MAX_RING)
@@ -205,10 +205,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 {
                     ringBuffer[ircheck][1] = 0xFF; // no retransmission
                     retryCount[ircheck] = 0; // clear retry counter
+                    ringBuffer[ircheck][0] = 0; // release slot — ACK received, no retransmit needed
 
                     if(bDisplayRetx)
                     {
                         Serial.printf("\n[RETX] got lora rx for retid:%i no need status:%02X lng;%i msg-id:%c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
+                    }
+
+                    if(bLORADEBUG)
+                    {
+                        Serial.printf("[MC-DBG] ACK_RECEIVED retid=%d msg_id=%08X\n", ircheck, ring_msg_id);
                     }
                 }
             }
@@ -240,7 +246,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             //Serial.printf("LOG Write: %i read:%i\n", RAWLoRaWrite, RAWLoRaRead);
             memcpy(ringbufferRAWLoraRX[RAWLoRaWrite], charBuffer_aprs((char*)"", aprsmsg).c_str(), UDP_TX_BUF_SIZE-1);
 
-            addRingPointer(RAWLoRaWrite, RAWLoRaRead, MAX_LOG);
+            addRingPointer(RAWLoRaWrite, RAWLoRaRead, MAX_LOG, "raw_rx");
             
             //Serial.printf("LOG Write next: %i read next:%i\n", RAWLoRaWrite, RAWLoRaRead);
 
@@ -688,7 +694,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 ringBuffer[iWrite][1]=0xFF; // retransmission Status ...0xFF no retransmission
                                                 memcpy(ringBuffer[iWrite]+2, print_buff, 12);
 
-                                                addRingPointer(iWrite, iRead, MAX_RING);
+                                                addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
                                                 /*
                                                 iWrite++;
@@ -720,7 +726,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                                 memcpy(ringBuffer[iWrite]+2, print_buff, 12);
 
-                                                addRingPointer(iWrite, iRead, MAX_RING);
+                                                addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
                                                 /*
                                                 iWrite++;
@@ -865,7 +871,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 }
 
                                 retryCount[iWrite] = 0;
-                                addRingPointer(iWrite, iRead, MAX_RING);
+                                addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
                                 /*
                                 iWrite++;
@@ -1080,10 +1086,14 @@ bool doTX()
 
                 bSetLoRaAPRS = true;
 
-                // FIX Bug 4: Clear consumed slot only after successful transmit
-                ringBuffer[save_read][0] = 0;
-                ringBuffer[save_read][1] = 0xFF;
-                retryCount[save_read] = 0;
+                // Clear slot immediately only for fire-and-forget (relay/ACK/beacon).
+                // Text messages (0x3A) are retained for retransmit tracking.
+                if(save_ring_status == 0xFF || ringBuffer[save_read][2] != 0x3A)
+                {
+                    ringBuffer[save_read][0] = 0;
+                    ringBuffer[save_read][1] = 0xFF;
+                    retryCount[save_read] = 0;
+                }
 
                 return true;
             }
@@ -1157,10 +1167,14 @@ bool doTX()
                         }
                     }
 
-                    // FIX Bug 4: Clear consumed slot only after successful transmit
-                    ringBuffer[save_read][0] = 0;
-                    ringBuffer[save_read][1] = 0xFF;
-                    retryCount[save_read] = 0;
+                    // Clear slot immediately only for fire-and-forget (relay/ACK/beacon).
+                    // Text messages (0x3A) are retained for retransmit tracking.
+                    if(save_ring_status == 0xFF || ringBuffer[save_read][2] != 0x3A)
+                    {
+                        ringBuffer[save_read][0] = 0;
+                        ringBuffer[save_read][1] = 0xFF;
+                        retryCount[save_read] = 0;
+                    }
 
                     return true;
                 }
@@ -1171,13 +1185,16 @@ bool doTX()
             DEBUG_MSG("RADIO", "TX DISABLED");
         }
 
-        // FIX Bug 4: Clear consumed slot on non-rollback drop paths
+        // Clear consumed slot on non-rollback drop paths
         // (TX disabled, or msg_type_b_lora == 0x00 decode failure).
-        // The slot is consumed (iRead advanced) but will never be sent,
-        // so clear it to prevent deadlock accumulation.
-        ringBuffer[save_read][0] = 0;
-        ringBuffer[save_read][1] = 0xFF;
-        retryCount[save_read] = 0;
+        // Clear slot immediately only for fire-and-forget (relay/ACK/beacon).
+        // Text messages (0x3A) are retained for retransmit tracking.
+        if(save_ring_status == 0xFF || ringBuffer[save_read][2] != 0x3A)
+        {
+            ringBuffer[save_read][0] = 0;
+            ringBuffer[save_read][1] = 0xFF;
+            retryCount[save_read] = 0;
+        }
     }
 
     //#endif
@@ -1194,14 +1211,8 @@ bool doTX()
 
 bool updateRetransmissionStatus()
 {
-    // FIX: Only scan slots in the active iRead→iWrite range.
-    // Consumed slots behind iRead are cleared by doTX() (Bug 1 fix),
-    // but this defense-in-depth prevents ghost retransmits from stale data.
-    int count = (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite);
-
-    for(int q = 0; q < count; q++)
+    for(int ircheck = 0; ircheck < MAX_RING; ircheck++)
     {
-        int ircheck = (iRead + q) % MAX_RING;
 
         // Non-text messages: force no-retransmit
         if(ringBuffer[ircheck][2] != 0x3A)
@@ -1274,7 +1285,7 @@ bool updateRetransmissionStatus()
                 // Transfer and increment retry count
                 retryCount[iWrite] = retryCount[ircheck] + 1;
 
-                addRingPointer(iWrite, iRead, MAX_RING);
+                addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
                 return true;
             }
