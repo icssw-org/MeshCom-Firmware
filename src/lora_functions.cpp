@@ -205,10 +205,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 {
                     ringBuffer[ircheck][1] = 0xFF; // no retransmission
                     retryCount[ircheck] = 0; // clear retry counter
+                    ringBuffer[ircheck][0] = 0; // release slot — ACK received, no retransmit needed
 
                     if(bDisplayRetx)
                     {
                         Serial.printf("\n[RETX] got lora rx for retid:%i no need status:%02X lng;%i msg-id:%c-%08X\n", ircheck, ringBuffer[ircheck][1], ringBuffer[ircheck][0], ringBuffer[ircheck][2], ring_msg_id);
+                    }
+
+                    if(bLORADEBUG)
+                    {
+                        Serial.printf("[MC-DBG] ACK_RECEIVED retid=%d msg_id=%08X\n", ircheck, ring_msg_id);
                     }
                 }
             }
