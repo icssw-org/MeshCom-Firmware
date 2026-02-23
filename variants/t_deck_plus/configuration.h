@@ -14,8 +14,10 @@
 #define SX1262X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
 #define ENABLE_GPS
 #define GPS_L76K
-//#define ENABLE_BMX280
-//#define ENABLE_BMX680
+
+#define ENABLE_BMX280
+#define ENABLE_BMX680
+
 //#define ENABLE_MCP23017
 //#define ENABLE_INA226
 //#define ENABLE_MC811
