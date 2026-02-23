@@ -330,7 +330,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
 
             retryCount[iWrite] = 0;
-            addRingPointer(iWrite, iRead, MAX_RING);
+            addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
             /*
             iWrite++;

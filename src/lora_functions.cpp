@@ -168,7 +168,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     memcpy(ringBuffer[iWrite]+2, print_buff, 12);
 
                     retryCount[iWrite] = 0;
-                    addRingPointer(iWrite, iRead, MAX_RING);
+                    addRingPointer(iWrite, iRead, MAX_RING, "tx");
                     /*
                     iWrite++;
                     if(iWrite >= MAX_RING)
@@ -246,7 +246,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             //Serial.printf("LOG Write: %i read:%i\n", RAWLoRaWrite, RAWLoRaRead);
             memcpy(ringbufferRAWLoraRX[RAWLoRaWrite], charBuffer_aprs((char*)"", aprsmsg).c_str(), UDP_TX_BUF_SIZE-1);
 
-            addRingPointer(RAWLoRaWrite, RAWLoRaRead, MAX_LOG);
+            addRingPointer(RAWLoRaWrite, RAWLoRaRead, MAX_LOG, "raw_rx");
             
             //Serial.printf("LOG Write next: %i read next:%i\n", RAWLoRaWrite, RAWLoRaRead);
 
@@ -694,7 +694,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 ringBuffer[iWrite][1]=0xFF; // retransmission Status ...0xFF no retransmission
                                                 memcpy(ringBuffer[iWrite]+2, print_buff, 12);
 
-                                                addRingPointer(iWrite, iRead, MAX_RING);
+                                                addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
                                                 /*
                                                 iWrite++;
@@ -726,7 +726,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                                 memcpy(ringBuffer[iWrite]+2, print_buff, 12);
 
-                                                addRingPointer(iWrite, iRead, MAX_RING);
+                                                addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
                                                 /*
                                                 iWrite++;
@@ -871,7 +871,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 }
 
                                 retryCount[iWrite] = 0;
-                                addRingPointer(iWrite, iRead, MAX_RING);
+                                addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
                                 /*
                                 iWrite++;
@@ -1285,7 +1285,7 @@ bool updateRetransmissionStatus()
                 // Transfer and increment retry count
                 retryCount[iWrite] = retryCount[ircheck] + 1;
 
-                addRingPointer(iWrite, iRead, MAX_RING);
+                addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
                 return true;
             }

@@ -386,7 +386,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 
     //Serial.printf("toPhone write:%i read:%i max:%i ", toPhoneWrite, toPhoneRead, MAX_RING);
 
-    addRingPointer(toPhoneWrite, toPhoneRead, MAX_RING);
+    addRingPointer(toPhoneWrite, toPhoneRead, MAX_RING, "phone");
 
     //Serial.printf("next write:%i read:%i max:%i\n", toPhoneWrite, toPhoneRead, MAX_RING);
 
@@ -2366,7 +2366,7 @@ void sendMessage(char *msg_text, int len)
     }
 
     retryCount[iWrite] = 0;
-    addRingPointer(iWrite, iRead, MAX_RING);
+    addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
     /*
     iWrite++;
@@ -2721,7 +2721,7 @@ void sendPosition(unsigned int uintervall, double lat, char lat_c, double lon, c
         ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
         memcpy(ringBuffer[iWrite]+2, msg_buffer, ilng);
 
-        addRingPointer(iWrite, iRead, MAX_RING);
+        addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             tdeck_send_track_view();
@@ -2845,7 +2845,7 @@ void sendPosition(unsigned int uintervall, double lat, char lat_c, double lon, c
         ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
         memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-        addRingPointer(iWrite, iRead, MAX_RING);
+        addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             tdeck_send_track_view();
@@ -2917,7 +2917,7 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
     ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
     memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-    addRingPointer(iWrite, iRead, MAX_RING);
+    addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
     /*
     iWrite++;
@@ -2992,7 +2992,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     ringBuffer[iWrite][1]=0xFF;    // ACK-Status byte 0xFF for no retransmission
     memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-    addRingPointer(iWrite, iRead, MAX_RING);
+    addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
     /*
     iWrite++;
@@ -3065,7 +3065,7 @@ void sendHey()
         ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
         memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-        addRingPointer(iWrite, iRead, MAX_RING);
+        addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
         /*
         iWrite++;
@@ -3333,7 +3333,7 @@ void sendTelemetry(int ID)
             memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
             if(!bDisplayTrack)
-                addRingPointer(iWrite, iRead, MAX_RING);
+                addRingPointer(iWrite, iRead, MAX_RING, "tx");
         }
 
         // send value messages to Lora-APRS
@@ -3349,7 +3349,7 @@ void sendTelemetry(int ID)
             ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
             memcpy(ringBuffer[iWrite]+2, msg_buffer, tlng);
 
-            addRingPointer(iWrite, iRead, MAX_RING);
+            addRingPointer(iWrite, iRead, MAX_RING, "tx");
         }
     }
 }
@@ -3745,7 +3745,7 @@ int count_char(String s, char c)
 }
 
 // add RING Pointer
-void addRingPointer(int &pWrite, int &pRead, int iMAX)
+void addRingPointer(int &pWrite, int &pRead, int iMAX, const char* bufName)
 {
     pWrite++;
     if (pWrite >= iMAX) // if the buffer is full we start at index 0 -> take care of overwriting!
@@ -3761,8 +3761,10 @@ void addRingPointer(int &pWrite, int &pRead, int iMAX)
             if (pRead >= iMAX) // if the buffer is full we start at index 0 -> take care of overwriting!
                 pRead = 0;
 
-            // Debug M: RING_OVERFLOW — NOT gated by bLORADEBUG, always visible
-            Serial.println(F("[MC-DBG] RING_OVERFLOW"));
+            if(bLORADEBUG)
+            {
+                Serial.printf("[MC-DBG] RING_OVERFLOW buf=%s\n", bufName);
+            }
         }
     }
 
