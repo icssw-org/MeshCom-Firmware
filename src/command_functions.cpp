@@ -4171,8 +4171,8 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
-            Serial.printf("...DisplayInfo %s ...DisplayCont %s\n",
-                    (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"));
+            Serial.printf("...DisplayInfo %s ...DisplayCont %s ...contrast %i\n",
+                    (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), meshcom_settings.node_contrast);
 
             Serial.printf("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
 

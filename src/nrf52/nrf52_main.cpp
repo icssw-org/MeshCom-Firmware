@@ -381,8 +381,6 @@ void nrf52setup()
 
         flash_reset();
 
-        init_flash();
-
         meshcom_settings.node_fversion = FLASH_VERSION;
 
         save_settings();
