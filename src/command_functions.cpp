@@ -729,6 +729,10 @@ void commandAction(char *umsg_text, bool ble)
         if(contrast_value < 0) contrast_value = 0;
         if(contrast_value > 255) contrast_value = 255;
 
+        meshcom_settings.node_contrast = contrast_value;
+
+        save_settings();
+
         if(u8g2 != NULL)
         {
             u8g2->setContrast(contrast_value);
@@ -4158,6 +4162,8 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i <%s> ...UTC-OFF %f [%s]\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n", 
                     SOURCE_VERSION, SOURCE_VERSION_SUB , __DATE__ , __TIME__ , meshcom_settings.node_update,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, getHardwareLong(BOARD_HARDWARE).c_str(), meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv, millis());
+
+            Serial.printf("...Flash-Version %i\n", meshcom_settings.node_fversion);
 
             Serial.printf("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s ... SOFTSERREAD %s\n...PASSWD <%s>\n",
                 (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), (bSOFTSERREAD?"on":"off"), meshcom_settings.node_passwd);

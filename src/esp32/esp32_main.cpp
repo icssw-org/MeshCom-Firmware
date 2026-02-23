@@ -543,6 +543,23 @@ void esp32setup()
 	// Get LoRa parameter
 	init_flash();
 
+    if(meshcom_settings.node_fversion != FLASH_VERSION)
+    {
+        Serial.printf("[INIT]...FLASH cleared new version %i\n", FLASH_VERSION);
+
+        clear_flash();
+
+        init_flash();
+
+        meshcom_settings.node_fversion = FLASH_VERSION;
+
+        save_settings();
+    }
+    else
+    {
+        Serial.printf("[INIT]...FLASH version %i\n", meshcom_settings.node_fversion);
+    }
+
     bDisplayVolt = meshcom_settings.node_sset & 0x0001;
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
     bPosDisplay = meshcom_settings.node_sset & 0x0004;

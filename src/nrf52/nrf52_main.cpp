@@ -375,6 +375,23 @@ void nrf52setup()
 	// Get LoRa parameter
 	init_flash();
 
+    if(meshcom_settings.node_fversion != FLASH_VERSION)
+    {
+        Serial.printf("[INIT]...FLASH cleared new version %i\n", FLASH_VERSION);
+
+        flash_reset();
+
+        init_flash();
+
+        meshcom_settings.node_fversion = FLASH_VERSION;
+
+        save_settings();
+    }
+    else
+    {
+        Serial.printf("[INIT]...FLASH version %i\n", meshcom_settings.node_fversion);
+    }
+
     meshcom_settings.node_date_hour = 0;
     meshcom_settings.node_date_minute = 0;
     meshcom_settings.node_date_second = 0;
