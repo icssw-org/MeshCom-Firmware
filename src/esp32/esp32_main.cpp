@@ -549,8 +549,6 @@ void esp32setup()
 
         clear_flash();
 
-        init_flash();
-
         meshcom_settings.node_fversion = FLASH_VERSION;
 
         save_settings();
