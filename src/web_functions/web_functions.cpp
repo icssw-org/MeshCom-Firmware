@@ -48,6 +48,8 @@ double dlon;
 char clat;
 char clon;
 
+int iMDNS_count = 0;
+
 /**
  * ###########################################################################################################################
  * initialize the Web Server
@@ -89,15 +91,26 @@ void startWebserver()
     //   we send our IP address on the WiFi network
     if (!MDNS.begin(meshcom_settings.node_call))
     {
-        Serial.print(getTimeString());
-        Serial.println("[Web]...Error setting up MDNS responder!");
+        if(iMDNS_count == 0)
+        {
+            Serial.print(getTimeString());
+            Serial.println("[Web]...Error setting up MDNS responder!");
+        }
+
+        iMDNS_count++;
+
+        if(iMDNS_count > 100)
+            iMDNS_count = 0;
+        
         return;
     }
-
-    if (bDEBUG)
+    else
     {
-        Serial.print(getTimeString());
-        Serial.println("[Web]...mDNS responder started");
+        if (bDEBUG)
+        {
+            Serial.print(getTimeString());
+            Serial.println("[Web]...mDNS responder started");
+        }
     }
 
     web_server.begin();

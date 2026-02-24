@@ -235,7 +235,13 @@ void clear_flash(void)
 {
     preferences.begin("Credentials", false);
 
+    Serial.printf("[INIT]...FLASH #entries %i\n bevor clear\n", preferences.freeEntries());
+
+    preferences.freeEntries();
+    
     preferences.clear();
+
+    Serial.printf("[INIT]...FLASH #entries %i after clear\n", preferences.freeEntries());
 
     preferences.end();
 }
@@ -458,6 +464,8 @@ void save_settings(void)
     preferences.putInt("node_contrast", meshcom_settings.node_contrast);
 
     preferences.putInt("node_fversion", meshcom_settings.node_fversion);
+
+    //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
 
     preferences.end();
 

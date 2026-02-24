@@ -4328,17 +4328,15 @@ void commandAction(char *umsg_text, bool ble)
         sensdoc["TYP"] = "SE";
         sensdoc["BME"] = bBMEON;
         sensdoc["BMP"] = bBMPON;
-        sensdoc["BMXF"] = bmx_found;
         sensdoc["BMP3"] = bBMP3ON;
         sensdoc["BMP3F"] = bmp3_found;
+        sensdoc["AHT"] = bAHT20ON;
+        sensdoc["AHTF"] = aht20_found;
+        sensdoc["BMXF"] = bmx_found;
         sensdoc["680"] = bBME680ON;
         sensdoc["680F"] = bme680_found;
         sensdoc["811"] = bMCU811ON;
         sensdoc["811F"] = mcu811_found;
-        sensdoc["226"] = bINA226ON;
-        sensdoc["226F"] = ina226_found;
-        sensdoc["AHT"] = bAHT20ON;
-        sensdoc["AHTF"] = aht20_found;
         sensdoc["SS"] = bSOFTSERON;
         sensdoc["LPS33"] = bLPS33;
         sensdoc["OW"] = bONEWIRE;
@@ -4367,6 +4365,8 @@ void commandAction(char *umsg_text, bool ble)
         sensdoc1["SAMP"] = meshcom_settings.node_isamp;
         sensdoc1["SHT"] = bSHT21ON;
         sensdoc1["SHTF"] = sht21_found;
+        sensdoc1["226"] = bINA226ON;
+        sensdoc1["226F"] = ina226_found;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
