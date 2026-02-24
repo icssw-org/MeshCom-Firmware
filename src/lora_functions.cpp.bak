@@ -26,7 +26,7 @@
     extern int transmissionState;
 #endif
 
-#if defined(SX1262_E22) || defined(USING_SX1262)
+#ifdef SX1262_E22
     #include <RadioLib.h>
     extern SX1262 radio;
     extern int transmissionState;
@@ -1045,10 +1045,6 @@ bool doTX()
                         Radio.Send(lora_tx_buffer, sendlng);
                     #else
                         #ifndef BOARD_T5_EPAPER
-                        #ifdef RADIO_CTRL
-                            digitalWrite(RADIO_CTRL, LOW);  // TX Mode [OE3WAS]
-                            delay(2);
-                        #endif
                         #ifdef BOARD_HELTEC_V4
                         enablePATransmit();
                         #endif
@@ -1074,10 +1070,6 @@ bool doTX()
                     Radio.Send(lora_tx_buffer, sendlng);
                 #else
                     #ifndef BOARD_T5_EPAPER
-                    #ifdef RADIO_CTRL
-                        digitalWrite(RADIO_CTRL, LOW);  // TX Mode [OE3WAS]
-                        delay(2);
-                    #endif
                     #ifdef BOARD_HELTEC_V4
                     enablePATransmit();
                     #endif
@@ -1148,10 +1140,6 @@ bool doTX()
                         Radio.Send(lora_tx_buffer, sendlng);
                     #else
                         #ifndef BOARD_T5_EPAPER
-                        #ifdef RADIO_CTRL
-                            digitalWrite(RADIO_CTRL, LOW);  // TX Mode [OE3WAS]
-                            delay(2);
-                        #endif
                         #ifdef BOARD_HELTEC_V4
                         enablePATransmit();
                         #endif
