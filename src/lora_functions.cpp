@@ -102,6 +102,20 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     // Debug I: OnRxDone timing — capture start time
     unsigned long _onrxdone_start = millis();
 
+#if defined BOARD_RAK4630
+    // FIX BUG #2 (nRF52): RX sofort neu starten um Blindfenster zu minimieren.
+    // Sicherheitskopie: Payload koennte auf internen Radiopuffer zeigen,
+    // der durch Radio.Rx() ueberschrieben wird.
+    static uint8_t rxPayloadCopy[UDP_TX_BUF_SIZE];
+    uint16_t rxSize = (size <= UDP_TX_BUF_SIZE) ? size : UDP_TX_BUF_SIZE;
+    memcpy(rxPayloadCopy, payload, rxSize);
+    payload = rxPayloadCopy;
+    size = rxSize;
+    Radio.Rx(RX_TIMEOUT_VALUE);
+    if(bLORADEBUG)
+        Serial.printf("[MC-DBG] RX_RESTART_EARLY src=OnRxDone\n");
+#endif
+
     // only for Test T5_EPAPER
     //bDisplayInfo=true;
 
@@ -911,10 +925,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         }
     }
 
-    #if defined BOARD_RAK4630
-        Radio.Rx(RX_TIMEOUT_VALUE);
-    #endif
-
+    // Note: Radio.Rx() for RAK4630 is now called at the beginning of OnRxDone
+    // to minimize the RX blind window (BUG #2 fix).
 
     // Debug I: ONRXDONE_TIME — measure processing duration
     if(bLORADEBUG)

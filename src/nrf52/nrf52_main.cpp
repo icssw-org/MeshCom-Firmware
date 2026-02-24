@@ -1030,29 +1030,60 @@ extern bool btimeClient;
         }
     }
 
+    // Periodischer Ringpuffer-Auslastungsbericht (alle 30s)
+    {
+        static unsigned long ring_status_timer = 0;
+        if(bLORADEBUG && (millis() - ring_status_timer) > 30000)
+        {
+            ring_status_timer = millis();
+            int pending = 0, retrying = 0, done = 0;
+            for(int i = 0; i < MAX_RING; i++)
+            {
+                if(ringBuffer[i][0] == 0) continue;
+                if(ringBuffer[i][1] == 0xFF) done++;
+                else if(ringBuffer[i][1] == 0x00) pending++;
+                else retrying++;
+            }
+            int queued = (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite);
+            Serial.printf("[MC-DBG] RING_STATUS queued=%d pending=%d retrying=%d done=%d iW=%d iR=%d\n",
+                queued, pending, retrying, done, iWrite, iRead);
+        }
+    }
+
     if(iReceiveTimeOutTime > 0)
     {
-        // Timeout RECEIVE_TIMEOUT
         if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
         {
-            iReceiveTimeOutTime=0;
-
-            // LoRa preamble was detected
             if(bLORADEBUG)
+                Serial.printf("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu last_event=%lu delta=%lu\n",
+                    millis(), iReceiveTimeOutTime, millis() - iReceiveTimeOutTime);
+
+            // BUG #1 Aequivalent: Wenn Header erkannt, ist Empfang moeglicherweise
+            // noch aktiv. Timer verlaengern statt zuruecksetzen.
+            if(is_receiving)
             {
-                Serial.printf("[SX12xx] Receive Timeout, starting receiving again ... \n");
+                iReceiveTimeOutTime = millis();
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] RX_TIMEOUT skipped: is_receiving=true\n");
+            }
+            else
+            {
+                iReceiveTimeOutTime = 0;
+                Radio.Rx(RX_TIMEOUT_VALUE);
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] RX_RESTART src=timeout\n");
             }
         }
     }
 
     if(iReceiveTimeOutTime == 0 && is_receiving == false && tx_is_active == false)
     {
-        // channel is free
-        // nothing was detected
-        // do not print anything, it just spams the console
         if (iWrite != iRead)
         {
-            // save transmission state between loops
+            if(bLORADEBUG)
+                Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cmd_ctr=%d tx_wait=%d\n",
+                    (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite),
+                    cmd_counter, tx_waiting);
             doTX();
         }
     }
