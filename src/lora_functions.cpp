@@ -403,17 +403,20 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             if(is_new_packet(RcvBuffer+1))
             {
                 // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
-                switch (msg_type_b_lora)
+                if(bDisplayCont)
                 {
+                    switch (msg_type_b_lora)
+                    {
 
-                    case 0x3A: DEBUG_MSG("RADIO", "Received Textmessage"); break;
-                    case 0x21: DEBUG_MSG("RADIO", "Received PosInfo"); break;
-                    case 0x40: DEBUG_MSG("RADIO", "Received Hey"); break;
-                    default:
-                        DEBUG_MSG("RADIO", "Received unknown");
-                        if(bDEBUG)
-                            printBuffer(RcvBuffer, size);
-                        break;
+                        case 0x3A: DEBUG_MSG("RADIO", "Received Textmessage"); break;
+                        case 0x21: DEBUG_MSG("RADIO", "Received PosInfo"); break;
+                        case 0x40: DEBUG_MSG("RADIO", "Received Hey"); break;
+                        default:
+                            DEBUG_MSG("RADIO", "Received unknown");
+                            if(bDEBUG)
+                                printBuffer(RcvBuffer, size);
+                            break;
+                    }
                 }
 
                 // txtmessage, position, hey

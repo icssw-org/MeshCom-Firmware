@@ -4,7 +4,9 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 
+#if not defined(BOARD_RAK4630)
 #include <esp_adc_cal.h>
+#endif
 
 float global_batt = 0;
 int global_proz = 0;

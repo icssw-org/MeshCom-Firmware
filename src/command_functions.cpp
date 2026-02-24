@@ -727,7 +727,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         #if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
         int contrast_value = atoi(msg_text + 11);  // "--" + "contrast " = 2 + 9 = 11
-        if(contrast_value < 0) contrast_value = 0;
+        if(contrast_value <= 0) contrast_value = 1;
         if(contrast_value > 255) contrast_value = 255;
 
         meshcom_settings.node_contrast = contrast_value;

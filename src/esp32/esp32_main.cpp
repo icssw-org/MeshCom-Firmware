@@ -521,7 +521,8 @@ float getTempForNTC()
         // Calculate temperature using the Steinhart-Hart equation
         temperature = (1.0 / (log(resistance / ROOM_TEMP_RESISTANCE) / B_COEFFICIENT + 1.0 / ROOM_TEMP)) - 273.15;
 
-        Serial.printf("NTC-Temp: %.3f_°C %u_raw %.3f_mV %.2f_Ohm\n", temperature, raw, voltage, resistance);
+        if(bWXDEBUG)
+            Serial.printf("NTC-Temp: %.3f_°C %u_raw %.3f_mV %.2f_Ohm\n", temperature, raw, voltage, resistance);
 
         check_temperature  = millis() + 1000;
     }
@@ -2604,7 +2605,9 @@ void esp32loop()
             if (NTCtemp > 35.0) { digitalWrite(FAN_CTRL, HIGH); 
             } else if (NTCtemp < 28.0) { digitalWrite(FAN_CTRL, LOW); }
 
-            Serial.printf("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
+            if(bWXDEBUG)
+                Serial.printf("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
+                
             #endif
 
             BattTimeWait = millis();
