@@ -138,6 +138,34 @@ void decodeMHeard(unsigned char u_mh_buffer[sizeof(mheardBuffer[0])], struct mhe
     }
 }
 
+void saveMHeardPersistence() {
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    if(SD.exists("/mheard.dat")) SD.remove("/mheard.dat");
+    File file = SD.open("/mheard.dat", FILE_WRITE);
+    if(!file) return;
+    file.write((uint8_t*)mheardCalls, sizeof(mheardCalls));
+    file.write((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
+    file.write((uint8_t*)mheardLat, sizeof(mheardLat));
+    file.write((uint8_t*)mheardLon, sizeof(mheardLon));
+    file.write((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
+    file.close();
+    #endif
+}
+
+void savePathPersistence() {
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    if(SD.exists("/mhpath.dat")) SD.remove("/mhpath.dat");
+    File file = SD.open("/mhpath.dat", FILE_WRITE);
+    if(!file) return;
+    file.write((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
+    file.write((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
+    file.write((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
+    file.write((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
+    file.close();
+    #endif
+}
+
+
 void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 {
     String strYear = mheardLine.mh_date.substring(0, 4);
@@ -701,20 +729,6 @@ void showPathTDECK()
 }
 #endif
 
-void saveMHeardPersistence() {
-    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    if(SD.exists("/mheard.dat")) SD.remove("/mheard.dat");
-    File file = SD.open("/mheard.dat", FILE_WRITE);
-    if(!file) return;
-    file.write((uint8_t*)mheardCalls, sizeof(mheardCalls));
-    file.write((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
-    file.write((uint8_t*)mheardLat, sizeof(mheardLat));
-    file.write((uint8_t*)mheardLon, sizeof(mheardLon));
-    file.write((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
-    file.close();
-    #endif
-}
-
 void loadMHeardPersistence() {
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     if(!SD.exists("/mheard.dat")) return;
@@ -727,19 +741,6 @@ void loadMHeardPersistence() {
     file.read((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
     file.close();
     showMHeardTDECK();
-    #endif
-}
-
-void savePathPersistence() {
-    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    if(SD.exists("/mhpath.dat")) SD.remove("/mhpath.dat");
-    File file = SD.open("/mhpath.dat", FILE_WRITE);
-    if(!file) return;
-    file.write((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
-    file.write((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
-    file.write((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
-    file.write((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
-    file.close();
     #endif
 }
 
