@@ -224,6 +224,8 @@ void init_flash(void)
 		meshcom_settings.node_contrast = old_struct.node_contrast;
 		meshcom_settings.node_fversion = old_struct.node_fversion;
 
+		memcpy(meshcom_settings.node_ownntp, old_struct.node_ownntp, 20);
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
