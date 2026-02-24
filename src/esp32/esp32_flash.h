@@ -156,6 +156,8 @@ struct s_meshcom_settings
 
 	int node_fversion = 1;
 
+	char node_ownntp[40] = {0};
+
 
 	// nicht im Flash
 	int node_press_alt = 0;
@@ -169,6 +171,7 @@ struct s_meshcom_settings
 	char node_dns[40] = {0};
 	char node_gw[40] = {0};
 	char node_subnet[40] = {0};
+	char node_ntp[40] = {0};
 	bool node_hasIPaddress = false;
 	unsigned long node_last_upd_timer = 0;
 

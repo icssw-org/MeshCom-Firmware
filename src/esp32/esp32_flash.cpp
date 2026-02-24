@@ -228,6 +228,9 @@ void init_flash(void)
 
     meshcom_settings.node_fversion = preferences.getInt("node_fversion", 0);
 
+    strVar = preferences.getString("node_ownntp");
+    snprintf(meshcom_settings.node_ownntp, sizeof(meshcom_settings.node_ownntp), "%s", strVar.c_str());
+
     preferences.end();
 }
 
@@ -464,6 +467,9 @@ void save_settings(void)
     preferences.putInt("node_contrast", meshcom_settings.node_contrast);
 
     preferences.putInt("node_fversion", meshcom_settings.node_fversion);
+
+    strVar = meshcom_settings.node_ownntp;
+    preferences.putString("node_ownntp", strVar); 
 
     //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
 

@@ -564,7 +564,7 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("MeshCom %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setname  set first name/none\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
             delay(100);
 
-            Serial.printf("--setssid  WLAN SSID/none\n--setpwd   WLAN PASSWORD/none\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--setowndns 255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255/none\n");
+            Serial.printf("--setssid  WLAN SSID/none\n--setpwd   WLAN PASSWORD/none\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--setowndns 255.255.255.255\n--setownntp 255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255/none\n");
             delay(100);
 
             Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analog check on/off\n");
@@ -3022,6 +3022,56 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"setowndns ") == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        snprintf(meshcom_settings.node_owndns, sizeof(meshcom_settings.node_owndns), "%s", msg_text+11);
+
+        if(ble)
+        {
+            bWifiSetting = true;
+        }
+
+        save_settings();
+
+        if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
+           (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
+        {
+            Serial.println("Auto. Reboot after 15 sec.");
+
+            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setowntp ") == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        snprintf(meshcom_settings.node_ownntp, sizeof(meshcom_settings.node_ownntp), "%s", msg_text+11);
+
+        if(ble)
+        {
+            bWifiSetting = true;
+        }
+
+        save_settings();
+
+        if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
+           (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
+        {
+            Serial.println("Auto. Reboot after 15 sec.");
+
+            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+        }
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"sethamnet") == 0)
     {
         meshcom_settings.node_hamnet_only = 1;
@@ -4258,6 +4308,7 @@ void commandAction(char *umsg_text, bool ble)
                     Serial.printf("...OWNMS  address: %s\n", meshcom_settings.node_ownms);
                     Serial.printf("...OWNGW  address: %s\n", meshcom_settings.node_owngw);
                     Serial.printf("...OWNDNS address: %s\n", meshcom_settings.node_owndns);
+                    Serial.printf("...OWNNTP address: %s\n", meshcom_settings.node_ownntp);
                 }
             }
 
@@ -4427,6 +4478,7 @@ void commandAction(char *umsg_text, bool ble)
         swdoc2["OWNGW"] = meshcom_settings.node_owngw;
         swdoc2["OWNMS"] = meshcom_settings.node_ownms;
         swdoc2["OWNDNS"] = meshcom_settings.node_owndns;
+        swdoc2["OWNNTP"] = meshcom_settings.node_ownntp;
         swdoc2["EUDP"] = bEXTUDP;
         swdoc2["EUDPIP"] = meshcom_settings.node_extern;
         swdoc2["TXPOW"] = meshcom_settings.node_wifi_power;

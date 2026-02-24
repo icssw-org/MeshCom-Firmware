@@ -403,6 +403,22 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
     
+    if(setupData->paramName.equals("setowndns")) {
+        snprintf(message_text, sizeof(message_text), "--setowndns %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_owndns, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_owndns;    
+        return;
+    } else
+
+    if(setupData->paramName.equals("setownntp")) {
+        snprintf(message_text, sizeof(message_text), "--setownntp %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_ownntp, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_ownntp;    
+        return;
+    } else
+
     if(setupData->paramName.equals("extudpip")) {
         snprintf(message_text, sizeof(message_text), "--extudpip %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
@@ -776,6 +792,16 @@ void webSetup_getParam(setupStruct *setupData){
 
     if(setupData->paramName.equals("setowngw")) {
         setupData->returnValue = String(meshcom_settings.node_owngw);    
+        return;
+    } else
+    
+    if(setupData->paramName.equals("setowndns")) {
+        setupData->returnValue = String(meshcom_settings.node_owndns);
+        return;
+    } else
+    
+    if(setupData->paramName.equals("setownntp")) {
+        setupData->returnValue = String(meshcom_settings.node_ownntp);    
         return;
     } else
     
