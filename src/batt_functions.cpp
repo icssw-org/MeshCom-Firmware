@@ -4,6 +4,8 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 
+#include <esp_adc_cal.h>
+
 float global_batt = 0;
 int global_proz = 0;
 
@@ -113,6 +115,9 @@ adc_unit_t unit = ADC_UNIT_2;
 adc_atten_t atten = ADC_ATTEN_DB_0;
 //static const
 adc_unit_t unit = ADC_UNIT_1;
+#elif defined(BOARD_TBEAM_1W)
+adc_atten_t atten = ADC_ATTEN_DB_2_5;
+adc_unit_t unit = ADC_UNIT_1;
 #else
 //static const
 adc_atten_t atten = ADC_ATTEN_DB_0;
@@ -204,7 +209,7 @@ void init_batt(void)
 {
     Serial.println("[INIT]...init_batt");
 
-// getht für HELTEC V3/V4 und für V3.2  wichtig für Display
+// geht für HELTEC V3/V4 und für V3.2  wichtig für Display
 #if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
 	pinMode(36,OUTPUT);
 	digitalWrite(36, LOW);
@@ -236,7 +241,10 @@ void init_batt(void)
 
 #elif defined(BOARD_E22_S3)
 	analogSetAttenuation(ADC_0db);
+	analogReadResolution(12);
 
+#elif defined(BOARD_TBEAM_1W)
+	analogSetAttenuation(ADC_11db); // bis ≈4,3V an GPIO
 	analogReadResolution(12);
 
 #elif defined(BOARD_TRACKER)
@@ -383,11 +391,11 @@ float read_batt(void)
 
 		raw = floatVoltage * 1000.0;
 
-		#elif defined(BOARD_E22_S3)
+		#elif defined(BOARD_E22_S3) || defined(BOARD_TBEAM_1W)
 
 		uint16_t analogValue = analogReadMilliVolts(BATTERY_PIN);
 
-		raw = (float)analogValue * fBattFaktor;
+		raw = (float)analogValue * fBattFaktor  + BAT_VOL_COMPENSATION;
 
 		if(bDisplayCont)
 		{
@@ -441,7 +449,7 @@ float read_batt(void)
 		// all done - millivolts computed directly in read path
 	#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_TRACKER) || defined(BOARD_HELTEC_V4)
 		// all done
-	#elif defined(BOARD_E22_S3)
+	#elif defined(BOARD_E22_S3) || defined(BOARD_TBEAM_1W)
 		// all done
 	#elif defined(BOARD_TLORA_OLV216)
 		raw = raw * 1000.0; // convert to volt
@@ -455,8 +463,7 @@ float read_batt(void)
 
 	if(bDisplayCont)
 	{
-		Serial.print("[readBatteryVoltage] raw mV : ");
-		Serial.println(raw);
+		Serial.printf("[readBatteryVoltage] raw %.2f mV\n", raw);
 	}
 
 	is_receiving = false;
