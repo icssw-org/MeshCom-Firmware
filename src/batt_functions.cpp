@@ -209,7 +209,7 @@ void init_batt(void)
 {
     Serial.println("[INIT]...init_batt");
 
-// getht für HELTEC V3/V4 und für V3.2  wichtig für Display
+// geht für HELTEC V3/V4 und für V3.2  wichtig für Display
 #if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
 	pinMode(36,OUTPUT);
 	digitalWrite(36, LOW);

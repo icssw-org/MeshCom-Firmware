@@ -554,7 +554,7 @@ void webSetup_setParam(setupStruct *setupData){
 
 /**
  * ###########################################################################################################################
- * Returns a value for the requested parameter 
+ * REturns a value for the requested parameter 
  * It will return a code that correspondens to wether the parameter was known or not known
  * 
  * @param setupData a pointer to a struct that contains the parameter name and will contain the return code and return value
