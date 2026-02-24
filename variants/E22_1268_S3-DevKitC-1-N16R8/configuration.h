@@ -67,6 +67,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 
 #define BATTERY_PIN 2 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_MULTIPLIER 5.7    // default and can be overwritten with Flash variable node_analog_batt_faktor Spannungsteiler 47k+10k
+#define BAT_VOL_COMPENSATION        (0.0)
 
 #define BUTTON_PIN  0
 #define BUTTON_EXT  21

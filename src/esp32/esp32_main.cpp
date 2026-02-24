@@ -16,6 +16,24 @@
 
 #include "esp32_gps.h"
 #include "esp32_flash.h"
+#include <esp_adc_cal.h>
+
+//====== Timer for periodical events u.a.
+#include "Timeout.h"
+Timeout timerSerial;
+
+#ifdef HAS_SDCARD
+#include <SD.h>
+#endif
+
+#if defined(ARDUINO_ARCH_ESP32)
+#include <FS.h>
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5,0,0)
+#include "hal/gpio_hal.h"
+#endif
+#include "driver/gpio.h"
+#endif //ARDUINO_ARCH_ESP32
+
 
 #if defined (GPS_L76K)
     #include "gps_l76k.h"
@@ -313,7 +331,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 #endif
 
 #ifdef SX1262_E22
-    // RadioModule SX1268 
+    // RadioModule SX1262 
     // cs - irq - reset - interrupt gpio
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
@@ -341,6 +359,12 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     //  begin(sck, miso, mosi, ss).
     SX1262 radio = new Module(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
 
+#endif
+
+
+#ifdef USING_SX1262 // BOARD_TBEAM_1W
+    // !!!!! es wird nur ein SX1261 erkannt !!!!!
+    SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);    
 #endif
 
 #ifdef SX1262_E290
@@ -475,17 +499,47 @@ unsigned long bme680_timer = millis();
 int delay_bme680 = 0;
 #endif
 
+//=======================================================================================
+#ifdef NTC_PIN
+    //NCP18XH103F03RB: https://item.szlcsc.com/14214.html
+    #define SERIES_RESISTOR 10000 // Series resistance value (10kΩ)
+    #define B_COEFFICIENT 3950 // B value, set according to the NTC specification
+    #define ROOM_TEMP 298.15 // 25°C absolute temperature (K)
+    #define ROOM_TEMP_RESISTANCE 10000 // Resistance of NTC at 25°C (10kΩ)
+
+float getTempForNTC()
+{
+    static float temperature = 0.0f;
+    static uint32_t check_temperature = 0;
+    if (millis() > check_temperature) {
+        analogSetAttenuation(ADC_11db); // bis <2,2V
+        float voltage = analogReadMilliVolts(NTC_PIN);
+        uint16_t raw = analogReadRaw(NTC_PIN);
+        // die fixen 3.3 V stimmen nicht, hier sollte diese Spannung auch gemessen werden (Jumper)
+        float resistance = SERIES_RESISTOR * ((3.3 / voltage *1000.0) - 1); // Calculate the resistance of NTC
+
+        // Calculate temperature using the Steinhart-Hart equation
+        temperature = (1.0 / (log(resistance / ROOM_TEMP_RESISTANCE) / B_COEFFICIENT + 1.0 / ROOM_TEMP)) - 273.15;
+
+        Serial.printf("NTC-Temp: %.3f_°C %u_raw %.3f_mV %.2f_Ohm\n", temperature, raw, voltage, resistance);
+
+        check_temperature  = millis() + 1000;
+    }
+    return temperature;
+}
+#endif
+//=======================================================================================
+
+
 void esp32setup()
 {
-    // Initialize T5-EPAPER GUI
+    ///< Initialize T5-EPAPER GUI
+    ///< delay for ESP32-S3 nativ USB [OE3WAS]
+    ///< um Terminal verbinden zu können
+    timerSerial.start(2000);  //timeout falls keine USB verbunden ist
     Serial.begin(MONITOR_SPEED);
-    int isc=10;
-    while(!Serial && isc > 0)
-    {
-        delay(500);
-
-        isc--;
-    }
+    while (!Serial && !timerSerial.time_over());
+    if (Serial) { for (int i=0;i<10;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
 
     #if defined BOARD_T5_EPAPER
         if (psramInit()) {
@@ -522,6 +576,36 @@ void esp32setup()
     #endif
 
     delay(500);
+    //======================================================
+    // hier mal alles reingepackt bez. der GPOIs für BOARD_TBEAM_1W [OE3WAS]
+    #if defined(BOARD_TBEAM_1W)
+
+        SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
+
+        #if defined(HAS_SDCARD) && defined(SD_SHARE_SPI_BUS)
+            // Share spi bus with lora , set lora cs,rst to high
+            pinMode(RADIO_CS_PIN, OUTPUT);
+            pinMode(RADIO_RST_PIN, OUTPUT);
+            digitalWrite(RADIO_CS_PIN, HIGH);
+            digitalWrite(RADIO_RST_PIN, HIGH);
+        #endif
+
+        #if defined(HAS_GPS) && defined(GPS_EN_PIN)
+            pinMode(GPS_EN_PIN, OUTPUT);
+            digitalWrite(GPS_EN_PIN, HIGH);
+        #endif /*GPS_EN_PIN*/
+
+        #ifdef GPS_PPS_PIN
+            pinMode(GPS_PPS_PIN, INPUT);
+        #endif
+
+        #ifdef FAN_CTRL
+            pinMode(FAN_CTRL, OUTPUT);
+            digitalWrite(FAN_CTRL,HIGH);
+        #endif
+
+    #endif
+    //======================================================
 
     Serial.println("");
     Serial.println("");
@@ -626,7 +710,7 @@ void esp32setup()
             addMessage("GPS disabled");
     #endif
 
-    // Initialize T-Deck GUI
+    // Initialize T-Deck Pro GUI
     #if defined(BOARD_T_DECK_PRO)
         initTDeck_pro();
     #endif
@@ -688,7 +772,7 @@ void esp32setup()
     meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
     meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
 
-    #if defined(BOARD_E22_S3)
+    #if defined(BOARD_E22_S3) || defined(BOARD_TBEAM_1W)
         fBattFaktor = ADC_MULTIPLIER;   // default
         if(meshcom_settings.node_analog_batt_faktor > 0.0)
             fBattFaktor = meshcom_settings.node_analog_batt_faktor;
@@ -943,7 +1027,7 @@ void esp32setup()
     Serial.print(F("[LoRa]...SX1262 V3 chip"));
     #endif
     
-    #ifdef SX1262_E22
+    #if defined(SX1262_E22) || defined(USING_SX1262)
     Serial.print(F("[LoRa]...SX1262 V3 chip"));
     #endif
 
@@ -959,8 +1043,7 @@ void esp32setup()
     Serial.print(F("[LoRa]...SX1262 V4 chip (with PA)"));
     #endif
 
-
-    #if defined (BOARD_TRACKER)
+    #if defined (BOARD_TRACKER) || defined(BOARD_TBEAM_1W)
         SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
     #endif
 
@@ -973,6 +1056,26 @@ void esp32setup()
         int state = radio.begin(434.0F, 125.0F, 9, 7, SYNC_WORD_SX127x, 10, LORA_PREAMBLE_LENGTH, /*float tcxoVoltage = 0*/ 1.6F, /*bool useRegulatorLDO = false*/ false);
     #else
         Serial.print(F(" Initializing ... "));
+
+        #if defined(BOARD_TBEAM_1W)
+        #ifdef RADIO_LDO_EN
+            // T-BEAM-1W Control SX1262, LNA, must set RADIO_LDO_EN to HIGH to power the Radio
+            pinMode(RADIO_LDO_EN, OUTPUT);
+            digitalWrite(RADIO_LDO_EN, HIGH);
+            delay(200);
+        #endif
+
+        #ifdef RADIO_CTRL
+            // T-BEAM-1W LoRa RX/TX Control. RADIO_CTRL controls the LNA, not the PA.
+            // Only when RX DATA is on, set to 1 to turn on LNA.
+            // When TX DATA is on, RADIO_CTRL is set to 0 and LNA is turned off.
+            pinMode(RADIO_CTRL, OUTPUT);
+            digitalWrite(RADIO_CTRL, HIGH);  // RX Mode
+            delay(200);
+        #endif
+        #endif
+
+    
         int state = radio.begin(433.175F);
     #endif
     
@@ -1030,7 +1133,7 @@ void esp32setup()
     if(bRadio)
     {
         // set boosted gain
-        #if defined(SX1262_V3) || defined(SX126x_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || defined(SX1262_V4)
+        #if defined(SX1262_V3) || defined(SX126x_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || defined(USING_SX1262) || defined(SX1262_V4)
         Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
         if (radio.setRxBoostedGainMode(meshcom_settings.node_sset2 & 0x0800)  != RADIOLIB_ERR_NONE ) {
             Serial.println(F("Boosted Gain is not available for this module!"));
@@ -1084,6 +1187,8 @@ void esp32setup()
         if(tx_power < TX_POWER_MIN)
             tx_power= TX_POWER_MIN;
 
+        meshcom_settings.node_power = tx_power;  // [OE3WAS] für den Ring der Sicherheit ;-) ??
+        save_settings();
         Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
 
         if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
@@ -1156,7 +1261,7 @@ void esp32setup()
         #endif
 
         // setup for SX126x, 1268_V3 Radios
-        #if defined(SX126X) || defined(SX126x_V3) || defined(SX1262X)
+        #if defined(SX126X) || defined(SX126x_V3) || defined(SX1262X) || defined(USING_SX1262)
         // set the function that will be called
         // when LoRa preamble is not detected within CAD timeout period
         // or when a packet is received
@@ -1242,7 +1347,7 @@ void esp32setup()
                     Serial.println(state);
             }        
 
-            // enablee CRC
+            // enable CRC
             if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
                 Serial.println(F("Selected CRC is invalid for this module!"));
                 while (true);
@@ -1717,7 +1822,7 @@ void esp32loop()
                 // clean up after transmission is finished
                 // this will ensure transmitter is disabled,
                 // RF switch is powered down etc.
-                radio.finishTransmit();
+                radio.finishTransmit();  // hat keine Wirkung, ist leere Definition [OE3WAS]
 
                 #ifdef BOARD_HELTEC_V4
                 disablePATransmit();
@@ -2477,7 +2582,7 @@ void esp32loop()
                 if(bDisplayCont)
                 {
                     #if not defined (BOARD_T_DECK_PRO)
-                    Serial.printf("[readBatteryVoltage]...volt %.2f proz %i max_batt %.3f\n", global_batt/1000., global_proz, meshcom_settings.node_maxv);
+                    Serial.printf("[readBatteryVoltage] %s ... %.2f V %i%% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
                     #endif
                 }
 
@@ -2492,6 +2597,15 @@ void esp32loop()
                 Serial.printf("%s;[HEAP];%d;(free)\n", getTimeString().c_str(), ESP.getFreeHeap());
                 Serial.printf("%s;[PSRM];%d\n", getTimeString().c_str(), ESP.getFreePsram());
             }
+
+            // [OE3WAS] Lüftersteuerung
+            #if defined(NTC_PIN) && defined(FAN_CTRL) // BOARD_TBEAM_1W
+            float NTCtemp = getTempForNTC();
+            if (NTCtemp > 35.0) { digitalWrite(FAN_CTRL, HIGH); 
+            } else if (NTCtemp < 28.0) { digitalWrite(FAN_CTRL, LOW); }
+
+            Serial.printf("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
+            #endif
 
             BattTimeWait = millis();
         }

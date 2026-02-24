@@ -227,6 +227,9 @@ U8G2 *u8g2;
 #elif defined(BOARD_TBEAM_V3)
     U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
     U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, 18, 17, U8X8_PIN_NONE);
+#elif defined(TBEAM_1W)
+    DISPLAY_MODEL u8g2_1(U8G2_R0, U8X8_PIN_NONE);  //RESET CLOCK DATA
+    DISPLAY_MODEL u8g2_2(U8G2_R0, U8X8_PIN_NONE);
 #else
     U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2_1(U8G2_R0);
     U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2_2(U8G2_R0);
@@ -588,6 +591,10 @@ int esp32_isSSD1306(int address)
 
     #if defined (BOARD_TBEAM_V3)
         return 2;
+    #endif
+
+    #if defined (BOARD_TBEAM_1W)
+        return 1;  //SH1106 aber stimmt 1 wirklich?
     #endif
 
     TwoWire *w = NULL;
@@ -1131,6 +1138,13 @@ void sendDisplayTime()
         snprintf(cbatt, sizeof(cbatt), "  USB");
  #endif
 
+ #if defined(BOARD_TBEAM_1W)
+    // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
+    // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
+    if(global_batt < 5000.0)
+        snprintf(cbatt, sizeof(cbatt), " USB");
+ #endif
+
     // nur alle 15 sekunden
     if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton)
     {
@@ -1180,6 +1194,13 @@ void sendDisplayMainline()
 
  #if defined(BOARD_E290)
     if(global_batt > 4300.0)
+        snprintf(cbatt, sizeof(cbatt), " USB");
+ #endif
+
+ #if defined(BOARD_TBEAM_1W)
+    // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
+    // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
+    if(global_batt < 5000.0)
         snprintf(cbatt, sizeof(cbatt), " USB");
  #endif
 
@@ -2080,7 +2101,7 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-    Serial.printf("%s %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+    Serial.printf("%s %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
         aprsmsg.msg_source_hw, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
@@ -2088,9 +2109,9 @@ void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_t size)
 {
     if(size == 7)
-        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
+        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
     else
-        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
+        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
 }
 
 

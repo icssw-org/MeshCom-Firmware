@@ -1276,7 +1276,7 @@ void sub_page_spectrum()
 {
     _create_meshcom_subheader("Spectrum Scan");
     web_client.println("<div id=\"content_inner\">");
-#if defined(SX1262X) || defined(SX126X) || defined(SX1262_V3) || defined(SX1262_E290)
+#if defined(SX1262X) || defined(SX126X) || defined(SX1262_V3) || defined(SX1262_E290) || defined(USING_SX1262)
 
     meshcom_settings.node_specstart = 432.0;
     meshcom_settings.node_specend = 434.0;
