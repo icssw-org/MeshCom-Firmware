@@ -227,6 +227,9 @@ U8G2 *u8g2;
 #elif defined(BOARD_TBEAM_V3)
     U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, U8X8_PIN_NONE);
     U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, 18, 17, U8X8_PIN_NONE);
+#elif defined(TBEAM_1W)
+    DISPLAY_MODEL u8g2_1(U8G2_R0, U8X8_PIN_NONE);  //RESET CLOCK DATA
+    DISPLAY_MODEL u8g2_2(U8G2_R0, U8X8_PIN_NONE);
 #else
     U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2_1(U8G2_R0);
     U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2_2(U8G2_R0);
@@ -588,6 +591,10 @@ int esp32_isSSD1306(int address)
 
     #if defined (BOARD_TBEAM_V3)
         return 2;
+    #endif
+
+    #if defined (BOARD_TBEAM_1W)
+        return 1;  //SH1106 aber stimmt 1 wirklich?
     #endif
 
     TwoWire *w = NULL;
@@ -1131,6 +1138,13 @@ void sendDisplayTime()
         snprintf(cbatt, sizeof(cbatt), "  USB");
  #endif
 
+ #if defined(BOARD_TBEAM_1W)
+    // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
+    // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
+    if(global_batt < 5000.0)
+        snprintf(cbatt, sizeof(cbatt), " USB");
+ #endif
+
     // nur alle 15 sekunden
     if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton)
     {
@@ -1180,6 +1194,13 @@ void sendDisplayMainline()
 
  #if defined(BOARD_E290)
     if(global_batt > 4300.0)
+        snprintf(cbatt, sizeof(cbatt), " USB");
+ #endif
+
+ #if defined(BOARD_TBEAM_1W)
+    // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
+    // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
+    if(global_batt < 5000.0)
         snprintf(cbatt, sizeof(cbatt), " USB");
  #endif
 
