@@ -19,7 +19,7 @@
     extern SX1268 radio;
 #endif
 
-#if defined(SX1262_V3) || defined(SX1262_E290)
+#if defined(SX1262_V3) || defined(SX1262_E290) || defined(USING_SX1262)
     #include <RadioLib.h>
     extern SX1262 radio;
 #endif
