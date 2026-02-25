@@ -2753,6 +2753,10 @@ static void msg_render_active_tab(void)
         msg_list_show_hint("No messages in this conversation");
         return;
     }
+    else
+    {
+        msg_list_show_hint("");
+    }
 
     msg_list_clear();
 

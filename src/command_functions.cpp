@@ -63,6 +63,7 @@ unsigned long rebootAuto = 0;
 // libs for T-Deck view refresh
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions.h>
+#include <SPIFFS.h>
 #endif
 
 #if defined(BOARD_T5_EPAPER)
@@ -752,6 +753,19 @@ void commandAction(char *umsg_text, bool ble)
         }
         #else
         Serial.println("[DISP]...Contrast not supported on this display");
+        #endif
+
+        bReturn = true;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"spiffs reset") == 0)
+    {
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        Serial.println("...SPIFFS format start");
+        SPIFFS.format();
+        Serial.println("...SPIFFS format done");
+        #else
+        Serial.println("[DISP]...SPIFFS  not supported on this hardware");
         #endif
 
         bReturn = true;
