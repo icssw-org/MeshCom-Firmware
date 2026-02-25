@@ -238,7 +238,7 @@ void clear_flash(void)
 {
     preferences.begin("Credentials", false);
 
-    Serial.printf("[INIT]...FLASH #entries %i\n bevor clear\n", preferences.freeEntries());
+    Serial.printf("[INIT]...FLASH #entries %i bevor clear\n", preferences.freeEntries());
 
     preferences.freeEntries();
     
