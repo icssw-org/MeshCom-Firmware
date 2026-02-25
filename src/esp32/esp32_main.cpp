@@ -632,6 +632,9 @@ void esp32setup()
     {
         Serial.printf("[INIT]...FLASH cleared new version %i\n", FLASH_VERSION);
 
+        initTimePersistence();
+
+
         clear_flash();
 
         meshcom_settings.node_fversion = FLASH_VERSION;
@@ -2877,14 +2880,14 @@ void esp32loop()
             #endif
         }
 
-        if(bWEBSERVER)
+        if(bWEBSERVER && iWlanWait == 0)
         {
             startWebserver();
 
             loopWebserver();
         }
 
-        if(bEXTUDP)
+        if(bEXTUDP && iWlanWait == 0)
         {
             startExternUDP();
         }

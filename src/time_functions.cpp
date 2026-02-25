@@ -14,6 +14,7 @@
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions_extern.h>
+#include <SPIFFS.h>
 #endif
 
 #define SECONDS_PER_MINUTE 60
@@ -101,6 +102,15 @@ String convertUNIXtoString(uint32_t timestamp)
 
 #if defined(ESP32)
 Preferences timePrefs;
+
+void initTimePersistence() {
+    timePrefs.begin("meshcom_time", false);
+    timePrefs.clear();
+    timePrefs.end();
+
+    SPIFFS.format();
+
+}
 
 void saveTimePersistence() {
     unsigned long current_time = getUnixClock();

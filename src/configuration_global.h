@@ -1,7 +1,7 @@
 #define SOURCE_VERSION "4.35"
 #define SOURCE_VERSION_SUB "n"
 
-#define FLASH_VERSION 20260224
+#define FLASH_VERSION 20260225
 
 //Hardware Types
 #define TLORA_V2 1

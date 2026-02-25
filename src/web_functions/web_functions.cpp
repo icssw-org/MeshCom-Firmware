@@ -48,7 +48,7 @@ double dlon;
 char clat;
 char clon;
 
-int iMDNS_count = 0;
+bool bMDNSOK=true;
 
 /**
  * ###########################################################################################################################
@@ -58,15 +58,17 @@ void startWebserver()
 {
     if (bweb_server_running)
         return;
+
     if (strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
     {
-        /*
         if(bDEBUG)
         {
             Serial.print("[WEB]...no ip set :");
             Serial.println(meshcom_settings.node_ip);
         }
-         */
+
+        stopWebserver();
+
         return;
     }
 
@@ -89,27 +91,26 @@ void startWebserver()
     //   the fully-qualified domain name is "esp32.local"
     // - second argument is the IP address to advertise
     //   we send our IP address on the WiFi network
-    if (!MDNS.begin(meshcom_settings.node_call))
+    if(bMDNSOK)
     {
-        if(iMDNS_count == 0)
+        if (!MDNS.begin(meshcom_settings.node_call))
         {
             Serial.print(getTimeString());
             Serial.println("[Web]...Error setting up MDNS responder!");
+            
+            stopWebserver();
+
+            bMDNSOK=false;
+
+            return;
         }
-
-        iMDNS_count++;
-
-        if(iMDNS_count > 100)
-            iMDNS_count = 0;
-        
-        return;
-    }
-    else
-    {
-        if (bDEBUG)
+        else
         {
-            Serial.print(getTimeString());
-            Serial.println("[Web]...mDNS responder started");
+            if (bDEBUG)
+            {
+                Serial.print(getTimeString());
+                Serial.println("[Web]...mDNS responder started");
+            }
         }
     }
 
@@ -123,6 +124,12 @@ void startWebserver()
     }
 #endif
     bweb_server_running = true;
+
+    if (bDEBUG)
+    {
+        Serial.print(getTimeString());
+        Serial.println("[Web]...WEBServer started");
+    }
 }
 
 /**
@@ -136,6 +143,12 @@ void stopWebserver()
     web_server.stop();
 #endif
     bweb_server_running = false;
+
+    if (bDEBUG)
+    {
+        Serial.print(getTimeString());
+        Serial.println("[Web]...WEBServer stopped");
+    }
 }
 
 /**
