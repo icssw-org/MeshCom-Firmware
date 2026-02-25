@@ -34,15 +34,17 @@ jobs:
     - name: Install RAK Deps
       run: pio platform install nordicnrf52
 
-    - name: Patch PlatformIO for RAK1
-      run: "mkdir ~/.platformio/RAK_PATCH && cd ~/.platformio/RAK_PATCH && wget https://raw.githubusercontent.com/RAKWireless/WisBlock/master/PlatformIO/RAK_PATCH.zip && unzip RAK_PATCH.zip && python rak_patch.py"
+    # Patch not needed anymore. Is now statically. 
+    # See https://github.com/RAKWireless/WisBlock/blob/master/PlatformIO/README.md for details with RAK_PATCH_V2
+    #- name: Patch PlatformIO for RAK1
+    #  run: "mkdir ~/.platformio/RAK_PATCH && cd ~/.platformio/RAK_PATCH && wget https://raw.githubusercontent.com/RAKWireless/WisBlock/master/PlatformIO/RAK_PATCH.zip && unzip RAK_PATCH.zip && python rak_patch.py"
 
-    - name: Prepare for RAK Patch2
-      continue-on-error: true
-      run: "cd ${{ github.workspace }} && pio run -e wiscore_rak4631 && exit 0"
+    #- name: Prepare for RAK Patch2
+    #  continue-on-error: true
+    #  run: "cd ${{ github.workspace }} && pio run -e wiscore_rak4631 && exit 0"
 
-    - name: Patch PlatformIO for RAK2
-      run: "cd ~/.platformio/RAK_PATCH && python rak_patch.py"
+    #- name: Patch PlatformIO for RAK2
+    #  run: "cd ~/.platformio/RAK_PATCH && python rak_patch.py"
 
     - name: Install ESP32 platform
       run: "pio platform install espressif32"

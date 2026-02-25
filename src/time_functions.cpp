@@ -107,9 +107,9 @@ void initTimePersistence() {
     timePrefs.begin("meshcom_time", false);
     timePrefs.clear();
     timePrefs.end();
-
-    SPIFFS.format();
-
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        SPIFFS.format();
+    #endif
 }
 
 void saveTimePersistence() {
