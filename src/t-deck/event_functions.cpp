@@ -590,10 +590,14 @@ void btn_event_handler_setup(lv_event_t * e)
         sprintf(cNewPassword, "%s", strVar.c_str());
         if (memcmp(cNewPassword, meshcom_settings.node_passwd, sizeof(cNewPassword)) != 0)
         {
-            if (bDEBUG)
-                Serial.println("[TDECK]...changing Wifi password");
-            sprintf(cCmd, "--setpwd %s", cNewPassword);
-            commandAction(cCmd, false);
+            // nicht ändern wenn das Musterpasswort nicht geändert wurde
+            if (strcmp(cNewPassword, (char*)"**********") != 0)
+            {
+                if (bDEBUG)
+                    Serial.println("[TDECK]...changing Wifi password");
+                sprintf(cCmd, "--setpwd %s", cNewPassword);
+                commandAction(cCmd, false);
+            }
         }
 
 
