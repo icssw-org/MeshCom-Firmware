@@ -15,15 +15,16 @@ MeshCom is indeed an exciting project of the Institute of Citizen Science for Sp
 The main goal is to have a selfbuilding and selfhealing Mesh-Network, that can be enhanced by other components of the Amateur Radio Service, like HAMNET (IP-Network), centralised or distributed Meshcom servers. This will increase coverage to all continents and enable interconnection to other modes and services (APRS, WINLINK, DMR, TETRA-SDS, SOTA-WATCH, POCSAG,VARA-AC, …) building an unified communication plattform.
 Particulary useful is Meshcom for Emergency Communication (EMCOM) in case of disaster or Blackout.
 In all usecases terms  and rules of Amateur Radio Service (strictly non commercial, experimental) should be respected.
-This is an open Citizen Science project that should help to promote Amateur Radio Service within academic and society.
+This is an open Citizen Science project that should help to promote Amateur Radio Service within academic and society.<br/><br/>
+For more information visit: https://icssw.org/en/meshcom/
 
 ## Frequency in Region: 
-EU: 433.175
-UK: tbd
-Nordic: tbd
-USA: 433.175
-Afrika: 433.175
-Asia/Pacific: tbd
+EU: 433.175<br/>
+UK: 439.9125 BW:125k SF:10<br/>
+Norwegen: 433.925 BW:125k SF:10<br/>
+USA: 433.175<br/>
+Afrika: 433.175<br/>
+Asia/Pacific: tbd<br/>
 
 ## Lora parameter:
 SF: 11
@@ -107,31 +108,29 @@ MeshCom 4.0 verwendet für die Payload-Daten das AX.25 Protokoll, wie es für AP
 - 6 TTGO T-Beam ESP32 SX1262 T-BEAM-0.7 0.7
 - 7 T-Echo LoRa SX1262 nRF SX1262 T-ECHO
 - 8 T-Deck ESP32-S3 SX1262 T-DECK
-- 9 Wisblock RAK4631 nRF Wisblock nRF RAK4631
+- 9 Wisblock RAK4631 nRF52840
 - 10 WiFi LoRa 32 v2 ESP32 SX1262 HELTEC-V2-1 V2
 - 11 WiFi LoRa 32 v1 ESP32 SX1276 HELTEC-V1 V1
 - 12 TTGO T-Beam ESP32 SX1278 TBEAM-AXP2101
-- 39 Ebyte Lora E22 ESP32 SX1278 EBYTE-E22
+- 39 Ebyte Lora E22 ESP32 SX1268 EBYTE-E22
+- 41 Heltec Tracker
+- 42 Heltec Stick v3
 - 43 WiFi LoRa 32 v3 ESP32-S3 SX1262 HELTEC-V3 V3
 - 44 Heltec E290
 - 45 TTGO T-Beam ESP32 SX1268 T-BEAM-1268 1.2 SX1262
+- 46 T-DECK-PLUS
+- 47 TBEAM SUPREME L76K GPS
+- 48 Ebyte Lora E22 ESP32-S3
+- 49 T-Lora Pager
+- 50 T-Deck Pro
+- 51 LilyGo T-Beam 1W
+- 52 Heltec Wifi Lora 32 v4 
 
-### MeshCom LoRa modulations index
-
-- 0 Extended range 10-20 fast
-- 1 Extended range 10-20 slow (robust) 0.275 kbps
-- 2 Additional extended range 20-40 slow (robust) 0.183 kbps
-- 3 Normal range 5-10 slow (robust)
-- 4 Normal range 5-10 fast 5,469 kbps
-- 5 Local range 0-5 slow (robust)
-- 6 Local range 0-5 fast 21,875 kbps
 
 ## Preparations for platform.io VSCode plugin
 - Install the needed frameworks under Platforms: 
   + Espressif 32
   + Nordic nRF52
-- For adding the correct Board defintions for RAK Wireless RAK4631 follow these instructions:
-    https://github.com/RAKWireless/WisBlock/blob/master/PlatformIO/README.md
 
 ## Flashing Firmware
 Usually it is done via the upload button in VSCode directly. 
@@ -178,11 +177,22 @@ If you want to wipe the firmware on the node:<br/>
 If you want to wipe the settings stored on the node:<br/>
 `python esptool.py --port <SERIAL-PORT> erase_region 0x009000 0x005000`
 ### RAK4631 via CLI:
-To do so, you need the Adafruit nrfutil. Installation and Usage:<br/>
+To do so, you need the Adafruit-Nrfutil.<br/>
+First you need to have python 3 installed on your OS.<br/>
+Install the Adafruit-Nrfutil:<br/>
+`pip3 install adafruit-nrfutil`<br/>
+Next you need the .zip firmware file and not the uf2:<br/>
+https://github.com/icssw-org/MeshCom-Firmware/releases or download via the webflasher.<br/>
+Check your correct serial device! COM on Win or tty on Linux and MAC zb /dev/ttyACM0.<br/>
+Flashing via the command:<br/>
+`adafruit-nrfutil --verbose dfu serial --package wiscore_rak4631.zip -p <YOUR_CORRECT_SERIAL_DEVICE> --singlebank --touch 1200`<br/>
+More info on:<br/>
 https://github.com/adafruit/Adafruit_nRF52_nrfutil<br/>
 
 ### RAK4631 via UF2 File:
-When you double click the button on the module it mounts a USB Device where you can copy an .uf2 file onto the module. To generate that file you need the following Python script:<br/>
+When you double click the button on the module it mounts a USB Device where you can copy an .uf2 file onto the module. The uf2 file can be downloaded here:
+https://github.com/icssw-org/MeshCom-Firmware/releases or via the webflasher<br/>
+If you need to generate an uf2 from a hex file compiled you need the following Python script:<br/>
 https://github.com/microsoft/uf2/blob/master/utils/uf2conv.py<br/>
 
 `./uf2conv.py <PATH_TO-HEX-FILE> -c -o firmware.uf2 -f 0xADA52840`
