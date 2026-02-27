@@ -88,13 +88,14 @@ bool play_file_from_sd(const char *filename, int volume)
             if (bDEBUG)
                 Serial.printf("[audio]...playing %s in background\n", strAudioWithType.c_str());
 
-            xTaskCreate(
+            xTaskCreatePinnedToCore(
                 play_function,
                 "audio play task",
                 16 * 1024,
                 NULL,
                 50,
-                NULL
+                NULL,
+                1
             );
             return true;
         }
