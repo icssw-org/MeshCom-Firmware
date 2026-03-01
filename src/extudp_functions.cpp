@@ -154,7 +154,7 @@ void getExternUDP()
   }
 }
 
-void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
+void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t rssi, int8_t snr)
 {
   #ifdef ESP32
     if(bWIFIAP)
@@ -259,6 +259,9 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
       cJson["fw_sub"] = c_fw_sub;
     }
 
+    cJson["rssi"] = rssi;
+    cJson["snr"] = snr;
+
     // clear the buffer
     memset(c_json, 0x00, sizeof(c_json));
     // serialize the json
@@ -346,6 +349,8 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
       }
 
       cJson["fw_sub"] = c_fw_sub;
+      cJson["rssi"] = rssi;
+      cJson["snr"] = snr;
 
       // clear the buffer
       memset(c_json, 0x00, sizeof(c_json));
