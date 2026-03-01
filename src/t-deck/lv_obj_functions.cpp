@@ -2580,6 +2580,7 @@ static void sys_msg_save_timer_cb(lv_timer_t *timer)
 
              if(bSDDected)
              {
+                /* TODO SAVE
                 const char* sys_filename = "/system_messages.json";
                 // Check size limit (approx 10000 messages * 100 bytes = 1MB)
                 if(SD.exists(sys_filename))
@@ -2600,6 +2601,7 @@ static void sys_msg_save_timer_cb(lv_timer_t *timer)
                     }
                 }
                 log_message_to_sd(sys_msg_save_group, last, sys_filename);
+                */
              }
         }
     }
@@ -3497,6 +3499,8 @@ void tdeck_update_time_label()
  */
 void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c)
 {
+    //return; // test heap
+
     if (bDEBUG)
         Serial.printf("[ MAP ]...add position point call:%s\n", callsign.c_str());
 
@@ -3548,7 +3552,7 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
  */
 void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c, int alt)
 {
-    char buf[2000];
+    char buf[30];
 
     if (bDEBUG)
         Serial.printf("[POSVIEW]...add %s\n", callsign.c_str());
@@ -3590,6 +3594,8 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
 
     snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", dlat, lat_c, dlon, lon_c, alt);
     lv_table_set_cell_value(position_ta, 1, 2, buf);
+
+    //return; // test heap
 
     // Log position to SD
     String json = "{";
@@ -3767,10 +3773,12 @@ static void msg_focus_and_alert(bool bWithAudio)
     {
         if (bDEBUG)
             Serial.println("[TDECK]...msg_focus_and_alert: Playing audio...");
+
         if (!play_file_from_sd(meshcom_settings.node_audio_msg.c_str(), 12))
         {
             play_cw('r');
         }
+        
         if (bDEBUG)
             Serial.println("[TDECK]...msg_focus_and_alert: Audio finished.");
     }

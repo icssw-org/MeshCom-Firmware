@@ -177,6 +177,8 @@ String escape_json(const String &s)
  */
 void log_json_to_sd(const char* filename, const String& json_object_str)
 {
+    //return; // test heap
+    
     if(!bSDDected) return;
 
     // Ensure file exists and has initial array structure

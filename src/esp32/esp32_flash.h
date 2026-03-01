@@ -158,6 +158,7 @@ struct s_meshcom_settings
 
 	char node_ownntp[40] = {0};
 
+	int node_mversion = 0;
 
 	// nicht im Flash
 	int node_press_alt = 0;
