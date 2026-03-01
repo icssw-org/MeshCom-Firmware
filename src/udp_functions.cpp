@@ -166,7 +166,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           if(hasExternIPaddress)
           {
             if(bEXTUDP)
-              sendExtern(true, (char*)"udp", convBuffer, lora_tx_msg_len);
+              sendExtern(true, (char*)"udp", convBuffer, lora_tx_msg_len, 0, 0);
           }
           
           struct aprsMessage aprsmsg;

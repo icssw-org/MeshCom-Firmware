@@ -2408,7 +2408,7 @@ void sendMessage(char *msg_text, int len)
 
     // Extern Server
     if(bEXTUDP)
-        sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
+        sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len, 0, 0);
 
                         
     // wenn text via Console kommt auch an BLE bzw. WEBService senden
@@ -2898,7 +2898,7 @@ void sendPosition(unsigned int uintervall, double lat, char lat_c, double lon, c
 
         // Extern Server
         if(bEXTUDP)
-            sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len);
+            sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len, 0, 0);
     }
 
 }
