@@ -645,6 +645,8 @@ void esp32setup()
     {
         meshcom_settings.node_mversion = MODUL_HARDWARE;
 
+        snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%-4.4s%-1.1s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+
         save_settings();
 
         Serial.printf("[INIT]...FLASH version %i\n", meshcom_settings.node_fversion);

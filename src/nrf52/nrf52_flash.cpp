@@ -223,6 +223,7 @@ void init_flash(void)
 
 		meshcom_settings.node_contrast = old_struct.node_contrast;
 		meshcom_settings.node_fversion = old_struct.node_fversion;
+		memcpy(meshcom_settings.node_fwversion, old_struct.node_fwversion, sizeof(meshcom_settings.node_fwversion));
 
 		memcpy(meshcom_settings.node_ownntp, old_struct.node_ownntp, 40);
 

@@ -2532,6 +2532,8 @@ static MsgTabEntry *msg_tabs_get_or_create_entry(const String &group, int *index
 
 static void log_message_to_sd(const String &group, const MsgBubble &bubble, const char* filename = "/messages.json")
 {
+    #ifdef HEAP_TEST
+
     if (!meshcom_settings.node_persist_to_sd)
     {
         if (bDEBUG)
@@ -2553,6 +2555,8 @@ static void log_message_to_sd(const String &group, const MsgBubble &bubble, cons
     line += "}";
 
     log_json_to_sd(filename, line);
+
+    #endif
 }
 
 static lv_timer_t *sys_msg_save_timer = NULL;
@@ -2580,7 +2584,7 @@ static void sys_msg_save_timer_cb(lv_timer_t *timer)
 
              if(bSDDected)
              {
-                /* TODO SAVE
+                #ifdef HEAP_TEST
                 const char* sys_filename = "/system_messages.json";
                 // Check size limit (approx 10000 messages * 100 bytes = 1MB)
                 if(SD.exists(sys_filename))
@@ -2601,7 +2605,7 @@ static void sys_msg_save_timer_cb(lv_timer_t *timer)
                     }
                 }
                 log_message_to_sd(sys_msg_save_group, last, sys_filename);
-                */
+                #endif
              }
         }
     }
@@ -2671,7 +2675,7 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
     entry->bubbles.push_back(bubble);
     msg_tabs_trim_history(entry->bubbles);
 
-    /* Persist messages */
+    /* Persist messages 
     if(!loading_messages_from_file)
     {
         if (bubble.type != MsgBubbleType::System)
@@ -2716,6 +2720,8 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
         }
     }
 
+    */
+
     // Only switch to the new tab if it is NOT a System message,
     // or if we don't have any active tab yet.
     // This prevents System logs from pulling focus away from user conversations.
@@ -2726,6 +2732,7 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
         {
             // Already active, just append to view
             msg_list_append_bubble(bubble);
+
             lv_obj_t *last = lv_obj_get_child(msg_list, -1);
             if(last != NULL)
                 lv_obj_scroll_to_view(last, LV_ANIM_ON);
@@ -2882,7 +2889,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
         lv_label_set_text(del_label, LV_SYMBOL_TRASH);
         lv_obj_center(del_label);
 
-        // attach identifying userdata
+    // attach identifying userdata
         DeleteEventData *ded = new DeleteEventData();
         ded->group = current_group;
         ded->timestamp = bubble.timestamp;
@@ -2912,7 +2919,6 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_obj_set_width(time_label, LV_SIZE_CONTENT);
     lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     */
-
     lv_obj_t *body = lv_label_create(bubble_obj);
     lv_label_set_text(body, bubble.body.c_str());
     lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
@@ -3149,6 +3155,8 @@ static String unescape_json(const String &s)
 
 static void save_persisted_messages(void)
 {
+    #ifdef HEAP_TEST
+
     if (! meshcom_settings.node_persist_to_flash)
     {
         if (bDEBUG)
@@ -3239,10 +3247,14 @@ static void save_persisted_messages(void)
     // update flush timestamp and reset unsaved counter
     last_flush_millis = millis();
     unsaved_msgs_count = 0;
+
+    #endif
 }
 
 static void load_persisted_messages(void)
 {
+    #ifdef HEAP_TEST
+
     persisted_msgs.clear();
     loading_messages_from_file = true;
 
@@ -3360,6 +3372,8 @@ static void load_persisted_messages(void)
     loading_messages_from_file = false;
     // set last flush timestamp so timer waits full interval before next auto-save
     last_flush_millis = millis();
+
+    #endif
 }
 
 // -----------------------------------------------------------------------------
@@ -3499,7 +3513,7 @@ void tdeck_update_time_label()
  */
 void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c)
 {
-    //return; // test heap
+    #ifndef T_DECK_POS
 
     if (bDEBUG)
         Serial.printf("[ MAP ]...add position point call:%s\n", callsign.c_str());
@@ -3545,6 +3559,8 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
     map_pos_count++;
     if (map_pos_count >= MAX_POINTS)
         map_pos_count = 1;
+
+    #endif
 }
 
 /**
@@ -3552,6 +3568,8 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
  */
 void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c, int alt)
 {
+    #ifndef T_DECK_POS
+
     char buf[30];
 
     if (bDEBUG)
@@ -3595,8 +3613,7 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", dlat, lat_c, dlon, lon_c, alt);
     lv_table_set_cell_value(position_ta, 1, 2, buf);
 
-    //return; // test heap
-
+    #ifdef HEAP_TEST
     // Log position to SD
     String json = "{";
     json += "\"call\":\"" + escape_json(callsign) + "\",";
@@ -3606,6 +3623,10 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     json += "\"alt\":" + String(alt);
     json += "}";
     log_json_to_sd("/positions.json", json);
+
+    #endif
+
+    #endif
 }
 
 /**
@@ -3765,7 +3786,7 @@ static void msg_focus_and_alert(bool bWithAudio)
             // Force a full screen redraw to ensure the display buffer is flushed to the hardware
             lv_obj_invalidate(lv_scr_act());
             // Force a task handler run to update the UI before playing audio
-            lv_task_handler();
+            //lv_task_handler(); Y5 check
         }
     }
 

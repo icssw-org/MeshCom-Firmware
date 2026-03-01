@@ -1741,7 +1741,6 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #endif
 
     bSetDisplay=false;
-
 }
 
 void init_loop_function()

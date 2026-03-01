@@ -46,26 +46,24 @@
  *=========================*/
 
 /*1: use custom malloc/free, 0: use the built-in `lv_mem_alloc()` and `lv_mem_free()`*/
-#define LV_MEM_CUSTOM 0
+#define LV_MEM_CUSTOM 1
 #if LV_MEM_CUSTOM == 0
-/*Size of the memory available for `lv_mem_alloc()` in bytes (>= 2kB)*/
-#define LV_MEM_SIZE (48U * 1024U)          /*[bytes]*/
+    /*Size of the memory available for `lv_mem_alloc()` in bytes (>= 2kB)*/
+    #define LV_MEM_SIZE (48U * 1024U)          /*[bytes]*/
 
-/*Set an address for the memory pool instead of allocating it as a normal array. Can be in external SRAM too.*/
-#define LV_MEM_ADR 0     /*0: unused*/
-/*Instead of an address give a memory allocator that will be called to get a memory pool for LVGL. E.g. my_malloc*/
-#if LV_MEM_ADR == 0
-    #define LV_MEM_POOL_INCLUDE     "esp_heap_caps.h"
-    #define LV_MEM_POOL_ALLOC(size) heap_caps_malloc(size, MALLOC_CAP_SPIRAM)
-//#define LV_MEM_POOL_INCLUDE your_alloc_library  /* Uncomment if using an external allocator*/
-//#define LV_MEM_POOL_ALLOC   your_alloc          /* Uncomment if using an external allocator*/
-#endif
+    /*Set an address for the memory pool instead of allocating it as a normal array. Can be in external SRAM too.*/
+    #define LV_MEM_ADR 0     /*0: unused*/
+    /*Instead of an address give a memory allocator that will be called to get a memory pool for LVGL. E.g. my_malloc*/
+    #if LV_MEM_ADR == 0
+        #undef LV_MEM_POOL_INCLUDE
+        #undef LV_MEM_POOL_ALLOC
+    #endif
 
 #else       /*LV_MEM_CUSTOM*/
-#define LV_MEM_CUSTOM_INCLUDE <stdlib.h>   /* <esp32-hal-psram.h> Header for the dynamic memory function*/
-#define LV_MEM_CUSTOM_ALLOC   malloc
-#define LV_MEM_CUSTOM_FREE    free
-#define LV_MEM_CUSTOM_REALLOC realloc
+    #define LV_MEM_CUSTOM_INCLUDE "esp32-hal-psram.h"//<stdlib.h>   /*Header for the dynamic memory function*/
+    #define LV_MEM_CUSTOM_ALLOC   ps_malloc
+    #define LV_MEM_CUSTOM_FREE    free
+    #define LV_MEM_CUSTOM_REALLOC ps_realloc
 #endif     /*LV_MEM_CUSTOM*/
 
 /*Number of the intermediate memory buffer used during rendering and other internal processing mechanisms.

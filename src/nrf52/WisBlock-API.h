@@ -321,6 +321,7 @@ struct s_meshcom_settings
 	char node_ownntp[40] = {0};
 
 	int node_mversion = 0;
+	char node_fwversion[8] = {0};
 
 	// nicht im Flash
 	float node_specstart = 432.0;
@@ -528,6 +529,7 @@ struct s_meshcomcompat_settings
 	char node_ownntp[40] = {0};
 
 	int node_mversion = 0;
+	char node_fwversion[8] = {0};
 
 	// not within RAK Flash
 	float node_specstart = 432.0;

@@ -233,6 +233,9 @@ void init_flash(void)
 
     meshcom_settings.node_mversion = preferences.getInt("node_mversion", 0);
 
+    strVar = preferences.getString("node_fwversion");
+    snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%s", strVar.c_str());
+
     preferences.end();
 }
 
@@ -474,6 +477,9 @@ void save_settings(void)
     preferences.putString("node_ownntp", strVar); 
 
     preferences.putInt("node_mversion", meshcom_settings.node_mversion);
+
+    strVar = meshcom_settings.node_fwversion;
+    preferences.putString("node_fwversion", strVar); 
 
     //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
 
