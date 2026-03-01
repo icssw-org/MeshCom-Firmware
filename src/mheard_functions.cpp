@@ -174,8 +174,6 @@ void savePathPersistence() {
 
 void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 {
-    //return; // test heap
-
     String strYear = mheardLine.mh_date.substring(0, 4);
     if(strYear.toInt() < 2025)
         return;
@@ -268,10 +266,10 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
         addBLEOutBuffer(bleBuffer, measureJson(mhdoc)+1);
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    
-    #ifdef HEAP_TEST
+
     showMHeardTDECK();
     
+    #ifdef HEAP_TEST
     // Log MHeard to SD
     String json = "{";
     json += "\"call\":\"" + escape_json(mheardLine.mh_callsign) + "\",";
