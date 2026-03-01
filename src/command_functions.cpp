@@ -63,7 +63,9 @@ unsigned long rebootAuto = 0;
 // libs for T-Deck view refresh
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions.h>
+#ifdef HEAP_TEST
 #include <SPIFFS.h>
+#endif
 #endif
 
 #if defined(BOARD_T5_EPAPER)
@@ -757,6 +759,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bReturn = true;
     }
+    #ifdef HEAP_TEST
     else
     if(commandCheck(msg_text+2, (char*)"spiffs reset") == 0)
     {
@@ -770,6 +773,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bReturn = true;
     }
+    #endif
     else
     if(commandCheck(msg_text+2, (char*)"button on") == 0)
     {

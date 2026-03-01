@@ -139,6 +139,9 @@ void decodeMHeard(unsigned char u_mh_buffer[sizeof(mheardBuffer[0])], struct mhe
 }
 
 void saveMHeardPersistence() {
+
+    return; // test heap
+
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     if(SD.exists("/mheard.dat")) SD.remove("/mheard.dat");
     File file = SD.open("/mheard.dat", FILE_WRITE);
@@ -153,6 +156,9 @@ void saveMHeardPersistence() {
 }
 
 void savePathPersistence() {
+
+    return; // test heap
+
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     if(SD.exists("/mhpath.dat")) SD.remove("/mhpath.dat");
     File file = SD.open("/mhpath.dat", FILE_WRITE);
@@ -168,6 +174,8 @@ void savePathPersistence() {
 
 void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 {
+    //return; // test heap
+
     String strYear = mheardLine.mh_date.substring(0, 4);
     if(strYear.toInt() < 2025)
         return;
@@ -260,6 +268,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
         addBLEOutBuffer(bleBuffer, measureJson(mhdoc)+1);
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    
+    #ifdef HEAP_TEST
     showMHeardTDECK();
     
     // Log MHeard to SD
@@ -276,6 +286,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     log_json_to_sd("/mheard.json", json);
     #endif
 
+    #endif
+
     saveMHeardPersistence();
 
     #if defined(BOARD_T_DECK_PRO)
@@ -285,6 +297,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
 void updateHeyPath(struct mheardLine &mheardLine)
 {
+    #ifdef HEAP_TEST
+
     String strYear = mheardLine.mh_date.substring(0, 4);
     if(strYear.toInt() < 2025)
         return;
@@ -395,6 +409,8 @@ void updateHeyPath(struct mheardLine &mheardLine)
     #endif
 
     savePathPersistence();
+
+    #endif
 }
 
 String getValue(String data, char separator, int index)
@@ -688,6 +704,8 @@ void showMHeardTDECK()
  */
 void showPathTDECK()
 {
+    #ifdef HEAP_TEST
+
     char buf[200];
 
     uint16_t row=0;
@@ -726,10 +744,16 @@ void showPathTDECK()
             row++;
         }
     }
+
+    #endif
 }
 #endif
 
 void loadMHeardPersistence() {
+
+    #ifdef HEAP_TEST
+
+
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     if(!SD.exists("/mheard.dat")) return;
     File file = SD.open("/mheard.dat", FILE_READ);
@@ -742,9 +766,14 @@ void loadMHeardPersistence() {
     file.close();
     showMHeardTDECK();
     #endif
+
+    #endif
 }
 
 void loadPathPersistence() {
+
+    #ifdef HEAP_TEST
+
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     if(!SD.exists("/mhpath.dat")) return;
     File file = SD.open("/mhpath.dat", FILE_READ);
@@ -755,6 +784,8 @@ void loadPathPersistence() {
     file.read((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
     file.close();
     showPathTDECK();
+    #endif
+
     #endif
 }
 

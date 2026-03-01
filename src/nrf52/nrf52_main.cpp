@@ -387,6 +387,10 @@ void nrf52setup()
     }
     else
     {
+        meshcom_settings.node_mversion = MODUL_HARDWARE;
+
+        save_settings();
+
         Serial.printf("[INIT]...FLASH version %i\n", meshcom_settings.node_fversion);
     }
 

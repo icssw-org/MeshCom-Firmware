@@ -26,6 +26,8 @@ SemaphoreHandle_t audioSemaphore;
 // I2S-Handle
 i2s_port_t i2s_num = I2S_NUM;
 
+TaskHandle_t xHandle = NULL;
+
 /**
  * initializes audio
  */
@@ -62,14 +64,13 @@ bool play_file_from_sd(const char *filename, int volume)
         return true;
     }
 
+    if(!bSDDected)
+    {
+        return false;
+    }
+
     if (xSemaphoreTake(audioSemaphore, 0) == pdTRUE)
     {
-        if(!bSDDected)
-        {
-            xSemaphoreGive(audioSemaphore);
-            return false;
-        }
-
         String strAudioWithType = filename;
         if(!strAudioWithType.startsWith("/"))
         {
@@ -88,21 +89,37 @@ bool play_file_from_sd(const char *filename, int volume)
             if (bDEBUG)
                 Serial.printf("[audio]...playing %s in background\n", strAudioWithType.c_str());
 
-            xTaskCreatePinnedToCore(
-                play_function,
-                "audio play task",
-                16 * 1024,
-                NULL,
-                50,
-                NULL,
-                1
-            );
+            if(xHandle != NULL)
+            {
+                if(bDEBUG)
+                    Serial.println("[audio]...resume play_function");
+
+                vTaskResume(xHandle);
+
+            }
+            else
+            {
+                xTaskCreatePinnedToCore(
+                    play_function,
+                    "audio play task",
+                    16 * 1024,
+                    NULL,
+                    50,
+                    &xHandle,
+                    1
+                );
+            }
+
+            xSemaphoreGive(audioSemaphore);
+
             return true;
         }
         else
         {
             Serial.printf("[audio]...file %s not found on SD\n", filename);
+
             xSemaphoreGive(audioSemaphore);
+            
             return false;
         }
     }
@@ -450,20 +467,33 @@ void play_cw_start()
  */
 void play_function(void *parameter)
 {
-    while (audio.isRunning()) {
-        if (meshcom_settings.node_mute) {
-            break;
-        }
-        audio.loop();
-        // Reduce delay to minimum to keep audio buffer full
-        // vTaskDelay(10) is too long and causes buffer underruns/stuttering
-        vTaskDelay(1); 
+    if(bDEBUG)
+    {
+        Serial.print("[audio]...play_function running on core ");
+        Serial.println(xPortGetCoreID());
+        Serial.println("");
     }
-    audio.stopSong();
+    
+    for( ;; )
+    {
+        /* Task code goes here. */
+        while (audio.isRunning())
+        {
+            if (meshcom_settings.node_mute)
+            {
+                break;
+            }
+            audio.loop();
+            // Reduce delay to minimum to keep audio buffer full
+            // vTaskDelay(10) is too long and causes buffer underruns/stuttering
+            vTaskDelay(1); 
+        }
 
-    xSemaphoreGive(audioSemaphore);
+        audio.stopSong();
 
-    vTaskDelete(NULL); // Use vTaskDelete instead of vTaskSuspend to properly clean up
+        vTaskSuspend(NULL);
+
+    }
 }
 
 /**

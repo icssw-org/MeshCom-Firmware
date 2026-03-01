@@ -1741,7 +1741,6 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #endif
 
     bSetDisplay=false;
-
 }
 
 void init_loop_function()
@@ -1783,6 +1782,7 @@ void initAnalogPin()
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
     //Serial.printf("bPosDisplay:%i bSetDisplay:%i pageHold:%i bDisplayTrack:%i rssi:%d snr:%d\n", bPosDisplay, bSetDisplay, pageHold, bDisplayTrack, rssi, snr);
+    //return; // test heap
 
     if(!bPosDisplay)
         return;
