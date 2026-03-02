@@ -2675,7 +2675,7 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
     entry->bubbles.push_back(bubble);
     msg_tabs_trim_history(entry->bubbles);
 
-    /* Persist messages 
+    /* Persist messages */
     if(!loading_messages_from_file)
     {
         if (bubble.type != MsgBubbleType::System)
@@ -2719,8 +2719,6 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
             }
         }
     }
-
-    */
 
     // Only switch to the new tab if it is NOT a System message,
     // or if we don't have any active tab yet.
@@ -3155,7 +3153,7 @@ static String unescape_json(const String &s)
 
 static void save_persisted_messages(void)
 {
-    #ifdef HEAP_TEST
+    #ifndef HEAP_TEST
 
     if (! meshcom_settings.node_persist_to_flash)
     {
@@ -3253,7 +3251,7 @@ static void save_persisted_messages(void)
 
 static void load_persisted_messages(void)
 {
-    #ifdef HEAP_TEST
+    #ifndef HEAP_TEST
 
     persisted_msgs.clear();
     loading_messages_from_file = true;

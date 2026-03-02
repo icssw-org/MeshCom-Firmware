@@ -16,6 +16,8 @@
 #include <t-deck-pro/tdeck_pro.h>
 #endif
 
+extern bool bDEBUG;
+
 unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 double mheardLat[MAX_MHEARD];
@@ -138,36 +140,46 @@ void decodeMHeard(unsigned char u_mh_buffer[sizeof(mheardBuffer[0])], struct mhe
     }
 }
 
-void saveMHeardPersistence() {
-
-    return; // test heap
-
+void saveMHeardPersistence()
+{
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    if(SD.exists("/mheard.dat")) SD.remove("/mheard.dat");
-    File file = SD.open("/mheard.dat", FILE_WRITE);
-    if(!file) return;
-    file.write((uint8_t*)mheardCalls, sizeof(mheardCalls));
-    file.write((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
-    file.write((uint8_t*)mheardLat, sizeof(mheardLat));
-    file.write((uint8_t*)mheardLon, sizeof(mheardLon));
-    file.write((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
-    file.close();
+        if (!meshcom_settings.node_persist_to_sd)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...MHEARD not persisting to SD");
+            return;
+        }
+
+        if(SD.exists("/mheard.dat")) SD.remove("/mheard.dat");
+        File file = SD.open("/mheard.dat", FILE_WRITE);
+        if(!file) return;
+        file.write((uint8_t*)mheardCalls, sizeof(mheardCalls));
+        file.write((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
+        file.write((uint8_t*)mheardLat, sizeof(mheardLat));
+        file.write((uint8_t*)mheardLon, sizeof(mheardLon));
+        file.write((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
+        file.close();
     #endif
 }
 
-void savePathPersistence() {
-
-    return; // test heap
-
+void savePathPersistence()
+{
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    if(SD.exists("/mhpath.dat")) SD.remove("/mhpath.dat");
-    File file = SD.open("/mhpath.dat", FILE_WRITE);
-    if(!file) return;
-    file.write((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
-    file.write((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
-    file.write((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
-    file.write((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
-    file.close();
+        if (!meshcom_settings.node_persist_to_sd)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...PATH not persisting to SD");
+            return;
+        }
+
+        if(SD.exists("/mhpath.dat")) SD.remove("/mhpath.dat");
+        File file = SD.open("/mhpath.dat", FILE_WRITE);
+        if(!file) return;
+        file.write((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
+        file.write((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
+        file.write((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
+        file.write((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
+        file.close();
     #endif
 }
 
@@ -269,19 +281,19 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
     showMHeardTDECK();
     
-    #ifdef HEAP_TEST
-    // Log MHeard to SD
-    String json = "{";
-    json += "\"call\":\"" + escape_json(mheardLine.mh_callsign) + "\",";
-    json += "\"date\":\"" + escape_json(mheardLine.mh_date) + "\",";
-    json += "\"time\":\"" + escape_json(mheardLine.mh_time) + "\",";
-    json += "\"hw\":" + String(mheardLine.mh_hw) + ",";
-    json += "\"mod\":" + String(mheardLine.mh_mod) + ",";
-    json += "\"rssi\":" + String(mheardLine.mh_rssi) + ",";
-    json += "\"snr\":" + String(mheardLine.mh_snr) + ",";
-    json += "\"dist\":" + String(mheardLine.mh_dist, 1);
-    json += "}";
-    log_json_to_sd("/mheard.json", json);
+    #ifdef HEAP_TEST    // log not used
+        // Log MHeard to SD
+        String json = "{";
+        json += "\"call\":\"" + escape_json(mheardLine.mh_callsign) + "\",";
+        json += "\"date\":\"" + escape_json(mheardLine.mh_date) + "\",";
+        json += "\"time\":\"" + escape_json(mheardLine.mh_time) + "\",";
+        json += "\"hw\":" + String(mheardLine.mh_hw) + ",";
+        json += "\"mod\":" + String(mheardLine.mh_mod) + ",";
+        json += "\"rssi\":" + String(mheardLine.mh_rssi) + ",";
+        json += "\"snr\":" + String(mheardLine.mh_snr) + ",";
+        json += "\"dist\":" + String(mheardLine.mh_dist, 1);
+        json += "}";
+        log_json_to_sd("/mheard.json", json);
     #endif
 
     #endif
@@ -295,8 +307,6 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
 void updateHeyPath(struct mheardLine &mheardLine)
 {
-    #ifdef HEAP_TEST
-
     String strYear = mheardLine.mh_date.substring(0, 4);
     if(strYear.toInt() < 2025)
         return;
@@ -407,8 +417,6 @@ void updateHeyPath(struct mheardLine &mheardLine)
     #endif
 
     savePathPersistence();
-
-    #endif
 }
 
 String getValue(String data, char separator, int index)
@@ -702,8 +710,6 @@ void showMHeardTDECK()
  */
 void showPathTDECK()
 {
-    #ifdef HEAP_TEST
-
     char buf[200];
 
     uint16_t row=0;
@@ -742,48 +748,51 @@ void showPathTDECK()
             row++;
         }
     }
-
-    #endif
 }
 #endif
 
-void loadMHeardPersistence() {
-
-    #ifdef HEAP_TEST
-
-
+void loadMHeardPersistence()
+{
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    if(!SD.exists("/mheard.dat")) return;
-    File file = SD.open("/mheard.dat", FILE_READ);
-    if(!file) return;
-    file.read((uint8_t*)mheardCalls, sizeof(mheardCalls));
-    file.read((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
-    file.read((uint8_t*)mheardLat, sizeof(mheardLat));
-    file.read((uint8_t*)mheardLon, sizeof(mheardLon));
-    file.read((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
-    file.close();
-    showMHeardTDECK();
-    #endif
+        if (!meshcom_settings.node_persist_to_sd)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...MHEARD not persisting from SD");
+            return;
+        }
 
+        if(!SD.exists("/mheard.dat")) return;
+        File file = SD.open("/mheard.dat", FILE_READ);
+        if(!file) return;
+        file.read((uint8_t*)mheardCalls, sizeof(mheardCalls));
+        file.read((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
+        file.read((uint8_t*)mheardLat, sizeof(mheardLat));
+        file.read((uint8_t*)mheardLon, sizeof(mheardLon));
+        file.read((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
+        file.close();
+        showMHeardTDECK();
     #endif
 }
 
-void loadPathPersistence() {
-
-    #ifdef HEAP_TEST
-
+void loadPathPersistence()
+{
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    if(!SD.exists("/mhpath.dat")) return;
-    File file = SD.open("/mhpath.dat", FILE_READ);
-    if(!file) return;
-    file.read((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
-    file.read((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
-    file.read((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
-    file.read((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
-    file.close();
-    showPathTDECK();
-    #endif
+        if (!meshcom_settings.node_persist_to_sd)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...PATH not persisting from SD");
+            return;
+        }
 
+        if(!SD.exists("/mhpath.dat")) return;
+        File file = SD.open("/mhpath.dat", FILE_READ);
+        if(!file) return;
+        file.read((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
+        file.read((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
+        file.read((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
+        file.read((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
+        file.close();
+        showPathTDECK();
     #endif
 }
 
