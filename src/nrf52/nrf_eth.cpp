@@ -270,7 +270,7 @@ int NrfETH::getUDP()
 
         // send JSON to Extern IP
         if(bEXTUDP)
-          sendExtern(true, (char*)"udp", RcvBuffer, (uint8_t)lora_tx_msg_len);
+          sendExtern(true, (char*)"udp", RcvBuffer, (uint8_t)lora_tx_msg_len, 0, 0);
 
         // printout message type
         uint8_t msg_type_b = RcvBuffer[0];
