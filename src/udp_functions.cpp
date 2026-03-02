@@ -179,6 +179,18 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
           bool bUDPtoLoraSend = true;
 
+          // Hop limit: treat UDP-to-LoRa relay same as LoRa mesh relay
+          if(aprsmsg.max_hop == 0)
+          {
+            if(bDisplayInfo)
+              Serial.printf("[UDP] DROP max_hop=0 msg_id=%08X src=%s\n", aprsmsg.msg_id, source_call);
+            bUDPtoLoraSend = false;
+          }
+          else
+          {
+            aprsmsg.max_hop--;
+          }
+
           if(msg_type_b == 0x21)
           {
             sendDisplayPosition(aprsmsg, 99, 0);
