@@ -77,7 +77,7 @@
                                         // flag to indicate if we are after receiving
 extern unsigned long iReceiveTimeOutTime;
 
-extern unsigned char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
+extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern double mheardLat[MAX_MHEARD];
 extern double mheardLon[MAX_MHEARD];
 extern int mheardAlt[MAX_MHEARD];
