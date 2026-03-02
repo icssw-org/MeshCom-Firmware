@@ -3573,7 +3573,7 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     char buf[30];
 
     if (bDEBUG)
-        Serial.printf("[POSVIEW]...add %s\n", callsign.c_str());
+        Serial.printf("[POSVIEW]...add %s act posrow:%i\n", callsign.c_str(), posrow);
 
     double dlat = u_dlat;
     if(lat_c == 'W')
@@ -3583,24 +3583,43 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     if(lon_c == 'S')
         dlon = u_dlon * -1.0;
 
-    // Tabelle push down
-    if(posrow < MAX_POSROW)
+    bool bnotfound=true;
+
+    snprintf(buf, 10, "%s", callsign.c_str());
+
+    for(int pos_check = 1; pos_check<posrow+2; pos_check++)
     {
-        posrow++;
-        // 2025-04-23, OE3GJC: not required, autoextends on write to row
-        // lv_table_set_row_cnt(position_ta, posrow);
+        if(strcmp(lv_table_get_cell_value(position_ta, pos_check, 0), buf) == 0)
+        {
+            bnotfound=false;
+
+            break;
+        }
     }
 
-    if(posrow > 2)
+    int pos_next_push = posrow-1;
+    
+    if(bnotfound)
+        pos_next_push = posrow;
+
+    if(bDEBUG)
+        Serial.printf("[POSVIEW]...pos_next_push:%i\n", pos_next_push);
+    
+    for(int pos_push = posrow-1; pos_push > 0; pos_push--)
     {
-        for(int pos_push = posrow - 2; pos_push >= 1; pos_push--)
+        if(strcmp(lv_table_get_cell_value(position_ta, pos_push, 0), buf) != 0)
         {
             if (bDEBUG)
-                Serial.printf("[POSVIEW]...moving row %i to %i (%s)\n", pos_push, pos_push + 1, lv_table_get_cell_value(position_ta, pos_push, 0));
+                Serial.printf("[POSVIEW]...moving row %i to %i (%s)\n", pos_push, pos_next_push, lv_table_get_cell_value(position_ta, pos_push, 0));
 
-            lv_table_set_cell_value(position_ta, pos_push + 1, 0, lv_table_get_cell_value(position_ta, pos_push, 0));
-            lv_table_set_cell_value(position_ta, pos_push + 1, 1, lv_table_get_cell_value(position_ta, pos_push, 1));
-            lv_table_set_cell_value(position_ta, pos_push + 1, 2, lv_table_get_cell_value(position_ta, pos_push, 2));
+            if(pos_push != pos_next_push)
+            {
+                lv_table_set_cell_value(position_ta, pos_next_push, 0, lv_table_get_cell_value(position_ta, pos_push, 0));
+                lv_table_set_cell_value(position_ta, pos_next_push, 1, lv_table_get_cell_value(position_ta, pos_push, 1));
+                lv_table_set_cell_value(position_ta, pos_next_push, 2, lv_table_get_cell_value(position_ta, pos_push, 2));
+            }
+
+            pos_next_push--;
         }
     }
 
@@ -3612,6 +3631,9 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
 
     snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", dlat, lat_c, dlon, lon_c, alt);
     lv_table_set_cell_value(position_ta, 1, 2, buf);
+
+    if(bnotfound && posrow < MAX_POSROW)
+        posrow++;
 
     #ifdef HEAP_TEST
     // Log position to SD
