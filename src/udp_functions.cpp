@@ -310,42 +310,46 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             }
           }
 
-          // first byte is always the len of the msg
-          // UDP messages send to LoRa TX
-          // resend only Packet to all
-          if(bUDPtoLoraSend)
+          if(!checkOwnTx(aprsmsg.msg_id))
           {
-            // store last message to compare later on
-            insertOwnTx(aprsmsg.msg_id);
-
-            ringBuffer[iWrite][0] = size;
-            if (msg_type_b == 0x3A) // only Messages
+            if(bUDPtoLoraSend)
             {
-              if(aprsmsg.msg_payload.startsWith("{") > 0)
-                  ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+              // first byte is always the len of the msg
+              // UDP messages send to LoRa TX
+              // resend only Packet to all
+              
+              // store last message to compare later on
+              insertOwnTx(aprsmsg.msg_id);
+
+              ringBuffer[iWrite][0] = size;
+              if (msg_type_b == 0x3A) // only Messages
+              {
+                if(aprsmsg.msg_payload.startsWith("{") > 0)
+                    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+                else
+                    ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+              }
               else
-                  ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
-            }
-            else
-              ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-            memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
+                ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+              memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
 
-            retryCount[iWrite] = 0;
-            addRingPointer(iWrite, iRead, MAX_RING, "tx");
+              retryCount[iWrite] = 0;
+              addRingPointer(iWrite, iRead, MAX_RING, "tx");
 
-            /*
-            iWrite++;
-            if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-              iWrite = 0;
-            */
+              /*
+              iWrite++;
+              if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
+                iWrite = 0;
+              */
 
-            addLoraRxBuffer(aprsmsg.msg_id, true);
+              addLoraRxBuffer(aprsmsg.msg_id, true);
 
-            // add rcvMsg to BLE out Buff
-            // size message is int -> uint16_t buffer size
-            if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
-            {
-                addBLEOutBuffer(convBuffer, size);
+              // add rcvMsg to BLE out Buff
+              // size message is int -> uint16_t buffer size
+              if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
+              {
+                  addBLEOutBuffer(convBuffer, size);
+              }
             }
           }
         }

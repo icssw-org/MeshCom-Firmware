@@ -50,4 +50,6 @@ bool tdeck_tab_menu_is_visible();
 
 void tdeck_show_pos_tab();
 
+void loadPosPersistence();
+
 #endif // _LV_OBJ_FUNCTIONS_H_
