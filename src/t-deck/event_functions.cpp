@@ -433,6 +433,8 @@ void btn_event_handler_setup_btn(lv_event_t * e)
         meshcom_settings.node_persist_to_sd = lv_obj_has_state(btn_persist_to_SD, LV_STATE_CHECKED);
         save_settings();
 
+        loadPosPersistence();
+        
         return;
     }
     else if (lv_event_get_target(e) == btn_persist_immediate)

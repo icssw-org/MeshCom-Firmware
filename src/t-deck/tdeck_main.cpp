@@ -182,6 +182,8 @@ void initTDeck()
 
     posrow = 1;
 
+    loadPosPersistence();
+
     lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
 
     char buf[40];

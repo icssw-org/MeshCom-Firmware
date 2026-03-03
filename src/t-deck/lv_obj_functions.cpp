@@ -3561,6 +3561,101 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
     #endif
 }
 
+void savePosPersistence()
+{
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        if (!meshcom_settings.node_persist_to_sd)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...POS not persisting to SD");
+            return;
+        }
+
+        if(SD.exists("/pos.dat")) SD.remove("/pos.dat");
+        File file = SD.open("/pos.dat", FILE_WRITE);
+        if(!file) return;
+
+        unsigned char pos[30] = {0};
+        char u_pos[30]={0};
+
+        for(int pos_check = 1; pos_check<posrow+1; pos_check++)
+        {
+            sprintf(u_pos, "%-10.10s", lv_table_get_cell_value(position_ta, pos_check, 0));
+            memcpy(pos, u_pos, 10);
+            file.write(pos, 10);
+
+            sprintf(u_pos, "%-6.6s", lv_table_get_cell_value(position_ta, pos_check, 1));
+            memcpy(pos, u_pos, 6);
+            file.write(pos, 6);
+
+            sprintf(u_pos, "%-24.24s", lv_table_get_cell_value(position_ta, pos_check, 2));
+            memcpy(pos, u_pos, 24);
+            file.write(pos, 24);
+        }
+
+        file.close();
+
+    #endif
+}
+
+void loadPosPersistence()
+{
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        if (!meshcom_settings.node_persist_to_sd)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...POS not persisting from SD");
+            return;
+        }
+
+        File file = SD.open("/pos.dat", FILE_READ);
+        if(!file) return;
+
+        unsigned char pos[30] = {0};
+        char u_pos[30]={0};
+
+        posrow=0;
+
+        while(1)
+        {
+           if(file.read(pos, 10) != 10)
+                break;
+
+            pos[10]=0x00;
+            sprintf(u_pos, "%s", pos);
+            String s_pos = u_pos;
+            s_pos.trim();
+
+            if(s_pos.isEmpty())
+                break;
+
+            posrow++;
+
+            lv_table_set_cell_value(position_ta, posrow, 0, s_pos.c_str());
+
+            if(file.read(pos, 6) != 6)
+                break;
+
+            pos[6]=0x00;
+            sprintf(u_pos, "%s", pos);
+            s_pos = u_pos;
+            s_pos.trim();
+            lv_table_set_cell_value(position_ta, posrow, 1, s_pos.c_str());
+
+            if(file.read(pos, 24) != 24)
+                break;
+
+            pos[24]=0x00;
+            sprintf(u_pos, "%s", pos);
+            s_pos = u_pos;
+            s_pos.trim();
+            lv_table_set_cell_value(position_ta, posrow, 2, s_pos.c_str());
+        }
+
+        file.close();
+
+    #endif
+}
 /**
  * adds a position to the POS view
  */
@@ -3569,6 +3664,7 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     #ifndef T_DECK_POS
 
     char buf[30];
+
 
     if (bDEBUG)
         Serial.printf("[POSVIEW]...add %s act posrow:%i\n", callsign.c_str(), posrow);
@@ -3585,7 +3681,7 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
 
     snprintf(buf, 10, "%s", callsign.c_str());
 
-    for(int pos_check = 1; pos_check<posrow+2; pos_check++)
+    for(int pos_check = 1; pos_check<posrow+1; pos_check++)
     {
         if(strcmp(lv_table_get_cell_value(position_ta, pos_check, 0), buf) == 0)
         {
@@ -3633,18 +3729,7 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     if(bnotfound && posrow < MAX_POSROW)
         posrow++;
 
-    #ifdef HEAP_TEST
-    // Log position to SD
-    String json = "{";
-    json += "\"call\":\"" + escape_json(callsign) + "\",";
-    json += "\"time\":\"" + escape_json(String(meshcom_settings.node_date_hour) + ":" + String(meshcom_settings.node_date_minute)) + "\",";
-    json += "\"lat\":" + String(dlat, 6) + ",";
-    json += "\"lon\":" + String(dlon, 6) + ",";
-    json += "\"alt\":" + String(alt);
-    json += "}";
-    log_json_to_sd("/positions.json", json);
-
-    #endif
+    savePosPersistence();
 
     #endif
 }
