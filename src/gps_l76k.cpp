@@ -145,16 +145,28 @@ void stopL76KGPS()
 
 unsigned int loopL76KGPS()
 {
-    if (gpsInitTaskHandle != NULL) return POSINFO_INTERVAL;
-
     if(bGPSDEBUG)
         Serial.println("[L76K]...loopL76KGPS start");
 
+    if (gpsInitTaskHandle != NULL) return POSINFO_INTERVAL;
+
+    if(bGPSDEBUG)
+        Serial.println("[L76K]...loopL76KGPS gpsInitTaskHandle NULL");
+
     bool bGPSAVAIL=false;
+    bool bNMEA_OK=false;
+
+    char c_last = 0x00;
 
     while (SerialGPS.available())
     {
         char c = SerialGPS.read();
+
+        if(c_last == '$' and c == 'G')
+            bNMEA_OK = true;
+        
+        c_last = c;
+
         
         if(bGPSDEBUG && bDisplayCont)
         {
@@ -172,8 +184,20 @@ unsigned int loopL76KGPS()
     if(bGPSDEBUG && bDisplayCont && bGPSAVAIL)
         Serial.println("");
 
-    return displayInfo();
+    if(bGPSDEBUG && bDisplayCont && bGPSAVAIL)
+    {
+        Serial.printf("[NMEA] OK:%i\n", bNMEA_OK);
+    }
 
+    if(bNMEA_OK)
+        return displayInfo();
+
+    // falsche zeichen im NMEA
+    stopL76KGPS();
+
+    beginGPS();
+
+    return 0;
  }
  
  

@@ -152,6 +152,11 @@ unsigned long posfixinterall = 0;
 unsigned long currentWiFiMillis = 0;
 unsigned long previousWiFiMillis = 0;
 
+// Timer variables for persitence to SD
+unsigned long lastsavePOSPersistence = 0;
+unsigned long lastsaveMHEARDPersistence = 0;
+unsigned long lastsavePATHPersistence = 0;
+
 char cTimeSource[10];
 
 char cBLEName[60]={0};

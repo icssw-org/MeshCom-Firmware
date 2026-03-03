@@ -1,5 +1,6 @@
 #include <aprs_functions.h>
 #include <loop_functions.h>
+#include <loop_functions_extern.h>
 #include <debugconf.h>
 #include <ArduinoJson.h>
 #include <time_functions.h>
@@ -150,6 +151,15 @@ void saveMHeardPersistence()
             return;
         }
 
+        // check to save to SD only every 30 sec
+        if(lastsaveMHEARDPersistence + 30000 > millis())
+            return;
+
+        lastsaveMHEARDPersistence = millis();
+
+        if(bDisplayCont)
+            Serial.println("[TDECK]...MHEARD persisting to SD");
+
         if(SD.exists("/mheard.dat")) SD.remove("/mheard.dat");
         File file = SD.open("/mheard.dat", FILE_WRITE);
         if(!file) return;
@@ -171,6 +181,15 @@ void savePathPersistence()
                 Serial.println("[TDECK]...PATH not persisting to SD");
             return;
         }
+
+        // check to save to SD only every 30 sec
+        if(lastsavePATHPersistence + 30000 > millis())
+            return;
+
+        lastsavePATHPersistence = millis();
+        
+        if(bDisplayCont)
+            Serial.println("[TDECK]...PATH persisting to SD");
 
         if(SD.exists("/mhpath.dat")) SD.remove("/mhpath.dat");
         File file = SD.open("/mhpath.dat", FILE_WRITE);
