@@ -3571,6 +3571,15 @@ void savePosPersistence()
             return;
         }
 
+        // check to save to SD only every 30 sec
+        if(lastsavePOSPersistence + 30000 > millis())
+            return;
+
+        lastsavePOSPersistence = millis();
+
+        if(bDisplayCont)
+            Serial.println("[TDECK]...POS persisting to SD");
+
         if(SD.exists("/pos.dat")) SD.remove("/pos.dat");
         File file = SD.open("/pos.dat", FILE_WRITE);
         if(!file) return;

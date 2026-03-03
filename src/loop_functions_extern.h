@@ -203,6 +203,11 @@ extern unsigned long posfixinterall;
 extern unsigned long currentWiFiMillis;
 extern unsigned long previousWiFiMillis;
 
+// Timer variables for persitence to SD
+extern unsigned long lastsavePOSPersistence;
+extern unsigned long lastsaveMHEARDPersistence;
+extern unsigned long lastsavePATHPersistence;
+
 extern double posinfo_distance;
 extern double posinfo_direction;
 extern double posinfo_lat;
