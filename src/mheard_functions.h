@@ -27,5 +27,6 @@ unsigned long getLatestMHeardTimestamp();
 
 String getHardwareLong(uint8_t hwid);
 char* getPayloadType(char ptype);
+int getMheardCount();
 
 #endif

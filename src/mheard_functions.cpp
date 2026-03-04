@@ -438,6 +438,24 @@ void updateHeyPath(struct mheardLine &mheardLine)
     savePathPersistence();
 }
 
+int getMheardCount()
+{
+    int imhcount=0;
+
+    for(int iset=0; iset<MAX_MHEARD; iset++)
+    {
+        if(mheardCalls[iset][0] != 0x00)
+        {
+            if((mheardEpoch[iset]+60*60*12) > getUnixClock())
+            {
+                imhcount++;
+            }
+        }
+    }
+
+    return imhcount;
+}
+
 String getValue(String data, char separator, int index)
 {
     int found = 0;

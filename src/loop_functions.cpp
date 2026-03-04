@@ -5,6 +5,7 @@
 #endif
 
 #include "loop_functions.h"
+#include "mheard_functions.h"
 #include "command_functions.h"
 
 #include "clock.h"
@@ -3062,7 +3063,7 @@ void sendHey()
     else
         aprsmsg.msg_destination_path = "H";
 
-    aprsmsg.msg_payload = "R";
+    aprsmsg.msg_payload = "R" + String(getMheardCount()) + ";";
    
     meshcom_settings.node_msgid++;
     if(meshcom_settings.node_msgid > 999)
