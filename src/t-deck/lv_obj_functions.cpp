@@ -35,7 +35,10 @@
 extern TFT_eSPI tft;
 
 #include <esp32/esp32_flash.h>
+
+#ifdef T_DECK_SPIFFS
 #include <SPIFFS.h>
+#endif
 
 #if defined(ENABLE_AUDIO)
 #include <esp32/esp32_audio.h>
@@ -175,7 +178,9 @@ static const size_t MSG_TAB_MAX_MESSAGES = 50;
 static std::vector<std::pair<String, MsgBubble>> persisted_msgs;
 static bool loading_messages_from_file = false;
 static const size_t PERSISTED_MSG_LIMIT = 1000;
+#ifdef T_DECK_SPIFFS
 static const char *PERSISTED_MSG_FILE = "/messages.json";
+#endif
 static int unsaved_msgs_count = 0;
 static const int FLUSH_THRESHOLD = 10;
 static unsigned long last_flush_millis = 0;
@@ -188,7 +193,10 @@ static void msg_flush_timer_cb(lv_timer_t *t);
 static lv_timer_t *msg_flush_timer = NULL;
 static lv_timer_t *track_clear_timer = NULL;
 
+#ifdef T_DECK_SPIFFS
 static String unescape_json(const String &s);
+#endif
+
 static void save_persisted_messages(void);
 static void load_persisted_messages(void);
 
@@ -262,7 +270,7 @@ static void update_tab_button_state(bool show)
     if(tab_menu_icon_label != NULL)
     {
         lv_color_t color = show ? lv_palette_main(LV_PALETTE_RED)
-                                : lv_palette_main(LV_PALETTE_LIGHT_GREEN);
+                                : lv_palette_main(LV_PALETTE_LIME); //ex LV_PALETTE_LIGHT_GREEN
         lv_obj_set_style_text_color(tab_menu_icon_label, color, LV_PART_MAIN);
     }
 }
@@ -324,7 +332,7 @@ static void tab_standby_button_event_cb(lv_event_t * e)
 
     if (meshcom_settings.node_backlightlock)
     {
-        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
     }
     else
     {
@@ -343,7 +351,7 @@ static void tab_kbl_button_event_cb(lv_event_t * e)
         if (kbd_light_on)
         {
             setKeyboardBacklight(255);
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
         }
         else
         {
@@ -441,7 +449,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_menu_header = lv_obj_create(parent);
     lv_obj_set_size(tab_menu_header, screen_w, header_height);
-    lv_obj_set_style_bg_color(tab_menu_header, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(tab_menu_header, lv_palette_main(LV_PALETTE_BLUE_GREY), LV_PART_MAIN); //ex LV_PALETTE_BLUE
     lv_obj_set_style_bg_opa(tab_menu_header, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(tab_menu_header, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_menu_header, 0, LV_PART_MAIN);
@@ -452,7 +460,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_size(tab_menu_button, 40, header_height - 4);
     lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 8, 0);
     lv_obj_add_event_cb(tab_menu_button, tab_menu_button_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_color_t header_blue = lv_palette_main(LV_PALETTE_BLUE);
+    lv_color_t header_blue = lv_palette_main(LV_PALETTE_BLUE_GREY); //ex LV_PALETTE_BLUE
     lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN);
     lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_width(tab_menu_button, 0, LV_PART_MAIN);
@@ -494,13 +502,13 @@ void setDisplayLayout(lv_obj_t *parent)
     header_time_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_time_label, "--:--");
     lv_label_set_long_mode(header_time_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_time_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(header_time_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align(header_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     header_batt_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_label, "0%");
     lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_batt_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(header_batt_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -22, 0);
 
     header_batt_icon = lv_label_create(tab_menu_header);
@@ -510,7 +518,7 @@ void setDisplayLayout(lv_obj_t *parent)
     header_sat_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_sat_label, "0");
     lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_sat_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(header_sat_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align_to(header_sat_label, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     header_sat_icon = lv_label_create(tab_menu_header);
@@ -1945,7 +1953,7 @@ void tft_on()
             // Update button state visual
             if (tab_kbl_icon_label)
             {
-                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN); //ex LV_PALETTE_YELLOW
             }
         }
     }
@@ -2114,14 +2122,14 @@ static void update_header_wifi_indicator(void)
     // Only if global switch is ON (which we checked above, but double check logic)
     if (bWIFIAP || bWEBSERVER || (strlen(meshcom_settings.node_ssid) > 1))
     {
-        lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
+        lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex lv_palette_main(LV_PALETTE_RED)
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
         lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
     else
     {
         // Not enabled/configured -> White
-        lv_obj_set_style_text_color(header_wifi_icon, lv_color_white(), LV_PART_MAIN);
+        lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
         lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
@@ -2132,9 +2140,10 @@ static void update_header_bt_indicator(void)
     if(header_bt_icon == NULL)
         return;
     // Always render the icon glyph in white
-    lv_obj_set_style_text_color(header_bt_icon, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(header_bt_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
     lv_label_set_text(header_bt_icon, LV_SYMBOL_BLUETOOTH);
 
+    /* KBC
     // Ensure a square touch/visual area for the icon
     lv_obj_set_size(header_bt_icon, 22, 22);
     lv_obj_set_style_text_align(header_bt_icon, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -2144,20 +2153,21 @@ static void update_header_bt_indicator(void)
     lv_obj_set_style_border_width(header_bt_icon, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(header_bt_icon, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_radius(header_bt_icon, 12, LV_PART_MAIN);
+    */
 
     // deviceConnected is set by NimBLE callbacks
     if (deviceConnected)
     {
         // Connected: blue logo
-        lv_obj_set_style_text_color(header_bt_icon, lv_color_make(0x00, 0x00, 0xff), LV_PART_MAIN);
+        lv_obj_set_style_text_color(header_bt_icon, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_make(0x00, 0x00, 0xff)
     }
     else
     {
         // BLE advertising active: white glyph with white ring
         if (strlen(cBLEName) > 1)
         {
-            lv_obj_set_style_border_width(header_bt_icon, 2, LV_PART_MAIN);
-            lv_obj_set_style_border_color(header_bt_icon, lv_color_white(), LV_PART_MAIN);
+            //ex lv_obj_set_style_border_width(header_bt_icon, 2, LV_PART_MAIN);
+            lv_obj_set_style_border_color(header_bt_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
         }
         else
         {
@@ -2183,7 +2193,7 @@ void tdeck_update_header_standby(void)
 
     if (meshcom_settings.node_backlightlock)
     {
-        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex LV_PALETTE_YELLOW
     }
     else
     {
@@ -2224,7 +2234,7 @@ static void apply_tab_bar_styles(void)
 
     lv_obj_set_style_bg_color(tab_bar, lv_color_black(), LV_PART_ITEMS | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(tab_bar, LV_OPA_80, LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(tab_bar, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(tab_bar, lv_palette_darken(LV_PALETTE_BLUE_GREY, 2), LV_PART_ITEMS);   //ex LV_PALETTE_BLUE
     lv_obj_set_style_bg_opa(tab_bar, LV_OPA_60, LV_PART_ITEMS);
 
     lv_obj_set_style_border_width(tab_bar, 0, LV_PART_ITEMS);
@@ -3126,9 +3136,12 @@ static void msg_tabs_clear_all(void)
 
 // -- Persistence implementation -------------------------------------------------
 
+#ifdef T_DECK_SPIFFS
+
 static String unescape_json(const String &s)
 {
     String out;
+
     out.reserve(s.length());
     for(size_t i = 0; i < s.length(); ++i)
     {
@@ -3148,12 +3161,15 @@ static String unescape_json(const String &s)
             out += c;
         }
     }
+
+
     return out;
 }
+#endif
 
 static void save_persisted_messages(void)
 {
-    #ifndef HEAP_TEST
+    #ifdef T_DECK_SPIFFS
 
     if (! meshcom_settings.node_persist_to_flash)
     {
@@ -3251,7 +3267,8 @@ static void save_persisted_messages(void)
 
 static void load_persisted_messages(void)
 {
-    #ifndef HEAP_TEST
+    #ifdef T_DECK_SPIFFS
+
 
     persisted_msgs.clear();
     loading_messages_from_file = true;
@@ -3411,8 +3428,8 @@ static bool compute_maidenhead_locator(double lat, double lon, char *buffer, siz
     remainder_lon -= subsquare_lon * subsquare_lon_span;
     remainder_lat -= subsquare_lat * subsquare_lat_span;
 
-    const double extended_lon_span = subsquare_lon_span / 24.0;
-    const double extended_lat_span = subsquare_lat_span / 24.0;
+    const double extended_lon_span = subsquare_lon_span / 10.0;
+    const double extended_lat_span = subsquare_lat_span / 9.0;
 
     int extended_lon = (int)floor(remainder_lon / extended_lon_span);
     int extended_lat = (int)floor(remainder_lat / extended_lat_span);
@@ -3423,8 +3440,8 @@ static bool compute_maidenhead_locator(double lat, double lon, char *buffer, siz
     buffer[3] = '0' + clamp_int(square_lat, 0, 9);
     buffer[4] = 'A' + clamp_int(subsquare_lon, 0, 23);
     buffer[5] = 'A' + clamp_int(subsquare_lat, 0, 23);
-    buffer[6] = 'A' + clamp_int(extended_lon, 0, 23);
-    buffer[7] = 'A' + clamp_int(extended_lat, 0, 23);
+    buffer[6] = '0' + clamp_int(extended_lon, 0, 9);
+    buffer[7] = '0' + clamp_int(extended_lat, 0, 9);
     buffer[8] = '\0';
 
     return true;
