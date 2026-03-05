@@ -115,6 +115,7 @@ void gpsInitTask(void *parameter) {
             if (result)
             {
                 meshcom_settings.node_gpsbaud = 38400;
+                save_settings();
                 break;
             }
         }
@@ -131,6 +132,7 @@ void gpsInitTask(void *parameter) {
             if (result)
             {
                 meshcom_settings.node_gpsbaud = 115200;
+                save_settings();
                 break;
             }
         }
@@ -147,6 +149,7 @@ void gpsInitTask(void *parameter) {
             if (result)
             {
                 meshcom_settings.node_gpsbaud = 9600;
+                save_settings();
                 break;
             }
         }
