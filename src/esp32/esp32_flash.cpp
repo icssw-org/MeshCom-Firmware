@@ -236,6 +236,8 @@ void init_flash(void)
     strVar = preferences.getString("node_fwversion");
     snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%s", strVar.c_str());
 
+    meshcom_settings.node_gpsbaud = preferences.getUInt("node_gpsbaud", 38400);
+
     preferences.end();
 }
 
@@ -480,6 +482,8 @@ void save_settings(void)
 
     strVar = meshcom_settings.node_fwversion;
     preferences.putString("node_fwversion", strVar); 
+
+	preferences.putULong("node_gpsbaud", meshcom_settings.node_gpsbaud);
 
     //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
 

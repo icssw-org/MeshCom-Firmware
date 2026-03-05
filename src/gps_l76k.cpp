@@ -88,14 +88,20 @@ static TaskHandle_t gpsInitTaskHandle = NULL;
 void gpsInitTask(void *parameter) {
     bool result = false;
 
-    if(bGPSDEBUG)
-        Serial.println("[L76K]...check 9600baud");
-
-    SerialGPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-    for ( int i = 0; i < 3; ++i)
+    if(meshcom_settings.node_gpsbaud > 0 && meshcom_settings.node_gpsbaud < 150000)
     {
-        result = l76kProbe();
-        if (result) break;
+        if(bGPSDEBUG)
+            Serial.printf("[L76K]...check %lubaud\n", meshcom_settings.node_gpsbaud);
+
+        SerialGPS.begin(meshcom_settings.node_gpsbaud, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        for ( int i = 0; i < 3; ++i)
+        {
+            result = l76kProbe();
+            if (result)
+            {
+                break;
+            }
+        }
     }
 
     if (!result) {
@@ -106,7 +112,11 @@ void gpsInitTask(void *parameter) {
         for ( int i = 0; i < 3; ++i)
         {
             result = l76kProbe();
-            if (result) break;
+            if (result)
+            {
+                meshcom_settings.node_gpsbaud = 38400;
+                break;
+            }
         }
     }
 
@@ -118,10 +128,30 @@ void gpsInitTask(void *parameter) {
         for ( int i = 0; i < 3; ++i)
         {
             result = l76kProbe();
-            if (result) break;
+            if (result)
+            {
+                meshcom_settings.node_gpsbaud = 115200;
+                break;
+            }
         }
     }
     
+    if(!result) {
+        if(bGPSDEBUG)
+            Serial.println("[L76K]...check 9600baud");
+
+        SerialGPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        for ( int i = 0; i < 3; ++i)
+        {
+            result = l76kProbe();
+            if (result)
+            {
+                meshcom_settings.node_gpsbaud = 9600;
+                break;
+            }
+        }
+    }
+
     gpsInitTaskHandle = NULL;
     vTaskDelete(NULL);
 }

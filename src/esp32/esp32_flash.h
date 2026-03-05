@@ -161,6 +161,8 @@ struct s_meshcom_settings
 	int node_mversion = 0;
 	char node_fwversion[8] = {0};
 
+	unsigned long node_gpsbaud = 38400;
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
