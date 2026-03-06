@@ -231,7 +231,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
                 if(strlen(mheardCalls[iset]) > (size_t)ivgll)
                     ivgll=strlen(mheardCalls[iset]);
 
-                if(memcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str(), ivgll) == 0)
+                if(strcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str()) == 0)
                 {
                     ipos=iset;
                 }
@@ -350,7 +350,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
             if(strlen(mheardCalls[imh]) > (size_t)ivgll)
                 ivgll=strlen(mheardCalls[imh]);
 
-            if(memcmp(mheardCalls[imh], mheardLine.mh_sourcecallsign.c_str(), ivgll) == 0)
+            if(strcmp(mheardCalls[imh], mheardLine.mh_sourcecallsign.c_str()) == 0)
             {
                 if(bDisplayCont)
                 {
@@ -363,14 +363,26 @@ void updateHeyPath(struct mheardLine &mheardLine)
 
                 //NeighborCount einfügen
                 // check old format
+                int icolon=mheardLine.mh_path_payload.indexOf(",");
                 int ipos=mheardLine.mh_path_payload.indexOf(";");
                 
                 if(bDisplayCont)
                 {
+                    Serial.print(icolon);
+                    Serial.print("/");
                     Serial.print(ipos);
+                    Serial.print("/");
                 }
 
                 if(ipos <= 0)
+                {
+                    if(bDisplayCont)
+                        Serial.println("");
+
+                    return;
+                }
+
+                if(icolon > 0 && icolon < ipos)
                 {
                     if(bDisplayCont)
                         Serial.println("");
@@ -393,7 +405,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
                 char cBuffer[60];
                 snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
                 mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
-                memcpy(mheardBuffer[ipos], cBuffer, sizeof(cBuffer));
+                memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
 
                 return; // call heard direct
             }
@@ -417,7 +429,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
                 if(strlen(mheardPathCalls[iset]) > (size_t)ivgll)
                     ivgll=strlen(mheardPathCalls[iset]);
 
-                if(memcmp(mheardPathCalls[iset], mheardLine.mh_sourcecallsign.c_str(), ivgll) == 0)
+                if(strcmp(mheardPathCalls[iset], mheardLine.mh_sourcecallsign.c_str()) == 0)
                 {
                     ipos=iset;
                 }

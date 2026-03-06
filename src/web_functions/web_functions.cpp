@@ -890,8 +890,8 @@ void sub_page_mheard()
             web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span>%4idBm</span></div>", mheardLine.mh_rssi);
             web_client.printf("<div><span class=\"font-bold\">SNR:</span><br><span>%4idB</span></div>", mheardLine.mh_snr);
             web_client.printf("<div><span class=\"font-bold\">Dist:</span><br><span>%5.1lf</span></div>", mheardLine.mh_dist);
-            web_client.printf("<div><span class=\"font-bold\">NCnt:</span><br><span>%2i</span></div>", mheardLine.mh_ncount);
-            
+            web_client.printf("<div><span class=\"font-bold\">NCnt:</span><br><span>%2i</span></div>", mheardLine.mh_ncount);            
+
             dlat = mheardLat[iset];
             clat = 'N';
             if(dlat < 0)
