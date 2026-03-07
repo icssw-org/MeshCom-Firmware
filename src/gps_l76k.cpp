@@ -11,11 +11,9 @@
 
 #include <gps_l76k.h>
 
-//#ifndef SerialGPS
-//    #define SerialGPS Serial1
-//#endif
-
-HardwareSerial SerialGPS(1);
+#ifndef SerialGPS
+    #define SerialGPS Serial1
+#endif
 
 #include <TinyGPSPlus.h>
 
@@ -33,14 +31,15 @@ bool l76kProbe()
     Serial.print("[GPSL]...Try to init L76K . Wait stop .");
     // SerialGPS.flush();
 
+    strNMEA.clear();
+
     while (SerialGPS.available() > 0)
     {
-        int c = SerialGPS.read();
+        char c = SerialGPS.read();
         
         if(bGPSDEBUG && bDisplayCont)
         {
-            Serial.write(c);
-            Serial.flush();
+            strNMEA.concat(c);
         }
 
         SerialGPS.flush();
@@ -52,6 +51,10 @@ bool l76kProbe()
         }
     };
     Serial.println();
+    
+    if(bGPSDEBUG && bDisplayCont)
+        Serial.println(strNMEA);
+
     SerialGPS.flush();
     delay(200);
 
@@ -187,14 +190,12 @@ unsigned int loopL76KGPS()
 
     if (gpsInitTaskHandle != NULL) return POSINFO_INTERVAL;
 
-    if(bGPSDEBUG)
-        Serial.println("[L76K]...loopL76KGPS gpsInitTaskHandle NULL");
-
-    bool bGPSAVAIL=false;
     bool bNMEA_OK=false;
     int iNMEA_Count = 0;
 
     char c_last = 0x00;
+
+    strNMEA.clear();
 
     while (SerialGPS.available() > 0)
     {
@@ -207,26 +208,12 @@ unsigned int loopL76KGPS()
         
         c_last = c;
 
-        
         if(bGPSDEBUG && bDisplayCont)
-        {
-            if(bGPSDEBUG)
-                Serial.print(c);
-
-            bGPSAVAIL=true;
-        }
+            strNMEA.concat(c);
 
         if (tinyGPSPlus.encode(c))
         {
         }
-    }
-
-    if(bGPSDEBUG && bDisplayCont && bGPSAVAIL)
-        Serial.println("");
-
-    if(bGPSDEBUG && bDisplayCont && bGPSAVAIL)
-    {
-        Serial.printf("[NMEA] OK:%i\n", bNMEA_OK);
     }
 
     if(bNMEA_OK)
@@ -246,8 +233,16 @@ unsigned int loopL76KGPS()
  
 unsigned int displayInfo()
  {
-    if(bGPSDEBUG) 
+    if(bGPSDEBUG)
+    {
         Serial.print(F("[L76K]...Location: "));
+        
+        if(bDisplayCont)
+        {
+            Serial.println("");
+            Serial.println(strNMEA);
+        }
+    }
 
     if (tinyGPSPlus.location.isValid())
     {
@@ -271,7 +266,7 @@ unsigned int displayInfo()
             else
             {
                 if(bGPSDEBUG)
-                    Serial.println(F("INVALID"));
+                    Serial.println(F("[L76K]...INVALID"));
             }
         }
 
@@ -359,7 +354,7 @@ unsigned int displayInfo()
 
                 if(bGPSDEBUG)
                 {
-                    Serial.println(F("VALID"));
+                    Serial.println(F("[L76K]...VALID"));
                 }
 
                 return setSMartBeaconing(dlat, dlon);

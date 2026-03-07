@@ -428,52 +428,52 @@ int NrfETH::getUDP()
               }
             }
 
+            int icheck = checkOwnTx(aprsmsg.msg_id);
 
-          int icheck = checkOwnTx(aprsmsg.msg_id);
-
-          if(bDisplayInfo)
-            Serial.printf("OWN-TX-CHECK-UDP msg_id:%08X check:%i\n", aprsmsg.msg_id, icheck);
-          
-          if(icheck < 0)
-          {
-            // resend only Packet
-            if(bUDPtoLoraSend)
+            if(bDisplayInfo)
+              Serial.printf("OWN-TX-CHECK-UDP msg_id:%08X check:%i\n", aprsmsg.msg_id, icheck);
+            
+            if(icheck < 0)
             {
-              // store last message to compare later on
-              insertOwnTx(aprsmsg.msg_id);
-
-              ringBuffer[iWrite][0] = size;
-              if (msg_type_b == 0x3A) // only Messages
+              // resend only Packet
+              if(bUDPtoLoraSend)
               {
-                if(aprsmsg.msg_payload.startsWith("{") > 0)
-                    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+                // store last message to compare later on
+                insertOwnTx(aprsmsg.msg_id);
+
+                ringBuffer[iWrite][0] = size;
+                if (msg_type_b == 0x3A) // only Messages
+                {
+                  if(aprsmsg.msg_payload.startsWith("{") > 0)
+                      ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+                  else
+                      ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+                }
                 else
-                    ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
-              }
-              else
-                ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-              memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
-              iWrite++;
-              if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-                iWrite = 0;
+                  ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+                memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
+                iWrite++;
+                if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
+                  iWrite = 0;
 
-              if(bDEBUG)
-              {
-                Serial.printf("RX-UDP addLoraRxBuffer\n");
-              }
+                if(bDEBUG)
+                {
+                  Serial.printf("RX-UDP addLoraRxBuffer\n");
+                }
 
-              addLoraRxBuffer(aprsmsg.msg_id, true);
+                addLoraRxBuffer(aprsmsg.msg_id, true);
 
-              // add rcvMsg to BLE out Buff
-              // size message is int -> uint16_t buffer size
-              if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
-              {
-                  if(bDEBUG)
-                  {
-                    Serial.printf("RX-UDP addBLEOutBuffer\n");
-                  }
-                  
-                  addBLEOutBuffer(convBuffer, size);
+                // add rcvMsg to BLE out Buff
+                // size message is int -> uint16_t buffer size
+                if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
+                {
+                    if(bDEBUG)
+                    {
+                      Serial.printf("RX-UDP addBLEOutBuffer\n");
+                    }
+                    
+                    addBLEOutBuffer(convBuffer, size);
+                }
               }
             }
           }

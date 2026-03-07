@@ -414,6 +414,8 @@ unsigned int readGPS(void)
 
     GPS.flush();
 
+    strNMEA.clear();
+
     while ((millis() - start) < 1000)
     {
         while (GPS.available() > 0)
@@ -423,15 +425,18 @@ unsigned int readGPS(void)
             char c = GPS.read();
             if(((c>=0x20) && (c<0x7f)) || (c==0x0A) || (c==0x0D))
             {
+                strNMEA.concat(c);
+
                 if (tinyGPSPlus.encode(c))
                     newData = true;
-
-                if(bGPSDEBUG)
-                    Serial.print(c);
             }
         }
         if (BurstStart && (GPStimeout+20) < millis()) break;
     }
+
+
+    if(bGPSDEBUG)
+        Serial.println(strNMEA);
 
     if(bGPSDEBUG)
     {
