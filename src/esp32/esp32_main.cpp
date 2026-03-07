@@ -537,12 +537,12 @@ void esp32setup()
     ///< Initialize T5-EPAPER GUI
     ///< delay for ESP32-S3 nativ USB [OE3WAS]
     ///< um Terminal verbinden zu können
-    //timerSerial.start(2000);  //timeout falls keine USB verbunden ist
+    timerSerial.start(2000);  //timeout falls keine USB verbunden ist
     Serial.begin(MONITOR_SPEED);
     
     Serial.setTxTimeoutMs(300);
 
-    while (!Serial)// && !timerSerial.time_over());
+    while (!Serial && !timerSerial.time_over());
     if (Serial) { for (int i=0;i<10;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
 
     #if defined BOARD_T5_EPAPER
