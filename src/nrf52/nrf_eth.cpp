@@ -428,6 +428,14 @@ int NrfETH::getUDP()
               }
             }
 
+
+          int icheck = checkOwnTx(aprsmsg.msg_id);
+
+          if(bDisplayInfo)
+            Serial.printf("OWN-TX-CHECK-UDP msg_id:%08X check:%i\n", aprsmsg.msg_id, icheck);
+          
+          if(icheck < 0)
+          {
             // resend only Packet
             if(bUDPtoLoraSend)
             {

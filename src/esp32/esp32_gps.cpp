@@ -416,7 +416,7 @@ unsigned int readGPS(void)
 
     while ((millis() - start) < 1000)
     {
-        while (GPS.available())
+        while (GPS.available() > 0)
         {
             BurstStart = true;
             GPStimeout = millis();
@@ -536,7 +536,7 @@ unsigned int getGPS(void)
     }
 
     #if defined (BOARD_TRACKER)
-        if(GPS.available())
+        if(GPS.available() > 0)
         {
             return readGPS();
         }
@@ -699,7 +699,7 @@ unsigned int getGPS(void)
             break;
         
         case 4:
-            if(GPS.available())
+            if(GPS.available() > 0)
             {
                 return readGPS();
             }
