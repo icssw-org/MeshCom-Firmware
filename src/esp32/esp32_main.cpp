@@ -541,7 +541,7 @@ void esp32setup()
     Serial.begin(MONITOR_SPEED);
     
     while (!Serial && !timerSerial.time_over());
-    if (Serial) { for (int i=0;i<10;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
+    if (Serial) { for (int i=0;i<5;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
 
     #if defined BOARD_T5_EPAPER
         if (psramInit()) {

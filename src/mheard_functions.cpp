@@ -227,10 +227,6 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
             }
             else
             {
-                int ivgll= mheardLine.mh_callsign.length();
-                if(strlen(mheardCalls[iset]) > (size_t)ivgll)
-                    ivgll=strlen(mheardCalls[iset]);
-
                 if(strcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str()) == 0)
                 {
                     ipos=iset;
@@ -275,7 +271,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     */
     char cBuffer[60];
     snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
-     mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount); 
+     mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardNCount[ipos]); 
     memcpy(mheardBuffer[ipos], cBuffer, sizeof(cBuffer));
 
     // generate JSON
@@ -404,7 +400,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
 
                 char cBuffer[60];
                 snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
-                mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
+                mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardNCount[imh]);
                 memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
 
                 return; // call heard direct
@@ -576,6 +572,12 @@ void sendMheard()
                 xval = getValue(mhstringdec, '|', 8);
                 mheardLine.mh_path_len = xval.toInt();
 
+                xval = getValue(mhstringdec, '|', 9);
+                mheardLine.mh_mesh = xval.toInt();
+
+                xval = getValue(mhstringdec, '|', 10);
+                mheardLine.mh_ncount = xval.toInt();
+
                 // generate JSON
                 JsonDocument mhdoc;
 
@@ -591,6 +593,7 @@ void sendMheard()
                 mhdoc["DIST"] = mheardLine.mh_dist;
                 mhdoc["PL"] = mheardLine.mh_path_len;
                 mhdoc["MESH"] = mheardLine.mh_mesh;
+                mhdoc["NCNT"] = mheardLine.mh_ncount;
 
                 // send to Phone
                 uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};

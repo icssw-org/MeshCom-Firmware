@@ -315,6 +315,8 @@ double posinfo_prev_lon = 0.0;
 double posinfo_last_direction = 0.0;
 unsigned int posinfo_last_rate = POSINFO_INTERVAL;  // seconds
 
+String strNMEA;
+
 uint32_t posinfo_satcount = 0;
 int posinfo_hdop = 0;
 bool posinfo_fix = false;
