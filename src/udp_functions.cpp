@@ -310,7 +310,12 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             }
           }
 
-          if(!checkOwnTx(aprsmsg.msg_id))
+          int icheck = checkOwnTx(aprsmsg.msg_id);
+
+          if(bDisplayInfo)
+            Serial.printf("OWN-TX-CHECK-UDP msg_id:%08X check:%i\n", aprsmsg.msg_id, icheck);
+          
+          if(icheck < 0)
           {
             if(bUDPtoLoraSend)
             {
