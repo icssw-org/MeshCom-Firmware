@@ -11,15 +11,17 @@
 
 #include <gps_l76k.h>
 
-#ifndef SerialGPS
-    #define SerialGPS Serial1
-#endif
+//#ifndef SerialGPS
+//    #define SerialGPS Serial1
+//#endif
+
+HardwareSerial SerialGPS(1);
 
 #include <TinyGPSPlus.h>
 
 // TinyGPS
 extern TinyGPSPlus tinyGPSPlus;
- 
+
 bool l76kProbe()
 {
     bool result = false;
@@ -30,7 +32,8 @@ bool l76kProbe()
     startTimeout = millis() + 4000;
     Serial.print("[GPSL]...Try to init L76K . Wait stop .");
     // SerialGPS.flush();
-    while (SerialGPS.available())
+
+    while (SerialGPS.available() > 0)
     {
         int c = SerialGPS.read();
         
@@ -55,7 +58,8 @@ bool l76kProbe()
     SerialGPS.write("$PCAS06,0*1B\r\n");
     startTimeout = millis() + 500;
     String ver = "";
-    while (!SerialGPS.available())
+
+    while (SerialGPS.available() <= 0)
     {
         if (millis() > startTimeout)
         {
@@ -63,7 +67,7 @@ bool l76kProbe()
             return false;
         }
     }
-    SerialGPS.setTimeout(10);
+    SerialGPS.setTimeout(200);
     ver = SerialGPS.readStringUntil('\n');
     if (ver.startsWith("$GPTXT,01,01,02") || ver.startsWith("$GNTXT,01,01,01,PCAS"))
     {
@@ -188,12 +192,15 @@ unsigned int loopL76KGPS()
 
     bool bGPSAVAIL=false;
     bool bNMEA_OK=false;
+    int iNMEA_Count = 0;
 
     char c_last = 0x00;
 
-    while (SerialGPS.available())
+    while (SerialGPS.available() > 0)
     {
         char c = SerialGPS.read();
+
+        iNMEA_Count++;
 
         if(c_last == '$' and c == 'G')
             bNMEA_OK = true;
@@ -225,10 +232,13 @@ unsigned int loopL76KGPS()
     if(bNMEA_OK)
         return displayInfo();
 
-    // falsche zeichen im NMEA
-    stopL76KGPS();
+    if(iNMEA_Count > 0)
+    {
+        // falsche zeichen im NMEA
+        stopL76KGPS();
 
-    beginGPS();
+        beginGPS();
+    }
 
     return 0;
  }
