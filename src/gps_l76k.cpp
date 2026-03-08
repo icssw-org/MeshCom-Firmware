@@ -201,19 +201,18 @@ unsigned int loopL76KGPS()
     {
         char c = SerialGPS.read();
 
+        tinyGPSPlus.encode(c);
+
         iNMEA_Count++;
 
         if(c_last == '$' and c == 'G')
+        {
             bNMEA_OK = true;
+        }
         
         c_last = c;
 
-        if(bGPSDEBUG && bDisplayCont)
-            strNMEA.concat(c);
-
-        if (tinyGPSPlus.encode(c))
-        {
-        }
+        strNMEA.concat(c);
     }
 
     if(bNMEA_OK)
@@ -265,8 +264,7 @@ unsigned int displayInfo()
             }
             else
             {
-                if(bGPSDEBUG)
-                    Serial.println(F("[L76K]...INVALID"));
+                Serial.println(F("[L76K]...INVALID"));
             }
         }
 
