@@ -25,7 +25,7 @@
 
 void setup()
 {
-  #if defined(BOARD_T5_EPAPER)
+    #if defined(BOARD_T5_EPAPER)
     if (psramInit()) {
         Serial.println("\nThe PSRAM is correctly initialized");
     } else {
@@ -33,9 +33,11 @@ void setup()
     }
   #endif
 
-  #if !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
-    SPI.begin();
-  #endif
+#if defined(BOARD_T_ETH_ELITE)
+  SPI.begin(SCK, MISO, MOSI, SX126x_CS);
+#elif !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
+  SPI.begin();
+#endif
 
   #if defined(BOARD_RAK4630)
     nrf52setup();

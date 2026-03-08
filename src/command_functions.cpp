@@ -2883,6 +2883,34 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    // --- network or wifi mode ---
+    if(commandCheck(msg_text+2, (char*)"netmode wifi") == 0)
+    {
+        meshcom_settings.node_netmode = 0;
+
+        Serial.println("[CMD] netmode -> WiFi");
+
+        save_settings();
+
+        rebootAuto = millis() + 2000;
+
+        bReturn = true;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"netmode eth") == 0)
+    {
+        meshcom_settings.node_netmode = 1;
+
+        Serial.println("[CMD] netmode -> Ethernet");
+        //Serial.printf("node_netmode=%d\n", meshcom_settings.node_netmode); // solo per debug
+
+        save_settings();
+
+        rebootAuto = millis() + 2000;
+
+        bReturn = true;
+    } 
+    else
     if(commandCheck(msg_text+2, (char*)"wifiap on") == 0)
     {
         bWIFIAP=true;

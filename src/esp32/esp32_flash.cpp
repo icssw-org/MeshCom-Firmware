@@ -223,6 +223,9 @@ void init_flash(void)
     strVar = preferences.getString("node_owndns");
     snprintf(meshcom_settings.node_owndns, sizeof(meshcom_settings.node_owndns), "%s", strVar.c_str());
 
+    // Network Mode wifi/eth
+    meshcom_settings.node_netmode = preferences.getUChar("node_netmode", 0);
+
     preferences.end();
 }
 
@@ -441,6 +444,8 @@ void save_settings(void)
     strVar = meshcom_settings.node_owndns;
     preferences.putString("node_owndns", strVar); 
 
+    // Network Mode wifi/eth
+    preferences.putUChar("node_netmode", meshcom_settings.node_netmode);
 
     preferences.end();
 

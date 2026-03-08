@@ -5,7 +5,7 @@
 #include <loop_functions_extern.h>
 
 // WIFI functions
-bool startWIFI();
+bool startNetwork();
 bool doWiFiConnect();
 String udpUpdateTimeClient();
 String udpGetTimeClient();

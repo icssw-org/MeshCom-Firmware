@@ -192,6 +192,8 @@ struct s_meshcom_settings
 	bool node_kbl_sync = true;
 	bool node_wifion = true;
 	#endif
+
+	uint8_t node_netmode = 0;   // 0 = WiFi, 1 = Ethernet
 };
 
 extern s_meshcom_settings meshcom_settings;
