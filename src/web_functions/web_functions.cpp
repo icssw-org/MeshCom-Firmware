@@ -58,26 +58,47 @@ void startWebserver()
 {
     if (bweb_server_running)
         return;
-
-    if (strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
-    {
-        if(bDEBUG)
+    #ifdef HAS_ETHERNET
+        if (meshcom_settings.node_netmode == 0)
         {
-            Serial.print("[WEB]...no ip set :");
-            Serial.println(meshcom_settings.node_ip);
+            if (strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
+            {
+                if(bDEBUG)
+                {
+                    Serial.print("[WEB]...no ip set :");
+                    Serial.println(meshcom_settings.node_ip);
+                }
+
+                stopWebserver();
+                return;
+            }
         }
+    #else
+        if (strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
+        {
+            if(bDEBUG)
+            {
+                Serial.print("[WEB]...no ip set :");
+                Serial.println(meshcom_settings.node_ip);
+            }
 
-        stopWebserver();
-
-        return;
-    }
+            stopWebserver();
+            return;
+        }
+    #endif
 
 #ifdef ESP32
     // Check if WiFi is actually connected or AP is active before trying to start MDNS
     bool is_connected = (WiFi.status() == WL_CONNECTED);
     bool is_ap_active = (WiFi.getMode() == WIFI_MODE_AP) || (WiFi.getMode() == WIFI_MODE_APSTA);
 
-    if (!is_connected && !is_ap_active)
+    #ifdef HAS_ETHERNET
+    bool ethernet_mode = (meshcom_settings.node_netmode == 1);
+    #else
+    bool ethernet_mode = false;
+    #endif
+
+    if (!is_connected && !is_ap_active && !ethernet_mode)
     {
         return;
     }
@@ -160,17 +181,20 @@ void loopWebserver()
     if (!bweb_server_running)
         return;
 
+    #ifdef HAS_ETHERNET
+    if (meshcom_settings.node_netmode == 0)
+    {
+        if (strlen(meshcom_settings.node_ip) < 7)
+        {
+            return;
+        }
+    }
+    #else
     if (strlen(meshcom_settings.node_ip) < 7)
     {
-        /*
-        if(bDEBUG)
-        {
-            Serial.print("[WEBLOOP]...no ip set :");
-            Serial.println(meshcom_settings.node_ip);
-        }
-        */
         return;
     }
+    #endif
 
     web_client = web_server.available(); // Create a client connection.
 
@@ -1061,6 +1085,9 @@ void sub_page_setup()
     _create_setup_textinput_element("extudp", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("</div><div class=\"grid grid2\">");
+    #if defined(HAS_ETHERNET)
+    _create_setup_switch_element("netmode", "Ethernet Mode", "switch between WiFi and Ethernet", meshcom_settings.node_netmode == 1);
+    #endif
     _create_setup_switch_element("extudp", "ext UDP", "enable ext. UDP", bEXTUDP); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);   // create Switch-Element inclucing Label and Description
 
@@ -1437,33 +1464,42 @@ void sub_page_info()
     web_client.printf("<tr><td>Coding Rate (CR)</td><td>%i</td></tr>\n", getCR());
     web_client.printf("<tr><td>TX Power</td><td>%i dBm (%.2f mW)</td></tr>\n", getPower(), 1000 * powf(10, ((float)getPower() - 30) / 10));
 
-#ifndef BOARD_RAK4630
-    if (bWIFIAP)
-        web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", cBLEName);
-    else
-        web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", meshcom_settings.node_ssid);
-    web_client.printf("<tr><td>WiFi AP</td><td>%s</td></tr>\n", (bWIFIAP ? "yes" : "no"));
+    #if defined(HAS_ETHERNET)
+    web_client.printf("<tr><td>Netmode</td><td>%s</td></tr>\n", (meshcom_settings.node_netmode == 1 ? "Ethernet" : "WiFi"));
+    #endif
 
-    web_client.printf("<tr><td>WiFi RSSI</td><td>%i</td></tr>\n", WiFi.RSSI()); 
-    web_client.printf("<tr><td>WiFi POWER SET</td><td>%i dBm\n</td></tr>\n", WiFi.getTxPower()/4);
-#endif
+    #ifndef BOARD_RAK4630
+    if(meshcom_settings.node_netmode == 0)
+    {
+        if (bWIFIAP)
+            web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", cBLEName);
+        else
+            web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", meshcom_settings.node_ssid);
+
+        web_client.printf("<tr><td>WiFi AP</td><td>%s</td></tr>\n", (bWIFIAP ? "yes" : "no"));
+        web_client.printf("<tr><td>WiFi RSSI</td><td>%i</td></tr>\n", WiFi.RSSI()); 
+        web_client.printf("<tr><td>WiFi POWER SET</td><td>%i dBm\n</td></tr>\n", WiFi.getTxPower()/4);
+    }
+    #endif
 
     // wenn WIFI unterbrochen wird
     // if(meshcom_settings.node_hasIPaddress && strcmp(meshcom_settings.node_ip, "0.0.0.0") == 0)
     //    meshcom_settings.node_hasIPaddress = false;
-    // web_client.printf("<tr><td><b>hasIpAddress</b></td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
-
+    //    web_client.printf("<tr><td><b>hasIpAddress</b></td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
+    
     web_client.printf("<tr><td>hasIpAddress</td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress ? "yes" : "no"));
 
     if (meshcom_settings.node_hasIPaddress)
     {
         web_client.printf("<tr><td>IP address</td><td>%s</td></tr>\n", meshcom_settings.node_ip);
+        web_client.printf("<tr><td>SUB-MASK</td><td>%s</td></tr>\n", meshcom_settings.node_subnet);
+
         if (!bWIFIAP)
         {
             web_client.printf("<tr><td>GW address</td><td>%s</td></tr>\n", meshcom_settings.node_gw);
             web_client.printf("<tr><td>DNS address</td><td>%s</td></tr>\n", meshcom_settings.node_dns);
         }
-        web_client.printf("<tr><td>SUB-MASK</td><td>%s</td></tr>\n", meshcom_settings.node_subnet);
+    
     }
 
     if (bINA226ON)

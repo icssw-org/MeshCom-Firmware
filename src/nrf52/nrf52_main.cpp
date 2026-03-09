@@ -1714,7 +1714,7 @@ if (isPhoneReady == 1)
                 stopWebserver();
 
                 if(!meshcom_settings.node_hasIPaddress)
-                    startWIFI();
+                    startNetwork();
             #endif
 
             if(bWEBSERVER)

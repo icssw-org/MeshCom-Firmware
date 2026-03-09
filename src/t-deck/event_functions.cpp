@@ -278,7 +278,7 @@ void btn_event_handler_setup_btn(lv_event_t * e)
             commandAction((char*)"--webserver on", false);
 
             // attempt to start WiFi immediately
-            startWIFI();
+            startNetwork();
         }
         else
         {

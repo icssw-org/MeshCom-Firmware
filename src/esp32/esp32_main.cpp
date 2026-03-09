@@ -14,6 +14,11 @@
 #include <SPI.h>
 #include <WiFi.h>
 
+#ifdef BOARD_T_ETH_ELITE
+#include "esp32_eth.h"
+SPIClass ethSPI(FSPI);
+#endif
+
 #include "esp32_gps.h"
 #include "esp32_flash.h"
 #include <esp_adc_cal.h>
@@ -162,6 +167,11 @@ bool bHeyFirst = true;
 bool bTeleFirst = true;
 
 bool bAllStarted = true;
+
+#ifdef BOARD_T_ETH_ELITE
+EspETH neth;
+bool bETHERNET = false;
+#endif
 
 String strTime;
 String strDate;
@@ -1050,7 +1060,7 @@ void esp32setup()
 
     #if defined (BOARD_TRACKER) || defined(BOARD_TBEAM_1W)
         SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
-    #endif
+    #endif-ELITE and refactor network handling)
 
     #if defined(BOARD_T5_EPAPER)
     // extra source
@@ -1059,6 +1069,10 @@ void esp32setup()
     #elif defined(BOARD_E220)
         Serial.print(F(" Initializing ... "));
         int state = radio.begin(434.0F, 125.0F, 9, 7, SYNC_WORD_SX127x, 10, LORA_PREAMBLE_LENGTH, /*float tcxoVoltage = 0*/ 1.6F, /*bool useRegulatorLDO = false*/ false);
+    #elif defined(BOARD_T_ETH_ELITE)
+    Serial.print(F(" Initializing ... "));
+    int state = radio.begin(433.175F);
+    radio.setDio2AsRfSwitch(true);
     #else
         Serial.print(F(" Initializing ... "));
 
@@ -1491,7 +1505,7 @@ void esp32setup()
     {
         bAllStarted=false;
 
-        if(!startWIFI())
+        if(!startNetwork())
         {
             Serial.println("[WIFI]...no connection");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -2100,7 +2114,7 @@ void esp32loop()
                 if(bWEBSERVER)
                     stopWebserver();
 
-                startWIFI();
+                startNetwork();
 
                 ifalseping = 5;
                 
@@ -2115,7 +2129,7 @@ void esp32loop()
         }
     }
 
-    if(meshcom_settings.node_hasIPaddress)
+    if(meshcom_settings.node_netmode == 0 && meshcom_settings.node_hasIPaddress)
     {
         currentWiFiMillis = millis();
 
@@ -2857,7 +2871,7 @@ void esp32loop()
                         if(bWEBSERVER)
                             stopWebserver();
 
-                        startWIFI();
+                        startNetwork();
                     }
                     else
                     {
@@ -2890,6 +2904,13 @@ void esp32loop()
 
         if(bEXTUDP && iWlanWait == 0)
         {
+        #ifdef BOARD_T_ETH_ELITE
+            if(meshcom_settings.node_hasIPaddress == false)
+            {
+                neth.initethDHCP();
+            }
+        #endif
+
             startExternUDP();
         }
     }
