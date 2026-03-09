@@ -213,7 +213,9 @@ unsigned int loopL76KGPS()
         iNMEA_Count++;
 
         if(c_last == '$' and c == 'G')
+        {
             bNMEA_OK = true;
+        }
         
         c_last = c;
     }
@@ -264,8 +266,7 @@ unsigned int displayInfo()
             }
             else
             {
-                if(bGPSDEBUG)
-                    Serial.println(F("[L76K]...INVALID"));
+                Serial.println(F("[L76K]...INVALID"));
             }
         }
 

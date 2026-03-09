@@ -1478,21 +1478,23 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_clip_corner(mheard_ta, true, 0);
 
     lv_table_set_row_cnt(mheard_ta, 1);
-    lv_table_set_col_cnt(mheard_ta, 6);
+    lv_table_set_col_cnt(mheard_ta, 7);
 
     lv_table_set_col_width(mheard_ta, 0, 76);
     lv_table_set_col_width(mheard_ta, 1, 40);
-    lv_table_set_col_width(mheard_ta, 2, 38);
-    lv_table_set_col_width(mheard_ta, 3, 68);
-    lv_table_set_col_width(mheard_ta, 4, 38);
-    lv_table_set_col_width(mheard_ta, 5, 38);
+    lv_table_set_col_width(mheard_ta, 2, 35);
+    lv_table_set_col_width(mheard_ta, 3, 60);
+    lv_table_set_col_width(mheard_ta, 4, 30);
+    lv_table_set_col_width(mheard_ta, 5, 30);
+    lv_table_set_col_width(mheard_ta, 6, 25);
 
     lv_table_set_cell_value(mheard_ta, 0, 0, "Call");
     lv_table_set_cell_value(mheard_ta, 0, 1, "Time");
     lv_table_set_cell_value(mheard_ta, 0, 2, "Typ");
     lv_table_set_cell_value(mheard_ta, 0, 3, "HW");
-    lv_table_set_cell_value(mheard_ta, 0, 4, "Mod");
-    lv_table_set_cell_value(mheard_ta, 0, 5, "Dist");
+    lv_table_set_cell_value(mheard_ta, 0, 4, "SSI");
+    lv_table_set_cell_value(mheard_ta, 0, 5, "SNR");
+    lv_table_set_cell_value(mheard_ta, 0, 6, "NCT");
 
     // lv_obj_set_height(mheard_ta, LV_VER_RES * 0.6);
 
