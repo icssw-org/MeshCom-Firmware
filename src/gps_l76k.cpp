@@ -37,7 +37,7 @@ bool l76kProbe()
     {
         char c = SerialGPS.read();
         
-        if(bGPSDEBUG && bDisplayCont)
+        if(bGPSDEBUG)
         {
             strNMEA.concat(c);
         }
@@ -52,7 +52,7 @@ bool l76kProbe()
     };
     Serial.println();
     
-    if(bGPSDEBUG && bDisplayCont)
+    if(bGPSDEBUG)
         Serial.println(strNMEA);
 
     SerialGPS.flush();
@@ -70,7 +70,7 @@ bool l76kProbe()
             return false;
         }
     }
-    SerialGPS.setTimeout(200);
+    SerialGPS.setTimeout(10);
     ver = SerialGPS.readStringUntil('\n');
     if (ver.startsWith("$GPTXT,01,01,02") || ver.startsWith("$GNTXT,01,01,01,PCAS"))
     {
@@ -201,7 +201,14 @@ unsigned int loopL76KGPS()
     {
         char c = SerialGPS.read();
 
-        tinyGPSPlus.encode(c);
+        if (tinyGPSPlus.encode(c))
+        {
+        }
+
+        if(bGPSDEBUG)
+        {
+            strNMEA.concat(c);
+        }
 
         iNMEA_Count++;
 
@@ -211,8 +218,6 @@ unsigned int loopL76KGPS()
         }
         
         c_last = c;
-
-        strNMEA.concat(c);
     }
 
     if(bNMEA_OK)
@@ -236,11 +241,8 @@ unsigned int displayInfo()
     {
         Serial.print(F("[L76K]...Location: "));
         
-        if(bDisplayCont)
-        {
-            Serial.println("");
-            Serial.println(strNMEA);
-        }
+        Serial.println("");
+        Serial.println(strNMEA);
     }
 
     if (tinyGPSPlus.location.isValid())
@@ -304,7 +306,7 @@ unsigned int displayInfo()
                 Serial.printf("\n[L76K]...location.isUpdated:%i isValid:%i sat:%i hdop:%i -- ", tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.satellites.value(), tinyGPSPlus.hdop.value());
             
             // valid GPS data
-            if(tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 2000)
+            if(tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 5000)
             {
                 double dlat, dlon;
 
