@@ -440,6 +440,19 @@ unsigned int readGPS(void)
     if(bGPSDEBUG)
         Serial.println(strNMEA);
 
+    if(tinyGPSPlus.satellites.isValid())
+    {
+        posinfo_satcount = tinyGPSPlus.satellites.value();
+        
+        if(tinyGPSPlus.hdop.isValid())
+            posinfo_hdop = tinyGPSPlus.hdop.value();
+        else
+            posinfo_hdop = 9099;
+
+        if(bGPSDEBUG)
+            Serial.printf("[GPS ]...SAT:%i HDOP:%i\n", posinfo_satcount, posinfo_hdop);
+    }
+
     if(bGPSDEBUG)
     {
         Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i TIMEVAL:%i\n", newData, tinyGPSPlus.satellites.value(), tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value(), tinyGPSPlus.time.isValid());
@@ -454,7 +467,7 @@ unsigned int readGPS(void)
         snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
     }
 
-    if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 2000)
+    if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 5000)
     {
         meshcom_settings.node_lat = cround4abs(tinyGPSPlus.location.lat());
         meshcom_settings.node_lon = cround4abs(tinyGPSPlus.location.lng());

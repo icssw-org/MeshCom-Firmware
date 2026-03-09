@@ -2671,7 +2671,7 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     return String(msg_start);
 }
 
-void sendPosition(unsigned int uintervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
+void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
 {
     // position 0.0/0.0 no message sent
     if(lat == 0.0 && lon == 0.0)
@@ -2682,10 +2682,10 @@ void sendPosition(unsigned int uintervall, double lat, char lat_c, double lon, c
     bool bSendViaAPRS = bDisplayTrack;
     bool bSendViaMesh = !bDisplayTrack;
 
-    unsigned int intervall = uintervall;
+    unsigned long intervall = uintervall;
 
     bool bsendTele = false;
-    if(intervall == 1)
+    if(intervall == 0xEEEE)
     {
         intervall = 0;
         bsendTele = true;
@@ -2693,7 +2693,7 @@ void sendPosition(unsigned int uintervall, double lat, char lat_c, double lon, c
         bSendViaAPRS=false;
     }
 
-    if(lastHeardTime + 15000 < millis() && (intervall == POSINFO_INTERVAL || intervall == 0)) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auch via MeshCom
+    if(lastHeardTime + 15000 < millis() && (intervall == POSINFO_INTERVAL || intervall == 0x9999)) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auch via MeshCom
     {
         bSendViaMesh = true;
 

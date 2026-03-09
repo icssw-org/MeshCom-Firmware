@@ -1483,7 +1483,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_table_set_col_width(mheard_ta, 0, 76);
     lv_table_set_col_width(mheard_ta, 1, 40);
     lv_table_set_col_width(mheard_ta, 2, 35);
-    lv_table_set_col_width(mheard_ta, 3, 60);
+    lv_table_set_col_width(mheard_ta, 3, 62);
     lv_table_set_col_width(mheard_ta, 4, 30);
     lv_table_set_col_width(mheard_ta, 5, 30);
     lv_table_set_col_width(mheard_ta, 6, 25);
@@ -1494,7 +1494,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_table_set_cell_value(mheard_ta, 0, 3, "HW");
     lv_table_set_cell_value(mheard_ta, 0, 4, "SSI");
     lv_table_set_cell_value(mheard_ta, 0, 5, "SNR");
-    lv_table_set_cell_value(mheard_ta, 0, 6, "NCT");
+    lv_table_set_cell_value(mheard_ta, 0, 6, "NC");
 
     // lv_obj_set_height(mheard_ta, LV_VER_RES * 0.6);
 
