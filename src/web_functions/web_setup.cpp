@@ -35,6 +35,26 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    #if defined(HAS_ETHERNET)
+
+        if(setupData->paramName.equals("netmode")) {
+
+            if(setupData->paramValue.equals("on")) {
+                snprintf(message_text, sizeof(message_text), "--netmode eth");
+            } else {
+                snprintf(message_text, sizeof(message_text), "--netmode wifi");
+            }
+
+            commandAction(message_text, bPhoneReady);
+
+            setupData->returnCode = WS_RETURNCODE_OKAY;
+            setupData->returnValue = meshcom_settings.node_netmode == 1 ? "eth" : "wifi";
+            return;
+
+        } else
+
+    #endif
+
     if(setupData->paramName.equals("setcall")) {        
         snprintf(message_text, sizeof(message_text), "--setcall %s", setupData->paramValue.c_str());                   // set command string
         commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
