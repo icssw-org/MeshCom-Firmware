@@ -744,8 +744,9 @@ void showMHeardTDECK()
     lv_table_set_cell_value(mheard_ta, row, 1, (char*)"Time");
     lv_table_set_cell_value(mheard_ta, row, 2, (char*)"Type");
     lv_table_set_cell_value(mheard_ta, row, 3, (char*)"HW");
-    lv_table_set_cell_value(mheard_ta, row, 4, (char*)"RSSI");
+    lv_table_set_cell_value(mheard_ta, row, 4, (char*)"SSI");
     lv_table_set_cell_value(mheard_ta, row, 5, (char*)"SNR");
+    lv_table_set_cell_value(mheard_ta, row, 6, (char*)"NC");
 
     row++;
 
@@ -805,6 +806,9 @@ void showMHeardTDECK()
 
             snprintf(buf, 7, "%4i", mheardLine.mh_snr);
             lv_table_set_cell_value(mheard_ta, row, 5, buf);
+
+            snprintf(buf, 7, "%4i", mheardLine.mh_ncount);
+            lv_table_set_cell_value(mheard_ta, row, 6, buf);
 
             row++;
         }
@@ -875,6 +879,7 @@ void loadMHeardPersistence()
         file.read((uint8_t*)mheardLat, sizeof(mheardLat));
         file.read((uint8_t*)mheardLon, sizeof(mheardLon));
         file.read((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
+        file.read((uint8_t*)mheardNCount, sizeof(mheardNCount));
         file.close();
         showMHeardTDECK();
     #endif

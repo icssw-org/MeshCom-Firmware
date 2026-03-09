@@ -243,6 +243,16 @@ unsigned int displayInfo()
         Serial.println(strNMEA);
     }
 
+    if(tinyGPSPlus.satellites.isValid())
+    {
+        posinfo_satcount = tinyGPSPlus.satellites.value();
+        
+        if(tinyGPSPlus.hdop.isValid())
+        {
+            posinfo_hdop = tinyGPSPlus.hdop.value();
+        }
+    }
+
     if (tinyGPSPlus.location.isValid())
     {
         if(bGPSDEBUG) 

@@ -2321,7 +2321,7 @@ void esp32loop()
 
     // TRACK ON
     if(bDisplayTrack)
-        gps_refresh_intervall = 2.0;
+        gps_refresh_intervall = 5.0;
 
     if ((gps_refresh_timer + ((unsigned long)gps_refresh_intervall * 1000)) < millis())
     {
