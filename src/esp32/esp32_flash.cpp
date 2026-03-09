@@ -238,6 +238,9 @@ void init_flash(void)
 
     meshcom_settings.node_gpsbaud = preferences.getUInt("node_gpsbaud", 38400);
 
+    // Network Mode wifi/eth
+    meshcom_settings.node_netmode = preferences.getUChar("node_netmode", 0);
+
     preferences.end();
 }
 
@@ -252,7 +255,6 @@ void clear_flash(void)
     preferences.clear();
 
     Serial.printf("[INIT]...FLASH #entries %i after clear\n", preferences.freeEntries());
-
     preferences.end();
 }
 
@@ -483,10 +485,12 @@ void save_settings(void)
     strVar = meshcom_settings.node_fwversion;
     preferences.putString("node_fwversion", strVar); 
 
-	preferences.putULong("node_gpsbaud", meshcom_settings.node_gpsbaud);
+    preferences.putULong("node_gpsbaud", meshcom_settings.node_gpsbaud);
+
+    // Network Mode wifi/eth
+    preferences.putUChar("node_netmode", meshcom_settings.node_netmode);
 
     //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
-
     preferences.end();
 
     //Test only Serial.println("flash save...");
