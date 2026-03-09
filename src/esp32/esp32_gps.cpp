@@ -425,10 +425,12 @@ unsigned int readGPS(void)
             char c = GPS.read();
             if(((c>=0x20) && (c<0x7f)) || (c==0x0A) || (c==0x0D))
             {
-                strNMEA.concat(c);
-
                 if (tinyGPSPlus.encode(c))
+                {
                     newData = true;
+                }
+                
+                strNMEA.concat(c);
             }
         }
         if (BurstStart && (GPStimeout+20) < millis()) break;
