@@ -1060,7 +1060,7 @@ void esp32setup()
 
     #if defined (BOARD_TRACKER) || defined(BOARD_TBEAM_1W)
         SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
-    #endif-ELITE and refactor network handling)
+    #endif
 
     #if defined(BOARD_T5_EPAPER)
     // extra source
@@ -1094,8 +1094,8 @@ void esp32setup()
         #endif
         #endif
 
-    
         int state = radio.begin(433.175F);
+
     #endif
     
     #if defined(BOARD_T5_EPAPER)

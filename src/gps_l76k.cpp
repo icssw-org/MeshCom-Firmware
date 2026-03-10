@@ -11,9 +11,7 @@
 
 #include <gps_l76k.h>
 
-#ifndef SerialGPS
-    #define SerialGPS Serial1
-#endif
+extern HardwareSerial gpsSerial;
 
 #include <TinyGPSPlus.h>
 
@@ -24,26 +22,17 @@ bool l76kProbe()
 {
     bool result = false;
     uint32_t startTimeout ;
-    SerialGPS.write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
+    gpsSerial.write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
     delay(500);
     // Get version information
     startTimeout = millis() + 4000;
     Serial.print("[GPSL]...Try to init L76K . Wait stop .");
-    // SerialGPS.flush();
 
-    strNMEA.clear();
-
-    while (SerialGPS.available() > 0)
+    while (gpsSerial.available() > 0)
     {
-        char c = SerialGPS.read();
-        
-        if(bGPSDEBUG)
-        {
-            strNMEA.concat(c);
-        }
+        char c = gpsSerial.read();
+        Serial.print(c);
 
-        SerialGPS.flush();
-        
         if (millis() > startTimeout)
         {
             Serial.println("[GPSL]...Wait L76K stop NMEA timeout!");
@@ -52,17 +41,14 @@ bool l76kProbe()
     };
     Serial.println();
     
-    if(bGPSDEBUG)
-        Serial.println(strNMEA);
-
-    SerialGPS.flush();
+    gpsSerial.flush();
     delay(200);
 
-    SerialGPS.write("$PCAS06,0*1B\r\n");
+    gpsSerial.write("$PCAS06,0*1B\r\n");
     startTimeout = millis() + 500;
     String ver = "";
 
-    while (SerialGPS.available() <= 0)
+    while (gpsSerial.available() <= 0)
     {
         if (millis() > startTimeout)
         {
@@ -70,8 +56,8 @@ bool l76kProbe()
             return false;
         }
     }
-    SerialGPS.setTimeout(10);
-    ver = SerialGPS.readStringUntil('\n');
+    gpsSerial.setTimeout(10);
+    ver = gpsSerial.readStringUntil('\n');
     if (ver.startsWith("$GPTXT,01,01,02") || ver.startsWith("$GNTXT,01,01,01,PCAS"))
     {
         Serial.println("[GPSL]...L76K GNSS init succeeded, using L76K GNSS Module");
@@ -80,19 +66,20 @@ bool l76kProbe()
     delay(500);
 
     // Initialize the L76K Chip, use GPS + GLONASS
-    SerialGPS.write("$PCAS04,5*1C\r\n");
+    gpsSerial.write("$PCAS04,5*1C\r\n");
     delay(250);
     // only ask for RMC and GGA
-    SerialGPS.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+    gpsSerial.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
     delay(250);
     // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
-    SerialGPS.write("$PCAS11,3*1E\r\n");
+    gpsSerial.write("$PCAS11,3*1E\r\n");
     return result;
 }
 
 static TaskHandle_t gpsInitTaskHandle = NULL;
 
 void gpsInitTask(void *parameter) {
+
     bool result = false;
 
     if(meshcom_settings.node_gpsbaud > 0 && meshcom_settings.node_gpsbaud < 150000)
@@ -100,7 +87,7 @@ void gpsInitTask(void *parameter) {
         if(bGPSDEBUG)
             Serial.printf("[L76K]...check %lubaud\n", meshcom_settings.node_gpsbaud);
 
-        SerialGPS.begin(meshcom_settings.node_gpsbaud, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        gpsSerial.begin(meshcom_settings.node_gpsbaud, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         for ( int i = 0; i < 3; ++i)
         {
             result = l76kProbe();
@@ -115,7 +102,7 @@ void gpsInitTask(void *parameter) {
         if(bGPSDEBUG)
             Serial.println("[L76K]...check 38400baud");
 
-        SerialGPS.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        gpsSerial.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         for ( int i = 0; i < 3; ++i)
         {
             result = l76kProbe();
@@ -132,7 +119,7 @@ void gpsInitTask(void *parameter) {
         if(bGPSDEBUG)
             Serial.println("[L76K]...check 115200baud");
 
-        SerialGPS.begin(115200, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        gpsSerial.begin(115200, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         for ( int i = 0; i < 3; ++i)
         {
             result = l76kProbe();
@@ -149,7 +136,7 @@ void gpsInitTask(void *parameter) {
         if(bGPSDEBUG)
             Serial.println("[L76K]...check 9600baud");
 
-        SerialGPS.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         for ( int i = 0; i < 3; ++i)
         {
             result = l76kProbe();
@@ -176,7 +163,7 @@ bool beginGPS()
 
 void stopL76KGPS()
 {
-    SerialGPS.end();
+    gpsSerial.end();
 
     posinfo_fix = false;
     posinfo_satcount = 0;
@@ -185,80 +172,32 @@ void stopL76KGPS()
 
 unsigned int loopL76KGPS()
 {
-    if(bGPSDEBUG)
-        Serial.println("[L76K]...loopL76KGPS start");
-
-    if (gpsInitTaskHandle != NULL) return POSINFO_INTERVAL;
-
-    bool bNMEA_OK=false;
-    int iNMEA_Count = 0;
-
-    char c_last = 0x00;
-
-    strNMEA.clear();
-
-    while (SerialGPS.available() > 0)
+    while (gpsSerial.available() > 0)
     {
-        char c = SerialGPS.read();
-
-        if (tinyGPSPlus.encode(c))
-        {
-        }
-
-        if(bGPSDEBUG)
-        {
-            strNMEA.concat(c);
-        }
-
-        iNMEA_Count++;
-
-        if(c_last == '$' and c == 'G')
-        {
-            bNMEA_OK = true;
-        }
-        
-        c_last = c;
+        tinyGPSPlus.encode(gpsSerial.read());
     }
 
-    if(bNMEA_OK)
-        return displayInfo();
-
-    if(iNMEA_Count > 0)
-    {
-        // falsche zeichen im NMEA
-        stopL76KGPS();
-
-        beginGPS();
-    }
-
-    return 0;
+    return displayInfo();
  }
  
  
 unsigned int displayInfo()
  {
+    bool gps_time_update = tinyGPSPlus.time.isUpdated();
+    bool gps_loc_update  = tinyGPSPlus.location.isUpdated();
+    posinfo_satcount = tinyGPSPlus.satellites.value();
+    posinfo_hdop = tinyGPSPlus.hdop.value();
+
     if(bGPSDEBUG)
     {
-        Serial.print(F("[L76K]...Location: "));
-        
-        Serial.println("");
-        Serial.println(strNMEA);
-    }
-
-    if(tinyGPSPlus.satellites.isValid())
-    {
-        posinfo_satcount = tinyGPSPlus.satellites.value();
-        
-        if(tinyGPSPlus.hdop.isValid())
-        {
-            posinfo_hdop = tinyGPSPlus.hdop.value();
-        }
+        Serial.printf("[L76K]... sat_count:%i hdop:%i time_update:%i location_update:%i\n", posinfo_satcount, posinfo_hdop, gps_time_update, gps_loc_update);
     }
 
     if (tinyGPSPlus.location.isValid())
     {
         if(bGPSDEBUG) 
         {
+            Serial.printf("[L76K]... ");
             Serial.print(tinyGPSPlus.location.lat(), 6);
             Serial.print((tinyGPSPlus.location.rawLat().negative?"S":"N"));
             Serial.print(F(","));
@@ -312,9 +251,6 @@ unsigned int displayInfo()
             meshcom_settings.node_date_minute = MyClock.Minute();
             meshcom_settings.node_date_second = MyClock.Second();
     
-            if(bGPSDEBUG)
-                Serial.printf("\n[L76K]...location.isUpdated:%i isValid:%i sat:%i hdop:%i -- ", tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.satellites.value(), tinyGPSPlus.hdop.value());
-            
             // valid GPS data
             if(tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 5000)
             {
@@ -364,7 +300,7 @@ unsigned int displayInfo()
 
                 if(bGPSDEBUG)
                 {
-                    Serial.println(F("[L76K]...VALID"));
+                    Serial.println(F("...VALID"));
                 }
 
                 return setSMartBeaconing(dlat, dlon);
