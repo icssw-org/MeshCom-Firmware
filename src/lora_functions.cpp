@@ -1107,7 +1107,7 @@ bool doTX()
                 if(bDisplayInfo)
                 {
                     Serial.print(getTimeString());
-                    Serial.printf(" TX-APRS:%s\n", lora_tx_buffer+3);
+                    Serial.printf(" TX-APRS:%c%02X%02X%s\n", lora_tx_buffer[0], lora_tx_buffer[1], lora_tx_buffer[2], lora_tx_buffer+3);
                 }
 
                 bSetLoRaAPRS = true;

@@ -1215,12 +1215,14 @@ void esp32setup()
             while (true);
         }
 
-        // set over current protection limit (accepted range is 45 - 240 mA)
+        // set over current protection limit (accepted range is 0 - 140 mA)
         // NOTE: set value to 0 to disable overcurrent protection
+        /*
         if (radio.setCurrentLimit(CURRENT_LIMIT) == RADIOLIB_ERR_INVALID_CURRENT_LIMIT) {
             Serial.println(F("Selected current limit is invalid for this module!"));
             while (true);
         }
+        */
 
         // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
         Serial.printf("[LoRa]...PREAMBLE: %i symbols\n", meshcom_settings.node_preamplebits);
