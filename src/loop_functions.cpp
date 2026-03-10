@@ -2747,7 +2747,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
 
         if(bDisplayInfo)
         {
-            Serial.printf("%s [LO-APRS]...%s\n", getTimeString().c_str(), msg_buffer+3);
+            Serial.printf("%s [LO-APRS]...%c%02X%02X%s\n", getTimeString().c_str(), msg_buffer[0], msg_buffer[1], msg_buffer[2], msg_buffer+3);
         }
 
         // local LoRa-APRS position-messages send to LoRa TX
