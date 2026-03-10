@@ -162,7 +162,7 @@ void initTDeck()
 
     Serial.print("[INIT]...Keyboard: ");
     Serial.println(kbDected == true ? "OK" : "ERROR");
-    
+
     // SET Map
     set_map(meshcom_settings.node_map);
 

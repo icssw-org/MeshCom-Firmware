@@ -227,8 +227,6 @@ extern bool wx_shot;
 extern int no_gps_reset_counter;
 extern int gps_refresh_track;
 
-extern String strNMEA;
-
 extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long posinfo_timer_min;
 extern unsigned long heyinfo_timer;      // we check periodically to send HEY

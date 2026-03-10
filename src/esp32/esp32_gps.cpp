@@ -17,11 +17,13 @@
 #define GPS_DEFAULT_BAUDRATE 9600
 #define GPS_BAUDRATE 38400
 
-#if defined (BOARD_TRACKER)
-    HardwareSerial GPS(1);
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    HardwareSerial gpsSerial(1);
+#elif defined (BOARD_TRACKER)
+    HardwareSerial gpsSerial(1);
 #else
 #include "SoftwareSerial.h"
-    SoftwareSerial GPS(GPS_RX_PIN, GPS_TX_PIN);
+    SoftwareSerial gpsSerial(GPS_RX_PIN, GPS_TX_PIN);
 #endif
 
 
@@ -412,33 +414,25 @@ unsigned int readGPS(void)
     unsigned long GPStimeout = millis();
     bool BurstStart = false;
 
-    GPS.flush();
-
-    strNMEA.clear();
+    gpsSerial.flush();
 
     while ((millis() - start) < 1000)
     {
-        while (GPS.available() > 0)
+        while (gpsSerial.available() > 0)
         {
             BurstStart = true;
             GPStimeout = millis();
-            char c = GPS.read();
+            char c = gpsSerial.read();
             if(((c>=0x20) && (c<0x7f)) || (c==0x0A) || (c==0x0D))
             {
                 if (tinyGPSPlus.encode(c))
                 {
                     newData = true;
                 }
-                
-                strNMEA.concat(c);
             }
         }
         if (BurstStart && (GPStimeout+20) < millis()) break;
     }
-
-
-    if(bGPSDEBUG)
-        Serial.println(strNMEA);
 
     if(tinyGPSPlus.satellites.isValid())
     {
@@ -520,9 +514,9 @@ int gpsBaudrate = GPS_DEFAULT_BAUDRATE;
 bool checkGPS(uint32_t Baudrate)
 {
     Serial.printf("GPS: trying %u baud <%i>\n", Baudrate, maxStateCount);
-    GPS.begin(Baudrate);
+    gpsSerial.begin(Baudrate);
 
-    if (myGPS.begin(GPS))
+    if (myGPS.begin(gpsSerial))
     {
         Serial.printf("GPS: connected at %u baud\n", Baudrate);
         gpsBaudrate = Baudrate;
@@ -530,7 +524,7 @@ bool checkGPS(uint32_t Baudrate)
         return true;
     }
     myGPS.end();
-    GPS.end();
+    gpsSerial.end();
     delay(100);
     return false;
 }
@@ -556,12 +550,12 @@ unsigned int getGPS(void)
     }
 
     #if defined (BOARD_TRACKER)
-        if(GPS.available() > 0)
+        if(gpsSerial.available() > 0)
         {
             return readGPS();
         }
         
-        GPS.begin(GPS_BAUDRATE_MODUL, SERIAL_8N1, GPS_TX_PIN, GPS_RX_PIN);
+        gpsSerial.begin(GPS_BAUDRATE_MODUL, SERIAL_8N1, GPS_TX_PIN, GPS_RX_PIN);
         
         return POSINFO_INTERVAL;
     #endif
@@ -633,9 +627,9 @@ unsigned int getGPS(void)
                 {
                     myGPS.setSerialRate(GPS_BAUDRATE, COM_PORT_UART1);
     
-                    GPS.end();
+                    gpsSerial.end();
                     delay(100);
-                    GPS.begin(GPS_BAUDRATE);
+                    gpsSerial.begin(GPS_BAUDRATE);
                     delay(100);
     
                     myGPS.saveConfiguration();
@@ -656,9 +650,9 @@ unsigned int getGPS(void)
 
                 myGPS.hardReset();
                 delay(3000);
-                GPS.begin(gpsBaudrate);
+                gpsSerial.begin(gpsBaudrate);
 
-                if (myGPS.begin(GPS))
+                if (myGPS.begin(gpsSerial))
                 {
                     Serial.println("Success.");
                 }
@@ -682,9 +676,9 @@ unsigned int getGPS(void)
 
                 myGPS.factoryReset();
                 delay(3000); // takes more than one second... a loop to resync would be best
-                GPS.begin(gpsBaudrate);
+                gpsSerial.begin(gpsBaudrate);
 
-                if (myGPS.begin(GPS))
+                if (myGPS.begin(gpsSerial))
                 {
                     Serial.println("Success.");
                 } else {
@@ -719,7 +713,7 @@ unsigned int getGPS(void)
             break;
         
         case 4:
-            if(GPS.available() > 0)
+            if(gpsSerial.available() > 0)
             {
                 return readGPS();
             }

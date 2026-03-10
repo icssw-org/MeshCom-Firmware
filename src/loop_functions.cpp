@@ -315,8 +315,6 @@ double posinfo_prev_lon = 0.0;
 double posinfo_last_direction = 0.0;
 unsigned int posinfo_last_rate = POSINFO_INTERVAL;  // seconds
 
-String strNMEA;
-
 uint32_t posinfo_satcount = 0;
 int posinfo_hdop = 0;
 bool posinfo_fix = false;
@@ -3450,14 +3448,14 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
             posinfo_last_rate = 1800;
 
             if(bGPSDEBUG)
-                Serial.printf("%s [POSINFO]... STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", getTimeString().c_str(), speed_mps, distance, (int)posinfo_last_rate);
+                Serial.printf("[POSI]... STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", speed_mps, distance, (int)posinfo_last_rate);
 
             return posinfo_last_rate;
         }
     }
 
     if(bGPSDEBUG)
-        Serial.printf("%s [POSINFO]... dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", getTimeString().c_str(), posinfo_direction, distance, speed_mps, gps_refresh_intervall);
+        Serial.printf("[POSI]... dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", posinfo_direction, distance, speed_mps, gps_refresh_intervall);
 
     // Moving Logic & Symbol Switching with Hysteresis
     static unsigned long last_car_speed_ts = 0;
@@ -3497,7 +3495,9 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
             if (target_symbol != 0 && meshcom_settings.node_symcd != target_symbol)
             {
                 meshcom_settings.node_symcd = target_symbol;
-                if(bGPSDEBUG) Serial.printf("Auto-Symbol switch to '%c'\n", target_symbol);
+
+                if(bGPSDEBUG)
+                    Serial.printf("Auto-Symbol switch to '%c'\n", target_symbol);
             }
         }
     }
