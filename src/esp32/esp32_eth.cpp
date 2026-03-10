@@ -1,8 +1,9 @@
+#include <configuration.h>
+
 #ifdef HAS_ETHERNET
 
 #include "esp32_eth.h"
 #include "esp32_flash.h"
-#include <configuration.h>
 
 void EspETH::initethDHCP()
 {
