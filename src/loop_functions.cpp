@@ -3448,14 +3448,14 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
             posinfo_last_rate = 1800;
 
             if(bGPSDEBUG)
-                Serial.printf("[POSI]... STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", speed_mps, distance, (int)posinfo_last_rate);
+                Serial.printf("[POSI]...STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", speed_mps, distance, (int)posinfo_last_rate);
 
             return posinfo_last_rate;
         }
     }
 
     if(bGPSDEBUG)
-        Serial.printf("[POSI]... dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", posinfo_direction, distance, speed_mps, gps_refresh_intervall);
+        Serial.printf("[POSI]...dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", posinfo_direction, distance, speed_mps, gps_refresh_intervall);
 
     // Moving Logic & Symbol Switching with Hysteresis
     static unsigned long last_car_speed_ts = 0;
@@ -3514,7 +3514,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         // Also suppress distance triggers unless very large (e.g. moving to another building)
         if(distance < 200.0) 
         {
-            if(bGPSDEBUG) Serial.println("[POSINFO]... WiFi connected & Stationary -> Suppressing drift (Rate: 1800s)");
+            if(bGPSDEBUG) Serial.println("[POSI]...WiFi connected & Stationary -> Suppressing drift (Rate: 1800s)");
             return 1800;
         }
     }
@@ -3539,7 +3539,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     }
 
     if(bGPSDEBUG)
-        Serial.printf("%s [POSINFO]... speed:%.1lf -> fast rate:%i\n", getTimeString().c_str(), speed_mps, (int)gps_send_rate);
+        Serial.printf("[POSI]...speed:%.1lf -> fast rate:%i\n", speed_mps, (int)gps_send_rate);
 
     // Distance Trigger: Force send if distance threshold exceeded
     double dist_threshold = 500.0;
@@ -3550,7 +3550,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     {
         posinfo_shot = true;
         if(bGPSDEBUG)
-            Serial.printf("%s [POSINFO]... one-shot set - distance > %.0fm (%.1lf)\n", getTimeString().c_str(), dist_threshold, distance);
+            Serial.printf("[POSI]...one-shot set - distance > %.0fm (%.1lf)\n", dist_threshold, distance);
     }
 
     if(gps_send_rate < 200)  // seit letzter position
@@ -3573,7 +3573,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
                 posinfo_shot=true;
 
                 if(bGPSDEBUG)
-                    Serial.printf("%s [POSINFO]... one-shot set - direction_diff:%i (thresh:%i) last_lat:%.1lf last_lon:%.1lf\n", getTimeString().c_str(), direction_diff, turn_threshold, posinfo_prev_lat, posinfo_prev_lon);
+                    Serial.printf("[POSI]...one-shot set - direction_diff:%i (thresh:%i) last_lat:%.1lf last_lon:%.1lf\n", direction_diff, turn_threshold, posinfo_prev_lat, posinfo_prev_lon);
             }
         }
     }
@@ -3586,7 +3586,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     posinfo_last_rate = gps_send_rate;
 
     if(bGPSDEBUG)
-        Serial.printf("%s [POSINFO]... RATE:%i\n", getTimeString().c_str(), (int)posinfo_last_rate);
+        Serial.printf("[POSI]...RATE:%i\n", (int)posinfo_last_rate);
 
     return posinfo_last_rate;
 }

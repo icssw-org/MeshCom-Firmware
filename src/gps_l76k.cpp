@@ -26,7 +26,7 @@ bool l76kProbe()
     delay(500);
     // Get version information
     startTimeout = millis() + 4000;
-    Serial.print("[GPSL]...Try to init L76K . Wait stop .");
+    Serial.print("[GPSL]...Try to init GNSS . Wait stop .");
 
     while (gpsSerial.available() > 0)
     {
@@ -35,7 +35,7 @@ bool l76kProbe()
 
         if (millis() > startTimeout)
         {
-            Serial.println("[GPSL]...Wait L76K stop NMEA timeout!");
+            Serial.println("[GPSL]...Wait GNSS stop NMEA timeout!");
             return false;
         }
     };
@@ -52,7 +52,7 @@ bool l76kProbe()
     {
         if (millis() > startTimeout)
         {
-            Serial.println("[GPSL]...Get L76K timeout!");
+            Serial.println("[GPSL]...Get GNSS timeout!");
             return false;
         }
     }
@@ -60,12 +60,17 @@ bool l76kProbe()
     ver = gpsSerial.readStringUntil('\n');
     if (ver.startsWith("$GPTXT,01,01,02") || ver.startsWith("$GNTXT,01,01,01,PCAS"))
     {
-        Serial.println("[GPSL]...L76K GNSS init succeeded, using L76K GNSS Module");
+        Serial.print("[GPSL]...GNSS init succeeded, using GNSS Module: ");
+
+        if(ver.indexOf("PCAS inv format*23") > 0)
+            Serial.println("L76K");
+        else
+            Serial.println("UBLOX GNSS");
         result = true;
     }
     delay(500);
 
-    // Initialize the L76K Chip, use GPS + GLONASS
+    // Initialize the GNSS Chip, use GPS + GLONASS
     gpsSerial.write("$PCAS04,5*1C\r\n");
     delay(250);
     // only ask for RMC and GGA
@@ -85,7 +90,7 @@ void gpsInitTask(void *parameter) {
     if(meshcom_settings.node_gpsbaud > 0 && meshcom_settings.node_gpsbaud < 150000)
     {
         if(bGPSDEBUG)
-            Serial.printf("[L76K]...check %lubaud\n", meshcom_settings.node_gpsbaud);
+            Serial.printf("[GPS ]...check %lubaud\n", meshcom_settings.node_gpsbaud);
 
         gpsSerial.begin(meshcom_settings.node_gpsbaud, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         for ( int i = 0; i < 3; ++i)
@@ -100,7 +105,7 @@ void gpsInitTask(void *parameter) {
 
     if (!result) {
         if(bGPSDEBUG)
-            Serial.println("[L76K]...check 38400baud");
+            Serial.println("[GPS ]...check 38400baud");
 
         gpsSerial.begin(38400, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         for ( int i = 0; i < 3; ++i)
@@ -117,7 +122,7 @@ void gpsInitTask(void *parameter) {
 
     if (!result) {
         if(bGPSDEBUG)
-            Serial.println("[L76K]...check 115200baud");
+            Serial.println("[GPS ]...check 115200baud");
 
         gpsSerial.begin(115200, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         for ( int i = 0; i < 3; ++i)
@@ -134,7 +139,7 @@ void gpsInitTask(void *parameter) {
     
     if(!result) {
         if(bGPSDEBUG)
-            Serial.println("[L76K]...check 9600baud");
+            Serial.println("[GPS ]...check 9600baud");
 
         gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         for ( int i = 0; i < 3; ++i)
@@ -190,33 +195,38 @@ unsigned int displayInfo()
 
     if(bGPSDEBUG)
     {
-        Serial.printf("[L76K]... sat_count:%i hdop:%i time_update:%i location_update:%i\n", posinfo_satcount, posinfo_hdop, gps_time_update, gps_loc_update);
+        Serial.printf("[GPS ]...sat_count:%i hdop:%i time_update:%i location_update:%i\n", posinfo_satcount, posinfo_hdop, gps_time_update, gps_loc_update);
+
+        Serial.print("[GPS ]...Time <UTC>: ");
+        if (tinyGPSPlus.time.hour() < 10) Serial.print(F("0"));
+        Serial.print(tinyGPSPlus.time.hour());
+        Serial.print(F(":"));
+        if (tinyGPSPlus.time.minute() < 10) Serial.print(F("0"));
+        Serial.print(tinyGPSPlus.time.minute());
+        Serial.print(F(":"));
+        if (tinyGPSPlus.time.second() < 10) Serial.print(F("0"));
+        Serial.print(tinyGPSPlus.time.second());
+
+        Serial.print(F(" / Date: "));
+        Serial.print(tinyGPSPlus.date.year());
+        Serial.print(F("."));
+        if (tinyGPSPlus.date.month() < 10) Serial.print(F("0"));
+        Serial.print(tinyGPSPlus.date.month());
+        Serial.print(F("."));
+        if (tinyGPSPlus.date.day() < 10) Serial.print(F("0"));
+        Serial.print(tinyGPSPlus.date.day());
     }
 
     if (tinyGPSPlus.location.isValid())
     {
         if(bGPSDEBUG) 
         {
-            Serial.printf("[L76K]... ");
+            Serial.printf(" / Pos: ");
             Serial.print(tinyGPSPlus.location.lat(), 6);
             Serial.print((tinyGPSPlus.location.rawLat().negative?"S":"N"));
             Serial.print(F(","));
             Serial.print(tinyGPSPlus.location.lng(), 6);
             Serial.print((tinyGPSPlus.location.rawLng().negative?"W":"E"));
-
-            Serial.print(F("  Date/Time: "));
-            if (tinyGPSPlus.date.isValid())
-            {
-                Serial.print(tinyGPSPlus.date.year());
-                Serial.print(F("."));
-                Serial.print(tinyGPSPlus.date.month());
-                Serial.print(F("."));
-                Serial.print(tinyGPSPlus.date.day());
-            }
-            else
-            {
-                Serial.println(F("[L76K]...INVALID"));
-            }
         }
 
         if(bGPSDEBUG)
@@ -224,19 +234,6 @@ unsigned int displayInfo()
 
         if (tinyGPSPlus.time.isValid())
         {
-            if(bGPSDEBUG)
-            {
-                if (tinyGPSPlus.time.hour() < 10) Serial.print(F("0"));
-                Serial.print(tinyGPSPlus.time.hour());
-                Serial.print(F(":"));
-                if (tinyGPSPlus.time.minute() < 10) Serial.print(F("0"));
-                Serial.print(tinyGPSPlus.time.minute());
-                Serial.print(F(":"));
-                if (tinyGPSPlus.time.second() < 10) Serial.print(F("0"));
-                Serial.print(tinyGPSPlus.time.second());
-                Serial.print(F("."));
-            }
-
             if(tinyGPSPlus.date.year() > 2023)
             {
                 MyClock.setCurrentTime(meshcom_settings.node_utcoff, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
@@ -309,8 +306,6 @@ unsigned int displayInfo()
             else
             {
                 posinfo_fix = false;
-                posinfo_satcount = 0;
-                posinfo_hdop = 0;
                 posinfo_direction = 0;
                 posinfo_distance = 0;
                 posinfo_age = 0;
@@ -322,8 +317,6 @@ unsigned int displayInfo()
         else
         {
             posinfo_fix = false;
-            posinfo_satcount = 0;
-            posinfo_hdop = 0;
             posinfo_direction = 0;
             posinfo_distance = 0;
 
@@ -337,8 +330,6 @@ unsigned int displayInfo()
     else
     {
         posinfo_fix = false;
-        posinfo_satcount = 0;
-        posinfo_hdop = 0;
 
         if(bGPSDEBUG)
             Serial.println(F("INVALID"));   
