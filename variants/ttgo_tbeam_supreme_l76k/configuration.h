@@ -12,8 +12,10 @@ definitions for T-Beam-Supreme-L76K
 #define MODUL_FW_TBEAM TBEAM_SUPREME_L76K
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
+
 #define ENABLE_GPS
-#define GPS_L76K
+//#define GPS_FUNCTIONS
+
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20

@@ -205,7 +205,7 @@ uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
 String strText="";
 
 // TinyGPS
-TinyGPSPlus tinyGPSPlus;
+TinyGPSPlus gps;
 
 int direction_S_N = 0;  //0--S, 1--N
 int direction_E_W = 0;  //0--E, 1--W
@@ -1171,7 +1171,7 @@ extern bool btimeClient;
         if(bGPSDEBUG)
             Serial.println("gKeyNum == 2");
 
-        #ifdef ENABLE_GPS
+        #ifdef ENABLE_RAK_GPS
 
         if(bGPSON)
         {
@@ -1207,7 +1207,7 @@ extern bool btimeClient;
         gKeyNum = 0;
     }
 
-    #ifdef ENABLE_GPS
+    #ifdef ENABLE_RAK_GPS
     if(bGPSON)
     {
         // check GPS ON and activ --> <gKeyNum == 2> the signal must be active
@@ -1853,41 +1853,41 @@ unsigned int getGPS(void)
         if(bGPSDEBUG)
             Serial.write(c);
 
-        if (tinyGPSPlus.encode(c))// Did a new valid sentence come in?
+        if (gps.encode(c))// Did a new valid sentence come in?
           newData = true;
       }
     }
 
     if(bGPSDEBUG)
-        Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, tinyGPSPlus.satellites.value(), tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
+        Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, gps.satellites.value(), gps.sentencesWithFix(), gps.location.isUpdated(), gps.location.isValid(), gps.hdop.value());
 
-    if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 800)
+    if (newData && gps.location.isUpdated() && gps.location.isValid() && gps.hdop.isValid() && gps.hdop.value() < 800)
     {
         double dlat, dlon;
         
-        dlat = tinyGPSPlus.location.lat();
-        dlon = tinyGPSPlus.location.lng();
+        dlat = gps.location.lat();
+        dlon = gps.location.lng();
 
         meshcom_settings.node_lat = cround4(dlat);
         meshcom_settings.node_lon = cround4(dlon);
 
-        if(tinyGPSPlus.location.rawLat().negative)
+        if(gps.location.rawLat().negative)
             meshcom_settings.node_lat_c = 'S';
         else
             meshcom_settings.node_lat_c = 'N';
 
-        if(tinyGPSPlus.location.rawLng().negative)
+        if(gps.location.rawLng().negative)
             meshcom_settings.node_lon_c = 'W';
         else
             meshcom_settings.node_lon_c = 'E';
 
-        meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)tinyGPSPlus.altitude.meters()) / 11;
+        meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)gps.altitude.meters()) / 11;
 
-        MyClock.setCurrentTime(meshcom_settings.node_utcoff, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
+        MyClock.setCurrentTime(meshcom_settings.node_utcoff, gps.date.year(), gps.date.month(), gps.date.day(), gps.time.hour(), gps.time.minute(), gps.time.second());
         snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
 
-        posinfo_satcount = tinyGPSPlus.satellites.value();
-        posinfo_hdop = tinyGPSPlus.hdop.value();
+        posinfo_satcount = gps.satellites.value();
+        posinfo_hdop = gps.hdop.value();
         posinfo_fix = true;
 
         if(bGPSDEBUG)
@@ -1898,8 +1898,8 @@ unsigned int getGPS(void)
         }
 
 
-        posinfo_satcount = tinyGPSPlus.satellites.value();
-        posinfo_hdop = tinyGPSPlus.hdop.value();
+        posinfo_satcount = gps.satellites.value();
+        posinfo_hdop = gps.hdop.value();
         posinfo_fix = true;
 
         return setSMartBeaconing(dlat, dlon);

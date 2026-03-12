@@ -38,7 +38,13 @@
 #include "tft_display_functions.h"
 #endif
 // TinyGPS
+#if defined(ENABLE_GPS)
+extern TinyGPSPlus gps;
+#elif defined(ENABLE_RAK_GPS)
+extern TinyGPSPlus gps;
+#else
 extern TinyGPSPlus tinyGPSPlus;
+#endif
 
 bool bnextread=false;
 
@@ -1842,10 +1848,10 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     lat = conv_coord_to_dec(aprspos.lat);
     lon = conv_coord_to_dec(aprspos.lon);
 
-    d_dir_to = tinyGPSPlus.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
+    d_dir_to = gps.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
     dir_to = d_dir_to;
 
-    dist_to = tinyGPSPlus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
+    dist_to = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
 
     sendDisplayMainline();
 
@@ -3400,8 +3406,6 @@ int GetHeadingDifference(int heading1, int heading2)
 
 unsigned int setSMartBeaconing(double dlat, double dlon)
 {
-    extern TinyGPSPlus tinyGPSPlus;
-
     unsigned int gps_send_rate = posinfo_last_rate;  // seconds
 
     posinfo_lat = dlat;
@@ -3413,7 +3417,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         posinfo_last_lon = dlon;
     }
 
-    double distance = tinyGPSPlus.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
+    double distance = gps.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
 
     
     //posinfo_distance += distance;
@@ -3428,13 +3432,13 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     }
     else
     {
-        posinfo_direction = tinyGPSPlus.courseTo(posinfo_prev_lat, posinfo_prev_lon, dlat, dlon);    // Grad
+        posinfo_direction = gps.courseTo(posinfo_prev_lat, posinfo_prev_lon, dlat, dlon);    // Grad
     }
 
     // Use GPS speed if available (more accurate than distance/interval)
     double speed_mps = 0.0;
-    if(tinyGPSPlus.speed.isValid())
-        speed_mps = tinyGPSPlus.speed.mps();
+    if(gps.speed.isValid())
+        speed_mps = gps.speed.mps();
     else
         speed_mps = distance / gps_refresh_intervall; // Fallback
 

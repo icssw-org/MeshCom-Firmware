@@ -22,7 +22,7 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 
 #define HAS_GPS
 #define GPS_SLEEP_HOLD_ON_LOW
-#define GPS_BAUD_RATE               9600
+#define GPS_BAUDRATE_MODUL          9600
 #define GPS_RX_PIN                  (5)
 #define GPS_TX_PIN                  (6)
 #define GPS_PPS_PIN                 (7)
@@ -77,7 +77,6 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
 #define GPS_SLEEP_HOLD_ON_LOW
-#define GPS_BAUD_RATE               9600
 #define HAS_SDCARD
 #define HAS_GPS
 #define SDCARD_MOSI                 SPI_MOSI
@@ -102,7 +101,8 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define BOARD_COUNTRY 8   // EU8
 
 #define ENABLE_GPS
-#define GPS_L76K
+//#define GPS_FUNCTIONS
+
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20

@@ -40,11 +40,13 @@ Timeout timerSerial;
 #endif //ARDUINO_ARCH_ESP32
 
 
-#if defined (GPS_L76K)
-    #include "gps_l76k.h"
-#elif defined (GPS_L76K_TDECK)
-    #include "gps_l76k_tdeck.h"
-#else
+#if defined (ENABLE_GPS)
+    #include "gps_functions.h"
+    extern GPSData gpsData;
+#endif
+
+#if defined (GPS_FUNCTIONS)
+    #include "gps_functions.h"
 #endif
 
 // Sensors
@@ -888,18 +890,27 @@ void esp32setup()
 
     #if defined(ENABLE_GPS)
         bSETGPS_POWER=true;
+        
+        // TBEAM variants
+        #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+            setupPMU(bSETGPS_POWER);
+        #endif
     #endif
-
-    #ifndef BOARD_T_DECK_PRO
-        #if defined (GPS_L76K)
+    
+    #if defined(ENABLE_GPS)
+        GPS_Init();
+    #else
+    
+    #if defined(BOARD_T_DECK_PRO)
+        #if defined(GPS_FUNCTIONS)
             setupPMU(bSETGPS_POWER);
             beginGPS();
-        #elif defined (GPS_L76K_TDECK)
-            switchL76KGPS();
-        #elif defined (BOARD_T5_EPAPER)
+        #elif defined(BOARD_T5_EPAPER)
         #else
             setupPMU(bSETGPS_POWER);
         #endif
+    #endif
+
     #endif
 
     #if defined(ENABLE_BMX280)
@@ -2341,8 +2352,6 @@ void esp32loop()
 
     if ((gps_refresh_timer + ((unsigned long)gps_refresh_intervall * 1000)) < millis())
     {
-        #ifdef ENABLE_GPS
-
         unsigned int igps=0;
             
         if(!bGPSON)
@@ -2366,6 +2375,40 @@ void esp32loop()
         }
         else
         {
+            #if defined (ENABLE_GPS)
+                igps = GPS_Loop();
+
+                if(bGPSDEBUG)
+                {
+                    Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
+
+                    Serial.print("[GPS ]...Time <UTC>: ");
+                    if (gpsData.hour < 10) Serial.print(F("0"));
+                    Serial.print(gpsData.hour);
+                    Serial.print(F(":"));
+                    if (gpsData.minute < 10) Serial.print(F("0"));
+                    Serial.print(gpsData.minute);
+                    Serial.print(F(":"));
+                    if (gpsData.second < 10) Serial.print(F("0"));
+                    Serial.print(gpsData.second);
+
+                    Serial.print(F(" / Date: "));
+                    Serial.print(gpsData.year);
+                    Serial.print(F("."));
+                    if (gpsData.month < 10) Serial.print(F("0"));
+                    Serial.print(gpsData.month);
+                    Serial.print(F("."));
+                    if (gpsData.day < 10) Serial.print(F("0"));
+                    Serial.println(gpsData.day);
+
+                    if(posinfo_fix)
+                    {
+                        Serial.printf("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
+                    }
+
+                }
+            #else
+
             #if defined (BOARD_T_DECK_PRO)
                 tdeck_set_gps(true);
             #endif
@@ -2373,12 +2416,14 @@ void esp32loop()
             #ifdef BOARD_T_DECK_PRO
                 igps = tdeck_get_gps();
             #else
-                #if defined (GPS_L76K)
-                    igps = loopL76KGPS();
+                #if defined (GPS_FUNCTIONS)
+                    igps = loopGPS();
                 #else
                     igps = getGPS();
                 #endif
             #endif
+
+            #endif // ENABLE_GPS
         }
 
         if(igps > 0)
@@ -2401,8 +2446,6 @@ void esp32loop()
                 tdeck_refresh_track_view();
                 gps_refresh_track=0;
             }
-        #endif
-
         #endif
 
         gps_refresh_timer = millis();

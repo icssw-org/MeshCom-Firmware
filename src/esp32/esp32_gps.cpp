@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if defined (ENABLE_GPS)
+#if defined(ENABLE_GPS)
 
 #include "esp32_gps.h"
 #include <loop_functions.h>
@@ -17,9 +17,11 @@
 #define GPS_DEFAULT_BAUDRATE 9600
 #define GPS_BAUDRATE 38400
 
-#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+#if defined(ENABLE_GPS)
+//local withoin functions defined
+#elif defined(GPS_FUNCTIONS)
     HardwareSerial gpsSerial(1);
-#elif defined (BOARD_TRACKER)
+#elif defined(BOARD_TRACKER)
     HardwareSerial gpsSerial(1);
 #else
 #include "SoftwareSerial.h"
@@ -39,7 +41,11 @@ XPowersLibInterface *PMU = NULL;
 
 
 // TinyGPS
+#if defined(ENABLE_GPS)
+TinyGPSPlus gps;
+#else
 TinyGPSPlus tinyGPSPlus;
+#endif
 
 SFE_UBLOX_GNSS myGPS;
 
@@ -52,7 +58,9 @@ bool bMitHardReset = false;
     
 int maxStateCount=1;
 
+#if not defined(ENABLE_GPS)
 static void persist_last_position_if_needed(void);
+#endif
 
 void setupPMU(bool bGPSPOWER)
 {
@@ -368,6 +376,8 @@ void setupPMU(bool bGPSPOWER)
     #endif
 }
 
+#if not defined ENABLE_GPS
+
 static void persist_last_position_if_needed(void)
 {
     static double last_saved_lat = NAN;
@@ -549,7 +559,7 @@ unsigned int getGPS(void)
         Serial.println(state);
     }
 
-    #if defined (BOARD_TRACKER)
+    #if defined(BOARD_TRACKER)
         if(gpsSerial.available() > 0)
         {
             return readGPS();
@@ -722,5 +732,7 @@ unsigned int getGPS(void)
 
     return POSINFO_INTERVAL;
 }
+
+#endif
 
 #endif
