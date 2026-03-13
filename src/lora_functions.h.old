@@ -25,6 +25,4 @@ bool updateRetransmissionStatus(void);
 unsigned long csma_compute_timeout(int attempt);
 void csma_reset(void);
 
-void addTxRingEntry(const char* source);
-
 #endif

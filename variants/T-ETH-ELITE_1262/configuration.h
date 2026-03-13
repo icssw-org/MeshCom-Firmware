@@ -10,7 +10,7 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define HAS_ETHERNET
 
 // Manteniamo compatibilità MeshCom
-#define MODUL_HARDWARE ESP32_S3_EBYTE_E22
+#define MODUL_HARDWARE T_ETH_ELITE_1262
 
 // Frequenze
 #define RF_FREQUENCY 433.175000
@@ -20,7 +20,6 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 // GPS
 #define ENABLE_GPS
 #define GPS_RESET_MODE 1
-#define GPS_L76K
 
 // Radio
 #define SX126x_V3

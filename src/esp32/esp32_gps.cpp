@@ -62,7 +62,7 @@ int maxStateCount=1;
 static void persist_last_position_if_needed(void);
 #endif
 
-void setupPMU(bool bGPSPOWER)
+void setupPMU()
 {
 /*
 | CHIP       | AXP173            | AXP192            | AXP202            | AXP2101                                |

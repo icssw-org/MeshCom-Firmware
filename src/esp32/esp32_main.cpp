@@ -886,14 +886,10 @@ void esp32setup()
         initPAControl();
     #endif
 
-    bool bSETGPS_POWER=false;
-
     #if defined(ENABLE_GPS)
-        bSETGPS_POWER=true;
-        
         // TBEAM variants
         #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
-            setupPMU(bSETGPS_POWER);
+            setupPMU();
         #endif
     #endif
     
@@ -903,11 +899,11 @@ void esp32setup()
     
     #if defined(BOARD_T_DECK_PRO)
         #if defined(GPS_FUNCTIONS)
-            setupPMU(bSETGPS_POWER);
+            setupPMU();
             beginGPS();
         #elif defined(BOARD_T5_EPAPER)
         #else
-            setupPMU(bSETGPS_POWER);
+            setupPMU();
         #endif
     #endif
 

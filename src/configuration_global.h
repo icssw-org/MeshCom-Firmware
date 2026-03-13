@@ -1,5 +1,5 @@
 #define SOURCE_VERSION "4.35"
-#define SOURCE_VERSION_SUB "o"
+#define SOURCE_VERSION_SUB "p"
 
 #define FLASH_VERSION 20260310
 
@@ -24,12 +24,13 @@
 #define HELTEC_E290 44
 #define TBEAM_1262 45
 #define T_DECK_PLUS 46
-#define TBEAM_SUPREME_L76K 47
+#define TBEAM_SUPREME 47
 #define ESP32_S3_EBYTE_E22 48
 #define TLORA_PAGER 49
 #define T_DECK_PRO 50
 #define TBEAM_1W 51
 #define HELTEC_V4 52
+#define T_ETH_ELITE_1262 53
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 
@@ -63,18 +64,21 @@
 #define MAX_MHEARD 5                       // max count of messages in mheard ringbuffer
 #define MAX_MHPATH 5                       // max count of messages in mhpath ringbuffer
 #define MAX_RING 20                        // max count of messages in ringbuffer
+#define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
 #define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #elif defined(ENABLE_SBUFFER)
 #define MAX_MHEARD 5                       // max count of messages in mheard ringbuffer
 #define MAX_MHPATH 5                       // max count of messages in mhpath ringbuffer
 #define MAX_RING 20                        // max count of messages in ringbuffer
+#define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
 #define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #else
 #define MAX_MHEARD 20                      // max count of messages in mheard ringbuffer
 #define MAX_MHPATH 30                      // max count of messages in mhpath ringbuffer
 #define MAX_RING 30                        // max count of messages in ringbuffer
+#define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
 #define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #endif
@@ -91,6 +95,27 @@
 #define RADIOLIB_SX126X_CAD 0x07           // 0x00...length off    0x07...32-bit detect
 #define RADIOLIB_SX126X_DETMIN  10         // default 10
 #define RADIOLIB_SX126X_DETPEAK 25         // default 25
+
+// CSMA/CA - Slot-basierter Backoff mit Hardware-CAD
+#define CSMA_BASE_0         4500    // Basis-Timeout Versuch 0 (ms)
+#define CSMA_BASE_1         3000    // Basis-Timeout Versuch 1 (ms)
+#define CSMA_BASE_2         2000    // Basis-Timeout Versuch 2 (ms)
+#define CSMA_SLOT_SIZE      35      // Slot-Groesse (ms): 28ms CAD + 2ms TX-Switch + 5ms Safety
+#define CSMA_SLOTS_0        10      // Zufalls-Slots bei Versuch 0 (max 350ms Jitter)
+#define CSMA_SLOTS_1_2      5       // Zufalls-Slots bei Versuch 1-2 (max 175ms Jitter)
+#define CSMA_MAX_ATTEMPTS   3       // Ab hier: Rapid-fire CAD bis Kanal frei
+#define CSMA_RAPID_RX_MS    100     // Preamble-Check Fenster im Rapid-fire Modus (ms)
+
+// LoRa Message Types
+#define MSG_TYPE_ACK          0x41
+#define MSG_TYPE_TEXT         0x3A
+#define MSG_TYPE_POSITION     0x21
+#define MSG_TYPE_HEY          0x40
+
+// Ring Buffer Slot Status (ringBuffer[slot][1])
+#define RING_STATUS_READY     0x00   // Ready to send
+#define RING_STATUS_SENT      0x01   // Sent, waiting for ACK/timer
+#define RING_STATUS_DONE      0xFF   // Final, no retransmission
 
 // SOFTSERIEL
 #define SOFTSER_REFRESH_INTERVAL 5         // SOFTSER Refresh alle 5 Minuten

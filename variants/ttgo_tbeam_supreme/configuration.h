@@ -1,5 +1,5 @@
 /*
-definitions for T-Beam-Supreme-L76K
+definitions for T-Beam-Supreme
 */
 
 #pragma once
@@ -8,13 +8,12 @@ definitions for T-Beam-Supreme-L76K
 #include <configuration_global.h>
 
 // T-Beam specific config
-#define MODUL_HARDWARE TBEAM_SUPREME_L76K
-#define MODUL_FW_TBEAM TBEAM_SUPREME_L76K
+#define MODUL_HARDWARE TBEAM_SUPREME
+#define MODUL_FW_TBEAM TBEAM_SUPREME
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 
 #define ENABLE_GPS
-//#define GPS_FUNCTIONS
 
 #define ENABLE_BMX280
 #define ENABLE_BMP390
