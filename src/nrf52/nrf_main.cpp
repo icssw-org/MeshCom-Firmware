@@ -10,6 +10,13 @@
 #include <nrf52_functions.h>
 #include <extudp_functions.h>
 
+// Deferred serial output for radio callbacks — see deferred_serial.h
+#include "deferred_serial.h"
+char    _dsr_buf[DSR_SLOTS][DSR_SLOT_SIZE];
+volatile uint8_t _dsr_wr = 0;
+volatile uint8_t _dsr_rd = 0;
+volatile bool    _in_radio_isr_task = false;
+
 #include <TinyGPSPlus.h>
 
 #include "Adafruit_SHTC3.h"
@@ -949,6 +956,9 @@ void nrf52setup()
 
 void nrf52loop()
 {
+    // Drain deferred serial output from radio callbacks (see deferred_serial.h)
+    deferred_serial_flush();
+
     // get RTC Now
     // RTC hat Vorrang zu Zeit via MeshCom-Server
     bool bMyClock = true;
@@ -1084,6 +1094,18 @@ extern bool btimeClient;
         }
     }
 
+    // Deferred display update from OnRxDone (avoid I2C inside radio callback)
+    if(bPendingDisplayText)
+    {
+        sendDisplayText(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
+        bPendingDisplayText = false;
+    }
+    if(bPendingDisplayPos)
+    {
+        sendDisplayPosition(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
+        bPendingDisplayPos = false;
+    }
+
     // Channel utilization report (every 10s)
     {
         static unsigned long ch_util_timer = 0;
@@ -1099,7 +1121,11 @@ extern bool btimeClient;
             if(util > 100) util = 100;
             Serial.printf("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
                 rx_ms, tx_ms, util);
-        }
+            // ONRXDONE stats: report max and warn count, then reset
+            Serial.printf("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
+                onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
+            onrxdone_max_ms = 0;
+            onrxdone_warn_count = 0;        }
     }
 
     if(iReceiveTimeOutTime > 0)
@@ -1833,6 +1859,7 @@ if (isPhoneReady == 1)
     if(bEXTUDP)
     {
         getExternUDP();
+        flushExternQueue();
     }
 
     if(bWEBSERVER || bEXTUDP)

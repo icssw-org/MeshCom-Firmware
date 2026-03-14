@@ -304,3 +304,14 @@ extern int pagePointer;
 extern int pageHold;
 
 extern bool bShowHead;
+
+// ONRXDONE_TIME monitoring
+extern unsigned long onrxdone_max_ms;
+extern unsigned int  onrxdone_warn_count;
+
+// Deferred display update from OnRxDone
+extern volatile bool bPendingDisplayText;
+extern volatile bool bPendingDisplayPos;
+extern struct aprsMessage pendingDisplayMsg;
+extern int16_t pendingDisplayRssi;
+extern int8_t  pendingDisplaySnr;

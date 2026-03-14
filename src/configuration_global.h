@@ -75,11 +75,11 @@
 #define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #else
-#define MAX_MHEARD 20                      // max count of messages in mheard ringbuffer
+#define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer
 #define MAX_MHPATH 30                      // max count of messages in mhpath ringbuffer
 #define MAX_RING 30                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
-#define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
+#define MAX_LOG 30                         // max count of messages in LOG-ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #endif
 
@@ -105,6 +105,9 @@
 #define CSMA_SLOTS_1_2      5       // Zufalls-Slots bei Versuch 1-2 (max 175ms Jitter)
 #define CSMA_MAX_ATTEMPTS   3       // Ab hier: Rapid-fire CAD bis Kanal frei
 #define CSMA_RAPID_RX_MS    100     // Preamble-Check Fenster im Rapid-fire Modus (ms)
+
+// OnRxDone processing time monitoring
+#define ONRXDONE_WARN_MS    50      // Warnung wenn OnRxDone laenger als X ms dauert
 
 // LoRa Message Types
 #define MSG_TYPE_ACK          0x41
