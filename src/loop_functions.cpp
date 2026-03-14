@@ -483,6 +483,10 @@ void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
  */
 void addLoraRxBuffer(unsigned int msg_id, bool bserver)
 {
+    if(bLORADEBUG)
+        Serial.printf("[MC-DBG] RX_DEDUP_ADD msg_id=%08X srv=%d slot=%d/%d\n",
+                      msg_id, bserver, loraWrite, MAX_DEDUP_RING);
+
     // byte 0-3 msg_id
     ringBufferLoraRX[loraWrite][3] = msg_id >> 24;
     ringBufferLoraRX[loraWrite][2] = msg_id >> 16;

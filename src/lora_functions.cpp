@@ -821,6 +821,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 print_buff[3]=(msg_counter >> 16) & 0xFF;
                                                 print_buff[4]=(msg_counter >> 24) & 0xFF;
 
+                                                ringBuffer[iWrite][0]=12;
+                                                ringBuffer[iWrite][1]=RING_STATUS_DONE; // no retransmission
                                                 memcpy(ringBuffer[iWrite]+2, print_buff, 12);
 
                                                 addTxRingEntry("rx_dm_ack_new");
