@@ -873,6 +873,17 @@ void loadMHeardPersistence()
         if(!SD.exists("/mheard.dat")) return;
         File file = SD.open("/mheard.dat", FILE_READ);
         if(!file) return;
+
+// FIX — vor den file.read() Aufrufen einfuegen:
+        size_t expected_mh = sizeof(mheardCalls) + sizeof(mheardBuffer) + sizeof(mheardLat)
+                           + sizeof(mheardLon) + sizeof(mheardEpoch) + sizeof(mheardNCount);
+        if(file.size() != expected_mh) {
+            Serial.printf("[TDECK]...mheard.dat size mismatch (%u != %u), deleting\n", file.size(), expected_mh);
+            file.close();
+            SD.remove("/mheard.dat");
+            return;
+        }
+
         file.read((uint8_t*)mheardCalls, sizeof(mheardCalls));
         file.read((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
         file.read((uint8_t*)mheardLat, sizeof(mheardLat));
@@ -897,6 +908,17 @@ void loadPathPersistence()
         if(!SD.exists("/mhpath.dat")) return;
         File file = SD.open("/mhpath.dat", FILE_READ);
         if(!file) return;
+
+// FIX — vor den file.read() Aufrufen einfuegen:
+        size_t expected_path = sizeof(mheardPathCalls) + sizeof(mheardPathBuffer1)
+                             + sizeof(mheardPathEpoch) + sizeof(mheardPathLen);
+        if(file.size() != expected_path) {
+            Serial.printf("[TDECK]...mhpath.dat size mismatch (%u != %u), deleting\n", file.size(), expected_path);
+            file.close();
+            SD.remove("/mhpath.dat");
+            return;
+        }
+
         file.read((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
         file.read((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
         file.read((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));

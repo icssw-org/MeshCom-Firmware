@@ -3538,7 +3538,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         // Also suppress distance triggers unless very large (e.g. moving to another building)
         if(distance < 200.0) 
         {
-            if(bGPSDEBUG) Serial.printf("%s [POSINFO]...WiFi connected & Stationary -> Suppressing drift (Rate: 1800s\n)", getTimeString().c_str());
+            if(bGPSDEBUG) Serial.printf("%s [POSINFO]...WiFi connected & Stationary -> Suppressing drift (Rate: 1800s)\n", getTimeString().c_str());
             return 1800;
         }
     }

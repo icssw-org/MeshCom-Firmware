@@ -227,7 +227,6 @@ struct BleQueueItem {
 };
 
 static QueueHandle_t bleQueue = NULL;
-static volatile bool connect_pending = false;
 
 NimBLEServer *pServer = NULL;
 NimBLECharacteristic* pTxCharacteristic;
@@ -255,7 +254,6 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     {
         deviceConnected = true;
         config_to_phone_prepare = true;
-        connect_pending = true;  // commandAction runs in Main Loop
 
         Serial.printf("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
         pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
