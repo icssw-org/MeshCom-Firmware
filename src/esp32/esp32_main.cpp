@@ -2437,12 +2437,6 @@ void esp32loop()
         }
     }
 
-    // BLE connect pending: run conffin in Main Loop context
-    if (connect_pending) {
-        connect_pending = false;
-        commandAction((char*)"--conffin", isPhoneReady, true);
-    }
-
     if(hasMsgFromPhone)
     {
         if(bBLEDEBUG)
@@ -2469,7 +2463,7 @@ void esp32loop()
             }
 
             sendMheard();
-
+            commandAction((char*)"--conffin", isPhoneReady, true);
             config_to_phone_prepare_timer = millis();
             
             config_to_phone_prepare = false;

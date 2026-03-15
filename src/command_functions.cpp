@@ -4769,6 +4769,7 @@ void sendAPRSset()
 
 }
 
+
 // when all Jsons for configuration are sent to the phone, we send a finish message
 void sendConfigFinish()
 {
