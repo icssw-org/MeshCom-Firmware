@@ -40,6 +40,18 @@ Timeout timerSerial;
 #include "driver/gpio.h"
 #endif //ARDUINO_ARCH_ESP32
 
+// Kompatibilitaets-Macro: DIO1-Pin hat je nach Board verschiedene Namen
+#ifndef LORA_DIO1
+  #if defined(E22_DIO1)
+    #define LORA_DIO1 E22_DIO1
+  #elif defined(RADIO_DIO1_PIN)
+    #define LORA_DIO1 RADIO_DIO1_PIN
+  #elif defined(PIN_LORA_DIO_1)
+    #define LORA_DIO1 PIN_LORA_DIO_1
+  #else
+    #warning "LORA_DIO1 not defined -- safety net digitalRead() disabled"
+  #endif
+#endif
 
 #if defined (ENABLE_GPS)
     #include "gps_functions.h"
@@ -203,6 +215,19 @@ String str;
 // Textmessage buffer from phone, hasMsgFromPhone flag indicates new message
 extern char textbuff_phone [MAX_MSG_LEN_PHONE];
 extern uint8_t txt_msg_len_phone;
+extern unsigned long last_upd_timer;
+extern bool hb_warn_logged;
+
+// FreeRTOS Queue for BLE data from NimBLE task to Main Loop
+#include "freertos/queue.h"
+
+struct BleQueueItem {
+    uint8_t data[MAX_MSG_LEN_PHONE];
+    size_t length;
+};
+
+static QueueHandle_t bleQueue = NULL;
+static volatile bool connect_pending = false;
 
 NimBLEServer *pServer = NULL;
 NimBLECharacteristic* pTxCharacteristic;
@@ -230,20 +255,10 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     {
         deviceConnected = true;
         config_to_phone_prepare = true;
-        
-        Serial.printf("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
-        /**
-         *  We can use the connection handle here to ask for different connection parameters.
-         *  Args: connection handle, min connection interval, max connection interval
-         *  latency, supervision timeout.
-         *  Units; Min/Max Intervals: 1.25 millisecond increments.
-         *  Latency: number of intervals allowed to skip.
-         *  Timeout: 10 millisecond increments.
-         */
-        pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
-        // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-        commandAction((char*)"--conffin", isPhoneReady, true);
+        connect_pending = true;  // commandAction runs in Main Loop
 
+        Serial.printf("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
+        pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
     };
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
@@ -270,14 +285,9 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
 	/*******************************************************************/
 
     void onAuthenticationComplete(NimBLEConnInfo& connInfo) override {
-        /** Check that encryption was successful, if not we disconnect the client */
-        if (!connInfo.isEncrypted()) {
-            NimBLEDevice::getServer()->disconnect(connInfo.getConnHandle());
-            Serial.printf("Encrypt connection failed - disconnecting client\n");
-            return;
-        }
-
-        Serial.printf("Secured connection to: %s\n", connInfo.getAddress().toString().c_str());
+        Serial.printf("Client connected: %s (encrypted: %s)\n",
+            connInfo.getAddress().toString().c_str(),
+            connInfo.isEncrypted() ? "yes" : "no");
     }
 } serverCallbacks;
 
@@ -291,17 +301,12 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
     }*/
 
     void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
-
-        uint8_t conf_data[MAX_MSG_LEN_PHONE] = {0};
-        size_t conf_length=0;
-        conf_length = pCharacteristic->getLength(); // getLength();
-
-        if (conf_length <= 0)
+        BleQueueItem item = {};
+        item.length = pCharacteristic->getLength();
+        if (item.length <= 0 || item.length > MAX_MSG_LEN_PHONE)
             return;
-        
-        memcpy(conf_data, pCharacteristic->getValue() , conf_length);
-
-        readPhoneCommand(conf_data);
+        memcpy(item.data, pCharacteristic->getValue(), item.length);
+        xQueueSend(bleQueue, &item, 0);  // non-blocking, drop on full queue
     }
 
 } chrCallbacks;
@@ -550,11 +555,11 @@ void esp32setup()
     ///< Initialize T5-EPAPER GUI
     ///< delay for ESP32-S3 nativ USB [OE3WAS]
     ///< um Terminal verbinden zu können
-    timerSerial.start(1000);  //timeout falls keine USB verbunden ist
+    timerSerial.start(2000);  //timeout falls keine USB verbunden ist
     Serial.begin(MONITOR_SPEED);
     
     while (!Serial && !timerSerial.time_over());
-    if (Serial) { for (int i=0;i<5;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
+    if (Serial) { for (int i=0;i<10;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
 
     #if defined BOARD_T5_EPAPER
         if (psramInit()) {
@@ -1225,12 +1230,10 @@ void esp32setup()
 
         // set over current protection limit (accepted range is 0 - 140 mA)
         // NOTE: set value to 0 to disable overcurrent protection
-        /*
         if (radio.setCurrentLimit(CURRENT_LIMIT) == RADIOLIB_ERR_INVALID_CURRENT_LIMIT) {
             Serial.println(F("Selected current limit is invalid for this module!"));
             while (true);
         }
-        */
 
         // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
         Serial.printf("[LoRa]...PREAMBLE: %i symbols\n", meshcom_settings.node_preamplebits);
@@ -1269,7 +1272,7 @@ void esp32setup()
 
         // start scanning the channel
         Serial.print(F("[LoRa]...Starting to listen ... "));
-        state = radio.startReceive();
+        state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
         if (state == RADIOLIB_ERR_NONE)
         {
             Serial.println(F("success"));
@@ -1305,7 +1308,7 @@ void esp32setup()
 
         // start scanning the channel
         Serial.print(F("[LoRa]...Starting to listen ... "));
-        state = radio.startReceive();
+        state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
         if (state == RADIOLIB_ERR_NONE)
         {
             Serial.println(F("success"));
@@ -1338,7 +1341,7 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[LoRa]...Starting to listen ... "));
-            state = radio.startReceive();
+            state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("success"));
@@ -1365,7 +1368,7 @@ void esp32setup()
 
             // start scanning the channel
             Serial.print(F("[E220] Starting to listen ... "));
-            state = radio.startReceive();
+            state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
             if (state == RADIOLIB_ERR_NONE)
             {
                 Serial.println(F("success!"));
@@ -1405,6 +1408,8 @@ void esp32setup()
     const std::__cxx11::string strBLEManufData = cManufData;
 
     Serial.printf("[BLE ]...Device started with BLE-Name <%s>\n", strBLEName.c_str());
+
+    bleQueue = xQueueCreate(5, sizeof(BleQueueItem));
 
     NimBLEDevice::init(strBLEName);
 
@@ -1706,14 +1711,14 @@ void esp32loop()
             }
         }
 
-        if(!bGATEWAY)
+        // Retransmission status must tick on ALL nodes (including gateways).
+        // Without this, gateway text messages stay stuck at RING_STATUS_SENT
+        // forever if no echo is received via LoRa (RING_ZOMBIE).
+        if ((retransmit_timer + (1000 * 2)) < millis())
         {
-            if ((retransmit_timer + (1000 * 2)) < millis())   // repeat 2 seconds
-            {
-                updateRetransmissionStatus();
+            updateRetransmissionStatus();
 
-                retransmit_timer = millis();
-            }
+            retransmit_timer = millis();
         }
 
         // FIX: Periodic ring buffer utilization report (every 30s)
@@ -1726,25 +1731,69 @@ void esp32loop()
                 for(int i = 0; i < MAX_RING; i++)
                 {
                     if(ringBuffer[i][0] == 0) continue;
-                    if(ringBuffer[i][1] == 0xFF) done++;
-                    else if(ringBuffer[i][1] == 0x00) pending++;
+                    if(ringBuffer[i][1] == RING_STATUS_DONE) done++;
+                    else if(ringBuffer[i][1] == RING_STATUS_READY) pending++;
                     else retrying++;
                 }
                 int queued = (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite);
-                Serial.printf("[MC-DBG] RING_STATUS queued=%d pending=%d retrying=%d done=%d iW=%d iR=%d\n",
-                    queued, pending, retrying, done, iWrite, iRead);
+                int dedup_used = 0;
+                for(int i = 0; i < MAX_DEDUP_RING; i++)
+                {
+                    if(ringBufferLoraRX[i][0] != 0 || ringBufferLoraRX[i][1] != 0 ||
+                       ringBufferLoraRX[i][2] != 0 || ringBufferLoraRX[i][3] != 0)
+                        dedup_used++;
+                }
+                Serial.printf("[MC-DBG] RING_STATUS queued=%d pending=%d retrying=%d "
+                              "done=%d iW=%d iR=%d dedup=%d/%d\n",
+                              queued, pending, retrying, done, iWrite, iRead,
+                              dedup_used, MAX_DEDUP_RING);
+            }
+        }
+
+        // Deferred display update from OnRxDone (avoid I2C inside radio callback)
+        if(bPendingDisplayText)
+        {
+            sendDisplayText(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
+            bPendingDisplayText = false;
+        }
+        if(bPendingDisplayPos)
+        {
+            sendDisplayPosition(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
+            bPendingDisplayPos = false;
+        }
+
+        // Channel utilization report (every 10s)
+        {
+            static unsigned long ch_util_timer = 0;
+            if(bLORADEBUG && (millis() - ch_util_timer) > 10000)
+            {
+                unsigned long window = millis() - ch_util_timer;
+                ch_util_timer = millis();
+                unsigned long rx_ms = ch_util_rx_accum;
+                unsigned long tx_ms = ch_util_tx_accum;
+                ch_util_rx_accum = 0;
+                ch_util_tx_accum = 0;
+                unsigned int util = (unsigned int)((rx_ms + tx_ms) * 100 / window);
+                if(util > 100) util = 100;
+                Serial.printf("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
+                    rx_ms, tx_ms, util);
+                // ONRXDONE stats: report max and warn count, then reset
+                Serial.printf("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
+                    onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
+                onrxdone_max_ms = 0;
+                onrxdone_warn_count = 0;
             }
         }
 
         if(iReceiveTimeOutTime > 0)
         {
-            // Timeout RECEIVE_TIMEOUT
-            if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
+            // Timeout csma_timeout (slot-basierter Backoff)
+            if((iReceiveTimeOutTime + csma_timeout) < millis())
             {
                 // Debug A: RX_TIMEOUT_FIRE
                 if(bLORADEBUG)
-                    Serial.printf("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu last_event=%lu delta=%lu\n",
-                        millis(), iReceiveTimeOutTime, millis() - iReceiveTimeOutTime);
+                    Serial.printf("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu wait=%lu delta=%lu\n",
+                        millis(), csma_timeout, millis() - iReceiveTimeOutTime);
 
                 // FIX BUG #1: Do not reset radio if a received packet is pending
                 if(receiveFlag)
@@ -1754,48 +1803,115 @@ void esp32loop()
                     iReceiveTimeOutTime = millis();
 
                     if(bLORADEBUG)
-                    {
-                        Serial.print(getTimeString());
-                        Serial.println(F(" [MC-DBG] RX_TIMEOUT skipped: receiveFlag pending"));
-                    }
+                        Serial.printf("[MC-DBG] RX_TIMEOUT_DEFERRED src=receiveFlag\n");
                 }
+                // FIX: Do not reset radio if a packet reception is in progress.
+                // Poll IRQ register for PREAMBLE_DETECTED or HEADER_VALID —
+                // if set, the radio is actively demodulating a packet and
+                // calling startReceive() would abort it.
+                // RSSI validation: stale IRQ flags with no signal are rejected early.
+                // Header valid: strong indicator, up to 3 deferrals allowed.
+                // Preamble only: weak indicator, max 1 deferral allowed.
                 else
                 {
-                    iReceiveTimeOutTime=0;
+                    bool shouldDefer = false;
+                    uint32_t irqFlags = radio.getIrqFlags();
+                    bool irq_active = irqFlags & (RADIOLIB_SX126X_IRQ_HEADER_VALID |
+                                                   RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
 
-                    // FIX BUG #1: Call startReceive FIRST, then re-wire interrupts.
-                    // Disable interrupt gating while we reconfigure
-                    bEnableInterruptReceive = false;
-                    bEnableInterruptTransmit = false;
-
-                    int state = radio.startReceive();
-
-                    // Now re-wire the interrupt callback
-                    radio.clearPacketReceivedAction();
-                    radio.clearPacketSentAction();
-                    radio.setPacketReceivedAction(setFlagReceive);
-
-                    bEnableInterruptReceive = true;
-
-                    // Debug B: RX_RESTART after timeout
-                    if(bLORADEBUG)
-                        Serial.printf("[MC-DBG] RX_RESTART src=timeout state=%d\n", state);
-
-                    if(bLORADEBUG)
+                    if(irq_active)
                     {
-                        Serial.print(getTimeString());
-                        if (state == RADIOLIB_ERR_NONE)
-                            Serial.println(F(" [LoRa]...Receive Timeout, startReceive again with sucess"));
+                        bool header_valid = irqFlags & RADIOLIB_SX126X_IRQ_HEADER_VALID;
+                        float currentRSSI = radio.getRSSI(false);
+
+                        if(currentRSSI < -126.0f)
+                        {
+                            // No signal present — IRQ flags are stale
+                            if(bLORADEBUG)
+                                Serial.printf("[MC-DBG] RX_IRQ_STALE_EARLY rssi=%.0f flags=%s cnt=%d\n",
+                                    currentRSSI, header_valid ? "HDR" : "PRE", rx_irq_defer_count);
+                        }
+                        else if(header_valid && rx_irq_defer_count < 3)
+                        {
+                            shouldDefer = true;
+                            if(bLORADEBUG)
+                                Serial.printf("[MC-DBG] RX_TIMEOUT_DEFERRED src=header_valid rssi=%.0f cnt=%d\n",
+                                    currentRSSI, rx_irq_defer_count);
+                        }
+                        else if(!header_valid && rx_irq_defer_count < 1)
+                        {
+                            shouldDefer = true;
+                            if(bLORADEBUG)
+                                Serial.printf("[MC-DBG] RX_TIMEOUT_DEFERRED src=preamble_only rssi=%.0f cnt=%d\n",
+                                    currentRSSI, rx_irq_defer_count);
+                        }
                         else
                         {
-                            Serial.print(F(" [LoRa]...Receive Timeout, startReceive again with error = "));
-                            Serial.println(state);
+                            if(bLORADEBUG)
+                                Serial.printf("[MC-DBG] RX_IRQ_STALE rssi=%.0f flags=%s cnt=%d\n",
+                                    currentRSSI, header_valid ? "HDR" : "PRE", rx_irq_defer_count);
+                        }
+                    }
+
+                    if(shouldDefer)
+                    {
+                        rx_irq_defer_count++;
+                        iReceiveTimeOutTime = millis();
+                    }
+                    else
+                    {
+                        if(rx_irq_defer_count > 0 && bLORADEBUG)
+                            Serial.printf("[MC-DBG] RX_IRQ_STALE forced restart after %d deferrals\n", rx_irq_defer_count);
+                        rx_irq_defer_count = 0;
+                        iReceiveTimeOutTime=0;
+
+                        // FIX BUG #1: Call startReceive FIRST, then re-wire interrupts.
+                        // Disable interrupt gating while we reconfigure
+                        bEnableInterruptReceive = false;
+                        bEnableInterruptTransmit = false;
+
+                        int state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+
+                        // Now re-wire the interrupt callback
+                        radio.clearPacketReceivedAction();
+                        radio.clearPacketSentAction();
+                        radio.setPacketReceivedAction(setFlagReceive);
+
+                        bEnableInterruptReceive = true;
+
+                        // Flanken-Recovery
+                        #ifdef LORA_DIO1
+                        if(digitalRead(LORA_DIO1) == HIGH)
+                        {
+                            receiveFlag = true;
+                            if(bLORADEBUG)
+                                Serial.println(F("[MC-DBG] RX_TIMEOUT missed_edge recovery"));
+                        }
+                        #endif
+
+                        // Debug B: RX_RESTART after timeout
+                        if(bLORADEBUG)
+                        {
+                            Serial.printf("[MC-SM] IDLE -> RX_LISTEN rc=%d\n", state);
+                            Serial.printf("[MC-DBG] RX_RESTART src=timeout state=%d\n", state);
+                        }
+
+                        if(bLORADEBUG)
+                        {
+                            Serial.print(getTimeString());
+                            if (state == RADIOLIB_ERR_NONE)
+                                Serial.println(F(" [LoRa]...Receive Timeout, startReceive again with sucess"));
+                            else
+                            {
+                                Serial.print(F(" [LoRa]...Receive Timeout, startReceive again with error = "));
+                                Serial.println(state);
+                            }
                         }
                     }
                 }
             }
         }
-        
+
         if(receiveFlag || transmittedFlag)
         {
             // check ongoing reception
@@ -1803,11 +1919,15 @@ void esp32loop()
             {
                 // Debug C: RX_FLAG_PROCESS
                 if(bLORADEBUG)
+                {
+                    Serial.printf("[MC-SM] RX_LISTEN -> RX_PROCESS rc=0\n");
                     Serial.printf("[MC-DBG] RX_FLAG_PROCESS ts=%lu\n", millis());
+                }
 
                 // reset flags first
                 bEnableInterruptReceive = false;
                 receiveFlag = false;
+                rx_irq_defer_count = 0;
 
                 // DIO triggered while reception is ongoing
                 // that means we got a packet
@@ -1819,6 +1939,7 @@ void esp32loop()
                 // Only reset the timeout timers here.
                 inoReceiveTimeOutTime=millis();
                 iReceiveTimeOutTime = millis();
+                csma_timeout = csma_compute_timeout(cad_attempt);
             }
             else
             if(transmittedFlag)
@@ -1831,7 +1952,10 @@ void esp32loop()
 
                 // Debug G: TX_DONE
                 if(bLORADEBUG)
+                {
+                    Serial.printf("[MC-SM] TX_ACTIVE -> TX_DONE rc=%d\n", transmissionState);
                     Serial.printf("[MC-DBG] TX_DONE state=%d ts=%lu\n", transmissionState, millis());
+                }
 
                 if (transmissionState == RADIOLIB_ERR_NONE)
                 {
@@ -1868,23 +1992,33 @@ void esp32loop()
 
                 OnTxDone();
 
-                // clear Transmit Interrupt
-                bEnableInterruptTransmit = false; // KBC 0801
-                radio.clearPacketSentAction();  //KBC 0801
-
-                // clear Receive Interrupt
-                bEnableInterruptReceive = false; // KBC 0801
-                radio.clearPacketReceivedAction();  //KBC 0801
-
-                // set Receive Interupt
+                // Atomarer RX-Restart: Radio in RX BEVOR ISR aktiv
+                bEnableInterruptTransmit = false;
+                bEnableInterruptReceive = false;
+                radio.clearPacketSentAction();
+                radio.clearPacketReceivedAction();
+                int state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);           // Radio in RX zuerst
+                radio.setPacketReceivedAction(setFlagReceive);
                 bEnableInterruptReceive = true;
                 radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
 
-                int state = radio.startReceive();
+                // Verpasste Flanke erkennen: wenn DIO1 bereits HIGH ist, hat ein Paket
+                // waehrend der Umschaltung ausgeloest
+                #ifdef LORA_DIO1
+                if(digitalRead(LORA_DIO1) == HIGH)
+                {
+                    receiveFlag = true;
+                    if(bLORADEBUG)
+                        Serial.println(F("[MC-DBG] RX_RESTART missed_edge recovery"));
+                }
+                #endif
 
                 // Debug H: RX_RESTARTED after TX
                 if(bLORADEBUG)
+                {
+                    Serial.printf("[MC-SM] TX_DONE -> RX_LISTEN rc=%d\n", state);
                     Serial.printf("[MC-DBG] RX_RESTARTED src=after_tx state=%d\n", state);
+                }
 
                 if (state != RADIOLIB_ERR_NONE)
                 {
@@ -1899,6 +2033,7 @@ void esp32loop()
                 inoReceiveTimeOutTime=millis();
 
                 iReceiveTimeOutTime = millis(); // start to wait for next transmit
+                csma_reset();
             }
         }
 
@@ -1912,67 +2047,135 @@ void esp32loop()
             {
                 // Debug E: TX_GATE_ENTER
                 if(bLORADEBUG)
-                    Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cmd_ctr=%d tx_wait=%d\n",
+                {
+                    Serial.printf("[MC-SM] IDLE -> TX_PREPARE rc=0\n");
+                    Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cad_attempt=%d\n",
                         (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite),
-                        cmd_counter, tx_waiting);
+                        cad_attempt);
+                }
 
-                // save transmission state between loops
-                cmd_counter=0;
-                tx_waiting=true;
+                // Header/Preamble-Check per IRQ-Register-Polling
+                // getIrqFlags() liest das SX1262 IRQ-Status-Register per SPI
+                // ohne Flags zu clearen. Wenn HEADER_VALID oder PREAMBLE_DETECTED
+                // gesetzt ist, ist ein Paket im Anflug -> TX abbrechen.
+                bool irq_rx_active = false;
+                {
+                    uint32_t irqStatus = radio.getIrqFlags();
+                    if(irqStatus & (RADIOLIB_SX126X_IRQ_HEADER_VALID |
+                                    RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED))
+                    {
+                        is_receiving = true;
+                        irq_rx_active = true;
+                        if(bLORADEBUG)
+                            Serial.printf("[MC-DBG] IRQ_POLL hdr/pre=0x%04X -> TX_ABORT\n",
+                                          irqStatus);
+                        iReceiveTimeOutTime = millis();
+                        csma_timeout = csma_compute_timeout(cad_attempt);
+                    }
+                }
 
-                // clear Receive Interrupt
+                if(!irq_rx_active)
+                {
+                // Disable RX interrupt before CAD scan
                 bEnableInterruptReceive = false;
-                radio.clearPacketReceivedAction();  //KBC 0801
+                radio.clearPacketReceivedAction();
 
-                // set Transmit Interupt
-                bEnableInterruptTransmit = true; //KBC 0801
-                radio.setPacketSentAction(setFlagSent); //KBC 0801
+                // CAD Scan 1
+                int cad_result = radio.scanChannel();
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] CAD_SCAN result=%d\n", cad_result);
+
+                bool channel_free = false;
+                if(cad_result == RADIOLIB_CHANNEL_FREE)
+                {
+                    channel_free = true;
+                }
+                else
+                {
+                    // Double-Check: second scan to filter false positives
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] CAD_BUSY_1 attempt=%d, double-check...\n", cad_attempt);
+
+                    cad_result = radio.scanChannel();
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] CAD_SCAN result=%d\n", cad_result);
+                    if(cad_result == RADIOLIB_CHANNEL_FREE)
+                    {
+                        if(bLORADEBUG)
+                            Serial.printf("[MC-DBG] CAD_FALSE_POSITIVE\n");
+                        channel_free = true;
+                    }
+                }
+
+                if(channel_free)
+                {
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] CAD_FREE attempt=%d\n", cad_attempt);
+
+                    csma_reset();
+
+                    // set Transmit Interrupt
+                    bEnableInterruptTransmit = true;
+                    radio.setPacketSentAction(setFlagSent);
 
                 #ifdef BOARD_HELTEC_V4
                 enablePATransmit();
                 #endif
 
-                if(doTX())
-                {
-                    //KBC 0801 bEnableInterruptTransmit = true;
-
-                    // Debug F: TX_START
-                    if(bLORADEBUG)
-                        Serial.printf("[MC-DBG] TX_START qlen=%d\n",
-                            (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite));
-                }
-                else
-                {
-                    #ifdef BOARD_HELTEC_V4
-                    disablePATransmit();
-                    #endif
-                    if(bLORADEBUG)
-                        Serial.print(F("[LoRa]...Starting to listen again... "));
-
-                    // clear Transmit Interrupt
-                    bEnableInterruptReceive = false; // KBC 0801
-                    bEnableInterruptTransmit = false; // KBC 0801
-                    radio.clearPacketSentAction();  //KBC 0801
-
-                    // set Receive Interupt
-                    bEnableInterruptReceive = true; //KBC 0801
-                    radio.setPacketReceivedAction(setFlagReceive); //KBC 0801
-
-                    int state = radio.startReceive();
-                    if (state == RADIOLIB_ERR_NONE)
+                    if(doTX())
                     {
+                        ch_util_tx_start = millis();
+                        // Debug F: TX_START
                         if(bLORADEBUG)
-                            Serial.println(F("success!"));
+                        {
+                            Serial.printf("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
+                            Serial.printf("[MC-DBG] TX_START qlen=%d\n",
+                                (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite));
+                        }
                     }
                     else
                     {
+                        #ifdef BOARD_HELTEC_V4
+                        disablePATransmit();
+                        #endif
+
+                        // doTX() returned false (empty queue race) — restore RX
                         if(bLORADEBUG)
-                        {
-                            Serial.print(F("failed, code "));
-                            Serial.println(state);
-                        }
-                    }        
+                            Serial.printf("[MC-SM] TX_PREPARE -> IDLE rc=0\n");
+                        bEnableInterruptTransmit = false;
+                        radio.clearPacketSentAction();
+
+                        bEnableInterruptReceive = true;
+                        radio.setPacketReceivedAction(setFlagReceive);
+                        radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+                    }
                 }
+                else
+                {
+                    // Channel busy confirmed — backoff
+                    cad_attempt++;
+                    csma_timeout = csma_compute_timeout(cad_attempt);
+
+                    if(bLORADEBUG)
+                    {
+                        Serial.printf("[MC-SM] TX_PREPARE -> IDLE rc=-1\n");
+                        Serial.printf("[MC-DBG] CAD_BUSY attempt=%d next_timeout=%lu\n",
+                            cad_attempt, csma_timeout);
+                    }
+
+                    // Restore RX
+                    bEnableInterruptReceive = true;
+                    radio.setPacketReceivedAction(setFlagReceive);
+                    radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+
+                    iReceiveTimeOutTime = millis();
+                }
+                } // end if(!irq_rx_active)
+            }
+            else
+            {
+                // Nothing to send — restart timeout cycle
+                iReceiveTimeOutTime = millis();
             }
         }
     } // bRadio active
@@ -2139,25 +2342,6 @@ void esp32loop()
         }
     }
 
-    if(meshcom_settings.node_netmode == 0 && meshcom_settings.node_hasIPaddress)
-    {
-        currentWiFiMillis = millis();
-
-        // if WiFi is down, try reconnecting every 5 sec
-        if ((WiFi.status() != WL_CONNECTED) && (currentWiFiMillis - previousWiFiMillis >= 5000))
-        {
-            Serial.printf("%s [WIFI]..Reconnecting to WiFi...\n", getTimeString().c_str());
-
-            WiFi.disconnect();
-            //WiFi.reconnect();
-
-            meshcom_settings.node_hasIPaddress=false;
-            web_timer=0;
-
-            previousWiFiMillis = currentWiFiMillis;
-        }
-    }
-
     // SOFTSER
     #if defined(ENABLE_SOFTSER)
         if(bSOFTSERON)
@@ -2244,6 +2428,21 @@ void esp32loop()
         tdeck_update_header_bt();
         #endif
     }    // check if message from phone to send
+
+    // BLE Queue: process data from NimBLE task in Main Loop context
+    {
+        BleQueueItem bleItem;
+        while (xQueueReceive(bleQueue, &bleItem, 0) == pdTRUE) {
+            readPhoneCommand(bleItem.data);
+        }
+    }
+
+    // BLE connect pending: run conffin in Main Loop context
+    if (connect_pending) {
+        connect_pending = false;
+        commandAction((char*)"--conffin", isPhoneReady, true);
+    }
+
     if(hasMsgFromPhone)
     {
         if(bBLEDEBUG)
@@ -2345,10 +2544,12 @@ void esp32loop()
 
     // TRACK ON
     if(bDisplayTrack)
-        gps_refresh_intervall = 5.0;
+        gps_refresh_intervall = 2.0;
 
     if ((gps_refresh_timer + ((unsigned long)gps_refresh_intervall * 1000)) < millis())
     {
+        #ifdef ENABLE_GPS
+
         unsigned int igps=0;
             
         if(!bGPSON)
@@ -2443,6 +2644,8 @@ void esp32loop()
                 tdeck_refresh_track_view();
                 gps_refresh_track=0;
             }
+        #endif
+
         #endif
 
         gps_refresh_timer = millis();
@@ -2882,10 +3085,52 @@ void esp32loop()
         // heartbeat
         if ((hb_timer + (HEARTBEAT_INTERVAL * 1000)) < millis())
         {
-            //DEBUG_MSG("UDP", "Sending Heartbeat");
             sendMeshComHeartbeat();
-
             hb_timer = millis();
+
+            if (last_upd_timer > 0)
+            {
+                unsigned long hb_age = millis() - last_upd_timer;
+
+                // Stage 1: diagnostic warning at 35s
+                if (hb_age > (HB_WARN_TIME * 1000) && !hb_warn_logged)
+                {
+                    bool wifi_ok = (WiFi.status() == WL_CONNECTED);
+                    Serial.printf("[UDP] Server not responding for %lus — WiFi %s\n",
+                                  hb_age / 1000, wifi_ok ? "CONNECTED" : "NOT_CONNECTED");
+                    hb_warn_logged = true;
+
+                    // WiFi actually down → reset immediately, don't wait
+                    if (!wifi_ok)
+                    {
+                        Serial.println("[UDP] WiFi down — resetting");
+                        resetMeshComUDP();
+                        last_upd_timer = millis();
+                        hb_warn_logged = false;
+                    }
+                }
+
+                // Stage 2: timeout at 65s
+                if (hb_age > (MAX_HB_RX_TIME * 1000))
+                {
+                    bool wifi_ok = (WiFi.status() == WL_CONNECTED);
+
+                    if (!wifi_ok)
+                    {
+                        Serial.printf("[UDP] Heartbeat timeout %lus — WiFi NOT_CONNECTED, resetting\n",
+                                      hb_age / 1000);
+                        resetMeshComUDP();
+                    }
+                    else
+                    {
+                        Serial.printf("[UDP] Heartbeat timeout %lus — WiFi CONNECTED, server unresponsive, waiting\n",
+                                      hb_age / 1000);
+                    }
+
+                    last_upd_timer = millis();
+                    hb_warn_logged = false;
+                }
+            }
         }
 
         meshcom_settings.node_last_upd_timer = hb_timer;
@@ -2895,6 +3140,7 @@ void esp32loop()
     if(bEXTUDP)
     {
         getExternUDP();
+        flushExternQueue();
     }
 
     if(bWEBSERVER || bEXTUDP || bGATEWAY)
@@ -2919,11 +3165,23 @@ void esp32loop()
                     {
                         doWiFiConnect();
 
-                        if(iWlanWait > 30)
+                        if(iWlanWait > 15)
                         {
                             iWlanWait = 0;
 
-                            Serial.println("[WIFI]...SET but no Wifi connect ...please wait for next try (5 min)");
+                            if (!bAllStarted)
+                            {
+                                // First boot failure — full radio power-cycle and retry
+                                Serial.println("[WIFI]...no connection at boot — full radio reset and retrying");
+                                WiFi.disconnect(true, true);
+                                WiFi.mode(WIFI_OFF);
+                                delay(1500);
+                                startNetwork();  // sets iWlanWait = 1, triggers doWiFiConnect() polling
+                            }
+                            else
+                            {
+                                Serial.println("[WIFI]...SET but no Wifi connect ...please wait for next try (5 min)");
+                            }
 
                             bAllStarted=true;
                         }
@@ -3019,9 +3277,17 @@ int checkRX(bool bRadio)
         {
             radio.clearPacketReceivedAction();
             radio.clearPacketSentAction();
-            bEnableInterruptReceive = true;
+            int rxstate = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);          // Radio in RX zuerst
             radio.setPacketReceivedAction(setFlagReceive);
-            int rxstate = radio.startReceive();
+            bEnableInterruptReceive = true;
+            #ifdef LORA_DIO1
+            if(digitalRead(LORA_DIO1) == HIGH)
+            {
+                receiveFlag = true;
+                if(bLORADEBUG)
+                    Serial.println(F("[MC-DBG] CHECKRX missed_edge recovery"));
+            }
+            #endif
 
             // Debug D: RX_RESTARTED after readData
             if(bLORADEBUG)
@@ -3049,33 +3315,80 @@ int checkRX(bool bRadio)
             Serial.println(F(" Hz"));
         }
 
+        // RX channel utilization: calculate airtime from packet length
+        // (ESP32 has no OnHeaderDetect, so ch_util_rx_start is never set)
+        ch_util_rx_accum += radio.getTimeOnAir(ibytes) / 1000;  // us -> ms
+
         OnRxDone(payload, (uint16_t)ibytes, saved_rssi, saved_snr);
     }
     else
     if (state == RADIOLIB_ERR_CRC_MISMATCH)
     {
-        // FIX BUG #2: Also restart RX after CRC error
+        // RSSI/SNR/FreqError VOR RX-Restart sichern (Register werden ungueltig)
+        int16_t saved_crc_rssi = (int16_t)radio.getRSSI();
+        int8_t  saved_crc_snr  = (int8_t)radio.getSNR();
+        float   saved_crc_ferr = radio.getFrequencyError();
+
+        // RX sofort wieder starten
         {
             radio.clearPacketReceivedAction();
             radio.clearPacketSentAction();
             bEnableInterruptReceive = true;
             radio.setPacketReceivedAction(setFlagReceive);
-            radio.startReceive();
+            int rxstate = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+
+            if(bLORADEBUG)
+                Serial.printf("[MC-DBG] RX_RESTARTED src=after_crc_error state=%d\n", rxstate);
         }
 
-        // packet was received, but is malformed
+        // RX channel utilization: CRC-failed packet still occupied the channel
+        ch_util_rx_accum += radio.getTimeOnAir(ibytes) / 1000;  // us -> ms
+
+        // Diagnose-Output: RSSI/SNR + kompletter Payload-Hex-Dump
         if(bLORADEBUG)
         {
-            Serial.printf("[MC-DBG] CRC_ERROR rssi=%.1f snr=%.1f freq_err=%.1f size=%d ts=%lu\n",
-                radio.getRSSI(), radio.getSNR(), radio.getFrequencyError(),
-                (int)ibytes, millis());
+            Serial.printf("[MC-DBG] CRC_ERROR rssi=%d snr=%d freq_err=%.1f size=%d ts=%lu\n",
+                saved_crc_rssi, saved_crc_snr, saved_crc_ferr, (int)ibytes, millis());
+
+            // Hex-Dump des beschaedigten Payloads (max 255 Bytes)
+            int dump_len = (ibytes > 255) ? 255 : (int)ibytes;
+            Serial.printf("[MC-DBG] CRC_PAYLOAD[%d]: ", dump_len);
+            for(int i = 0; i < dump_len; i++)
+                Serial.printf("%02X ", payload[i]);
+            Serial.println();
         }
     }
     else
     {
-        // some other error occurred
-        Serial.print(F("[LoRa]...Failed, code <2>"));
-        Serial.println(state);
+        // RX-Restart auch bei unbekannten Fehlern -- ohne dies bleibt
+        // das Radio im Standby (BLINDSPOT fuer Empfang!)
+        int16_t saved_err_rssi = (int16_t)radio.getRSSI();
+        int8_t  saved_err_snr  = (int8_t)radio.getSNR();
+
+        {
+            radio.clearPacketReceivedAction();
+            radio.clearPacketSentAction();
+            bEnableInterruptReceive = true;
+            radio.setPacketReceivedAction(setFlagReceive);
+            int rxstate = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+
+            if(bLORADEBUG)
+                Serial.printf("[MC-DBG] RX_RESTARTED src=after_other_error state=%d\n", rxstate);
+        }
+
+        // Immer loggen (nicht nur bLORADEBUG) -- unbekannte Fehler sind kritisch
+        Serial.printf("[MC-DBG] RX_OTHER_ERROR code=%d rssi=%d snr=%d size=%d ts=%lu\n",
+            state, saved_err_rssi, saved_err_snr, (int)ibytes, millis());
+
+        // Payload-Dump bei Debug aktiv
+        if(bLORADEBUG && ibytes > 0)
+        {
+            int dump_len = (ibytes > 255) ? 255 : (int)ibytes;
+            Serial.printf("[MC-DBG] ERR_PAYLOAD[%d]: ", dump_len);
+            for(int i = 0; i < dump_len; i++)
+                Serial.printf("%02X ", payload[i]);
+            Serial.println();
+        }
     }
 
     //#endif

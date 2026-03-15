@@ -295,10 +295,8 @@ int ComToPhoneRead=0;
 bool hasMsgFromPhone = false;
 
 // LoRa RX/TX sequence control
-int cmd_counter = 0;      // ticker dependant on main cycle delay time
 volatile bool is_receiving = false;  // flag to store we are receiving a lora packet.
 volatile bool tx_is_active = false;  // flag to store we are transmitting  a lora packet.
-bool tx_waiting = false;
 
 int cad_attempt = 0;
 unsigned long csma_timeout = CSMA_BASE_0;
