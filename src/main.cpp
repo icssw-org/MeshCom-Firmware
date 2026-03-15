@@ -25,12 +25,12 @@
 
 void setup()
 {
-    #if defined(BOARD_T5_EPAPER)
-    if (psramInit()) {
-        Serial.println("\nThe PSRAM is correctly initialized");
-    } else {
-        Serial.println("\nPSRAM does not work");
-    }
+  #if defined(BOARD_T5_EPAPER)
+  if (psramInit()) {
+      Serial.println("\nThe PSRAM is correctly initialized");
+  } else {
+      Serial.println("\nPSRAM does not work");
+  }
   #endif
 
   #if defined(BOARD_T_ETH_ELITE)
