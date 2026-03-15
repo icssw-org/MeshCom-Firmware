@@ -33,7 +33,7 @@ TaskHandle_t xHandle = NULL;
  */
 void init_audio()
 {
-    Serial.println("[audi]...initializing");
+    Serial.println("[audio]...initializing");
 
     audioSemaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(audioSemaphore);
@@ -45,7 +45,7 @@ void init_audio()
     audio.setVolume(12); // Set a default volume
 
     if (meshcom_settings.node_mute) {
-        if (bDEBUG) Serial.println("[audi]...initially muted, disabling hardware");
+        if (bDEBUG) Serial.println("[audio]...initially muted, disabling hardware");
         i2s_driver_uninstall(i2s_num);
     }
 }
@@ -59,7 +59,7 @@ bool play_file_from_sd(const char *filename, int volume)
     {
         if (bDEBUG)
         {
-            Serial.println("[audi]...muted");
+            Serial.println("[audio]...muted");
         }
         return true;
     }
@@ -87,12 +87,12 @@ bool play_file_from_sd(const char *filename, int volume)
             audio.connecttoFS(SD, strAudioWithType.c_str());
 
             if (bDEBUG)
-                Serial.printf("[audi]...playing %s in background\n", strAudioWithType.c_str());
+                Serial.printf("[audio]...playing %s in background\n", strAudioWithType.c_str());
 
             if(xHandle != NULL)
             {
                 if(bDEBUG)
-                    Serial.println("[audi]...resume play_function");
+                    Serial.println("[audio]...resume play_function");
 
                 vTaskResume(xHandle);
 
@@ -116,7 +116,7 @@ bool play_file_from_sd(const char *filename, int volume)
         }
         else
         {
-            Serial.printf("[audi]...file %s not found on SD\n", filename);
+            Serial.printf("[audio]...file %s not found on SD\n", filename);
 
             xSemaphoreGive(audioSemaphore);
             
@@ -125,7 +125,7 @@ bool play_file_from_sd(const char *filename, int volume)
     }
     else
     {
-        Serial.println("[audi]...currently playing another file");
+        Serial.println("[audio]...currently playing another file");
         return true;
     }
 }
@@ -146,7 +146,7 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
     if (meshcom_settings.node_mute)
     {
         if (bDEBUG)
-            Serial.println("[audi]...muted");
+            Serial.println("[audio]...muted");
         return true;
     }
     
@@ -167,7 +167,7 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
         audio.setVolume(volume);
         audio.connecttoFS(SD, strAudioWithType.c_str());
         if (bDEBUG)
-            Serial.printf("[audi]...playing %s\n", strAudioWithType.c_str());
+            Serial.printf("[audio]...playing %s\n", strAudioWithType.c_str());
 
         while (audio.isRunning())
         {
@@ -182,7 +182,7 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
     }
     else
     {
-        Serial.printf("[audi]...file %s not found on SD\n", filename);
+        Serial.printf("[audio]...file %s not found on SD\n", filename);
         return false;
     }
 }
@@ -227,7 +227,7 @@ void playTone(int duration_ms, int volume_percent) {
         esp_err_t err = i2s_write(i2s_num, buffer, sizeof(buffer), &bytes_written, 100 / portTICK_PERIOD_MS);
         if (err != ESP_OK) {
             if (bDEBUG) 
-                Serial.printf("[audi]...i2s_write failed: %d\n", err);
+                Serial.printf("[audio]...i2s_write failed: %d\n", err);
             break; // Exit loop on error to prevent freeze
         }
         total_ms--;
@@ -242,7 +242,7 @@ void play_cw(const char character, int volume)
     if (meshcom_settings.node_mute)
     {
         if (bDEBUG)
-            Serial.println("[audi]...muted");
+            Serial.println("[audio]...muted");
         return;
     }
 
@@ -439,12 +439,12 @@ void play_cw_start()
     if (meshcom_settings.node_mute)
     {
         if (bDEBUG)
-            Serial.println("[audi]...muted");
+            Serial.println("[audio]...muted");
         return;
     }
 
     if (bDEBUG)
-        Serial.println("[audi]...playing CW start");
+        Serial.println("[audio]...playing CW start");
 
     const char *morseCode = "-.-.-";
 
@@ -469,7 +469,7 @@ void play_function(void *parameter)
 {
     if(bDEBUG)
     {
-        Serial.print("[audi]...play_function running on core ");
+        Serial.print("[audio]...play_function running on core ");
         Serial.println(xPortGetCoreID());
         Serial.println("");
     }
