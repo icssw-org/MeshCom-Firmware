@@ -275,8 +275,6 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     int8_t mh_snr;
     */
 
-    mheardLine.mh_ncount = mheardNCount[ipos];
-
     char cBuffer[60];
     snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
      mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount); 

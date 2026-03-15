@@ -4789,5 +4789,5 @@ void sendConfigFinish()
     // set data message flag and tx ble
     msg_buffer[0] = 0x44;
     memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
 }

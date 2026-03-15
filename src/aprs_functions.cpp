@@ -1063,11 +1063,7 @@ uint16_t encodeLoRaAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10
     msg_buffer[1]=0xFF;
     msg_buffer[2]=0x01;
 
-    String msgtext="(via MeshCom)";
-    if(meshcom_settings.node_atxt[0] != 0x00)
-        msgtext = meshcom_settings.node_atxt;
-
-    snprintf(msg_start, sizeof(msg_start), "%s>APLT00-1,WIDE1-1:!%07.2lf%c%c%08.2lf%c%c%s", cSourceCall, slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, msgtext.c_str());
+    snprintf(msg_start, sizeof(msg_start), "%s>APLT00-1,WIDE1-1:!%07.2lf%c%c%08.2lf%c%c%s", cSourceCall, slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, meshcom_settings.node_atxt);
 
     ilng = strlen(msg_start) + 3;
 
