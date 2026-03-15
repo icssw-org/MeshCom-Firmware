@@ -48,7 +48,7 @@
 unsigned long rebootAuto = 0;
 
 #ifndef BOARD_T_DECK_PRO
-    #if defined (ENABLE_GPS)
+    #if defined (ENABLE_GPS) or defined(BOARD_RAK4630)
     extern int state; // only for gps reset
     extern bool bMitHardReset;
     #endif
@@ -1259,7 +1259,7 @@ void commandAction(char *umsg_text, bool ble)
         #endif
     }
     else
-    #if defined (ENABLE_GPS)
+    #if defined (ENABLE_GPS) or defined(BOARD_RAK4630)
     if(commandCheck(msg_text+2, (char*)"gps on") == 0)
     {
         bGPSON=true;
@@ -3098,7 +3098,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setowntp ") == 0)
+    if(commandCheck(msg_text+2, (char*)"setownntp ") == 0)
     {
         // max. 40 char
         msg_text[50]=0x00;

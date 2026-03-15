@@ -24,7 +24,7 @@ extern bool bLED_ORANGE;
 
 extern int iWlanWait;
 
-extern bool bSetLoRaAPRS;
+extern volatile bool bSetLoRaAPRS;
 
 extern bool bDEBUG;
 extern bool bLORADEBUG;
@@ -183,12 +183,12 @@ extern unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE+5];
 extern int ComToPhoneWrite;
 extern int ComToPhoneRead;
 
-extern uint8_t ringBufferLoraRX[MAX_RING][5]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
+extern uint8_t ringBufferLoraRX[MAX_DEDUP_RING][5]; //Ringbuffer for received msg_id deduplication
 extern uint8_t loraWrite;   // counter for ringbuffer
 
 extern int cmd_counter; // ticker dependant on main cycle delay time
-extern bool is_receiving;   // flag to store we are receiving a lora packet.
-extern bool tx_is_active;   // flag to store we are transmitting  a lora packet.
+extern volatile bool is_receiving;   // flag to store we are receiving a lora packet.
+extern volatile bool tx_is_active;   // flag to store we are transmitting  a lora packet.
 extern bool tx_waiting;
 
 extern int cad_attempt;

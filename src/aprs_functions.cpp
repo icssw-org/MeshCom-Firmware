@@ -919,7 +919,7 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage
     msg_buffer[3]=(aprsmsg.msg_id >> 16) & 0xff;
     msg_buffer[4]=(aprsmsg.msg_id >> 24) & 0xff;
 
-    msg_buffer[5]=aprsmsg.max_hop;
+    msg_buffer[5]=aprsmsg.max_hop & 0x0F;
 
     if(aprsmsg.msg_server)
         msg_buffer[5] = msg_buffer[5] | 0x80;
@@ -1168,7 +1168,6 @@ uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSou
     msg_buffer[1]=0xFF;
     msg_buffer[2]=0x01;
 
-    // check for some IGates
     String msgtext="(MeshCom)";
     if(meshcom_settings.node_atxt[0] != 0x00)
         msgtext = meshcom_settings.node_atxt;

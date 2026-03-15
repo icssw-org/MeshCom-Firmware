@@ -61,32 +61,42 @@
 #define BLEBLINK_INTERVAL 3000             // BLEBLINK interval in milliseconds
 
 #if defined(ENABLE_XML)
-#define MAX_MHEARD 5                       // max count of messages in mheard ringbuffer
-#define MAX_MHPATH 5                       // max count of messages in mhpath ringbuffer
+#define MAX_MHEARD 50                      // max count of messages in mheard ringbuffer
+#define MAX_MHPATH 50                      // max count of messages in mhpath ringbuffer
 #define MAX_RING 20                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
 #define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #elif defined(ENABLE_SBUFFER)
-#define MAX_MHEARD 5                       // max count of messages in mheard ringbuffer
-#define MAX_MHPATH 5                       // max count of messages in mhpath ringbuffer
+#define MAX_MHEARD 50                      // max count of messages in mheard ringbuffer
+#define MAX_MHPATH 50                      // max count of messages in mhpath ringbuffer
 #define MAX_RING 20                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
 #define MAX_LOG 20                         // max count of messages in ringbuffer
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
-#else
-#define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer
-#define MAX_MHPATH 30                      // max count of messages in mhpath ringbuffer
+#elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(BOARD_RAK4630)
+// ESP32-S3 (320 KB SRAM) and nRF52840 (256 KB RAM) — full buffer sizes
+#define MAX_MHEARD 120                     // max count of messages in mheard ringbuffer (was 20, 85-124 H00 nodes observed)
+#define MAX_MHPATH 150                     // max count of messages in mhpath ringbuffer (was 30, multiple paths per node)
 #define MAX_RING 30                        // max count of messages in ringbuffer
-#define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
-#define MAX_LOG 30                         // max count of messages in LOG-ringbuffer
-#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
+#define MAX_DEDUP_RING 100                 // dedup ring for received msg_ids (was 60, wraparounds observed)
+#define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
+#define MAX_RING_UDP 30                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
+#else
+// ESP32 original (~160 KB DRAM) — reduced buffer sizes due to RAM constraints
+#define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer (was 20, limited by DRAM)
+#define MAX_MHPATH 40                      // max count of messages in mhpath ringbuffer (was 30, limited by DRAM)
+#define MAX_RING 30                        // max count of messages in ringbuffer
+#define MAX_DEDUP_RING 70                  // dedup ring for received msg_ids (was 60)
+#define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
+#define MAX_RING_UDP 25                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
 #endif
 
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message
 #define MAX_ERR_UDP_TX 10                  // maximum of errors on sending KEEP messages via UDP (derived from Udp.endPacket())
 #define DHCP_REFRESH 1                     // Refreshtime of DHCP Address in minutes
-#define MAX_HB_RX_TIME 30                  // time we wait for an HB from server in seconds
+#define MAX_HB_RX_TIME 65                  // time we wait for an HB from server in seconds
+#define HB_WARN_TIME 35                    // seconds before logging server-not-responding warning
 
 #define MAX_HOP_TEXT_DEFAULT 4             // max hop set on text-message
 #define MAX_HOP_POS_DEFAULT 2              // max hop set on pos-message

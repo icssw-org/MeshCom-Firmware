@@ -25,7 +25,21 @@
 #include "onebutton_functions.h"
 
 #include <OneButton.h>
+#include <malloc.h>
 OneButton btn;
+
+// nRF52 heap monitoring: heap_3 wraps libc malloc, so we use mallinfo()
+// fordblks = free bytes within arena already obtained from system
+// The gap between current sbrk and stack is additional free memory
+extern "C" char *sbrk(int incr);
+static uint32_t nrf52_getFreeHeap(void)
+{
+    struct mallinfo mi = mallinfo();
+    char topOfStack;
+    // free = (stack pointer - current program break) + free chunks inside arena
+    uint32_t freeFromSbrk = (uint32_t)(&topOfStack) - (uint32_t)sbrk(0);
+    return freeFromSbrk + mi.fordblks;
+}
 
 // Ethernet Object
 NrfETH neth;
@@ -162,6 +176,13 @@ static RadioEvents_t RadioEvents;
 // flag to indicate if we are after receiving
 unsigned long iReceiveTimeOutTime = 0;
 
+// CSMA/CA async CAD state
+volatile bool cad_done_flag = false;
+volatile bool cad_channel_busy = false;
+bool cad_in_progress = false;
+bool cad_double_check = false;
+unsigned long cad_start_time = 0;
+
 bool g_meshcom_initialized;
 bool init_flash_done=false;
 
@@ -205,7 +226,7 @@ uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
 String strText="";
 
 // TinyGPS
-TinyGPSPlus gps;
+TinyGPSPlus tinyGPSPlus;
 
 int direction_S_N = 0;  //0--S, 1--N
 int direction_E_W = 0;  //0--E, 1--W
@@ -299,6 +320,12 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src[5]; // | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
 
+void OnCadDone(bool channelActivityDetected)
+{
+    cad_channel_busy = channelActivityDetected;
+    cad_done_flag = true;
+}
+
 void RadioInit()
 {
     Radio.Init(&RadioEvents);
@@ -335,6 +362,8 @@ void nrf52setup()
 
     Serial.println("=====================================");
     Serial.println("[INIT] START CLIENT");
+    Serial.printf("%s;[HEAP];%lu;(free)\n", getTimeString().c_str(),
+        (unsigned long)nrf52_getFreeHeap());
 
     // init nach Reboot
     init_loop_function();
@@ -761,9 +790,10 @@ void nrf52setup()
     RadioEvents.TxTimeout = OnTxTimeout;
     RadioEvents.RxTimeout = OnRxTimeout;
     RadioEvents.RxError = OnRxError;
+    RadioEvents.CadDone = OnCadDone;
     //RadioEvents.PreAmpDetect = OnPreambleDetect;
     RadioEvents.PreAmpDetect = OnHeaderDetect;
-    
+
     // 4.34w we use EU8 instead of EU
     if(meshcom_settings.node_country == 0)
         meshcom_settings.node_country = 8;
@@ -838,6 +868,9 @@ void nrf52setup()
 
     //  Start receiving LoRa packets
     Radio.Rx(RX_TIMEOUT_VALUE);
+
+    // Configure CAD parameters: 4 symbols, DETPEAK/DETMIN from config, CAD_ONLY mode
+    Radio.SetCadParams(LORA_CAD_04_SYMBOL, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN, LORA_CAD_ONLY, 0);
 
     // set left button interrupt
     //pinMode(LEFT_BUTTON, INPUT);
@@ -1021,14 +1054,14 @@ extern bool btimeClient;
         }
     }
 
-    if(!bGATEWAY)
+    // Retransmission status must tick on ALL nodes (including gateways).
+    // Without this, gateway text messages stay stuck at RING_STATUS_SENT
+    // forever if no echo is received via LoRa (RING_ZOMBIE).
+    if ((retransmit_timer + (1000 * 2)) < millis())
     {
-        if ((retransmit_timer + (1000 * 2)) < millis())   // repeat 2 seconds
-        {
-            updateRetransmissionStatus();
+        updateRetransmissionStatus();
 
-            retransmit_timer = millis();
-        }
+        retransmit_timer = millis();
     }
 
     // Periodischer Ringpuffer-Auslastungsbericht (alle 30s)
@@ -1051,28 +1084,70 @@ extern bool btimeClient;
         }
     }
 
+    // Deferred display update from OnRxDone (avoid I2C inside radio callback)
+    if(bPendingDisplayText)
+    {
+        sendDisplayText(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
+        bPendingDisplayText = false;
+    }
+    if(bPendingDisplayPos)
+    {
+        sendDisplayPosition(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
+        bPendingDisplayPos = false;
+    }
+
+    // Channel utilization report (every 10s)
+    {
+        static unsigned long ch_util_timer = 0;
+        if(bLORADEBUG && (millis() - ch_util_timer) > 10000)
+        {
+            unsigned long window = millis() - ch_util_timer;
+            ch_util_timer = millis();
+            unsigned long rx_ms = ch_util_rx_accum;
+            unsigned long tx_ms = ch_util_tx_accum;
+            ch_util_rx_accum = 0;
+            ch_util_tx_accum = 0;
+            unsigned int util = (unsigned int)((rx_ms + tx_ms) * 100 / window);
+            if(util > 100) util = 100;
+            Serial.printf("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
+                rx_ms, tx_ms, util);
+            // ONRXDONE stats: report max and warn count, then reset
+            Serial.printf("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
+                onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
+            onrxdone_max_ms = 0;
+            onrxdone_warn_count = 0;
+        }
+    }
+
     if(iReceiveTimeOutTime > 0)
     {
-        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
+        if((iReceiveTimeOutTime + csma_timeout) < millis())
         {
             if(bLORADEBUG)
-                Serial.printf("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu last_event=%lu delta=%lu\n",
-                    millis(), iReceiveTimeOutTime, millis() - iReceiveTimeOutTime);
+                Serial.printf("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu wait=%lu delta=%lu\n",
+                    millis(), csma_timeout, millis() - iReceiveTimeOutTime);
 
             // BUG #1 Aequivalent: Wenn Header erkannt, ist Empfang moeglicherweise
             // noch aktiv. Timer verlaengern statt zuruecksetzen.
-            if(is_receiving)
+            if(is_receiving && rx_irq_defer_count < 3)
             {
+                rx_irq_defer_count++;
                 iReceiveTimeOutTime = millis();
                 if(bLORADEBUG)
-                    Serial.printf("[MC-DBG] RX_TIMEOUT skipped: is_receiving=true\n");
+                    Serial.printf("[MC-DBG] RX_TIMEOUT_DEFERRED src=is_receiving cnt=%d\n", rx_irq_defer_count);
             }
             else
             {
+                if(rx_irq_defer_count >= 3 && bLORADEBUG)
+                    Serial.printf("[MC-DBG] RX_IRQ_STALE forced restart after %d deferrals\n", rx_irq_defer_count);
+                rx_irq_defer_count = 0;
                 iReceiveTimeOutTime = 0;
                 Radio.Rx(RX_TIMEOUT_VALUE);
                 if(bLORADEBUG)
+                {
+                    Serial.printf("[MC-SM] IDLE -> RX_LISTEN rc=0\n");
                     Serial.printf("[MC-DBG] RX_RESTART src=timeout\n");
+                }
             }
         }
     }
@@ -1081,11 +1156,87 @@ extern bool btimeClient;
     {
         if (iWrite != iRead)
         {
-            if(bLORADEBUG)
-                Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cmd_ctr=%d tx_wait=%d\n",
-                    (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite),
-                    cmd_counter, tx_waiting);
-            doTX();
+            if(!cad_in_progress && !cad_done_flag)
+            {
+                // Start CAD scan
+                if(bLORADEBUG)
+                {
+                    Serial.printf("[MC-SM] IDLE -> TX_PREPARE rc=0\n");
+                    Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cad_attempt=%d\n",
+                        (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite),
+                        cad_attempt);
+                }
+
+                cad_in_progress = true;
+                cad_done_flag = false;
+                cad_double_check = false;
+                cad_start_time = millis();
+                Radio.Standby();
+                Radio.StartCad();
+            }
+            else if(cad_done_flag)
+            {
+                cad_in_progress = false;
+                cad_done_flag = false;
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] CAD_SCAN result=%d\n", cad_channel_busy ? -702 : 0);
+
+                if(!cad_channel_busy)
+                {
+                    if(cad_double_check && bLORADEBUG)
+                        Serial.printf("[MC-DBG] CAD_FALSE_POSITIVE\n");
+                    // Channel free — transmit
+                    if(bLORADEBUG)
+                    {
+                        Serial.printf("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
+                        Serial.printf("[MC-DBG] CAD_FREE attempt=%d\n", cad_attempt);
+                    }
+
+                    ch_util_tx_start = millis();
+                    csma_reset();
+                    doTX();
+                }
+                else if(!cad_double_check)
+                {
+                    // First scan busy — double-check
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] CAD_BUSY_1 attempt=%d, double-check...\n", cad_attempt);
+
+                    cad_double_check = true;
+                    cad_in_progress = true;
+                    cad_done_flag = false;
+                    cad_start_time = millis();
+                    Radio.Standby();
+                    Radio.StartCad();
+                }
+                else
+                {
+                    // Double-check confirmed busy — backoff
+                    cad_attempt++;
+                    csma_timeout = csma_compute_timeout(cad_attempt);
+
+                    if(bLORADEBUG)
+                    {
+                        Serial.printf("[MC-SM] TX_PREPARE -> IDLE rc=-1\n");
+                        Serial.printf("[MC-DBG] CAD_BUSY attempt=%d next_timeout=%lu\n",
+                            cad_attempt, csma_timeout);
+                    }
+
+                    Radio.Rx(RX_TIMEOUT_VALUE);
+                    iReceiveTimeOutTime = millis();
+                }
+            }
+            else if(cad_in_progress && (millis() - cad_start_time > 100))
+            {
+                // Safety timeout: CadDone never fired
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] CAD_SAFETY_TIMEOUT\n");
+
+                cad_in_progress = false;
+                cad_done_flag = false;
+                Radio.Rx(RX_TIMEOUT_VALUE);
+                iReceiveTimeOutTime = millis();
+            }
         }
     }
 
@@ -1171,7 +1322,7 @@ extern bool btimeClient;
         if(bGPSDEBUG)
             Serial.println("gKeyNum == 2");
 
-        #ifdef ENABLE_RAK_GPS
+        #ifdef ENABLE_GPS
 
         if(bGPSON)
         {
@@ -1207,7 +1358,7 @@ extern bool btimeClient;
         gKeyNum = 0;
     }
 
-    #ifdef ENABLE_RAK_GPS
+    #ifdef ENABLE_GPS
     if(bGPSON)
     {
         // check GPS ON and activ --> <gKeyNum == 2> the signal must be active
@@ -1374,7 +1525,7 @@ if (isPhoneReady == 1)
                 if(!neth.hasIPaddress)
                 {
                     neth.hasIPaddress = false;
-                    cmd_counter = 50;
+                    iReceiveTimeOutTime = millis();
 
                     if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
                     {
@@ -1699,6 +1850,7 @@ if (isPhoneReady == 1)
     if(bEXTUDP)
     {
         getExternUDP();
+        flushExternQueue();
     }
 
     if(bWEBSERVER || bEXTUDP)
@@ -1714,7 +1866,7 @@ if (isPhoneReady == 1)
                 stopWebserver();
 
                 if(!meshcom_settings.node_hasIPaddress)
-                    startNetwork();
+                    startWIFI();
             #endif
 
             if(bWEBSERVER)
@@ -1738,7 +1890,7 @@ if (isPhoneReady == 1)
 
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
-    
+
     yield();
 }
 
@@ -1853,41 +2005,41 @@ unsigned int getGPS(void)
         if(bGPSDEBUG)
             Serial.write(c);
 
-        if (gps.encode(c))// Did a new valid sentence come in?
+        if (tinyGPSPlus.encode(c))// Did a new valid sentence come in?
           newData = true;
       }
     }
 
     if(bGPSDEBUG)
-        Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, gps.satellites.value(), gps.sentencesWithFix(), gps.location.isUpdated(), gps.location.isValid(), gps.hdop.value());
+        Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, tinyGPSPlus.satellites.value(), tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
 
-    if (newData && gps.location.isUpdated() && gps.location.isValid() && gps.hdop.isValid() && gps.hdop.value() < 800)
+    if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 800)
     {
         double dlat, dlon;
         
-        dlat = gps.location.lat();
-        dlon = gps.location.lng();
+        dlat = tinyGPSPlus.location.lat();
+        dlon = tinyGPSPlus.location.lng();
 
         meshcom_settings.node_lat = cround4(dlat);
         meshcom_settings.node_lon = cround4(dlon);
 
-        if(gps.location.rawLat().negative)
+        if(tinyGPSPlus.location.rawLat().negative)
             meshcom_settings.node_lat_c = 'S';
         else
             meshcom_settings.node_lat_c = 'N';
 
-        if(gps.location.rawLng().negative)
+        if(tinyGPSPlus.location.rawLng().negative)
             meshcom_settings.node_lon_c = 'W';
         else
             meshcom_settings.node_lon_c = 'E';
 
-        meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)gps.altitude.meters()) / 11;
+        meshcom_settings.node_alt = ((meshcom_settings.node_alt * 10) + (int)tinyGPSPlus.altitude.meters()) / 11;
 
-        MyClock.setCurrentTime(meshcom_settings.node_utcoff, gps.date.year(), gps.date.month(), gps.date.day(), gps.time.hour(), gps.time.minute(), gps.time.second());
+        MyClock.setCurrentTime(meshcom_settings.node_utcoff, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
         snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
 
-        posinfo_satcount = gps.satellites.value();
-        posinfo_hdop = gps.hdop.value();
+        posinfo_satcount = tinyGPSPlus.satellites.value();
+        posinfo_hdop = tinyGPSPlus.hdop.value();
         posinfo_fix = true;
 
         if(bGPSDEBUG)
@@ -1898,8 +2050,8 @@ unsigned int getGPS(void)
         }
 
 
-        posinfo_satcount = gps.satellites.value();
-        posinfo_hdop = gps.hdop.value();
+        posinfo_satcount = tinyGPSPlus.satellites.value();
+        posinfo_hdop = tinyGPSPlus.hdop.value();
         posinfo_fix = true;
 
         return setSMartBeaconing(dlat, dlon);

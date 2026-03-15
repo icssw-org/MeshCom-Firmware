@@ -51,6 +51,8 @@ String s_node_hostip = "";
 
 String strSource_call;
 
+bool hasIPaddress = false;
+
 extern bool hasExternIPaddress;
 
 WiFiUDP Udp;
@@ -65,6 +67,7 @@ bool udp_is_busy = false;
 uint16_t lora_tx_msg_len = 0;
 
 unsigned long last_upd_timer = 0; // last time we got a HB
+extern bool hb_warn_logged;
 bool had_initial_udp_conn = false;  // indicator that we had already a udp connection
 
 uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
@@ -77,15 +80,10 @@ void getMeshComUDP()
   if(bWIFIAP)
     return;
 
-  // WiFi mode: sync runtime flag from WiFi state
-  // Ethernet mode: node_hasIPaddress is managed by esp32_eth.cpp
-  if(meshcom_settings.node_netmode == 0)
-  {
-      meshcom_settings.node_hasIPaddress = meshcom_settings.node_hasIPaddress;
-
-      if(!meshcom_settings.node_hasIPaddress)
-          return;
-  }
+  meshcom_settings.node_hasIPaddress = hasIPaddress;
+  
+  if(!hasIPaddress)
+    return;
 
   ifalseping = 5;
 
@@ -168,7 +166,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           bool bBLELoopOut = true;
 
           last_upd_timer = millis();
-          
+          hb_warn_logged = false;
+
           memcpy(convBuffer, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);
 
           // send JSON to Extern IP
@@ -320,10 +319,6 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           }
 
           int icheck = checkOwnTx(aprsmsg.msg_id);
-
-          if(bDisplayInfo)
-            Serial.printf("OWN-TX-CHECK-UDP msg_id:%08X check:%i\n", aprsmsg.msg_id, icheck);
-          
           if(icheck < 0)
           {
             if(bUDPtoLoraSend)
@@ -336,19 +331,11 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
               insertOwnTx(aprsmsg.msg_id);
 
               ringBuffer[iWrite][0] = size;
-              if (msg_type_b == 0x3A) // only Messages
-              {
-                if(aprsmsg.msg_payload.startsWith("{") > 0)
-                    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
-                else
-                    ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
-              }
-              else
-                ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+              ringBuffer[iWrite][1] = 0xFF; // no retransmission for UDP relay messages
               memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
 
               retryCount[iWrite] = 0;
-              addRingPointer(iWrite, iRead, MAX_RING, "tx");
+              addTxRingEntry("udp_rx");
 
               /*
               iWrite++;
@@ -388,11 +375,13 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           42 45 41 54 00 09 4F 45 31 4B 46 52 2D 47 57 01 05 4B 46 52 36 35
         */
         last_upd_timer = millis();
+        hb_warn_logged = false;
       }
       else
       {
         DEBUG_MSG("ERROR", "Received udp message without indicator");
         last_upd_timer = millis();
+        hb_warn_logged = false;
       }
     } 
     else
@@ -411,7 +400,7 @@ void sendMeshComUDP()
     if(bWIFIAP)
       return;
 
-    if(!meshcom_settings.node_hasIPaddress)
+    if(!hasIPaddress)
       return;
 
     if(udpWrite != udpRead)
@@ -433,21 +422,17 @@ void sendMeshComUDP()
                 // if we have too much errors sending, reset UDP
                 if (err_cnt_udp_tx >= MAX_ERR_UDP_TX)
                 {
-                    // avoid TX and UDP
-                    meshcom_settings.node_hasIPaddress = false;
+                    Serial.printf("[WIFI-DBG] UDP TX error limit (%d) reached, calling resetMeshComUDP\n", MAX_ERR_UDP_TX);
 
-                    // WiFi mode: propagate WiFi state
-                    // Ethernet mode: node_hasIPaddress handled by esp32_eth.cpp
-                    if(meshcom_settings.node_netmode == 0)
-                        meshcom_settings.node_hasIPaddress = meshcom_settings.node_hasIPaddress;
-                    
+                    // avoid TX and UDP
+                    hasIPaddress = false;
+                    meshcom_settings.node_hasIPaddress = hasIPaddress;
                     //cmd_counter = 50;
-                    if(bDisplayCont)
-                      Serial.println("[ERROR]...resetMeshComUDP");
 
                     err_cnt_udp_tx = 0;
                     
                     resetMeshComUDP();
+                    return;  // socket reset, don't call endPacket
                 }
             }
 
@@ -528,9 +513,10 @@ void sendMeshComUDP()
         Serial.println("[WIFI]...bWIFIAP=true");
 
     WiFi.disconnect(true, true);
-    delay(500);
+    WiFi.mode(WIFI_OFF);
+    delay(1000);
 
-    meshcom_settings.node_hasIPaddress=false;
+    hasIPaddress=false;
 
     WiFi.mode(WIFI_AP);
     WiFi.softAP(meshcom_settings.node_call);
@@ -559,12 +545,15 @@ void sendMeshComUDP()
   }
 
   if (bDEBUG)
-      Serial.println("[WIFI]...WiFi.disconnect(true, true)");
+      Serial.println("[WIFI]...WiFi full radio reset");
 
   WiFi.disconnect(true, true);
-	delay(500);
+  WiFi.mode(WIFI_OFF);
+  delay(1000);
+  WiFi.mode(WIFI_STA);
+  delay(200);
 
-  meshcom_settings.node_hasIPaddress=false;
+  hasIPaddress=false;
 
   // Scan for AP with best RSSI
 	int nrAps = WiFi.scanNetworks();
@@ -653,7 +642,7 @@ bool doWiFiConnect()
 
     iWlanWait++;
 
-    if(iWlanWait > 20)
+    if(iWlanWait > 10)
     {
       Serial.printf("\n[WIFI]...ssid<%s> connection error\n", meshcom_settings.node_ssid);
     }
@@ -680,26 +669,30 @@ bool checkWifiPing()
   if(bWIFIAP)
     return true;
 
-  if(meshcom_settings.node_hasIPaddress)
+  if(hasIPaddress)
   {
-    if(!Ping.ping(meshcom_settings.node_gw))
+    // Non-blocking check: WiFi status instead of blocking ICMP ping
+    // Server reachability is now covered by heartbeat-loss detection
+    if(WiFi.status() != WL_CONNECTED)
     {
       ifalseping--;
 
-      Serial.printf("%s [WIFI]..Ping to IP<%s> failed:%i\n", getTimeString().c_str(), meshcom_settings.node_gw, ifalseping);
+      Serial.printf("%s [WIFI]..WiFi not connected, count:%i\n", getTimeString().c_str(), ifalseping);
 
       if(ifalseping <= 0)
       {
+        Serial.println("[WIFI-DBG] checkWifiPing: ifalseping exhausted, disconnecting WiFi");
+
         Udp.stop();
 
         WiFi.disconnect(true, true);
 
-        meshcom_settings.node_hasIPaddress=false;
+        hasIPaddress=false;
 
         // WiFi mode: propagate WiFi state
         // Ethernet mode: node_hasIPaddress handled by esp32_eth.cpp
         if(meshcom_settings.node_netmode == 0)
-            meshcom_settings.node_hasIPaddress = meshcom_settings.node_hasIPaddress;
+            meshcom_settings.node_hasIPaddress = hasIPaddress;
       }
 
       return false;
@@ -708,7 +701,7 @@ bool checkWifiPing()
     else
     {
       if(bDEBUG && bDisplayCont)
-        Serial.printf("%s [WIFI]..Ping to IP<%s> success\n", getTimeString().c_str(), meshcom_settings.node_gw);
+        Serial.printf("%s [WIFI]..WiFi connected\n", getTimeString().c_str());
     }
   }
 
@@ -724,13 +717,8 @@ String udpUpdateTimeClient()
     if(!timeClient.forceUpdate())
     {
       Serial.println("TimeClient no force update possible");
+      Serial.println("[WIFI-DBG] NTP update failed, will retry next cycle");
 
-      Udp.stop();
-
-      WiFi.disconnect(true, true);
-
-      meshcom_settings.node_hasIPaddress=false;
-      
       return "none";
     }
   }
@@ -840,20 +828,20 @@ void startMeshComUDP()
 
     if(strcmp(s_node_ip.c_str(), "0.0.0.0") == 0)
     {
-      meshcom_settings.node_hasIPaddress=false;
+      hasIPaddress=false;
       Serial.printf("[WIFI]..not connected for UDP port %d\n",  LOCAL_PORT);
     }
     else
     {
-      meshcom_settings.node_hasIPaddress=true;
+      hasIPaddress=true;
       ifalseping=5;
 
       Serial.printf("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
     }
 
-    meshcom_settings.node_hasIPaddress = meshcom_settings.node_hasIPaddress;
+    meshcom_settings.node_hasIPaddress = hasIPaddress;
 
-    if(meshcom_settings.node_hasIPaddress)
+    if(hasIPaddress)
     {
       ifalseping = 5;
 
@@ -939,7 +927,7 @@ void startMeshComUDP()
     Serial.print("[WIFIAP]...node_ip ");
     Serial.println(node_ip);
   
-    meshcom_settings.node_hasIPaddress=true;
+    hasIPaddress=true;
     ifalseping=5;
   }
 
@@ -948,7 +936,7 @@ void startMeshComUDP()
 
 void sendMeshComHeartbeat()
 {
-    if(!meshcom_settings.node_hasIPaddress)
+    if(!hasIPaddress)
     {
       waitRestartUDP--;
 
@@ -960,7 +948,7 @@ void sendMeshComHeartbeat()
 
       startMeshComUDP();
 
-      if(!meshcom_settings.node_hasIPaddress)
+      if(!hasIPaddress)
       {
         waitRestartUDPCounter++;
 
@@ -987,14 +975,14 @@ void resetMeshComUDP()
 
   WiFi.disconnect(true, true);
 
-  meshcom_settings.node_hasIPaddress=false;
+  hasIPaddress = false;
+  meshcom_settings.node_hasIPaddress = false;
+  iWlanWait = 0;
+  web_timer = 0;
 
-  if(bGATEWAY || bWEBSERVER)
-  {
-    startMeshComUDP();
+  Serial.println("[WIFI-DBG] resetMeshComUDP: WiFi disconnected, flags reset for reconnect");
 
-    sendDisplayHead(false);
-  }
+  sendDisplayHead(false);
 }
 
 #endif
@@ -1016,11 +1004,7 @@ void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
     //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
     //neth.printBuffer(ringBufferUDPout[udpWrite], len + 1);
 
-    //NOT addRingPointer(udpWrite, udpRead, MAX_RING_UDP);
-
-    udpWrite++;
-    if (udpWrite >= MAX_RING_UDP) // if the buffer is full we start at index 0 -> take care of overwriting!
-        udpWrite = 0;
+    addRingPointer(udpWrite, udpRead, MAX_RING_UDP);
 }
 
 void sendKEEP()
@@ -1068,7 +1052,7 @@ void addNodeData(uint8_t msg_buffer[UDP_TX_BUF_SIZE], uint16_t size, int16_t rss
 {
   #ifdef ESP32
   
-  if(!meshcom_settings.node_hasIPaddress)
+  if(!hasIPaddress)
     return;
     
   #endif

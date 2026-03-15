@@ -5,17 +5,8 @@
 #endif
 
 #include "loop_functions.h"
-#include "lora_functions.h"
 #include "mheard_functions.h"
 #include "command_functions.h"
-
-#if defined(BOARD_RAK4630)
-#include "deferred_serial.h"
-#else
-#define CB_PRINTF(...)    Serial.printf(__VA_ARGS__)
-#define RADIO_CB_BEGIN()
-#define RADIO_CB_END()
-#endif
 
 #include "clock.h"
 
@@ -72,13 +63,14 @@ bool bLED_CLEAR=false;
 bool bLED_DELAY=false;
 
 extern unsigned long rebootAuto;
+extern bool g_ble_uart_is_connected;
 
 int iWlanWait = 0;
 
 extern float global_batt;
 extern int global_proz;
 
-bool bSetLoRaAPRS = false;
+volatile bool bSetLoRaAPRS = false;
 
 bool bDEBUG = false;
 bool bLORADEBUG = false;
@@ -277,7 +269,7 @@ int iRetransmit=-1;
 uint8_t retryCount[MAX_RING] = {0};
 
 // RINGBUFFER for incomming LoRa RX msg_id
-uint8_t ringBufferLoraRX[MAX_RING][5] = {0};
+uint8_t ringBufferLoraRX[MAX_DEDUP_RING][5] = {0};
 uint8_t loraWrite = 0;   // counter for ringbuffer
 
 // RINGBUFFER RAW LoRa RX
@@ -304,8 +296,8 @@ bool hasMsgFromPhone = false;
 
 // LoRa RX/TX sequence control
 int cmd_counter = 0;      // ticker dependant on main cycle delay time
-bool is_receiving = false;  // flag to store we are receiving a lora packet.
-bool tx_is_active = false;  // flag to store we are transmitting  a lora packet.
+volatile bool is_receiving = false;  // flag to store we are receiving a lora packet.
+volatile bool tx_is_active = false;  // flag to store we are transmitting  a lora packet.
 bool tx_waiting = false;
 
 int cad_attempt = 0;
@@ -358,6 +350,7 @@ unsigned long telemetry_timer = 0;      // we check periodically to send TELEMET
 unsigned long temphum_timer = 0;        // we check periodically get TEMP/HUM
 unsigned long druck_timer = 0;          // we check periodically get AIRPRESURE
 unsigned long hb_timer = 0;
+bool hb_warn_logged = false;
 unsigned long web_timer = 0;
 
 // Function that gets current epoch time
@@ -388,6 +381,9 @@ unsigned long getUnixClock()
  */
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 {
+    if (!g_ble_uart_is_connected && !bWEBSERVER)
+        return;
+
     if (len > UDP_TX_BUF_SIZE)
         len = UDP_TX_BUF_SIZE-4; // just for safety
 
@@ -437,6 +433,9 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
  */
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
 {
+    if (!g_ble_uart_is_connected && !bWEBSERVER)
+        return;
+
     if (len > 245)
     {
         Serial.printf("[ERR]...BLE out-buffer to long <%i> <%-245.245s>\n", len, buffer);
@@ -507,13 +506,13 @@ void addLoraRxBuffer(unsigned int msg_id, bool bserver)
         ringBufferLoraRX[loraWrite][4] = 0;
 
     loraWrite++;
-    if (loraWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
+    if (loraWrite >= MAX_DEDUP_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         loraWrite = 0;
 }
 
 int checkOwnRx(uint8_t compBuffer[4])
 {
-    for(int ilo=0; ilo<MAX_RING; ilo++)
+    for(int ilo=0; ilo<MAX_DEDUP_RING; ilo++)
     {
         if(memcmp(ringBufferLoraRX[ilo], compBuffer, 4) == 0)
             return ilo;
@@ -524,7 +523,7 @@ int checkOwnRx(uint8_t compBuffer[4])
 
 bool checkServerRx(uint8_t compBuffer[4])
 {
-    for(int ilo=0; ilo<MAX_RING; ilo++)
+    for(int ilo=0; ilo<MAX_DEDUP_RING; ilo++)
     {
         if(memcmp(ringBufferLoraRX[ilo], compBuffer, 4) == 0)
         {
@@ -2141,7 +2140,7 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-    CB_PRINTF("%s %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+    Serial.printf("%s %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
         aprsmsg.msg_source_hw, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
@@ -2149,9 +2148,9 @@ void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_t size)
 {
     if(size == 7)
-        CB_PRINTF("%s %s: %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
+        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
     else
-        CB_PRINTF("%s %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
+        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
 }
 
 
@@ -2427,7 +2426,7 @@ void sendMessage(char *msg_text, int len)
     }
 
     retryCount[iWrite] = 0;
-    addRingPointer(iWrite, iRead, MAX_RING, "tx");
+    addTxRingEntry("user_msg");
 
     /*
     iWrite++;
@@ -2782,7 +2781,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
         memcpy(ringBuffer[iWrite]+2, msg_buffer, ilng);
 
-        addRingPointer(iWrite, iRead, MAX_RING, "tx");
+        addTxRingEntry("user_pos");
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             tdeck_send_track_view();
@@ -2906,7 +2905,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
         memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-        addRingPointer(iWrite, iRead, MAX_RING, "tx");
+        addTxRingEntry("user_wx");
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             tdeck_send_track_view();
@@ -2978,7 +2977,7 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
     ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
     memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-    addRingPointer(iWrite, iRead, MAX_RING, "tx");
+    addTxRingEntry("user_hey");
 
     /*
     iWrite++;
@@ -3053,7 +3052,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     ringBuffer[iWrite][1]=0xFF;    // ACK-Status byte 0xFF for no retransmission
     memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-    addRingPointer(iWrite, iRead, MAX_RING, "tx");
+    addTxRingEntry("beacon");
 
     /*
     iWrite++;
@@ -3126,7 +3125,7 @@ void sendHey()
         ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
         memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-        addRingPointer(iWrite, iRead, MAX_RING, "tx");
+        addTxRingEntry("auto_pos");
 
         /*
         iWrite++;
@@ -3394,7 +3393,7 @@ void sendTelemetry(int ID)
             memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
             if(!bDisplayTrack)
-                addRingPointer(iWrite, iRead, MAX_RING, "tx");
+                addTxRingEntry("phone_msg");
         }
 
         // send value messages to Lora-APRS
@@ -3410,7 +3409,7 @@ void sendTelemetry(int ID)
             ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
             memcpy(ringBuffer[iWrite]+2, msg_buffer, tlng);
 
-            addRingPointer(iWrite, iRead, MAX_RING, "tx");
+            addTxRingEntry("phone_raw");
         }
     }
 }
@@ -3822,7 +3821,7 @@ void addRingPointer(int &pWrite, int &pRead, int iMAX, const char* bufName)
             if (pRead >= iMAX) // if the buffer is full we start at index 0 -> take care of overwriting!
                 pRead = 0;
 
-            if(bLORADEBUG)
+            if(bLORADEBUG && strcmp(bufName, "raw_rx") != 0)
             {
                 Serial.printf("[MC-DBG] RING_OVERFLOW buf=%s\n", bufName);
             }
