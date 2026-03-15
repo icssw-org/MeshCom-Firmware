@@ -504,7 +504,7 @@ void audio_set_mute(bool mute) {
     
     if (mute) {
         if (bDEBUG)
-            Serial.println("[audi]...muting and disabling hardware");
+            Serial.println("[audio]...muting and disabling hardware");
         // Stop any playing audio
         if (audio.isRunning()) {
             audio.stopSong();
@@ -513,7 +513,7 @@ void audio_set_mute(bool mute) {
         i2s_driver_uninstall(i2s_num);
     } else {
         if (bDEBUG)
-            Serial.println("[audi]...unmuting and enabling hardware");
+            Serial.println("[audio]...unmuting and enabling hardware");
         // Re-install I2S driver with default settings (same as Audio lib default)
         i2s_config_t i2s_config = {
             .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),

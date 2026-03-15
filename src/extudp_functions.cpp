@@ -143,8 +143,17 @@ void getExtern(unsigned char incoming[], int len)
     return;
   }
 
-  const char* dst = inputJson["dst"]; // "OE5BYE-1"
-  const char* msg = inputJson["msg"]; // "Test 1 2 3"
+// FIX — Null-Checks einfügen:
+  const char* dst = inputJson["dst"];
+  const char* msg = inputJson["msg"];
+  if(!dst || !msg) {
+    Serial.println("[EXT] missing dst/msg");
+    return;
+  }
+  if(strlen(dst) < 1 || strlen(dst) > 9 || strlen(msg) < 1 || strlen(msg) > 150) {
+    Serial.printf("[EXT] invalid lengths dst:%i msg:%i\n", strlen(dst), strlen(msg));
+    return;
+  }
   aprsmsg.msg_destination_path = dst;
   aprsmsg.msg_payload = msg;
   
@@ -425,6 +434,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     if (!UdpExtern.write(u_json, strlen(c_json)))
     {
       resetExternUDP();
+      return;
     }
 
     UdpExtern.endPacket();
@@ -439,6 +449,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
       if (!UdpExtern.write(t_json, strlen(c_tjson)))
       {
         resetExternUDP();
+        return;
       }
 
       UdpExtern.endPacket();
