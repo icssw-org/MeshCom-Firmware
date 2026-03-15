@@ -654,7 +654,7 @@ void showPath()
 
                 //Serial.printf("| %-10.10s | ", mheardPathCalls[iset]);
 
-                unsigned long lt = mheardPathEpoch[iset] + ((60 * 60 + 24) * (int)meshcom_settings.node_utcoff);
+                unsigned long lt = mheardPathEpoch[iset] + (long)(meshcom_settings.node_utcoff * 3600.0);
                 
                 Serial.printf("| %-19.19s | ", convertUNIXtoString(lt).c_str()); // yyyy.mm.dd hh:mm:ss
 
@@ -844,7 +844,7 @@ void showPathTDECK()
             snprintf(buf, 11, "%s", mheardPathCalls[iset]);
             lv_table_set_cell_value(path_ta, row, 0, buf);
         
-            unsigned long lt = mheardPathEpoch[iset] + ((60 * 60 + 24) * (int)meshcom_settings.node_utcoff);
+            unsigned long lt = mheardPathEpoch[iset] + (long)(meshcom_settings.node_utcoff * 3600.0);
 
             snprintf(buf, 20, "%s", convertUNIXtoString(lt).substring(11, 16).c_str());
             lv_table_set_cell_value(path_ta, row, 1, buf);

@@ -544,7 +544,7 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check ATXT
-    for(unsigned int id=istarttext;id<=PayloadBuffer.length();id++)
+    for(unsigned int id=istarttext;id<PayloadBuffer.length();id++)
     {
         // ENDE
         if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 25)
@@ -566,11 +566,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check Batt
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'B' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -594,11 +594,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check Altitute
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'A' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -622,11 +622,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check Press
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'P' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -650,11 +650,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check Hum
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'H' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -678,11 +678,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check Temp
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'T' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -706,11 +706,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check Temp2
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'O' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -734,11 +734,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check QFE
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'F' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -762,11 +762,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check QNH
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'Q' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -790,11 +790,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check GASRES
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'G' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -818,11 +818,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check CO2
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'C' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -846,11 +846,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     ipt=0;
 
     // check version
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'V' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
@@ -871,11 +871,11 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     }
 
     // check telemetry
-    for(itxt=istarttext; itxt<=PayloadBuffer.length(); itxt++)
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
         if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'Y' && PayloadBuffer.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=PayloadBuffer.length();id++)
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
             {
                 // ENDE
                 if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)

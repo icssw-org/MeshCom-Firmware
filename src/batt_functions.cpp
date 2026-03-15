@@ -351,7 +351,7 @@ float read_batt(void)
 
 		// ADC resolution
 		const int resolution = 12;
-		const int adcMax = pow(2,resolution) - 1;
+		const int adcMax = (1 << resolution) -1;
 		const float adcMaxVoltage = 3.3;
 		// On-board voltage divider
 		const int R1 = 390;
