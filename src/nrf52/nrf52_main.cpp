@@ -1434,21 +1434,81 @@ if (isPhoneReady == 1)
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
     {
-        bPosFirst = false;
-        posinfo_shot=false;
-        posinfo_timer = millis();
-        
-        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
-
-        posinfo_last_lat=posinfo_lat;
-        posinfo_last_lon=posinfo_lon;
-        posinfo_last_direction=posinfo_direction;
-
-        if(pos_shot)
+        // minimal transmit time only max 15 sec
+        if((posinfo_timer_min + 15000) < millis())
         {
-            commandAction((char*)"--pos", isPhoneReady, true);
-            pos_shot = false;
+            if(bDisplayInfo)
+            {
+                Serial.print(getTimeString());
+                Serial.printf(" [POS]...sendPostion initialized F:%i S:%i\n", bPosFirst, posinfo_shot);
+            }
+
+            bPosFirst = false;
+
+            if(posinfo_shot)
+            {
+                double slat = 0.0;
+                double slon = 0.0;
+                
+                double slatr=60.0;
+                double slonr=60.0;
+                
+                slat = (int)posinfo_prev_lat;
+                slatr = (posinfo_prev_lat - slat) * slatr;
+                slat = (slat * 100.) + slatr;
+                
+                slon = (int)posinfo_prev_lon;
+                slonr = (posinfo_prev_lon - slon) * slonr;
+                slon = (slon * 100.) + slonr;
+            
+                double node_lat = cround4(posinfo_prev_lat);
+                double node_lon = cround4(posinfo_prev_lon);
+
+                char node_lat_c = 'N';
+                char node_lon_c = 'E';
+
+                if(posinfo_prev_lat < 0.0)
+                    node_lat_c='S';
+                else
+                    node_lat_c='N';
+                    
+                if(posinfo_prev_lon < 0.0)
+                    node_lon_c='W';
+                else
+                    node_lon_c='E';
+
+                sendPosition(posinfo_interval, node_lat, node_lat_c, node_lon, node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+            }
+            else
+            {
+                sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+            }
+
+            posinfo_shot=false;
+
+            posinfo_prev_lat = 0.0; // done
+            posinfo_prev_lon = 0.0; // done
+
+            posinfo_last_lat=posinfo_lat;
+            posinfo_last_lon=posinfo_lon;
+
+            posinfo_last_direction=posinfo_direction;
+            posinfo_distance = 0.0;
+
+            posinfo_timer = millis();
+
+            if(pos_shot)
+            {
+                commandAction((char*)"--pos", isPhoneReady, false);
+                pos_shot = false;
+            }
+
+            posinfo_timer_min = millis();
         }
+    }
+    else
+    {
+        posinfo_timer_min = millis();
     }
 
     // HEYINFO_INTERVAL in Seconds == 15 minutes

@@ -53,7 +53,7 @@ Timeout timerSerial;
   #endif
 #endif
 
-#if defined (ENABLE_GPS)
+#if defined(ENABLE_GPS)
     #include "gps_functions.h"
     extern GPSData gpsData;
 #endif

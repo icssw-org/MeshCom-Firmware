@@ -50,9 +50,9 @@
 //#define SEE_ALL_PACKETS 0                  // switch to filter multiple receives of same packets from neighbours rebroadcasted
 #define UDP_MSG_INDICATOR_LEN 4            // the first n bytes to recognize which incoming message we have (GATE, CONF)
 #define HEARTBEAT_INTERVAL 30              // HB interval in seconds
-#define POSINFO_INTERVAL 30 * 60           // POSINFO interval in seconds default 30 minutes
-#define HEYINFO_INTERVAL 15 * 60           // HEYINFO interval in seconds default 15 minutes
-#define TELEMETRY_INTERVAL 30 * 60         // TELEMETRY interval in seconds default 30 minutes
+#define POSINFO_INTERVAL 30 * 60           // POSINFO interval in minutes default 30 minutes
+#define HEYINFO_INTERVAL 15 * 60           // HEYINFO interval in minutes default 15 minutes
+#define TELEMETRY_INTERVAL 30 * 60         // TELEMETRY interval in minutes default 30 minutes
 #define GPS_REFRESH_INTERVAL 5             // GPS Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds

@@ -12,7 +12,7 @@
 // ============================================================================
 #include "gps_functions.h"
 
-#ifdef ENABLE_GPS
+#if defined(ENABLE_GPS)
 
 #include <TinyGPSPlus.h>
 
@@ -36,7 +36,9 @@ void GPS_Init() {
     // Baudrate-Erkennung: Jede Baudrate kurz ausprobieren
     for (size_t i = 0; i < GPS_BAUD_COUNT; i++) {
         GPSSerial.begin(GPS_BAUDS[i], SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-        Serial.printf("[GPS] check %u baud...\n", GPS_BAUDS[i]);
+
+        if(bGPSON)
+            Serial.printf("[GPS] check %u baud...\n", GPS_BAUDS[i]);
 
         uint32_t start = millis();
         bool found = false;
@@ -59,9 +61,9 @@ void GPS_Init() {
             }
         }
 
-        if (gps.charsProcessed() > 10) {
-            Serial.printf("[GPS] found with %u baud (%u chars)\n",
-                             GPS_BAUDS[i], gps.charsProcessed());
+        if (gps.charsProcessed() > 10)
+        {
+            Serial.printf("[GPS] found with %u baud (%u chars)\n", GPS_BAUDS[i], gps.charsProcessed());
             gpsDetected = true;
 
             // Initialize the GNSS Chip, use GPS + GLONASS
@@ -80,14 +82,17 @@ void GPS_Init() {
         }
         else
         {
-            Serial.println("[GPS] not found\n");
+            if(bGPSON)
+                Serial.println("[GPS] not found");
+
             gpsDetected = false;
         }
 
         GPSSerial.end();
     }
 
-    Serial.println("[GPS] not found\n");
+    if(bGPSON)
+       Serial.println("[GPS] not found");
 
     gpsDetected = false;
 }

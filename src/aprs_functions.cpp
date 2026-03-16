@@ -176,7 +176,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         
         aprsmsg.msg_last_path_cnt=1;
 
-        for(ib=6; ib < rsize; ib++)
+        for(ib=6; ib < rsize && (ib - 6) < 120; ib++)
         {
             if(RcvBuffer[ib] == '>')
             {
@@ -186,6 +186,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             }
             else
             {
+                if(RcvBuffer[ib] < 0x20 || RcvBuffer[ib] > 0x7E)
+                    break;
+
                 aprsmsg.msg_source_path.concat((char)RcvBuffer[ib]);
                 
                 if(RcvBuffer[ib] == ',')
@@ -251,7 +254,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         bool bDestinationCall=true;
         uint16_t inextstart=inext;
 
-        for(ib=inextstart; ib < rsize; ib++)
+        for(ib=inextstart; ib < rsize && (ib - inextstart) < 120; ib++)
         {
             if(RcvBuffer[ib] == aprsmsg.payload_type)
             {
@@ -261,6 +264,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             }
             else
             {
+                if(RcvBuffer[ib] < 0x20 || RcvBuffer[ib] > 0x7E)
+                    break;
+
                 aprsmsg.msg_destination_path.concat((char)RcvBuffer[ib]);
 
                 if(RcvBuffer[ib] == ',')
@@ -400,19 +406,21 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             inext++;
         }
 
-        if(RcvBuffer[inext] == 0x7e)
+        if(inext < rsize)
         {
-            aprsmsg.msg_source_fw_sub_version = '#';
-            inext++;
-        }
-        else
-        {
-            if(RcvBuffer[inext] == 0x00)
+            if(RcvBuffer[inext] == 0x7e)
+            {
                 aprsmsg.msg_source_fw_sub_version = '#';
+                inext++;
+            }
             else
-                aprsmsg.msg_source_fw_sub_version = RcvBuffer[inext];
-            inext++;
-
+            {
+                if(RcvBuffer[inext] == 0x00)
+                    aprsmsg.msg_source_fw_sub_version = '#';
+                else
+                    aprsmsg.msg_source_fw_sub_version = RcvBuffer[inext];
+                inext++;
+            }
         }
 
         if(inext < rsize)

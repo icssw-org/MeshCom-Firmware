@@ -246,9 +246,12 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
     //Serial.printf("inext:%i ipos:%i\n", inext, ipos);
 
+    bool bNew=false;
+
     if(inext >= 0 && ipos == -1)
     {
         ipos=inext;
+        bNew=false;
     }
     else
     if(inext == -1 && ipos == -1)
@@ -266,14 +269,13 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     memcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str(), len);
     
     mheardEpoch[ipos] = getUnixClock();
-    /*
-    String mh_time;
-    String mh_callsign;
-    uint8_t mh_hw;
-    uint8_t mh_mod;
-    int16_t mh_rssi;
-    int8_t mh_snr;
-    */
+
+    // da bei dem eintreffen von updateMHeard kein NCOUNT dabei ist
+    // wird dieser aus dem bestehenden Tabellen-Wert  mheardNCount[]; ergänzt
+    if(bNew)
+        mheardLine.mh_ncount = 0;
+    else
+        mheardLine.mh_ncount = mheardNCount[ipos];
 
     char cBuffer[60];
     snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,

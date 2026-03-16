@@ -2084,6 +2084,9 @@ void printBuffer(uint8_t *buffer, int len)
 
 void printAsciiBuffer(uint8_t *buffer, int len)
 {
+    if(len < 4)
+        return;
+        
     if(buffer[0] != 0x21 && buffer[0] != 0x3A && buffer[0] != 0x40 && buffer[0] != 0x41)
     {
         Serial.printf("LoRa starting with 0x%02X and %02X%02X%02X ... no decode\n", buffer[0], buffer[1], buffer[2], buffer[3]);
