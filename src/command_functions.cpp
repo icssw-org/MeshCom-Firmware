@@ -47,13 +47,6 @@
 
 unsigned long rebootAuto = 0;
 
-#ifndef BOARD_T_DECK_PRO
-    #if defined (ENABLE_GPS) or defined(BOARD_RAK4630)
-    extern int state; // only for gps reset
-    extern bool bMitHardReset;
-    #endif
-#endif
-
 // OTA Libs for ESP32 Partition Switching
 #ifdef ESP32
 #include <esp_ota_ops.h>
@@ -1327,10 +1320,6 @@ void commandAction(char *umsg_text, bool ble)
             addBLECommandBack((char*)"--gps reset");
         }
 
-        bMitHardReset=true;
-
-        state = 1;
-        
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         tdeck_refresh_SET_view();
         #endif

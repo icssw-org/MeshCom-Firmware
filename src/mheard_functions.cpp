@@ -365,38 +365,39 @@ void updateHeyPath(struct mheardLine &mheardLine)
                     Serial.print(" ");
                 }
 
-                //NeighborCount einfügen
-                // check old format
+                // NeighborCount einfügen
+                // check new/old format
+                // new R99; R99;77,7 ...
+                // old R99,99,99;77,7 ... oder R99,77 
+                
                 int ipos=mheardLine.mh_path_payload.indexOf(";");
 
-                if(bDisplayCont)
+                if(ipos > 0)
                 {
-                    Serial.print(ipos);
+                    // check old format
+                    if(mheardLine.mh_path_payload.substring(0, ipos).indexOf(",") < 0)
+                    {
+                        if(bDisplayCont)
+                        {
+                            Serial.print(mheardLine.mh_path_payload.substring(1, ipos));
+                            Serial.print(" count:");
+                        }
+
+                        mheardNCount[imh] = mheardLine.mh_path_payload.substring(1, ipos).toInt();
+                        mheardLine.mh_ncount = mheardNCount[imh];
+
+                        if(bDisplayCont)
+                            Serial.println(mheardLine.mh_ncount);
+
+                        char cBuffer[60];
+                        snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
+                        mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
+                        memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
+                    }
                 }
 
-                if(ipos <= 0)
-                {
-                    if(bDisplayCont)
-                        Serial.println("");
-                    return;
-                }
-
                 if(bDisplayCont)
-                {
-                    Serial.print(mheardLine.mh_path_payload.substring(1, ipos));
-                    Serial.print(" count:");
-                }
-
-                mheardNCount[imh] = mheardLine.mh_path_payload.substring(1, ipos).toInt();
-                mheardLine.mh_ncount = mheardNCount[imh];
-
-                if(bDisplayCont)
-                    Serial.println(mheardLine.mh_ncount);
-
-                char cBuffer[60];
-                snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
-                mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
-                memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
+                    Serial.println("");
 
                 return; // call heard direct
             }

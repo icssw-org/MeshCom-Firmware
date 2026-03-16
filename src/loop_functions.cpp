@@ -39,13 +39,10 @@
 #if defined(HAS_TFT)
 #include "tft_display_functions.h"
 #endif
+
 // TinyGPS
-#if defined(ENABLE_GPS)
+#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS)
 extern TinyGPSPlus gps;
-#elif defined(ENABLE_RAK_GPS)
-extern TinyGPSPlus gps;
-#else
-extern TinyGPSPlus tinyGPSPlus;
 #endif
 
 bool bnextread=false;
@@ -3452,8 +3449,9 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         posinfo_last_lon = dlon;
     }
 
-    double distance = gps.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
-
+    double distance = 0.;
+    
+    distance = gps.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
     
     //posinfo_distance += distance;
     posinfo_distance = distance; // KBC 25.11.14

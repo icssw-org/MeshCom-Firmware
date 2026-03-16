@@ -85,7 +85,9 @@ extern int mheardAlt[MAX_MHEARD];
 #include "TinyGPSPlus.h"
 
 // TinyGPS
-extern TinyGPSPlus tinyGPSPLus;
+#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS)
+extern TinyGPSPlus gps;
+#endif
 
 int sendlng = 0;
 uint8_t lora_tx_buffer[UDP_TX_BUF_SIZE+10];  // lora tx buffer
@@ -404,7 +406,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_sourcepath = aprsmsg.msg_source_path;
                 mheardLine.mh_sourcecallsign = aprsmsg.msg_source_call;
                 mheardLine.mh_destinationpath = aprsmsg.msg_destination_path;
-                mheardLine.mh_hw = aprsmsg.msg_last_hw & 0x7F;
+                mheardLine.mh_hw = aprsmsg.msg_last_hw;
                 
                 if((aprsmsg.msg_last_hw & 0x80) == 0x80)    // Last-Sending
                     mheardLine.mh_mod = aprsmsg.msg_source_mod;
@@ -481,10 +483,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                     #ifndef BOARD_T5_EPAPER
                     if(lat != 0.0 && lon != 0.0 && meshcom_settings.node_lat != 0.0 && meshcom_settings.node_lon != 0.0)
-                        mheardLine.mh_dist = tinyGPSPLus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+                    {
+                        mheardLine.mh_dist = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+                    }
 
                     updateMheard(mheardLine, isPhoneReady);
-
+                    
                     #endif
                     // last heard LoRa MeshCom-Packet
                     lastHeardTime = millis();

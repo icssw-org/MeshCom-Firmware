@@ -20,7 +20,7 @@
 SPIClass ethSPI(FSPI);
 #endif
 
-#include "esp32_gps.h"
+#include "esp32_pmu.h"
 #include "esp32_flash.h"
 #include <esp_adc_cal.h>
 
@@ -56,10 +56,6 @@ Timeout timerSerial;
 #if defined(ENABLE_GPS)
     #include "gps_functions.h"
     extern GPSData gpsData;
-#endif
-
-#if defined (GPS_FUNCTIONS)
-    #include "gps_functions.h"
 #endif
 
 // Sensors
@@ -557,7 +553,7 @@ void esp32setup()
     Serial.begin(MONITOR_SPEED);
     
     while (!Serial && !timerSerial.time_over());
-    if (Serial) { for (int i=0;i<10;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
+    if (Serial) { for (int i=0;i<5;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
 
     #if defined BOARD_T5_EPAPER
         if (psramInit()) {
