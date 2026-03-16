@@ -26,7 +26,7 @@ class BaseDisplay: public GFX {
         BaseDisplay ( uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_sdi, uint8_t pin_clk, int16_t page_height );
 
         // Destructor
-        ~BaseDisplay() {
+        virtual ~BaseDisplay() {
             freePageMemory();
         }
 
