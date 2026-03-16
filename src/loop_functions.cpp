@@ -1552,8 +1552,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         TDeck_pro_lora_disp(strPath, strAscii);
 
-        strcpy(pageLastTextLong1[pagePointer], msg_text);
-        strcpy(pageLastTextLong2[pagePointer], strAscii.c_str());
+        strncpy(pageLastTextLong1[pagePointer], msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
+        pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
+        strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
+        pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
         bSetDisplay = false;
 
@@ -1596,8 +1598,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     e290_display.println(strAscii);
 
-    strcpy(pageLastTextLong1[pagePointer], msg_text);
-    strcpy(pageLastTextLong2[pagePointer], strAscii.c_str());
+    strncpy(pageLastTextLong1[pagePointer], msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
+    pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
+    strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
+    pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
     e290_display.update();
 
@@ -1631,8 +1635,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     strAscii = utf8ascii(aprsmsg.msg_payload);
 
-    strcpy(pageLastTextLong1[pagePointer], strPath.c_str());
-    strcpy(pageLastTextLong2[pagePointer], strAscii.c_str());
+    strncpy(pageLastTextLong1[pagePointer], strPath.c_str(), sizeof(pageLastTextLong1[pagePointer]) - 1);
+    pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
+    strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
+    pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
     displayTFT(strPath, strAscii);
 
@@ -1715,7 +1721,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     iwords=99;
 
     memset(line_text, 0x00, 21);
-    strcat(line_text, words[0]);
+    strncat(line_text, words[0], sizeof(line_text) - strlen(line_text) - 1);
 
     bool bEnd=false;
 
@@ -1749,13 +1755,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             bClear=false;
 
-            strcat(line_text, words[itxt]);
+            strncat(line_text, words[itxt], sizeof(line_text) - strlen(line_text) - 1);
 
         }
         else
         {
-            strcat(line_text, " ");
-            strcat(line_text, words[itxt]);
+            strncat(line_text, " ", sizeof(line_text) - strlen(line_text) - 1);
+            strncat(line_text, words[itxt], sizeof(line_text) - strlen(line_text) - 1);
         }
     }
 
