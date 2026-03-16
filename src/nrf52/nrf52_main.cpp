@@ -515,8 +515,10 @@ void nrf52setup()
     // Umstekllung auf langes WIFI Passwort
     if(strlen(meshcom_settings.node_ossid) > 4 && strlen(meshcom_settings.node_ssid) < 5)
     {
-        strcpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid);
-        strcpy(meshcom_settings.node_pwd, meshcom_settings.node_opwd);
+        strncpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid, sizeof(meshcom_settings.node_ssid) - 1);
+        meshcom_settings.node_ssid[sizeof(meshcom_settings.node_ssid) - 1] = '\0';
+        strncpy(meshcom_settings.node_pwd, meshcom_settings.node_opwd, sizeof(meshcom_settings.node_pwd) - 1);
+        meshcom_settings.node_pwd[sizeof(meshcom_settings.node_pwd) - 1] = '\0';
 
         memset(meshcom_settings.node_ossid, 0x00, sizeof(meshcom_settings.node_ossid));
         memset(meshcom_settings.node_opwd, 0x00, sizeof(meshcom_settings.node_opwd));
@@ -2149,7 +2151,8 @@ void checkSerialCommand(void)
             if(strText.endsWith("\n") || strText.endsWith("\r"))
             {
                 strText.trim();
-                strcpy(msg_text, strText.c_str());
+                strncpy(msg_text, strText.c_str(), sizeof(msg_text) - 1);
+                msg_text[sizeof(msg_text) - 1] = '\0';
 
                 int inext = 0;
                 char msg_buffer[600];

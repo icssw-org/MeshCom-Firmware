@@ -100,7 +100,8 @@ int casecmp(const char *s1, const char *s2)
 int commandCheck(char *msg, char *command)
 {
     char vmsg[100];
-    strcpy(vmsg, msg);
+    strncpy(vmsg, msg, sizeof(vmsg) - 1);
+    vmsg[sizeof(vmsg) - 1] = '\0';
     vmsg[strlen(command)] = 0x00;
 
     if(casecmp(vmsg, command) == 0)
