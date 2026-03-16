@@ -186,6 +186,10 @@ class Monitor:
         self.hb_timeout_streak: int = 0
         self.hb_timeout_cycle_alerted: bool = False
 
+        # Priority/Trickle tracking
+        self.last_mc_stat: str | None = None
+        self.last_mc_hwm: str | None = None
+
         # Alerts collected this interval
         self.alerts: list[str] = []
 
@@ -531,6 +535,38 @@ class Monitor:
                     f"RX RESTART flood: {cur_count}/min"
                 )
 
+        # Priority statistics from firmware
+        if "[MC-STAT]" in line:
+            self.counters["mc_stat_lines"] = self.counters.get("mc_stat_lines", 0) + 1
+            self.last_mc_stat = line.strip()
+            return
+
+        if "[MC-PRIO]" in line:
+            self.counters["mc_prio_lines"] = self.counters.get("mc_prio_lines", 0) + 1
+            # Check for Prio-1 starvation (latency > 10000ms)
+            m = re.search(r"p1_lat_max=(\d+)ms", line)
+            if m and int(m.group(1)) > 10000:
+                self._alert(f"PRIO1_STARVED: p1_lat_max={m.group(1)}ms (>10s)")
+            return
+
+        if "[MC-TRICKLE]" in line:
+            self.counters["trickle_events"] = self.counters.get("trickle_events", 0) + 1
+            if "SUPPRESS" in line:
+                self.counters["trickle_suppress"] = self.counters.get("trickle_suppress", 0) + 1
+            elif "TOPO_CHANGE" in line:
+                self.counters["trickle_topo_change"] = self.counters.get("trickle_topo_change", 0) + 1
+            return
+
+        if "[MC-HWM]" in line:
+            self.last_mc_hwm = line.strip()
+            return
+
+        # Priority drop alert
+        if "RING_DROP_PRIO" in line:
+            self.counters["ring_drop_prio"] = self.counters.get("ring_drop_prio", 0) + 1
+            self.total["ring_drop_prio"] = self.total.get("ring_drop_prio", 0) + 1
+            return
+
     def _alert(self, msg: str) -> None:
         self._indicator_newline()
         ts = datetime.now().strftime("%H:%M:%S")
@@ -648,66 +684,154 @@ class Monitor:
             else:
                 ack_eff_str = "n/a"
 
-            summary = (
-                f"\n{'=' * 60}\n"
+            # -- build summary: quiet-by-default, loud-when-interesting --
+            SEP = "=" * 60
+            lines: list[str] = [
+                "",
+                SEP,
                 f"SUMMARY {t_start:%H:%M}-{t_end:%H:%M} "
-                f"(uptime: {h}h{m:02d}m)\n"
-                f"{'=' * 60}\n"
-                f"RX: {self.counters['rx_packets']} packets, "
-                f"{self.counters['rx_errors']} errors, "
-                f"{self.counters['rx_timeouts']} timeouts\n"
-                f"TX: {self.counters['tx_packets']} packets, "
-                f"{self.counters['tx_timeouts']} timeouts\n"
-                f"State: {state_str or 'no transitions'}\n"
-                f"Drops: {drops} | "
-                f"Loop blocked: {self.counters.get('relay_loop_blocked', 0)} | "
-                f"CAD busy: {self.counters.get('cad_busy', 0)} | "
-                f"CAD filtered: {cad_fp_filtered} | "
-                f"Retransmit fails: {self.counters.get('retransmit_fails', 0)}\n"
-                f"Radio: {self.radio_silent_events_interval} silent events "
-                f"(max gap: {self.max_radio_gap:.0f}s) | "
-                f"Channel busy: {self.counters.get('channel_busy', 0)} | "
-                f"Deferred: {deferred}\n"
-                f"ACK Dedup: saved={ack_saved} "
-                f"(cancel={self.counters.get('ack_rx_cancel_saved', 0)} "
-                f"fwd_dedup={self.counters.get('ack_fwd_dedup', 0)} "
-                f"gw_dedup={self.counters.get('gw_ack_dedup', 0)} "
-                f"skip={self.counters.get('ack_slot_skip', 0)}) "
-                f"tx={ack_tx} eff={ack_eff_str}\n"
-                f"  ACK: queued={ack_queued} "
-                f"received={self.counters.get('ack_received', 0)} "
-                f"cad_busy={self.counters.get('ack_cad_busy', 0)} "
-                f"cancel_retx={self.counters.get('ack_cancel_retransmit', 0)} "
-                f"drops={ack_drops}\n"
-                f"Channel: {util_str}\n"
-                + (f"  Airtime: {airtime_str}\n" if airtime_str else "")
-                + f"Adaptive wait: {wait_str}\n"
-                f"Ring:  queued={self.ring_last_queued} retrying={self.ring_last_retrying} "
-                f"done={self.ring_last_done} (last seen)\n"
-                f"WiFi: {wifi_str} | UDP: {udp_str} | "
-                f"Server: {server_str} | NTP: {ntp_str}\n"
-                f"Alerts: {alert_str}\n"
-                f"{'=' * 60}\n"
+                f"(uptime: {h}h{m:02d}m)",
+                SEP,
+            ]
+
+            # always visible: core metrics
+            lines.append(
+                f"RX: {self.counters['rx_packets']} packets | "
+                f"TX: {self.counters['tx_packets']} | "
+                f"Errors: {self.counters['rx_errors']} | "
+                f"Drops: {drops}"
             )
-            # totals line
-            summary += (
-                f"  TOTALS: RX={self.total['rx_packets']} "
-                f"TX={self.total['tx_packets']} "
-                f"Errors={self.total['rx_errors']} "
-                f"Drops={sum(v for k, v in self.total.items() if k.startswith('drop_'))} "
-                f"LoopBlocked={self.total['relay_loop_blocked']} "
-                f"RadioSilent={self.total['radio_silent']} "
-                f"(max gap: {self.max_radio_gap_total:.0f}s) "
-                f"Deferred={self.total['rx_timeout_deferred']}\n"
-                f"  HB_Timeouts={self.total['hb_timeouts']} "
-                f"NTP_Fails={self.total['ntp_fails']}\n"
-                f"  ACK_Saved={self.total['ack_rx_cancel_saved'] + self.total['ack_fwd_dedup'] + self.total['gw_ack_dedup'] + self.total['ack_slot_skip']} "
-                f"ACK_TX={self.total['ack_fast_tx']} "
-                f"ACK_Drops={self.total['ack_fwd_dropped'] + self.total['gw_ack_dropped']} "
-                f"ACK_Received={self.total['ack_received']}\n"
+            lines.append(
+                f"State: {state_str or 'no transitions'} | "
+                f"Channel: {util_str}"
+            )
+            if airtime_str:
+                lines.append(
+                    f"Airtime: {airtime_str} | Adaptive wait: {wait_str}"
+                )
+            else:
+                lines.append(f"Adaptive wait: {wait_str}")
+            lines.append(
+                f"Ring: queued={self.ring_last_queued} "
+                f"retrying={self.ring_last_retrying} "
+                f"done={self.ring_last_done} | Deferred: {deferred}"
+            )
+            lines.append(
+                f"WiFi: {wifi_str} | UDP: {udp_str} | "
+                f"Server: {server_str} | NTP: {ntp_str}"
             )
 
-            print(summary, flush=True)
+            # conditional: only when non-zero
+            loop_blocked = self.counters.get("relay_loop_blocked", 0)
+            cad_busy = self.counters.get("cad_busy", 0)
+            retransmit_fails = self.counters.get("retransmit_fails", 0)
+            if drops or loop_blocked or cad_busy or cad_fp_filtered or retransmit_fails:
+                lines.append(
+                    f"Drops: {drops} | Loop blocked: {loop_blocked} | "
+                    f"CAD busy: {cad_busy} | CAD filtered: {cad_fp_filtered} | "
+                    f"Retransmit fails: {retransmit_fails}"
+                )
+
+            channel_busy = self.counters.get("channel_busy", 0)
+            if self.radio_silent_events_interval or channel_busy:
+                lines.append(
+                    f"Radio: {self.radio_silent_events_interval} silent events "
+                    f"(max gap: {self.max_radio_gap:.0f}s) | "
+                    f"Channel busy: {channel_busy}"
+                )
+
+            ack_received = self.counters.get("ack_received", 0)
+            ack_cad_busy = self.counters.get("ack_cad_busy", 0)
+            ack_cancel_retx = self.counters.get("ack_cancel_retransmit", 0)
+            if ack_saved or ack_tx or ack_queued or ack_received or ack_drops:
+                lines.append(
+                    f"ACK: saved={ack_saved} "
+                    f"(cancel={self.counters.get('ack_rx_cancel_saved', 0)} "
+                    f"fwd_dedup={self.counters.get('ack_fwd_dedup', 0)} "
+                    f"gw_dedup={self.counters.get('gw_ack_dedup', 0)} "
+                    f"skip={self.counters.get('ack_slot_skip', 0)}) "
+                    f"tx={ack_tx} eff={ack_eff_str} | "
+                    f"queued={ack_queued} received={ack_received} "
+                    f"cad_busy={ack_cad_busy} cancel_retx={ack_cancel_retx} "
+                    f"drops={ack_drops}"
+                )
+
+            trickle_events = self.counters.get("trickle_events", 0)
+            trickle_suppress = self.counters.get("trickle_suppress", 0)
+            trickle_topo = self.counters.get("trickle_topo_change", 0)
+            if trickle_events or trickle_suppress or trickle_topo:
+                lines.append(
+                    f"Trickle: events={trickle_events} "
+                    f"suppress={trickle_suppress} "
+                    f"topo_change={trickle_topo}"
+                )
+
+            prio_drops = self.counters.get("ring_drop_prio", 0)
+            mc_stat_lines = self.counters.get("mc_stat_lines", 0)
+            if prio_drops or mc_stat_lines > 1:
+                lines.append(
+                    f"Prio: stat_lines={mc_stat_lines} "
+                    f"prio_drops={prio_drops} preempt=see [MC-STAT]"
+                )
+
+            if self.alerts:
+                lines.append(f"Alerts: {len(self.alerts)} (see above)")
+
+            # totals: always RX/TX, rest only if non-zero
+            lines.append(SEP)
+            totals_parts = [
+                f"RX={self.total['rx_packets']}",
+                f"TX={self.total['tx_packets']}",
+            ]
+            total_errors = self.total["rx_errors"]
+            total_drops = sum(
+                v for k, v in self.total.items() if k.startswith("drop_")
+            )
+            total_loop = self.total["relay_loop_blocked"]
+            total_silent = self.total["radio_silent"]
+            total_deferred = self.total["rx_timeout_deferred"]
+            total_hb_to = self.total["hb_timeouts"]
+            total_ntp = self.total["ntp_fails"]
+            total_ack_saved = (
+                self.total["ack_rx_cancel_saved"]
+                + self.total["ack_fwd_dedup"]
+                + self.total["gw_ack_dedup"]
+                + self.total["ack_slot_skip"]
+            )
+            total_ack_tx = self.total["ack_fast_tx"]
+            total_ack_drops = (
+                self.total["ack_fwd_dropped"] + self.total["gw_ack_dropped"]
+            )
+            total_ack_rx = self.total["ack_received"]
+
+            if total_errors:
+                totals_parts.append(f"Errors={total_errors}")
+            if total_drops:
+                totals_parts.append(f"Drops={total_drops}")
+            if total_loop:
+                totals_parts.append(f"LoopBlocked={total_loop}")
+            if total_silent:
+                totals_parts.append(f"RadioSilent={total_silent}")
+            totals_parts.append(
+                f"(max gap: {self.max_radio_gap_total:.0f}s)"
+            )
+            if total_deferred:
+                totals_parts.append(f"Deferred={total_deferred}")
+            if total_hb_to:
+                totals_parts.append(f"HB_Timeouts={total_hb_to}")
+            if total_ntp:
+                totals_parts.append(f"NTP_Fails={total_ntp}")
+            if total_ack_saved or total_ack_tx or total_ack_drops or total_ack_rx:
+                totals_parts.extend([
+                    f"ACK_Saved={total_ack_saved}",
+                    f"ACK_TX={total_ack_tx}",
+                    f"ACK_Drops={total_ack_drops}",
+                    f"ACK_Received={total_ack_rx}",
+                ])
+            lines.append(f"  TOTALS: {' '.join(totals_parts)}")
+            lines.append(SEP)
+
+            print("\n".join(lines), flush=True)
 
             # reset interval counters
             self.counters = defaultdict(int)
@@ -789,7 +913,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # Create log directory and file
-    log_dir = "/tmp/meshcom_monitor"
+    log_dir = "./meshcom_monitor"
     os.makedirs(log_dir, exist_ok=True)
     log_name = f"meshcom_{datetime.now():%Y-%m-%d_%H%M%S}.log"
     log_path = os.path.join(log_dir, log_name)
