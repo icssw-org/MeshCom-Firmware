@@ -1250,6 +1250,13 @@ extern bool btimeClient;
                 iReceiveTimeOutTime = millis();
             }
         }
+        else
+        {
+            // Nothing to send — restart timeout cycle (radio watchdog).
+            // Matches ESP32 esp32_main.cpp behaviour: periodic Radio.Rx()
+            // prevents silent SX1262 stall when queue is empty.
+            iReceiveTimeOutTime = millis();
+        }
     }
 
     // SOFTSER
