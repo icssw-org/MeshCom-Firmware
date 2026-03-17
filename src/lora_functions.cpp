@@ -290,6 +290,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     payload = rxPayloadCopy[rxBufIndex];
     size = rxSize;
     Radio.Rx(RX_TIMEOUT_VALUE);
+    // CAD aborted by RX — reset so main loop doesn't deadlock
+    if(cad_in_progress) {
+        cad_in_progress = false;
+        cad_done_flag = false;
+        cad_double_check = false;
+        if(bLORADEBUG)
+            Serial.printf("[MC-DBG] CAD_ABORT_BY_RX\n");
+    }
     if(bLORADEBUG)
         Serial.printf("[MC-DBG] RX_RESTART_EARLY src=OnRxDone\n");
     #endif
@@ -1092,6 +1100,11 @@ void OnRxTimeout(void)
 {
     #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
+        if(cad_in_progress) {
+            cad_in_progress = false;
+            cad_done_flag = false;
+            cad_double_check = false;
+        }
     #endif
 
     if(bLORADEBUG)
@@ -1113,6 +1126,11 @@ void OnRxError(void)
 {
     #if defined BOARD_RAK4630
         Radio.Rx(RX_TIMEOUT_VALUE);
+        if(cad_in_progress) {
+            cad_in_progress = false;
+            cad_done_flag = false;
+            cad_double_check = false;
+        }
     #endif
 
     if(bLORADEBUG)
@@ -1267,7 +1285,9 @@ bool doTX()
                 if(millis() > track_to_meshcom_timer + 1000 * 60 * 5)
                 {
                     #if defined BOARD_RAK4630
+                        taskENTER_CRITICAL();
                         Radio.Send(lora_tx_buffer, sendlng);
+                        taskEXIT_CRITICAL();
                     #else
                         #ifndef BOARD_T5_EPAPER
                         #ifdef RADIO_CTRL
@@ -1296,7 +1316,9 @@ bool doTX()
                 // you can transmit C-string or Arduino string up to
                 // 256 characters long
                 #if defined BOARD_RAK4630
+                    taskENTER_CRITICAL();
                     Radio.Send(lora_tx_buffer, sendlng);
+                    taskEXIT_CRITICAL();
                 #else
                     #ifndef BOARD_T5_EPAPER
                     #ifdef RADIO_CTRL
@@ -1350,7 +1372,9 @@ bool doTX()
                     // you can transmit C-string or Arduino string up to
                     // 256 characters long
                     #if defined BOARD_RAK4630
+                        taskENTER_CRITICAL();
                         Radio.Send(lora_tx_buffer, sendlng);
+                        taskEXIT_CRITICAL();
                     #else
                         #ifndef BOARD_T5_EPAPER
                         #ifdef RADIO_CTRL
