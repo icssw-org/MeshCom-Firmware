@@ -468,9 +468,9 @@ void updateHeyPath(struct mheardLine &mheardLine)
     if(ips <= 0)
         return;
 
-    memset(mheardPathCalls[ipos], 0x00, sizeof(mheardPathCalls[ipos]));
-    memcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str(), mheardLine.mh_sourcecallsign.length());
-    mheardPathCalls[ipos][9]=0x00;
+    size_t len = min(mheardLine.mh_sourcecallsign.length(), sizeof(mheardPathCalls[ipos]) - 1);
+    memcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str(), len);
+    mheardPathCalls[ipos][len] = 0x00;
 
     //Serial.printf("PATH:%i <%s> <%s> %i %i\n", ipos,  mheardLine.mh_sourcepath.c_str(), mheardLine.mh_sourcepath.substring(ips).c_str(), ips, ipc);
 

@@ -84,8 +84,8 @@ bool play_file_from_sd(const char *filename, int volume)
         if (SD.exists(strAudioWithType.c_str()))
         {
             audio.setVolume(volume);
-            audio.connecttoFS(SD, strAudioWithType.c_str());
-
+                audio.connecttoFS(SD, strAudioWithType.c_str());
+            
             if (bDEBUG)
                 Serial.printf("[audio]...playing %s in background\n", strAudioWithType.c_str());
 
@@ -165,7 +165,11 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
     if (SD.exists(strAudioWithType.c_str()))
     {
         audio.setVolume(volume);
-        audio.connecttoFS(SD, strAudioWithType.c_str());
+        if (xSemaphoreTake(audioSemaphore, pdMS_TO_TICKS(500)) == pdTRUE) {
+            audio.connecttoFS(SD, strAudioWithType.c_str());
+            xSemaphoreGive(audioSemaphore);
+        }
+
         if (bDEBUG)
             Serial.printf("[audio]...playing %s\n", strAudioWithType.c_str());
 

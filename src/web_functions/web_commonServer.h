@@ -18,7 +18,7 @@
     class CommonWebServer : public WiFiServer {
         using WiFiServer::WiFiServer;
         public:
-              CommonWebClient available() {
+            CommonWebClient available() {
                 WiFiClient c = WiFiServer::available();
                 CommonWebClient* cwc = static_cast<CommonWebClient*>(&c);
                 return *cwc;

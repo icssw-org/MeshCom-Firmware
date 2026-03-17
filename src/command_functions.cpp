@@ -66,13 +66,14 @@ unsigned long rebootAuto = 0;
 #include <t5-epaper/t5epaper_main.h>
 #endif
 
-uint16_t json_len = 0;
 void sendNodeSetting();
 void sendGpsJson();
 void sendAPRSset();
 void sendConfigFinish();
 
 String strMore;
+
+size_t json_len = 0;
 
 int casecmp(const char *s1, const char *s2)
 {
@@ -152,7 +153,12 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     if(inext > 0)
     {
         memset(msg_detail, 0x00, sizeof(msg_detail));
-        memcpy(msg_detail, msg_text+inext, strlen(msg_text)-inext);
+        
+        size_t detail_len = strlen(msg_text) - inext;
+        if (detail_len > sizeof(msg_detail) - 1)
+            detail_len = sizeof(msg_detail) - 1;
+        memcpy(msg_detail, msg_text + inext, detail_len);
+        msg_detail[detail_len] = '\0';
 
         if(bDisplayCont)
         {
@@ -1904,7 +1910,7 @@ void commandAction(char *umsg_text, bool ble)
             return;
         }
 
-        sprintf(meshcom_settings.node_gwsrv, "%s", strCtry.c_str());
+        snprintf(meshcom_settings.node_gwsrv, sizeof(meshcom_settings.node_gwsrv), "%s", strCtry.c_str());
 
         if(ble)
         {
@@ -3998,13 +4004,16 @@ void commandAction(char *umsg_text, bool ble)
 
             serializeJson(tmdoc, print_buff, measureJson(tmdoc));
 
-            // clear buffer
-            memset(msg_buffer, 0, sizeof(msg_buffer));
+            json_len = strlen(print_buff);
+            if (json_len > MAX_MSG_LEN_PHONE - 2) {
+                json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+            }
 
-            // set data message flag and tx ble
+            memset(msg_buffer, 0, sizeof(msg_buffer));
             msg_buffer[0] = 0x44;
-            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            memcpy(msg_buffer + 1, print_buff, json_len);
+
+            addBLEComToOutBuffer(msg_buffer, json_len + 1);
         }
 
         if(!bRxFromPhone)
@@ -4045,13 +4054,16 @@ void commandAction(char *umsg_text, bool ble)
 
             serializeJson(wdoc, print_buff, measureJson(wdoc));
 
-            // clear buffer
-            memset(msg_buffer, 0, sizeof(msg_buffer)); 
+            json_len = strlen(print_buff);
+            if (json_len > MAX_MSG_LEN_PHONE - 2) {
+                json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+            }
 
-            // set data message flag and tx ble
+            memset(msg_buffer, 0, sizeof(msg_buffer));
             msg_buffer[0] = 0x44;
-            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            memcpy(msg_buffer + 1, print_buff, json_len);
+
+            addBLEComToOutBuffer(msg_buffer, json_len + 1);
         }
 
         if(!bRxFromPhone)
@@ -4148,13 +4160,16 @@ void commandAction(char *umsg_text, bool ble)
 
             serializeJson(iodoc, print_buff, measureJson(iodoc));
 
-            // clear buffer
-            memset(msg_buffer, 0, sizeof(msg_buffer));
+            json_len = strlen(print_buff);
+            if (json_len > MAX_MSG_LEN_PHONE - 2) {
+                json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+            }
 
-            // set data message flag and tx ble
+            memset(msg_buffer, 0, sizeof(msg_buffer));
             msg_buffer[0] = 0x44;
-            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            memcpy(msg_buffer + 1, print_buff, json_len);
+
+            addBLEComToOutBuffer(msg_buffer, json_len + 1);
         }
 
         if(!bRxFromPhone)
@@ -4234,13 +4249,16 @@ void commandAction(char *umsg_text, bool ble)
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 
-            // clear buffer
-            memset(msg_buffer, 0, sizeof(msg_buffer));
+            json_len = strlen(print_buff);
+            if (json_len > MAX_MSG_LEN_PHONE - 2) {
+                json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+            }
 
-            // set data message flag and tx ble
+            memset(msg_buffer, 0, sizeof(msg_buffer));
             msg_buffer[0] = 0x44;
-            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            memcpy(msg_buffer + 1, print_buff, json_len);
+
+            addBLEComToOutBuffer(msg_buffer, json_len + 1);
         }
         
         if(!bRxFromPhone)
@@ -4440,13 +4458,16 @@ void commandAction(char *umsg_text, bool ble)
 
         serializeJson(sensdoc, print_buff, measureJson(sensdoc));
 
-        // clear buffer
-        memset(msg_buffer, 0, sizeof(msg_buffer));
+        json_len = strlen(print_buff);
+        if (json_len > MAX_MSG_LEN_PHONE - 2) {
+            json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+        }
 
-        // set data message flag and tx ble
+        memset(msg_buffer, 0, sizeof(msg_buffer));
         msg_buffer[0] = 0x44;
-        memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        memcpy(msg_buffer + 1, print_buff, json_len);
+
+        addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
         JsonDocument sensdoc1;
 
@@ -4465,13 +4486,16 @@ void commandAction(char *umsg_text, bool ble)
 
         serializeJson(sensdoc1, print_buff, measureJson(sensdoc1));
 
-        // clear buffer
-        memset(msg_buffer, 0, sizeof(msg_buffer));
+        json_len = strlen(print_buff);
+        if (json_len > MAX_MSG_LEN_PHONE - 2) {
+            json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+        }
 
-        // set data message flag and tx ble
+        memset(msg_buffer, 0, sizeof(msg_buffer));
         msg_buffer[0] = 0x44;
-        memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        memcpy(msg_buffer + 1, print_buff, json_len);
+
+        addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
         return;
     }
@@ -4504,13 +4528,16 @@ void commandAction(char *umsg_text, bool ble)
 
         serializeJson(swdoc, print_buff, measureJson(swdoc));
 
-        // clear buffer
-        memset(msg_buffer, 0, sizeof(msg_buffer));
+        json_len = strlen(print_buff);
+        if (json_len > MAX_MSG_LEN_PHONE - 2) {
+            json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+        }
 
-        // set data message flag and tx ble
+        memset(msg_buffer, 0, sizeof(msg_buffer));
         msg_buffer[0] = 0x44;
-        memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        memcpy(msg_buffer + 1, print_buff, json_len);
+
+        addBLEComToOutBuffer(msg_buffer, json_len + 1);
         
         JsonDocument swdoc2;
 
@@ -4529,13 +4556,16 @@ void commandAction(char *umsg_text, bool ble)
 
         serializeJson(swdoc2, print_buff, measureJson(swdoc2));
 
-        // clear buffer
-        memset(msg_buffer, 0, sizeof(msg_buffer));
+        json_len = strlen(print_buff);
+        if (json_len > MAX_MSG_LEN_PHONE - 2) {
+            json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+        }
 
-        // set data message flag and tx ble
+        memset(msg_buffer, 0, sizeof(msg_buffer));
         msg_buffer[0] = 0x44;
-        memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        memcpy(msg_buffer + 1, print_buff, json_len);
+
+        addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
         return;
     }
@@ -4603,13 +4633,16 @@ void sendGpsJson()
 
     serializeJson(pdoc, print_buff, measureJson(pdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer + 1, print_buff, strlen(print_buff));
-    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 }
 
 
@@ -4681,13 +4714,16 @@ void sendNodeSetting()
 
     serializeJson(nsetdoc, print_buff, measureJson(nsetdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 }
 
 void sendAnalogSetting()
@@ -4715,13 +4751,16 @@ void sendAnalogSetting()
 
     serializeJson(asetdoc, print_buff, measureJson(asetdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
     #endif
 
@@ -4749,13 +4788,16 @@ void sendAPRSset()
 
     serializeJson(aprsdoc, print_buff, measureJson(aprsdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
 }
 
@@ -4773,11 +4815,14 @@ void sendConfigFinish()
 
     serializeJson(cdoc, print_buff, measureJson(cdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 }

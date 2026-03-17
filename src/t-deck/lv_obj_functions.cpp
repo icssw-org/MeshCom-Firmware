@@ -2878,7 +2878,10 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_obj_set_flex_grow(header, 1);
 
     lv_obj_add_flag(header, LV_OBJ_FLAG_CLICKABLE);
+    
     HeaderEventData *hed = new HeaderEventData();
+    if (!hed) return;  // Graceful bail-out
+
     hed->header = full_header;
     hed->is_sender = false;
     lv_obj_add_event_cb(header, header_label_event_cb, LV_EVENT_CLICKED, hed);
@@ -2899,8 +2902,10 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
         lv_label_set_text(del_label, LV_SYMBOL_TRASH);
         lv_obj_center(del_label);
 
-    // attach identifying userdata
+        // attach identifying userdata
         DeleteEventData *ded = new DeleteEventData();
+        if (!ded) return;  // Graceful bail-out
+
         ded->group = current_group;
         ded->timestamp = bubble.timestamp;
         ded->header = bubble.header;
