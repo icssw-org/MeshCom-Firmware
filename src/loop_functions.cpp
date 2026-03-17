@@ -260,8 +260,8 @@ int iWriteOwn=0;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
 unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5] = {0};
-int iWrite=0;
-int iRead=0;
+std::atomic<int> iWrite{0};
+std::atomic<int> iRead{0};
 int iRetransmit=-1;
 
 // FIX: Per-slot retry counter for retransmit cap
@@ -269,7 +269,7 @@ uint8_t retryCount[MAX_RING] = {0};
 
 // RINGBUFFER for incomming LoRa RX msg_id
 uint8_t ringBufferLoraRX[MAX_DEDUP_RING][5] = {0};
-uint8_t loraWrite = 0;   // counter for ringbuffer
+std::atomic<uint8_t> loraWrite{0};   // counter for ringbuffer
 
 // RINGBUFFER RAW LoRa RX
 unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5] = {0};
@@ -487,24 +487,25 @@ void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
  */
 void addLoraRxBuffer(unsigned int msg_id, bool bserver)
 {
+    // RACE-03 fix: local copy for atomic index — write buffer content first,
+    // then atomically update index so readers see complete entries
+    uint8_t slot = loraWrite.load();
+
     if(bLORADEBUG)
         Serial.printf("[MC-DBG] RX_DEDUP_ADD msg_id=%08X srv=%d slot=%d/%d\n",
-                      msg_id, bserver, loraWrite, MAX_DEDUP_RING);
+                      msg_id, bserver, slot, MAX_DEDUP_RING);
 
     // byte 0-3 msg_id
-    ringBufferLoraRX[loraWrite][3] = msg_id >> 24;
-    ringBufferLoraRX[loraWrite][2] = msg_id >> 16;
-    ringBufferLoraRX[loraWrite][1] = msg_id >> 8;
-    ringBufferLoraRX[loraWrite][0] = msg_id;
+    ringBufferLoraRX[slot][3] = msg_id >> 24;
+    ringBufferLoraRX[slot][2] = msg_id >> 16;
+    ringBufferLoraRX[slot][1] = msg_id >> 8;
+    ringBufferLoraRX[slot][0] = msg_id;
+    ringBufferLoraRX[slot][4] = bserver ? 1 : 0;
 
-    if(bserver)
-        ringBufferLoraRX[loraWrite][4] = 1;
-    else
-        ringBufferLoraRX[loraWrite][4] = 0;
-
-    loraWrite++;
-    if (loraWrite >= MAX_DEDUP_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-        loraWrite = 0;
+    uint8_t next = slot + 1;
+    if (next >= MAX_DEDUP_RING)
+        next = 0;
+    loraWrite.store(next);
 }
 
 int checkOwnRx(uint8_t compBuffer[4])
@@ -2089,7 +2090,7 @@ void printAsciiBuffer(uint8_t *buffer, int len)
 {
     if(len < 4)
         return;
-        
+
     if(buffer[0] != 0x21 && buffer[0] != 0x3A && buffer[0] != 0x40 && buffer[0] != 0x41)
     {
         Serial.printf("LoRa starting with 0x%02X and %02X%02X%02X ... no decode\n", buffer[0], buffer[1], buffer[2], buffer[3]);
@@ -2431,8 +2432,9 @@ void sendMessage(char *msg_text, int len)
 
     if(bDisplayRetx)
     {
-        unsigned int ring_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
-        Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iWrite, ringBuffer[iWrite][1], ringBuffer[iWrite][0], ringBuffer[iWrite][2], ring_msg_id);
+        int w = iWrite.load();
+        unsigned int ring_msg_id = (ringBuffer[w][6]<<24) | (ringBuffer[w][5]<<16) | (ringBuffer[w][4]<<8) | ringBuffer[w][3];
+        Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", w, ringBuffer[w][1], ringBuffer[w][0], ringBuffer[w][2], ring_msg_id);
     }
 
     retryCount[iWrite] = 0;
