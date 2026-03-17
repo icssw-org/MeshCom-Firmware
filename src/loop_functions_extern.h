@@ -195,6 +195,9 @@ extern std::atomic<bool> tx_is_active;   // flag to store we are transmitting  a
 extern int cad_attempt;
 extern unsigned long csma_timeout;
 extern int rx_irq_defer_count;
+extern volatile bool cad_in_progress;
+extern volatile bool cad_done_flag;
+extern volatile bool cad_double_check;
 
 // Channel utilization tracking (10s window)
 extern std::atomic<unsigned long> ch_util_rx_start;
