@@ -322,8 +322,11 @@ void getMacAddr(uint8_t *dmac)
 
 void OnCadDone(bool channelActivityDetected)
 {
+    // RACE-05 fix: atomic flag update under critical section
+    taskENTER_CRITICAL();
     cad_channel_busy = channelActivityDetected;
     cad_done_flag = true;
+    taskEXIT_CRITICAL();
 }
 
 void RadioInit()
@@ -1080,22 +1083,33 @@ extern bool btimeClient;
                 else if(ringBuffer[i][1] == 0x00) pending++;
                 else retrying++;
             }
-            int queued = (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite);
+            int w = iWrite;
+            int r = iRead;
+            int queued = (w >= r) ? (w - r) : (MAX_RING - r + w);
             Serial.printf("[MC-DBG] RING_STATUS queued=%d pending=%d retrying=%d done=%d iW=%d iR=%d\n",
-                queued, pending, retrying, done, iWrite, iRead);
+                queued, pending, retrying, done, w, r);
         }
     }
 
     // Deferred display update from OnRxDone (avoid I2C inside radio callback)
-    if(bPendingDisplayText)
+    // RACE-01 fix: snapshot under critical section, display call outside
     {
-        sendDisplayText(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
-        bPendingDisplayText = false;
-    }
-    if(bPendingDisplayPos)
-    {
-        sendDisplayPosition(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
-        bPendingDisplayPos = false;
+        taskENTER_CRITICAL();
+        bool _pendText = bPendingDisplayText;
+        bool _pendPos = bPendingDisplayPos;
+        struct aprsMessage _msg;
+        int16_t _rssi = 0;
+        int8_t _snr = 0;
+        if(_pendText || _pendPos) {
+            _msg = pendingDisplayMsg;
+            _rssi = pendingDisplayRssi;
+            _snr = pendingDisplaySnr;
+            bPendingDisplayText = false;
+            bPendingDisplayPos = false;
+        }
+        taskEXIT_CRITICAL();
+        if(_pendText) sendDisplayText(_msg, _rssi, _snr);
+        if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
     }
 
     // Channel utilization report (every 10s)
@@ -1105,10 +1119,8 @@ extern bool btimeClient;
         {
             unsigned long window = millis() - ch_util_timer;
             ch_util_timer = millis();
-            unsigned long rx_ms = ch_util_rx_accum;
-            unsigned long tx_ms = ch_util_tx_accum;
-            ch_util_rx_accum = 0;
-            ch_util_tx_accum = 0;
+            unsigned long rx_ms = ch_util_rx_accum.exchange(0);
+            unsigned long tx_ms = ch_util_tx_accum.exchange(0);
             unsigned int util = (unsigned int)((rx_ms + tx_ms) * 100 / window);
             if(util > 100) util = 100;
             Serial.printf("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
