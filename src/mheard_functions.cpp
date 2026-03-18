@@ -234,6 +234,9 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
                 if(memcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str(), ivgll) == 0)
                 {
                     ipos=iset;
+
+                    if(inext >= 0)
+                        break;
                 }
             }
         }
@@ -326,9 +329,9 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
         log_json_to_sd("/mheard.json", json);
     #endif
 
-    #endif
-
     saveMHeardPersistence();
+    
+    #endif
 
     #if defined(BOARD_T_DECK_PRO)
     TDeck_pro_mheard_disp();
