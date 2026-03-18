@@ -478,7 +478,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     {
                         if(mheardCalls[iset][0] != 0x00)
                         {
-                            if(memcmp(mheardCalls[iset], aprsmsg.msg_source_last.c_str(), aprsmsg.msg_source_last.length()) == 0)
+                            int ivgll= mheardLine.mh_callsign.length();
+                            if(strlen(mheardCalls[iset]) > (size_t)ivgll)
+                                ivgll=strlen(mheardCalls[iset]);
+                            if(memcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str(), ivgll) == 0)
                             {
                                 ipos=iset;
                                 lat = mheardLat[ipos];
@@ -553,7 +556,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     //
                     ///////////////////////////////////////////////
                 }
-
 
             }
 
