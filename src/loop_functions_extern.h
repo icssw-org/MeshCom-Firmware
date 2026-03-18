@@ -164,6 +164,8 @@ extern volatile int iWrite;
 extern volatile int iRead;
 extern int iRetransmit;
 extern uint8_t retryCount[MAX_RING];
+extern uint8_t ringPriority[MAX_RING];         // Prio 1-5 pro Slot
+extern uint32_t ringEnqueueTime[MAX_RING];     // millis() timestamp when enqueued
 
 extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5];
 extern int RAWLoRaWrite;
@@ -210,6 +212,23 @@ extern std::atomic<unsigned long> ch_util_rx_start;
 extern std::atomic<unsigned long> ch_util_tx_start;
 extern std::atomic<unsigned long> ch_util_rx_accum;
 extern std::atomic<unsigned long> ch_util_tx_accum;
+
+
+// Trickle-HEY state
+extern unsigned long trickle_interval_ms;       // Aktuelles Intervall (Imin..Imax)
+extern uint8_t trickle_consistent_count;        // Konsistente HEYs seit letztem Reset
+extern int trickle_last_neighbor_count;         // Nachbarzahl beim letzten Check
+
+// Priority statistics (5-minute window, reset after output)
+extern uint16_t stat_tx_count[6];               // Index 1-5 = Prio 1-5
+extern uint16_t stat_drop_count[6];             // Drops per priority
+extern uint16_t stat_preempt_count;             // Priority preemptions (out-of-order sends)
+extern uint32_t stat_latency_sum[6];            // Sum of queue-to-TX latency per prio (ms)
+extern uint16_t stat_latency_max[6];            // Max latency per prio (ms)
+extern uint8_t  stat_queue_hwm;                 // Queue high-water mark since boot
+extern uint16_t stat_csma_hwm_attempts;         // Max CAD attempts since boot
+extern unsigned long stat_prio_timer;           // Timer for periodic stat output
+extern unsigned long stat_hwm_timer;            // Timer for HWM output
 
 extern int isPhoneReady;      // flag we receive from phone when itis ready to receive data
 extern bool bPhoneTimeValid;

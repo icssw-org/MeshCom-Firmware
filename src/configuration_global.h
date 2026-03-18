@@ -1,7 +1,7 @@
 #define SOURCE_VERSION "4.35"
-#define SOURCE_VERSION_SUB "p"
+#define SOURCE_VERSION_SUB "n"
 
-#define FLASH_VERSION 20260310
+#define FLASH_VERSION 20260318
 
 //Hardware Types
 #define TLORA_V2 1
@@ -129,6 +129,36 @@
 #define RING_STATUS_READY     0x00   // Ready to send
 #define RING_STATUS_SENT      0x01   // Sent, waiting for ACK/timer
 #define RING_STATUS_DONE      0xFF   // Final, no retransmission
+
+// Message Priority Classes (lower = higher priority)
+#define MSG_PRIO_CRITICAL   1   // ACK (0x41) + persoenliche DM
+#define MSG_PRIO_HIGH       2   // Gruppen-Nachrichten + Broadcast "*"
+#define MSG_PRIO_NORMAL     3   // Mesh-Relay (weitergeleitete Pakete)
+#define MSG_PRIO_LOW        4   // Position (0x21)
+#define MSG_PRIO_BACKGROUND 5   // HEY (0x40)
+
+// Priority-dependent CSMA base timeouts (ms)
+#define CSMA_PRIO_BASE_1    3000   // ACK/DM
+#define CSMA_PRIO_BASE_2    3000   // Gruppen/Broadcast
+#define CSMA_PRIO_BASE_3    4500   // Relay
+#define CSMA_PRIO_BASE_4    5500   // Position
+#define CSMA_PRIO_BASE_5    5500   // HEY
+
+// Priority-dependent CSMA slot ranges
+#define CSMA_PRIO_SLOTS_1   10   // max 350ms Jitter
+#define CSMA_PRIO_SLOTS_2   10   // max 350ms Jitter
+#define CSMA_PRIO_SLOTS_3   10   // max 350ms Jitter
+#define CSMA_PRIO_SLOTS_4   10   // max 350ms Jitter
+#define CSMA_PRIO_SLOTS_5   10   // max 350ms Jitter
+
+// Trickle-HEY (RFC 6206 adaptiert)
+#define TRICKLE_IMIN_S        30      // Schnellstes HEY-Intervall (30s nach Topologieaenderung)
+#define TRICKLE_IMAX_S        (15*60) // Langsamstes HEY-Intervall (15min, wie bisher)
+#define TRICKLE_K             2       // Redundanzschwelle: eigenen HEY unterdruecken wenn >=k konsistente gehoert
+
+// Priority statistics interval
+#define PRIO_STAT_INTERVAL_S  300   // 5 Minuten
+#define PRIO_HWM_INTERVAL_S   1800  // 30 Minuten
 
 // SOFTSERIEL
 #define SOFTSER_REFRESH_INTERVAL 5         // SOFTSER Refresh alle 5 Minuten

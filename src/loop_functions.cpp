@@ -343,6 +343,26 @@ int gps_refresh_track = 0;
 unsigned long posinfo_timer = 0;        // we check periodically to send GPS
 unsigned long posinfo_timer_min = 0;    // we check min. periodically to send GPS
 unsigned long heyinfo_timer = 0;        // we check periodically to send HEY
+
+// Priority Queue arrays
+uint8_t ringPriority[MAX_RING];                 // Prio 1-5 pro Slot
+uint32_t ringEnqueueTime[MAX_RING];             // millis() timestamp when enqueued
+
+// Trickle-HEY state
+unsigned long trickle_interval_ms = TRICKLE_IMIN_S * 1000UL;
+uint8_t trickle_consistent_count = 0;
+int trickle_last_neighbor_count = -1;
+
+// Priority statistics
+uint16_t stat_tx_count[6] = {0};
+uint16_t stat_drop_count[6] = {0};
+uint16_t stat_preempt_count = 0;
+uint32_t stat_latency_sum[6] = {0};
+uint16_t stat_latency_max[6] = {0};
+uint8_t  stat_queue_hwm = 0;
+uint16_t stat_csma_hwm_attempts = 0;
+unsigned long stat_prio_timer = 0;
+unsigned long stat_hwm_timer = 0;
 unsigned long telemetry_timer = 0;      // we check periodically to send TELEMETRY
 unsigned long temphum_timer = 0;        // we check periodically get TEMP/HUM
 unsigned long druck_timer = 0;          // we check periodically get AIRPRESURE

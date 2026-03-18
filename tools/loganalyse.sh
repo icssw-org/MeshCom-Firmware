@@ -531,13 +531,16 @@ grep "TX_GATE_ENTER" "$LOGFILE" | grep -oE 'cad_attempt=[0-9]+' | awk -F= '{
 }
 END {
     printf "%-12s %8s %8s %12s\n", "ATTEMPT", "COUNT", "PCT%", "EST_WAIT_MS"
-    for (a in cnt) {
-        a_int = a + 0
-        if (a_int == 0) wait = 4675
-        else if (a_int == 1) wait = 3087
-        else if (a_int == 2) wait = 2087
-        else wait = 35
-        printf "%-12d %8d %8.1f %12d\n", a_int, cnt[a], cnt[a] * 100.0 / total, wait
+    max_a = 0
+    for (a in cnt) { if (a+0 > max_a) max_a = a+0 }
+    for (i = 0; i <= max_a; i++) {
+        if (i in cnt) {
+            if (i == 0) wait = 4675
+            else if (i == 1) wait = 3087
+            else if (i == 2) wait = 2087
+            else wait = 35
+            printf "%-12d %8d %8.1f %12d\n", i, cnt[i], cnt[i] * 100.0 / total, wait
+        }
     }
     printf "\nTOTAL_TX_ATTEMPTS: %d\n", total
 
@@ -925,6 +928,54 @@ if [ $# -ge 2 ] && [ -f "$2" ]; then
 
     # Cleanup cross-correlation temp files
     rm -f /tmp/cross_log1_msgids.txt /tmp/cross_log2_msgids.txt
+fi
+
+# ─── PRIORITY DISTRIBUTION ───
+section "PRIORITY_DISTRIBUTION"
+if grep -q '\[MC-STAT\]' "$LOGFILE"; then
+    echo "--- TX counts per priority (from [MC-STAT] lines) ---"
+    grep '\[MC-STAT\]' "$LOGFILE" | tail -20
+    echo ""
+    echo "--- Latency per priority (from [MC-PRIO] lines) ---"
+    grep '\[MC-PRIO\]' "$LOGFILE" | tail -20
+    echo ""
+    echo "--- Priority drops ---"
+    grep 'RING_DROP_PRIO\|RING_DROP_NEW' "$LOGFILE" | wc -l | awk '{printf "  Total priority drops: %d\n", $1}'
+    grep 'RING_DROP_PRIO' "$LOGFILE" | grep -oE 'prio=[0-9]' | sort | uniq -c | sort -rn || true
+else
+    echo "  No [MC-STAT] data found (priority queue not active or no data yet)"
+fi
+
+# ─── TRICKLE HEY ───
+section "TRICKLE_HEY"
+if grep -q '\[MC-TRICKLE\]' "$LOGFILE"; then
+    echo "--- Trickle-HEY events ---"
+    trickle_send=$(grep -c 'MC-TRICKLE.*SEND' "$LOGFILE" || true)
+    trickle_suppress=$(grep -c 'MC-TRICKLE.*SUPPRESS' "$LOGFILE" || true)
+    trickle_topo=$(grep -c 'MC-TRICKLE.*TOPO_CHANGE' "$LOGFILE" || true)
+    trickle_total=$((trickle_send + trickle_suppress))
+    if [ "$trickle_total" -gt 0 ]; then
+        suppress_pct=$((trickle_suppress * 100 / trickle_total))
+    else
+        suppress_pct=0
+    fi
+    echo "  HEY sent: $trickle_send"
+    echo "  HEY suppressed: $trickle_suppress ($suppress_pct%)"
+    echo "  Topology changes: $trickle_topo"
+    echo ""
+    echo "--- Last 10 Trickle events ---"
+    grep '\[MC-TRICKLE\]' "$LOGFILE" | tail -10
+else
+    echo "  No [MC-TRICKLE] data found (Trickle-HEY not active or no data yet)"
+fi
+
+# ─── HIGH WATER MARKS ───
+section "HIGH_WATER_MARKS"
+if grep -q '\[MC-HWM\]' "$LOGFILE"; then
+    echo "--- High-Water Marks ---"
+    grep '\[MC-HWM\]' "$LOGFILE" | tail -5
+else
+    echo "  No [MC-HWM] data found"
 fi
 
 # ─── DONE ───

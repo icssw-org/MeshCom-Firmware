@@ -605,6 +605,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     }
                 }
 
+                // Trickle-HEY: count received HEY for consistency check
+                if(msg_type_b_lora == MSG_TYPE_HEY)
+                    trickle_consistent_count++;
+
                 // txtmessage, position, hey
                 if(msg_type_b_lora == MSG_TYPE_TEXT || msg_type_b_lora == MSG_TYPE_POSITION || msg_type_b_lora == MSG_TYPE_HEY)
                 {
@@ -1220,94 +1224,283 @@ bool is_new_packet(uint8_t compBuffer[4])
 // LoRa TX functions
 
 /**
+ * Determine message priority from ring buffer slot content.
+ * Ring buffer layout: [0]=len, [1]=status, [2]=payload_type, [3-6]=msg_id, [7]=flags, [8+]=path
+ * Encoded path format: "SOURCE>DEST:" starting at offset 8 (relative to ringBuffer[slot]+2)
+ * i.e. ringBuffer[slot][8] is the first char of the source callsign.
+ */
+uint8_t getMessagePriority(int slot)
+{
+    uint8_t msg_type = ringBuffer[slot][2];
+
+    if(msg_type == MSG_TYPE_ACK)
+        return MSG_PRIO_CRITICAL;
+
+    if(msg_type == MSG_TYPE_POSITION)
+        return MSG_PRIO_LOW;
+
+    if(msg_type == MSG_TYPE_HEY)
+        return MSG_PRIO_BACKGROUND;
+
+    if(msg_type == MSG_TYPE_TEXT)
+    {
+        // Relay detection: OnRxDone sets RING_STATUS_DONE for relayed packets
+        if(ringBuffer[slot][1] == RING_STATUS_DONE)
+            return MSG_PRIO_NORMAL; // Relay
+
+        // User-originated text: parse destination from encoded APRS path
+        // Path starts at ringBuffer[slot][8] (offset 6 in encoded data = after type+id+flags)
+        // Format: "SOURCE>DEST:" — find '>' then read until payload_type char
+        int len = ringBuffer[slot][0];
+        int path_start = 8; // slot[2] + 6 bytes header = slot[8]
+        int dest_start = -1;
+        int dest_end = -1;
+
+        for(int i = path_start; i < len + 2 && i < (int)(UDP_TX_BUF_SIZE + 4); i++)
+        {
+            if(ringBuffer[slot][i] == '>' && dest_start < 0)
+            {
+                dest_start = i + 1;
+            }
+            else if(dest_start >= 0 && (ringBuffer[slot][i] == ':' || ringBuffer[slot][i] == MSG_TYPE_TEXT))
+            {
+                dest_end = i;
+                break;
+            }
+        }
+
+        if(dest_start >= 0 && dest_end > dest_start)
+        {
+            char dest[12] = {0};
+            int dlen = dest_end - dest_start;
+            if(dlen > 10) dlen = 10;
+            memcpy(dest, &ringBuffer[slot][dest_start], dlen);
+            dest[dlen] = 0;
+
+            if(strcmp(dest, "*") == 0)
+                return MSG_PRIO_HIGH; // Broadcast
+
+            if(CheckGroup(String(dest)) != 0)
+                return MSG_PRIO_HIGH; // Group message
+
+            return MSG_PRIO_CRITICAL; // Personal DM
+        }
+
+        // Fallback: treat as high priority if parsing fails
+        return MSG_PRIO_HIGH;
+    }
+
+    // Unknown type: normal priority
+    return MSG_PRIO_NORMAL;
+}
+
+/**
+ * Find the next slot to transmit from the ring buffer, based on priority.
+ * Scans all occupied slots between iRead and iWrite.
+ * Returns slot index, or -1 if empty.
+ * Within same priority, oldest entry (closest to iRead) wins (FIFO).
+ */
+int getNextTxSlot(void)
+{
+    if(iWrite == iRead)
+        return -1;
+
+    int best_slot = -1;
+    uint8_t best_prio = 255;
+
+    int pos = iRead;
+    while(pos != iWrite)
+    {
+        // Only consider slots with data (len > 0) and not already fully processed
+        if(ringBuffer[pos][0] > 0)
+        {
+            uint8_t prio = ringPriority[pos];
+            if(prio < best_prio)
+            {
+                best_prio = prio;
+                best_slot = pos;
+            }
+            // Same prio: keep first found (= oldest = FIFO)
+        }
+
+        pos++;
+        if(pos >= MAX_RING)
+            pos = 0;
+    }
+
+    return best_slot;
+}
+
+/**
+ * Advance iRead past any empty (already-transmitted) slots at the front.
+ */
+static void advanceIReadPastEmpty(void)
+{
+    int localRead = iRead;
+    int localWrite = iWrite;
+    while(localRead != localWrite && ringBuffer[localRead][0] == 0)
+    {
+        localRead++;
+        if(localRead >= MAX_RING)
+            localRead = 0;
+    }
+    iRead = localRead;
+}
+
+/**
  * Log + advance TX ring buffer write pointer.
  * Replaces direct addRingPointer(iWrite, iRead, MAX_RING, "tx") calls.
  * @param source  Short label for the calling code path (e.g. "rx_relay", "udp")
  */
 void addTxRingEntry(const char* source)
 {
+    int w = iWrite;
+    int r = iRead;
+
     if(bLORADEBUG)
     {
-        uint32_t mid = ((uint32_t)ringBuffer[iWrite][6] << 24) |
-                       ((uint32_t)ringBuffer[iWrite][5] << 16) |
-                       ((uint32_t)ringBuffer[iWrite][4] << 8)  |
-                        (uint32_t)ringBuffer[iWrite][3];
-        int queued = (iWrite >= iRead) ? (iWrite - iRead)
-                                       : (MAX_RING - iRead + iWrite);
+        uint32_t mid = ((uint32_t)ringBuffer[w][6] << 24) |
+                       ((uint32_t)ringBuffer[w][5] << 16) |
+                       ((uint32_t)ringBuffer[w][4] << 8)  |
+                        (uint32_t)ringBuffer[w][3];
+        int queued = (w >= r) ? (w - r) : (MAX_RING - r + w);
         Serial.printf("[MC-DBG] RING_WRITE slot=%d type=%02X status=%02X "
                       "len=%d msg_id=%08X queued=%d/%d src=%s\n",
-                      iWrite, ringBuffer[iWrite][2], ringBuffer[iWrite][1],
-                      ringBuffer[iWrite][0], mid, queued, MAX_RING, source);
+                      w, ringBuffer[w][2], ringBuffer[w][1],
+                      ringBuffer[w][0], mid, queued, MAX_RING, source);
     }
 
-    // Overflow-Vorwarnung: wird der naechste Slot einen noch aktiven
-    // Eintrag ueberschreiben?
-    int nextWrite = iWrite + 1;
+    // Assign priority and enqueue timestamp
+    ringPriority[w] = getMessagePriority(w);
+    ringEnqueueTime[w] = millis();
+
+    // Track queue depth for high-water mark
+    int queued_now = (w >= r) ? (w - r) : (MAX_RING - r + w);
+    if(queued_now + 1 > stat_queue_hwm)
+        stat_queue_hwm = queued_now + 1;
+
+    if(bLORADEBUG)
+        Serial.printf("[MC-DBG] RING_PRIO slot=%d prio=%d\n", w, ringPriority[w]);
+
+    // Priority-aware overflow: when queue is full, drop lowest-priority oldest entry
+    int nextWrite = w + 1;
     if(nextWrite >= MAX_RING) nextWrite = 0;
-    if(nextWrite == iRead && ringBuffer[iRead][0] > 0)
+    if(nextWrite == r && ringBuffer[r][0] > 0)
     {
-        uint32_t lost_id = ((uint32_t)ringBuffer[iRead][6] << 24) |
-                           ((uint32_t)ringBuffer[iRead][5] << 16) |
-                           ((uint32_t)ringBuffer[iRead][4] << 8)  |
-                            (uint32_t)ringBuffer[iRead][3];
-        // IMMER loggen (nicht nur bLORADEBUG) -- Paketverlust ist kritisch
-        Serial.printf("[MC-DBG] RING_DROP slot=%d type=%02X status=%02X "
-                      "msg_id=%08X retry=%d (overwritten by %s)\n",
-                      iRead, ringBuffer[iRead][2], ringBuffer[iRead][1],
-                      lost_id, retryCount[iRead], source);
+        // Find the oldest entry of the lowest priority in the queue
+        uint8_t new_prio = ringPriority[w];
+        int worst_slot = -1;
+        uint8_t worst_prio = 0;
+        int scan = r;
+        while(scan != w)
+        {
+            if(ringBuffer[scan][0] > 0 && ringPriority[scan] > worst_prio)
+            {
+                worst_prio = ringPriority[scan];
+                worst_slot = scan;
+            }
+            scan++;
+            if(scan >= MAX_RING) scan = 0;
+        }
+
+        if(worst_slot >= 0 && new_prio < worst_prio)
+        {
+            // Drop the lowest-priority entry to make room
+            uint32_t lost_id = ((uint32_t)ringBuffer[worst_slot][6] << 24) |
+                               ((uint32_t)ringBuffer[worst_slot][5] << 16) |
+                               ((uint32_t)ringBuffer[worst_slot][4] << 8)  |
+                                (uint32_t)ringBuffer[worst_slot][3];
+            Serial.printf("[MC-DBG] RING_DROP_PRIO slot=%d prio=%d type=%02X "
+                          "msg_id=%08X replaced_by_prio=%d src=%s\n",
+                          worst_slot, worst_prio, ringBuffer[worst_slot][2],
+                          lost_id, new_prio, source);
+            stat_drop_count[worst_prio]++;
+            ringBuffer[worst_slot][0] = 0; // Mark as empty
+            advanceIReadPastEmpty();
+        }
+        else
+        {
+            // New packet is same or lower priority than everything in queue — drop it
+            uint32_t lost_id = ((uint32_t)ringBuffer[w][6] << 24) |
+                               ((uint32_t)ringBuffer[w][5] << 16) |
+                               ((uint32_t)ringBuffer[w][4] << 8)  |
+                                (uint32_t)ringBuffer[w][3];
+            Serial.printf("[MC-DBG] RING_DROP_NEW slot=%d prio=%d type=%02X "
+                          "msg_id=%08X (queue full, no lower prio to evict)\n",
+                          w, new_prio, ringBuffer[w][2], lost_id);
+            stat_drop_count[new_prio]++;
+            ringBuffer[w][0] = 0; // Don't enqueue
+            return; // Don't advance write pointer
+        }
     }
 
     addRingPointer(iWrite, iRead, MAX_RING, "tx");
 }
 
-/**@brief our Lora TX sequence
+/**@brief our Lora TX sequence — priority-based slot selection
  */
 bool doTX()
 {
     //#if not defined(BOARD_T_DECK_PRO)
 
-    if (iWrite != iRead && iRead < MAX_RING)
+    // Priority-based slot selection instead of plain FIFO
+    int txSlot = getNextTxSlot();
+    if (txSlot >= 0)
     {
-        sendlng = ringBuffer[iRead][0];
+        // Track latency
+        uint8_t prio = ringPriority[txSlot];
+        uint32_t latency = millis() - ringEnqueueTime[txSlot];
+        if(prio >= 1 && prio <= 5)
+        {
+            stat_tx_count[prio]++;
+            stat_latency_sum[prio] += latency;
+            if(latency > stat_latency_max[prio])
+                stat_latency_max[prio] = (uint16_t)min(latency, (uint32_t)65535);
+        }
+
+        // Track preemption (out-of-order send)
+        if(txSlot != iRead)
+            stat_preempt_count++;
+
+        sendlng = ringBuffer[txSlot][0];
         if(sendlng >= UDP_TX_BUF_SIZE)
             sendlng = UDP_TX_BUF_SIZE - 1;
-        
+
         memset(lora_tx_buffer, 0x00, UDP_TX_BUF_SIZE + 1);
-        memcpy(lora_tx_buffer, ringBuffer[iRead] + 2, sendlng);
-        
+        memcpy(lora_tx_buffer, ringBuffer[txSlot] + 2, sendlng);
+
         lora_tx_buffer[sendlng]=0x00;
 
-        int save_read = iRead;
-        char save_ring_status = ringBuffer[iRead][1];
+        int save_read = txSlot;
+        char save_ring_status = ringBuffer[txSlot][1];
 
         if(bLORADEBUG)
         {
-            uint32_t tx_mid = ((uint32_t)ringBuffer[iRead][6] << 24) |
-                              ((uint32_t)ringBuffer[iRead][5] << 16) |
-                              ((uint32_t)ringBuffer[iRead][4] << 8)  |
-                               (uint32_t)ringBuffer[iRead][3];
-            int queued = (iWrite >= iRead) ? (iWrite - iRead)
-                                           : (MAX_RING - iRead + iWrite);
-            Serial.printf("[MC-DBG] RING_TX_READ slot=%d type=%02X status=%02X "
-                          "len=%d msg_id=%08X retry=%d queued=%d/%d\n",
-                          iRead, ringBuffer[iRead][2], ringBuffer[iRead][1],
-                          sendlng, tx_mid, retryCount[iRead], queued, MAX_RING);
+            uint32_t tx_mid = ((uint32_t)ringBuffer[txSlot][6] << 24) |
+                              ((uint32_t)ringBuffer[txSlot][5] << 16) |
+                              ((uint32_t)ringBuffer[txSlot][4] << 8)  |
+                               (uint32_t)ringBuffer[txSlot][3];
+            int tw = iWrite;
+            int tr = iRead;
+            int queued = (tw >= tr) ? (tw - tr) : (MAX_RING - tr + tw);
+            Serial.printf("[MC-DBG] RING_TX_READ slot=%d prio=%d type=%02X status=%02X "
+                          "len=%d msg_id=%08X retry=%d queued=%d/%d lat=%lums\n",
+                          txSlot, prio, ringBuffer[txSlot][2], ringBuffer[txSlot][1],
+                          sendlng, tx_mid, retryCount[txSlot], queued, MAX_RING, (unsigned long)latency);
         }
 
-        if(ringBuffer[iRead][1] == RING_STATUS_READY) // mark open to send
-            ringBuffer[iRead][1] = RING_STATUS_SENT; // mark as sent
+        if(ringBuffer[txSlot][1] == RING_STATUS_READY) // mark open to send
+            ringBuffer[txSlot][1] = RING_STATUS_SENT; // mark as sent
 
-        // FIX: 0x7F handling removed. Retransmit copies now use status 0x01
-        // and re-enter the normal timer cycle with retryCount tracking.
-
-        iRead++;
-        if (iRead >= MAX_RING)
-            iRead = 0;
+        // For out-of-order reads: clear slot data length so getNextTxSlot skips it
+        // and advance iRead past any empty leading slots
+        ringBuffer[txSlot][0] = 0; // Mark as consumed (data is in lora_tx_buffer)
+        advanceIReadPastEmpty();
 
         // NOTE: Slot clearing (Bug 1 fix) is deferred until after the transmit
         // decision. Two rollback paths (CAD wait, APRS chip-switch failure)
-        // restore iRead to save_read and retry the same slot on the next call.
-        // Clearing here would destroy the slot data before those paths execute.
+        // restore the slot and retry on the next call.
+        // For rollback: we restore ringBuffer[save_read][0] = sendlng.
 
         // we can now tx the message
         if (TX_ENABLE == 1)
@@ -1346,8 +1539,9 @@ bool doTX()
 
                 if(!lora_setchip_aprs())
                 {
-                    iRead=save_read;
-                    ringBuffer[iRead][1] = save_ring_status;
+                    // Rollback: restore slot so it gets picked up again
+                    ringBuffer[save_read][0] = sendlng;
+                    ringBuffer[save_read][1] = save_ring_status;
 
                     return false;
                 }
@@ -1380,14 +1574,10 @@ bool doTX()
 
                 bSetLoRaAPRS = true;
 
-                // Clear slot immediately only for fire-and-forget (relay/ACK/beacon).
-                // Text messages (0x3A) are retained for retransmit tracking.
-                if(save_ring_status == (char)RING_STATUS_DONE || ringBuffer[save_read][2] != MSG_TYPE_TEXT)
-                {
-                    ringBuffer[save_read][0] = 0;
-                    ringBuffer[save_read][1] = RING_STATUS_DONE;
-                    retryCount[save_read] = 0;
-                }
+                // For text messages needing retransmit: restore length so
+                // updateRetransmissionStatus() can find and retransmit them.
+                if(save_ring_status != (char)RING_STATUS_DONE && ringBuffer[save_read][2] == MSG_TYPE_TEXT)
+                    ringBuffer[save_read][0] = sendlng;
 
                 return true;
             }
@@ -1396,10 +1586,10 @@ bool doTX()
 
             {
                 struct aprsMessage aprsmsg;
-                
+
                 // print which message type we got
                 uint16_t msg_type_b_lora = 0x00;
-                
+
                 msg_type_b_lora = decodeAPRS(lora_tx_buffer, (uint16_t)sendlng, aprsmsg);
 
                 //Serial.printf("msg_type_b_lora:%02X tx_waiting:%02X sendlng:%i bDisplayInfo:%i\n", msg_type_b_lora, tx_waiting, sendlng, bDisplayInfo);
@@ -1447,14 +1637,10 @@ bool doTX()
                         }
                     }
 
-                    // Clear slot immediately only for fire-and-forget (relay/ACK/beacon).
-                    // Text messages (0x3A) are retained for retransmit tracking.
-                    if(save_ring_status == (char)RING_STATUS_DONE || ringBuffer[save_read][2] != MSG_TYPE_TEXT)
-                    {
-                        ringBuffer[save_read][0] = 0;
-                        ringBuffer[save_read][1] = RING_STATUS_DONE;
-                        retryCount[save_read] = 0;
-                    }
+                    // For text messages needing retransmit: restore length so
+                    // updateRetransmissionStatus() can find and retransmit them.
+                    if(save_ring_status != (char)RING_STATUS_DONE && ringBuffer[save_read][2] == MSG_TYPE_TEXT)
+                        ringBuffer[save_read][0] = sendlng;
 
                     return true;
                 }
@@ -1465,16 +1651,7 @@ bool doTX()
             DEBUG_MSG("RADIO", "TX DISABLED");
         }
 
-        // Clear consumed slot on non-rollback drop paths
-        // (TX disabled, or msg_type_b_lora == 0x00 decode failure).
-        // Clear slot immediately only for fire-and-forget (relay/ACK/beacon).
-        // Text messages (0x3A) are retained for retransmit tracking.
-        if(save_ring_status == (char)RING_STATUS_DONE || ringBuffer[save_read][2] != MSG_TYPE_TEXT)
-        {
-            ringBuffer[save_read][0] = 0;
-            ringBuffer[save_read][1] = RING_STATUS_DONE;
-            retryCount[save_read] = 0;
-        }
+        // Non-rollback drop paths (TX disabled or decode failure) — slot stays cleared
     }
 
     //#endif
@@ -1665,18 +1842,40 @@ void OnHeaderDetect(void)
 }
 
 unsigned long csma_compute_timeout(int attempt) {
+    // Default (no priority context): use priority of next queued packet
+    int txSlot = getNextTxSlot();
+    uint8_t prio = (txSlot >= 0) ? ringPriority[txSlot] : MSG_PRIO_NORMAL;
+    return csma_compute_timeout_prio(attempt, prio);
+}
+
+unsigned long csma_compute_timeout_prio(int attempt, uint8_t priority) {
+    if(attempt >= CSMA_MAX_ATTEMPTS)
+        return CSMA_RAPID_RX_MS; // rapid-fire with preamble check
+
+    // Priority-dependent base timeout and slot range
     unsigned long base;
     int slots;
-    switch(attempt) {
-        case 0:  base = CSMA_BASE_0; slots = CSMA_SLOTS_0; break;
-        case 1:  base = CSMA_BASE_1; slots = CSMA_SLOTS_1_2; break;
-        case 2:  base = CSMA_BASE_2; slots = CSMA_SLOTS_1_2; break;
-        default: base = CSMA_RAPID_RX_MS; slots = 0; break; // rapid-fire with preamble check
+    switch(priority) {
+        case MSG_PRIO_CRITICAL:   base = CSMA_PRIO_BASE_1; slots = CSMA_PRIO_SLOTS_1; break;
+        case MSG_PRIO_HIGH:       base = CSMA_PRIO_BASE_2; slots = CSMA_PRIO_SLOTS_2; break;
+        case MSG_PRIO_NORMAL:     base = CSMA_PRIO_BASE_3; slots = CSMA_PRIO_SLOTS_3; break;
+        case MSG_PRIO_LOW:        base = CSMA_PRIO_BASE_4; slots = CSMA_PRIO_SLOTS_4; break;
+        case MSG_PRIO_BACKGROUND: base = CSMA_PRIO_BASE_5; slots = CSMA_PRIO_SLOTS_5; break;
+        default:                  base = CSMA_PRIO_BASE_3; slots = CSMA_PRIO_SLOTS_3; break;
     }
+
+    // Reduce base on retries (keep priority differentiation)
+    if(attempt >= 2) base = base * 2 / 3;      // ~33% reduction on 3rd attempt
+    else if(attempt >= 1) base = base * 5 / 6;  // ~17% reduction on 2nd attempt
+
     return base + (unsigned long)random(0, slots + 1) * CSMA_SLOT_SIZE;
 }
 
 void csma_reset(void) {
+    // Track max CAD attempts before resetting
+    if(cad_attempt > stat_csma_hwm_attempts)
+        stat_csma_hwm_attempts = cad_attempt;
+
     cad_attempt = 0;
     csma_timeout = csma_compute_timeout(0);
 }

@@ -23,6 +23,10 @@ void OnHeaderDetect(void);
 bool updateRetransmissionStatus(void);
 
 unsigned long csma_compute_timeout(int attempt);
+unsigned long csma_compute_timeout_prio(int attempt, uint8_t priority);
 void csma_reset(void);
+
+uint8_t getMessagePriority(int slot);
+int getNextTxSlot(void);
 
 #endif

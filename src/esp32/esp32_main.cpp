@@ -1786,6 +1786,44 @@ void esp32loop()
             }
         }
 
+        // Priority statistics output (every 5 minutes)
+        if((millis() - stat_prio_timer) > (unsigned long)(PRIO_STAT_INTERVAL_S * 1000UL))
+        {
+            stat_prio_timer = millis();
+            Serial.printf("[MC-STAT] t=%ds qmax=%d/%d\n",
+                PRIO_STAT_INTERVAL_S, stat_queue_hwm, MAX_RING);
+            Serial.printf("  tx: p1=%d p2=%d p3=%d p4=%d p5=%d preempt=%d\n",
+                stat_tx_count[1], stat_tx_count[2], stat_tx_count[3],
+                stat_tx_count[4], stat_tx_count[5], stat_preempt_count);
+            Serial.printf("  drop: p1=%d p2=%d p3=%d p4=%d p5=%d\n",
+                stat_drop_count[1], stat_drop_count[2], stat_drop_count[3],
+                stat_drop_count[4], stat_drop_count[5]);
+            for(int p = 1; p <= 5; p++)
+            {
+                if(stat_tx_count[p] > 0)
+                {
+                    uint32_t avg = stat_latency_sum[p] / stat_tx_count[p];
+                    Serial.printf("[MC-PRIO] p%d_lat_avg=%ums p%d_lat_max=%dms p%d_cnt=%d\n",
+                        p, avg, p, stat_latency_max[p], p, stat_tx_count[p]);
+                }
+            }
+            // Reset window counters
+            memset(stat_tx_count, 0, sizeof(stat_tx_count));
+            memset(stat_drop_count, 0, sizeof(stat_drop_count));
+            memset(stat_latency_sum, 0, sizeof(stat_latency_sum));
+            memset(stat_latency_max, 0, sizeof(stat_latency_max));
+            stat_preempt_count = 0;
+        }
+
+        // High-water mark output (every 30 minutes)
+        if((millis() - stat_hwm_timer) > (unsigned long)(PRIO_HWM_INTERVAL_S * 1000UL))
+        {
+            stat_hwm_timer = millis();
+            Serial.printf("[MC-HWM] uptime=%lus queue_hwm=%d/%d csma_hwm=%d trickle=%lums\n",
+                millis() / 1000, stat_queue_hwm, MAX_RING,
+                stat_csma_hwm_attempts, trickle_interval_ms);
+        }
+
         if(iReceiveTimeOutTime > 0)
         {
             // Timeout csma_timeout (slot-basierter Backoff)
@@ -2725,12 +2763,42 @@ void esp32loop()
     }
 
 
-    // HEYINFO_INTERVAL in Seconds == 15 minutes
-    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || (bHeyFirst && bAllStarted))
+    // Trickle-HEY: adaptive interval (RFC 6206)
+    if (((heyinfo_timer + trickle_interval_ms) < millis()) || (bHeyFirst && bAllStarted))
     {
         bHeyFirst = false;
-        
-        sendHey();
+
+        // Check for topology change (neighbor count changed)
+        int current_neighbors = getMheardCount();
+        if(trickle_last_neighbor_count >= 0 && current_neighbors != trickle_last_neighbor_count)
+        {
+            // Topology changed — reset to fastest interval
+            trickle_interval_ms = TRICKLE_IMIN_S * 1000UL;
+            trickle_consistent_count = 0;
+            if(bDisplayInfo)
+                Serial.printf("[MC-TRICKLE] TOPO_CHANGE neighbors=%d->%d interval_reset=%lums\n",
+                    trickle_last_neighbor_count, current_neighbors, trickle_interval_ms);
+        }
+        trickle_last_neighbor_count = current_neighbors;
+
+        // Trickle suppression: skip HEY if enough consistent HEYs heard
+        if(trickle_consistent_count >= TRICKLE_K)
+        {
+            if(bDisplayInfo)
+                Serial.printf("[MC-TRICKLE] SUPPRESS consistent=%d>=k=%d interval=%lums neighbors=%d\n",
+                    trickle_consistent_count, TRICKLE_K, trickle_interval_ms, current_neighbors);
+        }
+        else
+        {
+            sendHey();
+            if(bDisplayInfo)
+                Serial.printf("[MC-TRICKLE] SEND consistent=%d<k=%d interval=%lums neighbors=%d\n",
+                    trickle_consistent_count, TRICKLE_K, trickle_interval_ms, current_neighbors);
+        }
+
+        // Double interval (Trickle step), cap at Imax
+        trickle_interval_ms = min(trickle_interval_ms * 2, (unsigned long)(TRICKLE_IMAX_S * 1000UL));
+        trickle_consistent_count = 0;
 
         heyinfo_timer = millis();
     }
