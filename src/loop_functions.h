@@ -95,7 +95,7 @@ String getTimeZone();
 
 int count_char(String s, char c);
 
-void addRingPointer(int &toWrite, int &toRead, int iMAX, const char* bufName = "?");
+void addRingPointer(volatile int &toWrite, volatile int &toRead, int iMAX, const char* bufName = "?");
 
 
 #endif // _LOOP_FUNCTIONS_H_

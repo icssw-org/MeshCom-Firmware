@@ -160,8 +160,8 @@ extern float BATexp2;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5];
-extern int iWrite;
-extern int iRead;
+extern volatile int iWrite;
+extern volatile int iRead;
 extern int iRetransmit;
 extern uint8_t retryCount[MAX_RING];
 
@@ -187,7 +187,7 @@ extern int ComToPhoneWrite;
 extern int ComToPhoneRead;
 
 extern uint8_t ringBufferLoraRX[MAX_DEDUP_RING][5]; //Ringbuffer for received msg_id deduplication
-extern uint8_t loraWrite;   // counter for ringbuffer
+extern std::atomic<uint8_t> loraWrite;   // counter for ringbuffer
 
 extern std::atomic<bool> is_receiving;   // flag to store we are receiving a lora packet.
 extern std::atomic<bool> tx_is_active;   // flag to store we are transmitting  a lora packet.
@@ -198,6 +198,12 @@ extern int rx_irq_defer_count;
 extern volatile bool cad_in_progress;
 extern volatile bool cad_done_flag;
 extern volatile bool cad_double_check;
+
+
+// RACE-01 fix: spinlock for deferred display update (ISR → main loop)
+#if defined(ESP32)
+extern portMUX_TYPE displayMux;
+#endif
 
 // Channel utilization tracking (10s window)
 extern std::atomic<unsigned long> ch_util_rx_start;
