@@ -593,7 +593,8 @@ void nrf52setup()
     //
     ////////////////////////////////////////////////////////////////////
 
-    if(bGPSON)
+    // Hardware immer aktivieren
+    //if(bGPSON)
     {
         //gps init
         pinMode(WB_IO2, OUTPUT);
@@ -604,9 +605,9 @@ void nrf52setup()
         
         Serial.println("=====================================");
 
-        Serial.println("GPS: trying 38400 baud");
+        Serial.println("GPS: trying 9600 baud");
         
-        Serial1.begin(38400);
+        Serial1.begin(9600);
         Serial1.setTimeout(500);
         while (!Serial1);
 
@@ -614,16 +615,16 @@ void nrf52setup()
         {
             if (myGPS.begin(Serial1))
             {
-                Serial.println("GPS: connected at 38400 baud");
+                Serial.println("GPS: connected at 9600 baud");
             }
             else
             {
                 Serial1.end();
 
                 delay(100);
-                Serial.println("GPS: trying 9600 baud");
+                Serial.println("GPS: trying 38400 baud");
 
-                Serial1.begin(9600);
+                Serial1.begin(38400);
                 Serial1.setTimeout(500);
                 while (!Serial1);
 
@@ -631,7 +632,7 @@ void nrf52setup()
                 {
                     if (myGPS.begin(Serial1))
                     {
-                        Serial.println("GPS: connected at 9600 baud");
+                        Serial.println("GPS: connected at 38400 baud");
                     }
                     else
                     {
@@ -647,12 +648,10 @@ void nrf52setup()
 
         delay(100);
     }
-    else
-    {
-        posinfo_fix = false;
-        posinfo_satcount = 0;
-        posinfo_hdop = 0;
-    }
+
+    posinfo_fix = false;
+    posinfo_satcount = 0;
+    posinfo_hdop = 0;
 
     // Try to initialize!
     #if defined(LPS33)
