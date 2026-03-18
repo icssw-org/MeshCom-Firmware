@@ -70,5 +70,5 @@ definitions for HELTEC_V2_1
 
 #define OneWire_GPIO 17 // getestet OE5HWN
 
-#define GPS_RX_PIN 23
-#define GPS_TX_PIN 3
+#define GPS_RX_PIN 13
+#define GPS_TX_PIN 12
