@@ -8,7 +8,6 @@
  *  @date        2025-12-03
  */
 #include <Arduino.h>
-#include <atomic>
 #include <configuration.h>
 #include <RadioLib.h>
 
@@ -58,7 +57,6 @@ Timeout timerSerial;
     #include "gps_functions.h"
     extern GPSData gpsData;
 #endif
-
 
 // Sensors
 #include "bmx280.h"
@@ -403,19 +401,19 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 int checkRX(bool bRadio);
 
 // save transmission state between loops
-volatile int transmissionState = RADIOLIB_ERR_UNKNOWN;
+int transmissionState = RADIOLIB_ERR_UNKNOWN;
 
 // flag to indicate that a preamble was not detected
-std::atomic<bool> receiveFlag{false};
-std::atomic<bool> bEnableInterruptReceive{true};
+volatile bool receiveFlag = false;
+volatile bool bEnableInterruptReceive = true;
 
 // flag to indicate if we are after receiving
 unsigned long iReceiveTimeOutTime = 0;
 unsigned long inoReceiveTimeOutTime = 0;
 
 // flag to indicate if we are currently allowed to transmittig
-std::atomic<bool> transmittedFlag{false};
-std::atomic<bool> bEnableInterruptTransmit{false};
+volatile bool transmittedFlag = false;
+volatile bool bEnableInterruptTransmit = false;
 
 // flag to indicate that a packet was detected or CAD timed out
 volatile bool scanFlag = false;
@@ -900,9 +898,15 @@ void esp32setup()
     #if defined(ENABLE_GPS)
         GPS_Init();
     #else
-
-    #if !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T5_EPAPER)
-        setupPMU();
+    
+    #if defined(BOARD_T_DECK_PRO)
+        #if defined(GPS_FUNCTIONS)
+            setupPMU();
+            beginGPS();
+        #elif defined(BOARD_T5_EPAPER)
+        #else
+            setupPMU();
+        #endif
     #endif
 
     #endif
@@ -1727,9 +1731,7 @@ void esp32loop()
                     else if(ringBuffer[i][1] == RING_STATUS_READY) pending++;
                     else retrying++;
                 }
-                int w = iWrite.load();
-                int r = iRead.load();
-                int queued = (w >= r) ? (w - r) : (MAX_RING - r + w);
+                int queued = (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite);
                 int dedup_used = 0;
                 for(int i = 0; i < MAX_DEDUP_RING; i++)
                 {
@@ -1739,30 +1741,21 @@ void esp32loop()
                 }
                 Serial.printf("[MC-DBG] RING_STATUS queued=%d pending=%d retrying=%d "
                               "done=%d iW=%d iR=%d dedup=%d/%d\n",
-                              queued, pending, retrying, done, w, r,
+                              queued, pending, retrying, done, iWrite, iRead,
                               dedup_used, MAX_DEDUP_RING);
             }
         }
 
         // Deferred display update from OnRxDone (avoid I2C inside radio callback)
-        // RACE-01 fix: snapshot under spinlock, display call outside
+        if(bPendingDisplayText)
         {
-            portENTER_CRITICAL(&displayMux);
-            bool _pendText = bPendingDisplayText;
-            bool _pendPos = bPendingDisplayPos;
-            struct aprsMessage _msg;
-            int16_t _rssi = 0;
-            int8_t _snr = 0;
-            if(_pendText || _pendPos) {
-                _msg = pendingDisplayMsg;
-                _rssi = pendingDisplayRssi;
-                _snr = pendingDisplaySnr;
-                bPendingDisplayText = false;
-                bPendingDisplayPos = false;
-            }
-            portEXIT_CRITICAL(&displayMux);
-            if(_pendText) sendDisplayText(_msg, _rssi, _snr);
-            if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
+            sendDisplayText(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
+            bPendingDisplayText = false;
+        }
+        if(bPendingDisplayPos)
+        {
+            sendDisplayPosition(pendingDisplayMsg, pendingDisplayRssi, pendingDisplaySnr);
+            bPendingDisplayPos = false;
         }
 
         // Channel utilization report (every 10s)
@@ -1772,8 +1765,10 @@ void esp32loop()
             {
                 unsigned long window = millis() - ch_util_timer;
                 ch_util_timer = millis();
+                
                 unsigned long rx_ms = ch_util_rx_accum.exchange(0);
                 unsigned long tx_ms = ch_util_tx_accum.exchange(0);
+                
                 unsigned int util = (unsigned int)((rx_ms + tx_ms) * 100 / window);
                 if(util > 100) util = 100;
                 Serial.printf("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
@@ -2044,16 +2039,14 @@ void esp32loop()
             // channel is free
             // nothing was detected
             // do not print anything, it just spams the console
-            int _w = iWrite.load();
-            int _r = iRead.load();
-            if (_w != _r)
+            if (iWrite != iRead)
             {
                 // Debug E: TX_GATE_ENTER
                 if(bLORADEBUG)
                 {
                     Serial.printf("[MC-SM] IDLE -> TX_PREPARE rc=0\n");
                     Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cad_attempt=%d\n",
-                        (_w >= _r) ? (_w - _r) : (MAX_RING - _r + _w),
+                        (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite),
                         cad_attempt);
                 }
 
@@ -2132,10 +2125,8 @@ void esp32loop()
                         if(bLORADEBUG)
                         {
                             Serial.printf("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
-                            int __w = iWrite.load();
-                            int __r = iRead.load();
                             Serial.printf("[MC-DBG] TX_START qlen=%d\n",
-                                (__w >= __r) ? (__w - __r) : (MAX_RING - __r + __w));
+                                (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite));
                         }
                     }
                     else
@@ -2470,7 +2461,7 @@ void esp32loop()
             sendMheard();
             commandAction((char*)"--conffin", isPhoneReady, true);
             config_to_phone_prepare_timer = millis();
-
+            
             config_to_phone_prepare = false;
         }
         else
@@ -2612,6 +2603,12 @@ void esp32loop()
 
             #ifdef BOARD_T_DECK_PRO
                 igps = tdeck_get_gps();
+            #else
+                #if defined (GPS_FUNCTIONS)
+                    igps = loopGPS();
+                #else
+                    igps = getGPS();
+                #endif
             #endif
 
             #endif // ENABLE_GPS
@@ -3310,7 +3307,7 @@ int checkRX(bool bRadio)
 
         // RX channel utilization: calculate airtime from packet length
         // (ESP32 has no OnHeaderDetect, so ch_util_rx_start is never set)
-        ch_util_rx_accum.fetch_add(radio.getTimeOnAir(ibytes) / 1000);  // us -> ms
+        ch_util_rx_accum += radio.getTimeOnAir(ibytes) / 1000;  // us -> ms
 
         OnRxDone(payload, (uint16_t)ibytes, saved_rssi, saved_snr);
     }
@@ -3335,7 +3332,7 @@ int checkRX(bool bRadio)
         }
 
         // RX channel utilization: CRC-failed packet still occupied the channel
-        ch_util_rx_accum.fetch_add(radio.getTimeOnAir(ibytes) / 1000);  // us -> ms
+        ch_util_rx_accum += radio.getTimeOnAir(ibytes) / 1000;  // us -> ms
 
         // Diagnose-Output: RSSI/SNR + kompletter Payload-Hex-Dump
         if(bLORADEBUG)
