@@ -751,6 +751,13 @@ void esp32setup()
         Serial.println("[INIT]...WEBServer starting...");
     }
 
+    #if defined(BOARD_T_DECK_PRO)
+        bWEBSERVER=false;
+        bDEBUG=true;
+        bGPSON=false;
+    #endif
+
+
     if(meshcom_settings.node_gwsrv[0] == 0x00)
         sprintf(meshcom_settings.node_gwsrv, "%s", "OE");
 

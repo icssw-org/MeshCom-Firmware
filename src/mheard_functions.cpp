@@ -268,8 +268,10 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     }
 
     memset(mheardCalls[ipos], 0x00, sizeof(mheardCalls[ipos]));
-    size_t len = min(mheardLine.mh_callsign.length(), sizeof(mheardCalls[ipos]) - 1);
-    memcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str(), len);
+    int ivgll= mheardLine.mh_callsign.length();
+    if(strlen(mheardCalls[ipos]) > (size_t)ivgll)
+        ivgll=strlen(mheardCalls[ipos]);
+    memcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str(), ivgll);
     
     mheardEpoch[ipos] = getUnixClock();
 

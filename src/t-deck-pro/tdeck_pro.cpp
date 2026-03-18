@@ -29,7 +29,7 @@
 #include "TinyGPSPlus.h"
 
 // TinyGPS
-TinyGPSPlus tinyGPSPlus;
+TinyGPSPlus gpss;
 
 TinyGsm modem(SerialAT);
 TaskHandle_t a7682_handle;
