@@ -1169,38 +1169,53 @@ extern bool btimeClient;
 
     if(iReceiveTimeOutTime == 0 && is_receiving == false && tx_is_active == false)
     {
-        if (iWrite != iRead)
+        int _w = iWrite;
+        int _r = iRead;
+        if (_w != _r)
         {
-            if(!cad_in_progress && !cad_done_flag)
+            // RACE-05 fix: snapshot CAD flags under critical section,
+            // then act on snapshot values outside the lock
+            taskENTER_CRITICAL();
+            bool _cad_ip = cad_in_progress;
+            bool _cad_df = cad_done_flag;
+            bool _cad_cb = cad_channel_busy;
+            bool _cad_dc = cad_double_check;
+            taskEXIT_CRITICAL();
+
+            if(!_cad_ip && !_cad_df)
             {
                 // Start CAD scan
                 if(bLORADEBUG)
                 {
                     Serial.printf("[MC-SM] IDLE -> TX_PREPARE rc=0\n");
                     Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cad_attempt=%d\n",
-                        (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite),
+                        (_w >= _r) ? (_w - _r) : (MAX_RING - _r + _w),
                         cad_attempt);
                 }
 
+                taskENTER_CRITICAL();
                 cad_in_progress = true;
                 cad_done_flag = false;
                 cad_double_check = false;
                 cad_start_time = millis();
+                taskEXIT_CRITICAL();
                 taskENTER_CRITICAL();
                 Radio.Standby();
                 Radio.StartCad();
                 taskEXIT_CRITICAL();
             }
-            else if(cad_done_flag)
+            else if(_cad_df)
             {
+                taskENTER_CRITICAL();
                 cad_in_progress = false;
                 cad_done_flag = false;
+                taskEXIT_CRITICAL();
                 if(bLORADEBUG)
-                    Serial.printf("[MC-DBG] CAD_SCAN result=%d\n", cad_channel_busy ? -702 : 0);
+                    Serial.printf("[MC-DBG] CAD_SCAN result=%d\n", _cad_cb ? -702 : 0);
 
-                if(!cad_channel_busy)
+                if(!_cad_cb)
                 {
-                    if(cad_double_check && bLORADEBUG)
+                    if(_cad_dc && bLORADEBUG)
                         Serial.printf("[MC-DBG] CAD_FALSE_POSITIVE\n");
                     // Channel free — transmit
                     if(bLORADEBUG)
@@ -1213,16 +1228,18 @@ extern bool btimeClient;
                     csma_reset();
                     doTX();
                 }
-                else if(!cad_double_check)
+                else if(!_cad_dc)
                 {
                     // First scan busy — double-check
                     if(bLORADEBUG)
                         Serial.printf("[MC-DBG] CAD_BUSY_1 attempt=%d, double-check...\n", cad_attempt);
 
+                    taskENTER_CRITICAL();
                     cad_double_check = true;
                     cad_in_progress = true;
                     cad_done_flag = false;
                     cad_start_time = millis();
+                    taskEXIT_CRITICAL();
                     taskENTER_CRITICAL();
                     Radio.Standby();
                     Radio.StartCad();
@@ -1247,14 +1264,16 @@ extern bool btimeClient;
                     iReceiveTimeOutTime = millis();
                 }
             }
-            else if(cad_in_progress && (millis() - cad_start_time > 100))
+            else if(_cad_ip && (millis() - cad_start_time > 100))
             {
                 // Safety timeout: CadDone never fired
                 if(bLORADEBUG)
                     Serial.printf("[MC-DBG] CAD_SAFETY_TIMEOUT\n");
 
+                taskENTER_CRITICAL();
                 cad_in_progress = false;
                 cad_done_flag = false;
+                taskEXIT_CRITICAL();
                 taskENTER_CRITICAL();
                 Radio.Rx(RX_TIMEOUT_VALUE);
                 taskEXIT_CRITICAL();
@@ -1479,18 +1498,17 @@ if (isPhoneReady == 1)
             {
                 double slat = 0.0;
                 double slon = 0.0;
-                
+
                 double slatr=60.0;
                 double slonr=60.0;
-                
+
                 slat = (int)posinfo_prev_lat;
                 slatr = (posinfo_prev_lat - slat) * slatr;
                 slat = (slat * 100.) + slatr;
-                
+
                 slon = (int)posinfo_prev_lon;
                 slonr = (posinfo_prev_lon - slon) * slonr;
                 slon = (slon * 100.) + slonr;
-            
                 double node_lat = cround4(posinfo_prev_lat);
                 double node_lon = cround4(posinfo_prev_lon);
 
@@ -1501,7 +1519,7 @@ if (isPhoneReady == 1)
                     node_lat_c='S';
                 else
                     node_lat_c='N';
-                    
+
                 if(posinfo_prev_lon < 0.0)
                     node_lon_c='W';
                 else
@@ -1541,12 +1559,34 @@ if (isPhoneReady == 1)
         posinfo_timer_min = millis();
     }
 
-    // HEYINFO_INTERVAL in Seconds == 15 minutes
-    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
+    // Trickle-HEY: adaptive interval (RFC 6206)
+    if (((heyinfo_timer + trickle_interval_ms) < millis()) || bHeyFirst)
     {
         bHeyFirst = false;
-        
-        sendHey();
+
+        // Check for topology change
+        int current_neighbors = getMheardCount();
+        if(trickle_last_neighbor_count >= 0 && current_neighbors != trickle_last_neighbor_count)
+        {
+            trickle_interval_ms = TRICKLE_IMIN_S * 1000UL;
+            trickle_consistent_count = 0;
+        }
+        trickle_last_neighbor_count = current_neighbors;
+
+        // Trickle suppression
+        if(trickle_consistent_count >= TRICKLE_K)
+        {
+            if(bDisplayInfo)
+                Serial.printf("[MC-TRICKLE] SUPPRESS consistent=%d interval=%lums\n",
+                    trickle_consistent_count, trickle_interval_ms);
+        }
+        else
+        {
+            sendHey();
+        }
+
+        trickle_interval_ms = min(trickle_interval_ms * 2, (unsigned long)(TRICKLE_IMAX_S * 1000UL));
+        trickle_consistent_count = 0;
 
         heyinfo_timer = millis();
     }
