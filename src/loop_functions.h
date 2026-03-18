@@ -97,5 +97,6 @@ int count_char(String s, char c);
 
 void addRingPointer(volatile int &toWrite, volatile int &toRead, int iMAX, const char* bufName = "?");
 
+bool is_equ(const char* buf1, const char* buf2);
 
 #endif // _LOOP_FUNCTIONS_H_

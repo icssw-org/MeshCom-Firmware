@@ -478,10 +478,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     {
                         if(mheardCalls[iset][0] != 0x00)
                         {
-                            int ivgll= mheardLine.mh_callsign.length();
-                            if(strlen(mheardCalls[iset]) > (size_t)ivgll)
-                                ivgll=strlen(mheardCalls[iset]);
-                            if(memcmp(mheardCalls[iset], mheardLine.mh_callsign.c_str(), ivgll) == 0)
+                            if(is_equ(mheardCalls[iset], mheardLine.mh_callsign.c_str()))
                             {
                                 ipos=iset;
                                 lat = mheardLat[ipos];

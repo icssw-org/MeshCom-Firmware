@@ -3843,3 +3843,17 @@ void addRingPointer(volatile int &pWrite, volatile int &pRead, int iMAX, const c
 
     bnextread=false;
 }
+
+// allgemeine Funktionen
+bool is_equ(const char* buf1, const char* buf2)
+{
+    size_t len = strlen(buf1);
+
+    if(len != strlen(buf2))
+        return false;
+
+    if(memcmp(buf1, buf2, len) == 0)
+        return true;
+
+    return false;
+}
