@@ -1341,7 +1341,7 @@ extern bool btimeClient;
         if(bGPSDEBUG)
             Serial.println("gKeyNum == 2");
 
-        #ifdef ENABLE_GPS
+        #ifdef ENABLE_RAK_GPS
 
         if(bGPSON)
         {
@@ -1377,7 +1377,7 @@ extern bool btimeClient;
         gKeyNum = 0;
     }
 
-    #ifdef ENABLE_GPS
+    #ifdef ENABLE_RAK_GPS
     if(bGPSON)
     {
         // check GPS ON and activ --> <gKeyNum == 2> the signal must be active
