@@ -27,7 +27,7 @@ int mheardAlt[MAX_MHEARD];
 unsigned long mheardEpoch[MAX_MHEARD];
 int mheardNCount[MAX_MHEARD];
 
-unsigned char mheardPathBuffer1[MAX_MHPATH][38]; //Ringbuffer for MHeard Sourcepath
+unsigned char mheardPathBuffer1[MAX_MHPATH][50]; //Ringbuffer for MHeard Sourcepath
 char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 unsigned long mheardPathEpoch[MAX_MHPATH];
 uint8_t mheardPathLen[MAX_MHPATH];
@@ -275,7 +275,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     else
         mheardLine.mh_ncount = mheardNCount[ipos];
 
-    char cBuffer[60];
+    char cBuffer[sizeof(mheardBuffer[ipos])];
     snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
      mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount); 
     memcpy(mheardBuffer[ipos], cBuffer, sizeof(cBuffer));
@@ -388,7 +388,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
                         if(bDisplayCont)
                             Serial.println(mheardLine.mh_ncount);
 
-                        char cBuffer[60];
+                        char cBuffer[sizeof(mheardBuffer[imh])];
                         snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine_save.mh_hw,
                         mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
                         memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
@@ -472,7 +472,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
 
     memset(mheardPathBuffer1[ipos], 0x00, sizeof(mheardPathBuffer1[ipos]));
     memcpy(mheardPathBuffer1[ipos], mheardLine.mh_sourcepath.substring(ips).c_str(), sizeof(mheardPathBuffer1[ipos]));
-    mheardPathBuffer1[ipos][37] = 0x00;
+    mheardPathBuffer1[ipos][49] = 0x00;
     // TODO second 30 chars
 
     // check HEY! comming from gateway
@@ -640,7 +640,7 @@ void showMHeard()
 
 void showPath()
 {
-    Serial.printf("/---------------------------------------------------------------------------\\\n");
+    Serial.printf("/---------------------------------------------------------------------------------------\\\n");
     Serial.printf("|       date          | lng/Gate/Path                                       |\n");
 
     for(int iset=0; iset<MAX_MHPATH; iset++)
@@ -649,7 +649,7 @@ void showPath()
         {
             if((mheardPathEpoch[iset]+60*60*12) > getUnixClock())    // 12h
             {
-                Serial.printf("|---------------------|-----------------------------------------------------|\n");
+                Serial.printf("|---------------------|-----------------------------------------------------------------|\n");
 
                 //Serial.printf("| %-10.10s | ", mheardPathCalls[iset]);
 
@@ -657,7 +657,7 @@ void showPath()
                 
                 Serial.printf("| %-19.19s | ", convertUNIXtoString(lt).c_str()); // yyyy.mm.dd hh:mm:ss
 
-                Serial.printf("%01u%s/%-10.10s %-37.37s |\n", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathCalls[iset], mheardPathBuffer1[iset]);
+                Serial.printf("%01u%s/%-10.10s %-49.49s |\n", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathCalls[iset], mheardPathBuffer1[iset]);
             }
             else
             {
@@ -666,7 +666,7 @@ void showPath()
         }
     }
 
-    Serial.printf("\\---------------------------------------------------------------------------/\n");
+    Serial.printf("\\---------------------------------------------------------------------------------------/\n");
 }
 
 char* getPayloadType(char ptype)
@@ -816,7 +816,7 @@ void showMHeardTDECK()
  */
 void showPathTDECK()
 {
-    char buf[200];
+    char buf[60];
 
     uint16_t row=0;
 
@@ -848,7 +848,7 @@ void showPathTDECK()
             snprintf(buf, 20, "%s", convertUNIXtoString(lt).substring(11, 16).c_str());
             lv_table_set_cell_value(path_ta, row, 1, buf);
 
-            snprintf(buf, 40, "%01u%s/%s", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathBuffer1[iset]);
+            snprintf(buf, 50, "%01u%s/%s", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathBuffer1[iset]);
             lv_table_set_cell_value(path_ta, row, 2, buf);
 
             row++;
