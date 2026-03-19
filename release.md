@@ -7,6 +7,25 @@ Kein On-Air-Change — alte Firmware empfaengt alle Pakete korrekt.
 
 ---
 
+## BLE-Ringpuffer Offline-Nachrichten Bugfix (2026-03-19)
+
+Nachrichten wurden nicht im BLE-Ringpuffer gespeichert wenn kein Telefon verbunden war.
+Beim spaeteten Verbinden eines Telefons war der Puffer daher leer — keine Offline-Nachrichten.
+
+**Root Cause**: Guard in `addBLEOutBuffer()` (`!g_ble_uart_is_connected && !bWEBSERVER`)
+verwarf alle Nachrichten wenn weder BLE-Telefon noch Webserver aktiv war.
+E22 zeigte 7 Nachrichten weil dort der Webserver aktiv war (Guard griff nicht).
+Heltec V2, RAK (GW und Non-GW) zeigten 0 Nachrichten.
+
+**Fix** (2 Aenderungen in `src/loop_functions.cpp`):
+- Guard entfernt — Nachrichten werden immer im Ringpuffer gespeichert
+- Overflow-Debug-Log fuer "phone"-Puffer unterdrueckt (Ueberlauf gewuenscht,
+  aelteste Eintraege werden ueberschrieben)
+
+**Betroffene Datei**: `src/loop_functions.cpp`
+
+---
+
 ## TX-Loop und UDP-Dedup Bugfix (2026-03-19)
 
 Zwei Bugs behoben, die gemeinsam massive Duplikat-Sendungen verursachten.
