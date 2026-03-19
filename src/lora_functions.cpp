@@ -1170,7 +1170,7 @@ void OnRxError(void)
         if(cad_in_progress) {
             cad_in_progress = false;
             cad_done_flag = false;
-            cad_double_check = false;
+                cad_double_check = false;
         }
         taskEXIT_CRITICAL();
     #endif
@@ -1201,8 +1201,8 @@ bool is_new_packet(uint8_t compBuffer[4])
                                       ((uint32_t)compBuffer[1] << 8) |
                                       ((uint32_t)compBuffer[2] << 16) |
                                       ((uint32_t)compBuffer[3] << 24);
-                    Serial.printf("[MC-DBG] RX_DEDUP_DUP msg_id=%08X slot=%d\n",
-                                  dup_id, ib);
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] RX_DEDUP_DUP msg_id=%08X slot=%d\n",dup_id, ib);
                 }
                 return false;
             }
@@ -1214,7 +1214,8 @@ bool is_new_packet(uint8_t compBuffer[4])
                           ((uint32_t)compBuffer[1] << 8) |
                           ((uint32_t)compBuffer[2] << 16) |
                           ((uint32_t)compBuffer[3] << 24);
-        Serial.printf("[MC-DBG] RX_DEDUP_NEW msg_id=%08X\n", new_id);
+        if(bLORADEBUG)
+            Serial.printf("[MC-DBG] RX_DEDUP_NEW msg_id=%08X\n", new_id);
     }
     return true;
 }
@@ -1365,7 +1366,8 @@ void addTxRingEntry(const char* source)
                        ((uint32_t)ringBuffer[w][4] << 8)  |
                         (uint32_t)ringBuffer[w][3];
         int queued = (w >= r) ? (w - r) : (MAX_RING - r + w);
-        Serial.printf("[MC-DBG] RING_WRITE slot=%d type=%02X status=%02X "
+        if(bLORADEBUG)
+            Serial.printf("[MC-DBG] RING_WRITE slot=%d type=%02X status=%02X "
                       "len=%d msg_id=%08X queued=%d/%d src=%s\n",
                       w, ringBuffer[w][2], ringBuffer[w][1],
                       ringBuffer[w][0], mid, queued, MAX_RING, source);
@@ -1411,7 +1413,8 @@ void addTxRingEntry(const char* source)
                                ((uint32_t)ringBuffer[worst_slot][5] << 16) |
                                ((uint32_t)ringBuffer[worst_slot][4] << 8)  |
                                 (uint32_t)ringBuffer[worst_slot][3];
-            Serial.printf("[MC-DBG] RING_DROP_PRIO slot=%d prio=%d type=%02X "
+            if(bLORADEBUG)
+                Serial.printf("[MC-DBG] RING_DROP_PRIO slot=%d prio=%d type=%02X "
                           "msg_id=%08X replaced_by_prio=%d src=%s\n",
                           worst_slot, worst_prio, ringBuffer[worst_slot][2],
                           lost_id, new_prio, source);
@@ -1426,7 +1429,8 @@ void addTxRingEntry(const char* source)
                                ((uint32_t)ringBuffer[w][5] << 16) |
                                ((uint32_t)ringBuffer[w][4] << 8)  |
                                 (uint32_t)ringBuffer[w][3];
-            Serial.printf("[MC-DBG] RING_DROP_NEW slot=%d prio=%d type=%02X "
+            if(bLORADEBUG)
+                Serial.printf("[MC-DBG] RING_DROP_NEW slot=%d prio=%d type=%02X "
                           "msg_id=%08X (queue full, no lower prio to evict)\n",
                           w, new_prio, ringBuffer[w][2], lost_id);
             stat_drop_count[new_prio]++;
@@ -1484,7 +1488,8 @@ bool doTX()
             int tw = iWrite;
             int tr = iRead;
             int queued = (tw >= tr) ? (tw - tr) : (MAX_RING - tr + tw);
-            Serial.printf("[MC-DBG] RING_TX_READ slot=%d prio=%d type=%02X status=%02X "
+            if(bLORADEBUG)
+                Serial.printf("[MC-DBG] RING_TX_READ slot=%d prio=%d type=%02X status=%02X "
                           "len=%d msg_id=%08X retry=%d queued=%d/%d lat=%lums\n",
                           txSlot, prio, ringBuffer[txSlot][2], ringBuffer[txSlot][1],
                           sendlng, tx_mid, retryCount[txSlot], queued, MAX_RING, (unsigned long)latency);
@@ -1700,7 +1705,8 @@ bool updateRetransmissionStatus()
                     if(bLORADEBUG)
                     {
                         unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
-                        Serial.printf("[MC-DBG] RETRANSMIT_GIVEUP retries=%d msg_id=%08X\n",
+                        if(bLORADEBUG)
+                            Serial.printf("[MC-DBG] RETRANSMIT_GIVEUP retries=%d msg_id=%08X\n",
                             retryCount[ircheck], ring_msg_id);
                     }
 
@@ -1710,7 +1716,8 @@ bool updateRetransmissionStatus()
                 if(bLORADEBUG)
                 {
                     unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
-                    Serial.printf("[MC-DBG] RETRANSMIT retry=%d after_sec=%d msg_id=%08X\n",
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] RETRANSMIT retry=%d after_sec=%d msg_id=%08X\n",
                         retryCount[ircheck] + 1, (ringBuffer[ircheck][1] - 1) * 2, ring_msg_id);
                 }
 

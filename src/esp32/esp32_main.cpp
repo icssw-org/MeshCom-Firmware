@@ -2787,7 +2787,7 @@ void esp32loop()
             // Topology changed — reset to fastest interval
             trickle_interval_ms = TRICKLE_IMIN_S * 1000UL;
             trickle_consistent_count = 0;
-            if(bDisplayInfo)
+            if(bLORADEBUG)
                 Serial.printf("[MC-TRICKLE] TOPO_CHANGE neighbors=%d->%d interval_reset=%lums\n",
                     trickle_last_neighbor_count, current_neighbors, trickle_interval_ms);
         }
@@ -2796,14 +2796,14 @@ void esp32loop()
         // Trickle suppression: skip HEY if enough consistent HEYs heard
         if(trickle_consistent_count >= TRICKLE_K)
         {
-            if(bDisplayInfo)
+            if(bLORADEBUG)
                 Serial.printf("[MC-TRICKLE] SUPPRESS consistent=%d>=k=%d interval=%lums neighbors=%d\n",
                     trickle_consistent_count, TRICKLE_K, trickle_interval_ms, current_neighbors);
         }
         else
         {
             sendHey();
-            if(bDisplayInfo)
+            if(bLORADEBUG)
                 Serial.printf("[MC-TRICKLE] SEND consistent=%d<k=%d interval=%lums neighbors=%d\n",
                     trickle_consistent_count, TRICKLE_K, trickle_interval_ms, current_neighbors);
         }
