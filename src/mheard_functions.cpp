@@ -641,7 +641,7 @@ void showMHeard()
 void showPath()
 {
     Serial.printf("/---------------------------------------------------------------------------------------\\\n");
-    Serial.printf("|       date          | lng/Gate/Path                                       |\n");
+    Serial.printf("|       date          | lng/Gate/Path                                                   |\n");
 
     for(int iset=0; iset<MAX_MHPATH; iset++)
     {
