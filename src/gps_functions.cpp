@@ -82,16 +82,13 @@ void GPS_Init() {
         }
         else
         {
-            Serial.println("[GPS] hardware not found");
-
             gpsDetected = false;
         }
 
         GPSSerial.end();
     }
 
-    if(bGPSON)
-       Serial.println("[GPS] hardware not found");
+    Serial.println("[GPS] hardware not found");
 
     gpsDetected = false;
 }

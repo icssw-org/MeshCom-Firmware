@@ -1106,8 +1106,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         if(_onrxdone_elapsed > ONRXDONE_WARN_MS)
         {
             onrxdone_warn_count++;
-            Serial.printf("[MC-WARN] ONRXDONE_SLOW ms=%lu threshold=%d\n",
-                _onrxdone_elapsed, ONRXDONE_WARN_MS);
+            if(bLORADEBUG)
+                Serial.printf("[MC-WARN] ONRXDONE_SLOW ms=%lu threshold=%d\n", _onrxdone_elapsed, ONRXDONE_WARN_MS);
         }
     }
 
