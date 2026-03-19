@@ -10,6 +10,7 @@
 #include <batt_functions.h>
 #include <command_functions.h>
 #include <loop_functions_extern.h>
+#include <lora_functions.h>
 #include <time_functions.h>
 #include <lora_setchip.h>
 #include <configuration.h>
@@ -318,38 +319,43 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             }
           }
 
-          int icheck = checkOwnTx(aprsmsg.msg_id);
-          if(icheck < 0)
+          // Check dedup ring first (same check that LoRa RX path uses)
+          uint8_t udp_mid[4] = {
+              (uint8_t)(aprsmsg.msg_id),
+              (uint8_t)(aprsmsg.msg_id >> 8),
+              (uint8_t)(aprsmsg.msg_id >> 16),
+              (uint8_t)(aprsmsg.msg_id >> 24)
+          };
+
+          if(is_new_packet(udp_mid))
           {
-            if(bUDPtoLoraSend)
+            int icheck = checkOwnTx(aprsmsg.msg_id);
+            if(icheck < 0)
             {
-              // first byte is always the len of the msg
-              // UDP messages send to LoRa TX
-              // resend only Packet to all
-              
-              // store last message to compare later on
-              insertOwnTx(aprsmsg.msg_id);
-
-              ringBuffer[iWrite][0] = size;
-              ringBuffer[iWrite][1] = 0xFF; // no retransmission for UDP relay messages
-              memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
-
-              retryCount[iWrite] = 0;
-              addTxRingEntry("udp_rx");
-
-              /*
-              iWrite++;
-              if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-                iWrite = 0;
-              */
-
-              addLoraRxBuffer(aprsmsg.msg_id, true);
-
-              // add rcvMsg to BLE out Buff
-              // size message is int -> uint16_t buffer size
-              if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
+              if(bUDPtoLoraSend)
               {
-                  addBLEOutBuffer(convBuffer, size);
+                // first byte is always the len of the msg
+                // UDP messages send to LoRa TX
+                // resend only Packet to all
+
+                // store last message to compare later on
+                insertOwnTx(aprsmsg.msg_id);
+
+                ringBuffer[iWrite][0] = size;
+                ringBuffer[iWrite][1] = 0xFF; // no retransmission for UDP relay messages
+                memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
+
+                retryCount[iWrite] = 0;
+                addTxRingEntry("udp_rx");
+
+                addLoraRxBuffer(aprsmsg.msg_id, true);
+
+                // add rcvMsg to BLE out Buff
+                // size message is int -> uint16_t buffer size
+                if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
+                {
+                    addBLEOutBuffer(convBuffer, size);
+                }
               }
             }
           }
