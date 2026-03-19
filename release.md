@@ -1,9 +1,48 @@
-# Release Notes -- MeshCom Firmware v4.35* (2026-03-18)
+# Release Notes -- MeshCom Firmware v4.35* (2026-03-19)
 
 Nachrichtenprioritaet, Trickle-HEY, erweiterte Statistik,
 APRS-Parser Hardening und diverse Bugfixes auf Basis von `oe1kbc_v4.35p`.
 
 Kein On-Air-Change — alte Firmware empfaengt alle Pakete korrekt.
+
+---
+
+## TX-Loop und UDP-Dedup Bugfix (2026-03-19)
+
+Zwei Bugs behoben, die gemeinsam massive Duplikat-Sendungen verursachten.
+Gateway oe1kbc zeigte TX/RX-Ratio von 8.5:1 (2573 TX bei 302 RX),
+eine einzelne msg_id wurde 179x wiederholt, Queue-Wasserstand erreichte 29/30.
+
+### Bug 1: TX-Loop im Ring-Buffer (KRITISCH)
+
+**Root Cause**: `getNextTxSlot()` pruefte nur `ringBuffer[pos][0] > 0`, nicht den
+Status-Byte. Durch Priority-Queue konnte ein Slot gesendet werden, der nicht an
+der iRead-Position lag. Nach dem Senden stellte `doTX()` die Slot-Laenge fuer die
+Retransmission wieder her (Zeile 1642). Da `advanceIReadPastEmpty()` iRead nicht
+vorruecken konnte (fruehere belegte Slots), blieb der wiederhergestellte Slot im
+iRead..iWrite-Fenster sichtbar — `getNextTxSlot()` waehlte ihn erneut aus.
+Ergebnis: ~20 Sends derselben Nachricht in 40 Sekunden.
+
+**Fix** (3 Aenderungen in `src/lora_functions.cpp`):
+- `getNextTxSlot()`: Status-Check — nur READY oder DONE Slots auswaehlen,
+  SENT-Slots (Retransmit-Timer laeuft) ueberspringen
+- `updateRetransmissionStatus()`: Original-Slot `[0]` auf 0 setzen nach DONE-Markierung
+  (sowohl bei Retransmit-Kopie als auch bei Giveup)
+- Retransmit-Kopie: Status READY statt SENT, damit `doTX` sie normal aufgreift
+
+### Bug 2: Fehlender Dedup-Ring-Check im UDP-Empfangspfad (MITTEL)
+
+**Root Cause**: `udp_functions.cpp:321` pruefte nur `checkOwnTx()` (30-Entry-Buffer).
+Der Dedup-Ring `ringBufferLoraRX` (100 Entries) wurde nicht abgefragt — im Gegensatz
+zum LoRa-RX-Pfad, der beide Checks korrekt durchfuehrt. Nach 30 Nachrichten wrappte
+`own_msg_id`, und der Gateway akzeptierte dieselbe Nachricht erneut vom Server.
+
+**Fix** (1 Aenderung in `src/udp_functions.cpp`):
+- `is_new_packet()` Check vor dem bestehenden `checkOwnTx()` eingefuegt,
+  analog zum LoRa-RX-Pfad
+- `#include <lora_functions.h>` fuer Deklaration
+
+**Betroffene Dateien**: `src/lora_functions.cpp`, `src/udp_functions.cpp`
 
 ---
 

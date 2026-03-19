@@ -1310,8 +1310,10 @@ int getNextTxSlot(void)
     int pos = iRead;
     while(pos != iWrite)
     {
-        // Only consider slots with data (len > 0) and not already fully processed
-        if(ringBuffer[pos][0] > 0)
+        // Only consider slots with data that are ready to send (READY or DONE/fire-and-forget).
+        // Skip slots with status SENT..threshold (awaiting retransmission timer).
+        if(ringBuffer[pos][0] > 0 &&
+           (ringBuffer[pos][1] == RING_STATUS_READY || ringBuffer[pos][1] == RING_STATUS_DONE))
         {
             uint8_t prio = ringPriority[pos];
             if(prio < best_prio)
@@ -1693,6 +1695,7 @@ bool updateRetransmissionStatus()
                 {
                     // Give up — max retries exhausted
                     ringBuffer[ircheck][1] = RING_STATUS_DONE;
+                    ringBuffer[ircheck][0] = 0;  // free slot so getNextTxSlot skips it
 
                     if(bLORADEBUG)
                     {
@@ -1727,14 +1730,15 @@ bool updateRetransmissionStatus()
                     Serial.println("");
                 }
 
-                // Mark original as done
+                // Mark original as done and free slot
                 ringBuffer[ircheck][1] = RING_STATUS_DONE;
+                ringBuffer[ircheck][0] = 0;  // free slot so getNextTxSlot skips it
 
                 // Copy message to new slot at iWrite
                 memcpy(ringBuffer[iWrite], ringBuffer[ircheck], size + 2);
 
                 if (ringBuffer[iWrite][2] == MSG_TYPE_TEXT) // text messages
-                    ringBuffer[iWrite][1] = RING_STATUS_SENT;  // start timer immediately
+                    ringBuffer[iWrite][1] = RING_STATUS_READY;  // ready for doTX; timer starts after send
                 else
                     ringBuffer[iWrite][1] = RING_STATUS_DONE;
 
