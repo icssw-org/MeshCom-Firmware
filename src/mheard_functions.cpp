@@ -335,6 +335,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
 void updateHeyPath(struct mheardLine &mheardLine)
 {
+    struct mheardLine mheardLine_save;
+
     String strYear = mheardLine.mh_date.substring(0, 4);
     if(strYear.toInt() < 2025)
         return;
@@ -380,11 +382,14 @@ void updateHeyPath(struct mheardLine &mheardLine)
                         mheardNCount[imh] = mheardLine.mh_path_payload.substring(1, ipos).toInt();
                         mheardLine.mh_ncount = mheardNCount[imh];
 
+                        // REP aktion
+                        decodeMHeard(mheardBuffer[imh], mheardLine_save);
+
                         if(bDisplayCont)
                             Serial.println(mheardLine.mh_ncount);
 
                         char cBuffer[60];
-                        snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
+                        snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine_save.mh_hw,
                         mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
                         memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
                     }
