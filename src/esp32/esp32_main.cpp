@@ -1797,21 +1797,26 @@ void esp32loop()
         if((millis() - stat_prio_timer) > (unsigned long)(PRIO_STAT_INTERVAL_S * 1000UL))
         {
             stat_prio_timer = millis();
-            Serial.printf("[MC-STAT] t=%ds qmax=%d/%d\n",
-                PRIO_STAT_INTERVAL_S, stat_queue_hwm, MAX_RING);
-            Serial.printf("  tx: p1=%d p2=%d p3=%d p4=%d p5=%d preempt=%d\n",
-                stat_tx_count[1], stat_tx_count[2], stat_tx_count[3],
-                stat_tx_count[4], stat_tx_count[5], stat_preempt_count);
-            Serial.printf("  drop: p1=%d p2=%d p3=%d p4=%d p5=%d\n",
-                stat_drop_count[1], stat_drop_count[2], stat_drop_count[3],
-                stat_drop_count[4], stat_drop_count[5]);
+            if(bLORADEBUG)
+            {
+                Serial.printf("[MC-STAT] t=%ds qmax=%d/%d\n",
+                    PRIO_STAT_INTERVAL_S, stat_queue_hwm, MAX_RING);
+                Serial.printf("  tx: p1=%d p2=%d p3=%d p4=%d p5=%d preempt=%d\n",
+                    stat_tx_count[1], stat_tx_count[2], stat_tx_count[3],
+                    stat_tx_count[4], stat_tx_count[5], stat_preempt_count);
+                Serial.printf("  drop: p1=%d p2=%d p3=%d p4=%d p5=%d\n",
+                    stat_drop_count[1], stat_drop_count[2], stat_drop_count[3],
+                    stat_drop_count[4], stat_drop_count[5]);
+            }
+            
             for(int p = 1; p <= 5; p++)
             {
                 if(stat_tx_count[p] > 0)
                 {
                     uint32_t avg = stat_latency_sum[p] / stat_tx_count[p];
-                    Serial.printf("[MC-PRIO] p%d_lat_avg=%ums p%d_lat_max=%dms p%d_cnt=%d\n",
-                        p, avg, p, stat_latency_max[p], p, stat_tx_count[p]);
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-PRIO] p%d_lat_avg=%ums p%d_lat_max=%dms p%d_cnt=%d\n",
+                            p, avg, p, stat_latency_max[p], p, stat_tx_count[p]);
                 }
             }
             // Reset window counters
