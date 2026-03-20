@@ -987,11 +987,9 @@ void esp32setup()
         digitalWrite(LORA_RST, HIGH);
     #endif
 
-    #if defined(BOARD_T_ETH_ELITE)
-        // no RF switch on this board
-    #else
-       // we have TXEN and RXEN Pin connected
-       radio.setRfSwitchPins(E22_RXEN, E22_TXEN);
+    #if defined(BOARD_E22) || defined(BOARD_E220) || defined(BOARD_E22_S3)
+        // we have TXEN and RXEN Pin connected
+        radio.setRfSwitchPins(E22_RXEN, E22_TXEN);
     #endif
 
     #if defined (BOARD_T5_EPAPER)
