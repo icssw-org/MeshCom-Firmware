@@ -238,6 +238,8 @@ void init_flash(void)
 
     meshcom_settings.node_gpsbaud = preferences.getUInt("node_gpsbaud", 38400);
 
+    meshcom_settings.node_cleanflash = preferences.getUInt("node_cflash", 0);
+
     // Network Mode wifi/eth
     meshcom_settings.node_netmode = preferences.getUChar("node_netmode", 0);
 
@@ -486,6 +488,8 @@ void save_settings(void)
     preferences.putString("node_fwversion", strVar); 
 
     preferences.putULong("node_gpsbaud", meshcom_settings.node_gpsbaud);
+
+    preferences.putULong("node_cflash", meshcom_settings.node_cleanflash);
 
     // Network Mode wifi/eth
     preferences.putUChar("node_netmode", meshcom_settings.node_netmode);

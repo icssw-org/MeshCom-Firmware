@@ -407,7 +407,7 @@ void nrf52setup()
 	// Get LoRa parameter
 	init_flash();
 
-    if(meshcom_settings.node_fversion != FLASH_VERSION)
+    if(meshcom_settings.node_fversion != FLASH_VERSION || meshcom_settings.node_cleanflash == 1)
     {
         Serial.printf("[INIT]...FLASH cleared new version %i\n", FLASH_VERSION);
 
@@ -420,6 +420,7 @@ void nrf52setup()
 
     meshcom_settings.node_fversion = FLASH_VERSION;
     meshcom_settings.node_mversion = MODUL_HARDWARE;
+    meshcom_settings.node_cleanflash = 0;
     snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%-4.4s%-1.1s", SOURCE_VERSION, SOURCE_VERSION_SUB);
     save_settings();
 

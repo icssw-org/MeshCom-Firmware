@@ -163,6 +163,8 @@ struct s_meshcom_settings
 
 	unsigned long node_gpsbaud = 38400;
 
+	int node_cleanflash = 0;
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;

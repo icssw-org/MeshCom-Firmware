@@ -490,6 +490,30 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"cleanflash") == 0)
+    {
+        meshcom_settings.node_cleanflash = 1;
+        
+        save_settings();
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--reboot now");
+        }
+
+        delay(2000);
+        
+        #ifdef ESP32
+            ESP.restart();
+        #endif
+        
+        #if defined NRF52_SERIES
+            NVIC_SystemReset();     // resets the device
+        #endif
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"reboot") == 0)
     {
         if(ble)
