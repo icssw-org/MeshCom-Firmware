@@ -211,6 +211,8 @@ void savePathPersistence()
 
 void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 {
+    struct mheardLine mheardLine_save;
+
     String strYear = mheardLine.mh_date.substring(0, 4);
     if(strYear.toInt() < 2025)
         return;
@@ -268,12 +270,21 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     
     mheardEpoch[ipos] = getUnixClock();
 
+    // REP action
+    decodeMHeard(mheardBuffer[ipos], mheardLine_save);
+
     // da bei dem eintreffen von updateMHeard kein NCOUNT dabei ist
     // wird dieser aus dem bestehenden Tabellen-Wert  mheardNCount[]; ergänzt
     if(bNew)
         mheardLine.mh_ncount = 0;
     else
-        mheardLine.mh_ncount = mheardNCount[ipos];
+    {
+        mheardLine.mh_ncount = mheardLine_save.mh_ncount;
+    }
+
+    // Distance only on new calculation
+    if(mheardLine.mh_dist < 0)
+        mheardLine.mh_dist = mheardLine_save.mh_dist;
 
     char cBuffer[sizeof(mheardBuffer[ipos])];
     snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
@@ -382,7 +393,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
                         mheardNCount[imh] = mheardLine.mh_path_payload.substring(1, ipos).toInt();
                         mheardLine.mh_ncount = mheardNCount[imh];
 
-                        // REP aktion
+                        // REP action
                         decodeMHeard(mheardBuffer[imh], mheardLine_save);
 
                         if(bDisplayCont)

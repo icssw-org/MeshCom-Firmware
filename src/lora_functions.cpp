@@ -457,17 +457,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_date = getDateString();
                 mheardLine.mh_time = getTimeString();
                 mheardLine.mh_payload_type = aprsmsg.payload_type;
-                mheardLine.mh_dist = 0;
+                mheardLine.mh_dist = -1;
                 mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
                 mheardLine.mh_mesh = aprsmsg.msg_mesh;
                 mheardLine.mh_ncount = 0;
                 mheardLine.mh_path_payload = "";
 
-                // Mheard immer auch bei Hey
+                ///////////////////////////////////////////////
+                // MHeard
+                
+                // only on Position
+                if(aprsmsg.payload_type == '!')
                 {
-                    ///////////////////////////////////////////////
-                    // MHeard
-                    
                     // check MHeard exists already
                     int ipos=-1;
                     double lat=0.0;
@@ -520,28 +521,28 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         }
                     }
 
-                    #ifndef BOARD_T5_EPAPER
+                    #if not defined(BOARD_T5_EPAPER)
                     if(lat != 0.0 && lon != 0.0 && meshcom_settings.node_lat != 0.0 && meshcom_settings.node_lon != 0.0)
                     {
                         mheardLine.mh_dist = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
                     }
-
-                    updateMheard(mheardLine, isPhoneReady);
-                    
                     #endif
-                    // last heard LoRa MeshCom-Packet
-                    lastHeardTime = millis();
-
-                    // print aprs message
-                    if(bLORADEBUG && bDisplayInfo)
-                    {
-                        printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
-                        Serial.printf("\n");
-                        bNewLine=true;
-                    }
-                    //
-                    ///////////////////////////////////////////////
                 }
+
+                updateMheard(mheardLine, isPhoneReady);
+                
+                // last heard LoRa MeshCom-Packet
+                lastHeardTime = millis();
+
+                // print aprs message
+                if(bLORADEBUG && bDisplayInfo)
+                {
+                    printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
+                    Serial.printf("\n");
+                    bNewLine=true;
+                }
+                //
+                ///////////////////////////////////////////////
 
                 if(aprsmsg.payload_type == '@')
                 {
