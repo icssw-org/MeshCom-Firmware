@@ -988,10 +988,11 @@ void esp32setup()
     #endif
 
     #if defined(BOARD_E22) || defined(BOARD_E220) || defined(BOARD_E22_S3)
-        // we have TXEN and RXEN Pin connected
-        radio.setRfSwitchPins(E22_RXEN, E22_TXEN);
+        #if defined(E22_RXEN) && defined(E22_TXEN)
+            radio.setRfSwitchPins(E22_RXEN, E22_TXEN);
+        #endif
     #endif
-
+    
     #if defined (BOARD_T5_EPAPER)
     //
     #elif defined (BOARD_T_DECK_PRO)
