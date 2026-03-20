@@ -3457,6 +3457,15 @@ int GetHeadingDifference(int heading1, int heading2)
 
 unsigned int setSMartBeaconing(double dlat, double dlon)
 {
+    // check TRACK Mode on
+    if(!bDisplayTrack)
+    {
+        if(bGPSDEBUG)
+            Serial.printf("%s [POSINFO]...Stationary -> Suppressing drift (Rate: %is)\n", getTimeString().c_str(), POSINFO_INTERVAL);
+        
+        return POSINFO_INTERVAL;
+    }
+
     unsigned int gps_send_rate = posinfo_last_rate;  // seconds
 
     posinfo_lat = dlat;
@@ -3501,7 +3510,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     {
         if(distance < 100)
         {
-            posinfo_last_rate = 1800;
+            posinfo_last_rate = POSINFO_INTERVAL;
 
             if(bGPSDEBUG)
                 Serial.printf("%s [POSINFO]...STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", getTimeString().c_str(), speed_mps, distance, (int)posinfo_last_rate);
@@ -3565,13 +3574,13 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     if(WiFi.status() == WL_CONNECTED && speed_mps < 1.0)
     {
         // Relax update rate significantly if on WiFi and not moving
-        gps_send_rate = 1800; // 30 minutes
+        gps_send_rate = POSINFO_INTERVAL; // 30 minutes
         
         // Also suppress distance triggers unless very large (e.g. moving to another building)
         if(distance < 200.0) 
         {
-            if(bGPSDEBUG) Serial.printf("%s [POSINFO]...WiFi connected & Stationary -> Suppressing drift (Rate: 1800s)\n", getTimeString().c_str());
-            return 1800;
+            if(bGPSDEBUG) Serial.printf("%s [POSINFO]...WiFi connected & Stationary -> Suppressing drift (Rate: %i)\n", getTimeString().c_str(), POSINFO_INTERVAL);
+            return POSINFO_INTERVAL;
         }
     }
     #endif

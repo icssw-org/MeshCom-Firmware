@@ -116,9 +116,6 @@ unsigned int GPS_Loop() {
         }
     }
 
-    if(bGPSDEBUG)
-        Serial.printf("[GPS ]... char read:%i\n", gps.charsProcessed());
-
     // GPS-Daten in unsere Struktur uebertragen
     gpsData.valid      = gps.location.isValid();
     gpsData.latitude   = gps.location.lat();
@@ -144,10 +141,20 @@ unsigned int GPS_Loop() {
     posinfo_satcount = gpsData.satellites;
     posinfo_hdop = gpsData.hdop;
 
-    if(GPS_HasFix())
-    {
-        posinfo_fix = true;
+    bool has_gnss_location=false;
 
+    if ((posinfo_hdop < 6.0) && (posinfo_satcount > 5))
+    {
+        has_gnss_location = true;
+        posinfo_fix = true;
+    }
+    else
+    {
+        posinfo_fix = false;
+    }
+    
+    if (GPS_HasFix() && has_gnss_location)
+    {
         // time -> variables
         if(gpsData.year > 2023)
         {
@@ -209,8 +216,6 @@ unsigned int GPS_Loop() {
     }
     else
     {
-        posinfo_fix = false;
-
         posinfo_direction = 0;
         posinfo_distance = 0;
         posinfo_age = 0;

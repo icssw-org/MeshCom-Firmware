@@ -2143,7 +2143,22 @@ unsigned int getGPS(void)
     if(bGPSDEBUG)
         Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, tinyGPSPlus.satellites.value(), tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
 
-    if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 800)
+    posinfo_satcount = tinyGPSPlus.satellites.value();
+    posinfo_hdop = tinyGPSPlus.hdop.value();
+
+    bool has_gnss_location=false;
+
+    if ((tinyGPSPlus.hdop.value() < 300) && (tinyGPSPlus.satellites.value() > 5))
+    {
+        has_gnss_location = true;
+        posinfo_fix = true;
+    }
+    else
+    {
+        posinfo_fix = false;
+    }
+    
+    if (newData && has_gnss_location)
     {
         double dlat, dlon;
         
@@ -2168,10 +2183,6 @@ unsigned int getGPS(void)
         MyClock.setCurrentTime(meshcom_settings.node_utcoff, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
         snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
 
-        posinfo_satcount = tinyGPSPlus.satellites.value();
-        posinfo_hdop = tinyGPSPlus.hdop.value();
-        posinfo_fix = true;
-
         if(bGPSDEBUG)
         {
             Serial.printf("INT: LAT:%lf%c LON:%lf%c ALT:%i (%i-%02i-%02i %02i:%02i:%02i)\n", meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
@@ -2179,21 +2190,10 @@ unsigned int getGPS(void)
             meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
         }
 
-
-        posinfo_satcount = tinyGPSPlus.satellites.value();
-        posinfo_hdop = tinyGPSPlus.hdop.value();
-        posinfo_fix = true;
-
         return setSMartBeaconing(dlat, dlon);
     }
-    else
-    {
-        posinfo_fix = false;
-        posinfo_satcount = 0;
-        posinfo_hdop = 0;
-    }
 
-    return 0;   // no GPS
+    return POSINFO_INTERVAL;   // no GPS
 }
 
 void checkSerialCommand(void)
