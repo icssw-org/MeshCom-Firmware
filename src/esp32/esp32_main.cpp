@@ -985,9 +985,13 @@ void esp32setup()
         digitalWrite(LORA_RST, LOW);
         delay(200);
         digitalWrite(LORA_RST, HIGH);
+    #endif
 
-        // we have TXEN and RXEN Pin connected
-        radio.setRfSwitchPins(E22_RXEN, E22_TXEN);
+    #if defined(BOARD_T_ETH_ELITE)
+        // no RF switch on this board
+    #else
+       // we have TXEN and RXEN Pin connected
+       radio.setRfSwitchPins(E22_RXEN, E22_TXEN);
     #endif
 
     #if defined (BOARD_T5_EPAPER)
@@ -1498,6 +1502,7 @@ void esp32setup()
     Serial.println("==============");
     Serial.println("CLIENT STARTED");
     Serial.println("==============");
+    delay(500);
 
     ///////////////////////////////////////////////////////
     // WIFI
@@ -2100,7 +2105,8 @@ void esp32loop()
     }
 
     // check WiFI connected with Ping every 30 sec
-    if ((wifi_active_timer + 30000) < millis())
+    if (meshcom_settings.node_netmode == 0 &&
+    (wifi_active_timer + 30000) < millis())
     {
         if(!checkWifiPing())
         {
