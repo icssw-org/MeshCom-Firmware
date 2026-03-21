@@ -329,6 +329,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         Serial.printf("[MC-DBG] CAD_ABORT_BY_RX\n");
     if(bLORADEBUG)
         Serial.printf("[MC-DBG] RX_RESTART_EARLY src=OnRxDone\n");
+    // Log RX_LISTEN -> RX_PROCESS here (not in OnHeaderDetect ISR where
+    // Serial.printf is unreliable on nRF52)
+    if(bLORADEBUG)
+        Serial.printf("[MC-SM] RX_LISTEN -> RX_PROCESS rc=0\n");
     #endif
 
     // only for Test T5_EPAPER
