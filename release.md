@@ -7,6 +7,54 @@ Kein On-Air-Change — alte Firmware empfaengt alle Pakete korrekt.
 
 ---
 
+## v4.35p_20260321_fix1: CAD-Spinloop-Fix und RX-Error-Diagnose (2026-03-21)
+
+### CAD-Spinloop-Fix (nRF52 und ESP32)
+
+Wenn `doTX()` kein sendefaehiges Paket im Ringpuffer fand (z.B. Retransmit-Slot
+mit Status SENT), wurde auf beiden Plattformen eine Endlosschleife ausgeloest:
+CAD-Scan → Channel frei → doTX() false → sofort naechster CAD-Scan (~100-200ms Zyklus).
+Waehrend dieser Schleife war das Radio im Standby/CAD-Modus und konnte nicht empfangen.
+
+**Symptome**: Hunderte aufeinanderfolgende CAD-Scans (CTCTCTCTC im Monitor),
+OnRxError-Haeufung, RADIO_SILENT-Alarme (bis 51s Funkstille), wachsende TX-Queue.
+
+**Root Cause**: `doTX()` gibt `false` zurueck wenn `getNextTxSlot()` keinen Slot
+mit Status READY/DONE findet. Der Ringpuffer erscheint nicht-leer (`iWrite != iRead`),
+weil Retransmit-Slots ihre Laenge behalten (fuer Wiederholungs-Tracking).
+
+**Fix**:
+- `src/nrf52/nrf52_main.cpp`: Rueckgabewert von `doTX()` pruefen. Bei `false`
+  Radio in RX-Modus zuruecksetzen und CSMA-Timeout starten.
+- `src/esp32/esp32_main.cpp`: `iReceiveTimeOutTime = millis()` nach `doTX()` false
+  setzen, damit der Guard (`iReceiveTimeOutTime == 0`) den sofortigen Wiedereintritt
+  in den TX-Pfad verhindert.
+
+### Erweiterte RX-Error-Diagnose
+
+- **nRF52/RAK**: `OnRxError` loggt jetzt RSSI und SNR aus dem SX1262 `RadioPktStatus`
+  Register: `[MC-DBG] RX_ERROR rssi=X snr=Y ts=Z`
+- **ESP32/Heltec**: `OnRxError` Logzeile hinzugefuegt bei CRC- und sonstigen Fehlern,
+  damit der Serial-Monitor diese konsistent zaehlen kann.
+
+### Serial-Monitor Verbesserungen (`tools/serial_monitor.py`)
+
+- **RADIO_SILENT False-Positive behoben**: Monitor zaehlt jetzt auch Transitionen
+  VON `RX_PROCESS` (nicht nur nach `RX_PROCESS`), sodass aktiver Empfang via
+  `RX_RESTART_EARLY` korrekt als "Channel busy" statt "Radio silent" erkannt wird.
+- **RX-Error-Alert entfernt**: `OnRxError` erzeugt keinen roten `[ALERT]`-Text mehr.
+  Das `x`-Zeichen im Statusband bleibt, Fehler werden weiterhin im Summary gezaehlt.
+  CRC-Fehler durch schwache Signale oder Kollisionen sind normales RF-Verhalten.
+
+### Betroffene Dateien
+
+- `src/nrf52/nrf52_main.cpp` — CAD-Spinloop-Fix, doTX()-Rueckgabewert pruefen
+- `src/esp32/esp32_main.cpp` — CAD-Spinloop-Fix, OnRxError-Log, iReceiveTimeOutTime
+- `src/lora_functions.cpp` — OnRxError RSSI/SNR-Diagnose fuer RAK
+- `tools/serial_monitor.py` — RADIO_SILENT Fix, RX-Error-Alert entfernt
+
+---
+
 ## Upstream-Sync 2026-03-21 (oe1kbc_v4.35p)
 
 Rebase auf aktuellen upstream. Alle lokalen Commits wurden upstream uebernommen

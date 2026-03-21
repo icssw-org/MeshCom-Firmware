@@ -240,7 +240,7 @@ class Monitor:
             self.last_transition = now
             self.counters["transitions"] += 1
             self.total["transitions"] += 1
-            if to_st == "RX_PROCESS":
+            if to_st == "RX_PROCESS" or from_st == "RX_PROCESS":
                 self.rx_process_since_last_timeout += 1
             ch = "!" if rc != 0 else STATE_CHAR.get(to_st, "?")
             self._indicator(ch)
@@ -253,7 +253,6 @@ class Monitor:
                 self.total[counter_name] += 1
                 if counter_name == "rx_errors":
                     self._indicator("x")
-                    self._alert(f"RX ERROR detected: {line.strip()}")
                 if counter_name == "tx_timeouts":
                     self._indicator("!")
                     self._alert(f"TX TIMEOUT: {line.strip()}")

@@ -1177,14 +1177,28 @@ void OnRxError(void)
     #endif
 
     if(bLORADEBUG)
+    {
         Serial.printf("OnRxError\n");
+        #if defined BOARD_RAK4630
+        {
+            // RadioPktStatus is populated by SX126xGetPacketStatus() in
+            // RadioBgIrqProcess before calling this callback (for CRC errors).
+            // For header errors the values may be stale — still useful context.
+            extern PacketStatus_t RadioPktStatus;
+            Serial.printf("[MC-DBG] RX_ERROR rssi=%d snr=%d ts=%lu\n",
+                RadioPktStatus.Params.LoRa.RssiPkt,
+                RadioPktStatus.Params.LoRa.SnrPkt,
+                millis());
+        }
+        #endif
+    }
 
     {
         unsigned long _rx_s = ch_util_rx_start.exchange(0);
         if(_rx_s > 0)
             ch_util_rx_accum.fetch_add(millis() - _rx_s);
     }
-        
+
     is_receiving = false;
 }
 
@@ -1786,6 +1800,7 @@ void OnTxDone(void)
         }
 
         Radio.Rx(RX_TIMEOUT_VALUE);
+        iReceiveTimeOutTime = millis();  // force full CSMA timeout before next TX
         csma_reset();
 
         if(bLORADEBUG)
