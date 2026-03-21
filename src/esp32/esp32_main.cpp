@@ -236,6 +236,7 @@ uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Ken
 
 // Queue for sending config jsons to phone
 bool config_to_phone_prepare = false;
+bool conffin_sent = false;
 unsigned long config_to_phone_prepare_timer = 0;
 unsigned long config_to_phone_datetime_timer = 0;
 const uint8_t json_configs_cnt = 10;
@@ -252,6 +253,7 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     {
         deviceConnected = true;
         config_to_phone_prepare = true;
+        conffin_sent = false;
 
         Serial.printf("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
         pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
@@ -2553,24 +2555,22 @@ void esp32loop()
                         ble_wait = millis();
                     }
                 }
-                else
+                else if (toPhoneWrite != toPhoneRead)
                 {
-                    // check if we have messages for BLE to send
-                    if (toPhoneWrite != toPhoneRead)
+                    // wait for each message to send to phone
+                    if ((ble_wait + 400) < millis())
                     {
-                        // wait for each message to send to phone
-                        if ((ble_wait + 400) < millis())
-                        {
-                            sendToPhone();
+                        sendToPhone();
 
-                            ble_wait = millis();
-                        }
+                        ble_wait = millis();
                     }
                 }
-
-
-                // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-                commandAction((char*)"--conffin", isPhoneReady, true);
+                else if (!conffin_sent)
+                {
+                    // both queues empty — send config finish once
+                    commandAction((char*)"--conffin", isPhoneReady, true);
+                    conffin_sent = true;
+                }
 
                 iPhoneState = 0;
             }

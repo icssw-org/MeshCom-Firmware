@@ -29,6 +29,7 @@ extern uint8_t txt_msg_len_phone;
 extern bool bInitDisplay;
 extern uint8_t dmac[6];
 extern bool config_to_phone_prepare;
+extern bool conffin_sent;
 
 // Create device name
 char helper_string[256] = {0};
@@ -194,6 +195,7 @@ void connect_callback(uint16_t conn_handle)
 
 	isPhoneReady = 1;
 	config_to_phone_prepare = true;
+	conffin_sent = false;
 	g_ble_uart_is_connected = true;
 
 }

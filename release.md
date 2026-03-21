@@ -1,9 +1,28 @@
-# Release Notes -- MeshCom Firmware v4.35* (2026-03-19)
+# Release Notes -- MeshCom Firmware v4.35* (2026-03-21)
 
 Nachrichtenprioritaet, Trickle-HEY, erweiterte Statistik,
 APRS-Parser Hardening und diverse Bugfixes auf Basis von `oe1kbc_v4.35p`.
 
 Kein On-Air-Change — alte Firmware empfaengt alle Pakete korrekt.
+
+---
+
+## Upstream-Sync 2026-03-21 (oe1kbc_v4.35p)
+
+Rebase auf aktuellen upstream. Alle lokalen Commits wurden upstream uebernommen
+(inkl. MHeard RSSI/SNR Fix via PR #785, mit zusaetzlichen Korrekturen vom Maintainer).
+
+Neue Aenderungen aus upstream:
+- BLE connect confirmation nach Nachrichten-Empfang
+- BLE connect confirmation allgemein
+- T-Deck Fonts und Symbole ueberarbeitet
+- Neuer Befehl `cleanflash` / `clearflash`
+- GPS HDOP Anpassung
+- MHeard: Distanz nur bei Berechnung setzen (Maintainer-Fix zu unserem PR)
+- MHeard: HEY-Distanz aus MHeard-Buffer (Maintainer-Fix zu unserem PR)
+- Merge PR #785 (unser MHeard RSSI/SNR Fix)
+
+Unsere uebernommenen Commits: alle (Branch ist jetzt identisch mit upstream)
 
 ---
 
