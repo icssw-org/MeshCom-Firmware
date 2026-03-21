@@ -1786,6 +1786,7 @@ void OnTxDone(void)
         }
 
         Radio.Rx(RX_TIMEOUT_VALUE);
+        iReceiveTimeOutTime = millis();  // force full CSMA timeout before next TX
         csma_reset();
 
         if(bLORADEBUG)
