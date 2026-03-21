@@ -1228,15 +1228,27 @@ extern bool btimeClient;
                     if(_cad_dc && bLORADEBUG)
                         Serial.printf("[MC-DBG] CAD_FALSE_POSITIVE\n");
                     // Channel free — transmit
-                    if(bLORADEBUG)
-                    {
-                        Serial.printf("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
-                        Serial.printf("[MC-DBG] CAD_FREE attempt=%d\n", cad_attempt);
-                    }
-
-                    ch_util_tx_start = millis();
                     csma_reset();
-                    doTX();
+                    if(doTX())
+                    {
+                        ch_util_tx_start = millis();
+                        if(bLORADEBUG)
+                        {
+                            Serial.printf("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
+                            Serial.printf("[MC-DBG] CAD_FREE attempt=%d\n", cad_attempt);
+                        }
+                    }
+                    else
+                    {
+                        // doTX() returned false (no ready slot) — restore RX
+                        // to prevent CAD spin loop where radio stays in standby
+                        if(bLORADEBUG)
+                            Serial.printf("[MC-DBG] CAD_FREE_NO_TX restoring RX\n");
+                        taskENTER_CRITICAL();
+                        Radio.Rx(RX_TIMEOUT_VALUE);
+                        taskEXIT_CRITICAL();
+                        iReceiveTimeOutTime = millis();
+                    }
                 }
                 else if(!_cad_dc)
                 {

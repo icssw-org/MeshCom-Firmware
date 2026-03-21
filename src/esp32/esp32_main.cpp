@@ -2205,15 +2205,17 @@ void esp32loop()
                         disablePATransmit();
                         #endif
 
-                        // doTX() returned false (empty queue race) — restore RX
+                        // doTX() returned false (no ready slot) — restore RX
+                        // and set timeout to prevent CAD spin loop
                         if(bLORADEBUG)
-                            Serial.printf("[MC-SM] TX_PREPARE -> IDLE rc=0\n");
+                            Serial.printf("[MC-DBG] CAD_FREE_NO_TX restoring RX\n");
                         bEnableInterruptTransmit = false;
                         radio.clearPacketSentAction();
 
                         bEnableInterruptReceive = true;
                         radio.setPacketReceivedAction(setFlagReceive);
                         radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+                        iReceiveTimeOutTime = millis();
                     }
                 }
                 else
@@ -3410,6 +3412,9 @@ int checkRX(bool bRadio)
     else
     if (state == RADIOLIB_ERR_CRC_MISMATCH)
     {
+        if(bLORADEBUG)
+            Serial.printf("OnRxError\n");
+
         // RSSI/SNR/FreqError VOR RX-Restart sichern (Register werden ungueltig)
         int16_t saved_crc_rssi = (int16_t)radio.getRSSI();
         int8_t  saved_crc_snr  = (int8_t)radio.getSNR();
@@ -3446,6 +3451,9 @@ int checkRX(bool bRadio)
     }
     else
     {
+        if(bLORADEBUG)
+            Serial.printf("OnRxError\n");
+
         // RX-Restart auch bei unbekannten Fehlern -- ohne dies bleibt
         // das Radio im Standby (BLINDSPOT fuer Empfang!)
         int16_t saved_err_rssi = (int16_t)radio.getRSSI();
