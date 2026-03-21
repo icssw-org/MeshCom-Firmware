@@ -277,6 +277,16 @@ extern "C" {
 #define LV_SYMBOL_DUMMY           "\xEF\xA3\xBF"
 #endif
 
+#if !defined LV_SYMBOL_HEADPHONE
+/** Invalid symbol at (U+F8FF). If written before a string then `lv_img` will show it as a label*/
+#define LV_SYMBOL_HEADPHONE       "\xF0\x9F\x8E\xA7"
+#endif
+
+#if !defined LV_SYMBOL_POSITION
+/** Invalid symbol at (U+F8FF). If written before a string then `lv_img` will show it as a label*/
+#define LV_SYMBOL_POSITION       "\xE2\x8C\x96"
+#endif
+
 /*
  * The following list is generated using
  * cat src/font/lv_symbol_def.h | sed -E -n 's/^#define\s+LV_(SYMBOL_\w+).*".*$/    _LV_STR_\1,/p'
@@ -344,6 +354,8 @@ enum {
     _LV_STR_SYMBOL_SD_CARD,
     _LV_STR_SYMBOL_NEW_LINE,
     _LV_STR_SYMBOL_DUMMY,
+    _LV_STR_SYMBOL_HEADPHONE,
+    _LV_STR_SYMBOL_POSITION
 };
 
 #ifdef __cplusplus

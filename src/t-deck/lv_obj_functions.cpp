@@ -440,6 +440,7 @@ void setDisplayLayout(lv_obj_t *parent)
     static lv_style_t bg_style;
     lv_style_init(&bg_style);
     lv_style_set_text_color(&bg_style, lv_color_white());
+    lv_style_set_text_font(&bg_style, &lv_font_montserrat_14);
     //lv_style_set_bg_img_src(&bg_style, &image);
     lv_style_set_bg_opa(&bg_style, LV_OPA_100);
 
@@ -457,8 +458,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_clear_flag(tab_menu_header, LV_OBJ_FLAG_SCROLLABLE);
 
     tab_menu_button = lv_btn_create(tab_menu_header);
-    lv_obj_set_size(tab_menu_button, 40, header_height - 4);
-    lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 8, 0);
+    lv_obj_set_size(tab_menu_button, 32, header_height - 4);
+    lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_add_event_cb(tab_menu_button, tab_menu_button_event_cb, LV_EVENT_CLICKED, NULL);
     lv_color_t header_blue = lv_palette_main(LV_PALETTE_BLUE_GREY); //ex LV_PALETTE_BLUE
     lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN);
@@ -467,12 +468,13 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_radius(tab_menu_button, 4, LV_PART_MAIN);
 
     tab_menu_icon_label = lv_label_create(tab_menu_button);
-    lv_label_set_text(tab_menu_icon_label, LV_SYMBOL_LIST);
+    lv_label_set_text(tab_menu_icon_label, LV_SYMBOL_BARS);
+    lv_obj_set_style_text_font(tab_menu_icon_label, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_set_style_text_color(tab_menu_icon_label, lv_palette_main(LV_PALETTE_LIGHT_GREEN), LV_PART_MAIN);
     lv_obj_center(tab_menu_icon_label);
 
     tab_kbl_button = lv_btn_create(tab_menu_header);
-    lv_obj_set_size(tab_kbl_button, 40, header_height - 4);
+    lv_obj_set_size(tab_kbl_button, 32, header_height - 4);
     lv_obj_align_to(tab_kbl_button, tab_menu_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
     lv_obj_add_event_cb(tab_kbl_button, tab_kbl_button_event_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_set_style_bg_color(tab_kbl_button, header_blue, LV_PART_MAIN);
@@ -482,11 +484,12 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_kbl_icon_label = lv_label_create(tab_kbl_button);
     lv_label_set_text(tab_kbl_icon_label, LV_SYMBOL_KEYBOARD);
+    lv_obj_set_style_text_font(tab_kbl_icon_label, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_kbl_icon_label);
 
     tab_standby_button = lv_btn_create(tab_menu_header);
-    lv_obj_set_size(tab_standby_button, 40, header_height - 4);
+    lv_obj_set_size(tab_standby_button, 32, header_height - 4);
     lv_obj_align_to(tab_standby_button, tab_kbl_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
     lv_obj_add_event_cb(tab_standby_button, tab_standby_button_event_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_set_style_bg_color(tab_standby_button, header_blue, LV_PART_MAIN);
@@ -496,45 +499,53 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_standby_icon_label = lv_label_create(tab_standby_button);
     lv_label_set_text(tab_standby_icon_label, LV_SYMBOL_EYE_OPEN);
+    lv_obj_set_style_text_font(tab_standby_icon_label, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_standby_icon_label);
 
     header_time_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_time_label, "--:--");
+    lv_obj_set_style_text_font(header_time_label, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_label_set_long_mode(header_time_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_time_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align(header_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     header_batt_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_label, "0%");
+    lv_obj_set_style_text_font(header_batt_label, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_batt_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
-    lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -22, 0);
+    lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -35, 0);
 
     header_batt_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_icon, LV_SYMBOL_BATTERY_EMPTY);
+    lv_obj_set_style_text_font(header_batt_icon, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_align_to(header_batt_icon, header_batt_label, LV_ALIGN_OUT_LEFT_MID, -4, 0);
 
     header_sat_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_sat_label, "0");
+    lv_obj_set_style_text_font(header_sat_label, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_sat_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align_to(header_sat_label, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     header_sat_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_sat_icon, LV_SYMBOL_GPS); // Symbol stammt von WpZoom (CC BY-SA 3.0, siehe README)
+    lv_obj_set_style_text_font(header_sat_icon, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_align_to(header_sat_icon, header_sat_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
     
     /* wifi + bluetooth icons (left of battery) */
     header_wifi_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+    lv_obj_set_style_text_font(header_wifi_icon, &lv_font_montserrat_18, LV_PART_MAIN);
     // Slightly increase left offset so wifi icon sits closer to battery icon
-    lv_obj_align_to(header_wifi_icon, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
+    lv_obj_align_to(header_wifi_icon, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -9, 0);
 
     header_bt_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_bt_icon, LV_SYMBOL_BLUETOOTH);
+    lv_obj_set_style_text_font(header_bt_icon, &lv_font_montserrat_18, LV_PART_MAIN);
     // Match spacing with wifi icon (leave a comfortable gap)
-    lv_obj_align_to(header_bt_icon, header_wifi_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
+    lv_obj_align_to(header_bt_icon, header_wifi_icon, LV_ALIGN_OUT_LEFT_MID, -7, 0);
 
     /*header_locator_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_locator_label, "JJ00AAAA");
@@ -565,8 +576,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t *t3 = lv_tabview_add_tab(tv, "POS");
     lv_obj_t *t7 = lv_tabview_add_tab(tv, LV_SYMBOL_IMAGE);
     lv_obj_t *t6 = lv_tabview_add_tab(tv, LV_SYMBOL_GPS);
-    lv_obj_t *t4 = lv_tabview_add_tab(tv, "MHD");
-    lv_obj_t *t8 = lv_tabview_add_tab(tv, "PATH");
+    lv_obj_t *t4 = lv_tabview_add_tab(tv, LV_SYMBOL_DIRECTORY);
+    lv_obj_t *t8 = lv_tabview_add_tab(tv, LV_SYMBOL_LIST);
     lv_obj_t *t1 = lv_tabview_add_tab(tv, LV_SYMBOL_SETTINGS);
 
     lv_obj_set_scroll_dir(t2, LV_DIR_VER);
@@ -598,9 +609,9 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_border_color(&tr_style, lv_color_black());
     lv_style_set_line_width(&tr_style, 4);
 
-
     static lv_style_t ta_input_style;
     lv_style_init(&ta_input_style);
+    lv_style_set_text_font(&ta_input_style, &lv_font_montserrat_12);
     lv_style_set_text_color(&ta_input_style, lv_color_black()); // BLAU lv_color_make(0x1C, 0x73, 0xFF));
     lv_style_set_bg_opa(&ta_input_style, LV_OPA_100);
     lv_style_set_bg_color(&ta_input_style, lv_color_white());
@@ -629,6 +640,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_right(&cell_style1, 2);
     lv_style_set_bg_color(&cell_style1, lv_color_white());
     lv_style_set_text_color(&cell_style1, lv_color_black());
+    lv_style_set_text_font(&cell_style1, &lv_font_montserrat_12);
     lv_style_set_border_width(&cell_style1, 1);
     lv_style_set_border_color(&cell_style1, lv_color_black());
     lv_style_set_border_side(&cell_style1, LV_BORDER_SIDE_FULL);
@@ -640,6 +652,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_right(&cell_style2, 2);
     lv_style_set_bg_color(&cell_style2, lv_color_white());
     lv_style_set_text_color(&cell_style2, lv_color_black());
+    lv_style_set_text_font(&cell_style2, &lv_font_montserrat_12);
     lv_style_set_border_width(&cell_style2, 1);
     lv_style_set_border_color(&cell_style2, lv_color_black());
     lv_style_set_border_side(&cell_style2, LV_BORDER_SIDE_FULL);
@@ -666,7 +679,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_width(setup_version_label, 100);
     lv_obj_set_style_text_align(setup_version_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     char sv[50];
-    sprintf(sv, "MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+    sprintf(sv, "MC %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
     lv_label_set_text(setup_version_label, sv);
 
     // Locator
@@ -690,7 +703,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_callsign_label = lv_label_create(setup_line_callsign);
     lv_obj_align(setup_callsign_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_callsign_label, 65);
-    lv_label_set_text(setup_callsign_label, "Callsign: ");
+    lv_label_set_text(setup_callsign_label, "Callsign ");
     lv_obj_set_style_text_align(setup_callsign_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_callsign = lv_textarea_create(setup_line_callsign);
@@ -768,7 +781,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_name_label = lv_label_create(setup_line_aprs);
     lv_obj_align_to(setup_name_label, dropdown_aprs, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
     lv_obj_set_width(setup_name_label, 50);
-    lv_label_set_text(setup_name_label, "Name: ");
+    lv_label_set_text(setup_name_label, "Name ");
     lv_obj_set_style_text_align(setup_name_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_name = lv_textarea_create(setup_line_aprs);
@@ -792,7 +805,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_comment_label = lv_label_create(setup_line_aprs2);
     lv_obj_align(setup_comment_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_comment_label, 75);
-    lv_label_set_text(setup_comment_label, "Comment: ");
+    lv_label_set_text(setup_comment_label, "APRS-Txt ");
     lv_obj_set_style_text_align(setup_comment_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_comment = lv_textarea_create(setup_line_aprs2);
@@ -816,7 +829,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_lat_label = lv_label_create(setup_line_location);
     lv_obj_align(setup_lat_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_lat_label, 75);
-    lv_label_set_text(setup_lat_label, "Latitude: ");
+    lv_label_set_text(setup_lat_label, "Lat ");
     lv_obj_set_style_text_align(setup_lat_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_lat = lv_textarea_create(setup_line_location);
@@ -850,7 +863,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_alt_label = lv_label_create(setup_line_location);
     lv_obj_align_to(setup_alt_label, setup_lat_c, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
     lv_obj_set_width(setup_alt_label, 30);
-    lv_label_set_text(setup_alt_label, "ALT: ");
+    lv_label_set_text(setup_alt_label, "Alt ");
     lv_obj_set_style_text_align(setup_alt_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
     setup_alt = lv_textarea_create(setup_line_location);
@@ -872,7 +885,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_lon_label = lv_label_create(setup_line_location2);
     lv_obj_align(setup_lon_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_lon_label, 75);
-    lv_label_set_text(setup_lon_label, "Longitude: ");
+    lv_label_set_text(setup_lon_label, "Long ");
     lv_obj_set_style_text_align(setup_lon_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_lon = lv_textarea_create(setup_line_location2);
@@ -925,7 +938,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_wifissid_label = lv_label_create(setup_line_wifi);
     lv_obj_align(setup_wifissid_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_wifissid_label, 75);
-    lv_label_set_text(setup_wifissid_label, "WIFI SSID: ");
+    lv_label_set_text(setup_wifissid_label, "WIFI SSID ");
     lv_obj_set_style_text_align(setup_wifissid_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_wifissid = lv_textarea_create(setup_line_wifi);
@@ -965,7 +978,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_wifipassword_label = lv_label_create(setup_line_wifi2);
     lv_obj_align(setup_wifipassword_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_wifipassword_label, 75);
-    lv_label_set_text(setup_wifipassword_label, "Password: ");
+    lv_label_set_text(setup_wifipassword_label, "Password ");
     lv_obj_set_style_text_align(setup_wifipassword_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_wifipassword = lv_textarea_create(setup_line_wifi2);
@@ -1008,7 +1021,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_groups_label = lv_label_create(setup_line_groups);
     lv_obj_align(setup_groups_label, LV_ALIGN_TOP_LEFT, 0, 10);
     lv_obj_set_width(setup_groups_label, 50);
-    lv_label_set_text(setup_groups_label, "Groups: ");
+    lv_label_set_text(setup_groups_label, "GRP ");
     lv_obj_set_style_text_align(setup_groups_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
     setup_grc0 = lv_textarea_create(setup_line_groups);
@@ -1138,7 +1151,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_txpower_label = lv_label_create(setup_line_timelora);
     lv_obj_align_to(setup_txpower_label, dropdown_country, LV_ALIGN_OUT_RIGHT_MID, 2, 0);
     lv_obj_set_width(setup_txpower_label, 60);
-    lv_label_set_text(setup_txpower_label, "TXPower: ");
+    lv_label_set_text(setup_txpower_label, "TXPwr: ");
     lv_obj_set_style_text_align(setup_txpower_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
     setup_txpower = lv_textarea_create(setup_line_timelora);
@@ -1200,7 +1213,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_event_cb(btn_noallmsg, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_noallmsg_label = lv_label_create(btn_noallmsg);
-    lv_label_set_text(btn_noallmsg_label, "No * Messages");
+    lv_label_set_text(btn_noallmsg_label, "No * MSG");
     lv_obj_center(btn_noallmsg_label);
 
     // MAP-SELECT TAB
@@ -1219,7 +1232,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_stone_label = lv_label_create(setup_line_starttone);
     lv_obj_align(setup_stone_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_stone_label, 75);
-    lv_label_set_text(setup_stone_label, "StartTone: ");
+    lv_label_set_text(setup_stone_label, "Starttone ");
     lv_obj_set_style_text_align(setup_stone_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_stone = lv_textarea_create(setup_line_starttone);
@@ -1242,7 +1255,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_mtone_label = lv_label_create(setup_line_messagetone);
     lv_obj_align(setup_mtone_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_mtone_label, 75);
-    lv_label_set_text(setup_mtone_label, "Msg.Tone: ");
+    lv_label_set_text(setup_mtone_label, "Msg.Tone ");
     lv_obj_set_style_text_align(setup_mtone_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_mtone = lv_textarea_create(setup_line_messagetone);
@@ -1269,7 +1282,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     // to Flash
     btn_persist_to_flash = lv_btn_create(setup_line_persist);
-    lv_obj_align_to(btn_persist_to_flash, setup_save_label, LV_ALIGN_OUT_RIGHT_TOP, 5, -10);
+    lv_obj_align_to(btn_persist_to_flash, setup_save_label, LV_ALIGN_OUT_RIGHT_TOP, 5, -2);
     lv_obj_set_size(btn_persist_to_flash, 75, 35);
 
     /* Make the button checkable (like a toggle) */
@@ -1309,7 +1322,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_event_cb(btn_persist_immediate, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_persist_immediate_label = lv_label_create(btn_persist_immediate);
-    lv_label_set_text(btn_persist_immediate_label, "immediate");
+    lv_label_set_text(btn_persist_immediate_label, "instant");
     lv_obj_center(btn_persist_immediate_label);
 
 
@@ -1380,6 +1393,8 @@ void setDisplayLayout(lv_obj_t *parent)
     ////////////////////////////////////////////////////////////////////////////
     // TEXT OUTPUT
     msg_list = lv_obj_create(t2);
+    lv_obj_add_style(msg_list, &cell_style, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_add_style(msg_list, &cell_style1, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_size(msg_list, 300, LV_VER_RES * 0.6);
     lv_obj_align(msg_list, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_opa(msg_list, LV_OPA_TRANSP, LV_PART_MAIN);

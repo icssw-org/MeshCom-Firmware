@@ -190,7 +190,7 @@ void initTDeck()
     snprintf(buf, 40, "MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
     addMessage(buf);
 
-    snprintf(buf, 40, "(build: %s / %s)\n", __DATE__, __TIME__);
+    snprintf(buf, 40, "(build: %s / %s)", __DATE__, __TIME__);
     addMessage(buf);
 }
 
