@@ -192,6 +192,7 @@ bool bHeyFirst = true;
 // Queue for sending config jsons to phone
 uint8_t iPhoneState = 0;
 bool config_to_phone_prepare = false;
+bool conffin_sent = false;
 unsigned long config_to_phone_prepare_timer = 0;
 unsigned long config_to_phone_datetime_timer = 0;
 const uint8_t json_configs_cnt = 9;
@@ -1457,19 +1458,18 @@ if (isPhoneReady == 1)
                 // send JSON config to phone after BLE connection
                 if (ComToPhoneWrite != ComToPhoneRead)
                 {
-                    sendComToPhone();   
+                    sendComToPhone();
                 }
-                else
+                else if (toPhoneWrite != toPhoneRead)
                 {
-                    // check if we have messages for BLE to send
-                    if (toPhoneWrite != toPhoneRead)
-                    {
-                        sendToPhone();   
-                    }
+                    sendToPhone();
                 }
-
-                // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-                commandAction((char*)"--conffin", isPhoneReady, true);
+                else if (!conffin_sent)
+                {
+                    // both queues empty — send config finish once
+                    commandAction((char*)"--conffin", isPhoneReady, true);
+                    conffin_sent = true;
+                }
 
                 iPhoneState = 0;
             }
