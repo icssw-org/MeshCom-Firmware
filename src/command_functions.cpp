@@ -4726,8 +4726,8 @@ void sendNodeSetting()
     nsetdoc["TXP"] = meshcom_settings.node_power;
     nsetdoc["MQRG"] = node_qrg;
     nsetdoc["MSF"] = meshcom_settings.node_sf;
-    nsetdoc["MCR"] = meshcom_settings.node_cr;
-    nsetdoc["MBW"] = meshcom_settings.node_bw;
+    nsetdoc["MCR"] = getCR();
+    nsetdoc["MBW"] = getBW();
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
     nsetdoc["NOALL"] = bNoMSGtoALL;
     nsetdoc["BLED"] = bUSER_BOARD_LED;
