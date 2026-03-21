@@ -30,6 +30,7 @@
 #define T_DECK_PRO 50
 #define TBEAM_1W 51
 #define HELTEC_V4 52
+#define ESP32_S3_T_ETH_ELITE 53
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 

@@ -10,17 +10,30 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define HAS_ETHERNET
 
 // Manteniamo compatibilità MeshCom
-#define MODUL_HARDWARE ESP32_S3_EBYTE_E22
+//#define MODUL_HARDWARE ESP32_S3_EBYTE_E22
+#define MODUL_HARDWARE ESP32_S3_T_ETH_ELITE
 
 // Frequenze
 #define RF_FREQUENCY 433.175000
 #define LORA_APRS_FREQUENCY 433.775000
 #define BOARD_COUNTRY 8
 
+// External Hardware
+#define ENABLE_BMX280
+//#define ENABLE_BMP390
+//#define ENABLE_AHT20
+//#define ENABLE_SHT21
+//#define ENABLE_BMX680
+//#define ENABLE_MCP23017
+//#define ENABLE_INA226
+//#define ENABLE_MC811
+//#define ENABLE_RTC
+//#define ENABLE_SOFTSER
+
 // GPS
 #define ENABLE_GPS
-#define GPS_RESET_MODE 1
 #define GPS_L76K
+#define GPS_RESET_MODE 1
 
 // Radio
 #define SX126x_V3
@@ -74,20 +87,14 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define ETH_MISO_PIN  47
 #define ETH_MOSI_PIN  21
 
-// E22 compatibility
-#define E22_RXEN -1
-#define E22_TXEN -1
+// E22 compatibility (required by MeshCom)
+//#define E22_RXEN -1
+//#define E22_TXEN -1
 
-#define E22_DIO1 8
-#define E22_BUSY 16
-#define E22_NRST 46
+// SX126x mapping (required by MeshCom)
+#define SX126x_IRQ   8      // ex E22_DIO1
+#define SX126x_GPIO  16     // ex E22_BUSY
+#define SX126x_RST   46
+#define SX126x_CS    SS
+#define LORA_RST     SX126x_RST
 
-#define E22_SCK SCK
-#define E22_NSS SS
-#define LORA_RST E22_NRST
-
-// SX126x mapping
-#define SX126x_CS    E22_NSS
-#define SX126x_IRQ   E22_DIO1
-#define SX126x_RST   E22_NRST
-#define SX126x_GPIO  E22_BUSY

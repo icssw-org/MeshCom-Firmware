@@ -486,14 +486,14 @@ void sendMeshComUDP()
 }
 
 
-  bool startNetwork()
-{
+ bool startNetwork()
+ {
   #if defined(HAS_ETHERNET)
 
       if(meshcom_settings.node_netmode == 1)
       {
           Serial.println("[NET] Ethernet mode");
-
+          
           if(!meshcom_settings.node_hasIPaddress)
               neth.initethDHCP();
 
