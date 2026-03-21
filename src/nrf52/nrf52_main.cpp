@@ -1468,6 +1468,9 @@ if (isPhoneReady == 1)
                     }
                 }
 
+                // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
+                commandAction((char*)"--conffin", isPhoneReady, true);
+
                 iPhoneState = 0;
             }
             else

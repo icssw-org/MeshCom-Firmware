@@ -255,9 +255,6 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
 
         Serial.printf("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
         pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
-
-        // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-        commandAction((char*)"--conffin", isPhoneReady, true);
     };
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
@@ -2570,6 +2567,10 @@ void esp32loop()
                         }
                     }
                 }
+
+
+                // set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
+                commandAction((char*)"--conffin", isPhoneReady, true);
 
                 iPhoneState = 0;
             }
