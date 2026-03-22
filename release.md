@@ -7,6 +7,16 @@ Kein On-Air-Change — alte Firmware empfaengt alle Pakete korrekt.
 
 ---
 
+## Upstream-Sync 2026-03-22 (oe1kbc_v4.35p)
+
+Rebase auf aktuellen upstream. Neue Aenderungen aus upstream:
+- 583782a v4.35p keyboard light switch
+- 9a573a2 Merge pull request #791 (DK5EN/v4.35p_prio)
+
+Unsere uebernommenen Commits: keine
+
+---
+
 ## Serial Monitor: Replay-Funktion (2026-03-22)
 
 ### Log-Replay (`--replay`)
