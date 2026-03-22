@@ -12,6 +12,7 @@ Usage:
     python3 tools/serial_monitor.py                          # NRF52/RAK (CDC-ACM)
     python3 tools/serial_monitor.py --no-dtr                 # ESP32/CP2102 (no reset)
     python3 tools/serial_monitor.py --port /dev/cu.usbserial-0001 --interval 300
+    python3 tools/serial_monitor.py --replay meshcom_2026-03-21.log  # replay log file
 """
 
 import argparse
@@ -25,7 +26,10 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-import serial
+try:
+    import serial
+except ImportError:
+    serial = None  # only needed for live mode, not replay
 
 
 # ---------------------------------------------------------------------------
@@ -127,10 +131,12 @@ STATE_CHAR = {
 
 
 class Monitor:
-    def __init__(self, summary_interval: int) -> None:
+    def __init__(self, summary_interval: int, clock=None, wallclock=None) -> None:
         self.summary_interval = summary_interval
-        self.start_time = time.monotonic()
-        self.interval_start = time.monotonic()
+        self._clock = clock or time.monotonic
+        self._wallclock = wallclock or datetime.now
+        self.start_time = self._clock()
+        self.interval_start = self._clock()
 
         # Counters (reset each interval)
         self.counters: dict[str, int] = defaultdict(int)
@@ -139,8 +145,8 @@ class Monitor:
 
         # State tracking
         self.current_state: str | None = None
-        self.state_since = time.monotonic()
-        self.last_transition = time.monotonic()
+        self.state_since = self._clock()
+        self.last_transition = self._clock()
         self.state_time: dict[str, float] = defaultdict(float)  # per interval
 
         # CAD false-positive streak
@@ -218,7 +224,7 @@ class Monitor:
             self._process(line)
 
     def _process(self, line: str) -> None:
-        now = time.monotonic()
+        now = self._clock()
 
         # State machine transitions
         m = RE_STATE_TRANSITION.search(line)
@@ -568,14 +574,14 @@ class Monitor:
 
     def _alert(self, msg: str) -> None:
         self._indicator_newline()
-        ts = datetime.now().strftime("%H:%M:%S")
+        ts = self._wallclock().strftime("%H:%M:%S")
         alert_line = f"[ALERT {ts}] {msg}"
         self.alerts.append(alert_line)
         print(f"\033[91m{alert_line}\033[0m", flush=True)
 
     def _resolved(self, msg: str) -> None:
         self._indicator_newline()
-        ts = datetime.now().strftime("%H:%M:%S")
+        ts = self._wallclock().strftime("%H:%M:%S")
         resolved_line = f"[RESOLVED {ts}] {msg}"
         self.alerts.append(resolved_line)
         print(f"\033[92m{resolved_line}\033[0m", flush=True)
@@ -584,7 +590,7 @@ class Monitor:
 
     def check_stuck_state(self) -> None:
         with self.lock:
-            now = time.monotonic()
+            now = self._clock()
             if self.current_state and (now - self.state_since) > STUCK_STATE_SECONDS:
                 if self.current_state not in ("RX_LISTEN",):
                     self._alert(
@@ -602,7 +608,7 @@ class Monitor:
     def print_summary(self) -> None:
         with self.lock:
             self._indicator_newline()
-            now = time.monotonic()
+            now = self._clock()
             elapsed = now - self.interval_start
             uptime = now - self.start_time
 
@@ -611,8 +617,8 @@ class Monitor:
                 self.state_time[self.current_state] += now - self.state_since
                 self.state_since = now
 
-            t_start = datetime.now() - timedelta(seconds=elapsed)
-            t_end = datetime.now()
+            t_start = self._wallclock() - timedelta(seconds=elapsed)
+            t_end = self._wallclock()
             h, rem = divmod(int(uptime), 3600)
             m, _ = divmod(rem, 60)
 
@@ -832,21 +838,114 @@ class Monitor:
 
             print("\n".join(lines), flush=True)
 
-            # reset interval counters
-            self.counters = defaultdict(int)
-            self.state_time = defaultdict(float)
-            self.alerts = []
-            self.wifi_events_interval = []
-            self.udp_resets_interval = 0
-            self.radio_silent_events_interval = 0
-            self.max_radio_gap = 0.0
-            self.channel_util_samples = []
-            self.channel_rx_ms_total = 0
-            self.channel_tx_ms_total = 0
-            self.adaptive_wait_min = None
-            self.adaptive_wait_max = None
-            self.ntp_fails_interval = 0
-            self.interval_start = now
+            self._reset_interval(now)
+
+    def _reset_interval(self, now: float) -> None:
+        self.counters = defaultdict(int)
+        self.state_time = defaultdict(float)
+        self.alerts = []
+        self.wifi_events_interval = []
+        self.udp_resets_interval = 0
+        self.radio_silent_events_interval = 0
+        self.max_radio_gap = 0.0
+        self.channel_util_samples = []
+        self.channel_rx_ms_total = 0
+        self.channel_tx_ms_total = 0
+        self.adaptive_wait_min = None
+        self.adaptive_wait_max = None
+        self.ntp_fails_interval = 0
+        self.interval_start = now
+
+    def reset_interval(self) -> None:
+        """Reset interval counters without printing (used by replay)."""
+        with self.lock:
+            now = self._clock()
+            if self.current_state:
+                self.state_time[self.current_state] += now - self.state_since
+                self.state_since = now
+            self._reset_interval(now)
+
+
+# -- replay ----------------------------------------------------------------
+
+RE_LOG_TIMESTAMP = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})  (.*)$"
+)
+
+
+def parse_log_line(raw: str) -> tuple[datetime, str] | None:
+    """Extract timestamp and firmware output from a log line."""
+    m = RE_LOG_TIMESTAMP.match(raw)
+    if not m:
+        return None
+    ts = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S.%f")
+    return ts, m.group(2)
+
+
+def replay_file(path: str, interval: int, speed: float) -> None:
+    """Replay a log file through the Monitor analysis engine."""
+    # Mutable clock state shared via closures
+    sim_mono = [0.0]
+    sim_wall = [datetime.now()]
+
+    def clock() -> float:
+        return sim_mono[0]
+
+    def wallclock() -> datetime:
+        return sim_wall[0]
+
+    monitor = Monitor(summary_interval=interval, clock=clock, wallclock=wallclock)
+
+    origin_ts: datetime | None = None
+    last_summary_at = 0.0
+    last_stuck_check = 0.0
+    prev_elapsed = 0.0
+    line_count = 0
+
+    print(f"MeshCom Serial Monitor — Replay")
+    print(f"File:    {path}")
+    print(f"Speed:   {'fast-forward' if speed == 0 else f'{speed}x'}")
+    print(f"Summary every {interval}s (simulated time)")
+    print()
+
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            parsed = parse_log_line(raw.rstrip())
+            if parsed is None:
+                continue
+            ts, firmware_line = parsed
+
+            if origin_ts is None:
+                origin_ts = ts
+
+            # Advance simulated clock
+            elapsed = (ts - origin_ts).total_seconds()
+            sim_mono[0] = elapsed
+            sim_wall[0] = ts
+
+            # Speed control: pace playback
+            if speed > 0:
+                delta = (elapsed - prev_elapsed) / speed
+                if delta > 0.001:
+                    time.sleep(delta)
+            prev_elapsed = elapsed
+
+            monitor.process_line(firmware_line)
+            line_count += 1
+
+            # Periodic stuck-state check (every simulated second)
+            if elapsed - last_stuck_check >= 1.0:
+                monitor.check_stuck_state()
+                last_stuck_check = elapsed
+
+            # Reset interval counters at summary boundaries (no printout)
+            if elapsed - last_summary_at >= interval:
+                monitor.reset_interval()
+                last_summary_at = elapsed
+
+    # Final summary
+    print(f"\n--- Final Summary (Replay: {line_count} lines) ---")
+    monitor.print_summary()
 
 
 def reader_thread(
@@ -909,7 +1008,27 @@ def main() -> None:
         help="Suppress DTR/RTS to prevent hardware reset (needed for CP2102/ESP32, "
              "NOT for CDC-ACM/NRF52 where DTR=True is required)",
     )
+    parser.add_argument(
+        "--replay",
+        metavar="LOGFILE",
+        help="Replay a log file through the analysis engine (no serial port needed)",
+    )
+    parser.add_argument(
+        "--speed",
+        type=float,
+        default=0,
+        help="Replay speed: 0=fast-forward (default), 1=real-time, 2=2x speed",
+    )
     args = parser.parse_args()
+
+    # Replay mode: process a log file, no serial port needed
+    if args.replay:
+        replay_file(args.replay, args.interval, args.speed)
+        return
+
+    if serial is None:
+        print("ERROR: pyserial is required for live mode. Install with: pip install pyserial")
+        sys.exit(1)
 
     # Create log directory and file
     log_dir = "./meshcom_monitor"

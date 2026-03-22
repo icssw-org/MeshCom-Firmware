@@ -1,9 +1,53 @@
-# Release Notes -- MeshCom Firmware v4.35* (2026-03-21)
+# Release Notes -- MeshCom Firmware v4.35* (2026-03-22)
 
 Nachrichtenprioritaet, Trickle-HEY, erweiterte Statistik,
 APRS-Parser Hardening und diverse Bugfixes auf Basis von `oe1kbc_v4.35p`.
 
 Kein On-Air-Change — alte Firmware empfaengt alle Pakete korrekt.
+
+---
+
+## Serial Monitor: Replay-Funktion (2026-03-22)
+
+### Log-Replay (`--replay`)
+
+Der Serial Monitor (`tools/serial_monitor.py`) kann jetzt gespeicherte Logfiles
+durch die komplette Analyse-Engine schleusen — ohne serielle Schnittstelle.
+
+**Anwendungsfall**: Logfiles von abgesetzten Geraeten werden zugeschickt und
+koennen lokal mit der vollen Analyse (Alerts, Stuck-Detection, State-Distribution,
+Channel Utilization, Ring-Zombie-Tracking) ausgewertet werden.
+
+**Aufruf**:
+```
+python3 tools/serial_monitor.py --replay meshcom_2026-03-21.log
+python3 tools/serial_monitor.py --replay meshcom_2026-03-21.log --speed 1   # Echtzeit
+python3 tools/serial_monitor.py --replay meshcom_2026-03-21.log --speed 2   # 2x Speed
+```
+
+**Funktionsweise**:
+- Simulierte Clock: Timestamps aus dem Logfile steuern alle zeitabhaengigen
+  Analysen (Stuck-Detection, Radio-Gap-Erkennung, Summary-Intervalle)
+- Activity-Indicator-Zeichen (rRCTtxB!) werden angezeigt, Zwischen-Summaries
+  werden unterdrueckt — nur Alerts und das Final Summary am Ende
+- Default: Fast-Forward (maximale Geschwindigkeit), optional Echtzeit oder N-fach
+- Kein pyserial noetig fuer Replay (nur Python-Standardbibliothek)
+
+**Implementierung**: Injizierbare Clock-Abstraktion in der Monitor-Klasse.
+Live-Modus bleibt zu 100% unveraendert.
+
+---
+
+## Upstream-Sync 2026-03-21 (oe1kbc_v4.35p)
+
+Rebase auf aktuellen upstream. Neue Aenderungen aus upstream:
+- Merge pull request #789 (DK5EN/v4.35p_prio) — vorherige Commits uebernommen
+- Merge pull request #790 (DK5EN/v4.35p_prio) — BLE CR/BW Fix + RX_PROCESS State-Log
+
+Unsere uebernommenen Commits:
+- `fix(nrf52): RX_PROCESS state log + BLE CR/BW Anzeige korrigiert` (PR #790)
+
+Branch ist vollstaendig mit upstream synchronisiert — keine lokalen Commits.
 
 ---
 
