@@ -58,21 +58,21 @@ static int externQueueWrite = 0;
 void startExternUDP()
 {
   #ifdef BOARD_T_ETH_ELITE
-    static bool ethStarted = false;
+      static bool ethStarted = false;
 
-   if(!ethStarted)
-   {
-      Serial.println("[ETH] starting ETHClass2");
+      if(!ethStarted)
+      {
+          Serial.println("[ETH] starting ETHClass2");
 
-      ETH.begin();
+          ETH.begin();
 
-      delay(2000);
+          delay(2000);
 
-      Serial.print("[ETH] IP: ");
-      Serial.println(ETH.localIP());
+          Serial.print("[ETH] IP: ");
+          Serial.println(ETH.localIP());
 
-      ethStarted = true;
-    }
+          ethStarted = true;
+      }
   #endif
 
   #ifdef ESP32
