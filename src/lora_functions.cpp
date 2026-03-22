@@ -1607,7 +1607,7 @@ bool doTX()
 
                 // For text messages needing retransmit: restore length so
                 // updateRetransmissionStatus() can find and retransmit them.
-                if(save_ring_status != (char)RING_STATUS_DONE && ringBuffer[save_read][2] == MSG_TYPE_TEXT)
+                if(ringBuffer[save_read][1] != (char)RING_STATUS_DONE && ringBuffer[save_read][2] == MSG_TYPE_TEXT)
                     ringBuffer[save_read][0] = sendlng;
 
                 return true;
@@ -1670,7 +1670,7 @@ bool doTX()
 
                     // For text messages needing retransmit: restore length so
                     // updateRetransmissionStatus() can find and retransmit them.
-                    if(save_ring_status != (char)RING_STATUS_DONE && ringBuffer[save_read][2] == MSG_TYPE_TEXT)
+                    if(ringBuffer[save_read][1] != (char)RING_STATUS_DONE && ringBuffer[save_read][2] == MSG_TYPE_TEXT)
                         ringBuffer[save_read][0] = sendlng;
 
                     return true;
