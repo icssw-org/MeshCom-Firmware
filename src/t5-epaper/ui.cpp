@@ -71,16 +71,14 @@ static const char *line_full_format(int max_c, const char *str1, const char *str
 
     len1 = strlen(str1);
 
+    int buf_size = sizeof(global_buf);  // 256
+    if (len1 >= buf_size) len1 = buf_size - 1;
     strncpy(global_buf, str1, len1);
-
-    len2 = strlen(str2);
-    for(j = len1; j < max_c -1 - len2; j++){
-        global_buf[j] = ' ';
-    }
+    // ... Padding mit max_c Begrenzung ...
+    int remaining = buf_size - j - 1;
+    if (len2 > remaining) len2 = remaining;
     strncpy(global_buf + j, str2, len2);
-    j = j + len2;
-    
-    global_buf[j] = '\0'; 
+    global_buf[buf_size - 1] = '\0';
 
     printf("[%d] buf: %s\n", __LINE__, global_buf);
 
@@ -1239,11 +1237,9 @@ static void scr3_btn_event_cb(lv_event_t * e)
 static void scr3_add_img_btn(const char *text, int text_len, int type)
 {
     char buf[16] = {0};
-    strncpy(buf, text, 16);
-    char *suffix = (char *)text + text_len - 4;
-    buf[text_len - 4] = '\0';
-
-    printf("imgbtn [%s][%d][%s]\n", text, text_len, suffix);
+    int cut = (text_len > 4) ? min(text_len - 4, (int)sizeof(buf) - 1) : 0;
+    strncpy(buf, text, sizeof(buf) - 1);
+    buf[cut] = '\0';
 
     lv_obj_t *obj = lv_obj_create(scr3_cont_file);
     lv_obj_set_size(obj, LCD_HOR_SIZE/11, LCD_HOR_SIZE/11);

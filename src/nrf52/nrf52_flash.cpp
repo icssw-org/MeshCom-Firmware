@@ -231,6 +231,8 @@ void init_flash(void)
 
 		meshcom_settings.node_gpsbaud = old_struct.node_gpsbaud;
 
+		meshcom_settings.node_cleanflash = old_struct.node_cleanflash;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

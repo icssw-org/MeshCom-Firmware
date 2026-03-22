@@ -12,6 +12,7 @@
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define SX1262X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
+
 #define ENABLE_GPS
 
 #define ENABLE_BMX280
@@ -33,7 +34,7 @@
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 #define TX_OUTPUT_POWER 22  // SX1268 have up to +22dBm
-#define CURRENT_LIMIT 240 // in mA +20dBm are about 120mA -> check if enough headroom 
+#define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
 
 /**

@@ -450,13 +450,8 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			txt_msg_len_phone = msg_len - 2;	// now zero escape for lora TX
 
-			if(ble_busy_flag && bBLEDEBUG)
-				Serial.println("BLE is busy. Waiting...");
-
-			while(ble_busy_flag)
-			{
-				delay(5);
-			}
+			// Spin-wait removed: readPhoneCommand now runs in Main Loop,
+			// no cross-core conflict with sendToPhone() possible
 
 			if (bBLEDEBUG)
 				Serial.printf("Text from phone: %s\n", conf_data + 2);

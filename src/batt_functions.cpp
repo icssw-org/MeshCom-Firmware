@@ -14,8 +14,6 @@ int global_proz = 0;
 unsigned long BattTimeWait = 0;
 unsigned long BattTimeAPP = 0;
 
-extern bool is_receiving;
-
 #if defined(BOARD_RAK4630)
 
 uint32_t vbat_pin = WB_A0;
@@ -291,8 +289,6 @@ float read_batt(void)
 {
 	//Serial.println("read_batt");
 
-	is_receiving = true;
-
 	float raw = 0.0;
 
 	#if defined(NRF52_SERIES)
@@ -347,18 +343,15 @@ float read_batt(void)
 
 			float milliVolt = ((voltage / inputDivider) + 0.285)*1000.0;
 			
-			is_receiving = false;
-			
 			return milliVolt; // Yes, this offset is excessive, but the ADC on the ESP32s3 is quite inaccurate and noisy. Adjust to own measurements.
 		#else
-			is_receiving = false;
 			return (float)0.0;
 		#endif
 	#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
 
 		// ADC resolution
 		const int resolution = 12;
-		const int adcMax = pow(2,resolution) - 1;
+		const int adcMax = (1 << resolution) -1;
 		const float adcMaxVoltage = 3.3;
 		// On-board voltage divider
 		const int R1 = 390;
@@ -467,8 +460,6 @@ float read_batt(void)
 	{
 		Serial.printf("[readBatteryVoltage] raw %.2f mV\n", raw);
 	}
-
-	is_receiving = false;
 
 	return raw;
 }

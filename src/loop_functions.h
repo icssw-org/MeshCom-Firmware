@@ -50,6 +50,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLECommandBack(char *text);
 void addLoraRxBuffer(unsigned int msg_id, bool msg_server);
+void addTxRingEntry(const char* source);
 
 int checkOwnRx(uint8_t compBuffer[4]);
 bool checkServerRx(uint8_t compBuffer[4]);
@@ -94,7 +95,8 @@ String getTimeZone();
 
 int count_char(String s, char c);
 
-void addRingPointer(int &toWrite, int &toRead, int iMAX, const char* bufName = "?");
+void addRingPointer(volatile int &toWrite, volatile int &toRead, int iMAX, const char* bufName = "?");
 
+bool is_equ(const char* buf1, const char* buf2);
 
 #endif // _LOOP_FUNCTIONS_H_

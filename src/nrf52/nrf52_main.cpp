@@ -25,7 +25,21 @@
 #include "onebutton_functions.h"
 
 #include <OneButton.h>
+#include <malloc.h>
 OneButton btn;
+
+// nRF52 heap monitoring: heap_3 wraps libc malloc, so we use mallinfo()
+// fordblks = free bytes within arena already obtained from system
+// The gap between current sbrk and stack is additional free memory
+extern "C" char *sbrk(int incr);
+static uint32_t nrf52_getFreeHeap(void)
+{
+    struct mallinfo mi = mallinfo();
+    char topOfStack;
+    // free = (stack pointer - current program break) + free chunks inside arena
+    uint32_t freeFromSbrk = (uint32_t)(&topOfStack) - (uint32_t)sbrk(0);
+    return freeFromSbrk + mi.fordblks;
+}
 
 // Ethernet Object
 NrfETH neth;
@@ -162,6 +176,13 @@ static RadioEvents_t RadioEvents;
 // flag to indicate if we are after receiving
 unsigned long iReceiveTimeOutTime = 0;
 
+// CSMA/CA async CAD state
+volatile bool cad_done_flag = false;
+volatile bool cad_channel_busy = false;
+volatile bool cad_in_progress = false;
+volatile bool cad_double_check = false;
+unsigned long cad_start_time = 0;
+
 bool g_meshcom_initialized;
 bool init_flash_done=false;
 
@@ -171,6 +192,7 @@ bool bHeyFirst = true;
 // Queue for sending config jsons to phone
 uint8_t iPhoneState = 0;
 bool config_to_phone_prepare = false;
+bool conffin_sent = false;
 unsigned long config_to_phone_prepare_timer = 0;
 unsigned long config_to_phone_datetime_timer = 0;
 const uint8_t json_configs_cnt = 9;
@@ -299,6 +321,15 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = src[5]; // | 0xc0; // MSB high two bits get set elsewhere in the bluetooth stack
 }
 
+void OnCadDone(bool channelActivityDetected)
+{
+    // RACE-05 fix: atomic flag update under critical section
+    taskENTER_CRITICAL();
+    cad_channel_busy = channelActivityDetected;
+    cad_done_flag = true;
+    taskEXIT_CRITICAL();
+}
+
 void RadioInit()
 {
     Radio.Init(&RadioEvents);
@@ -335,6 +366,8 @@ void nrf52setup()
 
     Serial.println("=====================================");
     Serial.println("[INIT] START CLIENT");
+    Serial.printf("%s;[HEAP];%lu;(free)\n", getTimeString().c_str(),
+        (unsigned long)nrf52_getFreeHeap());
 
     // init nach Reboot
     init_loop_function();
@@ -375,7 +408,11 @@ void nrf52setup()
 	// Get LoRa parameter
 	init_flash();
 
-    if(meshcom_settings.node_fversion != FLASH_VERSION)
+    bool bClear = false;
+    if(meshcom_settings.node_cleanflash == 1)
+        bClear = true;
+
+    if(meshcom_settings.node_fversion != FLASH_VERSION || bClear)
     {
         Serial.printf("[INIT]...FLASH cleared new version %i\n", FLASH_VERSION);
 
@@ -386,9 +423,14 @@ void nrf52setup()
         Serial.printf("[INIT]...FLASH version %i\n", meshcom_settings.node_fversion);
     }
 
+    if(bClear)
+        init_flash();
+
     meshcom_settings.node_fversion = FLASH_VERSION;
     meshcom_settings.node_mversion = MODUL_HARDWARE;
+    meshcom_settings.node_cleanflash = 0;
     snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%-4.4s%-1.1s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+    
     save_settings();
 
     meshcom_settings.node_date_hour = 0;
@@ -486,8 +528,10 @@ void nrf52setup()
     // Umstekllung auf langes WIFI Passwort
     if(strlen(meshcom_settings.node_ossid) > 4 && strlen(meshcom_settings.node_ssid) < 5)
     {
-        strcpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid);
-        strcpy(meshcom_settings.node_pwd, meshcom_settings.node_opwd);
+        strncpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid, sizeof(meshcom_settings.node_ssid) - 1);
+        meshcom_settings.node_ssid[sizeof(meshcom_settings.node_ssid) - 1] = '\0';
+        strncpy(meshcom_settings.node_pwd, meshcom_settings.node_opwd, sizeof(meshcom_settings.node_pwd) - 1);
+        meshcom_settings.node_pwd[sizeof(meshcom_settings.node_pwd) - 1] = '\0';
 
         memset(meshcom_settings.node_ossid, 0x00, sizeof(meshcom_settings.node_ossid));
         memset(meshcom_settings.node_opwd, 0x00, sizeof(meshcom_settings.node_opwd));
@@ -559,7 +603,8 @@ void nrf52setup()
     //
     ////////////////////////////////////////////////////////////////////
 
-    if(bGPSON)
+    // Hardware immer aktivieren
+    //if(bGPSON)
     {
         //gps init
         pinMode(WB_IO2, OUTPUT);
@@ -570,9 +615,9 @@ void nrf52setup()
         
         Serial.println("=====================================");
 
-        Serial.println("GPS: trying 38400 baud");
+        Serial.println("GPS: trying 9600 baud");
         
-        Serial1.begin(38400);
+        Serial1.begin(9600);
         Serial1.setTimeout(500);
         while (!Serial1);
 
@@ -580,16 +625,16 @@ void nrf52setup()
         {
             if (myGPS.begin(Serial1))
             {
-                Serial.println("GPS: connected at 38400 baud");
+                Serial.println("GPS: connected at 9600 baud");
             }
             else
             {
                 Serial1.end();
 
                 delay(100);
-                Serial.println("GPS: trying 9600 baud");
+                Serial.println("GPS: trying 38400 baud");
 
-                Serial1.begin(9600);
+                Serial1.begin(38400);
                 Serial1.setTimeout(500);
                 while (!Serial1);
 
@@ -597,7 +642,7 @@ void nrf52setup()
                 {
                     if (myGPS.begin(Serial1))
                     {
-                        Serial.println("GPS: connected at 9600 baud");
+                        Serial.println("GPS: connected at 38400 baud");
                     }
                     else
                     {
@@ -613,12 +658,10 @@ void nrf52setup()
 
         delay(100);
     }
-    else
-    {
-        posinfo_fix = false;
-        posinfo_satcount = 0;
-        posinfo_hdop = 0;
-    }
+
+    posinfo_fix = false;
+    posinfo_satcount = 0;
+    posinfo_hdop = 0;
 
     // Try to initialize!
     #if defined(LPS33)
@@ -761,9 +804,10 @@ void nrf52setup()
     RadioEvents.TxTimeout = OnTxTimeout;
     RadioEvents.RxTimeout = OnRxTimeout;
     RadioEvents.RxError = OnRxError;
+    RadioEvents.CadDone = OnCadDone;
     //RadioEvents.PreAmpDetect = OnPreambleDetect;
     RadioEvents.PreAmpDetect = OnHeaderDetect;
-    
+
     // 4.34w we use EU8 instead of EU
     if(meshcom_settings.node_country == 0)
         meshcom_settings.node_country = 8;
@@ -838,6 +882,9 @@ void nrf52setup()
 
     //  Start receiving LoRa packets
     Radio.Rx(RX_TIMEOUT_VALUE);
+
+    // Configure CAD parameters: 4 symbols, DETPEAK/DETMIN from config, CAD_ONLY mode
+    Radio.SetCadParams(LORA_CAD_04_SYMBOL, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN, LORA_CAD_ONLY, 0);
 
     // set left button interrupt
     //pinMode(LEFT_BUTTON, INPUT);
@@ -1021,14 +1068,14 @@ extern bool btimeClient;
         }
     }
 
-    if(!bGATEWAY)
+    // Retransmission status must tick on ALL nodes (including gateways).
+    // Without this, gateway text messages stay stuck at RING_STATUS_SENT
+    // forever if no echo is received via LoRa (RING_ZOMBIE).
+    if ((retransmit_timer + (1000 * 2)) < millis())
     {
-        if ((retransmit_timer + (1000 * 2)) < millis())   // repeat 2 seconds
-        {
-            updateRetransmissionStatus();
+        updateRetransmissionStatus();
 
-            retransmit_timer = millis();
-        }
+        retransmit_timer = millis();
     }
 
     // Periodischer Ringpuffer-Auslastungsbericht (alle 30s)
@@ -1045,47 +1092,222 @@ extern bool btimeClient;
                 else if(ringBuffer[i][1] == 0x00) pending++;
                 else retrying++;
             }
-            int queued = (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite);
+            int w = iWrite;
+            int r = iRead;
+            int queued = (w >= r) ? (w - r) : (MAX_RING - r + w);
             Serial.printf("[MC-DBG] RING_STATUS queued=%d pending=%d retrying=%d done=%d iW=%d iR=%d\n",
-                queued, pending, retrying, done, iWrite, iRead);
+                queued, pending, retrying, done, w, r);
+        }
+    }
+
+    // Deferred display update from OnRxDone (avoid I2C inside radio callback)
+    // RACE-01 fix: snapshot under critical section, display call outside
+    {
+        taskENTER_CRITICAL();
+        bool _pendText = bPendingDisplayText;
+        bool _pendPos = bPendingDisplayPos;
+        struct aprsMessage _msg;
+        int16_t _rssi = 0;
+        int8_t _snr = 0;
+        if(_pendText || _pendPos) {
+            _msg = pendingDisplayMsg;
+            _rssi = pendingDisplayRssi;
+            _snr = pendingDisplaySnr;
+            bPendingDisplayText = false;
+            bPendingDisplayPos = false;
+        }
+        taskEXIT_CRITICAL();
+        if(_pendText) sendDisplayText(_msg, _rssi, _snr);
+        if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
+    }
+
+    // Channel utilization report (every 10s)
+    {
+        static unsigned long ch_util_timer = 0;
+        if(bLORADEBUG && (millis() - ch_util_timer) > 10000)
+        {
+            unsigned long window = millis() - ch_util_timer;
+            ch_util_timer = millis();
+            unsigned long rx_ms = ch_util_rx_accum.exchange(0);
+            unsigned long tx_ms = ch_util_tx_accum.exchange(0);
+            unsigned int util = (unsigned int)((rx_ms + tx_ms) * 100 / window);
+            if(util > 100) util = 100;
+            Serial.printf("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
+                rx_ms, tx_ms, util);
+            // ONRXDONE stats: report max and warn count, then reset
+            Serial.printf("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
+                onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
+            onrxdone_max_ms = 0;
+            onrxdone_warn_count = 0;
         }
     }
 
     if(iReceiveTimeOutTime > 0)
     {
-        if((iReceiveTimeOutTime + RECEIVE_TIMEOUT) < millis())
+        if((iReceiveTimeOutTime + csma_timeout) < millis())
         {
             if(bLORADEBUG)
-                Serial.printf("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu last_event=%lu delta=%lu\n",
-                    millis(), iReceiveTimeOutTime, millis() - iReceiveTimeOutTime);
+                Serial.printf("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu wait=%lu delta=%lu\n",
+                    millis(), csma_timeout, millis() - iReceiveTimeOutTime);
 
             // BUG #1 Aequivalent: Wenn Header erkannt, ist Empfang moeglicherweise
             // noch aktiv. Timer verlaengern statt zuruecksetzen.
-            if(is_receiving)
+            if(is_receiving && rx_irq_defer_count < 3)
             {
+                rx_irq_defer_count++;
                 iReceiveTimeOutTime = millis();
                 if(bLORADEBUG)
-                    Serial.printf("[MC-DBG] RX_TIMEOUT skipped: is_receiving=true\n");
+                    Serial.printf("[MC-DBG] RX_TIMEOUT_DEFERRED src=is_receiving cnt=%d\n", rx_irq_defer_count);
             }
             else
             {
+                if(rx_irq_defer_count >= 3 && bLORADEBUG)
+                    Serial.printf("[MC-DBG] RX_IRQ_STALE forced restart after %d deferrals\n", rx_irq_defer_count);
+                rx_irq_defer_count = 0;
                 iReceiveTimeOutTime = 0;
+                taskENTER_CRITICAL();
                 Radio.Rx(RX_TIMEOUT_VALUE);
+                taskEXIT_CRITICAL();
                 if(bLORADEBUG)
+                {
+                    Serial.printf("[MC-SM] IDLE -> RX_LISTEN rc=0\n");
                     Serial.printf("[MC-DBG] RX_RESTART src=timeout\n");
+                }
             }
         }
     }
 
     if(iReceiveTimeOutTime == 0 && is_receiving == false && tx_is_active == false)
     {
-        if (iWrite != iRead)
+        int _w = iWrite;
+        int _r = iRead;
+        if (_w != _r)
         {
-            if(bLORADEBUG)
-                Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cmd_ctr=%d tx_wait=%d\n",
-                    (iWrite >= iRead) ? (iWrite - iRead) : (MAX_RING - iRead + iWrite),
-                    cmd_counter, tx_waiting);
-            doTX();
+            // RACE-05 fix: snapshot CAD flags under critical section,
+            // then act on snapshot values outside the lock
+            taskENTER_CRITICAL();
+            bool _cad_ip = cad_in_progress;
+            bool _cad_df = cad_done_flag;
+            bool _cad_cb = cad_channel_busy;
+            bool _cad_dc = cad_double_check;
+            taskEXIT_CRITICAL();
+
+            if(!_cad_ip && !_cad_df)
+            {
+                // Start CAD scan
+                if(bLORADEBUG)
+                {
+                    Serial.printf("[MC-SM] IDLE -> TX_PREPARE rc=0\n");
+                    Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cad_attempt=%d\n",
+                        (_w >= _r) ? (_w - _r) : (MAX_RING - _r + _w),
+                        cad_attempt);
+                }
+
+                taskENTER_CRITICAL();
+                cad_in_progress = true;
+                cad_done_flag = false;
+                cad_double_check = false;
+                cad_start_time = millis();
+                taskEXIT_CRITICAL();
+                taskENTER_CRITICAL();
+                Radio.Standby();
+                Radio.StartCad();
+                taskEXIT_CRITICAL();
+            }
+            else if(_cad_df)
+            {
+                taskENTER_CRITICAL();
+                cad_in_progress = false;
+                cad_done_flag = false;
+                taskEXIT_CRITICAL();
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] CAD_SCAN result=%d\n", _cad_cb ? -702 : 0);
+
+                if(!_cad_cb)
+                {
+                    if(_cad_dc && bLORADEBUG)
+                        Serial.printf("[MC-DBG] CAD_FALSE_POSITIVE\n");
+                    // Channel free — transmit
+                    csma_reset();
+                    if(doTX())
+                    {
+                        ch_util_tx_start = millis();
+                        if(bLORADEBUG)
+                        {
+                            Serial.printf("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
+                            Serial.printf("[MC-DBG] CAD_FREE attempt=%d\n", cad_attempt);
+                        }
+                    }
+                    else
+                    {
+                        // doTX() returned false (no ready slot) — restore RX
+                        // to prevent CAD spin loop where radio stays in standby
+                        if(bLORADEBUG)
+                            Serial.printf("[MC-DBG] CAD_FREE_NO_TX restoring RX\n");
+                        taskENTER_CRITICAL();
+                        Radio.Rx(RX_TIMEOUT_VALUE);
+                        taskEXIT_CRITICAL();
+                        iReceiveTimeOutTime = millis();
+                    }
+                }
+                else if(!_cad_dc)
+                {
+                    // First scan busy — double-check
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] CAD_BUSY_1 attempt=%d, double-check...\n", cad_attempt);
+
+                    taskENTER_CRITICAL();
+                    cad_double_check = true;
+                    cad_in_progress = true;
+                    cad_done_flag = false;
+                    cad_start_time = millis();
+                    taskEXIT_CRITICAL();
+                    taskENTER_CRITICAL();
+                    Radio.Standby();
+                    Radio.StartCad();
+                    taskEXIT_CRITICAL();
+                }
+                else
+                {
+                    // Double-check confirmed busy — backoff
+                    cad_attempt++;
+                    csma_timeout = csma_compute_timeout(cad_attempt);
+
+                    if(bLORADEBUG)
+                    {
+                        Serial.printf("[MC-SM] TX_PREPARE -> IDLE rc=-1\n");
+                        Serial.printf("[MC-DBG] CAD_BUSY attempt=%d next_timeout=%lu\n",
+                            cad_attempt, csma_timeout);
+                    }
+
+                    taskENTER_CRITICAL();
+                    Radio.Rx(RX_TIMEOUT_VALUE);
+                    taskEXIT_CRITICAL();
+                    iReceiveTimeOutTime = millis();
+                }
+            }
+            else if(_cad_ip && (millis() - cad_start_time > 100))
+            {
+                // Safety timeout: CadDone never fired
+                if(bLORADEBUG)
+                    Serial.printf("[MC-DBG] CAD_SAFETY_TIMEOUT\n");
+
+                taskENTER_CRITICAL();
+                cad_in_progress = false;
+                cad_done_flag = false;
+                taskEXIT_CRITICAL();
+                taskENTER_CRITICAL();
+                Radio.Rx(RX_TIMEOUT_VALUE);
+                taskEXIT_CRITICAL();
+                iReceiveTimeOutTime = millis();
+            }
+        }
+        else
+        {
+            // Nothing to send — restart timeout cycle (radio watchdog).
+            // Matches ESP32 esp32_main.cpp behaviour: periodic Radio.Rx()
+            // prevents silent SX1262 stall when queue is empty.
+            iReceiveTimeOutTime = millis();
         }
     }
 
@@ -1171,7 +1393,7 @@ extern bool btimeClient;
         if(bGPSDEBUG)
             Serial.println("gKeyNum == 2");
 
-        #ifdef ENABLE_GPS
+        #ifdef ENABLE_RAK_GPS
 
         if(bGPSON)
         {
@@ -1207,7 +1429,7 @@ extern bool btimeClient;
         gKeyNum = 0;
     }
 
-    #ifdef ENABLE_GPS
+    #ifdef ENABLE_RAK_GPS
     if(bGPSON)
     {
         // check GPS ON and activ --> <gKeyNum == 2> the signal must be active
@@ -1248,15 +1470,17 @@ if (isPhoneReady == 1)
                 // send JSON config to phone after BLE connection
                 if (ComToPhoneWrite != ComToPhoneRead)
                 {
-                    sendComToPhone();   
+                    sendComToPhone();
                 }
-                else
+                else if (toPhoneWrite != toPhoneRead)
                 {
-                    // check if we have messages for BLE to send
-                    if (toPhoneWrite != toPhoneRead)
-                    {
-                        sendToPhone();   
-                    }
+                    sendToPhone();
+                }
+                else if (!conffin_sent)
+                {
+                    // both queues empty — send config finish once
+                    commandAction((char*)"--conffin", isPhoneReady, true);
+                    conffin_sent = true;
                 }
 
                 iPhoneState = 0;
@@ -1283,29 +1507,110 @@ if (isPhoneReady == 1)
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
     {
-        bPosFirst = false;
-        posinfo_shot=false;
-        posinfo_timer = millis();
-        
-        sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
-
-        posinfo_last_lat=posinfo_lat;
-        posinfo_last_lon=posinfo_lon;
-        posinfo_last_direction=posinfo_direction;
-
-        if(pos_shot)
+        // minimal transmit time only max 15 sec
+        if((posinfo_timer_min + 15000) < millis())
         {
-            commandAction((char*)"--pos", isPhoneReady, true);
-            pos_shot = false;
+            if(bDisplayInfo)
+            {
+                Serial.print(getTimeString());
+                Serial.printf(" [POS]...sendPostion initialized F:%i S:%i\n", bPosFirst, posinfo_shot);
+            }
+
+            bPosFirst = false;
+
+            if(posinfo_shot)
+            {
+                double slat = 0.0;
+                double slon = 0.0;
+
+                double slatr=60.0;
+                double slonr=60.0;
+
+                slat = (int)posinfo_prev_lat;
+                slatr = (posinfo_prev_lat - slat) * slatr;
+                slat = (slat * 100.) + slatr;
+
+                slon = (int)posinfo_prev_lon;
+                slonr = (posinfo_prev_lon - slon) * slonr;
+                slon = (slon * 100.) + slonr;
+                double node_lat = cround4(posinfo_prev_lat);
+                double node_lon = cround4(posinfo_prev_lon);
+
+                char node_lat_c = 'N';
+                char node_lon_c = 'E';
+
+                if(posinfo_prev_lat < 0.0)
+                    node_lat_c='S';
+                else
+                    node_lat_c='N';
+
+                if(posinfo_prev_lon < 0.0)
+                    node_lon_c='W';
+                else
+                    node_lon_c='E';
+
+                sendPosition(posinfo_interval, node_lat, node_lat_c, node_lon, node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+            }
+            else
+            {
+                sendPosition(posinfo_interval, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+            }
+
+            posinfo_shot=false;
+
+            posinfo_prev_lat = 0.0; // done
+            posinfo_prev_lon = 0.0; // done
+
+            posinfo_last_lat=posinfo_lat;
+            posinfo_last_lon=posinfo_lon;
+
+            posinfo_last_direction=posinfo_direction;
+            posinfo_distance = 0.0;
+
+            posinfo_timer = millis();
+
+            if(pos_shot)
+            {
+                commandAction((char*)"--pos", isPhoneReady, false);
+                pos_shot = false;
+            }
+
+            posinfo_timer_min = millis();
         }
     }
+    else
+    {
+        posinfo_timer_min = millis();
+    }
 
-    // HEYINFO_INTERVAL in Seconds == 15 minutes
-    if (((heyinfo_timer + (HEYINFO_INTERVAL * 1000)) < millis()) || bHeyFirst)
+    // Trickle-HEY: adaptive interval (RFC 6206)
+    if (((heyinfo_timer + trickle_interval_ms) < millis()) || bHeyFirst)
     {
         bHeyFirst = false;
-        
-        sendHey();
+
+        // Check for topology change
+        int current_neighbors = getMheardCount();
+        if(trickle_last_neighbor_count >= 0 && current_neighbors != trickle_last_neighbor_count)
+        {
+            trickle_interval_ms = TRICKLE_IMIN_S * 1000UL;
+            trickle_consistent_count = 0;
+        }
+        trickle_last_neighbor_count = current_neighbors;
+
+        // Trickle suppression
+        if(trickle_consistent_count >= TRICKLE_K)
+        {
+            if(bDisplayInfo)
+                Serial.printf("[MC-TRICKLE] SUPPRESS consistent=%d interval=%lums\n",
+                    trickle_consistent_count, trickle_interval_ms);
+        }
+        else
+        {
+            sendHey();
+        }
+
+        trickle_interval_ms = min(trickle_interval_ms * 2, (unsigned long)(TRICKLE_IMAX_S * 1000UL));
+        trickle_consistent_count = 0;
 
         heyinfo_timer = millis();
     }
@@ -1374,7 +1679,7 @@ if (isPhoneReady == 1)
                 if(!neth.hasIPaddress)
                 {
                     neth.hasIPaddress = false;
-                    cmd_counter = 50;
+                    iReceiveTimeOutTime = millis();
 
                     if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
                     {
@@ -1699,6 +2004,7 @@ if (isPhoneReady == 1)
     if(bEXTUDP)
     {
         getExternUDP();
+        flushExternQueue();
     }
 
     if(bWEBSERVER || bEXTUDP)
@@ -1714,7 +2020,7 @@ if (isPhoneReady == 1)
                 stopWebserver();
 
                 if(!meshcom_settings.node_hasIPaddress)
-                    startNetwork();
+                    startWIFI();
             #endif
 
             if(bWEBSERVER)
@@ -1738,7 +2044,7 @@ if (isPhoneReady == 1)
 
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
-    
+
     yield();
 }
 
@@ -1861,7 +2167,22 @@ unsigned int getGPS(void)
     if(bGPSDEBUG)
         Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, tinyGPSPlus.satellites.value(), tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
 
-    if (newData && tinyGPSPlus.location.isUpdated() && tinyGPSPlus.location.isValid() && tinyGPSPlus.hdop.isValid() && tinyGPSPlus.hdop.value() < 800)
+    posinfo_satcount = tinyGPSPlus.satellites.value();
+    posinfo_hdop = tinyGPSPlus.hdop.value();
+
+    bool has_gnss_location=false;
+
+    if ((tinyGPSPlus.hdop.value() < 300) && (tinyGPSPlus.satellites.value() > 5))
+    {
+        has_gnss_location = true;
+        posinfo_fix = true;
+    }
+    else
+    {
+        posinfo_fix = false;
+    }
+    
+    if (newData && has_gnss_location)
     {
         double dlat, dlon;
         
@@ -1886,10 +2207,6 @@ unsigned int getGPS(void)
         MyClock.setCurrentTime(meshcom_settings.node_utcoff, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
         snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
 
-        posinfo_satcount = tinyGPSPlus.satellites.value();
-        posinfo_hdop = tinyGPSPlus.hdop.value();
-        posinfo_fix = true;
-
         if(bGPSDEBUG)
         {
             Serial.printf("INT: LAT:%lf%c LON:%lf%c ALT:%i (%i-%02i-%02i %02i:%02i:%02i)\n", meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
@@ -1897,21 +2214,10 @@ unsigned int getGPS(void)
             meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second );
         }
 
-
-        posinfo_satcount = tinyGPSPlus.satellites.value();
-        posinfo_hdop = tinyGPSPlus.hdop.value();
-        posinfo_fix = true;
-
         return setSMartBeaconing(dlat, dlon);
     }
-    else
-    {
-        posinfo_fix = false;
-        posinfo_satcount = 0;
-        posinfo_hdop = 0;
-    }
 
-    return 0;   // no GPS
+    return POSINFO_INTERVAL;   // no GPS
 }
 
 void checkSerialCommand(void)
@@ -1937,7 +2243,8 @@ void checkSerialCommand(void)
             if(strText.endsWith("\n") || strText.endsWith("\r"))
             {
                 strText.trim();
-                strcpy(msg_text, strText.c_str());
+                strncpy(msg_text, strText.c_str(), sizeof(msg_text) - 1);
+                msg_text[sizeof(msg_text) - 1] = '\0';
 
                 int inext = 0;
                 char msg_buffer[600];

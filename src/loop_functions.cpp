@@ -1,5 +1,7 @@
 #include "Arduino.h"
 
+#include <atomic>
+
 #if defined(ESP32)
 #include <WiFi.h>
 #endif
@@ -37,8 +39,11 @@
 #if defined(HAS_TFT)
 #include "tft_display_functions.h"
 #endif
+
 // TinyGPS
-extern TinyGPSPlus tinyGPSPlus;
+#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS)
+extern TinyGPSPlus gps;
+#endif
 
 bool bnextread=false;
 
@@ -57,13 +62,14 @@ bool bLED_CLEAR=false;
 bool bLED_DELAY=false;
 
 extern unsigned long rebootAuto;
+extern bool g_ble_uart_is_connected;
 
 int iWlanWait = 0;
 
 extern float global_batt;
 extern int global_proz;
 
-bool bSetLoRaAPRS = false;
+volatile bool bSetLoRaAPRS = false;
 
 bool bDEBUG = false;
 bool bLORADEBUG = false;
@@ -254,16 +260,16 @@ int iWriteOwn=0;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
 unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5] = {0};
-int iWrite=0;
-int iRead=0;
+volatile int iWrite = 0;
+volatile int iRead = 0;
 int iRetransmit=-1;
 
 // FIX: Per-slot retry counter for retransmit cap
 uint8_t retryCount[MAX_RING] = {0};
 
 // RINGBUFFER for incomming LoRa RX msg_id
-uint8_t ringBufferLoraRX[MAX_RING][5] = {0};
-uint8_t loraWrite = 0;   // counter for ringbuffer
+uint8_t ringBufferLoraRX[MAX_DEDUP_RING][5] = {0};
+std::atomic<uint8_t> loraWrite{0};   // counter for ringbuffer
 
 // RINGBUFFER RAW LoRa RX
 unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5] = {0};
@@ -288,10 +294,18 @@ int ComToPhoneRead=0;
 bool hasMsgFromPhone = false;
 
 // LoRa RX/TX sequence control
-int cmd_counter = 0;      // ticker dependant on main cycle delay time
-bool is_receiving = false;  // flag to store we are receiving a lora packet.
-bool tx_is_active = false;  // flag to store we are transmitting  a lora packet.
-bool tx_waiting = false;
+std::atomic<bool> is_receiving{false};  // flag to store we are receiving a lora packet.
+std::atomic<bool> tx_is_active{false};  // flag to store we are transmitting  a lora packet.
+
+int cad_attempt = 0;
+unsigned long csma_timeout = CSMA_BASE_0;
+int rx_irq_defer_count = 0;
+
+// Channel utilization tracking (10s window)
+std::atomic<unsigned long> ch_util_rx_start{0};   // timestamp when RX started
+std::atomic<unsigned long> ch_util_tx_start{0};   // timestamp when TX started
+std::atomic<unsigned long> ch_util_rx_accum{0};   // accumulated RX airtime (ms) in current window
+std::atomic<unsigned long> ch_util_tx_accum{0};   // accumulated TX airtime (ms) in current window
 
 int isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
@@ -329,10 +343,31 @@ int gps_refresh_track = 0;
 unsigned long posinfo_timer = 0;        // we check periodically to send GPS
 unsigned long posinfo_timer_min = 0;    // we check min. periodically to send GPS
 unsigned long heyinfo_timer = 0;        // we check periodically to send HEY
+
+// Priority Queue arrays
+uint8_t ringPriority[MAX_RING];                 // Prio 1-5 pro Slot
+uint32_t ringEnqueueTime[MAX_RING];             // millis() timestamp when enqueued
+
+// Trickle-HEY state
+unsigned long trickle_interval_ms = TRICKLE_IMIN_S * 1000UL;
+uint8_t trickle_consistent_count = 0;
+int trickle_last_neighbor_count = -1;
+
+// Priority statistics
+uint16_t stat_tx_count[6] = {0};
+uint16_t stat_drop_count[6] = {0};
+uint16_t stat_preempt_count = 0;
+uint32_t stat_latency_sum[6] = {0};
+uint16_t stat_latency_max[6] = {0};
+uint8_t  stat_queue_hwm = 0;
+uint16_t stat_csma_hwm_attempts = 0;
+unsigned long stat_prio_timer = 0;
+unsigned long stat_hwm_timer = 0;
 unsigned long telemetry_timer = 0;      // we check periodically to send TELEMETRY
 unsigned long temphum_timer = 0;        // we check periodically get TEMP/HUM
 unsigned long druck_timer = 0;          // we check periodically get AIRPRESURE
 unsigned long hb_timer = 0;
+bool hb_warn_logged = false;
 unsigned long web_timer = 0;
 
 // Function that gets current epoch time
@@ -412,6 +447,9 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
  */
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
 {
+    if (!g_ble_uart_is_connected && !bWEBSERVER)
+        return;
+
     if (len > 245)
     {
         Serial.printf("[ERR]...BLE out-buffer to long <%i> <%-245.245s>\n", len, buffer);
@@ -466,25 +504,30 @@ void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
  */
 void addLoraRxBuffer(unsigned int msg_id, bool bserver)
 {
+    // RACE-03 fix: local copy for atomic index — write buffer content first,
+    // then atomically update index so readers see complete entries
+    uint8_t slot = loraWrite.load();
+
+    if(bLORADEBUG)
+        Serial.printf("[MC-DBG] RX_DEDUP_ADD msg_id=%08X srv=%d slot=%d/%d\n",
+                      msg_id, bserver, slot, MAX_DEDUP_RING);
+
     // byte 0-3 msg_id
-    ringBufferLoraRX[loraWrite][3] = msg_id >> 24;
-    ringBufferLoraRX[loraWrite][2] = msg_id >> 16;
-    ringBufferLoraRX[loraWrite][1] = msg_id >> 8;
-    ringBufferLoraRX[loraWrite][0] = msg_id;
+    ringBufferLoraRX[slot][3] = msg_id >> 24;
+    ringBufferLoraRX[slot][2] = msg_id >> 16;
+    ringBufferLoraRX[slot][1] = msg_id >> 8;
+    ringBufferLoraRX[slot][0] = msg_id;
+    ringBufferLoraRX[slot][4] = bserver ? 1 : 0;
 
-    if(bserver)
-        ringBufferLoraRX[loraWrite][4] = 1;
-    else
-        ringBufferLoraRX[loraWrite][4] = 0;
-
-    loraWrite++;
-    if (loraWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-        loraWrite = 0;
+    uint8_t next = slot + 1;
+    if (next >= MAX_DEDUP_RING)
+        next = 0;
+    loraWrite.store(next);
 }
 
 int checkOwnRx(uint8_t compBuffer[4])
 {
-    for(int ilo=0; ilo<MAX_RING; ilo++)
+    for(int ilo=0; ilo<MAX_DEDUP_RING; ilo++)
     {
         if(memcmp(ringBufferLoraRX[ilo], compBuffer, 4) == 0)
             return ilo;
@@ -495,7 +538,7 @@ int checkOwnRx(uint8_t compBuffer[4])
 
 bool checkServerRx(uint8_t compBuffer[4])
 {
-    for(int ilo=0; ilo<MAX_RING; ilo++)
+    for(int ilo=0; ilo<MAX_DEDUP_RING; ilo++)
     {
         if(memcmp(ringBufferLoraRX[ilo], compBuffer, 4) == 0)
         {
@@ -1524,8 +1567,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         TDeck_pro_lora_disp(strPath, strAscii);
 
-        strcpy(pageLastTextLong1[pagePointer], msg_text);
-        strcpy(pageLastTextLong2[pagePointer], strAscii.c_str());
+        strncpy(pageLastTextLong1[pagePointer], msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
+        pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
+        strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
+        pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
         bSetDisplay = false;
 
@@ -1568,8 +1613,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     e290_display.println(strAscii);
 
-    strcpy(pageLastTextLong1[pagePointer], msg_text);
-    strcpy(pageLastTextLong2[pagePointer], strAscii.c_str());
+    strncpy(pageLastTextLong1[pagePointer], msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
+    pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
+    strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
+    pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
     e290_display.update();
 
@@ -1603,8 +1650,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     strAscii = utf8ascii(aprsmsg.msg_payload);
 
-    strcpy(pageLastTextLong1[pagePointer], strPath.c_str());
-    strcpy(pageLastTextLong2[pagePointer], strAscii.c_str());
+    strncpy(pageLastTextLong1[pagePointer], strPath.c_str(), sizeof(pageLastTextLong1[pagePointer]) - 1);
+    pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
+    strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
+    pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
     displayTFT(strPath, strAscii);
 
@@ -1687,7 +1736,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     iwords=99;
 
     memset(line_text, 0x00, 21);
-    strcat(line_text, words[0]);
+    strncat(line_text, words[0], sizeof(line_text) - strlen(line_text) - 1);
 
     bool bEnd=false;
 
@@ -1721,13 +1770,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             bClear=false;
 
-            strcat(line_text, words[itxt]);
+            strncat(line_text, words[itxt], sizeof(line_text) - strlen(line_text) - 1);
 
         }
         else
         {
-            strcat(line_text, " ");
-            strcat(line_text, words[itxt]);
+            strncat(line_text, " ", sizeof(line_text) - strlen(line_text) - 1);
+            strncat(line_text, words[itxt], sizeof(line_text) - strlen(line_text) - 1);
         }
     }
 
@@ -1842,10 +1891,10 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     lat = conv_coord_to_dec(aprspos.lat);
     lon = conv_coord_to_dec(aprspos.lon);
 
-    d_dir_to = tinyGPSPlus.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
+    d_dir_to = gps.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
     dir_to = d_dir_to;
 
-    dist_to = tinyGPSPlus.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
+    dist_to = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
 
     sendDisplayMainline();
 
@@ -1930,11 +1979,11 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     ipt=0;
 
     // check Batt
-    for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
+    for(itxt=istarttext; itxt<aprsmsg.msg_payload.length(); itxt++)
     {
         if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == 'B' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=aprsmsg.msg_payload.length();id++)
+            for(unsigned int id=itxt+3;id<aprsmsg.msg_payload.length();id++)
             {
                 // ENDE
                 if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
@@ -1974,11 +2023,11 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #endif
 
-    for(itxt=istarttext; itxt<=aprsmsg.msg_payload.length(); itxt++)
+    for(itxt=istarttext; itxt<aprsmsg.msg_payload.length(); itxt++)
     {
         if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == 'A' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
         {
-            for(unsigned int id=itxt+3;id<=aprsmsg.msg_payload.length();id++)
+            for(unsigned int id=itxt+3;id<aprsmsg.msg_payload.length();id++)
             {
                 // ENDE
                 if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
@@ -2056,16 +2105,23 @@ void printBuffer(uint8_t *buffer, int len)
 
 void printAsciiBuffer(uint8_t *buffer, int len)
 {
+    if(len < 4)
+        return;
+
     if(buffer[0] != 0x21 && buffer[0] != 0x3A && buffer[0] != 0x40 && buffer[0] != 0x41)
     {
         Serial.printf("LoRa starting with 0x%02X and %02X%02X%02X ... no decode\n", buffer[0], buffer[1], buffer[2], buffer[3]);
         return;
     }
 
-    for (int i = 0; i < len; i++)
+    int ulen = len;
+    if(ulen > 255)
+        ulen = 255;
+
+    for (int i = 0; i < ulen; i++)
     {
-        if(buffer[i] == 0x00)
-            Serial.printf("#");
+        if(buffer[i] < 0x20 || buffer[i] > 0x7e)
+            Serial.print("#");
         else
             Serial.printf("%c", buffer[i]);
     }
@@ -2393,12 +2449,13 @@ void sendMessage(char *msg_text, int len)
 
     if(bDisplayRetx)
     {
-        unsigned int ring_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
-        Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", iWrite, ringBuffer[iWrite][1], ringBuffer[iWrite][0], ringBuffer[iWrite][2], ring_msg_id);
+        int w = iWrite;
+        unsigned int ring_msg_id = (ringBuffer[w][6]<<24) | (ringBuffer[w][5]<<16) | (ringBuffer[w][4]<<8) | ringBuffer[w][3];
+        Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", w, ringBuffer[w][1], ringBuffer[w][0], ringBuffer[w][2], ring_msg_id);
     }
 
     retryCount[iWrite] = 0;
-    addRingPointer(iWrite, iRead, MAX_RING, "tx");
+    addTxRingEntry("user_msg");
 
     /*
     iWrite++;
@@ -2753,7 +2810,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
         memcpy(ringBuffer[iWrite]+2, msg_buffer, ilng);
 
-        addRingPointer(iWrite, iRead, MAX_RING, "tx");
+        addTxRingEntry("user_pos");
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             tdeck_send_track_view();
@@ -2877,7 +2934,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
         memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-        addRingPointer(iWrite, iRead, MAX_RING, "tx");
+        addTxRingEntry("user_wx");
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             tdeck_send_track_view();
@@ -2949,7 +3006,7 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
     ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
     memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-    addRingPointer(iWrite, iRead, MAX_RING, "tx");
+    addTxRingEntry("user_hey");
 
     /*
     iWrite++;
@@ -3024,7 +3081,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     ringBuffer[iWrite][1]=0xFF;    // ACK-Status byte 0xFF for no retransmission
     memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-    addRingPointer(iWrite, iRead, MAX_RING, "tx");
+    addTxRingEntry("beacon");
 
     /*
     iWrite++;
@@ -3097,7 +3154,7 @@ void sendHey()
         ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
         memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
-        addRingPointer(iWrite, iRead, MAX_RING, "tx");
+        addTxRingEntry("auto_pos");
 
         /*
         iWrite++;
@@ -3365,7 +3422,7 @@ void sendTelemetry(int ID)
             memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
             if(!bDisplayTrack)
-                addRingPointer(iWrite, iRead, MAX_RING, "tx");
+                addTxRingEntry("phone_msg");
         }
 
         // send value messages to Lora-APRS
@@ -3381,7 +3438,7 @@ void sendTelemetry(int ID)
             ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
             memcpy(ringBuffer[iWrite]+2, msg_buffer, tlng);
 
-            addRingPointer(iWrite, iRead, MAX_RING, "tx");
+            addTxRingEntry("phone_raw");
         }
     }
 }
@@ -3400,7 +3457,14 @@ int GetHeadingDifference(int heading1, int heading2)
 
 unsigned int setSMartBeaconing(double dlat, double dlon)
 {
-    extern TinyGPSPlus tinyGPSPlus;
+    // check TRACK Mode on
+    if(!bDisplayTrack)
+    {
+        if(bGPSDEBUG)
+            Serial.printf("%s [POSINFO]...Stationary -> Suppressing drift (Rate: %is)\n", getTimeString().c_str(), POSINFO_INTERVAL);
+        
+        return POSINFO_INTERVAL;
+    }
 
     unsigned int gps_send_rate = posinfo_last_rate;  // seconds
 
@@ -3413,8 +3477,9 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         posinfo_last_lon = dlon;
     }
 
-    double distance = tinyGPSPlus.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
-
+    double distance = 0.;
+    
+    distance = gps.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
     
     //posinfo_distance += distance;
     posinfo_distance = distance; // KBC 25.11.14
@@ -3428,13 +3493,13 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     }
     else
     {
-        posinfo_direction = tinyGPSPlus.courseTo(posinfo_prev_lat, posinfo_prev_lon, dlat, dlon);    // Grad
+        posinfo_direction = gps.courseTo(posinfo_prev_lat, posinfo_prev_lon, dlat, dlon);    // Grad
     }
 
     // Use GPS speed if available (more accurate than distance/interval)
     double speed_mps = 0.0;
-    if(tinyGPSPlus.speed.isValid())
-        speed_mps = tinyGPSPlus.speed.mps();
+    if(gps.speed.isValid())
+        speed_mps = gps.speed.mps();
     else
         speed_mps = distance / gps_refresh_intervall; // Fallback
 
@@ -3445,17 +3510,17 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     {
         if(distance < 100)
         {
-            posinfo_last_rate = 1800;
+            posinfo_last_rate = POSINFO_INTERVAL;
 
             if(bGPSDEBUG)
-                Serial.printf("[POSI]...STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", speed_mps, distance, (int)posinfo_last_rate);
+                Serial.printf("%s [POSINFO]...STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", getTimeString().c_str(), speed_mps, distance, (int)posinfo_last_rate);
 
             return posinfo_last_rate;
         }
     }
 
     if(bGPSDEBUG)
-        Serial.printf("[POSI]...dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", posinfo_direction, distance, speed_mps, gps_refresh_intervall);
+        Serial.printf("%s [POSINFO]...dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", getTimeString().c_str(), posinfo_direction, distance, speed_mps, gps_refresh_intervall);
 
     // Moving Logic & Symbol Switching with Hysteresis
     static unsigned long last_car_speed_ts = 0;
@@ -3509,13 +3574,13 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     if(WiFi.status() == WL_CONNECTED && speed_mps < 1.0)
     {
         // Relax update rate significantly if on WiFi and not moving
-        gps_send_rate = 1800; // 30 minutes
+        gps_send_rate = POSINFO_INTERVAL; // 30 minutes
         
         // Also suppress distance triggers unless very large (e.g. moving to another building)
         if(distance < 200.0) 
         {
-            if(bGPSDEBUG) Serial.println("[POSI]...WiFi connected & Stationary -> Suppressing drift (Rate: 1800s)");
-            return 1800;
+            if(bGPSDEBUG) Serial.printf("%s [POSINFO]...WiFi connected & Stationary -> Suppressing drift (Rate: %i)\n", getTimeString().c_str(), POSINFO_INTERVAL);
+            return POSINFO_INTERVAL;
         }
     }
     #endif
@@ -3539,7 +3604,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     }
 
     if(bGPSDEBUG)
-        Serial.printf("[POSI]...speed:%.1lf -> fast rate:%i\n", speed_mps, (int)gps_send_rate);
+        Serial.printf("%s [POSINFO]...speed:%.1lf -> fast rate:%i\n", getTimeString().c_str(), speed_mps, (int)gps_send_rate);
 
     // Distance Trigger: Force send if distance threshold exceeded
     double dist_threshold = 500.0;
@@ -3550,7 +3615,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     {
         posinfo_shot = true;
         if(bGPSDEBUG)
-            Serial.printf("[POSI]...one-shot set - distance > %.0fm (%.1lf)\n", dist_threshold, distance);
+            Serial.printf("%s [POSINFO]...one-shot set - distance > %.0fm (%.1lf)\n", getTimeString().c_str(), dist_threshold, distance);
     }
 
     if(gps_send_rate < 200)  // seit letzter position
@@ -3573,7 +3638,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
                 posinfo_shot=true;
 
                 if(bGPSDEBUG)
-                    Serial.printf("[POSI]...one-shot set - direction_diff:%i (thresh:%i) last_lat:%.1lf last_lon:%.1lf\n", direction_diff, turn_threshold, posinfo_prev_lat, posinfo_prev_lon);
+                    Serial.printf("%s [POSINFO]...one-shot set - direction_diff:%i (thresh:%i) last_lat:%.1lf last_lon:%.1lf\n", getTimeString().c_str(), direction_diff, turn_threshold, posinfo_prev_lat, posinfo_prev_lon);
             }
         }
     }
@@ -3586,7 +3651,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     posinfo_last_rate = gps_send_rate;
 
     if(bGPSDEBUG)
-        Serial.printf("[POSI]...RATE:%i\n", (int)posinfo_last_rate);
+        Serial.printf("%s [POSINFO]...RATE:%i\n", getTimeString().c_str(), (int)posinfo_last_rate);
 
     return posinfo_last_rate;
 }
@@ -3779,7 +3844,7 @@ int count_char(String s, char c)
 }
 
 // add RING Pointer
-void addRingPointer(int &pWrite, int &pRead, int iMAX, const char* bufName)
+void addRingPointer(volatile int &pWrite, volatile int &pRead, int iMAX, const char* bufName)
 {
     pWrite++;
     if (pWrite >= iMAX) // if the buffer is full we start at index 0 -> take care of overwriting!
@@ -3795,7 +3860,7 @@ void addRingPointer(int &pWrite, int &pRead, int iMAX, const char* bufName)
             if (pRead >= iMAX) // if the buffer is full we start at index 0 -> take care of overwriting!
                 pRead = 0;
 
-            if(bLORADEBUG)
+            if(bLORADEBUG && strcmp(bufName, "raw_rx") != 0 && strcmp(bufName, "phone") != 0)
             {
                 Serial.printf("[MC-DBG] RING_OVERFLOW buf=%s\n", bufName);
             }
@@ -3803,4 +3868,18 @@ void addRingPointer(int &pWrite, int &pRead, int iMAX, const char* bufName)
     }
 
     bnextread=false;
+}
+
+// allgemeine Funktionen
+bool is_equ(const char* buf1, const char* buf2)
+{
+    size_t len = strlen(buf1);
+
+    if(len != strlen(buf2))
+        return false;
+
+    if(memcmp(buf1, buf2, len) == 0)
+        return true;
+
+    return false;
 }

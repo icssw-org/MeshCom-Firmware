@@ -90,7 +90,8 @@ bool BaseDisplay::calculating() {
             // --------------
 
             if (PRESERVE_IMAGE && pagefile_height == panel_height) {
-                if (!saving_to_sd) {
+                if (!saving_to_sd)
+                {
                     activate();
                     fastmode_secondpass = true;
 

@@ -71,7 +71,7 @@ void setBrightness(uint8_t value)
         tft_off();
 
         // Sync keyboard backlight (always)
-        setKeyboardBacklight(0);
+        // KBC 03 setKeyboardBacklight(0);
 
         return;
     }
@@ -108,8 +108,10 @@ void setBrightness(uint8_t value)
     }
     
     // Sync keyboard backlight if not locked
-    if(!meshcom_settings.node_keyboardlock) {
+    if(meshcom_settings.node_kbllightlock)
+    {
         uint8_t kbl_val = (value >= BRIGHTNESS_STEPS) ? 255 : (value * 16);
+
         if (bDEBUG)
             Serial.printf("[TDECK]...setBrightness: Syncing KBL to %d\n", kbl_val);
 

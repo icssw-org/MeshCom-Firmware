@@ -960,7 +960,7 @@ void sub_page_path()
             if ((mheardPathEpoch[iset] + 60 * 60 * 3) > getUnixClock())
             { // 3h
                 isShowing = true;
-                unsigned long lt = mheardPathEpoch[iset] + ((60 * 60 + 24) * (int)meshcom_settings.node_utcoff);
+                unsigned long lt = mheardPathEpoch[iset] + (long)(meshcom_settings.node_utcoff * 3600.0);
                 web_client.printf("<div class=\"cardlayout\">\n");
                 web_client.printf("<label class=\"cardlabel\"><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a> <span class=\"font-small\">(%s)</span></label>", mheardPathCalls[iset], mheardPathCalls[iset], convertUNIXtoString(lt).substring(5).c_str());
                 web_client.printf("<div class=\"flex-auto-wrap\">");
