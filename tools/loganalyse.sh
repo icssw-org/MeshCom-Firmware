@@ -284,11 +284,40 @@ echo "--- ACK_QLEN ---"
 grep -oE 'ack_qlen=[0-9]+' "$LOGFILE" | sort | uniq -c | sort -rn || true
 
 # ─── 8. CRC ERRORS ───
+# Matches three log formats:
+#   ESP32:      [MC-DBG] CRC_ERROR rssi=-125 snr=-20 freq_err=134.7 size=255
+#   nRF52 new:  [MC-DBG] RX_ERROR rssi=-125 snr=-20 ts=12345
+#   nRF52 old:  OnRxError   (bare, no details)
 section "CRC_ERRORS"
 
-echo "CRC_ERROR_COUNT: $(grep -c 'CRC_ERROR' "$LOGFILE" 2>/dev/null; true)"
+CRC_ESP_COUNT=$(grep -c 'CRC_ERROR' "$LOGFILE" 2>/dev/null || true)
+CRC_NRF_NEW_COUNT=$(grep -c 'RX_ERROR rssi' "$LOGFILE" 2>/dev/null || true)
+CRC_NRF_OLD_COUNT=$(grep -c 'OnRxError$' "$LOGFILE" 2>/dev/null || true)
+# OnRxError always comes paired with a detail line:
+#   ESP32:      OnRxError -> CRC_ERROR (with rssi/snr/freq_err)
+#   nRF52 new:  OnRxError -> RX_ERROR  (with rssi/snr)
+#   nRF52 old:  OnRxError alone        (no detail line)
+# Only count OnRxError if there are NO CRC_ERROR and NO RX_ERROR lines (old nRF52 FW)
+if [ "$CRC_ESP_COUNT" -gt 0 ] || [ "$CRC_NRF_NEW_COUNT" -gt 0 ]; then
+    CRC_NRF_COUNT=$CRC_NRF_NEW_COUNT
+else
+    CRC_NRF_COUNT=$CRC_NRF_OLD_COUNT
+fi
+CRC_TOTAL=$((CRC_ESP_COUNT + CRC_NRF_COUNT))
+echo "CRC_ERROR_COUNT: $CRC_TOTAL"
+if [ "$CRC_ESP_COUNT" -gt 0 ]; then echo "CRC_ESP32 (CRC_ERROR): $CRC_ESP_COUNT"; fi
+if [ "$CRC_NRF_COUNT" -gt 0 ]; then echo "CRC_NRF52 (RX_ERROR): $CRC_NRF_COUNT"; fi
+if [ "$CRC_ESP_COUNT" -eq 0 ] && [ "$CRC_NRF_NEW_COUNT" -eq 0 ] && [ "$CRC_NRF_OLD_COUNT" -gt 0 ]; then
+    echo "CRC_NRF52 (OnRxError, no details): $CRC_NRF_OLD_COUNT"
+fi
 
-grep "CRC_ERROR" "$LOGFILE" | awk '{
+# Detail lines: CRC_ERROR (ESP32) + RX_ERROR (nRF52 new), fall back to OnRxError (nRF52 old)
+if [ "$CRC_ESP_COUNT" -gt 0 ] || [ "$CRC_NRF_NEW_COUNT" -gt 0 ]; then
+    grep -E 'CRC_ERROR|RX_ERROR rssi' "$LOGFILE"
+else
+    grep -E 'OnRxError$' "$LOGFILE"
+fi | awk '{
+    rssi="n/a"; snr="n/a"; ferr="n/a"; sz="n/a"
     for (i=1; i<=NF; i++) {
         if ($i ~ /^rssi=/) rssi = $i
         if ($i ~ /^snr=/) snr = $i
@@ -298,7 +327,7 @@ grep "CRC_ERROR" "$LOGFILE" | awk '{
     print $2, rssi, snr, ferr, sz
 }' | head -50 || true
 
-# Classify by freq error
+# Classify by freq error (only possible for ESP32 CRC_ERROR lines with freq_err)
 echo ""
 echo "--- CRC_FREQ_CLASSIFICATION ---"
 grep "CRC_ERROR" "$LOGFILE" | grep -oE 'freq_err=[0-9.-]+' | awk -F= '{
@@ -312,6 +341,14 @@ END {
     printf "MEDIUM (1-3kHz): %d\n", medium+0
     printf "COLLISION (<1kHz): %d\n", collision+0
 }' || true
+NRF_UNCLASS=$CRC_NRF_COUNT
+# Also count OnRxError-only entries from old nRF52 FW
+if [ "$CRC_ESP_COUNT" -eq 0 ] && [ "$CRC_NRF_NEW_COUNT" -eq 0 ] && [ "$CRC_NRF_OLD_COUNT" -gt 0 ]; then
+    NRF_UNCLASS=$CRC_NRF_OLD_COUNT
+fi
+if [ "$NRF_UNCLASS" -gt 0 ]; then
+    echo "UNCLASSIFIED (nRF52, no freq_err): $NRF_UNCLASS"
+fi
 
 # ─── 9. RETRIES (RING_STATUS) ───
 section "RING_STATUS"
@@ -425,7 +462,12 @@ echo "RX_TIMEOUT_DEFERRED: $(grep -c 'RX_TIMEOUT_DEFERRED' "$LOGFILE" 2>/dev/nul
 section "CRC_DETAIL"
 
 echo "--- CRC_10MIN_BUCKETS ---"
-grep "CRC_ERROR" "$LOGFILE" | awk '{
+# Use CRC_ERROR + RX_ERROR (structured detail lines), fall back to OnRxError (old nRF52)
+if [ "$CRC_ESP_COUNT" -gt 0 ] || [ "$CRC_NRF_NEW_COUNT" -gt 0 ]; then
+    grep -E 'CRC_ERROR|RX_ERROR rssi' "$LOGFILE"
+else
+    grep -E 'OnRxError$' "$LOGFILE"
+fi | awk '{
     split($2, t, ":")
     bucket = t[1] ":" sprintf("%02d", int(t[2]/10)*10)
     cnt[bucket]++
@@ -438,8 +480,14 @@ END {
 echo ""
 echo "--- CRC_HOURLY_RATE ---"
 # CRC errors per hour vs received packets per hour
-awk '
-/CRC_ERROR/ {
+# Build CRC pattern to avoid double-counting OnRxError+CRC_ERROR/RX_ERROR pairs
+if [ "$CRC_ESP_COUNT" -gt 0 ] || [ "$CRC_NRF_NEW_COUNT" -gt 0 ]; then
+    CRC_AWK_RE='CRC_ERROR|RX_ERROR rssi'
+else
+    CRC_AWK_RE='OnRxError$'
+fi
+awk -v crc_re="$CRC_AWK_RE" '
+$0 ~ crc_re {
     split($2, t, ":")
     h = t[1]
     crc[h]++
@@ -460,7 +508,11 @@ END {
 echo ""
 echo "--- CRC_CLUSTERS ---"
 # CRC errors within 2s of each other = collision bursts
-grep "CRC_ERROR" "$LOGFILE" | awk '{
+if [ "$CRC_ESP_COUNT" -gt 0 ] || [ "$CRC_NRF_NEW_COUNT" -gt 0 ]; then
+    grep -E 'CRC_ERROR|RX_ERROR rssi' "$LOGFILE"
+else
+    grep -E 'OnRxError$' "$LOGFILE"
+fi | awk '{
     split($2, t, ":")
     split(t[3], s, ".")
     ts = t[1] * 3600 + t[2] * 60 + s[1] + (length(s) > 1 ? ("0." s[2]) + 0 : 0)
@@ -495,8 +547,8 @@ END {
 echo ""
 echo "--- CRC_VS_CHANNEL_UTIL ---"
 # Correlate CRC buckets with channel utilization buckets
-awk '
-/CRC_ERROR/ {
+awk -v crc_re="$CRC_AWK_RE" '
+$0 ~ crc_re {
     split($2, t, ":")
     bucket = t[1] ":" sprintf("%02d", int(t[2]/10)*10)
     crc[bucket]++
@@ -726,7 +778,17 @@ section "DROPPED_PACKETS"
 
 echo "--- DROP_CATEGORIES ---"
 RING_DROP_N=$(grep -c 'RING_DROP' "$LOGFILE" 2>/dev/null || true); echo "RING_DROP: ${RING_DROP_N:-0}"
-CRC_ERR_N=$(grep -c 'CRC_ERROR' "$LOGFILE" 2>/dev/null || true); echo "CRC_ERROR: ${CRC_ERR_N:-0}"
+CRC_ERR_ESP2=$(grep -c 'CRC_ERROR' "$LOGFILE" 2>/dev/null || true)
+CRC_ERR_NRF_NEW2=$(grep -c 'RX_ERROR rssi' "$LOGFILE" 2>/dev/null || true)
+CRC_ERR_NRF_OLD2=$(grep -c 'OnRxError$' "$LOGFILE" 2>/dev/null || true)
+# Same dedup logic: OnRxError only when no structured detail lines exist
+if [ "$CRC_ERR_ESP2" -gt 0 ] || [ "$CRC_ERR_NRF_NEW2" -gt 0 ]; then
+    CRC_ERR_NRF2=$CRC_ERR_NRF_NEW2
+else
+    CRC_ERR_NRF2=$CRC_ERR_NRF_OLD2
+fi
+CRC_ERR_N=$((CRC_ERR_ESP2 + CRC_ERR_NRF2))
+echo "CRC_ERROR: ${CRC_ERR_N:-0}"
 DEDUP_N=$(grep -c 'RX_DEDUP_DUP' "$LOGFILE" 2>/dev/null || true); echo "RX_DEDUP_DUP: ${DEDUP_N:-0}"
 LOOP_N=$(grep -c 'RELAY_LOOP_BLOCKED' "$LOGFILE" 2>/dev/null || true); echo "RELAY_LOOP_BLOCKED: ${LOOP_N:-0}"
 AFD_N=$(grep -c 'ACK_FWD_DROPPED' "$LOGFILE" 2>/dev/null || true); echo "ACK_FWD_DROPPED: ${AFD_N:-0}"

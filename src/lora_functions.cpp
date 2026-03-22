@@ -286,6 +286,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         unsigned long _rx_s = ch_util_rx_start.exchange(0);
         if(_rx_s > 0)
             ch_util_rx_accum.fetch_add(millis() - _rx_s);
+#if defined BOARD_RAK4630
+        // Fallback: OnHeaderDetect feuert nicht zuverlaessig auf nRF52,
+        // daher RX-Airtime aus Paketlaenge berechnen (wie ESP32 in checkRX).
+        else if(size > 0)
+            ch_util_rx_accum.fetch_add(Radio.TimeOnAir(MODEM_LORA, size));
+#endif
     }
 
     #if defined BOARD_RAK4630
