@@ -178,6 +178,7 @@ static int findAndStopRingSlot(uint32_t msgId)
             if(extractRingMsgId(i) == msgId)
             {
                 ringBuffer[i][1] = RING_STATUS_DONE;
+                ringBuffer[i][0] = 0;  // clear len so getNextTxSlot skips this slot
                 retryCount[i] = 0;
                 return i;
             }
