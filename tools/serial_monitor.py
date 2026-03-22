@@ -171,6 +171,9 @@ class Monitor:
         self.ring_last_pending: int = 0
         self.ring_last_retrying: int = 0
         self.ring_last_done: int = 0
+        self.ring_max_queued: int = 0
+        self.ring_max_retrying: int = 0
+        self.ring_max_done: int = 0
         self.ring_zombie_streak: int = 0  # consecutive reports with retrying>0, queued==0
 
         # CSMA / adaptive wait tracking
@@ -370,6 +373,9 @@ class Monitor:
             self.ring_last_pending = int(m.group(2))
             self.ring_last_retrying = int(m.group(3))
             self.ring_last_done = int(m.group(4))
+            self.ring_max_queued = max(self.ring_max_queued, self.ring_last_queued)
+            self.ring_max_retrying = max(self.ring_max_retrying, self.ring_last_retrying)
+            self.ring_max_done = max(self.ring_max_done, self.ring_last_done)
             if self.ring_last_retrying > 0 and self.ring_last_queued == 0:
                 self.ring_zombie_streak += 1
                 if self.ring_zombie_streak >= RING_ZOMBIE_CONSECUTIVE:
@@ -717,9 +723,9 @@ class Monitor:
             else:
                 lines.append(f"Adaptive wait: {wait_str}")
             lines.append(
-                f"Ring: queued={self.ring_last_queued} "
-                f"retrying={self.ring_last_retrying} "
-                f"done={self.ring_last_done} | Deferred: {deferred}"
+                f"Ring: queued={self.ring_last_queued} (max {self.ring_max_queued}) "
+                f"retrying={self.ring_last_retrying} (max {self.ring_max_retrying}) "
+                f"done={self.ring_last_done} (max {self.ring_max_done}) | Deferred: {deferred}"
             )
             lines.append(
                 f"WiFi: {wifi_str} | UDP: {udp_str} | "
@@ -749,17 +755,22 @@ class Monitor:
             ack_cad_busy = self.counters.get("ack_cad_busy", 0)
             ack_cancel_retx = self.counters.get("ack_cancel_retransmit", 0)
             if ack_saved or ack_tx or ack_queued or ack_received or ack_drops:
-                lines.append(
-                    f"ACK: saved={ack_saved} "
-                    f"(cancel={self.counters.get('ack_rx_cancel_saved', 0)} "
-                    f"fwd_dedup={self.counters.get('ack_fwd_dedup', 0)} "
-                    f"gw_dedup={self.counters.get('gw_ack_dedup', 0)} "
-                    f"skip={self.counters.get('ack_slot_skip', 0)}) "
-                    f"tx={ack_tx} eff={ack_eff_str} | "
-                    f"queued={ack_queued} received={ack_received} "
-                    f"cad_busy={ack_cad_busy} cancel_retx={ack_cancel_retx} "
-                    f"drops={ack_drops}"
-                )
+                ack_parts = []
+                if ack_received:
+                    ack_parts.append(f"received={ack_received}")
+                if ack_saved:
+                    ack_parts.append(f"saved={ack_saved} eff={ack_eff_str}")
+                if ack_tx:
+                    ack_parts.append(f"tx={ack_tx}")
+                if ack_queued:
+                    ack_parts.append(f"queued={ack_queued}")
+                if ack_drops:
+                    ack_parts.append(f"drops={ack_drops}")
+                if ack_cad_busy:
+                    ack_parts.append(f"cad_busy={ack_cad_busy}")
+                if ack_cancel_retx:
+                    ack_parts.append(f"cancel_retx={ack_cancel_retx}")
+                lines.append(f"ACK: {' | '.join(ack_parts)}")
 
             trickle_events = self.counters.get("trickle_events", 0)
             trickle_suppress = self.counters.get("trickle_suppress", 0)
@@ -897,7 +908,6 @@ def replay_file(path: str, interval: int, speed: float) -> None:
     monitor = Monitor(summary_interval=interval, clock=clock, wallclock=wallclock)
 
     origin_ts: datetime | None = None
-    last_summary_at = 0.0
     last_stuck_check = 0.0
     prev_elapsed = 0.0
     line_count = 0
@@ -905,7 +915,6 @@ def replay_file(path: str, interval: int, speed: float) -> None:
     print(f"MeshCom Serial Monitor — Replay")
     print(f"File:    {path}")
     print(f"Speed:   {'fast-forward' if speed == 0 else f'{speed}x'}")
-    print(f"Summary every {interval}s (simulated time)")
     print()
 
     with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -937,11 +946,6 @@ def replay_file(path: str, interval: int, speed: float) -> None:
             if elapsed - last_stuck_check >= 1.0:
                 monitor.check_stuck_state()
                 last_stuck_check = elapsed
-
-            # Reset interval counters at summary boundaries (no printout)
-            if elapsed - last_summary_at >= interval:
-                monitor.reset_interval()
-                last_summary_at = elapsed
 
     # Final summary
     print(f"\n--- Final Summary (Replay: {line_count} lines) ---")
