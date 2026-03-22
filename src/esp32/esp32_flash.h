@@ -196,6 +196,7 @@ struct s_meshcom_settings
 	String node_audio_msg = "/";
 	bool node_keyboardlock = false;
 	bool node_backlightlock = false;
+	bool node_kbllightlock = false;
 	int node_modus = 0; // 0..OFF, 1..KB LOCK, 2..LIGHT ON, 3.. KBL&LIGHT
 	bool node_mute = false;
 	// When true: persist every incoming non-system message immediately

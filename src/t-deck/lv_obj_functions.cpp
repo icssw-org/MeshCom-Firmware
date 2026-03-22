@@ -320,41 +320,52 @@ bool tdeck_tab_menu_is_visible(void)
     return tab_menu_visible;
 }
 
-static bool kbd_light_on = false;
-
 static void tab_standby_button_event_cb(lv_event_t * e)
 {
     if (bDEBUG)
         Serial.println("[TDECK]...standby_button_event - pressed");
 
     meshcom_settings.node_backlightlock = !meshcom_settings.node_backlightlock;
-    meshcom_settings.node_modus = (meshcom_settings.node_modus + 2) % 4;
 
     if (meshcom_settings.node_backlightlock)
     {
+        meshcom_settings.node_modus = meshcom_settings.node_modus | 0x02;
+
         lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
     }
     else
     {
+        meshcom_settings.node_modus = meshcom_settings.node_modus & 0xFD;
+
         lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     }
 }
 
 static void tab_kbl_button_event_cb(lv_event_t * e)
 {
-    if (bDEBUG)
-        Serial.println("[TDECK]...kbl_button_event - pressed");
-
     if(lv_event_get_code(e) == LV_EVENT_CLICKED)
     {
-        kbd_light_on = !kbd_light_on;
-        if (kbd_light_on)
+        if (bDEBUG)
+            Serial.println("[TDECK]...kbl_button_event - pressed");
+
+        meshcom_settings.node_kbllightlock = !meshcom_settings.node_kbllightlock;
+
+        if (meshcom_settings.node_kbllightlock)
         {
-            setKeyboardBacklight(255);
+            meshcom_settings.node_modus = meshcom_settings.node_modus | 0x01;
+
+            if (bDEBUG)
+                Serial.println("[TDECK]...tab_kbl: turn on keyboard backlight");
+            setKeyboardBacklight(150);
             lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
         }
         else
         {
+            meshcom_settings.node_modus = meshcom_settings.node_modus & 0xFE;
+
+            if (bDEBUG)
+                Serial.println("[TDECK]...tab_kbl: turn off keyboard backlight");
+                
             setKeyboardBacklight(0);
             lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         }
@@ -440,7 +451,7 @@ void setDisplayLayout(lv_obj_t *parent)
     static lv_style_t bg_style;
     lv_style_init(&bg_style);
     lv_style_set_text_color(&bg_style, lv_color_white());
-    lv_style_set_text_font(&bg_style, &lv_font_montserrat_14);
+    lv_style_set_text_font(&bg_style, &lv_font_montserrat_16);
     //lv_style_set_bg_img_src(&bg_style, &image);
     lv_style_set_bg_opa(&bg_style, LV_OPA_100);
 
@@ -573,11 +584,11 @@ void setDisplayLayout(lv_obj_t *parent)
 
     lv_obj_t *t2 = lv_tabview_add_tab(tv, LV_SYMBOL_ENVELOPE);
     lv_obj_t *t5 = lv_tabview_add_tab(tv, LV_SYMBOL_KEYBOARD);
-    lv_obj_t *t3 = lv_tabview_add_tab(tv, "POS");
+    lv_obj_t *t3 = lv_tabview_add_tab(tv, "\uF052");
     lv_obj_t *t7 = lv_tabview_add_tab(tv, LV_SYMBOL_IMAGE);
     lv_obj_t *t6 = lv_tabview_add_tab(tv, LV_SYMBOL_GPS);
-    lv_obj_t *t4 = lv_tabview_add_tab(tv, LV_SYMBOL_DIRECTORY);
-    lv_obj_t *t8 = lv_tabview_add_tab(tv, LV_SYMBOL_LIST);
+    lv_obj_t *t4 = lv_tabview_add_tab(tv, LV_SYMBOL_LIST);
+    lv_obj_t *t8 = lv_tabview_add_tab(tv, "\uF0C9");
     lv_obj_t *t1 = lv_tabview_add_tab(tv, LV_SYMBOL_SETTINGS);
 
     lv_obj_set_scroll_dir(t2, LV_DIR_VER);
@@ -669,6 +680,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_pad_left(t1, 10, LV_PART_MAIN);
     lv_obj_set_style_pad_right(t1, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_top(t1, 5, LV_PART_MAIN);
+    lv_obj_set_style_text_font(t1, &lv_font_montserrat_14, LV_PART_MAIN);
 
     // Line Info
     lv_obj_t * setup_line_info = SET_new_line(t1, NULL, 0);
@@ -1473,8 +1485,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_style(track_ta, &tr_style, LV_PART_MAIN);
 
     lv_obj_t * btsendpos = lv_btn_create(t6);
-    lv_obj_set_pos(btsendpos, 200, 140);
-    lv_obj_set_size(btsendpos, 80, 20);
+    lv_obj_set_pos(btsendpos, 180, 150);
+    lv_obj_set_size(btsendpos, 100, 20);
     lv_obj_add_event_cb(btsendpos, btn_event_handler_sendpos, LV_EVENT_ALL, NULL);
 
     lv_obj_t * btnlabelsendpos = lv_label_create(btsendpos);
@@ -1958,21 +1970,13 @@ void tft_on()
     resetBrightness();
 
     // Force sync keyboard backlight
-    if (!meshcom_settings.node_keyboardlock) {
-        if (kbd_light_on)
-        {
-            if (bDEBUG)
-                Serial.println("[TDECK]...tft_on: turn on keyboard backlight");
+    if (meshcom_settings.node_keyboardlock)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...tft_on: turn on keyboard backlight");
 
-            // turn on keyboard backlight
-            setKeyboardBacklight(255);
-
-            // Update button state visual
-            if (tab_kbl_icon_label)
-            {
-                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN); //ex LV_PALETTE_YELLOW
-            }
-        }
+        // turn on keyboard backlight
+        setKeyboardBacklight(150);
     }
 
     tdeck_tft_timer = millis();
@@ -2003,22 +2007,17 @@ void tft_off()
         if (bDEBUG)
             Serial.println("[TDECK]...tft_off: sending sleep commands");
 
-        if (kbd_light_on)
-        {
-            // turn off keyboard backlight
-            setKeyboardBacklight(0);
-
-            // Update UI to reflect that KBL is now OFF
-            if(tab_kbl_icon_label)
-            {
-                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-            }
-        }
-
         tft.writecommand(TFT_DISPOFF);
         tft.writecommand(TFT_SLPIN);
         tft_is_sleeping = true;
     }
+
+    // always turn off keyboard backlight
+    if (bDEBUG)
+        Serial.println("[TDECK]...tft_off: turn off keyboard backlight");
+
+    setKeyboardBacklight(0);
+
 }
 
 
@@ -2204,19 +2203,42 @@ void tdeck_update_header_bt(void)
     update_header_bt_indicator();
 }
 
+bool save_node_backlightlock=false;
+bool save_node_kbllightlock=false;
+
 void tdeck_update_header_standby(void)
-{  
+{
     meshcom_settings.node_backlightlock = meshcom_settings.node_modus >= 2;
 
-    if (meshcom_settings.node_backlightlock)
+    if(meshcom_settings.node_backlightlock != save_node_backlightlock)
     {
-        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex LV_PALETTE_YELLOW
-    }
-    else
-    {
-        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+        if (meshcom_settings.node_backlightlock)
+        {
+            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex LV_PALETTE_YELLOW
+        }
+        else
+        {
+            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+        }
+
+        save_node_backlightlock = meshcom_settings.node_backlightlock;
     }
 
+    meshcom_settings.node_kbllightlock = meshcom_settings.node_modus >= 2 || meshcom_settings.node_modus == 1;
+
+    if(meshcom_settings.node_kbllightlock != save_node_kbllightlock)
+    {
+        if (meshcom_settings.node_kbllightlock)
+        {
+            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
+        }
+        else
+        {
+            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
+        }
+
+        save_node_kbllightlock = meshcom_settings.node_kbllightlock;
+    }
 }
 
 /* Pause/resume a small set of UI timers when the display is turned off/on.
