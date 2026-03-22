@@ -186,6 +186,8 @@ class Monitor:
 
         # No-transition silence tracking (for resolved alerts)
         self.radio_was_silent = False
+        self._no_transition_alerted = False
+        self._stuck_state_alerted = False
 
         # NTP tracking
         self.ntp_fails_interval: int = 0
@@ -241,6 +243,8 @@ class Monitor:
                     f"woke up via {from_st}->{to_st}"
                 )
                 self.radio_was_silent = False
+            self._no_transition_alerted = False
+            self._stuck_state_alerted = False
             # accumulate time in previous state
             if self.current_state:
                 self.state_time[self.current_state] += now - self.state_since
@@ -599,15 +603,19 @@ class Monitor:
             now = self._clock()
             if self.current_state and (now - self.state_since) > STUCK_STATE_SECONDS:
                 if self.current_state not in ("RX_LISTEN",):
-                    self._alert(
-                        f"STUCK in {self.current_state} for "
-                        f"{now - self.state_since:.0f}s"
-                    )
+                    if not self._stuck_state_alerted:
+                        self._alert(
+                            f"STUCK in {self.current_state} for "
+                            f"{now - self.state_since:.0f}s"
+                        )
+                        self._stuck_state_alerted = True
             if (now - self.last_transition) > NO_TRANSITION_SECONDS:
                 self.radio_was_silent = True
-                self._alert(
-                    f"No state transitions for {now - self.last_transition:.0f}s"
-                )
+                if not self._no_transition_alerted:
+                    self._alert(
+                        f"No state transitions for {now - self.last_transition:.0f}s"
+                    )
+                    self._no_transition_alerted = True
 
     # -- summary ------------------------------------------------------------
 
@@ -964,8 +972,19 @@ def reader_thread(
             raw = ser.readline()
         except serial.SerialException:
             if not stop_event.is_set():
-                print("\033[91m[SERIAL] Connection lost, retrying...\033[0m", flush=True)
-                time.sleep(2)
+                print("\033[91m[SERIAL] Connection lost, reconnecting...\033[0m", flush=True)
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+                # Wait for device to finish reboot cycle (CDC-ACM port
+                # may appear/disappear multiple times during boot)
+                time.sleep(5)
+                try:
+                    ser.open()
+                    print("\033[92m[SERIAL] Reconnected\033[0m", flush=True)
+                except Exception:
+                    pass
             continue
         if not raw:
             continue
