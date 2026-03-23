@@ -341,10 +341,6 @@ extern unsigned int  onrxdone_warn_count;
 // Deferred display update from OnRxDone
 extern volatile bool bPendingDisplayText;
 extern volatile bool bPendingDisplayPos;
-
-// Deferred save/reset — avoid flash write + W5100S SPI conflict during web request
-extern volatile bool bPendingSaveSettings;
-extern volatile bool bPendingResetExternUDP;
 extern struct aprsMessage pendingDisplayMsg;
 extern int16_t pendingDisplayRssi;
 extern int8_t  pendingDisplaySnr;
