@@ -105,6 +105,11 @@ unsigned int  onrxdone_warn_count = 0;
 // Deferred display update — avoid I2C transfer inside OnRxDone
 volatile bool bPendingDisplayText = false;
 volatile bool bPendingDisplayPos = false;
+
+// SPI bus guard — prevent LoRa ISR from accessing SPI while Ethernet (W5100S) is active
+// Both chips share the single SPI bus on RAK4631 (pins 3/29/30).
+volatile bool bSPI_ETH_Active = false;
+volatile bool bPendingRadioRx = false;
 struct aprsMessage pendingDisplayMsg;
 int16_t pendingDisplayRssi = 0;
 int8_t  pendingDisplaySnr = 0;
@@ -173,7 +178,7 @@ static int findAndStopRingSlot(uint32_t msgId)
 {
     for(int i = 0; i < MAX_RING; i++)
     {
-        if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE)
+        if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY)
         {
             if(extractRingMsgId(i) == msgId)
             {
@@ -322,7 +327,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         Serial.printf("[MC-DBG] RX_BUF_OVERWRITE buf=%d (still in use)\n", rxBufIndex);
     else if(bLORADEBUG)
         Serial.printf("[MC-DBG] RX_BUF_SWITCH buf=%d\n", rxBufIndex);
-    Radio.Rx(RX_TIMEOUT_VALUE);
+    // SPI guard: defer Radio.Rx() if Ethernet (W5100S) owns the shared SPI bus
+    if(bSPI_ETH_Active) {
+        bPendingRadioRx = true;
+    } else {
+        Radio.Rx(RX_TIMEOUT_VALUE);
+    }
     // RACE-05 fix: CAD abort under critical section
     taskENTER_CRITICAL();
     bool _cad_was_active = cad_in_progress;
@@ -380,13 +390,21 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         int rxSlot = -1;
         for(int i = 0; i < MAX_RING; i++)
         {
-            if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE)
+            if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY)
             {
                 if(memcmp(ringBuffer[i]+3, RcvBuffer+1, 4) == 0)
                 {
                     rxSlot = i;
                     dbg_msg_id = extractRingMsgId(i);
                     break;
+                }
+            }
+            else if(ringBuffer[i][0] > 0 && ringBuffer[i][1] == RING_STATUS_READY)
+            {
+                if(memcmp(ringBuffer[i]+3, RcvBuffer+1, 4) == 0)
+                {
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] ACK_SKIP_READY slot=%d msg_id=%08X\n", i, extractRingMsgId(i));
                 }
             }
         }
@@ -1806,11 +1824,19 @@ void OnTxDone(void)
         // reset MeshCom
         if(bSetLoRaAPRS)
         {
-            lora_setchip_meshcom();
-            bSetLoRaAPRS = false;
+            // SPI guard: defer if Ethernet owns the shared SPI bus
+            if(!bSPI_ETH_Active) {
+                lora_setchip_meshcom();
+                bSetLoRaAPRS = false;
+            }
         }
 
-        Radio.Rx(RX_TIMEOUT_VALUE);
+        // SPI guard: defer Radio.Rx() if Ethernet (W5100S) owns the shared SPI bus
+        if(bSPI_ETH_Active) {
+            bPendingRadioRx = true;
+        } else {
+            Radio.Rx(RX_TIMEOUT_VALUE);
+        }
         iReceiveTimeOutTime = millis();  // force full CSMA timeout before next TX
         csma_reset();
 
