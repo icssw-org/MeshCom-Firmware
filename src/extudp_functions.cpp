@@ -228,11 +228,9 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     return;
   }
 
-  static char c_json[500];
-  static char c_tjson[500];
-  memset(c_json, 0, sizeof(c_json));
-  memset(c_tjson, 0, sizeof(c_tjson));
-
+  char c_json[500] = {0};
+  char c_tjson[500] = {0};
+  
   char escape_symbol[3];
   char escape_group[3];
 
