@@ -173,7 +173,7 @@ static int findAndStopRingSlot(uint32_t msgId)
 {
     for(int i = 0; i < MAX_RING; i++)
     {
-        if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE)
+        if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY)
         {
             if(extractRingMsgId(i) == msgId)
             {
@@ -380,13 +380,21 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         int rxSlot = -1;
         for(int i = 0; i < MAX_RING; i++)
         {
-            if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE)
+            if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY)
             {
                 if(memcmp(ringBuffer[i]+3, RcvBuffer+1, 4) == 0)
                 {
                     rxSlot = i;
                     dbg_msg_id = extractRingMsgId(i);
                     break;
+                }
+            }
+            else if(ringBuffer[i][0] > 0 && ringBuffer[i][1] == RING_STATUS_READY)
+            {
+                if(memcmp(ringBuffer[i]+3, RcvBuffer+1, 4) == 0)
+                {
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] ACK_SKIP_READY slot=%d msg_id=%08X\n", i, extractRingMsgId(i));
                 }
             }
         }
