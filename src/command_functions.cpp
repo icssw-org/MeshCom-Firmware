@@ -2108,7 +2108,7 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"extudp on") == 0)
     {
         bEXTUDP=true;
-        
+
         meshcom_settings.node_sset = meshcom_settings.node_sset | 0x02000;
 
         if(ble)
@@ -2116,9 +2116,9 @@ void commandAction(char *umsg_text, bool ble)
             bWifiSetting=true;
         }
 
-        save_settings();
-
-        resetExternUDP();
+        // deferred: flash write + UDP reset after web response is sent (W5100S SPI conflict)
+        bPendingSaveSettings = true;
+        bPendingResetExternUDP = true;
 
         bReturn = true;
     }
@@ -2126,7 +2126,7 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"extudp off") == 0)
     {
         bEXTUDP=false;
-        
+
         meshcom_settings.node_sset &= ~0x2000;   // mask 0x2000
 
         if(ble)
@@ -2134,7 +2134,8 @@ void commandAction(char *umsg_text, bool ble)
             bWifiSetting=true;
         }
 
-        save_settings();
+        // deferred: flash write after web response is sent (W5100S SPI conflict)
+        bPendingSaveSettings = true;
 
         bReturn = true;
     }
@@ -2161,7 +2162,8 @@ void commandAction(char *umsg_text, bool ble)
             bWifiSetting=true;
         }
 
-        save_settings();
+        // deferred: flash write after web response is sent (W5100S SPI conflict)
+        bPendingSaveSettings = true;
 
         bReturn = true;
     }
