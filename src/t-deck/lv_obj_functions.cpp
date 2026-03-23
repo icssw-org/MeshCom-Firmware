@@ -35,7 +35,10 @@
 extern TFT_eSPI tft;
 
 #include <esp32/esp32_flash.h>
+
+#ifdef T_DECK_SPIFFS
 #include <SPIFFS.h>
+#endif
 
 #if defined(ENABLE_AUDIO)
 #include <esp32/esp32_audio.h>
@@ -175,7 +178,9 @@ static const size_t MSG_TAB_MAX_MESSAGES = 50;
 static std::vector<std::pair<String, MsgBubble>> persisted_msgs;
 static bool loading_messages_from_file = false;
 static const size_t PERSISTED_MSG_LIMIT = 1000;
+#ifdef T_DECK_SPIFFS
 static const char *PERSISTED_MSG_FILE = "/messages.json";
+#endif
 static int unsaved_msgs_count = 0;
 static const int FLUSH_THRESHOLD = 10;
 static unsigned long last_flush_millis = 0;
@@ -188,7 +193,10 @@ static void msg_flush_timer_cb(lv_timer_t *t);
 static lv_timer_t *msg_flush_timer = NULL;
 static lv_timer_t *track_clear_timer = NULL;
 
+#ifdef T_DECK_SPIFFS
 static String unescape_json(const String &s);
+#endif
+
 static void save_persisted_messages(void);
 static void load_persisted_messages(void);
 
@@ -262,7 +270,7 @@ static void update_tab_button_state(bool show)
     if(tab_menu_icon_label != NULL)
     {
         lv_color_t color = show ? lv_palette_main(LV_PALETTE_RED)
-                                : lv_palette_main(LV_PALETTE_LIGHT_GREEN);
+                                : lv_palette_main(LV_PALETTE_LIME); //ex LV_PALETTE_LIGHT_GREEN
         lv_obj_set_style_text_color(tab_menu_icon_label, color, LV_PART_MAIN);
     }
 }
@@ -312,41 +320,52 @@ bool tdeck_tab_menu_is_visible(void)
     return tab_menu_visible;
 }
 
-static bool kbd_light_on = false;
-
 static void tab_standby_button_event_cb(lv_event_t * e)
 {
     if (bDEBUG)
         Serial.println("[TDECK]...standby_button_event - pressed");
 
     meshcom_settings.node_backlightlock = !meshcom_settings.node_backlightlock;
-    meshcom_settings.node_modus = (meshcom_settings.node_modus + 2) % 4;
 
     if (meshcom_settings.node_backlightlock)
     {
-        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+        meshcom_settings.node_modus = meshcom_settings.node_modus | 0x02;
+
+        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
     }
     else
     {
+        meshcom_settings.node_modus = meshcom_settings.node_modus & 0xFD;
+
         lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     }
 }
 
 static void tab_kbl_button_event_cb(lv_event_t * e)
 {
-    if (bDEBUG)
-        Serial.println("[TDECK]...kbl_button_event - pressed");
-
     if(lv_event_get_code(e) == LV_EVENT_CLICKED)
     {
-        kbd_light_on = !kbd_light_on;
-        if (kbd_light_on)
+        if (bDEBUG)
+            Serial.println("[TDECK]...kbl_button_event - pressed");
+
+        meshcom_settings.node_kbllightlock = !meshcom_settings.node_kbllightlock;
+
+        if (meshcom_settings.node_kbllightlock)
         {
-            setKeyboardBacklight(255);
-            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
+            meshcom_settings.node_modus = meshcom_settings.node_modus | 0x01;
+
+            if (bDEBUG)
+                Serial.println("[TDECK]...tab_kbl: turn on keyboard backlight");
+            setKeyboardBacklight(150);
+            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
         }
         else
         {
+            meshcom_settings.node_modus = meshcom_settings.node_modus & 0xFE;
+
+            if (bDEBUG)
+                Serial.println("[TDECK]...tab_kbl: turn off keyboard backlight");
+                
             setKeyboardBacklight(0);
             lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         }
@@ -432,6 +451,7 @@ void setDisplayLayout(lv_obj_t *parent)
     static lv_style_t bg_style;
     lv_style_init(&bg_style);
     lv_style_set_text_color(&bg_style, lv_color_white());
+    lv_style_set_text_font(&bg_style, &lv_font_montserrat_16);
     //lv_style_set_bg_img_src(&bg_style, &image);
     lv_style_set_bg_opa(&bg_style, LV_OPA_100);
 
@@ -441,7 +461,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_menu_header = lv_obj_create(parent);
     lv_obj_set_size(tab_menu_header, screen_w, header_height);
-    lv_obj_set_style_bg_color(tab_menu_header, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(tab_menu_header, lv_palette_main(LV_PALETTE_BLUE_GREY), LV_PART_MAIN); //ex LV_PALETTE_BLUE
     lv_obj_set_style_bg_opa(tab_menu_header, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(tab_menu_header, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_menu_header, 0, LV_PART_MAIN);
@@ -449,22 +469,23 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_clear_flag(tab_menu_header, LV_OBJ_FLAG_SCROLLABLE);
 
     tab_menu_button = lv_btn_create(tab_menu_header);
-    lv_obj_set_size(tab_menu_button, 40, header_height - 4);
-    lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 8, 0);
+    lv_obj_set_size(tab_menu_button, 32, header_height - 4);
+    lv_obj_align(tab_menu_button, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_add_event_cb(tab_menu_button, tab_menu_button_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_color_t header_blue = lv_palette_main(LV_PALETTE_BLUE);
+    lv_color_t header_blue = lv_palette_main(LV_PALETTE_BLUE_GREY); //ex LV_PALETTE_BLUE
     lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN);
     lv_obj_set_style_bg_color(tab_menu_button, header_blue, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_width(tab_menu_button, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(tab_menu_button, 4, LV_PART_MAIN);
 
     tab_menu_icon_label = lv_label_create(tab_menu_button);
-    lv_label_set_text(tab_menu_icon_label, LV_SYMBOL_LIST);
+    lv_label_set_text(tab_menu_icon_label, LV_SYMBOL_BARS);
+    lv_obj_set_style_text_font(tab_menu_icon_label, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_set_style_text_color(tab_menu_icon_label, lv_palette_main(LV_PALETTE_LIGHT_GREEN), LV_PART_MAIN);
     lv_obj_center(tab_menu_icon_label);
 
     tab_kbl_button = lv_btn_create(tab_menu_header);
-    lv_obj_set_size(tab_kbl_button, 40, header_height - 4);
+    lv_obj_set_size(tab_kbl_button, 32, header_height - 4);
     lv_obj_align_to(tab_kbl_button, tab_menu_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
     lv_obj_add_event_cb(tab_kbl_button, tab_kbl_button_event_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_set_style_bg_color(tab_kbl_button, header_blue, LV_PART_MAIN);
@@ -474,11 +495,12 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_kbl_icon_label = lv_label_create(tab_kbl_button);
     lv_label_set_text(tab_kbl_icon_label, LV_SYMBOL_KEYBOARD);
+    lv_obj_set_style_text_font(tab_kbl_icon_label, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_kbl_icon_label);
 
     tab_standby_button = lv_btn_create(tab_menu_header);
-    lv_obj_set_size(tab_standby_button, 40, header_height - 4);
+    lv_obj_set_size(tab_standby_button, 32, header_height - 4);
     lv_obj_align_to(tab_standby_button, tab_kbl_button, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
     lv_obj_add_event_cb(tab_standby_button, tab_standby_button_event_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_set_style_bg_color(tab_standby_button, header_blue, LV_PART_MAIN);
@@ -488,45 +510,53 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_standby_icon_label = lv_label_create(tab_standby_button);
     lv_label_set_text(tab_standby_icon_label, LV_SYMBOL_EYE_OPEN);
+    lv_obj_set_style_text_font(tab_standby_icon_label, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_standby_icon_label);
 
     header_time_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_time_label, "--:--");
+    lv_obj_set_style_text_font(header_time_label, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_label_set_long_mode(header_time_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_time_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(header_time_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align(header_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     header_batt_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_label, "0%");
+    lv_obj_set_style_text_font(header_batt_label, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_batt_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -22, 0);
+    lv_obj_set_style_text_color(header_batt_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
+    lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -35, 0);
 
     header_batt_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_icon, LV_SYMBOL_BATTERY_EMPTY);
+    lv_obj_set_style_text_font(header_batt_icon, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_align_to(header_batt_icon, header_batt_label, LV_ALIGN_OUT_LEFT_MID, -4, 0);
 
     header_sat_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_sat_label, "0");
+    lv_obj_set_style_text_font(header_sat_label, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(header_sat_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(header_sat_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align_to(header_sat_label, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     header_sat_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_sat_icon, LV_SYMBOL_GPS); // Symbol stammt von WpZoom (CC BY-SA 3.0, siehe README)
+    lv_obj_set_style_text_font(header_sat_icon, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_align_to(header_sat_icon, header_sat_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
     
     /* wifi + bluetooth icons (left of battery) */
     header_wifi_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+    lv_obj_set_style_text_font(header_wifi_icon, &lv_font_montserrat_18, LV_PART_MAIN);
     // Slightly increase left offset so wifi icon sits closer to battery icon
-    lv_obj_align_to(header_wifi_icon, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
+    lv_obj_align_to(header_wifi_icon, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -9, 0);
 
     header_bt_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_bt_icon, LV_SYMBOL_BLUETOOTH);
+    lv_obj_set_style_text_font(header_bt_icon, &lv_font_montserrat_18, LV_PART_MAIN);
     // Match spacing with wifi icon (leave a comfortable gap)
-    lv_obj_align_to(header_bt_icon, header_wifi_icon, LV_ALIGN_OUT_LEFT_MID, -12, 0);
+    lv_obj_align_to(header_bt_icon, header_wifi_icon, LV_ALIGN_OUT_LEFT_MID, -7, 0);
 
     /*header_locator_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_locator_label, "JJ00AAAA");
@@ -554,11 +584,11 @@ void setDisplayLayout(lv_obj_t *parent)
 
     lv_obj_t *t2 = lv_tabview_add_tab(tv, LV_SYMBOL_ENVELOPE);
     lv_obj_t *t5 = lv_tabview_add_tab(tv, LV_SYMBOL_KEYBOARD);
-    lv_obj_t *t3 = lv_tabview_add_tab(tv, "POS");
+    lv_obj_t *t3 = lv_tabview_add_tab(tv, "\uF052");
     lv_obj_t *t7 = lv_tabview_add_tab(tv, LV_SYMBOL_IMAGE);
     lv_obj_t *t6 = lv_tabview_add_tab(tv, LV_SYMBOL_GPS);
-    lv_obj_t *t4 = lv_tabview_add_tab(tv, "MHD");
-    lv_obj_t *t8 = lv_tabview_add_tab(tv, "PATH");
+    lv_obj_t *t4 = lv_tabview_add_tab(tv, LV_SYMBOL_LIST);
+    lv_obj_t *t8 = lv_tabview_add_tab(tv, "\uF0C9");
     lv_obj_t *t1 = lv_tabview_add_tab(tv, LV_SYMBOL_SETTINGS);
 
     lv_obj_set_scroll_dir(t2, LV_DIR_VER);
@@ -590,9 +620,9 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_border_color(&tr_style, lv_color_black());
     lv_style_set_line_width(&tr_style, 4);
 
-
     static lv_style_t ta_input_style;
     lv_style_init(&ta_input_style);
+    lv_style_set_text_font(&ta_input_style, &lv_font_montserrat_12);
     lv_style_set_text_color(&ta_input_style, lv_color_black()); // BLAU lv_color_make(0x1C, 0x73, 0xFF));
     lv_style_set_bg_opa(&ta_input_style, LV_OPA_100);
     lv_style_set_bg_color(&ta_input_style, lv_color_white());
@@ -621,6 +651,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_right(&cell_style1, 2);
     lv_style_set_bg_color(&cell_style1, lv_color_white());
     lv_style_set_text_color(&cell_style1, lv_color_black());
+    lv_style_set_text_font(&cell_style1, &lv_font_montserrat_12);
     lv_style_set_border_width(&cell_style1, 1);
     lv_style_set_border_color(&cell_style1, lv_color_black());
     lv_style_set_border_side(&cell_style1, LV_BORDER_SIDE_FULL);
@@ -632,6 +663,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_right(&cell_style2, 2);
     lv_style_set_bg_color(&cell_style2, lv_color_white());
     lv_style_set_text_color(&cell_style2, lv_color_black());
+    lv_style_set_text_font(&cell_style2, &lv_font_montserrat_12);
     lv_style_set_border_width(&cell_style2, 1);
     lv_style_set_border_color(&cell_style2, lv_color_black());
     lv_style_set_border_side(&cell_style2, LV_BORDER_SIDE_FULL);
@@ -648,6 +680,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_pad_left(t1, 10, LV_PART_MAIN);
     lv_obj_set_style_pad_right(t1, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_top(t1, 5, LV_PART_MAIN);
+    lv_obj_set_style_text_font(t1, &lv_font_montserrat_14, LV_PART_MAIN);
 
     // Line Info
     lv_obj_t * setup_line_info = SET_new_line(t1, NULL, 0);
@@ -658,7 +691,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_width(setup_version_label, 100);
     lv_obj_set_style_text_align(setup_version_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     char sv[50];
-    sprintf(sv, "MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+    sprintf(sv, "MC %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
     lv_label_set_text(setup_version_label, sv);
 
     // Locator
@@ -682,7 +715,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_callsign_label = lv_label_create(setup_line_callsign);
     lv_obj_align(setup_callsign_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_callsign_label, 65);
-    lv_label_set_text(setup_callsign_label, "Callsign: ");
+    lv_label_set_text(setup_callsign_label, "Callsign ");
     lv_obj_set_style_text_align(setup_callsign_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_callsign = lv_textarea_create(setup_line_callsign);
@@ -760,7 +793,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_name_label = lv_label_create(setup_line_aprs);
     lv_obj_align_to(setup_name_label, dropdown_aprs, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
     lv_obj_set_width(setup_name_label, 50);
-    lv_label_set_text(setup_name_label, "Name: ");
+    lv_label_set_text(setup_name_label, "Name ");
     lv_obj_set_style_text_align(setup_name_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_name = lv_textarea_create(setup_line_aprs);
@@ -784,7 +817,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_comment_label = lv_label_create(setup_line_aprs2);
     lv_obj_align(setup_comment_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_comment_label, 75);
-    lv_label_set_text(setup_comment_label, "Comment: ");
+    lv_label_set_text(setup_comment_label, "APRS-Txt ");
     lv_obj_set_style_text_align(setup_comment_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_comment = lv_textarea_create(setup_line_aprs2);
@@ -808,7 +841,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_lat_label = lv_label_create(setup_line_location);
     lv_obj_align(setup_lat_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_lat_label, 75);
-    lv_label_set_text(setup_lat_label, "Latitude: ");
+    lv_label_set_text(setup_lat_label, "Lat ");
     lv_obj_set_style_text_align(setup_lat_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_lat = lv_textarea_create(setup_line_location);
@@ -842,7 +875,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_alt_label = lv_label_create(setup_line_location);
     lv_obj_align_to(setup_alt_label, setup_lat_c, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
     lv_obj_set_width(setup_alt_label, 30);
-    lv_label_set_text(setup_alt_label, "ALT: ");
+    lv_label_set_text(setup_alt_label, "Alt ");
     lv_obj_set_style_text_align(setup_alt_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
     setup_alt = lv_textarea_create(setup_line_location);
@@ -864,7 +897,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_lon_label = lv_label_create(setup_line_location2);
     lv_obj_align(setup_lon_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_lon_label, 75);
-    lv_label_set_text(setup_lon_label, "Longitude: ");
+    lv_label_set_text(setup_lon_label, "Long ");
     lv_obj_set_style_text_align(setup_lon_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_lon = lv_textarea_create(setup_line_location2);
@@ -917,7 +950,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_wifissid_label = lv_label_create(setup_line_wifi);
     lv_obj_align(setup_wifissid_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_wifissid_label, 75);
-    lv_label_set_text(setup_wifissid_label, "WIFI SSID: ");
+    lv_label_set_text(setup_wifissid_label, "WIFI SSID ");
     lv_obj_set_style_text_align(setup_wifissid_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_wifissid = lv_textarea_create(setup_line_wifi);
@@ -957,7 +990,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_wifipassword_label = lv_label_create(setup_line_wifi2);
     lv_obj_align(setup_wifipassword_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_wifipassword_label, 75);
-    lv_label_set_text(setup_wifipassword_label, "Password: ");
+    lv_label_set_text(setup_wifipassword_label, "Password ");
     lv_obj_set_style_text_align(setup_wifipassword_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_wifipassword = lv_textarea_create(setup_line_wifi2);
@@ -1000,7 +1033,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_groups_label = lv_label_create(setup_line_groups);
     lv_obj_align(setup_groups_label, LV_ALIGN_TOP_LEFT, 0, 10);
     lv_obj_set_width(setup_groups_label, 50);
-    lv_label_set_text(setup_groups_label, "Groups: ");
+    lv_label_set_text(setup_groups_label, "GRP ");
     lv_obj_set_style_text_align(setup_groups_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
     setup_grc0 = lv_textarea_create(setup_line_groups);
@@ -1130,7 +1163,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_txpower_label = lv_label_create(setup_line_timelora);
     lv_obj_align_to(setup_txpower_label, dropdown_country, LV_ALIGN_OUT_RIGHT_MID, 2, 0);
     lv_obj_set_width(setup_txpower_label, 60);
-    lv_label_set_text(setup_txpower_label, "TXPower: ");
+    lv_label_set_text(setup_txpower_label, "TXPwr: ");
     lv_obj_set_style_text_align(setup_txpower_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
     setup_txpower = lv_textarea_create(setup_line_timelora);
@@ -1192,7 +1225,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_event_cb(btn_noallmsg, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_noallmsg_label = lv_label_create(btn_noallmsg);
-    lv_label_set_text(btn_noallmsg_label, "No * Messages");
+    lv_label_set_text(btn_noallmsg_label, "No * MSG");
     lv_obj_center(btn_noallmsg_label);
 
     // MAP-SELECT TAB
@@ -1211,7 +1244,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_stone_label = lv_label_create(setup_line_starttone);
     lv_obj_align(setup_stone_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_stone_label, 75);
-    lv_label_set_text(setup_stone_label, "StartTone: ");
+    lv_label_set_text(setup_stone_label, "Starttone ");
     lv_obj_set_style_text_align(setup_stone_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_stone = lv_textarea_create(setup_line_starttone);
@@ -1234,7 +1267,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t * setup_mtone_label = lv_label_create(setup_line_messagetone);
     lv_obj_align(setup_mtone_label, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_width(setup_mtone_label, 75);
-    lv_label_set_text(setup_mtone_label, "Msg.Tone: ");
+    lv_label_set_text(setup_mtone_label, "Msg.Tone ");
     lv_obj_set_style_text_align(setup_mtone_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     
     setup_mtone = lv_textarea_create(setup_line_messagetone);
@@ -1261,7 +1294,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     // to Flash
     btn_persist_to_flash = lv_btn_create(setup_line_persist);
-    lv_obj_align_to(btn_persist_to_flash, setup_save_label, LV_ALIGN_OUT_RIGHT_TOP, 5, -10);
+    lv_obj_align_to(btn_persist_to_flash, setup_save_label, LV_ALIGN_OUT_RIGHT_TOP, 5, -2);
     lv_obj_set_size(btn_persist_to_flash, 75, 35);
 
     /* Make the button checkable (like a toggle) */
@@ -1301,7 +1334,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_event_cb(btn_persist_immediate, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn_persist_immediate_label = lv_label_create(btn_persist_immediate);
-    lv_label_set_text(btn_persist_immediate_label, "immediate");
+    lv_label_set_text(btn_persist_immediate_label, "instant");
     lv_obj_center(btn_persist_immediate_label);
 
 
@@ -1372,6 +1405,8 @@ void setDisplayLayout(lv_obj_t *parent)
     ////////////////////////////////////////////////////////////////////////////
     // TEXT OUTPUT
     msg_list = lv_obj_create(t2);
+    lv_obj_add_style(msg_list, &cell_style, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_add_style(msg_list, &cell_style1, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_size(msg_list, 300, LV_VER_RES * 0.6);
     lv_obj_align(msg_list, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_opa(msg_list, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -1450,8 +1485,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_style(track_ta, &tr_style, LV_PART_MAIN);
 
     lv_obj_t * btsendpos = lv_btn_create(t6);
-    lv_obj_set_pos(btsendpos, 200, 140);
-    lv_obj_set_size(btsendpos, 80, 20);
+    lv_obj_set_pos(btsendpos, 180, 150);
+    lv_obj_set_size(btsendpos, 100, 20);
     lv_obj_add_event_cb(btsendpos, btn_event_handler_sendpos, LV_EVENT_ALL, NULL);
 
     lv_obj_t * btnlabelsendpos = lv_label_create(btsendpos);
@@ -1470,21 +1505,23 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_clip_corner(mheard_ta, true, 0);
 
     lv_table_set_row_cnt(mheard_ta, 1);
-    lv_table_set_col_cnt(mheard_ta, 6);
+    lv_table_set_col_cnt(mheard_ta, 7);
 
     lv_table_set_col_width(mheard_ta, 0, 76);
     lv_table_set_col_width(mheard_ta, 1, 40);
-    lv_table_set_col_width(mheard_ta, 2, 38);
-    lv_table_set_col_width(mheard_ta, 3, 68);
-    lv_table_set_col_width(mheard_ta, 4, 38);
-    lv_table_set_col_width(mheard_ta, 5, 38);
+    lv_table_set_col_width(mheard_ta, 2, 35);
+    lv_table_set_col_width(mheard_ta, 3, 62);
+    lv_table_set_col_width(mheard_ta, 4, 30);
+    lv_table_set_col_width(mheard_ta, 5, 30);
+    lv_table_set_col_width(mheard_ta, 6, 25);
 
     lv_table_set_cell_value(mheard_ta, 0, 0, "Call");
     lv_table_set_cell_value(mheard_ta, 0, 1, "Time");
     lv_table_set_cell_value(mheard_ta, 0, 2, "Typ");
     lv_table_set_cell_value(mheard_ta, 0, 3, "HW");
-    lv_table_set_cell_value(mheard_ta, 0, 4, "Mod");
-    lv_table_set_cell_value(mheard_ta, 0, 5, "Dist");
+    lv_table_set_cell_value(mheard_ta, 0, 4, "SSI");
+    lv_table_set_cell_value(mheard_ta, 0, 5, "SNR");
+    lv_table_set_cell_value(mheard_ta, 0, 6, "NC");
 
     // lv_obj_set_height(mheard_ta, LV_VER_RES * 0.6);
 
@@ -1933,21 +1970,13 @@ void tft_on()
     resetBrightness();
 
     // Force sync keyboard backlight
-    if (!meshcom_settings.node_keyboardlock) {
-        if (kbd_light_on)
-        {
-            if (bDEBUG)
-                Serial.println("[TDECK]...tft_on: turn on keyboard backlight");
+    if (meshcom_settings.node_keyboardlock)
+    {
+        if (bDEBUG)
+            Serial.println("[TDECK]...tft_on: turn on keyboard backlight");
 
-            // turn on keyboard backlight
-            setKeyboardBacklight(255);
-
-            // Update button state visual
-            if (tab_kbl_icon_label)
-            {
-                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
-            }
-        }
+        // turn on keyboard backlight
+        setKeyboardBacklight(150);
     }
 
     tdeck_tft_timer = millis();
@@ -1978,22 +2007,17 @@ void tft_off()
         if (bDEBUG)
             Serial.println("[TDECK]...tft_off: sending sleep commands");
 
-        if (kbd_light_on)
-        {
-            // turn off keyboard backlight
-            setKeyboardBacklight(0);
-
-            // Update UI to reflect that KBL is now OFF
-            if(tab_kbl_icon_label)
-            {
-                lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-            }
-        }
-
         tft.writecommand(TFT_DISPOFF);
         tft.writecommand(TFT_SLPIN);
         tft_is_sleeping = true;
     }
+
+    // always turn off keyboard backlight
+    if (bDEBUG)
+        Serial.println("[TDECK]...tft_off: turn off keyboard backlight");
+
+    setKeyboardBacklight(0);
+
 }
 
 
@@ -2114,14 +2138,14 @@ static void update_header_wifi_indicator(void)
     // Only if global switch is ON (which we checked above, but double check logic)
     if (bWIFIAP || bWEBSERVER || (strlen(meshcom_settings.node_ssid) > 1))
     {
-        lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
+        lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex lv_palette_main(LV_PALETTE_RED)
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
         lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
     else
     {
         // Not enabled/configured -> White
-        lv_obj_set_style_text_color(header_wifi_icon, lv_color_white(), LV_PART_MAIN);
+        lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
         lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
         lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
@@ -2132,9 +2156,10 @@ static void update_header_bt_indicator(void)
     if(header_bt_icon == NULL)
         return;
     // Always render the icon glyph in white
-    lv_obj_set_style_text_color(header_bt_icon, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(header_bt_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
     lv_label_set_text(header_bt_icon, LV_SYMBOL_BLUETOOTH);
 
+    /* KBC
     // Ensure a square touch/visual area for the icon
     lv_obj_set_size(header_bt_icon, 22, 22);
     lv_obj_set_style_text_align(header_bt_icon, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -2144,20 +2169,21 @@ static void update_header_bt_indicator(void)
     lv_obj_set_style_border_width(header_bt_icon, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(header_bt_icon, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_radius(header_bt_icon, 12, LV_PART_MAIN);
+    */
 
     // deviceConnected is set by NimBLE callbacks
     if (deviceConnected)
     {
         // Connected: blue logo
-        lv_obj_set_style_text_color(header_bt_icon, lv_color_make(0x00, 0x00, 0xff), LV_PART_MAIN);
+        lv_obj_set_style_text_color(header_bt_icon, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_make(0x00, 0x00, 0xff)
     }
     else
     {
         // BLE advertising active: white glyph with white ring
         if (strlen(cBLEName) > 1)
         {
-            lv_obj_set_style_border_width(header_bt_icon, 2, LV_PART_MAIN);
-            lv_obj_set_style_border_color(header_bt_icon, lv_color_white(), LV_PART_MAIN);
+            //ex lv_obj_set_style_border_width(header_bt_icon, 2, LV_PART_MAIN);
+            lv_obj_set_style_border_color(header_bt_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
         }
         else
         {
@@ -2177,19 +2203,42 @@ void tdeck_update_header_bt(void)
     update_header_bt_indicator();
 }
 
+bool save_node_backlightlock=false;
+bool save_node_kbllightlock=false;
+
 void tdeck_update_header_standby(void)
-{  
+{
     meshcom_settings.node_backlightlock = meshcom_settings.node_modus >= 2;
 
-    if (meshcom_settings.node_backlightlock)
+    if(meshcom_settings.node_backlightlock != save_node_backlightlock)
     {
-        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN);
-    }
-    else
-    {
-        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+        if (meshcom_settings.node_backlightlock)
+        {
+            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex LV_PALETTE_YELLOW
+        }
+        else
+        {
+            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+        }
+
+        save_node_backlightlock = meshcom_settings.node_backlightlock;
     }
 
+    meshcom_settings.node_kbllightlock = meshcom_settings.node_modus >= 2 || meshcom_settings.node_modus == 1;
+
+    if(meshcom_settings.node_kbllightlock != save_node_kbllightlock)
+    {
+        if (meshcom_settings.node_kbllightlock)
+        {
+            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
+        }
+        else
+        {
+            lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
+        }
+
+        save_node_kbllightlock = meshcom_settings.node_kbllightlock;
+    }
 }
 
 /* Pause/resume a small set of UI timers when the display is turned off/on.
@@ -2224,7 +2273,7 @@ static void apply_tab_bar_styles(void)
 
     lv_obj_set_style_bg_color(tab_bar, lv_color_black(), LV_PART_ITEMS | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(tab_bar, LV_OPA_80, LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(tab_bar, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(tab_bar, lv_palette_darken(LV_PALETTE_BLUE_GREY, 2), LV_PART_ITEMS);   //ex LV_PALETTE_BLUE
     lv_obj_set_style_bg_opa(tab_bar, LV_OPA_60, LV_PART_ITEMS);
 
     lv_obj_set_style_border_width(tab_bar, 0, LV_PART_ITEMS);
@@ -2532,6 +2581,8 @@ static MsgTabEntry *msg_tabs_get_or_create_entry(const String &group, int *index
 
 static void log_message_to_sd(const String &group, const MsgBubble &bubble, const char* filename = "/messages.json")
 {
+    #ifdef HEAP_TEST
+
     if (!meshcom_settings.node_persist_to_sd)
     {
         if (bDEBUG)
@@ -2553,6 +2604,8 @@ static void log_message_to_sd(const String &group, const MsgBubble &bubble, cons
     line += "}";
 
     log_json_to_sd(filename, line);
+
+    #endif
 }
 
 static lv_timer_t *sys_msg_save_timer = NULL;
@@ -2580,6 +2633,7 @@ static void sys_msg_save_timer_cb(lv_timer_t *timer)
 
              if(bSDDected)
              {
+                #ifdef HEAP_TEST
                 const char* sys_filename = "/system_messages.json";
                 // Check size limit (approx 10000 messages * 100 bytes = 1MB)
                 if(SD.exists(sys_filename))
@@ -2600,6 +2654,7 @@ static void sys_msg_save_timer_cb(lv_timer_t *timer)
                     }
                 }
                 log_message_to_sd(sys_msg_save_group, last, sys_filename);
+                #endif
              }
         }
     }
@@ -2724,6 +2779,7 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
         {
             // Already active, just append to view
             msg_list_append_bubble(bubble);
+
             lv_obj_t *last = lv_obj_get_child(msg_list, -1);
             if(last != NULL)
                 lv_obj_scroll_to_view(last, LV_ANIM_ON);
@@ -2752,6 +2808,10 @@ static void msg_render_active_tab(void)
     {
         msg_list_show_hint("No messages in this conversation");
         return;
+    }
+    else
+    {
+        msg_list_show_hint("");
     }
 
     msg_list_clear();
@@ -2855,7 +2915,10 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_obj_set_flex_grow(header, 1);
 
     lv_obj_add_flag(header, LV_OBJ_FLAG_CLICKABLE);
+    
     HeaderEventData *hed = new HeaderEventData();
+    if (!hed) return;  // Graceful bail-out
+
     hed->header = full_header;
     hed->is_sender = false;
     lv_obj_add_event_cb(header, header_label_event_cb, LV_EVENT_CLICKED, hed);
@@ -2878,6 +2941,8 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
 
         // attach identifying userdata
         DeleteEventData *ded = new DeleteEventData();
+        if (!ded) return;  // Graceful bail-out
+
         ded->group = current_group;
         ded->timestamp = bubble.timestamp;
         ded->header = bubble.header;
@@ -2906,7 +2971,6 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_obj_set_width(time_label, LV_SIZE_CONTENT);
     lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     */
-
     lv_obj_t *body = lv_label_create(bubble_obj);
     lv_label_set_text(body, bubble.body.c_str());
     lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
@@ -3116,9 +3180,12 @@ static void msg_tabs_clear_all(void)
 
 // -- Persistence implementation -------------------------------------------------
 
+#ifdef T_DECK_SPIFFS
+
 static String unescape_json(const String &s)
 {
     String out;
+
     out.reserve(s.length());
     for(size_t i = 0; i < s.length(); ++i)
     {
@@ -3138,11 +3205,16 @@ static String unescape_json(const String &s)
             out += c;
         }
     }
+
+
     return out;
 }
+#endif
 
 static void save_persisted_messages(void)
 {
+    #ifdef T_DECK_SPIFFS
+
     if (! meshcom_settings.node_persist_to_flash)
     {
         if (bDEBUG)
@@ -3233,10 +3305,15 @@ static void save_persisted_messages(void)
     // update flush timestamp and reset unsaved counter
     last_flush_millis = millis();
     unsaved_msgs_count = 0;
+
+    #endif
 }
 
 static void load_persisted_messages(void)
 {
+    #ifdef T_DECK_SPIFFS
+
+
     persisted_msgs.clear();
     loading_messages_from_file = true;
 
@@ -3354,6 +3431,8 @@ static void load_persisted_messages(void)
     loading_messages_from_file = false;
     // set last flush timestamp so timer waits full interval before next auto-save
     last_flush_millis = millis();
+
+    #endif
 }
 
 // -----------------------------------------------------------------------------
@@ -3393,8 +3472,8 @@ static bool compute_maidenhead_locator(double lat, double lon, char *buffer, siz
     remainder_lon -= subsquare_lon * subsquare_lon_span;
     remainder_lat -= subsquare_lat * subsquare_lat_span;
 
-    const double extended_lon_span = subsquare_lon_span / 24.0;
-    const double extended_lat_span = subsquare_lat_span / 24.0;
+    const double extended_lon_span = subsquare_lon_span / 10.0;
+    const double extended_lat_span = subsquare_lat_span / 9.0;
 
     int extended_lon = (int)floor(remainder_lon / extended_lon_span);
     int extended_lat = (int)floor(remainder_lat / extended_lat_span);
@@ -3405,8 +3484,8 @@ static bool compute_maidenhead_locator(double lat, double lon, char *buffer, siz
     buffer[3] = '0' + clamp_int(square_lat, 0, 9);
     buffer[4] = 'A' + clamp_int(subsquare_lon, 0, 23);
     buffer[5] = 'A' + clamp_int(subsquare_lat, 0, 23);
-    buffer[6] = 'A' + clamp_int(extended_lon, 0, 23);
-    buffer[7] = 'A' + clamp_int(extended_lat, 0, 23);
+    buffer[6] = '0' + clamp_int(extended_lon, 0, 9);
+    buffer[7] = '0' + clamp_int(extended_lat, 0, 9);
     buffer[8] = '\0';
 
     return true;
@@ -3493,6 +3572,8 @@ void tdeck_update_time_label()
  */
 void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c)
 {
+    #ifndef T_DECK_POS
+
     if (bDEBUG)
         Serial.printf("[ MAP ]...add position point call:%s\n", callsign.c_str());
 
@@ -3537,17 +3618,126 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
     map_pos_count++;
     if (map_pos_count >= MAX_POINTS)
         map_pos_count = 1;
+
+    #endif
 }
 
+void savePosPersistence()
+{
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        if (!meshcom_settings.node_persist_to_sd)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...POS not persisting to SD");
+            return;
+        }
+
+        // check to save to SD only every 30 sec
+        if(lastsavePOSPersistence + 30000 > millis())
+            return;
+
+        lastsavePOSPersistence = millis();
+
+        if(bDisplayCont)
+            Serial.println("[TDECK]...POS persisting to SD");
+
+        if(SD.exists("/pos.dat")) SD.remove("/pos.dat");
+        File file = SD.open("/pos.dat", FILE_WRITE);
+        if(!file) return;
+
+        unsigned char pos[30] = {0};
+        char u_pos[30]={0};
+
+        for(int pos_check = 1; pos_check<posrow+1; pos_check++)
+        {
+            sprintf(u_pos, "%-10.10s", lv_table_get_cell_value(position_ta, pos_check, 0));
+            memcpy(pos, u_pos, 10);
+            file.write(pos, 10);
+
+            sprintf(u_pos, "%-6.6s", lv_table_get_cell_value(position_ta, pos_check, 1));
+            memcpy(pos, u_pos, 6);
+            file.write(pos, 6);
+
+            sprintf(u_pos, "%-24.24s", lv_table_get_cell_value(position_ta, pos_check, 2));
+            memcpy(pos, u_pos, 24);
+            file.write(pos, 24);
+        }
+
+        file.close();
+
+    #endif
+}
+
+void loadPosPersistence()
+{
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        if (!meshcom_settings.node_persist_to_sd)
+        {
+            if (bDEBUG)
+                Serial.println("[TDECK]...POS not persisting from SD");
+            return;
+        }
+
+        File file = SD.open("/pos.dat", FILE_READ);
+        if(!file) return;
+
+        unsigned char pos[30] = {0};
+        char u_pos[30]={0};
+
+        posrow=0;
+
+        while(1)
+        {
+           if(file.read(pos, 10) != 10)
+                break;
+
+            pos[10]=0x00;
+            sprintf(u_pos, "%s", pos);
+            String s_pos = u_pos;
+            s_pos.trim();
+
+            if(s_pos.isEmpty())
+                break;
+
+            posrow++;
+
+            lv_table_set_cell_value(position_ta, posrow, 0, s_pos.c_str());
+
+            if(file.read(pos, 6) != 6)
+                break;
+
+            pos[6]=0x00;
+            sprintf(u_pos, "%s", pos);
+            s_pos = u_pos;
+            s_pos.trim();
+            lv_table_set_cell_value(position_ta, posrow, 1, s_pos.c_str());
+
+            if(file.read(pos, 24) != 24)
+                break;
+
+            pos[24]=0x00;
+            sprintf(u_pos, "%s", pos);
+            s_pos = u_pos;
+            s_pos.trim();
+            lv_table_set_cell_value(position_ta, posrow, 2, s_pos.c_str());
+        }
+
+        file.close();
+
+    #endif
+}
 /**
  * adds a position to the POS view
  */
 void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c, int alt)
 {
-    char buf[2000];
+    #ifndef T_DECK_POS
+
+    char buf[30];
+
 
     if (bDEBUG)
-        Serial.printf("[POSVIEW]...add %s\n", callsign.c_str());
+        Serial.printf("[POSVIEW]...add %s act posrow:%i\n", callsign.c_str(), posrow);
 
     double dlat = u_dlat;
     if(lat_c == 'W')
@@ -3557,24 +3747,43 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     if(lon_c == 'S')
         dlon = u_dlon * -1.0;
 
-    // Tabelle push down
-    if(posrow < MAX_POSROW)
+    bool bnotfound=true;
+
+    snprintf(buf, 10, "%s", callsign.c_str());
+
+    for(int pos_check = 1; pos_check<posrow+1; pos_check++)
     {
-        posrow++;
-        // 2025-04-23, OE3GJC: not required, autoextends on write to row
-        // lv_table_set_row_cnt(position_ta, posrow);
+        if(strcmp(lv_table_get_cell_value(position_ta, pos_check, 0), buf) == 0)
+        {
+            bnotfound=false;
+
+            break;
+        }
     }
 
-    if(posrow > 2)
+    int pos_next_push = posrow-1;
+    
+    if(bnotfound)
+        pos_next_push = posrow;
+
+    if(bDEBUG)
+        Serial.printf("[POSVIEW]...pos_next_push:%i\n", pos_next_push);
+    
+    for(int pos_push = posrow-1; pos_push > 0; pos_push--)
     {
-        for(int pos_push = posrow - 2; pos_push >= 1; pos_push--)
+        if(strcmp(lv_table_get_cell_value(position_ta, pos_push, 0), buf) != 0)
         {
             if (bDEBUG)
-                Serial.printf("[POSVIEW]...moving row %i to %i (%s)\n", pos_push, pos_push + 1, lv_table_get_cell_value(position_ta, pos_push, 0));
+                Serial.printf("[POSVIEW]...moving row %i to %i (%s)\n", pos_push, pos_next_push, lv_table_get_cell_value(position_ta, pos_push, 0));
 
-            lv_table_set_cell_value(position_ta, pos_push + 1, 0, lv_table_get_cell_value(position_ta, pos_push, 0));
-            lv_table_set_cell_value(position_ta, pos_push + 1, 1, lv_table_get_cell_value(position_ta, pos_push, 1));
-            lv_table_set_cell_value(position_ta, pos_push + 1, 2, lv_table_get_cell_value(position_ta, pos_push, 2));
+            if(pos_push != pos_next_push)
+            {
+                lv_table_set_cell_value(position_ta, pos_next_push, 0, lv_table_get_cell_value(position_ta, pos_push, 0));
+                lv_table_set_cell_value(position_ta, pos_next_push, 1, lv_table_get_cell_value(position_ta, pos_push, 1));
+                lv_table_set_cell_value(position_ta, pos_next_push, 2, lv_table_get_cell_value(position_ta, pos_push, 2));
+            }
+
+            pos_next_push--;
         }
     }
 
@@ -3587,15 +3796,12 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", dlat, lat_c, dlon, lon_c, alt);
     lv_table_set_cell_value(position_ta, 1, 2, buf);
 
-    // Log position to SD
-    String json = "{";
-    json += "\"call\":\"" + escape_json(callsign) + "\",";
-    json += "\"time\":\"" + escape_json(String(meshcom_settings.node_date_hour) + ":" + String(meshcom_settings.node_date_minute)) + "\",";
-    json += "\"lat\":" + String(dlat, 6) + ",";
-    json += "\"lon\":" + String(dlon, 6) + ",";
-    json += "\"alt\":" + String(alt);
-    json += "}";
-    log_json_to_sd("/positions.json", json);
+    if(bnotfound && posrow < MAX_POSROW)
+        posrow++;
+
+    savePosPersistence();
+
+    #endif
 }
 
 /**
@@ -3627,7 +3833,7 @@ void tdeck_refresh_SET_view()
     lv_textarea_set_text(setup_name, meshcom_settings.node_name);
     lv_textarea_set_text(setup_comment, meshcom_settings.node_atxt);
     lv_textarea_set_text(setup_wifissid, meshcom_settings.node_ssid);
-    lv_textarea_set_text(setup_wifipassword, meshcom_settings.node_pwd);
+    lv_textarea_set_text(setup_wifipassword, "**********");
 
     sprintf(vChar, "%i", meshcom_settings.node_gcb[0]);
     lv_textarea_set_text(setup_grc0, vChar);
@@ -3755,7 +3961,7 @@ static void msg_focus_and_alert(bool bWithAudio)
             // Force a full screen redraw to ensure the display buffer is flushed to the hardware
             lv_obj_invalidate(lv_scr_act());
             // Force a task handler run to update the UI before playing audio
-            lv_task_handler();
+            //lv_task_handler(); Y5 check
         }
     }
 
@@ -3763,10 +3969,12 @@ static void msg_focus_and_alert(bool bWithAudio)
     {
         if (bDEBUG)
             Serial.println("[TDECK]...msg_focus_and_alert: Playing audio...");
+
         if (!play_file_from_sd(meshcom_settings.node_audio_msg.c_str(), 12))
         {
             play_cw('r');
         }
+        
         if (bDEBUG)
             Serial.println("[TDECK]...msg_focus_and_alert: Audio finished.");
     }

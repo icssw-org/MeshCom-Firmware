@@ -6,6 +6,9 @@
  *  @author      Ralph Weich (DD5RW)
  *  @date        2025-12-03
  */
+
+#include <atomic>
+
 extern bool bnextread;
 
 extern int ifalseping;
@@ -24,7 +27,7 @@ extern bool bLED_ORANGE;
 
 extern int iWlanWait;
 
-extern bool bSetLoRaAPRS;
+extern volatile bool bSetLoRaAPRS;
 
 extern bool bDEBUG;
 extern bool bLORADEBUG;
@@ -157,9 +160,12 @@ extern float BATexp2;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5];
-extern int iWrite;
-extern int iRead;
+extern volatile int iWrite;
+extern volatile int iRead;
 extern int iRetransmit;
+extern uint8_t retryCount[MAX_RING];
+extern uint8_t ringPriority[MAX_RING];         // Prio 1-5 pro Slot
+extern uint32_t ringEnqueueTime[MAX_RING];     // millis() timestamp when enqueued
 
 extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5];
 extern int RAWLoRaWrite;
@@ -182,13 +188,47 @@ extern unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE+5];
 extern int ComToPhoneWrite;
 extern int ComToPhoneRead;
 
-extern uint8_t ringBufferLoraRX[MAX_RING][5]; //Ringbuffer for UDP TX from LoRa RX, first byte is length
-extern uint8_t loraWrite;   // counter for ringbuffer
+extern uint8_t ringBufferLoraRX[MAX_DEDUP_RING][5]; //Ringbuffer for received msg_id deduplication
+extern std::atomic<uint8_t> loraWrite;   // counter for ringbuffer
 
-extern int cmd_counter; // ticker dependant on main cycle delay time
-extern bool is_receiving;   // flag to store we are receiving a lora packet.
-extern bool tx_is_active;   // flag to store we are transmitting  a lora packet.
-extern bool tx_waiting;
+extern std::atomic<bool> is_receiving;   // flag to store we are receiving a lora packet.
+extern std::atomic<bool> tx_is_active;   // flag to store we are transmitting  a lora packet.
+
+extern int cad_attempt;
+extern unsigned long csma_timeout;
+extern int rx_irq_defer_count;
+extern volatile bool cad_in_progress;
+extern volatile bool cad_done_flag;
+extern volatile bool cad_double_check;
+
+
+// RACE-01 fix: spinlock for deferred display update (ISR → main loop)
+#if defined(ESP32)
+extern portMUX_TYPE displayMux;
+#endif
+
+// Channel utilization tracking (10s window)
+extern std::atomic<unsigned long> ch_util_rx_start;
+extern std::atomic<unsigned long> ch_util_tx_start;
+extern std::atomic<unsigned long> ch_util_rx_accum;
+extern std::atomic<unsigned long> ch_util_tx_accum;
+
+
+// Trickle-HEY state
+extern unsigned long trickle_interval_ms;       // Aktuelles Intervall (Imin..Imax)
+extern uint8_t trickle_consistent_count;        // Konsistente HEYs seit letztem Reset
+extern int trickle_last_neighbor_count;         // Nachbarzahl beim letzten Check
+
+// Priority statistics (5-minute window, reset after output)
+extern uint16_t stat_tx_count[6];               // Index 1-5 = Prio 1-5
+extern uint16_t stat_drop_count[6];             // Drops per priority
+extern uint16_t stat_preempt_count;             // Priority preemptions (out-of-order sends)
+extern uint32_t stat_latency_sum[6];            // Sum of queue-to-TX latency per prio (ms)
+extern uint16_t stat_latency_max[6];            // Max latency per prio (ms)
+extern uint8_t  stat_queue_hwm;                 // Queue high-water mark since boot
+extern uint16_t stat_csma_hwm_attempts;         // Max CAD attempts since boot
+extern unsigned long stat_prio_timer;           // Timer for periodic stat output
+extern unsigned long stat_hwm_timer;            // Timer for HWM output
 
 extern int isPhoneReady;      // flag we receive from phone when itis ready to receive data
 extern bool bPhoneTimeValid;
@@ -201,6 +241,11 @@ extern unsigned long posfixinterall;
 
 extern unsigned long currentWiFiMillis;
 extern unsigned long previousWiFiMillis;
+
+// Timer variables for persitence to SD
+extern unsigned long lastsavePOSPersistence;
+extern unsigned long lastsaveMHEARDPersistence;
+extern unsigned long lastsavePATHPersistence;
 
 extern double posinfo_distance;
 extern double posinfo_direction;
@@ -235,12 +280,12 @@ extern float global_batt;
 extern int global_proz;
 
 extern unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
-extern unsigned char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
+extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Update Time
 
-extern unsigned char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
+extern char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardPathEpoch[MAX_MHPATH];  //Ringbuffer for MHeard EPoch Update Time
-extern unsigned char mheardPathBuffer1[MAX_MHPATH][38]; //Ringbuffer for MHeard Sourcepath
+extern unsigned char mheardPathBuffer1[MAX_MHPATH][50]; //Ringbuffer for MHeard Sourcepath
 extern uint8_t mheardPathLen[MAX_MHPATH];
 
 extern char cTimeSource[10];
@@ -288,3 +333,14 @@ extern int pagePointer;
 extern int pageHold;
 
 extern bool bShowHead;
+
+// ONRXDONE_TIME monitoring
+extern unsigned long onrxdone_max_ms;
+extern unsigned int  onrxdone_warn_count;
+
+// Deferred display update from OnRxDone
+extern volatile bool bPendingDisplayText;
+extern volatile bool bPendingDisplayPos;
+extern struct aprsMessage pendingDisplayMsg;
+extern int16_t pendingDisplayRssi;
+extern int8_t  pendingDisplaySnr;

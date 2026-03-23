@@ -191,6 +191,7 @@ void init_flash(void)
     meshcom_settings.node_audio_msg = preferences.getString("node_audmsg", "/");
     meshcom_settings.node_keyboardlock = preferences.getBool("node_kblock", false);
     meshcom_settings.node_backlightlock = preferences.getBool("node_bllock", false);
+    meshcom_settings.node_kbllightlock = preferences.getBool("node_kllock", false);
     meshcom_settings.node_modus = preferences.getInt("node_modus", 0);
     meshcom_settings.node_mute = preferences.getBool("node_mute", false);
     meshcom_settings.node_persist_to_flash = preferences.getBool("node_perflash", true);
@@ -219,10 +220,44 @@ void init_flash(void)
     meshcom_settings.node_shunt = preferences.getFloat("node_shunt", 0.002);
     meshcom_settings.node_imax = preferences.getFloat("node_imax", 20.0);
     meshcom_settings.node_isamp = preferences.getInt("node_isamp", 7);
+    meshcom_settings.node_isamp = preferences.getInt("node_isamp", 7);
 
     strVar = preferences.getString("node_owndns");
     snprintf(meshcom_settings.node_owndns, sizeof(meshcom_settings.node_owndns), "%s", strVar.c_str());
 
+    meshcom_settings.node_contrast = preferences.getInt("node_contrast", 255);
+
+    meshcom_settings.node_fversion = preferences.getInt("node_fversion", 0);
+
+    strVar = preferences.getString("node_ownntp");
+    snprintf(meshcom_settings.node_ownntp, sizeof(meshcom_settings.node_ownntp), "%s", strVar.c_str());
+
+    meshcom_settings.node_mversion = preferences.getInt("node_mversion", 0);
+
+    strVar = preferences.getString("node_fwversion");
+    snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%s", strVar.c_str());
+
+    meshcom_settings.node_gpsbaud = preferences.getUInt("node_gpsbaud", 38400);
+
+    meshcom_settings.node_cleanflash = preferences.getUInt("node_cflash", 0);
+
+    // Network Mode wifi/eth
+    meshcom_settings.node_netmode = preferences.getUChar("node_netmode", 0);
+
+    preferences.end();
+}
+
+void clear_flash(void)
+{
+    preferences.begin("Credentials", false);
+
+    Serial.printf("[INIT]...FLASH #entries %i bevor clear\n", preferences.freeEntries());
+
+    preferences.freeEntries();
+    
+    preferences.clear();
+
+    Serial.printf("[INIT]...FLASH #entries %i after clear\n", preferences.freeEntries());
     preferences.end();
 }
 
@@ -409,6 +444,7 @@ void save_settings(void)
     preferences.putString("node_audmsg", meshcom_settings.node_audio_msg);
     preferences.putBool("node_kblock", meshcom_settings.node_keyboardlock);
     preferences.putBool("node_bllock", meshcom_settings.node_backlightlock);
+    preferences.putBool("node_kllock", meshcom_settings.node_kbllightlock);
     preferences.putInt("node_modus", meshcom_settings.node_modus);
     preferences.putBool("node_mute", meshcom_settings.node_mute);
     preferences.putBool("node_perflash", meshcom_settings.node_persist_to_flash);
@@ -441,7 +477,26 @@ void save_settings(void)
     strVar = meshcom_settings.node_owndns;
     preferences.putString("node_owndns", strVar); 
 
+    preferences.putInt("node_contrast", meshcom_settings.node_contrast);
 
+    preferences.putInt("node_fversion", meshcom_settings.node_fversion);
+
+    strVar = meshcom_settings.node_ownntp;
+    preferences.putString("node_ownntp", strVar); 
+
+    preferences.putInt("node_mversion", meshcom_settings.node_mversion);
+
+    strVar = meshcom_settings.node_fwversion;
+    preferences.putString("node_fwversion", strVar); 
+
+    preferences.putULong("node_gpsbaud", meshcom_settings.node_gpsbaud);
+
+    preferences.putULong("node_cflash", meshcom_settings.node_cleanflash);
+
+    // Network Mode wifi/eth
+    preferences.putUChar("node_netmode", meshcom_settings.node_netmode);
+
+    //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
     preferences.end();
 
     //Test only Serial.println("flash save...");

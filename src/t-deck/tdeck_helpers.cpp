@@ -71,7 +71,7 @@ void setBrightness(uint8_t value)
         tft_off();
 
         // Sync keyboard backlight (always)
-        setKeyboardBacklight(0);
+        // KBC 03 setKeyboardBacklight(0);
 
         return;
     }
@@ -108,8 +108,10 @@ void setBrightness(uint8_t value)
     }
     
     // Sync keyboard backlight if not locked
-    if(!meshcom_settings.node_keyboardlock) {
+    if(meshcom_settings.node_kbllightlock)
+    {
         uint8_t kbl_val = (value >= BRIGHTNESS_STEPS) ? 255 : (value * 16);
+
         if (bDEBUG)
             Serial.printf("[TDECK]...setBrightness: Syncing KBL to %d\n", kbl_val);
 
@@ -177,6 +179,8 @@ String escape_json(const String &s)
  */
 void log_json_to_sd(const char* filename, const String& json_object_str)
 {
+    #ifdef HEAP_TEST
+    
     if(!bSDDected) return;
 
     // Ensure file exists and has initial array structure
@@ -269,4 +273,6 @@ void log_json_to_sd(const char* filename, const String& json_object_str)
     }
     
     f.close();
+
+    #endif
 }

@@ -72,6 +72,7 @@ struct mheardLine
     String mh_sourcecallsign;
     String mh_sourcepath;
     String mh_destinationpath;
+    String mh_path_payload;
     char mh_payload_type;
     uint8_t mh_hw;
     uint8_t mh_mod;
@@ -80,6 +81,7 @@ struct mheardLine
     double mh_dist;
     uint8_t mh_path_len;
     uint8_t mh_mesh;
+    uint8_t mh_ncount;
 };
 
 #endif // _APRS_STRUCTURES_H_

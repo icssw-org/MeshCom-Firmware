@@ -38,9 +38,6 @@ using namespace ace_button;
 #include <esp32/esp32_audio.h>
 #endif
 
-#include "nvs.h"
-#include "nvs_flash.h"
-
 #define I2S_CH I2S_NUM_1
 
 TFT_eSPI            tft;
@@ -165,7 +162,7 @@ void initTDeck()
 
     Serial.print("[INIT]...Keyboard: ");
     Serial.println(kbDected == true ? "OK" : "ERROR");
-    
+
     // SET Map
     set_map(meshcom_settings.node_map);
 
@@ -185,13 +182,15 @@ void initTDeck()
 
     posrow = 1;
 
+    loadPosPersistence();
+
     lv_tabview_set_act(tv, 0, LV_ANIM_OFF);
 
     char buf[40];
     snprintf(buf, 40, "MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
     addMessage(buf);
 
-    snprintf(buf, 40, "(build: %s / %s)\n", __DATE__, __TIME__);
+    snprintf(buf, 40, "(build: %s / %s)", __DATE__, __TIME__);
     addMessage(buf);
 }
 
@@ -318,9 +317,9 @@ void setupLvgl()
 #define LVGL_BUFFER_SIZE    (TFT_WIDTH * TFT_HEIGHT * sizeof(lv_color_t))
     static lv_color_t *buf = (lv_color_t *)ps_malloc(LVGL_BUFFER_SIZE);
     if (!buf) {
-        Serial.println("menory alloc failed!");
-        delay(5000);
-        assert(buf);
+        Serial.println("[INIT] FATAL: LVGL buffer allocation failed!");
+        delay(3000);
+        ESP.restart();
     }
 #endif
 

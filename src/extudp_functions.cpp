@@ -4,9 +4,15 @@
 #include <loop_functions.h>
 #include <debugconf.h>
 #include "ArduinoJson.h"
+#include <SPI.h>
 
-// WIFI
-#ifdef ESP32
+// WIFI and Ethernet
+#ifdef BOARD_T_ETH_ELITE
+  #include <ETHClass2.h>
+  #include <EthernetUdp.h>
+
+  ETHClass2 ETH;
+#elif defined(ESP32)
   #include <WiFi.h>
   #include <WiFiClient.h>
 #else
@@ -21,20 +27,54 @@ String s_extern_node_ip = "";
 String strExtOutput;
 String str_ip;
 
-#ifdef ESP32
+#ifdef BOARD_T_ETH_ELITE
+  IPAddress extern_node_ip;
+  EthernetUDP UdpExtern;
+#elif defined(ESP32)
   IPAddress extern_node_ip = IPAddress(0,0,0,0);
   WiFiUDP UdpExtern;
 #else
-  EthernetUDP UdpExtern;
   IPAddress extern_node_ip;
+  EthernetUDP UdpExtern;
 #endif
 
 unsigned char incomingExtPacket[UDP_TX_BUF_SIZE];  // buffer for incoming packets
 int packetExtSize=0;
 
+// Deferred sendExtern ringbuffer — queued from OnRxDone, flushed in main loop
+#define MAX_EXTERN_QUEUE 4
+struct externQueueEntry {
+    uint8_t  buffer[500];
+    uint16_t buflen;
+    int16_t  rssi;
+    int8_t   snr;
+    char     src_type[8];
+    bool     used;
+};
+static struct externQueueEntry externQueue[MAX_EXTERN_QUEUE];
+static int externQueueWrite = 0;
+
 // Extern JSON UDP
 void startExternUDP()
 {
+  #ifdef BOARD_T_ETH_ELITE
+      static bool ethStarted = false;
+
+      if(!ethStarted)
+      {
+          Serial.println("[ETH] starting ETHClass2");
+
+          ETH.begin();
+
+          delay(2000);
+
+          Serial.print("[ETH] IP: ");
+          Serial.println(ETH.localIP());
+
+          ethStarted = true;
+      }
+  #endif
+
   #ifdef ESP32
     if(bWIFIAP)
       return;
@@ -46,7 +86,9 @@ void startExternUDP()
   if(hasExternIPaddress)
     return;
 
-  #ifdef ESP32
+  #ifdef BOARD_T_ETH_ELITE
+  extern_node_ip = ETH.localIP();
+  #elif defined(ESP32)
     extern_node_ip = WiFi.localIP();
   #else
     extern_node_ip = Ethernet.localIP();
@@ -101,8 +143,17 @@ void getExtern(unsigned char incoming[], int len)
     return;
   }
 
-  const char* dst = inputJson["dst"]; // "OE5BYE-1"
-  const char* msg = inputJson["msg"]; // "Test 1 2 3"
+// FIX — Null-Checks einfügen:
+  const char* dst = inputJson["dst"];
+  const char* msg = inputJson["msg"];
+  if(!dst || !msg) {
+    Serial.println("[EXT] missing dst/msg");
+    return;
+  }
+  if(strlen(dst) < 1 || strlen(dst) > 9 || strlen(msg) < 1 || strlen(msg) > 150) {
+    Serial.printf("[EXT] invalid lengths dst:%i msg:%i\n", strlen(dst), strlen(msg));
+    return;
+  }
   aprsmsg.msg_destination_path = dst;
   aprsmsg.msg_payload = msg;
   
@@ -154,7 +205,7 @@ void getExternUDP()
   }
 }
 
-void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
+void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t rssi, int8_t snr)
 {
   #ifdef ESP32
     if(bWIFIAP)
@@ -259,6 +310,9 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
       cJson["fw_sub"] = c_fw_sub;
     }
 
+    cJson["rssi"] = rssi;
+    cJson["snr"] = snr;
+
     // clear the buffer
     memset(c_json, 0x00, sizeof(c_json));
     // serialize the json
@@ -346,6 +400,8 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
       }
 
       cJson["fw_sub"] = c_fw_sub;
+      cJson["rssi"] = rssi;
+      cJson["snr"] = snr;
 
       // clear the buffer
       memset(c_json, 0x00, sizeof(c_json));
@@ -378,6 +434,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
     if (!UdpExtern.write(u_json, strlen(c_json)))
     {
       resetExternUDP();
+      return;
     }
 
     UdpExtern.endPacket();
@@ -392,6 +449,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
       if (!UdpExtern.write(t_json, strlen(c_tjson)))
       {
         resetExternUDP();
+        return;
       }
 
       UdpExtern.endPacket();
@@ -402,6 +460,32 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen)
     Serial.printf("%s\n", c_json);
     Serial.printf("%s\n", c_tjson);
   }
+}
+
+void queueExtern(char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t rssi, int8_t snr)
+{
+    struct externQueueEntry *entry = &externQueue[externQueueWrite];
+    if(buflen > 500) buflen = 500;
+    memcpy(entry->buffer, buffer, buflen);
+    entry->buflen = buflen;
+    entry->rssi = rssi;
+    entry->snr = snr;
+    snprintf(entry->src_type, sizeof(entry->src_type), "%s", src_type);
+    entry->used = true;
+    externQueueWrite = (externQueueWrite + 1) % MAX_EXTERN_QUEUE;
+}
+
+void flushExternQueue()
+{
+    for(int i = 0; i < MAX_EXTERN_QUEUE; i++)
+    {
+        if(externQueue[i].used)
+        {
+            sendExtern(true, externQueue[i].src_type, externQueue[i].buffer,
+                       externQueue[i].buflen, externQueue[i].rssi, externQueue[i].snr);
+            externQueue[i].used = false;
+        }
+    }
 }
 
 void  sendExternHeartbeat()

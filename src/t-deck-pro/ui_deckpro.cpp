@@ -76,20 +76,15 @@ static const char *line_full_format(int max_c, const char *str1, const char *str
 
     len1 = (int)strlen(str1);
 
+    int buf_size = sizeof(global_buf);  // 256
+    if (len1 >= buf_size) len1 = buf_size - 1;
     strncpy(global_buf, str1, len1);
-
-    len2 = (int)strlen(str2);
-
-    for(j = len1; j < max_c -1 - len2; j++)
-    {
-        global_buf[j] = ' ';
-    }
-
+    // ... Padding mit max_c Begrenzung ...
+    int remaining = buf_size - j - 1;
+    if (len2 > remaining) len2 = remaining;
     strncpy(global_buf + j, str2, len2);
-    j = j + len2;
+    global_buf[buf_size - 1] = '\0';
     
-    global_buf[j] = '\0'; 
-
     printf("[%d] buf: %s\n", __LINE__, global_buf);
 
     return (const char *)global_buf;

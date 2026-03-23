@@ -50,6 +50,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLECommandBack(char *text);
 void addLoraRxBuffer(unsigned int msg_id, bool msg_server);
+void addTxRingEntry(const char* source);
 
 int checkOwnRx(uint8_t compBuffer[4]);
 bool checkServerRx(uint8_t compBuffer[4]);
@@ -60,7 +61,7 @@ int esp32_isSSD1306(int address);
 
 void sendMessage(char *msg_text, int len);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);
-void sendPosition(unsigned int intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
+void sendPosition(unsigned long intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
 void SendAckMessage(String dest_call, unsigned int iAckId);
 void sendHey();
@@ -94,7 +95,8 @@ String getTimeZone();
 
 int count_char(String s, char c);
 
-void addRingPointer(int &toWrite, int &toRead, int iMAX);
+void addRingPointer(volatile int &toWrite, volatile int &toRead, int iMAX, const char* bufName = "?");
 
+bool is_equ(const char* buf1, const char* buf2);
 
 #endif // _LOOP_FUNCTIONS_H_

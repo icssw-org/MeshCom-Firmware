@@ -8,7 +8,9 @@
 void startExternUDP();
 void getExternUDP();
 void getExtern(unsigned char icomming[255], int len);
-void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen);
+void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t rssi, int8_t snr);
+void queueExtern(char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t rssi, int8_t snr);
+void flushExternQueue();
 void sendExternHeartbeat();
 void resetExternUDP();
 

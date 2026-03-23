@@ -48,6 +48,8 @@ double dlon;
 char clat;
 char clon;
 
+bool bMDNSOK=true;
+
 /**
  * ###########################################################################################################################
  * initialize the Web Server
@@ -56,29 +58,53 @@ void startWebserver()
 {
     if (bweb_server_running)
         return;
-    if (strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
-    {
-        /*
-        if(bDEBUG)
+    #ifdef HAS_ETHERNET
+        if (meshcom_settings.node_netmode == 0)
         {
-            Serial.print("[WEB]...no ip set :");
-            Serial.println(meshcom_settings.node_ip);
+            if (strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
+            {
+                if(bDEBUG)
+                {
+                    Serial.print("[WEB]...no ip set :");
+                    Serial.println(meshcom_settings.node_ip);
+                }
+
+                stopWebserver();
+                return;
+            }
         }
-         */
-        return;
-    }
+    #else
+        if (strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
+        {
+            if(bDEBUG)
+            {
+                Serial.print("[WEB]...no ip set :");
+                Serial.println(meshcom_settings.node_ip);
+            }
+
+            stopWebserver();
+            return;
+        }
+    #endif
 
 #ifdef ESP32
     // Check if WiFi is actually connected or AP is active before trying to start MDNS
     bool is_connected = (WiFi.status() == WL_CONNECTED);
     bool is_ap_active = (WiFi.getMode() == WIFI_MODE_AP) || (WiFi.getMode() == WIFI_MODE_APSTA);
 
-    if (!is_connected && !is_ap_active)
+    #ifdef HAS_ETHERNET
+    bool ethernet_mode = (meshcom_settings.node_netmode == 1);
+    #else
+    bool ethernet_mode = false;
+    #endif
+
+    if (!is_connected && !is_ap_active && !ethernet_mode)
     {
         return;
     }
 
     web_server.stop();
+
     MDNS.end();
 
     // Set up mDNS responder:
@@ -86,17 +112,27 @@ void startWebserver()
     //   the fully-qualified domain name is "esp32.local"
     // - second argument is the IP address to advertise
     //   we send our IP address on the WiFi network
-    if (!MDNS.begin(meshcom_settings.node_call))
+    if(bMDNSOK)
     {
-        Serial.print(getTimeString());
-        Serial.println("[Web]...Error setting up MDNS responder!");
-        return;
-    }
+        if (!MDNS.begin(meshcom_settings.node_call))
+        {
+            Serial.print(getTimeString());
+            Serial.println("[Web]...Error setting up MDNS responder!");
+            
+            stopWebserver();
 
-    if (bDEBUG)
-    {
-        Serial.print(getTimeString());
-        Serial.println("[Web]...mDNS responder started");
+            bMDNSOK=false;
+
+            return;
+        }
+        else
+        {
+            if (bDEBUG)
+            {
+                Serial.print(getTimeString());
+                Serial.println("[Web]...mDNS responder started");
+            }
+        }
     }
 
     web_server.begin();
@@ -109,6 +145,12 @@ void startWebserver()
     }
 #endif
     bweb_server_running = true;
+
+    if (bDEBUG)
+    {
+        Serial.print(getTimeString());
+        Serial.println("[Web]...WEBServer started");
+    }
 }
 
 /**
@@ -122,6 +164,12 @@ void stopWebserver()
     web_server.stop();
 #endif
     bweb_server_running = false;
+
+    if (bDEBUG)
+    {
+        Serial.print(getTimeString());
+        Serial.println("[Web]...WEBServer stopped");
+    }
 }
 
 /**
@@ -133,17 +181,20 @@ void loopWebserver()
     if (!bweb_server_running)
         return;
 
+    #ifdef HAS_ETHERNET
+    if (meshcom_settings.node_netmode == 0)
+    {
+        if (strlen(meshcom_settings.node_ip) < 7)
+        {
+            return;
+        }
+    }
+    #else
     if (strlen(meshcom_settings.node_ip) < 7)
     {
-        /*
-        if(bDEBUG)
-        {
-            Serial.print("[WEBLOOP]...no ip set :");
-            Serial.println(meshcom_settings.node_ip);
-        }
-        */
         return;
     }
+    #endif
 
     web_client = web_server.available(); // Create a client connection.
 
@@ -863,7 +914,8 @@ void sub_page_mheard()
             web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span>%4idBm</span></div>", mheardLine.mh_rssi);
             web_client.printf("<div><span class=\"font-bold\">SNR:</span><br><span>%4idB</span></div>", mheardLine.mh_snr);
             web_client.printf("<div><span class=\"font-bold\">Dist:</span><br><span>%5.1lf</span></div>", mheardLine.mh_dist);
-            
+            web_client.printf("<div><span class=\"font-bold\">NCNT:</span><br><span>%2i</span></div>", mheardLine.mh_ncount);            
+
             dlat = mheardLat[iset];
             clat = 'N';
             if(dlat < 0)
@@ -908,7 +960,7 @@ void sub_page_path()
             if ((mheardPathEpoch[iset] + 60 * 60 * 3) > getUnixClock())
             { // 3h
                 isShowing = true;
-                unsigned long lt = mheardPathEpoch[iset] + ((60 * 60 + 24) * (int)meshcom_settings.node_utcoff);
+                unsigned long lt = mheardPathEpoch[iset] + (long)(meshcom_settings.node_utcoff * 3600.0);
                 web_client.printf("<div class=\"cardlayout\">\n");
                 web_client.printf("<label class=\"cardlabel\"><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a> <span class=\"font-small\">(%s)</span></label>", mheardPathCalls[iset], mheardPathCalls[iset], convertUNIXtoString(lt).substring(5).c_str());
                 web_client.printf("<div class=\"flex-auto-wrap\">");
@@ -1033,6 +1085,9 @@ void sub_page_setup()
     _create_setup_textinput_element("extudp", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("</div><div class=\"grid grid2\">");
+    #if defined(HAS_ETHERNET)
+    _create_setup_switch_element("netmode", "Ethernet Mode", "switch between WiFi and Ethernet", meshcom_settings.node_netmode == 1);
+    #endif
     _create_setup_switch_element("extudp", "ext UDP", "enable ext. UDP", bEXTUDP); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);   // create Switch-Element inclucing Label and Description
 
@@ -1262,7 +1317,7 @@ void sub_page_spectrum()
 {
     _create_meshcom_subheader("Spectrum Scan");
     web_client.println("<div id=\"content_inner\">");
-#if defined(SX1262X) || defined(SX126X) || defined(SX1262_V3) || defined(SX1262_E290)
+#if defined(SX1262X) || defined(SX126X) || defined(SX1262_V3) || defined(SX1262_E290) || defined(USING_SX1262)
 
     meshcom_settings.node_specstart = 432.0;
     meshcom_settings.node_specend = 434.0;
@@ -1380,7 +1435,7 @@ void sub_page_info()
     web_client.println("<table class=\"table mw-600\">");
     web_client.println("<thead><tr class=\"font-bold\"><td>Item</td><td>Value</td></tr></thead>");
 
-    web_client.printf("<tr><td>Firmware</td><td>Meshcom %-4.4s%-1.1s<br>(build: %s / %s)</td></tr>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, __DATE__, __TIME__);
+    web_client.printf("<tr><td>Firmware</td><td>Meshcom %-4.4s%-1.1s<br>(build: %s / %s)<br>(flash-version %i)</td></tr>\n", SOURCE_VERSION, SOURCE_VERSION_SUB, __DATE__, __TIME__, meshcom_settings.node_fversion);
     web_client.printf("<tr><td>Start Date</td><td>%s</td></tr>\n", meshcom_settings.node_update);
     web_client.printf("<tr><td>Call</td><td>%s</td></tr>\n", meshcom_settings.node_call);
     web_client.printf("<tr><td>Hardware</td><td>%s</td></tr>\n", getHardwareLong(BOARD_HARDWARE).c_str());
@@ -1409,33 +1464,42 @@ void sub_page_info()
     web_client.printf("<tr><td>Coding Rate (CR)</td><td>%i</td></tr>\n", getCR());
     web_client.printf("<tr><td>TX Power</td><td>%i dBm (%.2f mW)</td></tr>\n", getPower(), 1000 * powf(10, ((float)getPower() - 30) / 10));
 
-#ifndef BOARD_RAK4630
-    if (bWIFIAP)
-        web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", cBLEName);
-    else
-        web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", meshcom_settings.node_ssid);
-    web_client.printf("<tr><td>WiFi AP</td><td>%s</td></tr>\n", (bWIFIAP ? "yes" : "no"));
+    #if defined(HAS_ETHERNET)
+    web_client.printf("<tr><td>Netmode</td><td>%s</td></tr>\n", (meshcom_settings.node_netmode == 1 ? "Ethernet" : "WiFi"));
+    #endif
 
-    web_client.printf("<tr><td>WiFi RSSI</td><td>%i</td></tr>\n", WiFi.RSSI()); 
-    web_client.printf("<tr><td>WiFi POWER SET</td><td>%i dBm\n</td></tr>\n", WiFi.getTxPower()/4);
-#endif
+    #ifndef BOARD_RAK4630
+    if(meshcom_settings.node_netmode == 0)
+    {
+        if (bWIFIAP)
+            web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", cBLEName);
+        else
+            web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", meshcom_settings.node_ssid);
+
+        web_client.printf("<tr><td>WiFi AP</td><td>%s</td></tr>\n", (bWIFIAP ? "yes" : "no"));
+        web_client.printf("<tr><td>WiFi RSSI</td><td>%i</td></tr>\n", WiFi.RSSI()); 
+        web_client.printf("<tr><td>WiFi POWER SET</td><td>%i dBm\n</td></tr>\n", WiFi.getTxPower()/4);
+    }
+    #endif
 
     // wenn WIFI unterbrochen wird
     // if(meshcom_settings.node_hasIPaddress && strcmp(meshcom_settings.node_ip, "0.0.0.0") == 0)
     //    meshcom_settings.node_hasIPaddress = false;
-    // web_client.printf("<tr><td><b>hasIpAddress</b></td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
-
+    //    web_client.printf("<tr><td><b>hasIpAddress</b></td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
+    
     web_client.printf("<tr><td>hasIpAddress</td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress ? "yes" : "no"));
 
     if (meshcom_settings.node_hasIPaddress)
     {
         web_client.printf("<tr><td>IP address</td><td>%s</td></tr>\n", meshcom_settings.node_ip);
+        web_client.printf("<tr><td>SUB-MASK</td><td>%s</td></tr>\n", meshcom_settings.node_subnet);
+
         if (!bWIFIAP)
         {
             web_client.printf("<tr><td>GW address</td><td>%s</td></tr>\n", meshcom_settings.node_gw);
             web_client.printf("<tr><td>DNS address</td><td>%s</td></tr>\n", meshcom_settings.node_dns);
         }
-        web_client.printf("<tr><td>SUB-MASK</td><td>%s</td></tr>\n", meshcom_settings.node_subnet);
+    
     }
 
     if (bINA226ON)

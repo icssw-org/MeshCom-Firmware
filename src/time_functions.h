@@ -6,6 +6,7 @@ String getDateTime(unsigned long timestamp);
 
 String convertUNIXtoString(uint32_t timestamp);
 
+void initTimePersistence();
 void saveTimePersistence();
 void loadTimePersistence();
 

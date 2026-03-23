@@ -221,6 +221,18 @@ void init_flash(void)
 
 		memcpy(meshcom_settings.node_owndns, old_struct.node_owndns, 20);
 
+		meshcom_settings.node_contrast = old_struct.node_contrast;
+		meshcom_settings.node_fversion = old_struct.node_fversion;
+		memcpy(meshcom_settings.node_fwversion, old_struct.node_fwversion, sizeof(meshcom_settings.node_fwversion));
+
+		memcpy(meshcom_settings.node_ownntp, old_struct.node_ownntp, 40);
+
+		meshcom_settings.node_mversion = old_struct.node_mversion;
+
+		meshcom_settings.node_gpsbaud = old_struct.node_gpsbaud;
+
+		meshcom_settings.node_cleanflash = old_struct.node_cleanflash;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

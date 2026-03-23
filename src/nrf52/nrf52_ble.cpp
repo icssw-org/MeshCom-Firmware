@@ -29,6 +29,7 @@ extern uint8_t txt_msg_len_phone;
 extern bool bInitDisplay;
 extern uint8_t dmac[6];
 extern bool config_to_phone_prepare;
+extern bool conffin_sent;
 
 // Create device name
 char helper_string[256] = {0};
@@ -190,9 +191,11 @@ void connect_callback(uint16_t conn_handle)
 	Bluefruit.setTxPower(4);
 	DEBUG_MSG("BLE", "Connected");
 	// set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-    commandAction((char*)"--conffin", true, true);
+    // wird im nrf52_main aufgerufen
+
 	isPhoneReady = 1;
 	config_to_phone_prepare = true;
+	conffin_sent = false;
 	g_ble_uart_is_connected = true;
 
 }

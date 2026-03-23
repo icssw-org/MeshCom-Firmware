@@ -8,7 +8,7 @@
 
 /* clang-format off */
 
-TinyGPSPlus gps;
+extern TinyGPSPlus gps;
 static bool GPS_Recovery();
 bool setupGPS();
 void displayInfo();

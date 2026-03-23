@@ -47,13 +47,6 @@
 
 unsigned long rebootAuto = 0;
 
-#ifndef BOARD_T_DECK_PRO
-    #if defined (ENABLE_GPS)
-    extern int state; // only for gps reset
-    extern bool bMitHardReset;
-    #endif
-#endif
-
 // OTA Libs for ESP32 Partition Switching
 #ifdef ESP32
 #include <esp_ota_ops.h>
@@ -63,6 +56,9 @@ unsigned long rebootAuto = 0;
 // libs for T-Deck view refresh
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions.h>
+#ifdef HEAP_TEST
+#include <SPIFFS.h>
+#endif
 #endif
 
 #if defined(BOARD_T5_EPAPER)
@@ -70,13 +66,14 @@ unsigned long rebootAuto = 0;
 #include <t5-epaper/t5epaper_main.h>
 #endif
 
-uint16_t json_len = 0;
 void sendNodeSetting();
 void sendGpsJson();
 void sendAPRSset();
 void sendConfigFinish();
 
 String strMore;
+
+size_t json_len = 0;
 
 int casecmp(const char *s1, const char *s2)
 {
@@ -97,7 +94,8 @@ int casecmp(const char *s1, const char *s2)
 int commandCheck(char *msg, char *command)
 {
     char vmsg[100];
-    strcpy(vmsg, msg);
+    strncpy(vmsg, msg, sizeof(vmsg) - 1);
+    vmsg[sizeof(vmsg) - 1] = '\0';
     vmsg[strlen(command)] = 0x00;
 
     if(casecmp(vmsg, command) == 0)
@@ -155,7 +153,12 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     if(inext > 0)
     {
         memset(msg_detail, 0x00, sizeof(msg_detail));
-        memcpy(msg_detail, msg_text+inext, strlen(msg_text)-inext);
+        
+        size_t detail_len = strlen(msg_text) - inext;
+        if (detail_len > sizeof(msg_detail) - 1)
+            detail_len = sizeof(msg_detail) - 1;
+        memcpy(msg_detail, msg_text + inext, detail_len);
+        msg_detail[detail_len] = '\0';
 
         if(bDisplayCont)
         {
@@ -487,6 +490,30 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"cleanflash") == 0)
+    {
+        meshcom_settings.node_cleanflash = 1;
+        
+        save_settings();
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--reboot now");
+        }
+
+        delay(2000);
+        
+        #ifdef ESP32
+            ESP.restart();
+        #endif
+        
+        #if defined NRF52_SERIES
+            NVIC_SystemReset();     // resets the device
+        #endif
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"reboot") == 0)
     {
         if(ble)
@@ -564,7 +591,7 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("MeshCom %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setname  set first name/none\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
             delay(100);
 
-            Serial.printf("--setssid  WLAN SSID/none\n--setpwd   WLAN PASSWORD/none\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--setowndns 255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255/none\n");
+            Serial.printf("--setssid  WLAN SSID/none\n--setpwd   WLAN PASSWORD/none\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--setowndns 255.255.255.255\n--setownntp 255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255/none\n");
             delay(100);
 
             Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analog check on/off\n");
@@ -617,7 +644,8 @@ void commandAction(char *umsg_text, bool ble)
             //value timer
             Serial.printf("--ptime 99 messuring interval minutes\n");
 
-            #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || defined(SX1262_V3)
+            #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || \
+                defined(SX1262_V3) || defined(USING_SX1262)
                 delay(100);
                 Serial.printf("--setboostedgain    on/off  enable/disable boosted rx gain\n");
             #endif
@@ -726,8 +754,12 @@ void commandAction(char *umsg_text, bool ble)
     {
         #if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
         int contrast_value = atoi(msg_text + 11);  // "--" + "contrast " = 2 + 9 = 11
-        if(contrast_value < 0) contrast_value = 0;
+        if(contrast_value <= 0) contrast_value = 1;
         if(contrast_value > 255) contrast_value = 255;
+
+        meshcom_settings.node_contrast = contrast_value;
+
+        save_settings();
 
         if(u8g2 != NULL)
         {
@@ -751,6 +783,21 @@ void commandAction(char *umsg_text, bool ble)
 
         bReturn = true;
     }
+    #ifdef HEAP_TEST
+    else
+    if(commandCheck(msg_text+2, (char*)"spiffs reset") == 0)
+    {
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+        Serial.println("...SPIFFS format start");
+        SPIFFS.format();
+        Serial.println("...SPIFFS format done");
+        #else
+        Serial.println("[DISP]...SPIFFS  not supported on this hardware");
+        #endif
+
+        bReturn = true;
+    }
+    #endif
     else
     if(commandCheck(msg_text+2, (char*)"button on") == 0)
     {
@@ -940,6 +987,7 @@ void commandAction(char *umsg_text, bool ble)
             return ;
         }
 
+        analogSetAttenuation(adc_attenuation_t(dVar));  // [OE3WAS] setzen
         meshcom_settings.node_analog_atten=dVar;
 
         save_settings();
@@ -1235,7 +1283,7 @@ void commandAction(char *umsg_text, bool ble)
         #endif
     }
     else
-    #if defined (ENABLE_GPS)
+    #if defined (ENABLE_GPS) or defined(BOARD_RAK4630)
     if(commandCheck(msg_text+2, (char*)"gps on") == 0)
     {
         bGPSON=true;
@@ -1302,10 +1350,6 @@ void commandAction(char *umsg_text, bool ble)
             addBLECommandBack((char*)"--gps reset");
         }
 
-        bMitHardReset=true;
-
-        state = 1;
-        
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         tdeck_refresh_SET_view();
         #endif
@@ -1890,7 +1934,7 @@ void commandAction(char *umsg_text, bool ble)
             return;
         }
 
-        sprintf(meshcom_settings.node_gwsrv, "%s", strCtry.c_str());
+        snprintf(meshcom_settings.node_gwsrv, sizeof(meshcom_settings.node_gwsrv), "%s", strCtry.c_str());
 
         if(ble)
         {
@@ -2190,7 +2234,8 @@ void commandAction(char *umsg_text, bool ble)
         
         return;
     }
-    #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || defined(SX1262_V3)
+    #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || \
+        defined(SX1262_V3) || defined(USING_SX1262)
     else
     if(commandCheck(msg_text+2, (char*)"setboostedgain on") == 0)
     {
@@ -2644,7 +2689,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"sendpos") == 0)
     {
-        sendPosition(0, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+        sendPosition(0x9999, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         if(ble)
         {
@@ -2656,7 +2701,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"sendtele") == 0)
     {
-        sendPosition(1, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+        sendPosition(0xEEEE, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
 
         if(ble)
         {
@@ -2883,6 +2928,39 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    
+    #if defined(HAS_ETHERNET)
+        // --- network or wifi mode ---
+        if(commandCheck(msg_text+2, (char*)"netmode wifi") == 0)
+        {
+            meshcom_settings.node_netmode = 0;
+
+            Serial.println("[CMD] netmode -> WiFi");
+
+            save_settings();
+
+            rebootAuto = millis() + 2000;
+
+            bReturn = true;
+        }
+        else
+        if(commandCheck(msg_text+2, (char*)"netmode eth") == 0)
+        {
+            meshcom_settings.node_netmode = 1;
+
+            Serial.println("[CMD] netmode -> Ethernet");
+            //Serial.printf("node_netmode=%d\n", meshcom_settings.node_netmode); // solo per debug
+
+            save_settings();
+
+            rebootAuto = millis() + 2000;
+
+            bReturn = true;
+        } 
+        else
+
+    #endif
+
     if(commandCheck(msg_text+2, (char*)"wifiap on") == 0)
     {
         bWIFIAP=true;
@@ -2996,6 +3074,56 @@ void commandAction(char *umsg_text, bool ble)
         msg_text[50]=0x00;
 
         snprintf(meshcom_settings.node_ownms, sizeof(meshcom_settings.node_ownms), "%s", msg_text+11);
+
+        if(ble)
+        {
+            bWifiSetting = true;
+        }
+
+        save_settings();
+
+        if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
+           (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
+        {
+            Serial.println("Auto. Reboot after 15 sec.");
+
+            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setowndns ") == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        snprintf(meshcom_settings.node_owndns, sizeof(meshcom_settings.node_owndns), "%s", msg_text+11);
+
+        if(ble)
+        {
+            bWifiSetting = true;
+        }
+
+        save_settings();
+
+        if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
+           (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
+        {
+            Serial.println("Auto. Reboot after 15 sec.");
+
+            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setownntp ") == 0)
+    {
+        // max. 40 char
+        msg_text[50]=0x00;
+
+        snprintf(meshcom_settings.node_ownntp, sizeof(meshcom_settings.node_ownntp), "%s", msg_text+11);
 
         if(ble)
         {
@@ -3900,13 +4028,16 @@ void commandAction(char *umsg_text, bool ble)
 
             serializeJson(tmdoc, print_buff, measureJson(tmdoc));
 
-            // clear buffer
-            memset(msg_buffer, 0, sizeof(msg_buffer));
+            json_len = strlen(print_buff);
+            if (json_len > MAX_MSG_LEN_PHONE - 2) {
+                json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+            }
 
-            // set data message flag and tx ble
+            memset(msg_buffer, 0, sizeof(msg_buffer));
             msg_buffer[0] = 0x44;
-            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            memcpy(msg_buffer + 1, print_buff, json_len);
+
+            addBLEComToOutBuffer(msg_buffer, json_len + 1);
         }
 
         if(!bRxFromPhone)
@@ -3947,13 +4078,16 @@ void commandAction(char *umsg_text, bool ble)
 
             serializeJson(wdoc, print_buff, measureJson(wdoc));
 
-            // clear buffer
-            memset(msg_buffer, 0, sizeof(msg_buffer)); 
+            json_len = strlen(print_buff);
+            if (json_len > MAX_MSG_LEN_PHONE - 2) {
+                json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+            }
 
-            // set data message flag and tx ble
+            memset(msg_buffer, 0, sizeof(msg_buffer));
             msg_buffer[0] = 0x44;
-            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            memcpy(msg_buffer + 1, print_buff, json_len);
+
+            addBLEComToOutBuffer(msg_buffer, json_len + 1);
         }
 
         if(!bRxFromPhone)
@@ -4050,13 +4184,16 @@ void commandAction(char *umsg_text, bool ble)
 
             serializeJson(iodoc, print_buff, measureJson(iodoc));
 
-            // clear buffer
-            memset(msg_buffer, 0, sizeof(msg_buffer));
+            json_len = strlen(print_buff);
+            if (json_len > MAX_MSG_LEN_PHONE - 2) {
+                json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+            }
 
-            // set data message flag and tx ble
+            memset(msg_buffer, 0, sizeof(msg_buffer));
             msg_buffer[0] = 0x44;
-            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            memcpy(msg_buffer + 1, print_buff, json_len);
+
+            addBLEComToOutBuffer(msg_buffer, json_len + 1);
         }
 
         if(!bRxFromPhone)
@@ -4136,13 +4273,16 @@ void commandAction(char *umsg_text, bool ble)
 
             serializeJson(idoc, print_buff, measureJson(idoc));
 
-            // clear buffer
-            memset(msg_buffer, 0, sizeof(msg_buffer));
+            json_len = strlen(print_buff);
+            if (json_len > MAX_MSG_LEN_PHONE - 2) {
+                json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+            }
 
-            // set data message flag and tx ble
+            memset(msg_buffer, 0, sizeof(msg_buffer));
             msg_buffer[0] = 0x44;
-            memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-            addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+            memcpy(msg_buffer + 1, print_buff, json_len);
+
+            addBLEComToOutBuffer(msg_buffer, json_len + 1);
         }
         
         if(!bRxFromPhone)
@@ -4159,14 +4299,16 @@ void commandAction(char *umsg_text, bool ble)
                     SOURCE_VERSION, SOURCE_VERSION_SUB , __DATE__ , __TIME__ , meshcom_settings.node_update,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, getHardwareLong(BOARD_HARDWARE).c_str(), meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv, millis());
 
+            Serial.printf("...Flash-Version %i\n", meshcom_settings.node_fversion);
+
             Serial.printf("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s ... SOFTSERREAD %s\n...PASSWD <%s>\n",
                 (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), (bSOFTSERREAD?"on":"off"), meshcom_settings.node_passwd);
 
             Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
-            Serial.printf("...DisplayInfo %s ...DisplayCont %s\n",
-                    (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"));
+            Serial.printf("...DisplayInfo %s ...DisplayCont %s ...contrast %i\n",
+                    (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), meshcom_settings.node_contrast);
 
             Serial.printf("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
 
@@ -4249,6 +4391,7 @@ void commandAction(char *umsg_text, bool ble)
                     Serial.printf("...OWNMS  address: %s\n", meshcom_settings.node_ownms);
                     Serial.printf("...OWNGW  address: %s\n", meshcom_settings.node_owngw);
                     Serial.printf("...OWNDNS address: %s\n", meshcom_settings.node_owndns);
+                    Serial.printf("...OWNNTP address: %s\n", meshcom_settings.node_ownntp);
                 }
             }
 
@@ -4319,17 +4462,15 @@ void commandAction(char *umsg_text, bool ble)
         sensdoc["TYP"] = "SE";
         sensdoc["BME"] = bBMEON;
         sensdoc["BMP"] = bBMPON;
-        sensdoc["BMXF"] = bmx_found;
         sensdoc["BMP3"] = bBMP3ON;
         sensdoc["BMP3F"] = bmp3_found;
+        sensdoc["AHT"] = bAHT20ON;
+        sensdoc["AHTF"] = aht20_found;
+        sensdoc["BMXF"] = bmx_found;
         sensdoc["680"] = bBME680ON;
         sensdoc["680F"] = bme680_found;
         sensdoc["811"] = bMCU811ON;
         sensdoc["811F"] = mcu811_found;
-        sensdoc["226"] = bINA226ON;
-        sensdoc["226F"] = ina226_found;
-        sensdoc["AHT"] = bAHT20ON;
-        sensdoc["AHTF"] = aht20_found;
         sensdoc["SS"] = bSOFTSERON;
         sensdoc["LPS33"] = bLPS33;
         sensdoc["OW"] = bONEWIRE;
@@ -4341,13 +4482,16 @@ void commandAction(char *umsg_text, bool ble)
 
         serializeJson(sensdoc, print_buff, measureJson(sensdoc));
 
-        // clear buffer
-        memset(msg_buffer, 0, sizeof(msg_buffer));
+        json_len = strlen(print_buff);
+        if (json_len > MAX_MSG_LEN_PHONE - 2) {
+            json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+        }
 
-        // set data message flag and tx ble
+        memset(msg_buffer, 0, sizeof(msg_buffer));
         msg_buffer[0] = 0x44;
-        memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        memcpy(msg_buffer + 1, print_buff, json_len);
+
+        addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
         JsonDocument sensdoc1;
 
@@ -4358,19 +4502,24 @@ void commandAction(char *umsg_text, bool ble)
         sensdoc1["SAMP"] = meshcom_settings.node_isamp;
         sensdoc1["SHT"] = bSHT21ON;
         sensdoc1["SHTF"] = sht21_found;
+        sensdoc1["226"] = bINA226ON;
+        sensdoc1["226F"] = ina226_found;
 
         // reset print buffer
         memset(print_buff, 0, sizeof(print_buff));
 
         serializeJson(sensdoc1, print_buff, measureJson(sensdoc1));
 
-        // clear buffer
-        memset(msg_buffer, 0, sizeof(msg_buffer));
+        json_len = strlen(print_buff);
+        if (json_len > MAX_MSG_LEN_PHONE - 2) {
+            json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+        }
 
-        // set data message flag and tx ble
+        memset(msg_buffer, 0, sizeof(msg_buffer));
         msg_buffer[0] = 0x44;
-        memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        memcpy(msg_buffer + 1, print_buff, json_len);
+
+        addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
         return;
     }
@@ -4403,13 +4552,16 @@ void commandAction(char *umsg_text, bool ble)
 
         serializeJson(swdoc, print_buff, measureJson(swdoc));
 
-        // clear buffer
-        memset(msg_buffer, 0, sizeof(msg_buffer));
+        json_len = strlen(print_buff);
+        if (json_len > MAX_MSG_LEN_PHONE - 2) {
+            json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+        }
 
-        // set data message flag and tx ble
+        memset(msg_buffer, 0, sizeof(msg_buffer));
         msg_buffer[0] = 0x44;
-        memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        memcpy(msg_buffer + 1, print_buff, json_len);
+
+        addBLEComToOutBuffer(msg_buffer, json_len + 1);
         
         JsonDocument swdoc2;
 
@@ -4418,6 +4570,7 @@ void commandAction(char *umsg_text, bool ble)
         swdoc2["OWNGW"] = meshcom_settings.node_owngw;
         swdoc2["OWNMS"] = meshcom_settings.node_ownms;
         swdoc2["OWNDNS"] = meshcom_settings.node_owndns;
+        swdoc2["OWNNTP"] = meshcom_settings.node_ownntp;
         swdoc2["EUDP"] = bEXTUDP;
         swdoc2["EUDPIP"] = meshcom_settings.node_extern;
         swdoc2["TXPOW"] = meshcom_settings.node_wifi_power;
@@ -4427,13 +4580,16 @@ void commandAction(char *umsg_text, bool ble)
 
         serializeJson(swdoc2, print_buff, measureJson(swdoc2));
 
-        // clear buffer
-        memset(msg_buffer, 0, sizeof(msg_buffer));
+        json_len = strlen(print_buff);
+        if (json_len > MAX_MSG_LEN_PHONE - 2) {
+            json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+        }
 
-        // set data message flag and tx ble
+        memset(msg_buffer, 0, sizeof(msg_buffer));
         msg_buffer[0] = 0x44;
-        memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-        addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+        memcpy(msg_buffer + 1, print_buff, json_len);
+
+        addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
         return;
     }
@@ -4501,13 +4657,16 @@ void sendGpsJson()
 
     serializeJson(pdoc, print_buff, measureJson(pdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer + 1, print_buff, strlen(print_buff));
-    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 }
 
 
@@ -4567,8 +4726,8 @@ void sendNodeSetting()
     nsetdoc["TXP"] = meshcom_settings.node_power;
     nsetdoc["MQRG"] = node_qrg;
     nsetdoc["MSF"] = meshcom_settings.node_sf;
-    nsetdoc["MCR"] = meshcom_settings.node_cr;
-    nsetdoc["MBW"] = meshcom_settings.node_bw;
+    nsetdoc["MCR"] = getCR();
+    nsetdoc["MBW"] = getBW();
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
     nsetdoc["NOALL"] = bNoMSGtoALL;
     nsetdoc["BLED"] = bUSER_BOARD_LED;
@@ -4579,13 +4738,16 @@ void sendNodeSetting()
 
     serializeJson(nsetdoc, print_buff, measureJson(nsetdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 }
 
 void sendAnalogSetting()
@@ -4613,13 +4775,16 @@ void sendAnalogSetting()
 
     serializeJson(asetdoc, print_buff, measureJson(asetdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
     #endif
 
@@ -4647,15 +4812,19 @@ void sendAPRSset()
 
     serializeJson(aprsdoc, print_buff, measureJson(aprsdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEComToOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 
 }
+
 
 // when all Jsons for configuration are sent to the phone, we send a finish message
 void sendConfigFinish()
@@ -4670,11 +4839,14 @@ void sendConfigFinish()
 
     serializeJson(cdoc, print_buff, measureJson(cdoc));
 
-    // clear buffer
-    memset(msg_buffer, 0, sizeof(msg_buffer));
+    json_len = strlen(print_buff);
+    if (json_len > MAX_MSG_LEN_PHONE - 2) {
+        json_len = MAX_MSG_LEN_PHONE - 2;  // 1 Byte Header + Null-Terminator
+    }
 
-    // set data message flag and tx ble
+    memset(msg_buffer, 0, sizeof(msg_buffer));
     msg_buffer[0] = 0x44;
-    memcpy(msg_buffer +1, print_buff, strlen(print_buff));
-    addBLEOutBuffer(msg_buffer, strlen(print_buff) + 1);
+    memcpy(msg_buffer + 1, print_buff, json_len);
+
+    addBLEComToOutBuffer(msg_buffer, json_len + 1);
 }

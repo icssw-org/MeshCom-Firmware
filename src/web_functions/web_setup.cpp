@@ -35,6 +35,26 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    #if defined(HAS_ETHERNET)
+
+        if(setupData->paramName.equals("netmode")) {
+
+            if(setupData->paramValue.equals("on")) {
+                snprintf(message_text, sizeof(message_text), "--netmode eth");
+            } else {
+                snprintf(message_text, sizeof(message_text), "--netmode wifi");
+            }
+
+            commandAction(message_text, bPhoneReady);
+
+            setupData->returnCode = WS_RETURNCODE_OKAY;
+            setupData->returnValue = meshcom_settings.node_netmode == 1 ? "eth" : "wifi";
+            return;
+
+        } else
+
+    #endif
+
     if(setupData->paramName.equals("setcall")) {        
         snprintf(message_text, sizeof(message_text), "--setcall %s", setupData->paramValue.c_str());                   // set command string
         commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
@@ -403,6 +423,22 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
     
+    if(setupData->paramName.equals("setowndns")) {
+        snprintf(message_text, sizeof(message_text), "--setowndns %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_owndns, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_owndns;    
+        return;
+    } else
+
+    if(setupData->paramName.equals("setownntp")) {
+        snprintf(message_text, sizeof(message_text), "--setownntp %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = strcmp(meshcom_settings.node_ownntp, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parametr was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_ownntp;    
+        return;
+    } else
+
     if(setupData->paramName.equals("extudpip")) {
         snprintf(message_text, sizeof(message_text), "--extudpip %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
@@ -554,7 +590,7 @@ void webSetup_setParam(setupStruct *setupData){
 
 /**
  * ###########################################################################################################################
- * Returns a value for the requested parameter 
+ * REturns a value for the requested parameter 
  * It will return a code that correspondens to wether the parameter was known or not known
  * 
  * @param setupData a pointer to a struct that contains the parameter name and will contain the return code and return value
@@ -776,6 +812,16 @@ void webSetup_getParam(setupStruct *setupData){
 
     if(setupData->paramName.equals("setowngw")) {
         setupData->returnValue = String(meshcom_settings.node_owngw);    
+        return;
+    } else
+    
+    if(setupData->paramName.equals("setowndns")) {
+        setupData->returnValue = String(meshcom_settings.node_owndns);
+        return;
+    } else
+    
+    if(setupData->paramName.equals("setownntp")) {
+        setupData->returnValue = String(meshcom_settings.node_ownntp);    
         return;
     } else
     

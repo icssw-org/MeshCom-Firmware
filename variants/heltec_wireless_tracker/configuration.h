@@ -13,7 +13,9 @@ definitions for HELTEC_V3
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define SX1262_V3
 #define RX_TIMEOUT_VALUE 0      // continous rx with 0
+
 #define ENABLE_GPS
+
 #define ENABLE_BMX280
 #define ENABLE_BMX680
 #define ENABLE_BMP390
@@ -88,8 +90,8 @@ definitions for HELTEC_V3
 
 #define OneWire_GPIO 99 // getestet ???
 
-#define GPS_RX_PIN 34 //*
-#define GPS_TX_PIN 33 //*
+#define GPS_RX_PIN 33 // old 33
+#define GPS_TX_PIN 34 // old 34
 #define GPS_BAUDRATE_MODUL 115200 //*
 
 #define VEXT_CTRL   3   // To turn on GPS and TFT

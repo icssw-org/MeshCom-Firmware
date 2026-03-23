@@ -13,11 +13,14 @@
 #include "optimization.h"   // Compile-time size reduction, configurable
 
 #include "GFX_Root/GFX.h"
-#include "SDWrapper/sd_wrapper.h"
 
 #include "Platforms/platforms.h"
 #include "Bounds/bounds.h"
 #include "Displays/BaseDisplay/enums.h"
+
+#ifndef DISABLE_SDCARD  // optimization.h, WirelessPaper.h
+#include "SDWrapper/sd_wrapper.h"
+#endif
 
 class BaseDisplay: public GFX {
 
@@ -278,11 +281,14 @@ class BaseDisplay: public GFX {
 
 
         // SD
+        #ifndef DISABLE_SDCARD  // optimization.h, WirelessPaper.h
         SDWrapper* sd;                                              // Dynamically allocated SD instance
+        const char* sd_filename;                                    // Pass filename to writePageToBMP()
+        #endif
+
+        bool saving_to_sd = false;                                  // Are drawing operations currently diverted into a bmp file?
         uint8_t pin_miso = DEFAULT_MISO;                            // Set in useSD(). Relevant to SAMD21 pin muxing
         uint8_t pin_cs_card = -1;                                   // Set in useSD()
-        bool saving_to_sd = false;                                  // Are drawing operations currently diverted into a bmp file?
-        const char* sd_filename;                                    // Pass filename to writePageToBMP()
 
 
         // External power switch
