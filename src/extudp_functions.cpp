@@ -228,10 +228,8 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     return;
   }
 
-  static char c_json[500];
-  static char c_tjson[500];
-  memset(c_json, 0, sizeof(c_json));
-  memset(c_tjson, 0, sizeof(c_tjson));
+  char c_json[500] = {0};
+  char c_tjson[500] = {0};
 
   char escape_symbol[3];
   char escape_group[3];
@@ -422,12 +420,19 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
 
     UdpExtern.beginPacket(apip , EXTERN_PORT);
 
-    int iklng=strlen(c_json) / 2;
+    if(strlen(c_json) < 10)
+    {
+      Serial.printf("[EXT] Out: %s Len: %i\n", c_json, strlen(c_json));
+    }
+    else
+    {
+      int iklng=strlen(c_json) / 2;
 
-    String strKurz = c_json;
+      String strKurz = c_json;
 
-    Serial.printf("[EXT] Out: %s", strKurz.substring(0, iklng).c_str());
-    Serial.printf("%s Len: %i\n", strKurz.substring(iklng, strlen(c_json)).c_str(), strlen(c_json));
+      Serial.printf("[EXT] Out: %s", strKurz.substring(0, iklng).c_str());
+      Serial.printf("%s Len: %i\n", strKurz.substring(iklng, strlen(c_json)).c_str(), strlen(c_json));
+    }
 
     if (!UdpExtern.write((uint8_t*)c_json, strlen(c_json)))
     {
@@ -442,12 +447,19 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
       // Telemetrie
       UdpExtern.beginPacket(apip , EXTERN_PORT);
 
-      int iklng=strlen(c_tjson) / 2;
+      if(strlen(c_tjson) < 10)
+      {
+        Serial.printf("[EXT] Tele-Out: %s Len: %i\n", c_tjson, strlen(c_tjson));
+      }
+      else
+      {
+        int iklng=strlen(c_tjson) / 2;
 
-      String strKurz = c_tjson;
+        String strKurz = c_tjson;
 
-      Serial.printf("[EXT] Tele-Out: %s", strKurz.substring(0, iklng).c_str());
-      Serial.printf("%s Len: %i\n", strKurz.substring(iklng, strlen(c_tjson)).c_str(), strlen(c_tjson));
+        Serial.printf("[EXT] Tele-Out: %s", strKurz.substring(0, iklng).c_str());
+        Serial.printf("%s Len: %i\n", strKurz.substring(iklng, strlen(c_tjson)).c_str(), strlen(c_tjson));
+      }
 
       if (!UdpExtern.write((uint8_t*)c_tjson, strlen(c_tjson)))
       {
