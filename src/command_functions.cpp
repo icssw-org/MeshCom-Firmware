@@ -2116,10 +2116,6 @@ void commandAction(char *umsg_text, bool ble)
             bWifiSetting=true;
         }
 
-        // deferred: flash write + UDP reset after web response is sent (W5100S SPI conflict)
-        bPendingSaveSettings = true;
-        bPendingResetExternUDP = true;
-
         bReturn = true;
     }
     else
@@ -2133,9 +2129,6 @@ void commandAction(char *umsg_text, bool ble)
         {
             bWifiSetting=true;
         }
-
-        // deferred: flash write after web response is sent (W5100S SPI conflict)
-        bPendingSaveSettings = true;
 
         bReturn = true;
     }
@@ -2161,9 +2154,6 @@ void commandAction(char *umsg_text, bool ble)
         {
             bWifiSetting=true;
         }
-
-        // deferred: flash write after web response is sent (W5100S SPI conflict)
-        bPendingSaveSettings = true;
 
         bReturn = true;
     }

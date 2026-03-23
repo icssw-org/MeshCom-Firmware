@@ -2056,19 +2056,6 @@ if (isPhoneReady == 1)
 
     }
 
-    // Deferred save/reset — execute after web TCP connection is closed
-    if(bPendingSaveSettings)
-    {
-        bPendingSaveSettings = false;
-        save_settings();
-    }
-
-    if(bPendingResetExternUDP)
-    {
-        bPendingResetExternUDP = false;
-        resetExternUDP();
-    }
-
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
 
