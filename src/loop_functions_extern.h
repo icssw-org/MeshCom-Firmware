@@ -342,9 +342,9 @@ extern unsigned int  onrxdone_warn_count;
 extern volatile bool bPendingDisplayText;
 extern volatile bool bPendingDisplayPos;
 
-// SPI bus guard — prevent LoRa ISR from accessing SPI while Ethernet (W5100S) is active
-extern volatile bool bSPI_ETH_Active;
-extern volatile bool bPendingRadioRx;
+// Deferred save/reset — avoid flash write + W5100S SPI conflict during web request
+extern volatile bool bPendingSaveSettings;
+extern volatile bool bPendingResetExternUDP;
 extern struct aprsMessage pendingDisplayMsg;
 extern int16_t pendingDisplayRssi;
 extern int8_t  pendingDisplaySnr;
