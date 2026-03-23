@@ -228,17 +228,16 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     return;
   }
 
-  char c_json[500] = {0};
-  char c_tjson[500] = {0};
+  static char c_json[500];
+  static char c_tjson[500];
+  memset(c_json, 0, sizeof(c_json));
+  memset(c_tjson, 0, sizeof(c_tjson));
 
   char escape_symbol[3];
   char escape_group[3];
 
   memset(escape_symbol, 0x00, 3);
   memset(escape_group, 0x00, 3);
-
-  uint8_t u_json[500] = {0};
-  uint8_t t_json[500] = {0};
 
   // convert the mesgid to 8 digits hex
   char _msgId[9];
@@ -319,7 +318,6 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     json_len = measureJson(cJson);
     serializeJson(cJson, c_json, json_len + 1);
 
-    memcpy(u_json, c_json, json_len + 1);
 
     JsonDocument ctJson;
     int tjson_len = 0;
@@ -340,12 +338,10 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
       ctJson["co2"] = meshcom_settings.node_co2;
 
       // clear the buffer
-      memset(t_json, 0x00, sizeof(t_json));
       // serialize the json
       tjson_len = measureJson(ctJson);
       serializeJson(ctJson, c_tjson, tjson_len + 1);
 
-      memcpy(t_json, c_tjson, tjson_len + 1);
     }
     if(strcmp(src_type, "lora") == 0)
     {
@@ -363,12 +359,10 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
       ctJson["co2"] = aprspos.co2;
 
       // clear the buffer
-      memset(t_json, 0x00, sizeof(t_json));
       // serialize the json
       tjson_len = measureJson(ctJson);
       serializeJson(ctJson, c_tjson, tjson_len + 1);
 
-      memcpy(t_json, c_tjson, tjson_len + 1);
     }
   }
   else
@@ -409,8 +403,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
       json_len = measureJson(cJson);
       serializeJson(cJson, c_json, json_len + 1);
 
-      memcpy(u_json, c_json, json_len + 1);
-    }
+      }
   }
   else
     return;
@@ -431,7 +424,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
 
     Serial.printf("[EXT] Out: %s Len: %i\n", c_json, strlen(c_json));
 
-    if (!UdpExtern.write(u_json, strlen(c_json)))
+    if (!UdpExtern.write((uint8_t*)c_json, strlen(c_json)))
     {
       resetExternUDP();
       return;
@@ -446,7 +439,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
 
       Serial.printf("[EXT] Tele-Out: %s Len: %i\n", c_tjson, strlen(c_tjson));
 
-      if (!UdpExtern.write(t_json, strlen(c_tjson)))
+      if (!UdpExtern.write((uint8_t*)c_tjson, strlen(c_tjson)))
       {
         resetExternUDP();
         return;
