@@ -105,6 +105,10 @@ unsigned int  onrxdone_warn_count = 0;
 // Deferred display update — avoid I2C transfer inside OnRxDone
 volatile bool bPendingDisplayText = false;
 volatile bool bPendingDisplayPos = false;
+
+// Deferred save/reset — avoid flash write + W5100S SPI conflict during web request
+volatile bool bPendingSaveSettings = false;
+volatile bool bPendingResetExternUDP = false;
 struct aprsMessage pendingDisplayMsg;
 int16_t pendingDisplayRssi = 0;
 int8_t  pendingDisplaySnr = 0;
