@@ -1644,9 +1644,10 @@ if (isPhoneReady == 1)
         // check if we received a UDP packet
         if (neth.hasIPaddress)
         {
+            bSPI_ETH_Active = true;   // SPI guard: Ethernet owns bus
             if(neth.getUDP() == 1)  // 1...no udp-paket received
             {
-                sendUDP(); 
+                sendUDP();
             }
             else
             {
@@ -1655,6 +1656,8 @@ if (isPhoneReady == 1)
                 if(bDEBUG)
                     Serial.println("LOOP GATEWAY actions UDP received");
             }
+            bSPI_ETH_Active = false;  // SPI guard: release bus
+            if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
         }
         else
         {
@@ -2003,8 +2006,11 @@ if (isPhoneReady == 1)
 
     if(bEXTUDP)
     {
+        bSPI_ETH_Active = true;   // SPI guard: Ethernet owns bus
         getExternUDP();
         flushExternQueue();
+        bSPI_ETH_Active = false;  // SPI guard: release bus
+        if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
     }
 
     if(bWEBSERVER || bEXTUDP)
@@ -2025,19 +2031,27 @@ if (isPhoneReady == 1)
 
             if(bWEBSERVER)
             {
+                bSPI_ETH_Active = true;
                 startWebserver();
-
+                bSPI_ETH_Active = false;
+                if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
             }
 
             if(bEXTUDP)
             {
+                bSPI_ETH_Active = true;
                 startExternUDP();
+                bSPI_ETH_Active = false;
+                if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
             }
         }
 
         if(bWEBSERVER)
         {
-            loopWebserver(); 
+            bSPI_ETH_Active = true;   // SPI guard: Ethernet owns bus (web page delivery)
+            loopWebserver();
+            bSPI_ETH_Active = false;  // SPI guard: release bus
+            if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
         }
 
     }
