@@ -2116,6 +2116,8 @@ void commandAction(char *umsg_text, bool ble)
             bWifiSetting=true;
         }
 
+        save_settings();
+
         bReturn = true;
     }
     else
@@ -2129,6 +2131,8 @@ void commandAction(char *umsg_text, bool ble)
         {
             bWifiSetting=true;
         }
+
+        save_settings();
 
         bReturn = true;
     }
@@ -2154,6 +2158,8 @@ void commandAction(char *umsg_text, bool ble)
         {
             bWifiSetting=true;
         }
+
+        save_settings();
 
         bReturn = true;
     }
