@@ -148,6 +148,9 @@ void PressLong()
       #if defined(BOARD_TRACKER)
         Serial.println("[BOARD_TRACKER]... GO to deepsleep");
         commandAction((char*)"--deepsleep", isPhoneReady, false);
+      #elif defined(BOARD_HELTEC_V2)
+        Serial.println("[BOARD_HELTEC_V3]... GO to deepsleep");
+        commandAction((char*)"--deepsleep", isPhoneReady, false);
       #elif defined(BOARD_HELTEC_V3)
         Serial.println("[BOARD_HELTEC_V3]... GO to deepsleep");
         commandAction((char*)"--deepsleep", isPhoneReady, false);
