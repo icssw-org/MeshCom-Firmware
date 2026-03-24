@@ -28,18 +28,32 @@
 #include <malloc.h>
 OneButton btn;
 
-// nRF52 heap monitoring: heap_3 wraps libc malloc, so we use mallinfo()
-// fordblks = free bytes within arena already obtained from system
-// The gap between current sbrk and stack is additional free memory
-extern "C" char *sbrk(int incr);
+// nRF52 heap monitoring using Adafruit framework APIs (debug.h)
+// dbgHeapTotal() = __HeapLimit - __HeapBase (linker symbols)
+// dbgHeapUsed()  = mallinfo().uordblks (allocated bytes)
+extern int dbgHeapTotal(void);
+extern int dbgHeapUsed(void);
+
 static uint32_t nrf52_getFreeHeap(void)
 {
-    struct mallinfo mi = mallinfo();
-    char topOfStack;
-    // free = (stack pointer - current program break) + free chunks inside arena
-    uint32_t freeFromSbrk = (uint32_t)(&topOfStack) - (uint32_t)sbrk(0);
-    return freeFromSbrk + mi.fordblks;
+    return (uint32_t)(dbgHeapTotal() - dbgHeapUsed());
 }
+
+// Largest contiguous free block — binary search probe (fragmentation indicator)
+static uint32_t nrf52_getMaxFreeBlock(void)
+{
+    uint32_t lo = 0, hi = nrf52_getFreeHeap();
+    while (lo + 64 < hi) {
+        uint32_t mid = (lo + hi) / 2;
+        void *p = malloc(mid);
+        if (p) { free(p); lo = mid; }
+        else   { hi = mid; }
+    }
+    return lo;
+}
+
+// Min-free watermark since boot
+static uint32_t nrf52_heapMinFree = UINT32_MAX;
 
 // Ethernet Object
 NrfETH neth;
@@ -366,8 +380,11 @@ void nrf52setup()
 
     Serial.println("=====================================");
     Serial.println("[INIT] START CLIENT");
-    Serial.printf("%s;[HEAP];%lu;(free)\n", getTimeString().c_str(),
-        (unsigned long)nrf52_getFreeHeap());
+    nrf52_heapMinFree = nrf52_getFreeHeap();
+    Serial.printf("%s;[HEAP];%lu;%lu;%lu;(init)\n", getTimeString().c_str(),
+        (unsigned long)nrf52_getFreeHeap(),
+        (unsigned long)nrf52_heapMinFree,
+        (unsigned long)nrf52_getMaxFreeBlock());
 
     // init nach Reboot
     init_loop_function();
@@ -1808,7 +1825,26 @@ if (isPhoneReady == 1)
             BattTimeWait = millis();
         }
     }
-    
+
+    // Heap Monitor — always active, 60s interval
+    {
+        static unsigned long heapMonTimer = 0;
+        if (heapMonTimer == 0)
+            heapMonTimer = millis();
+
+        if ((heapMonTimer + 60000) < millis())
+        {
+            uint32_t freeHeap = nrf52_getFreeHeap();
+            if (freeHeap < nrf52_heapMinFree) nrf52_heapMinFree = freeHeap;
+
+            Serial.printf("%s;[HEAP];%lu;%lu;%lu;(mon)\n",
+                getTimeString().c_str(),
+                (unsigned long)freeHeap,
+                (unsigned long)nrf52_heapMinFree,
+                (unsigned long)nrf52_getMaxFreeBlock());
+            heapMonTimer = millis();
+        }
+    }
 
     if(bONEWIRE)
     {

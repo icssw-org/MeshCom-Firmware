@@ -631,7 +631,8 @@ void esp32setup()
     Serial.println("CLIENT SETUP");
     Serial.println("============");
 
-    Serial.printf("%s;[HEAP];%d;(free)\n", getTimeString().c_str(), ESP.getFreeHeap());
+    Serial.printf("%s;[HEAP];%d;%d;%d;(init)\n", getTimeString().c_str(),
+        ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     Serial.printf("%s;[PSRM];%d\n", getTimeString().c_str(), ESP.getFreePsram());
     
     check_efuse();
@@ -2963,6 +2964,28 @@ void esp32loop()
             #endif
 
             BattTimeWait = millis();
+        }
+    }
+
+    // Heap Monitor — always active, 60s interval
+    {
+        static unsigned long heapMonTimer = 0;
+        if (heapMonTimer == 0)
+            heapMonTimer = millis();
+
+        if ((heapMonTimer + 60000) < millis())
+        {
+            Serial.printf("%s;[HEAP];%d;%d;%d;(mon)\n",
+                getTimeString().c_str(),
+                ESP.getFreeHeap(),
+                ESP.getMinFreeHeap(),
+                ESP.getMaxAllocHeap());
+            #if defined(BOARD_HAS_PSRAM)
+            Serial.printf("%s;[PSRM];%d;(mon)\n",
+                getTimeString().c_str(),
+                ESP.getFreePsram());
+            #endif
+            heapMonTimer = millis();
         }
     }
 
