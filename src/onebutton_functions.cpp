@@ -145,14 +145,19 @@ void PressLong()
   #else
       pageHold=0;
 
-      if(!bDisplayOff)
-      {
-          commandAction((char*)"--display off", isPhoneReady, false);
-      }
-      else
-      {
-          commandAction((char*)"--display on", isPhoneReady, false);
-      }
+      #if defined(BOARD_TRACKER)
+        Serial.println("[TRACKER]... GO to deepsleep");
+        commandAction((char*)"--deepsleep", isPhoneReady, false);
+      #else
+        if(!bDisplayOff)
+        {
+            commandAction((char*)"--display off", isPhoneReady, false);
+        }
+        else
+        {
+            commandAction((char*)"--display on", isPhoneReady, false);
+        }
+      #endif
 
   #endif
 }

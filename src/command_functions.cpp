@@ -750,6 +750,18 @@ void commandAction(char *umsg_text, bool ble)
         sendDisplayHead(false);
     }
     else
+    #if defined(BOARD_TRACKER)
+    if(commandCheck(msg_text+2, (char*)"deepsleep") == 0)
+    {
+        digitalWrite(VEXT_CTRL, LOW);   // HWT needs this for GPS and TFT Screen
+        digitalWrite(ADC_CTRL, LOW);
+
+        esp_deep_sleep_start();
+
+        bReturn = true;
+    }
+    else
+    #endif
     if(commandCheck(msg_text+2, (char*)"contrast ") == 0)
     {
         #if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)

@@ -635,7 +635,7 @@ int esp32_isSSD1306(int address)
         return 1;
     #endif
 
-    #if defined (BOARD_TRACKER)
+    #if defined(BOARD_TRACKER)
         return 1;
     #endif
 
