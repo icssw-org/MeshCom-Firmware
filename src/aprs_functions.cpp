@@ -1104,11 +1104,11 @@ uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSou
     if(lat_c != 'N' && lat_c != 'S')
         lat_c = 'N';
 
-    double dlat = lat;
+    double dlat = abs(lat);
     if(lat_c == 'S')
         dlat = dlat * -1.0;
 
-    double dlon = lon;
+    double dlon = abs(lon);
     if(lon_c == 'W')
         dlon = dlon * -1.0;
 
@@ -1122,12 +1122,12 @@ uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSou
         if(ig == 1)
         {
             lgeo = 380926.0 * (90.0 - dlat);
-            //Serial.printf("dlat %lf lgeo %ld ", dlat, lgeo);
+            //Serial.printf("dlat %c %lf lgeo %ld ", lat_c, dlat, lgeo);
         }
         else
         {
             lgeo = 190463.0 * (180.0 + dlon);
-            //Serial.printf("dlat %lf lgeo %ld ", dlon, lgeo);
+            //Serial.printf("dlat %c %lf lgeo %ld\n", lon_c, dlon, lgeo);
         }
 
 

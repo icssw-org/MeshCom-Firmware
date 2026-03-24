@@ -37,7 +37,7 @@ void GPS_Init() {
     for (size_t i = 0; i < GPS_BAUD_COUNT; i++) {
         GPSSerial.begin(GPS_BAUDS[i], SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 
-        if(bGPSON)
+        if(bGPSON && bGPSDEBUG)
             Serial.printf("[GPS] check %u baud...\n", GPS_BAUDS[i]);
 
         uint32_t start = millis();
@@ -47,7 +47,9 @@ void GPS_Init() {
         while (millis() - start < 2000) {
             while (GPSSerial.available()) {
                 char c = GPSSerial.read();
-                if(((c>=0x20) && (c<0x7f)) || (c==0x0A) || (c==0x0D))
+                //if(((c>=0x20) && (c<0x7f)) || (c==0x0A) || (c==0x0D))
+                // A-Z 0-9 $ , * CR LF
+                if(((c>=0x40) && (c<0x5B)) || ((c>=0x30) && (c<=0x39)) || c==0x24 || c==0x2C || c==0x2A || c==0x2E || c==0x0A || c==0x0D)
                 {
                     //Serial.print(c);
 
@@ -61,7 +63,7 @@ void GPS_Init() {
             }
         }
 
-        if (gps.charsProcessed() > 10)
+        if (gps.charsProcessed() > 100)
         {
             Serial.printf("[GPS] found with %u baud (%u chars)\n", GPS_BAUDS[i], gps.charsProcessed());
             gpsDetected = true;
@@ -109,9 +111,10 @@ unsigned int GPS_Loop() {
 
     while (GPSSerial.available()) {
         c = GPSSerial.read();
-        if(((c>=0x20) && (c<0x7f)) || (c==0x0A) || (c==0x0D))
+        if(((c>=0x40) && (c<0x5B)) || ((c>=0x30) && (c<=0x39)) || c==0x24 || c==0x2C || c==0x2A || c==0x2E || c==0x0A || c==0x0D)
         {
             gps.encode(c);
+
             //Serial.print(c);
         }
     }
