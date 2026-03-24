@@ -2752,13 +2752,9 @@ void esp32loop()
 
                 if(posinfo_prev_lat < 0.0)
                     node_lat_c='S';
-                else
-                    node_lat_c='N';
                     
                 if(posinfo_prev_lon < 0.0)
                     node_lon_c='W';
-                else
-                    node_lon_c='E';
 
                 sendPosition(posinfo_interval, node_lat, node_lat_c, node_lon, node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
             }

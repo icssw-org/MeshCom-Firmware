@@ -2482,16 +2482,11 @@ void sendMessage(char *msg_text, int len)
 
 String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, char lat_c, double plon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
 {
-    double lat=plat;
-    if(plat < 0.0)
-        lat = plat * -1.0;
-
-    double lon=plon;
-    if(plon < 0.0)
-        lon = plon * -1.0;
+    double lat=abs(plat);
+    double lon=abs(plon);
 
 
-    if(lat == 0.0 && lon == 0.0)
+    if(lat >= 0.0 && lat <= 2.0 && lon >= 0.0 && lon <= 2.0)
     {
         Serial.println("[APRS] Error PositionToAPRS");
         return "";
