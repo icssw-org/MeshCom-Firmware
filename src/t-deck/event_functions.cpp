@@ -92,6 +92,9 @@ void btn_event_handler_aprs(lv_event_t * e)
                 meshcom_settings.node_symcd = '&';
 
             lv_dropdown_close(dropdown_aprs);
+
+            save_settings();
+            
             break;
     
         case LV_EVENT_CLICKED:
