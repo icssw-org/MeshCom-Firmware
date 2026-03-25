@@ -844,7 +844,7 @@ void esp32setup()
     #endif
 
     // Umstellung auf langes WIFI Passwort
-    if(strlen(meshcom_settings.node_ossid) > 0 && (strlen(meshcom_settings.node_ssid) == 0 || strcmp(meshcom_settings.node_ssid, "none") == 0))
+    if(strlen(meshcom_settings.node_ossid) > 0 && (strlen(meshcom_settings.node_ssid) == 0 || is_equ(meshcom_settings.node_ssid, "none")))
     {
         strncpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid, sizeof(meshcom_settings.node_ssid) - 1);
         meshcom_settings.node_ssid[sizeof(meshcom_settings.node_ssid) - 1] = '\0';
@@ -879,7 +879,7 @@ void esp32setup()
         global_batt = meshcom_settings.node_maxv * 1000.0F;
     }
 
-    if(strcmp(meshcom_settings.node_ssid, "XX0XXX") == 0)
+    if(memcmp(meshcom_settings.node_ssid, "XX0XXX", 6) == 0)
     {
         sprintf(meshcom_settings.node_ssid, (char*)"none");
         sprintf(meshcom_settings.node_pwd, (char*)"none");

@@ -1521,7 +1521,10 @@ bool doTX()
         lora_tx_buffer[sendlng]=0x00;
 
         int save_read = txSlot;
+
+        #ifndef BOARD_TLORA_OLV216
         char save_ring_status = ringBuffer[txSlot][1];
+        #endif
 
         if(bLORADEBUG)
         {

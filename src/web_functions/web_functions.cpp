@@ -36,8 +36,8 @@ char web_last_message_sent[200];
 bool bweb_server_running = false;
 
 // password check
-char web_ip[10][20];
-long web_ip_passwd_time[10];
+char web_ip[10][20] = {0};
+long web_ip_passwd_time[10] = {0};
 
 extern double mheardLat[MAX_MHEARD];
 extern double mheardLon[MAX_MHEARD];
@@ -236,13 +236,20 @@ void web_client_html(CommonWebClient web_client)
     {
         for (int iwid = 0; iwid < 10; iwid++)
         {
+            // check passwort Time expired 4h
+            if((web_ip_passwd_time[iwid] + (1000 * 60 * 60 * 4)) < millis())
+            {
+                web_ip_passwd_time[iwid] = 0;
+                memset(web_ip[iwid], 0x00, sizeof(web_ip[iwid]));
+            }
+
             // check timeout
             if (web_ip_passwd_time[iwid] > 0)
             {
                 if (bDEBUG)
                     Serial.printf("iwid:%i web_ip[iwid]:%s %s\n", iwid, web_ip[iwid], c_web_ip_now);
 
-                if (strcmp(web_ip[iwid], c_web_ip_now) == 0)
+                if (is_equ(web_ip[iwid], c_web_ip_now))
                 {
                     bPasswordOk = true;
                     web_ip_passwd_time[iwid] = millis();
@@ -267,7 +274,7 @@ void web_client_html(CommonWebClient web_client)
             {
                 String strGetPassword = work_webpage(true, inext_free);
 
-                if (strcmp(strGetPassword.c_str(), meshcom_settings.node_webpwd) == 0)
+                if (is_equ(strGetPassword.c_str(), meshcom_settings.node_webpwd))
                 {
                     Serial.print(getTimeString());
                     Serial.printf(" WEBServer Password OK IP:<%s pos:%i>\n", c_web_ip_now, inext_free);
@@ -1274,7 +1281,7 @@ void sub_content_messages()
                         msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{'));
 
                     // messages by others
-                    if (strcmp(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()) == 0)
+                    if (is_equ(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()))
                     {
                         web_client.printf("<div class=\"message message-send\"><div>");
 
