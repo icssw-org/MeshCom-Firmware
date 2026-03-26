@@ -5,6 +5,7 @@ definitions for T-Beam
 #pragma once
 
 #include <Arduino.h>
+
 #include <configuration_global.h>
 
 // T-Beam specific config

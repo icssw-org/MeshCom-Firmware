@@ -2,19 +2,17 @@
 //
 // 20230326: Version 4.00: START
 
+#include "configuration.h"
+
 #include <Arduino.h>
 #include <SPI.h>
-#include <SX126x-RAK4630.h>
+
 #include <debugconf.h>
 #include <time.h>
 #include <nrf52_functions.h>
 #include <extudp_functions.h>
 
 #include <TinyGPSPlus.h>
-
-#include "Adafruit_SHTC3.h"
-
-#include "Adafruit_LPS2X.h"
 
 // MeshCom nrf52 functions
 #include <RAK13800_W5100S.h>
@@ -23,6 +21,55 @@
 #include <nrf_eth.h>
 
 #include "onebutton_functions.h"
+
+#include <SX126x-RAK4630.h>
+
+
+#if defined(HAS_TFT) || defined(HAS_TFT_114)
+#include "tft_display_functions.h"
+#endif
+
+#ifdef HAS_TFT_114
+
+#define PIN_SPI1_MISO         (43)
+#define PIN_SPI1_MOSI         (41)
+#define PIN_SPI1_SCK          (40)
+
+#define PIN_TFT_CS        11
+#define PIN_TFT_RST       2 // Or set to -1 and connect to Arduino RESET pin
+#define PIN_TFT_DC        12
+
+#define PIN_TFT_VDD_CTL      3
+#define TFT_VDD_ENABLE       0
+#define PIN_TFT_LEDA_CTL     15
+#define TFT_LEDA_ENABLE      0
+
+#include <Adafruit_GFX.h>    // Core graphics library
+#include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
+
+/*
+Wiring an ST7789 (SPI):
+VCC: 3.3V
+GND: Ground
+SCL/SCK: SPI Clock Pin
+SDA/MOSI: SPI MOSI Pin
+RES/RST: Digital IO (Reset)
+DC: Digital IO (Data/Command)
+CS: Digital IO (Optional, if not present, the display is always active) 
+*/
+
+SPIClass SPI_TFT(NRF_SPIM1, PIN_SPI1_MISO, PIN_SPI1_SCK, PIN_SPI1_MOSI);
+
+Adafruit_ST7789 tft = Adafruit_ST7789(&SPI_TFT, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
+
+#endif
+
+#include "Adafruit_LPS2X.h"
+#include "Adafruit_SHTC3.h"
+
+#if defined(ENABLE_GPS)
+#include "gps_functions.h"
+#endif
 
 #include <OneButton.h>
 #include <malloc.h>
@@ -246,7 +293,9 @@ TinyGPSPlus tinyGPSPlus;
 int direction_S_N = 0;  //0--S, 1--N
 int direction_E_W = 0;  //0--E, 1--W
 
+#if defined(ENABLE_RAK_GPS)
 unsigned int getGPS(void);
+#endif
 
 // TEMP/HUM
 Adafruit_SHTC3 shtc3 = Adafruit_SHTC3();
@@ -359,9 +408,42 @@ void nrf52setup()
 	xSemaphoreGive(g_task_sem);
 #endif
 
+#if defined(USE_HELTEC_T114)
+    // Enable GPS
+    pinMode(PIN_VEXT_CTL, OUTPUT);
+    digitalWrite(PIN_VEXT_CTL, VEXT_ENABLE);
+    delay(10);
+
+    pinMode(RST_GPS, OUTPUT);
+    digitalWrite(RST_GPS, LOW);
+    delay(100);
+    digitalWrite(RST_GPS, HIGH);
+#endif
+
+#if defined(HAS_TFT_114)
+    pinMode(PIN_TFT_VDD_CTL, OUTPUT);
+    pinMode(PIN_TFT_LEDA_CTL, OUTPUT);
+    digitalWrite(PIN_TFT_VDD_CTL, TFT_LEDA_ENABLE);  // TFT VDD
+    digitalWrite(PIN_TFT_LEDA_CTL, TFT_VDD_ENABLE); // TFT LEDA
+
+    SPI_TFT.begin();
+
+    tft.init(135, 240);                  // 初始化 ST7789 240x135
+    tft.setRotation(3);
+    tft.setSPISpeed(40000000);
+
+    char cvers1[22];
+    sprintf(cvers1, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+    String  version1 = cvers1;
+    displayTFT(" MeshCom 4.0 ", version1, "@BY ICSSW.ORG", "  OE1KBC, OE1KFR",  "  ...starting now", 5000);
+
+#endif
+
      // LEDs
+     /*
     pinMode(LED_GREEN, OUTPUT);
     pinMode(LED_BLUE, OUTPUT);
+    */
 
     //  Initialize the Serial Port for debug output
     time_t timeout = millis();
@@ -584,15 +666,18 @@ void nrf52setup()
         save_settings();
     }
 
-    if(bONEWIRE)
+if(bONEWIRE)
     {
         init_onewire_ds18();
         init_onewire_dht();
     }
-        
-
-    //  Initialize the LoRa Module
-    lora_rak4630_init();
+    
+//  Initialize the LoRa Module
+    #ifdef USE_HELTEC_T114
+        lora_t114_init();
+    #else
+        lora_rak4630_init();
+    #endif
 
     getMacAddr(dmac);
 
@@ -623,12 +708,16 @@ void nrf52setup()
     // Hardware immer aktivieren
     //if(bGPSON)
     {
-        //gps init
-        pinMode(WB_IO2, OUTPUT);
-        digitalWrite(WB_IO2, 0);
-        delay(1000);
-        digitalWrite(WB_IO2, 1);
-        delay(1000);
+        #if defined(ENABLE_GPS)
+        GPS_Init();
+        #endif
+
+        #if defined(ENABLE_RAK_GPS)
+            pinMode(WB_IO2, OUTPUT);
+            digitalWrite(WB_IO2, 0);
+            delay(1000);
+            digitalWrite(WB_IO2, 1);
+            delay(1000);
         
         Serial.println("=====================================");
 
@@ -674,6 +763,7 @@ void nrf52setup()
             Serial.println("GPS: not connected");
 
         delay(100);
+        #endif
     }
 
     posinfo_fix = false;
@@ -755,7 +845,9 @@ void nrf52setup()
 	else
 	{
 		// BLE is not activated, switch off blue LED
+        /*
 		digitalWrite(LED_BLUE, LOW);
+        */
 	}
 
 	// Take the semaphore so the loop will go to sleep until an event happens
@@ -768,7 +860,10 @@ void nrf52setup()
 #endif
 
     // I2C init
-    Wire.begin();
+    #if defined(USE_HELTEC_T114)
+    #else
+        Wire.begin();
+    #endif
 
     #if defined(ENABLE_BMX280)
         setupBMX280(true);
@@ -803,9 +898,21 @@ void nrf52setup()
         setupSOFTSER();
     #endif
 
-    initDisplay();
-    
-    startDisplay((char*)"...starting now", (char*)"@by icssw.org", (char*)"OE1KBC, OE1KFR");
+    #if defined(HAS_TFT_114)
+        char cvers[22];
+        sprintf(cvers, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        String  version = cvers;
+        displayTFT(" MeshCom 4.0", version, "@BY ICSSW.ORG", "   OE1KBC, OE1KFR",  "   ...starting now", 5000);
+    #elif defined(HAS_TFT)
+        initTFT();
+        char cvers[22];
+        sprintf(cvers, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        String  version = cvers;
+        displayTFT(" MeshCom 4.0 ", version, "  @BY ICSSW.ORG", "  OE1KBC, OE1KFR",  "  ...starting now", 5000);
+    #else
+        initDisplay();
+        startDisplay((char*)"...starting now", (char*)"@by icssw.org", (char*)"OE1KBC, OE1KFR");
+    #endif
 
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;
@@ -814,6 +921,11 @@ void nrf52setup()
     meshcom_settings.node_date_hundredths = 0;
 
     Serial.println("[INIT]...CLIENT STARTED");
+
+    Radio.SetModem(MODEM_LORA);
+
+    Serial.print("[INIT]...Radio-Status:");
+    Serial.println(Radio.GetStatus());
 
     //  Set the LoRa Callback Functions
     RadioEvents.TxDone = OnTxDone;
@@ -896,6 +1008,8 @@ void nrf52setup()
         0,    // fsk only frequ hop period
         LORA_IQ_INVERSION_ON,
         TX_TIMEOUT_VALUE);
+
+    Serial.printf("[INIT]...Radio-Status: %i\n", Radio.GetStatus());
 
     //  Start receiving LoRa packets
     Radio.Rx(RX_TIMEOUT_VALUE);
@@ -984,6 +1098,7 @@ void nrf52loop()
     // RTC hat Vorrang zu Zeit via MeshCom-Server
     bool bMyClock = true;
 
+    #if defined(ENABLE_RTC)
     if(bRTCON)
     {
         bMyClock = false;
@@ -1015,11 +1130,12 @@ void nrf52loop()
         }
     }
     else
+    #endif
     if(meshcom_settings.node_hasIPaddress)
     {
         strTime = "none";
 
-extern bool btimeClient;
+        extern bool btimeClient;
 
         // every 15 minutes
         if(btimeClient)
@@ -1410,14 +1526,19 @@ extern bool btimeClient;
         if(bGPSDEBUG)
             Serial.println("gKeyNum == 2");
 
-        #ifdef ENABLE_RAK_GPS
-
         if(bGPSON)
         {
             // gps refresh every 10 sec
             if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
             {
+                #if defined(ENABLE_RAK_GPS)
                 unsigned int igps = getGPS();
+                #endif
+
+                #if defined(ENABLE_GPS)
+                unsigned int igps = GPS_Loop();
+                #endif
+
                 if(igps > 0)
                     posinfo_interval = igps;
                 else
@@ -1434,8 +1555,6 @@ extern bool btimeClient;
             }
         }
 
-        #endif
-
         gKeyNum = 0;
     }
 
@@ -1446,7 +1565,7 @@ extern bool btimeClient;
         gKeyNum = 0;
     }
 
-    #ifdef ENABLE_RAK_GPS
+    #if defined(ENABLE_RAK_GPS) || defined(ENABLE_HELTEC_GPS)
     if(bGPSON)
     {
         // check GPS ON and activ --> <gKeyNum == 2> the signal must be active
@@ -1873,6 +1992,7 @@ if (isPhoneReady == 1)
         }
     }
 
+    #if defined(ENABLE_BMX280)
     if(BMXTimeWait == 0)
         BMXTimeWait = millis() - 10000;
 
@@ -1894,6 +2014,7 @@ if (isPhoneReady == 1)
 
         BMXTimeWait = millis();
     }
+    #endif
 
     // read every n seconds the bme680 sensor calculated from millis()
     #if defined(ENABLE_BMX680)
@@ -2102,16 +2223,20 @@ if (isPhoneReady == 1)
  */
 void blinkLED()
 {
+    /*
     digitalWrite(LED_GREEN, HIGH);
     delay(5);
     digitalWrite(LED_GREEN, LOW);
+    */
 }
 
 void blinkLED2()
 {
+    /*
     digitalWrite(LED_BLUE, HIGH);
     delay(20);
     digitalWrite(LED_BLUE, LOW);
+    */
 }
 
 
@@ -2192,6 +2317,7 @@ void direction_parse(String tmp)
 
 /**@brief Function for handling a LoRa tx timer timeout event.
  */
+#if defined(ENABLE_RAK_GPS)
 unsigned int getGPS(void)
 {
     if(bGPSDEBUG)
@@ -2269,6 +2395,7 @@ unsigned int getGPS(void)
 
     return POSINFO_INTERVAL;   // no GPS
 }
+#endif
 
 void checkSerialCommand(void)
 {

@@ -103,10 +103,7 @@ Timeout timerSerial;
     #include <lora_setchip.h>
 #endif
 
-#include <esp_adc_cal.h>
-
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
-
 #include "XPowersAXP192.tpp"
 #include "XPowersAXP2101.tpp"
 #include "XPowersLibInterface.hpp"

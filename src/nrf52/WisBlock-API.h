@@ -662,4 +662,6 @@ extern uint16_t g_sw_ver_1; // major version increase on API change / not backwa
 extern uint16_t g_sw_ver_2; // minor version increase on API change / backward compatible
 extern uint16_t g_sw_ver_3; // patch version increase on bugfix, no affect on API
 
+uint32_t lora_t114_init(void);
+
 #endif // SX126x-API_H

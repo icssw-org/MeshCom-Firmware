@@ -36,7 +36,7 @@
 #include <t5-epaper/t5epaper_main.h>
 #endif
 
-#if defined(HAS_TFT)
+#if defined(HAS_TFT) || defined(HAS_TFT_114)
 #include "tft_display_functions.h"
 #endif
 
@@ -218,7 +218,7 @@ int dzeile[6] = {42, 52, 62, 0, 0, 0};
 int dzeile[6] = {8, 21, 31, 41, 51, 61};
 #endif
 
-#if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+#if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
 
 #include <U8g2lib.h>
 
@@ -639,15 +639,19 @@ int esp32_isSSD1306(int address)
         return 1;
     #endif
 
-    #if defined (BOARD_T5_EPAPER)
+    #if defined(BOARD_HELTEC_T114)
         return 1;
     #endif
 
-    #if defined (BOARD_TBEAM_V3)
+    #if defined(BOARD_T5_EPAPER)
+        return 1;
+    #endif
+
+    #if defined(BOARD_TBEAM_V3)
         return 2;
     #endif
 
-    #if defined (BOARD_TBEAM_1W)
+    #if defined(BOARD_TBEAM_1W)
         return 1;  //SH1106 aber stimmt 1 wirklich?
     #endif
 
@@ -717,7 +721,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -735,7 +739,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             e290_display.fastmodeOn();
             
             e290_display.setFont(&FreeMonoBold12pt7b);
-        #elif defined(BOARD_TRACKER) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
+        #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
         #else
             u8g2->setFont(u8g2_font_6x10_mf);
         #endif
@@ -830,7 +834,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     e290_display.update();
             }
             
-        #elif defined (BOARD_TRACKER)
+        #elif defined (BOARD_TRACKER) || defined (BOARD_HELTEC_T114)
 
         if(pageLineAnz > 0)
         {
@@ -857,7 +861,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                 }
             }
 
-            #if defined(HAS_TFT)
+            #if defined(HAS_TFT) || defined(HAS_TFT_114)
             displayTFT(strLine[0], strLine[1], strLine[2], strLine[3], strLine[4], strLine[5], 0);
             #endif
         }
@@ -1020,7 +1024,7 @@ void sendDisplayHead(bool bInit)
     snprintf(print_text, sizeof(print_text), "BLE-C: %06i", meshcom_settings.bt_code);
     sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-    #if !defined (BOARD_TRACKER)
+    #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
     if(bWIFIAP)
         snprintf(print_text, sizeof(print_text), "AP   : %-13.13s", meshcom_settings.node_call);
     else
@@ -1076,13 +1080,13 @@ void sendDisplayTrack()
         sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
         snprintf(print_text, sizeof(print_text), "DIST: %.0lf hdop%4i", posinfo_distance, posinfo_hdop);
-        #if !defined (BOARD_TRACKER)
+        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
             sendDisplay1306(false, false, 3, dzeile[4], print_text);
         #else
             sendDisplay1306(false, true, 3, dzeile[4], print_text);
         #endif
 
-        #if !defined (BOARD_TRACKER)
+        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
             snprintf(print_text, sizeof(print_text), "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
             sendDisplay1306(false, true, 3, dzeile[5], print_text);
         #endif
@@ -1148,7 +1152,7 @@ void sendDisplayTime()
             pagePointer=PAGE_MAX-1;
     }
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -1214,7 +1218,7 @@ void sendDisplayTime()
 
         #if defined (BOARD_T5_EPAPER)
         // extra source
-        #elif defined (HAS_TFT)
+        #elif defined (HAS_TFT) || defined(HAS_TFT_114)
             displayTFT(print_text);
         #else
             sendDisplay1306(false, true, 3, dzeile[0], print_text);
@@ -1622,7 +1626,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #elif defined (BOARD_T5_EPAPER)
     // extra source
-    #elif defined(BOARD_TRACKER)
+    #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114)
 
     sendDisplayMainline();
     sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");    // not fastmode for CET display
@@ -2814,6 +2818,8 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         #elif defined(BOARD_E290)
         // none
         #elif defined(BOARD_TRACKER)
+        // none
+        #elif defined(BOARD_HELTEC_T114)
         // none
         #elif defined(BOARD_STICK_V3)
         // none

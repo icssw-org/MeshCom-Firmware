@@ -31,6 +31,7 @@
 #define TBEAM_1W 51
 #define HELTEC_V4 52
 #define T_ETH_ELITE_1262 53
+#define HELTEC_T114 54
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 
