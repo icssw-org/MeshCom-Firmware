@@ -440,10 +440,10 @@ void nrf52setup()
 #endif
 
      // LEDs
-     /*
     pinMode(LED_GREEN, OUTPUT);
+    #if not defined(BOARD_HELTEC_T114)
     pinMode(LED_BLUE, OUTPUT);
-    */
+    #endif
 
     //  Initialize the Serial Port for debug output
     time_t timeout = millis();
@@ -849,9 +849,9 @@ void nrf52setup()
 	else
 	{
 		// BLE is not activated, switch off blue LED
-        /*
+        #if not defined(BOARD_HELTEC_T114)
 		digitalWrite(LED_BLUE, LOW);
-        */
+        #endif
 	}
 
 	// Take the semaphore so the loop will go to sleep until an event happens
@@ -2229,20 +2229,18 @@ if (isPhoneReady == 1)
  */
 void blinkLED()
 {
-    /*
     digitalWrite(LED_GREEN, HIGH);
     delay(5);
     digitalWrite(LED_GREEN, LOW);
-    */
 }
 
 void blinkLED2()
 {
-    /*
+    #if not defined(BOARD_HELTEC_T114)
     digitalWrite(LED_BLUE, HIGH);
     delay(20);
     digitalWrite(LED_BLUE, LOW);
-    */
+    #endif
 }
 
 
