@@ -13,7 +13,7 @@
 #include <t-deck/lv_obj_functions.h>
 #endif 
 
-#if defined(HAS_TFT)
+#if defined(HAS_TFT) || defined(HAS_TFT_114)
 #include "tft_display_functions.h"
 #endif
 
@@ -71,7 +71,7 @@ void singleClick()
         iDisplayType=0;
     #endif
 
-    #if defined(HAS_TFT)
+    #if defined(HAS_TFT) || defined(HAS_TFT_114)
       displayTFT(pageLastTextLong1[pagePointer], pageLastTextLong2[pagePointer]);
     #else
       strcpy(pageTextLong1, pageLastTextLong1[pagePointer]);

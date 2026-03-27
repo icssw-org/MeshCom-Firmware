@@ -475,11 +475,13 @@ void nrf52setup()
     init_onebutton();
 
     //gps init
+    #if defined(ENABLE_RAK_GPS)
     pinMode(WB_IO2, OUTPUT);
     digitalWrite(WB_IO2, 0);
     delay(1000);
     digitalWrite(WB_IO2, 1);
     delay(1000);
+    #endif
 
     // clear the buffers
     for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)

@@ -26,8 +26,7 @@ definitions for RAK4631
 
 // #define ENABLE_SOFTSER
 
-#define BUTTON_PIN 42               // only in combination with RAK13002
-//#define OneWire_GPIO WB_IO1       // only in combination with RAK13002
+#define BUTTON_PIN 42
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define ENABLE_GPS
