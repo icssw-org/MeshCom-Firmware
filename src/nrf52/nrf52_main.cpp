@@ -677,11 +677,7 @@ void nrf52setup()
 #endif
 
 //  Initialize the LoRa Module
-    #ifdef USE_HELTEC_T114
-        lora_t114_init();
-    #else
-        lora_rak4630_init();
-    #endif
+    api_init_lora();
 
     getMacAddr(dmac);
 
@@ -864,8 +860,7 @@ void nrf52setup()
 #endif
 
     // I2C init
-    #if defined(USE_HELTEC_T114)
-    #else
+    #if not defined(USE_HELTEC_T114)
         Wire.begin();
     #endif
 
