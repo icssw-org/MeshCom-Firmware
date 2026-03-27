@@ -246,6 +246,8 @@
 
 #if defined(HAS_TFT_114)
 
+// T114 TFT_WIDTH = 135 TFT_HEIGHT = 240 TFT_RORATION = 3 (so WIDTH and HEIGHT changed in use)
+// 
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 
@@ -255,8 +257,8 @@
     {
         //Serial.println("[DISP]...1 Line");
 
-        tft.fillRect(0, 0, 240, 30, ST77XX_RED);
-        tft.setCursor(2, 5);
+        tft.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft.setCursor(4, 6);
         tft.setTextColor(ST77XX_WHITE);
         tft.setTextSize(2); //2... 12*16
         tft.println(header);
@@ -268,8 +270,8 @@
 
         tft.fillScreen(ST77XX_WHITE);
 
-        tft.fillRect(0, 0, 240, 30, ST77XX_RED);
-        tft.setCursor(2, 5);
+        tft.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft.setCursor(4, 6);
         tft.setTextColor(ST77XX_WHITE);
         tft.setTextSize(2); //2... 12*16
         tft.println(header);
@@ -288,7 +290,7 @@
 
         tft.fillScreen(ST77XX_WHITE);
 
-        tft.fillRect(0, 0, 240, 30, ST77XX_RED);
+        tft.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
         tft.setCursor(0, 0);
         tft.setTextColor(ST77XX_WHITE);
         tft.setTextSize(3); //2... 12*16
@@ -315,8 +317,8 @@
 
         tft.fillScreen(ST77XX_WHITE);
 
-        tft.fillRect(0, 0, 240, 30, ST77XX_RED);
-        tft.setCursor(2, 5);
+        tft.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft.setCursor(4, 6);
         tft.setTextColor(ST77XX_WHITE);
         tft.setTextSize(2); //2... 12*16
         tft.println(header);

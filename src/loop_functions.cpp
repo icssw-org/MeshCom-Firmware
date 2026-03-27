@@ -1079,7 +1079,7 @@ void sendDisplayTrack()
         snprintf(print_text, sizeof(print_text), "RATE: %4i NEXT %4i", (int)posinfo_interval, pos_seconds);
         sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-        snprintf(print_text, sizeof(print_text), "DIST: %.0lf hdop%4i", posinfo_distance, posinfo_hdop);
+        snprintf(print_text, sizeof(print_text), "DIST: %5.0lf hdop%4i", posinfo_distance, posinfo_hdop);
         #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
             sendDisplay1306(false, false, 3, dzeile[4], print_text);
         #else
@@ -1181,26 +1181,23 @@ void sendDisplayTime()
 
     char cbatt[10];
 
+    #if defined (HAS_TFT) || defined(HAS_TFT_114)
     if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.2fV", global_batt/1000.0);
+        snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
         snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
+    #else
+    if(bDisplayVolt)
+        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
+    else
+        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
+    #endif
 
- #if defined(XPOWERS_CHIP_AXP192)
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "  USB");
- #endif
-
- #if defined(XPOWERS_CHIP_AXP2101)
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "  USB");
- #endif
-
- #if defined(BOARD_TBEAM_1W)
+ #if defined(XPOWERS_CHIP_AXP192) || defined(BOARD_E290) || defined(BOARD_TBEAM_1W)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
-    if(global_batt < 5000.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+    if(global_batt == 0.0)
+        snprintf(cbatt, sizeof(cbatt), "  USB");
  #endif
 
     // nur alle 15 sekunden
@@ -1210,7 +1207,7 @@ void sendDisplayTime()
         
         bOneButton = false;
 
-        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-5.5s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
 
         memcpy(pageText[0], print_text, 20);
         pageLine[0][0] = 3;
@@ -1231,44 +1228,36 @@ void sendDisplayTime()
 void sendDisplayMainline()
 {
     char print_text[500];
-    char cbatt[6];
+    char cbatt[10];
     char nodetype[5];
 
 
+    #if defined (HAS_TFT) || defined(HAS_TFT_114)
     if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.2fV", global_batt/1000.0);
+        snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
         snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
+    #else
+    if(bDisplayVolt)
+        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
+    else
+        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
+    #endif
 
- #if defined(XPOWERS_CHIP_AXP192)
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
- #endif
-
- #if defined(XPOWERS_CHIP_AXP2101)
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
- #endif
-
- #if defined(BOARD_E290)
-    if(global_batt > 4300.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
- #endif
-
- #if defined(BOARD_TBEAM_1W)
+ #if defined(XPOWERS_CHIP_AXP192) || defined(BOARD_E290) || defined(BOARD_E290) || defined(BOARD_TBEAM_1W)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
-    if(global_batt < 5000.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+    if(global_batt == 0.0)
+        snprintf(cbatt, sizeof(cbatt), "  USB");
  #endif
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
-        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s         %-5.5s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s       %s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
     }
     else
     {
-        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-5.5s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
     sendDisplay1306(true, false, 3, dzeile[0], print_text);
@@ -2048,7 +2037,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
                     #else
-                        snprintf(msg_text, sizeof(msg_text), "ALT:%im rssi:%i", alt, rssi);
+                        snprintf(msg_text, sizeof(msg_text), "ALT:%im   rssi:%i", alt, rssi);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
                     #endif

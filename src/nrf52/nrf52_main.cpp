@@ -428,9 +428,9 @@ void nrf52setup()
 
     SPI_TFT.begin();
 
-    tft.init(135, 240);                  // 初始化 ST7789 240x135
-    tft.setRotation(3);
-    tft.setSPISpeed(40000000);
+    tft.init(TFT_WIDTH, TFT_HEIGHT);                  // ST7789 240x135
+    tft.setRotation(TFT_ROTATION);
+    tft.setSPISpeed(SPI_FREQUENCY);
 
     char cvers1[22];
     sprintf(cvers1, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
@@ -666,12 +666,14 @@ void nrf52setup()
         save_settings();
     }
 
-if(bONEWIRE)
+#ifdef OneWire_GPIO
+    if(bONEWIRE)
     {
         init_onewire_ds18();
         init_onewire_dht();
     }
-    
+#endif
+
 //  Initialize the LoRa Module
     #ifdef USE_HELTEC_T114
         lora_t114_init();
@@ -1965,6 +1967,7 @@ if (isPhoneReady == 1)
         }
     }
 
+    #ifdef OneWire_GPIO
     if(bONEWIRE)
     {
         if(onewireTimeWait == 0)
@@ -1991,6 +1994,7 @@ if (isPhoneReady == 1)
             }
         }
     }
+    #endif
 
     #if defined(ENABLE_BMX280)
     if(BMXTimeWait == 0)
