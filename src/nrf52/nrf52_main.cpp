@@ -2230,7 +2230,7 @@ if (isPhoneReady == 1)
 void blinkLED()
 {
     digitalWrite(LED_GREEN, HIGH);
-    delay(5);
+    delay(10);
     digitalWrite(LED_GREEN, LOW);
 }
 

@@ -6,6 +6,8 @@
 #include <Arduino.h>
 #include <configuration.h>
 
+#if not defined(HAS_TFT_114)
+
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <lora_setchip.h>
@@ -66,3 +68,4 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
         u8g2->drawStr(5, 55, line3);
     } while (u8g2->nextPage());
 }
+#endif
