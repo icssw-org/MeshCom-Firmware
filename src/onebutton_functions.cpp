@@ -13,7 +13,7 @@
 #include <t-deck/lv_obj_functions.h>
 #endif 
 
-#if defined(HAS_TFT)
+#if defined(HAS_TFT) || defined(HAS_TFT_114)
 #include "tft_display_functions.h"
 #endif
 
@@ -71,7 +71,7 @@ void singleClick()
         iDisplayType=0;
     #endif
 
-    #if defined(HAS_TFT)
+    #if defined(HAS_TFT) || defined(HAS_TFT_114)
       displayTFT(pageLastTextLong1[pagePointer], pageLastTextLong2[pagePointer]);
     #else
       strcpy(pageTextLong1, pageLastTextLong1[pagePointer]);
@@ -145,14 +145,31 @@ void PressLong()
   #else
       pageHold=0;
 
-      if(!bDisplayOff)
-      {
-          commandAction((char*)"--display off", isPhoneReady, false);
-      }
-      else
-      {
-          commandAction((char*)"--display on", isPhoneReady, false);
-      }
+      #if defined(BOARD_TRACKER)
+        Serial.println("[BOARD_TRACKER]... GO to deepsleep");
+        commandAction((char*)"--deepsleep", isPhoneReady, false);
+      #elif defined(BOARD_HELTEC_V2)
+        Serial.println("[BOARD_HELTEC_V3]... GO to deepsleep");
+        commandAction((char*)"--deepsleep", isPhoneReady, false);
+      #elif defined(BOARD_HELTEC_V3)
+        Serial.println("[BOARD_HELTEC_V3]... GO to deepsleep");
+        commandAction((char*)"--deepsleep", isPhoneReady, false);
+      #elif defined(BOARD_TLORA_OLV216)
+        Serial.println("[BOARD_TLORA_OLV216]... GO to deepsleep");
+        bDisplayOff=true;
+        bDisplayIsOff=true;
+        sendDisplayHead(false);
+        commandAction((char*)"--deepsleep", isPhoneReady, false);
+      #else
+        if(!bDisplayOff)
+        {
+            commandAction((char*)"--display off", isPhoneReady, false);
+        }
+        else
+        {
+            commandAction((char*)"--display on", isPhoneReady, false);
+        }
+      #endif
 
   #endif
 }

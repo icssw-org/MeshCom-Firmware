@@ -36,7 +36,7 @@
 //TEST #include "compress_functions.h"
 
 // For display contrast control
-#if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
+#if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
     #include <U8g2lib.h>
     extern U8G2 *u8g2;
 #endif
@@ -750,9 +750,30 @@ void commandAction(char *umsg_text, bool ble)
         sendDisplayHead(false);
     }
     else
+    if(commandCheck(msg_text+2, (char*)"deepsleep") == 0)
+    {
+        #if defined(vEXT_CTRL)
+            digitalWrite(VEXT_CTRL, LOW);   // HWT needs this for GPS and TFT Screen
+            digitalWrite(ADC_CTRL, LOW);
+        #endif
+
+        #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
+            Serial.println(F("[INIT]...Disbling Vext for OLED power"));
+            pinMode(Vext, OUTPUT);
+            digitalWrite(Vext, HIGH);   // Vext OFF (active high)
+            delay(50);
+        #endif
+
+        #if not defined(BOARD_RAK4630) and not defined(BOARD_HELTEC_T114)
+            esp_deep_sleep_start();
+        #endif
+
+        bReturn = true;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"contrast ") == 0)
     {
-        #if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
+        #if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
         int contrast_value = atoi(msg_text + 11);  // "--" + "contrast " = 2 + 9 = 11
         if(contrast_value <= 0) contrast_value = 1;
         if(contrast_value > 255) contrast_value = 255;
@@ -3796,9 +3817,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         String stri2c = "not available";
 
-        #if not defined(BOARD_HELTEC_V3)
-            stri2c = scanI2C();
-        #endif
+        stri2c = scanI2C();
 
         snprintf(print_buff, sizeof(print_buff), "%s", stri2c.c_str());
 

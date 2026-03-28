@@ -322,22 +322,25 @@ bool tdeck_tab_menu_is_visible(void)
 
 static void tab_standby_button_event_cb(lv_event_t * e)
 {
-    if (bDEBUG)
-        Serial.println("[TDECK]...standby_button_event - pressed");
-
-    meshcom_settings.node_backlightlock = !meshcom_settings.node_backlightlock;
-
-    if (meshcom_settings.node_backlightlock)
+    if(lv_event_get_code(e) == LV_EVENT_CLICKED)
     {
-        meshcom_settings.node_modus = meshcom_settings.node_modus | 0x02;
+        if (bDEBUG)
+            Serial.println("[TDECK]...standby_button_event - pressed");
 
-        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
-    }
-    else
-    {
-        meshcom_settings.node_modus = meshcom_settings.node_modus & 0xFD;
+        meshcom_settings.node_backlightlock = !meshcom_settings.node_backlightlock;
 
-        lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+        if (meshcom_settings.node_backlightlock)
+        {
+            meshcom_settings.node_modus = meshcom_settings.node_modus | 0x02;
+
+            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex LV_PALETTE_YELLOW
+        }
+        else
+        {
+            meshcom_settings.node_modus = meshcom_settings.node_modus & 0xFD;
+
+            lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+        }
     }
 }
 
@@ -2208,7 +2211,7 @@ bool save_node_kbllightlock=false;
 
 void tdeck_update_header_standby(void)
 {
-    meshcom_settings.node_backlightlock = meshcom_settings.node_modus >= 2;
+    meshcom_settings.node_backlightlock = meshcom_settings.node_modus & 0x02;
 
     if(meshcom_settings.node_backlightlock != save_node_backlightlock)
     {
@@ -2224,7 +2227,7 @@ void tdeck_update_header_standby(void)
         save_node_backlightlock = meshcom_settings.node_backlightlock;
     }
 
-    meshcom_settings.node_kbllightlock = meshcom_settings.node_modus >= 2 || meshcom_settings.node_modus == 1;
+    meshcom_settings.node_kbllightlock = meshcom_settings.node_modus & 0x01;
 
     if(meshcom_settings.node_kbllightlock != save_node_kbllightlock)
     {

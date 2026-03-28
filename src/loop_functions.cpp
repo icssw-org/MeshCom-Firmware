@@ -36,7 +36,7 @@
 #include <t5-epaper/t5epaper_main.h>
 #endif
 
-#if defined(HAS_TFT)
+#if defined(HAS_TFT) || defined(HAS_TFT_114)
 #include "tft_display_functions.h"
 #endif
 
@@ -218,7 +218,7 @@ int dzeile[6] = {42, 52, 62, 0, 0, 0};
 int dzeile[6] = {8, 21, 31, 41, 51, 61};
 #endif
 
-#if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+#if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
 
 #include <U8g2lib.h>
 
@@ -635,19 +635,23 @@ int esp32_isSSD1306(int address)
         return 1;
     #endif
 
-    #if defined (BOARD_TRACKER)
+    #if defined(BOARD_TRACKER)
         return 1;
     #endif
 
-    #if defined (BOARD_T5_EPAPER)
+    #if defined(BOARD_HELTEC_T114)
         return 1;
     #endif
 
-    #if defined (BOARD_TBEAM_V3)
+    #if defined(BOARD_T5_EPAPER)
+        return 1;
+    #endif
+
+    #if defined(BOARD_TBEAM_V3)
         return 2;
     #endif
 
-    #if defined (BOARD_TBEAM_1W)
+    #if defined(BOARD_TBEAM_1W)
         return 1;  //SH1106 aber stimmt 1 wirklich?
     #endif
 
@@ -717,7 +721,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -735,7 +739,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             e290_display.fastmodeOn();
             
             e290_display.setFont(&FreeMonoBold12pt7b);
-        #elif defined(BOARD_TRACKER) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
+        #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
         #else
             u8g2->setFont(u8g2_font_6x10_mf);
         #endif
@@ -830,7 +834,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     e290_display.update();
             }
             
-        #elif defined (BOARD_TRACKER)
+        #elif defined (BOARD_TRACKER) || defined (BOARD_HELTEC_T114)
 
         if(pageLineAnz > 0)
         {
@@ -857,7 +861,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                 }
             }
 
-            #if defined(HAS_TFT)
+            #if defined(HAS_TFT) || defined(HAS_TFT_114)
             displayTFT(strLine[0], strLine[1], strLine[2], strLine[3], strLine[4], strLine[5], 0);
             #endif
         }
@@ -1020,7 +1024,7 @@ void sendDisplayHead(bool bInit)
     snprintf(print_text, sizeof(print_text), "BLE-C: %06i", meshcom_settings.bt_code);
     sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-    #if !defined (BOARD_TRACKER)
+    #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
     if(bWIFIAP)
         snprintf(print_text, sizeof(print_text), "AP   : %-13.13s", meshcom_settings.node_call);
     else
@@ -1075,14 +1079,14 @@ void sendDisplayTrack()
         snprintf(print_text, sizeof(print_text), "RATE: %4i NEXT %4i", (int)posinfo_interval, pos_seconds);
         sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-        snprintf(print_text, sizeof(print_text), "DIST: %.0lf hdop%4i", posinfo_distance, posinfo_hdop);
-        #if !defined (BOARD_TRACKER)
+        snprintf(print_text, sizeof(print_text), "DIST: %5.0lf hdop%4i", posinfo_distance, posinfo_hdop);
+        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
             sendDisplay1306(false, false, 3, dzeile[4], print_text);
         #else
             sendDisplay1306(false, true, 3, dzeile[4], print_text);
         #endif
 
-        #if !defined (BOARD_TRACKER)
+        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
             snprintf(print_text, sizeof(print_text), "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
             sendDisplay1306(false, true, 3, dzeile[5], print_text);
         #endif
@@ -1148,7 +1152,7 @@ void sendDisplayTime()
             pagePointer=PAGE_MAX-1;
     }
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -1177,26 +1181,23 @@ void sendDisplayTime()
 
     char cbatt[10];
 
+    #if defined (HAS_TFT) || defined(HAS_TFT_114)
     if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.2fV", global_batt/1000.0);
+        snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
         snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
+    #else
+    if(bDisplayVolt)
+        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
+    else
+        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
+    #endif
 
- #if defined(XPOWERS_CHIP_AXP192)
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "  USB");
- #endif
-
- #if defined(XPOWERS_CHIP_AXP2101)
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "  USB");
- #endif
-
- #if defined(BOARD_TBEAM_1W)
+ #if defined(XPOWERS_CHIP_AXP192) || defined(BOARD_E290) || defined(BOARD_TBEAM_1W)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
-    if(global_batt < 5000.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+    if(global_batt == 0.0)
+        snprintf(cbatt, sizeof(cbatt), "  USB");
  #endif
 
     // nur alle 15 sekunden
@@ -1206,7 +1207,7 @@ void sendDisplayTime()
         
         bOneButton = false;
 
-        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-5.5s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
 
         memcpy(pageText[0], print_text, 20);
         pageLine[0][0] = 3;
@@ -1214,7 +1215,7 @@ void sendDisplayTime()
 
         #if defined (BOARD_T5_EPAPER)
         // extra source
-        #elif defined (HAS_TFT)
+        #elif defined (HAS_TFT) || defined(HAS_TFT_114)
             displayTFT(print_text);
         #else
             sendDisplay1306(false, true, 3, dzeile[0], print_text);
@@ -1227,44 +1228,36 @@ void sendDisplayTime()
 void sendDisplayMainline()
 {
     char print_text[500];
-    char cbatt[6];
+    char cbatt[10];
     char nodetype[5];
 
 
+    #if defined (HAS_TFT) || defined(HAS_TFT_114)
     if(bDisplayVolt)
-        snprintf(cbatt, sizeof(cbatt), "%4.2fV", global_batt/1000.0);
+        snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
         snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
+    #else
+    if(bDisplayVolt)
+        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
+    else
+        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
+    #endif
 
- #if defined(XPOWERS_CHIP_AXP192)
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
- #endif
-
- #if defined(XPOWERS_CHIP_AXP2101)
-    if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
- #endif
-
- #if defined(BOARD_E290)
-    if(global_batt > 4300.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
- #endif
-
- #if defined(BOARD_TBEAM_1W)
+ #if defined(XPOWERS_CHIP_AXP192) || defined(BOARD_E290) || defined(BOARD_E290) || defined(BOARD_TBEAM_1W)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
-    if(global_batt < 5000.0)
-        snprintf(cbatt, sizeof(cbatt), " USB");
+    if(global_batt == 0.0)
+        snprintf(cbatt, sizeof(cbatt), "  USB");
  #endif
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
-        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s         %-5.5s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s       %s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
     }
     else
     {
-        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i %-5.5s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
     }
 
     sendDisplay1306(true, false, 3, dzeile[0], print_text);
@@ -1622,7 +1615,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #elif defined (BOARD_T5_EPAPER)
     // extra source
-    #elif defined(BOARD_TRACKER)
+    #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114)
 
     sendDisplayMainline();
     sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");    // not fastmode for CET display
@@ -1877,7 +1870,6 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     double lat=0.0;
     double lon=0.0;
 
-    float d_dir_to = 0;
     int dir_to=0;
     int dist_to=0;
 
@@ -1891,10 +1883,16 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     lat = conv_coord_to_dec(aprspos.lat);
     lon = conv_coord_to_dec(aprspos.lon);
 
+    #if defined(ENABLE_GPS)
+    float d_dir_to = 0;
     d_dir_to = gps.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
     dir_to = d_dir_to;
 
     dist_to = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
+    #else
+    dir_to = 0;
+    dist_to = 0;
+    #endif
 
     sendDisplayMainline();
 
@@ -2044,7 +2042,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
                     #else
-                        snprintf(msg_text, sizeof(msg_text), "ALT:%im rssi:%i", alt, rssi);
+                        snprintf(msg_text, sizeof(msg_text), "ALT:%im   rssi:%i", alt, rssi);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
                     #endif
@@ -2734,6 +2732,8 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
 
     unsigned long intervall = uintervall;
 
+    bool bGateway_done = false;
+
     bool bsendTele = false;
     if(intervall == 0xEEEE)
     {
@@ -2815,6 +2815,8 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         // none
         #elif defined(BOARD_TRACKER)
         // none
+        #elif defined(BOARD_HELTEC_T114)
+        // none
         #elif defined(BOARD_STICK_V3)
         // none
         #else
@@ -2881,6 +2883,8 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
                     Serial.printf("%s [NEW-UDP]...%s\n", getTimeString().c_str(), msg_buffer+3);
                 }
 
+                bGateway_done = true;
+
                 // UDP out
                 addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
             }
@@ -2935,8 +2939,14 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
             tdeck_send_track_view();
         #endif
 
-        if(bGATEWAY)
+        // already sent
+        if(bGATEWAY && !bGateway_done)
         {
+            if(bDisplayInfo)
+            {
+                Serial.printf("%s [NEW-UDP]...%s\n", getTimeString().c_str(), msg_buffer+3);
+            }
+            
             // UDP out
             addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
         }
@@ -3474,7 +3484,9 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
 
     double distance = 0.;
     
+    #if defined(ENABLE_GPS)
     distance = gps.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
+    #endif
     
     //posinfo_distance += distance;
     posinfo_distance = distance; // KBC 25.11.14
@@ -3488,14 +3500,21 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     }
     else
     {
+        #if defined(ENABLE_GPS)
         posinfo_direction = gps.courseTo(posinfo_prev_lat, posinfo_prev_lon, dlat, dlon);    // Grad
+        #else
+        posinfo_direction = 0;
+        #endif
     }
 
     // Use GPS speed if available (more accurate than distance/interval)
     double speed_mps = 0.0;
+
+    #if defined(ENABLE_GPS)
     if(gps.speed.isValid())
         speed_mps = gps.speed.mps();
     else
+    #endif
         speed_mps = distance / gps_refresh_intervall; // Fallback
 
     // Stationary / Drift suppression

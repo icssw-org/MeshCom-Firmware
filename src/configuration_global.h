@@ -1,7 +1,7 @@
 #define SOURCE_VERSION "4.35"
 #define SOURCE_VERSION_SUB "p"
 
-#define FLASH_VERSION 20260323
+#define FLASH_VERSION 20260324
 
 //Hardware Types
 #define TLORA_V2 1
@@ -31,6 +31,7 @@
 #define TBEAM_1W 51
 #define HELTEC_V4 52
 #define T_ETH_ELITE_1262 53
+#define HELTEC_T114 54
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 
@@ -82,6 +83,13 @@
 #define MAX_DEDUP_RING 100                 // dedup ring for received msg_ids (was 60, wraparounds observed)
 #define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
 #define MAX_RING_UDP 30                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
+#elif defined(ENABLE_TBEAM)                // very smal version only for developer tests
+#define MAX_MHEARD 10                      // max count of messages in mheard ringbuffer (was 20, limited by DRAM)
+#define MAX_MHPATH 10                      // max count of messages in mhpath ringbuffer (was 30, limited by DRAM)
+#define MAX_RING 10                        // max count of messages in ringbuffer
+#define MAX_DEDUP_RING 10                  // dedup ring for received msg_ids (was 60)
+#define MAX_LOG 10                         // max count of messages in LOG-ringbuffer
+#define MAX_RING_UDP 10                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
 #else
 // ESP32 original (~160 KB DRAM) — reduced buffer sizes due to RAM constraints
 #define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer (was 20, limited by DRAM)

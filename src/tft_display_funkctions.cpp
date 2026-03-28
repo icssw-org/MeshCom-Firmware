@@ -2,13 +2,29 @@
 #include <configuration.h>
 
 #include "tft_display_functions.h"
+#include "tft_custom_colors.h"
 
 #if defined(HAS_TFT)
-    #include "tft_custom_colors.h"
-    #include "TFT_eSPI.h"
-
+#include "TFT_eSPI.h"
     TFT_eSPI    tft     = TFT_eSPI(); 
     TFT_eSprite sprite  = TFT_eSprite(&tft);
+
+    void initTFT()
+    {
+        uint8_t screenBrightness = 50;    //from 1 to 255 to regulate brightness of screens
+
+        delay(500);
+
+        tft.init();
+        tft.begin();
+        tft.setRotation(1);
+
+        pinMode(TFT_BL, OUTPUT);
+        analogWrite(TFT_BL, screenBrightness);
+        tft.setTextFont(0);
+        tft.fillScreen(TFT_BLACK);
+        sprite.createSprite(160,80);
+    }
 
     #define bigSizeFont     2
     #define smallSizeFont   1
@@ -113,23 +129,6 @@
                 colorCuadrados                                                          // color
             );
         }
-    }
-
-    void initTFT()
-    {
-        uint8_t screenBrightness = 50;    //from 1 to 255 to regulate brightness of screens
-
-        delay(500);
-
-        tft.init();
-        tft.begin();
-        tft.setRotation(1);
-
-        pinMode(TFT_BL, OUTPUT);
-        analogWrite(TFT_BL, screenBrightness);
-        tft.setTextFont(0);
-        tft.fillScreen(TFT_BLACK);
-        sprite.createSprite(160,80);
     }
 
     void displayTFT(const String& header)
@@ -242,6 +241,95 @@
         sprite.pushSprite(0,0);
     
         delay(wait);
+    }
+#endif
+
+#if defined(HAS_TFT_114)
+
+// T114 TFT_WIDTH = 135 TFT_HEIGHT = 240 TFT_RORATION = 3 (so WIDTH and HEIGHT changed in use)
+// 
+#include <Adafruit_GFX.h>    // Core graphics library
+#include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
+
+    extern Adafruit_ST7789 tft;
+
+    void displayTFT(const String& header)
+    {
+        //Serial.println("[DISP]...1 Line");
+
+        tft.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft.setCursor(4, 6);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setTextSize(2); //2... 12*16
+        tft.println(header);
+    }
+
+    void displayTFT(const String& header, const String& line)
+    {
+        //Serial.println("[DISP]...2 Lines");
+
+        tft.fillScreen(ST77XX_WHITE);
+
+        tft.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft.setCursor(4, 6);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setTextSize(2); //2... 12*16
+        tft.println(header);
+
+        tft.setTextColor(ST77XX_BLACK);
+        tft.setTextWrap(true);
+        tft.setTextSize(2); //2... 12*16
+        tft.setCursor(0, 32);
+        tft.println(line);
+
+    }
+
+    void displayTFT(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, int wait)
+    {
+        //Serial.println("[DISP]...5 Lines");
+
+        tft.fillScreen(ST77XX_WHITE);
+
+        tft.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft.setCursor(0, 0);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setTextSize(3); //2... 12*16
+        tft.println(header);
+
+        tft.setTextColor(ST77XX_BLACK);
+        tft.setTextSize(2); //2... 12*16
+        tft.println("");
+        tft.println(line1);
+        tft.println("");
+
+        tft.setTextSize(3); //2... 12*16
+        tft.println(line2);
+        tft.setTextSize(2); //2... 12*16
+        tft.println(line3);
+        tft.println(line4);
+        
+        //tft.setTextWrap(false);
+    }
+
+    void displayTFT(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, const String& line5, int wait)
+    {
+        //Serial.println("[DISP]...6 Lines");
+
+        tft.fillScreen(ST77XX_WHITE);
+
+        tft.fillRect(0, 0, TFT_HEIGHT, 30, ST77XX_RED);
+        tft.setCursor(4, 6);
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setTextSize(2); //2... 12*16
+        tft.println(header);
+
+        tft.setTextColor(ST77XX_BLACK);
+        tft.setCursor(0, 32);
+        tft.println(line1);
+        tft.println(line2);
+        tft.println(line3);
+        tft.println(line4);
+        tft.println(line5);
     }
 
 #endif

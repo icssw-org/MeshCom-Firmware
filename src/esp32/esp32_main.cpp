@@ -103,10 +103,7 @@ Timeout timerSerial;
     #include <lora_setchip.h>
 #endif
 
-#include <esp_adc_cal.h>
-
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
-
 #include "XPowersAXP192.tpp"
 #include "XPowersAXP2101.tpp"
 #include "XPowersLibInterface.hpp"
@@ -631,7 +628,8 @@ void esp32setup()
     Serial.println("CLIENT SETUP");
     Serial.println("============");
 
-    Serial.printf("%s;[HEAP];%d;(free)\n", getTimeString().c_str(), ESP.getFreeHeap());
+    Serial.printf("%s;[HEAP];%d;%d;%d;(init)\n", getTimeString().c_str(),
+        ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     Serial.printf("%s;[PSRM];%d\n", getTimeString().c_str(), ESP.getFreePsram());
     
     check_efuse();
@@ -843,7 +841,7 @@ void esp32setup()
     #endif
 
     // Umstellung auf langes WIFI Passwort
-    if(strlen(meshcom_settings.node_ossid) > 0 && (strlen(meshcom_settings.node_ssid) == 0 || strcmp(meshcom_settings.node_ssid, "none") == 0))
+    if(strlen(meshcom_settings.node_ossid) > 0 && (strlen(meshcom_settings.node_ssid) == 0 || is_equ(meshcom_settings.node_ssid, "none")))
     {
         strncpy(meshcom_settings.node_ssid, meshcom_settings.node_ossid, sizeof(meshcom_settings.node_ssid) - 1);
         meshcom_settings.node_ssid[sizeof(meshcom_settings.node_ssid) - 1] = '\0';
@@ -878,7 +876,7 @@ void esp32setup()
         global_batt = meshcom_settings.node_maxv * 1000.0F;
     }
 
-    if(strcmp(meshcom_settings.node_ssid, "XX0XXX") == 0)
+    if(memcmp(meshcom_settings.node_ssid, "XX0XXX", 6) == 0)
     {
         sprintf(meshcom_settings.node_ssid, (char*)"none");
         sprintf(meshcom_settings.node_pwd, (char*)"none");
@@ -2963,6 +2961,28 @@ void esp32loop()
             #endif
 
             BattTimeWait = millis();
+        }
+    }
+
+    // Heap Monitor — always active, 60s interval
+    {
+        static unsigned long heapMonTimer = 0;
+        if (heapMonTimer == 0)
+            heapMonTimer = millis();
+
+        if ((heapMonTimer + 60000) < millis())
+        {
+            Serial.printf("%s;[HEAP];%d;%d;%d;(mon)\n",
+                getTimeString().c_str(),
+                ESP.getFreeHeap(),
+                ESP.getMinFreeHeap(),
+                ESP.getMaxAllocHeap());
+            #if defined(BOARD_HAS_PSRAM)
+            Serial.printf("%s;[PSRM];%d;(mon)\n",
+                getTimeString().c_str(),
+                ESP.getFreePsram());
+            #endif
+            heapMonTimer = millis();
         }
     }
 

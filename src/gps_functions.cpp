@@ -19,9 +19,14 @@ TinyGPSPlus gps;
 
 #if defined(ENABLE_GPS)
 
+#if defined(ENABLE_HELTEC_GPS)
+    #include "SoftwareSerial.h"
+    SoftwareSerial GPSSerial(GPS_RX_PIN, GPS_TX_PIN);
+#else
 // Eigene UART fuer GPS -- NICHT Serial0 (ist USB-CDC)!
 // Serial1 auf die GPS-Pins legen
 static HardwareSerial GPSSerial(1);  // UART1
+#endif
 
 GPSData gpsData;
 bool gpsDetected = false;
@@ -35,7 +40,11 @@ void GPS_Init() {
 
     // Baudrate-Erkennung: Jede Baudrate kurz ausprobieren
     for (size_t i = 0; i < GPS_BAUD_COUNT; i++) {
+        #if defined(ENABLE_HELTEC_GPS)
+        GPSSerial.begin(GPS_BAUDS[i]);
+        #else
         GPSSerial.begin(GPS_BAUDS[i], SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        #endif
 
         if(bGPSON && bGPSDEBUG)
             Serial.printf("[GPS] check %u baud...\n", GPS_BAUDS[i]);
@@ -51,7 +60,7 @@ void GPS_Init() {
                 // A-Z 0-9 $ , * CR LF
                 if(((c>=0x40) && (c<0x5B)) || ((c>=0x30) && (c<=0x39)) || c==0x24 || c==0x2C || c==0x2A || c==0x2E || c==0x0A || c==0x0D)
                 {
-                    //Serial.print(c);
+                    //PLEASE ONLY FOR TEST Serial.print(c);
 
                     if (c == '$') {  // NMEA-Satz beginnt immer mit '$'
                         found = true;
@@ -115,7 +124,7 @@ unsigned int GPS_Loop() {
         {
             gps.encode(c);
 
-            //Serial.print(c);
+            //PLEASE ONLY FOR TEST Serial.print(c);
         }
     }
 
