@@ -136,6 +136,8 @@ void sendHeartbeat();
 #include <clock.h>
 
 #include <bmx280.h>
+#include "bmp390.h"
+#include "aht20.h"
 #include "bme680.h"
 #include "mcu811.h"
 #include "io_functions.h"
@@ -575,6 +577,9 @@ void nrf52setup()
     // nicht mehr notwendig bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
+    bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
+    bBMP3ON = meshcom_settings.node_sset3 & 0x0010;
+    bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
 
     bDisplayInfo = bLORADEBUG;
 
@@ -866,6 +871,10 @@ void nrf52setup()
 
     #if defined(ENABLE_BMX280)
         setupBMX280(true);
+    #endif
+
+    #if defined(ENABLE_AHT20)
+        setupAHT20(true);
     #endif
 
     #if defined(ENABLE_MC811)
@@ -1993,81 +2002,81 @@ if (isPhoneReady == 1)
     }
     #endif
 
-    #if defined(ENABLE_BMX280)
-    if(BMXTimeWait == 0)
-        BMXTimeWait = millis() - 10000;
-
-    if ((BMXTimeWait + 60000) < millis())   // 60 sec
-    {
-        // read BMX Sensor
-        if(loopBMX280())
-        {
-            meshcom_settings.node_temp = getTemp();
-            meshcom_settings.node_hum = getHum();  //BMP280 - not supported
-            meshcom_settings.node_press = getPress();
-
-            if(wx_shot)
-            {
-                commandAction((char*)"--wx", isPhoneReady, true);
-                wx_shot = false;
-            }
-        }
-
-        BMXTimeWait = millis();
-    }
-    #endif
-
-    // read every n seconds the bme680 sensor calculated from millis()
-    #if defined(ENABLE_BMX680)
-    if(bBME680ON && bme680_found)
-    {
-        if ((bme680_timer + 60000) < millis() || delay_bme680 <= 0)
-        {
-            if (delay_bme680 <= 0)
-            {
-                getBME680();
-
-            }
-
-            if(wx_shot)
-            {
-                commandAction((char*)"--wx", isPhoneReady, true);
-                wx_shot = false;
-            }
-
-            // calculate delay
-            delay_bme680 = bme680_get_endTime() - millis();
-
-            bme680_timer = millis();
-        }
-    }
-    #endif
-
     // read BMP Sensor
-    #if defined(ENABLE_BMX280)
-    if((bBMPON || bBMEON) && bmx_found)
+    #if defined(ENABLE_BMX280) || defined(ENABLE_AHT20)
+    if(((bBMPON || bBMEON) && bmx_found) || (bAHT20ON && aht20_found))
     {
-        if(BMXTimeWait == 0)
-            BMXTimeWait = millis() - 10000;
+        unsigned long lreduction = 0;
 
-        if ((BMXTimeWait + 30000) < millis())   // 30 sec
+        if ((BMXTimeWait + 60000) < millis())   // 60 sec
         {
+            #if defined(ENABLE_BMX280)
                 if(loopBMX280())
                 {
-                    meshcom_settings.node_press = getPress();
-                    meshcom_settings.node_temp = getTemp();
-                    meshcom_settings.node_hum = getHum();
-                    meshcom_settings.node_press_alt = getPressALT();
-                    meshcom_settings.node_press_asl = getPressASL(meshcom_settings.node_alt);
-                    
-                    if(wx_shot)
+                    if(!aht20_found && !bmp3_found)
                     {
-                        commandAction((char*)"--wx", isPhoneReady, true);
-                        wx_shot = false;
+                        meshcom_settings.node_temp = getTemp();
                     }
-                }
 
-            BMXTimeWait = millis(); // wait for next messurement
+                    if(!aht20_found)
+                    {
+                        meshcom_settings.node_hum = getHum();
+                    }
+
+                    if(!bmp3_found)
+                    {
+                        meshcom_settings.node_press = getPress();
+                        meshcom_settings.node_press_alt = getPressALT();
+                        meshcom_settings.node_press_asl = getPressASL(meshcom_settings.node_alt);
+                    }
+
+                    bmx_start = 0;
+                }
+                else
+                {
+                    if(bmx_start > 0)
+                        lreduction = 58000;
+                }
+            #endif
+
+
+            #if defined(ENABLE_AHT20)
+                if(loopAHT20())
+                {
+                    meshcom_settings.node_temp = getAHT20Temp();
+                    meshcom_settings.node_hum = getAHT20Hum();
+                }
+            #endif
+
+            if(wx_shot)
+            {
+                commandAction((char*)"--wx", isPhoneReady, false);
+                wx_shot = false;
+            }
+
+            BMXTimeWait = millis() - lreduction; // wait for next messurement
+        }
+    }
+    #endif
+
+    // read BMP390 Sensor
+    #if defined(ENABLE_BMP390)
+    if((bBMP3ON && bmp3_found))
+    {
+        if ((BMP3TimeWait + 60000) < millis())   // 60 sec
+        {
+            if(loopBMP390())
+            {
+                meshcom_settings.node_press = getPress3();
+                if(!aht20_found)
+                {
+                    meshcom_settings.node_temp = getTemp3();
+                }
+                meshcom_settings.node_press_asl = getPressASL3();
+                meshcom_settings.node_press_alt = getAltitude3();
+            }
+
+            BMP3TimeWait = millis(); // wait for next messurement
         }
     }
     #endif
@@ -2253,7 +2262,7 @@ void getTEMP(void)
         Serial.print("Humidity: "); Serial.print(humidity.relative_humidity); Serial.println("% rH");
     }
 
-    meshcom_settings.node_temp = temp.temperature;
+    meshcom_settings.node_temp2 = temp.temperature;
     meshcom_settings.node_hum = humidity.relative_humidity;
 }
 
