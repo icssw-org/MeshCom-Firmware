@@ -2732,6 +2732,8 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
 
     unsigned long intervall = uintervall;
 
+    bool bGateway_done = false;
+
     bool bsendTele = false;
     if(intervall == 0xEEEE)
     {
@@ -2881,6 +2883,8 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
                     Serial.printf("%s [NEW-UDP]...%s\n", getTimeString().c_str(), msg_buffer+3);
                 }
 
+                bGateway_done = true;
+
                 // UDP out
                 addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
             }
@@ -2935,8 +2939,14 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
             tdeck_send_track_view();
         #endif
 
-        if(bGATEWAY)
+        // already sent
+        if(bGATEWAY && !bGateway_done)
         {
+            if(bDisplayInfo)
+            {
+                Serial.printf("%s [NEW-UDP]...%s\n", getTimeString().c_str(), msg_buffer+3);
+            }
+            
             // UDP out
             addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
         }
