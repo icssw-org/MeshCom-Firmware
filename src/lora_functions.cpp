@@ -553,7 +553,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     #if not defined(BOARD_T5_EPAPER)
                     if(lat != 0.0 && lon != 0.0 && meshcom_settings.node_lat != 0.0 && meshcom_settings.node_lon != 0.0)
                     {
+                        #if defined(ENABLE_GPS)
                         mheardLine.mh_dist = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+                        #else
+                        mheardLine.mh_dist = 0;
+                        #endif
                     }
                     #endif
                 }

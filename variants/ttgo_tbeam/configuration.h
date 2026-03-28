@@ -23,7 +23,7 @@ definitions for T-Beam
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
-#define ENABLE_SOFTSER
+//#define ENABLE_SOFTSER    do not enable onj TBEAM !!
 #define SX127X
 #define TX_POWER_MAX 20  // max 20 dBm
 #define TX_POWER_MIN 2
