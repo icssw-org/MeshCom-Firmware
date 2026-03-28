@@ -3817,9 +3817,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         String stri2c = "not available";
 
-        #if not defined(BOARD_HELTEC_V3)
-            stri2c = scanI2C();
-        #endif
+        stri2c = scanI2C();
 
         snprintf(print_buff, sizeof(print_buff), "%s", stri2c.c_str());
 
