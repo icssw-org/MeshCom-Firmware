@@ -351,12 +351,14 @@ void interruptHandle3()
   }
 }
 
+#if not defined(BOARD_HELTEC_T114)
 #include <U8g2lib.h>
 
 //extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
 extern U8G2 *u8g2;
 extern U8G2 u8g2_1;
 extern U8G2 u8g2_2;
+#endif
 
 // Prototypes
 void blinkLED();                                     // blink GREEN
