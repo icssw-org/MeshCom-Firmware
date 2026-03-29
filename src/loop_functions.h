@@ -13,7 +13,7 @@
 #endif
 
 // OLED Display 1306 128 x 64 px
-#if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO) && !defined (BOARD_HELTEC_T114)
+#if !defined(BOARD_E290) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
 #include <U8g2lib.h>
 #endif
 
