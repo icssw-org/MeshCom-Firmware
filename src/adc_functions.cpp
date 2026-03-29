@@ -1,10 +1,11 @@
 #include "configuration.h"
+
+#ifndef BOARD_RAK4630
+
 #include "loop_functions_extern.h"
 
 #include "loop_functions.h"
 #include <command_functions.h>
-
-#ifndef BOARD_RAK4630
 
 #include <adc_functions.h>
 #include <esp_adc_cal.h>
