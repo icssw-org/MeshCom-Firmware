@@ -2727,8 +2727,15 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
-    bool bSendViaAPRS = bDisplayTrack;
-    bool bSendViaMesh = !bDisplayTrack;
+    bool bSendViaAPRS = false;
+    bool bSendViaMesh = true;
+
+    // TRACk only allowed on receivind GPS singnals with having fix
+    if(bDisplayTrack && posinfo_fix)
+    {
+        bSendViaAPRS = bDisplayTrack;
+        bSendViaMesh = !bDisplayTrack;
+    }
 
     unsigned long intervall = uintervall;
 
