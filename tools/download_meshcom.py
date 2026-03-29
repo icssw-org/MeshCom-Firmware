@@ -42,12 +42,15 @@ def get_target_hardware(asset):
     "ttgo_tbeam.bin": "tbeam",
     "ttgo_tbeam_SX1262.bin" : "tbeamSX1262",
     "ttgo_tbeam_SX1268.bin" : "tbeamSX1268",
-    "ttgo_tbeam_supreme_l76k.bin" : "tbeam_supreme_l76k",
+    "ttgo_tbeam_supreme.bin" : "tbeam_supreme",
+    "T-Beam-1W.bin" : "tbeam1w",
     "ttgo-lora32-v21.bin" : "tlora",
     "t_deck.bin" : "t_deck",
     "t_deck_plus.bin" : "t_deck_plus",
     "wiscore_rak4631.uf2" : "rak4631_uf2",
     "wiscore_rak4631.zip" : "rak4631_zip",
+    "heltec_t114.uf2" : "heltec_t114_uf2",
+    "heltec_t114.zip" : "heltec_t114_zip",
     }
 
     bootloader_dict = {
@@ -64,12 +67,15 @@ def get_target_hardware(asset):
     "ttgo_tbeam.bin": "bootloader.bin",
     "ttgo_tbeam_SX1262.bin" : "bootloader.bin",
     "ttgo_tbeam_SX1268.bin" : "bootloader.bin",
-    "ttgo_tbeam_supreme_l76k.bin" : "bootloader-s3.bin",
+    "ttgo_tbeam_supreme.bin" : "bootloader-s3.bin",
+    "T-Beam-1W.bin" : "bootloader-s3.bin",
     "ttgo-lora32-v21.bin" : "bootloader.bin",
     "t_deck.bin" : "bootloader-s3.bin",
     "t_deck_plus.bin" : "bootloader-s3.bin",
     "wiscore_rak4631.uf2" : "wiscore_rak4631.uf2",
     "wiscore_rak4631.zip" : "wiscore_rak4631.zip",
+    "heltec_t114.uf2" : "heltec_t114.uf2",
+    "heltec_t114.zip" : "heltec_t114.zip",
     }
 
     safeboot_dict = {
@@ -86,12 +92,15 @@ def get_target_hardware(asset):
     "ttgo_tbeam.bin": "safeboot.bin",
     "ttgo_tbeam_SX1262.bin" : "safeboot.bin",
     "ttgo_tbeam_SX1268.bin" : "safeboot.bin",
-    "ttgo_tbeam_supreme_l76k.bin" : "safeboot-s3.bin",
+    "ttgo_tbeam_supreme.bin" : "safeboot-s3.bin",
+    "T-Beam-1W.bin" : "safeboot-s3.bin",
     "ttgo-lora32-v21.bin" : "safeboot.bin",
     "t_deck.bin" : "safeboot-s3.bin",
     "t_deck_plus.bin" : "safeboot-s3.bin",
     "wiscore_rak4631.uf2" : "wiscore_rak4631.uf2",
     "wiscore_rak4631.zip" : "wiscore_rak4631.zip",
+    "heltec_t114.uf2" : "heltec_t114.uf2",
+    "heltec_t114.zip" : "heltec_t114.zip",
     }
 
 
