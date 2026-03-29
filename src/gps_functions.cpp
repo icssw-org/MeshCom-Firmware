@@ -32,7 +32,7 @@ GPSData gpsData;
 bool gpsDetected = false;
 
 // Baudrate-Erkennung: Viele Module starten mit 9600, manche mit 38400/115200
-static const uint32_t GPS_BAUDS[] = {38400, 19200, 9600, 115200};
+static const uint32_t GPS_BAUDS[] = {4800, 9600, 19200, 38400, 57600, 115200};
 static const size_t   GPS_BAUD_COUNT = sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]);
 
 void GPS_Init() {
