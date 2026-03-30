@@ -19,6 +19,8 @@
 
 #include "TinyGPSPlus.h"
 
+bool bGPSMitHardReset = false;
+
 #include <Wire.h> 
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)

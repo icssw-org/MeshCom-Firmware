@@ -9,11 +9,37 @@ definitions for T-Beam
 #include <configuration_global.h>
 
 // T-Beam specific config
+// LoRa
 #define MODUL_HARDWARE TBEAM
 #define MODUL_FW_TBEAM TBEAM
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
-#define ENABLE_GPS
+
+// LoRa Chip
+#define SX127X
+#define TX_POWER_MAX 20  // max 20 dBm
+#define TX_POWER_MIN 2
+#define TX_OUTPUT_POWER 20
+#define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
+#define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
+
+// LoRa SPI Bus
+//#define LORA_RST  //already defined
+#define LORA_DIO0 LORA_IO0
+#define LORA_DIO1 LORA_IO1
+//#define LORA_CS  //already defined
+
+// I2C Bus
+#define SDA_PIN 21
+#define SCL_PIN 22
+#define I2C_SDA    SDA_PIN
+#define I2C_SCL    SCL_PIN
+
+// Defined PowerManagement AXP192
+#define XPOWERS_CHIP_AXP192
+#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
+
+// Telemetry
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20
@@ -22,27 +48,26 @@ definitions for T-Beam
 #define ENABLE_MCP23017
 #define ENABLE_INA226
 #define ENABLE_MC811
+
+// Extra Hardware
 #define ENABLE_RTC
+
+// Extra Project
 //#define ENABLE_SOFTSER    do not enable onj TBEAM !!
-#define SX127X
-#define TX_POWER_MAX 20  // max 20 dBm
-#define TX_POWER_MIN 2
 
-// Defined using AXP192
-#define XPOWERS_CHIP_AXP192
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
-
+// OnBoard LED
 #define BOARD_LED 4    // LED_BUILTIN
 
-#define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
+// OnBoard Button
+#define BUTTON_PIN      38
+#define OneWire_GPIO    4
 
-#define TX_OUTPUT_POWER 20
-#define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
-
+// OnBoard ADC
 #define ANALOG_PIN 36
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
-/**
+
+/* LoRa Parameters without onther Settings
  * RadioLib Coding Rate: Allowed values range from 5 to 8.
  * case 5: CR_4_5;
     case 6: CR_4_6;
@@ -65,20 +90,8 @@ definitions for T-Beam
 */
 #define LORA_SF 11
 
-//#define LORA_RST  //already defined
-#define LORA_DIO0 LORA_IO0
-#define LORA_DIO1 LORA_IO1
-//#define LORA_CS  //already defined
-
-#define SDA_PIN 21
-#define SCL_PIN 22
-
-#define I2C_SDA    SDA_PIN
-#define I2C_SCL    SCL_PIN
-
-#define BUTTON_PIN      38
-
-#define OneWire_GPIO    4
-
-#define GPS_RX_PIN 34
-#define GPS_TX_PIN 12
+// GPS on Board
+#define ENABLE_GPS      // GPS on OnBoard or External
+#define ENABLE_UBLOX    // GPS Chip-type
+#define GPS_RX_PIN 34   // Serial Pin RX
+#define GPS_TX_PIN 12   // Serial Pin TX
