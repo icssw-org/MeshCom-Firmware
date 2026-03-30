@@ -28,6 +28,8 @@ TinyGPSPlus gps;
 static HardwareSerial GPSSerial(1);  // UART1
 #endif
 
+#if defined(ENABLE_GPS)
+
 GPSData gpsData;
 bool gpsDetected = false;
 
@@ -35,6 +37,212 @@ bool gpsDetected = false;
 static const uint32_t GPS_BAUDS[] = {4800, 9600, 19200, 38400, 57600, 115200};
 static const size_t   GPS_BAUD_COUNT = sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]);
 
+#if defined(ENABLE_UBLOX)
+
+SFE_UBLOX_GNSS myGPS;
+
+#define GPS_DEFAULT_BAUDRATE 9600
+#define GPS_BAUDRATE 38400
+
+int gpsBaudrate = GPS_DEFAULT_BAUDRATE;
+
+int maxStateCount=1;
+
+/// @brief check GPS at Baudrate (OE3WAS)
+/// @param Baudrate 
+/// @return true if found
+bool checkGPS(uint32_t Baudrate)
+{
+    Serial.printf("GPS: trying %u baud <%i>\n", Baudrate, maxStateCount);
+    GPSSerial.begin(Baudrate);
+
+    if (myGPS.begin(GPSSerial))
+    {
+        Serial.printf("[GPS]...connected at %u baud\n", Baudrate);
+        gpsBaudrate = Baudrate;
+        maxStateCount=1;
+        return true;
+    }
+    myGPS.end();
+    GPSSerial.end();
+    delay(100);
+    return false;
+}
+
+void GPS_Init() {
+
+    Serial.printf("[GPS]...Init with GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
+
+    int state = 0;
+
+    if(bGPSMitHardReset)
+    {
+        Serial.print("===== STATE ");
+        Serial.println(state);
+    }
+
+    #if defined GPS_BAUDRATE
+        gpsBaudrate = GPS_BAUDRATE;
+    #endif
+
+    bool bw=true;
+
+    switch (state)
+    {
+        case 0: // auto-baud connection, then switch to 38400 and save config
+            
+            while(bw)
+            {
+                if (checkGPS(gpsBaudrate)) //priorisierte Baudrate zuerst testen
+                {
+                    bw=false;
+                }
+                else
+                if (checkGPS(9600))
+                {
+                    bw=false;
+                }
+                else
+                if (checkGPS(38400))
+                {
+                    bw=false;
+                }
+                else
+                if (checkGPS(57600))
+                {
+                    bw=false;
+                }
+                else
+                if (checkGPS(115200))
+                {
+                    bw=false;
+                }
+
+                delay(200); //Wait a bit before trying again to limit the Serial output flood
+                maxStateCount++;
+
+                if(maxStateCount > 10)
+                {
+                    gpsDetected = false;
+
+                    Serial.println("[GPS]...hardware not found");
+
+                    return;
+                }
+            }
+
+            myGPS.setUART1Output(COM_TYPE_NMEA); //Set the UART port to output NMEA only
+            delay(100);
+            myGPS.enableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
+            delay(100);
+            myGPS.enableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
+            delay(100);
+            myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
+            delay(100);
+            myGPS.enableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART1);
+            delay(100);
+            myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART1);
+            delay(100);
+            myGPS.setMeasurementRate(1000);
+            delay(100);
+            myGPS.saveConfiguration(); //Save the current settings to flash and BBR
+            delay(100);
+
+            if(gpsBaudrate != GPS_BAUDRATE)
+            {
+                myGPS.setSerialRate(GPS_BAUDRATE, COM_PORT_UART1);
+
+                GPSSerial.end();
+                delay(100);
+                GPSSerial.begin(GPS_BAUDRATE);
+                delay(100);
+
+                myGPS.saveConfiguration();
+                delay(100);
+            }
+
+            Serial.println("[GPS] serial connected, saved config");
+
+            state++;
+            
+            break;
+            
+        case 1: // hardReset, expect to see GPS back at 38400 baud
+            if(bGPSMitHardReset)
+            {
+                Serial.println("Issuing hardReset (cold start)");
+
+                myGPS.hardReset();
+                delay(3000);
+                GPSSerial.begin(gpsBaudrate);
+
+                if (myGPS.begin(GPSSerial))
+                {
+                    Serial.println("[GPS]...Success.");
+                }
+                else
+                {
+                    Serial.printf("[GPS]...did not respond at %i baud, starting over.\n", gpsBaudrate);
+                    state = 2;
+                    break;
+                }
+            }
+
+            state++;
+
+            break;
+            
+        case 2: // factoryReset, expect to see GPS back at gpsBaudrate baud
+            if(bGPSMitHardReset)
+            {
+                Serial.println("[GPS]...Issuing factoryReset");
+
+                myGPS.factoryReset();
+                delay(3000); // takes more than one second... a loop to resync would be best
+                GPSSerial.begin(gpsBaudrate);
+
+                if (myGPS.begin(GPSSerial))
+                {
+                    Serial.println("[GPS]...Success.");
+                }
+                else
+                {
+                    Serial.printf("[GPS]...did not come back at %i baud, starting over.\n", gpsBaudrate);
+                    state = 0;
+                    bGPSMitHardReset=false;
+                    break;
+                }
+            }
+        
+            state++;
+
+            break;
+            
+        case 3: // print version info
+            if(bGPSMitHardReset)
+            {
+                /*
+                Serial.print("GPS protocol version: ");
+                Serial.print(myGPS.getProtocolVersionHigh());
+                Serial.print('.');
+                Serial.println(myGPS.getProtocolVersionLow());
+                Serial.println();
+                */
+            
+                Serial.println("GPS running");
+            }
+            
+            state++;
+            bGPSMitHardReset=false;
+
+            break;
+        
+        case 4:
+            return;
+    }
+}
+
+#else
 void GPS_Init() {
     Serial.printf("[GPS] Init with GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
 
@@ -103,6 +311,8 @@ void GPS_Init() {
 
     gpsDetected = false;
 }
+
+#endif //UBLOX or other
 
 /**
  * @brief Non-blocking GPS-Update. In jedem loop()-Durchlauf aufrufen.

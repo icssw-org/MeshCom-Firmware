@@ -9,6 +9,8 @@
 
 #include <atomic>
 
+extern bool bGPSMitHardReset;
+
 extern bool bnextread;
 
 extern int ifalseping;
