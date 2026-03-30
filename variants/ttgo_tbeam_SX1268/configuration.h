@@ -12,7 +12,7 @@ definitions for TBEAM 1268
 #define MODUL_FW_TBEAM  TBEAM_1268
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
-#define ENABLE_GPS
+
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20
@@ -92,5 +92,7 @@ definitions for TBEAM 1268
 #define I2C_SDA    SDA_PIN
 #define I2C_SCL    SCL_PIN
 
+#define ENABLE_GPS
+#define ENABLE_UBLOX    // GPS Chip-type
 #define GPS_RX_PIN 34
 #define GPS_TX_PIN 12
