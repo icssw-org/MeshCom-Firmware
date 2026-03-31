@@ -517,6 +517,8 @@ void initTDeck_pro()
     ui_deckpro_entry();
 
     disp_full_refr();
+
+    Serial.println("INIT DONE");
 }
 
 void loopTDeck_pro()

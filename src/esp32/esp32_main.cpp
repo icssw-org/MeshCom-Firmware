@@ -25,9 +25,11 @@ SPIClass ethSPI(FSPI);
 #include "esp32_flash.h"
 #include <esp_adc_cal.h>
 
+#if not defined(BOARD_T_DECK_PRO)
 //====== Timer for periodical events u.a.
 #include "Timeout.h"
 Timeout timerSerial;
+#endif
 
 #ifdef HAS_SDCARD
 #include <SD.h>
@@ -550,10 +552,16 @@ void esp32setup()
     ///< Initialize T5-EPAPER GUI
     ///< delay for ESP32-S3 nativ USB [OE3WAS]
     ///< um Terminal verbinden zu können
+    #if not defined(BOARD_T_DECK_PRO)
     timerSerial.start(2000);  //timeout falls keine USB verbunden ist
+    #endif
     Serial.begin(MONITOR_SPEED);
     
+    #if defined(BOARD_T_DECK_PRO)
+    while (!Serial) // && !timerSerial.time_over());
+    #else
     while (!Serial && !timerSerial.time_over());
+    #endif
     if (Serial) { for (int i=0;i<5;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
 
     #if defined BOARD_T5_EPAPER
