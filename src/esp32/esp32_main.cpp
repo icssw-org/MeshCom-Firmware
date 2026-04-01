@@ -377,7 +377,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 
 
 #ifdef USING_SX1262 // BOARD_TBEAM_1W
-    SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
+    SX1262 radio = new Module(RADIO_CS_PIN, RADIO_IRQ_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
 #endif
 
 #ifdef SX1262_E290
@@ -1099,12 +1099,6 @@ void esp32setup()
     #elif defined(BOARD_E220)
         Serial.print(F(" Initializing ... "));
         int state = radio.begin(434.0F, 125.0F, 9, 7, SYNC_WORD_SX127x, 10, LORA_PREAMBLE_LENGTH, /*float tcxoVoltage = 0*/ 1.6F, /*bool useRegulatorLDO = false*/ false);
-    /*
-    #elif defined(BOARD_T_ETH_ELITE)
-    Serial.print(F(" Initializing ... "));
-    int state = radio.begin(433.175F);
-    radio.setDio2AsRfSwitch(true);
-    */
     #else
         Serial.print(F(" Initializing ... "));
 
@@ -1126,7 +1120,16 @@ void esp32setup()
         #endif
         #endif
 
+        #if defined(USING_SX1262)
+        int state = radio.begin();
+        #else
         int state = radio.begin(433.175F);
+        #endif
+
+        #if defined(BOARD_T_ETH_ELITE)
+            radio.setDio2AsRfSwitch(true);
+            radio.setTCXO(1.8);
+        #endif
 
     #endif
     
@@ -2155,7 +2158,7 @@ void esp32loop()
                 radio.clearPacketReceivedAction();
 
                 if(bLORADEBUG)
-                    Serial.println("[CHECK] radio.scanChannel() / 2");
+                    Serial.println("[CHECK] radio.scanChannel() / 1");
 
                 // CAD Scan 1
                 #if defined(BOARD_T_ETH_ELITE)
@@ -2178,7 +2181,7 @@ void esp32loop()
                         Serial.printf("[MC-DBG] CAD_BUSY_1 attempt=%d, double-check...\n", cad_attempt);
 
                     if(bLORADEBUG)
-                        Serial.println("[CHECK] radio.scanChannel() / 1");
+                        Serial.println("[CHECK] radio.scanChannel() / 2");
 
                     cad_result = radio.scanChannel();
                     if(bLORADEBUG)

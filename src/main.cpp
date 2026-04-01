@@ -34,7 +34,10 @@ void setup()
   #endif
 
   #if defined(BOARD_T_ETH_ELITE)
-    SPI.begin(RADIO_SCK, RADIO_MISO, RADIO_MOSI, RADIO_CS_PIN);
+    SPI.begin(RADIO_SCK, RADIO_MISO, RADIO_MOSI);
+    pinMode(RADIO_CS_PIN, OUTPUT);
+    digitalWrite(RADIO_CS_PIN, HIGH);
+    
   #elif !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_TBEAM_1W)
     SPI.begin();
   #endif

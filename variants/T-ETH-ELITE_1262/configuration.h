@@ -75,13 +75,7 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define ETH_MISO_PIN  47
 #define ETH_MOSI_PIN  21
 
-// E22 compatibility (required by MeshCom)
-//#define E22_RXEN -1
-//#define E22_TXEN -1
-
 // Radio
-//#define SX126x_V3
-//#define SX1262_E22
 #define USING_SX1262
 
 // SPI radio
@@ -90,6 +84,6 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define RADIO_SCK     10
 
 #define RADIO_CS_PIN    40
-#define RADIO_DIO1_PIN  8
+#define RADIO_IRQ_PIN   8
 #define RADIO_RST_PIN   46
 #define RADIO_BUSY_PIN  16
