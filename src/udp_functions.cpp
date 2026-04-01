@@ -513,6 +513,11 @@ void sendMeshComUDP()
     return false;
   }
 
+  if(meshcom_settings.node_ssid[0] == 0x00 || is_equ(meshcom_settings.node_ssid, "none"))
+  {
+    return false;
+  }
+
   if (bWIFIAP)
   {
     if (bDEBUG)

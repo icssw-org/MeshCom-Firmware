@@ -165,6 +165,8 @@ struct s_meshcom_settings
 
 	int node_cleanflash = 0;
 
+	int node_netmode = 0;   // 0 = WiFi, 1 = Ethernet
+
 	// nicht im Flash
 	int node_press_alt = 0;
 	float node_press_asl = 0;
@@ -207,8 +209,6 @@ struct s_meshcom_settings
 	bool node_kbl_sync = true;
 	bool node_wifion = true;
 	#endif
-
-	uint8_t node_netmode = 0;   // 0 = WiFi, 1 = Ethernet
 };
 
 extern s_meshcom_settings meshcom_settings;

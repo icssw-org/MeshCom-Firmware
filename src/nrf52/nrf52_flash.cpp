@@ -233,6 +233,8 @@ void init_flash(void)
 
 		meshcom_settings.node_cleanflash = old_struct.node_cleanflash;
 
+		meshcom_settings.node_netmode = old_struct.node_netmode;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

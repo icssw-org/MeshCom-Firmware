@@ -242,7 +242,7 @@ void init_flash(void)
     meshcom_settings.node_cleanflash = preferences.getUInt("node_cflash", 0);
 
     // Network Mode wifi/eth
-    meshcom_settings.node_netmode = preferences.getUChar("node_netmode", 0);
+    meshcom_settings.node_netmode = preferences.getInt("node_netmode", 0);
 
     preferences.end();
 }
@@ -494,7 +494,7 @@ void save_settings(void)
     preferences.putULong("node_cflash", meshcom_settings.node_cleanflash);
 
     // Network Mode wifi/eth
-    preferences.putUChar("node_netmode", meshcom_settings.node_netmode);
+    preferences.putInt("node_netmode", meshcom_settings.node_netmode);
 
     //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
     preferences.end();
