@@ -49,6 +49,8 @@ Timeout timerSerial;
     #define LORA_DIO1 E22_DIO1
   #elif defined(RADIO_DIO1_PIN)
     #define LORA_DIO1 RADIO_DIO1_PIN
+  #elif defined(RADIO_IRQ_PIN)
+    #define LORA_DIO1 RADIO_IRQ_PIN
   #elif defined(PIN_LORA_DIO_1)
     #define LORA_DIO1 PIN_LORA_DIO_1
   #else
@@ -2978,6 +2980,12 @@ void esp32loop()
             if(bWXDEBUG)
                 Serial.printf("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
                 
+            meshcom_settings.node_ntctemp = NTCtemp;
+            if(digitalRead(FAN_CTRL) == HIGH)
+                meshcom_settings.node_fanon = true;
+            else
+                meshcom_settings.node_fanon = false;
+
             #endif
 
             BattTimeWait = millis();

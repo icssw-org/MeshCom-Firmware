@@ -13,9 +13,7 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define BOARD_VARIANT_NAME          "LoRa 1W"
 #define MODUL_HARDWARE TBEAM_1W
 #define RADIO_TYPE_STR  "SX1262"
-#ifndef USING_SX1262
 #define USING_SX1262
-#endif
 
 #define I2C_SDA                     (8)
 #define I2C_SCL                     (9)
@@ -50,7 +48,7 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define RADIO_RST_PIN               3
 #define RADIO_LDO_EN                (40)
 #define RADIO_CTRL                  (21)
-#define RADIO_DIO1_PIN              (1)
+#define RADIO_IRQ_PIN               (1)
 #define RADIO_BUSY_PIN              (38)
 
 // SX1262 alternative definitions - duplicates 433MHz/868MHz

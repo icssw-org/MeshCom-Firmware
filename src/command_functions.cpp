@@ -3546,6 +3546,8 @@ void commandAction(char *umsg_text, bool ble)
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
         sscanf(_owner_c, "%d", &iVar);
 
+        Serial.println(iVar);
+
         if(iVar < TX_POWER_MIN || iVar > TX_POWER_MAX)
         {
             Serial.printf("txpower %i dBm not between %i and max %i dBm\n", iVar, TX_POWER_MIN, TX_POWER_MAX);
@@ -4153,6 +4155,10 @@ void commandAction(char *umsg_text, bool ble)
             (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBMP3ON?"on":"off"), cbmp3, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bAHT20ON?"on":"off"), cAHT20, (bSHT21ON?"on":"off"), cSHT21, (bINA226ON?"on":"off"), (bLPS33?"on":"off"));
 
             Serial.printf("...ONEWIRE: %s (%i) DS18%s DHT%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, cdht);
+
+            #ifdef NTC_PIN
+                Serial.printf("...NTC-TEMP: %.1f °C  ...FAN: %s\n", meshcom_settings.node_ntctemp, meshcom_settings.node_fanon ? "on" : "off");
+            #endif
 
             Serial.printf("...TEMP: %.1f °C off %.3f\n...TOUT: %.1f °C off %.3f\n...HUM: %.1f %%rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kΩ\n...eCO2: %.0f ppm\n", 
             meshcom_settings.node_temp, meshcom_settings.node_tempi_off, meshcom_settings.node_temp2, meshcom_settings.node_tempo_off, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);

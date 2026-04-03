@@ -75,8 +75,8 @@
 #define TDECK_TFT_DC        11
 #define TDECK_TFT_BACKLIGHT 42
 
-#define GPS_RX_PIN        43
-#define GPS_TX_PIN        44
+#define GPS_RX_PIN        44
+#define GPS_TX_PIN        43
 
 #define LORA_RST  17
 #define LORA_DIO0 13 // aka BUSY Pin

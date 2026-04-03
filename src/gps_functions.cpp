@@ -306,7 +306,7 @@ void GPS_Init() {
 
             // Initialize the GNSS Chip, use GPS + GLONASS
             delay(250);
-            GPSSerial.write("$PCAS04,5*1C\r\n");
+            GPSSerial.write("$PCAS04,7*1E\r\n");
             
             // only ask for RMC and GGA
             delay(250);

@@ -192,6 +192,9 @@ struct s_meshcom_settings
 	char node_parm_t[150] = {0};
 	char node_parm_id[100] = {0};
 
+	float node_ntctemp = 0;
+	bool node_fanon = false;
+
 	#if defined(BOARD_T_DECK) || defined (BOARD_T_DECK_PLUS) || defined (BOARD_T_DECK_PRO)
 	int node_map = 0;
 	String node_audio_start = "/";

@@ -157,8 +157,6 @@ int8_t getPower()
 
     if(power <= 0)
         power = TX_OUTPUT_POWER;
-    if(power > TX_OUTPUT_POWER)
-        power = TX_OUTPUT_POWER;
 
     if(power > TX_POWER_MAX)
         power= TX_POWER_MAX;
