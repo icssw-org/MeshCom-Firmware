@@ -32,7 +32,6 @@ String web_header;
 unsigned long web_currentTime = millis(); // Current time
 unsigned long web_previousTime = 0;       // Previous time
 #define WEB_TIMEOUT_TIME 2000             // Define timeout time in milliseconds (example: 2000ms = 2s)
-char web_last_message_sent[200];
 bool bweb_server_running = false;
 
 // password check
@@ -1793,11 +1792,10 @@ void send_message(String web_header)
 
             int iml = strlen(message_text);
             // new massage has to be different from previous message
-            if (memcmp(web_last_message_sent, message_text, iml) != 0 && iml > 0)
+            if (iml > 0)
             {
                 hasMsgFromPhone = true;
                 sendMessage(message_text, iml);
-                memcpy(web_last_message_sent, message_text, iml);
                 hasMsgFromPhone = false;
                 // Serial.print("Message send: ");
                 // Serial.println(message_text);
