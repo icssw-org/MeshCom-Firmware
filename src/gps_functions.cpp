@@ -306,7 +306,7 @@ void GPS_Init() {
 
             // Initialize the GNSS Chip, use GPS + GLONASS
             delay(250);
-            GPSSerial.write("$PCAS04,7*1E\r\n");
+            GPSSerial.write("$PCAS04,D,D,9*10\r\n");
             
             // only ask for RMC and GGA
             delay(250);
@@ -315,7 +315,7 @@ void GPS_Init() {
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
             delay(250);
             GPSSerial.write("$PCAS11,3*1E\r\n");
-            
+
             return;
         }
         else
