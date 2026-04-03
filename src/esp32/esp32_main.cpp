@@ -49,6 +49,8 @@ Timeout timerSerial;
     #define LORA_DIO1 E22_DIO1
   #elif defined(RADIO_DIO1_PIN)
     #define LORA_DIO1 RADIO_DIO1_PIN
+  #elif defined(RADIO_IRQ_PIN)
+    #define LORA_DIO1 RADIO_IRQ_PIN
   #elif defined(PIN_LORA_DIO_1)
     #define LORA_DIO1 PIN_LORA_DIO_1
   #else
@@ -334,7 +336,6 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 
 #endif
 
-
 #ifdef SX126X
     // RadioModule SX1268 
     // cs - irq - reset - interrupt gpio
@@ -378,8 +379,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 
 
 #ifdef USING_SX1262 // BOARD_TBEAM_1W
-    // !!!!! es wird nur ein SX1261 erkannt !!!!!
-    SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);    
+    SX1262 radio = new Module(RADIO_CS_PIN, RADIO_IRQ_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
 #endif
 
 #ifdef SX1262_E290
@@ -1101,10 +1101,6 @@ void esp32setup()
     #elif defined(BOARD_E220)
         Serial.print(F(" Initializing ... "));
         int state = radio.begin(434.0F, 125.0F, 9, 7, SYNC_WORD_SX127x, 10, LORA_PREAMBLE_LENGTH, /*float tcxoVoltage = 0*/ 1.6F, /*bool useRegulatorLDO = false*/ false);
-    #elif defined(BOARD_T_ETH_ELITE)
-    Serial.print(F(" Initializing ... "));
-    int state = radio.begin(433.175F);
-    radio.setDio2AsRfSwitch(true);
     #else
         Serial.print(F(" Initializing ... "));
 
@@ -1126,7 +1122,16 @@ void esp32setup()
         #endif
         #endif
 
+        #if defined(USING_SX1262)
+        int state = radio.begin();
+        #else
         int state = radio.begin(433.175F);
+        #endif
+
+        #if defined(BOARD_T_ETH_ELITE)
+            radio.setDio2AsRfSwitch(true);
+            radio.setTCXO(1.8);
+        #endif
 
     #endif
     
@@ -2154,8 +2159,15 @@ void esp32loop()
                 bEnableInterruptReceive = false;
                 radio.clearPacketReceivedAction();
 
+                if(bLORADEBUG)
+                    Serial.println("[CHECK] radio.scanChannel() / 1");
+
                 // CAD Scan 1
+                #if defined(BOARD_T_ETH_ELITE)
+                int cad_result = RADIOLIB_CHANNEL_FREE; //!!!!!!!!!!!!!! ACHTUNG !!!!!!!!!!!!!!!! muss raus
+                #else
                 int cad_result = radio.scanChannel();
+                #endif
                 if(bLORADEBUG)
                     Serial.printf("[MC-DBG] CAD_SCAN result=%d\n", cad_result);
 
@@ -2169,6 +2181,9 @@ void esp32loop()
                     // Double-Check: second scan to filter false positives
                     if(bLORADEBUG)
                         Serial.printf("[MC-DBG] CAD_BUSY_1 attempt=%d, double-check...\n", cad_attempt);
+
+                    if(bLORADEBUG)
+                        Serial.println("[CHECK] radio.scanChannel() / 2");
 
                     cad_result = radio.scanChannel();
                     if(bLORADEBUG)
@@ -2391,8 +2406,7 @@ void esp32loop()
     }
 
     // check WiFI connected with Ping every 30 sec
-    if (meshcom_settings.node_netmode == 0 &&
-    (wifi_active_timer + 30000) < millis())
+    if(meshcom_settings.node_netmode == 0 && (wifi_active_timer + 30000) < millis())
     {
         if(!checkWifiPing())
         {
@@ -2966,6 +2980,12 @@ void esp32loop()
             if(bWXDEBUG)
                 Serial.printf("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
                 
+            meshcom_settings.node_ntctemp = NTCtemp;
+            if(digitalRead(FAN_CTRL) == HIGH)
+                meshcom_settings.node_fanon = true;
+            else
+                meshcom_settings.node_fanon = false;
+
             #endif
 
             BattTimeWait = millis();
@@ -3289,10 +3309,15 @@ void esp32loop()
                             if (!bAllStarted)
                             {
                                 // First boot failure — full radio power-cycle and retry
-                                Serial.println("[WIFI]...no connection at boot — full radio reset and retrying");
-                                WiFi.disconnect(true, true);
-                                WiFi.mode(WIFI_OFF);
-                                delay(1500);
+                                #if defined(HAST_ETHERNET)
+                                    Serial.println("[ETH]...no connection at boot — reset and retrying");
+                                #else
+                                    Serial.println("[WIFI]...no connection at boot — full radio reset and retrying");
+                                    WiFi.disconnect(true, true);
+                                    WiFi.mode(WIFI_OFF);
+                                    delay(1500);
+                                #endif
+
                                 startNetwork();  // sets iWlanWait = 1, triggers doWiFiConnect() polling
                             }
                             else

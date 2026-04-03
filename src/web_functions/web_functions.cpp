@@ -1148,7 +1148,17 @@ void sub_page_setup()
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid3\">");
 
-    _create_setup_textinput_element("ubgpio", "Userbutton GPIO", String(meshcom_settings.node_button_pin), "0", "buttongpio", 3, false, false); // create Textinput-Element including Label and Button
+    int iButtonPin = 0;
+    #ifdef BUTTON_PIN
+        iButtonPin = BUTTON_PIN;
+    #else
+        iButtonPin = 99;
+    #endif
+
+    if(meshcom_settings.node_button_pin > 0)
+        iButtonPin = meshcom_settings.node_button_pin;
+
+    _create_setup_textinput_element("ubgpio", "Userbutton GPIO", String(iButtonPin), "0", "buttongpio", 3, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid2\">");

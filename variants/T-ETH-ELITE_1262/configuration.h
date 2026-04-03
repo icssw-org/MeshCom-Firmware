@@ -33,10 +33,6 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define ENABLE_GPS
 #define GPS_RESET_MODE 1
 
-// Radio
-#define SX126x_V3
-#define SX1262_E22
-
 #define CURRENT_LIMIT 140
 #define TX_POWER_MAX 22
 #define TX_POWER_MIN 2
@@ -70,12 +66,6 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define I2C_SDA 17
 #define I2C_SCL 18
 
-// SPI radio
-#define SCK 10
-#define MISO 9
-#define MOSI 11
-#define SS 40
-
 // =========================
 // Ethernet W5500 (T-ETH-ELITE)
 #define ETH_CS_PIN    45
@@ -85,14 +75,15 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define ETH_MISO_PIN  47
 #define ETH_MOSI_PIN  21
 
-// E22 compatibility (required by MeshCom)
-//#define E22_RXEN -1
-//#define E22_TXEN -1
+// Radio
+#define USING_SX1262
 
-// SX126x mapping (required by MeshCom)
-#define SX126x_IRQ   8      // ex E22_DIO1
-#define SX126x_GPIO  16     // ex E22_BUSY
-#define SX126x_RST   46
-#define SX126x_CS    SS
-#define LORA_RST     SX126x_RST
+// SPI radio
+#define RADIO_MISO    9
+#define RADIO_MOSI    11
+#define RADIO_SCK     10
 
+#define RADIO_CS_PIN    40
+#define RADIO_IRQ_PIN   8
+#define RADIO_RST_PIN   46
+#define RADIO_BUSY_PIN  16

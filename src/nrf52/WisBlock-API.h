@@ -327,6 +327,11 @@ struct s_meshcom_settings
 
 	int node_cleanflash = 0;
 
+	int node_netmode = 0;
+
+	float node_ntctemp = 0.0;
+	bool node_fanon = false;
+	
 	// nicht im Flash
 	float node_specstart = 432.0;
 	float node_specend = 434.0;
@@ -539,6 +544,8 @@ struct s_meshcomcompat_settings
 
 	int node_cleanflash = 0;
 
+	int node_netmode = 0;   // 0 = WiFi, 1 = Ethernet
+
 	// not within RAK Flash
 	float node_specstart = 432.0;
 	float node_specend = 434.0;
@@ -555,6 +562,8 @@ struct s_meshcomcompat_settings
 	char node_parm_t[25] = {0};
 	char node_parm_id[100] = {0};
 
+	float node_ntctemp = 0.0;
+	bool node_fanon = false;
 };
 
 // Flash

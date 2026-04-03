@@ -1976,27 +1976,35 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
     {
-        bWEBSERVER=true;
-        meshcom_settings.node_sset2 |= 0x0040;    // mask 0x0040
-
-        bWIFIAP=false;
-        meshcom_settings.node_sset2 &= ~0x0080;    // mask 0x0080
-
-        if(ble)
+        if(meshcom_settings.node_ssid[0] == 0x00 || is_equ(meshcom_settings.node_ssid, "none"))
         {
-            bNodeSetting=true;
+            Serial.println("Please set SSID first");
+        }
+        else
+        {
+            bWEBSERVER=true;
+            meshcom_settings.node_sset2 |= 0x0040;    // mask 0x0040
+
+            bWIFIAP=false;
+            meshcom_settings.node_sset2 &= ~0x0080;    // mask 0x0080
+
+            if(ble)
+            {
+                bNodeSetting=true;
+            }
+
+
+            save_settings();
+
+            //if(!meshcom_settings.node_hasIPaddress)
+            //    rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+            
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            tdeck_refresh_SET_view();
+            #endif
         }
 
         bReturn = true;
-
-        save_settings();
-
-        //if(!meshcom_settings.node_hasIPaddress)
-        //    rebootAuto = millis() + 15 * 1000; // 15 Sekunden
-        
-        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-        tdeck_refresh_SET_view();
-        #endif
     }
     else
     if(commandCheck(msg_text+2, (char*)"webserver off") == 0)
@@ -2165,7 +2173,7 @@ void commandAction(char *umsg_text, bool ble)
 
         snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", msg_text+11);
 
-        if(strcmp(meshcom_settings.node_extern, "none") == 0)
+        if(is_equ(meshcom_settings.node_extern, "none"))
             memset(meshcom_settings.node_extern, 0x00, sizeof(meshcom_settings.node_extern));
 
         if(strcmp(meshcom_settings.node_extern, meshcom_settings.node_ip) == 0)
@@ -2903,7 +2911,7 @@ void commandAction(char *umsg_text, bool ble)
             bWifiSetting = true;
         }
 
-        if(strcmp(meshcom_settings.node_ssid, "none") == 0)
+        if(is_equ(meshcom_settings.node_ssid, "none"))
             memset(meshcom_settings.node_ssid, 0x00, sizeof(meshcom_settings.node_ssid));
 
         save_settings();
@@ -2931,7 +2939,7 @@ void commandAction(char *umsg_text, bool ble)
             bWifiSetting = true;
         }
 
-        if(strcmp(meshcom_settings.node_pwd, "none") == 0)
+        if(is_equ(meshcom_settings.node_pwd, "none"))
             memset(meshcom_settings.node_pwd, 0x00, sizeof(meshcom_settings.node_pwd));
 
         save_settings();
@@ -2958,7 +2966,7 @@ void commandAction(char *umsg_text, bool ble)
 
             save_settings();
 
-            rebootAuto = millis() + 2000;
+            rebootAuto = millis() + 5000;
 
             bReturn = true;
         }
@@ -2972,7 +2980,7 @@ void commandAction(char *umsg_text, bool ble)
 
             save_settings();
 
-            rebootAuto = millis() + 2000;
+            rebootAuto = millis() + 5000;
 
             bReturn = true;
         } 
@@ -3537,6 +3545,8 @@ void commandAction(char *umsg_text, bool ble)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
         sscanf(_owner_c, "%d", &iVar);
+
+        Serial.println(iVar);
 
         if(iVar < TX_POWER_MIN || iVar > TX_POWER_MAX)
         {
@@ -4146,6 +4156,10 @@ void commandAction(char *umsg_text, bool ble)
 
             Serial.printf("...ONEWIRE: %s (%i) DS18%s DHT%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, cdht);
 
+            #ifdef NTC_PIN
+                Serial.printf("...NTC-TEMP: %.1f °C  ...FAN: %s\n", meshcom_settings.node_ntctemp, meshcom_settings.node_fanon ? "on" : "off");
+            #endif
+
             Serial.printf("...TEMP: %.1f °C off %.3f\n...TOUT: %.1f °C off %.3f\n...HUM: %.1f %%rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kΩ\n...eCO2: %.0f ppm\n", 
             meshcom_settings.node_temp, meshcom_settings.node_tempi_off, meshcom_settings.node_temp2, meshcom_settings.node_tempo_off, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
         }
@@ -4412,8 +4426,15 @@ void commandAction(char *umsg_text, bool ble)
                 }
             }
 
-            Serial.printf("\n...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
-            if(meshcom_settings.node_hasIPaddress)
+            Serial.print("...NETWORK Mode:");
+            if(meshcom_settings.node_netmode == 0)
+                Serial.println("WiFi");
+            else
+            if(meshcom_settings.node_netmode == 1)
+                Serial.println("ETH");
+
+            Serial.printf("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
+            if(meshcom_settings.node_hasIPaddress || meshcom_settings.node_netmode == 1)
             {
                 Serial.printf("...IP address   : %s\n", meshcom_settings.node_ip);
                 Serial.printf("...SUBNET-MASK  : %s\n", meshcom_settings.node_subnet);
@@ -4427,6 +4448,10 @@ void commandAction(char *umsg_text, bool ble)
                         Serial.printf("...I-NET ONLY   : true\n");
 
                         Serial.printf("...GW server    : %s\n", meshcom_settings.node_gwsrv);
+                    }
+
+                    if(bGATEWAY || bWEBSERVER)
+                    {
                         Serial.printf("...GW address   : %s\n", meshcom_settings.node_gw);
                         Serial.printf("...DNS address  : %s\n", meshcom_settings.node_dns);
                     }
