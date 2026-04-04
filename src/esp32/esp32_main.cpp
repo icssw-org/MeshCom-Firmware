@@ -919,15 +919,12 @@ void esp32setup()
         #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
             setupPMU();
         #endif
-    #endif
-    
-    #if defined(ENABLE_GPS)
-        GPS_Init();
-    #else
 
-    #if !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T5_EPAPER)
-        setupPMU();
-    #endif
+    #else
+    
+        #if !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T5_EPAPER)
+            setupPMU();
+        #endif
 
     #endif
 
@@ -2405,6 +2402,16 @@ void esp32loop()
         }
     }
 
+    #if defined(ENABLE_GPS)
+        if(iGpsBaud < 10)
+        {
+            if(GPS_Init(iGpsBaud))
+                iGpsBaud = 10;
+            else
+                iGpsBaud++;
+        }
+    #endif
+
     // check WiFI connected with Ping every 30 sec
     if(meshcom_settings.node_netmode == 0 && (wifi_active_timer + 30000) < millis())
     {
@@ -2663,46 +2670,47 @@ void esp32loop()
         else
         {
             #if defined (ENABLE_GPS)
-                igps = GPS_Loop();
-
-                if(bGPSDEBUG)
+                if(gpsDetected)
                 {
-                    Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
+                    igps = GPS_Loop();
 
-                    Serial.print("[GPS ]...Time <UTC>: ");
-                    if (gpsData.hour < 10) Serial.print(F("0"));
-                    Serial.print(gpsData.hour);
-                    Serial.print(F(":"));
-                    if (gpsData.minute < 10) Serial.print(F("0"));
-                    Serial.print(gpsData.minute);
-                    Serial.print(F(":"));
-                    if (gpsData.second < 10) Serial.print(F("0"));
-                    Serial.print(gpsData.second);
-
-                    Serial.print(F(" / Date: "));
-                    Serial.print(gpsData.year);
-                    Serial.print(F("."));
-                    if (gpsData.month < 10) Serial.print(F("0"));
-                    Serial.print(gpsData.month);
-                    Serial.print(F("."));
-                    if (gpsData.day < 10) Serial.print(F("0"));
-                    Serial.println(gpsData.day);
-
-                    if(posinfo_fix)
+                    if(bGPSDEBUG)
                     {
-                        Serial.printf("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
-                    }
+                        Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
 
+                        Serial.print("[GPS ]...Time <UTC>: ");
+                        if (gpsData.hour < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.hour);
+                        Serial.print(F(":"));
+                        if (gpsData.minute < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.minute);
+                        Serial.print(F(":"));
+                        if (gpsData.second < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.second);
+
+                        Serial.print(F(" / Date: "));
+                        Serial.print(gpsData.year);
+                        Serial.print(F("."));
+                        if (gpsData.month < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.month);
+                        Serial.print(F("."));
+                        if (gpsData.day < 10) Serial.print(F("0"));
+                        Serial.println(gpsData.day);
+
+                        if(posinfo_fix)
+                        {
+                            Serial.printf("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
+                        }
+
+                    }
                 }
+                
             #else
 
-            #if defined (BOARD_T_DECK_PRO)
-                tdeck_set_gps(true);
-            #endif
-
-            #ifdef BOARD_T_DECK_PRO
-                igps = tdeck_get_gps();
-            #endif
+                #if defined (BOARD_T_DECK_PRO)
+                    tdeck_set_gps(true);
+                    igps = tdeck_get_gps();
+                #endif
 
             #endif // ENABLE_GPS
         }

@@ -15,6 +15,7 @@ definitions for HELTEC_V3
 #define RX_TIMEOUT_VALUE 0      // continous rx with 0
 
 #define ENABLE_GPS
+#define ENABLE_HELTEC_GPS
 
 #define ENABLE_BMX280
 #define ENABLE_BMX680

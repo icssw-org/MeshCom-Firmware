@@ -21,6 +21,8 @@
 
 bool bGPSMitHardReset = false;
 
+int iGpsBaud = 0;
+
 #include <Wire.h> 
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)

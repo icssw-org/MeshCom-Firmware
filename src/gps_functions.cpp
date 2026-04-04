@@ -46,12 +46,16 @@ int maxStateCount=1;
 /// @return true if found
 bool checkGPS(uint32_t Baudrate)
 {
-    Serial.printf("[GPS]...trying %u baud <%i>\n", Baudrate, maxStateCount);
+    Serial.printf("[GPS ]...trying %u baud <%i>\n", Baudrate, maxStateCount);
+    #if defined(ENABLE_HELTEC_GPS)
+    GPSSerial.begin(Baudrate);
+    #else
     GPSSerial.begin(Baudrate, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    #endif
 
     if (myGPS.begin(GPSSerial))
     {
-        Serial.printf("[GPS]...connected at %u baud\n", Baudrate);
+        Serial.printf("[GPS ]...connected at %u baud\n", Baudrate);
         gpsBaudrate = Baudrate;
         maxStateCount=1;
         return true;
@@ -64,7 +68,7 @@ bool checkGPS(uint32_t Baudrate)
 
 void GPS_Init() {
 
-    Serial.printf("[GPS]...Init with GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
+    Serial.printf("[GPS ]...Init with GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
 
     int state = 0;
 
@@ -81,7 +85,7 @@ void GPS_Init() {
     while(bGPSearch)
     {
         if(bGPSDEBUG)
-            Serial.printf("[GPS]..search state:%i\n", state);
+            Serial.printf("[GPS ]...search state:%i\n", state);
 
         switch (state)
         {
@@ -123,7 +127,7 @@ void GPS_Init() {
                         if(maxStateCount > 3)
                         {
 
-                            Serial.println("[GPS]...hardware not found");
+                            Serial.println("[GPS ]...hardware not found");
 
                             gpsDetected = false;
                             bGPSearch = false;
@@ -152,20 +156,24 @@ void GPS_Init() {
                 if(gpsBaudrate != GPS_BAUDRATE)
                 {
                     if(bGPSDEBUG)
-                        Serial.printf("[GPS]...GPS_BAUDRADE:%i gpsBaudrate:%i\n", GPS_BAUDRATE, gpsBaudrate);
+                        Serial.printf("[GPS ]...GPS_BAUDRADE:%i gpsBaudrate:%i\n", GPS_BAUDRATE, gpsBaudrate);
 
                     myGPS.setSerialRate(GPS_BAUDRATE, COM_PORT_UART1);
 
                     GPSSerial.end();
                     delay(100);
+                    #if defined(ENABLE_HELTEC_GPS)
+                    GPSSerial.begin(GPS_BAUDRATE);
+                    #else
                     GPSSerial.begin(GPS_BAUDRATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                    #endif
                     delay(100);
 
                     myGPS.saveConfiguration();
                     delay(100);
                 }
 
-                Serial.println("[GPS] serial connected, saved config");
+                Serial.println("[GPS ]...serial connected, saved config");
                 gpsDetected = true;
                 bGPSearch = false;
                 break;
@@ -173,22 +181,26 @@ void GPS_Init() {
             case 1: // hardReset, expect to see GPS back at 38400 baud
                 if(bGPSMitHardReset)
                 {
-                    Serial.println("[GPS]...Issuing hardReset (cold start)");
+                    Serial.println("[GPS ]...Issuing hardReset (cold start)");
 
                     myGPS.hardReset();
                     delay(3000);
+                    #if defined(ENABLE_HELTEC_GPS)
+                    GPSSerial.begin(gpsBaudrate);
+                    #else
                     GPSSerial.begin(gpsBaudrate, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                    #endif
 
                     if (myGPS.begin(GPSSerial))
                     {
-                        Serial.println("[GPS]...Success.");
+                        Serial.println("[GPS ]...Success.");
                         gpsDetected = true;
                         bGPSearch = false;
                         break;
                     }
                     else
                     {
-                        Serial.printf("[GPS]...did not respond at %i baud, starting over.\n", gpsBaudrate);
+                        Serial.printf("[GPS ]...did not respond at %i baud, starting over.\n", gpsBaudrate);
                         state = 2;
                         break;
                     }
@@ -201,22 +213,26 @@ void GPS_Init() {
             case 2: // factoryReset, expect to see GPS back at gpsBaudrate baud
                 if(bGPSMitHardReset)
                 {
-                    Serial.println("[GPS]...Issuing factoryReset");
+                    Serial.println("[GPS ]...Issuing factoryReset");
 
                     myGPS.factoryReset();
                     delay(3000); // takes more than one second... a loop to resync would be best
+                    #if defined(ENABLE_HELTEC_GPS)
+                    GPSSerial.begin(gpsBaudrate);
+                    #else
                     GPSSerial.begin(gpsBaudrate, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+                    #endif
 
                     if (myGPS.begin(GPSSerial))
                     {
-                        Serial.println("[GPS]...Success.");
+                        Serial.println("[GPS ]...Success.");
                         gpsDetected = true;
                         bGPSearch = false;
                         break;
                     }
                     else
                     {
-                        Serial.printf("[GPS]...did not come back at %i baud, starting over.\n", gpsBaudrate);
+                        Serial.printf("[GPS ]...did not come back at %i baud, starting over.\n", gpsBaudrate);
                         state = 0;
                         bGPSMitHardReset=false;
                         break;
@@ -238,7 +254,7 @@ void GPS_Init() {
                     Serial.println();
                     */
                 
-                    Serial.println("[GPS]...running");
+                    Serial.println("[GPS ]...running");
                     gpsDetected = true;
                     bGPSearch = false;
                     break;
@@ -258,50 +274,65 @@ void GPS_Init() {
 
 #else
 
+GPSData gpsData;
+bool gpsDetected = false;
+
 // Baudrate-Erkennung: Viele Module starten mit 9600, manche mit 38400/115200
-static const uint32_t GPS_BAUDS[] = {4800, 9600, 19200, 38400, 57600, 115200};
+static const uint32_t GPS_BAUDS[] = {38400, 4800, 9600, 19200, 57600, 115200};
 static const size_t   GPS_BAUD_COUNT = sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]);
 
-void GPS_Init() {
-    Serial.printf("[GPS] Init with GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
+bool GPS_Init(int iGpsBaud)
+{
+    if(iGpsBaud == 0)   
+        Serial.printf("[GPS ]...Init with GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
 
     // Baudrate-Erkennung: Jede Baudrate kurz ausprobieren
-    for (size_t i = 0; i < GPS_BAUD_COUNT; i++) {
+
+    if(iGpsBaud < GPS_BAUD_COUNT)
+    {
         #if defined(ENABLE_HELTEC_GPS)
-        GPSSerial.begin(GPS_BAUDS[i]);
+        GPSSerial.begin(GPS_BAUDS[iGpsBaud]);
         #else
-        GPSSerial.begin(GPS_BAUDS[i], SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        GPSSerial.begin(GPS_BAUDS[iGpsBaud], SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         #endif
 
-        if(bGPSON && bGPSDEBUG)
-            Serial.printf("[GPS] check %u baud...\n", GPS_BAUDS[i]);
+        #if not defined(ENABLE_HELTEC_GPS)
+        detectedBaud = GPS_BAUDS[iGpsBaud];
+        #endif
 
         uint32_t start = millis();
-        bool found = false;
 
-        // 2 Sekunden lang auf gueltige NMEA-Daten warten
+        int itxt=0;
+
+         // 2 Sekunden lang auf gueltige NMEA-Daten warten
         while (millis() - start < 2000) {
-            while (GPSSerial.available()) {
+            while (GPSSerial.available())
+            {
                 char c = GPSSerial.read();
-                //if(((c>=0x20) && (c<0x7f)) || (c==0x0A) || (c==0x0D))
                 // A-Z 0-9 $ , * CR LF
                 if(((c>=0x40) && (c<0x5B)) || ((c>=0x30) && (c<=0x39)) || c==0x24 || c==0x2C || c==0x2A || c==0x2E || c==0x0A || c==0x0D)
                 {
-                    //PLEASE ONLY FOR TEST Serial.print(c);
+                    //PLEASE ONLY FOR TEST
+                    //Serial.print(c);
 
-                    if (c == '$') {  // NMEA-Satz beginnt immer mit '$'
-                        found = true;
-                        gps.encode(c);
-                    } else if (found) {
-                        gps.encode(c);
-                    }
-                    }
+                    gps.encode(c);
+
+                    itxt++;
+                }
             }
         }
 
-        if (gps.charsProcessed() > 100)
+        if(itxt < 500)
         {
-            Serial.printf("[GPS] found with %u baud (%u chars)\n", GPS_BAUDS[i], gps.charsProcessed());
+            if(bGPSON && bGPSDEBUG)
+                Serial.printf("[GPS ]...check %u baud  (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);
+
+            gpsDetected = false;
+        }
+        else
+        {
+            Serial.printf("[GPS ]...found with %u baud (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);
+
             gpsDetected = true;
 
             // Initialize the GNSS Chip, use GPS + GLONASS
@@ -316,25 +347,35 @@ void GPS_Init() {
             delay(250);
             GPSSerial.write("$PCAS11,3*1E\r\n");
 
-            return;
-        }
-        else
-        {
-            gpsDetected = false;
+            #if not defined(ENABLE_HELTEC_GPS)
+            if (detectedBaud != 38400)
+            {
+                Serial.printf("[GPS ]...set to 38400 Baud\n");
+                GPSSerial.write("$PCAS01,3*1F\r\n"); // set to new Baudrate 38400
+                delay(250);
+
+                GPSSerial.updateBaudRate(38400);
+
+                GPSSerial.write("$PCAS00*01\r\n");  // save to Flash
+            }
+            #endif
+
+            return true;
         }
 
         GPSSerial.end();
+
+        return false;
     }
 
-    Serial.println("[GPS] hardware not found");
+    Serial.println("[GPS ]...hardware not found");
 
     gpsDetected = false;
+
+    return false;
 }
 
 #endif //UBLOX or other
-
-GPSData gpsData;
-bool gpsDetected = false;
 
 /**
  * @brief Non-blocking GPS-Update. In jedem loop()-Durchlauf aufrufen.
@@ -342,13 +383,18 @@ bool gpsDetected = false;
  * Liest alle verfuegbaren Bytes von der GPS-UART und fuettert sie
  * in den TinyGPS++ Parser. Aktualisiert gpsData wenn neue Daten da sind.
  */
-unsigned int GPS_Loop() {
+unsigned int GPS_Loop()
+{
+
     int igps = POSINFO_INTERVAL;
 
     if (!gpsDetected) return igps;
 
+    memset(msg_text, 0x00, sizeof(msg_text));
+
     // Alle verfuegbaren Bytes lesen (non-blocking)
     char c;
+    int itxt=0;
 
     while (GPSSerial.available()) {
         c = GPSSerial.read();
@@ -356,10 +402,16 @@ unsigned int GPS_Loop() {
         {
             gps.encode(c);
 
-            //PLEASE ONLY FOR TEST
-            if(bGPSDEBUG)
-                Serial.print(c);
+            msg_text[itxt]=c;
+            if(itxt < (sizeof(msg_text)-1))
+                itxt++;
         }
+    }
+
+    //PLEASE ONLY FOR TEST
+    if(bGPSDEBUG)
+    {
+        Serial.printf("[GPS ]...new NMEA with %i - chars\n[GPS ]...%s\n", itxt, msg_text);
     }
 
     // GPS-Daten in unsere Struktur uebertragen
