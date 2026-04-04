@@ -20,7 +20,7 @@
 #include "TinyGPSPlus.h"
 
 bool bGPSMitHardReset = false;
-
+bool gpsDetected = false;
 int iGpsBaud = 0;
 
 #include <Wire.h> 

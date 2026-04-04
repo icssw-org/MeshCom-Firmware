@@ -177,15 +177,15 @@ void getExternUDP()
       return;
   #endif
 
-    if(!bEXTUDP)
+  if(!bEXTUDP)
     return;
 
-  if(!hasExternIPaddress && bEXTUDP)
+  if(!hasExternIPaddress)
     return;
 
   int len=0;
 
-  if(bEXTUDP)
+  if(bEXTUDP && (int)strlen(meshcom_settings.node_extern) > 7)
   {
     // check if we received a UDP packet
     packetExtSize = UdpExtern.parsePacket();
@@ -406,7 +406,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
   else
     return;
 
-  if(bEXTUDP)
+  if(bEXTUDP && (int)strlen(meshcom_settings.node_extern) > 7)
   {
     IPAddress apip;
     
@@ -519,7 +519,7 @@ void resetExternUDP()
 
   hasExternIPaddress = false;
   
-  if(bEXTUDP)
+  if(bEXTUDP && (int)strlen(meshcom_settings.node_extern) > 7)
   {
     startExternUDP();
   }

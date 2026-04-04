@@ -10,7 +10,7 @@
 #include <atomic>
 
 extern bool bGPSMitHardReset;
-
+extern bool gpsDetected;
 extern int iGpsBaud;
 
 extern bool bnextread;

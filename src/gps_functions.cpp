@@ -66,7 +66,10 @@ bool checkGPS(uint32_t Baudrate)
     return false;
 }
 
-void GPS_Init() {
+bool GPS_Init(int iGpsBaud)
+{
+    if(iGpsBaud > 0)
+        return false;
 
     Serial.printf("[GPS ]...Init with GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
 
@@ -270,12 +273,13 @@ void GPS_Init() {
                 break;
         }
     }
+
+    return true;
 }
 
 #else
 
 GPSData gpsData;
-bool gpsDetected = false;
 
 // Baudrate-Erkennung: Viele Module starten mit 9600, manche mit 38400/115200
 static const uint32_t GPS_BAUDS[] = {38400, 4800, 9600, 19200, 57600, 115200};
@@ -283,6 +287,8 @@ static const size_t   GPS_BAUD_COUNT = sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]);
 
 bool GPS_Init(int iGpsBaud)
 {
+    uint32_t detectedBaud = 0;
+
     if(iGpsBaud == 0)   
         Serial.printf("[GPS ]...Init with GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
 

@@ -2403,6 +2403,8 @@ void esp32loop()
     }
 
     #if defined(ENABLE_GPS)
+    if(bGPSON)
+    {
         if(iGpsBaud < 10)
         {
             if(GPS_Init(iGpsBaud))
@@ -2410,6 +2412,7 @@ void esp32loop()
             else
                 iGpsBaud++;
         }
+    }
     #endif
 
     // check WiFI connected with Ping every 30 sec
