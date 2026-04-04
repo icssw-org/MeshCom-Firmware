@@ -66,6 +66,7 @@ jobs:
       mv .pio/build/E22-DevKitC/firmware.bin .pio/build/E22-DevKitC/E22-DevKitC.bin & 
       mv .pio/build/t_deck/firmware.bin .pio/build/t_deck/t_deck.bin & 
       mv .pio/build/t_deck_plus/firmware.bin .pio/build/t_deck_plus/t_deck_plus.bin & 
+      mv .pio/build/t_deck_pro/firmware.bin .pio/build/t_deck_pro/t_deck_pro.bin & 
       mv .pio/build/E22_XML-DevKitC/firmware.bin .pio/build/E22_XML-DevKitC/E22_XML-DevKitC.bin & 
       mv .pio/build/E22_1262_S3-DevKitC-1-N16R8/firmware.bin .pio/build/E22_1262_S3-DevKitC-1-N16R8/E22_1262_S3-DevKitC-1-N16R8.bin & 
       mv .pio/build/E22_1268_S3-DevKitC-1-N16R8/firmware.bin .pio/build/E22_1268_S3-DevKitC-1-N16R8/E22_1268_S3-DevKitC-1-N16R8.bin & 
@@ -93,6 +94,7 @@ jobs:
         .pio/build/E22-DevKitC/E22-DevKitC.bin,
         .pio/build/t_deck/t_deck.bin,
         .pio/build/t_deck_plus/t_deck_plus.bin,
+        .pio/build/t_deck_pro/t_deck_pro.bin,
         .pio/build/E22_XML-DevKitC/E22_XML-DevKitC.bin,
         .pio/build/E22_1262_S3-DevKitC-1-N16R8/E22_1262_S3-DevKitC-1-N16R8.bin,
         .pio/build/E22_1268_S3-DevKitC-1-N16R8/E22_1268_S3-DevKitC-1-N16R8.bin,
