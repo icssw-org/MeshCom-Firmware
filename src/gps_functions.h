@@ -27,7 +27,7 @@ struct GPSData {
 extern GPSData gpsData;
 extern bool    gpsDetected;
 
-void GPS_Init();
+bool GPS_Init(int iGpsBaud);
 unsigned int GPS_Loop();     // Non-blocking! In jedem loop()-Durchlauf aufrufen
 bool GPS_HasFix();
 String GPS_GetMaidenhead();  // Maidenhead-Locator (fuer Amateurfunk)

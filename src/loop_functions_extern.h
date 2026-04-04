@@ -11,6 +11,8 @@
 
 extern bool bGPSMitHardReset;
 
+extern int iGpsBaud;
+
 extern bool bnextread;
 
 extern int ifalseping;
