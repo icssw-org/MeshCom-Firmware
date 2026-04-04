@@ -1307,6 +1307,8 @@ void commandAction(char *umsg_text, bool ble)
     #if defined (ENABLE_GPS) or defined(BOARD_RAK4630)
     if(commandCheck(msg_text+2, (char*)"gps on") == 0)
     {
+        iGpsBaud = 0;
+
         bGPSON=true;
         
         init_loop_function();
@@ -1329,6 +1331,8 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"gps off") == 0)
     {
+        gpsDetected = false;
+        
         bGPSON=false;
         
         init_loop_function();
@@ -1364,6 +1368,8 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"gps reset") == 0)
     {
         bGPSON=true;
+
+        iGpsBaud = 0;
 
         if(ble)
         {
@@ -2136,16 +2142,23 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"extudp on") == 0)
     {
-        bEXTUDP=true;
-
-        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x02000;
-
-        if(ble)
+        if((int)strlen(meshcom_settings.node_extern) < 7)
         {
-            bWifiSetting=true;
+            Serial.printf("\nPlease set EXPUDP IP first\n");
         }
+        else
+        {
+            bEXTUDP=true;
 
-        save_settings();
+            meshcom_settings.node_sset = meshcom_settings.node_sset | 0x02000;   //
+
+            if(ble)
+            {
+                bWifiSetting=true;
+            }
+
+            save_settings();
+        }
 
         bReturn = true;
     }
@@ -2154,7 +2167,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         bEXTUDP=false;
 
-        meshcom_settings.node_sset &= ~0x2000;   // mask 0x2000
+        meshcom_settings.node_sset &= ~0x02000;
 
         if(ble)
         {
@@ -2174,13 +2187,17 @@ void commandAction(char *umsg_text, bool ble)
         snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", msg_text+11);
 
         if(is_equ(meshcom_settings.node_extern, "none"))
-            memset(meshcom_settings.node_extern, 0x00, sizeof(meshcom_settings.node_extern));
-
-        if(strcmp(meshcom_settings.node_extern, meshcom_settings.node_ip) == 0)
         {
-            snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", "");
-            Serial.printf("\nEXTERNAL-IP:%s is same as Own-IP - please set another IP\n", meshcom_settings.node_extern);
-            return;
+            memset(meshcom_settings.node_extern, 0x00, sizeof(meshcom_settings.node_extern));
+        }
+        else
+        {
+            if(strcmp(meshcom_settings.node_extern, meshcom_settings.node_ip) == 0)
+            {
+                snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", "");
+                Serial.printf("\nEXTERNAL-IP:%s is same as Own-IP - please set another IP\n", meshcom_settings.node_extern);
+                return;
+            }
         }
 
         if(ble)

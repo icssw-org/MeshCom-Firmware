@@ -501,7 +501,7 @@ void sendMeshComUDP()
       return false;
     }
 
-      Serial.println("[WIFI]...enabled by Settings (node_wifion=true)");
+    Serial.println("[WIFI]...enabled by Settings (node_wifion=true)");
   }
   #endif
 
