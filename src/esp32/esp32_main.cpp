@@ -916,6 +916,11 @@ void esp32setup()
         initPAControl();
     #endif
 
+    #ifdef USING_SX1262
+        // SPI-Bus für das Shield initialisieren
+        SPI.begin(RADIO_SCK, RADIO_MISO, RADIO_MOSI, RADIO_CS_PIN);
+    #endif
+
     #if defined(ENABLE_GPS)
         // TBEAM variants
         #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
@@ -1121,11 +1126,7 @@ void esp32setup()
         #endif
         #endif
 
-        #if defined(USING_SX1262)
-        int state = radio.begin();
-        #else
-        int state = radio.begin(433.175F);
-        #endif
+        int state = radio.begin(433.175);
 
         #if defined(BOARD_T_ETH_ELITE)
             radio.setDio2AsRfSwitch(true);
