@@ -802,6 +802,14 @@ void sub_page_login()
 
 /**
  * ###########################################################################################################################
+ * Increments i by 1 within a modular range.
+ */
+static int increment_mod(int i, int n) {
+    return (i + 1) % n;
+}
+
+/**
+ * ###########################################################################################################################
  * delivers the rxlog-page to be injected into the scaffold
  */
 void sub_page_rxlog()
@@ -810,13 +818,11 @@ void sub_page_rxlog()
     _create_meshcom_subheader("RX Log");
     web_client.println("<div id=\"content_inner\" class=\"logoutput\">");
     web_client.println("<div style=\"overflow:scroll;\">");
-    while (RAWLoRaWrite != iRead)
+    do
     {
         web_client.printf("<p class=\"font-small no-wrap\"><%i>%s</nobr></td></tr>\n", iRead, ringbufferRAWLoraRX[iRead]);
-        iRead++;
-        if (iRead >= MAX_LOG)
-            iRead = 0;
-    }
+        iRead = increment_mod(iRead, MAX_LOG);
+    } while (RAWLoRaRead != iRead);
     web_client.println("</div></div>");
     web_client.println(); // The HTTP response ends with another blank line
 }
