@@ -715,10 +715,6 @@ void nrf52setup()
     // Hardware immer aktivieren
     //if(bGPSON)
     {
-        #if defined(ENABLE_GPS)
-        GPS_Init();
-        #endif
-
         #if defined(ENABLE_RAK_GPS)
             pinMode(WB_IO2, OUTPUT);
             digitalWrite(WB_IO2, 0);
@@ -1454,6 +1450,19 @@ void nrf52loop()
         }
     }
 
+    #if defined(ENABLE_GPS)
+    if(bGPSON)
+    {
+        if(iGpsBaud < 10)
+        {
+            if(GPS_Init(iGpsBaud))
+                iGpsBaud = 10;
+            else
+                iGpsBaud++;
+        }
+    }
+    #endif
+
     // SOFTSER
     #if defined(ENABLE_SOFTSER)
     if(bSOFTSERON)
@@ -1546,7 +1555,44 @@ void nrf52loop()
                 #endif
 
                 #if defined(ENABLE_GPS)
-                unsigned int igps = GPS_Loop();
+                
+                unsigned int igps = POSINFO_INTERVAL;
+
+                if(gpsDetected)
+                {
+                    igps = GPS_Loop();
+
+                    if(bGPSDEBUG)
+                    {
+                        Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
+
+                        Serial.print("[GPS ]...Time <UTC>: ");
+                        if (gpsData.hour < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.hour);
+                        Serial.print(F(":"));
+                        if (gpsData.minute < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.minute);
+                        Serial.print(F(":"));
+                        if (gpsData.second < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.second);
+
+                        Serial.print(F(" / Date: "));
+                        Serial.print(gpsData.year);
+                        Serial.print(F("."));
+                        if (gpsData.month < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.month);
+                        Serial.print(F("."));
+                        if (gpsData.day < 10) Serial.print(F("0"));
+                        Serial.println(gpsData.day);
+
+                        if(posinfo_fix)
+                        {
+                            Serial.printf("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
+                        }
+
+                    }
+                }
+                
                 #endif
 
                 if(igps > 0)
