@@ -289,7 +289,7 @@ bool GPS_Init(int iGpsBaud)
 #else
 
 // Baudrate-Erkennung: Viele Module starten mit 9600, manche mit 38400/115200
-static const uint32_t GPS_BAUDS[] = {38400, 4800, 9600, 19200, 57600, 115200};
+static const uint32_t GPS_BAUDS[] = {38400, 4800, 9600, 19200, 38400, 57600, 115200};
 static const size_t   GPS_BAUD_COUNT = sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]);
 
 bool GPS_Init(int iGpsBaud)
@@ -335,7 +335,12 @@ bool GPS_Init(int iGpsBaud)
             }
         }
 
-        if(itxt < 300)
+        int itxtmax = 300; // muss verbessert werden
+        #if defined(TBEAM_1W)
+        itxtmax = 100;
+        #endif
+
+        if(itxt < itxtmax)
         {
             if(bGPSON && bGPSDEBUG)
                 Serial.printf("[GPS ]...check %u baud  (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);

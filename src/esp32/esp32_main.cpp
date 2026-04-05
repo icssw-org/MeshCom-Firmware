@@ -737,6 +737,8 @@ void esp32setup()
         init_audio();
     #endif
 
+    iGpsBaud = 0;
+
     // Initialize T-Deck GUI
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         initTDeck();
