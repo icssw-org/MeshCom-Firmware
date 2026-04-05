@@ -335,7 +335,7 @@ bool GPS_Init(int iGpsBaud)
             }
         }
 
-        if(itxt < 500)
+        if(itxt < 300)
         {
             if(bGPSON && bGPSDEBUG)
                 Serial.printf("[GPS ]...check %u baud  (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);
