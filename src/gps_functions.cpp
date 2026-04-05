@@ -28,6 +28,8 @@ TinyGPSPlus gps;
 static HardwareSerial GPSSerial(1);  // UART1
 #endif
 
+GPSData gpsData;
+
 #if defined(ENABLE_UBLOX)
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
@@ -141,18 +143,25 @@ bool GPS_Init(int iGpsBaud)
 
                 myGPS.setUART1Output(COM_TYPE_NMEA); //Set the UART port to output NMEA only
                 delay(100);
-                myGPS.enableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
+                myGPS.setMeasurementRate(1000);
                 delay(100);
-                myGPS.enableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
+                
+                // disabled
+                myGPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
+                delay(100);
+                myGPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
+                delay(100);
+                myGPS.disableNMEAMessage(UBX_NMEA_GSV, COM_PORT_UART1);
+                delay(100);
+                myGPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART1);
+                delay(100);
+                
+                // enabled
+                myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART1);
                 delay(100);
                 myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
                 delay(100);
-                myGPS.enableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART1);
-                delay(100);
-                myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART1);
-                delay(100);
-                myGPS.setMeasurementRate(1000);
-                delay(100);
+                
                 myGPS.saveConfiguration(); //Save the current settings to flash and BBR
                 delay(100);
 
@@ -278,8 +287,6 @@ bool GPS_Init(int iGpsBaud)
 }
 
 #else
-
-GPSData gpsData;
 
 // Baudrate-Erkennung: Viele Module starten mit 9600, manche mit 38400/115200
 static const uint32_t GPS_BAUDS[] = {38400, 4800, 9600, 19200, 57600, 115200};
@@ -417,7 +424,7 @@ unsigned int GPS_Loop()
     //PLEASE ONLY FOR TEST
     if(bGPSDEBUG)
     {
-        Serial.printf("[GPS ]...new NMEA with %i - chars\n[GPS ]...%s\n", itxt, msg_text);
+        Serial.printf("[GPS ]...new NMEA with %i - chars\n%s\n", itxt, msg_text);
     }
 
     // GPS-Daten in unsere Struktur uebertragen
