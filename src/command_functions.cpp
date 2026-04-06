@@ -2402,7 +2402,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"gpsdebug 2") == 0)
+    if(commandCheck(msg_text+2, (char*)"gpsdebug 2") == 0 || commandCheck(msg_text+2, (char*)"gpsdebug on") == 0)
     {
         iGPSDEBUG=2;
         meshcom_settings.node_gpsdebug = 2;
@@ -2417,7 +2417,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"gpsdebug 0") == 0)
+    if(commandCheck(msg_text+2, (char*)"gpsdebug 0") == 0 || commandCheck(msg_text+2, (char*)"gpsdebug off") == 0)
     {
         iGPSDEBUG=0;
         meshcom_settings.node_gpsdebug = 0;

@@ -1576,7 +1576,7 @@ void nrf52loop()
     if(bGPSON)
     {
         // gps refresh every 5 sec
-        if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
+        if ((gps_refresh_timer + 2000) < millis())
         {
             unsigned int igps = POSINFO_INTERVAL;
 

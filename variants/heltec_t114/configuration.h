@@ -51,13 +51,15 @@ definitions for RAK4631
 #define TX_TIMEOUT_VALUE 3000
 
 #define ENABLE_GPS_SOFTSER
-#define GPS_RX_PIN 39
-#define GPS_TX_PIN 37
+#define GPS_RX_PIN 37
+#define GPS_TX_PIN 39
 
 #define ENABLE_GPS
 #define ENABLE_GPS_UBLOX_FIX
 #define ENABLE_GPS_BAUD_FIX
-#define GPS_BAUDRATE_MODUL 115200 //*
+//#define GPS_BAUDRATE_MODUL 9600 //*
+#define ENABLE_GPS_UBLOX_FIX
+
 
 // ETH Sield
 //#define ETH_CS WB_IO5                   // Resoldered CS Pin to WB_IO5

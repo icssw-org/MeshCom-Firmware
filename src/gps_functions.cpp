@@ -22,7 +22,7 @@ TinyGPSPlus gps;
 
 GPSData gpsData;;
 
-#if defined(USE_HELTEC_T114_TEST)
+#if defined(USE_HELTEC_T114)
 extern Uart Serial1;
 #elif defined(ENABLE_GPS_SOFTSER)
     #include "SoftwareSerial.h"
@@ -85,19 +85,19 @@ void WZ_GPS_Init() {
     gpsDetected = false;
     Serial.printf("[GPS]...Init GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
 
-    #if defined(USE_HELTEC_T114_TEST)
+    #if defined(USE_HELTEC_T114)
         Serial1.setPins(GPS_RX_PIN, GPS_TX_PIN);
     #else
         pinMode(GPS_RX_PIN, INPUT);
     #endif
 
-      long detectedBaud = detectBaudrate();
+    long detectedBaud = detectBaudrate();
 
     if (detectedBaud > 0) {
         Serial.printf("[GPS]...erkannte Baudrate: %ld\n", detectedBaud);
         // UART mit der erkannten Rate starten:
         #if defined(ENABLE_GPS_SOFTSER)
-        #if defined(USE_HELTEC_T114_TEST)
+        #if defined(USE_HELTEC_T114)
         Serial1.begin(detectedBaud);
         #else
         GPSSerial.begin(detectedBaud);
@@ -205,13 +205,13 @@ int WZ_GPS_Loop() {
     if (!gpsDetected) return igps;
 
     // Alle verfuegbaren Bytes lesen (non-blocking)
-    #if defined(USE_HELTEC_T114_TEST)
+    #if defined(USE_HELTEC_T114)
     while (Serial1.available())
     #else
     while (GPSSerial.available())
     #endif
     {
-        #if defined(USE_HELTEC_T114_TEST)
+        #if defined(USE_HELTEC_T114)
         char c = Serial1.read();
         #else
         char c = GPSSerial.read();
@@ -392,7 +392,7 @@ bool L76Kprobe()
         Serial.printf("[GPS]... >>> $PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02r\n");
 
     
-    #if defined(USE_HELTEC_T114_TEST)
+    #if defined(USE_HELTEC_T114)
     Serial1.write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
     Serial1.flush();  // wait for all sent
     #else
@@ -402,7 +402,7 @@ bool L76Kprobe()
     delay(200);
     startTimeout = millis() + WAIT_DURATION;
 
-    #if defined(USE_HELTEC_T114_TEST)
+    #if defined(USE_HELTEC_T114)
     while (Serial1.available())
     {  // clear RX-Buffer
         Serial1.read();
@@ -422,7 +422,7 @@ bool L76Kprobe()
     if(iGPSDEBUG > 1)
         Serial.printf("[GPS]... >>> $PCAS06,0*1B\n");
 
-    #if defined(USE_HELTEC_T114_TEST)
+    #if defined(USE_HELTEC_T114)
     Serial1.write("$PCAS06,0*1B\r\n");
     Serial1.setTimeout(WAIT_DURATION);
     #else
@@ -434,14 +434,14 @@ bool L76Kprobe()
 
     while (millis() < startTimeout)
     {
-    #if defined(USE_HELTEC_T114_TEST)
+    #if defined(USE_HELTEC_T114)
         while (Serial1.available())
     #else
         while (GPSSerial.available())
     #endif
         {
             if (ver.length() > 40) { break; }
-            #if defined(USE_HELTEC_T114_TEST)
+            #if defined(USE_HELTEC_T114)
             ver = ver + char(Serial1.read());
             #else
             ver = ver + char(GPSSerial.read());
@@ -467,7 +467,7 @@ bool L76Kprobe()
             if(iGPSDEBUG > 1)
                 Serial.printf("[GPS] >>> $PCAS04,D,D,9*10\n");
 
-            #if defined(USE_HELTEC_T114_TEST)
+            #if defined(USE_HELTEC_T114)
             Serial1.write("$PCAS04,D,D,9*10\r\n");
             #else
             GPSSerial.write("$PCAS04,D,D,9*10\r\n");
@@ -477,7 +477,7 @@ bool L76Kprobe()
             if(iGPSDEBUG > 1)
                 Serial.printf("[GPS] >>> $PCAS02,1000*2E\n");
 
-            #if defined(USE_HELTEC_T114_TEST)
+            #if defined(USE_HELTEC_T114)
             Serial1.write("$PCAS02,1000*2E\r\n");
             #else
             GPSSerial.write("$PCAS02,1000*2E\r\n");
@@ -487,7 +487,7 @@ bool L76Kprobe()
             if(iGPSDEBUG > 1)
                 Serial.printf("[GPS] >>> $PCAS11,0*1D\n");
 
-            #if defined(USE_HELTEC_T114_TEST)
+            #if defined(USE_HELTEC_T114)
             Serial1.write("$PCAS11,0*1D\r\n");
             #else
             GPSSerial.write("$PCAS11,0*1D\r\n");
@@ -497,7 +497,7 @@ bool L76Kprobe()
             if(iGPSDEBUG > 1)
                 Serial.printf("[GPS] >>> $PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\n");
 
-            #if defined(USE_HELTEC_T114_TEST)
+            #if defined(USE_HELTEC_T114)
             Serial1.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
             #else
             GPSSerial.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
@@ -514,8 +514,131 @@ bool L76Kprobe()
 #endif
 
 #if defined(ENABLE_GPS_BAUD_FIX)
-long detectBaudrate() {
-    return GPS_BAUDRATE_MODUL;
+
+// Baudrate-Erkennung: Viele Module starten mit 9600, manche mit 38400/115200
+static const uint32_t GPS_BAUDS[] = {38400, 4800, 9600, 19200, 38400, 57600, 115200};
+static const size_t   GPS_BAUD_COUNT = sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]);
+
+long detectBaudrate()
+{
+    #if defined(GPS_BAUDRATE_MODUL)
+        return GPS_BAUDRATE_MODUL;
+    #endif
+
+    // Baudrate-Erkennung: Jede Baudrate kurz ausprobieren
+    Serial.printf("[GPS ]...Init with GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
+    
+    long detectedBaud=0;
+
+    for(int iGpsBaud=0; iGpsBaud < GPS_BAUD_COUNT; iGpsBaud++)
+    {
+        detectedBaud =  GPS_BAUDS[iGpsBaud];
+
+        #if defined(ENABLE_GPS_SOFTSER)
+        #if defined(USE_HELTEC_T114)
+        Serial1.begin(GPS_BAUDS[iGpsBaud]);
+        #else
+        GPSSerial.begin(GPS_BAUDS[iGpsBaud]);
+        #endif
+        #else
+        GPSSerial.begin(GPS_BAUDS[iGpsBaud], SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+        #endif
+
+        uint32_t start = millis();
+
+        int itxt=0;
+
+         // 2 Sekunden lang auf gueltige NMEA-Daten warten
+        while (millis() - start < 2000) {
+            #if defined(USE_HELTEC_T114)
+            while (Serial1.available())
+            #else
+            while (GPSSerial.available())
+            #endif
+            {
+                #if defined(USE_HELTEC_T114)
+                char c = Serial1.read();
+                #else
+                char c = GPSSerial.read();
+                #endif
+                // A-Z 0-9 $ , * CR LF
+                if(((c>=0x40) && (c<0x5B)) || ((c>=0x30) && (c<=0x39)) || c==0x24 || c==0x2C || c==0x2A || c==0x2E || c==0x0A || c==0x0D)
+                {
+                    //PLEASE ONLY FOR TEST
+                    //Serial.print(c);
+
+                    gps.encode(c);
+
+                    itxt++;
+                }
+            }
+        }
+
+        int itxtmax = 300; // muss verbessert werden
+
+        if(itxt < itxtmax)
+        {
+            if(bGPSON && iGPSDEBUG > 0)
+                Serial.printf("[GPS ]...check %u baud  (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);
+
+            gpsDetected = false;
+        }
+        else
+        {
+            Serial.printf("[GPS ]...found with %u baud (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);
+
+            gpsDetected = true;
+
+            // Initialize the GNSS Chip, use GPS + GLONASS
+            delay(250);
+            #if defined(USE_HELTEC_T114)
+            Serial1.write("$PCAS04,D,D,9*10\r\n");
+            #else
+            GPSSerial.write("$PCAS04,D,D,9*10\r\n");
+            #endif
+            
+            // only ask for RMC and GGA
+            delay(250);
+            #if defined(USE_HELTEC_T114)
+            Serial1.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+            #else
+            GPSSerial.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+            #endif
+            
+            // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
+            delay(250);
+            #if defined(USE_HELTEC_T114)
+            Serial1.write("$PCAS11,3*1E\r\n");
+            #else
+            GPSSerial.write("$PCAS11,3*1E\r\n");
+            #endif
+
+            #if not defined(ENABLE_GPS_SOFTSER)
+            if (detectedBaud != 38400)
+            {
+                Serial.printf("[GPS ]...set to 38400 Baud\n");
+                GPSSerial.write("$PCAS01,3*1F\r\n"); // set to new Baudrate 38400
+                delay(250);
+
+                GPSSerial.updateBaudRate(38400);
+
+                GPSSerial.write("$PCAS00*01\r\n");  // save to Flash
+            }
+            #endif
+
+            return detectedBaud;
+        }
+
+        #if defined(USE_HELTEC_T114)
+        Serial1.end();
+        #else
+        GPSSerial.end();
+        #endif
+    }
+
+    detectedBaud = 0;
+    
+    return detectedBaud;
 }
 #else
 
