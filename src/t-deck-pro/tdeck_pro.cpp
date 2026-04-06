@@ -633,7 +633,7 @@ unsigned int tdeck_get_gps()
         posinfo_distance = 0;
         posinfo_age = 0;
 
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
             Serial.println(F("INVALID"));
 
         return POSINFO_INTERVAL;
@@ -679,7 +679,7 @@ unsigned int tdeck_get_gps()
 
         posinfo_age = 0;
     
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
             Serial.println(F("VALID"));
 
         return setSMartBeaconing(dlat, dlon);

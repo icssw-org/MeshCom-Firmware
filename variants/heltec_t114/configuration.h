@@ -29,9 +29,6 @@ definitions for RAK4631
 #define BUTTON_PIN 42
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
-#define ENABLE_GPS
-#define ENABLE_HELTEC_GPS
-
 #define USE_HELTEC_T114
 
 // Define RAK LoRa parameters
@@ -53,8 +50,13 @@ definitions for RAK4631
 #define RX_TIMEOUT_VALUE 0      // continous rx with 0
 #define TX_TIMEOUT_VALUE 3000
 
-#define GPS_RX_PIN 37
-#define GPS_TX_PIN 39
+#define ENABLE_GPS_SOFTSER
+#define GPS_RX_PIN 39
+#define GPS_TX_PIN 37
+
+#define ENABLE_GPS
+#define ENABLE_GPS_UBLOX_FIX
+#define ENABLE_GPS_BAUD_FIX
 #define GPS_BAUDRATE_MODUL 115200 //*
 
 // ETH Sield

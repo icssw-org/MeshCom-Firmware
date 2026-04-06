@@ -111,6 +111,9 @@ definitions for TBEAM 1262
 #define I2C_SCL    SCL_PIN
 
 #define ENABLE_GPS
-#define ENABLE_UBLOX    // GPS Chip-type
 #define GPS_RX_PIN 34
 #define GPS_TX_PIN 12
+
+#define ENABLE_GPS_UBLOX_FIX
+#define ENABLE_GPS_BAUD_FIX
+#define GPS_BAUDRATE_MODUL 38400

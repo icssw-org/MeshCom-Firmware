@@ -129,7 +129,7 @@ void gps_get_fix(uint8_t *fix)
 /* clang-format on */
 void displayInfo()
 {
-    if(bGPSDEBUG)
+    if(iGPSDEBUG > 0)
         Serial.print(F("Location: "));
 
     gps_fix = 1;
@@ -142,7 +142,7 @@ void displayInfo()
         if(gps_altitude < 0)
             gps_altitude = 0;
 
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
         {
             Serial.print(gps_lat, 6);
             Serial.print(F(","));
@@ -151,13 +151,13 @@ void displayInfo()
     }
     else
     {
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
             Serial.print(F("INVALID"));
     
         gps_fix = 0;
     }
 
-    if(bGPSDEBUG)
+    if(iGPSDEBUG > 0)
         Serial.print(F("  Date/Time: "));
 
     if (gps.date.isValid())
@@ -166,7 +166,7 @@ void displayInfo()
         gps_month = gps.date.month();
         gps_day = gps.date.day();
 
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
         {
             Serial.print(gps_month);
             Serial.print(F("/"));
@@ -177,13 +177,13 @@ void displayInfo()
     }
     else
     {
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
             Serial.print(F("INVALID"));
 
         gps_fix = 0;
     }
 
-    if(bGPSDEBUG)
+    if(iGPSDEBUG > 0)
         Serial.print(F(" "));
 
     if (gps.time.isValid())
@@ -192,7 +192,7 @@ void displayInfo()
         gps_minute = gps.time.minute();
         gps_second = gps.time.second();
 
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
         {
             if (gps_hour < 10)
                 Serial.print(F("0"));
@@ -210,13 +210,13 @@ void displayInfo()
     }
     else
     {
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
             Serial.print(F("INVALID"));
             
         gps_fix = 0;
     }
 
-    if(bGPSDEBUG)
+    if(iGPSDEBUG > 0)
         Serial.print(F("  Satellites: "));
 
     if(gps.satellites.isValid())
@@ -224,7 +224,7 @@ void displayInfo()
         gps_vsat = gps.satellites.value();
         gps_hdop = gps.hdop.value();
 
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
         {
             Serial.print(gps_vsat);
             Serial.print(F(" "));
@@ -232,7 +232,7 @@ void displayInfo()
     }
     else
     {
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
             Serial.print(F("INVALID"));
             
         gps_vsat = 0;
@@ -241,14 +241,14 @@ void displayInfo()
     }
 
 
-    if(bGPSDEBUG)
+    if(iGPSDEBUG > 0)
         Serial.print(F("  Speed: "));
 
     if(gps.speed.isValid())
     {
         gps_speed = gps.speed.kmph();
 
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
         {
             Serial.print(gps_speed);
             Serial.print(F(" "));
@@ -256,14 +256,14 @@ void displayInfo()
     }
     else
     {
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 0)
             Serial.print(F("INVALID"));
             
         gps_speed = 0;
         gps_fix = 0;
     }
 
-    if(bGPSDEBUG)
+    if(iGPSDEBUG > 0)
         Serial.println();
 }
 /* clang-format off */

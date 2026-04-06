@@ -16,7 +16,6 @@ definitions for E22 Board
 #define BOARD_COUNTRY 5   // E22-900 -> 868
 
 #define SX1262X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
-#define ENABLE_GPS
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20
@@ -26,7 +25,9 @@ definitions for E22 Board
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
+
 #define ENABLE_SOFTSER
+
 #define ANALOG_PIN 32
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 #define TX_POWER_MAX 22  // max 22dBm
@@ -85,5 +86,8 @@ definitions for E22 Board
 
 #define OneWire_GPIO 25 // getestet OE5HWN
 
+#define ENABLE_GPS
 #define GPS_RX_PIN 16
 #define GPS_TX_PIN 17
+
+#define ENABLE_GPS_UBLOX_FIX

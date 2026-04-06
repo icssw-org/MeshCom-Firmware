@@ -655,6 +655,8 @@ void esp32setup()
     if(meshcom_settings.node_cleanflash == 1)
         bClear = true;
 
+    Serial.printf("[INIT]...build %s / %s\n", __DATE__, __TIME__);
+
     if(meshcom_settings.node_fversion != FLASH_VERSION || bClear)
     {
         Serial.printf("[INIT]...FLASH cleared new version %i\n", FLASH_VERSION);
@@ -698,7 +700,9 @@ void esp32setup()
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
     bBME680ON =  meshcom_settings.node_sset2 & 0x0004;
     bMCU811ON =  meshcom_settings.node_sset2 & 0x0008;
-    bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
+    //bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010; // new variale
+    iGPSDEBUG = meshcom_settings.node_gpsdebug;
+
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
@@ -736,8 +740,6 @@ void esp32setup()
     #if defined(ENABLE_AUDIO)
         init_audio();
     #endif
-
-    iGpsBaud = 0;
 
     // Initialize T-Deck GUI
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -916,7 +918,7 @@ void esp32setup()
         initPAControl();
     #endif
 
-    #ifdef USING_SX1262
+    #if defined(USING_SX1262) && not defined(BOARD_TBEAM_1W)
         // SPI-Bus für das Shield initialisieren
         SPI.begin(RADIO_SCK, RADIO_MISO, RADIO_MOSI, RADIO_CS_PIN);
     #endif
@@ -2408,12 +2410,9 @@ void esp32loop()
     #if defined(ENABLE_GPS)
     if(bGPSON)
     {
-        if(iGpsBaud < 10)
+        if(!gpsInitDone)
         {
-            if(GPS_Init(iGpsBaud))
-                iGpsBaud = 10;
-            else
-                iGpsBaud++;
+            WZ_GPS_Init();
         }
     }
     #endif
@@ -2678,9 +2677,9 @@ void esp32loop()
             #if defined (ENABLE_GPS)
                 if(gpsDetected)
                 {
-                    igps = GPS_Loop();
-
-                    if(bGPSDEBUG)
+                    igps = WZ_GPS_Loop();
+                    
+                    if(iGPSDEBUG > 0)
                     {
                         Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
 
