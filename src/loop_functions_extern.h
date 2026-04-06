@@ -9,9 +9,8 @@
 
 #include <atomic>
 
-extern bool bGPSMitHardReset;
 extern bool gpsDetected;
-extern int iGpsBaud;
+extern bool gpsInitDone;
 
 extern bool bnextread;
 
@@ -105,8 +104,8 @@ extern bool shtc3_found;
 extern bool dht_found;
 
 extern bool bSHORTPATH;
-extern bool bGPSDEBUG;
-extern bool bGPSDEBUG_DETAIL;
+//extern bool bGPSDEBUG;
+extern int iGPSDEBUG;
 extern bool bSOFTSERDEBUG;
 
 extern bool bBLElong;

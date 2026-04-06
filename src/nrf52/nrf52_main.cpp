@@ -412,18 +412,6 @@ void nrf52setup()
 	xSemaphoreGive(g_task_sem);
 #endif
 
-#if defined(USE_HELTEC_T114)
-    // Enable GPS
-    pinMode(PIN_VEXT_CTL, OUTPUT);
-    digitalWrite(PIN_VEXT_CTL, VEXT_ENABLE);
-    delay(10);
-
-    pinMode(RST_GPS, OUTPUT);
-    digitalWrite(RST_GPS, LOW);
-    delay(100);
-    digitalWrite(RST_GPS, HIGH);
-#endif
-
 #if defined(HAS_TFT_114)
     pinMode(PIN_TFT_VDD_CTL, OUTPUT);
     pinMode(PIN_TFT_LEDA_CTL, OUTPUT);
@@ -477,15 +465,6 @@ void nrf52setup()
 
     // user button init
     init_onebutton();
-
-    //gps init
-    #if defined(ENABLE_RAK_GPS)
-    pinMode(WB_IO2, OUTPUT);
-    digitalWrite(WB_IO2, 0);
-    delay(1000);
-    digitalWrite(WB_IO2, 1);
-    delay(1000);
-    #endif
 
     // clear the buffers
     for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
@@ -566,7 +545,8 @@ void nrf52setup()
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
     bBME680ON = meshcom_settings.node_sset2 & 0x0004;
     bMCU811ON =  meshcom_settings.node_sset2 & 0x0008;
-    bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
+    //bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
+    iGPSDEBUG = meshcom_settings.node_gpsdebug;
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
@@ -715,12 +695,27 @@ void nrf52setup()
     // Hardware immer aktivieren
     //if(bGPSON)
     {
+        //gps init
+
+        #if defined(ENABLE_GPS)
+        // Enable GPS
+        pinMode(PIN_VEXT_CTL, OUTPUT);
+        digitalWrite(PIN_VEXT_CTL, VEXT_ENABLE);
+        delay(10);
+
+        pinMode(RST_GPS, OUTPUT);
+        digitalWrite(RST_GPS, LOW);
+        delay(100);
+        digitalWrite(RST_GPS, HIGH);
+        Serial.println("=====================================");
+        #endif
+
         #if defined(ENABLE_RAK_GPS)
-            pinMode(WB_IO2, OUTPUT);
-            digitalWrite(WB_IO2, 0);
-            delay(1000);
-            digitalWrite(WB_IO2, 1);
-            delay(1000);
+        pinMode(WB_IO2, OUTPUT);
+        digitalWrite(WB_IO2, 0);
+        delay(1000);
+        digitalWrite(WB_IO2, 1);
+        delay(1000);
         
         Serial.println("=====================================");
 
@@ -1453,12 +1448,9 @@ void nrf52loop()
     #if defined(ENABLE_GPS)
     if(bGPSON)
     {
-        if(iGpsBaud < 10)
+        if(!gpsInitDone)
         {
-            if(GPS_Init(iGpsBaud))
-                iGpsBaud = 10;
-            else
-                iGpsBaud++;
+            WZ_GPS_Init();
         }
     }
     #endif
@@ -1542,58 +1534,16 @@ void nrf52loop()
 
     if(gKeyNum == 2)
     {
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 1)
             Serial.println("gKeyNum == 2");
 
+        #if defined(ENABLE_RAK_GPS)
         if(bGPSON)
         {
             // gps refresh every 10 sec
             if ((gps_refresh_timer + (GPS_REFRESH_INTERVAL * 1000)) < millis())
             {
-                #if defined(ENABLE_RAK_GPS)
                 unsigned int igps = getGPS();
-                #endif
-
-                #if defined(ENABLE_GPS)
-                
-                unsigned int igps = POSINFO_INTERVAL;
-
-                if(gpsDetected)
-                {
-                    igps = GPS_Loop();
-
-                    if(bGPSDEBUG)
-                    {
-                        Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
-
-                        Serial.print("[GPS ]...Time <UTC>: ");
-                        if (gpsData.hour < 10) Serial.print(F("0"));
-                        Serial.print(gpsData.hour);
-                        Serial.print(F(":"));
-                        if (gpsData.minute < 10) Serial.print(F("0"));
-                        Serial.print(gpsData.minute);
-                        Serial.print(F(":"));
-                        if (gpsData.second < 10) Serial.print(F("0"));
-                        Serial.print(gpsData.second);
-
-                        Serial.print(F(" / Date: "));
-                        Serial.print(gpsData.year);
-                        Serial.print(F("."));
-                        if (gpsData.month < 10) Serial.print(F("0"));
-                        Serial.print(gpsData.month);
-                        Serial.print(F("."));
-                        if (gpsData.day < 10) Serial.print(F("0"));
-                        Serial.println(gpsData.day);
-
-                        if(posinfo_fix)
-                        {
-                            Serial.printf("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
-                        }
-
-                    }
-                }
-                
-                #endif
 
                 if(igps > 0)
                     posinfo_interval = igps;
@@ -1610,6 +1560,7 @@ void nrf52loop()
                 gps_refresh_timer = millis();
             }
         }
+        #endif
 
         gKeyNum = 0;
     }
@@ -1621,7 +1572,67 @@ void nrf52loop()
         gKeyNum = 0;
     }
 
-    #if defined(ENABLE_RAK_GPS) || defined(ENABLE_HELTEC_GPS)
+    #if defined(ENABLE_GPS)
+    if(bGPSON)
+    {
+        // gps refresh every 5 sec
+        if ((gps_refresh_timer + 2000) < millis())
+        {
+            unsigned int igps = POSINFO_INTERVAL;
+
+            if(gpsDetected)
+            {
+                igps = WZ_GPS_Loop();
+
+                if(iGPSDEBUG > 0)
+                {
+                    Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
+
+                    Serial.print("[GPS ]...Time <UTC>: ");
+                    if (gpsData.hour < 10) Serial.print(F("0"));
+                    Serial.print(gpsData.hour);
+                    Serial.print(F(":"));
+                    if (gpsData.minute < 10) Serial.print(F("0"));
+                    Serial.print(gpsData.minute);
+                    Serial.print(F(":"));
+                    if (gpsData.second < 10) Serial.print(F("0"));
+                    Serial.print(gpsData.second);
+
+                    Serial.print(F(" / Date: "));
+                    Serial.print(gpsData.year);
+                    Serial.print(F("."));
+                    if (gpsData.month < 10) Serial.print(F("0"));
+                    Serial.print(gpsData.month);
+                    Serial.print(F("."));
+                    if (gpsData.day < 10) Serial.print(F("0"));
+                    Serial.println(gpsData.day);
+
+                    if(posinfo_fix)
+                    {
+                        Serial.printf("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
+                    }
+
+                }
+            }
+            
+            if(igps > 0)
+                posinfo_interval = igps;
+            else
+            {
+                no_gps_reset_counter++;
+                if(no_gps_reset_counter > 10)
+                {
+                    posinfo_interval = POSINFO_INTERVAL;
+                    no_gps_reset_counter = 0;
+                }
+            }
+
+            gps_refresh_timer = millis();
+        }
+    }
+    #endif
+    
+    #if defined(ENABLE_RAK_GPS) || defined(ENABLE_GPS)
     if(bGPSON)
     {
         // check GPS ON and activ --> <gKeyNum == 2> the signal must be active
@@ -2376,7 +2387,7 @@ void direction_parse(String tmp)
 #if defined(ENABLE_RAK_GPS)
 unsigned int getGPS(void)
 {
-    if(bGPSDEBUG)
+    if(iGPSDEBUG > 1)
         Serial.println("-----------check GPS-----------");
 
     bool newData = false;
@@ -2388,7 +2399,7 @@ unsigned int getGPS(void)
       {
         char c = Serial1.read();
         
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 1)
             Serial.write(c);
 
         if (tinyGPSPlus.encode(c))// Did a new valid sentence come in?
@@ -2396,7 +2407,7 @@ unsigned int getGPS(void)
       }
     }
 
-    if(bGPSDEBUG)
+    if(iGPSDEBUG > 1)
         Serial.printf("newData:%i SAT:%d Fix:%d UPD:%d VAL:%d HDOP:%i\n", newData, tinyGPSPlus.satellites.value(), tinyGPSPlus.sentencesWithFix(), tinyGPSPlus.location.isUpdated(), tinyGPSPlus.location.isValid(), tinyGPSPlus.hdop.value());
 
     posinfo_satcount = tinyGPSPlus.satellites.value();
@@ -2439,7 +2450,7 @@ unsigned int getGPS(void)
         MyClock.setCurrentTime(meshcom_settings.node_utcoff, tinyGPSPlus.date.year(), tinyGPSPlus.date.month(), tinyGPSPlus.date.day(), tinyGPSPlus.time.hour(), tinyGPSPlus.time.minute(), tinyGPSPlus.time.second());
         snprintf(cTimeSource, sizeof(cTimeSource), (char*)"GPS");
 
-        if(bGPSDEBUG)
+        if(iGPSDEBUG > 1)
         {
             Serial.printf("INT: LAT:%lf%c LON:%lf%c ALT:%i (%i-%02i-%02i %02i:%02i:%02i)\n", meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
             meshcom_settings.node_date_year, meshcom_settings.node_date_month,  meshcom_settings.node_date_day,

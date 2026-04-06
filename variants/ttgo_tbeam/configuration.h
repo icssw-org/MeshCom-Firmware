@@ -53,7 +53,7 @@ definitions for T-Beam
 #define ENABLE_RTC
 
 // Extra Project
-//#define ENABLE_SOFTSER    do not enable onj TBEAM !!
+//#define ENABLE_SOFTSER    //do not enable on TBEAM !!
 
 // OnBoard LED
 #define BOARD_LED 4    // LED_BUILTIN
@@ -92,6 +92,9 @@ definitions for T-Beam
 
 // GPS on Board
 #define ENABLE_GPS      // GPS on OnBoard or External
-#define ENABLE_UBLOX    // GPS Chip-type
 #define GPS_RX_PIN 34   // Serial Pin RX
 #define GPS_TX_PIN 12   // Serial Pin TX
+
+#define ENABLE_GPS_UBLOX_FIX
+#define ENABLE_GPS_BAUD_FIX
+//#define GPS_BAUDRATE_MODUL 38400

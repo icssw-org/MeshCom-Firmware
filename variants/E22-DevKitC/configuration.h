@@ -13,7 +13,6 @@ definitions for E22 Board
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
-#define ENABLE_GPS
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20
@@ -84,3 +83,8 @@ definitions for E22 Board
 
 #define GPS_RX_PIN 16
 #define GPS_TX_PIN 17
+
+#define ENABLE_GPS
+#define ENABLE_GPS_UBLOX_FIX
+//#define ENABLE_GPS_BAUD_FIX
+//#define GPS_BAUDRATE_MODUL 38400

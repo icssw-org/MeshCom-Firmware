@@ -18,7 +18,9 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define I2C_SDA                     (8)
 #define I2C_SCL                     (9)
 
+#define ENABLE_GPS
 #define HAS_GPS
+#define BAUD_CHARS 100
 #define GPS_SLEEP_HOLD_ON_LOW
 #define GPS_BAUDRATE_MODUL          9600
 #define GPS_RX_PIN                  (5)
@@ -97,8 +99,6 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 
 #define BOARD_COUNTRY 8   // EU8
-
-#define ENABLE_GPS
 
 #define ENABLE_BMX280
 #define ENABLE_BMP390

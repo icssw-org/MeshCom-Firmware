@@ -1464,7 +1464,7 @@ void sub_page_info()
     web_client.printf("Button: %s<br>", (bButtonCheck ? "on" : "off"));
     web_client.printf("Debug: %s<br>", (bDEBUG ? "on" : "off"));
     web_client.printf("Debug LoRa: %s<br>", (bLORADEBUG ? "on" : "off"));
-    web_client.printf("Debug GPS: %s<br>", (bGPSDEBUG ? "on" : "off"));
+    web_client.printf("Debug GPS: %s<br>", (iGPSDEBUG ? "on" : "off"));
     web_client.printf("Debug WX: %s<br>", (bWXDEBUG ? "on" : "off"));
     web_client.printf("Debug BLE: %s<br>", (bBLEDEBUG ? "on" : "off"));
     web_client.printf("</td></tr>\n");

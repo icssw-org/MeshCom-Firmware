@@ -13,8 +13,6 @@
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define SX1262X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
 
-#define ENABLE_GPS
-
 #define ENABLE_BMX280
 #define ENABLE_BMX680
 
@@ -75,6 +73,8 @@
 #define TDECK_TFT_DC        11
 #define TDECK_TFT_BACKLIGHT 42
 
+#define ENABLE_GPS
+#define BAUD_CHARS 250
 #define GPS_RX_PIN        44
 #define GPS_TX_PIN        43
 

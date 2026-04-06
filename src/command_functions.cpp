@@ -1307,7 +1307,7 @@ void commandAction(char *umsg_text, bool ble)
     #if defined (ENABLE_GPS) or defined(BOARD_RAK4630)
     if(commandCheck(msg_text+2, (char*)"gps on") == 0)
     {
-        iGpsBaud = 0;
+        gpsInitDone = false;
 
         bGPSON=true;
         
@@ -1369,7 +1369,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         bGPSON=true;
 
-        iGpsBaud = 0;
+        gpsInitDone = false;
 
         if(ble)
         {
@@ -2387,11 +2387,10 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"gpsdebug on") == 0)
+    if(commandCheck(msg_text+2, (char*)"gpsdebug 1") == 0)
     {
-        bGPSDEBUG=true;
-
-        meshcom_settings.node_sset2 |= 0x0010;
+        iGPSDEBUG=1;
+        meshcom_settings.node_gpsdebug = 1;
 
         if(ble)
         {
@@ -2403,11 +2402,25 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"gpsdebug off") == 0)
+    if(commandCheck(msg_text+2, (char*)"gpsdebug 2") == 0 || commandCheck(msg_text+2, (char*)"gpsdebug on") == 0)
     {
-        bGPSDEBUG=false;
+        iGPSDEBUG=2;
+        meshcom_settings.node_gpsdebug = 2;
 
-        meshcom_settings.node_sset2 &= ~0x0010;
+        if(ble)
+        {
+            addBLECommandBack((char*)"--gpsdebug on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"gpsdebug 0") == 0 || commandCheck(msg_text+2, (char*)"gpsdebug off") == 0)
+    {
+        iGPSDEBUG=0;
+        meshcom_settings.node_gpsdebug = 0;
 
         if(ble)
         {
@@ -4352,8 +4365,8 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s ... SOFTSERREAD %s\n...PASSWD <%s>\n",
                 (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), (bSOFTSERREAD?"on":"off"), meshcom_settings.node_passwd);
 
-            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
-                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bGPSDEBUG?"on":"off"), (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
+            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
+                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
             Serial.printf("...DisplayInfo %s ...DisplayCont %s ...contrast %i\n",
                     (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), meshcom_settings.node_contrast);
