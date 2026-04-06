@@ -13,8 +13,6 @@ definitions for T-Beam-Supreme
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 
-#define ENABLE_GPS
-
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20
@@ -97,6 +95,7 @@ definitions for T-Beam-Supreme
 #define I2C1_SDA 42
 #define I2C1_SCL 41
 
+#define ENABLE_GPS
 #define GPS_RX_PIN 9
 #define GPS_TX_PIN 8
 #define GPS_WAKEUP 7

@@ -95,6 +95,6 @@ definitions for T-Beam
 #define GPS_RX_PIN 34   // Serial Pin RX
 #define GPS_TX_PIN 12   // Serial Pin TX
 
-//#define ENABLE_GPS_UBLOX_FIX
+#define ENABLE_GPS_UBLOX_FIX
 #define ENABLE_GPS_BAUD_FIX
-#define GPS_BAUDRATE_MODUL 38400
+//#define GPS_BAUDRATE_MODUL 38400
