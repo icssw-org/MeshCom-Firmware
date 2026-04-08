@@ -92,6 +92,7 @@ unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
 bool bOneButton = false;
 bool bGPSON = false;
+bool bGPSAutosymbol = false;
 bool bBMPON = false;
 bool bBMP3ON = false;
 bool bAHT20ON = false;
@@ -3563,34 +3564,38 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
 
     // Determine Symbol based on history (2 minutes hysteresis)
     char target_symbol = 0;
-    if (meshcom_settings.node_symid == '/') // Only auto-switch if using primary table
+
+    // use APRS Symbol switching
+    if(bGPSAutosymbol)
     {
-        // Check if we are currently using one of the auto-switchable symbols
-        if (meshcom_settings.node_symcd == '[' || meshcom_settings.node_symcd == 'b' || meshcom_settings.node_symcd == '>')
+        if (meshcom_settings.node_symid == '/') // Only auto-switch if using primary table
         {
-            if ((millis() - last_car_speed_ts) < 120000) // Car speed seen in last 2 mins
+            // Check if we are currently using one of the auto-switchable symbols
+            if (meshcom_settings.node_symcd == '[' || meshcom_settings.node_symcd == 'b' || meshcom_settings.node_symcd == '>')
             {
-                target_symbol = '>';
-            }
-            else if ((millis() - last_bike_speed_ts) < 120000) // Bike speed seen in last 2 mins
-            {
-                target_symbol = 'b';
-            }
-            else
-            {
-                target_symbol = '['; // Runner/Hiker default
-            }
+                if ((millis() - last_car_speed_ts) < 120000) // Car speed seen in last 2 mins
+                {
+                    target_symbol = '>';
+                }
+                else if ((millis() - last_bike_speed_ts) < 120000) // Bike speed seen in last 2 mins
+                {
+                    target_symbol = 'b';
+                }
+                else
+                {
+                    target_symbol = '['; // Runner/Hiker default
+                }
 
-            if (target_symbol != 0 && meshcom_settings.node_symcd != target_symbol)
-            {
-                meshcom_settings.node_symcd = target_symbol;
+                if (target_symbol != 0 && meshcom_settings.node_symcd != target_symbol)
+                {
+                    meshcom_settings.node_symcd = target_symbol;
 
-                if(iGPSDEBUG > 0)
-                    Serial.printf("Auto-Symbol switch to '%c'\n", target_symbol);
+                    if(iGPSDEBUG > 0)
+                        Serial.printf("Auto-Symbol switch to '%c'\n", target_symbol);
+                }
             }
         }
     }
-
     // WiFi Stationary Check
     // If connected to WiFi AND speed is low, we assume we are indoors/stationary to prevent GPS drift
     // But if moving (e.g. in car with hotspot), we still want updates.

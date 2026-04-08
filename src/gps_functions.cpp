@@ -74,10 +74,27 @@ String GPS_GetMaidenhead() {
 bool on_L76K = false;
 bool on_UBLOX = false;
 
+void WZ_GPS_Deactivate() {
+
+    #if defined(BOARD_TBEAM_1W)
+        #if defined(HAS_GPS) && defined(GPS_EN_PIN)
+            pinMode(GPS_EN_PIN, OUTPUT);
+            digitalWrite(GPS_EN_PIN, LOW);
+        #endif /*GPS_EN_PIN*/
+    #endif
+}
+
 void WZ_GPS_Init() {
     
     if(gpsInitDone)
         return;
+
+    #if defined(BOARD_TBEAM_1W)
+        #if defined(HAS_GPS) && defined(GPS_EN_PIN)
+            pinMode(GPS_EN_PIN, OUTPUT);
+            digitalWrite(GPS_EN_PIN, HIGH);
+        #endif /*GPS_EN_PIN*/
+    #endif
 
     on_L76K = false;
     on_UBLOX = false;
@@ -109,6 +126,14 @@ void WZ_GPS_Init() {
     } else {
         Serial.println("[GPS_ERR]...Erkennung fehlgeschlagen (Timeout oder kein Signal).");
         gpsDetected = false;
+
+        GPSSerial.begin(9600,SERIAL_8N1,GPS_RX_PIN,GPS_TX_PIN);
+        GPSSerial.write("$PCAS10,3*1C\r\n");  // reset l76k
+        delay(200);
+
+        GPSSerial.updateBaudRate(38400);
+        GPSSerial.write("$PCAS10,3*1C\r\n");  // reset l76k
+        delay(200);
     }
 
     if (gpsDetected)
@@ -681,6 +706,10 @@ long detectBaudrate() {
   pulseIndex = 0;
   lastMicros = micros();
 
+  if(iGPSDEBUG > 1)
+      Serial.println("[GPS ]...start detect Baudrate");
+
+
   // Messung: warten, bis genügend Flanken gemessen wurden oder Timeout 5s
   attachInterrupt(GPS_RX_PIN, handleRxInterrupt, CHANGE);
   startWait = millis();
@@ -697,7 +726,7 @@ long detectBaudrate() {
   }
 
   if(iGPSDEBUG > 1)
-    Serial.printf("[GPS ] gemessene Flanken %u\n", pulseIndex);
+    Serial.printf("[GPS ]...gemessene Flanken %u\n", pulseIndex);
 
   long calculatedBaud = 1000000 / minDuration;
 

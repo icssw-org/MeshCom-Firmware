@@ -76,7 +76,6 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define ANALOG_PIN ADC_PIN  //testweise
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
-#define GPS_SLEEP_HOLD_ON_LOW
 #define HAS_SDCARD
 #define HAS_GPS
 #define SDCARD_MOSI                 SPI_MOSI

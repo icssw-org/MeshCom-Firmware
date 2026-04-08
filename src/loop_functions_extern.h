@@ -69,6 +69,7 @@ extern bool bDisplayTrack;
 extern bool bOneButton;
 
 extern bool bGPSON;
+extern bool bGPSAutosymbol;
 extern bool bBMPON;
 extern bool bBMP3ON;
 extern bool bAHT20ON;

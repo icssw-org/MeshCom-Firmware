@@ -32,6 +32,9 @@
 #include <onebutton_functions.h>
 #include "ina226_functions.h"
 
+// GPS
+#include "gps_functions.h"
+
 #include "INA226.h"
 //TEST #include "compress_functions.h"
 
@@ -1304,7 +1307,7 @@ void commandAction(char *umsg_text, bool ble)
         #endif
     }
     else
-    #if defined (ENABLE_GPS) or defined(BOARD_RAK4630)
+    #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114)
     if(commandCheck(msg_text+2, (char*)"gps on") == 0)
     {
         gpsInitDone = false;
@@ -1336,13 +1339,10 @@ void commandAction(char *umsg_text, bool ble)
         bGPSON=false;
         
         init_loop_function();
+
+        WZ_GPS_Deactivate();    // GPS Enable off
         
         meshcom_settings.node_sset &= ~0x0040;
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
 
         bDisplayTrack=false;
         
@@ -1362,6 +1362,37 @@ void commandAction(char *umsg_text, bool ble)
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         tdeck_refresh_SET_view();
         #endif
+    }
+    if(commandCheck(msg_text+2, (char*)"gps autosymbol") == 0)
+    {
+        bGPSAutosymbol = true;
+        
+        meshcom_settings.node_sset3 |= 0x1000;
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"gps fixsymbol") == 0)
+    {
+        bGPSAutosymbol = false;
+
+        meshcom_settings.node_sset3 &= ~0x1000;
+
+        if(ble)
+        {
+            bNodeSetting=true;
+        }
+
+        bReturn = true;
+
+        save_settings();
     }
     else
     #ifndef BOARD_T_DECK_PRO
@@ -4513,7 +4544,7 @@ void commandAction(char *umsg_text, bool ble)
                 (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), posinfo_hdop, (int)posinfo_interval, meshcom_settings.node_postime, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
                 meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str(), cTimeSource);
 
-                printf("...SYMB: %c %c\n...GPS: %s\n...Track: %s\n...SOFTSER: %s APP:%i\n...SOFTSERREAD: %s\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"), (bSOFTSERON?"on":"off"), SOFTSER_APP_ID, (bSOFTSERREAD?"on":"off"));
+                printf("...SYMB: %c %c ..Auto %s\n...GPS: %s\n...Track: %s\n...SOFTSER: %s APP:%i\n...SOFTSERREAD: %s\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSAutosymbol?"on":"off"), (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"), (bSOFTSERON?"on":"off"), SOFTSER_APP_ID, (bSOFTSERREAD?"on":"off"));
             }
         }
 
@@ -4804,6 +4835,7 @@ void sendNodeSetting()
     nsetdoc["NOALL"] = bNoMSGtoALL;
     nsetdoc["BLED"] = bUSER_BOARD_LED;
     nsetdoc["GWS"] = meshcom_settings.node_gwsrv;
+    nsetdoc["ASYM"] = bGPSAutosymbol;
 
     // reset print buffer
     memset(print_buff, 0, sizeof(print_buff));
