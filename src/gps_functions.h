@@ -27,6 +27,7 @@ struct GPSData {
 extern GPSData gpsData;
 extern bool    gpsDetected;
 
+void WZ_GPS_Deactivate();
 void WZ_GPS_Init();
 int WZ_GPS_Loop();
 bool L76Kprobe();

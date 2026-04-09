@@ -176,6 +176,9 @@ OneButton btn;
  * SX1278 zB: https://github.com/jgromes/RadioLib/blob/master/src/modules/SX127x/SX1278.h
 */
 
+unsigned long lFreeHeap = 0;
+unsigned long lFreePsram = 0;
+
 bool bPosFirst = true;
 bool bHeyFirst = true;
 bool bTeleFirst = true;
@@ -613,18 +616,13 @@ void esp32setup()
             digitalWrite(RADIO_RST_PIN, HIGH);
         #endif
 
-        #if defined(HAS_GPS) && defined(GPS_EN_PIN)
-            pinMode(GPS_EN_PIN, OUTPUT);
-            digitalWrite(GPS_EN_PIN, HIGH);
-        #endif /*GPS_EN_PIN*/
-
-        #ifdef GPS_PPS_PIN
-            pinMode(GPS_PPS_PIN, INPUT);
-        #endif
-
         #ifdef FAN_CTRL
             pinMode(FAN_CTRL, OUTPUT);
             digitalWrite(FAN_CTRL,HIGH);
+        #endif
+
+        #ifdef GPS_PPS_PIN
+            pinMode(GPS_PPS_PIN, INPUT);
         #endif
 
     #endif
@@ -636,9 +634,12 @@ void esp32setup()
     Serial.println("CLIENT SETUP");
     Serial.println("============");
 
-    Serial.printf("%s;[HEAP];%d;%d;%d;(init)\n", getTimeString().c_str(),
-        ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    Serial.printf("%s;[PSRM];%d\n", getTimeString().c_str(), ESP.getFreePsram());
+    lFreeHeap =  ESP.getFreeHeap();
+    lFreePsram = ESP.getFreePsram();
+
+    Serial.printf("%s;[HEAP];%lu;%d;%d;(init)\n", getTimeString().c_str(),
+       lFreeHeap, ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    Serial.printf("%s;[PSRM];%lu\n", getTimeString().c_str(), lFreePsram);
     
     check_efuse();
 
@@ -725,6 +726,7 @@ void esp32setup()
     bWXDEBUG = meshcom_settings.node_sset3 & 0x0200;
     bSHT21ON = meshcom_settings.node_sset3 & 0x0400;
     bINA226ON = meshcom_settings.node_sset3 & 0x0800;
+    bGPSAutosymbol = meshcom_settings.node_sset3 & 0x10000;
 
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 
@@ -2978,12 +2980,6 @@ void esp32loop()
             
             #endif
 
-            if(bDisplayCont)
-            {
-                Serial.printf("%s;[HEAP];%d;(free)\n", getTimeString().c_str(), ESP.getFreeHeap());
-                Serial.printf("%s;[PSRM];%d\n", getTimeString().c_str(), ESP.getFreePsram());
-            }
-
             // [OE3WAS] Lüftersteuerung
             #if defined(NTC_PIN) && defined(FAN_CTRL) // BOARD_TBEAM_1W
             float NTCtemp = getTempForNTC();
@@ -3013,16 +3009,23 @@ void esp32loop()
 
         if ((heapMonTimer + 60000) < millis())
         {
-            Serial.printf("%s;[HEAP];%d;%d;%d;(mon)\n",
-                getTimeString().c_str(),
-                ESP.getFreeHeap(),
-                ESP.getMinFreeHeap(),
-                ESP.getMaxAllocHeap());
-            #if defined(BOARD_HAS_PSRAM)
-            Serial.printf("%s;[PSRM];%d;(mon)\n",
-                getTimeString().c_str(),
-                ESP.getFreePsram());
-            #endif
+            if(ESP.getFreeHeap() != lFreeHeap || ESP.getFreePsram() != lFreePsram)
+            {
+                lFreeHeap = ESP.getFreeHeap();
+                lFreePsram = ESP.getFreePsram();
+
+                Serial.printf("%s;[HEAP];%lu;%d;%d;(mon)\n",
+                    getTimeString().c_str(),
+                    lFreeHeap,
+                    ESP.getMinFreeHeap(),
+                    ESP.getMaxAllocHeap());
+                #if defined(BOARD_HAS_PSRAM)
+                Serial.printf("%s;[PSRM];%lu;(mon)\n",
+                    getTimeString().c_str(),
+                    lFreePsram);
+                #endif
+            }
+
             heapMonTimer = millis();
         }
     }
