@@ -93,33 +93,7 @@ void WZ_GPS_Reset() {
             delay(200);
             digitalWrite(GPS_EN_PIN, HIGH);
             delay(100);
-
-            uint8_t error, address;
-        
-            TwoWire *w = NULL;
-
-            w = &Wire;
-
-            address = 0x10;
-
-            w->beginTransmission(address);
-            error = w->endTransmission();
-
-            if (error == 0)
-            {
-                char gps_reset[]={"$PCS10,3*1E\r\n"};
-
-                w->write(gps_reset);
-                w->endTransmission(false);
-
-                Serial.println("[GPS ]...L76K reset command sent");
-            }
-
-            delay(200);
-       
         #endif /*GPS_EN_PIN*/
-
-
     #endif
 }
 
