@@ -1340,7 +1340,9 @@ void commandAction(char *umsg_text, bool ble)
         
         init_loop_function();
 
+        #if not defined(BOARD_RAK4630) && not defined(BOARD_HELTEC_T114)
         WZ_GPS_Deactivate();    // GPS Enable off
+        #endif
         
         meshcom_settings.node_sset &= ~0x0040;
 
