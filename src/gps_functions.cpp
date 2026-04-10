@@ -127,6 +127,7 @@ void WZ_GPS_Init() {
         Serial.println("[GPS_ERR]...Erkennung fehlgeschlagen (Timeout oder kein Signal).");
         gpsDetected = false;
 
+        #if not defined(USE_HELTEC_T114)
         GPSSerial.begin(9600,SERIAL_8N1,GPS_RX_PIN,GPS_TX_PIN);
         GPSSerial.write("$PCAS10,3*1C\r\n");  // reset l76k
         delay(200);
@@ -134,6 +135,8 @@ void WZ_GPS_Init() {
         GPSSerial.updateBaudRate(38400);
         GPSSerial.write("$PCAS10,3*1C\r\n");  // reset l76k
         delay(200);
+        
+        #endif
     }
 
     if (gpsDetected)
