@@ -84,17 +84,51 @@ void WZ_GPS_Deactivate() {
     #endif
 }
 
+void WZ_GPS_Reset() {
+
+    #if defined(BOARD_TBEAM_1W)
+        #if defined(HAS_GPS) && defined(GPS_EN_PIN)
+            pinMode(GPS_EN_PIN, OUTPUT);
+            digitalWrite(GPS_EN_PIN, LOW);
+            delay(200);
+            digitalWrite(GPS_EN_PIN, HIGH);
+            delay(100);
+
+            uint8_t error, address;
+        
+            TwoWire *w = NULL;
+
+            w = &Wire;
+
+            address = 0x10;
+
+            w->beginTransmission(address);
+            error = w->endTransmission();
+
+            if (error == 0)
+            {
+                char gps_reset[]={"$PCS10,3*1E\r\n"};
+
+                w->write(gps_reset);
+                w->endTransmission(false);
+
+                Serial.println("[GPS ]...L76K reset command sent");
+            }
+
+            delay(200);
+       
+        #endif /*GPS_EN_PIN*/
+
+
+    #endif
+}
+
 void WZ_GPS_Init() {
     
     if(gpsInitDone)
         return;
 
-    #if defined(BOARD_TBEAM_1W)
-        #if defined(HAS_GPS) && defined(GPS_EN_PIN)
-            pinMode(GPS_EN_PIN, OUTPUT);
-            digitalWrite(GPS_EN_PIN, HIGH);
-        #endif /*GPS_EN_PIN*/
-    #endif
+    WZ_GPS_Reset();
 
     on_L76K = false;
     on_UBLOX = false;
