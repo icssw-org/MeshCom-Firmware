@@ -1400,19 +1400,11 @@ void commandAction(char *umsg_text, bool ble)
     #ifndef BOARD_T_DECK_PRO
     if(commandCheck(msg_text+2, (char*)"gps reset") == 0)
     {
-        bGPSON=true;
+        #if not defined(BOARD_RAK4630) && not defined(BOARD_HELTEC_T114)
+        WZ_GPS_Reset();    // GPS Reset
+        #endif
 
         gpsInitDone = false;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--gps on");
-            addBLECommandBack((char*)"--gps reset");
-        }
-
-        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-        tdeck_refresh_SET_view();
-        #endif
 
         return;
     }
