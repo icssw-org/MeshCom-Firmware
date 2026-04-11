@@ -157,6 +157,9 @@ void PressLong()
       #elif defined(BOARD_HELTEC_V4)
         Serial.println("[BOARD_HELTEC_V4]... GO to deepsleep");
         commandAction((char*)"--deepsleep", isPhoneReady, false);
+      #elif defined(BOARD_HELTEC_T114)
+        Serial.println("[BOARD_HELTEC_T114]... GO to deepsleep");
+        commandAction((char*)"--deepsleep", isPhoneReady, false);
       #elif defined(BOARD_TLORA_OLV216)
         Serial.println("[BOARD_TLORA_OLV216]... GO to deepsleep");
         bDisplayOff=true;
@@ -200,6 +203,11 @@ void init_onebutton()
     btn.attachMultiClick(tripleClick);    // Multi Click event attachement
     btn.attachLongPressStart(PressLong);  // LongPress Click event attachement
   }
-} // setup
+  else
+  {
+      Serial.printf("[OBUT]...One Button GPIO(%i) not activated\n", iButtonPin);
+  }
+}
+// setup
 
 // End

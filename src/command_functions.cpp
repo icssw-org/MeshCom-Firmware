@@ -767,8 +767,29 @@ void commandAction(char *umsg_text, bool ble)
             delay(50);
         #endif
 
-        #if not defined(BOARD_RAK4630) and not defined(BOARD_HELTEC_T114)
+        #if defined(BOARD_HELTEC_T114)
+            
+            // GPIO21: LOW - power off GPS
+            // GPIO15: HIGH - power off LCD LED
+            // GPIO25: LOW - power off LORA
+
+            extern bool bT114_DEEP_SLEEP;
+
+            if(bT114_DEEP_SLEEP)
+            {
+                bT114_DEEP_SLEEP = false;
+            }
+            else
+            {
+                digitalWrite(PIN_VEXT_CTL, LOW);   // GPS
+                digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT
+                digitalWrite(LORA_NRSET, LOW);   // LORA
+                bT114_DEEP_SLEEP = true;
+            }
+        #else
+            #if not defined(BOARD_RAK4630)
             esp_deep_sleep_start();
+            #endif
         #endif
 
         bReturn = true;

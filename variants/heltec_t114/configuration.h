@@ -69,10 +69,25 @@ definitions for RAK4631
 #define VEXT_CTRL   3   // To turn on GPS and TFT
 #define ADC_CTRL    2   // ADC_CTRL = HIGH
 
-#define HAS_TFT_114
-
-//#define HAS_TFT
-
 #define RST_GPS     38
 #define PIN_VEXT_CTL      21
 #define VEXT_ENABLE       1
+
+#define PIN_SPI1_MISO         (43)
+#define PIN_SPI1_MOSI         (41)
+#define PIN_SPI1_SCK          (40)
+
+// TFT Display
+#define HAS_TFT_114
+
+#define PIN_TFT_CS        11
+#define PIN_TFT_RST       2 // Or set to -1 and connect to Arduino RESET pin
+#define PIN_TFT_DC        12
+
+#define PIN_TFT_VDD_CTL      3
+#define TFT_VDD_ENABLE       0
+#define PIN_TFT_LEDA_CTL     15
+#define TFT_LEDA_ENABLE      0
+
+// LORA Chip
+#define LORA_NRSET 25
