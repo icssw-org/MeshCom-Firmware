@@ -613,8 +613,13 @@ long detectBaudrate()
         }
 
         int itxtmax = 290; // muss verbessert werden
+        
         #if defined(ENABLE_GPS_UBLOX_FIX)
-        itxtmax = 220;
+            itxtmax = 220;
+        #endif
+
+        #if defined(BOARD_HELTEC_T114)
+            itxtmax = 100;
         #endif
 
         if(itxt < itxtmax)

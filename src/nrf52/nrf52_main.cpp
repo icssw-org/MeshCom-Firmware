@@ -432,9 +432,9 @@ void nrf52setup()
 #endif
 
      // LEDs
-    pinMode(LED_GREEN, OUTPUT);
     #if not defined(BOARD_HELTEC_T114)
-    pinMode(LED_BLUE, OUTPUT);
+        pinMode(LED_GREEN, OUTPUT);
+        pinMode(LED_BLUE, OUTPUT);
     #endif
 
     //  Initialize the Serial Port for debug output
@@ -2292,9 +2292,11 @@ if (isPhoneReady == 1)
  */
 void blinkLED()
 {
+    #if not defined(BOARD_HELTEC_T114)
     digitalWrite(LED_GREEN, HIGH);
-    delay(10);
+    delay(20);
     digitalWrite(LED_GREEN, LOW);
+    #endif
 }
 
 void blinkLED2()
