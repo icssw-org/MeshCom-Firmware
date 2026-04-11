@@ -612,9 +612,9 @@ long detectBaudrate()
             }
         }
 
-        int itxtmax = 300; // muss verbessert werden
+        int itxtmax = 290; // muss verbessert werden
         #if defined(ENABLE_GPS_UBLOX_FIX)
-        itxtmax = 250;
+        itxtmax = 220;
         #endif
 
         if(itxt < itxtmax)
