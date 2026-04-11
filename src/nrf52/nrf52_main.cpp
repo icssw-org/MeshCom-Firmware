@@ -30,20 +30,7 @@
 #endif
 
 #ifdef HAS_TFT_114
-
-#define PIN_SPI1_MISO         (43)
-#define PIN_SPI1_MOSI         (41)
-#define PIN_SPI1_SCK          (40)
-
-#define PIN_TFT_CS        11
-#define PIN_TFT_RST       2 // Or set to -1 and connect to Arduino RESET pin
-#define PIN_TFT_DC        12
-
-#define PIN_TFT_VDD_CTL      3
-#define TFT_VDD_ENABLE       0
-#define PIN_TFT_LEDA_CTL     15
-#define TFT_LEDA_ENABLE      0
-
+bool bT114_DEEP_SLEEP = false;
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 
@@ -463,9 +450,6 @@ void nrf52setup()
     // init nach Reboot
     init_loop_function();
 
-    // user button init
-    init_onebutton();
-
     // clear the buffers
     for (int i = 0; i < uint8_t(sizeof(RcvBuffer)); i++)
     {
@@ -571,6 +555,9 @@ void nrf52setup()
     iButtonPin = BUTTON_PIN;
     if(meshcom_settings.node_button_pin > 0)
         iButtonPin = meshcom_settings.node_button_pin;
+
+    // user button init
+    init_onebutton();
 
     // if Node not set --> WifiAP Mode on
     if(memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0 || meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
@@ -1095,6 +1082,15 @@ void nrf52setup()
 
 void nrf52loop()
 {
+    #ifdef HAS_TFT_114
+    if(bT114_DEEP_SLEEP)
+    {
+        // only loop
+    }
+    else
+    {
+    #endif
+
     // get RTC Now
     // RTC hat Vorrang zu Zeit via MeshCom-Server
     bool bMyClock = true;
@@ -2281,6 +2277,10 @@ if (isPhoneReady == 1)
         }
 
     }
+
+    #ifdef HAS_TFT_114
+    }   // else from 
+    #endif
 
     //  We are on FreeRTOS, give other tasks a chance to run
     delay(100);
