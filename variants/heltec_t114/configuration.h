@@ -55,10 +55,9 @@ definitions for RAK4631
 #define GPS_TX_PIN 39
 
 #define ENABLE_GPS
-#define ENABLE_GPS_UBLOX_FIX
+
 #define ENABLE_GPS_BAUD_FIX
-//#define GPS_BAUDRATE_MODUL 9600 //*
-#define ENABLE_GPS_UBLOX_FIX
+#define GPS_BAUDRATE_MODUL_SET 38400
 
 
 // ETH Sield

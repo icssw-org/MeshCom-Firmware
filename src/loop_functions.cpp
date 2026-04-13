@@ -3912,3 +3912,37 @@ bool is_equ(const char* buf1, const char* buf2)
 
     return false;
 }
+
+int is_pos(const char* buf, const char* comp_buf)
+{
+    size_t buf_len = strlen(buf);
+    size_t comp_len = strlen(comp_buf);
+
+    // buf ist kleinerf als comp_buf
+    if(buf_len < comp_len)
+        return -1;
+
+    for(int ipos=0; ipos<(int)(buf_len-comp_len); ipos++)
+    {
+        if(buf[ipos] == comp_buf[0])
+        {
+            bool bEqual=true;
+
+            for(int icomp=0; icomp<(int)comp_len; icomp++)
+            {
+                if(buf[ipos+icomp] != comp_buf[icomp])
+                {
+                    bEqual = false;
+                    break;
+                }
+            }
+
+            if(bEqual)
+            {
+                return ipos;
+            }
+        }
+    }
+
+    return -1;
+}

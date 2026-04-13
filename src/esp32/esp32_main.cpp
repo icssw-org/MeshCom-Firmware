@@ -2642,7 +2642,7 @@ void esp32loop()
     }
     #endif
 
-    // gps display refresh every 10 sec
+    // gps display refresh every 5 sec
     gps_refresh_intervall = GPS_REFRESH_INTERVAL;
 
     // TRACK ON
