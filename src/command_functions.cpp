@@ -74,7 +74,12 @@ void sendGpsJson();
 void sendAPRSset();
 void sendConfigFinish();
 
-String strMore;
+char print_buff[350];
+
+uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+char msg_detail[100];
+
+bool bRxFromPhone = false;
 
 size_t json_len = 0;
 
@@ -107,13 +112,6 @@ int commandCheck(char *msg, char *command)
     return -1;
 }
 
-char print_buff[600];
-
-uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
-char msg_detail[300];
-
-bool bRxFromPhone = false;
-
 void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 {
     bRxFromPhone = rxFromPhone;
@@ -137,7 +135,8 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
         if(memcmp(msg_text+ipos, "--", 2) == 0)
         {
             memset(msg_detail, 0x00, sizeof(msg_detail));
-            memcpy(msg_detail, msg_text+inext, ipos-inext);
+            if(ipos-inext < (int)sizeof(msg_detail))
+                memcpy(msg_detail, msg_text+inext, ipos-inext);
 
             if(bDisplayCont)
             {
@@ -187,8 +186,6 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 
 void commandAction(char *umsg_text, bool ble)
 {
-    //char print_buff[600];
-
     // -info
     // -set-owner
 

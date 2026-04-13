@@ -32,7 +32,7 @@ void WZ_GPS_Reset();
 void WZ_GPS_Init();
 int WZ_GPS_Loop();
 bool L76Kprobe();
-long detectBaudrate();
+unsigned long detectBaudrate();
 
 //bool GPS_Init(int iGpsBaud);
 //unsigned int GPS_Loop();     // Non-blocking! In jedem loop()-Durchlauf aufrufen

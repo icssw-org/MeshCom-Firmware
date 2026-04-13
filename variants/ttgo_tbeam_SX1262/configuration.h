@@ -114,6 +114,4 @@ definitions for TBEAM 1262
 #define GPS_RX_PIN 34
 #define GPS_TX_PIN 12
 
-#define ENABLE_GPS_UBLOX_FIX
 #define ENABLE_GPS_BAUD_FIX
-//#define GPS_BAUDRATE_MODUL 38400
