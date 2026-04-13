@@ -95,6 +95,18 @@ void WZ_GPS_Reset() {
             delay(100);
         #endif /*GPS_EN_PIN*/
     #endif
+
+    #if defined(USE_HELTEC_T114)
+        // Enable GPS
+        pinMode(PIN_VEXT_CTL, OUTPUT);
+        digitalWrite(PIN_VEXT_CTL, VEXT_ENABLE);
+        delay(10);
+
+        pinMode(RST_GPS, OUTPUT);
+        digitalWrite(RST_GPS, LOW);
+        delay(100);
+        digitalWrite(RST_GPS, HIGH);
+    #endif
 }
 
 void WZ_GPS_Init() {
@@ -226,7 +238,9 @@ void WZ_GPS_Init() {
 
 bool updateGPSdata;
 String GPSjson;
-String NMEAline;
+
+#define maxNMEAline MAX_MSG_LEN_PHONE * 2
+int NMEAlineIndex = 0;
 
 #define WAIT_DURATION 2000
 
@@ -242,6 +256,9 @@ int WZ_GPS_Loop() {
 
     if (!gpsDetected) return igps;
 
+    NMEAlineIndex = 0;
+    memset(msg_text, 0x00, maxNMEAline);
+
     // Alle verfuegbaren Bytes lesen (non-blocking)
     #if defined(USE_HELTEC_T114)
     while (Serial1.available())
@@ -255,10 +272,12 @@ int WZ_GPS_Loop() {
         char c = GPSSerial.read();
         #endif
 
-        // TODO: nicht einzeln ausgeben, sondern sammeln in LineBuffer
-        // und erst ausgeben, wenn ein Satz vollständig ist \r\n
-        // Serial.print(c);  // ^^^^^^
-        NMEAline = NMEAline + char(c);
+      // TODO: nicht einzeln ausgeben, sondern sammeln in LineBuffer
+      // und erst ausgeben, wenn ein Satz vollständig ist \r\n
+      if (NMEAlineIndex < (int)maxNMEAline-1) {
+        msg_text[NMEAlineIndex] = c;
+        NMEAlineIndex++;
+      }
 
         if (gps.encode(c)) { updateGPSdata = true; }
     }
@@ -268,9 +287,7 @@ int WZ_GPS_Loop() {
         //TODO: hier kommen ev. noch Zeichen vom nächsten Satz mit
         //TODO: daher nur bis \n ausgeben und den Rest behalten
         if(iGPSDEBUG == 2)
-            Serial.printf(NMEAline.c_str());
-
-        NMEAline = "";
+            Serial.print(msg_text);
 
         // GPS-Daten in unsere Struktur uebertragen
         gpsData.valid      = gps.location.isValid();
@@ -568,7 +585,7 @@ long detectBaudrate()
     
     long detectedBaud=0;
 
-    for(int iGpsBaud=0; iGpsBaud < GPS_BAUD_COUNT; iGpsBaud++)
+    for(int iGpsBaud=0; iGpsBaud < (int)GPS_BAUD_COUNT; iGpsBaud++)
     {
         detectedBaud =  GPS_BAUDS[iGpsBaud];
 

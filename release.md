@@ -17,12 +17,18 @@
 - heltec_t114.uf2
 
 ### Lilygo
+#### TBEAM
 - ttgo-lora32-v21.bin
 - ttgo_tbeam.bin
 - ttgo_tbeam_SX1262.bin
 - ttgo_tbeam_SX1268.bin
 - ttgo_tbeam_supreme_l76k.bin
+- ttgo_tbeam_1W.bin
+
+#### E-PAPER
 - vision-master-e290.bin
+
+#### T-DECK
 - t_deck.bin
 - t_deck_plus.bin
 - t_deck_pro.bin
