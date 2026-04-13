@@ -405,6 +405,8 @@ void nrf52setup()
     digitalWrite(PIN_TFT_VDD_CTL, TFT_LEDA_ENABLE);  // TFT VDD
     digitalWrite(PIN_TFT_LEDA_CTL, TFT_VDD_ENABLE); // TFT LEDA
 
+    digitalWrite(LORA_NRSET, HIGH);   // LORA
+
     SPI_TFT.begin();
 
     tft.init(TFT_WIDTH, TFT_HEIGHT);                  // ST7789 240x135
@@ -683,20 +685,6 @@ void nrf52setup()
     //if(bGPSON)
     {
         //gps init
-
-        #if defined(ENABLE_GPS)
-        // Enable GPS
-        pinMode(PIN_VEXT_CTL, OUTPUT);
-        digitalWrite(PIN_VEXT_CTL, VEXT_ENABLE);
-        delay(10);
-
-        pinMode(RST_GPS, OUTPUT);
-        digitalWrite(RST_GPS, LOW);
-        delay(100);
-        digitalWrite(RST_GPS, HIGH);
-        Serial.println("=====================================");
-        #endif
-
         #if defined(ENABLE_RAK_GPS)
         pinMode(WB_IO2, OUTPUT);
         digitalWrite(WB_IO2, 0);
