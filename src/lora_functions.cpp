@@ -59,6 +59,10 @@
 #include <t5-epaper/t5epaper_main.h>
 #endif
 
+#if defined(BOARD_RAK4630)
+#include <nrf52/nrf52_radio.h>
+#endif
+
 #include "lora_functions.h"
 #include "loop_functions.h"
 #include <loop_functions_extern.h>
@@ -331,7 +335,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     if(bSPI_ETH_Active) {
         bPendingRadioRx = true;
     } else {
-        Radio.Rx(RX_TIMEOUT_VALUE);
+        startReceive();
     }
     // RACE-05 fix: CAD abort under critical section
     taskENTER_CRITICAL();
@@ -1169,7 +1173,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 void OnRxTimeout(void)
 {
     #if defined BOARD_RAK4630
-        Radio.Rx(RX_TIMEOUT_VALUE);
+        startReceive();
         // RACE-05 fix: CAD abort under critical section
         taskENTER_CRITICAL();
         if(cad_in_progress) {
@@ -1198,7 +1202,7 @@ void OnRxTimeout(void)
 void OnRxError(void)
 {
     #if defined BOARD_RAK4630
-        Radio.Rx(RX_TIMEOUT_VALUE);
+        startReceive();
         // RACE-05 fix: CAD abort under critical section
         taskENTER_CRITICAL();
         if(cad_in_progress) {
@@ -1842,7 +1846,7 @@ void OnTxDone(void)
         if(bSPI_ETH_Active) {
             bPendingRadioRx = true;
         } else {
-            Radio.Rx(RX_TIMEOUT_VALUE);
+            startReceive();
         }
         iReceiveTimeOutTime = millis();  // force full CSMA timeout before next TX
         csma_reset();
@@ -1880,7 +1884,7 @@ void OnTxTimeout(void)
             bSetLoRaAPRS = false;
         }
 
-        Radio.Rx(RX_TIMEOUT_VALUE);
+        startReceive();
 
     #endif
 
