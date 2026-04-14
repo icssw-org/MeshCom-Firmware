@@ -11,7 +11,7 @@ definitions for HELTEC E290
 #define MODUL_HARDWARE HELTEC_E290
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
-#define ENABLE_GPS
+
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20
@@ -33,8 +33,9 @@ definitions for HELTEC E290
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
-#define GPS_RX_PIN 47
-#define GPS_TX_PIN 48
+#define ENABLE_GPS
+#define GPS_RX_PIN 44
+#define GPS_TX_PIN 43
 
 // ESP32
 /** 

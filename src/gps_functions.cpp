@@ -225,22 +225,28 @@ void WZ_GPS_Init() {
                 delay(100);
                 myGPS.setMeasurementRate(1000);  // Wiederholrate 1s
                 delay(100);
+                
                 myGPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART1);
                 delay(100);
+                myGPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
+                delay(100);
+
                 myGPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
                 delay(100);
                 myGPS.disableNMEAMessage(UBX_NMEA_GSV, COM_PORT_UART1);
-                delay(100);
-                myGPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
                 delay(100);
 
                 myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART1);
                 delay(100);
                 myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
                 delay(100);
-                myGPS.enableGNSS(1,SFE_UBLOX_GNSS_ID_GPS);
+                myGPS.enableGNSS(true, SFE_UBLOX_GNSS_ID_GPS);
                 delay(100);
-                myGPS.enableGNSS(1,SFE_UBLOX_GNSS_ID_GALILEO);
+                myGPS.enableGNSS(true, SFE_UBLOX_GNSS_ID_BEIDOU);
+                delay(100);
+                myGPS.enableGNSS(true, SFE_UBLOX_GNSS_ID_GLONASS);
+                delay(100);
+                myGPS.enableGNSS(true, SFE_UBLOX_GNSS_ID_GALILEO);
                 delay(100);
                 
                 myGPS.enableGNSS(1,SFE_UBLOX_GNSS_ID_GLONASS);
