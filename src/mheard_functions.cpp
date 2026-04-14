@@ -214,8 +214,13 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     struct mheardLine mheardLine_save;
 
     String strYear = mheardLine.mh_date.substring(0, 4);
+    
+    //Serial.printf("strYear:%s int:%i\n", strYear.c_str(), strYear.toInt());
+
     if(strYear.toInt() < 2025)
         return;
+
+    //Serial.printf("mh_callsign:%s\n", mheardLine.mh_callsign.c_str());
 
     int ipos=-1;
     int inext=-1;

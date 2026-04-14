@@ -467,9 +467,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 RAWLoRaWrite=0;
             */
 
+            //Serial.printf("1:msg_source_last:%s node_call:%s\n", aprsmsg.msg_source_last.c_str(), meshcom_settings.node_call);
 
-            if(aprsmsg.msg_source_last != meshcom_settings.node_call)
+            if(!is_equ(aprsmsg.msg_source_last.c_str(), meshcom_settings.node_call))
             {
+
+            //Serial.printf("2:msg_source_last:%s node_call:%s\n", aprsmsg.msg_source_last.c_str(), meshcom_settings.node_call);
+            
                 struct mheardLine mheardLine;
 
                 initMheardLine(mheardLine);
