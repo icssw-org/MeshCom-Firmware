@@ -497,7 +497,7 @@ bool lora_setchip_meshcom()
         TX_TIMEOUT_VALUE);
 
     //  Start receiving LoRa packets
-    startReceive();
+    Radio.Rx(RX_TIMEOUT_VALUE);
     
 #else
     // Set MeshCom parameter

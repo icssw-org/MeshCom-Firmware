@@ -10,7 +10,6 @@
     #include <esp32/esp32_flash.h>
 #else
     #include <nrf52/WisBlock-API.h>
-    #include <nrf52/nrf52_radio.h>
 #endif
 
 unsigned long getUnixClock();
