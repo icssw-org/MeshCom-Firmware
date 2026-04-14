@@ -10,6 +10,7 @@
 #include <debugconf.h>
 #include <time.h>
 #include <nrf52_functions.h>
+#include <nrf52_radio.h>
 #include <extudp_functions.h>
 
 #include <TinyGPSPlus.h>
@@ -988,7 +989,7 @@ void nrf52setup()
     Serial.printf("[INIT]...Radio-Status: %i\n", Radio.GetStatus());
 
     //  Start receiving LoRa packets
-    Radio.Rx(RX_TIMEOUT_VALUE);
+    startRadioReceive();
 
     // Configure CAD parameters: 4 symbols, DETPEAK/DETMIN from config, CAD_ONLY mode
     Radio.SetCadParams(LORA_CAD_04_SYMBOL, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN, LORA_CAD_ONLY, 0);
@@ -1284,7 +1285,7 @@ void nrf52loop()
                 rx_irq_defer_count = 0;
                 iReceiveTimeOutTime = 0;
                 taskENTER_CRITICAL();
-                Radio.Rx(RX_TIMEOUT_VALUE);
+                startRadioReceive();
                 taskEXIT_CRITICAL();
                 if(bLORADEBUG)
                 {
@@ -1363,7 +1364,7 @@ void nrf52loop()
                         if(bLORADEBUG)
                             Serial.printf("[MC-DBG] CAD_FREE_NO_TX restoring RX\n");
                         taskENTER_CRITICAL();
-                        Radio.Rx(RX_TIMEOUT_VALUE);
+                        startRadioReceive();
                         taskEXIT_CRITICAL();
                         iReceiveTimeOutTime = millis();
                     }
@@ -1399,7 +1400,7 @@ void nrf52loop()
                     }
 
                     taskENTER_CRITICAL();
-                    Radio.Rx(RX_TIMEOUT_VALUE);
+                    startRadioReceive();
                     taskEXIT_CRITICAL();
                     iReceiveTimeOutTime = millis();
                 }
@@ -1415,7 +1416,7 @@ void nrf52loop()
                 cad_done_flag = false;
                 taskEXIT_CRITICAL();
                 taskENTER_CRITICAL();
-                Radio.Rx(RX_TIMEOUT_VALUE);
+                startRadioReceive();
                 taskEXIT_CRITICAL();
                 iReceiveTimeOutTime = millis();
             }
@@ -1844,7 +1845,7 @@ if (isPhoneReady == 1)
                     Serial.println("LOOP GATEWAY actions UDP received");
             }
             bSPI_ETH_Active = false;  // SPI guard: release bus
-            if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
+            if(bPendingRadioRx) { bPendingRadioRx = false; startRadioReceive(); }
         }
         else
         {
@@ -2220,7 +2221,7 @@ if (isPhoneReady == 1)
         getExternUDP();
         flushExternQueue();
         bSPI_ETH_Active = false;  // SPI guard: release bus
-        if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
+        if(bPendingRadioRx) { bPendingRadioRx = false; startRadioReceive(); }
     }
 
     if(bWEBSERVER || bEXTUDP)
@@ -2244,7 +2245,7 @@ if (isPhoneReady == 1)
                 bSPI_ETH_Active = true;
                 startWebserver();
                 bSPI_ETH_Active = false;
-                if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
+                if(bPendingRadioRx) { bPendingRadioRx = false; startRadioReceive(); }
             }
 
             if(bEXTUDP)
@@ -2252,7 +2253,7 @@ if (isPhoneReady == 1)
                 bSPI_ETH_Active = true;
                 startExternUDP();
                 bSPI_ETH_Active = false;
-                if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
+                if(bPendingRadioRx) { bPendingRadioRx = false; startRadioReceive(); }
             }
         }
 
@@ -2261,7 +2262,7 @@ if (isPhoneReady == 1)
             bSPI_ETH_Active = true;   // SPI guard: Ethernet owns bus (web page delivery)
             loopWebserver();
             bSPI_ETH_Active = false;  // SPI guard: release bus
-            if(bPendingRadioRx) { bPendingRadioRx = false; Radio.Rx(RX_TIMEOUT_VALUE); }
+            if(bPendingRadioRx) { bPendingRadioRx = false; startRadioReceive(); }
         }
 
     }
