@@ -20,7 +20,7 @@ String scanI2C()
 
     TwoWire *w = NULL;
 
-    Serial.printf("[I2C] ... Scanner started\n");
+    Serial.printf("[I2C ]...Scanner started\n");
 
     #ifdef BOARD_TBEAM_V3
         Wire.end();

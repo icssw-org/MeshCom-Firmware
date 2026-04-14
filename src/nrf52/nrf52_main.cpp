@@ -833,9 +833,9 @@ void nrf52setup()
 #endif
 
     // I2C init
-    #if not defined(USE_HELTEC_T114)
+//    #if not defined(USE_HELTEC_T114)
         Wire.begin();
-    #endif
+//    #endif
 
     #if defined(ENABLE_BMX280)
         setupBMX280(true);
