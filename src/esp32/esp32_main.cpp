@@ -1195,7 +1195,7 @@ void esp32setup()
         // set boosted gain
         #if defined(SX1262_V3) || defined(SX126x_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || defined(USING_SX1262) || defined(SX1262_V4)
         Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
-        if (radio.setRxBoostedGainMode(meshcom_settings.node_sset2 & 0x0800)  != RADIOLIB_ERR_NONE ) {
+        if (radio.setRxBoostedGainMode(bBOOSTEDGAIN)  != RADIOLIB_ERR_NONE ) {
             Serial.println(F("Boosted Gain is not available for this module!"));
         }
         #endif
@@ -1336,6 +1336,10 @@ void esp32setup()
 
         // start scanning the channel
         Serial.print(F("[LoRa]...Starting to listen ... "));
+        #ifdef RADIO_CTRL
+            digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
+            delay(2);
+        #endif
         state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
         if (state == RADIOLIB_ERR_NONE)
         {
@@ -1951,6 +1955,10 @@ void esp32loop()
                         bEnableInterruptReceive = false;
                         bEnableInterruptTransmit = false;
 
+                        #ifdef RADIO_CTRL
+                            digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
+                            delay(2);
+                        #endif
                         int state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
 
                         // Now re-wire the interrupt callback
@@ -2078,6 +2086,10 @@ void esp32loop()
                 bEnableInterruptReceive = false;
                 radio.clearPacketSentAction();
                 radio.clearPacketReceivedAction();
+                #ifdef RADIO_CTRL
+                    digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
+                    delay(2);
+                #endif
                 int state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);           // Radio in RX zuerst
                 radio.setPacketReceivedAction(setFlagReceive);
                 bEnableInterruptReceive = true;
@@ -2243,6 +2255,10 @@ void esp32loop()
 
                         bEnableInterruptReceive = true;
                         radio.setPacketReceivedAction(setFlagReceive);
+                        #ifdef RADIO_CTRL
+                            digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
+                            delay(2);
+                        #endif
                         radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
                         iReceiveTimeOutTime = millis();
                     }
@@ -2263,6 +2279,10 @@ void esp32loop()
                     // Restore RX
                     bEnableInterruptReceive = true;
                     radio.setPacketReceivedAction(setFlagReceive);
+                    #ifdef RADIO_CTRL
+                        digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
+                        delay(2);
+                    #endif
                     radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
 
                     iReceiveTimeOutTime = millis();
@@ -3435,6 +3455,10 @@ int checkRX(bool bRadio)
         {
             radio.clearPacketReceivedAction();
             radio.clearPacketSentAction();
+            #ifdef RADIO_CTRL
+                digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
+                delay(2);
+            #endif
             int rxstate = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);          // Radio in RX zuerst
             radio.setPacketReceivedAction(setFlagReceive);
             bEnableInterruptReceive = true;
@@ -3496,6 +3520,10 @@ int checkRX(bool bRadio)
             radio.clearPacketSentAction();
             bEnableInterruptReceive = true;
             radio.setPacketReceivedAction(setFlagReceive);
+            #ifdef RADIO_CTRL
+                digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
+                delay(2);
+            #endif
             int rxstate = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
 
             if(bLORADEBUG)
@@ -3534,6 +3562,10 @@ int checkRX(bool bRadio)
             radio.clearPacketSentAction();
             bEnableInterruptReceive = true;
             radio.setPacketReceivedAction(setFlagReceive);
+            #ifdef RADIO_CTRL
+                digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
+                delay(2);
+            #endif
             int rxstate = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
 
             if(bLORADEBUG)
