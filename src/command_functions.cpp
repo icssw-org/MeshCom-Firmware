@@ -3626,11 +3626,6 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("txpower %i dBm not between %i and max %i dBm\n", iVar, TX_POWER_MIN, TX_POWER_MAX);
         }
         else
-        if(TX_POWER_MAX == 20 && (iVar == 17 || iVar == 18))
-        {
-            Serial.printf("txpower %i dBm not possible with this loRa-Chip\n", iVar);
-        }
-        else
         {
             meshcom_settings.node_power=iVar;
 
