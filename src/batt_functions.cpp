@@ -18,20 +18,11 @@ unsigned long BattTimeAPP = 0;
 
 #if defined(BOARD_HELTEC_T114)
 uint32_t vbat_pin = 4;
+#elif defined(BOARD_T_ECHO)
+uint32_t vbat_pin = 4;
 #else
 uint32_t vbat_pin = WB_A0;
 #endif
-
-#define NO_OF_SAMPLES   64          //Multisampling
-
-#endif
-
-
-
-#if defined(BOARD_T_ECHO)
-
-//uint32_t vbat_pin = WB_A0;
-uint32_t vbat_pin = 4;
 
 #define NO_OF_SAMPLES   64          //Multisampling
 
@@ -241,6 +232,17 @@ void init_batt(void)
 	analogReadResolution(12);
 #endif
 
+#if defined(BOARD_T_ECHO)
+
+	#define ADC_CTRL_PIN 6
+	#define BATTERY_SAMPLES 20
+
+	pinMode(vbat_pin, INPUT);
+	pinMode(ADC_CTRL_PIN, OUTPUT);
+
+	analogReadResolution(12);
+#endif
+
 #if defined(NRF52_SERIES)
 	// Set the resolution to 12-bit (0..4095)
 	analogReadResolution(12); // Can be 8, 10, 12 or 14
@@ -309,7 +311,7 @@ float read_batt(void)
 
 	float raw = 0.0;
 
-	#if defined(NRF52_SERIES) && not defined(BOARD_HELTEC_T114)
+	#if defined(NRF52_SERIES) && not defined(BOARD_HELTEC_T114) && not defined(BOARD_T_ECHO)
 
 		analogReference(AR_INTERNAL_3_0);
 		
@@ -385,7 +387,26 @@ float read_batt(void)
 
 		raw = voltage;
 
-	#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
+		#elif defined(BOARD_T_ECHO)
+		int adcin = vbat_pin; 
+		int adcvalue = 0;
+		float mv_per_lsb = 3000.0F / 4096.0F;  // 12-bit ADC with 3.0V input range
+
+		analogReference(AR_INTERNAL_3_0);
+		analogReadResolution(12);
+		pinMode(ADC_CTRL_PIN, OUTPUT);
+		digitalWrite(ADC_CTRL_PIN, 1);
+		
+		delay(10);
+		
+		adcvalue = analogRead(adcin);
+		digitalWrite(ADC_CTRL_PIN, 0);
+
+		uint16_t voltage = (uint16_t)((float)adcvalue * mv_per_lsb * 4.9);
+
+		raw = voltage;
+
+		#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
 
 		// ADC resolution
 		const int resolution = 12;
@@ -475,6 +496,8 @@ float read_batt(void)
 
 	// take it als mV
 	#if defined(BOARD_HELTEC_T114)
+		// all done - millivolts computed directly in read path
+	#elif defined(BOARD_T_ECHO)
 		// all done - millivolts computed directly in read path
 	#elif defined(NRF52_SERIES)
 		raw = raw * 1.25717;

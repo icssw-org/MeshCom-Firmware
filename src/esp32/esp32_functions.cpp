@@ -6,7 +6,7 @@
 #include <Arduino.h>
 #include <configuration.h>
 
-#ifdef ESP32
+#if defined(ESP32)
 
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
@@ -20,10 +20,10 @@
 #elif defined(BOARD_T_DECK)
 #elif defined(BOARD_T_DECK_PLUS)
 #elif defined(BOARD_T_DECK_PRO)
-#elif defined BOARD_E290
+#elif defined(BOARD_E290)
 #include "heltec-eink-modules.h"
 
-extern EInkDisplay_VisionMasterE290 e290_display;
+extern EInkDisplay_VisionMasterE290 epaper_display;
 
 #include "Fonts/FreeSans9pt7b.h"
 #include "Fonts/FreeSansBold12pt7b.h"
@@ -39,7 +39,8 @@ extern EInkDisplay_VisionMasterE290 e290_display;
 
 void initDisplay()
 {
-#if ! defined(BOARD_E290) && ! defined(BOARD_T_DECK) && ! defined(BOARD_T_DECK_PLUS) && ! defined(BOARD_TRACKER) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+#if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
+
     Serial.println(F("[INIT]...Auto detecting display:"));
         
     int idtype = esp32_isSSD1306(0x3C);
@@ -80,34 +81,34 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 
     sprintf(cvers, "%s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
 
-    e290_display.clear();
-    e290_display.fastmodeOn();
+    epaper_display.clear();
+    epaper_display.fastmodeOn();
 
-    e290_display.landscape();
+    epaper_display.landscape();
 
-    e290_display.setRotation(270);
+    epaper_display.setRotation(270);
 
-    e290_display.fillCircle(10, 10,
+    epaper_display.fillCircle(10, 10,
         10,                             // Radius: 10px
         BLACK                           // Color: black
         );
 
-    e290_display.setFont( &FreeSansBold12pt7b );
-    e290_display.setCursor(20, 50);
-    e290_display.printf("MeshCom %s\n", cvers);
-    e290_display.setCursor(65, 80);
-    e290_display.setFont( &FreeSans12pt7b );
-    e290_display.println("HELTEC E290");
+    epaper_display.setFont( &FreeSansBold12pt7b );
+    epaper_display.setCursor(20, 50);
+    epaper_display.printf("MeshCom %s\n", cvers);
+    epaper_display.setCursor(65, 80);
+    epaper_display.setFont( &FreeSans12pt7b );
+    epaper_display.println("HELTEC E290");
 
-    e290_display.setFont( &FreeSans9pt7b );
-    e290_display.setCursor(30, 18);
-    e290_display.println(line1);
-    e290_display.setCursor(80, 100);
-    e290_display.println(line2);
-    e290_display.setCursor(65, 120);
-    e290_display.println(line3);
+    epaper_display.setFont( &FreeSans9pt7b );
+    epaper_display.setCursor(30, 18);
+    epaper_display.println(line1);
+    epaper_display.setCursor(80, 100);
+    epaper_display.println(line2);
+    epaper_display.setCursor(65, 120);
+    epaper_display.println(line3);
 
-    e290_display.update();
+    epaper_display.update();
 
     #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_TRACKER) || defined (BOARD_T5_EPAPER) || defined(BOARD_T_DECK_PRO)
     // do nothing
@@ -125,7 +126,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     {
         
         #if defined (BOARD_TRACKER)
-//TODO
+        //TODO
         #elif defined (BOARD_STICK_V3)
             u8g2->setFont(u8g2_font_6x10_tf);
             u8g2->drawStr(36, 42, "MeshCom 4");

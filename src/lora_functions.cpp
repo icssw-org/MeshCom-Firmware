@@ -48,12 +48,6 @@
     #include "esp32/pa_control.h"
 #endif
 
-#ifdef BOARD_T_ECHO
-    #include <RadioLib.h>
-    extern SX1262 radio;
-    extern volatile int transmissionState;
-#endif
-
 #if defined(BOARD_T5_EPAPER)
 #include <t5-epaper/t5epaper_extern.h>
 #include <t5-epaper/t5epaper_main.h>

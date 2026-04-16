@@ -204,7 +204,34 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
 #if defined (BOARD_E290)
 #include "heltec-eink-modules.h"
 
-EInkDisplay_VisionMasterE290 e290_display;
+EInkDisplay_VisionMasterE290 epaper_display;
+
+#include "Fonts/FreeMonoBold9pt7b.h"
+#include "Fonts/FreeMonoBold12pt7b.h"
+
+#include "Fonts/FreeSans9pt7b.h"
+#include "Fonts/FreeSans12pt7b.h"
+
+#include <GxEPD2.h>
+
+int dzeile[6] = {16, 41, 61, 81, 101, 121};
+
+#elif defined (BOARD_T_ECHO)
+
+#include "t_echo_utilities.h"
+#include "t_echo_images.h"
+
+//Libraries for E-paper Display
+#include <GxEPD.h>
+#include <GxDEPG0150BN/GxDEPG0150BN.h>  // 1.54" b/w
+#include GxEPD_BitmapExamples
+#include <GxIO/GxIO_SPI/GxIO_SPI.h>
+#include <GxIO/GxIO.h>
+
+SPIClass dispPort(NRF_SPIM2, ePaper_Miso, ePaper_Sclk, ePaper_Mosi);
+
+GxIO_Class io(dispPort, ePaper_Cs, ePaper_Dc, ePaper_Rst);
+GxEPD_Class epaper_display(io, ePaper_Rst, ePaper_Busy);
 
 #include "Fonts/FreeMonoBold9pt7b.h"
 #include "Fonts/FreeMonoBold12pt7b.h"
@@ -222,7 +249,7 @@ int dzeile[6] = {42, 52, 62, 0, 0, 0};
 int dzeile[6] = {8, 21, 31, 41, 51, 61};
 #endif
 
-#if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+#if !defined(BOARD_E290) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
 
 #include <U8g2lib.h>
 
@@ -335,6 +362,7 @@ unsigned int posinfo_last_rate = POSINFO_INTERVAL;  // seconds
 
 uint32_t posinfo_satcount = 0;
 int posinfo_hdop = 0;
+float fposinfo_hdop = 0.0;
 bool posinfo_fix = false;
 bool posinfo_shot=false;
 uint32_t posinfo_age=0;
@@ -647,6 +675,10 @@ int esp32_isSSD1306(int address)
         return 1;
     #endif
 
+    #if defined(BOARD_T_ECHO)
+        return 1;
+    #endif
+
     #if defined(BOARD_T5_EPAPER)
         return 1;
     #endif
@@ -716,8 +748,8 @@ int esp32_isSSD1306(int address)
 
 void E290DisplayUpdate()
 {
-    #ifdef BOARD_E290
-    e290_display.update();
+    #ifdef HAS_EPAPER
+    epaper_display.update();
     #endif
 }
 
@@ -725,25 +757,28 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
         if(u8g2 == NULL)
             return;
     #endif
 
 	if(bClear || (x == 0 && y== 0) || (x == 0 && memcmp(text, "#F", 2) == 0))
     {
-        #if defined (BOARD_E290)
-            e290_display.clearMemory();
+        #if defined(BOARD_T_ECHO)
+            epaper_display.fillScreen(GxEPD_WHITE);
+            epaper_display.setFont(&FreeMonoBold9pt7b);
+        #elif defined(HAS_EPAPER)
+            epaper_display.clearMemory();
 
         	if(memcmp(text, "#F", 2) == 0)
-                e290_display.clear();
+                epaper_display.clear();
             else
-                e290_display.clearMemory();
+                epaper_display.clearMemory();
 
-            e290_display.fastmodeOn();
+            epaper_display.fastmodeOn();
             
-            e290_display.setFont(&FreeMonoBold12pt7b);
-        #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
+            epaper_display.setFont(&FreeMonoBold12pt7b);
+        #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114) || defined(BOARD_T_ECHO) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
         #else
             u8g2->setFont(u8g2_font_6x10_mf);
         #endif
@@ -782,7 +817,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     if(bTransfer)
     {
         //Serial.println("Transfer");
-        #if defined BOARD_E290
+        #if defined HAS_EPAPER
             if(pageLineAnz > 0)
             {
                 for(int its=0;its<pageLineAnz;its++)
@@ -805,19 +840,19 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                         // only transfer
                         if(!bNeu)
                         {
-                            e290_display.setCursor(0, dzeile[1]);
-                            e290_display.setFont(&FreeSans9pt7b);
+                            epaper_display.setCursor(0, dzeile[1]);
+                            epaper_display.setFont(&FreeSans9pt7b);
 
-                            e290_display.println(pageTextLong1);
+                            epaper_display.println(pageTextLong1);
 
-                            e290_display.setCursor(0, dzeile[2]);
-                            e290_display.println(pageTextLong2);
+                            epaper_display.setCursor(0, dzeile[2]);
+                            epaper_display.println(pageTextLong2);
                         }
                     }
                     else
                     if(memcmp(pageText[its], "#L", 2) == 0)
                     {
-                        e290_display.drawLine(0, 22, 320, 22, BLACK);
+                        epaper_display.drawLine(0, 22, 320, 22, GxEPD_BLACK);
 
                         //u8g2->drawHLine(pageLine[its][0], pageLine[its][1], 120);
                     }
@@ -826,8 +861,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                         snprintf(ptext, sizeof(ptext), "%s", pageText[its]);
                         if(pageLine[its][1] >= 0)
                         {
-                            e290_display.setCursor(pageLine[its][0], pageLine[its][1]);
-                            e290_display.println(ptext);
+                            epaper_display.setCursor(pageLine[its][0], pageLine[its][1]);
+                            epaper_display.println(ptext);
 
                             //u8g2->drawUTF8(pageLine[its][0], pageLine[its][1], ptext);
                         }
@@ -835,7 +870,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                 }
 
             	if(memcmp(text, "#S", 2) != 0 && memcmp(text, "#F", 2) != 0)
-                    e290_display.update();
+                    epaper_display.update();
             }
             
         #elif defined (BOARD_TRACKER) || defined (BOARD_HELTEC_T114)
@@ -870,6 +905,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             #endif
         }
 
+        #elif defined (BOARD_T_ECHO)
+        // extra source
         #elif defined (BOARD_T5_EPAPER)
         // extra source
         #elif defined (BOARD_T_DECK_PRO)
@@ -1028,7 +1065,7 @@ void sendDisplayHead(bool bInit)
     snprintf(print_text, sizeof(print_text), "BLE-C: %06i", meshcom_settings.bt_code);
     sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-    #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
+    #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114) && !defined (BOARD_T_ECHO)
     if(bWIFIAP)
         snprintf(print_text, sizeof(print_text), "AP   : %-13.13s", meshcom_settings.node_call);
     else
@@ -1084,13 +1121,13 @@ void sendDisplayTrack()
         sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
         snprintf(print_text, sizeof(print_text), "DIST: %5.0lf hdop%4i", posinfo_distance, posinfo_hdop);
-        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
+        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114) && !defined (BOARD_T_ECHO)
             sendDisplay1306(false, false, 3, dzeile[4], print_text);
         #else
             sendDisplay1306(false, true, 3, dzeile[4], print_text);
         #endif
 
-        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114)
+        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114) && !defined (BOARD_T_ECHO)
             snprintf(print_text, sizeof(print_text), "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
             sendDisplay1306(false, true, 3, dzeile[5], print_text);
         #endif
@@ -1156,12 +1193,12 @@ void sendDisplayTime()
             pagePointer=PAGE_MAX-1;
     }
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
         if(u8g2 == NULL)
             return;
     #endif
 
-    #if defined (BOARD_E290) || defined (BOARD_T_DECK)  || defined (BOARD_T_DECK_PLUS) || defined (BOARD_T5_EPAPER)
+    #if defined (HAS_EPAPER) || defined (BOARD_T_DECK)  || defined (BOARD_T_DECK_PLUS) || defined (BOARD_T5_EPAPER)
         return;
     #endif
 
@@ -1197,7 +1234,7 @@ void sendDisplayTime()
         snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
     #endif
 
- #if defined(XPOWERS_CHIP_AXP192) || defined(BOARD_E290) || defined(BOARD_TBEAM_1W)
+ #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
     if(global_batt == 0.0)
@@ -1211,7 +1248,11 @@ void sendDisplayTime()
         
         bOneButton = false;
 
+        #ifdef BOARD_T_ECHO
+        snprintf(print_text, sizeof(print_text), "%02i:%02i:%02i    %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        #else
         snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        #endif
 
         memcpy(pageText[0], print_text, 20);
         pageLine[0][0] = 3;
@@ -1248,7 +1289,7 @@ void sendDisplayMainline()
         snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
     #endif
 
- #if defined(XPOWERS_CHIP_AXP192) || defined(BOARD_E290) || defined(BOARD_E290) || defined(BOARD_TBEAM_1W)
+ #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
     if(global_batt == 0.0)
@@ -1257,11 +1298,19 @@ void sendDisplayMainline()
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
+        #ifdef BORAD_T_ECHO
+        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s   %s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
+        #else
         snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s       %s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
+        #endif
     }
     else
     {
+        #ifdef BOARD_T_ECHO
+        snprintf(print_text, sizeof(print_text), "%02i:%02i:%02i    %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        #else
         snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        #endif
     }
 
     sendDisplay1306(true, false, 3, dzeile[0], print_text);
@@ -1573,14 +1622,14 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         return;
 
-    #elif defined (BOARD_E290)
+    #elif defined (HAS_EPAPER)
 
     sendDisplayMainline();
 
     sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");    // not fastmode for CET display
 
-    e290_display.setCursor(0, dzeile[1]);
-    e290_display.setFont(&FreeSans9pt7b);
+    epaper_display.setCursor(0, dzeile[1]);
+    epaper_display.setFont(&FreeSans9pt7b);
 
     String strPath = "M* <" + aprsmsg.msg_source_call + ">";
     // DM
@@ -1594,28 +1643,32 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             strPath = "DM <" + aprsmsg.msg_source_call + ">";
         }
 
+    #ifdef BOARD_T_ECHO
+        snprintf(msg_text, sizeof(msg_text), "%s", strPath.c_str());
+    #else
     if(strPath.length() < (20-4))
         snprintf(msg_text, sizeof(msg_text), "%s <%i>", strPath.c_str(), rssi);
     else
         snprintf(msg_text, sizeof(msg_text), "%s", strPath.c_str());
+    #endif
 
     msg_text[20]=0x00;
-    e290_display.println(msg_text);
+    epaper_display.println(msg_text);
 
-    e290_display.setCursor(0, dzeile[2]);
+    epaper_display.setCursor(0, dzeile[2]);
 
     String strAscii = "";//aprsmsg.msg_payload;
 
     strAscii = utf8ascii(aprsmsg.msg_payload);
 
-    e290_display.println(strAscii);
+    epaper_display.println(strAscii);
 
     strncpy(pageLastTextLong1[pagePointer], msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
     pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
     strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
     pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
-    e290_display.update();
+    epaper_display.update();
 
     #elif defined (BOARD_T5_EPAPER)
     // extra source
@@ -1900,7 +1953,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     sendDisplayMainline();
 
-    #ifdef BOARD_E290
+    #ifdef HAS_EPAPER
         sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
     #endif
 
@@ -2005,16 +2058,16 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     memset(decode_text, 0x00, sizeof(decode_text));
     ipt=0;
 
-    #ifdef BOARD_E290
+    #if defined(HAS_EPAPER) and not defined(BOARD_T_ECHO)
 
     // dir_to
-    e290_display.drawCircle(275, 107,
+    epaper_display.drawCircle(275, 107,
         20,                             // Radius: 10px
         BLACK                           // Color: black
         );
 
     // dir_to
-    e290_display.drawCircle(275, 107,
+    epaper_display.drawCircle(275, 107,
         19,                             // Radius: 10px
         BLACK                           // Color: black
         );
@@ -2039,12 +2092,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                     if(aprsmsg.msg_source_fw_version > 13)
                         alt = (int)((float)alt * 0.3048);
 
-                    #ifdef BOARD_E290
+                    #if defined(HAS_EPAPER)
+                        #if not defined(BOARD_T_ECHO)
                         DrawRssi(3, 117, rssi);
 
                         snprintf(msg_text, sizeof(msg_text), "ALT:%im", alt);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+                        #endif
                     #else
                         snprintf(msg_text, sizeof(msg_text), "ALT:%im   rssi:%i", alt, rssi);
                         msg_text[20]=0x00;
@@ -2066,14 +2121,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
 }
 
-#ifdef BOARD_E290
+#if defined(HAS_EPAPER) and not defined(BOARD_T_ECHO)
 void DrawDirection(float angle, int cx, int cy, int radius)
 {
     float displacedAngle = angle - 90;
     int x = cx + ((float)cos(degreesToRadians(displacedAngle)) * (radius - 3)); //convert angle to radians for x and y coordinates
     int y = cy + ((float)sin(degreesToRadians(displacedAngle)) * (radius - 3));
     
-    e290_display.drawLine(cx, cy, x, y, BLACK); //draw a line from center point back to the point
+    epaper_display.drawLine(cx, cy, x, y, BLACK); //draw a line from center point back to the point
 }
 
 double degreesToRadians(double degrees)
@@ -2087,10 +2142,10 @@ void DrawRssi(int cx, int cy, int16_t rssi)
     
     //Serial.printf("rssi:%i irssi:%i\n", rssi, irssi);
 
-    e290_display.fillRect(cx + 60, cy, irssi, 5, BLACK);
+    epaper_display.fillRect(cx + 60, cy, irssi, 5, BLACK);
 
-    e290_display.setCursor(cx, cy + 10);
-    e290_display.printf("%i", rssi);
+    epaper_display.setCursor(cx, cy + 10);
+    epaper_display.printf("%i", rssi);
 }
 #endif
 
@@ -2822,7 +2877,9 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
             tdeck_send_track_view();
         #elif defined(HAS_TFT)
         // none
-        #elif defined(BOARD_E290)
+        #elif defined(BOARD_T_ECHO)
+        // none
+        #elif defined(HAS_EPAPER)
         // none
         #elif defined(BOARD_TRACKER)
         // none
