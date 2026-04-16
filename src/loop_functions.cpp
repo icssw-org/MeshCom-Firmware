@@ -228,7 +228,7 @@ int dzeile[6] = {16, 41, 61, 81, 101, 121};
 #include <GxIO/GxIO_SPI/GxIO_SPI.h>
 #include <GxIO/GxIO.h>
 
-SPIClass dispPort(NRF_SPIM2, ePaper_Miso, ePaper_Sclk, ePaper_Mosi);
+SPIClass dispPort(NRF_SPIM3, ePaper_Miso, ePaper_Sclk, ePaper_Mosi);
 
 GxIO_Class io(dispPort, ePaper_Cs, ePaper_Dc, ePaper_Rst);
 GxEPD_Class epaper_display(io, ePaper_Rst, ePaper_Busy);
