@@ -262,6 +262,7 @@ extern double posinfo_prev_lon;
 extern double posinfo_last_direction;
 extern uint32_t posinfo_satcount;
 extern int posinfo_hdop;
+extern float fposinfo_hdop;
 extern bool posinfo_fix;
 extern bool posinfo_shot;
 extern uint32_t posinfo_age;

@@ -43,12 +43,6 @@
     extern int transmissionState;
 #endif
 
-#ifdef BOARD_T_ECHO
-    #include <RadioLib.h>
-    extern SX1262 radio;
-    extern int transmissionState;
-#endif
-
 #if defined(BOARD_T5_EPAPER)
 #include <t5-epaper/t5epaper_extern.h>
 #endif
@@ -88,7 +82,7 @@ float getFreq()
         freq = RF_FREQUENCY;
     }
 
-    #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+    #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
         freq=freq/1000000;
     #endif
 
@@ -99,7 +93,7 @@ float getBW()
 {
     float bw = meshcom_settings.node_bw;
 
-    #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+    #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
         if(bw == 0)
             bw = 125.0;
         else
@@ -131,7 +125,7 @@ int getCR()
     if(rf_cr_info == 0)
         rf_cr_info = LORA_CR;
 
-    #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+    #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
         if(meshcom_settings.node_cr == 1)
             rf_cr_info=5;
         else
@@ -199,7 +193,7 @@ void lora_setcountry(int iCtry)
     {
         case 1:  // UK ... 
             
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_freq = 439912500;
                 meshcom_settings.node_bw = 0;
                 meshcom_settings.node_cr = 1;
@@ -220,7 +214,7 @@ void lora_setcountry(int iCtry)
         case 2:  // ON
             meshcom_settings.node_freq = RF_FREQUENCY;
 
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_bw = 0;
                 meshcom_settings.node_cr = 2;
             #else
@@ -239,7 +233,7 @@ void lora_setcountry(int iCtry)
         case 4:  // LA
             meshcom_settings.node_freq = RF_FREQUENCY;
 
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_freq = 433925000;
                 meshcom_settings.node_bw = 0;
                 meshcom_settings.node_cr = 2;
@@ -259,7 +253,7 @@ void lora_setcountry(int iCtry)
 
             case 5:  // 868 ... 
 
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_freq = 869525000;
                 meshcom_settings.node_bw = 1;
                 meshcom_settings.node_cr = 2;
@@ -279,7 +273,7 @@ void lora_setcountry(int iCtry)
 
         case 6:  // 906 ... 
 
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_freq = 906875000;
                 meshcom_settings.node_bw = 1;
                 meshcom_settings.node_cr = 2;
@@ -338,7 +332,7 @@ void lora_setcountry(int iCtry)
         case 8:  // EU Preabble 8 ... 
             meshcom_settings.node_freq = RF_FREQUENCY;
 
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_bw = 1;
                 meshcom_settings.node_cr = 2;
             #else
@@ -356,7 +350,7 @@ void lora_setcountry(int iCtry)
 
         case 9:  // UK8 ... 
             
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_freq = 439912500;
                 meshcom_settings.node_bw = 0;
                 meshcom_settings.node_cr = 1;
@@ -375,7 +369,7 @@ void lora_setcountry(int iCtry)
             break;
 
         case 10:  // US ... 
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_freq = 433175000;
                 meshcom_settings.node_bw = 1;
                 meshcom_settings.node_cr = 2;
@@ -394,7 +388,7 @@ void lora_setcountry(int iCtry)
             break;
 
         case 11:  // VR2 ... 
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_freq = 435775000;
                 meshcom_settings.node_bw = 1;
                 meshcom_settings.node_cr = 2;
@@ -415,7 +409,7 @@ void lora_setcountry(int iCtry)
         default:    // EU
             meshcom_settings.node_freq = RF_FREQUENCY;
 
-            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
                 meshcom_settings.node_bw = 1;
                 meshcom_settings.node_cr = 2;
             #else
@@ -435,14 +429,14 @@ void lora_setcountry(int iCtry)
     save_settings();
 }
 
-#if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+#if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
 void RadioInit();
 #endif
 
 bool lora_setchip_meshcom()
 {
 
-#if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+#if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
 
     //  Initialize the LoRa Transceiver
     RadioInit();
@@ -514,13 +508,13 @@ bool lora_setchip_meshcom()
 
 }
 
-#if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+#if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
 void RadioInit();
 #endif
 
 bool lora_setchip_aprs()
 {
-#if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114)
+#if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
     //  Initialize the LoRa Transceiver
     RadioInit();
 

@@ -89,6 +89,7 @@ static uint32_t nrf52_getMaxFreeBlock(void)
 
 // Min-free watermark since boot
 static uint32_t nrf52_heapMinFree = UINT32_MAX;
+static uint32_t nrf52_heapFree = UINT32_MAX;
 
 // Ethernet Object
 NrfETH neth;
@@ -339,7 +340,7 @@ void interruptHandle3()
   }
 }
 
-#if not defined(BOARD_HELTEC_T114)
+#if not defined(BOARD_HELTEC_T114) and not defined(BOARD_T_ECHO)
 #include <U8g2lib.h>
 
 //extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
@@ -351,6 +352,7 @@ extern U8G2 u8g2_2;
 // Prototypes
 void blinkLED();                                     // blink GREEN
 void blinkLED2();                                    // blink BLUE
+void blinkLED2();                                    // blink RED
 
 void checkSerialCommand(void);
 
@@ -424,6 +426,9 @@ void nrf52setup()
      // LEDs
     #if not defined(BOARD_HELTEC_T114)
         pinMode(LED_GREEN, OUTPUT);
+        #ifndef BOARD_RAK4630
+        pinMode(LED_RED, OUTPUT);
+        #endif
         pinMode(LED_BLUE, OUTPUT);
     #endif
 
@@ -445,6 +450,7 @@ void nrf52setup()
     Serial.println("=====================================");
     Serial.println("[INIT] START CLIENT");
     nrf52_heapMinFree = nrf52_getFreeHeap();
+    nrf52_heapFree = nrf52_heapMinFree;
     Serial.printf("%s;[HEAP];%lu;%lu;%lu;(init)\n", getTimeString().c_str(),
         (unsigned long)nrf52_getFreeHeap(),
         (unsigned long)nrf52_heapMinFree,
@@ -563,6 +569,7 @@ void nrf52setup()
     init_onebutton();
 
     // if Node not set --> WifiAP Mode on
+    /* NRF52 no WiFi
     if(memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0 || meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
     {
         bWIFIAP = true;
@@ -570,6 +577,7 @@ void nrf52setup()
 
         Serial.println("WIFIAP starting...");
     }
+    */
 
     if(meshcom_settings.node_gwsrv[0] == 0x00)
         sprintf(meshcom_settings.node_gwsrv, "%s", "OE");
@@ -743,6 +751,7 @@ void nrf52setup()
     posinfo_fix = false;
     posinfo_satcount = 0;
     posinfo_hdop = 0;
+    fposinfo_hdop = 0;
 
     // Try to initialize!
     #if defined(LPS33)
@@ -875,7 +884,13 @@ void nrf52setup()
         setupSOFTSER();
     #endif
 
-    #if defined(HAS_TFT_114)
+    #if defined(BOARD_T_ECHO)
+        initDisplay();
+        startDisplay((char*)"..starting now..", (char*)"@by icssw.org", (char*)"OE1KBC, OE1KFR");
+    
+    #elif defined(HAS_EPAPER)
+
+    #elif defined(HAS_TFT_114)
         char cvers[22];
         sprintf(cvers, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         String  version = cvers;
@@ -888,7 +903,7 @@ void nrf52setup()
         displayTFT(" MeshCom 4.0 ", version, "  @BY ICSSW.ORG", "  OE1KBC, OE1KFR",  "  ...starting now", 5000);
     #else
         initDisplay();
-        startDisplay((char*)"...starting now", (char*)"@by icssw.org", (char*)"OE1KBC, OE1KFR");
+        startDisplay((char*)"..starting now..", (char*)"@by icssw.org", (char*)"OE1KBC, OE1KFR");
     #endif
 
     // reset GPS-Time parameter
@@ -1071,7 +1086,7 @@ void nrf52setup()
 
 void nrf52loop()
 {
-    #ifdef HAS_TFT_114
+    #if defined(HAS_TFT_114)
     if(bT114_DEEP_SLEEP)
     {
         // only loop
@@ -1115,8 +1130,8 @@ void nrf52loop()
             }
         }
     }
-    else
     #endif
+
     if(meshcom_settings.node_hasIPaddress)
     {
         strTime = "none";
@@ -1626,6 +1641,7 @@ void nrf52loop()
             posinfo_fix = false;
             posinfo_satcount = 0;
             posinfo_hdop = 0;
+            fposinfo_hdop = 0;
             posinfo_interval = POSINFO_INTERVAL;
         }
     }
@@ -2006,13 +2022,20 @@ if (isPhoneReady == 1)
         if ((heapMonTimer + 60000) < millis())
         {
             uint32_t freeHeap = nrf52_getFreeHeap();
-            if (freeHeap < nrf52_heapMinFree) nrf52_heapMinFree = freeHeap;
 
-            Serial.printf("%s;[HEAP];%lu;%lu;%lu;(mon)\n",
-                getTimeString().c_str(),
-                (unsigned long)freeHeap,
-                (unsigned long)nrf52_heapMinFree,
-                (unsigned long)nrf52_getMaxFreeBlock());
+            if(nrf52_heapFree != freeHeap)
+            {
+                nrf52_heapFree = freeHeap;
+                
+                if (freeHeap < nrf52_heapMinFree) nrf52_heapMinFree = freeHeap;
+
+                Serial.printf("%s;[HEAP];%lu;%lu;%lu;(mon)\n",
+                    getTimeString().c_str(),
+                    (unsigned long)freeHeap,
+                    (unsigned long)nrf52_heapMinFree,
+                    (unsigned long)nrf52_getMaxFreeBlock());
+            }
+
             heapMonTimer = millis();
         }
     }
@@ -2403,6 +2426,7 @@ unsigned int getGPS(void)
 
     posinfo_satcount = tinyGPSPlus.satellites.value();
     posinfo_hdop = tinyGPSPlus.hdop.value();
+    fposinfo_hdop = tinyGPSPlus.hdop.value();;
 
     bool has_gnss_location=false;
 

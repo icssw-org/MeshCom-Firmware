@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-#if defined(BOARD_T_ECHO) || defined(BOARD_T5_EPAPER)
+#if defined(BOARD_T5_EPAPER) or defined(BOARD_T_ECHO)
 #else
   #include <SPI.h>
 #endif
@@ -13,10 +13,6 @@
 
 #if defined(BOARD_RAK4630)
   #include <nrf52/nrf52_main.h>
-#endif
-
-#if defined(BOARD_T_ECHO)
-  #include <nrf52_techo/nrf52_main.h>
 #endif
 
 #if defined (BOARD_T_DECK_PRO)
@@ -45,10 +41,6 @@ void setup()
       nrf52setup();
     #endif
 
-    #if defined(BOARD_T_ECHO)
-      nrf52setup();
-    #endif
-
     //#if defined (BOARD_T_DECK_PRO)
     //  initTDeck_pro();
     //#elif ESP32
@@ -65,10 +57,6 @@ void loop()
   #endif  
 
   #if defined(BOARD_RAK4630)
-    nrf52loop();
-  #endif
-
-  #if defined(BOARD_T_ECHO)
     nrf52loop();
   #endif
 

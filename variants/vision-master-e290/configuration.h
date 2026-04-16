@@ -112,3 +112,5 @@ definitions for HELTEC E290
 #define PIN_LORA_SCK            9
 #define PIN_LORA_MISO           11
 #define PIN_LORA_MOSI           10
+
+#define HAS_EPAPER
