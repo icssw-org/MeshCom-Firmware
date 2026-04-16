@@ -13,8 +13,7 @@
 - heltec_wifi_lora_32_V4.bin
 - heltec_wireless_stick_v3.bin
 - heltec_wireless_tracker.bin
-- heltec_t114.zip
-- heltec_t114.uf2
+- heltec_t114.zip, .uf2
 
 ### Lilygo
 #### TBEAM
@@ -24,6 +23,7 @@
 - ttgo_tbeam_SX1268.bin
 - ttgo_tbeam_supreme_l76k.bin
 - ttgo_tbeam_1W.bin
+- t-echo.zip, .uf2
 
 #### E-PAPER
 - vision-master-e290.bin
@@ -34,8 +34,7 @@
 - t_deck_pro.bin
 
 ### RAK Wisblock
-- wiscore_rak4631.zip
-- wiscore_rak4631.uf2
+- wiscore_rak4631.zip, .uf2
 
 ### Newer version > v4.35 able to upgrade via OTA-Flasher.
 
