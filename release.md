@@ -23,7 +23,6 @@
 - ttgo_tbeam_SX1268.bin
 - ttgo_tbeam_supreme_l76k.bin
 - ttgo_tbeam_1W.bin
-- t-echo.zip, .uf2
 
 #### E-PAPER
 - vision-master-e290.bin
@@ -32,6 +31,9 @@
 - t_deck.bin
 - t_deck_plus.bin
 - t_deck_pro.bin
+
+#### T-Echo
+- t_echo.zip, .uf2
 
 ### RAK Wisblock
 - wiscore_rak4631.zip, .uf2
