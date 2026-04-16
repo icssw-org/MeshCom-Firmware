@@ -24,7 +24,7 @@ GPSData gpsData;;
 
 #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
 extern Uart Serial1;
-#elif defined(ENABLE_GPS_SOFTSER)
+#elif defined(GPS_SOFTWARE_SERIAL)
     #include "SoftwareSerial.h"
     SoftwareSerial GPSSerial(GPS_RX_PIN, GPS_TX_PIN);
 #else
@@ -133,10 +133,11 @@ void WZ_GPS_Init() {
 
     unsigned long detectedBaud = detectBaudrate();
 
-    if (detectedBaud > 0) {
-        Serial.printf("[GPS ]...erkannte Baudrate: %u\n", detectedBaud);
+    if (checkbaud(detectedBaud))
+    {
+        Serial.printf("[GPS ]...erkannte Baudrate: %lu\n", detectedBaud);
         // UART mit der erkannten Rate starten:
-        #if defined(ENABLE_GPS_SOFTSER)
+        #if defined(GPS_BAUDRATE_SOFTCHECK)
         #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
         Serial1.begin(detectedBaud);
         #else
@@ -146,20 +147,11 @@ void WZ_GPS_Init() {
         GPSSerial.begin(detectedBaud,SERIAL_8N1,GPS_RX_PIN,GPS_TX_PIN);
         #endif
         gpsDetected = true;
-    } else {
+    }
+    else
+    {
         Serial.println("[GPS_ERR]...Erkennung fehlgeschlagen (Timeout oder kein Signal).");
         gpsDetected = false;
-
-        #if not defined(USE_HELTEC_T114) and not defined(BOARD_T_ECHO)
-        GPSSerial.begin(9600,SERIAL_8N1,GPS_RX_PIN,GPS_TX_PIN);
-        GPSSerial.write("$PCAS10,3*1C\r\n");  // reset l76k
-        delay(200);
-
-        GPSSerial.updateBaudRate(38400);
-        GPSSerial.write("$PCAS10,3*1C\r\n");  // reset l76k
-        delay(200);
-        
-        #endif
     }
 
     if (gpsDetected)
@@ -170,11 +162,11 @@ void WZ_GPS_Init() {
             {
                 // Baudrate auf 38400 umstellen falls erforderlich
                 unsigned long fixbaud = 38400;
-                #if defined(GPS_BAUDRATE_MODUL_SET)
-                fixbaud = GPS_BAUDRATE_MODUL_SET;
+                #if defined(GPS_BAUDRATE_SETFIX)
+                fixbaud = GPS_BAUDRATE_SETFIX;
                 #endif
                 if (detectedBaud != fixbaud) {
-                    Serial.printf("[GPS ]...set to %u Baud & save to Flash\n", fixbaud);
+                    Serial.printf("[GPS ]...set to %lu Baud & save to Flash\n", fixbaud);
                     #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
                     if(fixbaud == 115200)
                         Serial1.write("$PCAS01,5*19\r\n"); // set to new Baudrate 38400
@@ -211,10 +203,9 @@ void WZ_GPS_Init() {
                 #else
                 if (myGPS.begin(GPSSerial)) {
                 #endif
-                    Serial.printf("[GPS ]...UBLOX verbunden\n");
                     on_UBLOX = true;
                 } else {
-                    Serial.printf("[GPS_ERR]...no UBLOX verbunden\n");
+                    Serial.printf("[GPS_ERR]...UBLOX no setup\n");
                     on_UBLOX = false;
                 }
             }
@@ -250,18 +241,19 @@ void WZ_GPS_Init() {
                 delay(100);
                 
                 myGPS.enableGNSS(1,SFE_UBLOX_GNSS_ID_GLONASS);
-                Serial.printf("[GPS ]...UBLOX konfiguriert\n");
 
-
-                #if not defined(ENABLE_GPS_BAUD_FIX)
+                #if not defined(USE_HELTEC_T114) and not defined(BOARD_T_ECHO)
                 if (detectedBaud != 38400) {
                     myGPS.setSerialRate(38400, COM_PORT_UART1);
                     delay(100);
                     GPSSerial.updateBaudRate(38400);
+                    delay(100);
                     myGPS.saveConfiguration(); //Save the current settings to flash and BBR
                     delay(100);
-                    Serial.printf("[GPS ]...UBLOX auf 38400 Baud gestellt & save Flash\n");
+                    Serial.printf("[GPS ]...UBLOX set to 38400 Baud & saved to UBLOX-Flash\n");
                 }
+                #else
+                    Serial.printf("[GPS ]...UBLOX set & not saved to UBLOX-Flash\n");
                 #endif
             }
             #endif
@@ -656,6 +648,10 @@ bool L76Kprobe()
                 on_L76K = true;
                 return true;
             }
+            else
+            {
+                Serial.printf("[GPS ] UBLOX or L76K not found\n");
+            }
         }
     }
 
@@ -663,16 +659,27 @@ bool L76Kprobe()
 }
 #endif
 
-#if defined(ENABLE_GPS_BAUD_FIX)
-
 // Baudrate-Erkennung: Viele Module starten mit 9600, manche mit 38400/115200
-static const unsigned long GPS_BAUDS[] = {38400, 4800, 9600, 19200, 38400, 57600, 115200};
+static const unsigned long GPS_BAUDS[] = {38400, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
 static const size_t   GPS_BAUD_COUNT = sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]);
+
+bool checkbaud(unsigned long detectbaud)
+{
+    for(int iGpsBaud=0; iGpsBaud < (int)GPS_BAUD_COUNT; iGpsBaud++)
+    {
+        if(GPS_BAUDS[iGpsBaud] == detectbaud)
+            return true;
+    }
+
+    return false;
+}
+
+#if defined(GPS_BAUDRATE_SOFTCHECK)
 
 unsigned long detectBaudrate()
 {
-    #if defined(GPS_BAUDRATE_MODUL)
-        return GPS_BAUDRATE_MODUL;
+    #if defined(GPS_BAUDRATE_SETFIX)
+        return GPS_BAUDRATE_SETFIX;
     #endif
 
     // Baudrate-Erkennung: Jede Baudrate kurz ausprobieren
@@ -684,7 +691,7 @@ unsigned long detectBaudrate()
     {
         detectedBaud =  GPS_BAUDS[iGpsBaud];
 
-        #if defined(ENABLE_GPS_SOFTSER)
+        #if defined(GPS_BAUDRATE_SOFTCHECK)
         #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
         Serial1.begin(GPS_BAUDS[iGpsBaud]);
         #else
@@ -729,13 +736,13 @@ unsigned long detectBaudrate()
         if(itxt < itxtmax)
         {
             if(bGPSON && iGPSDEBUG > 0)
-                Serial.printf("[GPS ]...check %u baud  (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);
+                Serial.printf("[GPS ]...check %lu baud  (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);
 
             gpsDetected = false;
         }
         else
         {
-            Serial.printf("[GPS ]...found with %u baud (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);
+            Serial.printf("[GPS ]...found with %lu baud (%i chars)\n", GPS_BAUDS[iGpsBaud], itxt);
 
             gpsDetected = true;
 
@@ -763,18 +770,31 @@ unsigned long detectBaudrate()
             GPSSerial.write("$PCAS11,3*1E\r\n");
             #endif
 
-            #if not defined(ENABLE_GPS_SOFTSER)
             if (detectedBaud != 38400)
             {
                 Serial.printf("[GPS ]...set to 38400 Baud\n");
+                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+                Serial1.write("$PCAS01,3*1F\r\n"); // set to new Baudrate 38400
+                #else
                 GPSSerial.write("$PCAS01,3*1F\r\n"); // set to new Baudrate 38400
+                #endif
                 delay(250);
 
+                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+                Serial1.end();
+                delay(250);
+                Serial1.begin(38400);
+                delay(250);
+                #else
                 GPSSerial.updateBaudRate(38400);
+                #endif
 
+                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+                Serial1.write("$PCAS00*01\r\n");  // save to Flash
+                #else
                 GPSSerial.write("$PCAS00*01\r\n");  // save to Flash
+                #endif
             }
-            #endif
 
             return detectedBaud;
         }

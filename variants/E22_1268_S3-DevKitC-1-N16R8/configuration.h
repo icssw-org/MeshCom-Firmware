@@ -11,7 +11,6 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define MODUL_HARDWARE ESP32_S3_EBYTE_E22
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
-#define ENABLE_GPS
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20
@@ -78,9 +77,6 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 
 #define OneWire_GPIO 47
 
-#define GPS_TX_PIN  15
-#define GPS_RX_PIN  16
-
 // I2C GPIOs
 #define I2C_SDA  8
 #define I2C_SCL  9
@@ -106,3 +102,11 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define SX126x_IRQ E22_DIO1
 #define SX126x_RST E22_NRST
 #define SX126x_GPIO E22_BUSY
+
+#define ENABLE_GPS
+#define GPS_TX_PIN  15
+#define GPS_RX_PIN  16
+
+//#define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
+//#define ENABLE_GPS_UBLOX_FIX          // UBLOX wird fix festgelegt und kein setup gemacht
+//#define GPS_BAUDRATE_SETFIX 38400     // Die Baudrate für GPS wird auf FIXWERT gesetzt

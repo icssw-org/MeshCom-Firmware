@@ -29,10 +29,6 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 //#define ENABLE_RTC
 //#define ENABLE_SOFTSER
 
-// GPS
-#define ENABLE_GPS
-#define GPS_RESET_MODE 1
-
 #define CURRENT_LIMIT 140
 #define TX_POWER_MAX 22
 #define TX_POWER_MIN 2
@@ -59,9 +55,6 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 
 #define OneWire_GPIO -1
 
-#define GPS_TX_PIN 42
-#define GPS_RX_PIN 39
-
 // I2C
 #define I2C_SDA 17
 #define I2C_SCL 18
@@ -87,3 +80,9 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define RADIO_IRQ_PIN   8
 #define RADIO_RST_PIN   46
 #define RADIO_BUSY_PIN  16
+
+// GPS
+#define ENABLE_GPS
+#define GPS_RESET_MODE 1
+#define GPS_TX_PIN 42
+#define GPS_RX_PIN 39

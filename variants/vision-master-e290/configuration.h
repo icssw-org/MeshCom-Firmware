@@ -33,10 +33,6 @@ definitions for HELTEC E290
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
-#define ENABLE_GPS
-#define GPS_RX_PIN 44
-#define GPS_TX_PIN 43
-
 // ESP32
 /** 
  * Radiolib Object Module
@@ -114,3 +110,7 @@ definitions for HELTEC E290
 #define PIN_LORA_MOSI           10
 
 #define HAS_EPAPER
+
+#define ENABLE_GPS
+#define GPS_RX_PIN 44
+#define GPS_TX_PIN 43
