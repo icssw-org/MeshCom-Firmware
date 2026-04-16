@@ -12,7 +12,6 @@ definitions for HELTEC_V2_1
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define SX127X
-#define ENABLE_GPS
 #define ENABLE_BMX280
 #define ENABLE_BMP390
 #define ENABLE_AHT20
@@ -70,5 +69,6 @@ definitions for HELTEC_V2_1
 
 #define OneWire_GPIO 17 // getestet OE5HWN
 
+#define ENABLE_GPS
 #define GPS_RX_PIN 13
 #define GPS_TX_PIN 12

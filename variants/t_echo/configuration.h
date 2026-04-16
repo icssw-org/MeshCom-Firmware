@@ -53,16 +53,6 @@ definitions for RAK4631
 #define RX_TIMEOUT_VALUE 0      // continous rx with 0
 #define TX_TIMEOUT_VALUE 3000
 
-#define ENABLE_GPS_SOFTSER
-#define GPS_RX_PIN 41
-#define GPS_TX_PIN 40
-
-#define ENABLE_GPS
-
-#define ENABLE_GPS_BAUD_FIX
-#define GPS_BAUDRATE_MODUL_SET 38400
-
-
 // ETH Sield
 //#define ETH_CS WB_IO5                   // Resoldered CS Pin to WB_IO5
 #define ETH_CS SS                     // use this to try with pin 26 CS
@@ -83,3 +73,12 @@ definitions for RAK4631
 #define LORA_NRSET 25
 
 #define HAS_EPAPER
+
+#define ENABLE_GPS
+#define GPS_RX_PIN 41
+#define GPS_TX_PIN 40
+
+// bei T114 bitte auf SOFTCHECK lassen .. Interrupt routine bei NRF52 nicht ok
+#define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
+//#define ENABLE_GPS_UBLOX_FIX          // UBLOX wird fix festgelegt und kein setup gemacht
+//#define GPS_BAUDRATE_SETFIX 38400     // Die Baudrate für GPS wird auf FIXWERT gesetzt

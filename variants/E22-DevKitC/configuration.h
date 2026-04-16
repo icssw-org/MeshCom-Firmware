@@ -81,10 +81,10 @@ definitions for E22 Board
 #define SX1268_RST LORA_RST
 #define SX1268_GPIO LORA_DIO0
 
+#define ENABLE_GPS
 #define GPS_RX_PIN 16
 #define GPS_TX_PIN 17
 
-#define ENABLE_GPS
-#define ENABLE_GPS_UBLOX_FIX
-//#define ENABLE_GPS_BAUD_FIX
-//#define GPS_BAUDRATE_MODUL 38400
+//#define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
+//#define ENABLE_GPS_UBLOX_FIX          // UBLOX wird fix festgelegt und kein setup gemacht
+//#define GPS_BAUDRATE_SETFIX 38400     // Die Baudrate für GPS wird auf FIXWERT gesetzt

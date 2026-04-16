@@ -95,4 +95,7 @@ definitions for T-Beam
 #define GPS_RX_PIN 34   // Serial Pin RX
 #define GPS_TX_PIN 12   // Serial Pin TX
 
-#define ENABLE_GPS_BAUD_FIX
+// bei TBEAM bitte auf SOFTCHECK lassen .. Interrupt routine benötigt zu viel vom IRAM
+#define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
+//#define ENABLE_GPS_UBLOX_FIX          // UBLOX wird fix festgelegt und kein setup gemacht
+//#define GPS_BAUDRATE_SETFIX 38400     // Die Baudrate für GPS wird auf FIXWERT gesetzt

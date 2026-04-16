@@ -38,6 +38,7 @@ unsigned long detectBaudrate();
 //unsigned int GPS_Loop();     // Non-blocking! In jedem loop()-Durchlauf aufrufen
 bool GPS_HasFix();
 String GPS_GetMaidenhead();  // Maidenhead-Locator (fuer Amateurfunk)
+bool checkbaud(unsigned long detectbaud);
 
 #endif // ENABLE_GPS
 
