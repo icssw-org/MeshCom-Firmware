@@ -53,6 +53,8 @@ def get_target_hardware(asset):
     "wiscore_rak4631.zip" : "rak4631_zip",
     "heltec_t114.uf2" : "heltec_t114_uf2",
     "heltec_t114.zip" : "heltec_t114_zip",
+    "t_echo.uf2" : "t_echo_uf2",
+    "t_echo.zip" : "t_echo_zip",
     }
 
     bootloader_dict = {
@@ -80,6 +82,8 @@ def get_target_hardware(asset):
     "wiscore_rak4631.zip" : "wiscore_rak4631.zip",
     "heltec_t114.uf2" : "heltec_t114.uf2",
     "heltec_t114.zip" : "heltec_t114.zip",
+    "t_echo.uf2" : "t_echo.uf2",
+    "t_echo.zip" : "t_echo.zip",
     }
 
     safeboot_dict = {
@@ -107,6 +111,8 @@ def get_target_hardware(asset):
     "wiscore_rak4631.zip" : "wiscore_rak4631.zip",
     "heltec_t114.uf2" : "heltec_t114.uf2",
     "heltec_t114.zip" : "heltec_t114.zip",
+    "t_echo.uf2" : "t_echo.uf2",
+    "t_echo.zip" : "t_echo.zip",
     }
 
 
@@ -149,7 +155,7 @@ if __name__ == "__main__":
 
                 Path(target_asset_path).mkdir(parents=True, exist_ok=True)
 
-                if target_hw == "rak4631_uf2" or target_hw == "rak4631_zip":
+                if target_hw == "rak4631_uf2" or target_hw == "rak4631_zip" or target_hw == "heltec_t114_uf2" or target_hw == "heltec_t114_zip"  or target_hw == "t_echo_uf2" or target_hw == "t_echo_zip":
                     target_filename = target_asset_path + target_bootloader
                 else:
                     target_filename = target_asset_path + "firmware.bin"
@@ -159,7 +165,7 @@ if __name__ == "__main__":
                     print(tagname + " - " + filename +  " downloading")
                     urllib.request.urlretrieve(asset_url, target_filename)
 
-                if target_hw != "rak4631_uf2" and target_hw != "rak4631_zip":
+                if target_hw != "rak4631_uf2" and target_hw != "rak4631_zip" and target_hw != "heltec_t114_uf2" and target_hw != "heltec_t114_zip"  and target_hw != "t_echo_uf2" and target_hw != "t_echo_zip":
                     # Download corresponding bootloader + safeboot + partitions + otadata
                     download_asset(release['assets'],target_bootloader,target_asset_path + "bootloader.bin")
                     download_asset(release['assets'],target_safeboot,target_asset_path + "safeboot.bin")
