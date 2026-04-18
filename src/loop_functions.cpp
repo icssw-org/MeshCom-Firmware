@@ -242,11 +242,11 @@ GxEPD_Class epaper_display(io, ePaper_Rst, ePaper_Busy);
 int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 141, 161, 181, 200, 0};
 
 #elif defined (BOARD_TBEAM_V3)
-int dzeile[maxdisplines] = {11, 24, 34, 44, 54, 64, 0, 0, 0, 0, 0};
+int dzeile[maxdisplines] = {11, 24, 34, 44, 54, 64, 0};
 #elif defined (BOARD_STICK_V3)
-int dzeile[maxdisplines] = {42, 52, 62, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+int dzeile[maxdisplines] = {42, 52, 62, 0, 0, 0, 0};
 #else
-int dzeile[maxdisplines] = {8, 21, 31, 41, 51, 61, 0, 0, 0, 0, 0};
+int dzeile[maxdisplines] = {8, 21, 31, 41, 51, 61, 0};
 #endif
 
 #if !defined(BOARD_E290) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
@@ -633,7 +633,11 @@ void insertOwnTx(unsigned int msg_id)
         iWriteOwn=0;
 }
 
+#if defined(BOARD_T_ECHO)
 #define maxdisplines 11
+#else
+#define maxdisplines 7
+#endif
 
 int pageLine[maxdisplines][3] = {0};
 char pageText[maxdisplines][25] = {0};

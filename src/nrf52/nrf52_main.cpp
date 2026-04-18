@@ -843,9 +843,9 @@ void nrf52setup()
 #endif
 
     // I2C init
-//    #if not defined(USE_HELTEC_T114)
-        //Wire.begin();
-//    #endif
+    #if not defined(USE_HELTEC_T114)
+        Wire.begin();
+    #endif
 
     #if defined(ENABLE_BMX280)
         setupBMX280(true);
@@ -1575,7 +1575,7 @@ void nrf52loop()
     if(bGPSON)
     {
         // gps refresh every sec
-        if ((gps_refresh_timer + 2000) < millis())
+        if ((gps_refresh_timer + 1000) < millis())
         {
             unsigned int igps = POSINFO_INTERVAL;
 
