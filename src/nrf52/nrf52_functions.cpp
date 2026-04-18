@@ -105,7 +105,7 @@ void LilyGo_logo(void)
     epaper_display.fillScreen(GxEPD_WHITE);
 
     epaper_display.drawExampleBitmap(BitmapCallSign, 0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, GxEPD_BLACK);
-    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+    epaper_display.update();
 }
 
 void Veille_logo(void)
@@ -114,7 +114,7 @@ void Veille_logo(void)
     epaper_display.fillScreen(GxEPD_WHITE);
     epaper_display.drawExampleBitmap(T_Echo_OFF, 0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, GxEPD_BLACK);
     epaper_display.setRotation(3);
-    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+    epaper_display.update();
 }
 
 void Batterie_Vide_logo(void)
@@ -123,18 +123,18 @@ void Batterie_Vide_logo(void)
     epaper_display.fillScreen(GxEPD_WHITE);
     epaper_display.drawExampleBitmap(Batterie_Vide, 0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, GxEPD_BLACK);
     epaper_display.setRotation(3);
-    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+    epaper_display.update();
 }
 
 void MeshCom_Image(void)
 {
     epaper_display.fillScreen(GxEPD_WHITE);
-    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+    epaper_display.update();
 
     epaper_display.setRotation(0);
     epaper_display.drawExampleBitmap(MeshCom_BitMap, 0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, GxEPD_BLACK);
     epaper_display.setRotation(3);
-    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+    epaper_display.update();
 }
 
 extern bool bDEEP_SLEEP;
@@ -199,7 +199,7 @@ void initDisplay()
 
     enableBacklight(false);
 
-    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+    epaper_display.update();
 }
 
 void startDisplay(char line1[20], char line2[20], char line3[20])
@@ -229,7 +229,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     epaper_display.setCursor(5, 160);
     epaper_display.printf("%s\n", line3);
 
-    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+    epaper_display.update();
 }
 
 #endif
