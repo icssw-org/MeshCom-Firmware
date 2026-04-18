@@ -86,7 +86,7 @@ definitions for E22 Board
 
 #define OneWire_GPIO 25 // getestet OE5HWN
 
-#define ENABLE_GPS
+//#define ENABLE_GPS
 #define GPS_RX_PIN 16
 #define GPS_TX_PIN 17
 

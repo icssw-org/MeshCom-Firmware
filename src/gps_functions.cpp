@@ -33,7 +33,7 @@ extern Uart Serial1;
 static HardwareSerial GPSSerial(1);  // UART1
 #endif
 
-#if not defined(ENABLE_GPS_UBLOX_FIX)
+#ifndef ENABLE_GPS_UBLOX_FIX
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
 extern SFE_UBLOX_GNSS myGPS;
@@ -233,6 +233,8 @@ void WZ_GPS_Init() {
                 #endif
             }
 
+            #if not defined(ENABLE_GPS_UBLOX_FIX)
+
             if (on_UBLOX)
             {
                 // testen auf UBLOX, bzw. UBLOX annehmen
@@ -294,6 +296,7 @@ void WZ_GPS_Init() {
                     Serial.printf("[GPS ]...UBLOX set & not saved to UBLOX-Flash\n");
                 #endif
             }
+            #endif
         } 
     }
 
@@ -820,8 +823,6 @@ unsigned long detectBaudrate()
 }
 #else
 
-#if not defined(GPS_BAUDRATE_SETFIX)
-
 //=======================================================================================
 const int SAMPLE_COUNT = 50;      // Anzahl der zu messenden Signalflanken
 const int SAMPLE_DURATION = 5000; // max. Messdauer 5s
@@ -895,7 +896,6 @@ unsigned long detectBaudrate() {
   }
   return bestMatch;
 }
-#endif
 
 #endif
 

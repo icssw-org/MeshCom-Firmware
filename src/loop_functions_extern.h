@@ -320,7 +320,11 @@ extern byte c1;
 
 extern int iDisplayType;
 
+#if defined(BOARD_T_ECHO)
 #define maxdisplines 11
+#else
+#define maxdisplines 7
+#endif
 
 extern int pageLine[maxdisplines][3];
 extern char pageText[maxdisplines][25];
