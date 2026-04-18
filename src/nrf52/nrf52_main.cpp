@@ -410,7 +410,7 @@ void nrf52setup()
 
     digitalWrite(LORA_NRSET, HIGH);   // LORA
 
-    //SPI_TFT.begin();
+    SPI_TFT.begin();
 
     tft1.init(TFT_WIDTH, TFT_HEIGHT);                  // ST7789 240x135
     tft1.setRotation(TFT_ROTATION);
@@ -844,7 +844,7 @@ void nrf52setup()
 
     // I2C init
 //    #if not defined(USE_HELTEC_T114)
-        Wire.begin();
+        //Wire.begin();
 //    #endif
 
     #if defined(ENABLE_BMX280)
@@ -950,7 +950,6 @@ void nrf52setup()
 
     // coding rate
     Serial.printf("[LoRa]...RF_CR: 4/%i\n", getCR());
-
 
     // set carrier frequency
     uint32_t ifreq=(getFreq()*1000.)+0.5;

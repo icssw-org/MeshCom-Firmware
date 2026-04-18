@@ -313,7 +313,7 @@
 
     void displayTFT(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, const String& line5, int wait)
     {
-        Serial.println("[DISP]...6 Lines");
+        //Serial.println("[DISP]...6 Lines");
 
         tft1.fillScreen(ST77XX_WHITE);
 

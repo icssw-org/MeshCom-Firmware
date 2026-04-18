@@ -1145,7 +1145,7 @@ void sendDisplayTrack()
         snprintf(msg_text, sizeof(msg_text), "HDOP:%5.1f", fposinfo_hdop);
         sendDisplay1306(false, false, 3, dzeile[6], msg_text);
         #else
-        snprintf(msg_text, sizeof(msg_text), "DIST:%5.0lf HDOP:%5.1f", posinfo_distance, fposinfo_hdop);
+        snprintf(msg_text, sizeof(msg_text), "DIST:%5.0lf HDOP%5.1f", posinfo_distance, fposinfo_hdop);
         sendDisplay1306(false, false, 3, dzeile[4], msg_text);
         #endif
 
@@ -1156,7 +1156,7 @@ void sendDisplayTrack()
         memset(msg_text, 0x00, sizeof(msg_text));
         sendDisplay1306(false, true, 3, dzeile[5], msg_text);
         #else
-        snprintf(msg_text, sizeof(msg_text), "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
+        snprintf(msg_text, sizeof(msg_text), "DIR :old%3i new%3i", (int)posinfo_last_direction, (int)posinfo_direction);
         sendDisplay1306(false, true, 3, dzeile[5], msg_text);
         #endif
     }
@@ -2177,7 +2177,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     }
     
-    #if defined(BOARD_TRACKER)
+    #if defined(BOARD_TRACKER) or defined(BOARD_HELTEC_T114)
     memset(msg_text, 0x00, sizeof(msg_text));
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
     #else
