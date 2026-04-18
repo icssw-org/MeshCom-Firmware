@@ -214,7 +214,7 @@ EInkDisplay_VisionMasterE290 epaper_display;
 
 #include <GxEPD2.h>
 
-int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 0, 0, 0, 0, 0};
+int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 0};
 
 #elif defined (BOARD_T_ECHO)
 
@@ -878,7 +878,11 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                 }
 
             	if(memcmp(text, "#S", 2) != 0 && memcmp(text, "#F", 2) != 0)
+                    #if defined (BOARD_E290)
                     epaper_display.update();
+                    #else
+                    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+                    #endif
             }
             
         #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114)

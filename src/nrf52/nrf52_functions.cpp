@@ -105,7 +105,7 @@ void LilyGo_logo(void)
     epaper_display.fillScreen(GxEPD_WHITE);
 
     epaper_display.drawExampleBitmap(BitmapCallSign, 0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, GxEPD_BLACK);
-    epaper_display.update();
+    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 }
 
 void Veille_logo(void)
@@ -128,13 +128,26 @@ void Batterie_Vide_logo(void)
 
 void MeshCom_Image(void)
 {
-    epaper_display.setRotation(0);
     epaper_display.fillScreen(GxEPD_WHITE);
+    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+
+    epaper_display.setRotation(0);
     epaper_display.drawExampleBitmap(MeshCom_BitMap, 0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, GxEPD_BLACK);
     epaper_display.setRotation(3);
     epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 }
 
+extern bool bDEEP_SLEEP;
+
+void boardPWROff()
+{
+    Batterie_Vide_logo();
+    // Arrêt alimentation périphériques 
+    digitalWrite(Power_On_Pin,LOW);
+    //digitalWrite(GreenLed_Pin,LOW);
+    //digitalWrite(RedLed_Pin,HIGH);        
+    bDEEP_SLEEP = true;
+}
 
 void boardInit()
 {
@@ -186,7 +199,7 @@ void initDisplay()
 
     enableBacklight(false);
 
-    epaper_display.update();
+    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 }
 
 void startDisplay(char line1[20], char line2[20], char line3[20])
@@ -216,7 +229,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     epaper_display.setCursor(5, 160);
     epaper_display.printf("%s\n", line3);
 
-    epaper_display.update();
+    epaper_display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 }
 
 #endif

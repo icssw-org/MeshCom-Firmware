@@ -4,4 +4,6 @@
 void initDisplay();
 void startDisplay(char line1[20], char line2[20], char line3[20]);
 
+void boardPWROff();
+
 #endif
