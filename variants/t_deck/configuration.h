@@ -24,7 +24,7 @@
 #define ENABLE_AUDIO
 
 #define TX_POWER_MAX 22  // max 22 dBm
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -9
 
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 

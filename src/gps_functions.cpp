@@ -161,10 +161,8 @@ void WZ_GPS_Init() {
             if (on_L76K)
             {
                 // Baudrate auf 38400 umstellen falls erforderlich
+                #if not defined(GPS_BAUDRATE_SETFIX)
                 unsigned long fixbaud = 38400;
-                #if defined(GPS_BAUDRATE_SETFIX)
-                fixbaud = GPS_BAUDRATE_SETFIX;
-                #endif
                 if (detectedBaud != fixbaud) {
                     Serial.printf("[GPS ]...set to %lu Baud & save to Flash\n", fixbaud);
                     #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
@@ -187,14 +185,54 @@ void WZ_GPS_Init() {
                     Serial1.write("$PCAS00*01\r\n");  // save to Flash
                     #else
                     GPSSerial.write("$PCAS01,3*1F\r\n"); // set to new Baudrate 38400
-                    delay(250);
+                    delay(1000);
                     GPSSerial.updateBaudRate(38400);
                     GPSSerial.write("$PCAS00*01\r\n");  // save to Flash
                     #endif
                 }
+                #endif
+
+                // Initialize the L76K Chip, use GPS + GLONASS + GALILEO
+                if(iGPSDEBUG > 1)
+                    Serial.printf("[GPS ] >>> $PCAS04,D,D,9*10\n");
+
+                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+                Serial1.write("$PCAS04,D,D,9*10\r\n");
+                #else
+                GPSSerial.write("$PCAS04,D,D,9*10\r\n");
+                #endif
+                delay(250);
+                // Wiederholrate 1s
+                if(iGPSDEBUG > 1)
+                    Serial.printf("[GPS ] >>> $PCAS02,1000*2E\n");
+
+                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+                Serial1.write("$PCAS02,1000*2E\r\n");
+                #else
+                GPSSerial.write("$PCAS02,1000*2E\r\n");
+                #endif
+                delay(250);
+                // Switch to portable Mode
+                if(iGPSDEBUG > 1)
+                    Serial.printf("[GPS ] >>> $PCAS11,0*1D\n");
+
+                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+                Serial1.write("$PCAS11,0*1D\r\n");
+                #else
+                GPSSerial.write("$PCAS11,0*1D\r\n");
+                #endif
+                delay(250);
+                // ask for only RMC and GGA
+                if(iGPSDEBUG > 1)
+                    Serial.printf("[GPS ] >>> $PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\n");
+
+                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+                Serial1.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+                #else
+                GPSSerial.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+                #endif
             }
 
-            #if not defined(ENABLE_GPS_UBLOX_FIX)
             if (on_UBLOX)
             {
                 // testen auf UBLOX, bzw. UBLOX annehmen
@@ -256,7 +294,6 @@ void WZ_GPS_Init() {
                     Serial.printf("[GPS ]...UBLOX set & not saved to UBLOX-Flash\n");
                 #endif
             }
-            #endif
         } 
     }
 
@@ -478,6 +515,15 @@ bool L76Kprobe()
 {
     on_UBLOX = true;
     on_L76K = false;
+    Serial.printf("[GPS ]...UBLOX set fix\n");
+    return true;
+}
+#elif defined(ENABLE_L76K)
+bool L76Kprobe()
+{
+    on_UBLOX = false;
+    on_L76K = true;
+    Serial.printf("[GPS ]...L76K set fix\n");
     return true;
 }
 #else
@@ -590,7 +636,7 @@ bool L76Kprobe()
         }
 
         // bei UBLOX kommt: $GNTXT,01,01,01,...
-        if (is_pos(msg_text, "$GPTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,PCAS") >= 0)
+        if (is_pos(msg_text, "$GPTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,0,") >= 0)
         {
             // 01 = warning message
             on_UBLOX = true;
@@ -604,48 +650,10 @@ bool L76Kprobe()
         {
             if (is_pos(msg_text, "$GPTXT,01,01,02,") >= 0)
             {
-                if(iGPSDEBUG > 1)
-                    Serial.printf("[GPS ] L76K found\n");
-                // Initialize the L76K Chip, use GPS + GLONASS + GALILEO
-                if(iGPSDEBUG > 1)
-                    Serial.printf("[GPS ] >>> $PCAS04,D,D,9*10\n");
-
-                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-                Serial1.write("$PCAS04,D,D,9*10\r\n");
-                #else
-                GPSSerial.write("$PCAS04,D,D,9*10\r\n");
-                #endif
-                delay(250);
-                // Wiederholrate 1s
-                if(iGPSDEBUG > 1)
-                    Serial.printf("[GPS ] >>> $PCAS02,1000*2E\n");
-
-                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-                Serial1.write("$PCAS02,1000*2E\r\n");
-                #else
-                GPSSerial.write("$PCAS02,1000*2E\r\n");
-                #endif
-                delay(250);
-                // Switch to portable Mode
-                if(iGPSDEBUG > 1)
-                    Serial.printf("[GPS ] >>> $PCAS11,0*1D\n");
-
-                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-                Serial1.write("$PCAS11,0*1D\r\n");
-                #else
-                GPSSerial.write("$PCAS11,0*1D\r\n");
-                #endif
-                delay(250);
-                // ask for only RMC and GGA
-                if(iGPSDEBUG > 1)
-                    Serial.printf("[GPS ] >>> $PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\n");
-
-                #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-                Serial1.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
-                #else
-                GPSSerial.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
-                #endif
                 on_L76K = true;
+                if(iGPSDEBUG > 1)
+                    Serial.printf("[GPS ]...L76K found\n");
+
                 return true;
             }
             else
@@ -812,6 +820,8 @@ unsigned long detectBaudrate()
 }
 #else
 
+#if not defined(GPS_BAUDRATE_SETFIX)
+
 //=======================================================================================
 const int SAMPLE_COUNT = 50;      // Anzahl der zu messenden Signalflanken
 const int SAMPLE_DURATION = 5000; // max. Messdauer 5s
@@ -885,6 +895,8 @@ unsigned long detectBaudrate() {
   }
   return bestMatch;
 }
+#endif
+
 #endif
 
 #endif // ENABLE_GPS

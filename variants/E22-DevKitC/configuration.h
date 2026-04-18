@@ -26,7 +26,7 @@ definitions for E22 Board
 #define ANALOG_PIN 32
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 #define TX_POWER_MAX 22  // max 22dBm
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -9
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 

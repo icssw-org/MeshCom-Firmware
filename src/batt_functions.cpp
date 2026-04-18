@@ -232,17 +232,6 @@ void init_batt(void)
 	analogReadResolution(12);
 #endif
 
-#if defined(BOARD_T_ECHO)
-
-	#define ADC_CTRL_PIN 6
-	#define BATTERY_SAMPLES 20
-
-	pinMode(vbat_pin, INPUT);
-	pinMode(ADC_CTRL_PIN, OUTPUT);
-
-	analogReadResolution(12);
-#endif
-
 #if defined(NRF52_SERIES)
 	// Set the resolution to 12-bit (0..4095)
 	analogReadResolution(12); // Can be 8, 10, 12 or 14
@@ -388,23 +377,39 @@ float read_batt(void)
 		raw = voltage;
 
 		#elif defined(BOARD_T_ECHO)
-		int adcin = vbat_pin; 
-		int adcvalue = 0;
-		float mv_per_lsb = 3000.0F / 4096.0F;  // 12-bit ADC with 3.0V input range
 
+		#define VBAT_MV_PER_LSB   (0.73242188F)   // 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
+
+		#ifdef NRF52840_XXAA
+		#define VBAT_DIVIDER      (0.5F)          // 150K + 150K voltage divider on VBAT
+		#define VBAT_DIVIDER_COMP (2.0F)          // Compensation factor for the VBAT divider
+		#else
+		#define VBAT_DIVIDER      (0.71275837F)   // 2M + 0.806M voltage divider on VBAT = (2M / (0.806M + 2M))
+		#define VBAT_DIVIDER_COMP (1.403F)        // Compensation factor for the VBAT divider
+		#endif
+
+		#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
+
+		// Set the analog reference to 3.0V (default = 3.6V)
 		analogReference(AR_INTERNAL_3_0);
-		analogReadResolution(12);
-		pinMode(ADC_CTRL_PIN, OUTPUT);
-		digitalWrite(ADC_CTRL_PIN, 1);
-		
-		delay(10);
-		
-		adcvalue = analogRead(adcin);
-		digitalWrite(ADC_CTRL_PIN, 0);
 
-		uint16_t voltage = (uint16_t)((float)adcvalue * mv_per_lsb * 4.9);
+		// Set the resolution to 12-bit (0..4095)
+		analogReadResolution(12); // Can be 8, 10, 12 or 14
 
-		raw = voltage;
+		// Let the ADC settle
+		delay(1);
+
+		// Get the raw 12-bit, 0..3000mV ADC value
+		raw = analogRead(vbat_pin);
+
+		// Set the ADC back to the default settings
+		analogReference(AR_DEFAULT);
+		analogReadResolution(10);
+
+		// Convert the raw value to compensated mv, taking the resistor-
+		// divider into account (providing the actual LIPO voltage)
+		// ADC range is 0..3000mV and resolution is 12-bit (0..4095)
+		raw =  raw * REAL_VBAT_MV_PER_LSB;
 
 		#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
 

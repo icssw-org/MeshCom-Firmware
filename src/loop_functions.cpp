@@ -214,7 +214,7 @@ EInkDisplay_VisionMasterE290 epaper_display;
 
 #include <GxEPD2.h>
 
-int dzeile[6] = {16, 41, 61, 81, 101, 121};
+int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 0, 0, 0, 0, 0};
 
 #elif defined (BOARD_T_ECHO)
 
@@ -239,14 +239,14 @@ GxEPD_Class epaper_display(io, ePaper_Rst, ePaper_Busy);
 #include "Fonts/FreeSans9pt7b.h"
 #include "Fonts/FreeSans12pt7b.h"
 
-int dzeile[6] = {16, 41, 61, 81, 101, 121};
+int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 141, 161, 181, 200, 0};
 
 #elif defined (BOARD_TBEAM_V3)
-int dzeile[6] = {11, 24, 34, 44, 54, 64};
+int dzeile[maxdisplines] = {11, 24, 34, 44, 54, 64, 0, 0, 0, 0, 0};
 #elif defined (BOARD_STICK_V3)
-int dzeile[6] = {42, 52, 62, 0, 0, 0};
+int dzeile[maxdisplines] = {42, 52, 62, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #else
-int dzeile[6] = {8, 21, 31, 41, 51, 61};
+int dzeile[maxdisplines] = {8, 21, 31, 41, 51, 61, 0, 0, 0, 0, 0};
 #endif
 
 #if !defined(BOARD_E290) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
@@ -633,16 +633,18 @@ void insertOwnTx(unsigned int msg_id)
         iWriteOwn=0;
 }
 
-int pageLine[7][3] = {0};
-char pageText[7][25] = {0};
+#define maxdisplines 11
+
+int pageLine[maxdisplines][3] = {0};
+char pageText[maxdisplines][25] = {0};
 char pageTextLong1[25] = {0};
 char pageTextLong2[200] = {0};
 int pageLineAnz=0;
 
 #define PAGE_MAX 6
 
-int pageLastLine[PAGE_MAX][7][3] = {0};
-char pageLastText[PAGE_MAX][7][25] = {0};
+int pageLastLine[PAGE_MAX][maxdisplines][3] = {0};
+char pageLastText[PAGE_MAX][maxdisplines][25] = {0};
 char pageLastTextLong1[PAGE_MAX][25] = {0};
 char pageLastTextLong2[PAGE_MAX][200] = {0};
 int pageLastLineAnz[PAGE_MAX] = {0};
@@ -761,6 +763,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
         if(u8g2 == NULL)
             return;
     #endif
+    
+    //Serial.printf("bClear:%i bTransfer:%i x:%i y:%i pageLineAnz:%i text:%s\n", bClear, bTransfer, x, y, pageLineAnz, text);
 
 	if(bClear || (x == 0 && y== 0) || (x == 0 && memcmp(text, "#F", 2) == 0))
     {
@@ -800,7 +804,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     }
     else
     {
-        if(pageLineAnz < 7)
+        if(pageLineAnz < maxdisplines)
         {
             //Serial.printf("pageLineAnz:%i text:%s\n", pageLineAnz, text);
 
@@ -809,8 +813,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             pageLine[pageLineAnz][2] = 20;
             memcpy(pageText[pageLineAnz], text, 25);
             pageLineAnz++;
-            if(pageLineAnz > 7)
-                pageLineAnz = 7;
+            if(pageLineAnz > maxdisplines)
+                pageLineAnz = maxdisplines;
         }
     }
 
@@ -873,13 +877,13 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     epaper_display.update();
             }
             
-        #elif defined (BOARD_TRACKER) || defined (BOARD_HELTEC_T114)
+        #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114)
 
         if(pageLineAnz > 0)
         {
             int ianz=0;
 
-            String strLine[7];
+            String strLine[8];
 
             for(int its=0;its<pageLineAnz;its++)
             {
@@ -1052,30 +1056,39 @@ void sendDisplayHead(bool bInit)
 
     iDisplayType=9;
 
-    char print_text[500];
-
     sendDisplayMainline();
 
-    snprintf(print_text, sizeof(print_text), "CALL : %s", meshcom_settings.node_call);
-    sendDisplay1306(false, false, 3, dzeile[1], print_text);
+    int izeile = 1;
+    snprintf(msg_text, sizeof(msg_text), "CALL : %s", meshcom_settings.node_call);
+    sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+    izeile++;
 
-    snprintf(print_text, sizeof(print_text), "MAC  : %08X", _GW_ID);
-    sendDisplay1306(false, false, 3, dzeile[2], print_text);
+    snprintf(msg_text, sizeof(msg_text), "MAC  : %08X", _GW_ID);
+    sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+    izeile++;
 
-    snprintf(print_text, sizeof(print_text), "BLE-C: %06i", meshcom_settings.bt_code);
-    sendDisplay1306(false, false, 3, dzeile[3], print_text);
+    snprintf(msg_text, sizeof(msg_text), "BLE-C: %06i", meshcom_settings.bt_code);
+    sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+    izeile++;
 
     #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114) && !defined (BOARD_T_ECHO)
     if(bWIFIAP)
-        snprintf(print_text, sizeof(print_text), "AP   : %-13.13s", meshcom_settings.node_call);
+        snprintf(msg_text, sizeof(msg_text), "AP   : %-13.13s", meshcom_settings.node_call);
     else
-        snprintf(print_text, sizeof(print_text), "SSID : %-15.15s", meshcom_settings.node_ssid);
+        snprintf(msg_text, sizeof(msg_text), "SSID : %-15.15s", meshcom_settings.node_ssid);
 
-    sendDisplay1306(false, false, 3, dzeile[4], print_text);
+    sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+    izeile++;
+
+    snprintf(msg_text, sizeof(msg_text), "IP%s%s %s", (bGATEWAY?"G":""), (bWEBSERVER?"W":""), meshcom_settings.node_ip);
+    sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+    izeile++;
+
+    #else
+    memset(msg_text, 0x00, sizeof(msg_text));
+    sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+    izeile++;
     #endif
-
-    snprintf(print_text, sizeof(print_text), "IP%s%s %s", (bGATEWAY?"G":""), (bWEBSERVER?"W":""), meshcom_settings.node_ip);
-    sendDisplay1306(false, true, 3, dzeile[5], print_text);
 
     bSetDisplay=false;
 }
@@ -1101,8 +1114,6 @@ void sendDisplayTrack()
 
     iDisplayType=9;
 
-    char print_text[500];
-
     // nur alle 15 sekunden
     if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton)
     {
@@ -1110,26 +1121,43 @@ void sendDisplayTrack()
 
         sendDisplayMainline();
 
-        snprintf(print_text, sizeof(print_text), "LAT : %.4lf %c %s", meshcom_settings.node_lat, meshcom_settings.node_lat_c, (posinfo_fix?"fix":""));
-        sendDisplay1306(false, false, 3, dzeile[1], print_text);
+        snprintf(msg_text, sizeof(msg_text), "LAT :%.4lf %c %s", meshcom_settings.node_lat, meshcom_settings.node_lat_c, (posinfo_fix?"fix":""));
+        sendDisplay1306(false, false, 3, dzeile[1], msg_text);
 
-        snprintf(print_text, sizeof(print_text), "LON : %.4lf %c %4i", meshcom_settings.node_lon, meshcom_settings.node_lon_c, (int)posinfo_satcount);
-        sendDisplay1306(false, false, 3, dzeile[2], print_text);
+        snprintf(msg_text, sizeof(msg_text), "LON :%.4lf %c%4i", meshcom_settings.node_lon, meshcom_settings.node_lon_c, (int)posinfo_satcount);
+        sendDisplay1306(false, false, 3, dzeile[2], msg_text);
 
         int pos_seconds = posinfo_interval - ((millis() - (int)posinfo_timer)) / 1000;
-        snprintf(print_text, sizeof(print_text), "RATE: %4i NEXT %4i", (int)posinfo_interval, pos_seconds);
-        sendDisplay1306(false, false, 3, dzeile[3], print_text);
 
-        snprintf(print_text, sizeof(print_text), "DIST: %5.0lf hdop%4i", posinfo_distance, posinfo_hdop);
-        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114) && !defined (BOARD_T_ECHO)
-            sendDisplay1306(false, false, 3, dzeile[4], print_text);
+        #if defined(BOARD_T_ECHO)
+        snprintf(msg_text, sizeof(msg_text), "RATE:%5i", (int)posinfo_interval);
+        sendDisplay1306(false, false, 3, dzeile[3], msg_text);
+        snprintf(msg_text, sizeof(msg_text), "NEXT:%5i", pos_seconds);
+        sendDisplay1306(false, false, 3, dzeile[4], msg_text);
         #else
-            sendDisplay1306(false, true, 3, dzeile[4], print_text);
+        snprintf(msg_text, sizeof(msg_text), "RATE: %4i NEXT %4i", (int)posinfo_interval, pos_seconds);
+        sendDisplay1306(false, false, 3, dzeile[3], msg_text);
         #endif
 
-        #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114) && !defined (BOARD_T_ECHO)
-            snprintf(print_text, sizeof(print_text), "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
-            sendDisplay1306(false, true, 3, dzeile[5], print_text);
+        #if defined(BOARD_T_ECHO)
+        snprintf(msg_text, sizeof(msg_text), "DIST:%5.0lf", posinfo_distance);
+        sendDisplay1306(false, false, 3, dzeile[5], msg_text);
+        snprintf(msg_text, sizeof(msg_text), "HDOP:%5.1f", fposinfo_hdop);
+        sendDisplay1306(false, false, 3, dzeile[6], msg_text);
+        #else
+        snprintf(msg_text, sizeof(msg_text), "DIST:%5.0lf HDOP%5.1f", posinfo_distance, fposinfo_hdop);
+        sendDisplay1306(false, false, 3, dzeile[4], msg_text);
+        #endif
+
+        #if defined(BOARD_T_ECHO)
+        snprintf(msg_text, sizeof(msg_text), "DIR:old%3i new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
+        sendDisplay1306(false, true, 3, dzeile[7], msg_text);
+        #elif defined(BOARD_TRACKER)
+        memset(msg_text, 0x00, sizeof(msg_text));
+        sendDisplay1306(false, true, 3, dzeile[5], msg_text);
+        #else
+        snprintf(msg_text, sizeof(msg_text), "DIR :old%3i new%3i", (int)posinfo_last_direction, (int)posinfo_direction);
+        sendDisplay1306(false, true, 3, dzeile[5], msg_text);
         #endif
     }
 
@@ -1158,24 +1186,22 @@ void sendDisplayWX()
 
     iDisplayType=9;
 
-    char print_text[500];
-
     sendDisplayMainline();
 
-    snprintf(print_text, sizeof(print_text), "TEMP : %.1f °C", meshcom_settings.node_temp);
-    sendDisplay1306(false, false, 3, dzeile[1], print_text);
+    snprintf(msg_text, sizeof(msg_text), "TEMP : %.1f °C", meshcom_settings.node_temp);
+    sendDisplay1306(false, false, 3, dzeile[1], msg_text);
 
-    snprintf(print_text, sizeof(print_text), "HUM  : %.1f %%", meshcom_settings.node_hum);
-    sendDisplay1306(false, false, 3, dzeile[2], print_text);
+    snprintf(msg_text, sizeof(msg_text), "HUM  : %.1f %%", meshcom_settings.node_hum);
+    sendDisplay1306(false, false, 3, dzeile[2], msg_text);
 
-    snprintf(print_text, sizeof(print_text), "QFE  : %.1f hPa", meshcom_settings.node_press);
-    sendDisplay1306(false, false, 3, dzeile[3], print_text);
+    snprintf(msg_text, sizeof(msg_text), "QFE  : %.1f hPa", meshcom_settings.node_press);
+    sendDisplay1306(false, false, 3, dzeile[3], msg_text);
 
-    snprintf(print_text, sizeof(print_text), "QNH  : %.1f hPa", meshcom_settings.node_press_asl);
-    sendDisplay1306(false, false, 3, dzeile[4], print_text);
+    snprintf(msg_text, sizeof(msg_text), "QNH  : %.1f hPa", meshcom_settings.node_press_asl);
+    sendDisplay1306(false, false, 3, dzeile[4], msg_text);
 
-    snprintf(print_text, sizeof(print_text), "ALT:%5im / %5im", meshcom_settings.node_alt, meshcom_settings.node_press_alt);
-    sendDisplay1306(false, true, 3, dzeile[5], print_text);
+    snprintf(msg_text, sizeof(msg_text), "ALT:%5im / %5im", meshcom_settings.node_alt, meshcom_settings.node_press_alt);
+    sendDisplay1306(false, true, 3, dzeile[5], msg_text);
 
 
     bSetDisplay=false;
@@ -1222,7 +1248,7 @@ void sendDisplayTime()
 
     char cbatt[10];
 
-    #if defined (HAS_TFT) || defined(HAS_TFT_114)
+    #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(BOARD_T_ECHO)
     if(bDisplayVolt)
         snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
@@ -1244,26 +1270,24 @@ void sendDisplayTime()
     // nur alle 15 sekunden
     if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton)
     {
-        char print_text[500];
-        
         bOneButton = false;
 
         #ifdef BOARD_T_ECHO
-        snprintf(print_text, sizeof(print_text), "%02i:%02i:%02i    %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i   %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
         #else
-        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(msg_text, sizeof(msg_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
         #endif
 
-        memcpy(pageText[0], print_text, 20);
+        memcpy(pageText[0], msg_text, 20);
         pageLine[0][0] = 3;
         pageLine[0][1] = dzeile[0];
 
         #if defined (BOARD_T5_EPAPER)
         // extra source
         #elif defined (HAS_TFT) || defined(HAS_TFT_114)
-            displayTFT(print_text);
+            displayTFT(msg_text);
         #else
-            sendDisplay1306(false, true, 3, dzeile[0], print_text);
+            sendDisplay1306(false, true, 3, dzeile[0], msg_text);
         #endif
     }
 
@@ -1272,12 +1296,11 @@ void sendDisplayTime()
 
 void sendDisplayMainline()
 {
-    char print_text[500];
     char cbatt[10];
     char nodetype[5];
 
 
-    #if defined (HAS_TFT) || defined(HAS_TFT_114)
+    #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(BOARD_T_ECHO)
     if(bDisplayVolt)
         snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
@@ -1298,22 +1321,22 @@ void sendDisplayMainline()
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
-        #ifdef BORAD_T_ECHO
-        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s   %s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
+        #ifdef BOARD_T_ECHO
+        snprintf(msg_text, sizeof(msg_text), "%-1.1s %-4.4s%-1.1s %s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
         #else
-        snprintf(print_text, sizeof(print_text), "%-1.1s %-4.4s%-1.1s       %s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
+        snprintf(msg_text, sizeof(msg_text), "%-1.1s %-4.4s%-1.1s       %s", nodetype, SOURCE_VERSION, SOURCE_VERSION_SUB, cbatt);
         #endif
     }
     else
     {
         #ifdef BOARD_T_ECHO
-        snprintf(print_text, sizeof(print_text), "%02i:%02i:%02i    %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i    %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
         #else
-        snprintf(print_text, sizeof(print_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        snprintf(msg_text, sizeof(msg_text), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
         #endif
     }
 
-    sendDisplay1306(true, false, 3, dzeile[0], print_text);
+    sendDisplay1306(true, false, 3, dzeile[0], msg_text);
     sendDisplay1306(false, false, 3, dzeile[0]+3, (char*)"#L");
 }
 
@@ -1886,8 +1909,7 @@ void initAnalogPin()
 
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
-    //Serial.printf("bPosDisplay:%i bSetDisplay:%i pageHold:%i bDisplayTrack:%i rssi:%d snr:%d\n", bPosDisplay, bSetDisplay, pageHold, bDisplayTrack, rssi, snr);
-    //return; // test heap
+    //Serial.printf("bPosDisplay:%i DisplayOffWait:%i bSetDisplay:%i pageHold:%i bDisplayTrack:%i bDisplayIsOff:%i\n", bPosDisplay, DisplayOffWait, bSetDisplay, pageHold, bDisplayTrack, bDisplayIsOff);
 
     if(!bPosDisplay)
         return;
@@ -1916,7 +1938,6 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     iDisplayType=1;
 
-    char print_text[500];
     int ipt=0;
 
     int izeile=1;
@@ -1928,6 +1949,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     double lon=0.0;
 
     int dir_to=0;
+    char cdir_to[3];
     int dist_to=0;
 
     aprsPosition aprspos;
@@ -1957,25 +1979,39 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
     #endif
 
-    snprintf(msg_text, sizeof(msg_text), "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
-
-
+    #if defined(BOARD_T_ECHO)
+    snprintf(msg_text, sizeof(msg_text), "%s", aprsmsg.msg_source_call.c_str());
     msg_text[20]=0x00;
     sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
-
     izeile=izeile+1;
 
+    snprintf(msg_text, sizeof(msg_text), " <>%s", aprsmsg.msg_source_last.c_str());
+    msg_text[20]=0x00;
+    sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+    izeile=izeile+1;
+    #else
+    snprintf(msg_text, sizeof(msg_text), "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
+    msg_text[20]=0x00;
+    sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+    izeile=izeile+1;
+    #endif
+
+    char scan_text[20];
+
+    memset(scan_text, 0x00, sizeof(scan_text));
     ipt=0;
 
     for(itxt=0; itxt<aprsmsg.msg_payload.length(); itxt++)
     {
         if((aprsmsg.msg_payload.charAt(itxt) == 'N' || aprsmsg.msg_payload.charAt(itxt) == 'S'))
         {
-            print_text[ipt]=0x00;
+            sscanf(scan_text, "%lf", &lat);
 
-            sscanf(print_text, "%lf", &lat);
-
-            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%5ikm", print_text, aprsmsg.msg_payload.charAt(itxt), dist_to);
+            #if defined(BOARD_T_ECHO)
+            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c", msg_text, aprsmsg.msg_payload.charAt(itxt));
+            #else
+            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%5ikm", scan_text, aprsmsg.msg_payload.charAt(itxt), dist_to);
+            #endif
             msg_text[20]=0x00;
             sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
 
@@ -1985,22 +2021,23 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         }
         else
         {
-            print_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
-            ipt++;
+            if(ipt < sizeof(scan_text)-1)
+            {
+                scan_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
+                ipt++;
+            }
         }
     }
 
+    memset(scan_text, 0x00, sizeof(scan_text));
     ipt=0;
 
     for(itxt=istarttext; itxt<aprsmsg.msg_payload.length(); itxt++)
     {
         if((aprsmsg.msg_payload.charAt(itxt) == 'W' || aprsmsg.msg_payload.charAt(itxt) == 'E'))
         {
-            print_text[ipt]=0x00;
+            sscanf(scan_text, "%lf", &lon);
 
-            sscanf(print_text, "%lf", &lon);
-
-            char cdir_to[3];
             float von_dir_to[10]     = {0.0, 22.5, 67.5, 112.5, 157.5, 202.5, 247.5, 292.5, 337.5, 360.0};
             char von_c_dir_to[10][4] = {"",  "N",  "NE",  "E",  "SE",  "S",   "SW",   "W",   "NW",  "N"} ;
 
@@ -2010,7 +2047,11 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                     snprintf(cdir_to, sizeof(cdir_to), "%s", von_c_dir_to[idir+1]);
             }
 
-            snprintf(msg_text, sizeof(msg_text), "LON:%s%c%5i%s", print_text, aprsmsg.msg_payload.charAt(itxt), dir_to, cdir_to);
+            #if defined(BOARD_T_ECHO)
+            snprintf(msg_text, sizeof(msg_text), "LON:%s%c", scan_text, aprsmsg.msg_payload.charAt(itxt));
+            #else
+            snprintf(msg_text, sizeof(msg_text), "LON:%s%c%5i%s", scan_text, aprsmsg.msg_payload.charAt(itxt), dir_to, cdir_to);
+            #endif
             msg_text[20]=0x00;
             sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
 
@@ -2020,17 +2061,18 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         }
         else
         {
-            print_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
-            ipt++;
+            if(ipt < sizeof(scan_text)-1)
+            {
+                scan_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
+                ipt++;
+            }
         }
     }
 
     int bat = 0;
     int alt = 0;
 
-    char decode_text[20];
-
-    memset(decode_text, 0x00, sizeof(decode_text));
+    memset(scan_text, 0x00, sizeof(scan_text));
     ipt=0;
 
     // check Batt
@@ -2043,19 +2085,22 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                 // ENDE
                 if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
                 {
-                    sscanf(decode_text, "%d", &bat);
+                    sscanf(scan_text, "%d", &bat);
                     break;
                 }
 
-                decode_text[ipt]=aprsmsg.msg_payload.charAt(id);
-                ipt++;
+                if(ipt < sizeof(scan_text)-1)
+                {
+                    scan_text[ipt]=aprsmsg.msg_payload.charAt(id);
+                    ipt++;
+                }
             }
 
             break;
         }
     }
 
-    memset(decode_text, 0x00, sizeof(decode_text));
+    memset(scan_text, 0x00, sizeof(scan_text));
     ipt=0;
 
     #if defined(HAS_EPAPER) and not defined(BOARD_T_ECHO)
@@ -2087,7 +2132,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                 // ENDE
                 if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
                 {
-                    sscanf(decode_text, "%d", &alt);
+                    sscanf(scan_text, "%d", &alt);
 
                     if(aprsmsg.msg_source_fw_version > 13)
                         alt = (int)((float)alt * 0.3048);
@@ -2095,28 +2140,51 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                     #if defined(HAS_EPAPER)
                         #if not defined(BOARD_T_ECHO)
                         DrawRssi(3, 117, rssi);
-
-                        snprintf(msg_text, sizeof(msg_text), "ALT:%im", alt);
-                        msg_text[20]=0x00;
-                        sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
                         #endif
+
+                        snprintf(msg_text, sizeof(msg_text), "ALT:%5i m", alt);
+                        msg_text[20]=0x00;
+                        sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+                        izeile++;
+
+                        snprintf(msg_text, sizeof(msg_text), "DST:%5i km", dist_to);
+                        msg_text[20]=0x00;
+                        sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+                        izeile++;
+
+                        snprintf(msg_text, sizeof(msg_text), "DIR:%5i %s", dir_to, cdir_to);
+                        msg_text[20]=0x00;
+                        sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+                        izeile++;
                     #else
                         snprintf(msg_text, sizeof(msg_text), "ALT:%im   rssi:%i", alt, rssi);
                         msg_text[20]=0x00;
-                        sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+                        sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
                     #endif
 
                     break;
                 }
 
-                decode_text[ipt]=aprsmsg.msg_payload.charAt(id);
-                ipt++;
+                if(ipt < sizeof(scan_text)-1)
+                {
+                    scan_text[ipt]=aprsmsg.msg_payload.charAt(id);
+                    ipt++;
+                }
             }
 
             break;
         }
+
     }
     
+    #if defined(BOARD_TRACKER) or defined(BOARD_HELTEC_T114)
+    memset(msg_text, 0x00, sizeof(msg_text));
+    sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+    #else
+    snprintf(msg_text, sizeof(msg_text), "RSSI:%4i", rssi);
+    sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+    #endif
+
     bSetDisplay=false;
 
 }

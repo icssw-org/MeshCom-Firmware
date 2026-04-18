@@ -22,7 +22,7 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define HAS_GPS
 #define BAUD_CHARS 100
 #define GPS_SLEEP_HOLD_ON_LOW
-#define GPS_BAUDRATE_MODUL          9600
+//#define GPS_BAUDRATE_MODUL          9600
 #define GPS_RX_PIN                  (5)
 #define GPS_TX_PIN                  (6)
 #define GPS_PPS_PIN                 (7)
@@ -113,7 +113,7 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 #define TX_POWER_MAX 22  // SX1262 max 22 dBm
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -9
 #define TX_OUTPUT_POWER 8
 
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx

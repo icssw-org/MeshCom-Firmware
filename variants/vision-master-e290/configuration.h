@@ -24,7 +24,7 @@ definitions for HELTEC E290
 #define ENABLE_SOFTSER
 
 #define TX_POWER_MAX 22  // max 22 dBm
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -9
 
 #define SX1262_E290
 

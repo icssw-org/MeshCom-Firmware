@@ -34,7 +34,7 @@ void setup()
     pinMode(RADIO_CS_PIN, OUTPUT);
     digitalWrite(RADIO_CS_PIN, HIGH);
     
-  #elif !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_TBEAM_1W)
+  #elif !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_TBEAM_1W)
     SPI.begin();
   #endif
     #if defined(BOARD_RAK4630)

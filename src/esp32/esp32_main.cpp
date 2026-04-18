@@ -834,17 +834,18 @@ void esp32setup()
 
     #ifdef VEXT_CTRL
         pinMode(VEXT_CTRL, OUTPUT);
+        #if defined(BOARD_TRACKER)
+            digitalWrite(VEXT_CTRL, HIGH);   // HWT needs this for GPS and TFT Screen
+        #endif
     #endif
 
     #ifdef ADC_CTRL
         pinMode(ADC_CTRL, OUTPUT);
+        #if defined(BOARD_TRACKER)
+            digitalWrite(ADC_CTRL, HIGH);
+        #endif
     #endif
         
-    #if defined(BOARD_TRACKER)
-        digitalWrite(VEXT_CTRL, HIGH);   // HWT needs this for GPS and TFT Screen
-        digitalWrite(ADC_CTRL, HIGH);
-    #endif
-
     #ifdef LED_PIN
         pixels.begin();
         Serial.println("[INIT]...NEOPIXEL set");
