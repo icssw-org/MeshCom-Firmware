@@ -971,7 +971,7 @@ void nrf52setup()
         (uint32_t)meshcom_settings.node_sf,
         (uint8_t)meshcom_settings.node_cr,
         0, //  AFC bandwidth: Unused with LoRa
-        (uint16_t)preamble_length,
+        preamble_length,
         LORA_SYMBOL_TIMEOUT,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         0,    //  Fixed payload length: N/A
@@ -992,7 +992,7 @@ void nrf52setup()
         (uint32_t)meshcom_settings.node_bw,
         (uint32_t)meshcom_settings.node_sf,
         (uint8_t)meshcom_settings.node_cr,
-        (uint16_t)preamble_length,
+        preamble_length,
         LORA_FIX_LENGTH_PAYLOAD_ON,
         true, // CRC ON
         0,    // fsk only frequ hop
@@ -1812,7 +1812,7 @@ if (isPhoneReady == 1)
             sendHey();
         }
 
-        trickle_interval_ms = min(trickle_interval_ms * 2, (unsigned long)(TRICKLE_IMAX_S * 1000UL));
+        trickle_interval_ms = min(trickle_interval_ms * 2, TRICKLE_IMAX_S * 1000UL);
         trickle_consistent_count = 0;
 
         heyinfo_timer = millis();

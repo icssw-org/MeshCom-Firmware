@@ -58,11 +58,11 @@ void getDaysPerMonth(int year, unsigned long day[13])
 
 String getDateTime(unsigned long timestamp)
 {
-    unsigned long days = (unsigned long)SECONDS_PER_DAY;
+    unsigned long days = SECONDS_PER_DAY;
     days = timestamp / days;
 
     int year = EPOCH_YEAR;
-    while (days >= (unsigned long)getDaysForYear(year))
+    while (days >= getDaysForYear(year))
     {
         days -= getDaysForYear(year);
         year++;
