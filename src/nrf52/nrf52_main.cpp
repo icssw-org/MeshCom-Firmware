@@ -46,9 +46,9 @@ DC: Digital IO (Data/Command)
 CS: Digital IO (Optional, if not present, the display is always active) 
 */
 
-SPIClass SPI_TFT(NRF_SPIM1, PIN_SPI1_MISO, PIN_SPI1_SCK, PIN_SPI1_MOSI);
+SPIClass SPI_TFT(NRF_SPIM3, PIN_SPI1_MISO, PIN_SPI1_SCK, PIN_SPI1_MOSI);
+Adafruit_ST7789 tft1 = Adafruit_ST7789(&SPI_TFT, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
 
-Adafruit_ST7789 tft = Adafruit_ST7789(&SPI_TFT, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
 
 #endif
 
@@ -410,11 +410,11 @@ void nrf52setup()
 
     digitalWrite(LORA_NRSET, HIGH);   // LORA
 
-    SPI_TFT.begin();
+    //SPI_TFT.begin();
 
-    tft.init(TFT_WIDTH, TFT_HEIGHT);                  // ST7789 240x135
-    tft.setRotation(TFT_ROTATION);
-    tft.setSPISpeed(SPI_FREQUENCY);
+    tft1.init(TFT_WIDTH, TFT_HEIGHT);                  // ST7789 240x135
+    tft1.setRotation(TFT_ROTATION);
+    tft1.setSPISpeed(SPI_FREQUENCY);
 
     char cvers1[22];
     sprintf(cvers1, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());

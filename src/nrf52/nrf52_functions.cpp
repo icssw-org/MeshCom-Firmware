@@ -140,10 +140,12 @@ void boardInit()
 {
     dispPort.begin();
 
+    /*
     uint32_t reset_reason;
     sd_power_reset_reason_get(&reset_reason);
     SerialMon.print("sd_power_reset_reason_get:");
     SerialMon.println(reset_reason, HEX);
+    */
 
     pinMode(Power_Enable_Pin, OUTPUT);
     digitalWrite(Power_Enable_Pin, HIGH);
@@ -175,14 +177,12 @@ void initDisplay()
     delay(500);
 
     epaper_display.init(/*115200*/); // enable diagnostic output on Serial
-    epaper_display.setRotation(0);
-    epaper_display.fillScreen(GxEPD_WHITE);
     epaper_display.setTextColor(GxEPD_BLACK);
     epaper_display.setFont(&FreeMonoBold9pt7b);
 
-
     MeshCom_Image();
-    delay(3000);
+
+    delay(4000);
 
     enableBacklight(false);
 
@@ -193,21 +193,27 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 {
     char cvers[20];
 
-    sprintf(cvers, "%s/%-1.1s" /* <%s>*/, SOURCE_VERSION, SOURCE_VERSION_SUB); //, getCountry(meshcom_settings.node_country).c_str());
+    sprintf(cvers, "%s/%-1.1s %s", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
 
     Serial.println("[DISP]...start");
 
     epaper_display.fillScreen(GxEPD_WHITE);
     epaper_display.setCursor(5, 20);
-    epaper_display.printf("MeshCom %s\n", cvers);
+    epaper_display.printf("MeshCom\n");
+
+    epaper_display.setCursor(5, 40);
+    epaper_display.printf("v%s\n", cvers);
 
     epaper_display.setCursor(5, 60);
-    epaper_display.printf("%s\n", line1);
-
-    epaper_display.setCursor(5, 100);
-    epaper_display.printf("%s\n", line2);
+    epaper_display.printf("%s\n%s\n", __DATE__ , __TIME__);
 
     epaper_display.setCursor(5, 120);
+    epaper_display.printf("%s\n", line1);
+
+    epaper_display.setCursor(5, 140);
+    epaper_display.printf("%s\n", line2);
+
+    epaper_display.setCursor(5, 160);
     epaper_display.printf("%s\n", line3);
 
     epaper_display.update();

@@ -54,8 +54,6 @@ uint32_t lora_t114_init(void)
 
 	TimerConfig();
 
-	SX126xIoInit();
-
 	SPI_LORA.setPins(_hwConfig.PIN_LORA_MISO, _hwConfig.PIN_LORA_SCLK, _hwConfig.PIN_LORA_MOSI);
 	delay(300);
 	SPI_LORA.end();
@@ -63,6 +61,8 @@ uint32_t lora_t114_init(void)
 	SPI_LORA.begin();
 	delay(300);
 	
+	SX126xIoInit();
+
 	// After power on the sync word should be 2414. 4434 could be possible on a restart
 	// If we got something else, something is wrong.
 	uint16_t readSyncWord = 0;

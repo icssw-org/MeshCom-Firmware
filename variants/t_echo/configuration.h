@@ -17,7 +17,7 @@ definitions for RAK4631
 
 #define ENABLE_RTC
 
-//#define ENABLE_BMX280
+#define ENABLE_BMX280
 
 //#define ENABLE_BMP390
 //#define ENABLE_AHT20

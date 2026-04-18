@@ -320,16 +320,18 @@ extern byte c1;
 
 extern int iDisplayType;
 
-extern int pageLine[7][3];
-extern char pageText[7][25];
+#define maxdisplines 11
+
+extern int pageLine[maxdisplines][3];
+extern char pageText[maxdisplines][25];
 extern char pageTextLong1[25];
 extern char pageTextLong2[200];
 extern int pageLineAnz;
 
 #define PAGE_MAX 6
 
-extern int pageLastLine[PAGE_MAX][7][3];
-extern char pageLastText[PAGE_MAX][7][25];
+extern int pageLastLine[PAGE_MAX][maxdisplines][3];
+extern char pageLastText[PAGE_MAX][maxdisplines][25];
 extern char pageLastTextLong1[PAGE_MAX][25];
 extern char pageLastTextLong2[PAGE_MAX][200];
 extern int pageLastLineAnz[PAGE_MAX];
