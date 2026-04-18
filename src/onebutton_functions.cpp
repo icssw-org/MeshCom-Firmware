@@ -17,6 +17,10 @@
 #include "tft_display_functions.h"
 #endif
 
+#if defined(BOARD_T_ECHO)
+#include "nrf52_functions.h"
+#endif
+
 void singleClick()
 {
   if(bDisplayCont)
@@ -166,6 +170,9 @@ void PressLong()
         bDisplayIsOff=true;
         sendDisplayHead(false);
         commandAction((char*)"--deepsleep", isPhoneReady, false);
+      #elif defined(BOARD_T_ECHO)
+        Serial.println("[BOARD_T_ECHO]... PWR OFF");
+        boardPWROff();
       #else
         if(!bDisplayOff)
         {

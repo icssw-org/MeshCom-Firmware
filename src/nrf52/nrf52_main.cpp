@@ -30,8 +30,9 @@
 #include "tft_display_functions.h"
 #endif
 
+bool bDEEP_SLEEP = false;
+
 #ifdef HAS_TFT_114
-bool bT114_DEEP_SLEEP = false;
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 
@@ -1085,8 +1086,8 @@ void nrf52setup()
 
 void nrf52loop()
 {
-    #if defined(HAS_TFT_114)
-    if(bT114_DEEP_SLEEP)
+    #if defined(HAS_TFT_114) or defined(BOARD_T_ECHO)
+    if(bDEEP_SLEEP)
     {
         // only loop
     }
@@ -2289,7 +2290,7 @@ if (isPhoneReady == 1)
 
     }
 
-    #ifdef HAS_TFT_114
+    #if defined(HAS_TFT_114) or defined(BOARD_T_ECHO)
     }   // else from 
     #endif
 
