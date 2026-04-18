@@ -34,7 +34,7 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
 #define TX_POWER_MAX 22  // max 22 dBm
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -9
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()

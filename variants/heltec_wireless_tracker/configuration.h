@@ -26,7 +26,7 @@ definitions for HELTEC_V3
 #define ENABLE_SOFTSER
 
 #define TX_POWER_MAX 22  // max 22dBm
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -9
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
@@ -88,11 +88,17 @@ definitions for HELTEC_V3
 
 #define OneWire_GPIO 99 // getestet ???
 
-#define ENABLE_GPS
-#define GPS_RX_PIN 33 // old 33
-#define GPS_TX_PIN 34 // old 34
-
 #define VEXT_CTRL   3   // To turn on GPS and TFT
 #define ADC_CTRL    2   // ADC_CTRL = HIGH
 
 #define HAS_TFT 1
+
+#define ENABLE_GPS
+#define GPS_RX_PIN 33
+#define GPS_TX_PIN 34
+// bei TBEAM bitte auf SOFTCHECK lassen .. Interrupt routine benötigt zu viel vom IRAM
+//#define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
+//#define ENABLE_UBLOX                  // UBLOX wird fix festgelegt und EIN setup gemacht
+#define ENABLE_L76K                     // Chip Erkennung fix auf L86K
+//#define ENABLE_GPS_UBLOX_FIX          // UBLOX wird fix festgelegt und KEIN setup gemacht
+#define GPS_BAUDRATE_SETFIX 115200      // Die Baudrate für GPS wird auf FIXWERT gesetzt

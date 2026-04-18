@@ -149,9 +149,6 @@ int8_t getPower()
     if(bLORADEBUG)
         Serial.printf("...POWER (FLASH): %i dBm\n", power);
 
-    if(power <= 0)
-        power = TX_OUTPUT_POWER;
-
     if(power > TX_POWER_MAX)
         power= TX_POWER_MAX;
 

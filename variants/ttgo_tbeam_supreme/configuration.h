@@ -30,7 +30,7 @@ definitions for T-Beam-Supreme
 #define SX1262_V3
 
 #define TX_POWER_MAX 22  // max 22 dBm
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -9
 
 // Defined using AXP192
 #define XPOWERS_CHIP_AXP192

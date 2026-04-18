@@ -18,7 +18,7 @@ definitions for T-Beam
 // LoRa Chip
 #define SX127X
 #define TX_POWER_MAX 17  // max 17 dBm
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -4
 #define TX_OUTPUT_POWER 20
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()

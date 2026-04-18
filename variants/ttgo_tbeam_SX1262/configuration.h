@@ -29,7 +29,7 @@ definitions for TBEAM 1262
 
 #define SX1262X
 #define TX_POWER_MAX 22  // max 22dBm
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -9
 
 // Defined using AXP192
 #define XPOWERS_CHIP_AXP192

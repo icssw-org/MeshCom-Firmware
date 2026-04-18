@@ -31,7 +31,7 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 
 #define CURRENT_LIMIT 140
 #define TX_POWER_MAX 22
-#define TX_POWER_MIN 2
+#define TX_POWER_MIN -9
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH
 #define WAIT_TX 5
 #define TX_OUTPUT_POWER 22
