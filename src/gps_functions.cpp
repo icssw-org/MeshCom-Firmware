@@ -187,7 +187,7 @@ void WZ_GPS_Init() {
                     Serial1.write("$PCAS00*01\r\n");  // save to Flash
                     #else
                     GPSSerial.write("$PCAS01,3*1F\r\n"); // set to new Baudrate 38400
-                    delay(250);
+                    delay(1000);
                     GPSSerial.updateBaudRate(38400);
                     GPSSerial.write("$PCAS00*01\r\n");  // save to Flash
                     #endif
@@ -590,7 +590,7 @@ bool L76Kprobe()
         }
 
         // bei UBLOX kommt: $GNTXT,01,01,01,...
-        if (is_pos(msg_text, "$GPTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,PCAS") >= 0)
+        if (is_pos(msg_text, "$GPTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,0,") >= 0)
         {
             // 01 = warning message
             on_UBLOX = true;

@@ -1156,6 +1156,9 @@ void sendDisplayTrack()
         #if defined(BOARD_T_ECHO)
         snprintf(print_text, sizeof(print_text), "DIR:old%3i new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
         sendDisplay1306(false, true, 3, dzeile[7], print_text);
+        #elif defined(BOARD_TRACKER)
+        snprintf(print_text, sizeof(print_text), "");
+        sendDisplay1306(false, true, 3, dzeile[5], print_text);
         #else
         snprintf(print_text, sizeof(print_text), "DIR :old%3i° new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
         sendDisplay1306(false, true, 3, dzeile[5], print_text);
@@ -2174,8 +2177,13 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     }
     
+    #if defined(BOARD_TRACKER)
+    snprintf(msg_text, sizeof(msg_text), "");
+    sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+    #else
     snprintf(msg_text, sizeof(msg_text), "RSSI:%4i", rssi);
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+    #endif
 
     bSetDisplay=false;
 
