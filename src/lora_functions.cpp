@@ -1306,7 +1306,7 @@ uint8_t getMessagePriority(int slot)
         int dest_start = -1;
         int dest_end = -1;
 
-        for(int i = path_start; i < len + 2 && i < (int)(UDP_TX_BUF_SIZE + 4); i++)
+        for(int i = path_start; i < len + 2 && i < (UDP_TX_BUF_SIZE + 4); i++)
         {
             if(ringBuffer[slot][i] == '>' && dest_start < 0)
             {

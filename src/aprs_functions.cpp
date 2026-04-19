@@ -955,20 +955,11 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage
 
 uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
 {
-    uint16_t ilng=aprsmsg.msg_payload.length();
-
-    char msg_start[ilng+1];
-    
-
-    memset(msg_start, 0x00, ilng+1);
-
-    snprintf(msg_start, sizeof(msg_start), "%s", aprsmsg.msg_payload.c_str());
-    
+    auto ilng = aprsmsg.msg_payload.length();
     if(ilng >= UDP_TX_BUF_SIZE)
         ilng = UDP_TX_BUF_SIZE - 1;
-    memcpy(msg_buffer, msg_start, ilng);
-    
-    return ilng;
+    memcpy(msg_buffer, aprsmsg.msg_payload.c_str(), ilng);
+    return static_cast<uint16_t>(ilng);
 }
 
 //10:30:29 RX-LoRa: 105 ! xAE48D54D 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.52E#/B=005/A=000161/P=1004.9/H=40.2/T=28.9/Q=1005.4/G232;2321 HW:04 MOD:03 FCS:15D5 FW:17 LH:09
