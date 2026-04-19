@@ -770,18 +770,18 @@ void commandAction(char *umsg_text, bool ble)
             // GPIO15: HIGH - power off LCD LED
             // GPIO25: LOW - power off LORA
 
-            extern bool bT114_DEEP_SLEEP;
+            extern bool bDEEP_SLEEP;
 
-            if(bT114_DEEP_SLEEP)
+            if(bDEEP_SLEEP)
             {
-                bT114_DEEP_SLEEP = false;
+                bDEEP_SLEEP = false;
             }
             else
             {
                 digitalWrite(PIN_VEXT_CTL, LOW);   // GPS
                 digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT
                 digitalWrite(LORA_NRSET, LOW);   // LORA
-                bT114_DEEP_SLEEP = true;
+                bDEEP_SLEEP = true;
             }
         #else
             #if not defined(BOARD_RAK4630)
