@@ -2012,7 +2012,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             sscanf(scan_text, "%lf", &lat);
 
             #if defined(BOARD_T_ECHO)
-            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c", msg_text, aprsmsg.msg_payload.charAt(itxt));
+            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c", scan_text, aprsmsg.msg_payload.charAt(itxt));
             #else
             snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%5ikm", scan_text, aprsmsg.msg_payload.charAt(itxt), dist_to);
             #endif
