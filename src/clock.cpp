@@ -45,10 +45,7 @@
 #include <Arduino.h>
 #include "clock.h"
 
-//---| globals |----------------------------------------------------------------
-const char* Clock::Months[] = {
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-};
+#include <time.h>
 
 //----------------------------------------------------------------------------
 // constructor
@@ -151,7 +148,7 @@ bool Clock::EnableAlarm(/*const*/ bool boEnable /*= true*/)
 //const
 char* Clock::GetDateStr()
 {
-	snprintf(szDateStr_m, sizeof(szDateStr_m), "%2u. %s. %04u", suClock_m.tm_mday, Months[suClock_m.tm_mon], 1900 + suClock_m.tm_year);
+	strftime(szDateStr_m, sizeof(szDateStr_m), "%e. %b. %Y", &suClock_m);
 	return szDateStr_m;
 }
 
