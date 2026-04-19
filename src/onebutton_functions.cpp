@@ -64,8 +64,8 @@ void singleClick()
                 if(pageText[its][iss] == 0x00)
                     pageText[its][iss] = 0x20;
             }
-            pageText[its][19] = pagePointer | 0x30;
-            pageText[its][20] = 0x00;
+            pageText[its][17] = pagePointer | 0x30;
+            pageText[its][18] = 0x00;
         }
     }
 
