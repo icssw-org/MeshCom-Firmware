@@ -1,3 +1,8 @@
+
+## [MeshCom Changelog](https://icssw.org/meshcom-versionen/)
+
+## [MeshCom@ICSSW Projektseite](https://icssw.org/meshcom/)
+
 ## Supported Hardware
 
 ### ESP DevKits + E22 LoRa Modul
@@ -39,7 +44,3 @@
 - wiscore_rak4631.zip, .uf2
 
 ### Newer version > v4.35 able to upgrade via OTA-Flasher.
-
-### [MeshCom Changelog](https://icssw.org/meshcom-versionen/)
-
-### [MeshCom@ICSSW Projektseite](https://icssw.org/meshcom/)
