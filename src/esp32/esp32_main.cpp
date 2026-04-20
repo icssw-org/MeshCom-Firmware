@@ -1237,7 +1237,7 @@ void esp32setup()
         
         int8_t tx_power = TX_OUTPUT_POWER;
         
-        if(meshcom_settings.node_power <= 0)
+        if(meshcom_settings.node_power == 0)
             meshcom_settings.node_power = TX_OUTPUT_POWER;
         else
             tx_power=meshcom_settings.node_power;   //set by command
