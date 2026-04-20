@@ -1131,11 +1131,12 @@ void esp32setup()
         #endif
         #endif
 
-        int state = radio.begin(433.175);
-
         #if defined(BOARD_T_ETH_ELITE)
-            radio.setDio2AsRfSwitch(true);
-            radio.setTCXO(1.8);
+        int state = radio.begin(433.175);
+        radio.setDio2AsRfSwitch(true);
+        radio.setTCXO(1.8);
+        #else
+        int state = radio.begin(433.175);
         #endif
 
     #endif
@@ -1237,7 +1238,7 @@ void esp32setup()
         
         int8_t tx_power = TX_OUTPUT_POWER;
         
-        if(meshcom_settings.node_power == 0)
+        if(meshcom_settings.node_power == -20)
             meshcom_settings.node_power = TX_OUTPUT_POWER;
         else
             tx_power=meshcom_settings.node_power;   //set by command
@@ -2182,6 +2183,8 @@ void esp32loop()
                 // CAD Scan 1
                 #if defined(BOARD_T_ETH_ELITE)
                 int cad_result = RADIOLIB_CHANNEL_FREE; //!!!!!!!!!!!!!! ACHTUNG !!!!!!!!!!!!!!!! muss raus
+                if(bLORADEBUG)
+                    Serial.println("[CHECK] T_ETH_ELITE BUG please fixit");
                 #else
                 int cad_result = radio.scanChannel();
                 #endif

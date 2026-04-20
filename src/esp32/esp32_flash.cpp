@@ -51,7 +51,7 @@ void init_flash(void)
     meshcom_settings.node_msgid = preferences.getInt("node_msgid", 0);
     meshcom_settings.node_ackid = preferences.getInt("node_ackid", 0);
 
-    meshcom_settings.node_power = preferences.getInt("node_power", 0);
+    meshcom_settings.node_power = preferences.getInt("node_power",-20); // not set
     meshcom_settings.node_freq = preferences.getFloat("node_freq", 0);
     meshcom_settings.node_bw = preferences.getFloat("node_bw", 0);
     meshcom_settings.node_sf = preferences.getInt("node_sf", 0);

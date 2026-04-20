@@ -322,8 +322,10 @@ extern int iDisplayType;
 
 #if defined(BOARD_T_ECHO)
 #define maxdisplines 11
+#define PAGE_MAX 6
 #else
 #define maxdisplines 7
+#define PAGE_MAX 6
 #endif
 
 extern int pageLine[maxdisplines][3];
@@ -332,7 +334,6 @@ extern char pageTextLong1[25];
 extern char pageTextLong2[200];
 extern int pageLineAnz;
 
-#define PAGE_MAX 6
 
 extern int pageLastLine[PAGE_MAX][maxdisplines][3];
 extern char pageLastText[PAGE_MAX][maxdisplines][25];

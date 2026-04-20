@@ -635,8 +635,10 @@ void insertOwnTx(unsigned int msg_id)
 
 #if defined(BOARD_T_ECHO)
 #define maxdisplines 11
+#define PAGE_MAX 6
 #else
 #define maxdisplines 7
+#define PAGE_MAX 6
 #endif
 
 int pageLine[maxdisplines][3] = {0};
@@ -645,7 +647,6 @@ char pageTextLong1[25] = {0};
 char pageTextLong2[200] = {0};
 int pageLineAnz=0;
 
-#define PAGE_MAX 6
 
 int pageLastLine[PAGE_MAX][maxdisplines][3] = {0};
 char pageLastText[PAGE_MAX][maxdisplines][25] = {0};
