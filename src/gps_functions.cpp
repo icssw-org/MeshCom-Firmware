@@ -639,7 +639,7 @@ bool L76Kprobe()
         }
 
         // bei UBLOX kommt: $GNTXT,01,01,01,...
-        if (is_pos(msg_text, "$GPTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,0,") >= 0)
+        if (is_pos(msg_text, "$GPTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,PCAS") >= 0 || is_pos(msg_text, "$GNTXT,01,01,01,0,") >= 0 || is_pos(msg_text, "$GNTXT,01,01,00,*61") > 0)
         {
             // 01 = warning message
             on_UBLOX = true;
@@ -702,12 +702,8 @@ unsigned long detectBaudrate()
     {
         detectedBaud =  GPS_BAUDS[iGpsBaud];
 
-        #if defined(GPS_BAUDRATE_SOFTCHECK)
         #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
         Serial1.begin(GPS_BAUDS[iGpsBaud]);
-        #else
-        GPSSerial.begin(GPS_BAUDS[iGpsBaud]);
-        #endif
         #else
         GPSSerial.begin(GPS_BAUDS[iGpsBaud], SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
         #endif
@@ -855,7 +851,7 @@ void IRAM_ATTR handleRxInterrupt() {
  */
 
  // Mapping auf Standard-Baudraten
-static const unsigned long standardBauds[] = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
+//static const unsigned long standardBauds[] = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
 
 unsigned long detectBaudrate() {
   pulseIndex = 0;
@@ -863,7 +859,6 @@ unsigned long detectBaudrate() {
 
   if(iGPSDEBUG > 1)
       Serial.println("[GPS ]...start detect Baudrate");
-
 
   // Messung: warten, bis genügend Flanken gemessen wurden oder Timeout 5s
   attachInterrupt(GPS_RX_PIN, handleRxInterrupt, CHANGE);
@@ -887,7 +882,8 @@ unsigned long detectBaudrate() {
 
   long bestMatch = 0;
   long minDiff = 1000000;
-  for (long b : standardBauds) {
+  for (long b : GPS_BAUDS)
+  {
     long diff = abs(calculatedBaud - b);
     if (diff < minDiff) {
       minDiff = diff;

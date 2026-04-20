@@ -224,7 +224,7 @@ struct s_meshcom_settings
 	int node_msgid = 0;
 	int node_ackid = 0;
 
-	int node_power = 0;
+	int node_power = -20;
 	float node_freq = 0;
 	float node_bw = 0;
 	int node_sf = 0;
