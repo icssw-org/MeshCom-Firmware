@@ -5,6 +5,10 @@
 
 #include "lora_setchip.h"
 
+#if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
+#include <nrf52/nrf52_radio.h>
+#endif
+
 #ifdef SX127X
     #include <RadioLib.h>
     extern SX1278 radio;
@@ -488,7 +492,10 @@ bool lora_setchip_meshcom()
         TX_TIMEOUT_VALUE);
 
     //  Start receiving LoRa packets
-    Radio.Rx(RX_TIMEOUT_VALUE);
+    startRadioReceive();
+
+    // Configure CAD parameters: 4 symbols, DETPEAK/DETMIN from config, CAD_ONLY mode
+    Radio.SetCadParams(LORA_CAD_04_SYMBOL, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN, LORA_CAD_ONLY, 0);
     
 #else
     // Set MeshCom parameter
@@ -560,6 +567,12 @@ bool lora_setchip_aprs()
         0,    // fsk only frequ hop period
         LORA_IQ_INVERSION_ON,
         TX_TIMEOUT_VALUE);
+
+    //  Start receiving LoRa packets
+    startRadioReceive();
+
+    // Configure CAD parameters: 4 symbols, DETPEAK/DETMIN from config, CAD_ONLY mode
+    Radio.SetCadParams(LORA_CAD_04_SYMBOL, RADIOLIB_SX126X_DETPEAK, RADIOLIB_SX126X_DETMIN, LORA_CAD_ONLY, 0);
 
 #else
     // Set LoRaAPRS parameter

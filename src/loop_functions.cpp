@@ -1942,7 +1942,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     iDisplayType=1;
 
-    int ipt=0;
+    unsigned int ipt=0;
 
     int izeile=1;
 
