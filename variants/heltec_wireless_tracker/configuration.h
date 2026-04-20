@@ -96,8 +96,9 @@ definitions for HELTEC_V3
 #define ENABLE_GPS
 #define GPS_RX_PIN 33
 #define GPS_TX_PIN 34
-// bei TBEAM bitte auf SOFTCHECK lassen .. Interrupt routine benötigt zu viel vom IRAM
-//#define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
+
+// bei WIRELESS_TRACKER bitte auf SOFTCHECK lassen
+#define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
 //#define ENABLE_UBLOX                  // UBLOX wird fix festgelegt und EIN setup gemacht
 #define ENABLE_L76K                     // Chip Erkennung fix auf L86K
 //#define ENABLE_GPS_UBLOX_FIX          // UBLOX wird fix festgelegt und KEIN setup gemacht

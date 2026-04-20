@@ -36,23 +36,9 @@ unsigned long detectBaudrate();
 
 //bool GPS_Init(int iGpsBaud);
 //unsigned int GPS_Loop();     // Non-blocking! In jedem loop()-Durchlauf aufrufen
-bool GPS_HasFix();
-String GPS_GetMaidenhead();  // Maidenhead-Locator (fuer Amateurfunk)
-bool checkbaud(unsigned long detectbaud);
+bool WZ_GPS_HasFix();
+String WZ_GPS_GetMaidenhead();  // Maidenhead-Locator (fuer Amateurfunk)
 
 #endif // ENABLE_GPS
-
-#ifdef GPS_FUNCTIONS
-    void switchGPS();
-    bool setupGPS();
-    void stopGPS();
-    unsigned int loopGPS();
- 
-    unsigned int displayInfo();
-    bool GPS_Recovery();
-
-    bool beginGPS();
-
-#endif
 
 #endif

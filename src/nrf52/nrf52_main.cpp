@@ -1448,10 +1448,7 @@ void nrf52loop()
     #if defined(ENABLE_GPS)
     if(bGPSON)
     {
-        if(!gpsInitDone)
-        {
-            WZ_GPS_Init();
-        }
+        WZ_GPS_Init();
     }
     #endif
 
