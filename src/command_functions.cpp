@@ -2430,21 +2430,6 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"gpsdebug 1") == 0)
-    {
-        iGPSDEBUG=1;
-        meshcom_settings.node_gpsdebug = 1;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--gpsdebug on");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"gpsdebug 2") == 0 || commandCheck(msg_text+2, (char*)"gpsdebug on") == 0)
     {
         iGPSDEBUG=2;
@@ -2468,6 +2453,59 @@ void commandAction(char *umsg_text, bool ble)
         if(ble)
         {
             addBLECommandBack((char*)"--gpsdebug off");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"gpsdebug ") == 0)
+    {
+        sscanf(msg_text+11, "%d", &iGPSDEBUG);
+
+        meshcom_settings.node_gpsdebug = iGPSDEBUG;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--gpsdebug on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setublox ") == 0)
+    {
+        if(memcmp(msg_text+11, "on", 2) == 0)
+        {
+            bGPSUBLOX = true;
+            meshcom_settings.node_sset3 |= 0x2000;
+        }
+        else
+        {
+            bGPSUBLOX = false;
+            meshcom_settings.node_sset3 &= ~0x2000;
+        }
+        
+
+        save_settings();
+
+        return;
+    }
+
+    if(commandCheck(msg_text+2, (char*)"setl76k ") == 0)
+    {
+        if(memcmp(msg_text+10, "on", 2) == 0)
+        {
+            bGPSL76K = true;
+            meshcom_settings.node_sset3 |= 0x4000;
+        }
+        else
+        {
+            bGPSL76K = false;
+            meshcom_settings.node_sset3 &= ~0x4000;
         }
 
         save_settings();

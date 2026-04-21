@@ -726,7 +726,9 @@ void esp32setup()
     bWXDEBUG = meshcom_settings.node_sset3 & 0x0200;
     bSHT21ON = meshcom_settings.node_sset3 & 0x0400;
     bINA226ON = meshcom_settings.node_sset3 & 0x0800;
-    bGPSAutosymbol = meshcom_settings.node_sset3 & 0x10000;
+    bGPSAutosymbol = meshcom_settings.node_sset3 & 0x1000;
+    bGPSUBLOX = meshcom_settings.node_sset3 & 0x2000;
+    bGPSL76K = meshcom_settings.node_sset3 & 0x4000;
 
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 
