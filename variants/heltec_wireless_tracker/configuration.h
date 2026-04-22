@@ -23,7 +23,8 @@ definitions for HELTEC_V3
 #define ENABLE_MC811
 //I2C fault #define ENABLE_INA226
 #define ENABLE_RTC
-#define ENABLE_SOFTSER
+
+//#define ENABLE_SOFTSER
 
 #define TX_POWER_MAX 22  // max 22dBm
 #define TX_POWER_MIN -9

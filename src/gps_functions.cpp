@@ -448,7 +448,11 @@ void SetupUBLOX()
 
   //GPSSerial.write("$PUBX,41,1,0003,0002,38400,0*25\r\n"); // set UART1 to 38400 baud, in NMEA+UBX, out NMEA
   //GPSSerial.write("$PUBX,41,1,0007,0003,38400,0*20"); // set UART1 to 38400 baud, send NMEA and UBX
+  #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+  Serial1.write("$PUBX,41,1,0007,0002,38400,0*21"); // set UART1 to 38400 baud, send NMEA only
+  #else
   GPSSerial.write("$PUBX,41,1,0007,0002,38400,0*21"); // set UART1 to 38400 baud, send NMEA only
+  #endif
   delay(100);
 
   // Baudrate von lokaler GPSSerial auf 38400 umstellen falls erforderlich

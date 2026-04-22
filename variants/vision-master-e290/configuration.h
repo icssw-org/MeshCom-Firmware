@@ -21,6 +21,7 @@ definitions for HELTEC E290
 #define ENABLE_INA226
 #define ENABLE_MCU811
 #define ENABLE_RTC
+
 #define ENABLE_SOFTSER
 
 #define TX_POWER_MAX 22  // max 22 dBm

@@ -22,6 +22,7 @@ definitions for TBEAM 1268
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
+
 //#define ENABLE_SOFTSER    do not enable onj TBEAM !!
 
 #define ANALOG_PIN 36

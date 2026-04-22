@@ -108,6 +108,7 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
+
 //#define ENABLE_SOFTSER
 
 

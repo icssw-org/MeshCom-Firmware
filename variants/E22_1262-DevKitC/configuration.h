@@ -26,7 +26,7 @@ definitions for E22 Board
 #define ENABLE_MC811
 #define ENABLE_RTC
 
-#define ENABLE_SOFTSER
+//#define ENABLE_SOFTSER
 
 #define ANALOG_PIN 32
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall

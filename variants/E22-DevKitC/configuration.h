@@ -22,13 +22,13 @@ definitions for E22 Board
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
-#define ENABLE_SOFTSER
 #define ANALOG_PIN 32
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 #define TX_POWER_MAX 22  // max 22dBm
 #define TX_POWER_MIN -9
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
+//#define ENABLE_SOFTSER
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 #define TX_OUTPUT_POWER 22  // E22 / SX1262 have up to +22dBm
