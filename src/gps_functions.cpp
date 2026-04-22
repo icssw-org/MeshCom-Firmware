@@ -68,8 +68,7 @@ bool on_UBLOX;
 #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
 extern Uart Serial1;
 #elif defined(GPS_SOFTWARE_SERIAL)
-    #include "SoftwareSerial.h"
-    SoftwareSerial GPSSerial(GPS_RX_PIN, GPS_TX_PIN);
+no more in use
 #else
 // Eigene UART fuer GPS -- NICHT Serial0 (ist USB-CDC)!
 // Serial1 auf die GPS-Pins legen
@@ -274,15 +273,6 @@ unsigned long detectBaudrate() {
 #endif
 
 //=======================================================================================
-
-const uint8_t UBX_CFG_GNSS[] = {  // Size 20, 'GNSS Configuration' GPS only for NEO-6M
-  0xB5, 0x62,             // Header (sync)
-  0x06, 0x3E,             // Class, ID
-  0x0C, 0x00,             // Length (2 Bytes, Little Endian)
-   0, 0, 0, 1, 0, 0, 0x32, 0, 1, 0, 0, 1,
-  0x85, 0xE4              // CK_A, CK_B
-};
-
 const uint8_t UBX_MON_VER[] = {  // Size 8, swVersion, hwVersion
   0xB5, 0x62,             // Header (sync)
   0x0A, 0x04,             // Class, ID
@@ -290,6 +280,32 @@ const uint8_t UBX_MON_VER[] = {  // Size 8, swVersion, hwVersion
   0x0E, 0x34              // CK_A, CK_B
 };
 
+//B5 62 06 08 06 00 E8 03 01 00 01 00 01 39
+const uint8_t UBX_CFG_RATE[] = {
+  0xB5, 0x62,
+  0x06, 0x08,
+  0x06, 0x00,
+  0xE8, 0x03,
+  0x01, 0x00,
+  0x01, 0x00,
+  0x01, 0x39
+};
+
+void sendUBX_CFG_RATE() {  // Binäres Paket senden
+  dbLOG("Sende UBX_CFG_RATE\n");
+  #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+  for (int i = 0; i < sizeof(UBX_CFG_RATE); i++)
+  {
+    Serial1.write(UBX_CFG_RATE[i]);
+  }
+  #else
+  for (int i = 0; i < sizeof(UBX_CFG_RATE); i++)
+  {
+    GPSSerial.write(UBX_CFG_RATE[i]);
+  }
+  #endif
+  delay(100); // Kurze Pause für das Modul
+}
 
 void sendUBX_MON_VER() {  // Binäres Paket senden
   dbLOG("Sende UBX_MON_VER\n");
@@ -301,15 +317,16 @@ void sendUBX_MON_VER() {  // Binäres Paket senden
     GPSSerial.write(UBX_MON_VER[i]);
   }
   #endif
+   delay(100); // Kurze Pause für das Modul
 }
 
 //<- B5 62 06 09 0D 00 00 00 00 00 FF FF 00 00 00 00 00 00 17 31 BF
 const uint8_t UBX_CFG_CFG[] = {  // Size 21, 'Configuration'
   0xB5, 0x62,             // Header (sync)
-  0x05, 0x09,             // Class, ID
+  0x06, 0x09,             // Class, ID
   0x0D, 0x00,             // Length (2 Bytes, Little Endian)
   0, 0, 0, 0, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0x17,
-  0x31 /*, 0xBF*/              // CK_A, CK_B
+  0x31, 0xBF              // CK_A, CK_B
 };
 
 void sendUBX_CFG_CFG() {  // Binäres Paket senden
@@ -322,6 +339,7 @@ void sendUBX_CFG_CFG() {  // Binäres Paket senden
     GPSSerial.write(UBX_CFG_CFG[i]);
   }
   #endif
+  delay(100); // Kurze Pause für das Modul
 }
 
 String readUBX() {
@@ -411,64 +429,12 @@ void sendUBXCommand(String cmd)
   delay(100); // Kurze Pause für das Modul
 }
 
-void SetupUBLOX() {
-  //TODO: ev. myGPS.hardReset(); bei Bedarf oder auf Befehl --GPS reset
+void SetupUBLOX()
+{
   WaitPause(); // Pause zwischen Blöcken erreicht
   sendUBX_MON_VER();
   ver = readUBXbin();
   dbLOG("[GPS_VER] %s\n", ver.c_str());
-/*
-  #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-  #else
-//WaitPause(); // Pause zwischen Blöcken erreicht ist optional aber nicht erforderlich
-  //myGPS.disableNMEAMessage(UBX_NMEA_VTG, COM_PORT_UART1);
-  GPSSerial.write("$PUBX,40,VTG,0,0,0,0,0,0*5E\r\n"); delay(100);
-// WaitPause(); // Pause zwischen Blöcken erreicht
-  //myGPS.disableNMEAMessage(UBX_NMEA_GSA, COM_PORT_UART1);
-  GPSSerial.write("$PUBX,40,GSA,0,0,0,0,0,0*4E\r\n"); delay(100);
-  //myGPS.disableNMEAMessage(UBX_NMEA_GSV, COM_PORT_UART1);
-  GPSSerial.write("$PUBX,40,GSV,0,0,0,0,0,0*59\r\n"); delay(100);
-  //myGPS.disableNMEAMessage(UBX_NMEA_GLL, COM_PORT_UART1);
-  GPSSerial.write("$PUBX,40,GLL,0,0,0,0,0,0*5C\r\n"); delay(100);
-  //myGPS.enableNMEAMessage(UBX_NMEA_GGA, COM_PORT_UART1);
-  GPSSerial.write("$PUBX,40,GGA,0,1,0,0,0,0*5B\r\n"); delay(100);
-  //myGPS.enableNMEAMessage(UBX_NMEA_RMC, COM_PORT_UART1);
-  GPSSerial.write("$PUBX,40,RMC,0,1,0,0,0,0*46\r\n"); delay(100);
-
-  WaitPause(); // Pause zwischen Blöcken erreicht
-
-  // RATE 1/sec
-  GPSSerial.write("$PUBX,40,00,0,1,0,0,0,0*35\r\n"); delay(100);
-  #endif
-  
-
-  // folgende 2 werden bei den einzelnen Sätzen angegeben, bzw wäre Rate ein eigener Befehl
-  //myGPS.setMeasurementRate(1000); delay(100); // Wiederholrate 1s
-  //myGPS.setUART1Output(COM_TYPE_NMEA); delay(100); //Set the UART port to output NMEA only
-
-  // binar senden als: UBX CFG-GNSS, Size 36, 'GNSS Configuration'
-  // abhängig von der Version:
-  // NEO-6M kann nur GPS und ist nicht konfigurierbar
-  //myGPS.enableGNSS(1,SFE_UBLOX_GNSS_ID_GPS);
-  //delay(100);
-  //myGPS.enableGNSS(1,SFE_UBLOX_GNSS_ID_GALILEO);
-  //delay(100);
-  //myGPS.enableGNSS(1,SFE_UBLOX_GNSS_ID_GLONASS);
-  //delay(100);
-
-  //
-
-  //myGPS.setSerialRate(38400, COM_PORT_UART1); // ist in folgender inkludiert
-  //myGPS.setUART1Output(COM_TYPE_NMEA); delay(100); //Set the UART port to output NMEA only
-  #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-  #else
-  //GPSSerial.write("$PUBX,41,1,0003,0002,38400,0*25\r\n"); // set UART1 to 38400 baud, in NMEA+UBX, out NMEA
-  //GPSSerial.write("$PUBX,41,1,0007,0003,38400,0*20"); // set UART1 to 38400 baud, send NMEA and UBX
-  GPSSerial.write("$PUBX,41,1,0007,0002,38400,0*21"); // set UART1 to 38400 baud, send NMEA only
-  //GPSSerial.write("$PUBX,41,1,0003,0003,115200,0*1C"); // set UART1 to 115200 baud, send NMEA only
-  #endif
-  delay(100);
-*/
 
   // 1. Alle Nachrichten (GSV) ausschalten, um Flut an Daten zu reduzieren
   sendUBXCommand("$PUBX,40,GSV,0,0,0,0,0,0*59");
@@ -477,7 +443,13 @@ void SetupUBLOX() {
   sendUBXCommand("$PUBX,40,GGA,0,1,0,0,0,0*5B");
   sendUBXCommand("$PUBX,40,RMC,0,1,0,0,0,0*47");
 
-  sendUBXCommand("$PUBX,40,00,0,1,0,0,0,0*35");
+  // set Rate to 1 sec
+  sendUBX_CFG_RATE();
+
+  //GPSSerial.write("$PUBX,41,1,0003,0002,38400,0*25\r\n"); // set UART1 to 38400 baud, in NMEA+UBX, out NMEA
+  //GPSSerial.write("$PUBX,41,1,0007,0003,38400,0*20"); // set UART1 to 38400 baud, send NMEA and UBX
+  GPSSerial.write("$PUBX,41,1,0007,0002,38400,0*21"); // set UART1 to 38400 baud, send NMEA only
+  delay(100);
 
   // Baudrate von lokaler GPSSerial auf 38400 umstellen falls erforderlich
   if (detectedBaud != 38400) {
@@ -498,10 +470,6 @@ void SetupUBLOX() {
   dbLOG("[GPS] UBLOX konfiguriert\n");
 
   WaitPause(); // Pause zwischen Blöcken erreicht
-  sendUBX_MON_VER();
-  ver = readUBXbin();
-  dbLOG("[GPS_VER2] %s\n", ver.c_str());
-
 }
 
 /**
