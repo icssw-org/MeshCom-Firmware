@@ -22,7 +22,9 @@
 #define ENABLE_MCP23017
 #define ENABLE_MC811
 #define ENABLE_RTC
-#define ENABLE_SOFTSER
+
+//#define ENABLE_SOFTSER
+
 #define TX_POWER_MAX 22
 #define TX_POWER_MIN -9
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx

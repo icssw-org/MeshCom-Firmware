@@ -23,7 +23,9 @@ definitions for TLORA_V2_1_1p6
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
-#define ENABLE_SOFTSER
+
+//#define ENABLE_SOFTSER
+
 #define ANALOG_PIN 35
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 #define TX_POWER_MAX 20  // max 20dBm

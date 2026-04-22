@@ -21,7 +21,9 @@ definitions for HELTEC_V2_1
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
-#define ENABLE_SOFTSER
+
+//#define ENABLE_SOFTSER
+
 #define TX_POWER_MAX 15
 #define TX_POWER_MIN -4
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx

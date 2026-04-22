@@ -11,16 +11,6 @@
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <command_functions.h>
 
-#if defined(ENABLE_GPS)
-//local withoin functions defined
-#elif defined(BOARD_TRACKER)
-    HardwareSerial gpsSerial(1);
-#else
-#include "SoftwareSerial.h"
-    SoftwareSerial gpsSerial(GPS_RX_PIN, GPS_TX_PIN);
-#endif
-
-
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
 
 #include "XPowersAXP192.tpp"

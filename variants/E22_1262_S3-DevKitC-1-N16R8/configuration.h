@@ -26,7 +26,8 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
-#define ENABLE_SOFTSER
+
+//#define ENABLE_SOFTSER
 
 #define SX126x_V3
 #define SX1262_E22  // E22 900M30S/900M33S
