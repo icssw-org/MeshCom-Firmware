@@ -779,8 +779,10 @@ void commandAction(char *umsg_text, bool ble)
             else
             {
                 digitalWrite(PIN_VEXT_CTL, LOW);   // GPS
-                digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT
+                digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
+                digitalWrite(PIN_TFT_VDD_CTL, HIGH);   // TFT VDD
                 digitalWrite(LORA_NRSET, LOW);   // LORA
+                
                 bDEEP_SLEEP = true;
             }
         #else

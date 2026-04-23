@@ -789,7 +789,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             epaper_display.fastmodeOn();
             
             epaper_display.setFont(&FreeMonoBold12pt7b);
-        #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114) || defined(BOARD_T_ECHO) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
+        #elif defined(BOARD_HELTEC_T114)
+        #elif defined(BOARD_TRACKER) || defined(BOARD_T_ECHO) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
         #else
             u8g2->setFont(u8g2_font_6x10_mf);
         #endif
@@ -885,6 +886,11 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             }
             
         #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114)
+
+        #if defined(BOARD_HELTEC_T114)
+        if(!bDisplayIsOff)
+            digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+        #endif
 
         if(pageLineAnz > 0)
         {
@@ -1056,10 +1062,24 @@ void sendDisplayHead(bool bInit)
 
     if(bDisplayIsOff)
     {
+        #if defined(BOARD_HELTEC_T114)
+        digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
+        #endif
+
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
         return;
     }
+    else
+    {
+        #if defined(BOARD_HELTEC_T114)
+        digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+        #endif
+    }
+
+    #if defined(BOARD_HELTEC_T114)
+    digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+    #endif
 
     iDisplayType=9;
 
@@ -1114,9 +1134,19 @@ void sendDisplayTrack()
 
     if(bDisplayIsOff)
     {
+        #if defined(BOARD_HELTEC_T114)
+        digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
+        #endif
+
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
         return;
+    }
+    else
+    {
+        #if defined(BOARD_HELTEC_T114)
+        digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+        #endif
     }
 
     iDisplayType=9;
@@ -1186,9 +1216,19 @@ void sendDisplayWX()
 
     if(bDisplayIsOff)
     {
+        #if defined(BOARD_HELTEC_T114)
+        digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
+        #endif
+
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
         return;
+    }
+    else
+    {
+        #if defined(BOARD_HELTEC_T114)
+        digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+        #endif
     }
 
     iDisplayType=9;
@@ -1319,12 +1359,12 @@ void sendDisplayMainline()
         snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
     #endif
 
- #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W)
+    #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
     if(global_batt == 0.0)
         snprintf(cbatt, sizeof(cbatt), "  USB");
- #endif
+    #endif
 
     if(meshcom_settings.node_date_hour == 0 && meshcom_settings.node_date_minute == 0 && meshcom_settings.node_date_second == 0)
     {
@@ -1937,9 +1977,19 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     if(bDisplayIsOff)
     {
+        #if defined(BOARD_HELTEC_T114)
+        digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
+        #endif
+
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
         return;
+    }
+    else
+    {
+        #if defined(BOARD_HELTEC_T114)
+        digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+        #endif
     }
 
 

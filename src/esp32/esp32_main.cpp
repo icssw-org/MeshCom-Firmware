@@ -2924,6 +2924,11 @@ void esp32loop()
             if(bDisplayOff)
             {
                 bDisplayIsOff=true;
+
+                #if defined(BOARD_HELTEC_T114)
+                digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
+                #endif
+
                 sendDisplay1306(true, true, 0, 0, (char*)"#C");
             }
         }
