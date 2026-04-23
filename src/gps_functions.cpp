@@ -9,6 +9,7 @@
  */
 
 #include "Arduino.h"
+#include "esp_attr.h"
 
 #include "configuration.h"
 
@@ -22,36 +23,6 @@
 #include "log_functions.h"
 
 #define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
-
-/*
-Tipps fuer bessere GPS-Erkennung
-
-  1. HDOP pruefen: Ein Fix mit HDOP > 5.0 ist ungenau. Erst ab HDOP < 2.0 ist die Position brauchbar.
-
-  2. Satelliten-Anzahl anzeigen hilft beim Debugging:
-    Auch ohne Fix zeigt gps.satellites.value() an, wie viele Satelliten empfangen werden.
-
-  3. GPS-Zeit als NTP-Alternative: Wenn kein WiFi verfuegbar ist, kann die GPS-Zeit als Zeitquelle dienen
-   -- nuetzlich fuer den Outdoor-Einsatz.
-
-  4. Warm/Hot Start: Manche Module unterstuetzen Battery-Backup.
-   Dann geht der Fix nach dem Neustart deutlich schneller (Sekunden statt Minuten).
-
-  5. **UART-Konflikt**: GPIO 43/44 sind auf dem ESP32-S3 auch die Standard-USB-JTAG-Pins.
-   Wenn USB-CDC aktiv ist (wie hier mit `HWCDC USBSerial`), kann das zu Konflikten fuehren.
-   Loesung: Eine andere UART (z.B. `Serial1` oder `Serial2`) explizit auf diese Pins legen.
-
-  6. **Kaltstart-Zeit**: Ein GPS-Modul braucht beim Kaltstart bis zu 15 Minuten fuer den ersten Fix.
-   In Gebaeuden oft gar kein Fix moeglich. Das darf den Rest der Anwendung nicht blockieren.
-*/
-
-
-/*
-  ✅1) AutoBaud
-  ✅2) saubere Erkennung des L76K  und UBLOX GPS-Modules und gleichartige Parametrierung derselben:
-    38400 Baud, 1s Rate, NMEA $GxGGA & $GxRMC, GPS+GLONASS+GALILEO je nach GPS-Modul Fähigkeit
-  ✅3) LineBuffered GPSDEBUG Ausgabe, um etwaige Fehler erkennbar zu machen.
-*/
 
 #include <TinyGPSPlus.h>
 
@@ -80,7 +51,7 @@ GPSData gpsData;
 // Baudrate-Erkennung: Viele Module starten mit 9600, manche mit 38400/115200
 static const unsigned long GPS_BAUDS[] = {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
 static const size_t   GPS_BAUD_COUNT = sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]);
-int GPS_BAUDS_RX[8];
+int GPS_BAUDS_RX[GPS_BAUD_COUNT];
 
 bool updateGPSdata;
 
@@ -124,7 +95,7 @@ unsigned long detectBaudrate()
         memset(msg_text, 0x00, maxNMEAline);
 
          // 2 Sekunden lang auf gueltige NMEA-Daten warten
-        while (millis() - start < 2000)
+        while (millis() - start < 1500)
         {
             #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
             while (Serial1.available())
@@ -271,24 +242,60 @@ unsigned long detectBaudrate() {
 }
 
 #endif
+/* 9600 
+unsigned long new_baud = 9600;
 
-//=======================================================================================
-const uint8_t UBX_MON_VER[] = {  // Size 8, swVersion, hwVersion
-  0xB5, 0x62,             // Header (sync)
-  0x0A, 0x04,             // Class, ID
-  0x00, 0x00,             // Length (2 Bytes, Little Endian)
-  0x0E, 0x34              // CK_A, CK_B
+const uint8_t UBX_CFG_PRT[] = {
+0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xD0, 0x08, 0x00, 0x00, 0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA2, 0xB5
 };
+*/
+
+
+/* 38400 */
+unsigned long new_baud = 38400;
+
+const uint8_t UBX_CFG_PRT[] = {
+0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xD0, 0x08, 0x00, 0x00, 0x00, 0x96, 0x00, 0x00, 0x07, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x93, 0x90
+};
+
+
+/* 115200 
+unsigned long new_baud = 115200;
+
+const uint8_t UBX_CFG_PRT[] = {
+0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xD0, 0x08, 0x00, 0x00, 0x00, 0xC2,  // Baud rate settings (115200)
+  0x01, 0x00, 0x03, 0x00,              
+  0x03, 0x00, 0x00, 0x00,              
+  0x00, 0x00, 0xBC, 0x5E 
+};
+*/
+
+
+void sendUBX_CFG_PRT() {  // Binäres Paket senden
+  Serial.printf("UBX_CFG_PRT %li\n", new_baud);
+  #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+  for (int i = 0; i < sizeof(UBX_CFG_PRT); i++)
+  {
+    Serial1.write(UBX_CFG_PRT[i]);
+  }
+  #else
+  for (int i = 0; i < sizeof(UBX_CFG_PRT); i++)
+  {
+    GPSSerial.write(UBX_CFG_PRT[i]);
+  }
+  #endif
+  delay(100); // Kurze Pause für das Modul
+}
 
 //B5 62 06 08 06 00 E8 03 01 00 01 00 01 39
 const uint8_t UBX_CFG_RATE[] = {
-  0xB5, 0x62,
-  0x06, 0x08,
-  0x06, 0x00,
-  0xE8, 0x03,
+  0xB5, 0x62,   // Header (sync)
+  0x06, 0x08,   // Class, ID
+  0x06, 0x00,   // Length (2 bytes, Little Endian)
+  0xE8, 0x03,   // üayload
   0x01, 0x00,
   0x01, 0x00,
-  0x01, 0x39
+  0x01, 0x39    // CH_A, CH_B
 };
 
 void sendUBX_CFG_RATE() {  // Binäres Paket senden
@@ -306,6 +313,13 @@ void sendUBX_CFG_RATE() {  // Binäres Paket senden
   #endif
   delay(100); // Kurze Pause für das Modul
 }
+
+const uint8_t UBX_MON_VER[] = {  // Size 8, swVersion, hwVersion
+  0xB5, 0x62,             // Header (sync)
+  0x0A, 0x04,             // Class, ID
+  0x00, 0x00,             // Length (2 Bytes, Little Endian)
+  0x0E, 0x34              // CK_A, CK_B
+};
 
 void sendUBX_MON_VER() {  // Binäres Paket senden
   dbLOG("Sende UBX_MON_VER\n");
@@ -398,16 +412,11 @@ void WaitPause() {
   while (millis() < startTimeout) {
     #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
     if (Serial1.available()) {
-      //char c = char(Serial1.read());
       Serial1.read();
     #else
     if (GPSSerial.available()) {
-      //char c = char(GPSSerial.read());
       GPSSerial.read();
     #endif
-
-      //dbLOG("%c", c);
-
       startTimeout = millis() + 50;  // retrigger timeout
     }
   }
@@ -431,10 +440,24 @@ void sendUBXCommand(String cmd)
 
 void SetupUBLOX()
 {
-  WaitPause(); // Pause zwischen Blöcken erreicht
-  sendUBX_MON_VER();
-  ver = readUBXbin();
-  dbLOG("[GPS_VER] %s\n", ver.c_str());
+  // ACHTUNG zu Beginn immer zuerst nur write Aktionen damit ein Modul das in einer 10Hz Rate sendet und nur auf 9600 baud steht umgestellt werdne kann
+  // set baud new_baud
+  sendUBX_CFG_PRT();
+
+  // Baudrate von lokaler GPSSerial auf new_baud umstellen falls erforderlich
+  if (detectedBaud != new_baud) {
+    #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+    Serial1.end();
+    delay(250);
+    Serial1.begin(new_baud);
+    delay(250);
+    #else
+    GPSSerial.updateBaudRate(new_baud);
+    delay(200);
+    #endif
+    if(iGPSDEBUG >= 2)
+      Serial.printf("[GPS] UBLOX & lokal auf %li Baud umgestellt\n", new_baud);
+  }
 
   // 1. Alle Nachrichten (GSV) ausschalten, um Flut an Daten zu reduzieren
   sendUBXCommand("$PUBX,40,GSV,0,0,0,0,0,0*59");
@@ -446,34 +469,21 @@ void SetupUBLOX()
   // set Rate to 1 sec
   sendUBX_CFG_RATE();
 
-  //GPSSerial.write("$PUBX,41,1,0003,0002,38400,0*25\r\n"); // set UART1 to 38400 baud, in NMEA+UBX, out NMEA
-  //GPSSerial.write("$PUBX,41,1,0007,0003,38400,0*20"); // set UART1 to 38400 baud, send NMEA and UBX
-  #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-  Serial1.write("$PUBX,41,1,0007,0002,38400,0*21"); // set UART1 to 38400 baud, send NMEA only
-  #else
-  GPSSerial.write("$PUBX,41,1,0007,0002,38400,0*21"); // set UART1 to 38400 baud, send NMEA only
-  #endif
-  delay(100);
+  // !!!ACHTUING!! hier noch baud-rate stellen aber zuerst testen und checksum setzen
+  // Damit sauber auf NMEA only gesetzt wird
+  sendUBXCommand("$PUBX,41,1,0007,0002,38400,0*21"); // set UART1 to 38400 baud, send NMEA only
 
-  // Baudrate von lokaler GPSSerial auf 38400 umstellen falls erforderlich
-  if (detectedBaud != 38400) {
-    #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-    Serial1.end();
-    delay(250);
-    Serial1.begin(38400);
-    delay(250);
-    #else
-    GPSSerial.updateBaudRate(38400);
-    #endif
-    dbLLOG(iGPSDEBUG, 2, "[GPS] UBLOX & lokal auf 38400 Baud umgestellt\n");
-  }
-
-  //myGPS.saveConfiguration(); //Save the current settings to flash and BBR
+  //Save the current settings to flash and BBR
   sendUBX_CFG_CFG();
   dbLLOG(iGPSDEBUG, 2, "[GPS] UBLOX save Flash\n");
   dbLOG("[GPS] UBLOX konfiguriert\n");
 
   WaitPause(); // Pause zwischen Blöcken erreicht
+
+  sendUBX_MON_VER();
+  ver = readUBXbin();
+  dbLOG("[GPS_VER] %s\n", ver.c_str());
+
 }
 
 /**
@@ -558,12 +568,6 @@ bool GPSprobe() {
   #else
 
   dbLOG("[GPS]...Try to init L76K/UBLOX\n");
-  // all output off for init, Annahme dass L76K vorhanden
-  //TODO: diese Abschaltung des gesamten Output ist kritisch und könnte ev. entfallen
-  //dbLOG("[GPS] >>> $PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\n");
-  //GPSSerial.write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
-  //GPSSerial.flush();  // wait for all sent
-  //delay(200);
   ver = "";
   startTimeout = millis() + WAIT_DURATION;
   dbLLOG(iGPSDEBUG, 2, "[GPS] clear RX-Buffer\n");
@@ -582,6 +586,8 @@ bool GPSprobe() {
   }
 
   // set device info
+  // command --setl76k on
+  // dient dazu um einen GPS-Modul L76K fix zu setzen
   if (bGPSL76K)
   {
     dbLOG("[GPS] set L76K GNSS\n");
@@ -590,6 +596,8 @@ bool GPSprobe() {
     return true;
   }
 
+  // command --setublox on
+  // dient dazu um einen GPS-Modul UBLOX fix zu setzen
   if (bGPSUBLOX)
   {
     // getestet auf UBLOX
@@ -752,32 +760,26 @@ int WZ_GPS_Loop() {
     #endif
     {
         #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-        c = Serial1.read();
+        c = char(Serial1.read());
         #else
-        c = GPSSerial.read();
+        int ic = GPSSerial.read();
         #endif
 
-        // A-Z 0-9 $ , * CR LF
-        //if(((c>=0x40) && (c<0x5B)) || ((c>=0x30) && (c<=0x39)) || c==0x21 || c==0x24 || c==0x2A || c==0x2C || c==0x5C || c==0x0A || c==0x0D)
-        {
-            if (gps.encode(c)) { updateGPSdata = true; }
+        if (gps.encode(char(ic))) { updateGPSdata = true; }
 
-            if(iGPSDEBUG > 2)
-            {
-                // TODO: nicht einzeln ausgeben, sondern sammeln in LineBuffer
-                // und erst ausgeben, wenn ein Satz vollständig ist \r\n
-                if (NMEAlineIndex < (int)maxNMEAline-2) {
-                    msg_text[NMEAlineIndex] = c;
-                    NMEAlineIndex++;
-                }
-            }
+        if(iGPSDEBUG > 2)
+        {
+          // TODO: nicht einzeln ausgeben, sondern sammeln in LineBuffer
+          // und erst ausgeben, wenn ein Satz vollständig ist \r\n
+          if (NMEAlineIndex < (int)maxNMEAline-2) {
+              msg_text[NMEAlineIndex] = char(ic);
+              NMEAlineIndex++;
+          }
         }
     }
 
     if (updateGPSdata)
     {
-        //TODO: hier kommen ev. noch Zeichen vom nächsten Satz mit
-        //TODO: daher nur bis \n ausgeben und den Rest behalten
         if(iGPSDEBUG > 2)
         {
             Serial.printf("size:%i\n%s\n", NMEAlineIndex, msg_text);
