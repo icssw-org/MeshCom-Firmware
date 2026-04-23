@@ -271,7 +271,7 @@ const uint8_t UBX_CFG_PRT[] = {
 void sendUBX_CFG_PRT() {  // Binäres Paket senden
   Serial.printf("UBX_CFG_PRT %li\n", new_baud);
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-  for (int i = 0; i < sizeof(UBX_CFG_PRT); i++)
+  for (int i = 0; i < (int)sizeof(UBX_CFG_PRT); i++)
   {
     Serial1.write(UBX_CFG_PRT[i]);
   }
@@ -298,7 +298,7 @@ const uint8_t UBX_CFG_RATE[] = {
 void sendUBX_CFG_RATE() {  // Binäres Paket senden
   dbLOG("Sende UBX_CFG_RATE");
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-  for (int i = 0; i < sizeof(UBX_CFG_RATE); i++)
+  for (int i = 0; i < (int)sizeof(UBX_CFG_RATE); i++)
   {
     Serial1.write(UBX_CFG_RATE[i]);
   }
@@ -757,7 +757,7 @@ int WZ_GPS_Loop() {
     #endif
     {
         #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
-        c = char(Serial1.read());
+        int ic = Serial1.read();
         #else
         int ic = GPSSerial.read();
         #endif
