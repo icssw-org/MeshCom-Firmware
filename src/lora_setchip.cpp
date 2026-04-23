@@ -553,20 +553,42 @@ bool lora_setchip_aprs()
     if(bLORADEBUG)
         Serial.printf("[LoRa]...RF_POWER: %d dBm\n", getPower());
 
-    Radio.SetTxConfig(
-        MODEM_LORA,
-        getPower(),
-        0, // fsk only
-        LORA_APRS_BANDWIDTH,
-        LORA_APRS_SPREADING_FACTOR,
-        LORA_APRS_CODINGRATE,
-        LORA_APRS_PREAMBLE_LENGTH,
-        LORA_FIX_LENGTH_PAYLOAD_ON,
-        true, // CRC ON
-        0,    // fsk only frequ hop
-        0,    // fsk only frequ hop period
-        LORA_IQ_INVERSION_ON,
-        TX_TIMEOUT_VALUE);
+    // issue #902
+    // "US" LoRa_APRS
+    if(meshcom_settings.node_country == 10)
+    {
+        Radio.SetTxConfig(
+            MODEM_LORA,
+            getPower(),
+            0, // fsk only
+            LORA_APRS_BANDWIDTH,
+            7,  // SF
+            2,  // CR
+            LORA_APRS_PREAMBLE_LENGTH,
+            LORA_FIX_LENGTH_PAYLOAD_ON,
+            true, // CRC ON
+            0,    // fsk only frequ hop
+            0,    // fsk only frequ hop period
+            LORA_IQ_INVERSION_ON,
+            TX_TIMEOUT_VALUE);
+    }
+    else
+    {
+        Radio.SetTxConfig(
+            MODEM_LORA,
+            getPower(),
+            0, // fsk only
+            LORA_APRS_BANDWIDTH,
+            LORA_APRS_SPREADING_FACTOR,
+            LORA_APRS_CODINGRATE,
+            LORA_APRS_PREAMBLE_LENGTH,
+            LORA_FIX_LENGTH_PAYLOAD_ON,
+            true, // CRC ON
+            0,    // fsk only frequ hop
+            0,    // fsk only frequ hop period
+            LORA_IQ_INVERSION_ON,
+            TX_TIMEOUT_VALUE);
+    }
 
     //  Start receiving LoRa packets
     startRadioReceive();
@@ -582,6 +604,14 @@ bool lora_setchip_aprs()
     int rf_cr = 5;
     uint16_t rf_preamble_length = 8;
     bool rf_crc = true;
+
+    // issue #902
+    // "US" LoRa_APRS
+    if(meshcom_settings.node_country == 10)
+    {
+        rf_sf = 7;
+        rf_cr = 6;
+    }
 
     return lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, 0x12, rf_preamble_length, rf_crc);
 #endif

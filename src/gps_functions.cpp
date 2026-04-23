@@ -9,7 +9,6 @@
  */
 
 #include "Arduino.h"
-#include "esp_attr.h"
 
 #include "configuration.h"
 
