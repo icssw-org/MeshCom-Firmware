@@ -917,8 +917,7 @@ void nrf52setup()
 
     Radio.SetModem(MODEM_LORA);
 
-    Serial.print("[INIT]...Radio-Status:");
-    Serial.println(Radio.GetStatus());
+    Serial.printf("[INIT]...Radio-Sync: %04X\n", Radio.GetSyncWord());
 
     //  Set the LoRa Callback Functions
     RadioEvents.TxDone = OnTxDone;
@@ -1001,7 +1000,7 @@ void nrf52setup()
         LORA_IQ_INVERSION_ON,
         TX_TIMEOUT_VALUE);
 
-    Serial.printf("[INIT]...Radio-Status: %i\n", Radio.GetStatus());
+    Serial.printf("[INIT]...Radio-Sync: %04X\n", Radio.GetSyncWord());
 
     //  Start receiving LoRa packets
     startRadioReceive();
@@ -1972,6 +1971,11 @@ if (isPhoneReady == 1)
             if(bDisplayOff)
             {
                 bDisplayIsOff=true;
+
+                #if defined(BOARD_HELTEC_T114)
+                digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
+                #endif
+
                 sendDisplay1306(true, true, 0, 0, (char*)"#C");
             }
         }
