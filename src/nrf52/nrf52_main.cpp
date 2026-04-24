@@ -1530,8 +1530,8 @@ void nrf52loop()
 
     if(gKeyNum == 2)
     {
-        if(iGPSDEBUG > 1)
-            Serial.println("gKeyNum == 2");
+        //if(iGPSDEBUG > 1)
+        //    Serial.println("gKeyNum == 2");
 
         #if defined(ENABLE_RAK_GPS)
         if(bGPSON)
@@ -1558,6 +1558,81 @@ void nrf52loop()
         }
         #endif
 
+        #if defined(ENABLE_GPS)
+        if(bGPSON)
+        {
+            // gps refresh every sec
+            if ((gps_refresh_timer + 1000) < millis())
+            {
+                unsigned int igps = POSINFO_INTERVAL;
+
+                if(gpsDetected)
+                {
+                    igps = WZ_GPS_Loop();
+
+                    if(iGPSDEBUG > 0)
+                    {
+                        Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
+
+                        Serial.print("[GPS ]...Time <UTC>: ");
+                        if (gpsData.hour < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.hour);
+                        Serial.print(F(":"));
+                        if (gpsData.minute < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.minute);
+                        Serial.print(F(":"));
+                        if (gpsData.second < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.second);
+
+                        Serial.print(F(" / Date: "));
+                        Serial.print(gpsData.year);
+                        Serial.print(F("."));
+                        if (gpsData.month < 10) Serial.print(F("0"));
+                        Serial.print(gpsData.month);
+                        Serial.print(F("."));
+                        if (gpsData.day < 10) Serial.print(F("0"));
+                        Serial.println(gpsData.day);
+
+                        if(posinfo_fix)
+                        {
+                            Serial.printf("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
+                        }
+
+                    }
+                }
+                
+                if(igps > 0)
+                    posinfo_interval = igps;
+                else
+                {
+                    no_gps_reset_counter++;
+                    if(no_gps_reset_counter > 10)
+                    {
+                        posinfo_interval = POSINFO_INTERVAL;
+                        no_gps_reset_counter = 0;
+                    }
+                }
+
+                gps_refresh_timer = millis();
+            }
+        }
+        #endif
+        
+        #if defined(ENABLE_RAK_GPS) || defined(ENABLE_GPS)
+        if(bGPSON)
+        {
+            // check GPS ON and activ --> <gKeyNum == 2> the signal must be active
+            if ((gps_refresh_timer + (5 * (GPS_REFRESH_INTERVAL * 1000))) < millis())
+            {
+                posinfo_fix = false;
+                posinfo_satcount = 0;
+                posinfo_hdop = 0;
+                fposinfo_hdop = 0;
+                posinfo_interval = POSINFO_INTERVAL;
+            }
+        }
+        #endif
+        
         gKeyNum = 0;
     }
 
@@ -1568,82 +1643,8 @@ void nrf52loop()
         gKeyNum = 0;
     }
 
-    #if defined(ENABLE_GPS)
-    if(bGPSON)
-    {
-        // gps refresh every sec
-        if ((gps_refresh_timer + 1000) < millis())
-        {
-            unsigned int igps = POSINFO_INTERVAL;
 
-            if(gpsDetected)
-            {
-                igps = WZ_GPS_Loop();
-
-                if(iGPSDEBUG > 0)
-                {
-                    Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
-
-                    Serial.print("[GPS ]...Time <UTC>: ");
-                    if (gpsData.hour < 10) Serial.print(F("0"));
-                    Serial.print(gpsData.hour);
-                    Serial.print(F(":"));
-                    if (gpsData.minute < 10) Serial.print(F("0"));
-                    Serial.print(gpsData.minute);
-                    Serial.print(F(":"));
-                    if (gpsData.second < 10) Serial.print(F("0"));
-                    Serial.print(gpsData.second);
-
-                    Serial.print(F(" / Date: "));
-                    Serial.print(gpsData.year);
-                    Serial.print(F("."));
-                    if (gpsData.month < 10) Serial.print(F("0"));
-                    Serial.print(gpsData.month);
-                    Serial.print(F("."));
-                    if (gpsData.day < 10) Serial.print(F("0"));
-                    Serial.println(gpsData.day);
-
-                    if(posinfo_fix)
-                    {
-                        Serial.printf("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
-                    }
-
-                }
-            }
-            
-            if(igps > 0)
-                posinfo_interval = igps;
-            else
-            {
-                no_gps_reset_counter++;
-                if(no_gps_reset_counter > 10)
-                {
-                    posinfo_interval = POSINFO_INTERVAL;
-                    no_gps_reset_counter = 0;
-                }
-            }
-
-            gps_refresh_timer = millis();
-        }
-    }
-    #endif
-    
-    #if defined(ENABLE_RAK_GPS) || defined(ENABLE_GPS)
-    if(bGPSON)
-    {
-        // check GPS ON and activ --> <gKeyNum == 2> the signal must be active
-        if ((gps_refresh_timer + (5 * (GPS_REFRESH_INTERVAL * 1000))) < millis())
-        {
-            posinfo_fix = false;
-            posinfo_satcount = 0;
-            posinfo_hdop = 0;
-            fposinfo_hdop = 0;
-            posinfo_interval = POSINFO_INTERVAL;
-        }
-    }
-    #endif
-
-if (isPhoneReady == 1)
+    if (isPhoneReady == 1)
     {
         if (config_to_phone_prepare)
         {
