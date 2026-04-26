@@ -1088,6 +1088,7 @@ void nrf52loop()
     #if defined(HAS_TFT_114) or defined(BOARD_T_ECHO)
     if(bDEEP_SLEEP)
     {
+        delay(60000);
         // only loop
     }
     else

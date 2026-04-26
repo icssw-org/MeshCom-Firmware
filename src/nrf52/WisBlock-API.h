@@ -122,6 +122,7 @@ void init_ble(void);
 void init_ble_name(void);
 BLEService init_settings_characteristic(void);
 void restart_advertising(uint16_t timeout);
+void stop_advertising();
 extern BLECharacteristic g_lora_data;
 extern BLEUart g_ble_uart;
 extern bool g_ble_uart_is_connected;
