@@ -107,10 +107,21 @@ void doubleClick()
       return;
   #endif
 
+  #if defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
+    if(!bDisplayOff)
+    {
+        commandAction((char*)"--display off", isPhoneReady, false);
+    }
+    else
+    {
+        commandAction((char*)"--display on", isPhoneReady, false);
+    }
+  #else
   if(bDisplayTrack)
       commandAction((char*)"--sendtrack", false);
   else
       commandAction((char*)"--sendpos", false);
+  #endif
 }
 
 void tripleClick()
@@ -153,7 +164,7 @@ void PressLong()
         Serial.println("[BOARD_TRACKER]... GO to deepsleep");
         commandAction((char*)"--deepsleep", isPhoneReady, false);
       #elif defined(BOARD_HELTEC_V2)
-        Serial.println("[BOARD_HELTEC_V3]... GO to deepsleep");
+        Serial.println("[BOARD_HELTEC_V2]... GO to deepsleep");
         commandAction((char*)"--deepsleep", isPhoneReady, false);
       #elif defined(BOARD_HELTEC_V3)
         Serial.println("[BOARD_HELTEC_V3]... GO to deepsleep");

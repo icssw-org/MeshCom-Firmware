@@ -183,6 +183,22 @@ void restart_advertising(uint16_t timeout)
 }
 
 /**
+ * @brief Stop advertising for a certain time
+ *
+ * @param timeout timeout in seconds
+ */
+void stop_advertising()
+{
+	Bluefruit.Advertising.stop();
+
+	// disconnect
+	g_ble_uart_is_connected = false;
+	isPhoneReady = 0;
+	Bluefruit.setTxPower(0);
+	DEBUG_MSG("BLE", "Disconnected");
+}
+
+/**
  * @brief  Callback when client connects
  * @param  conn_handle: Connection handle id
  */
