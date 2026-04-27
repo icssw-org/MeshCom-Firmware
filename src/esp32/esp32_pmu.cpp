@@ -67,6 +67,7 @@ void setupPMU()
     if (!PMU)
     {
         PMU = new XPowersAXP2101(*w);
+
         if (!PMU->init())
         {
             Serial.printf("[INIT]...Failed to find AXP2101 power management\n");
