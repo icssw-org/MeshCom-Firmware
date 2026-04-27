@@ -1559,7 +1559,7 @@ void esp32setup()
 
         if(!startNetwork())
         {
-            Serial.println("[WIFI]...no connection");
+            Serial.println("[WIFI]...no connection posible");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             addMessage("WiFi connection failed");
             #endif
@@ -3388,7 +3388,7 @@ void esp32loop()
             loopWebserver();
         }
 
-        if(bEXTUDP && iWlanWait == 0)
+        if((bEXTUDP && meshcom_settings.node_hasIPaddress) && iWlanWait == 0)
         {
         #ifdef BOARD_T_ETH_ELITE
             if(meshcom_settings.node_hasIPaddress == false)
