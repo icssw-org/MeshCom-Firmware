@@ -102,6 +102,7 @@ void startExternUDP()
 
   UdpExtern.begin(EXTERN_PORT);
 
+  #if defined(ESP32)
   if(!WiFi.isConnected())
   {
     Serial.println("[EXT] no WiFI connection open");
@@ -115,17 +116,18 @@ void startExternUDP()
     Serial.printf("[EXT] URL:%s to IP:%s\n", meshcom_settings.node_extern, apip.toString().c_str());
   }
   else
+  #endif
   {
     str_ip = meshcom_settings.node_extern;
 
     apip.fromString(str_ip);
 
-    Serial.printf("[EXT] to IP:%s\n", apip.toString().c_str());
+    Serial.printf("[EXT] to IP:%s\n", str_ip.c_str());
   }
 
 
   Serial.printf("[EXT]...now listening at IP %s, UDP port %d\n",  s_extern_node_ip.c_str(), EXTERN_PORT);
-  Serial.printf("[EXT]...now sending   to IP %s, UDP port %d\n",  apip.toString().c_str(), EXTERN_PORT);
+  Serial.printf("[EXT]...now sending   to IP %s, UDP port %d\n",  str_ip.c_str(), EXTERN_PORT);
 
   hasExternIPaddress=true;
 
