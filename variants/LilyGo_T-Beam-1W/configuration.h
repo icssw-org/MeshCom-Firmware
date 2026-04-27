@@ -12,6 +12,7 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 
 #define BOARD_VARIANT_NAME          "LoRa 1W"
 #define MODUL_HARDWARE TBEAM_1W
+
 #define RADIO_TYPE_STR  "SX1262"
 #define USING_SX1262
 
@@ -71,7 +72,8 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define BAT_MAX_VOLTAGE             7.4
 #define BAT_VOL_COMPENSATION        0.25
 #define S3_VREF                     (1.1)  // 1.0 - 1.2 V
-#define ADC_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
+//#define ADC_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
+#define ADC_MULTIPLIER 3.0
 
 #define ANALOG_PIN ADC_PIN  //testweise
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
@@ -120,7 +122,6 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 //todo #define WAIT_TX x         // waiting after Lora TX in doTX() >800µs
-
 
 /**
  * RadioLib Coding Rate: Allowed values range from 5 to 8.

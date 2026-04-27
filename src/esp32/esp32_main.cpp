@@ -935,7 +935,7 @@ void esp32setup()
         #endif
 
     #else
-    
+
         #if !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T5_EPAPER)
             setupPMU();
         #endif
@@ -2997,7 +2997,7 @@ void esp32loop()
                 
                 if(bDisplayCont)
                 {
-                    #if not defined (BOARD_T_DECK_PRO)
+                    #if not defined(BOARD_T_DECK_PRO) and not defined(BOARD_TBEAM_1W)
                     Serial.printf("[readBatteryVoltage] %s ... %.2f V %i%% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
                     #endif
                 }

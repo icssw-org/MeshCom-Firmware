@@ -450,7 +450,32 @@ float read_batt(void)
 
 		raw = floatVoltage * 1000.0;
 
-		#elif defined(BOARD_E22_S3) || defined(BOARD_TBEAM_1W)
+		#elif defined(BOARD_TBEAM_1W)
+
+		// T-Beam 1W uses 7.4V battery with voltage divider
+		// ADC reads through divider - adjust multiplier based on actual divider ratio
+		analogReadResolution(12);
+
+		uint32_t uraw = 0;
+		for (int i = 0; i < 8; i++) {
+			uraw += analogRead(BATTERY_PIN);
+		}
+		
+		uraw = uraw / 8;
+
+		if(uraw < 850)	// not batt on
+			uraw = 0;
+
+		// Assuming voltage divider ratio from ADC_MULTIPLIER
+		// 3.3V reference, 12-bit ADC (4095 max)
+		raw = (float)((uraw * 3300 * ADC_MULTIPLIER) / 4095);
+
+		if(bDisplayCont)
+		{
+			Serial.printf("%s [BATT]...reading: %u factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), uraw, (float)((3300 * ADC_MULTIPLIER) / 4095), raw);
+		}
+
+		#elif defined(BOARD_E22_S3)
 
 		uint16_t analogValue = analogReadMilliVolts(BATTERY_PIN);
 
@@ -524,11 +549,6 @@ float read_batt(void)
 		raw = raw * 24.80;
 	#endif
 
-	if(bDisplayCont)
-	{
-		Serial.printf("[readBatteryVoltage] raw %.2f mV\n", raw);
-	}
-
 	return raw;
 }
 
@@ -548,6 +568,12 @@ void setMaxBatt(float u_max_batt)
 
 uint8_t mv_to_percent(float mvolts)
 {
+	//mvolts		7143
+	//mvolts	.15	1072
+	//max_batt		7270
+	//max_batt .785	5707
+	//max_batt .857	6230
+
 	if (mvolts < max_batt * 0.785F)	// 80% (3300)
 		return 0;
 
@@ -565,6 +591,6 @@ uint8_t mv_to_percent(float mvolts)
 	mvolts -= max_batt * 0.857F;	// 3600
 
 	uint8_t rproz = 10 + (mvolts * 0.15F);
-	
+
 	return rproz;
 }
