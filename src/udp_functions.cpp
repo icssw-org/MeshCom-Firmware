@@ -528,6 +528,7 @@ void sendMeshComUDP()
     delay(1000);
 
     hasIPaddress=false;
+    meshcom_settings.node_hasIPaddress = hasIPaddress;
 
     WiFi.mode(WIFI_AP);
     WiFi.softAP(meshcom_settings.node_call);
@@ -565,6 +566,7 @@ void sendMeshComUDP()
   delay(200);
 
   hasIPaddress=false;
+  meshcom_settings.node_hasIPaddress = hasIPaddress;
 
   // Scan for AP with best RSSI
 	int nrAps = WiFi.scanNetworks();
@@ -699,6 +701,7 @@ bool checkWifiPing()
         WiFi.disconnect(true, true);
 
         hasIPaddress=false;
+        meshcom_settings.node_hasIPaddress = hasIPaddress;
 
         // WiFi mode: propagate WiFi state
         // Ethernet mode: node_hasIPaddress handled by esp32_eth.cpp
@@ -939,6 +942,7 @@ void startMeshComUDP()
     Serial.println(node_ip);
   
     hasIPaddress=true;
+    meshcom_settings.node_hasIPaddress = hasIPaddress;
     ifalseping=5;
   }
 
@@ -987,7 +991,7 @@ void resetMeshComUDP()
   WiFi.disconnect(true, true);
 
   hasIPaddress = false;
-  meshcom_settings.node_hasIPaddress = false;
+  meshcom_settings.node_hasIPaddress = hasIPaddress;
   iWlanWait = 0;
   web_timer = 0;
 

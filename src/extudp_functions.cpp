@@ -27,6 +27,8 @@ String s_extern_node_ip = "";
 String strExtOutput;
 String str_ip;
 
+IPAddress apip;
+
 #ifdef BOARD_T_ETH_ELITE
   IPAddress extern_node_ip;
   EthernetUDP UdpExtern;
@@ -100,8 +102,30 @@ void startExternUDP()
 
   UdpExtern.begin(EXTERN_PORT);
 
+  if(!WiFi.isConnected())
+  {
+    Serial.println("[EXT] no WiFI connection open");
+    return;
+  }
+
+  Serial.println("WiFI is open");
+  
+  if(WiFi.hostByName(meshcom_settings.node_extern, apip) == 1)
+  {
+    Serial.printf("[EXT] URL:%s to IP:%s\n", meshcom_settings.node_extern, apip.toString().c_str());
+  }
+  else
+  {
+    str_ip = meshcom_settings.node_extern;
+
+    apip.fromString(str_ip);
+
+    Serial.printf("[EXT] to IP:%s\n", apip.toString().c_str());
+  }
+
+
   Serial.printf("[EXT]...now listening at IP %s, UDP port %d\n",  s_extern_node_ip.c_str(), EXTERN_PORT);
-  Serial.printf("[EXT]...now sending   to IP %s, UDP port %d\n",  meshcom_settings.node_extern, EXTERN_PORT);
+  Serial.printf("[EXT]...now sending   to IP %s, UDP port %d\n",  apip.toString().c_str(), EXTERN_PORT);
 
   hasExternIPaddress=true;
 
@@ -406,18 +430,8 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
   else
     return;
 
-  if(bEXTUDP && (int)strlen(meshcom_settings.node_extern) > 7)
+  if(bEXTUDP && hasExternIPaddress && (int)strlen(meshcom_settings.node_extern) > 7)
   {
-    IPAddress apip;
-    
-    str_ip = meshcom_settings.node_extern;
-
-    //Serial.println(str_ip.c_str());
-
-    apip.fromString(str_ip);
-
-    //Serial.println(apip.toString());
-
     UdpExtern.beginPacket(apip , EXTERN_PORT);
 
     if(strlen(c_json) < 10)
@@ -519,7 +533,7 @@ void resetExternUDP()
 
   hasExternIPaddress = false;
   
-  if(bEXTUDP && (int)strlen(meshcom_settings.node_extern) > 7)
+  if(bEXTUDP && hasExternIPaddress && (int)strlen(meshcom_settings.node_extern) > 7)
   {
     startExternUDP();
   }
