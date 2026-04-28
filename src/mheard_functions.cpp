@@ -311,6 +311,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     mhdoc["DIST"] = mheardLine.mh_dist;
     mhdoc["PL"] = mheardLine.mh_path_len;
     mhdoc["MESH"] = mheardLine.mh_mesh;
+    mhdoc["NCNT"] = mheardLine.mh_ncount;
 
     // send to Phone
     uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};

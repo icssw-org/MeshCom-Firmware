@@ -1559,7 +1559,7 @@ void esp32setup()
 
         if(!startNetwork())
         {
-            Serial.println("[WIFI]...no connection posible");
+            Serial.println("[WIFI]...no connection possible");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             addMessage("WiFi connection failed");
             #endif
