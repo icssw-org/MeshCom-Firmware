@@ -41,7 +41,7 @@
 - t_echo.zip, .uf2
 
 #### T3 S3
-- T3_S3_V13_echo.bin
+- T3_S3_V13.bin
 
 ### RAK Wisblock
 - wiscore_rak4631.zip, .uf2
