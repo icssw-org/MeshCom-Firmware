@@ -21,7 +21,6 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 
 #define ENABLE_GPS
 #define HAS_GPS
-#define BAUD_CHARS 100
 #define GPS_SLEEP_HOLD_ON_LOW
 //#define GPS_BAUDRATE_MODUL          9600
 #define GPS_RX_PIN                  (5)

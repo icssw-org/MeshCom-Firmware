@@ -277,9 +277,8 @@ U8G2 *u8g2;
     DISPLAY_MODEL u8g2_2(U8G2_R0, U8X8_PIN_NONE);
 #else
     U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2_1(U8G2_R0);
-    U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2_2(U8G2_R0);
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0);
 #endif
-
 #endif
 
 unsigned int msg_counter = 0;
@@ -700,6 +699,10 @@ int esp32_isSSD1306(int address)
         return 1;  //SH1106 aber stimmt 1 wirklich?
     #endif
 
+    #if defined(BOARD_T3S3_V13)
+        return 1;
+    #endif
+
     TwoWire *w = NULL;
 
     w = &Wire;
@@ -791,7 +794,6 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             epaper_display.setFont(&FreeMonoBold12pt7b);
         #elif defined(BOARD_HELTEC_T114)
         #elif defined(BOARD_TRACKER) || defined(BOARD_T_ECHO) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
-        #else
             u8g2->setFont(u8g2_font_6x10_mf);
         #endif
 
@@ -1017,7 +1019,9 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     
                     if(memcmp(pageText[its], "#L", 2) == 0)
                     {
+                        #if not defined(BOARD_T3S3_V13)
                         u8g2->drawHLine(pageLine[its][0], pageLine[its][1], 120);
+                        #endif
                     }
                     else
                     {
@@ -1345,7 +1349,6 @@ void sendDisplayMainline()
 {
     char cbatt[10];
     char nodetype[5];
-
 
     #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(BOARD_T_ECHO)
     if(bDisplayVolt)
@@ -2217,6 +2220,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                         snprintf(msg_text, sizeof(msg_text), "ALT:%im   rssi:%i", alt, rssi);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
+                        izeile++;
                     #endif
 
                     break;
@@ -2234,7 +2238,9 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     }
     
-    #if defined(BOARD_TRACKER) or defined(BOARD_HELTEC_T114)
+    #if defined(BOARD_T3S3_V13)
+    // done above
+    #elif defined(BOARD_TRACKER) or defined(BOARD_HELTEC_T114)
     memset(msg_text, 0x00, sizeof(msg_text));
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
     #else

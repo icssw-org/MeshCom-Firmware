@@ -32,6 +32,7 @@
 #define HELTEC_V4 52
 #define T_ETH_ELITE_1262 53
 #define HELTEC_T114 54
+#define T3_S3_V13 55
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 

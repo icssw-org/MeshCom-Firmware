@@ -31,33 +31,27 @@ uint32_t vbat_pin = WB_A0;
 #if defined(BOARD_E290)
 
 uint32_t vbat_pin = BATTERY_PIN;
-
 #define NO_OF_SAMPLES   64          //Multisampling
-
 #endif
 
 #if defined(BOARD_TLORA_OLV216)
-
 uint32_t vbat_pin = BATTERY_PIN;
-
 #endif
 
 #if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
-
 uint32_t vbat_pin = BATTERY_PIN;
-
 #endif
 
 #if defined(BOARD_HELTEC)
-
 uint32_t vbat_pin = BATTERY_PIN;
-
 #endif
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-
 uint32_t vbat_pin = BATTERY_PIN;
+#endif
 
+#if defined(BOARD_T3S3_V13)
+uint32_t vbat_pin = ADC_PIN;
 #endif
 
 #if defined(BOARD_RAK4630) || defined(BOARD_T_ECHO)
@@ -256,6 +250,10 @@ void init_batt(void)
 	analogSetAttenuation(ADC_11db); // bis ≈4,3V an GPIO
 	analogReadResolution(12);
 
+#elif defined(BOARD_T3S3_V13)
+		analogSetAttenuation(ADC_11db);
+        analogReadResolution(12);
+
 #elif defined(BOARD_TRACKER)
 
 #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -327,6 +325,22 @@ float read_batt(void)
 		
 		// Serial.printf("ADC analog value = <%f>\n", raw);
 
+	#elif defined(BOARD_T3S3_V13)
+
+		// Spannung am Pin in Millivolt auslesen (kalibriert)
+		uint32_t Vpin = analogReadMilliVolts(ADC_PIN);
+		
+		// Da 1:1 Teiler: V_bat = Vpin * 2
+		float battery_voltage = (Vpin * 2.0);
+
+		/*
+		Serial.print("Batteriespannung: ");
+		Serial.print(battery_voltage);
+		Serial.println(" mV");
+		*/
+
+		raw = battery_voltage;
+		
 	#elif defined(BOARD_E290)
 
    		uint16_t battery_levl = analogRead(vbat_pin);
@@ -528,6 +542,8 @@ float read_batt(void)
 	#if defined(BOARD_HELTEC_T114)
 		// all done - millivolts computed directly in read path
 	#elif defined(BOARD_T_ECHO)
+		// all done - millivolts computed directly in read path
+	#elif defined(BOARD_T3S3_V13)
 		// all done - millivolts computed directly in read path
 	#elif defined(NRF52_SERIES)
 		raw = raw * 1.25717;
