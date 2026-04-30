@@ -794,6 +794,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             epaper_display.setFont(&FreeMonoBold12pt7b);
         #elif defined(BOARD_HELTEC_T114)
         #elif defined(BOARD_TRACKER) || defined(BOARD_T_ECHO) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
+        #else
             u8g2->setFont(u8g2_font_6x10_mf);
         #endif
 
