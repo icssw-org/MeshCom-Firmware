@@ -64,8 +64,15 @@ void singleClick()
                 if(pageText[its][iss] == 0x00)
                     pageText[its][iss] = 0x20;
             }
-            pageText[its][17] = pagePointer | 0x30;
-            pageText[its][18] = 0x00;
+
+            #if !defined(BOARD_E290) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+            int ispos=18;
+            #else
+            int ispos=16;
+            #endif
+            pageText[its][ispos] = 0x20;
+            pageText[its][ispos+1] = (pagePointer + 1) | 0x30;
+            pageText[its][ispos+2] = 0x00;
         }
     }
 
