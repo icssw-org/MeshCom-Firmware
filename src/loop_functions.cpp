@@ -308,6 +308,9 @@ unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5] = {0};
 int RAWLoRaWrite=0;
 int RAWLoRaRead=0;
 
+// Flag set by app-layer auth failure to request BLE disconnection
+bool ble_disconnect_requested = false;
+
 // RINGBUFFER for outgoing UDP lora packets for lora TX
 uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE+20];
 int udpWrite=0;

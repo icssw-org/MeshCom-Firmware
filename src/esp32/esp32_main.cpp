@@ -235,6 +235,7 @@ NimBLECharacteristic* pTxCharacteristic;
 NimBLEService *pService;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
+uint16_t g_ble_conn_handle = 0xFFFF;  // current BLE connection handle
 
 uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Kennwort
 
@@ -256,8 +257,9 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override 
     {
         deviceConnected = true;
-        config_to_phone_prepare = true;
+        config_to_phone_prepare = false;    // set only after app-layer auth via hello
         conffin_sent = false;
+        g_ble_conn_handle = connInfo.getConnHandle();
 
         Serial.printf("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
         pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
@@ -2532,6 +2534,13 @@ void esp32loop()
     if (deviceConnected)
     {
     	g_ble_uart_is_connected = true;
+
+        // Disconnect if app-layer auth failed
+        if(ble_disconnect_requested)
+        {
+            ble_disconnect_requested = false;
+            pServer->disconnect(g_ble_conn_handle);
+        }
 	}
 
     // disconnecting
@@ -2546,6 +2555,8 @@ void esp32loop()
 
         g_ble_uart_is_connected = false;
         isPhoneReady = 0;
+        config_to_phone_prepare = false;
+        conffin_sent = false;
 
         // Update T-Deck header so BT icon reflects disconnected state
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)

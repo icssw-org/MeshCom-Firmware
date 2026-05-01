@@ -2754,19 +2754,29 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"btcode ") == 0)
     {
-        sscanf(msg_text+9, "%d", &meshcom_settings.bt_code);
+        int new_bt_code = 0;
+        sscanf(msg_text+9, "%d", &new_bt_code);
 
-        if(meshcom_settings.bt_code < 100000 || meshcom_settings.bt_code > 999999)
+        // 000000 disables BLE security — only allowed on an already-authenticated connection
+        if(new_bt_code == 0)
         {
-            Serial.printf("Wrong BT Code only >= 100000 and <= 999999");
+
+            Serial.printf("BT Code reset to 000000 - BLE security disabled\n");
+
+        }
+        else if(new_bt_code < 100000 || new_bt_code > 999999)
+        {
+            Serial.printf("Wrong BT Code only >= 100000 and <= 999999\n");
             return;
         }
+
+        meshcom_settings.bt_code = new_bt_code;
 
         save_settings();
 
         if(ble)
         {
-            bNodeSetting=true;
+            bInfo=true;
         }
 
         bReturn = true;
@@ -4408,6 +4418,7 @@ void commandAction(char *umsg_text, bool ble)
             idoc["GCB5"] = meshcom_settings.node_gcb[5];
             idoc["CTRY"] = ctrycode;
             idoc["BOOST"] = bBOOSTEDGAIN;
+            idoc["BPIN"] = meshcom_settings.bt_code;
 
             // reset print buffer
             memset(print_buff, 0, sizeof(print_buff));
