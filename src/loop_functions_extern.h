@@ -239,6 +239,7 @@ extern unsigned long stat_hwm_timer;            // Timer for HWM output
 extern int isPhoneReady;      // flag we receive from phone when itis ready to receive data
 extern bool bPhoneTimeValid;
 extern bool bNTPDateTimeValid;
+extern bool ble_disconnect_requested; // set on auth failure to trigger platform BLE disconnect
 
 // timers
 extern double gps_refresh_intervall;   // sec

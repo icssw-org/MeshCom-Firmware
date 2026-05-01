@@ -207,11 +207,12 @@ void connect_callback(uint16_t conn_handle)
 	(void)conn_handle;
 	Bluefruit.setTxPower(4);
 	DEBUG_MSG("BLE", "Connected");
-	// set the config finish msg for phone at the end of the queue, so it comes after the offline TXT msgs
-    // wird im nrf52_main aufgerufen
 
-	isPhoneReady = 1;
-	config_to_phone_prepare = true;
+	// BLE link established — app auth not yet done.
+	// isPhoneReady and config_to_phone_prepare are set only after
+	// successful app-layer PIN authentication via the hello message.
+	isPhoneReady = 0;
+	config_to_phone_prepare = false;
 	conffin_sent = false;
 	g_ble_uart_is_connected = true;
 
@@ -228,6 +229,8 @@ void disconnect_callback(uint16_t conn_handle, uint8_t reason)
 	(void)reason;
 	g_ble_uart_is_connected = false;
 	isPhoneReady = 0;
+	config_to_phone_prepare = false;
+	conffin_sent = false;
 	Bluefruit.setTxPower(0);
 	DEBUG_MSG("BLE", "Disconnected");
 }
@@ -249,6 +252,13 @@ void bleuart_rx_callback(uint16_t conn_handle)
 	g_ble_uart.read(conf_data, MAX_MSG_LEN_PHONE);
 
 	readPhoneCommand(conf_data);
+
+	// Disconnect if app-layer auth failed
+	if(ble_disconnect_requested)
+	{
+		ble_disconnect_requested = false;
+		Bluefruit.disconnect(conn_handle);
+	}
 
 }
 

@@ -8,6 +8,11 @@
 #include <clock.h>
 #include <rtc_functions.h>
 #include <time_functions.h>
+#if defined(ESP32) || defined(ESP8266)
+#include "mbedtls/sha256.h"
+#else
+#include "Adafruit_nRFCrypto.h"
+#endif
 
 //#include <command_functions.h>
 
@@ -31,6 +36,8 @@ bool ble_busy_flag = false;
 void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len);
 
 extern bool g_ble_uart_is_connected;
+extern bool config_to_phone_prepare;
+extern bool conffin_sent;
 
 extern uint8_t shortVERSION();
 
@@ -172,6 +179,32 @@ void sendComToPhone()
     ble_busy_flag = false;
 }
 
+/**
+ * @brief Compute SHA-256 of the PIN formatted as zero-padded 6-digit decimal string.
+ * @param pin_code  The numeric PIN (0..999999)
+ * @param out_hash  32-byte output buffer
+ */
+static void hash_pin(uint32_t pin_code, uint8_t out_hash[32])
+{
+    char pin_str[8] = {0};
+    snprintf(pin_str, sizeof(pin_str), "%06u", (unsigned)pin_code);
+#if defined(ESP32) || defined(ESP8266)
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+    mbedtls_sha256_starts(&ctx, 0); // 0 = SHA-256 (not SHA-224)
+    mbedtls_sha256_update(&ctx, (const unsigned char*)pin_str, 6);
+    mbedtls_sha256_finish(&ctx, out_hash);
+    mbedtls_sha256_free(&ctx);
+#else
+    nRFCrypto.begin();
+    nRFCrypto_Hash hash;
+    hash.begin(CRYS_HASH_SHA256_mode);
+    hash.update((uint8_t*)pin_str, 6);
+    hash.end(out_hash);
+    nRFCrypto.end();
+#endif
+}
+
 void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 {
 	/**
@@ -235,12 +268,54 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 
 			if(conf_data[2] == 0x20 && conf_data[3] == 0x30){
 
-				//sendConfigToPhone(); // config data comes now via JSONs from main loop and commandfunctions
-
 				if(bBLEDEBUG)
 					Serial.println("BLE Hello Msg from phone");
-				
-				isPhoneReady = 1;
+
+				// App-layer PIN authentication.
+				// If bt_code is set (> 0), the phone must send the SHA-256 hash
+				// of the zero-padded 6-digit PIN string at conf_data[4..35] (32 bytes).
+				// If bt_code == 0 the original open hello is accepted.
+				bool auth_ok = false;
+				if(meshcom_settings.bt_code > 0 && meshcom_settings.bt_code <= 999999)
+				{
+					if(msg_len >= 35)
+					{
+						uint8_t device_hash[32];
+						uint8_t recv_hash[32];
+						hash_pin((uint32_t)meshcom_settings.bt_code, device_hash);
+						memcpy(recv_hash, conf_data + 4, 32);
+						if(memcmp(recv_hash, device_hash, 32) == 0)
+						{
+							auth_ok = true;
+							if(bBLEDEBUG)
+								Serial.println("[BLE] Auth OK");
+						}
+						else
+						{
+							Serial.println("[BLE] Auth failed: wrong PIN hash");
+							ble_disconnect_requested = true;
+						}
+					}
+					else
+					{
+						Serial.println("[BLE] Auth rejected: PIN hash required but not provided");
+						ble_disconnect_requested = true;
+					}
+				}
+				else
+				{
+					// No PIN configured on device — accept as before
+					if(bBLEDEBUG)
+						Serial.println("[BLE] No PIN configured, accepting hello without authentication");
+					auth_ok = true;
+				}
+
+				if(auth_ok)
+				{
+					isPhoneReady = 1;
+					config_to_phone_prepare = true;
+					conffin_sent = false;
+				}
 			}
 
 			break;
