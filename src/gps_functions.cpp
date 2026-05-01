@@ -58,7 +58,7 @@ bool updateGPSdata;
 int NMEAlineIndex = 0;
 char c;
 
-long detectedBaud = 0;
+unsigned long detectedBaud = 0;
 String ver = "";
 uint32_t startTimeout;
 
@@ -458,6 +458,9 @@ void SetupUBLOX()
 
   // 1. Alle Nachrichten (GSV) ausschalten, um Flut an Daten zu reduzieren
   sendUBXCommand("$PUBX,40,GSV,0,0,0,0,0,0*59");
+  sendUBXCommand("$PUBX,40,VTG,0,0,0,0,0,0*5E");
+  sendUBXCommand("$PUBX,40,GSA,0,0,0,0,0,0*4E");
+  sendUBXCommand("$PUBX,40,GLL,0,0,0,0,0,0*5C");
   
   // 2. Nur GGA (Position) und RMC (Zeit/Datum/Speed) aktivieren
   sendUBXCommand("$PUBX,40,GGA,0,1,0,0,0,0*5B");

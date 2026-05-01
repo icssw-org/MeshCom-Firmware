@@ -593,6 +593,11 @@ void esp32setup()
         delay(50);
     #endif
     
+    #if defined(BOARD_T3S3_V13)
+        Serial.println(F("[INIT]...Enabling ADC_PIN"));
+        pinMode(ADC_PIN, INPUT);
+    #endif
+
     #if not defined(BOARD_T_DECK_PRO)
         #ifndef BOARD_T5_EPAPER
             Wire.begin(I2C_SDA, I2C_SCL);
@@ -925,7 +930,7 @@ void esp32setup()
         initPAControl();
     #endif
 
-    #if defined(USING_SX1262) && not defined(BOARD_TBEAM_1W)
+    #if defined(USING_SX1262) && not defined(BOARD_TBEAM_1W) && not defined(BOARD_T3S3_V13)
         // SPI-Bus für das Shield initialisieren
         SPI.begin(RADIO_SCK, RADIO_MISO, RADIO_MOSI, RADIO_CS_PIN);
     #endif
@@ -1103,7 +1108,7 @@ void esp32setup()
     Serial.print(F("[LoRa]...SX1262 V4 chip (with PA)"));
     #endif
 
-    #if defined (BOARD_TRACKER) || defined(BOARD_TBEAM_1W)
+    #if defined (BOARD_TRACKER) || defined(BOARD_TBEAM_1W) || defined(BOARD_T3S3_V13)
         SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
     #endif
 
@@ -1561,7 +1566,7 @@ void esp32setup()
 
         if(!startNetwork())
         {
-            Serial.println("[WIFI]...no connection posible");
+            Serial.println("[WIFI]...no connection possible");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             addMessage("WiFi connection failed");
             #endif
