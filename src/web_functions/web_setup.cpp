@@ -455,6 +455,14 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    if(setupData->paramName.equals("telnet")) {
+        snprintf(message_text, sizeof(message_text), "--telnet %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bTELNET == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bTELNET?"on":"off";
+        return;
+    } else
+
     /// ###################################### MCPIO ######################################
     if(setupData->paramName.substring(0,5).equals("mcpio")) {
         String port = setupData->paramName.substring(5);
@@ -832,6 +840,11 @@ void webSetup_getParam(setupStruct *setupData){
 
     if(setupData->paramName.equals("extudp")) {        
         setupData->returnValue = bEXTUDP?"on":"off";
+        return;
+    }
+
+    if(setupData->paramName.equals("telnet")) {
+        setupData->returnValue = bTELNET?"on":"off";
         return;
     }
 

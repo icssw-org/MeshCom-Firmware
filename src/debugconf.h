@@ -2,6 +2,9 @@
 // DEBUG
 // -----------------------------------------------------------------------------
 
+// Telnet serial bridge — must be included before any Serial usage
+#include "telnet_functions.h"
+
 // If not on PIO or not defined in platformio.ini
 #ifndef DO_DEBUG
 // Debug output set to 0 to disable app debug output

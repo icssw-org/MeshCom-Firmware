@@ -115,6 +115,7 @@ extern bool bMESH;
 extern bool bWEBSERVER;
 extern bool bWIFIAP;
 extern bool bEXTUDP;
+extern bool bTELNET;
 
 extern float fBaseAltidude;
 extern float fBasePress;
