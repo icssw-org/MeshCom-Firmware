@@ -138,6 +138,7 @@ bool bMESH = false;
 bool bWEBSERVER = false;
 bool bWIFIAP = false;
 bool bEXTUDP = false;
+bool bTELNET = false;
 
 bool bSHORTPATH = false;
 //bool bGPSDEBUG = false;

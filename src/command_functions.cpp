@@ -2027,6 +2027,30 @@ void commandAction(char *umsg_text, bool ble)
         }
     }
     else
+    if(commandCheck(msg_text+2, (char*)"telnet on") == 0)
+    {
+        bTELNET=true;
+        meshcom_settings.node_sset2 |= 0x1000;
+
+        bReturn = true;
+
+        save_settings();
+
+        Serial.printf("...Telnet on (port 23)\n");
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"telnet off") == 0)
+    {
+        bTELNET=false;
+        meshcom_settings.node_sset2 &= ~0x1000;
+
+        bReturn = true;
+
+        save_settings();
+
+        Serial.printf("...Telnet off\n");
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
     {
         if(meshcom_settings.node_netmode == 0 && strlen(meshcom_settings.node_ssid) < 3)
