@@ -70,7 +70,10 @@ definitions for LilyGo T-CONNECT
 #define SX1262_RST RADIO_RST_PIN
 */
 
-#define ADC_PIN                     (4)
+#define ADC_PIN             4
+
+#define RELAY_SWITCH        8
+
 
 #define ANALOG_PIN ADC_PIN  //testweise
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall

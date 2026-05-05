@@ -331,6 +331,8 @@ struct s_meshcom_settings
 	int node_netmode = 0;
 
 	int node_gpsdebug = 0;
+
+	int node_relay = 0x0000;
 	
 	// nicht im Flash
 	float node_specstart = 432.0;
@@ -551,6 +553,8 @@ struct s_meshcomcompat_settings
 	int node_netmode = 0;   // 0 = WiFi, 1 = Ethernet
 
 	int node_gpsdebug = 0;
+
+	int node_relay = 0x0000;
 
 	// not within RAK Flash
 	float node_specstart = 432.0;

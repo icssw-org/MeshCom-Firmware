@@ -254,12 +254,14 @@
 
     extern Arduino_GFX *gfx;
 
+    #define top_line 53
+
     void displayTFT(const String& header)
     {
         //Serial.println("[DISP]...1 Line");
 
         gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
-        gfx->setCursor(0, 51);
+        gfx->setCursor(0, top_line);
         gfx->setTextColor(WHITE);
         gfx->setTextSize(3); //2... 12*16
         gfx->print(" ");
@@ -273,17 +275,16 @@
         gfx->fillScreen(WHITE);
 
         gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
-        gfx->setCursor(0, 51);
+        gfx->setCursor(0, top_line);
         gfx->setTextColor(WHITE);
         gfx->setTextSize(3); //2... 12*16
         gfx->print(" ");
         gfx->println(header);
 
         gfx->setTextColor(BLACK);
+        gfx->setCursor(0, 95);
         gfx->setTextWrap(true);
-        gfx->setTextSize(2); //2... 12*16
-        gfx->setCursor(0, 100);
-        gfx->print(" ");
+        gfx->setTextSize(3); //2... 12*16
         gfx->println(line);
 
     }
@@ -297,7 +298,7 @@
         gfx->setRotation(1);
 
         gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
-        gfx->setCursor(5, 51);
+        gfx->setCursor(5, top_line);
         gfx->setTextColor(WHITE);
         gfx->setTextSize(3); //2... 12*16
         gfx->print("       ");
@@ -328,7 +329,7 @@
         gfx->fillScreen(WHITE);
 
         gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
-        gfx->setCursor(0, 51);
+        gfx->setCursor(0, top_line);
         gfx->setTextColor(WHITE);
         gfx->setTextSize(3); //2... 12*16
         gfx->print(" ");

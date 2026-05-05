@@ -247,6 +247,8 @@ void init_flash(void)
     // GPSDEBUG 0 ... none, 1...only valid, 2...all info
     meshcom_settings.node_gpsdebug = preferences.getInt("node_gpsdebug", 0);
 
+    meshcom_settings.node_relay = preferences.getInt("node_relay", 0);
+
     preferences.end();
 }
 
@@ -501,6 +503,8 @@ void save_settings(void)
 
     // GPSDEBUG 0 ... none, 1...only valid, 2...all info
     preferences.putInt("node_gpsdebug", meshcom_settings.node_gpsdebug);
+
+    preferences.putInt("node_relay", meshcom_settings.node_relay);
 
     //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
     preferences.end();
