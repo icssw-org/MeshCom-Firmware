@@ -244,6 +244,112 @@
     }
 #endif
 
+#if defined(HAS_TFT_CONNECT)
+
+    #include "tft_display_functions.h"
+
+    #include "Arduino_GFX_Library.h"
+
+    #include "pin_config.h"
+
+    extern Arduino_GFX *gfx;
+
+    void displayTFT(const String& header)
+    {
+        //Serial.println("[DISP]...1 Line");
+
+        gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
+        gfx->setCursor(0, 51);
+        gfx->setTextColor(WHITE);
+        gfx->setTextSize(3); //2... 12*16
+        gfx->print(" ");
+        gfx->println(header);
+    }
+
+    void displayTFT(const String& header, const String& line)
+    {
+        //Serial.println("[DISP]...2 Lines");
+
+        gfx->fillScreen(WHITE);
+
+        gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
+        gfx->setCursor(0, 51);
+        gfx->setTextColor(WHITE);
+        gfx->setTextSize(3); //2... 12*16
+        gfx->print(" ");
+        gfx->println(header);
+
+        gfx->setTextColor(BLACK);
+        gfx->setTextWrap(true);
+        gfx->setTextSize(2); //2... 12*16
+        gfx->setCursor(0, 100);
+        gfx->print(" ");
+        gfx->println(line);
+
+    }
+
+    void displayTFT(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, int wait)
+    {
+        //Serial.println("[DISP]...5 Lines");
+
+        gfx->fillScreen(WHITE);
+
+        gfx->setRotation(1);
+
+        gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
+        gfx->setCursor(5, 51);
+        gfx->setTextColor(WHITE);
+        gfx->setTextSize(3); //2... 12*16
+        gfx->print("       ");
+        gfx->println(header);
+
+        gfx->setCursor(0, 100);
+        gfx->setTextColor(BLACK);
+        gfx->print("    ");
+        gfx->println(line1);
+
+        gfx->setCursor(0, 130);
+        gfx->print("    ");
+        gfx->println(line2);
+
+        gfx->setCursor(0, 160);
+        gfx->print("    ");
+        gfx->println(line3);
+
+        gfx->setCursor(0, 190);
+        gfx->print("    ");
+        gfx->println(line4);
+    }
+
+    void displayTFT(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, const String& line5, int wait)
+    {
+        //Serial.println("[DISP]...6 Lines");
+
+        gfx->fillScreen(WHITE);
+
+        gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
+        gfx->setCursor(0, 51);
+        gfx->setTextColor(WHITE);
+        gfx->setTextSize(3); //2... 12*16
+        gfx->print(" ");
+        gfx->println(header);
+
+        gfx->setTextColor(BLACK);
+        gfx->setCursor(0, 100);
+        gfx->print(" ");
+        gfx->println(line1);
+        gfx->print(" ");
+        gfx->println(line2);
+        gfx->print(" ");
+        gfx->println(line3);
+        gfx->print(" ");
+        gfx->println(line4);
+        gfx->print(" ");
+        gfx->println(line5);
+    }
+
+#endif
+
 #if defined(HAS_TFT_114)
 
 // T114 TFT_WIDTH = 135 TFT_HEIGHT = 240 TFT_RORATION = 3 (so WIDTH and HEIGHT changed in use)

@@ -39,7 +39,7 @@
 //TEST #include "compress_functions.h"
 
 // For display contrast control
-#if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
+#if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
     #include <U8g2lib.h>
     extern U8G2 *u8g2;
 #endif
@@ -798,7 +798,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"contrast ") == 0)
     {
-        #if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
+        #if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         int contrast_value = atoi(msg_text + 11);  // "--" + "contrast " = 2 + 9 = 11
         if(contrast_value <= 0) contrast_value = 1;
         if(contrast_value > 255) contrast_value = 255;
@@ -2029,7 +2029,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
     {
-        if(meshcom_settings.node_ssid[0] == 0x00 || is_equ(meshcom_settings.node_ssid, "none"))
+        if(meshcom_settings.node_netmode == 0)
         {
             Serial.println("Please set SSID first");
         }
@@ -4441,7 +4441,7 @@ void commandAction(char *umsg_text, bool ble)
         {
             int ibt = meshcom_settings.node_button_pin;
             
-            #ifndef BOARD_T_DECK_PRO
+            #if not defined(BOARD_T_DECK_PRO) && not defined(BOARD_T_CONNECT_PRO)
             if(ibt == 0)
                 ibt = BUTTON_PIN;
             #endif
@@ -4617,7 +4617,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         int ibt = meshcom_settings.node_button_pin;
 
-        #ifndef BOARD_T_DECK_PRO
+        #if not defined(BOARD_T_DECK_PRO) && not defined(BOARD_T_CONNECT_PRO)
         if(ibt == 0)
             ibt = BUTTON_PIN;
         #endif

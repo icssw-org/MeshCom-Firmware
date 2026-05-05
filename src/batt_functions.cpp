@@ -54,6 +54,10 @@ uint32_t vbat_pin = BATTERY_PIN;
 uint32_t vbat_pin = ADC_PIN;
 #endif
 
+#if defined(BOARD_T_CONNECT_PRO)
+uint32_t vbat_pin = ADC_PIN;
+#endif
+
 #if defined(BOARD_RAK4630) || defined(BOARD_T_ECHO)
 //nothing
 #else
@@ -251,8 +255,12 @@ void init_batt(void)
 	analogReadResolution(12);
 
 #elif defined(BOARD_T3S3_V13)
-		analogSetAttenuation(ADC_11db);
-        analogReadResolution(12);
+	analogSetAttenuation(ADC_11db);
+    analogReadResolution(12);
+
+#elif defined(BOARD_T_CONNECT_PRO)
+	analogSetAttenuation(ADC_11db);
+    analogReadResolution(12);
 
 #elif defined(BOARD_TRACKER)
 
@@ -340,6 +348,11 @@ float read_batt(void)
 		*/
 
 		raw = battery_voltage;
+		
+	#elif defined(BOARD_T_CONNECT_PRO)
+
+		// NO BAT PIN
+		raw = 0.0;
 		
 	#elif defined(BOARD_E290)
 
@@ -544,6 +557,8 @@ float read_batt(void)
 	#elif defined(BOARD_T_ECHO)
 		// all done - millivolts computed directly in read path
 	#elif defined(BOARD_T3S3_V13)
+		// all done - millivolts computed directly in read path
+	#elif defined(BOARD_T_CONNECT_PRO)
 		// all done - millivolts computed directly in read path
 	#elif defined(NRF52_SERIES)
 		raw = raw * 1.25717;

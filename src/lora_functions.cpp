@@ -440,6 +440,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             Serial.printf("\n");
         }
 
+        
+
         if(msg_type_b_lora == 0x00)
         {
             if(bDisplayCont)
