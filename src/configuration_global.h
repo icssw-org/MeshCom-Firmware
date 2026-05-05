@@ -1,6 +1,6 @@
 #define SOURCE_VERSION "4.35"
 #define SOURCE_VERSION_SUB "p"
-#define SOURCE_VERSION_WEB_SUB "p-DH1FR"
+#define SOURCE_VERSION_WEB_SUB "p (Telnet)"
 
 #define FLASH_VERSION 20260323
 

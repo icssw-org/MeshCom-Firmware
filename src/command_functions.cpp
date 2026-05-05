@@ -620,6 +620,11 @@ void commandAction(char *umsg_text, bool ble)
 
             Serial.printf("--info      show info\n--mheard    show MHeard\n--gateway   on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx/none\n--mesh      on/off\n");
             delay(100);
+            #ifdef ESP32
+                Serial.printf("--telnet    on/off\n");
+                delay(100);
+            #endif
+            delay(100);
             Serial.printf("--softser   on/off/send/app/baud/fixpegel/fixpegel2/fixtemp\n");
             delay(100);
             Serial.printf("--softserread   on/off (show rx msg)\n");
