@@ -2029,7 +2029,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
     {
-        if(meshcom_settings.node_netmode == 0)
+        if(meshcom_settings.node_netmode == 0 && strlen(meshcom_settings.node_ssid) < 3)
         {
             Serial.println("Please set SSID first");
         }
