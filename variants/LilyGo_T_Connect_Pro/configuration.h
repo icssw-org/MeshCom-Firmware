@@ -8,7 +8,7 @@ definitions for LilyGo T-CONNECT
 
 //original LilyGo T-Beam-1W mit MesCom definitions ergänzt und tw. andere Namen
 
-#define UNUSED_PIN                   (0)
+//#define UNUSED_PIN                   (0)
 
 #define BOARD_VARIANT_NAME          "LoRa T_Connect_Pro"
 #define MODUL_HARDWARE T_CONNECT_PRO
@@ -37,7 +37,7 @@ definitions for LilyGo T-CONNECT
 #define GPS_RX_PIN                  (5)
 #define GPS_TX_PIN                  (4)
 
-//+#define BUTTON_PIN                  (0)   /*BUTTON 0 = GPIO0 (BOOT)*/
+#define BUTTON_PIN                  (0) /*BUTTON 0 = GPIO0 (BOOT)*/
 //+#define BUTTON_PIN1                  38    /*BUTTON 1 = GPIO38*/
 //+#define BUTTON_PIN1_MASK             GPIO_SEL_38
 
