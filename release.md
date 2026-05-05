@@ -44,7 +44,7 @@
 - T3_S3_V13.bin
 
 #### T_CONNECT_PRO
-- T_Connect_Pro.bin
+- t_connect_pro.bin
 
 ### RAK Wisblock
 - wiscore_rak4631.zip, .uf2
