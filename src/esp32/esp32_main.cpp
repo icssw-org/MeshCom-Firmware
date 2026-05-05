@@ -16,7 +16,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 
-#ifdef BOARD_T_ETH_ELITE
+#if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
 #include "esp32_eth.h"
 SPIClass ethSPI(FSPI);
 #endif
@@ -61,6 +61,37 @@ Timeout timerSerial;
 #if defined(ENABLE_GPS)
     #include "gps_functions.h"
     extern GPSData gpsData;
+#endif
+
+#if defined(HAS_TFT_CONNECT)
+#include "tft_display_functions.h"
+
+#include "Arduino_GFX_Library.h"
+
+#include "pin_config.h"
+/*
+Wiring an ST7789 (SPI):
+VCC: 3.3V
+GND: Ground
+SCL/SCK: SPI Clock Pin
+SDA/MOSI: SPI MOSI Pin
+RES/RST: Digital IO (Reset)
+DC: Digital IO (Data/Command)
+CS: Digital IO (Optional, if not present, the display is always active) 
+*/
+
+Arduino_DataBus *bus = new Arduino_HWSPI(
+    SCREEN_DC /* DC */, SCREEN_CS /* CS */, SCREEN_SCLK /* SCK */,
+    SCREEN_MOSI /* MOSI */, SCREEN_MISO /* MISO */);
+
+Arduino_GFX *gfx = new Arduino_ST7796(
+    bus, SCREEN_RST /* RST */, 0 /* rotation */, true /* IPS */,
+    SCREEN_WIDTH /* width */, SCREEN_HEIGHT /* height */,
+    49 /* col offset 1 */, 0 /* row offset 1 */, 0 /* col_offset2 */, 0 /* row_offset2 */);
+
+//SPIClass SPI_TFT(NRF_SPIM3, PIN_SPI1_MISO, PIN_SPI1_SCK, PIN_SPI1_MOSI);
+//Adafruit_ST7789 tft1 = Adafruit_ST7789(&SPI_TFT, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
+
 #endif
 
 
@@ -185,7 +216,7 @@ bool bTeleFirst = true;
 
 bool bAllStarted = true;
 
-#ifdef BOARD_T_ETH_ELITE
+#if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
 EspETH neth;
 bool bETHERNET = false;
 #endif
@@ -569,6 +600,23 @@ void esp32setup()
     #endif
     if (Serial) { for (int i=0;i<5;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
 
+    #if defined(HAS_TFT_CONNECT)
+
+        ledcAttachPin(SCREEN_BL, 1);
+        ledcSetup(1, 2000, 8);
+        ledcWrite(1, 255);
+
+        gfx->begin();
+
+        /*
+        char cvers1[22];
+        sprintf(cvers1, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        String  version1 = cvers1;
+        displayTFT(" MeshCom 4.0 ", version1, "@BY ICSSW.ORG", "  OE1KBC, OE1KFR",  "  ...starting now", 5000);
+        */
+
+    #endif
+
     #if defined BOARD_T5_EPAPER
         if (psramInit()) {
             Serial.println("\nThe PSRAM is correctly initialized");
@@ -599,7 +647,7 @@ void esp32setup()
     #endif
 
     #if not defined(BOARD_T_DECK_PRO)
-        #ifndef BOARD_T5_EPAPER
+        #if not defined(BOARD_T5_EPAPER) && not defined(BOARD_T_CONNECT_PRO)
             Wire.begin(I2C_SDA, I2C_SCL);
         #endif
         
@@ -930,7 +978,7 @@ void esp32setup()
         initPAControl();
     #endif
 
-    #if defined(USING_SX1262) && not defined(BOARD_TBEAM_1W) && not defined(BOARD_T3S3_V13)
+    #if defined(USING_SX1262) && not defined(BOARD_TBEAM_1W) && not defined(BOARD_T3S3_V13) && not defined(BOARD_T_CONNECT_PRO)
         // SPI-Bus für das Shield initialisieren
         SPI.begin(RADIO_SCK, RADIO_MISO, RADIO_MOSI, RADIO_CS_PIN);
     #endif
@@ -1040,11 +1088,13 @@ void esp32setup()
         #endif
     #endif
     
-    #if defined (BOARD_T5_EPAPER)
+    #if defined(BOARD_T5_EPAPER)
     //
-    #elif defined (BOARD_T_DECK_PRO)
+    #elif defined(BOARD_T_DECK_PRO)
+
+    #elif defined(BOARD_T_CONNECT_PRO)
     //
-    #elif HAS_TFT
+    #elif defined(HAS_TFT)
         initTFT();
     #else
         initDisplay();
@@ -1058,11 +1108,11 @@ void esp32setup()
     //
     #elif defined (BOARD_T_DECK_PRO)
     //
-    #elif HAS_TFT
+    #elif defined(HAS_TFT) || defined(BOARD_T_CONNECT_PRO)
         char cvers[22];
-        sprintf(cvers, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        sprintf(cvers, "FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         String  version = cvers;
-        displayTFT(" MeshCom 4.0 ", version, "  @BY ICSSW.ORG", "  OE1KBC, OE1KFR",  "  ...starting now", 5000);
+        displayTFT("MeshCom 4.0", version, "@BY ICSSW.ORG", "OE1KBC, OE1KFR",  "...starting now", 5000);
     #else
         startDisplay((char*)"...starting now", (char*)"@BY ICSSW.ORG", (char*)"OE1KBC, OE1KFR");
     #endif
@@ -2941,7 +2991,7 @@ void esp32loop()
             {
                 bDisplayIsOff=true;
 
-                #if defined(BOARD_HELTEC_T114)
+                #if defined(BOARD_HELTEC_T114) || defined(BOARD_T_CONNECT_PRO)
                 digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
                 #endif
 
@@ -3406,7 +3456,7 @@ void esp32loop()
 
         if((bEXTUDP && meshcom_settings.node_hasIPaddress) && iWlanWait == 0)
         {
-        #ifdef BOARD_T_ETH_ELITE
+        #if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
             if(meshcom_settings.node_hasIPaddress == false)
             {
                 neth.initethDHCP();

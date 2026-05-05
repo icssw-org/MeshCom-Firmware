@@ -434,6 +434,14 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         aprsmsg.msg_len = inext;
 
 
+        if(aprsmsg.msg_source_fw_version > 0 && aprsmsg.msg_source_fw_version < 35)  // 4.35a
+        {
+            Serial.printf("APRS decode - Packet discarded, wrong FW-version <%s><%d>!\n", aprsmsg.msg_source_path.c_str(),  aprsmsg.msg_source_fw_version);
+
+            return 0x00;
+        }
+
+
         return aprsmsg.payload_type;
     }
     else

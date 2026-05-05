@@ -14,12 +14,13 @@
 
 #include "esp32_flash.h"
 
-#if defined BOARD_T5_EPAPER
+#if defined(BOARD_T5_EPAPER)
 // extra source
 #elif defined BOARD_TRACKER
 #elif defined(BOARD_T_DECK)
 #elif defined(BOARD_T_DECK_PLUS)
 #elif defined(BOARD_T_DECK_PRO)
+#elif defined(BOARD_T_CONNECT_PRO)
 #elif defined(BOARD_E290)
 #include "heltec-eink-modules.h"
 
@@ -39,7 +40,7 @@ extern EInkDisplay_VisionMasterE290 epaper_display;
 
 void initDisplay()
 {
-#if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO)
+#if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
 
     Serial.println(F("[INIT]...Auto detecting display:"));
         
@@ -110,7 +111,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 
     epaper_display.update();
 
-    #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_TRACKER) || defined (BOARD_T5_EPAPER) || defined(BOARD_T_DECK_PRO)
+    #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_TRACKER) || defined (BOARD_T5_EPAPER) || defined(BOARD_T_DECK_PRO) || defined(BOARD_T_CONNECT_PRO)
     // do nothing
     #else
 

@@ -1,6 +1,6 @@
 #pragma once
 /*
-definitions for LilyGo T3_S3_V1_3
+definitions for LilyGo T-CONNECT
 */
 
 #include <Arduino.h>
@@ -10,46 +10,67 @@ definitions for LilyGo T3_S3_V1_3
 
 #define UNUSED_PIN                   (0)
 
-#define BOARD_VARIANT_NAME          "LoRa T3_S3_V1.3"
-#define MODUL_HARDWARE T3_S3_V13
+#define BOARD_VARIANT_NAME          "LoRa T_Connect_Pro"
+#define MODUL_HARDWARE T_CONNECT_PRO
 
 #define USING_SX1262
 
-#define I2C_SDA                     (18)
-#define I2C_SCL                     (17)
+#define HAS_ETHERNET
+
+#define HAS_TFT_CONNECT
+
+// Touch
+#define I2C_SDA                     (39)
+#define I2C_SCL                     (40)
+
+// =========================
+// Ethernet W5500
+#define ETH_CS_PIN                  (10)
+#define ETH_INT_PIN                 (9)
+#define ETH_RST_PIN                 (48)
+#define ETH_SCLK_PIN                (12)
+#define ETH_MISO_PIN                (13)
+#define ETH_MOSI_PIN                (11)
 
 #define ENABLE_GPS
 
-#define GPS_RX_PIN                  (44)
-#define GPS_TX_PIN                  (43)
+#define GPS_RX_PIN                  (5)
+#define GPS_TX_PIN                  (4)
 
-#define BUTTON_PIN                  (0)   /*BUTTON 0 = GPIO0 (BOOT)*/
-#define BUTTON_PIN1                  38    /*BUTTON 1 = GPIO38*/
-#define BUTTON_PIN1_MASK             GPIO_SEL_38
+//+#define BUTTON_PIN                  (0)   /*BUTTON 0 = GPIO0 (BOOT)*/
+//+#define BUTTON_PIN1                  38    /*BUTTON 1 = GPIO38*/
+//+#define BUTTON_PIN1_MASK             GPIO_SEL_38
 
 // SPI GPIOs
-#define RADIO_SCLK_PIN              5
-#define RADIO_MISO_PIN              3
-#define RADIO_MOSI_PIN              6
-#define RADIO_CS_PIN                7
+#define RADIO_SCLK_PIN              12
+#define RADIO_MISO_PIN              13
+#define RADIO_MOSI_PIN              11
+#define RADIO_CS_PIN                14
 
-#define RADIO_DIO1_PIN              33
-#define RADIO_IRQ_PIN               33  // same as DIO1
-#define RADIO_RST_PIN               8
-#define RADIO_BUSY_PIN              34
+#define RADIO_DIO1_PIN              45
+#define RADIO_IRQ_PIN               45  // same as DIO1
+#define RADIO_RST_PIN               42
+#define RADIO_BUSY_PIN              38
 
-#define BOARD_LED                   4
-#define LED_ON                      LOW
-#define LED_OFF                     HIGH
+//+#define BOARD_LED                   4
+//+#define LED_ON                      LOW
+//+#define LED_OFF                     HIGH
+
+#define PIN_TFT_VDD_CTL      3
+#define TFT_VDD_ENABLE       0
+#define PIN_TFT_LEDA_CTL     15
+#define TFT_LEDA_ENABLE      0
 
 // SX1262 alternative definitions - duplicates 433MHz/868MHz
+/*
 #define SX1262_CS RADIO_CS_PIN
 #define SX1262_CTL RADIO_CTRL
 #define SX126x_BUSY RADIO_BUSY_PIN
 #define SX1262_IRQ RADIO_DIO1_PIN
 #define SX1262_RST RADIO_RST_PIN
+*/
 
-#define ADC_PIN                     (1)
+#define ADC_PIN                     (4)
 
 #define ANALOG_PIN ADC_PIN  //testweise
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall

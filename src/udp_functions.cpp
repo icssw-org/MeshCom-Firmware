@@ -17,7 +17,7 @@
 #include "ArduinoJson.h"
 #include "web_functions/web_functions.h"
 
-#ifdef BOARD_T_ETH_ELITE
+#if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
 #include "esp32/esp32_eth.h"
 extern EspETH neth;
 #endif

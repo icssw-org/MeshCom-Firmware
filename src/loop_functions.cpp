@@ -43,6 +43,10 @@ bool gpsInitDone = false;
 #include "tft_display_functions.h"
 #endif
 
+#if defined(HAS_TFT_CONNECT)
+#include "tft_display_functions.h"
+#include "pin_config.h"
+#endif
 // TinyGPS
 #if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS)
 extern TinyGPSPlus gps;
@@ -251,7 +255,7 @@ int dzeile[maxdisplines] = {42, 52, 62, 0, 0, 0, 0};
 int dzeile[maxdisplines] = {8, 21, 31, 41, 51, 61, 0};
 #endif
 
-#if !defined(BOARD_E290) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+#if !defined(BOARD_E290) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
 
 #include <U8g2lib.h>
 
@@ -686,6 +690,10 @@ int esp32_isSSD1306(int address)
         return 1;
     #endif
 
+    #if defined(BOARD_T_CONNECT_PRO)
+        return 1;
+    #endif
+
     #if defined(BOARD_T_ECHO)
         return 1;
     #endif
@@ -772,7 +780,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -795,8 +803,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             epaper_display.fastmodeOn();
             
             epaper_display.setFont(&FreeMonoBold12pt7b);
-        #elif defined(BOARD_HELTEC_T114)
-        #elif defined(BOARD_TRACKER) || defined(BOARD_T_ECHO) || defined (BOARD_T5_EPAPER) || defined (BOARD_T_DECK_PRO)
+        #elif defined(BOARD_HELTEC_T114) || defined(BOARD_T_CONNECT_PRO)
+        #elif defined(BOARD_TRACKER) || defined(BOARD_T_ECHO) || defined(BOARD_T5_EPAPER) || defined(BOARD_T_DECK_PRO)
         #else
             u8g2->setFont(u8g2_font_6x10_mf);
         #endif
@@ -891,11 +899,16 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     epaper_display.update();
             }
             
-        #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114)
+        #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114) || defined(BOARD_T_CONNECT_PRO)
 
         #if defined(BOARD_HELTEC_T114)
         if(!bDisplayIsOff)
             digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+        #endif
+
+        #if defined(BOARD_T_CONNECT_PRO)
+        if(!bDisplayIsOff)
+            ledcAttachPin(SCREEN_BL, 1);
         #endif
 
         if(pageLineAnz > 0)
@@ -923,7 +936,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                 }
             }
 
-            #if defined(HAS_TFT) || defined(HAS_TFT_114)
+            #if defined(HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT)
             displayTFT(strLine[0], strLine[1], strLine[2], strLine[3], strLine[4], strLine[5], 0);
             #endif
         }
@@ -933,6 +946,8 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
         #elif defined (BOARD_T5_EPAPER)
         // extra source
         #elif defined (BOARD_T_DECK_PRO)
+        // extra source
+        #elif defined (BOARD_T_CONNECT_PRO)
         // extra source
         #elif defined (BOARD_STICK_V3)
         // extra source
@@ -1074,6 +1089,10 @@ void sendDisplayHead(bool bInit)
         digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
         #endif
 
+        #if defined(BOARD_T_CONNECT_PRO)
+            ledcAttachPin(SCREEN_BL, 0);
+        #endif
+
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
         return;
@@ -1083,10 +1102,18 @@ void sendDisplayHead(bool bInit)
         #if defined(BOARD_HELTEC_T114)
         digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
         #endif
+
+        #if defined(BOARD_T_CONNECT_PRO)
+            ledcAttachPin(SCREEN_BL, 1);
+        #endif
     }
 
     #if defined(BOARD_HELTEC_T114)
     digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+    #endif
+
+    #if defined(BOARD_T_CONNECT_PRO)
+        ledcAttachPin(SCREEN_BL, 1);
     #endif
 
     iDisplayType=9;
@@ -1106,7 +1133,7 @@ void sendDisplayHead(bool bInit)
     sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
     izeile++;
 
-    #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114) && !defined (BOARD_T_ECHO)
+    #if !defined (BOARD_TRACKER) && !defined (BOARD_HELTEC_T114) && !defined (BOARD_T_CONNECT_PRO) && !defined (BOARD_T_ECHO)
     if(bWIFIAP)
         snprintf(msg_text, sizeof(msg_text), "AP   : %-13.13s", meshcom_settings.node_call);
     else
@@ -1146,6 +1173,10 @@ void sendDisplayTrack()
         digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
         #endif
 
+        #if defined(BOARD_T_CONNECT_PRO)
+            ledcAttachPin(SCREEN_BL, 0);
+        #endif
+
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
         return;
@@ -1154,6 +1185,10 @@ void sendDisplayTrack()
     {
         #if defined(BOARD_HELTEC_T114)
         digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+        #endif
+
+        #if defined(BOARD_T_CONNECT_PRO)
+            ledcAttachPin(SCREEN_BL, 1);
         #endif
     }
 
@@ -1228,6 +1263,10 @@ void sendDisplayWX()
         digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
         #endif
 
+        #if defined(BOARD_T_CONNECT_PRO)
+            ledcAttachPin(SCREEN_BL, 0);
+        #endif
+
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
         return;
@@ -1236,6 +1275,10 @@ void sendDisplayWX()
     {
         #if defined(BOARD_HELTEC_T114)
         digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+        #endif
+
+        #if defined(BOARD_T_CONNECT_PRO)
+           ledcAttachPin(SCREEN_BL, 1);
         #endif
     }
 
@@ -1274,7 +1317,7 @@ void sendDisplayTime()
             pagePointer=PAGE_MAX-1;
     }
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK)  && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -1303,7 +1346,7 @@ void sendDisplayTime()
 
     char cbatt[10];
 
-    #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(BOARD_T_ECHO)
+    #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT) || defined(BOARD_T_ECHO)
     if(bDisplayVolt)
         snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
@@ -1315,7 +1358,7 @@ void sendDisplayTime()
         snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
     #endif
 
- #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W)
+ #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W) || defined(BOARD_T_CONNECT_PRO)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
     if(global_batt == 0.0)
@@ -1339,7 +1382,7 @@ void sendDisplayTime()
 
         #if defined (BOARD_T5_EPAPER)
         // extra source
-        #elif defined (HAS_TFT) || defined(HAS_TFT_114)
+        #elif defined (HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT)
             displayTFT(msg_text);
         #else
             sendDisplay1306(false, true, 3, dzeile[0], msg_text);
@@ -1354,7 +1397,7 @@ void sendDisplayMainline()
     char cbatt[10];
     char nodetype[5];
 
-    #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(BOARD_T_ECHO)
+    #if defined (HAS_TFT) || defined(HAS_TFT_114) || defined(HAS_TFT_CONNECT) || defined(BOARD_T_ECHO)
     if(bDisplayVolt)
         snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
@@ -1366,7 +1409,7 @@ void sendDisplayMainline()
         snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
     #endif
 
-    #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W)
+    #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W) || defined(BOARD_T_CONNECT_PRO)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
     if(global_batt == 0.0)
@@ -1749,7 +1792,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #elif defined (BOARD_T5_EPAPER)
     // extra source
-    #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114)
+    #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114)  || defined(BOARD_T_CONNECT_PRO)
 
     sendDisplayMainline();
     sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");    // not fastmode for CET display
@@ -1766,10 +1809,14 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             strPath = "DM <" + aprsmsg.msg_source_call + ">";
         }
 
+    #if defined(BOARD_T_CONNECT_PRO)
+        snprintf(msg_text, sizeof(msg_text), "%s <%i>", strPath.c_str(), rssi);
+    #else
     if(strPath.length() < (20-4))
         snprintf(msg_text, sizeof(msg_text), "%s <%i>", strPath.c_str(), rssi);
     else
         snprintf(msg_text, sizeof(msg_text), "%s", strPath.c_str());
+    #endif
 
     msg_text[20]=0x00;
 
@@ -1988,6 +2035,10 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
         #endif
 
+        #if defined(BOARD_T_CONNECT_PRO)
+            ledcAttachPin(SCREEN_BL, 0);
+        #endif
+
         sendDisplay1306(true, true, 0, 0, (char*)"#C");
         bSetDisplay=false;
         return;
@@ -1996,6 +2047,10 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     {
         #if defined(BOARD_HELTEC_T114)
         digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+        #endif
+
+        #if defined(BOARD_T_CONNECT_PRO)
+            ledcAttachPin(SCREEN_BL, 1);
         #endif
     }
 
@@ -2244,7 +2299,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     
     #if defined(BOARD_T3S3_V13)
     // done above
-    #elif defined(BOARD_TRACKER) or defined(BOARD_HELTEC_T114)
+    #elif defined(BOARD_TRACKER) or defined(BOARD_HELTEC_T114)  or defined(BOARD_T_CONNECT_PRO)
     memset(msg_text, 0x00, sizeof(msg_text));
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
     #else
@@ -3019,6 +3074,8 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         #elif defined(BOARD_TRACKER)
         // none
         #elif defined(BOARD_HELTEC_T114)
+        // none
+        #elif defined(BOARD_T_CONNECT_PRO)
         // none
         #elif defined(BOARD_STICK_V3)
         // none
