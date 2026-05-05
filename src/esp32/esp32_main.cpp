@@ -572,7 +572,7 @@ float getTempForNTC()
         // Calculate temperature using the Steinhart-Hart equation
         temperature = (1.0 / (log(resistance / ROOM_TEMP_RESISTANCE) / B_COEFFICIENT + 1.0 / ROOM_TEMP)) - 273.15;
 
-        if(bWXDEBUG)
+        if(bWXDEBUG && bDisplayCont)
             Serial.printf("NTC-Temp: %.3f_°C %u_raw %.3f_mV %.2f_Ohm\n", temperature, raw, voltage, resistance);
 
         check_temperature  = millis() + 1000;
@@ -673,7 +673,7 @@ void esp32setup()
 
         #ifdef FAN_CTRL
             pinMode(FAN_CTRL, OUTPUT);
-            digitalWrite(FAN_CTRL,HIGH);
+            digitalWrite(FAN_CTRL, LOW);
         #endif
 
         #ifdef GPS_PPS_PIN
@@ -1644,6 +1644,15 @@ void esp32setup()
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         tdeck_clear_text_ta();
     #endif
+
+    #if defined(RELAY_SWITCH)
+        pinMode(RELAY_SWITCH, OUTPUT);
+        if((meshcom_settings.node_relay & 0x0001) == 0x0001)
+            digitalWrite(RELAY_SWITCH, LOW);
+        else
+            digitalWrite(RELAY_SWITCH, HIGH);
+    #endif
+
 }
 
 // BLE TX Function -> Node to Client
@@ -3077,13 +3086,21 @@ void esp32loop()
             // [OE3WAS] Lüftersteuerung
             #if defined(NTC_PIN) && defined(FAN_CTRL) // BOARD_TBEAM_1W
             float NTCtemp = getTempForNTC();
-            if (NTCtemp > 35.0) { digitalWrite(FAN_CTRL, HIGH); 
-            } else if (NTCtemp < 28.0) { digitalWrite(FAN_CTRL, LOW); }
+            if (NTCtemp > 40.0)
+            {
+                 digitalWrite(FAN_CTRL, HIGH); 
+            }
+            else
+            {
+                if (NTCtemp < 35.0)
+                    digitalWrite(FAN_CTRL, LOW);
+            }
 
             if(bWXDEBUG)
                 Serial.printf("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
                 
             meshcom_settings.node_ntctemp = NTCtemp;
+
             if(digitalRead(FAN_CTRL) == HIGH)
                 meshcom_settings.node_fanon = true;
             else

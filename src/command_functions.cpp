@@ -3113,6 +3113,39 @@ void commandAction(char *umsg_text, bool ble)
 
     #endif
 
+    #if defined(RELAY_SWITCH)
+        // --- network or wifi mode ---
+        if(commandCheck(msg_text+2, (char*)"relay on") == 0)
+        {
+            meshcom_settings.node_relay = meshcom_settings.node_relay | 0x0001;
+
+            pinMode(RELAY_SWITCH, OUTPUT);
+            digitalWrite(RELAY_SWITCH, LOW);
+
+            Serial.println("[CMD] relay on");
+
+            save_settings();
+
+            bReturn = true;
+        }
+        else
+        if(commandCheck(msg_text+2, (char*)"relay off") == 0)
+        {
+            meshcom_settings.node_relay &= ~0x0001;   // mask 0x0001;
+
+            pinMode(RELAY_SWITCH, OUTPUT);
+            digitalWrite(RELAY_SWITCH, HIGH);
+
+            Serial.println("[CMD] relay off");
+
+            save_settings();
+
+            bReturn = true;
+        }
+        else
+
+    #endif
+
     if(commandCheck(msg_text+2, (char*)"wifiap on") == 0)
     {
         bWIFIAP=true;
@@ -3139,7 +3172,7 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"wifiap off") == 0)
     {
         bWIFIAP=false;
-        meshcom_settings.node_sset2  &= ~0x0080;    // mask 0x0080
+        meshcom_settings.node_sset2 &= ~0x0080;    // mask 0x0080
 
         if(ble)
         {
@@ -4479,6 +4512,10 @@ void commandAction(char *umsg_text, bool ble)
                     Serial.printf("GC-%i:%i ", ig+1, meshcom_settings.node_gcb[ig]);
                 }
             }
+
+            #if defined(RELAY_SWITCH)
+                Serial.printf("\n...RELAY %s\n", ((meshcom_settings.node_relay & 0x0001)?"on":"off"));
+            #endif
 
             if(bSOFTSERON && meshcom_settings.node_ss_baud > 0)
             {

@@ -237,6 +237,8 @@ void init_flash(void)
 
 		meshcom_settings.node_gpsdebug = old_struct.node_gpsdebug;
 
+		meshcom_settings.node_relay = old_struct.node_relay;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
