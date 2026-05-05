@@ -15,13 +15,6 @@ bool checkRegexCall(String callsign)
 	if(callsign.length() < 1)
 		return false;
 
-	// black-list
-	if(callsign.startsWith("OE3MTC"))
-	{
-        Serial.printf("APRS decode - Source-CallSign Error [%s]\n", callsign.c_str());
-		return false;
-	}
-
 	// not legal
 	// DE ... Germany SWL-Callsign
 	if(callsign.compareTo("DE") == 0)
