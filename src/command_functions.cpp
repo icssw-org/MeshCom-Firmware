@@ -1963,11 +1963,10 @@ void commandAction(char *umsg_text, bool ble)
         bTELNET=true;
         meshcom_settings.node_sset2 |= 0x1000;
 
-        bReturn = true;
-
         save_settings();
 
         Serial.printf("...Telnet on (port 23)\n");
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"telnet off") == 0)
@@ -1975,11 +1974,17 @@ void commandAction(char *umsg_text, bool ble)
         bTELNET=false;
         meshcom_settings.node_sset2 &= ~0x1000;
 
-        bReturn = true;
-
         save_settings();
 
         Serial.printf("...Telnet off\n");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"telnet") == 0)
+    {
+        // show current telnet status; return early to prevent match against --tel telemetry handler
+        Serial.printf("...Telnet is %s\n", bTELNET ? "on (port 23)" : "off");
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
