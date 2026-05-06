@@ -2408,6 +2408,8 @@ void commandAction(char *umsg_text, bool ble)
 
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0200;
 
+        Serial.println("[CMD] wxdebug on");
+
         if(ble)
         {
             addBLECommandBack((char*)"--wxdebug on");
@@ -2423,6 +2425,8 @@ void commandAction(char *umsg_text, bool ble)
         bWXDEBUG=false;
 
         meshcom_settings.node_sset3 &= ~0x0200;
+
+        Serial.println("[CMD] wxdebug off");
 
         if(ble)
         {

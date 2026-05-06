@@ -46,7 +46,7 @@ def get_target_hardware(asset):
     "ttgo_tbeam_supreme.bin" : "tbeam_supreme",
     "T-Beam-1W.bin" : "tbeam1w",
     "T3_S3_V13.bin" : "lilygo_t3_s3",
-    "t_connect_pro.bin" : "lilygo_t_connect_pro",
+    "t_connect_pro.bin" : "t_connect_pro",
     "ttgo-lora32-v21.bin" : "tlora",
     "t_deck.bin" : "t_deck",
     "t_deck_plus.bin" : "t_deck_plus",

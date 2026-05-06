@@ -1932,12 +1932,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             izeile++;
             
-            memset(line_text, 0x00, 21);
-
             if(izeile > 5)
             {
                 break;
             }
+
+            memset(line_text, 0x00, 21);
 
             if(itxt+1 == iwords)
                 bEnd=true;
@@ -1954,18 +1954,24 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         }
     }
 
-    if(strlen(line_text) > 0)
-    {
-        if(izeile > 5)
-            izeile=5;
 
-        bEnd=true;
-        line_text[20]=0x00;
-        snprintf(msg_text, sizeof(msg_text), "%s", line_text);
-        //Serial.printf("1306-02:%s len:%i izeile:%i\n", msg_text, strlen(msg_text), izeile);
-        msg_text[20]=0x00;
-        sendDisplay1306(bClear, bEnd, 3, dzeile[izeile], msg_text);
+    bEnd=true;
+
+    line_text[20]=0x00;
+
+    if(izeile > 5)
+    {
+        izeile=5;
+        strcat(msg_text, " >>>>>>>>>>>>>>");
     }
+    else
+    {
+        snprintf(msg_text, sizeof(msg_text), "%s", line_text);
+    }
+
+    msg_text[20]=0x00;
+    //Serial.printf("1306-02:%s len:%i izeile:%i\n", msg_text, strlen(msg_text), izeile);
+    sendDisplay1306(bClear, bEnd, 3, dzeile[izeile], msg_text);
 
     #endif
 
