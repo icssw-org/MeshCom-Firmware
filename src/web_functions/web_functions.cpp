@@ -1104,7 +1104,7 @@ void sub_page_setup()
     _create_setup_switch_element("netmode", "Ethernet Mode", "switch between WiFi and Ethernet", meshcom_settings.node_netmode == 1);
     #endif
     _create_setup_switch_element("extudp", "ext UDP", "enable ext. UDP", bEXTUDP); // create Switch-Element inclucing Label and Description
-    _create_setup_switch_element("telnet", "Telnet", "enable Telnet console (port 23)", bTELNET); // create Switch-Element inclucing Label and Description
+    _create_setup_switch_element("telnet", "TLS Console", "enable TLS console (port 2323, encrypted)", bTLS_CONSOLE); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);   // create Switch-Element inclucing Label and Description
 
     web_client.println("</div></div>");

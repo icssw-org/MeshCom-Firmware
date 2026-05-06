@@ -2,8 +2,8 @@
 // DEBUG
 // -----------------------------------------------------------------------------
 
-// Telnet serial bridge — must be included before any Serial usage
-#include "telnet_functions.h"
+// TLS console serial bridge — must be included before any Serial usage
+#include "tls_console.h"
 
 // If not on PIO or not defined in platformio.ini
 #ifndef DO_DEBUG

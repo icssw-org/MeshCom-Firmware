@@ -129,7 +129,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include <lora_setchip.h>
 #include "esp32_functions.h"
 #include "tft_display_functions.h"
-#include "telnet_functions.h"
+#include "tls_console.h"
 
 #ifdef BOARD_HELTEC_V4
     #include "pa_control.h"
@@ -764,7 +764,8 @@ void esp32setup()
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
-    bTELNET = meshcom_settings.node_sset2 & 0x1000;
+    bTLS_CONSOLE = meshcom_settings.node_sset2 & 0x1000;
+    tlsConsoleSetPassword(meshcom_settings.node_passwd);
     bSMALLDISPLAY =  false;
     bSOFTSERREAD = meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
@@ -3479,10 +3480,10 @@ void esp32loop()
             loopWebserver();
         }
 
-        if(bTELNET && iWlanWait == 0)
+        if(bTLS_CONSOLE && iWlanWait == 0)
         {
-            startTelnet();
-            loopTelnet();
+            startTlsConsole();
+            loopTlsConsole();
         }
 
         if(bEXTUDP && iWlanWait == 0)
@@ -3705,20 +3706,20 @@ void checkSerialCommand(void)
     if(Serial.available() > 0)
     {
         char rd = (char)Serial.read();
-        Serial.print(rd);   // echo to USB + Telnet via MSerial
+        Serial.print(rd);   // echo to USB + TLS console via MSerial
         strText += rd;
     }
 
-    // Check Telnet input
-    if(telnetAvailable())
+    // Check TLS console input
+    if(tlsConsoleAvailable())
     {
-        char rd = (char)telnetRead();
+        char rd = (char)tlsConsoleRead();
         // Skip Telnet IAC negotiation bytes (0xFF and following 2 bytes)
         if((uint8_t)rd == 0xFF)
         {
             // Consume the 2 option bytes that follow IAC
-            if(telnetAvailable()) telnetRead();
-            if(telnetAvailable()) telnetRead();
+            if(tlsConsoleAvailable()) tlsConsoleRead();
+            if(tlsConsoleAvailable()) tlsConsoleRead();
         }
         else if(rd != '\r')         // strip CR, keep LF
         {

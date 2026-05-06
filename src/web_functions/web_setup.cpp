@@ -456,10 +456,10 @@ void webSetup_setParam(setupStruct *setupData){
     } else
 
     if(setupData->paramName.equals("telnet")) {
-        snprintf(message_text, sizeof(message_text), "--telnet %s", setupData->paramValue.c_str());
+        snprintf(message_text, sizeof(message_text), "--tlsconsole %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        setupData->returnCode = (bTELNET == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        setupData->returnValue = bTELNET?"on":"off";
+        setupData->returnCode = (bTLS_CONSOLE == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bTLS_CONSOLE?"on":"off";
         return;
     } else
 
@@ -844,7 +844,7 @@ void webSetup_getParam(setupStruct *setupData){
     }
 
     if(setupData->paramName.equals("telnet")) {
-        setupData->returnValue = bTELNET?"on":"off";
+        setupData->returnValue = bTLS_CONSOLE?"on":"off";
         return;
     }
 
