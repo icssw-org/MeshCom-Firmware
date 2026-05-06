@@ -1,6 +1,5 @@
 #define SOURCE_VERSION "4.35"
 #define SOURCE_VERSION_SUB "p"
-#define SOURCE_VERSION_WEB_SUB "p"
 
 #define FLASH_VERSION 20260401
 
