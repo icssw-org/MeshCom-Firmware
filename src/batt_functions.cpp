@@ -341,12 +341,6 @@ float read_batt(void)
 		// Da 1:1 Teiler: V_bat = Vpin * 2
 		float battery_voltage = (Vpin * 2.0);
 
-		/*
-		Serial.print("Batteriespannung: ");
-		Serial.print(battery_voltage);
-		Serial.println(" mV");
-		*/
-
 		raw = battery_voltage;
 		
 	#elif defined(BOARD_T_CONNECT_PRO)
@@ -599,12 +593,6 @@ void setMaxBatt(float u_max_batt)
 
 uint8_t mv_to_percent(float mvolts)
 {
-	//mvolts		7143
-	//mvolts	.15	1072
-	//max_batt		7270
-	//max_batt .785	5707
-	//max_batt .857	6230
-
 	if (mvolts < max_batt * 0.785F)	// 80% (3300)
 		return 0;
 

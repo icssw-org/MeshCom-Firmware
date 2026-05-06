@@ -944,8 +944,14 @@ void esp32setup()
     if(meshcom_settings.node_maxv > 0)
     {
         setMaxBatt(meshcom_settings.node_maxv * 1000.0F);
-    
         global_batt = meshcom_settings.node_maxv * 1000.0F;
+    }
+    else
+    {
+        #ifdef BAT_MAX_VOLTAGE
+        setMaxBatt(BAT_MAX_VOLTAGE * 1000.0F);
+        global_batt = BAT_MAX_VOLTAGE * 1000.0F;
+        #endif
     }
 
     if(memcmp(meshcom_settings.node_ssid, "XX0XXX", 6) == 0)

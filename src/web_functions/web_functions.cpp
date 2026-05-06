@@ -863,6 +863,9 @@ void sub_page_wx()
     web_client.printf("<tr><td>Altitude asl</td><td>%i m</td></tr>\n", meshcom_settings.node_press_alt);
     web_client.printf("<tr><td>Gas</td><td>%.1f kOhm</td></tr>\n", meshcom_settings.node_gas_res);
     web_client.printf("<tr><td>eCO2</td><td>%.1f ppm</td></tr>\n", meshcom_settings.node_co2);
+    #if defined(NTC_PIN) && defined(FAN_CTRL) // BOARD_TBEAM_1W
+    web_client.printf("<tr><td>NTC / FAN %s</td><td>%.1f &deg;C</td></tr>\n", digitalRead(FAN_CTRL) ? "on" : "off", meshcom_settings.node_ntctemp);
+    #endif
     // web_client.printf("<tr><td></td><td></td></tr>\n", );
     // web_client.printf("<tr><td></td><td></td></tr>\n", );
     web_client.println("</table></div>");
