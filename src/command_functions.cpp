@@ -2792,13 +2792,17 @@ void commandAction(char *umsg_text, bool ble)
         {
             // --passwd none clears the password (open access)
             memset(meshcom_settings.node_passwd, 0, sizeof(meshcom_settings.node_passwd));
+            #ifdef ESP32
             tlsConsoleSetPassword("");
+            #endif
             Serial.printf("...TLS console password cleared (open access)\n");
         }
         else
         {
             snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%-14.14s", _owner_c);
+            #ifdef ESP32
             tlsConsoleSetPassword(meshcom_settings.node_passwd);
+            #endif
         }
 
         save_settings();
