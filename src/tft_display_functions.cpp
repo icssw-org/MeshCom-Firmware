@@ -254,17 +254,19 @@
 
     extern Arduino_GFX *gfx;
 
+    #define top_x 10
     #define top_line 53
+    #define first_line 100
 
     void displayTFT(const String& header)
     {
         //Serial.println("[DISP]...1 Line");
 
         gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
-        gfx->setCursor(0, top_line);
+        gfx->setTextBound(top_x, top_line, SCREEN_HEIGHT-(top_x*2), SCREEN_WIDTH);
         gfx->setTextColor(WHITE);
+        gfx->setCursor(top_x, top_line);
         gfx->setTextSize(3); //2... 12*16
-        gfx->print(" ");
         gfx->println(header);
     }
 
@@ -275,15 +277,15 @@
         gfx->fillScreen(WHITE);
 
         gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
-        gfx->setCursor(0, top_line);
+        gfx->setTextBound(top_x, top_line, SCREEN_HEIGHT-(top_x*2), SCREEN_WIDTH);
         gfx->setTextColor(WHITE);
+        gfx->setCursor(top_x, top_line);
         gfx->setTextSize(3); //2... 12*16
-        gfx->print(" ");
         gfx->println(header);
 
         gfx->setTextColor(BLACK);
-        gfx->setCursor(0, 95);
         gfx->setTextWrap(true);
+        gfx->setCursor(top_x, first_line);
         gfx->setTextSize(3); //2... 12*16
         gfx->println(line);
 
@@ -295,31 +297,19 @@
 
         gfx->fillScreen(WHITE);
 
-        gfx->setRotation(1);
+        //gfx->setRotation(1);
 
         gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
-        gfx->setCursor(5, top_line);
+        gfx->setTextBound(top_x, top_line, SCREEN_HEIGHT-(top_x*2), SCREEN_WIDTH);
         gfx->setTextColor(WHITE);
-        gfx->setTextSize(3); //2... 12*16
-        gfx->print("       ");
+        gfx->setCursor(top_x, top_line);
+        gfx->setTextSize(3);
         gfx->println(header);
 
-        gfx->setCursor(0, 100);
         gfx->setTextColor(BLACK);
-        gfx->print("    ");
-        gfx->println(line1);
-
-        gfx->setCursor(0, 130);
-        gfx->print("    ");
-        gfx->println(line2);
-
-        gfx->setCursor(0, 160);
-        gfx->print("    ");
-        gfx->println(line3);
-
-        gfx->setCursor(0, 190);
-        gfx->print("    ");
-        gfx->println(line4);
+        gfx->setTextWrap(true);
+        gfx->setCursor(top_x, first_line);
+        gfx->println(line1+"\r\n"+line2+"\r\n"+line3+"\r\n"+line4);
     }
 
     void displayTFT(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, const String& line5, int wait)
@@ -329,24 +319,16 @@
         gfx->fillScreen(WHITE);
 
         gfx->fillRect(0, 49, SCREEN_HEIGHT, 32, RED);
-        gfx->setCursor(0, top_line);
+        gfx->setTextBound(top_x, top_line, SCREEN_HEIGHT-(top_x*2), SCREEN_WIDTH);
         gfx->setTextColor(WHITE);
-        gfx->setTextSize(3); //2... 12*16
-        gfx->print(" ");
+        gfx->setCursor(top_x, top_line);
+        gfx->setTextSize(3);
         gfx->println(header);
 
         gfx->setTextColor(BLACK);
-        gfx->setCursor(0, 100);
-        gfx->print(" ");
-        gfx->println(line1);
-        gfx->print(" ");
-        gfx->println(line2);
-        gfx->print(" ");
-        gfx->println(line3);
-        gfx->print(" ");
-        gfx->println(line4);
-        gfx->print(" ");
-        gfx->println(line5);
+        gfx->setTextWrap(true);
+        gfx->setCursor(top_x, first_line);
+        gfx->println(line1+"\r\n"+line2+"\r\n"+line3+"\r\n"+line4+"\r\n"+line5);
     }
 
 #endif

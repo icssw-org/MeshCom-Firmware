@@ -85,7 +85,7 @@ Arduino_DataBus *bus = new Arduino_HWSPI(
     SCREEN_MOSI /* MOSI */, SCREEN_MISO /* MISO */);
 
 Arduino_GFX *gfx = new Arduino_ST7796(
-    bus, SCREEN_RST /* RST */, 0 /* rotation */, true /* IPS */,
+    bus, SCREEN_RST /* RST */, 1 /* rotation */, true /* IPS */,
     SCREEN_WIDTH /* width */, SCREEN_HEIGHT /* height */,
     49 /* col offset 1 */, 0 /* row offset 1 */, 0 /* col_offset2 */, 0 /* row_offset2 */);
 
