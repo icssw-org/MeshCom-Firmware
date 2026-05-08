@@ -20,7 +20,7 @@
 #define IIC_SCL 40
 
 // ST7796
-#define SCREEN_WIDTH 222
+#define SCREEN_WIDTH 272//222
 #define SCREEN_HEIGHT 480
 #define SCREEN_BL 46
 #define SCREEN_MOSI 11

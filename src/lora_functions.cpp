@@ -557,8 +557,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     #if not defined(BOARD_T5_EPAPER)
                     if(lat != 0.0 && lon != 0.0 && meshcom_settings.node_lat != 0.0 && meshcom_settings.node_lon != 0.0)
                     {
-                        #if defined(ENABLE_GPS)
+                        #if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS)
                         mheardLine.mh_dist = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+                        Serial.printf("mheardLine.mh_dist:%.2lf lat:%.4lf, lon:%.4lf  lat:%.4lf, lon:%.4lf\n", mheardLine.mh_dist, lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon);
                         #else
                         mheardLine.mh_dist = 0;
                         #endif
