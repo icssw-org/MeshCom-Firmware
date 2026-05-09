@@ -90,12 +90,12 @@ void init_ble(void)
 
 #ifdef _VARIANT_ISP4520_
 	/** Device name for ISP4520 */
-	sprintf(helper_string, "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
+	snprintf(helper_string, sizeof(helper_string), "%s-%02X%02X%02X%02X%02X%02X", g_ble_dev_name,
 			(uint8_t)(meshcom_settings.node_device_eui[2]), (uint8_t)(meshcom_settings.node_device_eui[3]),
 			(uint8_t)(meshcom_settings.node_device_eui[4]), (uint8_t)(meshcom_settings.node_device_eui[5]), (uint8_t)(meshcom_settings.node_device_eui[6]), (uint8_t)(meshcom_settings.node_device_eui[7]));
 #else
 	/** Device name for RAK4631 */
-	sprintf(helper_string, "%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);	// Anzeige mit callsign
+	snprintf(helper_string, sizeof(helper_string), "%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);	// Anzeige mit callsign
 
 	Serial.print("[INIT]...init helper_string:");
 	Serial.println(helper_string);
@@ -119,7 +119,7 @@ void init_ble(void)
 	ble_dis.setModel("RAK4631");
 #endif
 
-	sprintf(helper_string, "%d.%d.%d", g_sw_ver_1, g_sw_ver_2, g_sw_ver_3);
+	snprintf(helper_string, sizeof(helper_string), "%d.%d.%d", g_sw_ver_1, g_sw_ver_2, g_sw_ver_3);
 	ble_dis.setSoftwareRev(helper_string);
 
 	ble_dis.setHardwareRev("52840");

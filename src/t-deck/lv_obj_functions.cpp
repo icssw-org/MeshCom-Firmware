@@ -694,7 +694,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_width(setup_version_label, 100);
     lv_obj_set_style_text_align(setup_version_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     char sv[50];
-    sprintf(sv, "MC %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+    snprintf(sv, sizeof(sv), "MC %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);
     lv_label_set_text(setup_version_label, sv);
 
     // Locator
@@ -3539,7 +3539,7 @@ void tdeck_update_batt_label(float batt, int proz)
 void tdeck_update_time_label()
 {
     char cTime[50];
-    sprintf(cTime, "%i-%02i-%02i %02i:%02i:%02i", 
+    snprintf(cTime, sizeof(cTime), "%i-%02i-%02i %02i:%02i:%02i", 
         meshcom_settings.node_date_year,
         meshcom_settings.node_date_month,
         meshcom_settings.node_date_day,
@@ -3653,15 +3653,15 @@ void savePosPersistence()
 
         for(int pos_check = 1; pos_check<posrow+1; pos_check++)
         {
-            sprintf(u_pos, "%-10.10s", lv_table_get_cell_value(position_ta, pos_check, 0));
+            snprintf(u_pos, sizeof(u_pos), "%-10.10s", lv_table_get_cell_value(position_ta, pos_check, 0));
             memcpy(pos, u_pos, 10);
             file.write(pos, 10);
 
-            sprintf(u_pos, "%-6.6s", lv_table_get_cell_value(position_ta, pos_check, 1));
+            snprintf(u_pos, sizeof(u_pos),"%-6.6s", lv_table_get_cell_value(position_ta, pos_check, 1));
             memcpy(pos, u_pos, 6);
             file.write(pos, 6);
 
-            sprintf(u_pos, "%-24.24s", lv_table_get_cell_value(position_ta, pos_check, 2));
+            snprintf(u_pos, sizeof(u_pos),"%-24.24s", lv_table_get_cell_value(position_ta, pos_check, 2));
             memcpy(pos, u_pos, 24);
             file.write(pos, 24);
         }
@@ -3695,7 +3695,7 @@ void loadPosPersistence()
                 break;
 
             pos[10]=0x00;
-            sprintf(u_pos, "%s", pos);
+            snprintf(u_pos, sizeof(u_pos),"%s", pos);
             String s_pos = u_pos;
             s_pos.trim();
 
@@ -3710,7 +3710,7 @@ void loadPosPersistence()
                 break;
 
             pos[6]=0x00;
-            sprintf(u_pos, "%s", pos);
+            snprintf(u_pos, sizeof(u_pos), "%s", pos);
             s_pos = u_pos;
             s_pos.trim();
             lv_table_set_cell_value(position_ta, posrow, 1, s_pos.c_str());
@@ -3719,7 +3719,7 @@ void loadPosPersistence()
                 break;
 
             pos[24]=0x00;
-            sprintf(u_pos, "%s", pos);
+            snprintf(u_pos, sizeof(u_pos), "%s", pos);
             s_pos = u_pos;
             s_pos.trim();
             lv_table_set_cell_value(position_ta, posrow, 2, s_pos.c_str());
@@ -3815,20 +3815,20 @@ void tdeck_refresh_SET_view()
     char vChar[10];
 
     lv_textarea_set_text(setup_callsign, meshcom_settings.node_call);
-    sprintf(vChar, "%.4lf", meshcom_settings.node_lat);
+    snprintf(vChar, sizeof(vChar), "%.4lf", meshcom_settings.node_lat);
     lv_textarea_set_text(setup_lat, vChar);
-    sprintf(vChar, "%c", meshcom_settings.node_lat_c);
+    snprintf(vChar, sizeof(vChar), "%c", meshcom_settings.node_lat_c);
     lv_textarea_set_text(setup_lat_c, vChar);
     
-    sprintf(vChar, "%.4lf", meshcom_settings.node_lon);
+    snprintf(vChar, sizeof(vChar), "%.4lf", meshcom_settings.node_lon);
     lv_textarea_set_text(setup_lon, vChar);
-    sprintf(vChar, "%c", meshcom_settings.node_lon_c);
+    snprintf(vChar, sizeof(vChar), "%c", meshcom_settings.node_lon_c);
     lv_textarea_set_text(setup_lon_c, vChar);
 
-    sprintf(vChar, "%i", meshcom_settings.node_alt);
+    snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_alt);
     lv_textarea_set_text(setup_alt, vChar);
 
-    sprintf(vChar, "%i", meshcom_settings.node_power);
+    snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_power);
     lv_textarea_set_text(setup_txpower, vChar);
 
     lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start.c_str());
@@ -3838,20 +3838,20 @@ void tdeck_refresh_SET_view()
     lv_textarea_set_text(setup_wifissid, meshcom_settings.node_ssid);
     lv_textarea_set_text(setup_wifipassword, "**********");
 
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[0]);
+    snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_gcb[0]);
     lv_textarea_set_text(setup_grc0, vChar);
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[1]);
+    snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_gcb[1]);
     lv_textarea_set_text(setup_grc1, vChar);
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[2]);
+    snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_gcb[2]);
     lv_textarea_set_text(setup_grc2, vChar);
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[3]);
+    snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_gcb[3]);
     lv_textarea_set_text(setup_grc3, vChar);
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[4]);
+    snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_gcb[4]);
     lv_textarea_set_text(setup_grc4, vChar);
-    sprintf(vChar, "%i", meshcom_settings.node_gcb[5]);
+    snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_gcb[5]);
     lv_textarea_set_text(setup_grc5, vChar);
 
-    sprintf(vChar, "%08X", _GW_ID);
+    snprintf(vChar, sizeof(vChar), "%08X", _GW_ID);
     lv_label_set_text(setup_id_label, vChar);
 
     char locator[9];
@@ -3886,7 +3886,7 @@ void tdeck_refresh_SET_view()
         lv_obj_clear_state(btn_gps, LV_STATE_CHECKED);
 
         // UTC offset        
-    sprintf(vChar, "%.1f", meshcom_settings.node_utcoff);
+    snprintf(vChar, sizeof(vChar), "%.1f", meshcom_settings.node_utcoff);
     lv_textarea_set_text(setup_utc, vChar);
     // TRACK
     if (bDisplayTrack)
@@ -4060,12 +4060,12 @@ void tdeck_refresh_track_view()
     int pos_seconds = (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000);
 
     char cDatum[20];
-    sprintf(cDatum, "%04i-%02i-%02i",
+    snprintf(cDatum, sizeof(cDatum), "%04i-%02i-%02i",
         meshcom_settings.node_date_year,
         meshcom_settings.node_date_month,
         meshcom_settings.node_date_day);
     char cZeit[20];
-    sprintf(cZeit, "%02i:%02i:%02i",
+    snprintf(cZeit, sizeof(cZeit), "%02i:%02i:%02i",
         meshcom_settings.node_date_hour,
         meshcom_settings.node_date_minute,
         meshcom_settings.node_date_second);

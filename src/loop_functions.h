@@ -38,7 +38,7 @@ String getTimeString();
 void printBuffer(uint8_t *buffer, int len);
 void printAsciiBuffer(uint8_t *buffer, int len);
 void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
-String charBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
+void charBuffer_aprs(struct aprsMessage &aprsMessage);
 void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_t size);
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);

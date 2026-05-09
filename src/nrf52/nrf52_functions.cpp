@@ -61,7 +61,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
         u8g2->setFont(u8g2_font_10x20_mf);
         u8g2->drawStr(5, 15, "MeshCom 4.0");
         u8g2->setFont(u8g2_font_6x10_mf);
-        sprintf(cvers, "FW %s/%s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        snprintf(cvers, sizeof(cvers), "FW %s/%s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         u8g2->drawStr(5, 25, cvers);
         u8g2->drawStr(5, 35, line1);
         u8g2->drawStr(5, 45, line2);
@@ -206,7 +206,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 {
     char cvers[20];
 
-    sprintf(cvers, "%s/%-1.1s %s", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+    snprintf(cvers, sizeof(cvers), "%s/%-1.1s %s", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
 
     Serial.println("[DISP]...start");
 

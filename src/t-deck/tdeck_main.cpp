@@ -310,18 +310,14 @@ void setupLvgl()
 {
     static lv_disp_draw_buf_t draw_buf;
 
-#ifndef BOARD_HAS_PSRAM
-#define LVGL_BUFFER_SIZE    ( TFT_HEIGHT * 100 )
-    static lv_color_t buf[ LVGL_BUFFER_SIZE ];
-#else
-#define LVGL_BUFFER_SIZE    (TFT_WIDTH * TFT_HEIGHT * sizeof(lv_color_t))
+    #define LVGL_BUFFER_SIZE    (TFT_WIDTH * TFT_HEIGHT * sizeof(lv_color_t))
     static lv_color_t *buf = (lv_color_t *)ps_malloc(LVGL_BUFFER_SIZE);
-    if (!buf) {
-        Serial.println("[INIT] FATAL: LVGL buffer allocation failed!");
-        delay(3000);
-        ESP.restart();
+    if (buf == NULL)
+    {
+        Serial.println("[INIT] FATAL: LVGL buffer PSRAM allocation failed!");
+        // Fallback to internal RAM if PSRAM fails
+        buf = (lv_color_t *)malloc(LVGL_BUFFER_SIZE);
     }
-#endif
 
 
     String LVGL_Arduino = "[INIT]...T-DECK based on Arduino ";
