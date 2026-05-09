@@ -2398,16 +2398,17 @@ String getTimeString()
     return (String)currTime;
 }
 
-String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
+void charBuffer_aprs(struct aprsMessage &aprsmsg)
 {
     char internal_message[UDP_TX_BUF_SIZE];
+    
+    memset(internal_message, 0x00, UDP_TX_BUF_SIZE);
 
     int ilpayload=aprsmsg.msg_payload.length();
     if(ilpayload > 60)
         ilpayload=60;
 
-    //snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %02X %i %i %i HW:%02i CS:%04X FW:%02i:%c LH:%02X %s>%s %c%s",  msgSource, getTimeString().c_str(),
-    snprintf(internal_message, sizeof(internal_message), "%s %s:%08X %1u %i%i%i %01X/%1u LH:%02X %s>%s %c%s",  getTimeString().c_str(), msgSource,
+    snprintf(internal_message, sizeof(internal_message), "%s :%08X %1u %i%i%i %01X/%1u LH:%02X %s>%s %c%s",  getTimeString().c_str(),
         aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_last_hw,
         //aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
         aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(),
@@ -2415,8 +2416,8 @@ String charBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 
     
     internal_message[UDP_TX_BUF_SIZE-1]=0x00;
-    
-    return (String)internal_message;
+
+    memcpy(ringbufferRAWLoraRX[RAWLoRaWrite], internal_message, UDP_TX_BUF_SIZE-1);
 }
 
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
@@ -2578,15 +2579,9 @@ void sendMessage(char *msg_text, int len)
             {
                 char cId[4] = {0};
                 snprintf(cId, sizeof(cId), "%03i", meshcom_settings.node_msgid);
-                String newMsg = "{mcp}";
-                newMsg.concat(cId[0]);
-                newMsg.concat(strMsg.substring(5, 7).c_str());
-                newMsg.concat(cId[1]);
-                newMsg.concat(strMsg.substring(7, 9).c_str());
-                newMsg.concat(cId[2]);
-                newMsg.concat(strMsg.substring(9).c_str());
-
-                strMsg = newMsg;
+                char cnewMsg[10];
+                snprintf(cnewMsg, sizeof(cnewMsg), "{mcp}%c%s%c%s%c%s", cId[0], strMsg.substring(5, 7).c_str(), cId[1], strMsg.substring(7, 9).c_str(), cId[2], strMsg.substring(9).c_str());
+                strMsg = cnewMsg;
             }
             else
                 if(CheckGroup(strDestinationCall) == 0 && strDestinationCall != "*" && strDestinationCall != "WLNK-1" && strDestinationCall != "APRS2SOTA") // no Group Call or WLNK-1 Call

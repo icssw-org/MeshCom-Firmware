@@ -508,14 +508,14 @@ void btn_event_handler_setup(lv_event_t * e)
         {
             if (bDEBUG)
                 Serial.printf("[TDECK]...changing call from '%s' to '%s'\n", meshcom_settings.node_call, cNewCall);
-            sprintf(cCmd, "--setcall %s", cNewCall);
+            snprintf(cCmd, sizeof(cCmd), "--setcall %s", cNewCall);
             commandAction(cCmd, false);
         }
 
         // LAT
         strVar = lv_textarea_get_text(setup_lat);
         char cNew[15] = {0};
-        sprintf(cNew, "%s", strVar.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strVar.c_str());
         sscanf(cNew, "%lf", &meshcom_settings.node_lat);
 
         strVar = lv_textarea_get_text(setup_lat_c);
@@ -523,7 +523,7 @@ void btn_event_handler_setup(lv_event_t * e)
 
         // LON
         strVar = lv_textarea_get_text(setup_lon);
-        sprintf(cNew, "%s", strVar.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strVar.c_str());
         sscanf(cNew, "%lf", &meshcom_settings.node_lon);
 
         strVar = lv_textarea_get_text(setup_lon_c);
@@ -531,12 +531,12 @@ void btn_event_handler_setup(lv_event_t * e)
 
         // ALT
         strVar = lv_textarea_get_text(setup_alt);
-        sprintf(cNew, "%s", strVar.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strVar.c_str());
         sscanf(cNew, "%i", &meshcom_settings.node_alt);
 
         // UTC
         String strNewUtc = lv_textarea_get_text(setup_utc);
-        sprintf(cNew, "%s", strNewUtc.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strNewUtc.c_str());
         sscanf(cNew, "%f", &meshcom_settings.node_utcoff);
 
         // START TONE
@@ -556,43 +556,43 @@ void btn_event_handler_setup(lv_event_t * e)
         // NAME
         strVar = lv_textarea_get_text(setup_name);
         char cNewName[20] = {0};
-        sprintf(cNewName, "%s", strVar.c_str());
+        snprintf(cNewName, sizeof(cNewName), "%s", strVar.c_str());
         if (memcmp(cNewName, meshcom_settings.node_name, sizeof(cNewName)) != 0)
         {
             if (bDEBUG)
                 Serial.printf("[TDECK]...changing name from '%s' to '%s'\n", meshcom_settings.node_name, cNewName);
-            sprintf(cCmd, "--setname %s", cNewName);
+            snprintf(cCmd, sizeof(cCmd), "--setname %s", cNewName);
             commandAction(cCmd, false);
         }
 
         // Comment
         strVar = lv_textarea_get_text(setup_comment);
         char cNewComment[40] = {0};
-        sprintf(cNewComment, "%s", strVar.c_str());
+        snprintf(cNewComment, sizeof(cNewComment), "%s", strVar.c_str());
         if (memcmp(cNewComment, meshcom_settings.node_atxt, sizeof(cNewComment)) != 0)
         {
             if (bDEBUG)
                 Serial.printf("[TDECK]...changing comment from '%s' to '%s'\n", meshcom_settings.node_atxt, cNewComment);
-            sprintf(cCmd, "--atxt %s", cNewComment);
+            snprintf(cCmd, sizeof(cCmd), "--atxt %s", cNewComment);
             commandAction(cCmd, false);
         }
 
         // Wifi SSID
         strVar = lv_textarea_get_text(setup_wifissid);
         char cNewSSID[33] = {0};
-        sprintf(cNewSSID, "%s", strVar.c_str());
+        snprintf(cNewSSID, sizeof(cNewSSID), "%s", strVar.c_str());
         if (memcmp(cNewSSID, meshcom_settings.node_ssid, sizeof(cNewSSID)) != 0)
         {
             if (bDEBUG)
                 Serial.printf("[TDECK]...changing SSID from '%s' to '%s'\n", meshcom_settings.node_ssid, cNewSSID);
-            sprintf(cCmd, "--setssid %s", cNewSSID);
+            snprintf(cCmd, sizeof(cCmd), "--setssid %s", cNewSSID);
             commandAction(cCmd, false);
         }
 
         // Wifi Password
         strVar = lv_textarea_get_text(setup_wifipassword);
         char cNewPassword[64] = {0};
-        sprintf(cNewPassword, "%s", strVar.c_str());
+        snprintf(cNewPassword, sizeof(cNewPassword), "%s", strVar.c_str());
         if (memcmp(cNewPassword, meshcom_settings.node_passwd, sizeof(cNewPassword)) != 0)
         {
             // nicht ändern wenn das Musterpasswort nicht geändert wurde
@@ -600,7 +600,7 @@ void btn_event_handler_setup(lv_event_t * e)
             {
                 if (bDEBUG)
                     Serial.println("[TDECK]...changing Wifi password");
-                sprintf(cCmd, "--setpwd %s", cNewPassword);
+                snprintf(cCmd, sizeof(cCmd), "--setpwd %s", cNewPassword);
                 commandAction(cCmd, false);
             }
         }
@@ -609,44 +609,44 @@ void btn_event_handler_setup(lv_event_t * e)
         // GRC
         String strNewGrc = lv_textarea_get_text(setup_grc0);
 
-        sprintf(cNew, "%s", strNewGrc.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strNewGrc.c_str());
         sscanf(cNew, "%i", &meshcom_settings.node_gcb[0]);
         if(meshcom_settings.node_gcb[0] < 0 || meshcom_settings.node_gcb[0] > 99999)
             meshcom_settings.node_gcb[0]=0;
 
         strNewGrc = lv_textarea_get_text(setup_grc1);
-        sprintf(cNew, "%s", strNewGrc.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strNewGrc.c_str());
         sscanf(cNew, "%i", &meshcom_settings.node_gcb[1]);
         if (meshcom_settings.node_gcb[1] < 0 || meshcom_settings.node_gcb[1] > 99999)
             meshcom_settings.node_gcb[1]=0;
 
         strNewGrc = lv_textarea_get_text(setup_grc2);
-        sprintf(cNew, "%s", strNewGrc.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strNewGrc.c_str());
         sscanf(cNew, "%i", &meshcom_settings.node_gcb[2]);
         if(meshcom_settings.node_gcb[2] < 0 || meshcom_settings.node_gcb[2] > 99999)
             meshcom_settings.node_gcb[2]=0;
 
         strNewGrc = lv_textarea_get_text(setup_grc3);
-        sprintf(cNew, "%s", strNewGrc.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strNewGrc.c_str());
         sscanf(cNew, "%i", &meshcom_settings.node_gcb[3]);
         if(meshcom_settings.node_gcb[3] < 0 || meshcom_settings.node_gcb[3] > 99999)
             meshcom_settings.node_gcb[3]=0;
 
         strNewGrc = lv_textarea_get_text(setup_grc4);
-        sprintf(cNew, "%s", strNewGrc.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strNewGrc.c_str());
         sscanf(cNew, "%i", &meshcom_settings.node_gcb[4]);
         if(meshcom_settings.node_gcb[4] < 0 || meshcom_settings.node_gcb[4] > 99999)
             meshcom_settings.node_gcb[4]=0;
 
         strNewGrc = lv_textarea_get_text(setup_grc5);
-        sprintf(cNew, "%s", strNewGrc.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strNewGrc.c_str());
         sscanf(cNew, "%i", &meshcom_settings.node_gcb[5]);
         if(meshcom_settings.node_gcb[5] < 0 || meshcom_settings.node_gcb[5] > 99999)
             meshcom_settings.node_gcb[5]=0;
 
         // TX POWER
         strVar = lv_textarea_get_text(setup_txpower);
-        sprintf(cNew, "%s", strVar.c_str());
+        snprintf(cNew, sizeof(cNew), "%s", strVar.c_str());
         int iNewPower;
         sscanf(cNew, "%i", &iNewPower);
         if(iNewPower != meshcom_settings.node_power)

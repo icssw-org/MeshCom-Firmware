@@ -256,20 +256,28 @@ static void lv_port_disp_init(void)
         static lv_color_t buf[ LVGL_BUFFER_SIZE ];
     #else
         static lv_color_t *lv_disp_buf_1 = (lv_color_t *)ps_malloc(DISP_BUF_SIZE);
-        if (!lv_disp_buf_1) {
-            Serial.println("menory 1 alloc failed!");
-            delay(5000);
-            assert(lv_disp_buf_1);
+        if (lv_disp_buf_1 == NULL)
+        {
+            Serial.println("[INIT] FATAL: LVGL buffer 1 PSRAM allocation failed!");
+            // Fallback to internal RAM if PSRAM fails
+            lv_disp_buf_1 = (lv_color_t *)malloc(DISP_BUF_SIZE);
         }
 
         static lv_color_t *lv_disp_buf_2 = (lv_color_t *)ps_malloc(DISP_BUF_SIZE);
-        if (!lv_disp_buf_2) {
-            Serial.println("menory 2 alloc failed!");
-            delay(5000);
-            assert(lv_disp_buf_2);
+        if (lv_disp_buf_2 == NULL)
+        {
+            Serial.println("[INIT] FATAL: LVGL buffer 2 PSRAM allocation failed!");
+            // Fallback to internal RAM if PSRAM fails
+            lv_disp_buf_2 = (lv_color_t *)malloc(DISP_BUF_SIZE);
         }
 
         decodebuffer = (uint8_t *)ps_calloc(sizeof(uint8_t), DISP_BUF_SIZE / 2);
+        if (decodebuffer == NULL)
+        {
+            Serial.println("[INIT] FATAL: LVGL decodebuffer PSRAM allocation failed!");
+            // Fallback to internal RAM if PSRAM fails
+            decodebuffer = (lv_color_t *)malloc(sizeof(uint8_t) * (DISP_BUF_SIZE / 2));
+        }
     #endif
 
     /*

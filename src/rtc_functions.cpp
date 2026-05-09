@@ -114,7 +114,7 @@ DateTime getRTCNow()
 String getStringRTCNow()
 {
     char cdate[40];
-    sprintf(cdate, "%02i.%02i.%i %02i:%02i:%02i", now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
+    snprintf(cdate, sizeof(cdate), "%02i.%02i.%i %02i:%02i:%02i", now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
     
     String strDate = cdate;
 

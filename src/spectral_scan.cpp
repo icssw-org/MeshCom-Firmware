@@ -169,6 +169,9 @@ void sx126x_spectral_scan()
     }
     Serial.println(" END");
 
+    delete[] res;
+    res = nullptr;
+
     // wait a little bit before the next scan
     delay(100);
 
@@ -183,11 +186,6 @@ void sx126x_spectral_scan()
 
   sx126x_spectral_finish_scan();
 }
-
-uint16_t *scan_freq(float freq) {
-  uint16_t *results = new uint16_t[RADIOLIB_SX126X_SPECTRAL_SCAN_RES_SIZE]{0};
-  return results; // return an array with zeros
-};
 
 int init_scan(float freq)
 {

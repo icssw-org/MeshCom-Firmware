@@ -49,7 +49,7 @@ String scanI2C()
         }
 
 
-        sprintf(cInfo, "[I2C-%i]...start\n", i2);
+        snprintf(cInfo, sizeof(cInfo), "[I2C-%i]...start\n", i2);
         strInfo.concat(cInfo);
 
         int is=1;
@@ -120,14 +120,14 @@ String scanI2C()
                 if(address == 0x71)strDev="TCA9548A/1";
                 if(address == 0x76)strDev="BME280/BMP280/BME680";
                 if(address == 0x77)strDev="BME280/BMP280/BME680/BMP390";
-                sprintf(cInfo, "[I2C-%i]...0x%02X %s\n", i2, address, strDev.c_str());
+                snprintf(cInfo, sizeof(cInfo), "[I2C-%i]...0x%02X %s\n", i2, address, strDev.c_str());
                 strInfo.concat(cInfo);
 
                 nDevices++;
             }
             else if (error == 4)
             {
-                sprintf(cInfo, "[I2C-%i]...unknown error at 0x%02X\n", i2, address);
+                snprintf(cInfo, sizeof(cInfo), "[I2C-%i]...unknown error at 0x%02X\n", i2, address);
                 strInfo.concat(cInfo);
             }
         }
@@ -135,7 +135,7 @@ String scanI2C()
 
     if (nDevices == 0)
     {
-        sprintf(cInfo, "[I2C-X]...no devices found\n");
+        snprintf(cInfo, sizeof(cInfo), "[I2C-X]...no devices found\n");
         strInfo.concat(cInfo);
     }
 

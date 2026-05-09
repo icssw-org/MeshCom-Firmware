@@ -1797,7 +1797,7 @@ void send_message(String web_header)
             // ToDo: We might think about changing everything to String instead of Char Array later.
             // That might be easier to handle, we won't waste memory and we cannot forget the NULL-Char at the end.
             char message_text[200];
-            strcpy(message_text, message.c_str()); // c_str() automagically adds a NULL-character to the end
+            strncpy(message_text, message.c_str(), sizeof(message_text)); // c_str() automagically adds a NULL-character to the end
 
             int iml = strlen(message_text);
             // new massage has to be different from previous message

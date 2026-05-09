@@ -4115,7 +4115,7 @@ void commandAction(char *umsg_text, bool ble)
         {
             Serial.println("PARM wrong format");
 
-            sprintf(meshcom_settings.node_parm, "%s", "none");
+            snprintf(meshcom_settings.node_parm, sizeof(meshcom_settings.node_parm), "%s", "none");
         }
         else
         {

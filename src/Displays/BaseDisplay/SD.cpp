@@ -365,7 +365,7 @@ char* BaseDisplay::getIterableFilename(const char* prefix, uint32_t number) {
     }
 
     // Add the extension
-    strcpy(&filename[8], ".bmp");
+    strcpy(&filename[8], ".bmp", sizeof(4));
 
     return filename;
 }

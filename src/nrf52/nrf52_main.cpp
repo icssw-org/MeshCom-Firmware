@@ -418,7 +418,7 @@ void nrf52setup()
     tft1.setSPISpeed(SPI_FREQUENCY);
 
     char cvers1[22];
-    sprintf(cvers1, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+    snprintf(cvers1, sizeof(cvers1), "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
     String  version1 = cvers1;
     displayTFT(" MeshCom 4.0 ", version1, "@BY ICSSW.ORG", "  OE1KBC, OE1KFR",  "  ...starting now", 5000);
 
@@ -581,7 +581,7 @@ void nrf52setup()
     */
 
     if(meshcom_settings.node_gwsrv[0] == 0x00)
-        sprintf(meshcom_settings.node_gwsrv, "%s", "OE");
+        snprintf(meshcom_settings.node_gwsrv, sizeof(meshcom_settings.node_gwsrv), "%s", "OE");
 
     // if Node is in WifiAP Mode -> no Gateway posible
     if(bWIFIAP && bGATEWAY)
@@ -893,13 +893,13 @@ void nrf52setup()
 
     #elif defined(HAS_TFT_114)
         char cvers[22];
-        sprintf(cvers, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        snprintf(cvers, sizeof(cvers), "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         String  version = cvers;
         displayTFT(" MeshCom 4.0", version, "@BY ICSSW.ORG", "   OE1KBC, OE1KFR",  "   ...starting now", 5000);
     #elif defined(HAS_TFT)
         initTFT();
         char cvers[22];
-        sprintf(cvers, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        snprintf(cvers, sizeof(cvers), "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         String  version = cvers;
         displayTFT(" MeshCom 4.0 ", version, "  @BY ICSSW.ORG", "  OE1KBC, OE1KFR",  "  ...starting now", 5000);
     #else

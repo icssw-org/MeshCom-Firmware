@@ -176,6 +176,16 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         
         aprsmsg.msg_last_path_cnt=1;
 
+        char cConcat1[UDP_TX_BUF_SIZE];
+        memset(cConcat1, 0x00, UDP_TX_BUF_SIZE);
+        int iConcat1=0;
+        char cConcat2[UDP_TX_BUF_SIZE];
+        memset(cConcat2, 0x00, UDP_TX_BUF_SIZE);
+        int iConcat2=0;
+        char cConcat3[UDP_TX_BUF_SIZE];
+        memset(cConcat3, 0x00, UDP_TX_BUF_SIZE);
+        int iConcat3=0;
+
         for(ib=6; ib < rsize && (ib - 6) < 120; ib++)
         {
             if(RcvBuffer[ib] == '>')
@@ -189,7 +199,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 if(RcvBuffer[ib] < 0x20 || RcvBuffer[ib] > 0x7E)
                     break;
 
-                aprsmsg.msg_source_path.concat((char)RcvBuffer[ib]);
+                //aprsmsg.msg_source_path.concat((char)RcvBuffer[ib]);
+                cConcat1[iConcat1] = (char)RcvBuffer[ib];
+                iConcat1++;
                 
                 if(RcvBuffer[ib] == ',')
                 {
@@ -197,19 +209,30 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                     
                     bSourceCall=false;
 
-                    aprsmsg.msg_source_last="";
+                    //aprsmsg.msg_source_last=""
+                    memset(cConcat2, 0x00, UDP_TX_BUF_SIZE);
+                    iConcat2 = 0;
+
                 }
                 else
                 {
-                    aprsmsg.msg_source_last.concat((char)RcvBuffer[ib]);
+                    //aprsmsg.msg_source_last.concat((char)RcvBuffer[ib]);
+                    cConcat2[iConcat2] = (char)RcvBuffer[ib];
+                    iConcat2++;
                 }
 
                 if(bSourceCall)
                 {
-                    aprsmsg.msg_source_call.concat((char)RcvBuffer[ib]);
+                    //aprsmsg.msg_source_call.concat((char)RcvBuffer[ib]);
+                    cConcat3[iConcat3] = (char)RcvBuffer[ib];
+                    iConcat3++;
                 }
             }
         }
+
+        aprsmsg.msg_source_path = cConcat1;
+        aprsmsg.msg_source_last = cConcat2;
+        aprsmsg.msg_source_call = cConcat3;
 
         if(!bSourceEndOk)
         {
@@ -254,6 +277,14 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         bool bDestinationCall=true;
         uint16_t inextstart=inext;
 
+        memset(cConcat1, 0x00, UDP_TX_BUF_SIZE);
+        iConcat1=0;
+        memset(cConcat2, 0x00, UDP_TX_BUF_SIZE);
+        iConcat2=0;
+        memset(cConcat3, 0x00, UDP_TX_BUF_SIZE);
+        iConcat3=0;
+
+
         for(ib=inextstart; ib < rsize && (ib - inextstart) < 120; ib++)
         {
             if(RcvBuffer[ib] == aprsmsg.payload_type)
@@ -267,25 +298,37 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 if(RcvBuffer[ib] < 0x20 || RcvBuffer[ib] > 0x7E)
                     break;
 
-                aprsmsg.msg_destination_path.concat((char)RcvBuffer[ib]);
+                //aprsmsg.msg_destination_path.concat((char)RcvBuffer[ib]);
+                cConcat1[iConcat1] = (char)RcvBuffer[ib];
+                iConcat1++;
 
                 if(RcvBuffer[ib] == ',')
                 {
                     bDestinationCall=false;
 
-                    aprsmsg.msg_destination_last="";
+                    //aprsmsg.msg_destination_last="";
+                    memset(cConcat2, 0x00, UDP_TX_BUF_SIZE);
+                    iConcat2 = 0;
                 }
                 else
                 {
-                    aprsmsg.msg_destination_last.concat((char)RcvBuffer[ib]);
+                    //aprsmsg.msg_destination_last.concat((char)RcvBuffer[ib]);
+                    cConcat2[iConcat2] = (char)RcvBuffer[ib];
+                    iConcat2++;
                 }
 
                 if(bDestinationCall)
                 {
-                    aprsmsg.msg_destination_call.concat((char)RcvBuffer[ib]);
+                    //aprsmsg.msg_destination_call.concat((char)RcvBuffer[ib]);
+                    cConcat3[iConcat3] = (char)RcvBuffer[ib];
+                    iConcat3++;
                 }
             }
         }
+
+        aprsmsg.msg_destination_path = cConcat1;
+        aprsmsg.msg_destination_last = cConcat2;
+        aprsmsg.msg_destination_call = cConcat3;
 
         if(!bDestinationEndOk)
         {
@@ -332,6 +375,10 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         // Payload
         bool bPayloadEndOk=false;
         inextstart=inext;
+
+        memset(cConcat1, 0x00, UDP_TX_BUF_SIZE);
+        iConcat1=0;
+
         for(ib=inext; ib < rsize; ib++)
         {
             if(RcvBuffer[ib] == 0x00)
@@ -341,8 +388,14 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 break;
             }
             else
-                aprsmsg.msg_payload.concat((char)RcvBuffer[ib]);
+            {
+                //aprsmsg.msg_payload.concat((char)RcvBuffer[ib]);
+                cConcat1[iConcat1] = (char)RcvBuffer[ib];
+                iConcat1++;
+            }
         }
+
+        aprsmsg.msg_payload = cConcat1;
 
         if(!bPayloadEndOk)
         {
@@ -559,6 +612,10 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 
     ipt=0;
 
+    char cConcat1[UDP_TX_BUF_SIZE];
+    memset(cConcat1, 0x00, UDP_TX_BUF_SIZE);
+    int iConcat1 = 0;
+
     // check ATXT
     for(unsigned int id=istarttext;id<PayloadBuffer.length();id++)
     {
@@ -570,10 +627,15 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 
         if(ipt < 25)
         {
-            aprspos.pos_atxt.concat(PayloadBuffer.charAt(id));
+            //aprspos.pos_atxt.concat(PayloadBuffer.charAt(id));
+            cConcat1[iConcat1] = PayloadBuffer.charAt(id);
+            iConcat1++;
+
             ipt++;
         }
     }
+
+    aprspos.pos_atxt = cConcat1;
 
     aprspos.bat = 0;
     aprspos.alt = 0;

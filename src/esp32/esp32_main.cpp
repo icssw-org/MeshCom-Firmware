@@ -607,14 +607,6 @@ void esp32setup()
         ledcWrite(1, 255);
 
         gfx->begin();
-
-        /*
-        char cvers1[22];
-        sprintf(cvers1, "  FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
-        String  version1 = cvers1;
-        displayTFT(" MeshCom 4.0 ", version1, "@BY ICSSW.ORG", "  OE1KBC, OE1KFR",  "  ...starting now", 5000);
-        */
-
     #endif
 
     #if defined BOARD_T5_EPAPER
@@ -839,7 +831,7 @@ void esp32setup()
 
 
     if(meshcom_settings.node_gwsrv[0] == 0x00)
-        sprintf(meshcom_settings.node_gwsrv, "%s", "OE");
+        snprintf(meshcom_settings.node_gwsrv, sizeof(meshcom_settings.node_gwsrv), "%s", "OE");
 
     // if Node is in WifiAP Mode -> no Gateway posible
     if(bWIFIAP && bGATEWAY)
@@ -956,8 +948,8 @@ void esp32setup()
 
     if(memcmp(meshcom_settings.node_ssid, "XX0XXX", 6) == 0)
     {
-        sprintf(meshcom_settings.node_ssid, (char*)"none");
-        sprintf(meshcom_settings.node_pwd, (char*)"none");
+        snprintf(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid), (char*)"none");
+        snprintf(meshcom_settings.node_pwd, sizeof(meshcom_settings.node_pwd), (char*)"none");
     }
 
     #ifdef MODUL_FW_TBEAM
@@ -1116,7 +1108,7 @@ void esp32setup()
     //
     #elif defined(HAS_TFT) || defined(BOARD_T_CONNECT_PRO)
         char cvers[22];
-        sprintf(cvers, "FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+        snprintf(cvers, sizeof(cvers), "FW %s/%-1.1s <%s>", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
         String  version = cvers;
         displayTFT("MeshCom 4.0", version, "@BY ICSSW.ORG", "OE1KBC, OE1KFR",  "...starting now", 5000);
     #else
@@ -1494,13 +1486,13 @@ void esp32setup()
 
     if(meshcom_settings.node_call[0] == 0x00)
     {
-        sprintf(meshcom_settings.node_call, "%s", (char*)"XX0XXX-00");
+        snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", (char*)"XX0XXX-00");
     }
 
     // Create the BLE Device & WiFiAP
-    sprintf(cBLEName, "M%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
+    snprintf(cBLEName, sizeof(cBLEName), "M%s-%02x%02x-%s", g_ble_dev_name, dmac[1], dmac[0], meshcom_settings.node_call);
     char cManufData[60]={0};
-    sprintf(cManufData, "MCM%s-%02x%02x-%s", g_ble_dev_name,  dmac[1], dmac[0], meshcom_settings.node_call);
+    snprintf(cManufData, sizeof(cManufData), "MCM%s-%02x%02x-%s", g_ble_dev_name,  dmac[1], dmac[0], meshcom_settings.node_call);
     
     
     const std::__cxx11::string strBLEName = cBLEName;
