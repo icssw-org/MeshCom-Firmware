@@ -2036,6 +2036,7 @@ void commandAction(char *umsg_text, bool ble)
         }
     }
     else
+    #ifndef NO_TLS_CONSOLE
     if(commandCheck(msg_text+2, (char*)"tlsconsole on") == 0)
     {
         bTLS_CONSOLE=true;
@@ -2065,6 +2066,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    #endif
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
     {
         if(meshcom_settings.node_netmode == 0 && strlen(meshcom_settings.node_ssid) < 3)
@@ -2863,7 +2865,9 @@ void commandAction(char *umsg_text, bool ble)
             // --passwd none clears the password (open access)
             memset(meshcom_settings.node_passwd, 0, sizeof(meshcom_settings.node_passwd));
             #ifdef ESP32
+            #ifndef NO_TLS_CONSOLE
             tlsConsoleSetPassword("");
+            #endif
             #endif
             Serial.printf("...TLS console password cleared (open access)\n");
         }
@@ -2871,7 +2875,9 @@ void commandAction(char *umsg_text, bool ble)
         {
             snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%-14.14s", _owner_c);
             #ifdef ESP32
+            #ifndef NO_TLS_CONSOLE
             tlsConsoleSetPassword(meshcom_settings.node_passwd);
+            #endif
             #endif
         }
 
