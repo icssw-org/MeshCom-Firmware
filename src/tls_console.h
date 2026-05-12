@@ -37,7 +37,10 @@
 //   - Test-NetConnection blockiert den Server für 15 s (kein TLS ClientHello).
 //     Danach ist der Server wieder frei.
 
+#include "configuration.h"
+
 #ifdef ESP32
+#ifndef NO_TLS_CONSOLE
 
 #include <Arduino.h>
 #include <Print.h>
@@ -88,4 +91,5 @@ extern MeshSerialClass MSerial;
 #undef  Serial
 #define Serial MSerial
 
+#endif // NO_TLS_CONSOLE
 #endif // ESP32
