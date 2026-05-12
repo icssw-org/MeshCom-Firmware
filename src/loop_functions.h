@@ -62,8 +62,6 @@ void SendAckMessage(String dest_call, unsigned int iAckId);
 void sendHey();
 void sendTelemetry(int ID);
 
-bool checkMesh();
-
 unsigned int setSMartBeaconing(double flat, double flon);
 
 String convertCallToShort(char callsign[10]);

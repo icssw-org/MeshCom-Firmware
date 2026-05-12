@@ -239,6 +239,8 @@ void init_flash(void)
 
 		meshcom_settings.node_relay = old_struct.node_relay;
 
+		memcpy(meshcom_settings.node_via, old_struct.node_via, sizeof(meshcom_settings.node_via));
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

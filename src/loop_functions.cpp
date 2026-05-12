@@ -84,6 +84,7 @@ bool bBLEDEBUG = false;
 bool bWXDEBUG = false;
 bool bIODEBUG = false;
 bool bTDECKDEBUG = false;
+bool bCHECKMESH = false;
 
 bool bPosDisplay = true;
 bool bDisplayOff = false;
@@ -135,6 +136,7 @@ bool dht_found = false;
 bool bGATEWAY = false;
 bool bGATEWAY_NOPOS = false;
 bool bMESH = false;
+bool bVIA = false;
 bool bWEBSERVER = false;
 bool bWIFIAP = false;
 bool bEXTUDP = false;
@@ -3989,11 +3991,6 @@ int conv_fuss(int alt_meter)
 int conv_meter(int alt_fuss)
 {
     return (int)((float)alt_fuss * 0.3048);
-}
-
-bool checkMesh()
-{
-    return bMESH;
 }
 
 // ****** UTF8-Decoder: convert UTF8-string to extended ASCII *******

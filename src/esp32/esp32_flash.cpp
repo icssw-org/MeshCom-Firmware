@@ -249,6 +249,9 @@ void init_flash(void)
 
     meshcom_settings.node_relay = preferences.getInt("node_relay", 0);
 
+    strVar = preferences.getString("node_via");
+    snprintf(meshcom_settings.node_via, sizeof(meshcom_settings.node_via), "%s", strVar.c_str());
+
     preferences.end();
 }
 
@@ -505,6 +508,9 @@ void save_settings(void)
     preferences.putInt("node_gpsdebug", meshcom_settings.node_gpsdebug);
 
     preferences.putInt("node_relay", meshcom_settings.node_relay);
+
+    strVar = meshcom_settings.node_via;
+    preferences.putString("node_via", strVar); 
 
     //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
     preferences.end();
