@@ -129,6 +129,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include <lora_setchip.h>
 #include "esp32_functions.h"
 #include "tft_display_functions.h"
+#include "tls_console.h"
 
 #ifdef BOARD_HELTEC_V4
     #include "pa_control.h"
@@ -755,6 +756,8 @@ void esp32setup()
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
+    bTLS_CONSOLE = meshcom_settings.node_sset2 & 0x1000;
+    tlsConsoleSetPassword(meshcom_settings.node_passwd);
     bSMALLDISPLAY =  false;
     bSOFTSERREAD = meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
@@ -3471,7 +3474,13 @@ void esp32loop()
             loopWebserver();
         }
 
-        if((bEXTUDP && meshcom_settings.node_hasIPaddress) && iWlanWait == 0)
+        if(bTLS_CONSOLE && iWlanWait == 0)
+        {
+            startTlsConsole();
+            loopTlsConsole();
+        }
+
+        if(bEXTUDP && iWlanWait == 0)
         {
         #if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
             if(meshcom_settings.node_hasIPaddress == false)
@@ -3687,77 +3696,89 @@ int checkRX(bool bRadio)
 
 void checkSerialCommand(void)
 {
-    //  Check Serial connected
-    if(!Serial)
-    {
-        return;
-    }
-
- 	//check if we got from the serial input
+    // Check USB Serial input (Serial == MSerial after telnet_functions.h include)
     if(Serial.available() > 0)
     {
-        char rd = Serial.read();
-
-        Serial.print(rd);
-
+        char rd = (char)Serial.read();
+        Serial.print(rd);   // echo to USB + TLS console via MSerial
         strText += rd;
+    }
 
-        if(strText.startsWith(":") || strText.startsWith("-") || strText.startsWith("{"))
+    // Check TLS console input
+    if(tlsConsoleAvailable())
+    {
+        char rd = (char)tlsConsoleRead();
+        // Skip Telnet IAC negotiation bytes (0xFF and following 2 bytes)
+        if((uint8_t)rd == 0xFF)
         {
-            if(strText.endsWith("\n") || strText.endsWith("\r"))
+            // Consume the 2 option bytes that follow IAC
+            if(tlsConsoleAvailable()) tlsConsoleRead();
+            if(tlsConsoleAvailable()) tlsConsoleRead();
+        }
+        else if(rd != '\r')         // strip CR, keep LF
+        {
+            Serial.print(rd);       // echo back via MSerial (server-side echo)
+            strText += rd;
+        }
+    }
+
+    if(strText.length() == 0)
+        return;
+
+    if(strText.startsWith(":") || strText.startsWith("-") || strText.startsWith("{"))
+    {
+        if(strText.endsWith("\n") || strText.endsWith("\r"))
+        {
+            strText.trim();
+            strncpy(msg_text, strText.c_str(), sizeof(msg_text) - 1);
+            msg_text[sizeof(msg_text) - 1] = '\0';
+
+            int inext=0;
+            char msg_buffer[600];
+            for(int itx=0; itx<(int)strText.length(); itx++)
             {
-                strText.trim();
-                strncpy(msg_text, strText.c_str(), sizeof(msg_text) - 1);
-                msg_text[sizeof(msg_text) - 1] = '\0';
-
-                int inext=0;
-                char msg_buffer[600];
-                for(int itx=0; itx<(int)strText.length(); itx++)
+                if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
                 {
-                    if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
-                    {
-                        inext--;
-                        if(inext < 0)
-                            inext=0;
-                            
-                        msg_buffer[inext+1]=0x00;
-                    }
-                    else
-                    {
-                        msg_buffer[inext]=msg_text[itx];
-                        msg_buffer[inext+1]=0x00;
-                        inext++;
-
-                        // buffer size reached
-                        if(inext > sizeof(msg_buffer)-2)
-                            break;
-                    }
-                }
-
-                if(strText.startsWith("::"))
-                {
-                    sendMessage(msg_buffer, inext);
+                    inext--;
+                    if(inext < 0)
+                        inext=0;
+                        
+                    msg_buffer[inext+1]=0x00;
                 }
                 else
-                    if(strText.startsWith("--"))
-                        commandAction(msg_buffer, isPhoneReady, false);
-                    else
-                        Serial.printf("\n...wrong command %s\n", strText.c_str());
-
-                strText="";
-            }
-        }
-        else
-        {
-            if(bDEBUG)
-            {
-                if(!strText.startsWith("\n") && !strText.startsWith("\r"))
                 {
-                    printf("MSG:%02X", rd);
-                    printf("..not sent\n");
+                    msg_buffer[inext]=msg_text[itx];
+                    msg_buffer[inext+1]=0x00;
+                    inext++;
+
+                    // buffer size reached
+                    if(inext > sizeof(msg_buffer)-2)
+                        break;
                 }
             }
+
+            if(strText.startsWith("::"))
+            {
+                sendMessage(msg_buffer, inext);
+            }
+            else
+                if(strText.startsWith("--"))
+                    commandAction(msg_buffer, isPhoneReady, false);
+                else
+                    Serial.printf("\n...wrong command %s\n", strText.c_str());
+
             strText="";
         }
+    }
+    else
+    {
+        if(bDEBUG)
+        {
+            if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+            {
+                Serial.printf("MSG:%02X..not sent\n", (unsigned char)strText[0]);
+            }
+        }
+        strText="";
     }
 }
