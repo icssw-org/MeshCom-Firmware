@@ -2867,7 +2867,6 @@ void commandAction(char *umsg_text, bool ble)
             #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
             tlsConsoleSetPassword("");
             #endif
-            #endif
             Serial.printf("...TLS console password cleared (open access)\n");
         }
         else
