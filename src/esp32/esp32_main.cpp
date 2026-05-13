@@ -757,7 +757,7 @@ void esp32setup()
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
     bTLS_CONSOLE = meshcom_settings.node_sset2 & 0x1000;
-    #ifndef NO_TLS_CONSOLE
+    #ifndef DISABLE_TLS_CONSOLE
     tlsConsoleSetPassword(meshcom_settings.node_passwd);
     #endif
     bSMALLDISPLAY =  false;
@@ -3476,7 +3476,7 @@ void esp32loop()
             loopWebserver();
         }
 
-        #ifndef NO_TLS_CONSOLE
+        #ifndef DISABLE_TLS_CONSOLE
         if(bTLS_CONSOLE && iWlanWait == 0)
         {
             startTlsConsole();
@@ -3709,7 +3709,7 @@ void checkSerialCommand(void)
     }
 
     // Check TLS console input
-    #ifndef NO_TLS_CONSOLE
+    #ifndef DISABLE_TLS_CONSOLE
     if(tlsConsoleAvailable())
     {
         char rd = (char)tlsConsoleRead();

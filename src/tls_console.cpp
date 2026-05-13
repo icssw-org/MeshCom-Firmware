@@ -3,11 +3,7 @@
 // Uses mbedTLS directly on the raw socket fd because WiFiServerSecure /
 // X509List / PrivateKey are not available in ESP32 Arduino 3.x (IDF 5.x).
 
-#include "Arduino.h"
-#include "configuration.h"
-
-#ifdef ESP32
-#ifndef NO_TLS_CONSOLE
+#if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
 
 // !! Include Arduino BEFORE tls_console.h so we can capture the real
 // HardwareSerial reference before #define Serial MSerial takes effect.
@@ -658,5 +654,4 @@ bool tlsConsoleAvailable()
     return false;
 }
 
-#endif// NO_TLS_CONSOLE
-#endif // ESP32
+#endif // defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
