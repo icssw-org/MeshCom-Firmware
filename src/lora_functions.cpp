@@ -69,6 +69,8 @@
 
 #include "softser_functions.h"
 
+#include "via_functions.h"
+
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions.h>
 #endif

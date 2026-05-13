@@ -40,6 +40,7 @@ extern bool bIODEBUG;
 extern bool bLED_CLEAR;
 extern bool bLED_DELAY;
 extern bool bTDECKDEBUG;
+extern bool bCHECKMESH;
 
 extern bool bPosDisplay;
 extern bool bDisplayOff;
@@ -118,6 +119,7 @@ extern bool bBOOSTEDGAIN;
 extern bool bGATEWAY;
 extern bool bGATEWAY_NOPOS;
 extern bool bMESH;
+extern bool bVIA;
 extern bool bWEBSERVER;
 extern bool bWIFIAP;
 extern bool bEXTUDP;

@@ -25,7 +25,10 @@ definitions for E22 Board
 #define ENABLE_INA226
 #define ENABLE_MC811
 #define ENABLE_RTC
+
 #define ENABLE_SOFTSER
+#define NO_TLS_CONSOLE
+
 #define ANALOG_PIN 32
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 #define TX_POWER_MAX 22  // max 22dBm

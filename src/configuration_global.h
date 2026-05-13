@@ -2,7 +2,7 @@
 #define SOURCE_VERSION_SUB "p"
 #define SOURCE_VERSION_WEB_SUB "p"
 
-#define FLASH_VERSION 20260401
+#define FLASH_VERSION 20260510
 
 //Hardware Types
 #define TLORA_V2 1

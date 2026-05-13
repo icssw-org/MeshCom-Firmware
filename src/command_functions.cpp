@@ -2036,6 +2036,7 @@ void commandAction(char *umsg_text, bool ble)
         }
     }
     else
+    #ifndef NO_TLS_CONSOLE
     if(commandCheck(msg_text+2, (char*)"tlsconsole on") == 0)
     {
         bTLS_CONSOLE=true;
@@ -2065,6 +2066,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    #endif
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
     {
         if(meshcom_settings.node_netmode == 0 && strlen(meshcom_settings.node_ssid) < 3)
@@ -2356,6 +2358,76 @@ void commandAction(char *umsg_text, bool ble)
         if(ble)
         {
             addBLECommandBack((char*)"--loradebug off");
+        }
+
+        save_settings();
+
+        
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"checkmesh on") == 0)
+    {
+        bCHECKMESH=true;
+
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x2000;   //
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--checkmesh on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"checkmesh off") == 0)
+    {
+        bCHECKMESH=false;
+
+        meshcom_settings.node_sset2 &= ~0x2000;   //
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--checkmesh off");
+        }
+
+        save_settings();
+
+        
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"via on") == 0)
+    {
+        bVIA=true;
+
+        memset(meshcom_settings.node_via, 0x00, sizeof(meshcom_settings.node_via));
+
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x4000;   //
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--via on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"via off") == 0)
+    {
+        bVIA=false;
+
+        memset(meshcom_settings.node_via, 0x00, sizeof(meshcom_settings.node_via));
+
+        meshcom_settings.node_sset2 &= ~0x4000;   //
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--via off");
         }
 
         save_settings();
@@ -2794,6 +2866,7 @@ void commandAction(char *umsg_text, bool ble)
             memset(meshcom_settings.node_passwd, 0, sizeof(meshcom_settings.node_passwd));
             #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
             tlsConsoleSetPassword("");
+            #endif
             #endif
             Serial.printf("...TLS console password cleared (open access)\n");
         }
@@ -4555,8 +4628,8 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s ... SOFTSERREAD %s\n...PASSWD <%s>\n",
                 (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), (bSOFTSERREAD?"on":"off"), meshcom_settings.node_passwd);
 
-            Serial.printf("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
-                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
+            Serial.printf("...DEBUG %s ...LORADEBUG %s ...CHECKMESH %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
+                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bCHECKMESH?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
             Serial.printf("...DisplayInfo %s ...DisplayCont %s ...contrast %i\n",
                     (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), meshcom_settings.node_contrast);
