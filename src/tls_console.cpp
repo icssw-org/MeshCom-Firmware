@@ -59,7 +59,6 @@ static mbedtls_ctr_drbg_context s_ctr_drbg;
 // This avoids the 2×16 KB I/O-buffer re-allocation on every connection that causes
 // heap fragmentation and "ssl_setup failed" from the second connection onwards.
 static mbedtls_ssl_context      s_ssl;
-static volatile bool            s_ssl_ready     = false;
 static int                      s_fd            = -1;
 
 static SemaphoreHandle_t        s_mutex         = nullptr;
@@ -127,9 +126,9 @@ static void teardownClient()
     s_authenticated = false;
     s_peek_valid    = false;
     mbedtls_ssl_close_notify(&s_ssl);
-    mbedtls_ssl_session_reset(&s_ssl); // keeps 2×16 KB I/O buffers, releases handshake memory
+    mbedtls_ssl_free(&s_ssl);    // release I/O buffers (~36 KB) back to heap until next connection
     if (s_fd >= 0) { ::close(s_fd); s_fd = -1; }
-    s_hwSerial.println("[TLS] Client disconnected.");
+    s_hwSerial.printf("[TLS] Client disconnected. free heap=%u\n", (unsigned)esp_get_free_heap_size());
 }
 
 // ── Key + cert generation (EC P-256 — ~1 KB heap for handshake vs ~16 KB RSA) ──
@@ -221,19 +220,26 @@ static void handshakeTask(void* arg)
         fcntl(fd, F_SETFL, flg & ~O_NONBLOCK);
     }
 
-    // Reuse the pre-allocated static ssl context via session_reset (no heap alloc/free).
-    if (!s_ssl_ready)
+    // Allocate the ssl context for this connection (~36 KB I/O buffers).
+    // Freed in teardownClient() so the heap is returned between connections.
+    if (!s_conf_ready)
     {
-        s_hwSerial.println("[TLS] ssl not ready");
+        s_hwSerial.println("[TLS] conf not ready");
         ::close(fd);
         s_hs_running = false; vTaskDelete(nullptr); return;
     }
-    if (mbedtls_ssl_session_reset(&s_ssl) != 0)
+    mbedtls_ssl_init(&s_ssl);
+    s_hwSerial.printf("[HEAP] before ssl_setup: free=%u min=%u\n",
+        (unsigned)esp_get_free_heap_size(), (unsigned)esp_get_minimum_free_heap_size());
+    if (mbedtls_ssl_setup(&s_ssl, &s_conf) != 0)
     {
-        s_hwSerial.println("[TLS] ssl_session_reset failed");
+        s_hwSerial.printf("[TLS] ssl_setup failed (OOM? free=%u)\n", (unsigned)esp_get_free_heap_size());
+        mbedtls_ssl_free(&s_ssl);
         ::close(fd);
         s_hs_running = false; vTaskDelete(nullptr); return;
     }
+    s_hwSerial.printf("[HEAP] after  ssl_setup: free=%u min=%u\n",
+        (unsigned)esp_get_free_heap_size(), (unsigned)esp_get_minimum_free_heap_size());
 
     mbedtls_ssl_set_bio(&s_ssl, &fd, bio_send, bio_recv, nullptr);
 
@@ -339,6 +345,8 @@ static void handshakeTask(void* arg)
     }
 
     s_hwSerial.printf("[TLS] Client authenticated on port %d\n", TLS_CONSOLE_PORT);
+    s_hwSerial.printf("[HEAP] after  handshake:  free=%u min=%u\n",
+        (unsigned)esp_get_free_heap_size(), (unsigned)esp_get_minimum_free_heap_size());
     s_hs_running = false;
     vTaskDelete(nullptr);
 }
@@ -486,16 +494,9 @@ static void tlsInitTask(void*)
 
     s_conf_ready = true;
 
-    // Allocate the ssl context ONCE here (2×16 KB I/O buffers).
-    // Subsequent connections reuse this via mbedtls_ssl_session_reset() —
-    // no repeated heap alloc/free, no fragmentation.
-    mbedtls_ssl_init(&s_ssl);
-    if (mbedtls_ssl_setup(&s_ssl, &s_conf) != 0)
-    {
-        s_hwSerial.println("[TLS] Initial ssl_setup failed — TLS console disabled.");
-        vTaskDelete(nullptr); return;
-    }
-    s_ssl_ready = true;
+    // ssl context is allocated lazily in handshakeTask (per connection) and
+    // freed in teardownClient() — this returns the ~36 KB I/O buffers to the
+    // heap when no client is connected.
 
     // Signal loopTlsConsole() to open the listening socket.
     s_server_pending = true;
