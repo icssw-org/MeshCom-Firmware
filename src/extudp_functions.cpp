@@ -44,7 +44,7 @@ unsigned char incomingExtPacket[UDP_TX_BUF_SIZE];  // buffer for incoming packet
 int packetExtSize=0;
 
 // Deferred sendExtern ringbuffer — queued from OnRxDone, flushed in main loop
-#define MAX_EXTERN_QUEUE 4
+#define MAX_EXTERN_QUEUE 2
 struct externQueueEntry {
     uint8_t  buffer[500];
     uint16_t buflen;

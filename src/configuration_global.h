@@ -80,12 +80,12 @@
 #define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
 #elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(BOARD_RAK4630)
 // ESP32-S3 (320 KB SRAM) and nRF52840 (256 KB RAM) — full buffer sizes
-#define MAX_MHEARD 120                     // max count of messages in mheard ringbuffer (was 20, 85-124 H00 nodes observed)
-#define MAX_MHPATH 150                     // max count of messages in mhpath ringbuffer (was 30, multiple paths per node)
-#define MAX_RING 30                        // max count of messages in ringbuffer
+#define MAX_MHEARD 80                      // max count of messages in mheard ringbuffer (was 20, 85-124 H00 nodes observed)
+#define MAX_MHPATH 100                     // max count of messages in mhpath ringbuffer (was 30, multiple paths per node)
+#define MAX_RING 20                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 100                 // dedup ring for received msg_ids (was 60, wraparounds observed)
-#define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
-#define MAX_RING_UDP 30                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
+#define MAX_LOG 10                         // max count of messages in LOG-ringbuffer (ram_opti)
+#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
 #elif defined(ENABLE_TBEAM)                // very smal version only for developer tests
 #define MAX_MHEARD 10                      // max count of messages in mheard ringbuffer (was 20, limited by DRAM)
 #define MAX_MHPATH 10                      // max count of messages in mhpath ringbuffer (was 30, limited by DRAM)

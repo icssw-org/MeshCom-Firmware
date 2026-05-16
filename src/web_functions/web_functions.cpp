@@ -29,6 +29,7 @@ void web_client_html(CommonWebClient web_client);
 
 
 String web_header;
+
 unsigned long web_currentTime = millis(); // Current time
 unsigned long web_previousTime = 0;       // Previous time
 #define WEB_TIMEOUT_TIME 2000             // Define timeout time in milliseconds (example: 2000ms = 2s)
@@ -311,7 +312,12 @@ void web_client_html(CommonWebClient web_client)
  */
 String work_webpage(bool bget_password, int webid)
 {
-    web_header = "";
+    static char web_header_collect[1024];        // BSS statt Heap
+    static uint16_t web_header_collect_len = 0;
+    // ...
+    web_header_collect_len = 0;
+    web_header_collect[0] = '\0';
+
     web_currentTime = millis();
     web_previousTime = web_currentTime;
     String password_message = "";
@@ -337,7 +343,11 @@ String work_webpage(bool bget_password, int webid)
             if (bDEBUG)
                 Serial.write(c); // print it out the serial monitor
 
-            web_header += c;
+            if (web_header_collect_len < sizeof(web_header_collect) - 1)
+            {
+                web_header_collect[web_header_collect_len++] = c;
+                web_header_collect[web_header_collect_len] = '\0';
+            }
 
             if (c == '\n')
             {
@@ -346,7 +356,8 @@ String work_webpage(bool bget_password, int webid)
                 // that's the end of the client HTTP request, so send a response:
                 if (web_currentLine.length() == 0)
                 {
-
+                    web_header = web_header_collect;
+                    
                     // Serial.println(web_header);
 
                     // user sends authentication
