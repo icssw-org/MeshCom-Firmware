@@ -4686,12 +4686,17 @@ void commandAction(char *umsg_text, bool ble)
             #endif
 
             #ifndef BOARD_T_ECHO
-            Serial.printf("\n...Webserver %s", (bWEBSERVER?"on":"off"));
+            Serial.printf("\n...Webserver  %s", (bWEBSERVER?"on":"off"));
             Serial.printf(" / Webpwd <%s>", meshcom_settings.node_webpwd);
             Serial.printf(" / Gateway %s %s\n", (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""));
 
+            #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
+            Serial.printf("...TLSConsole %s\n", (bTLS_CONSOLE ? "on (port 2323)" : "off"));
+            #endif
+
+
             #ifndef BOARD_RAK4630
-                Serial.printf("...WIFI-AP   %s\n", (bWIFIAP?"on":"off"));
+                Serial.printf("...WIFI-AP    %s\n", (bWIFIAP?"on":"off"));
                 if(bWIFIAP)
                 {
                     Serial.printf("...SSID <%s>", meshcom_settings.node_call);
