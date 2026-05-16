@@ -1,41 +1,26 @@
 #pragma once
 
-// TLS console server (port 2323) — encrypted Serial bridge for ESP32
-// Replaces plain-text Telnet (port 23) — now renamed to TLS Console.
+// HMAC console server (port 2323) — raw TCP serial bridge for ESP32
+// Replaces the TLS console to free the 36 KB mbedTLS I/O buffer overhead.
 // Only active on ESP32 with WiFi or Ethernet (not on nRF52/RAK4631).
 //
 // Security model:
-//   - EC P-256 key + self-signed cert generated on first boot,
-//     stored in NVS namespace "tls_creds" (separate from user settings).
-//   - After TLS handshake the client must send the node password followed
-//     by '\n'. The password is taken from meshcom_settings.node_passwd.
-//     If node_passwd is empty no password is required (open access, same
-//     behaviour as the old plain-text Telnet).
-//   - The TLS handshake runs in a dedicated FreeRTOS task so the main loop
-//     (including LoRa processing) is never blocked.
+//   - HMAC-SHA256 challenge-response: server sends a 16-byte random nonce,
+//     client must respond with HMAC-SHA256(password, nonce) as 64 hex chars.
+//     The password is never transmitted — only its HMAC is.
+//   - If node_passwd is empty no authentication is required (open access).
+//   - Auth runs in a dedicated FreeRTOS task (non-blocking for LoRa).
 //
-// Password setzen (max. 14 Zeichen, wird in NVS gespeichert):
+// Password setzen (max. 14 Zeichen):
 //   --passwd MeinPasswort
 //
-// Verbindung herstellen (Windows — Git Bash oder cmd.exe):
-//   "C:\Program Files\Git\usr\bin\openssl.exe" s_client -connect <ip>:2323
+// Verbindung herstellen (Python, alle Plattformen):
+//   python3 hmac_connect.py <ip> MeinPasswort
+//   (Skript: nonce=recv; send(HMAC-SHA256(password,nonce).hex()+'\n'))
 //
-// Verbindung herstellen (Linux / macOS):
-//   openssl s_client -connect <ip>:2323
-//   ncat --ssl <ip> 2323
-//
-// Ablauf nach CONNECTED:
-//   1. TLS-Handshake (self-signed Cert — Verify error 18 ist normal, kein Problem)
-//   2. Prompt:  Password:
-//   3. Passwort eingeben + Enter  (kein Echo sichtbar)
-//   4. Bei Erfolg:  MeshCom TLS Console
-//                   Type --help for commands
-//
-// Hinweise:
-//   - openssl mit -quiet unterdrückt den TLS-Header, aber der Password-Prompt
-//     kann dadurch unsichtbar sein → ohne -quiet verwenden.
-//   - Test-NetConnection blockiert den Server für 15 s (kein TLS ClientHello).
-//     Danach ist der Server wieder frei.
+// Verbindung herstellen (kein Passwort gesetzt):
+//   nc <ip> 2323         (Linux / macOS)
+//   ncat.exe <ip> 2323   (Windows — Nmap-Paket)
 
 #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
 
