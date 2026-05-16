@@ -333,7 +333,7 @@ struct s_meshcom_settings
 	int node_gpsdebug = 0;
 
 	int node_relay = 0x0000;
-	
+
 	char node_via[10] = {0};
 
 	// nicht im Flash

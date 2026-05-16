@@ -1945,6 +1945,46 @@ void esp32loop()
                 stat_csma_hwm_attempts, trickle_interval_ms);
         }
 
+        // TX-IRQ Watchdog: Wenn bEnableInterruptTransmit zu lange true bleibt
+        // (TX-Done-IRQ wurde nie gefeuert), ist die State Machine eingefroren.
+        // iReceiveTimeOutTime == 0 waehrend TX => normaler CSMA-Timeout greift nicht.
+        // Fix: nach TX_WATCHDOG_MS Zwangs-Recovery zurueck in RX.
+        {
+            unsigned long _tx_s = (unsigned long)ch_util_tx_start;
+            if(bEnableInterruptTransmit && _tx_s > 0 &&
+               (millis() - _tx_s) > TX_WATCHDOG_MS)
+            {
+                Serial.printf("[MC-WDT] TX_WATCHDOG fired after %lums — forcing RX recovery\n",
+                    millis() - _tx_s);
+
+                ch_util_tx_start = 0;
+                transmittedFlag   = false;
+                bEnableInterruptTransmit = false;
+                bEnableInterruptReceive  = false;
+
+                radio.clearPacketSentAction();
+                radio.clearPacketReceivedAction();
+                radio.finishTransmit();
+
+                #ifdef BOARD_HELTEC_V4
+                disablePATransmit();
+                #endif
+                #ifdef RADIO_CTRL
+                    digitalWrite(RADIO_CTRL, HIGH);  // RX Mode
+                    delay(2);
+                #endif
+
+                radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF,
+                    RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED),
+                    RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+                radio.setPacketReceivedAction(setFlagReceive);
+                bEnableInterruptReceive = true;
+
+                iReceiveTimeOutTime = millis();
+                csma_reset();
+            }
+        }
+
         if(iReceiveTimeOutTime > 0)
         {
             // Timeout csma_timeout (slot-basierter Backoff)

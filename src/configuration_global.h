@@ -127,6 +127,10 @@
 #define CSMA_MAX_ATTEMPTS   3       // Ab hier: Rapid-fire CAD bis Kanal frei
 #define CSMA_RAPID_RX_MS    100     // Preamble-Check Fenster im Rapid-fire Modus (ms)
 
+// TX-IRQ Watchdog: Maximale Zeit (ms) fuer einen LoRa-TX-Vorgang bevor Zwangs-Recovery
+// SF11 BW250 CR6 255 Bytes ToA ~6s -> 15s gibt ausreichend Sicherheitsabstand
+#define TX_WATCHDOG_MS      15000
+
 // OnRxDone processing time monitoring
 #define ONRXDONE_WARN_MS    50      // Warnung wenn OnRxDone laenger als X ms dauert
 
