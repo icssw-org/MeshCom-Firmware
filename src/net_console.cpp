@@ -3,7 +3,7 @@
 // Uses mbedtls/md.h (already in ESP-IDF) — zero extra library, zero Flash overhead.
 // RAM during active session: ~0 KB (vs 36 KB for TLS I/O buffers).
 //
-// Author: Ralf Altenbrand (DH1FR), 2026
+// Author: Ralf Altenbrand (DH1FR), 05/2026
 //
 // Protocol:
 //   <- "NONCE: <32 hex chars>\r\n"

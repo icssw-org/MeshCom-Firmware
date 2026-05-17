@@ -1595,6 +1595,14 @@ bool doTX()
                         enablePATransmit();
                         #endif
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
+                        if(transmissionState != RADIOLIB_ERR_NONE)
+                        {
+                            tx_is_active = false;
+                            ringBuffer[save_read][0] = sendlng;
+                            ringBuffer[save_read][1] = save_ring_status;
+                            iRead = iReadBeforeAdvance;
+                            return false;
+                        }
                         #endif
                         bLED_RED = true;
                     #endif
@@ -1627,6 +1635,14 @@ bool doTX()
                     enablePATransmit();
                     #endif
                     transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
+                    if(transmissionState != RADIOLIB_ERR_NONE)
+                    {
+                        tx_is_active = false;
+                        ringBuffer[save_read][0] = sendlng;
+                        ringBuffer[save_read][1] = save_ring_status;
+                        iRead = iReadBeforeAdvance;
+                        return false;
+                    }
                     #endif
                     bLED_ORANGE = true;
                 #endif
