@@ -3,6 +3,8 @@
 // Uses mbedtls/md.h (already in ESP-IDF) — zero extra library, zero Flash overhead.
 // RAM during active session: ~0 KB (vs 36 KB for TLS I/O buffers).
 //
+// Author: Ralf Altenbrand (DH1FR), 2026
+//
 // Protocol:
 //   <- "NONCE: <32 hex chars>\r\n"
 //   -> "<64 hex HMAC-SHA256(password, nonce)>\r\n"
@@ -17,9 +19,9 @@
 //
 // No password: connect with plain  nc <ip> 2323
 
-#if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
+#if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
 
-// !! Include Arduino BEFORE tls_console.h so we can capture the real
+// !! Include Arduino BEFORE net_console.h so we can capture the real
 // HardwareSerial reference before #define Serial MSerial takes effect.
 #include <Arduino.h>
 #include <WiFi.h>
@@ -38,7 +40,7 @@
 // HardwareSerial on classic ESP32/S3-UART, USBCDC on S3/S2/C3 USB-CDC builds.
 static auto& s_hwSerial = Serial;
 
-#include "tls_console.h"
+#include "net_console.h"
 // From here: Serial == MSerial
 
 // ── Password ──────────────────────────────────────────────────────────────────
@@ -55,7 +57,7 @@ static volatile bool     s_server_pending = false;
 static bool              s_authenticated  = false;
 static volatile bool     s_hs_running     = false;
 
-// 1-byte lookahead for tlsConsoleAvailable()
+// 1-byte lookahead for netConsoleAvailable()
 static bool     s_peek_valid = false;
 static uint8_t  s_peek_byte  = 0;
 
@@ -208,7 +210,7 @@ static void authTask(void* arg)
         xSemaphoreGive(s_mutex);
     }
     s_hwSerial.printf("[CON] Client authenticated on port %d. free heap=%u\n",
-                      TLS_CONSOLE_PORT, (unsigned)esp_get_free_heap_size());
+                      NET_CONSOLE_PORT, (unsigned)esp_get_free_heap_size());
     s_hs_running = false;
     vTaskDelete(nullptr);
 }
@@ -252,7 +254,7 @@ size_t MeshSerialClass::write(const uint8_t* buf, size_t size)
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
-void tlsConsoleSetPassword(const char* pw)
+void netConsoleSetPassword(const char* pw)
 {
     snprintf(s_password, sizeof(s_password), "%s", pw ? pw : "");
     // --passwd stores the value left-padded to 14 chars with spaces ("%-14.14s").
@@ -262,18 +264,18 @@ void tlsConsoleSetPassword(const char* pw)
 }
 
 
-void startTlsConsole()
+void startNetConsole()
 {
     if (s_started) return;
     s_started        = true;
     s_mutex          = xSemaphoreCreateMutex();
-    s_server_pending = true;   // open socket on next loopTlsConsole() call
+    s_server_pending = true;   // open socket on next loopNetConsole() call
     s_hwSerial.println("[CON] HMAC console init.");
 }
 
-void loopTlsConsole()
+void loopNetConsole()
 {
-    // Open listening socket on first call (triggered by startTlsConsole)
+    // Open listening socket on first call (triggered by startNetConsole)
     if (s_server_pending)
     {
         s_server_pending = false;
@@ -290,7 +292,7 @@ void loopTlsConsole()
         struct sockaddr_in addr;
         memset(&addr, 0, sizeof(addr));
         addr.sin_family      = AF_INET;
-        addr.sin_port        = htons(TLS_CONSOLE_PORT);
+        addr.sin_port        = htons(NET_CONSOLE_PORT);
         addr.sin_addr.s_addr = INADDR_ANY;
 
         if (::bind(s_listen_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0 ||
@@ -302,7 +304,7 @@ void loopTlsConsole()
         }
         int fl = fcntl(s_listen_fd, F_GETFL, 0);
         fcntl(s_listen_fd, F_SETFL, fl | O_NONBLOCK);
-        s_hwSerial.printf("[CON] Console started on port %d\n", TLS_CONSOLE_PORT);
+        s_hwSerial.printf("[CON] Console started on port %d\n", NET_CONSOLE_PORT);
     }
 
     if (s_listen_fd < 0) return;
@@ -353,14 +355,14 @@ void loopTlsConsole()
     }
 }
 
-bool isTlsConsoleConnected()
+bool isNetConsoleConnected()
 {
     return s_authenticated;
 }
 
-int tlsConsoleRead()
+int netConsoleRead()
 {
-    if (!isTlsConsoleConnected()) return -1;
+    if (!isNetConsoleConnected()) return -1;
 
     if (s_peek_valid)
     {
@@ -383,9 +385,9 @@ int tlsConsoleRead()
     return -1;
 }
 
-bool tlsConsoleAvailable()
+bool netConsoleAvailable()
 {
-    if (!isTlsConsoleConnected()) return false;
+    if (!isNetConsoleConnected()) return false;
     if (s_peek_valid) return true;
 
     uint8_t c;
@@ -403,4 +405,4 @@ bool tlsConsoleAvailable()
     return false;
 }
 
-#endif // defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
+#endif // defined(ESP32) && !defined(DISABLE_NET_CONSOLE)

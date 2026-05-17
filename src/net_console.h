@@ -1,8 +1,9 @@
 #pragma once
 
 // HMAC console server (port 2323) — raw TCP serial bridge for ESP32
-// Replaces the TLS console to free the 36 KB mbedTLS I/O buffer overhead.
+// Replaces the net console to free the 36 KB mbedTLS I/O buffer overhead.
 // Only active on ESP32 with WiFi or Ethernet (not on nRF52/RAK4631).
+// Author: Ralf Altenbrand (DH1FR), 2026
 //
 // Security model:
 //   - HMAC-SHA256 challenge-response: server sends a 16-byte random nonce,
@@ -22,30 +23,30 @@
 //   nc <ip> 2323         (Linux / macOS)
 //   ncat.exe <ip> 2323   (Windows — Nmap-Paket)
 
-#if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
+#if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
 
 #include <Arduino.h>
 #include <Print.h>
 #include <WiFi.h>
 
-#define TLS_CONSOLE_PORT 2323
+#define NET_CONSOLE_PORT 2323
 
-void startTlsConsole();
-void loopTlsConsole();
-bool isTlsConsoleConnected();
+void startNetConsole();
+void loopNetConsole();
+bool isNetConsoleConnected();
 
 // Set the password checked after TLS handshake (empty = no auth).
 // Call once from setup after loading settings.
-void tlsConsoleSetPassword(const char* pw);
+void netConsoleSetPassword(const char* pw);
 
 // Read one character from TLS client (-1 if none)
-int  tlsConsoleRead();
-bool tlsConsoleAvailable();
+int  netConsoleRead();
+bool netConsoleAvailable();
 
 /**
  * MeshSerialClass — drop-in wrapper around HardwareSerial.
  * All write() calls are forwarded to both the real UART and the TLS client
- * (when connected and authenticated). Method bodies are in tls_console.cpp
+ * (when connected and authenticated). Method bodies are in net_console.cpp
  * to avoid the circular #define issue.
  */
 class MeshSerialClass : public Stream
@@ -73,4 +74,4 @@ extern MeshSerialClass MSerial;
 #undef  Serial
 #define Serial MSerial
 
-#endif // defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
+#endif // defined(ESP32) && !defined(DISABLE_NET_CONSOLE)

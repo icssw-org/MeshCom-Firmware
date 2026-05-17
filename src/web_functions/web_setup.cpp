@@ -455,10 +455,10 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
-    if(setupData->paramName.equals("tlsconsole")) {
+    if(setupData->paramName.equals("netconsole")) {
         commandAction(message_text, bPhoneReady);
-        setupData->returnCode = (bTLS_CONSOLE == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        setupData->returnValue = bTLS_CONSOLE?"on":"off";
+        setupData->returnCode = (bNET_CONSOLE == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bNET_CONSOLE?"on":"off";
         return;
     } else
 
@@ -842,7 +842,7 @@ void webSetup_getParam(setupStruct *setupData){
         return;
     }
 
-    if(setupData->paramName.equals("tlsconsole")) {
+    if(setupData->paramName.equals("netconsole")) {
         return;
     }
 
