@@ -3346,11 +3346,14 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
         Serial.println();
     }
 
+    int savedAckSlot = iWrite;
     ringBuffer[iWrite][0]=aprsmsg.msg_len;
-    ringBuffer[iWrite][1]=0xFF;    // ACK-Status byte 0xFF for no retransmission
+    ringBuffer[iWrite][1]=0x00;  // temp READY (0x00) so getMessagePriority parses destination correctly
     memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
 
     addTxRingEntry("beacon");
+
+    ringBuffer[savedAckSlot][1]=0xFF;   // no retransmission (set after priority is recorded)
 
     /*
     iWrite++;
