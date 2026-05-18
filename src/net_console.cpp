@@ -159,28 +159,36 @@ static void authTask(void* arg)
             char c;
             int r = ::recv(fd, &c, 1, 0);
             if (r <= 0) break;
-            if (c == '\r') continue;
+            if (c == '\r') { readOk = true; break; } //continue;
             if (c == '\n') { readOk = true; break; }
             respBuf[idx++] = c;
         }
 
         if (readOk)
         {
-            // 4. Compute expected HMAC-SHA256(password, nonce)
-            uint8_t expected[32];
-            const mbedtls_md_info_t* md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-            if (md && mbedtls_md_hmac(md,
-                                      (const uint8_t*)s_password, strlen(s_password),
-                                      nonce, sizeof(nonce), expected) == 0)
+            // KBC check without SHA256
+            if(memcmp(respBuf, s_password, strlen(s_password)) != 0)
             {
-                // 5. Hex-decode response, constant-time compare
-                uint8_t received[32];
-                if (strlen(respBuf) == 64 &&
-                    hex_to_bytes(respBuf, 64, received, 32) &&
-                    ct_equal(expected, received, 32))
+                // 4. Compute expected HMAC-SHA256(password, nonce)
+                uint8_t expected[32];
+                const mbedtls_md_info_t* md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+                if (md && mbedtls_md_hmac(md,
+                                        (const uint8_t*)s_password, strlen(s_password),
+                                        nonce, sizeof(nonce), expected) == 0)
                 {
-                    authOk = true;
+                    // 5. Hex-decode response, constant-time compare
+                    uint8_t received[32];
+                    if (strlen(respBuf) == 64 &&
+                        hex_to_bytes(respBuf, 64, received, 32) &&
+                        ct_equal(expected, received, 32))
+                    {
+                        authOk = true;
+                    }
                 }
+            }
+            else
+            {
+                authOk = true;
             }
         }
     }
