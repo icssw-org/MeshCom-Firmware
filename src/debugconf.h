@@ -2,8 +2,8 @@
 // DEBUG
 // -----------------------------------------------------------------------------
 
-// TLS console serial bridge — must be included before any Serial usage
-#include "tls_console.h"
+// net console serial bridge — must be included before any Serial usage
+#include "net_console.h"
 
 // If not on PIO or not defined in platformio.ini
 #ifndef DO_DEBUG

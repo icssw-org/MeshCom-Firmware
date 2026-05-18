@@ -14,7 +14,7 @@
 #include "spectral_scan.h"
 #include "rtc_functions.h"
 #ifdef ESP32
-#include "tls_console.h"
+#include "net_console.h"
 #endif
 #include "tinyxml_functions.h"
 #include "clock.h"
@@ -624,8 +624,8 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf("--info      show info\n--mheard    show MHeard\n--gateway   on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx/none\n--mesh      on/off\n");
             delay(100);
             #ifdef ESP32
-                Serial.printf("--tlsconsole on/off  (TLS console port 2323)\n");
-                Serial.printf("--passwd xxxx/none   (TLS console password, none=clear)\n");
+                Serial.printf("--netconsole on/off  (net console port 2323)\n");
+                Serial.printf("--passwd xxxx/none   (net console password, none=clear)\n");
                 delay(100);
             #endif
             delay(100);
@@ -2036,33 +2036,33 @@ void commandAction(char *umsg_text, bool ble)
         }
     }
     else
-    #ifndef NO_TLS_CONSOLE
-    if(commandCheck(msg_text+2, (char*)"tlsconsole on") == 0)
+    #ifndef NO_NET_CONSOLE
+    if(commandCheck(msg_text+2, (char*)"netconsole on") == 0)
     {
-        bTLS_CONSOLE=true;
+        bNET_CONSOLE=true;
         meshcom_settings.node_sset2 |= 0x1000;
 
         save_settings();
 
-        Serial.printf("...TLS console on (port 2323)\n");
+        Serial.printf("...net console on (port 2323)\n");
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"tlsconsole off") == 0)
+    if(commandCheck(msg_text+2, (char*)"netconsole off") == 0)
     {
-        bTLS_CONSOLE=false;
+        bNET_CONSOLE=false;
         meshcom_settings.node_sset2 &= ~0x1000;
 
         save_settings();
 
-        Serial.printf("...TLS console off\n");
+        Serial.printf("...net console off\n");
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"tlsconsole") == 0)
+    if(commandCheck(msg_text+2, (char*)"netconsole") == 0)
     {
-        // show current TLS console status; return early to prevent match against --tls... handler
-        Serial.printf("...TLS console is %s\n", bTLS_CONSOLE ? "on (port 2323)" : "off");
+        // show current net console status; return early to prevent match against --tls... handler
+        Serial.printf("...net console is %s\n", bNET_CONSOLE ? "on (port 2323)" : "off");
         return;
     }
     else
@@ -2864,16 +2864,16 @@ void commandAction(char *umsg_text, bool ble)
         {
             // --passwd none clears the password (open access)
             memset(meshcom_settings.node_passwd, 0, sizeof(meshcom_settings.node_passwd));
-            #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
-            tlsConsoleSetPassword("");
+            #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
+            netConsoleSetPassword("");
             #endif
-            Serial.printf("...TLS console password cleared (open access)\n");
+            Serial.printf("...net console password cleared (open access)\n");
         }
         else
         {
             snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%-14.14s", _owner_c);
-            #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
-            tlsConsoleSetPassword(meshcom_settings.node_passwd);
+            #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
+            netConsoleSetPassword(meshcom_settings.node_passwd);
             #endif
         }
 

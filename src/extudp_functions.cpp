@@ -535,7 +535,7 @@ void resetExternUDP()
 
   hasExternIPaddress = false;
   
-  if(bEXTUDP && hasExternIPaddress && (int)strlen(meshcom_settings.node_extern) > 7)
+  if(bEXTUDP && (int)strlen(meshcom_settings.node_extern) > 7)
   {
     startExternUDP();
   }

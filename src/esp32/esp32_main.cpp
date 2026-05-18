@@ -129,7 +129,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include <lora_setchip.h>
 #include "esp32_functions.h"
 #include "tft_display_functions.h"
-#include "tls_console.h"
+#include "net_console.h"
 
 #ifdef BOARD_HELTEC_V4
     #include "pa_control.h"
@@ -756,9 +756,9 @@ void esp32setup()
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
-    bTLS_CONSOLE = meshcom_settings.node_sset2 & 0x1000;
-    #ifndef DISABLE_TLS_CONSOLE
-    tlsConsoleSetPassword(meshcom_settings.node_passwd);
+    bNET_CONSOLE = meshcom_settings.node_sset2 & 0x1000;
+    #ifndef DISABLE_NET_CONSOLE
+    netConsoleSetPassword(meshcom_settings.node_passwd);
     #endif
     bSMALLDISPLAY =  false;
     bSOFTSERREAD = meshcom_settings.node_sset2 & 0x0200;
@@ -1943,6 +1943,46 @@ void esp32loop()
             Serial.printf("[MC-HWM] uptime=%lus queue_hwm=%d/%d csma_hwm=%d trickle=%lums\n",
                 millis() / 1000, stat_queue_hwm, MAX_RING,
                 stat_csma_hwm_attempts, trickle_interval_ms);
+        }
+
+        // TX-IRQ Watchdog: Wenn bEnableInterruptTransmit zu lange true bleibt
+        // (TX-Done-IRQ wurde nie gefeuert), ist die State Machine eingefroren.
+        // iReceiveTimeOutTime == 0 waehrend TX => normaler CSMA-Timeout greift nicht.
+        // Fix: nach TX_WATCHDOG_MS Zwangs-Recovery zurueck in RX.
+        {
+            unsigned long _tx_s = (unsigned long)ch_util_tx_start;
+            if(bEnableInterruptTransmit && _tx_s > 0 &&
+               (millis() - _tx_s) > TX_WATCHDOG_MS)
+            {
+                Serial.printf("[MC-WDT] TX_WATCHDOG fired after %lums — forcing RX recovery\n",
+                    millis() - _tx_s);
+
+                ch_util_tx_start = 0;
+                transmittedFlag   = false;
+                bEnableInterruptTransmit = false;
+                bEnableInterruptReceive  = false;
+
+                radio.clearPacketSentAction();
+                radio.clearPacketReceivedAction();
+                radio.finishTransmit();
+
+                #ifdef BOARD_HELTEC_V4
+                disablePATransmit();
+                #endif
+                #ifdef RADIO_CTRL
+                    digitalWrite(RADIO_CTRL, HIGH);  // RX Mode
+                    delay(2);
+                #endif
+
+                radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF,
+                    RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED),
+                    RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+                radio.setPacketReceivedAction(setFlagReceive);
+                bEnableInterruptReceive = true;
+
+                iReceiveTimeOutTime = millis();
+                csma_reset();
+            }
         }
 
         if(iReceiveTimeOutTime > 0)
@@ -3476,11 +3516,11 @@ void esp32loop()
             loopWebserver();
         }
 
-        #ifndef DISABLE_TLS_CONSOLE
-        if(bTLS_CONSOLE && iWlanWait == 0)
+        #ifndef DISABLE_NET_CONSOLE
+        if(bNET_CONSOLE && iWlanWait == 0)
         {
-            startTlsConsole();
-            loopTlsConsole();
+            startNetConsole();
+            loopNetConsole();
         }
         #endif
 
@@ -3704,21 +3744,21 @@ void checkSerialCommand(void)
     if(Serial.available() > 0)
     {
         char rd = (char)Serial.read();
-        Serial.print(rd);   // echo to USB + TLS console via MSerial
+        Serial.print(rd);   // echo to USB + net console via MSerial
         strText += rd;
     }
 
-    // Check TLS console input
-    #ifndef DISABLE_TLS_CONSOLE
-    if(tlsConsoleAvailable())
+    // Check net console input
+    #ifndef DISABLE_NET_CONSOLE
+    if(netConsoleAvailable())
     {
-        char rd = (char)tlsConsoleRead();
+        char rd = (char)netConsoleRead();
         // Skip Telnet IAC negotiation bytes (0xFF and following 2 bytes)
         if((uint8_t)rd == 0xFF)
         {
             // Consume the 2 option bytes that follow IAC
-            if(tlsConsoleAvailable()) tlsConsoleRead();
-            if(tlsConsoleAvailable()) tlsConsoleRead();
+            if(netConsoleAvailable()) netConsoleRead();
+            if(netConsoleAvailable()) netConsoleRead();
         }
         else if(rd != '\r')         // strip CR, keep LF
         {

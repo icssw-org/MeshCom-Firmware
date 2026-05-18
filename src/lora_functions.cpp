@@ -1558,6 +1558,7 @@ bool doTX()
 
         // For out-of-order reads: clear slot data length so getNextTxSlot skips it
         // and advance iRead past any empty leading slots
+        int iReadBeforeAdvance = iRead; // saved for startTransmit failure rollback
         ringBuffer[txSlot][0] = 0; // Mark as consumed (data is in lora_tx_buffer)
         advanceIReadPastEmpty();
 
@@ -1594,6 +1595,15 @@ bool doTX()
                         enablePATransmit();
                         #endif
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
+                        if(transmissionState != RADIOLIB_ERR_NONE)
+                        {
+                            Serial.printf("[LoRa] startTransmit(track) failed: %d\n", transmissionState);
+                            tx_is_active = false;
+                            ringBuffer[save_read][0] = sendlng;
+                            ringBuffer[save_read][1] = save_ring_status;
+                            iRead = iReadBeforeAdvance;
+                            return false;
+                        }
                         #endif
                         bLED_RED = true;
                     #endif
@@ -1626,6 +1636,15 @@ bool doTX()
                     enablePATransmit();
                     #endif
                     transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
+                    if(transmissionState != RADIOLIB_ERR_NONE)
+                    {
+                        Serial.printf("[LoRa] startTransmit(aprs) failed: %d\n", transmissionState);
+                        tx_is_active = false;
+                        ringBuffer[save_read][0] = sendlng;
+                        ringBuffer[save_read][1] = save_ring_status;
+                        iRead = iReadBeforeAdvance;
+                        return false;
+                    }
                     #endif
                     bLED_ORANGE = true;
                 #endif
@@ -1683,6 +1702,17 @@ bool doTX()
                             Serial.printf("[MC-DBG] RADIO_TX len=%d\n", sendlng);
 
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
+                        if(transmissionState != RADIOLIB_ERR_NONE)
+                        {
+                            Serial.printf("[LoRa] startTransmit failed: %d\n", transmissionState);
+                            tx_is_active = false;
+                            ringBuffer[save_read][0] = sendlng;
+                            #ifndef BOARD_TLORA_OLV216
+                            ringBuffer[save_read][1] = save_ring_status;
+                            #endif
+                            iRead = iReadBeforeAdvance; // re-include slot in scan window
+                            return false;
+                        }
                         #endif
                         bLED_RED = true;
                     #endif
@@ -1795,11 +1825,7 @@ bool updateRetransmissionStatus()
                     Serial.println("");
                 }
 
-                // Mark original as done and free slot
-                ringBuffer[ircheck][1] = RING_STATUS_DONE;
-                ringBuffer[ircheck][0] = 0;  // free slot so getNextTxSlot skips it
-
-                // Copy message to new slot at iWrite
+                // Copy message to new slot BEFORE clearing original (len must still be valid)
                 memcpy(ringBuffer[iWrite], ringBuffer[ircheck], size + 2);
 
                 if (ringBuffer[iWrite][2] == MSG_TYPE_TEXT) // text messages
@@ -1809,6 +1835,10 @@ bool updateRetransmissionStatus()
 
                 // Transfer and increment retry count
                 retryCount[iWrite] = retryCount[ircheck] + 1;
+
+                // Mark original as done and free slot (after copy, so len is correct in new slot)
+                ringBuffer[ircheck][1] = RING_STATUS_DONE;
+                ringBuffer[ircheck][0] = 0;  // free slot so getNextTxSlot skips it
 
                 addTxRingEntry("retransmit");
 
