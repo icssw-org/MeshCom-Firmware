@@ -1079,7 +1079,7 @@ void sub_page_setup()
     web_client.println("</div><div class=\"grid grid2\">");
 
     _create_setup_switch_element("display", "Display", "keep display active permanently", !bDisplayOff);        // create Switch-Element inclucing Label and Description
-    _create_setup_switch_element("small", "small Display", "reduce content for small displays", bSMALLDISPLAY); // create Switch-Element inclucing Label and Description
+    //NOT USED _create_setup_switch_element("small", "small Display", "reduce content for small displays", bSMALLDISPLAY); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("volt", "Voltage", "show batt. voltage, not percent", bDisplayVolt);           // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("mesh", "Mesh", "enable mesh/forwarding of received LoRa messages", bMESH);    // create Switch-Element inclucing Label and Description
 
@@ -1189,23 +1189,33 @@ void sub_page_setup()
 
     web_client.println("<div class=\"grid grid3\">");
 
+    #if defined(ANALOG_PIN)
     _create_setup_textinput_element("angpio", "Analog GPIO", String(meshcom_settings.node_analog_pin), "2", "angpio", 3, false, false);                // create Textinput-Element including Label and Button
     _create_setup_textinput_element("afactor", "Analog Factor", String(meshcom_settings.node_analog_faktor, 6), "1.000", "afactor", 10, false, false); // create Textinput-Element including Label and Button
     _create_setup_textinput_element("aslope", "Analog Slope", String(meshcom_settings.node_analog_slope, 6), "1.000", "aslope", 10, false, false); // create Textinput-Element including Label and Button
     _create_setup_textinput_element("aoffset", "Analog Offset", String(meshcom_settings.node_analog_offset, 6), "0", "aoffset", 3, false, false); // create Textinput-Element including Label and Button
+    #endif
 
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid2\">");
 
+    #if defined(ANALOG_PIN)
     _create_setup_switch_element("analogcheck", "Analog", "enable analog GPIO measurement", bAnalogCheck); // create Switch-Element inclucing Label and Description
+    #endif
     _create_setup_switch_element("bmp", "BMP280", "enable BMP280 sensor", bBMPON);                         // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("bme", "BME280", "enable BME280 sensor", bBMEON);                         // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("680", "BME680", "enable BME680 sensor", bBME680ON);                      // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("811", "MCU811", "enable MCU811 sensor", bMCU811ON);                      // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("ina226", "INA226", "enable INA226 sensor", bINA226ON);                   // create Switch-Element inclucing Label and Description
+    #if defined(ENABLE_AHT20)
     _create_setup_switch_element("aht20", "AHT20", "enable AHT20 sensor", bAHT20ON);                       // create Switch-Element inclucing Label and Description
+    #endif
+    #if defined(ENABLE_SHT21)
     _create_setup_switch_element("sht21", "SHT21", "enable SHT21 sensor", bSHT21ON);                       // create Switch-Element inclucing Label and Description
+    #endif
+    #if defined(ENABLE_SOFTSER)
     _create_setup_switch_element("softser", "SoftSer", "enable software serial console", bSOFTSERON);      // create Switch-Element inclucing Label and Description
+    #endif
 
     web_client.println("</div>");
     
@@ -1598,8 +1608,11 @@ void sub_page_mcp23017()
     web_client.println("<thead><tr class=\"font-bold\"><td>PORT</td><td>In/Out</td><td>Name</td><td>Status</td><td>Set</td></tr></thead>");
 
 
-    Serial.printf("t_out = %i\n", t_out);
-    Serial.printf("t_in = %i\n", t_in);
+    if(bDEBUG)
+    {
+        Serial.printf("t_out = %i\n", t_out);
+        Serial.printf("t_in = %i\n", t_in);
+    }
 
 
     for (int io = 0; io < 16; io++)
@@ -1624,7 +1637,8 @@ void sub_page_mcp23017()
             iAB = io;
         }
 
-        Serial.printf("Port %c%i has mask %i and t_in %i and t_out %i\n",cAB, iAB, t_io, t_in, t_out);
+        if(bDEBUG)
+            Serial.printf("Port %c%i has mask %i and t_in %i and t_out %i\n",cAB, iAB, t_io, t_in, t_out);
 
         web_client.printf("<tr><td>[%c%i]</td><td>", cAB, iAB);
         snprintf(onclick, 100, "setvalue('mcpio%c%i','%s',true)", cAB, iAB, bOut ?"in":"out");
@@ -1881,10 +1895,10 @@ void setparam(String web_header)
 
     webSetup_setParam(&setupData);
 
-    // Serial.printf("pName: %s\n", setupData.paramName);
-    // Serial.printf("pValue: %s\n", setupData.paramValue);
-    // Serial.printf("retcode: %i\n", setupData.returnCode);
-    // Serial.printf("retvalue: %s\n", setupData.returnValue);
+    //Serial.printf("pName: %s\n", setupData.paramName);
+    //Serial.printf("pValue: %s\n", setupData.paramValue);
+    //Serial.printf("retcode: %i\n", setupData.returnCode);
+    //Serial.printf("retvalue: %s\n", setupData.returnValue);
 
     if (setupData.returnCode == WS_RETURNCODE_OKAY)
         send_http_header(200, RESPONSE_TYPE_JSON);

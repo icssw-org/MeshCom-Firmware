@@ -919,7 +919,7 @@ void commandAction(char *umsg_text, bool ble)
     }
     #endif
     else
-    #if defined (ANALOG_PIN)
+    #if defined(ANALOG_PIN)
     if(commandCheck(msg_text+2, (char*)"analog gpio ") == 0)
     {
         int iap = meshcom_settings.node_analog_pin;
@@ -3612,11 +3612,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         iVar = 99;
 
-        String strMasterPort = "";
-        strMasterPort.concat(msg_text[9]);
-        strMasterPort.toUpperCase();
-
-        if(strMasterPort == "A" || strMasterPort == "B")
+        if(msg_text[9] == 'a' || msg_text[9] == 'b' || msg_text[9] == 'A' || msg_text[9] == 'B')
         {
             snprintf(_owner_c, sizeof(_owner_c), "%-1.1s", msg_text+10);
             sscanf(_owner_c, "%d", &iVar);
@@ -3624,7 +3620,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(iVar >= 0 && iVar <= 7)
         {
-            if(strMasterPort == "B")
+            if(msg_text[9] == 'b' || msg_text[9] == 'B')
                 iVar = iVar + 8;
 
             bool bSet = false;
@@ -3643,14 +3639,14 @@ void commandAction(char *umsg_text, bool ble)
 
                 //Serial.printf("strsep:%s\n", strsep.c_str());
 
-                if(strsep.startsWith("HIGH"))
+                if(strsep.startsWith("HIGH") || strsep.startsWith("ON"))
                 {
                     meshcom_settings.node_mcp17out = meshcom_settings.node_mcp17out | mask;
 
                     bSet = true;
                 }
                 else
-                if(strsep.startsWith("LOW"))
+                if(strsep.startsWith("LOW") || strsep.startsWith("OFF"))
                 {
                     meshcom_settings.node_mcp17out = meshcom_settings.node_mcp17out & (mask ^ 0xFFFF);
 
@@ -3683,11 +3679,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         iVar = 99;
 
-        String strMasterPort = "";
-        strMasterPort.concat(msg_text[8]);
-        strMasterPort.toUpperCase();
-
-        if(strMasterPort == "A" || strMasterPort == "B")
+        if(msg_text[8] == 'a' || msg_text[8] == 'b' || msg_text[8] == 'A' || msg_text[8] == 'B')
         {
             snprintf(_owner_c, sizeof(_owner_c), "%-1.1s", msg_text+9);
             sscanf(_owner_c, "%d", &iVar);
@@ -3695,7 +3687,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(iVar >= 0 && iVar <= 7)
         {
-            if(strMasterPort == "B")
+            if(msg_text[8] == 'b' || msg_text[8] == 'B')
                 iVar = iVar + 8;
 
             bool bSet = false;

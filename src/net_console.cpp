@@ -166,6 +166,8 @@ static void authTask(void* arg)
 
         if (readOk)
         {
+            Serial.printf("[CON] s_password:<%s> lng:%i resoBuf:<%s>\n", s_password, strlen(s_password), respBuf);
+
             // KBC check without SHA256
             if(memcmp(respBuf, s_password, strlen(s_password)) != 0)
             {
