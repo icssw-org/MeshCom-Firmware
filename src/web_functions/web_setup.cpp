@@ -20,7 +20,7 @@ void webSetup_setParam(setupStruct *setupData){
     char message_text[200];
 
     if(bDEBUG)
-    Serial.println("Processing Param: "+setupData->paramName+" with value: "+setupData->paramValue);
+        Serial.println("Processing Param: "+setupData->paramName+" with value: "+setupData->paramValue);
 
 
     if(setupData->paramName.equals("manualcommand")) {        
@@ -349,6 +349,7 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    #if defined(ENABLE_SOFTSER)
     if(setupData->paramName.equals("softser")) {        
         snprintf(message_text, sizeof(message_text), "--softser %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
@@ -356,6 +357,7 @@ void webSetup_setParam(setupStruct *setupData){
         setupData->returnValue = bSOFTSERON?"on":"off";
         return;
     } else
+    #endif
 
     if(setupData->paramName.equals("setgrc")) {        
         snprintf(message_text, sizeof(message_text), "--setgrc %s", setupData->paramValue.c_str());
@@ -456,6 +458,7 @@ void webSetup_setParam(setupStruct *setupData){
     } else
 
     if(setupData->paramName.equals("netconsole")) {
+        snprintf(message_text, sizeof(message_text), "--netconsole %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
         setupData->returnCode = (bNET_CONSOLE == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = bNET_CONSOLE?"on":"off";
@@ -494,7 +497,8 @@ void webSetup_setParam(setupStruct *setupData){
         String port = setupData->paramName.substring(6);
         port.toUpperCase();
 
-        if(port.length()!= 2) {
+        if(port.length() != 2)
+        {
             setupData->returnCode = WS_RETURNCODE_FAIL;
             return;
         }
@@ -509,8 +513,9 @@ void webSetup_setParam(setupStruct *setupData){
         uint16_t bitmask = 1 << t_io;
         bool outputEnabled = (meshcom_settings.node_mcp17out & bitmask) > 0;  // check PIN set to OUTPUT
 
-        setupData->returnCode = (outputEnabled == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        setupData->returnValue = outputEnabled?"on":"off";
+        setupData->returnCode = WS_RETURNCODE_OKAY;
+        outputEnabled = (setupData->paramValue.compareTo("on")==0);
+        setupData->returnValue = outputEnabled?"off":"on";
 
         return;
     } else
@@ -655,10 +660,12 @@ void webSetup_getParam(setupStruct *setupData){
         return;
     } else
 
+    /* not used
     if(setupData->paramName.equals("small")) {
         setupData->returnValue = bSMALLDISPLAY?"on":"off";
         return;
     } else
+    */
 
     if(setupData->paramName.equals("volt")) {
         setupData->returnValue = bDisplayVolt?"on":"off";
@@ -843,6 +850,7 @@ void webSetup_getParam(setupStruct *setupData){
     }
 
     if(setupData->paramName.equals("netconsole")) {
+        setupData->returnValue = bNET_CONSOLE?"on":"off";
         return;
     }
 
