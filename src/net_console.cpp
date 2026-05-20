@@ -113,6 +113,8 @@ static void teardownClient()
     if (s_fd >= 0) { ::close(s_fd); s_fd = -1; }
     s_hwSerial.printf("[CON] Client disconnected. free heap=%u\n",
                       (unsigned)esp_get_free_heap_size());
+
+    xSemaphoreGive(s_mutex);
 }
 
 // ── Auth task — HMAC-SHA256 challenge-response ────────────────────────────────
@@ -283,6 +285,22 @@ void startNetConsole()
     s_hwSerial.println("[CON] HMAC console init.");
 }
 
+void stopNetConsole()
+{
+    if (!s_started) return;
+    s_started        = false;
+    s_mutex          = xSemaphoreCreateMutex();
+    s_server_pending = false;   // open socket on next loopNetConsole() call
+
+    // stop
+    if(s_listen_fd >= 0)
+        ::close(s_listen_fd); s_listen_fd = -1;
+
+    teardownClient();
+
+    s_hwSerial.println("[CON] HMAC console stopped.");
+}
+
 void loopNetConsole()
 {
     // Open listening socket on first call (triggered by startNetConsole)
@@ -329,7 +347,6 @@ void loopNetConsole()
             if (s_mutex && xSemaphoreTake(s_mutex, portMAX_DELAY) == pdTRUE)
             {
                 teardownClient();
-                xSemaphoreGive(s_mutex);
             }
         }
         return;
@@ -389,7 +406,6 @@ int netConsoleRead()
         if (s_mutex && xSemaphoreTake(s_mutex, 0) == pdTRUE)
         {
             teardownClient();
-            xSemaphoreGive(s_mutex);
         }
     }
     return -1;
@@ -409,7 +425,6 @@ bool netConsoleAvailable()
         if (s_mutex && xSemaphoreTake(s_mutex, 0) == pdTRUE)
         {
             teardownClient();
-            xSemaphoreGive(s_mutex);
         }
     }
     return false;

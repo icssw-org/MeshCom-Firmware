@@ -756,14 +756,14 @@ void esp32setup()
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
     bWIFIAP = meshcom_settings.node_sset2 & 0x0080;
     bGATEWAY_NOPOS =  meshcom_settings.node_sset2 & 0x0100;
-    bNET_CONSOLE = meshcom_settings.node_sset2 & 0x1000;
-    #ifndef DISABLE_NET_CONSOLE
-    netConsoleSetPassword(meshcom_settings.node_passwd);
-    #endif
     bSMALLDISPLAY =  false;
     bSOFTSERREAD = meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
+    bNET_CONSOLE = meshcom_settings.node_sset2 & 0x1000;
+    #ifndef DISABLE_NET_CONSOLE
+    netConsoleSetPassword(meshcom_settings.node_passwd);
+    #endif
     bCHECKMESH = meshcom_settings.node_sset2 & 0x2000;
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
@@ -3517,10 +3517,17 @@ void esp32loop()
         }
 
         #ifndef DISABLE_NET_CONSOLE
-        if(bNET_CONSOLE && iWlanWait == 0)
+        if(iWlanWait == 0)
         {
-            startNetConsole();
-            loopNetConsole();
+            if(bNET_CONSOLE)
+            {
+                startNetConsole();
+                loopNetConsole();
+            }
+            else
+            {
+                stopNetConsole();
+            }
         }
         #endif
 
