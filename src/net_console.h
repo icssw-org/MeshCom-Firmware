@@ -32,6 +32,7 @@
 #define NET_CONSOLE_PORT 2323
 
 void startNetConsole();
+void stopNetConsole();
 void loopNetConsole();
 bool isNetConsoleConnected();
 

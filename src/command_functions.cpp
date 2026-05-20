@@ -2051,7 +2051,7 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"netconsole off") == 0)
     {
         bNET_CONSOLE=false;
-        meshcom_settings.node_sset2 &= ~0x1000;
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x6FFF;
 
         save_settings();
 
@@ -2062,7 +2062,8 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"netconsole") == 0)
     {
         // show current net console status; return early to prevent match against --tls... handler
-        Serial.printf("...net console is %s\n", bNET_CONSOLE ? "on (port 2323)" : "off");
+        snprintf(_owner_c, sizeof(_owner_c), "on (%s port 2323)", meshcom_settings.node_ip);
+        Serial.printf("...net console is %s\n", bNET_CONSOLE ? _owner_c : "off");
         return;
     }
     else
