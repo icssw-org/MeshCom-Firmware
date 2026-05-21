@@ -111,7 +111,7 @@ static void teardownClient()
     s_authenticated = false;
     s_peek_valid    = false;
     if (s_fd >= 0) { ::close(s_fd); s_fd = -1; }
-    s_hwSerial.printf("[CON] Client disconnected. free heap=%u\n",
+    s_hwSerial.printf("[CON ]...Client disconnected. free heap=%u\n",
                       (unsigned)esp_get_free_heap_size());
 
     xSemaphoreGive(s_mutex);
@@ -168,7 +168,7 @@ static void authTask(void* arg)
 
         if (readOk)
         {
-            Serial.printf("[CON] s_password:<%s> lng:%i resoBuf:<%s>\n", s_password, strlen(s_password), respBuf);
+            Serial.printf("[CON ]...s_password:<%s> lng:%i resoBuf:<%s>\n", s_password, strlen(s_password), respBuf);
 
             // KBC check without SHA256
             if(memcmp(respBuf, s_password, strlen(s_password)) != 0)
@@ -201,7 +201,7 @@ static void authTask(void* arg)
     {
         ::send(fd, "FAIL\r\n", 6, 0);
         ::close(fd);
-        s_hwSerial.println("[CON] Authentication failed.");
+        s_hwSerial.println("[CON ]...Authentication failed.");
         s_hs_running = false;
         vTaskDelete(nullptr);
         return;
@@ -221,7 +221,7 @@ static void authTask(void* arg)
         s_authenticated = true;
         xSemaphoreGive(s_mutex);
     }
-    s_hwSerial.printf("[CON] Client authenticated on port %d. free heap=%u\n",
+    s_hwSerial.printf("[CON ]...Client authenticated on port %d. free heap=%u\n",
                       NET_CONSOLE_PORT, (unsigned)esp_get_free_heap_size());
     s_hs_running = false;
     vTaskDelete(nullptr);
@@ -282,7 +282,7 @@ void startNetConsole()
     s_started        = true;
     s_mutex          = xSemaphoreCreateMutex();
     s_server_pending = true;   // open socket on next loopNetConsole() call
-    s_hwSerial.println("[CON] HMAC console init.");
+    s_hwSerial.println("[CON ]...HMAC console init.");
 }
 
 void stopNetConsole()
@@ -298,7 +298,7 @@ void stopNetConsole()
 
     teardownClient();
 
-    s_hwSerial.println("[CON] HMAC console stopped.");
+    s_hwSerial.println("[CON ]...HMAC console stopped.");
 }
 
 void loopNetConsole()
@@ -311,7 +311,7 @@ void loopNetConsole()
         s_listen_fd = ::socket(AF_INET, SOCK_STREAM, 0);
         if (s_listen_fd < 0)
         {
-            s_hwSerial.println("[CON] socket() failed.");
+            s_hwSerial.println("[CON ]...socket() failed.");
             return;
         }
         int opt = 1;
@@ -326,13 +326,13 @@ void loopNetConsole()
         if (::bind(s_listen_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0 ||
             ::listen(s_listen_fd, 1) < 0)
         {
-            s_hwSerial.println("[CON] bind/listen failed.");
+            s_hwSerial.println("[CON ]...bind/listen failed.");
             ::close(s_listen_fd); s_listen_fd = -1;
             return;
         }
         int fl = fcntl(s_listen_fd, F_GETFL, 0);
         fcntl(s_listen_fd, F_SETFL, fl | O_NONBLOCK);
-        s_hwSerial.printf("[CON] Console started on port %d\n", NET_CONSOLE_PORT);
+        s_hwSerial.printf("[CON ]...Console started on port %d\n", NET_CONSOLE_PORT);
     }
 
     if (s_listen_fd < 0) return;
@@ -359,15 +359,15 @@ void loopNetConsole()
     if (client_fd < 0)
     {
         if (errno != EAGAIN && errno != EWOULDBLOCK)
-            s_hwSerial.printf("[CON] accept() error: errno=%d\n", errno);
+            s_hwSerial.printf("[CON ]...accept() error: errno=%d\n", errno);
         return;
     }
 
-    s_hwSerial.printf("[CON] accept() fd=%d free=%u\n", client_fd, (unsigned)esp_get_free_heap_size());
+    s_hwSerial.printf("[CON ]...accept() fd=%d free=%u\n", client_fd, (unsigned)esp_get_free_heap_size());
 
     if (s_hs_running)
     {
-        s_hwSerial.println("[CON] Rejected: auth already in progress");
+        s_hwSerial.println("[CON ]...Rejected: auth already in progress");
         ::close(client_fd);
         return;
     }
@@ -377,7 +377,7 @@ void loopNetConsole()
     BaseType_t rc = xTaskCreatePinnedToCore(authTask, "con_auth", 3072, args, 1, nullptr, 1);
     if (rc != pdPASS)
     {
-        s_hwSerial.printf("[CON] xTaskCreate failed: %d\n", rc);
+        s_hwSerial.printf("[CON ]...xTaskCreate failed: %d\n", rc);
         delete args; ::close(client_fd); s_hs_running = false;
     }
 }
