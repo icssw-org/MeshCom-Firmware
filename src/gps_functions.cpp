@@ -19,8 +19,6 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 
-#include "log_functions.h"
-
 #define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
 
 #include <TinyGPSPlus.h>
@@ -128,7 +126,7 @@ unsigned long detectBaudrate()
         }
 
         if(iGPSDEBUG >= 2 && GPS_BAUDS_RX[iGpsBaud] > 0)
-          Serial.printf("[GPS]...%lu baud --> %i chars\n", GPS_BAUDS[iGpsBaud], GPS_BAUDS_RX[iGpsBaud]);
+          Serial.printf("[GPS ]...%lu baud --> %i chars\n", GPS_BAUDS[iGpsBaud], GPS_BAUDS_RX[iGpsBaud]);
 
         #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
         Serial1.end();
@@ -153,7 +151,7 @@ unsigned long detectBaudrate()
 
     if(ipos >= 0)
     {
-        Serial.printf("[GPS]...found with %lu baud (%i chars)\n", GPS_BAUDS[ipos], itxt);
+        Serial.printf("[GPS ]...found with %lu baud (%i chars)\n", GPS_BAUDS[ipos], itxt);
 
         gpsDetected = true;
 
@@ -207,7 +205,7 @@ unsigned long detectBaudrate() {
   detachInterrupt(GPS_RX_PIN);
 
   // Auswertung
-  dbLOG("[GPS] gemessene Flanken %u\n", pulseIndex);
+  Serial.printf("[GPS ]...messured %u\n", pulseIndex);
   long minDiff = 1000000;
   if (pulseIndex < 5) return -1; // Zu wenig Daten empfangen
   unsigned long minDuration = minDiff;
@@ -219,7 +217,8 @@ unsigned long detectBaudrate() {
  
   // Mapping auf Standard-Baudraten
   long calculatedBaud = minDiff / minDuration;
-  dbLLOG(iGPSDEBUG, 2, "[GPS] 1st attempt: %lu Baud of %i\n", calculatedBaud, GPS_BAUD_COUNT);
+  if(iGPSDEBUG >= 2)
+    Serial.printf("[GPS ]...1st attempt: %lu Baud of %i\n", calculatedBaud, GPS_BAUD_COUNT);
 
   long bestMatch = 0;
   if ((calculatedBaud > (GPS_BAUDS[GPS_BAUD_COUNT-1]+1000)) || (calculatedBaud < (GPS_BAUDS[0]-100)) )
@@ -296,7 +295,7 @@ const uint8_t UBX_CFG_RATE[] = {
 };
 
 void sendUBX_CFG_RATE() {  // Binäres Paket senden
-  dbLOG("Sende UBX_CFG_RATE");
+  Serial.println("Sende UBX_CFG_RATE");
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   for (int i = 0; i < (int)sizeof(UBX_CFG_RATE); i++)
   {
@@ -319,7 +318,7 @@ const uint8_t UBX_MON_VER[] = {  // Size 8, swVersion, hwVersion
 };
 
 void sendUBX_MON_VER() {  // Binäres Paket senden
-  dbLOG("Sende UBX_MON_VER");
+  Serial.println("Sende UBX_MON_VER");
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write(UBX_MON_VER, sizeof(UBX_MON_VER));
   #else
@@ -341,7 +340,7 @@ const uint8_t UBX_CFG_CFG[] = {  // Size 21, 'Configuration'
 };
 
 void sendUBX_CFG_CFG() {  // Binäres Paket senden
-  dbLOG("\nSende UBX_CFG_CFG");
+  Serial.println("\nSende UBX_CFG_CFG");
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write(UBX_CFG_CFG, sizeof(UBX_CFG_CFG));
   #else
@@ -404,7 +403,8 @@ void WaitPause() {
   #else
   while ((!GPSSerial.available()) && (millis() < startTimeout)) { delay(5); } // auf Block von Zeichen warten
   #endif
-  dbLLOG(iGPSDEBUG, 2, "[GPS] ... ");
+  if(iGPSDEBUG >= 2)
+    Serial.printf("[GPS ]...wait");
   startTimeout = millis() + 50;  // für Serial Sync Zeichenblock lesen und Pause von 50ms abwarten
   while (millis() < startTimeout) {
     #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
@@ -453,7 +453,7 @@ void SetupUBLOX()
     delay(200);
     #endif
     if(iGPSDEBUG >= 2)
-      Serial.printf("[GPS] UBLOX & lokal auf %li Baud umgestellt\n", new_baud);
+      Serial.printf("[GPS ]...UBLOX changed to %li baud\n", new_baud);
   }
 
   // 1. Alle Nachrichten (GSV) ausschalten, um Flut an Daten zu reduzieren
@@ -475,14 +475,16 @@ void SetupUBLOX()
 
   //Save the current settings to flash and BBR
   sendUBX_CFG_CFG();
-  dbLLOG(iGPSDEBUG, 2, "[GPS] UBLOX save Flash\n");
-  dbLOG("[GPS] UBLOX konfiguriert\n");
+  if(iGPSDEBUG >= 2)
+    Serial.printf("[GPS ]...UBLOX Flash save\n");
+
+  Serial.printf("[GPS ]...UBLOX config finished\n");
 
   WaitPause(); // Pause zwischen Blöcken erreicht
 
   sendUBX_MON_VER();
   ver = readUBXbin();
-  dbLOG("[GPS_VER] %s\n", ver.c_str());
+  Serial.printf("[GPS_VER] %s\n", ver.c_str());
 
 }
 
@@ -492,7 +494,7 @@ void SetupUBLOX()
  */
 void SetupL76K() {
   // Initialize the L76K Chip, use GPS + GLONASS + GALILEO
-  dbLOG("[GPS] >>> $PCAS04,D,D,9*10\n");
+  Serial.printf("[GPS ]>>> $PCAS04,D,D,9*10\n");
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write("$PCAS04,D,D,9*10\r\n");
   #else
@@ -500,7 +502,7 @@ void SetupL76K() {
   #endif
   delay(250);
   // Wiederholrate 1s
-  dbLOG("[GPS] >>> $PCAS02,1000*2E\n");
+  Serial.printf("[GPS ]>>> $PCAS02,1000*2E\n");
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write("$PCAS02,1000*2E\r\n");
   #else
@@ -508,7 +510,7 @@ void SetupL76K() {
   #endif
   delay(250);
   // Switch to portable Mode
-  dbLOG("[GPS] >>> $PCAS11,0*1D\n");
+  Serial.printf("[GPS ]>>> $PCAS11,0*1D\n");
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write("$PCAS11,0*1D\r\n");
   #else
@@ -516,13 +518,13 @@ void SetupL76K() {
   #endif
   delay(250);
   // ask for only RMC and GGA
-  dbLOG("[GPS] >>> $PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\n");
+  Serial.printf("[GPS ]>>> $PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\n");
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
   #else
   GPSSerial.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
   #endif
-  dbLOG("[GPS] L76K konfiguriert\n");
+  Serial.printf("[GPS ]...L76K config finished\n");
 
   // Baudrate auf 38400 umstellen falls erforderlich
   if (detectedBaud != 38400) {
@@ -541,7 +543,7 @@ void SetupL76K() {
     GPSSerial.write("$PCAS00*01\r\n");  // save to Flash
     #endif
 
-    dbLOG("[GPS] L76K auf 38400 Baud gestellt & save Flash\n");
+    Serial.printf("[GPS ]...L76K set to 38400 baud & Flash saved\n");
   }
 }
 
@@ -559,18 +561,19 @@ bool GPSprobe() {
 
   #if defined(ENABLE_L76K)
     on_L76K = true;
-    dbLOG("[GPS]...set fix to L76K\n");
+    Serial.printf("[GPS ]...set fix to L76K\n");
     return true;
   #elif defined(ENABLE_UBLOX)
     on_UBLOX = true;
-    dbLOG("[GPS]...set fix to UBLOX\n");
+    Serial.printf("[GPS ]...set fix to UBLOX\n");
     return true;
   #else
 
-  dbLOG("[GPS]...Try to init L76K/UBLOX\n");
+  Serial.printf("[GPS ]...Try to init L76K/UBLOX\n");
   ver = "";
   startTimeout = millis() + WAIT_DURATION;
-  dbLLOG(iGPSDEBUG, 2, "[GPS] clear RX-Buffer\n");
+  if(iGPSDEBUG >= 2)
+    Serial.printf("[GPS ]...clear NMEA-Buffer\n");
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   while (Serial1.available()) {  // clear RX-Buffer
     ver = ver + char(Serial1.read());
@@ -580,7 +583,7 @@ bool GPSprobe() {
   #endif
 
     if (millis() > startTimeout) { // RC-Buffer muss nach WAIT_DURATION leer sein
-      dbLOG("[GPS_ERR] wait stop NMEA timeout!\n");
+      Serial.printf("[GPS_ERR] wait stop NMEA timeout!\n");
       return false;
     }
   }
@@ -590,7 +593,7 @@ bool GPSprobe() {
   // dient dazu um einen GPS-Modul L76K fix zu setzen
   if (bGPSL76K)
   {
-    dbLOG("[GPS] set L76K GNSS\n");
+    Serial.printf("[GPS ]...set L76K GNSS\n");
     on_L76K = true;
     SetupL76K();
     return true;
@@ -601,14 +604,14 @@ bool GPSprobe() {
   if (bGPSUBLOX)
   {
     // getestet auf UBLOX
-    dbLOG("[GPS] set UBLOX\n");
+    Serial.printf("[GPS ]...set UBLOX\n");
     on_UBLOX = true;
     SetupUBLOX();
     return true;
   }
   
   // get device info
-  dbLOG("[GPS] >>> $PCAS06,0*1B\n");
+  Serial.printf("[GPS ]>>> $PCAS06,0*1B\n");
   WaitPause(); // Pause zwischen Blöcken erreicht
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write("$PCAS06,0*1B\r\n");
@@ -618,13 +621,13 @@ bool GPSprobe() {
 
   ver = readUBX();
 
-  dbLOG("[GPS] <<< %s ...\n", ver.c_str());
-  dbLOG("check Input\n");
+  Serial.printf("[GPS ]<<< %s ...\n", ver.c_str());
+  Serial.printf("check Input\n");
   // bei L76K kommt: $GxTXT,01,01,02, ...
   // bei UBLOX kommt: $GxTXT,01,01,01,PCAS inv format (P || N)
 
   if (ver.indexOf("TXT,01,01,02") >= 0) {  // 02 = general information, zuvor startsWith
-    dbLOG("[GPS] L76K GNSS erfolgreich getestet\n");
+    Serial.printf("[GPS ]...L76K GNSS erfolgreich getestet\n");
     SetupL76K();
     on_L76K = true;
     return true;
@@ -632,13 +635,13 @@ bool GPSprobe() {
 
   if (ver.indexOf("TXT,01,01,01,PCAS") >= 0) {  // 01 = warning message => no PCAS
     // getestet auf UBLOX
-    dbLOG("[GPS] UBLOX verbunden\n");
+    Serial.printf("[GPS ]...UBLOX connected\n");
     SetupUBLOX();
     on_UBLOX = true;
     return true;
   }
 
-  dbLOG("[GPS_ERR] unbekanntes GPS Modul\n");
+  Serial.printf("[GPS_ERR] unbekanntes GPS Modul\n");
   on_UBLOX = false;
   on_L76K = false;
 
@@ -697,7 +700,7 @@ void WZ_GPS_Init()
 
   gpsInitDone = true;
   
-  dbLOG("[GPS]...Init GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
+  Serial.printf("[GPS ]...Init GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
   
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.setPins(GPS_RX_PIN, GPS_TX_PIN);
@@ -712,7 +715,7 @@ void WZ_GPS_Init()
   
   if (detectedBaud > 0)
   {
-    dbLOG("[GPS] erkannte Baudrate: %ld\n", detectedBaud);
+    Serial.printf("[GPS ]...erkannte Baudrate: %ld\n", detectedBaud);
 
     // UART mit der erkannten Baudrate starten:
     #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
@@ -725,13 +728,15 @@ void WZ_GPS_Init()
 
     if (GPSprobe())
     {
-      dbCLOG(on_L76K, "[GPS] L76K erkannt\n");
-      dbCLOG(on_UBLOX, "[GPS] UBLOX erkannt\n");
+      if(on_L76K)
+        Serial.printf("[GPS ]...L76K erkannt\n");
+      if(on_UBLOX)
+        Serial.printf("[GPS ]...UBLOX erkannt\n");
     }
   }
   else
   {
-    dbLOG("[GPS_ERR] Erkennung fehlgeschlagen (Timeout oder kein Signal)\n");
+    Serial.println("[GPS_ERR] Erkennung fehlgeschlagen (Timeout oder kein Signal)");
     gpsDetected = false;
   }
 }
@@ -782,7 +787,7 @@ int WZ_GPS_Loop() {
     {
         if(iGPSDEBUG > 2)
         {
-            Serial.printf("size:%i\n%s\n", NMEAlineIndex, msg_text);
+            Serial.printf("[GPS ]...NMEABuffer size:%i\n%s\n", NMEAlineIndex, msg_text);
         }
 
         // GPS-Daten in unsere Struktur uebertragen
@@ -813,7 +818,7 @@ int WZ_GPS_Loop() {
             //--GPSDEBUG {0,1,2} 0...kein Debug, 1...nur Pos/Zeit-Info, 2...mit NMEA-Daten
             /*
             if(iGPSDEBUG > 0)
-                Serial.printf("[GPS] {\"date\":\"%04d-%02d-%02d\", \"time\":\"%02d:%02d:%02d\", \"sats\":%u, \"HDOP\":%.1f}\n",
+                Serial.printf("[GPS ]...{\"date\":\"%04d-%02d-%02d\", \"time\":\"%02d:%02d:%02d\", \"sats\":%u, \"HDOP\":%.1f}\n",
                 gpsData.year, gpsData.month, gpsData.day, gpsData.hour, gpsData.minute, gpsData.second,
                 gpsData.satellites, gpsData.hdop);
             */
@@ -973,12 +978,12 @@ String WZ_GPS_GetMaidenhead() {
 /*
 void WZ_L76Kreset() {
   gpsInitDone = false;
-  dbLOG("[GPS] Init auf GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
+  Serial.printf("[GPS ]...Init auf GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
 
   // Baudrate-Erkennung: Jede Baudrate kurz ausprobieren
   for (size_t i = 0; i < GPS_BAUD_COUNT; i++) {
     GPSSerial.begin(GPS_BAUDS[i], SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-    dbLOG("[GPS] Teste %lu Baud...\n", GPS_BAUDS[i]);
+    Serial.printf("[GPS ]...test %lu Baud...\n", GPS_BAUDS[i]);
 
     uint32_t start = millis();
     bool found = false;
@@ -994,9 +999,9 @@ void WZ_L76Kreset() {
       }
     }
 
-    dbLOG("\n");
+    Serial.println("");
     if (gps.charsProcessed() > 10) {
-      dbLOG("[GPS] Erkannt bei %lu Baud (%lu Zeichen)\n",
+      Serial.printf("[GPS ]...found %lu Baud (%lu chars)\n",
                         GPS_BAUDS[i], gps.charsProcessed());
       gpsInitDone = true;
       return;
@@ -1005,7 +1010,7 @@ void WZ_L76Kreset() {
     GPSSerial.end();
   }
 
-  USBSerial.printf("[GPS] Kein GPS-Modul erkannt\n");
+  USBSerial.printf("[GPS ]...not GPS-Modul found\n");
   gpsInitDone = false;
 }
 */

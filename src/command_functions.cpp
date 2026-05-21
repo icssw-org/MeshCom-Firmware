@@ -524,8 +524,15 @@ void commandAction(char *umsg_text, bool ble)
             addBLECommandBack((char*)"--reboot now");
         }
 
-        delay(2000);
-        
+        #ifndef DISABLE_NET_CONSOLE
+        if(bNET_CONSOLE)
+        {
+            stopNetConsole();
+        }
+        #endif
+
+        delay(3000);
+
         #ifdef ESP32
             ESP.restart();
         #endif
@@ -2044,7 +2051,8 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
 
-        Serial.printf("...net console on (port 2323)\n");
+        snprintf(_owner_c, sizeof(_owner_c), "on (%s port 2323)", meshcom_settings.node_ip);
+        Serial.printf("...net console %s\n", _owner_c);
         return;
     }
     else
