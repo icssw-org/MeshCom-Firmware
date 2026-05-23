@@ -2043,7 +2043,7 @@ void commandAction(char *umsg_text, bool ble)
         }
     }
     else
-    #ifndef NO_NET_CONSOLE
+    #ifndef DISABLE_NET_CONSOLE
     if(commandCheck(msg_text+2, (char*)"netconsole on") == 0)
     {
         bNET_CONSOLE=true;
@@ -2078,11 +2078,13 @@ void commandAction(char *umsg_text, bool ble)
     #endif
     if(commandCheck(msg_text+2, (char*)"webserver on") == 0)
     {
+        #ifndef BOARD_RAK4630
         if(meshcom_settings.node_netmode == 0 && strlen(meshcom_settings.node_ssid) < 3)
         {
             Serial.println("Please set SSID first");
         }
         else
+        #endif
         {
             bWEBSERVER=true;
             meshcom_settings.node_sset2 |= 0x0040;    // mask 0x0040
