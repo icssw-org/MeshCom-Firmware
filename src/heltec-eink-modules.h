@@ -20,8 +20,8 @@
 
 // All-in-one "Wireless Paper" boards
 #ifdef WIRELESS_PAPER
-//#include "Displays/DEPG0213BNS800/DEPG0213BNS800.h"     // Wireless Paper V1
-//#include "Displays/LCMEN2R13EFC1/LCMEN2R13EFC1.h"       // Wireless Paper V1.1 / Vision Master E213
+//#include "Displays/DEPG0213BNS800/DEPG0213BNS800.h"     // Wireless Paper V1.0 (SSD1680, vom E0213A367-Treiber mit abgedeckt)
+#include "Displays/LCMEN2R13EFC1/LCMEN2R13EFC1.h"         // Wireless Paper V1.1 / Vision Master E213
 #include "Displays/E0213A367/E0213A367.h"                 // Wireless Paper V1.1.1 / V1.2
 #endif
 
