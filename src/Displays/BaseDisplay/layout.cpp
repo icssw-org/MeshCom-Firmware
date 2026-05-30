@@ -190,6 +190,8 @@ void BaseDisplay::landscape() {
     // Orient with LoRa antenna facing up
     #if defined(Vision_Master_E290)
         setRotation(1);
+    #elif defined(WIRELESS_PAPER)
+        setRotation(1);   // TODO: am Geraet verifizieren (ggf. 1 oder 3)
     #else
         setRotation(3);
     #endif

@@ -86,7 +86,8 @@ extern int mheardAlt[MAX_MHEARD];
 #include "TinyGPSPlus.h"
 
 // TinyGPS
-#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS)
+// gps nur fuer Distanz-/Kursberechnung (distanceBetween) - auch ohne ENABLE_GPS sichtbar machen.
+#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS) || defined(BOARD_WIRELESS_PAPER)
 extern TinyGPSPlus gps;
 #endif
 

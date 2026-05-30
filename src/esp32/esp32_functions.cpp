@@ -21,10 +21,14 @@
 #elif defined(BOARD_T_DECK_PLUS)
 #elif defined(BOARD_T_DECK_PRO)
 #elif defined(BOARD_T_CONNECT_PRO)
-#elif defined(BOARD_E290)
+#elif (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER))
 #include "heltec-eink-modules.h"
 
+#if defined(BOARD_E290)
 extern EInkDisplay_VisionMasterE290 epaper_display;
+#elif defined(BOARD_WIRELESS_PAPER)
+extern EInkDisplay_WirelessPaperV1_2 epaper_display;
+#endif
 
 #include "Fonts/FreeSans9pt7b.h"
 #include "Fonts/FreeSansBold12pt7b.h"
@@ -40,7 +44,7 @@ extern EInkDisplay_VisionMasterE290 epaper_display;
 
 void initDisplay()
 {
-#if !defined(BOARD_E290) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+#if ! (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
 
     Serial.println(F("[INIT]...Auto detecting display:"));
         
@@ -76,7 +80,7 @@ void initDisplay()
 
 void startDisplay(char line1[20], char line2[20], char line3[20])
 {
-    #if defined(BOARD_E290)
+    #if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER))
 
     char cvers[20];
 
@@ -97,9 +101,15 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     epaper_display.setFont( &FreeSansBold12pt7b );
     epaper_display.setCursor(20, 50);
     epaper_display.printf("MeshCom %s\n", cvers);
+    #if defined(BOARD_WIRELESS_PAPER)
+    epaper_display.setFont( &FreeSans9pt7b );      // 9pt, damit der lange Name in die Zeile passt
+    epaper_display.setCursor(20, 80);
+    epaper_display.println("Heltec Wireless Paper");
+    #else
     epaper_display.setCursor(65, 80);
     epaper_display.setFont( &FreeSans12pt7b );
     epaper_display.println("HELTEC E290");
+    #endif
 
     epaper_display.setFont( &FreeSans9pt7b );
     epaper_display.setCursor(30, 18);
