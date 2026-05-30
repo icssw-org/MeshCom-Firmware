@@ -27,7 +27,10 @@
 #if defined(BOARD_E290)
 extern EInkDisplay_VisionMasterE290 epaper_display;
 #elif defined(BOARD_WIRELESS_PAPER)
-extern EInkDisplay_WirelessPaperV1_2 epaper_display;
+// Display-Treiber wird zur Laufzeit per Chip-ID gewaehlt -> Zeiger statt festem Objekt.
+extern BaseDisplay* g_epaper_display;
+extern const char*  g_wp_panel_name;
+#define epaper_display (*g_epaper_display)
 #endif
 
 #include "Fonts/FreeSans9pt7b.h"
@@ -42,8 +45,77 @@ extern EInkDisplay_WirelessPaperV1_2 epaper_display;
     extern U8G2 u8g2_2;
 #endif   
 
+#if defined(BOARD_WIRELESS_PAPER)
+// Liest die Controller-Chip-ID des E-Ink-Panels per Software-SPI (Bit-Bang) aus.
+// Methode wie im Heltec-Factory-Test (Wireless_Paper_E0213A367_FactoryTest):
+// Reset -> Befehl 0x2F -> Datenleitung (SDI/MOSI) auf Eingang -> 8 Bit zuruecklesen.
+// Unterscheidet E0213A367 (V1.1.1/V1.2) von LCMEN2R13EFC1 (V1.1). Pins = WirelessPaper-Plattform.
+static uint8_t detectEinkChipId()
+{
+    // E-Ink mit Strom versorgen (VEXT = GPIO45, active LOW)
+    pinMode(PIN_PCB_VEXT, OUTPUT);
+    digitalWrite(PIN_PCB_VEXT, VEXT_ACTIVE);
+    delay(100);
+
+    pinMode(DEFAULT_CLK, OUTPUT);       // SCLK = 3
+    pinMode(PIN_DISPLAY_DC, OUTPUT);    // DC   = 5
+    pinMode(PIN_DISPLAY_CS, OUTPUT);    // CS   = 4
+    pinMode(PIN_DISPLAY_RST, OUTPUT);   // RES  = 6
+
+    digitalWrite(PIN_DISPLAY_RST, LOW);  delay(20);
+    digitalWrite(PIN_DISPLAY_RST, HIGH); delay(20);
+
+    digitalWrite(PIN_DISPLAY_DC, LOW);
+    digitalWrite(PIN_DISPLAY_CS, LOW);
+
+    // Befehl 0x2F (Read Chip-ID) MSB-first heraustakten
+    uint8_t cmd = 0x2F;
+    pinMode(DEFAULT_SDI, OUTPUT);       // MOSI/SDI = 2
+    digitalWrite(DEFAULT_CLK, LOW);
+    for (int i = 0; i < 8; i++)
+    {
+        digitalWrite(DEFAULT_SDI, (cmd & 0x80) ? HIGH : LOW);
+        cmd <<= 1;
+        digitalWrite(DEFAULT_CLK, HIGH); delayMicroseconds(1);
+        digitalWrite(DEFAULT_CLK, LOW);  delayMicroseconds(1);
+    }
+    delay(10);
+
+    // Antwort des Controllers ueber dieselbe Datenleitung einlesen
+    digitalWrite(PIN_DISPLAY_DC, HIGH);
+    pinMode(DEFAULT_SDI, INPUT_PULLUP);
+
+    uint8_t chipId = 0;
+    for (int8_t b = 7; b >= 0; b--)
+    {
+        digitalWrite(DEFAULT_CLK, LOW);  delayMicroseconds(1);
+        digitalWrite(DEFAULT_CLK, HIGH); delayMicroseconds(1);
+        if (digitalRead(DEFAULT_SDI)) chipId |= (1 << b);
+    }
+    digitalWrite(PIN_DISPLAY_CS, HIGH);
+
+    return chipId;
+}
+#endif
+
 void initDisplay()
 {
+#if defined(BOARD_WIRELESS_PAPER)
+    // HW-Version anhand der Panel-Chip-ID bestimmen und passenden Treiber instanziieren.
+    uint8_t chipId = detectEinkChipId();
+    if ((chipId & 0x03) != 0x01)
+    {
+        g_epaper_display = new EInkDisplay_WirelessPaperV1_1();   // LCMEN2R13EFC1 (V1.1)
+        g_wp_panel_name  = "LCMEN2R13EFC1";
+    }
+    else
+    {
+        g_epaper_display = new EInkDisplay_WirelessPaperV1_2();   // E0213A367 (V1.0 / V1.1.1 / V1.2)
+        g_wp_panel_name  = "E0213A367";
+    }
+    Serial.printf("[INIT]...Wireless Paper E-Ink chipId=0x%02X -> %s\n", chipId, g_wp_panel_name);
+#endif
+
 #if ! (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
 
     Serial.println(F("[INIT]...Auto detecting display:"));
@@ -103,8 +175,10 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     epaper_display.printf("MeshCom %s\n", cvers);
     #if defined(BOARD_WIRELESS_PAPER)
     epaper_display.setFont( &FreeSans9pt7b );      // 9pt, damit der lange Name in die Zeile passt
-    epaper_display.setCursor(20, 80);
+    epaper_display.setCursor(20, 72);
     epaper_display.println("Heltec Wireless Paper");
+    epaper_display.setCursor(20, 90);
+    epaper_display.printf("Panel: %s", g_wp_panel_name);   // zur Laufzeit erkannter Controller
     #else
     epaper_display.setCursor(65, 80);
     epaper_display.setFont( &FreeSans12pt7b );

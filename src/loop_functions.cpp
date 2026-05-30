@@ -219,7 +219,14 @@ unsigned int _GW_ID = 0x12345678; // ID of our Node
 #if defined(BOARD_E290)
 EInkDisplay_VisionMasterE290 epaper_display;
 #elif defined(BOARD_WIRELESS_PAPER)
-EInkDisplay_WirelessPaperV1_2 epaper_display;   // Wireless-Paper-Panel, gleicher Instanzname epaper_display wie E290/T-Echo
+// Wireless Paper: Panel-Controller variiert je HW-Version (E0213A367 ab V1.1.1,
+// LCMEN2R13EFC1 bei V1.1). Welcher verbaut ist, wird zur Laufzeit per Chip-ID erkannt
+// (detectEinkChipId() in esp32_functions.cpp) und der passende Treiber dynamisch
+// instanziiert. epaper_display ist daher ein BaseDisplay-Zeiger; das Makro haelt die
+// bestehende ".methode()"-Schreibweise im uebrigen Code unveraendert.
+BaseDisplay* g_epaper_display = nullptr;
+const char*  g_wp_panel_name  = "?";
+#define epaper_display (*g_epaper_display)
 #endif
 
 #include "Fonts/FreeMonoBold9pt7b.h"
