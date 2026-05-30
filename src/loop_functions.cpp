@@ -48,7 +48,10 @@ bool gpsInitDone = false;
 #include "pin_config.h"
 #endif
 // TinyGPS
-#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS)
+// gps (TinyGPSPlus) wird in gps_functions.cpp unbedingt instanziiert und hier nur fuer
+// reine Distanz-/Kursberechnungen (distanceBetween/courseTo) genutzt - kein GPS-Modul noetig.
+// Daher auch fuer Wireless Paper (ohne ENABLE_GPS) sichtbar machen.
+#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS) || defined(BOARD_WIRELESS_PAPER)
 extern TinyGPSPlus gps;
 #endif
 
@@ -210,10 +213,14 @@ char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
 
 unsigned int _GW_ID = 0x12345678; // ID of our Node
 
-#if defined (BOARD_E290)
+#if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER))
 #include "heltec-eink-modules.h"
 
+#if defined(BOARD_E290)
 EInkDisplay_VisionMasterE290 epaper_display;
+#elif defined(BOARD_WIRELESS_PAPER)
+EInkDisplay_WirelessPaperV1_2 epaper_display;   // Wireless-Paper-Panel, gleicher Instanzname epaper_display wie E290/T-Echo
+#endif
 
 #include "Fonts/FreeMonoBold9pt7b.h"
 #include "Fonts/FreeMonoBold12pt7b.h"
@@ -258,7 +265,7 @@ int dzeile[maxdisplines] = {42, 52, 62, 0, 0, 0, 0};
 int dzeile[maxdisplines] = {8, 21, 31, 41, 51, 61, 0};
 #endif
 
-#if !defined(BOARD_E290) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+#if !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
 
 #include <U8g2lib.h>
 
@@ -783,7 +790,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+    #if !defined (BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -1320,7 +1327,7 @@ void sendDisplayTime()
             pagePointer=PAGE_MAX-1;
     }
 
-    #if !defined (BOARD_E290) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK)  && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+    #if !defined (BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK)  && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -2090,8 +2097,11 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     lat = conv_coord_to_dec(aprspos.lat);
     lon = conv_coord_to_dec(aprspos.lon);
 
-    #if defined(ENABLE_GPS)
+    // d_dir_to wird weiter unten im HAS_EPAPER-Block (DrawDirection) genutzt - daher
+    // immer deklarieren, nicht nur unter ENABLE_GPS. Sonst bricht ein E-Paper-Board
+    // ohne GPS (z.B. Wireless Paper) die Kompilierung.
     float d_dir_to = 0;
+    #if defined(ENABLE_GPS)
     d_dir_to = gps.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
     dir_to = d_dir_to;
 

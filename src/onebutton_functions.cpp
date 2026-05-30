@@ -76,7 +76,7 @@ void singleClick()
         }
     }
 
-    #ifdef BOARD_E290
+    #if defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)
         iDisplayType=9;
     #else
         iDisplayType=0;
@@ -161,7 +161,7 @@ void PressLong()
 
   bShowHead=false;
 
-  #ifdef BOARD_E290
+  #if defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)
       sendDisplayMainline();
       E290DisplayUpdate();
   #else
@@ -215,7 +215,7 @@ void init_onebutton()
 /* Initialize a new OneButton instance for a button connected to digital
 *  pin and GND, which is active low [2] and uses the internal pull-up resistor.
 */
-    #if defined (BOARD_E290)
+    #if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER))
       // btn.setup( /*GPIO=*/ iButtonPin, /*active LOW=*/ true, /*pull-up=*/ false);
       btn.setup( /*GPIO=*/ iButtonPin, INPUT, /*active LOW=*/ true);
     #else
