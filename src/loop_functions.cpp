@@ -1163,6 +1163,13 @@ void sendDisplayHead(bool bInit)
 
     sendDisplayMainline();
 
+    #if defined(BOARD_WIRELESS_PAPER)
+    // Info-Seite in EINEM Voll-Refresh aufbauen (fastmodeOff vor dem Zeichnen). Sonst
+    // wuerde ein Fastmode-Partial-Update ueber ein zuvor gecleartes (weisses) Panel nichts
+    // anzeigen -> die Seite bliebe leer (z.B. beim Zurueckschalten aus dem Track-Modus).
+    epaper_display.fastmodeOff();
+    #endif
+
     int izeile = 1;
     snprintf(msg_text, sizeof(msg_text), "CALL : %s", meshcom_settings.node_call);
     sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
