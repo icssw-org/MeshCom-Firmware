@@ -1249,12 +1249,19 @@ void sendDisplayTrack()
     {
         bOneButton = false;
 
+        #if defined(BOARD_WIRELESS_PAPER)
+        // Die Track-Seite ist die einzige Seite, deren Inhalt sich periodisch aendert
+        // (NEXT-Countdown). Ein blosser fastmodeOff()-Voll-Refresh (0xF7) loescht physische
+        // E-Ink-Reste nicht restlos -> es bleibt ein Geist der wechselnden Ziffern stehen.
+        // Daher vor jedem Aufbau ein echtes clear() (weisses Panel), wie beim Track-Entry.
+        epaper_display.clear();
+        #endif
+
         sendDisplayMainline();
 
         #if defined(BOARD_WIRELESS_PAPER)
-        // Die GPS-/Positions-Statusseite in EINEM Voll-Refresh aufbauen (fastmodeOff vor
-        // dem Zeichnen): so gibt es keinen Fastmode-Partial-Zwischenframe, der kurz den
-        // alten Seiteninhalt durchscheinen liesse ("am Beginn etwas zwischen den Zeilen").
+        // Anschliessend in EINEM Voll-Refresh aufbauen (fastmodeOff vor dem Zeichnen): kein
+        // Fastmode-Partial-Zwischenframe ueber dem (jetzt weissen) Panel.
         epaper_display.fastmodeOff();
         #endif
 
