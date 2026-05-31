@@ -173,11 +173,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     epaper_display.printf("MeshCom %s\n", cvers);
     epaper_display.setCursor(65, 80);
     epaper_display.setFont( &FreeSans12pt7b );
-    #if defined(BOARD_WIRELESS_PAPER)
-    epaper_display.println("Heltec PaperW");   // nur der Board-Name, Layout bleibt E290-Standard
-    #else
     epaper_display.println("HELTEC E290");
-    #endif
     epaper_display.setFont( &FreeSans9pt7b );
     epaper_display.setCursor(30, 18);
     epaper_display.println(line1);
