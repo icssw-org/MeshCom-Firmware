@@ -1,7 +1,11 @@
 /*
-definitions for HELTEC Wireless Paper (V1.2 / E0213A367 panel)
+definitions for HELTEC Wireless Paper (ESP32-S3FN8 + SX1262, 2.13" E-Ink 250x122 / Panel 128x250).
 Abgeleitet von vision-master-e290. Keine Onboard-Sensoren, kein GPS.
-ESP32-S3FN8 + SX1262, 2.13" E-Ink 250x122 (Panel 128x250).
+
+Der verbaute Panel-Controller variiert je Hardware-Version und wird zur Laufzeit per
+Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
+  - E0213A367      -> V1.0 / V1.1.1 / V1.2
+  - LCMEN2R13EFC1  -> V1.1
 */
 
 #pragma once
