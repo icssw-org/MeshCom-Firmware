@@ -1282,6 +1282,14 @@ void sendDisplayTrack()
         snprintf(msg_text, sizeof(msg_text), "DIR :old%3i new%3i", (int)posinfo_last_direction, (int)posinfo_direction);
         sendDisplay1306(false, true, 3, dzeile[5], msg_text);
         #endif
+
+        #if defined(BOARD_WIRELESS_PAPER)
+        // Nach dem partiellen Aufbau einen Voll-Refresh nachschieben: loescht die zuvor
+        // angezeigte Seite (Nachricht/Info) physisch, sonst geistert die GPS-/Positions-
+        // seite ueber dem alten Inhalt (gleiches Muster wie sendDisplayPosition).
+        epaper_display.fastmodeOff();
+        epaper_display.update();
+        #endif
     }
 
 
