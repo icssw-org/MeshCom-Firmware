@@ -5,6 +5,8 @@
 // ------------------------
     #define EInkDisplay_WirelessPaperV1 DEPG0213BNS800
     #define EInkDisplay_WirelessPaperV1_1 LCMEN2R13EFC1
+    #define EInkDisplay_WirelessPaperV1_1_1 E0213A367
+    #define EInkDisplay_WirelessPaperV1_2 E0213A367
     #define EInkDisplay_VisionMasterE213 LCMEN2R13EFC1
     #define EInkDisplay_VisionMasterE290 DEPG0290BNS800
 

@@ -19,7 +19,10 @@
 //#include "Displays/GDE029A1/GDE029A1.h"                 // Heltec 2.9" BW V2    - Blue tab
 
 // All-in-one "Wireless Paper" boards
-//#include "Displays/DEPG0213BNS800/DEPG0213BNS800.h"         
-//#include "Displays/LCMEN2R13EFC1/LCMEN2R13EFC1.h"
+#ifdef WIRELESS_PAPER
+//#include "Displays/DEPG0213BNS800/DEPG0213BNS800.h"     // Wireless Paper V1.0 (SSD1680, vom E0213A367-Treiber mit abgedeckt)
+#include "Displays/LCMEN2R13EFC1/LCMEN2R13EFC1.h"         // Wireless Paper V1.1 / Vision Master E213
+#include "Displays/E0213A367/E0213A367.h"                 // Wireless Paper V1.1.1 / V1.2
+#endif
 
 #endif

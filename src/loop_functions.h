@@ -74,7 +74,7 @@ double cround4abs(double dvar);
 int conv_fuss(int alt_meter);
 int conv_meter(int alt_fuss);
 
-#ifdef BOARD_E290
+#if defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)
 void DrawDirection(float angle, int cx, int cy, int radius);
 void DrawRssi(int cx, int cy, int16_t rssi);
 double degreesToRadians(double degrees);

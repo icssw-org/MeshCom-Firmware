@@ -34,6 +34,11 @@ uint32_t vbat_pin = BATTERY_PIN;
 #define NO_OF_SAMPLES   64          //Multisampling
 #endif
 
+#if defined(BOARD_WIRELESS_PAPER)
+uint32_t vbat_pin = BATTERY_PIN;    // GPIO20, VBAT ueber 1:1-Teiler
+#define ADC_CTRL_PIN ADC_CTRL_WP    // GPIO19, Mess-Freigabe (active LOW)
+#endif
+
 #if defined(BOARD_TLORA_OLV216)
 uint32_t vbat_pin = BATTERY_PIN;
 #endif
@@ -246,6 +251,16 @@ void init_batt(void)
 
 	analogReadResolution(12); // Can be 8, 10, 12 or 14
 
+#elif defined(BOARD_WIRELESS_PAPER)
+
+	// Heltec Wireless Paper: VBAT (GPIO20) ueber Control-Pin GPIO19 (active LOW) freigeben.
+	pinMode(vbat_pin, INPUT);
+	pinMode(ADC_CTRL_PIN, OUTPUT);
+	digitalWrite(ADC_CTRL_PIN, HIGH);   // Ruhezustand: Teiler getrennt (Strom sparen)
+
+	analogReadResolution(12);
+	analogSetPinAttenuation(vbat_pin, ADC_11db);   // ~ DB_12: bis ~2,5V am Pin -> *2 deckt 4,2V LiPo ab
+
 #elif defined(BOARD_E22_S3)
 	analogSetAttenuation(ADC_0db);
 	analogReadResolution(12);
@@ -351,11 +366,30 @@ float read_batt(void)
 	#elif defined(BOARD_E290)
 
    		uint16_t battery_levl = analogRead(vbat_pin);
-		
+
 		if(bDisplayCont)
 		 Serial.printf("ADC analog value = <%i>\n", battery_levl);
-	
+
 		raw = (float)battery_levl;
+
+	#elif defined(BOARD_WIRELESS_PAPER)
+
+		// Mess-Freigabe (active LOW): Teiler durchschalten, kurz setteln lassen
+		digitalWrite(ADC_CTRL_PIN, LOW);
+		delay(10);
+
+		uint32_t umv = 0;
+		for (int i = 0; i < 8; i++)
+			umv += analogReadMilliVolts(vbat_pin);   // kalibriert, beruecksichtigt Atten/Vref
+		umv /= 8;
+
+		digitalWrite(ADC_CTRL_PIN, HIGH);            // Teiler wieder trennen (Strom sparen)
+
+		// 1:1-Spannungsteiler -> reale Batteriespannung = Pin-Spannung * ADC_MULTIPLIER (=2)
+		raw = (float)umv * ADC_MULTIPLIER;
+
+		if(bDisplayCont)
+			Serial.printf("%s [BATT]...Wireless Paper pin_mV=%u -> %.0f mV\n", getTimeString().c_str(), umv, raw);
 
 	#elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 
@@ -568,6 +602,8 @@ float read_batt(void)
 		raw = raw * 1000.0; // convert to volt
 	#elif defined(BOARD_E290)
 		raw = raw * 4.13173653;
+	#elif defined(BOARD_WIRELESS_PAPER)
+		// all done - read_batt-Zweig liefert bereits Millivolt (analogReadMilliVolts * 2)
 	#elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         raw = raw * 1.7209; //1.66051;
 	#else
