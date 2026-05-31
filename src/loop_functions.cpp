@@ -1249,20 +1249,16 @@ void sendDisplayTrack()
     {
         bOneButton = false;
 
-        #if defined(BOARD_WIRELESS_PAPER)
-        // Die Track-Seite ist die einzige Seite, deren Inhalt sich periodisch aendert
-        // (NEXT-Countdown). Ein blosser fastmodeOff()-Voll-Refresh (0xF7) loescht physische
-        // E-Ink-Reste nicht restlos -> es bleibt ein Geist der wechselnden Ziffern stehen.
-        // Daher vor jedem Aufbau ein echtes clear() (weisses Panel), wie beim Track-Entry.
-        epaper_display.clear();
-        #endif
-
         sendDisplayMainline();
 
         #if defined(BOARD_WIRELESS_PAPER)
-        // Anschliessend in EINEM Voll-Refresh aufbauen (fastmodeOff vor dem Zeichnen): kein
-        // Fastmode-Partial-Zwischenframe ueber dem (jetzt weissen) Panel.
+        // Direkt im Voll-Refresh aufbauen (fastmodeOff vor dem Zeichnen) - kein Fastmode-
+        // Partial-Zwischenframe. Zusaetzlich die Track-Seite kleiner setzen (FreeSans 9pt
+        // statt 12pt): die RATE-Zeile ("RATE: 1800 NEXT 1778") ist bei 12pt so breit, dass
+        // println die letzte NEXT-Ziffer umbricht - der umgebrochene Rest erschien als
+        // wechselnde "Geister"-Ziffer zwischen Zeile 3 und 4. Bei 9pt passt die Zeile.
         epaper_display.fastmodeOff();
+        epaper_display.setFont(&FreeSans9pt7b);
         #endif
 
         snprintf(msg_text, sizeof(msg_text), "LAT :%.4lf %c %s", meshcom_settings.node_lat, meshcom_settings.node_lat_c, (posinfo_fix?"fix":""));
