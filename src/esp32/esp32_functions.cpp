@@ -165,15 +165,20 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 
     epaper_display.setRotation(270);
 
-    // Start-Screen bewusst unveraendert (E290-Layout) - der erkannte Panel-Controller
-    // wird nur als DEBUG-Zeile am Terminal ausgegeben (siehe initDisplay()).
+    // Start-Screen im Original-E290-Layout - nur der Board-Name ist board-spezifisch.
+    // Der erkannte Panel-Controller wird zusaetzlich als DEBUG-Zeile am Terminal
+    // ausgegeben (siehe initDisplay()).
     epaper_display.fillCircle(10, 10, 10, BLACK);
     epaper_display.setFont( &FreeSansBold12pt7b );
     epaper_display.setCursor(20, 50);
     epaper_display.printf("MeshCom %s\n", cvers);
     epaper_display.setCursor(65, 80);
     epaper_display.setFont( &FreeSans12pt7b );
+    #if defined(BOARD_WIRELESS_PAPER)
+    epaper_display.println("Heltec PaperW");   // Board-Name, Layout bleibt E290-Standard
+    #else
     epaper_display.println("HELTEC E290");
+    #endif
     epaper_display.setFont( &FreeSans9pt7b );
     epaper_display.setCursor(30, 18);
     epaper_display.println(line1);
