@@ -602,6 +602,8 @@ float read_batt(void)
 		raw = raw * 1000.0; // convert to volt
 	#elif defined(BOARD_E290)
 		raw = raw * 4.13173653;
+	#elif defined(BOARD_WIRELESS_PAPER)
+		// all done - read_batt-Zweig liefert bereits Millivolt (analogReadMilliVolts * 2)
 	#elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         raw = raw * 1.7209; //1.66051;
 	#else
