@@ -77,10 +77,15 @@ Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
 
 #define OneWire_GPIO  99 // ungenutzt
 
-// TODO: Batteriemessung am Gerät verifizieren/kalibrieren.
-// Die Wireless Paper hat einen ADC-Spannungsteiler; Pin/Faktor vor Produktivnutzung pruefen.
-#define BATTERY_PIN 1
-#define ADC_MULTIPLIER 4.9245
+// Batteriemessung Heltec Wireless Paper (laut offizieller Heltec/Meshtastic-Pinbelegung):
+//  - VBAT liegt ueber einen 1:1-Spannungsteiler an GPIO20 (ADC)
+//  - Die Messung wird ueber den Control-Pin GPIO19 freigegeben (ACTIVE LOW:
+//    LOW = Teiler durchgeschaltet/messen, HIGH = getrennt/Strom sparen)
+//  - 1:1-Teiler -> Faktor 2 (V_bat = V_pin * 2)
+// Die eigentliche Mess-/Toggle-Logik steht in src/batt_functions.cpp (BOARD_WIRELESS_PAPER).
+#define BATTERY_PIN 20
+#define ADC_CTRL_WP 19          // Mess-Freigabe, active LOW
+#define ADC_MULTIPLIER 2.0      // 1:1-Spannungsteiler
 
 // E-Ink-Versorgung (VEXT=GPIO45, active LOW) wird von der Plattform-Schicht
 // src/Platforms/WirelessPaper/power_controls.cpp (#ifdef WIRELESS_PAPER) gehandhabt.
