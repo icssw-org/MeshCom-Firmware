@@ -1438,10 +1438,11 @@ void sendDisplayTime()
 void sendDisplayMainline()
 {
     #if defined(BOARD_WIRELESS_PAPER)
-    // Nur die Nachrichtenseite (iDisplayType 0) kompakt darstellen; alle Status-/
-    // Info-Seiten (1, 9) im grossen Standardlayout. Wird hier zentral umgeschaltet,
-    // da jede Seite sendDisplayMainline() nach dem Setzen von iDisplayType aufruft.
-    wpApplyLayout(iDisplayType == 0);
+    // Nachrichtenseite (0) und die zeilenreiche Positions-Anzeige (1) kompakt
+    // darstellen; die Info-/Track-Seiten (9) im grossen Standardlayout. Wird hier
+    // zentral umgeschaltet, da jede Seite sendDisplayMainline() nach dem Setzen
+    // von iDisplayType aufruft.
+    wpApplyLayout(iDisplayType == 0 || iDisplayType == 1);
     #endif
 
     char cbatt[10];
@@ -1486,6 +1487,40 @@ void sendDisplayMainline()
     sendDisplay1306(true, false, 3, dzeile[0], msg_text);
     sendDisplay1306(false, false, 3, dzeile[0]+3, (char*)"#L");
 }
+
+#if defined(BOARD_WIRELESS_PAPER)
+// Aktualisiert NUR die obere Statuszeile (Uhrzeit/Akku) per Teilbereich-Refresh
+// (setWindow). Der darunterliegende Seiteninhalt bleibt unberuehrt. Wird alle 10 s
+// aufgerufen - sekuendliches Voll-Update waere auf E-Ink Verschleiss und unnoetig.
+void wpRefreshClock()
+{
+    char cbatt[10];
+    if(bDisplayVolt)
+        snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
+    else
+        snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
+    if(global_batt == 0.0)
+        snprintf(cbatt, sizeof(cbatt), "  USB");
+
+    char st[40];
+    snprintf(st, sizeof(st), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB,
+             meshcom_settings.node_date_hour, meshcom_settings.node_date_minute,
+             meshcom_settings.node_date_second, cbatt);
+
+    // Fensterhoehe exakt 16 px (= 2 Byte; wird nicht auf die naechste 8-px-Byte-Grenze
+    // aufgerundet). Deckt die Statuszeile ab, laesst aber Trennlinie (y=17/22) und die
+    // erste Textzeile (y=19/41) unberuehrt -> die werden nicht angeschnitten und muessen
+    // nicht neu gezeichnet werden.
+    epaper_display.setWindow(0, 0, 250, 16);
+    epaper_display.fastmodeOn();
+    epaper_display.clearMemory();
+    epaper_display.setFont(bWpCompactLayout ? &FreeSans9pt7b : &FreeSans12pt7b);
+    epaper_display.setCursor(3, dzeile[0]);
+    epaper_display.print(st);
+    epaper_display.update();
+    epaper_display.setWindow(0, 0, 250, 122);         // zurueck auf Vollbild
+}
+#endif
 
 void mainStartTimeLoop()
 {
@@ -1557,7 +1592,15 @@ void mainStartTimeLoop()
                 }
                 else
                 {
+                    #if defined(BOARD_WIRELESS_PAPER)
+                    // E-Ink schonen: Uhrzeit nur alle 10 s aktualisieren (Teilbereich-Refresh
+                    // der Statuszeile), statt sekuendlich. sendDisplayTime() ist fuer E-Paper
+                    // ohnehin deaktiviert.
+                    if(meshcom_settings.node_date_second % 10 == 0)
+                        wpRefreshClock();
+                    #else
                     sendDisplayTime(); // Time only
+                    #endif
                 }
 
                 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -2173,7 +2216,13 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     sendDisplayMainline();
 
     #ifdef HAS_EPAPER
+        #if defined(BOARD_WIRELESS_PAPER)
+        // Voll-Refresh (#F) statt #S: loescht die zuvor angezeigte Nachricht physisch,
+        // sonst zeichnet die Positions-Anzeige ueber die alte Nachricht (E-Ink-Ghosting).
+        sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");
+        #else
         sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
+        #endif
     #endif
 
     #if defined(BOARD_T_ECHO)
