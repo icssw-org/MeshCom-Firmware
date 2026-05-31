@@ -1258,6 +1258,17 @@ void esp32setup()
     #else
     if(bRadio)
     {
+        #if defined(BOARD_WIRELESS_PAPER)
+        // Heltec Wireless Paper: TCXO ueber DIO3 mit 1.8V versorgen (Heltec/Meshtastic-Spec).
+        // RadioLibs begin() setzt per Default 1.6V; 1.8V entspricht der Hardware-Vorgabe und
+        // verbessert die Frequenzstabilitaet ueber Temperatur. Nur WP - der gemeinsam genutzte
+        // E290-Funkpfad bleibt unveraendert bei 1.6V.
+        if(radio.setTCXO(1.8) != RADIOLIB_ERR_NONE)
+            Serial.println(F("[LoRa]...TCXO 1.8V konnte nicht gesetzt werden"));
+        else
+            Serial.println(F("[LoRa]...TCXO DIO3 = 1.8V (Wireless Paper)"));
+        #endif
+
         // set boosted gain
         #if defined(SX1262_V3) || defined(SX126x_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || defined(USING_SX1262) || defined(SX1262_V4)
         Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
