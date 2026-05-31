@@ -1590,6 +1590,27 @@ void mainStartTimeLoop()
                         iDisplayChange=1;
                 }
 
+                #if defined(BOARD_WIRELESS_PAPER)
+                // E-Ink: Beim Umschalten des Track-Modus den Bildschirm physisch loeschen
+                // und sofort die passende Seite neu aufbauen. Sonst (a) schreibt die
+                // Track-Seite beim Einschalten ueber den alten Inhalt und (b) bleibt beim
+                // Ausschalten die alte Track-Seite stehen (es laeuft nur noch wpRefreshClock
+                // fuer die oberste Zeile, der Hauptbereich wird nie neu gezeichnet).
+                static int wpLastTrack = -1;
+                if(wpLastTrack != (int)bDisplayTrack)
+                {
+                    if(wpLastTrack != -1)
+                    {
+                        epaper_display.clear();          // physischer Voll-Clear (weiss)
+                        if(bDisplayTrack)
+                            bOneButton = true;           // Track-Seite sofort aufbauen
+                        else
+                            sendDisplayHead(true);       // normale Info-Seite wiederherstellen
+                    }
+                    wpLastTrack = (int)bDisplayTrack;
+                }
+                #endif
+
                 if(bDisplayTrack)
                 {
                     if(DisplayOffWait == 0)
