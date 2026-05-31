@@ -165,26 +165,31 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 
     epaper_display.setRotation(270);
 
-    epaper_display.fillCircle(10, 10,
-        10,                             // Radius: 10px
-        BLACK                           // Color: black
-        );
-
+    #if defined(BOARD_WIRELESS_PAPER)
+    // Kompaktes, lesbares Layout fuer das kleinere 2.13"-Panel (250 x 122 px).
+    // FreeSansBold12pt (E290) ist hier zu breit -> Titel in FreeSans12pt, Rest 9pt.
+    epaper_display.fillCircle(8, 8, 8, BLACK);
+    epaper_display.setFont( &FreeSans12pt7b );
+    epaper_display.setCursor(24, 18);
+    epaper_display.printf("MeshCom %s%s", SOURCE_VERSION, SOURCE_VERSION_SUB);   // z.B. "MeshCom 4.35p"
+    epaper_display.setFont( &FreeSans9pt7b );
+    epaper_display.setCursor(6, 44);
+    epaper_display.println("Heltec Wireless Paper");
+    epaper_display.setCursor(6, 64);
+    epaper_display.printf("Panel: %s", g_wp_panel_name);   // zur Laufzeit erkannter Controller
+    epaper_display.setCursor(6, 90);
+    epaper_display.println(line2);
+    epaper_display.setCursor(6, 110);
+    epaper_display.printf("%s, OE3LCR", line3);   // persoenliches Rufzeichen (lokaler Build; vor Upstream-PR entfernen)
+    #else
+    // E290 (groesseres 2.9"-Panel) - bisheriges Layout unveraendert
+    epaper_display.fillCircle(10, 10, 10, BLACK);
     epaper_display.setFont( &FreeSansBold12pt7b );
     epaper_display.setCursor(20, 50);
     epaper_display.printf("MeshCom %s\n", cvers);
-    #if defined(BOARD_WIRELESS_PAPER)
-    epaper_display.setFont( &FreeSans9pt7b );      // 9pt, damit der lange Name in die Zeile passt
-    epaper_display.setCursor(20, 72);
-    epaper_display.println("Heltec Wireless Paper");
-    epaper_display.setCursor(20, 90);
-    epaper_display.printf("Panel: %s", g_wp_panel_name);   // zur Laufzeit erkannter Controller
-    #else
     epaper_display.setCursor(65, 80);
     epaper_display.setFont( &FreeSans12pt7b );
     epaper_display.println("HELTEC E290");
-    #endif
-
     epaper_display.setFont( &FreeSans9pt7b );
     epaper_display.setCursor(30, 18);
     epaper_display.println(line1);
@@ -192,6 +197,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     epaper_display.println(line2);
     epaper_display.setCursor(65, 120);
     epaper_display.println(line3);
+    #endif
 
     epaper_display.update();
 
