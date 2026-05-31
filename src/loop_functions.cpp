@@ -1514,6 +1514,16 @@ void sendDisplayMainline()
 // aufgerufen - sekuendliches Voll-Update waere auf E-Ink Verschleiss und unnoetig.
 void wpRefreshClock()
 {
+    // V1.1-Panel (LCMEN2R13EFC1) unterstuetzt KEIN partielles Fenster-Update: jedes update()
+    // ist ein Voll-Panel-Refresh aus dem Framebuffer. Der setWindow-Teilrefresh nur der
+    // Statuszeile leert dabei den Framebuffer (clear_page) - der naechste Voll-Refresh wuerde
+    // den darunterliegenden Nachrichtentext loeschen. Daher auf V1.1 KEINEN separaten 10-s-Uhr-
+    // Refresh: die Statuszeile wird beim naechsten regulaeren Seiten-Redraw mitaktualisiert,
+    // der Seiteninhalt bleibt erhalten. V1.2 (E0213A367, SSD1680 mit echtem HW-Fenster) laeuft
+    // unveraendert weiter.
+    if(memcmp(g_wp_panel_name, "LCMEN", 5) == 0)
+        return;
+
     char cbatt[10];
     if(bDisplayVolt)
         snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
