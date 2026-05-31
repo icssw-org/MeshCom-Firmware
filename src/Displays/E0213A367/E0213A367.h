@@ -13,6 +13,13 @@ class E0213A367 : public BaseDisplay {
         static const uint16_t drawing_height = 250;                                 // Usable height
         static const Color supported_colors = (Color) ( BLACK | WHITE );            // Colors available for drawing
 
+        // Partial-Refresh-Waveform (GxEPD2, SSD1680 2.13") fuer sauberes schnelles
+        // Update ohne Ghosting. Vom DEPG0213BNS800-Treiber uebernommen (gleiche
+        // Panel-Klasse); das eingebaute OTP-Fast-Waveform allein verwischt hier.
+        PROGMEM static constexpr uint8_t lut_partial[153] = {
+            #include "lut_partial.inc"
+        };
+
     // Constructors
     // ======================
     public:
