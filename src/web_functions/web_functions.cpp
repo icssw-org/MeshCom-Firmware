@@ -1101,8 +1101,10 @@ void sub_page_setup()
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid grid3\">");
 
+    #ifndef BOARD_RAK4630
     _create_setup_textinput_element("wifissid", "SSID", String(meshcom_settings.node_ssid), "wifi-name", "setssid", 50, false, true);  // create Textinput-Element including Label and Button
     _create_setup_textinput_element("wifipassword", "WiFi Password", String(meshcom_settings.node_pwd), "", "setpwd", 50, true, true); // create Textinput-Element including Label and Button
+    #endif
 
     _create_setup_textinput_element("ownip", "fixed IP", String(meshcom_settings.node_ip), "192.168.2.100", "setownip", 50, false, true);        // create Textinput-Element including Label and Button
     _create_setup_textinput_element("ownsn", "Subnet Mask", String(meshcom_settings.node_subnet), "255.255.255.0", "setownms", 50, false, true); // create Textinput-Element including Label and Button
@@ -1115,7 +1117,9 @@ void sub_page_setup()
     _create_setup_switch_element("netmode", "Ethernet Mode", "switch between WiFi and Ethernet", meshcom_settings.node_netmode == 1);
     #endif
     _create_setup_switch_element("extudp", "ext UDP", "enable ext. UDP", bEXTUDP); // create Switch-Element inclucing Label and Description
+    #ifndef BOARD_RAK4630
     _create_setup_switch_element("netconsole", "net console", "enable net console (port 2323, HMAC auth)", bNET_CONSOLE); // create Switch-Element inclucing Label and Description
+    #endif
     _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);   // create Switch-Element inclucing Label and Description
 
     web_client.println("</div></div>");
