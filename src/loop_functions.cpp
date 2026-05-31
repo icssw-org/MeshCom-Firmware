@@ -2216,13 +2216,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     sendDisplayMainline();
 
     #ifdef HAS_EPAPER
-        #if defined(BOARD_WIRELESS_PAPER)
-        // Voll-Refresh (#F) statt #S: loescht die zuvor angezeigte Nachricht physisch,
-        // sonst zeichnet die Positions-Anzeige ueber die alte Nachricht (E-Ink-Ghosting).
-        sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");
-        #else
         sendDisplay1306(false, true, 0, dzeile[0], (char*)"#S");
-        #endif
     #endif
 
     #if defined(BOARD_T_ECHO)
@@ -2432,6 +2426,13 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #else
     snprintf(msg_text, sizeof(msg_text), "RSSI:%4i", rssi);
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
+    #endif
+
+    #if defined(BOARD_WIRELESS_PAPER)
+    // Nach dem partiellen Aufbau einen Voll-Refresh nachschieben: loescht die zuvor
+    // angezeigte Nachricht physisch (kein Ueberlagern), die Position erscheint sauber.
+    epaper_display.fastmodeOff();
+    epaper_display.update();
     #endif
 
     bSetDisplay=false;
