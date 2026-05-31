@@ -64,7 +64,7 @@ Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
 
 // Onboard-LED der Wireless Paper auf GPIO18 (active HIGH, einfache LED - KEIN NeoPixel).
 // MeshCom blinkt sie als Heartbeat ueber den BOARD_LED-Pfad; standardmaessig AUS
-// (bUSER_BOARD_LED=false), per App/--setbled on einschaltbar. Gleiche Belegung wie T-Beam-1W.
+// (bUSER_BOARD_LED=false), per Terminal-Kommando "--board led on" einschaltbar. Gleiche Belegung wie T-Beam-1W.
 #define BOARD_LED 18
 
 // --- Pins, die von NICHT board-spezifisch geschuetztem Code referenziert werden ---
