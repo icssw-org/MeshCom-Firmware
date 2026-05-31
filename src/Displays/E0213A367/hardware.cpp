@@ -35,9 +35,9 @@ void E0213A367::activate() {
     sendCommand(0x22);
     
     if ( fastmode_state == OFF )
-        sendData(0xF7);
+        sendData(0xF7);     // Full: Waveform aus OTP laden + anzeigen
     else
-        sendData(0xFF);
+        sendData(0xCF);     // Partial: anzeigen MIT der per 0x32 geladenen LUT (nicht OTP)
 
     // Execute the update
     sendCommand(0x20);

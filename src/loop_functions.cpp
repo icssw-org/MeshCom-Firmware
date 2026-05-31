@@ -237,7 +237,22 @@ const char*  g_wp_panel_name  = "?";
 
 #include <GxEPD2.h>
 
+#if defined(BOARD_WIRELESS_PAPER)
+// Standard-Layout (Statusseiten wie Info/Position/Track: gross, ueber das ganze
+// Panel verteilt). Nur die Nachrichtenseite (iDisplayType 0) schaltet via
+// wpApplyLayout() auf ein kompaktes Layout (kleine Statuszeile, enge Zeilen) um,
+// damit eine volle 160-Zeichen-Nachricht passt.
 int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 0};
+bool bWpCompactLayout = false;
+void wpApplyLayout(bool compact)
+{
+    bWpCompactLayout = compact;
+    if(compact) { dzeile[0]=12; dzeile[1]=32; dzeile[2]=47; dzeile[3]=62; dzeile[4]=77; dzeile[5]=92; }
+    else        { dzeile[0]=16; dzeile[1]=41; dzeile[2]=61; dzeile[3]=81; dzeile[4]=101; dzeile[5]=121; }
+}
+#else
+int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 0};
+#endif
 
 #elif defined (BOARD_T_ECHO)
 
@@ -818,8 +833,14 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                 epaper_display.clearMemory();
 
             epaper_display.fastmodeOn();
-            
+
+            #if defined(BOARD_WIRELESS_PAPER)
+            // Nachrichtenseite: kleine Statuszeile (9pt) -> Platz fuer 160 Zeichen.
+            // Statusseiten: gewohnte groessere Schrift (12pt).
+            epaper_display.setFont(bWpCompactLayout ? &FreeSans9pt7b : &FreeSans12pt7b);
+            #else
             epaper_display.setFont(&FreeMonoBold12pt7b);
+            #endif
         #elif defined(BOARD_HELTEC_T114) || defined(BOARD_T_CONNECT_PRO)
         #elif defined(BOARD_TRACKER) || defined(BOARD_T_ECHO) || defined(BOARD_T5_EPAPER) || defined(BOARD_T_DECK_PRO)
         #else
@@ -895,7 +916,12 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     else
                     if(memcmp(pageText[its], "#L", 2) == 0)
                     {
+                        #if defined(BOARD_WIRELESS_PAPER)
+                        // Nachrichtenseite: Linie hoeher (kleine Statuszeile); Statusseiten: wie gewohnt bei 22
+                        epaper_display.drawLine(0, bWpCompactLayout ? 17 : 22, 250, bWpCompactLayout ? 17 : 22, GxEPD_BLACK);
+                        #else
                         epaper_display.drawLine(0, 22, 320, 22, GxEPD_BLACK);
+                        #endif
 
                         //u8g2->drawHLine(pageLine[its][0], pageLine[its][1], 120);
                     }
@@ -1411,6 +1437,13 @@ void sendDisplayTime()
 
 void sendDisplayMainline()
 {
+    #if defined(BOARD_WIRELESS_PAPER)
+    // Nur die Nachrichtenseite (iDisplayType 0) kompakt darstellen; alle Status-/
+    // Info-Seiten (1, 9) im grossen Standardlayout. Wird hier zentral umgeschaltet,
+    // da jede Seite sendDisplayMainline() nach dem Setzen von iDisplayType aufruft.
+    wpApplyLayout(iDisplayType == 0);
+    #endif
+
     char cbatt[10];
     char nodetype[5];
 
@@ -1798,6 +1831,20 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     strAscii = utf8ascii(aprsmsg.msg_payload);
 
+    #if defined(BOARD_WIRELESS_PAPER)
+    // Nachrichtentext mit kompakter Schrift (gleiche 9pt-Glyphen, aber enger
+    // Zeilenabstand 15 statt 22) -> bis zu 160 Zeichen passen auf das Panel.
+    static GFXfont fontMsgCompact;
+    static bool fontMsgCompactReady = false;
+    if(!fontMsgCompactReady)
+    {
+        memcpy_P(&fontMsgCompact, &FreeSans9pt7b, sizeof(GFXfont));
+        fontMsgCompact.yAdvance = 15;
+        fontMsgCompactReady = true;
+    }
+    epaper_display.setFont(&fontMsgCompact);
+    #endif
+
     epaper_display.println(strAscii);
 
     strncpy(pageLastTextLong1[pagePointer], msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
@@ -1805,6 +1852,11 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
     pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
+    #if defined(BOARD_WIRELESS_PAPER)
+    // Neue Nachricht per Voll-Refresh aufbauen -> gestochen scharf, tiefschwarz,
+    // kein Ghosting. Die schnellen Partial-Updates (Uhrzeit) bleiben unberuehrt.
+    epaper_display.fastmodeOff();
+    #endif
     epaper_display.update();
 
     #elif defined (BOARD_T5_EPAPER)
