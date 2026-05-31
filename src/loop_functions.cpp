@@ -1244,6 +1244,13 @@ void sendDisplayTrack()
 
         sendDisplayMainline();
 
+        #if defined(BOARD_WIRELESS_PAPER)
+        // Die GPS-/Positions-Statusseite in EINEM Voll-Refresh aufbauen (fastmodeOff vor
+        // dem Zeichnen): so gibt es keinen Fastmode-Partial-Zwischenframe, der kurz den
+        // alten Seiteninhalt durchscheinen liesse ("am Beginn etwas zwischen den Zeilen").
+        epaper_display.fastmodeOff();
+        #endif
+
         snprintf(msg_text, sizeof(msg_text), "LAT :%.4lf %c %s", meshcom_settings.node_lat, meshcom_settings.node_lat_c, (posinfo_fix?"fix":""));
         sendDisplay1306(false, false, 3, dzeile[1], msg_text);
 
@@ -1282,14 +1289,9 @@ void sendDisplayTrack()
         snprintf(msg_text, sizeof(msg_text), "DIR :old%3i new%3i", (int)posinfo_last_direction, (int)posinfo_direction);
         sendDisplay1306(false, true, 3, dzeile[5], msg_text);
         #endif
-
-        #if defined(BOARD_WIRELESS_PAPER)
-        // Nach dem partiellen Aufbau einen Voll-Refresh nachschieben: loescht die zuvor
-        // angezeigte Seite (Nachricht/Info) physisch, sonst geistert die GPS-/Positions-
-        // seite ueber dem alten Inhalt (gleiches Muster wie sendDisplayPosition).
-        epaper_display.fastmodeOff();
-        epaper_display.update();
-        #endif
+        // Hinweis: Der abschliessende sendDisplay1306(..., bTransfer=true, ...) rendert die
+        // ganze Seite und ruft update() auf - da oben fastmodeOff() gesetzt wurde, ist das
+        // bereits ein sauberer Voll-Refresh (kein separater Nach-Refresh noetig).
     }
 
 
