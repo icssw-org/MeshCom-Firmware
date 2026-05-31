@@ -62,6 +62,11 @@ Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
 // PRG-Taster der Wireless Paper liegt auf GPIO0
 #define BUTTON_PIN 0
 
+// Onboard-LED der Wireless Paper auf GPIO18 (active HIGH, einfache LED - KEIN NeoPixel).
+// MeshCom blinkt sie als Heartbeat ueber den BOARD_LED-Pfad; standardmaessig AUS
+// (bUSER_BOARD_LED=false), per App/--setbled on einschaltbar. Gleiche Belegung wie T-Beam-1W.
+#define BOARD_LED 18
+
 // --- Pins, die von NICHT board-spezifisch geschuetztem Code referenziert werden ---
 // esp32_main.cpp ruft beim Start ungeschuetzt Wire.begin(I2C_SDA, I2C_SCL) auf.
 // Die Wireless Paper hat keine Onboard-I2C-Sensoren; wir setzen die frei liegenden
