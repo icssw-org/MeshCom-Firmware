@@ -329,6 +329,9 @@ extern int iDisplayType;
 #if defined(BOARD_T_ECHO)
 #define maxdisplines 11
 #define PAGE_MAX 6
+#elif defined(BOARD_WIRELESS_PAPER)
+#define maxdisplines 7
+#define PAGE_MAX 10   // Wireless Paper: bis zu 9 gespeicherte Nachrichten in einer Loop durchblaettern
 #else
 #define maxdisplines 7
 #define PAGE_MAX 6

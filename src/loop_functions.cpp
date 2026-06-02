@@ -233,9 +233,26 @@ const char*  g_wp_panel_name  = "?";
 #include "Fonts/FreeMonoBold12pt7b.h"
 
 #include "Fonts/FreeSans9pt7b.h"
+#include "Fonts/FreeSansBold9pt7b.h"
 #include "Fonts/FreeSans12pt7b.h"
 
 #include <GxEPD2.h>
+
+// 9pt-Schrift fuer den E-Paper-Pfad. Auf der Wireless Paper FETT (FreeSansBold), auf der E290
+// regulaer (unveraendert).
+//
+// WARUM FETT? Das E-Ink-Panel kennt nur "Pixel schwarz" oder "Pixel weiss" - keine Graustufen,
+// kein Antialiasing. Ein nur EIN Pixel breiter Strich (wie bei der regulaeren FreeSans9pt) wirkt
+// deshalb NICHT satt schwarz, sondern graeulich/duenn: ein einzelner schwarzer Pixel zwischen
+// weissen Nachbarn wird optisch als Grau wahrgenommen (zu wenig "Masse" Schwarz). Damit ein
+// Strich satt schwarz erscheint, muss er aus MEHREREN Pixeln bestehen - genau das liefert die
+// fette FreeSansBold9pt (Striche ~2 Pixel breit). Gleiche Schriftgroesse (9pt), nur kraeftiger
+// -> auf E-Ink klar lesbar und richtig schwarz statt grau.
+#if defined(BOARD_WIRELESS_PAPER)
+#define WP_FONT9 (&FreeSansBold9pt7b)
+#else
+#define WP_FONT9 (&FreeSans9pt7b)
+#endif
 
 #if defined(BOARD_WIRELESS_PAPER)
 // Standard-Layout (Statusseiten wie Info/Position/Track: gross, ueber das ganze
@@ -244,11 +261,18 @@ const char*  g_wp_panel_name  = "?";
 // damit eine volle 160-Zeichen-Nachricht passt.
 int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 0};
 bool bWpCompactLayout = false;
+// Index der aktuell per 1x-Klick angezeigten Nachricht (oben rechts): neueste=N..aelteste=1,
+// 0 = kein Index (Home/Status, frische Nachricht). Wird in wpRefreshClock mitgezeichnet, damit
+// der 10-s-Statuszeilen-Refresh die Ziffer nicht wegloescht.
+int wpMsgIdx = 0;
 void wpApplyLayout(bool compact)
 {
     bWpCompactLayout = compact;
+    // dzeile[0] = Statuszeilen-Baseline. Bewusst in BEIDEN Layouts 12, damit die 9pt-Schrift
+    // vollstaendig in das 16px-Refresh-Fenster passt (bei 16 wurde die unterste Pixelreihe der
+    // Statuszeile auf den Info-/Track-Seiten abgeschnitten). Body-Zeilen bleiben layout-abhaengig.
     if(compact) { dzeile[0]=12; dzeile[1]=32; dzeile[2]=47; dzeile[3]=62; dzeile[4]=77; dzeile[5]=92; }
-    else        { dzeile[0]=16; dzeile[1]=41; dzeile[2]=61; dzeile[3]=81; dzeile[4]=101; dzeile[5]=121; }
+    else        { dzeile[0]=12; dzeile[1]=41; dzeile[2]=61; dzeile[3]=81; dzeile[4]=101; dzeile[5]=121; }
 }
 #else
 int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 0};
@@ -676,6 +700,9 @@ void insertOwnTx(unsigned int msg_id)
 #if defined(BOARD_T_ECHO)
 #define maxdisplines 11
 #define PAGE_MAX 6
+#elif defined(BOARD_WIRELESS_PAPER)
+#define maxdisplines 7
+#define PAGE_MAX 10   // Wireless Paper: bis zu 9 gespeicherte Nachrichten in einer Loop durchblaettern
 #else
 #define maxdisplines 7
 #define PAGE_MAX 6
@@ -837,7 +864,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             #if defined(BOARD_WIRELESS_PAPER)
             // Nachrichtenseite: kleine Statuszeile (9pt) -> Platz fuer 160 Zeichen.
             // Statusseiten: gewohnte groessere Schrift (12pt).
-            epaper_display.setFont(bWpCompactLayout ? &FreeSans9pt7b : &FreeSans12pt7b);
+            epaper_display.setFont(bWpCompactLayout ? WP_FONT9 : &FreeSans12pt7b);
             #else
             epaper_display.setFont(&FreeMonoBold12pt7b);
             #endif
@@ -905,7 +932,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                         if(!bNeu)
                         {
                             epaper_display.setCursor(0, dzeile[1]);
-                            epaper_display.setFont(&FreeSans9pt7b);
+                            epaper_display.setFont(WP_FONT9);
 
                             epaper_display.println(pageTextLong1);
 
@@ -1121,6 +1148,10 @@ void sendDisplayHead(bool bInit)
 
     bSetDisplay=true;
 
+    #if defined(BOARD_WIRELESS_PAPER)
+    wpMsgIdx = 0;   // Home/Info-Seite -> keine Nachrichten-Ziffer oben rechts
+    #endif
+
     #ifdef BOARD_T5_EPAPER
         bSetDisplay=false;
         return;
@@ -1167,7 +1198,9 @@ void sendDisplayHead(bool bInit)
     // Info-Seite in EINEM Voll-Refresh aufbauen (fastmodeOff vor dem Zeichnen). Sonst
     // wuerde ein Fastmode-Partial-Update ueber ein zuvor gecleartes (weisses) Panel nichts
     // anzeigen -> die Seite bliebe leer (z.B. beim Zurueckschalten aus dem Track-Modus).
+    // Schrift etwas kleiner (FreeSans 9pt statt 12pt) - mehr Platz fuer SSID/IP-Zeilen.
     epaper_display.fastmodeOff();
+    epaper_display.setFont(WP_FONT9);
     #endif
 
     int izeile = 1;
@@ -1258,7 +1291,7 @@ void sendDisplayTrack()
         // println die letzte NEXT-Ziffer umbricht - der umgebrochene Rest erschien als
         // wechselnde "Geister"-Ziffer zwischen Zeile 3 und 4. Bei 9pt passt die Zeile.
         epaper_display.fastmodeOff();
-        epaper_display.setFont(&FreeSans9pt7b);
+        epaper_display.setFont(WP_FONT9);
         #endif
 
         snprintf(msg_text, sizeof(msg_text), "LAT :%.4lf %c %s", meshcom_settings.node_lat, meshcom_settings.node_lat_c, (posinfo_fix?"fix":""));
@@ -1275,7 +1308,13 @@ void sendDisplayTrack()
         snprintf(msg_text, sizeof(msg_text), "NEXT:%5i", pos_seconds);
         sendDisplay1306(false, false, 3, dzeile[4], msg_text);
         #else
+        #if defined(BOARD_WIRELESS_PAPER)
+        // Kompaktere Beschriftung fuer die fette WP-Schrift (FreeSansBold ist breiter), damit die
+        // Zeile nicht umbricht. E290 behaelt die ausfuehrliche Beschriftung.
+        snprintf(msg_text, sizeof(msg_text), "RATE:%4i N:%4i", (int)posinfo_interval, pos_seconds);
+        #else
         snprintf(msg_text, sizeof(msg_text), "RATE: %4i NEXT %4i", (int)posinfo_interval, pos_seconds);
+        #endif
         sendDisplay1306(false, false, 3, dzeile[3], msg_text);
         #endif
 
@@ -1509,19 +1548,51 @@ void sendDisplayMainline()
 }
 
 #if defined(BOARD_WIRELESS_PAPER)
+// Zeichnet die Nachrichten-Ziffer oben rechts (neueste=N..aelteste=1) in den Framebuffer.
+// Muss VOR jedem update() der obersten Zeile aufgerufen werden (wpShowStoredMessage UND
+// wpRefreshClock), sonst loescht der 10-s-Statuszeilen-Refresh die Ziffer weg.
+static void wpDrawMsgIdx()
+{
+    if(wpMsgIdx <= 0) return;
+    char d = '0' + (char)(wpMsgIdx > 9 ? 9 : wpMsgIdx);
+    epaper_display.fillRect(236, 0, 14, dzeile[0] + 3, WHITE);   // Ecke oben rechts freiraeumen
+    epaper_display.setFont(WP_FONT9);
+    epaper_display.setCursor(238, dzeile[0]);
+    epaper_display.print(d);
+}
+
 // Aktualisiert NUR die obere Statuszeile (Uhrzeit/Akku) per Teilbereich-Refresh
 // (setWindow). Der darunterliegende Seiteninhalt bleibt unberuehrt. Wird alle 10 s
 // aufgerufen - sekuendliches Voll-Update waere auf E-Ink Verschleiss und unnoetig.
 void wpRefreshClock()
 {
-    // V1.1-Panel (LCMEN2R13EFC1) unterstuetzt KEIN partielles Fenster-Update: jedes update()
-    // ist ein Voll-Panel-Refresh aus dem Framebuffer. Der setWindow-Teilrefresh nur der
-    // Statuszeile leert dabei den Framebuffer (clear_page) - der naechste Voll-Refresh wuerde
-    // den darunterliegenden Nachrichtentext loeschen. Daher auf V1.1 KEINEN separaten 10-s-Uhr-
-    // Refresh: die Statuszeile wird beim naechsten regulaeren Seiten-Redraw mitaktualisiert,
-    // der Seiteninhalt bleibt erhalten. V1.2 (E0213A367, SSD1680 mit echtem HW-Fenster) laeuft
-    // unveraendert weiter.
-    if(memcmp(g_wp_panel_name, "LCMEN", 5) == 0)
+    // Panel-Unterscheidung fuer die Statuszeilen-Aktualisierung (Uhr/Akku):
+    //  - V1.2 (E0213A367, SSD1680): hat ein echtes Hardware-Fenster -> schneller TEIL-Refresh
+    //    nur der obersten 16px, KEIN Blitzen. Alle 10 s.
+    //  - V1.1 (LCMEN2R13EFC1): unterstuetzt KEIN partielles Fenster -> jeder update() ist ein
+    //    VOLL-Refresh des GANZEN Panels.
+    //
+    // *** E-INK-LEBENSDAUER (wichtig!) ***
+    // Ein Voll-Refresh laesst das gesamte Panel kurz schwarz/weiss durchblitzen und belastet
+    // die E-Ink-Zellen deutlich staerker als ein Teil-Refresh. Deshalb wird die Uhr auf V1.1
+    // NUR alle 60 s (1x pro Minute) per Voll-Refresh aktualisiert - haeufigere Voll-Refreshes
+    // wuerden die Display-Lebensdauer spuerbar verkuerzen. Auf V1.2 bleibt es beim schonenden
+    // 10-s-Teil-Refresh.
+    const bool bV11 = (memcmp(g_wp_panel_name, "LCMEN", 5) == 0);
+
+    // Wechsel der Batterieanzeige VOLT<->PROZ (bDisplayVolt, via --volt/--proz oder Web-Client)
+    // loest selbst KEINEN Display-Refresh aus. Auf V1.2 faengt das der 10-s-Teilrefresh ab; auf
+    // V1.1 wuerde die alte Anzeige sonst bis zum 60-s-Voll-Refresh stehen bleiben und die neue
+    // Zeile ueberlagern. Daher den Wechsel erkennen und auf V1.1 den 60-s-Gate ausnahmsweise
+    // ueberspringen (naechster 10-s-Aufruf refresht dann sauber via fillRect). lastVolt wird bei
+    // JEDEM Aufruf nachgefuehrt (auch auf off-minute-Aufruf, der sonst frueh zurueckkehrt).
+    static bool lastVolt = false;
+    static bool voltInit  = false;
+    const bool voltChanged = voltInit && (lastVolt != bDisplayVolt);
+    lastVolt = bDisplayVolt;
+    voltInit = true;
+
+    if(bV11 && meshcom_settings.node_date_second != 0 && !voltChanged)   // V1.1: sonst nur zum Minutenwechsel (= 60 s)
         return;
 
     char cbatt[10];
@@ -1537,18 +1608,73 @@ void wpRefreshClock()
              meshcom_settings.node_date_hour, meshcom_settings.node_date_minute,
              meshcom_settings.node_date_second, cbatt);
 
-    // Fensterhoehe exakt 16 px (= 2 Byte; wird nicht auf die naechste 8-px-Byte-Grenze
-    // aufgerundet). Deckt die Statuszeile ab, laesst aber Trennlinie (y=17/22) und die
-    // erste Textzeile (y=19/41) unberuehrt -> die werden nicht angeschnitten und muessen
-    // nicht neu gezeichnet werden.
-    epaper_display.setWindow(0, 0, 250, 16);
-    epaper_display.fastmodeOn();
-    epaper_display.clearMemory();
-    epaper_display.setFont(bWpCompactLayout ? &FreeSans9pt7b : &FreeSans12pt7b);
-    epaper_display.setCursor(3, dzeile[0]);
-    epaper_display.print(st);
+    if(bV11)
+    {
+        // V1.1: KEIN partial-window. setWindow waere destruktiv (loescht beim Zuruecksetzen den
+        // Framebuffer -> Seiteninhalt weg). Stattdessen nur die Statuszeilen-Region im
+        // persistenten Framebuffer mit einem weissen Balken loeschen (fillRect), neu beschriften
+        // und dann das GANZE Panel voll-refreshen. Der Seiteninhalt unter der Trennlinie bleibt
+        // dank PRESERVE_IMAGE erhalten. Balkenhoehe knapp unter der Trennlinie (compact y=17,
+        // sonst y=22), damit diese stehen bleibt.
+        epaper_display.fastmodeOff();
+        epaper_display.fillRect(0, 0, 250, bWpCompactLayout ? 16 : 21, WHITE);
+        epaper_display.setFont(WP_FONT9);
+        epaper_display.setCursor(3, dzeile[0]);
+        epaper_display.print(st);
+        wpDrawMsgIdx();                 // Nachrichten-Ziffer oben rechts erhalten
+        epaper_display.update();        // Voll-Refresh: Status neu + Seiteninhalt intakt (Panel blitzt kurz)
+    }
+    else
+    {
+        // V1.2 (SSD1680): schneller Teil-Refresh nur der obersten 16px - kein Blitzen.
+        // Fensterhoehe exakt 16px; Trennlinie (y=22) und erste Textzeile bleiben unberuehrt.
+        epaper_display.setWindow(0, 0, 250, 16);
+        epaper_display.fastmodeOn();
+        epaper_display.clearMemory();
+        epaper_display.setFont(WP_FONT9);   // durchgehend 9pt (alle WP-Seiten sind 9pt)
+        epaper_display.setCursor(3, dzeile[0]);
+        epaper_display.print(st);
+        wpDrawMsgIdx();                 // Nachrichten-Ziffer oben rechts erhalten
+        epaper_display.update();
+        epaper_display.setWindow(0, 0, 250, 122);   // zurueck auf Vollbild (HW-Fenster maskiert den clear)
+    }
+}
+
+// Zeigt eine im Ringpuffer gespeicherte Nachricht (Slot) an - aufgerufen vom 1x-Klick-Browse
+// (singleClick) der Wireless Paper. Liegt bewusst hier, weil onebutton_functions.cpp keinen
+// Zugriff auf epaper_display / wpApplyLayout hat.
+// WICHTIG gegen den Status->Nachricht-Fehler:
+//  - wpApplyLayout(true) erzwingt das KOMPAKTE Layout (WP_FONT9 = 9pt fett). Frueher lief der
+//    Render mit iDisplayType=9 (non-compact) -> Statuszeile wurde 12pt "im alten Stil".
+//  - fastmodeOff()+update() schiebt einen VOLL-Refresh nach. Der "#N"-Fastmode-Partial alleine
+//    liess den zuvor angezeigten Status-Screen durchscheinen (Display "nicht geloescht").
+void wpShowStoredMessage(int slot, int idx)
+{
+    iDisplayType = 0;            // Nachrichtenseite (kompakt)
+    wpApplyLayout(true);         // kompaktes Layout -> 9pt fett, enge Zeilen
+    bDisplayIsOff = false;
+
+    pageLineAnz = pageLastLineAnz[slot];
+    for(int its = 0; its < pageLineAnz; its++)
+    {
+        pageLine[its][0] = pageLastLine[slot][its][0];
+        pageLine[its][1] = pageLastLine[slot][its][1];
+        pageLine[its][2] = pageLastLine[slot][its][2];
+        memcpy(pageText[its], pageLastText[slot][its], 25);
+    }
+    strncpy(pageTextLong1, pageLastTextLong1[slot], sizeof(pageTextLong1));
+    strncpy(pageTextLong2, pageLastTextLong2[slot], sizeof(pageTextLong2));
+
+    sendDisplay1306(false, true, 0, 0, (char*)"#N");
+
+    // Index oben rechts: neueste Meldung = N (max 9), je aelter desto kleiner, bis 1 (aelteste);
+    // 0 = Home-Screen. Global merken, damit der 10-s-wpRefreshClock die Ziffer NICHT wegloescht
+    // (er zeichnet sie via wpDrawMsgIdx() jedes Mal mit).
+    wpMsgIdx = idx;
+    wpDrawMsgIdx();                  // VOR dem Voll-Refresh in den Framebuffer
+
+    epaper_display.fastmodeOff();   // Voll-Refresh nachschieben -> Status-Screen physisch weg
     epaper_display.update();
-    epaper_display.setWindow(0, 0, 250, 122);         // zurueck auf Vollbild
 }
 #endif
 
@@ -1576,7 +1702,15 @@ void mainStartTimeLoop()
         {
             bDisplayIsOff = false;
 
+            #if !defined(BOARD_WIRELESS_PAPER)
             sendDisplayHead(true);
+            #else
+            // E-Ink (Wireless Paper): den ERSTEN von zwei Boot-Aufbauten ueberspringen.
+            // Das Original zeichnet die Info-Seite bei iInitDisplay==4 UND ==8 - auf E-Ink sind
+            // das ZWEI sichtbare Voll-Refreshes (Blitzen/Verschleiss). Wir lassen nur den zweiten
+            // (==8) stehen: gleiche End-Zeit, aber nur EIN Refresh - und mit vollstaendigeren
+            // Daten (IP/Zeit sind bis dahin eher verfuegbar).
+            #endif
 
             bDisplayIsOff = bDisplayOff;
 
@@ -1629,10 +1763,121 @@ void mainStartTimeLoop()
                     }
                     wpLastTrack = (int)bDisplayTrack;
                 }
+
+                // E-Ink behaelt sein Bild auch im "aus"-Zustand (anders als OLED). Beim Wechsel
+                // auf bDisplayIsOff den Schirm daher physisch loeschen (--display off -> weiss).
+                // Das Wieder-Anzeigen bei --display on uebernimmt der Befehl selbst
+                // (sendDisplayHead). wpRefreshClock wird im aus-Zustand uebersprungen (s. unten).
+                static int wpLastOff = -1;
+                if(wpLastOff != (int)bDisplayIsOff)
+                {
+                    if(wpLastOff != -1)
+                    {
+                        if(bDisplayIsOff)
+                            epaper_display.clear();      // --display off -> Panel physisch weiss
+                        else
+                            // --display on -> Info-Seite KOMPLETT neu aufbauen. bInit=true umgeht
+                            // den pageHold/bSetDisplay-Guard in sendDisplayHead (der sonst nur die
+                            // Statuszeile via wpRefreshClock durchkommen liesse).
+                            sendDisplayHead(true);
+                    }
+                    wpLastOff = (int)bDisplayIsOff;
+                }
                 #endif
 
                 if(bDisplayTrack)
                 {
+                    #if defined(BOARD_WIRELESS_PAPER)
+                    // ============================================================================
+                    // Konsequente Tracking-Anzeige-Logik fuer die GPS-LOSE Wireless Paper
+                    // ----------------------------------------------------------------------------
+                    // BEDEUTUNG DES FIX:
+                    // Die Track-Seite ist eine POSITIONS-Anzeige (LAT/LON/RATE/NEXT/...). Sie ist
+                    // nur dann sinnvoll, wenn tatsaechlich eine neue Position vorliegt. Die WP hat
+                    // KEINEN GPS-Empfaenger, d.h. posinfo_fix wird nie true (gps_functions.cpp).
+                    //
+                    // Das spiegelt EXAKT die bereits vorhandene SENDE-Logik wider: sendPosition()
+                    // sendet eine Track-Position ebenfalls nur mit echtem Positionsbezug
+                    //   if(bDisplayTrack && posinfo_fix) { via APRS ... }   (s. weiter unten).
+                    // Die ANZEIGE-Weiche hatte diese Bedingung bisher NICHT und hat die Track-Seite
+                    // bedingungslos alle 15 s per Voll-Refresh erzwungen -> die Nachrichtenseite
+                    // verschwand staendig und das E-Ink wurde unnoetig abgenutzt.
+                    //
+                    // KONSEQUENTE UMSETZUNG (Anzeige = Senden):
+                    // Die Track-Seite wird nur (neu) gezeichnet, wenn ein ECHTES Positionsupdate
+                    // vorliegt = die eigenen Koordinaten (node_lat/node_lon) haben sich seit dem
+                    // letzten Track-Render geaendert. Quelle eines Updates auf der GPS-losen WP:
+                    // Phone-App/BLE (phone_commands.cpp), empfangenes Mesh-Pos-Paket bzw. manuelles
+                    // --setlat/--setlon (command_functions.cpp) - oder, auf GPS-Modulen, ein Fix.
+                    // Die Track-Seite wird beim Einschalten (bOneButton aus dem Track-Transition-
+                    // Handler weiter oben) und bei jedem echten Positionsupdate fuer ~10 s gezeigt
+                    // und blendet danach AUTOMATISCH zurueck auf die Normalansicht (neueste
+                    // Nachricht; ersatzweise Info-/Statusseite). Grund: auf der GPS-losen WP aendern
+                    // sich die Koordinaten praktisch nie - eine DAUERHAFTE Track-Seite waere statisch
+                    // und sinnlos und wuerde die Nachrichtenansicht verdecken. (Bei GPS-Modulen mit
+                    // sekuendlichem RATE/NEXT-Countdown ist die Dauer-Ansicht sinnvoll - daher gilt
+                    // diese Rueckblende bewusst nur fuer die WP.)
+                    // Solange kein neues Update kommt, bleibt die Normalansicht stehen, nur die Uhr in
+                    // der Statuszeile wird (alle 10 s, E-Ink-schonend) aktualisiert. sendDisplayText
+                    // kennt keinen Track-Guard -> eingehende Nachrichten erscheinen auch bei Track an.
+                    // ============================================================================
+                    static double        wpTrackLat     = 0.0;
+                    static double        wpTrackLon      = 0.0;
+                    static bool          wpTrackInit     = false;
+                    static unsigned long wpTrackShownAt  = 0;   // millis() des letzten Track-Aufbaus (0 = aktuell keine Track-Seite sichtbar)
+
+                    bool wpPosUpdated = (!wpTrackInit)
+                                     || (meshcom_settings.node_lat != wpTrackLat)
+                                     || (meshcom_settings.node_lon != wpTrackLon);
+
+                    if(DisplayOffWait == 0 && (wpPosUpdated || bOneButton))
+                    {
+                        // echtes Positionsupdate (oder erstmaliger Aufbau): Track-/WX-Seite zeichnen
+                        // und den 10s-Rueckblende-Timer (neu) starten.
+                        wpTrackLat     = meshcom_settings.node_lat;
+                        wpTrackLon     = meshcom_settings.node_lon;
+                        wpTrackInit    = true;
+                        wpTrackShownAt = millis();
+                        bOneButton     = true;   // erzwingt sofortigen Aufbau (umgeht das 15s-Raster in sendDisplayTrack)
+
+                        if(iDisplayChange > 10)
+                            sendDisplayWX(); // Show WX
+                        else
+                            sendDisplayTrack(); // Show Track
+                    }
+                    else if(wpTrackShownAt != 0 && (millis() - wpTrackShownAt) >= 10000
+                            && DisplayOffWait == 0 && !bDisplayIsOff)
+                    {
+                        // Track-Seite war ~10 s sichtbar und es kam KEIN neues Update -> automatisch
+                        // zurueck auf die Normalansicht: neueste gespeicherte Nachricht, ersatzweise
+                        // (noch keine Nachricht vorhanden) die Info-/Statusseite.
+                        wpTrackShownAt = 0;
+
+                        int wpNewest = pageLastPointer - 1;
+                        if(wpNewest < 0) wpNewest += PAGE_MAX;
+
+                        if(pageLastLineAnz[wpNewest] != 0)
+                        {
+                            // Index oben rechts = N (neueste Meldung): Anzahl belegter Slots
+                            int wpRank = 0, s = wpNewest;
+                            for(int n = 0; n < PAGE_MAX; n++)
+                            {
+                                if(pageLastLineAnz[s] == 0) break;
+                                wpRank++;
+                                s--; if(s < 0) s += PAGE_MAX;
+                            }
+                            wpShowStoredMessage(wpNewest, wpRank);
+                        }
+                        else
+                            sendDisplayHead(true);
+                    }
+                    else if(!bDisplayIsOff && meshcom_settings.node_date_second % 10 == 0)
+                    {
+                        // weder neues Update noch faellige Rueckblende -> Normalansicht stehen lassen,
+                        // nur die Uhr in der Statuszeile auffrischen.
+                        wpRefreshClock();
+                    }
+                    #else
                     if(DisplayOffWait == 0)
                     {
                         if(iDisplayChange > 10)
@@ -1640,14 +1885,15 @@ void mainStartTimeLoop()
                         else
                             sendDisplayTrack(); // Show Track
                     }
+                    #endif
                 }
                 else
                 {
                     #if defined(BOARD_WIRELESS_PAPER)
                     // E-Ink schonen: Uhrzeit nur alle 10 s aktualisieren (Teilbereich-Refresh
                     // der Statuszeile), statt sekuendlich. sendDisplayTime() ist fuer E-Paper
-                    // ohnehin deaktiviert.
-                    if(meshcom_settings.node_date_second % 10 == 0)
+                    // ohnehin deaktiviert. Im aus-Zustand (--display off) NICHT refreshen.
+                    if(!bDisplayIsOff && meshcom_settings.node_date_second % 10 == 0)
                         wpRefreshClock();
                     #else
                     sendDisplayTime(); // Time only
@@ -1816,6 +2062,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // text immer 30 sec stehenlassen und Display immer ON
     DisplayOffWait = millis() + (30 * 1000); // 30 seconds
     bDisplayIsOff=false;
+
+    #if defined(BOARD_WIRELESS_PAPER)
+    wpMsgIdx = 0;   // frisch eintreffende Nachricht -> kein (alter) Browse-Index oben rechts
+    #endif
     //
     ///////////////////////////////////////////////////////////
     
@@ -1893,7 +2143,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");    // not fastmode for CET display
 
     epaper_display.setCursor(0, dzeile[1]);
-    epaper_display.setFont(&FreeSans9pt7b);
+    epaper_display.setFont(WP_FONT9);
 
     String strPath = "M* <" + aprsmsg.msg_source_call + ">";
     // DM
@@ -1932,7 +2182,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     static bool fontMsgCompactReady = false;
     if(!fontMsgCompactReady)
     {
-        memcpy_P(&fontMsgCompact, &FreeSans9pt7b, sizeof(GFXfont));
+        memcpy_P(&fontMsgCompact, WP_FONT9, sizeof(GFXfont));
         fontMsgCompact.yAdvance = 15;
         fontMsgCompactReady = true;
     }
