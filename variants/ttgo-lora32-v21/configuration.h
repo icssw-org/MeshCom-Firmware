@@ -26,8 +26,24 @@ definitions for TLORA_V2_1_1p6
 
 //#define ENABLE_SOFTSER
 
-#define ANALOG_PIN 35
-#define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
+#define USE_NEW_BATT              // neu batt_functions.cpp nehmen (kommt wenn alle Nodes umgestellt sind raus)
+#define USE_BATT
+#ifdef USE_BATT
+  #define BATTERY_PIN             35
+  #define BAT_VOLT_PIN            BATTERY_PIN
+  // voltage divider connected here to measure battery voltage
+  #define BAT_ADC_PULLUP_RES      100000.0  //intern verbaut
+  #define BAT_ADC_PULLDOWN_RES    100000.0  //intern verbaut
+  #define BAT_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
+  #define ADC_MULTIPLIER          BAT_MULTIPLIER
+  #define BAT_MAX_VOLTAGE         4.1  // [--maxv 4.1] Volt => Proz Umrechnung, def. Akku
+  #define BAT_MIN_VOLTAGE         3.3  // für Volt => Proz Umrechnung, definiert durch LDO
+  #define BAT_VOLT_OFFSET         0    // offset
+  #define BAT_VOLT_FACTOR         1    //factor [--batt factor 1.000]
+  #define BAT_ATTEN               ADC_11db  // Standard für ESP32 mit VREF = 1.1 V für 0 bis ≈3,9 V Messbereich
+  #define BAT_WIDTH               12
+#endif
+
 #define TX_POWER_MAX 20  // max 20dBm
 #define TX_POWER_MIN -4
 #define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx

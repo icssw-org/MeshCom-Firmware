@@ -107,7 +107,23 @@
 
 #define OneWire_GPIO 25 // getestet OE5HWN
 
-#define BATTERY_PIN       4
+#define USE_NEW_BATT              // neu batt_functions.cpp nehmen (kommt wenn alle Nodes umgestellt sind raus)
+#define USE_BATT
+#ifdef USE_BATT
+  #define BATTERY_PIN             4
+  #define BAT_VOLT_PIN            BATTERY_PIN
+  // voltage divider connected here to measure battery voltage
+  #define BAT_ADC_PULLUP_RES      100000.0  //intern verbaut
+  #define BAT_ADC_PULLDOWN_RES    100000.0  //intern verbaut
+  #define BAT_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
+  #define BAT_MAX_VOLTAGE         4.1     //für Volt => Proz Umrechnung, definiert durch Akku
+  #define BAT_MIN_VOLTAGE         3.3       //für Volt => Proz Umrechnung, definiert durch LDO
+  #define BAT_VOLT_OFFSET         0         //offset
+  #define BAT_VOLT_FACTOR         1.08      //factor
+  #define BAT_ATTEN               ADC_11db
+  #define BAT_WIDTH               12
+#endif
+
 #define BUTTON_PIN TDECK_BOOT_PIN
 
 #define I2S_BCLK            7

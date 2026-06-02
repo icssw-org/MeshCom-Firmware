@@ -62,11 +62,24 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 // =============================================
 // Custom Board homemade E22-Ebyte Module + ESP32-S3 DevKitC-1-N16R8V
 // ===== GPIOs =====
-#define ANALOG_PIN 1
+#define USE_NEW_BATT              // neu batt_functions.cpp nehmen (kommt wenn alle Nodes umgestellt sind raus)
+#define USE_BATT
+#ifdef USE_BATT
+  #define BATTERY_PIN             1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+  #define BAT_VOLT_PIN            BATTERY_PIN
+  #define BAT_ADC_PULLUP_RES      47000.0  //extern
+  #define BAT_ADC_PULLDOWN_RES    10000.0  //extern
+  #define BAT_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
+  #define BAT_MAX_VOLTAGE         4.1     //für Volt => Proz Umrechnung, definiert durch Akku
+  #define BAT_MIN_VOLTAGE         3.3       //für Volt => Proz Umrechnung, definiert durch LDO
+  #define BAT_VOLT_OFFSET         0         //offset
+  #define BAT_VOLT_FACTOR         1      //factor
+  #define BAT_ATTEN               ADC_11db
+  #define BAT_WIDTH               12
+#endif
+
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
-#define BATTERY_PIN 2 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_MULTIPLIER 5.7    // default and can be overwritten with Flash variable node_analog_batt_faktor Spannungsteiler 47k+10k
 #define BAT_VOL_COMPENSATION        (0.0)
 
 #define BUTTON_PIN  0

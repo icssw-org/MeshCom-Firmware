@@ -83,14 +83,33 @@ Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
 #define OneWire_GPIO  99 // ungenutzt
 
 // Batteriemessung Heltec Wireless Paper (laut offizieller Heltec/Meshtastic-Pinbelegung):
-//  - VBAT liegt ueber einen 1:1-Spannungsteiler an GPIO20 (ADC)
 //  - Die Messung wird ueber den Control-Pin GPIO19 freigegeben (ACTIVE LOW:
 //    LOW = Teiler durchgeschaltet/messen, HIGH = getrennt/Strom sparen)
-//  - 1:1-Teiler -> Faktor 2 (V_bat = V_pin * 2)
+
 // Die eigentliche Mess-/Toggle-Logik steht in src/batt_functions.cpp (BOARD_WIRELESS_PAPER).
-#define BATTERY_PIN 20
 #define ADC_CTRL_WP 19          // Mess-Freigabe, active LOW
-#define ADC_MULTIPLIER 2.0      // 1:1-Spannungsteiler
+
+#define USE_NEW_BATT              // neu batt_functions.cpp nehmen (kommt wenn alle Nodes umgestellt sind raus)
+#define USE_BATT
+#ifdef USE_BATT
+  #define BATTERY_PIN             20
+  #define BAT_VOLT_PIN            BATTERY_PIN
+  // voltage divider connected here to measure battery voltage
+  #define BAT_ADC_PULLUP_RES      100000.0  //intern verbaut
+  #define BAT_ADC_PULLDOWN_RES    100000.0  //intern verbaut
+  #define BAT_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
+  #define ADC_MULTIPLIER          BAT_MULTIPLIER
+  #define BAT_MAX_VOLTAGE         4.1  // [--maxv 4.1] Volt => Proz Umrechnung, def. Akku
+  #define BAT_MIN_VOLTAGE         3.3  // fuer Volt => Proz Umrechnung, definiert durch LDO
+  #define BAT_VOLT_OFFSET         0    // offset
+  #define BAT_VOLT_FACTOR         1    //factor [--batt factor 1.000]
+  #define BAT_ATTEN               ADC_11db 
+  #define BAT_WIDTH               12
+
+  #define VEXT_ENABLE             45 // active high, powers the EPaper display
+  
+  #define ADC_CTRL_PIN            19
+#endif
 
 // E-Ink-Versorgung (VEXT=GPIO45, active LOW) wird von der Plattform-Schicht
 // src/Platforms/WirelessPaper/power_controls.cpp (#ifdef WIRELESS_PAPER) gehandhabt.

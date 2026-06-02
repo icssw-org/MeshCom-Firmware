@@ -283,6 +283,8 @@ int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 0};
 #include "t_echo_utilities.h"
 #include "t_echo_images.h"
 
+#define WP_FONT9 (&FreeSans9pt7b)
+
 //Libraries for E-paper Display
 #include <GxEPD.h>
 #include <GxDEPG0150BN/GxDEPG0150BN.h>  // 1.54" b/w
@@ -934,6 +936,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                             epaper_display.setCursor(0, dzeile[1]);
                             epaper_display.setFont(WP_FONT9);
 
+                            
                             epaper_display.println(pageTextLong1);
 
                             epaper_display.setCursor(0, dzeile[2]);

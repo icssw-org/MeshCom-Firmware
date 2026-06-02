@@ -63,16 +63,33 @@ definitions for LilyGo T-BEAM 1W Board OE3WAS
 #define NTC_PIN                     (14)
 #define FAN_CTRL                    (41)
 
+#define USE_NEW_BATT              // neu batt_functions.cpp nehmen (kommt wenn alle Nodes umgestellt sind raus)
+#define USE_BATT
+#ifdef USE_BATT
+  #define BATTERY_PIN             4
+  #define BAT_VOLT_PIN            BATTERY_PIN
+  // voltage divider connected here to measure battery voltage
+  #define BAT_ADC_PULLUP_RES      300000.0  //intern verbaut
+  #define BAT_ADC_PULLDOWN_RES    150000.0  //intern verbaut
+  #define BAT_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
+  #define ADC_MULTIPLIER          BAT_MULTIPLIER
+  #define BAT_MAX_VOLTAGE         8.1       // [--maxv 4.1] für Volt => Proz Umrechnung, definiert durch Akku
+  #define BAT_MIN_VOLTAGE         6.5       // für Volt => Proz Umrechnung, definiert durch LDO
+  #define BAT_VOLT_COMPENSATION   0.005    // offset
+  #define BAT_VOLT_OFFSET         0         //offset
+  #define BAT_VOLT_FACTOR         1.00      //factor
+  #define BAT_ATTEN               ADC_11db  // Standard für ESP32 mit VREF = 1.1 V für 0 bis ≈3,9 V Messbereich
+  #define BAT_WIDTH               12
+  //#define S3_VREF                 (1.1)     // 1.0 - 1.2 V
+  //hier ev. noch spezielle Board spezifische Parameter, GPIO, ...
+  //...
+#endif
+
+
 #define ADC_PIN                     4
-#define BATTERY_PIN                 4 // A battery voltage measurement pin
 // voltage divider connected here to measure battery voltage
-#define BAT_ADC_PULLUP_RES          300000.0
-#define BAT_ADC_PULLDOWN_RES        150000.0
-#define BAT_MAX_VOLTAGE             7.4
 #define BAT_VOL_COMPENSATION        0.25
 #define S3_VREF                     (1.1)  // 1.0 - 1.2 V
-//#define ADC_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
-#define ADC_MULTIPLIER 3.0
 
 #define ANALOG_PIN ADC_PIN  //testweise
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall

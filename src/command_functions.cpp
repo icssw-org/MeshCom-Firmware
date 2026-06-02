@@ -814,7 +814,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"contrast ") == 0)
     {
-        #if !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+        #if !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         int contrast_value = atoi(msg_text + 11);  // "--" + "contrast " = 2 + 9 = 11
         if(contrast_value <= 0) contrast_value = 1;
         if(contrast_value > 255) contrast_value = 255;
@@ -822,7 +822,20 @@ void commandAction(char *umsg_text, bool ble)
         meshcom_settings.node_contrast = contrast_value;
 
         save_settings();
+        
+        #endif
 
+        #if defined(BOARD_TRACKER)
+        Serial.printf("[DISP]...Contrast set to %d\n", contrast_value);
+
+        if(ble)
+        {
+            char response[40];
+            snprintf(response, sizeof(response), "Contrast set to %d", contrast_value);
+            addBLECommandBack(response);
+        }
+        
+        #elif !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         if(u8g2 != NULL)
         {
             u8g2->setContrast(contrast_value);

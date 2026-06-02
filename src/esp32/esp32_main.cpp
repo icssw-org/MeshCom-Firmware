@@ -4,6 +4,8 @@
 //
 // 20230326: Version 4.00: START
 /**
+ *  @author      Kurt Baumann (OE1KBC)
+ *  @date        2023-03-26
  *  @author      Ralph Weich (DD5RW)
  *  @date        2025-12-03
  */
@@ -729,25 +731,7 @@ void esp32setup()
 
     save_settings();
 
-    #if defined(BOARD_WIRELESS_PAPER)
-    // ====================================================================================
-    // [WP-FIX #3] Zeit-Persistenz beim Boot wiederherstellen (Wireless Paper hat KEINE RTC)
-    // ------------------------------------------------------------------------------------
-    // Die Firmware SPEICHERT die Uhrzeit ohnehin alle 15 Min in NVS (saveTimePersistence(),
-    // esp32loop), aber loadTimePersistence() wird im Original NUR am T-Deck aufgerufen - auf
-    // der WP NIE. Folge: nach jedem Reboot/Stromausfall startet die Uhr bei 2000-01-01, bis
-    // (irgendwann) NTP greift -> "Time Lost". Da die WP weder RTC noch GPS hat, ist NVS die
-    // einzige Bruecke ueber Netz-/NTP-Luecken.
-    // Hier additiv (kapern): einmal beim Boot die zuletzt gespeicherte Zeit laden.
-    // Den UTC-Offset wendet loadTimePersistence() seit dev-Commit 9e049d3 SELBST an
-    // (SetClock(unix + node_utcoff, /*boUseUTC=*/false) -> Lokalzeit). Frueher fehlte das
-    // (gmtime/UTC) -> Uhr/Start Date liefen nach Reboot auf UTC (vgl. icssw Issue #972). Unser
-    // frueherer eigener NVS-Read-Workaround ist damit ueberfluessig; der simple Aufruf genuegt.
-    // SetClock passiert nur bei gueltigem Wert; NTP/{CET}/Phone ueberschreiben das spaeter.
-    // initTimePersistence() (mit clear()) laeuft NUR bei Flash-Clear/Versionswechsel, unberuehrt.
-    // ====================================================================================
     loadTimePersistence();
-    #endif
 
     bDisplayVolt = meshcom_settings.node_sset & 0x0001;
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
@@ -1278,11 +1262,7 @@ void esp32setup()
     #else
     if(bRadio)
     {
-        #if defined(BOARD_WIRELESS_PAPER)
-        // Heltec Wireless Paper: TCXO ueber DIO3 mit 1.8V versorgen (Heltec/Meshtastic-Spec).
-        // RadioLibs begin() setzt per Default 1.6V; 1.8V entspricht der Hardware-Vorgabe und
-        // verbessert die Frequenzstabilitaet ueber Temperatur. Nur WP - der gemeinsam genutzte
-        // E290-Funkpfad bleibt unveraendert bei 1.6V.
+        #if defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E290)
         if(radio.setTCXO(1.8) != RADIOLIB_ERR_NONE)
             Serial.println(F("[LoRa]...TCXO 1.8V konnte nicht gesetzt werden"));
         else
@@ -3102,12 +3082,12 @@ void esp32loop()
     checkSerialCommand();
 
     if(BattTimeWait == 0)
-        BattTimeWait = millis() - 10000;
+        BattTimeWait = millis() - 1000;
 
 
     //Serial.printf("BattTimeWait:%i millis():%i tx:%i rx:%i\n", BattTimeWait, millis(), tx_is_active, is_receiving);
 
-    if ((BattTimeWait + 20000) < millis())  // 20 sec
+    if ((BattTimeWait + 1000) < millis())  // 1 sec OE3WAS
     {
         if (tx_is_active == false && is_receiving == false)
         {
