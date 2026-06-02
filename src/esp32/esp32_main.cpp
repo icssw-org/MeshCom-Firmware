@@ -729,6 +729,26 @@ void esp32setup()
 
     save_settings();
 
+    #if defined(BOARD_WIRELESS_PAPER)
+    // ====================================================================================
+    // [WP-FIX #3] Zeit-Persistenz beim Boot wiederherstellen (Wireless Paper hat KEINE RTC)
+    // ------------------------------------------------------------------------------------
+    // Die Firmware SPEICHERT die Uhrzeit ohnehin alle 15 Min in NVS (saveTimePersistence(),
+    // esp32loop), aber loadTimePersistence() wird im Original NUR am T-Deck aufgerufen - auf
+    // der WP NIE. Folge: nach jedem Reboot/Stromausfall startet die Uhr bei 2000-01-01, bis
+    // (irgendwann) NTP greift -> "Time Lost". Da die WP weder RTC noch GPS hat, ist NVS die
+    // einzige Bruecke ueber Netz-/NTP-Luecken.
+    // Hier additiv (kapern): einmal beim Boot die zuletzt gespeicherte Zeit laden.
+    // Den UTC-Offset wendet loadTimePersistence() seit dev-Commit 9e049d3 SELBST an
+    // (SetClock(unix + node_utcoff, /*boUseUTC=*/false) -> Lokalzeit). Frueher fehlte das
+    // (gmtime/UTC) -> Uhr/Start Date liefen nach Reboot auf UTC (vgl. icssw Issue #972). Unser
+    // frueherer eigener NVS-Read-Workaround ist damit ueberfluessig; der simple Aufruf genuegt.
+    // SetClock passiert nur bei gueltigem Wert; NTP/{CET}/Phone ueberschreiben das spaeter.
+    // initTimePersistence() (mit clear()) laeuft NUR bei Flash-Clear/Versionswechsel, unberuehrt.
+    // ====================================================================================
+    loadTimePersistence();
+    #endif
+
     bDisplayVolt = meshcom_settings.node_sset & 0x0001;
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
     bPosDisplay = meshcom_settings.node_sset & 0x0004;
