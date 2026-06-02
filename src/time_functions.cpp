@@ -141,7 +141,7 @@ void loadTimePersistence() {
     if(msg_time > max_time) max_time = msg_time;
 
     if(max_time > 1000000000) {
-        MyClock.SetClock((time_t)max_time, true);
+        MyClock.SetClock((time_t)max_time + (time_t)(meshcom_settings.node_utcoff * 3600.0), false);
     }
 }
 #endif 
