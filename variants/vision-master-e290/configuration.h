@@ -97,8 +97,31 @@ definitions for HELTEC E290
 
 #define OneWire_GPIO  99 // please test
 
-#define BATTERY_PIN 7 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+//#define USE_NEW_BATT              // neu batt_functions.cpp nehmen (kommt wenn alle Nodes umgestellt sind raus)
+#define BATTERY_PIN             7
 #define ADC_MULTIPLIER 4.9245
+/*
+#define USE_BATT
+#ifdef USE_BATT
+  #define BATTERY_PIN             7
+  #define BAT_VOLT_PIN            BATTERY_PIN
+  // voltage divider connected here to measure battery voltage
+  #define BAT_ADC_PULLUP_RES      100000.0  //intern verbaut
+  #define BAT_ADC_PULLDOWN_RES    100000.0  //intern verbaut
+  #define BAT_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
+  #define ADC_MULTIPLIER          BAT_MULTIPLIER
+  #define BAT_MAX_VOLTAGE         4.1  // [--maxv 4.1] Volt => Proz Umrechnung, def. Akku
+  #define BAT_MIN_VOLTAGE         3.3  // fuer Volt => Proz Umrechnung, definiert durch LDO
+  #define BAT_VOLT_OFFSET         0    // offset
+  #define BAT_VOLT_FACTOR         1    //factor [--batt factor 1.000]
+  #define BAT_ATTEN               ADC_11db 
+  #define BAT_WIDTH               12
+
+  #define VEXT_ENABLE             45 // active high, powers the EPaper display
+  
+  #define ADC_CTRL_PIN            19
+#endif
+*/
 
 // PCB Wiring - LoRa - only used for prepareToSleep()
 // Provided for use convenience, and examples

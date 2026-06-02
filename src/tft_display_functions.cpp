@@ -4,6 +4,8 @@
 #include "tft_display_functions.h"
 #include "tft_custom_colors.h"
 
+#include "loop_functions.h"
+
 #if defined(HAS_TFT)
 #include "TFT_eSPI.h"
     TFT_eSPI    tft     = TFT_eSPI(); 
@@ -11,8 +13,6 @@
 
     void initTFT()
     {
-        uint8_t screenBrightness = 50;    //from 1 to 255 to regulate brightness of screens
-
         delay(500);
 
         tft.init();
@@ -20,7 +20,8 @@
         tft.setRotation(1);
 
         pinMode(TFT_BL, OUTPUT);
-        analogWrite(TFT_BL, screenBrightness);
+        analogWrite(TFT_BL, (uint8_t)meshcom_settings.node_contrast);
+
         tft.setTextFont(0);
         tft.fillScreen(TFT_BLACK);
         sprite.createSprite(160,80);
@@ -134,6 +135,8 @@
     void displayTFT(const String& header)
     {
         sprite.fillRect(0, 0, 160, 19, redColor);
+        pinMode(TFT_BL, OUTPUT);
+        analogWrite(TFT_BL, (uint8_t)meshcom_settings.node_contrast);
         sprite.setTextFont(2);
         sprite.setTextSize(smallSizeFont);
         sprite.setTextColor(TFT_WHITE, redColor);
@@ -146,6 +149,8 @@
     {
         sprite.fillSprite(TFT_BLACK); 
         sprite.fillRect(0, 0, 160, 19, redColor);
+        pinMode(TFT_BL, OUTPUT);
+        analogWrite(TFT_BL, (uint8_t)meshcom_settings.node_contrast);
         sprite.setTextFont(2);
         sprite.setTextSize(smallSizeFont);
         sprite.setTextColor(TFT_WHITE, redColor);
@@ -170,6 +175,8 @@
     {
         sprite.fillSprite(TFT_BLACK); 
         sprite.fillRect(0, 0, 160, 19, redColor);
+        pinMode(TFT_BL, OUTPUT);
+        analogWrite(TFT_BL, (uint8_t)meshcom_settings.node_contrast);
         sprite.setTextFont(0);
         sprite.setTextSize(bigSizeFont);
         sprite.setTextColor(TFT_WHITE, redColor);
@@ -211,6 +218,8 @@
     {
         sprite.fillSprite(TFT_BLACK); 
         sprite.fillRect(0, 0, 160, 19, redColor);
+        pinMode(TFT_BL, OUTPUT);
+        analogWrite(TFT_BL, (uint8_t)meshcom_settings.node_contrast);
         sprite.setTextFont(2);
         sprite.setTextSize(smallSizeFont);
         sprite.setTextColor(TFT_WHITE, redColor);
