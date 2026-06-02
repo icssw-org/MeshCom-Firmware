@@ -16,6 +16,9 @@ unsigned long getUnixClock();
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
 void sendDisplayHead(bool bInit);
+#if defined(BOARD_WIRELESS_PAPER)
+void wpShowStoredMessage(int slot, int idx);   // idx = Index oben rechts (neueste=N..aelteste=1, 0=keiner)
+#endif
 void sendDisplayTrack();
 void sendDisplayWX();
 void sendDisplayMainline();
