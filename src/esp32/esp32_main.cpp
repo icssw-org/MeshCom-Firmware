@@ -731,8 +731,6 @@ void esp32setup()
 
     save_settings();
 
-    loadTimePersistence();
-
     bDisplayVolt = meshcom_settings.node_sset & 0x0001;
     bDisplayOff = meshcom_settings.node_sset & 0x0002;
     bPosDisplay = meshcom_settings.node_sset & 0x0004;
@@ -764,7 +762,7 @@ void esp32setup()
     bSOFTSERREAD = meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
-    bNET_CONSOLE = meshcom_settings.node_sset2 & 0x1000;
+    bNETCONSOLE = meshcom_settings.node_sset2 & 0x1000;
     #ifndef DISABLE_NET_CONSOLE
     netConsoleSetPassword(meshcom_settings.node_passwd);
     #endif
@@ -788,6 +786,9 @@ void esp32setup()
     bGPSUBLOX = meshcom_settings.node_sset3 & 0x2000;
     bGPSL76K = meshcom_settings.node_sset3 & 0x4000;
 
+    // Time from Flash
+    loadTimePersistence();
+    snprintf(cTimeSource, sizeof(cTimeSource), (char*)"INIT");
     memset(meshcom_settings.node_update, 0x00, sizeof(meshcom_settings.node_update));
 
     #ifdef BUTTON_PIN
@@ -1627,7 +1628,7 @@ void esp32setup()
 
     ///////////////////////////////////////////////////////
     // WIFI
-    if(bGATEWAY || bEXTUDP || bWEBSERVER)
+    if(bGATEWAY || bEXTUDP || bWEBSERVER || bNETCONSOLE)
     {
         bAllStarted=false;
 
@@ -2446,28 +2447,39 @@ void esp32loop()
             updateTimeClient = millis();
         }
         else
-            strTime = udpGetTimeClient();
-
-        strDate = udpGetDateClient();
-
-        uint16_t Year = (uint16_t)strDate.substring(0, 4).toInt();
-        uint16_t Month = (uint16_t)strDate.substring(5, 7).toInt();
-        uint16_t Day = (uint16_t)strDate.substring(8, 10).toInt();
-
-        uint16_t Hour = (uint16_t)strTime.substring(0, 2).toInt();
-        uint16_t Minute = (uint16_t)strTime.substring(3, 5).toInt();
-        uint16_t Second = (uint16_t)strTime.substring(6, 8).toInt();
-    
-        // check valid Date & Time
-        if(Year > 2023 && strTime.compareTo("none") != 0)
         {
-            MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-            bNTPDateTimeValid = true;
+            strTime = udpGetTimeClient();
+        }
 
-            snprintf(cTimeSource, sizeof(cTimeSource), (char*)"NTP");
+        if(strTime.compareTo("none") != 0)
+        {
+            strDate = udpGetDateClient();
+
+            uint16_t Year = (uint16_t)strDate.substring(0, 4).toInt();
+            uint16_t Month = (uint16_t)strDate.substring(5, 7).toInt();
+            uint16_t Day = (uint16_t)strDate.substring(8, 10).toInt();
+
+            uint16_t Hour = (uint16_t)strTime.substring(0, 2).toInt();
+            uint16_t Minute = (uint16_t)strTime.substring(3, 5).toInt();
+            uint16_t Second = (uint16_t)strTime.substring(6, 8).toInt();
+        
+            // check valid Date & Time
+            if(Year > 2023 && strTime.compareTo("none") != 0)
+            {
+                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+                bNTPDateTimeValid = true;
+
+                snprintf(cTimeSource, sizeof(cTimeSource), (char*)"NTP");
+            }
+            else
+                bNTPDateTimeValid = false;
         }
         else
+        {
+            snprintf(cTimeSource, sizeof(cTimeSource), (char*)"CPU");
             bNTPDateTimeValid = false;
+        }
+
     }
     #if defined(ENABLE_RTC)
     else
@@ -2535,7 +2547,7 @@ void esp32loop()
         meshcom_settings.node_date_second = MyClock.Second();
 
         // Starttime setzen
-        if(meshcom_settings.node_date_year > 2023 && meshcom_settings.node_update[0] == 0x00)
+        if(meshcom_settings.node_date_year > 2023 && meshcom_settings.node_update[0] == 0x00 && memcmp(cTimeSource, "INIT", 4) != 0)
         {
             char ctemp[80];
             snprintf(ctemp, sizeof(ctemp), "%04i-%02i-%02i %02i:%02i:%02i",
@@ -3127,7 +3139,7 @@ void esp32loop()
                 global_batt = read_batt();
                 global_proz = mv_to_percent(global_batt);
                 
-                if(bDisplayCont)
+                if(bDisplayCont && bDEBUG)
                 {
                     #if not defined(BOARD_T_DECK_PRO) and not defined(BOARD_TBEAM_1W)
                     Serial.printf("[readBatteryVoltage] %s ... %.2f V %i%% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
@@ -3464,7 +3476,7 @@ void esp32loop()
         flushExternQueue();
     }
 
-    if(bWEBSERVER || bEXTUDP || bGATEWAY)
+    if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE)
     {
         if (web_timer == 0 || (iWlanWait > 0 && ((web_timer + 1000) < millis())) || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 10)) < millis()))   // repeat 5 minutes
         {
@@ -3531,7 +3543,7 @@ void esp32loop()
         #ifndef DISABLE_NET_CONSOLE
         if(iWlanWait == 0)
         {
-            if(bNET_CONSOLE)
+            if(bNETCONSOLE)
             {
                 startNetConsole();
                 loopNetConsole();

@@ -123,7 +123,7 @@ extern bool bVIA;
 extern bool bWEBSERVER;
 extern bool bWIFIAP;
 extern bool bEXTUDP;
-extern bool bNET_CONSOLE;
+extern bool bNETCONSOLE;
 
 extern float fBaseAltidude;
 extern float fBasePress;

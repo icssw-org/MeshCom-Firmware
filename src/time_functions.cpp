@@ -140,8 +140,19 @@ void loadTimePersistence() {
     if(mheard_time > max_time) max_time = mheard_time;
     if(msg_time > max_time) max_time = msg_time;
 
-    if(max_time > 1000000000) {
-        MyClock.SetClock((time_t)max_time + (time_t)(meshcom_settings.node_utcoff * 3600.0), false);
+    Serial.printf("[TIME]...Loaded time persistence: saved_time=%lu, mheard_time=%lu, msg_time=%lu\n", saved_time, mheard_time, msg_time);
+
+    if(max_time > 1000000000)
+    {
+        MyClock.SetClock((time_t)max_time + (meshcom_settings.node_utcoff * 60.0 * 60.0), false);
+
+        meshcom_settings.node_date_year = MyClock.Year();
+        meshcom_settings.node_date_month = MyClock.Month();
+        meshcom_settings.node_date_day = MyClock.Day();
+    
+        meshcom_settings.node_date_hour = MyClock.Hour();
+        meshcom_settings.node_date_minute = MyClock.Minute();
+        meshcom_settings.node_date_second = MyClock.Second();
     }
 }
 #endif 

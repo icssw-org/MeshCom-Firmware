@@ -525,7 +525,7 @@ void commandAction(char *umsg_text, bool ble)
         }
 
         #ifndef DISABLE_NET_CONSOLE
-        if(bNET_CONSOLE)
+        if(bNETCONSOLE)
         {
             stopNetConsole();
         }
@@ -2059,7 +2059,7 @@ void commandAction(char *umsg_text, bool ble)
     #ifndef DISABLE_NET_CONSOLE
     if(commandCheck(msg_text+2, (char*)"netconsole on") == 0)
     {
-        bNET_CONSOLE=true;
+        bNETCONSOLE=true;
         meshcom_settings.node_sset2 |= 0x1000;
 
         save_settings();
@@ -2071,7 +2071,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"netconsole off") == 0)
     {
-        bNET_CONSOLE=false;
+        bNETCONSOLE=false;
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x6FFF;
 
         save_settings();
@@ -2084,7 +2084,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         // show current net console status; return early to prevent match against --tls... handler
         snprintf(_owner_c, sizeof(_owner_c), "on (%s port 2323)", meshcom_settings.node_ip);
-        Serial.printf("...net console is %s\n", bNET_CONSOLE ? _owner_c : "off");
+        Serial.printf("...net console is %s\n", bNETCONSOLE ? _owner_c : "off");
         return;
     }
     else
@@ -4707,7 +4707,7 @@ void commandAction(char *umsg_text, bool ble)
             Serial.printf(" / Gateway %s %s\n", (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""));
 
             #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
-            Serial.printf("...NETConsole %s\n", (bNET_CONSOLE ? "on (port 2323)" : "off"));
+            Serial.printf("...NETConsole %s\n", (bNETCONSOLE ? "on (port 2323)" : "off"));
             #endif
 
 

@@ -671,6 +671,8 @@ bool doWiFiConnect()
 
   timeClient.begin();
 
+  timeClient.setUpdateInterval(3600000); // Sets refresh interval to 1 hour (in ms)
+
   // run startMeshComUDP() to get IP Address
   startMeshComUDP();
 
@@ -726,24 +728,28 @@ String udpUpdateTimeClient()
 {
   if(!timeClient.update())
   {
-    Serial.println("TimeClient no update possible");
+    Serial.println("TimeClient no update possible --> CPU-Mode");
 
+    /*
     if(!timeClient.forceUpdate())
     {
       Serial.println("TimeClient no force update possible");
       Serial.println("[WIFI-DBG] NTP update failed, will retry next cycle");
-
-      return "none";
     }
-  }
+    */
 
-  if(bDisplayInfo)
+    return "none";
+  }
+  else
   {
-    Serial.print("TimeClient now (UTC): ");
-    Serial.println(timeClient.getFormattedTime());
-  }
+    if(bDisplayInfo)
+    {
+      Serial.print("TimeClient now (UTC): ");
+      Serial.println(timeClient.getFormattedTime());
+    }
 
-  return timeClient.getFormattedTime();
+    return timeClient.getFormattedTime();
+  }
 }
 
 String udpGetTimeClient()

@@ -1120,7 +1120,7 @@ void sub_page_setup()
     #endif
     _create_setup_switch_element("extudp", "ext UDP", "enable ext. UDP", bEXTUDP); // create Switch-Element inclucing Label and Description
     #ifndef BOARD_RAK4630
-    _create_setup_switch_element("netconsole", "net console", "enable net console (port 2323, HMAC auth)", bNET_CONSOLE); // create Switch-Element inclucing Label and Description
+    _create_setup_switch_element("netconsole", "net console", "enable net console (port 2323, HMAC auth)", bNETCONSOLE); // create Switch-Element inclucing Label and Description
     #endif
     _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);   // create Switch-Element inclucing Label and Description
 
