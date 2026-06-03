@@ -167,7 +167,7 @@ float read_batt(void)
 
 	#if defined(ADC_CTRL_PIN)
 		//Heltec V3.1 --- hat keine eigene variants !?!?
-		#if defined(BOARD_HELTEC_V31)
+		#if defined(BOARD_HELTEC_V31) || defined(BOARD_WIRELESS_PAPER)
 			digitalWrite(ADC_CTRL_PIN,LOW);
 		#else
 			digitalWrite(ADC_CTRL_PIN, HIGH);
