@@ -881,8 +881,9 @@ void esp32setup()
     meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
     meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
 
+
     #if defined(BOARD_E22_S3) || defined(BOARD_TBEAM_1W)
-        fBattFaktor = ADC_MULTIPLIER;   // default
+        fBattFaktor = BAT_MULTIPLIER;   // default
         if(meshcom_settings.node_analog_batt_faktor > 0.0)
             fBattFaktor = meshcom_settings.node_analog_batt_faktor;
     #endif
