@@ -460,8 +460,8 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("netconsole")) {
         snprintf(message_text, sizeof(message_text), "--netconsole %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        setupData->returnCode = (bNET_CONSOLE == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        setupData->returnValue = bNET_CONSOLE?"on":"off";
+        setupData->returnCode = (bNETCONSOLE == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bNETCONSOLE?"on":"off";
         return;
     } else
 
@@ -850,7 +850,7 @@ void webSetup_getParam(setupStruct *setupData){
     }
 
     if(setupData->paramName.equals("netconsole")) {
-        setupData->returnValue = bNET_CONSOLE?"on":"off";
+        setupData->returnValue = bNETCONSOLE?"on":"off";
         return;
     }
 

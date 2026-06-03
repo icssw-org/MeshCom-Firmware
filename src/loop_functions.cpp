@@ -143,7 +143,7 @@ bool bVIA = false;
 bool bWEBSERVER = false;
 bool bWIFIAP = false;
 bool bEXTUDP = false;
-bool bNET_CONSOLE = false;
+bool bNETCONSOLE = false;
 
 bool bSHORTPATH = false;
 //bool bGPSDEBUG = false;
