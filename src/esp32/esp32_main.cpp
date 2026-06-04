@@ -160,6 +160,8 @@ int iCount_weiss=0;
 
 #endif
 
+bool bDEEP_SLEEP = false;
+
 #ifdef BOARD_LED
 bool bLED = true;
 #endif
@@ -1687,6 +1689,18 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
+    #if not defined(BOARD_T_DECK_PRO)
+    btn.tick();
+    #endif
+
+    if(bDEEP_SLEEP)
+    {
+        delay(1000);
+        // only loop
+    }
+    else
+    {
+
     static unsigned long last_time_save = 0;
     if(millis() - last_time_save > 900000) // Save every 15 minutes
     {
@@ -1697,10 +1711,6 @@ void esp32loop()
     // loop T-Deck GUI
     #if defined(BOARD_T_DECK_PRO)
         loopTDeck_pro();
-    #endif
-
-    #if not defined(BOARD_T_DECK_PRO)
-    btn.tick();
     #endif
 
     #ifdef LED_PIN
@@ -3583,6 +3593,10 @@ void esp32loop()
     #endif
 
     //
+    ////////////////////////////////////////////////
+
+    ////////////////////////////////////////////////
+    }   // else from DEEPSLEEP
     ////////////////////////////////////////////////
 
     // WOR/KBC not necesary     delay(100);
