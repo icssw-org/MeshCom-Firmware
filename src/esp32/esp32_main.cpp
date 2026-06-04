@@ -884,7 +884,7 @@ void esp32setup()
 
 
     #if defined(BOARD_E22_S3) || defined(BOARD_TBEAM_1W)
-        fBattFaktor = BAT_MULTIPLIER;   // default
+        fBattFaktor = 1;   // default Korrekturfaktor
         if(meshcom_settings.node_analog_batt_faktor > 0.0)
             fBattFaktor = meshcom_settings.node_analog_batt_faktor;
     #endif
@@ -3139,12 +3139,14 @@ void esp32loop()
                 global_batt = read_batt();
                 global_proz = mv_to_percent(global_batt);
                 
-                if(bDisplayCont && bDEBUG)
+                #ifndef USE_BATT
+                if(bDisplayCont)  // neue Ausgabe erfolgt in batt_functions
                 {
                     #if not defined(BOARD_T_DECK_PRO) and not defined(BOARD_TBEAM_1W)
                     Serial.printf("[readBatteryVoltage] %s ... %.2f V %i%% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
                     #endif
                 }
+                #endif
 
                 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
                 tdeck_update_batt_label(global_batt/1000., global_proz);
