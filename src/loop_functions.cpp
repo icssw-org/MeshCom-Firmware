@@ -1456,18 +1456,23 @@ void sendDisplayTime()
         snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
         snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
+    if(global_batt == 0.0)
+        snprintf(cbatt, sizeof(cbatt), " USB");
     #else
     if(bDisplayVolt)
         snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
     else
         snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
+
+    if(global_batt == 0.0)
+        snprintf(cbatt, sizeof(cbatt), "   USB");
     #endif
 
  #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W) || defined(BOARD_T_CONNECT_PRO)
     // [OE3WAS] 2S-Akku nom. 7.4V (LiPo = 5.0 .. 8.4 V)
     // wenn USB aber kein Akku, dann wird eine Spannung ≈>2V gemessen, durch Fehlströme erzeugt
     if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "  USB");
+        snprintf(cbatt, sizeof(cbatt), "   USB");
  #endif
 
     // nur alle 15 sekunden
@@ -1515,11 +1520,16 @@ void sendDisplayMainline()
         snprintf(cbatt, sizeof(cbatt), "%4.1fV", global_batt/1000.0);
     else
         snprintf(cbatt, sizeof(cbatt), "%4d%%", global_proz);
+    if(global_batt == 0.0)
+        snprintf(cbatt, sizeof(cbatt), " USB");
     #else
     if(bDisplayVolt)
         snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
     else
         snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
+
+    if(global_batt == 0.0)
+        snprintf(cbatt, sizeof(cbatt), "   USB");
     #endif
 
     #if defined(XPOWERS_CHIP_AXP192) || defined(HAS_EPAPER) || defined(BOARD_TBEAM_1W) || defined(BOARD_T_CONNECT_PRO)
@@ -1603,8 +1613,9 @@ void wpRefreshClock()
         snprintf(cbatt, sizeof(cbatt), "%5.2fV", global_batt/1000.0);
     else
         snprintf(cbatt, sizeof(cbatt), "%5d%%", global_proz);
+
     if(global_batt == 0.0)
-        snprintf(cbatt, sizeof(cbatt), "  USB");
+        snprintf(cbatt, sizeof(cbatt), "   USB");
 
     char st[40];
     snprintf(st, sizeof(st), "%-4.4s%-1.1s %02i:%02i:%02i%s", SOURCE_VERSION, SOURCE_VERSION_SUB,
