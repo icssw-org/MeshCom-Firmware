@@ -250,6 +250,9 @@ float read_batt(void)
 		#endif
 	}
 
+	// wenn keine AKKU am BATT PIN ist immmer 0V aber 100% ausgeben
+	if(BatVoltage < 1.0) { BatVoltage = 0; }
+
 	return BatVoltage*1000.0;  // [mV]
 
 //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -290,9 +293,13 @@ float mv_to_percent(float mvolts)
 {
 #ifdef USE_BATT
 
+	// USB - Versorgung
+	if(mvolts < 1000.0) { return 100.0; }
+
 	// fBattMax = Parameter aus Flash
-  float rproz = (mvolts/1000.0 - BAT_MIN_VOLTAGE)/(fBattMax - BAT_MIN_VOLTAGE) *100.0;
-  if (rproz > 100.0) { rproz = 100.0; }
+  	float rproz = (mvolts/1000.0 - BAT_MIN_VOLTAGE)/(fBattMax - BAT_MIN_VOLTAGE) *100.0;
+  	if (rproz > 100.0) { rproz = 100.0; }
+
 	return round(rproz);
 
 #else

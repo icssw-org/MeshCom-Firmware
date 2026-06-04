@@ -373,7 +373,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
       {
 
         // we got an heartbeat from server which we use to check connection (saving time we got it)
-        DEBUG_MSG("BEAT", "Heartbeat from server received");
+        if(bDisplayInfo)
+          Serial.println("[BEAT]...Heartbeat from server received");
 
         /**
          * TODO check HB accordingly to format not only BEAT at beginning
