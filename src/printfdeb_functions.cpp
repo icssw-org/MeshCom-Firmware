@@ -1,0 +1,120 @@
+// Functions: printfdeb() replaces the printf()
+// This function, allowing for different formatting options.
+//
+// printf() is converted to printfdeb() to maintain functionality
+// and passing data to the NETCONSOLE.
+//
+// Author: Kurt Baumann (OE1KBC), 06/2026
+//
+// Syntax:
+// int printfdeb(const char *format [,argument] ...)    --> Serial.printf(format, argument)
+// int printdeb(const char *text)                       --> Serial.print(text)
+// int printlndeb(const char *text)                     --> Serial.println(text)
+//
+
+#include <Arduino.h>
+
+#include "printfdeb_functions.h"
+
+#include <stdio.h>
+#include <stdarg.h>
+
+#ifdef ESP32
+#include "net_console.h"
+#endif
+
+int printfdeb(const char *format, ...)
+{
+    char loc_buf[64];
+    char * temp = loc_buf;
+    va_list arg;
+    va_list copy;
+    va_start(arg, format);
+    va_copy(copy, arg);
+    int len = vsnprintf(temp, sizeof(loc_buf), format, copy);
+    va_end(copy);
+    if(len < 0) {
+        va_end(arg);
+        return 0;
+    }
+    if(len >= (int)sizeof(loc_buf)){  // comparation of same sign type for the compiler
+        temp = (char*) malloc(len+1);
+        if(temp == NULL) {
+            va_end(arg);
+            return 0;
+        }
+        len = vsnprintf(temp, len+1, format, arg);
+    }
+    va_end(arg);
+    Serial.printf(temp);
+    if(temp != loc_buf){
+        free(temp);
+    }
+    return len;
+}
+
+int printlndeb(const char *buff)
+{
+    int len = Serial.println(buff);
+    return len;
+}
+
+int printdeb(const char *buff)
+{
+    int len = Serial.print(buff);
+    return len;
+}
+
+int printlndeb(int iVar)
+{
+    int len = Serial.println(iVar);
+    return len;
+}
+
+int printdeb(int iVar)
+{
+    int len = Serial.print(iVar);
+    return len;
+}
+
+int printfdeb(unsigned int iVar)
+{
+    int len = Serial.print(iVar);
+    return len;
+}
+
+int printfdeb(short iVar)
+{
+    int len = Serial.print(iVar);
+    return len;
+}
+
+int printdeb(float fVar)
+{
+    int len = Serial.print(fVar);
+    return len;
+}
+
+int printdeb(char c)
+{
+    int len = Serial.print(c);
+    return len;
+}
+
+int printdeb(unsigned char c)
+{
+    int len = Serial.print(c);
+    return len;
+}
+
+int printlndeb(String str)
+{
+    int len = Serial.println(str);
+    return len;
+}
+
+int printdeb(String str)
+{
+    int len = Serial.print(str);
+    return len;
+}

@@ -19,6 +19,8 @@
 
 #include "TinyGPSPlus.h"
 
+#include "printfdeb_functions.h"
+
 bool gpsDetected = false;
 bool gpsInitDone = false;
 
@@ -485,7 +487,7 @@ unsigned long getUnixClock()
     unsigned long ut = (unsigned long)mktime(&timeinfo);
     unsigned long ot = (unsigned long)(meshcom_settings.node_utcoff * 3600.0); // utcoff in sec
 
-    //Serial.printf("Date: %i.%i.%i %i:%i:%i %lu %f %lu\n",timeinfo.tm_year, timeinfo.tm_mon, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, ut, meshcom_settings.node_utcoff, ot);
+    //printfdeb("Date: %i.%i.%i %i:%i:%i %lu %f %lu\n",timeinfo.tm_year, timeinfo.tm_mon, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, ut, meshcom_settings.node_utcoff, ot);
 
 
 	return ut - ot;
@@ -506,7 +508,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     {
         unsigned long unix_time = getUnixClock();
         
-        //Serial.printf("UNIX TME:%lu\n", unix_time);
+        //printfdeb("UNIX TME:%lu\n", unix_time);
 
         uint8_t tbuffer[5];
         tbuffer[0] = (unix_time >> 24) & 0xFF;
@@ -522,19 +524,19 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 
     if(bBLEDEBUG)
     {
-        Serial.printf("<%02X>BLEtoPhone RingBuff added len=%i to element: %u\n", buffer[0], len, toPhoneWrite);
+        printfdeb("<%02X>BLEtoPhone RingBuff added len=%i to element: %u\n", buffer[0], len, toPhoneWrite);
         printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1 + 4);
     }
 
-    //Serial.printf("toPhone write:%i read:%i max:%i ", toPhoneWrite, toPhoneRead, MAX_RING);
+    //printfdeb("toPhone write:%i read:%i max:%i ", toPhoneWrite, toPhoneRead, MAX_RING);
 
     addRingPointer(toPhoneWrite, toPhoneRead, MAX_RING, "phone");
 
-    //Serial.printf("next write:%i read:%i max:%i\n", toPhoneWrite, toPhoneRead, MAX_RING);
+    //printfdeb("next write:%i read:%i max:%i\n", toPhoneWrite, toPhoneRead, MAX_RING);
 
     /*
     toPhoneWrite++;
-    //Serial.printf("toPhoneWrite:%i\n", toPhoneWrite);
+    //printfdeb("toPhoneWrite:%i\n", toPhoneWrite);
     if (toPhoneWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
         toPhoneWrite = 0;
     */
@@ -550,7 +552,7 @@ void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
 
     if (len > 245)
     {
-        Serial.printf("[ERR]...BLE out-buffer to long <%i> <%-245.245s>\n", len, buffer);
+        printfdeb("[ERR]...BLE out-buffer to long <%i> <%-245.245s>\n", len, buffer);
     }
 
     //first two bytes are always the message length
@@ -559,17 +561,17 @@ void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
 
     if(bBLEDEBUG)
     {
-        Serial.printf("<%s> BLEComToPhone RingBuff added len=%i to element: %u\n", buffer, len, ComToPhoneWrite);
+        printfdeb("<%s> BLEComToPhone RingBuff added len=%i to element: %u\n", buffer, len, ComToPhoneWrite);
     }
 
     ComToPhoneWrite++;
     
-    //Serial.printf("toPhoneWrite:%i\n", toPhoneWrite);
+    //printfdeb("toPhoneWrite:%i\n", toPhoneWrite);
 
     if (ComToPhoneWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
     {
         if(bBLEDEBUG)
-            Serial.printf("[ERR]...BLEComToPhoneRingBuff overflow! Reset to 0 from %i\n", ComToPhoneWrite);
+            printfdeb("[ERR]...BLEComToPhoneRingBuff overflow! Reset to 0 from %i\n", ComToPhoneWrite);
 
         ComToPhoneWrite = 0;
     }
@@ -607,7 +609,7 @@ void addLoraRxBuffer(unsigned int msg_id, bool bserver)
     uint8_t slot = loraWrite.load();
 
     if(bLORADEBUG)
-        Serial.printf("[MC-DBG] RX_DEDUP_ADD msg_id=%08X srv=%d slot=%d/%d\n",
+        printfdeb("[MC-DBG] RX_DEDUP_ADD msg_id=%08X srv=%d slot=%d/%d\n",
                       msg_id, bserver, slot, MAX_DEDUP_RING);
 
     // byte 0-3 msg_id
@@ -666,7 +668,7 @@ int checkOwnTx(unsigned int msg_id)
         {
             if(bDisplayInfo)
             {
-                Serial.printf("%s checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X> %02X\n", getTimeString().c_str(), msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0], own_msg_id[ilo][4]);
+                printfdeb("%s checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X> %02X\n", getTimeString().c_str(), msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0], own_msg_id[ilo][4]);
             }
 
             return ilo;
@@ -691,7 +693,7 @@ void insertOwnTx(unsigned int msg_id)
 
     if(bDisplayInfo)
     {
-        Serial.printf("%s Insert own_msg_id:%08X <%02X%02X%02X%02X>\n", getTimeString().c_str(), msg_id, own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
+        printfdeb("%s Insert own_msg_id:%08X <%02X%02X%02X%02X>\n", getTimeString().c_str(), msg_id, own_msg_id[iWriteOwn][3], own_msg_id[iWriteOwn][2], own_msg_id[iWriteOwn][1], own_msg_id[iWriteOwn][0]);
     }
 
     iWriteOwn++;
@@ -796,11 +798,11 @@ int esp32_isSSD1306(int address)
     // no display found
     if(!bFound)
     {
-        Serial.println("[INIT]...Display not found");
+        printlndeb("[INIT]...Display not found");
         return -1;
     }
 
-    Serial.printf("[INIT]...Display type: 0x%02X\n", buffer[0]);
+    printfdeb("[INIT]...Display type: 0x%02X\n", buffer[0]);
 
     // 0x00 == T-BEAM 1.3" 1106 !! sonst kommen artefakte
 
@@ -821,12 +823,12 @@ int esp32_isSSD1306(int address)
     byte checkByte = buffer[0] & 0x03f;
     if(checkByte == 0x28 || checkByte == 0x16 || checkByte == 0x00)
     {
-        Serial.println(F("[INIT]...OLED Display is SSD1306"));
+        printlndeb("[INIT]...OLED Display is SSD1306");
         return 2;
     }
 
     // cheched 0.9"
-    Serial.println(F("[INIT]...OLED Display is SH1106"));
+    printlndeb("[INIT]...OLED Display is SH1106");
     return 1;
 }
 
@@ -846,7 +848,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
             return;
     #endif
     
-    //Serial.printf("bClear:%i bTransfer:%i x:%i y:%i pageLineAnz:%i text:%s\n", bClear, bTransfer, x, y, pageLineAnz, text);
+    //printfdeb("bClear:%i bTransfer:%i x:%i y:%i pageLineAnz:%i text:%s\n", bClear, bTransfer, x, y, pageLineAnz, text);
 
 	if(bClear || (x == 0 && y== 0) || (x == 0 && memcmp(text, "#F", 2) == 0))
     {
@@ -895,7 +897,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     {
         if(pageLineAnz < maxdisplines)
         {
-            //Serial.printf("pageLineAnz:%i text:%s\n", pageLineAnz, text);
+            //printfdeb("pageLineAnz:%i text:%s\n", pageLineAnz, text);
 
             pageLine[pageLineAnz][0] = x;
             pageLine[pageLineAnz][1] = y;
@@ -909,7 +911,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 
     if(bTransfer)
     {
-        //Serial.println("Transfer");
+        //printlndeb("Transfer");
         #if defined HAS_EPAPER
             if(pageLineAnz > 0)
             {
@@ -1431,7 +1433,7 @@ void sendDisplayTime()
         return;
     #endif
 
-    //TEST ONLY Serial.printf("Time bDisplayOff:%i iDisplayType:%i bSetDisplay:%i\n", bDisplayOff, iDisplayType, bSetDisplay);
+    //TEST ONLY printfdeb("Time bDisplayOff:%i iDisplayType:%i bSetDisplay:%i\n", bDisplayOff, iDisplayType, bSetDisplay);
 
     if(bDisplayIsOff)
         return;
@@ -1698,7 +1700,7 @@ void mainStartTimeLoop()
     // Start-Loop & Time-Loop
 
     //if(iInitDisplay > 0)
-    //    Serial.printf("iInitDisplay %i meshcom_settings.node_date_second %i DisplayTimeWait %i\n", iInitDisplay, meshcom_settings.node_date_second, DisplayTimeWait);
+    //    printfdeb("iInitDisplay %i meshcom_settings.node_date_second %i DisplayTimeWait %i\n", iInitDisplay, meshcom_settings.node_date_second, DisplayTimeWait);
 
     if(iInitDisplay < 4)
     {
@@ -1973,7 +1975,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             if(!(cset[5] == clfd[0] && cset[8] == clfd[1] && cset[11] == clfd[2]))
             {
                 bpass=false;
-                Serial.printf("[MCP] wrong lfd:%s\n", clfd);
+                printfdeb("[MCP] wrong lfd:%s\n", clfd);
             }
         }
 
@@ -1989,7 +1991,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                     if(memcmp(cset+9, "ON", 2) == 0 || memcmp(cset+9, "on", 2) == 0)
                         bON = true;
 
-                    Serial.printf("[MCP] key:%-5.5s command: %c%i %s\n", cpasswd, cset[6], iswitch, (bON?"on":"off"));
+                    printfdeb("[MCP] key:%-5.5s command: %c%i %s\n", cpasswd, cset[6], iswitch, (bON?"on":"off"));
 
                     char cBefehl[30];
                     if(bON)
@@ -2001,17 +2003,17 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                 }
                 else
                 {
-                    Serial.println("[MCP] wrong switch number");
+                    printlndeb("[MCP] wrong switch number");
                 }
             }
             else
             {
-                Serial.println("[MCP] no command recognized");
+                printlndeb("[MCP] no command recognized");
             }
         }
         else
         {
-            Serial.println("[MCP] wrong keyword");
+            printlndeb("[MCP] wrong keyword");
         }
 
         return;
@@ -2397,7 +2399,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     }
 
     msg_text[20]=0x00;
-    //Serial.printf("1306-02:%s len:%i izeile:%i\n", msg_text, strlen(msg_text), izeile);
+    //printfdeb("1306-02:%s len:%i izeile:%i\n", msg_text, strlen(msg_text), izeile);
     sendDisplay1306(bClear, bEnd, 3, dzeile[izeile], msg_text);
 
     #endif
@@ -2434,7 +2436,7 @@ void initAnalogPin()
 
         if(bDEBUG && bDisplayInfo)
         {
-            Serial.printf("%s [ANALOG]...GPIO%i SET\n", getTimeString().c_str(), ANAGPIO);
+            printfdeb("%s [ANALOG]...GPIO%i SET\n", getTimeString().c_str(), ANAGPIO);
         }
     }
     
@@ -2443,7 +2445,7 @@ void initAnalogPin()
 
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
-    //Serial.printf("bPosDisplay:%i DisplayOffWait:%i bSetDisplay:%i pageHold:%i bDisplayTrack:%i bDisplayIsOff:%i\n", bPosDisplay, DisplayOffWait, bSetDisplay, pageHold, bDisplayTrack, bDisplayIsOff);
+    //printfdeb("bPosDisplay:%i DisplayOffWait:%i bSetDisplay:%i pageHold:%i bDisplayTrack:%i bDisplayIsOff:%i\n", bPosDisplay, DisplayOffWait, bSetDisplay, pageHold, bDisplayTrack, bDisplayIsOff);
 
     if(!bPosDisplay)
         return;
@@ -2773,7 +2775,7 @@ void DrawRssi(int cx, int cy, int16_t rssi)
 {
     int irssi = (110 + rssi) * 2;
     
-    //Serial.printf("rssi:%i irssi:%i\n", rssi, irssi);
+    //printfdeb("rssi:%i irssi:%i\n", rssi, irssi);
 
     epaper_display.fillRect(cx + 60, cy, irssi, 5, BLACK);
 
@@ -2788,9 +2790,9 @@ void printBuffer(uint8_t *buffer, int len)
 {
   for (int i = 0; i < len; i++)
   {
-    Serial.printf("%02X ", buffer[i]);
+    printfdeb("%02X ", buffer[i]);
   }
-  Serial.println("");
+  printlndeb("");
 }
 
 void printAsciiBuffer(uint8_t *buffer, int len)
@@ -2800,7 +2802,7 @@ void printAsciiBuffer(uint8_t *buffer, int len)
 
     if(buffer[0] != 0x21 && buffer[0] != 0x3A && buffer[0] != 0x40 && buffer[0] != 0x41)
     {
-        Serial.printf("LoRa starting with 0x%02X and %02X%02X%02X ... no decode\n", buffer[0], buffer[1], buffer[2], buffer[3]);
+        printfdeb("LoRa starting with 0x%02X and %02X%02X%02X ... no decode\n", buffer[0], buffer[1], buffer[2], buffer[3]);
         return;
     }
 
@@ -2811,12 +2813,12 @@ void printAsciiBuffer(uint8_t *buffer, int len)
     for (int i = 0; i < ulen; i++)
     {
         if(buffer[i] < 0x20 || buffer[i] > 0x7e)
-            Serial.print("#");
+            printdeb("#");
         else
-            Serial.printf("%c", buffer[i]);
+            printfdeb("%c", buffer[i]);
     }
 
-    Serial.println("");
+    printlndeb("");
 }
 
 String getDateString()
@@ -2859,7 +2861,7 @@ void charBuffer_aprs(struct aprsMessage &aprsmsg)
 
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-    Serial.printf("%s %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+    printfdeb("%s %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
         aprsmsg.msg_source_hw, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
@@ -2867,9 +2869,9 @@ void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_t size)
 {
     if(size == 7)
-        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
+        printfdeb("%s %s: %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
     else
-        Serial.printf("%s %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
+        printfdeb("%s %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
 }
 
 
@@ -2881,7 +2883,7 @@ void sendMessage(char *msg_text, int len)
     if(memcmp(msg_text, "-", 1) == 0)
     {
         if(bDisplayInfo)
-            Serial.printf("COMMAND:%s\n", msg_text);
+            printfdeb("COMMAND:%s\n", msg_text);
 
         commandAction(msg_text, false);
         return;
@@ -2919,8 +2921,8 @@ void sendMessage(char *msg_text, int len)
 
     if(bDisplayCont)
     {
-        Serial.print("SendMessage in:");
-        Serial.println(msg_text_check);
+        printdeb("SendMessage in:");
+        printlndeb(msg_text_check);
     }
 
     int iulng=0;
@@ -2976,18 +2978,18 @@ void sendMessage(char *msg_text, int len)
 
     if(bDisplayCont)
     {
-        Serial.print("SendMessage out:");
-        Serial.println(msg_text_checked);
+        printdeb("SendMessage out:");
+        printlndeb(msg_text_checked);
     }
 
     /*
-    Serial.println(msg_text_check);
-    Serial.println(msg_text_checked);
+    printlndeb(msg_text_check);
+    printlndeb(msg_text_checked);
     for(int iu=0;iu<50;iu++)
     {
-        Serial.printf("%02X ", msg_text_checked[iu]);
+        printfdeb("%02X ", msg_text_checked[iu]);
     }
-    Serial.println("");
+    printlndeb("");
     */
 
     String strMsg = msg_text_checked;
@@ -2996,7 +2998,7 @@ void sendMessage(char *msg_text, int len)
     
     if(strMsg.length() < 1 || strMsg.length() > 160)
     {
-        Serial.printf("sendMessage wrong text length:%i\n", strMsg.length());
+        printfdeb("sendMessage wrong text length:%i\n", strMsg.length());
         return;
     }
 
@@ -3028,7 +3030,7 @@ void sendMessage(char *msg_text, int len)
         // check no message to own-call
         if(strDestinationCall.compareTo(meshcom_settings.node_call) == 0)
         {
-            Serial.println("[ERROR]...DM to own-all not allowed");
+            printfdeb("[ERROR]...DM to own-all not allowed");
             return;
         }
     }
@@ -3069,7 +3071,7 @@ void sendMessage(char *msg_text, int len)
     if(bDisplayInfo)
     {
         printBuffer_aprs((char*)"NEW-TXT", aprsmsg);
-        Serial.println();
+        printfdeb("");
     }
 
     // An APP als Anzeige retour senden
@@ -3136,7 +3138,7 @@ void sendMessage(char *msg_text, int len)
     {
         int w = iWrite;
         unsigned int ring_msg_id = (ringBuffer[w][6]<<24) | (ringBuffer[w][5]<<16) | (ringBuffer[w][4]<<8) | ringBuffer[w][3];
-        Serial.printf("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", w, ringBuffer[w][1], ringBuffer[w][0], ringBuffer[w][2], ring_msg_id);
+        printfdeb("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", w, ringBuffer[w][1], ringBuffer[w][0], ringBuffer[w][2], ring_msg_id);
     }
 
     retryCount[iWrite] = 0;
@@ -3173,7 +3175,7 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
 
     if(lat >= 0.0 && lat <= 2.0 && lon >= 0.0 && lon <= 2.0)
     {
-        Serial.println("[APRS] Error PositionToAPRS");
+        printfdeb("[APRS] Error PositionToAPRS");
         return "";
     }
 
@@ -3491,7 +3493,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
 
         if(bDisplayInfo)
         {
-            Serial.printf("%s [LO-APRS]...%c%02X%02X%s\n", getTimeString().c_str(), msg_buffer[0], msg_buffer[1], msg_buffer[2], msg_buffer+3);
+            printfdeb("%s [LO-APRS]...%c%02X%02X%s\n", getTimeString().c_str(), msg_buffer[0], msg_buffer[1], msg_buffer[2], msg_buffer+3);
         }
 
         // local LoRa-APRS position-messages send to LoRa TX
@@ -3578,7 +3580,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
             {
                 if(bDisplayInfo)
                 {
-                    Serial.printf("%s [NEW-UDP]...%s\n", getTimeString().c_str(), msg_buffer+3);
+                    printfdeb("%s [NEW-UDP]...%s\n", getTimeString().c_str(), msg_buffer+3);
                 }
 
                 bGateway_done = true;
@@ -3623,7 +3625,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         if(bDisplayInfo)
         {
             printBuffer_aprs((char*)"NEW-POS", aprsmsg);
-            Serial.println();
+            printfdeb("");
         }
 
         // local position-messages send to LoRa TX
@@ -3642,7 +3644,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         {
             if(bDisplayInfo)
             {
-                Serial.printf("%s [NEW-UDP]...%s\n", getTimeString().c_str(), msg_buffer+3);
+                printfdeb("%s [NEW-UDP]...%s\n", getTimeString().c_str(), msg_buffer+3);
             }
             
             // UDP out
@@ -3701,7 +3703,7 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
     if(bDisplayInfo)
     {
         printBuffer_aprs((char*)"NEW-POS", aprsmsg);
-        Serial.println();
+        printfdeb("");
     }
 
     // local position-messages send to LoRa TX
@@ -3777,7 +3779,7 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     if(bDisplayInfo)
     {
         printBuffer_aprs((char*)"NEW-ACK", aprsmsg);
-        Serial.println();
+        printfdeb("");
     }
 
     int savedAckSlot = iWrite;
@@ -3840,7 +3842,7 @@ void sendHey()
     if(bDisplayInfo)
     {
         printBuffer_aprs((char*)"NEW-HEY", aprsmsg);
-        Serial.println();
+        printfdeb("");
     }
 
     // store last message to compare later on
@@ -4107,7 +4109,7 @@ void sendTelemetry(int ID)
         if(bDisplayInfo)
         {
             printBuffer_aprs((char*)"NEW-TMY", aprsmsg);
-            Serial.println();
+            printfdeb("");
         }
 
         // store last message to compare later on
@@ -4167,7 +4169,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     if(!bDisplayTrack)
     {
         if(iGPSDEBUG > 0)
-            Serial.printf("%s [POSINFO]...Stationary -> Suppressing drift (Rate: %is)\n", getTimeString().c_str(), POSINFO_INTERVAL);
+            printfdeb("%s [POSINFO]...Stationary -> Suppressing drift (Rate: %is)\n", getTimeString().c_str(), POSINFO_INTERVAL);
         
         return POSINFO_INTERVAL;
     }
@@ -4228,14 +4230,14 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
             posinfo_last_rate = POSINFO_INTERVAL;
 
             if(iGPSDEBUG > 0)
-                Serial.printf("%s [POSINFO]...STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", getTimeString().c_str(), speed_mps, distance, (int)posinfo_last_rate);
+                printfdeb("%s [POSINFO]...STATIONARY (Speed %.1f, Dist %.0f) --> RATE:%i\n", getTimeString().c_str(), speed_mps, distance, (int)posinfo_last_rate);
 
             return posinfo_last_rate;
         }
     }
 
     if(iGPSDEBUG > 0)
-        Serial.printf("%s [POSINFO]...dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", getTimeString().c_str(), posinfo_direction, distance, speed_mps, gps_refresh_intervall);
+        printfdeb("%s [POSINFO]...dir:%.1lf° dist:%.1lf speed:%.1lf intervall:%.1lf\n", getTimeString().c_str(), posinfo_direction, distance, speed_mps, gps_refresh_intervall);
 
     // Moving Logic & Symbol Switching with Hysteresis
     static unsigned long last_car_speed_ts = 0;
@@ -4281,7 +4283,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
                     meshcom_settings.node_symcd = target_symbol;
 
                     if(iGPSDEBUG > 0)
-                        Serial.printf("Auto-Symbol switch to '%c'\n", target_symbol);
+                        printfdeb("Auto-Symbol switch to '%c'\n", target_symbol);
                 }
             }
         }
@@ -4298,7 +4300,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
         // Also suppress distance triggers unless very large (e.g. moving to another building)
         if(distance < 200.0) 
         {
-            if(iGPSDEBUG > 0) Serial.printf("%s [POSINFO]...WiFi connected & Stationary -> Suppressing drift (Rate: %i)\n", getTimeString().c_str(), POSINFO_INTERVAL);
+            if(iGPSDEBUG > 0) printfdeb("%s [POSINFO]...WiFi connected & Stationary -> Suppressing drift (Rate: %i)\n", getTimeString().c_str(), POSINFO_INTERVAL);
             return POSINFO_INTERVAL;
         }
     }
@@ -4323,7 +4325,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     }
 
     if(iGPSDEBUG > 0)
-        Serial.printf("%s [POSINFO]...speed:%.1lf -> fast rate:%i\n", getTimeString().c_str(), speed_mps, (int)gps_send_rate);
+        printfdeb("%s [POSINFO]...speed:%.1lf -> fast rate:%i\n", getTimeString().c_str(), speed_mps, (int)gps_send_rate);
 
     // Distance Trigger: Force send if distance threshold exceeded
     double dist_threshold = 500.0;
@@ -4334,7 +4336,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     {
         posinfo_shot = true;
         if(iGPSDEBUG > 0)
-            Serial.printf("%s [POSINFO]...one-shot set - distance > %.0fm (%.1lf)\n", getTimeString().c_str(), dist_threshold, distance);
+            printfdeb("%s [POSINFO]...one-shot set - distance > %.0fm (%.1lf)\n", getTimeString().c_str(), dist_threshold, distance);
     }
 
     if(gps_send_rate < 200)  // seit letzter position
@@ -4357,7 +4359,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
                 posinfo_shot=true;
 
                 if(iGPSDEBUG > 0)
-                    Serial.printf("%s [POSINFO]...one-shot set - direction_diff:%i (thresh:%i) last_lat:%.1lf last_lon:%.1lf\n", getTimeString().c_str(), direction_diff, turn_threshold, posinfo_prev_lat, posinfo_prev_lon);
+                    printfdeb("%s [POSINFO]...one-shot set - direction_diff:%i (thresh:%i) last_lat:%.1lf last_lon:%.1lf\n", getTimeString().c_str(), direction_diff, turn_threshold, posinfo_prev_lat, posinfo_prev_lon);
             }
         }
     }
@@ -4370,7 +4372,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     posinfo_last_rate = gps_send_rate;
 
     if(iGPSDEBUG > 0)
-        Serial.printf("%s [POSINFO]...RATE:%i\n", getTimeString().c_str(), (int)posinfo_last_rate);
+        printfdeb("%s [POSINFO]...RATE:%i\n", getTimeString().c_str(), (int)posinfo_last_rate);
 
     return posinfo_last_rate;
 }
@@ -4576,7 +4578,7 @@ void addRingPointer(volatile int &pWrite, volatile int &pRead, int iMAX, const c
 
             if(bLORADEBUG && strcmp(bufName, "raw_rx") != 0 && strcmp(bufName, "phone") != 0)
             {
-                Serial.printf("[MC-DBG] RING_OVERFLOW buf=%s\n", bufName);
+                printfdeb("[MC-DBG] RING_OVERFLOW buf=%s\n", bufName);
             }
         }
     }
