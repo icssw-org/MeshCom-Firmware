@@ -2,6 +2,7 @@
 #include "command_functions.h"
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
+#include "printfdeb_functions.h"
 #include "batt_functions.h"
 #include "mheard_functions.h"
 #include "udp_functions.h"
@@ -128,8 +129,8 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     // --setcall OE3WAS-10 --setpwd 12345678 --setssid Drei_H288A_24G_yAFG --webserver on --button gpio 12 --button on ......
     if(bDisplayCont)
     {
-        Serial.println("");
-        Serial.println("START CHECK:");
+        printfdeb("");
+        printfdeb("START CHECK:");
     }
 
     int inext = 0;
@@ -143,9 +144,9 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 
             if(bDisplayCont)
             {
-                Serial.print("MORE:<");
-                Serial.print(msg_detail);
-                Serial.println(">");
+                printdeb("MORE:<");
+                printdeb(msg_detail);
+                printfdeb(">");
             }
 
             commandAction(msg_detail, ble);
@@ -167,8 +168,8 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 
         if(bDisplayCont)
         {
-            Serial.print("MORE:");
-            Serial.println(msg_detail);
+            printdeb("MORE:");
+            printfdeb(msg_detail);
         }
 
         commandAction(msg_detail, ble);
@@ -177,8 +178,8 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     {
         if(bDisplayCont)
         {
-            Serial.print("ONE:");
-            Serial.println(msg_text);
+            printdeb("ONE:");
+            printlndeb(msg_text);
         }
 
         commandAction(msg_text, ble);
@@ -217,7 +218,7 @@ void commandAction(char *umsg_text, bool ble)
     bool bAnalogSetting=false;
 
     if(bBLEDEBUG && ble)
-        Serial.printf("commandAction [%s] ble:%i\n", sVar.c_str(), ble);
+        printfdeb("commandAction [%s] ble:%i\n", sVar.c_str(), ble);
 
     if(memcmp(sVar.c_str(), "--", 2) != 0)
     {
@@ -227,7 +228,7 @@ void commandAction(char *umsg_text, bool ble)
             addBLECommandBack(print_buff);
         }
 
-        Serial.printf("\nMeshCom %-4.4s%-1.1s Client\n...wrong command %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB, sVar.c_str());
+        printfdeb("\nMeshCom %-4.4s%-1.1s Client\n...wrong command %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB, sVar.c_str());
 
         return;
     }
@@ -256,7 +257,7 @@ void commandAction(char *umsg_text, bool ble)
         // TODO: adapt node_time accordingly!
 
         if(bBLEDEBUG)
-            Serial.printf("[COMMAND]utcoff:%f\n", meshcom_settings.node_utcoff);
+            printfdeb("[COMMAND]utcoff:%f\n", meshcom_settings.node_utcoff);
 
         if(ble)
         {
@@ -407,7 +408,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setinfo off") == 0)
     {
-        Serial.println("\nsetinfo off");
+        printlndeb("\nsetinfo off");
 
         bDisplayInfo=false;
 
@@ -416,7 +417,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setinfo on") == 0)
     {
-        Serial.println("\nsetinfo on");
+        printlndeb("\nsetinfo on");
 
         bDisplayInfo=true;
 
@@ -425,7 +426,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setcont off") == 0)
     {
-        Serial.println("\nsetcont off");
+        printfdeb("\nsetcont off");
 
         bDisplayCont=false;
 
@@ -438,7 +439,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setcont on") == 0)
     {
-        Serial.println("\nsetcont on");
+        printlndeb("\nsetcont on");
 
         bDisplayCont=true;
 
@@ -451,7 +452,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setretx off") == 0)
     {
-        Serial.println("\nsetretx off");
+        printlndeb("\nsetretx off");
 
         bDisplayRetx=false;
 
@@ -460,7 +461,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setretx on") == 0)
     {
-        Serial.println("\nsetretx on");
+        printlndeb("\nsetretx on");
 
         bDisplayRetx=true;
 
@@ -469,7 +470,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"shortpath off") == 0)
     {
-        Serial.println("\nshortpath off");
+        printlndeb("\nshortpath off");
 
         bSHORTPATH=false;
 
@@ -482,7 +483,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"shortpath on") == 0)
     {
-        Serial.println("\nshortpath on");
+        printfdeb("\nshortpath on");
 
         bSHORTPATH=true;
 
@@ -598,72 +599,72 @@ void commandAction(char *umsg_text, bool ble)
         }
 //        else
         {
-            Serial.printf("MeshCom %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setname  set first name/none\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
+            printfdeb("MeshCom %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--setname  set first name/none\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
             delay(100);
 
-            Serial.printf("--setssid  WLAN SSID/none\n--setpwd   WLAN PASSWORD/none\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--setowndns 255.255.255.255\n--setownntp 255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255/none\n");
+            printlndeb("--setssid  WLAN SSID/none\n--setpwd   WLAN PASSWORD/none\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--setowndns 255.255.255.255\n--setownntp 255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255/none\n");
             delay(100);
 
-            Serial.printf("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analog check on/off\n");
+            printlndeb("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analog check on/off\n");
             delay(100);
-            Serial.printf("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
+            printfdeb("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
             delay(100);
-            Serial.printf("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--atxt   set APRS Textinfo/none\n--showI2C\n");
+            printlndeb("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--atxt   set APRS Textinfo/none\n--showI2C\n");
             delay(100);
-            Serial.printf("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n");
+            printlndeb("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n");
             delay(100);
-            Serial.printf("--setgrc 9;..9;  set groups\n--nomsgall on/off  '*'-msg on display\n");
+            printfdeb("--setgrc 9;..9;  set groups\n--nomsgall on/off  '*'-msg on display\n");
             delay(100);
-            Serial.printf("--maxv    100%% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n−−settime yyyy.mm.dd hh:mm:ss\n");
+            printlndeb("--maxv    100%% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n−−settime yyyy.mm.dd hh:mm:ss\n");
             delay(100);
-            Serial.printf("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
+            printlndeb("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
             delay(100);
-            Serial.printf("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--SS on  use SS\n--bmx BME/BMP/680 off\n");
+            printlndeb("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--SS on  use SS\n--bmx BME/BMP/680 off\n");
             delay(100);
-            Serial.printf("--onewire on/off  use DSxxxx\n--onewire gpio 99\n");
+            printlndeb("--onewire on/off  use DSxxxx\n--onewire gpio 99\n");
             delay(100);
             
             #ifdef BOARD_RAK4630
-                Serial.printf("--lps33 on/off (RAK only)\n");
+                printfdeb("--lps33 on/off (RAK only)\n");
                 delay(100);
             #endif
 
-            Serial.printf("--info      show info\n--mheard    show MHeard\n--gateway   on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx/none\n--mesh      on/off\n");
+            printfdeb("--info      show info\n--mheard    show MHeard\n--gateway   on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx/none\n--mesh      on/off\n");
             delay(100);
             #ifdef ESP32
-                Serial.printf("--netconsole on/off  (net console port 2323)\n");
-                Serial.printf("--passwd xxxx/none   (net console password, none=clear)\n");
+                printlndeb("--netconsole on/off  (net console port 2323)\n");
+                printfdeb("--passwd xxxx/none   (net console password, none=clear)\n");
                 delay(100);
             #endif
             delay(100);
-            Serial.printf("--softser   on/off/send/app/baud/fixpegel/fixpegel2/fixtemp\n");
+            printlndeb("--softser   on/off/send/app/baud/fixpegel/fixpegel2/fixtemp\n");
             delay(100);
-            Serial.printf("--softserread   on/off (show rx msg)\n");
+            printlndeb("--softserread   on/off (show rx msg)\n");
             delay(100);
-            Serial.printf("--spectrum  run spectral scan  --specstart MHz --specend MHz  --specstep MHz  --specsamples 500-2048\n");
+            printlndeb("--spectrum  run spectral scan  --specstart MHz --specend MHz  --specstep MHz  --specsamples 500-2048\n");
             delay(100);
             //own-call-ssid:PARM.VOLT,AMPERE,BATT,,,track,-,-,-,-,-,-,-
-            Serial.printf("--parm tm1,tm2,tm3,tm4,tm5 (measured value name ... not used leave blank)\n");
+            printlndeb("--parm tm1,tm2,tm3,tm4,tm5 (measured value name ... not used leave blank)\n");
             delay(100);
             //own-call-ssid:%-9.9s:UNIT.V,A,V,,,Y/N,O/N,O/N,O/N,O/N,O/N,O/N,O/N
-            Serial.printf("--unit tm1,tm2,tm3,tm4,tm5 (unit like V,A,mV, ... not used leave blank)\n");
+            printlndeb("--unit tm1,tm2,tm3,tm4,tm5 (unit like V,A,mV, ... not used leave blank)\n");
             delay(100);
             //#%03i,%.1f,%.1f,0,0,0,%01i0000000
-            Serial.printf("--format 1,1,1,1,1 (decimal places ... not used leave 0)\n");
+            printlndeb("--format 1,1,1,1,1 (decimal places ... not used leave 0)\n");
             delay(100);
             //own-call-ssid:EQNS.0,1,0,0,1,0,0,1,0,0,1,0,0,1,0
-            Serial.printf("--eqns 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0 (default is set)\n");
+            printlndeb("--eqns 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0 (default is set)\n");
             delay(100);
             //internal value names
-            Serial.printf("--values press,hum,temp,onewire,co2 (see project pages)\n");
+            printlndeb("--values press,hum,temp,onewire,co2 (see project pages)\n");
             delay(100);
             //value timer
-            Serial.printf("--ptime 99 messuring interval minutes\n");
+            printlndeb("--ptime 99 messuring interval minutes\n");
 
             #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || \
                 defined(SX1262_V3) || defined(USING_SX1262) || defined(BOARD_RAK4630)
                 delay(100);
-                Serial.printf("--setboostedgain    on/off  enable/disable boosted rx gain\n");
+                printlndeb("--setboostedgain    on/off  enable/disable boosted rx gain\n");
             #endif
         }
 
@@ -677,7 +678,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"all") == 0)
     {
-        Serial.println("all on");
+        printlndeb("all on");
 
         bPosDisplay=true;
 
@@ -695,7 +696,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"msg") == 0)
     {
-        Serial.println("msg on");
+        printlndeb("msg on");
 
         bPosDisplay=false;
         
@@ -774,7 +775,7 @@ void commandAction(char *umsg_text, bool ble)
         #endif
 
         #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
-            Serial.println(F("[INIT]...Disbling Vext for OLED power"));
+            printlndeb(F("[INIT]...Disbling Vext for OLED power"));
             pinMode(Vext, OUTPUT);
             digitalWrite(Vext, HIGH);   // Vext OFF (active high)
             delay(50);
@@ -826,7 +827,7 @@ void commandAction(char *umsg_text, bool ble)
         #endif
 
         #if defined(BOARD_TRACKER)
-        Serial.printf("[DISP]...Contrast set to %d\n", contrast_value);
+        printfdeb("[DISP]...Contrast set to %d\n", contrast_value);
 
         if(ble)
         {
@@ -839,7 +840,7 @@ void commandAction(char *umsg_text, bool ble)
         if(u8g2 != NULL)
         {
             u8g2->setContrast(contrast_value);
-            Serial.printf("[DISP]...Contrast set to %d\n", contrast_value);
+            printfdeb("[DISP]...Contrast set to %d\n", contrast_value);
 
             if(ble)
             {
@@ -850,10 +851,10 @@ void commandAction(char *umsg_text, bool ble)
         }
         else
         {
-            Serial.println("[DISP]...Display not initialized");
+            printfdeb("[DISP]...Display not initialized");
         }
         #else
-        Serial.println("[DISP]...Contrast not supported on this display");
+        printfdeb("[DISP]...Contrast not supported on this display");
         #endif
 
         bReturn = true;
@@ -863,11 +864,11 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"spiffs reset") == 0)
     {
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-        Serial.println("...SPIFFS format start");
+        printlndeb("...SPIFFS format start");
         SPIFFS.format();
-        Serial.println("...SPIFFS format done");
+        printlndeb("...SPIFFS format done");
         #else
-        Serial.println("[DISP]...SPIFFS  not supported on this hardware");
+        printlndeb("[DISP]...SPIFFS  not supported on this hardware");
         #endif
 
         bReturn = true;
@@ -917,7 +918,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(meshcom_settings.node_button_pin < 0 || meshcom_settings.node_button_pin > 99)
         {
-            Serial.printf("Wrong BUTTON GPIO PIN only >= 0 and <= 99");
+            printlndeb("Wrong BUTTON GPIO PIN only >= 0 and <= 99");
             
             meshcom_settings.node_button_pin = ibt;
 
@@ -948,7 +949,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(meshcom_settings.node_analog_pin <= 0 || meshcom_settings.node_analog_pin >= 99)
         {
-            Serial.printf("Wrong ANALOG GPIO PIN only > 0 and < 99");
+            printfdeb("Wrong ANALOG GPIO PIN only > 0 and < 99");
             
             meshcom_settings.node_analog_pin = iap;
 
@@ -1012,7 +1013,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(dVar < 0 || dVar >= 10.)
         {
-            Serial.println("ADCSlope only between 0 and 9.999");
+            printfdeb("ADCSlope only between 0 and 9.999");
             return ;
         }
 
@@ -1035,7 +1036,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(dVar < 0 || dVar >= 1000.0)
         {
-            Serial.println("ADCOffset only between 0 and 999 [mV]");
+            printfdeb("ADCOffset only between 0 and 999 [mV]");
             return ;
         }
 
@@ -1058,7 +1059,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(dVar < 0 || dVar > 3)
         {
-            Serial.println("ADCAttenuator only between 0 and 3");
+            printfdeb("ADCAttenuator only between 0 and 3");
             return ;
         }
 
@@ -1153,7 +1154,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(dVar < INA226_MINIMAL_SHUNT_OHM || dVar > 0.5)
         {
-            Serial.printf("INA226 Rs (shunt) not > %.3f and < 0.500 Ω\n", INA226_MINIMAL_SHUNT_OHM);
+            printfdeb("INA226 Rs (shunt) not > %.3f and < 0.500 Ω\n", INA226_MINIMAL_SHUNT_OHM);
             return;
         }
 
@@ -1178,7 +1179,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(dVar < 0 || dVar > 20)
         {
-            Serial.printf("INA226 maxCurrent 20 A\n");
+            printfdeb("INA226 maxCurrent 20 A\n");
             return;
         }
 
@@ -1203,7 +1204,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(iVar < 0 || iVar > 7)
         {
-            Serial.printf("INA226 Samples 0...7\n");
+            printfdeb("INA226 Samples 0...7\n");
             return;
         }
 
@@ -1519,7 +1520,7 @@ void commandAction(char *umsg_text, bool ble)
         // BMx280 and BME680 share same addresses - only one can be used
         if(bBME680ON)
         {
-            Serial.println("BME680 and BMx280 can't be used together!");
+            printfdeb("BME680 and BMx280 can't be used together!");
         }
         else
         {
@@ -1550,7 +1551,7 @@ void commandAction(char *umsg_text, bool ble)
         // BMx280 and BME680 share same addresses - only one can be used
         if(bBME680ON)
         {
-            Serial.println("BME680 and BMx280 can't be used together!");
+            printfdeb("BME680 and BMx280 can't be used together!");
         }
         else
         {
@@ -1581,7 +1582,7 @@ void commandAction(char *umsg_text, bool ble)
         // BMx280 and BME680 share same addresses - only one can be used
         if(bBMPON || bBMEON)
         {
-            Serial.println("BME680 and BMP or BME can't be used together!");
+            printfdeb("BME680 and BMP or BME can't be used together!");
         }
         else
         {
@@ -1919,7 +1920,7 @@ void commandAction(char *umsg_text, bool ble)
         #ifdef BOARD_RAK4630
         if(meshcom_settings.node_owgpio <= 2)
         {
-            Serial.println("GPIO 0-2 not supported on RAK4630 (reserved)");
+            printfdeb("GPIO 0-2 not supported on RAK4630 (reserved)");
             return;
         }
         #endif
@@ -1929,7 +1930,7 @@ void commandAction(char *umsg_text, bool ble)
             bSensSetting = true;
         }
 
-        Serial.printf("\nonewire gpio:%i\n", meshcom_settings.node_owgpio);
+        printfdeb("\nonewire gpio:%i\n", meshcom_settings.node_owgpio);
 
         bReturn = true;
 
@@ -1949,7 +1950,7 @@ void commandAction(char *umsg_text, bool ble)
         fBaseAltidude = (float)meshcom_settings.node_alt;
         fBasePress = meshcom_settings.node_press;
 
-        Serial.printf("\nBase Press set to: %.1f at %.1f m\n", fBasePress, fBaseAltidude);
+        printfdeb("\nBase Press set to: %.1f at %.1f m\n", fBasePress, fBaseAltidude);
 
         if(ble)
         {
@@ -2033,7 +2034,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(strCtry != "OE" && strCtry != "DL")
         {
-            Serial.printf("\nGateway-Server fault <%s> please only OE or DL\n", strCtry.c_str());
+            printfdeb("\nGateway-Server fault <%s> please only OE or DL\n", strCtry.c_str());
             return;
         }
 
@@ -2050,7 +2051,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(bGATEWAY)
         {
-            Serial.println("Auto. Reboot after 5 sec.");
+            printfdeb("Auto. Reboot after 5 sec.");
 
             rebootAuto = millis() + 5 * 1000; // 5 Sekunden
         }
@@ -2065,7 +2066,7 @@ void commandAction(char *umsg_text, bool ble)
         save_settings();
 
         snprintf(_owner_c, sizeof(_owner_c), "on (%s port 2323)", meshcom_settings.node_ip);
-        Serial.printf("...net console %s\n", _owner_c);
+        printfdeb("...net console %s\n", _owner_c);
         return;
     }
     else
@@ -2076,7 +2077,7 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
 
-        Serial.printf("...net console off\n");
+        printfdeb("...net console off\n");
         return;
     }
     else
@@ -2084,7 +2085,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         // show current net console status; return early to prevent match against --tls... handler
         snprintf(_owner_c, sizeof(_owner_c), "on (%s port 2323)", meshcom_settings.node_ip);
-        Serial.printf("...net console is %s\n", bNETCONSOLE ? _owner_c : "off");
+        printfdeb("...net console is %s\n", bNETCONSOLE ? _owner_c : "off");
         return;
     }
     else
@@ -2094,7 +2095,7 @@ void commandAction(char *umsg_text, bool ble)
         #ifndef BOARD_RAK4630
         if(meshcom_settings.node_netmode == 0 && strlen(meshcom_settings.node_ssid) < 3)
         {
-            Serial.println("Please set SSID first");
+            printfdeb("Please set SSID first");
         }
         else
         #endif
@@ -2255,7 +2256,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         if((int)strlen(meshcom_settings.node_extern) < 7)
         {
-            Serial.printf("\nPlease set EXPUDP IP first\n");
+            printfdeb("\nPlease set EXPUDP IP first\n");
         }
         else
         {
@@ -2306,7 +2307,7 @@ void commandAction(char *umsg_text, bool ble)
             if(strcmp(meshcom_settings.node_extern, meshcom_settings.node_ip) == 0)
             {
                 snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", "");
-                Serial.printf("\nEXTERNAL-IP:%s is same as Own-IP - please set another IP\n", meshcom_settings.node_extern);
+                printfdeb("\nEXTERNAL-IP:%s is same as Own-IP - please set another IP\n", meshcom_settings.node_extern);
                 return;
             }
         }
@@ -2477,7 +2478,7 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
 
-        Serial.println("Auto. Reboot after 5 sec.");
+        printfdeb("Auto. Reboot after 5 sec.");
 
         rebootAuto = millis() + 5 * 1000; // 5 Sekunden
 
@@ -2498,7 +2499,7 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
 
-        Serial.println("Auto. Reboot after 5 sec.");
+        printfdeb("Auto. Reboot after 5 sec.");
 
         rebootAuto = millis() + 5 * 1000; // 5 Sekunden
     }
@@ -2542,7 +2543,7 @@ void commandAction(char *umsg_text, bool ble)
 
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0200;
 
-        Serial.println("[CMD] wxdebug on");
+        printfdeb("[CMD] wxdebug on");
 
         if(ble)
         {
@@ -2560,7 +2561,7 @@ void commandAction(char *umsg_text, bool ble)
 
         meshcom_settings.node_sset3 &= ~0x0200;
 
-        Serial.println("[CMD] wxdebug off");
+        printfdeb("[CMD] wxdebug off");
 
         if(ble)
         {
@@ -2891,7 +2892,7 @@ void commandAction(char *umsg_text, bool ble)
             #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
             netConsoleSetPassword("");
             #endif
-            Serial.printf("...net console password cleared (open access)\n");
+            printfdeb("...net console password cleared (open access)\n");
         }
         else
         {
@@ -2910,7 +2911,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         // --passwd without argument: show current status (never print the actual password)
         bool hasPasswd = (meshcom_settings.node_passwd[0] != 0x00 && meshcom_settings.node_passwd[0] != ' ');
-        Serial.printf("...passwd is %s\n", hasPasswd ? "SET" : "EMPTY (open access)");
+        printfdeb("...passwd is %s\n", hasPasswd ? "SET" : "EMPTY (open access)");
         return;
     }
     else
@@ -2923,12 +2924,12 @@ void commandAction(char *umsg_text, bool ble)
         if(new_bt_code == 0)
         {
 
-            Serial.printf("BT Code reset to 000000 - BLE security disabled\n");
+            printfdeb("BT Code reset to 000000 - BLE security disabled\n");
 
         }
         else if(new_bt_code < 100000 || new_bt_code > 999999)
         {
-            Serial.printf("Wrong BT Code only >= 100000 and <= 999999\n");
+            printfdeb("Wrong BT Code only >= 100000 and <= 999999\n");
             return;
         }
 
@@ -3055,7 +3056,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!bSymbolTable)
         {
-            Serial.println("Symbol Table nur / \\ 0-9 A-Z");
+            printfdeb("Symbol Table nur / \\ 0-9 A-Z");
             meshcom_settings.node_symid = _owner_c[0];
         }
 
@@ -3083,7 +3084,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!bSymbolCode)
         {
-            Serial.println("Symbol Code nur >= ! && <= }");
+            printfdeb("Symbol Code nur >= ! && <= }");
             meshcom_settings.node_symcd = _owner_c[0];
         }
 
@@ -3136,7 +3137,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!checkRegexCall(sVar))
         {
-            Serial.printf("\n[ERR]..Callsign <%s> not valid\n", sVar.c_str());
+            printfdeb("\n[ERR]..Callsign <%s> not valid\n", sVar.c_str());
             return;
         }
 
@@ -3145,7 +3146,7 @@ void commandAction(char *umsg_text, bool ble)
 
         snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());
 
-        Serial.printf("Call:%s Short:%s set\n", meshcom_settings.node_call, meshcom_settings.node_short);
+        printfdeb("Call:%s Short:%s set\n", meshcom_settings.node_call, meshcom_settings.node_short);
 
         save_settings();
 
@@ -3170,14 +3171,14 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!checkRegexCall(sVar))
         {
-            Serial.printf("\n[ERR]..UDP-Callsign <%s> not valid\n", sVar.c_str());
+            printfdeb("\n[ERR]..UDP-Callsign <%s> not valid\n", sVar.c_str());
             return;
         }
 
         snprintf(meshcom_settings.node_lora_call, sizeof(meshcom_settings.node_lora_call), "%s", sVar.c_str());
 
 
-        Serial.printf("UDP-Call:%s set\n", meshcom_settings.node_lora_call);
+        printfdeb("UDP-Call:%s set\n", meshcom_settings.node_lora_call);
 
         save_settings();
 
@@ -3206,7 +3207,7 @@ void commandAction(char *umsg_text, bool ble)
         if((strlen(meshcom_settings.node_pwd) > 1 && strlen(meshcom_settings.node_ssid) > 1) ||
            (strlen(meshcom_settings.node_pwd) == 0 && strlen(meshcom_settings.node_ssid) == 0))
         {
-            Serial.println("Auto. Reboot after 15 sec.");
+            printfdeb("Auto. Reboot after 15 sec.");
 
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
@@ -3234,7 +3235,7 @@ void commandAction(char *umsg_text, bool ble)
         if((strlen(meshcom_settings.node_pwd) > 1 && strlen(meshcom_settings.node_ssid) > 1) ||
            (strlen(meshcom_settings.node_pwd) == 0 && strlen(meshcom_settings.node_ssid) == 0))
         {
-            Serial.println("Auto. Reboot after 15 sec.");
+            printfdeb("Auto. Reboot after 15 sec.");
 
             rebootAuto = millis() + 15 * 1000; // 10 Sekunden
         }
@@ -3249,7 +3250,7 @@ void commandAction(char *umsg_text, bool ble)
         {
             meshcom_settings.node_netmode = 0;
 
-            Serial.println("[CMD] netmode -> WiFi");
+            printfdeb("[CMD] netmode -> WiFi");
 
             save_settings();
 
@@ -3262,8 +3263,8 @@ void commandAction(char *umsg_text, bool ble)
         {
             meshcom_settings.node_netmode = 1;
 
-            Serial.println("[CMD] netmode -> Ethernet");
-            //Serial.printf("node_netmode=%d\n", meshcom_settings.node_netmode); // solo per debug
+            printfdeb("[CMD] netmode -> Ethernet");
+            //printfdeb("node_netmode=%d\n", meshcom_settings.node_netmode); // solo per debug
 
             save_settings();
 
@@ -3284,7 +3285,7 @@ void commandAction(char *umsg_text, bool ble)
             pinMode(RELAY_SWITCH, OUTPUT);
             digitalWrite(RELAY_SWITCH, LOW);
 
-            Serial.println("[CMD] relay on");
+            printfdeb("[CMD] relay on");
 
             save_settings();
 
@@ -3298,7 +3299,7 @@ void commandAction(char *umsg_text, bool ble)
             pinMode(RELAY_SWITCH, OUTPUT);
             digitalWrite(RELAY_SWITCH, HIGH);
 
-            Serial.println("[CMD] relay off");
+            printfdeb("[CMD] relay off");
 
             save_settings();
 
@@ -3366,7 +3367,7 @@ void commandAction(char *umsg_text, bool ble)
         if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
            (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
         {
-            Serial.println("Auto. Reboot after 15 sec.");
+            printfdeb("Auto. Reboot after 15 sec.");
 
             rebootAuto = millis() + 15 * 1000; // 10 Sekunden
         }
@@ -3408,7 +3409,7 @@ void commandAction(char *umsg_text, bool ble)
         if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
            (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
         {
-            Serial.println("Auto. Reboot after 15 sec.");
+            printfdeb("Auto. Reboot after 15 sec.");
 
             rebootAuto = millis() + 15 * 1000; // 10 Sekunden
         }
@@ -3432,7 +3433,7 @@ void commandAction(char *umsg_text, bool ble)
         if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
            (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
         {
-            Serial.println("Auto. Reboot after 15 sec.");
+            printfdeb("Auto. Reboot after 15 sec.");
 
             rebootAuto = millis() + 15 * 1000; // 10 Sekunden
         }
@@ -3457,7 +3458,7 @@ void commandAction(char *umsg_text, bool ble)
         if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
            (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
         {
-            Serial.println("Auto. Reboot after 15 sec.");
+            printfdeb("Auto. Reboot after 15 sec.");
 
             rebootAuto = millis() + 15 * 1000; // 10 Sekunden
         }
@@ -3482,7 +3483,7 @@ void commandAction(char *umsg_text, bool ble)
         if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
            (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
         {
-            Serial.println("Auto. Reboot after 15 sec.");
+            printfdeb("Auto. Reboot after 15 sec.");
 
             rebootAuto = millis() + 15 * 1000; // 10 Sekunden
         }
@@ -3586,7 +3587,7 @@ void commandAction(char *umsg_text, bool ble)
 
         meshcom_settings.node_alt=iVar;
 
-        Serial.printf("set alt to %i m\n", meshcom_settings.node_alt);
+        printfdeb("set alt to %i m\n", meshcom_settings.node_alt);
 
         save_settings();
         
@@ -3606,8 +3607,8 @@ void commandAction(char *umsg_text, bool ble)
 
         setRTCNow(rtcmsg);
 
-        Serial.println("");
-        Serial.println(getStringRTCNow());
+        printlndeb("");
+        printlndeb(getStringRTCNow());
 
         bPos=true;
     }
@@ -3651,7 +3652,7 @@ void commandAction(char *umsg_text, bool ble)
 
             int mask = 0x0001 << iVar;
 
-            //Serial.printf("mask:%02X %02X meshcom_settings.node_mcp17io:%02X meshcom_settings.node_mcp17out:%04X\n", mask, (mask ^ 0xFFFF), meshcom_settings.node_mcp17io, meshcom_settings.node_mcp17out);
+            //printfdeb("mask:%02X %02X meshcom_settings.node_mcp17io:%02X meshcom_settings.node_mcp17out:%04X\n", mask, (mask ^ 0xFFFF), meshcom_settings.node_mcp17io, meshcom_settings.node_mcp17out);
 
             if((meshcom_settings.node_mcp17io & mask) > 0)   // check PIN set to OUTPUT
             {
@@ -3661,7 +3662,7 @@ void commandAction(char *umsg_text, bool ble)
                 
                 strsep.toUpperCase();
 
-                //Serial.printf("strsep:%s\n", strsep.c_str());
+                //printfdeb("strsep:%s\n", strsep.c_str());
 
                 if(strsep.startsWith("HIGH") || strsep.startsWith("ON"))
                 {
@@ -3765,7 +3766,7 @@ void commandAction(char *umsg_text, bool ble)
 
             if(bSet)
             {
-                Serial.printf("set io[%i] %s to mask[%04X]\n", iVar, meshcom_settings.node_mcp17t[iVar], meshcom_settings.node_mcp17io);
+                printfdeb("set io[%i] %s to mask[%04X]\n", iVar, meshcom_settings.node_mcp17t[iVar], meshcom_settings.node_mcp17io);
 
                 if(ble)
                 {
@@ -3798,13 +3799,13 @@ void commandAction(char *umsg_text, bool ble)
 
         if(getCountry(iVar) == "none")
         {
-            Serial.printf("Country not allowed <%i>\n", iVar);
+            printfdeb("Country not allowed <%i>\n", iVar);
         }
         else
         {
             meshcom_settings.node_country=iVar;
 
-            Serial.printf("set country to %i <%s>\n", meshcom_settings.node_country, getCountry(iVar).c_str());
+            printfdeb("set country to %i <%s>\n", meshcom_settings.node_country, getCountry(iVar).c_str());
 
             if(ble)
             {
@@ -3817,7 +3818,7 @@ void commandAction(char *umsg_text, bool ble)
             
             save_settings();
 
-            Serial.println("Auto. Reboot after 15 sec.");
+            printfdeb("Auto. Reboot after 15 sec.");
 
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
@@ -3836,17 +3837,17 @@ void commandAction(char *umsg_text, bool ble)
 
         if(iVar < 2 || iVar > 20)
         {
-            Serial.printf("wifitxpower %i not between 2dBm and max 20 dBm\n", iVar);
+            printfdeb("wifitxpower %i not between 2dBm and max 20 dBm\n", iVar);
         }
         else
         {
             meshcom_settings.node_wifi_power = iVar;
 
-            Serial.printf("set wifitxpower to %i dBm (factor:%i)\n", iVar, meshcom_settings.node_wifi_power*4);
+            printfdeb("set wifitxpower to %i dBm (factor:%i)\n", iVar, meshcom_settings.node_wifi_power*4);
 
             save_settings();
             
-            Serial.println("Auto. Reboot after 15 sec.");
+            printfdeb("Auto. Reboot after 15 sec.");
             rebootAuto = millis() + 15 * 1000; // 15 Sekunden
         }
 
@@ -3858,17 +3859,17 @@ void commandAction(char *umsg_text, bool ble)
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
         sscanf(_owner_c, "%d", &iVar);
 
-        Serial.println(iVar);
+        printdeb(iVar);
 
         if(iVar < TX_POWER_MIN || iVar > TX_POWER_MAX)
         {
-            Serial.printf("txpower %i dBm not between %i and max %i dBm\n", iVar, TX_POWER_MIN, TX_POWER_MAX);
+            printfdeb("txpower %i dBm not between %i and max %i dBm\n", iVar, TX_POWER_MIN, TX_POWER_MAX);
         }
         else
         {
             meshcom_settings.node_power=iVar;
 
-            Serial.printf("set txpower to %i dBm\n", meshcom_settings.node_power);
+            printfdeb("set txpower to %i dBm\n", meshcom_settings.node_power);
 
             if(ble)
             {
@@ -3891,11 +3892,11 @@ void commandAction(char *umsg_text, bool ble)
         float dec_bandwith = (LORA_BANDWIDTH/2.0)/100.0;
         if(!((fVar >= (430.0 + dec_bandwith) && fVar <= (439.000 - dec_bandwith)) || (fVar >= (869.4 + dec_bandwith) && fVar <= (869.65 - dec_bandwith))))
         {
-            Serial.printf("txfrequency %.3f MHz not within Band\n", fVar);
+            printfdeb("txfrequency %.3f MHz not within Band\n", fVar);
         }
         else
         {
-            Serial.printf("set txfrequency to %.4f MHz\n", fVar);
+            printfdeb("set txfrequency to %.4f MHz\n", fVar);
 
             meshcom_settings.node_freq=fVar;
 
@@ -3923,13 +3924,13 @@ void commandAction(char *umsg_text, bool ble)
 
         if(fVar != 125 && fVar != 250)
         {
-            Serial.printf("txbw %.0f MHz not 125 or 250 kHz\n", fVar);
+            printfdeb("txbw %.0f MHz not 125 or 250 kHz\n", fVar);
         }
         else
         {
             meshcom_settings.node_bw=fVar;
 
-            Serial.printf("set txbw to %f kHz\n", meshcom_settings.node_bw);
+            printfdeb("set txbw to %f kHz\n", meshcom_settings.node_bw);
 
             if(ble)
             {
@@ -3951,13 +3952,13 @@ void commandAction(char *umsg_text, bool ble)
 
         if(iVar < 6 || iVar > 12)
         {
-            Serial.printf("txsf %i only 6 to 12\n", iVar);
+            printfdeb("txsf %i only 6 to 12\n", iVar);
         }
         else
         {
             meshcom_settings.node_sf=iVar;
 
-            Serial.printf("set txsf to %i\n", meshcom_settings.node_sf);
+            printfdeb("set txsf to %i\n", meshcom_settings.node_sf);
 
             if(ble)
             {
@@ -3980,11 +3981,11 @@ void commandAction(char *umsg_text, bool ble)
 
         if(iVar < 5 || iVar > 8)
         {
-            Serial.printf("txcr %i only 5 to 8 (4/5 to 4/8)\n", iVar);
+            printfdeb("txcr %i only 5 to 8 (4/5 to 4/8)\n", iVar);
         }
         else
         {
-            Serial.printf("set txcr to %i\n", iVar);
+            printfdeb("set txcr to %i\n", iVar);
 
             if(ble)
             {
@@ -4020,11 +4021,11 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!((fVar >= 430.0 && fVar <= (439.000)) || (fVar >= 869.4 && fVar <= 869.65)))
         {
-            Serial.printf("Start-Frequency %.3f MHz not within Band\n", fVar);
+            printfdeb("Start-Frequency %.3f MHz not within Band\n", fVar);
         }
         else
         {
-            Serial.printf("set Start-Frequency to %.2f MHz\n", fVar);
+            printfdeb("set Start-Frequency to %.2f MHz\n", fVar);
 
             meshcom_settings.node_specstart=fVar;
 
@@ -4041,11 +4042,11 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!((fVar >= 430.0 && fVar <= 439.000) || (fVar >= 869.4 && fVar <= 869.65)))
         {
-            Serial.printf("End-Frequency %.3f MHz not within Band\n", fVar);
+            printfdeb("End-Frequency %.3f MHz not within Band\n", fVar);
         }
         else
         {
-            Serial.printf("set End-Frequency to %.2f MHz\n", fVar);
+            printfdeb("set End-Frequency to %.2f MHz\n", fVar);
 
             meshcom_settings.node_specend=fVar;
 
@@ -4062,11 +4063,11 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!(fVar >= 0.1 && fVar <= 2.0))
         {
-            Serial.printf("Step-Frequency %.3f MHz max. 2.0 MHz\n", fVar);
+            printfdeb("Step-Frequency %.3f MHz max. 2.0 MHz\n", fVar);
         }
         else
         {
-            Serial.printf("set Step-Frequency to %.3f MHz\n", fVar);
+            printfdeb("set Step-Frequency to %.3f MHz\n", fVar);
 
             meshcom_settings.node_specsamples=fVar;
 
@@ -4083,11 +4084,11 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!(iVar >= 500 && iVar <= 2048))
         {
-            Serial.printf("Sampled %i (min. 500 - max. 2048)\n", iVar);
+            printfdeb("Sampled %i (min. 500 - max. 2048)\n", iVar);
         }
         else
         {
-            Serial.printf("set Samples to %i MHz\n", iVar);
+            printfdeb("set Samples to %i MHz\n", iVar);
 
             meshcom_settings.node_specstep=iVar;
 
@@ -4239,11 +4240,11 @@ void commandAction(char *umsg_text, bool ble)
     
         if(checkRegexCall(strCallSign))
         {
-            Serial.printf("\n%s match\n", strCallSign.c_str());
+            printfdeb("\n%s match\n", strCallSign.c_str());
         }
         else
         {
-            Serial.printf("\n%s no match\n", strCallSign.c_str());
+            printfdeb("\n%s no match\n", strCallSign.c_str());
         }
 
         return;
@@ -4263,7 +4264,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(count_char(strCheck, ',') > 4)
         {
-            Serial.println("PARM wrong format");
+            printfdeb("PARM wrong format");
 
             snprintf(meshcom_settings.node_parm, sizeof(meshcom_settings.node_parm), "%s", "none");
         }
@@ -4376,9 +4377,9 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!bRxFromPhone)
         {
-            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
+            printfdeb("\n\nMeshCom %-4.4s%-1.1s\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
 
-            Serial.printf("PARM:   %s\nUNIT:   %s\nFORMAT: %s\nEQNS:   %s\nVALUES: %s\nPTIME:  %i\n\n", meshcom_settings.node_parm, meshcom_settings.node_unit, meshcom_settings.node_format, meshcom_settings.node_eqns, meshcom_settings.node_values, meshcom_settings.node_parm_time);
+            printfdeb("PARM:   %s\nUNIT:   %s\nFORMAT: %s\nEQNS:   %s\nVALUES: %s\nPTIME:  %i\n\n", meshcom_settings.node_parm, meshcom_settings.node_unit, meshcom_settings.node_format, meshcom_settings.node_eqns, meshcom_settings.node_values, meshcom_settings.node_parm_time);
         }
 
         return;
@@ -4458,16 +4459,16 @@ void commandAction(char *umsg_text, bool ble)
                 snprintf(cdht, sizeof(cdht), " (%s)",  (dht_found?"found":"error"));
             }
 
-            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BMP390: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...AHT20: %s%s\n...SHT21: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
+            printfdeb("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BMP390: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...AHT20: %s%s\n...SHT21: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
             (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBMP3ON?"on":"off"), cbmp3, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bAHT20ON?"on":"off"), cAHT20, (bSHT21ON?"on":"off"), cSHT21, (bINA226ON?"on":"off"), (bLPS33?"on":"off"));
 
-            Serial.printf("...ONEWIRE: %s (%i) DS18%s DHT%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, cdht);
+            printfdeb("...ONEWIRE: %s (%i) DS18%s DHT%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, cdht);
 
             #ifdef NTC_PIN
-                Serial.printf("...NTC-TEMP: %.1f °C  ...FAN: %s\n", meshcom_settings.node_ntctemp, meshcom_settings.node_fanon ? "on" : "off");
+                printfdeb("...NTC-TEMP: %.1f °C  ...FAN: %s\n", meshcom_settings.node_ntctemp, meshcom_settings.node_fanon ? "on" : "off");
             #endif
 
-            Serial.printf("...TEMP: %.1f °C off %.3f\n...TOUT: %.1f °C off %.3f\n...HUM: %.1f %%rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kΩ\n...eCO2: %.0f ppm\n", 
+            printfdeb("...TEMP: %.1f °C off %.3f\n...TOUT: %.1f °C off %.3f\n...HUM: %.1f %%rH\n...QFE: %.1f hPa\n...QNH: %.1f hPa\n...ALT asl: %i m\n...GAS: %.1f kΩ\n...eCO2: %.0f ppm\n", 
             meshcom_settings.node_temp, meshcom_settings.node_tempi_off, meshcom_settings.node_temp2, meshcom_settings.node_tempo_off, meshcom_settings.node_hum, meshcom_settings.node_press, meshcom_settings.node_press_asl, meshcom_settings.node_press_alt, meshcom_settings.node_gas_res, meshcom_settings.node_co2);
         }
 
@@ -4536,7 +4537,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!bRxFromPhone)
         {
-            Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...MCP17 %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB,  (bMCP23017?"on":"off"));
+            printfdeb("\n\nMeshCom %-4.4s%-1.1s\n...MCP17 %s\n", SOURCE_VERSION, SOURCE_VERSION_SUB,  (bMCP23017?"on":"off"));
             
             uint16_t t_io = meshcom_settings.node_mcp17io;
             uint16_t t_out = meshcom_settings.node_mcp17out;
@@ -4557,14 +4558,14 @@ void commandAction(char *umsg_text, bool ble)
                     bInValue=true;
 
                 if(io < 8)
-                    Serial.printf("...MCP17[A%i]: %-3.3s", io, (bOut?"OUT":"IN"));
+                    printfdeb("...MCP17[A%i]: %-3.3s", io, (bOut?"OUT":"IN"));
                 else
-                    Serial.printf("...MCP17[B%i]: %-3.3s", io-8, (bOut?"OUT":"IN"));
+                    printfdeb("...MCP17[B%i]: %-3.3s", io-8, (bOut?"OUT":"IN"));
 
                 if(bOut)
-                    Serial.printf(" value %s %s\n", (bOutValue?"HIGH":"LOW "), meshcom_settings.node_mcp17t[io]);
+                    printfdeb(" value %s %s\n", (bOutValue?"HIGH":"LOW "), meshcom_settings.node_mcp17t[io]);
                 else
-                    Serial.printf(" value %s %s\n", (bInValue?"HIGH":"LOW "), meshcom_settings.node_mcp17t[io]);
+                    printfdeb(" value %s %s\n", (bInValue?"HIGH":"LOW "), meshcom_settings.node_mcp17t[io]);
 
                 t_io = t_io >> 1;
                 t_out = t_out >> 1;
@@ -4633,26 +4634,26 @@ void commandAction(char *umsg_text, bool ble)
                 ibt = BUTTON_PIN;
             #endif
 
-            Serial.println("");
-            Serial.printf("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i <%s> ...UTC-OFF %f [%s]\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n", 
+            printfdeb("");
+            printfdeb("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i <%s> ...UTC-OFF %f [%s]\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n", 
                     SOURCE_VERSION, SOURCE_VERSION_SUB , __DATE__ , __TIME__ , meshcom_settings.node_update,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, getHardwareLong(BOARD_HARDWARE).c_str(), meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv, millis());
 
-            Serial.printf("...Flash-Version %i\n", meshcom_settings.node_fversion);
+            printfdeb("...Flash-Version %i\n", meshcom_settings.node_fversion);
 
-            Serial.printf("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s ... SOFTSERREAD %s\n...PASSWD <%s>\n",
+            printfdeb("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s ... SOFTSERREAD %s\n...PASSWD <%s>\n",
                 (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), (bSOFTSERREAD?"on":"off"), meshcom_settings.node_passwd);
 
-            Serial.printf("...DEBUG %s ...LORADEBUG %s ...CHECKMESH %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
+            printfdeb("...DEBUG %s ...LORADEBUG %s ...CHECKMESH %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
                     (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bCHECKMESH?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
-            Serial.printf("...DisplayInfo %s ...DisplayCont %s ...contrast %i\n",
+            printfdeb("...DisplayInfo %s ...DisplayCont %s ...contrast %i\n",
                     (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), meshcom_settings.node_contrast);
 
-            Serial.printf("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
+            printfdeb("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
 
-            Serial.printf("...BTCODE %06i\n", meshcom_settings.bt_code);
-            Serial.printf("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
+            printfdeb("...BTCODE %06i\n", meshcom_settings.bt_code);
+            printfdeb("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
                     meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"),  (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
 
@@ -4661,74 +4662,74 @@ void commandAction(char *umsg_text, bool ble)
                 if(meshcom_settings.node_gcb[ig] > 0)
                 {
                     if(ig == 0)
-                        Serial.printf("\n...");
+                        printfdeb("\n...");
 
-                    Serial.printf("GC-%i:%i ", ig+1, meshcom_settings.node_gcb[ig]);
+                    printfdeb("GC-%i:%i ", ig+1, meshcom_settings.node_gcb[ig]);
                 }
             }
 
             #if defined(RELAY_SWITCH)
-                Serial.printf("\n...RELAY %s\n", ((meshcom_settings.node_relay & 0x0001)?"on":"off"));
+                printfdeb("\n...RELAY %s\n", ((meshcom_settings.node_relay & 0x0001)?"on":"off"));
             #endif
 
             if(bSOFTSERON && meshcom_settings.node_ss_baud > 0)
             {
-                Serial.printf("\n...SS RX   %2i\n", meshcom_settings.node_ss_rx_pin);
-                Serial.printf("...SS TX   %2i\n", meshcom_settings.node_ss_tx_pin);
-                Serial.printf("...SS BAUD %i\n", meshcom_settings.node_ss_baud);
+                printfdeb("\n...SS RX   %2i\n", meshcom_settings.node_ss_rx_pin);
+                printfdeb("...SS TX   %2i\n", meshcom_settings.node_ss_tx_pin);
+                printfdeb("...SS BAUD %i\n", meshcom_settings.node_ss_baud);
             }
 
-            Serial.println("");
+            printfdeb("");
 
             if(bINA226ON)
             {
-                Serial.printf("\n...INA226\n");
-                Serial.printf("...vBUS     %.2f V\n", meshcom_settings.node_vbus);
-                Serial.printf("...vSHUNT   %.2f mV\n", meshcom_settings.node_vshunt);
-                Serial.printf("...vCURRENT %.1f mA\n", meshcom_settings.node_vcurrent);
-                Serial.printf("...vPOWER   %.1f mW\n", meshcom_settings.node_vpower);
-                Serial.println("");
+                printfdeb("\n...INA226\n");
+                printfdeb("...vBUS     %.2f V\n", meshcom_settings.node_vbus);
+                printfdeb("...vSHUNT   %.2f mV\n", meshcom_settings.node_vshunt);
+                printfdeb("...vCURRENT %.1f mA\n", meshcom_settings.node_vcurrent);
+                printfdeb("...vPOWER   %.1f mW\n", meshcom_settings.node_vpower);
+                printfdeb("");
             }
 
             if(bAnalogCheck)
             {
-                Serial.printf("\n...ANALOG PIN %i factor %.4f slope %.4f offset %.0f\n", meshcom_settings.node_analog_pin, meshcom_settings.node_analog_faktor, meshcom_settings.node_analog_slope, meshcom_settings.node_analog_offset);
-                Serial.printf("...Value %.2f V\n", fAnalogValue);
-                Serial.println("");
+                printfdeb("\n...ANALOG PIN %i factor %.4f slope %.4f offset %.0f\n", meshcom_settings.node_analog_pin, meshcom_settings.node_analog_faktor, meshcom_settings.node_analog_slope, meshcom_settings.node_analog_offset);
+                printfdeb("...Value %.2f V\n", fAnalogValue);
+                printfdeb("");
             }
 
             #ifdef BATTERY_PIN
-                Serial.printf("\n...BATTERY PIN %i factor %.4f\n", BATTERY_PIN, fBattFaktor);
+                printfdeb("\n...BATTERY PIN %i factor %.4f\n", BATTERY_PIN, fBattFaktor);
             #endif
 
             #ifndef BOARD_T_ECHO
-            Serial.printf("\n...Webserver  %s", (bWEBSERVER?"on":"off"));
-            Serial.printf(" / Webpwd <%s>", meshcom_settings.node_webpwd);
-            Serial.printf(" / Gateway %s %s\n", (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""));
+            printfdeb("\n...Webserver  %s", (bWEBSERVER?"on":"off"));
+            printfdeb(" / Webpwd <%s>", meshcom_settings.node_webpwd);
+            printfdeb(" / Gateway %s %s\n", (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""));
 
             #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
-            Serial.printf("...NETConsole %s\n", (bNETCONSOLE ? "on (port 2323)" : "off"));
+            printfdeb("...NETConsole %s\n", (bNETCONSOLE ? "on (port 2323)" : "off"));
             #endif
 
 
             #ifndef BOARD_RAK4630
-                Serial.printf("...WIFI-AP    %s\n", (bWIFIAP?"on":"off"));
+                printfdeb("...WIFI-AP    %s\n", (bWIFIAP?"on":"off"));
                 if(bWIFIAP)
                 {
-                    Serial.printf("...SSID <%s>", meshcom_settings.node_call);
-                    Serial.printf(" / PASSWORD <>\n");
+                    printfdeb("...SSID <%s>", meshcom_settings.node_call);
+                    printfdeb(" / PASSWORD <>\n");
                 }
                 else
                 {
                     if(strlen(meshcom_settings.node_ssid) > 0)
-                        Serial.printf("...SSID <%s>", meshcom_settings.node_ssid);
+                        printfdeb("...SSID <%s>", meshcom_settings.node_ssid);
                     else
-                        Serial.printf("...SSID <>");
+                        printfdeb("...SSID <>");
 
                     if(strlen(meshcom_settings.node_pwd) > 0)
-                        Serial.printf(" / PASSWORD <%s>\n", meshcom_settings.node_pwd);
+                        printfdeb(" / PASSWORD <%s>\n", meshcom_settings.node_pwd);
                     else
-                        Serial.printf(" / PASSWORD <>\n");
+                        printfdeb(" / PASSWORD <>\n");
                 }
             #endif
 
@@ -4736,47 +4737,47 @@ void commandAction(char *umsg_text, bool ble)
             {
                 if(strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7)
                 {
-                    Serial.printf("...OWNIP  address: %s\n", meshcom_settings.node_ownip);
-                    Serial.printf("...OWNMS  address: %s\n", meshcom_settings.node_ownms);
-                    Serial.printf("...OWNGW  address: %s\n", meshcom_settings.node_owngw);
-                    Serial.printf("...OWNDNS address: %s\n", meshcom_settings.node_owndns);
-                    Serial.printf("...OWNNTP address: %s\n", meshcom_settings.node_ownntp);
+                    printfdeb("...OWNIP  address: %s\n", meshcom_settings.node_ownip);
+                    printfdeb("...OWNMS  address: %s\n", meshcom_settings.node_ownms);
+                    printfdeb("...OWNGW  address: %s\n", meshcom_settings.node_owngw);
+                    printfdeb("...OWNDNS address: %s\n", meshcom_settings.node_owndns);
+                    printfdeb("...OWNNTP address: %s\n", meshcom_settings.node_ownntp);
                 }
             }
 
-            Serial.print("...NETWORK Mode:");
+            printdeb("...NETWORK Mode:");
             if(meshcom_settings.node_netmode == 0)
-                Serial.println("WiFi");
+                printfdeb("WiFi");
             else
             if(meshcom_settings.node_netmode == 1)
-                Serial.println("ETH");
+                printfdeb("ETH");
 
-            Serial.printf("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
+            printfdeb("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             if(meshcom_settings.node_hasIPaddress || meshcom_settings.node_netmode == 1)
             {
-                Serial.printf("...IP address   : %s\n", meshcom_settings.node_ip);
-                Serial.printf("...SUBNET-MASK  : %s\n", meshcom_settings.node_subnet);
+                printfdeb("...IP address   : %s\n", meshcom_settings.node_ip);
+                printfdeb("...SUBNET-MASK  : %s\n", meshcom_settings.node_subnet);
                 if(!bWIFIAP)
                 {
                     if(bGATEWAY)
                     {
                         if(meshcom_settings.node_hamnet_only > 0)
-                        Serial.printf("...HAMNET ONLY  : true\n");
+                        printfdeb("...HAMNET ONLY  : true\n");
                         else
-                        Serial.printf("...I-NET ONLY   : true\n");
+                        printfdeb("...I-NET ONLY   : true\n");
 
-                        Serial.printf("...GW server    : %s\n", meshcom_settings.node_gwsrv);
+                        printfdeb("...GW server    : %s\n", meshcom_settings.node_gwsrv);
                     }
 
                     if(bGATEWAY || bWEBSERVER)
                     {
-                        Serial.printf("...GW address   : %s\n", meshcom_settings.node_gw);
-                        Serial.printf("...DNS address  : %s\n", meshcom_settings.node_dns);
+                        printfdeb("...GW address   : %s\n", meshcom_settings.node_gw);
+                        printfdeb("...DNS address  : %s\n", meshcom_settings.node_dns);
                     }
                 }
     
                 if(!bWIFIAP)
-                    Serial.printf("...UDP-HBeat : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
+                    printfdeb("...UDP-HBeat : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
             }
             #endif
     
@@ -4797,12 +4798,12 @@ void commandAction(char *umsg_text, bool ble)
         {
             if(bShowPos)
             {
-                Serial.printf("\n\nMeshCom %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %.1f\n...RATE: %i postime..%i\n...NEXT: %i sec\n...DIST: %.0lfm\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %04i.%02i.%02i %02i:%02i:%02i %s [%s]\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
+                printfdeb("\n\nMeshCom %-4.4s%-1.1s\n...LAT: %.4lf %c\n...LON: %.4lf %c\n...ALT: %i\n...SAT: %i - %s - HDOP %.1f\n...RATE: %i postime..%i\n...NEXT: %i sec\n...DIST: %.0lfm\n...DIRn:  %i°\n...DIRo:  %i°\n...DATE: %04i.%02i.%02i %02i:%02i:%02i %s [%s]\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
                 meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
                 (int)posinfo_satcount, (posinfo_fix?"fix":"nofix"), fposinfo_hdop, (int)posinfo_interval, meshcom_settings.node_postime, (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis())/1000), posinfo_distance, (int)posinfo_direction, (int)posinfo_last_direction,
                 meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day,meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, getTimeZone().c_str(), cTimeSource);
 
-                Serial.printf("...SYMB: %c %c ..Auto %s\n...GPS: %s\n...Track: %s\n...SOFTSER: %s APP:%i\n...SOFTSERREAD: %s\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSAutosymbol?"on":"off"), (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"), (bSOFTSERON?"on":"off"), SOFTSER_APP_ID, (bSOFTSERREAD?"on":"off"));
+                printfdeb("...SYMB: %c %c ..Auto %s\n...GPS: %s\n...Track: %s\n...SOFTSER: %s APP:%i\n...SOFTSERREAD: %s\n", meshcom_settings.node_symid, meshcom_settings.node_symcd, (bGPSAutosymbol?"on":"off"), (bGPSON?"on":"off"), (bDisplayTrack?"on":"off"), (bSOFTSERON?"on":"off"), SOFTSER_APP_ID, (bSOFTSERREAD?"on":"off"));
             }
         }
 
@@ -4981,7 +4982,7 @@ void commandAction(char *umsg_text, bool ble)
             addBLECommandBack(print_buff);
         }
 
-        Serial.printf("\n...wrong command %s\n", msg_text);
+        printfdeb("\n...wrong command %s\n", msg_text);
     }
 }
 
