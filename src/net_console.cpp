@@ -303,6 +303,15 @@ void stopNetConsole()
 
 void loopNetConsole()
 {
+    // Die Netconsole ist eine TCP/IP-Konsole und benoetigt zwingend eine aktive WiFi-/IP-
+    // Verbindung. Ohne verbundenes WiFi ist der lwIP-TCP/IP-Stack nicht bereit -> der folgende
+    // ::socket()-Aufruf loest dann einen Assert aus (tcpip_send_msg_wait_sem -> __assert_func)
+    // und damit einen Panic/Reboot. Daher hier frueh aussteigen, solange kein WiFi verbunden
+    // ist. s_server_pending bleibt erhalten, sodass der Listening-Socket geoeffnet wird, sobald
+    // die WiFi-Verbindung steht. (Ohne IP kann die Netconsole ohnehin nicht arbeiten.)
+    if (WiFi.status() != WL_CONNECTED)
+        return;
+
     // Open listening socket on first call (triggered by startNetConsole)
     if (s_server_pending)
     {

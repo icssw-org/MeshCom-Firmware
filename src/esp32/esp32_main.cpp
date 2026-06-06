@@ -132,6 +132,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include "esp32_functions.h"
 #include "tft_display_functions.h"
 #include "net_console.h"
+#include "printfdeb_functions.h"
 
 #ifdef BOARD_HELTEC_V4
     #include "pa_control.h"
@@ -159,6 +160,8 @@ bool bLED_WEISS=false;
 int iCount_weiss=0;
 
 #endif
+
+bool bDEEP_SLEEP = false;
 
 #ifdef BOARD_LED
 bool bLED = true;
@@ -295,7 +298,7 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
         conffin_sent = false;
         g_ble_conn_handle = connInfo.getConnHandle();
 
-        Serial.printf("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
+        printfdeb("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
         pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
     };
 
@@ -304,7 +307,7 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
         deviceConnected = false;
         // print the reason for the disconnection in hex
         // https://github.com/apache/mynewt-nimble/blob/master/docs/ble_hs/ble_hs_return_codes.rst
-        Serial.printf("BLE disconnected. Reason: 0x%04x\n", reason);
+        printfdeb("BLE disconnected. Reason: 0x%04x\n", reason);
         //NimBLEDevice::startAdvertising();
     }
 
@@ -313,17 +316,17 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     {
         if(meshcom_settings.bt_code > 0 && meshcom_settings.bt_code <= 999999)
         {
-    		Serial.printf("Server PassKeyRequest <%06i>\n", meshcom_settings.bt_code);
+    		printfdeb("Server PassKeyRequest <%06i>\n", meshcom_settings.bt_code);
 	    	return (uint32_t)meshcom_settings.bt_code;
         }
 
-		Serial.printf("Server PassKeyRequest <%06i>\n", PIN);
+		printfdeb("Server PassKeyRequest <%06i>\n", PIN);
 		return PIN;
 	}
 	/*******************************************************************/
 
     void onAuthenticationComplete(NimBLEConnInfo& connInfo) override {
-        Serial.printf("Client connected: %s (encrypted: %s)\n",
+        printfdeb("Client connected: %s (encrypted: %s)\n",
             connInfo.getAddress().toString().c_str(),
             connInfo.isEncrypted() ? "yes" : "no");
     }
@@ -333,7 +336,7 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
 /** Handler class for characteristic actions */
 class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
     /*void onRead(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
-        Serial.printf("%s : onRead(), value: %s\n",
+        printfdeb("%s : onRead(), value: %s\n",
                pCharacteristic->getUUID().toString().c_str(),
                pCharacteristic->getValue().c_str());
     }*/
@@ -576,7 +579,7 @@ float getTempForNTC()
         temperature = (1.0 / (log(resistance / ROOM_TEMP_RESISTANCE) / B_COEFFICIENT + 1.0 / ROOM_TEMP)) - 273.15;
 
         if(bWXDEBUG && bDisplayCont)
-            Serial.printf("NTC-Temp: %.3f_°C %u_raw %.3f_mV %.2f_Ohm\n", temperature, raw, voltage, resistance);
+            printfdeb("NTC-Temp: %.3f_°C %u_raw %.3f_mV %.2f_Ohm\n", temperature, raw, voltage, resistance);
 
         check_temperature  = millis() + 1000;
     }
@@ -601,7 +604,7 @@ void esp32setup()
     #else
     while (!Serial && !timerSerial.time_over());
     #endif
-    if (Serial) { for (int i=0;i<5;i++) { Serial.println("."); delay(1000); } } //delay for Terminal connect
+    if (Serial) { for (int i=0;i<5;i++) { printlndeb("."); delay(1000); } } //delay for Terminal connect
 
     #if defined(HAS_TFT_CONNECT)
 
@@ -614,21 +617,21 @@ void esp32setup()
 
     #if defined BOARD_T5_EPAPER
         if (psramInit()) {
-            Serial.println("\nThe PSRAM is correctly initialized");
+            printlndeb("\nThe PSRAM is correctly initialized");
         } else {
-            Serial.println("\nPSRAM does not work");
+            printlndeb("\nPSRAM does not work");
         }
     #endif
 
     // Heltec V2: Enable Vext (GPIO 21) Heltec V3: Enable Vext (GPIO 36) to power OLED and reset display
     #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
-        Serial.println(F("[INIT]...Enabling Vext for OLED power"));
+        printlndeb(F("[INIT]...Enabling Vext for OLED power"));
         pinMode(Vext, OUTPUT);
         digitalWrite(Vext, LOW);   // Vext ON (active low)
         delay(50);
 
         // Reset OLED 
-        Serial.println(F("[INIT]...Resetting OLED display"));
+        printlndeb(F("[INIT]...Resetting OLED display"));
         pinMode(RST_OLED, OUTPUT);
         digitalWrite(RST_OLED, LOW);   // Reset active
         delay(50);
@@ -637,7 +640,7 @@ void esp32setup()
     #endif
     
     #if defined(BOARD_T3S3_V13)
-        Serial.println(F("[INIT]...Enabling ADC_PIN"));
+        printlndeb("[INIT]...Enabling ADC_PIN");
         pinMode(ADC_PIN, INPUT);
     #endif
 
@@ -678,18 +681,18 @@ void esp32setup()
     #endif
     //======================================================
 
-    Serial.println("");
-    Serial.println("");
-    Serial.println("============");
-    Serial.println("CLIENT SETUP");
-    Serial.println("============");
+    printlndeb("");
+    printlndeb("");
+    printlndeb("============");
+    printlndeb("CLIENT SETUP");
+    printlndeb("============");
 
     lFreeHeap =  ESP.getFreeHeap();
     lFreePsram = ESP.getFreePsram();
 
-    Serial.printf("%s;[HEAP];%lu;%d;%d;(init)\n", getTimeString().c_str(),
+    printfdeb("%s;[HEAP];%lu;%d;%d;(init)\n", getTimeString().c_str(),
        lFreeHeap, ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    Serial.printf("%s;[PSRM];%lu\n", getTimeString().c_str(), lFreePsram);
+    printfdeb("%s;[PSRM];%lu\n", getTimeString().c_str(), lFreePsram);
     
     check_efuse();
 
@@ -706,11 +709,11 @@ void esp32setup()
     if(meshcom_settings.node_cleanflash == 1)
         bClear = true;
 
-    Serial.printf("[INIT]...build %s / %s\n", __DATE__, __TIME__);
+    printfdeb("[INIT]...build %s / %s\n", __DATE__, __TIME__);
 
     if(meshcom_settings.node_fversion != FLASH_VERSION || bClear)
     {
-        Serial.printf("[INIT]...FLASH cleared new version %i\n", FLASH_VERSION);
+        printfdeb("[INIT]...FLASH cleared new version %i\n", FLASH_VERSION);
 
         initTimePersistence();
 
@@ -718,7 +721,7 @@ void esp32setup()
     }
     else
     {
-        Serial.printf("[INIT]...FLASH version %i\n", meshcom_settings.node_fversion);
+        printfdeb("[INIT]...FLASH version %i\n", meshcom_settings.node_fversion);
     }
 
     if(bClear)
@@ -826,13 +829,13 @@ void esp32setup()
     if(memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0 || meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
     {
         bWIFIAP = true;
-        Serial.println("[INIT]...WIFIAP starting...");
+        printlndeb("[INIT]...WIFIAP starting...");
     }
 
     if(bWIFIAP)
     {
         bWEBSERVER = true;
-        Serial.println("[INIT]...WEBServer starting...");
+        printlndeb("[INIT]...WEBServer starting...");
     }
 
     #if defined(BOARD_T_DECK_PRO)
@@ -910,7 +913,7 @@ void esp32setup()
         
     #ifdef LED_PIN
         pixels.begin();
-        Serial.println("[INIT]...NEOPIXEL set");
+        printlndeb("[INIT]...NEOPIXEL set");
     #endif
 
     #ifndef ENABLE_SOFTSER
@@ -1069,7 +1072,7 @@ void esp32setup()
 
     init_onebutton();
 
-    Serial.printf("[INIT].._GW_ID: %08X\n", _GW_ID);
+    printfdeb("[INIT].._GW_ID: %08X\n", _GW_ID);
 
  
     ////////////////////////////////////////////////////////////////////
@@ -1078,7 +1081,7 @@ void esp32setup()
 	
 	// initialize clock
 	boResult = MyClock.Init();
-	Serial.printf("[INIT]...Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
+	printfdeb("[INIT]...Initialize clock: %s\n", (boResult) ? "ok" : "FAILED");
     snprintf(cTimeSource, sizeof(cTimeSource), (char*)"INIT");
 
     DisplayTimeWait=0;
@@ -1134,39 +1137,39 @@ void esp32setup()
     //TEST #ifndef BOARD_E290
 
     #ifdef SX127X
-    Serial.print(F("[LoRa]...SX1276 Chip"));
+    printdeb(F("[LoRa]...SX1276 Chip"));
     #endif
     
     #ifdef BOARD_E220
-    Serial.print(F("[LoRa]...LLCC68 chip"));
+    printdeb(F("[LoRa]...LLCC68 chip"));
     #endif
 
     #ifdef SX1262X
-    Serial.print(F("[LoRa]...SX1262 chip"));
+    printdeb(F("[LoRa]...SX1262 chip"));
     #endif
     
     #ifdef SX126X
-    Serial.print(F("[LoRa]...SX1268 chip"));
+    printdeb(F("[LoRa]...SX1268 chip"));
     #endif
     
     #ifdef SX1262_V3
-    Serial.print(F("[LoRa]...SX1262 V3 chip"));
+    printdeb(F("[LoRa]...SX1262 V3 chip"));
     #endif
     
     #if defined(SX1262_E22) || defined(USING_SX1262)
-    Serial.print(F("[LoRa]...SX1262 V3 chip"));
+    printdeb(F("[LoRa]...SX1262 V3 chip"));
     #endif
 
     #ifdef SX1268_E22
-    Serial.print(F("[LoRa]...SX1268 V3 chip"));
+    printdeb(F("[LoRa]...SX1268 V3 chip"));
     #endif
 
     #ifdef SX1262_E290
-    Serial.print(F("[LoRa]...SX1262 E290 chip"));
+    printdeb(F("[LoRa]...SX1262 E290 chip"));
     #endif
 
     #ifdef SX1262_V4
-    Serial.print(F("[LoRa]...SX1262 V4 chip (with PA)"));
+    printdeb(F("[LoRa]...SX1262 V4 chip (with PA)"));
     #endif
 
     #if defined (BOARD_TRACKER) || defined(BOARD_TBEAM_1W) || defined(BOARD_T3S3_V13)
@@ -1178,10 +1181,10 @@ void esp32setup()
     // #elif defined(BOARD_T_DECK_PRO)
     // extra source
     #elif defined(BOARD_E220)
-        Serial.print(F(" Initializing ... "));
+        printdeb(F(" Initializing ... "));
         int state = radio.begin(434.0F, 125.0F, 9, 7, SYNC_WORD_SX127x, 10, LORA_PREAMBLE_LENGTH, /*float tcxoVoltage = 0*/ 1.6F, /*bool useRegulatorLDO = false*/ false);
     #else
-        Serial.print(F(" Initializing ... "));
+        printdeb(F(" Initializing ... "));
 
         #if defined(BOARD_TBEAM_1W)
         #ifdef RADIO_LDO_EN
@@ -1218,7 +1221,7 @@ void esp32setup()
     #else
     if (state == RADIOLIB_ERR_NONE)
     {
-        Serial.println(F("success"));
+        printlndeb(F("success"));
         bRadio=true;
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -1227,8 +1230,8 @@ void esp32setup()
     }
     else
     {
-        Serial.print(F("failed, code "));
-        Serial.println(state);
+        printdeb(F("failed, code "));
+        printlndeb(state);
         bRadio=false;
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -1266,47 +1269,47 @@ void esp32setup()
     {
         #if defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E290)
         if(radio.setTCXO(1.8) != RADIOLIB_ERR_NONE)
-            Serial.println(F("[LoRa]...TCXO 1.8V konnte nicht gesetzt werden"));
+            printlndeb(F("[LoRa]...TCXO 1.8V konnte nicht gesetzt werden"));
         else
-            Serial.println(F("[LoRa]...TCXO DIO3 = 1.8V (Wireless Paper)"));
+            printlndeb(F("[LoRa]...TCXO DIO3 = 1.8V (Wireless Paper)"));
         #endif
 
         // set boosted gain
         #if defined(SX1262_V3) || defined(SX126x_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || defined(USING_SX1262) || defined(SX1262_V4)
-        Serial.printf("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
+        printfdeb("[LoRa]...RX_BOOSTED_GAIN: %d\n", (meshcom_settings.node_sset2 &  0x0800) == 0x0800);
         if (radio.setRxBoostedGainMode(bBOOSTEDGAIN)  != RADIOLIB_ERR_NONE ) {
-            Serial.println(F("Boosted Gain is not available for this module!"));
+            printlndeb(F("Boosted Gain is not available for this module!"));
         }
         #endif
 
         // set carrier frequency
-        Serial.printf("[LoRa]...RF_FREQUENCY: %.3f MHz\n", meshcom_settings.node_freq);
+        printfdeb("[LoRa]...RF_FREQUENCY: %.3f MHz\n", meshcom_settings.node_freq);
         if (radio.setFrequency(meshcom_settings.node_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
-            Serial.println(F("Selected frequency is invalid for this module!"));
+            printlndeb(F("Selected frequency is invalid for this module!"));
         }
 
         // set bandwidth 
-        Serial.printf("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", meshcom_settings.node_bw);
+        printfdeb("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", meshcom_settings.node_bw);
         if (radio.setBandwidth(meshcom_settings.node_bw) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
-            Serial.println(F("Selected bandwidth is invalid for this module!"));
+            printlndeb(F("Selected bandwidth is invalid for this module!"));
         }
 
         // set spreading factor 
-        Serial.printf("[LoRa]...RF_SF: %i\n", meshcom_settings.node_sf);
+        printfdeb("[LoRa]...RF_SF: %i\n", meshcom_settings.node_sf);
         if (radio.setSpreadingFactor(meshcom_settings.node_sf) == RADIOLIB_ERR_INVALID_SPREADING_FACTOR) {
-            Serial.println(F("Selected spreading factor is invalid for this module!"));
+            printlndeb(F("Selected spreading factor is invalid for this module!"));
         }
 
         // set coding rate 
-        Serial.printf("[LoRa]...RF_CR: 4/%i\n", meshcom_settings.node_cr);
+        printfdeb("[LoRa]...RF_CR: 4/%i\n", meshcom_settings.node_cr);
         if (radio.setCodingRate(meshcom_settings.node_cr) == RADIOLIB_ERR_INVALID_CODING_RATE) {
-            Serial.println(F("Selected coding rate is invalid for this module!"));
+            printlndeb(F("Selected coding rate is invalid for this module!"));
         }
 
         // set LoRa sync word 
         // NOTE: value 0x34 is reserved for LoRaWAN networks and should not be used
         if (radio.setSyncWord(SYNC_WORD_SX127x) != RADIOLIB_ERR_NONE) {
-            Serial.println(F("Unable to set sync word!"));
+            printlndeb(F("Unable to set sync word!"));
         }
 
         // set output power to 10 dBm (accepted range is -3 - 17 dBm)
@@ -1328,25 +1331,25 @@ void esp32setup()
 
         meshcom_settings.node_power = tx_power;  // [OE3WAS] für den Ring der Sicherheit ;-) ??
         save_settings();
-        Serial.printf("[LoRa]...RF_POWER: %d dBm\n", tx_power);
+        printfdeb("[LoRa]...RF_POWER: %d dBm\n", tx_power);
 
         if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
-            Serial.println(F("Selected output power is invalid for this module!"));
+            printlndeb(F("Selected output power is invalid for this module!"));
             while (true);
         }
 
         // set over current protection limit (accepted range is 0 - 140 mA)
         // NOTE: set value to 0 to disable overcurrent protection
         if (radio.setCurrentLimit(CURRENT_LIMIT) == RADIOLIB_ERR_INVALID_CURRENT_LIMIT) {
-            Serial.println(F("Selected current limit is invalid for this module!"));
+            printlndeb(F("Selected current limit is invalid for this module!"));
             while (true);
         }
 
         // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
-        Serial.printf("[LoRa]...PREAMBLE: %i symbols\n", meshcom_settings.node_preamplebits);
+        printfdeb("[LoRa]...PREAMBLE: %i symbols\n", meshcom_settings.node_preamplebits);
         
         if (radio.setPreambleLength(meshcom_settings.node_preamplebits) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
-            Serial.println(F("Selected preamble length is invalid for this module!"));
+            printlndeb(F("Selected preamble length is invalid for this module!"));
             while (true);
         }
 
@@ -1356,7 +1359,7 @@ void esp32setup()
         //       leave at 0 unless you know what you're doing
         if (radio.setGain(0) == RADIOLIB_ERR_INVALID_GAIN)
         {
-            Serial.println(F("Selected gain is invalid for this module!"));
+            printlndeb(F("Selected gain is invalid for this module!"));
             while (true);
         }
 
@@ -1378,22 +1381,22 @@ void esp32setup()
         // radio.setDio1Action(setFlagDetected, RISING);
 
         // start scanning the channel
-        Serial.print(F("[LoRa]...Starting to listen ... "));
+        printdeb(F("[LoRa]...Starting to listen ... "));
         state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
         if (state == RADIOLIB_ERR_NONE)
         {
-            Serial.println(F("success"));
+            printlndeb(F("success"));
         }
         else
         {
-            Serial.print(F("failed, code "));
-            Serial.println(state);
+            printdeb(F("failed, code "));
+            printlndeb(state);
         }        
 
         // enable CRC
         if (radio.setCRC(true) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
         {
-            Serial.println(F("Selected CRC is invalid for this module!"));
+            printlndeb(F("Selected CRC is invalid for this module!"));
             while (true);
         }
 
@@ -1414,7 +1417,7 @@ void esp32setup()
         // radio.setDio1Action(setFlagDetected, RISING);
 
         // start scanning the channel
-        Serial.print(F("[LoRa]...Starting to listen ... "));
+        printdeb(F("[LoRa]...Starting to listen ... "));
         #ifdef RADIO_CTRL
             digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
             delay(2);
@@ -1422,18 +1425,18 @@ void esp32setup()
         state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
         if (state == RADIOLIB_ERR_NONE)
         {
-            Serial.println(F("success"));
+            printlndeb("success");
         }
         else
         {
-            Serial.print(F("failed, code "));
-            Serial.println(state);
+            printdeb("failed, code ");
+            printdeb(state);
         }        
 
         // enable CRC
         if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
         {
-            Serial.println(F("Selected CRC is invalid for this module!"));
+            printlndeb(F("Selected CRC is invalid for this module!"));
             while (true);
         }
         #endif
@@ -1451,22 +1454,22 @@ void esp32setup()
             #endif
 
             // start scanning the channel
-            Serial.print(F("[LoRa]...Starting to listen ... "));
+            printdeb(F("[LoRa]...Starting to listen ... "));
             state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
             if (state == RADIOLIB_ERR_NONE)
             {
-                Serial.println(F("success"));
+                printlndeb("success");
             }
             else
             {
-                Serial.print(F("failed, code "));
-                Serial.println(state);
+                printdeb(F("failed, code "));
+                printlndeb(state);
             }        
     
             // enable CRC
             if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
             {
-                Serial.println(F("Selected CRC is invalid for this module!"));
+                printlndeb("Selected CRC is invalid for this module!");
                 while (true);
             }
         #endif
@@ -1478,28 +1481,28 @@ void esp32setup()
             radio.setDio1Action(setFlag);
 
             // start scanning the channel
-            Serial.print(F("[E220] Starting to listen ... "));
+            printdeb(F("[E220] Starting to listen ... "));
             state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
             if (state == RADIOLIB_ERR_NONE)
             {
-                Serial.println(F("success!"));
+                printlndeb("success!");
             }
             else
             {
-                    Serial.print(F("failed, code "));
-                    Serial.println(state);
+                    printdeb(F("failed, code "));
+                    printlndeb(state);
             }        
 
             // enable CRC
             if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
-                Serial.println(F("Selected CRC is invalid for this module!"));
+                printlndeb(F("Selected CRC is invalid for this module!"));
                 while (true);
             }
         
         #endif
     }
 
-    Serial.println(F("[LoRa]...All settings successfully changed"));
+    printlndeb(F("[LoRa]...All settings successfully changed"));
     #endif
 
     //#endif
@@ -1518,13 +1521,13 @@ void esp32setup()
     const std::__cxx11::string strBLEName = cBLEName;
     const std::__cxx11::string strBLEManufData = cManufData;
 
-    Serial.printf("[BLE ]...Device started with BLE-Name <%s>\n", strBLEName.c_str());
+    printfdeb("[BLE ]...Device started with BLE-Name <%s>\n", strBLEName.c_str());
 
     bleQueue = xQueueCreate(5, sizeof(BleQueueItem));
 
     NimBLEDevice::init(strBLEName);
 
-    Serial.printf("[BLE ]...Device-Address <%s>\n", NimBLEDevice::toString().c_str());
+    printfdeb("[BLE ]...Device-Address <%s>\n", NimBLEDevice::toString().c_str());
     
     //NimBLEDevice::setDeviceName(strBLEName);
 
@@ -1605,7 +1608,7 @@ void esp32setup()
     
     pAdvertising->start();
  
-    Serial.println("[BLE ]...Waiting a client connection to notify...");
+    printfdeb("[BLE ]...Waiting a client connection to notify...\n");
     
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;
@@ -1621,9 +1624,9 @@ void esp32setup()
     }
     #endif
 
-    Serial.println("==============");
-    Serial.println("CLIENT STARTED");
-    Serial.println("==============");
+    printlndeb("==============");
+    printlndeb("CLIENT STARTED");
+    printlndeb("==============");
     delay(500);
 
     ///////////////////////////////////////////////////////
@@ -1634,7 +1637,7 @@ void esp32setup()
 
         if(!startNetwork())
         {
-            Serial.println("[WIFI]...no connection possible");
+            printlndeb("[WIFI]...no connection possible");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             addMessage("WiFi connection failed");
             #endif
@@ -1677,7 +1680,7 @@ void esp32setup()
 void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 {
     if(bBLEDEBUG)
-        Serial.printf("[LOOP] <%lu> WRITE BLE\n", millis());
+        printfdeb("[LOOP] <%lu> WRITE BLE\n", millis());
 
     pTxCharacteristic->setValue(confBuff, conf_len);
     pTxCharacteristic->notify();
@@ -1687,6 +1690,18 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 void esp32loop()
 {
+    #if not defined(BOARD_T_DECK_PRO)
+    btn.tick();
+    #endif
+
+    if(bDEEP_SLEEP)
+    {
+        delay(1000);
+        // only loop
+    }
+    else
+    {
+
     static unsigned long last_time_save = 0;
     if(millis() - last_time_save > 900000) // Save every 15 minutes
     {
@@ -1697,10 +1712,6 @@ void esp32loop()
     // loop T-Deck GUI
     #if defined(BOARD_T_DECK_PRO)
         loopTDeck_pro();
-    #endif
-
-    #if not defined(BOARD_T_DECK_PRO)
-    btn.tick();
     #endif
 
     #ifdef LED_PIN
@@ -1811,10 +1822,10 @@ void esp32loop()
     if(bRadio)
     {
         if(bLORADEBUG && receiveFlag)
-            Serial.println("receiveflag");
+            printlndeb("receiveflag");
 
         if(bLORADEBUG && transmittedFlag)
-            Serial.println("transmittedFlag");
+            printlndeb("transmittedFlag");
 
         if(inoReceiveTimeOutTime > 0)
         {
@@ -1825,8 +1836,8 @@ void esp32loop()
 
                 if(bLORADEBUG)
                 {
-                    Serial.print(getTimeString());
-                    Serial.println(" [LoRa]...Receive Timeout > 6.5 min. just for info");
+                    printdeb(getTimeString());
+                    printlndeb(" [LoRa]...Receive Timeout > 6.5 min. just for info");
                 }
 
             }
@@ -1866,7 +1877,7 @@ void esp32loop()
                        ringBufferLoraRX[i][2] != 0 || ringBufferLoraRX[i][3] != 0)
                         dedup_used++;
                 }
-                Serial.printf("[MC-DBG] RING_STATUS queued=%d pending=%d retrying=%d "
+                printfdeb("[MC-DBG] RING_STATUS queued=%d pending=%d retrying=%d "
                               "done=%d iW=%d iR=%d dedup=%d/%d\n",
                               queued, pending, retrying, done, w, r,
                               dedup_used, MAX_DEDUP_RING);
@@ -1905,10 +1916,10 @@ void esp32loop()
                 unsigned long tx_ms = ch_util_tx_accum.exchange(0);
                 unsigned int util = (unsigned int)((rx_ms + tx_ms) * 100 / window);
                 if(util > 100) util = 100;
-                Serial.printf("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
+                printfdeb("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
                     rx_ms, tx_ms, util);
                 // ONRXDONE stats: report max and warn count, then reset
-                Serial.printf("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
+                printfdeb("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
                     onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
                 onrxdone_max_ms = 0;
                 onrxdone_warn_count = 0;
@@ -1921,12 +1932,12 @@ void esp32loop()
             stat_prio_timer = millis();
             if(bLORADEBUG)
             {
-                Serial.printf("[MC-STAT] t=%ds qmax=%d/%d\n",
+                printfdeb("[MC-STAT] t=%ds qmax=%d/%d\n",
                     PRIO_STAT_INTERVAL_S, stat_queue_hwm, MAX_RING);
-                Serial.printf("  tx: p1=%d p2=%d p3=%d p4=%d p5=%d preempt=%d\n",
+                printfdeb("  tx: p1=%d p2=%d p3=%d p4=%d p5=%d preempt=%d\n",
                     stat_tx_count[1], stat_tx_count[2], stat_tx_count[3],
                     stat_tx_count[4], stat_tx_count[5], stat_preempt_count);
-                Serial.printf("  drop: p1=%d p2=%d p3=%d p4=%d p5=%d\n",
+                printfdeb("  drop: p1=%d p2=%d p3=%d p4=%d p5=%d\n",
                     stat_drop_count[1], stat_drop_count[2], stat_drop_count[3],
                     stat_drop_count[4], stat_drop_count[5]);
             }
@@ -1937,7 +1948,7 @@ void esp32loop()
                 {
                     uint32_t avg = stat_latency_sum[p] / stat_tx_count[p];
                     if(bLORADEBUG)
-                        Serial.printf("[MC-PRIO] p%d_lat_avg=%ums p%d_lat_max=%dms p%d_cnt=%d\n",
+                        printfdeb("[MC-PRIO] p%d_lat_avg=%ums p%d_lat_max=%dms p%d_cnt=%d\n",
                             p, avg, p, stat_latency_max[p], p, stat_tx_count[p]);
                 }
             }
@@ -1953,7 +1964,7 @@ void esp32loop()
         if((millis() - stat_hwm_timer) > (unsigned long)(PRIO_HWM_INTERVAL_S * 1000UL))
         {
             stat_hwm_timer = millis();
-            Serial.printf("[MC-HWM] uptime=%lus queue_hwm=%d/%d csma_hwm=%d trickle=%lums\n",
+            printfdeb("[MC-HWM] uptime=%lus queue_hwm=%d/%d csma_hwm=%d trickle=%lums\n",
                 millis() / 1000, stat_queue_hwm, MAX_RING,
                 stat_csma_hwm_attempts, trickle_interval_ms);
         }
@@ -1967,7 +1978,7 @@ void esp32loop()
             if(bEnableInterruptTransmit && _tx_s > 0 &&
                (millis() - _tx_s) > TX_WATCHDOG_MS)
             {
-                Serial.printf("[MC-WDT] TX_WATCHDOG fired after %lums — forcing RX recovery\n",
+                printfdeb("[MC-WDT] TX_WATCHDOG fired after %lums — forcing RX recovery\n",
                     millis() - _tx_s);
 
                 ch_util_tx_start = 0;
@@ -2005,7 +2016,7 @@ void esp32loop()
             {
                 // Debug A: RX_TIMEOUT_FIRE
                 if(bLORADEBUG)
-                    Serial.printf("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu wait=%lu delta=%lu\n",
+                    printfdeb("[MC-DBG] RX_TIMEOUT_FIRE ts=%lu wait=%lu delta=%lu\n",
                         millis(), csma_timeout, millis() - iReceiveTimeOutTime);
 
                 // FIX BUG #1: Do not reset radio if a received packet is pending
@@ -2016,7 +2027,7 @@ void esp32loop()
                     iReceiveTimeOutTime = millis();
 
                     if(bLORADEBUG)
-                        Serial.printf("[MC-DBG] RX_TIMEOUT_DEFERRED src=receiveFlag\n");
+                        printlndeb("[MC-DBG] RX_TIMEOUT_DEFERRED src=receiveFlag\n");
                 }
                 // FIX: Do not reset radio if a packet reception is in progress.
                 // Poll IRQ register for PREAMBLE_DETECTED or HEADER_VALID —
@@ -2041,27 +2052,27 @@ void esp32loop()
                         {
                             // No signal present — IRQ flags are stale
                             if(bLORADEBUG)
-                                Serial.printf("[MC-DBG] RX_IRQ_STALE_EARLY rssi=%.0f flags=%s cnt=%d\n",
+                                printfdeb("[MC-DBG] RX_IRQ_STALE_EARLY rssi=%.0f flags=%s cnt=%d\n",
                                     currentRSSI, header_valid ? "HDR" : "PRE", rx_irq_defer_count);
                         }
                         else if(header_valid && rx_irq_defer_count < 3)
                         {
                             shouldDefer = true;
                             if(bLORADEBUG)
-                                Serial.printf("[MC-DBG] RX_TIMEOUT_DEFERRED src=header_valid rssi=%.0f cnt=%d\n",
+                                printfdeb("[MC-DBG] RX_TIMEOUT_DEFERRED src=header_valid rssi=%.0f cnt=%d\n",
                                     currentRSSI, rx_irq_defer_count);
                         }
                         else if(!header_valid && rx_irq_defer_count < 1)
                         {
                             shouldDefer = true;
                             if(bLORADEBUG)
-                                Serial.printf("[MC-DBG] RX_TIMEOUT_DEFERRED src=preamble_only rssi=%.0f cnt=%d\n",
+                                printfdeb("[MC-DBG] RX_TIMEOUT_DEFERRED src=preamble_only rssi=%.0f cnt=%d\n",
                                     currentRSSI, rx_irq_defer_count);
                         }
                         else
                         {
                             if(bLORADEBUG)
-                                Serial.printf("[MC-DBG] RX_IRQ_STALE rssi=%.0f flags=%s cnt=%d\n",
+                                printfdeb("[MC-DBG] RX_IRQ_STALE rssi=%.0f flags=%s cnt=%d\n",
                                     currentRSSI, header_valid ? "HDR" : "PRE", rx_irq_defer_count);
                         }
                     }
@@ -2074,7 +2085,7 @@ void esp32loop()
                     else
                     {
                         if(rx_irq_defer_count > 0 && bLORADEBUG)
-                            Serial.printf("[MC-DBG] RX_IRQ_STALE forced restart after %d deferrals\n", rx_irq_defer_count);
+                            printfdeb("[MC-DBG] RX_IRQ_STALE forced restart after %d deferrals\n", rx_irq_defer_count);
                         rx_irq_defer_count = 0;
                         iReceiveTimeOutTime=0;
 
@@ -2102,26 +2113,26 @@ void esp32loop()
                         {
                             receiveFlag = true;
                             if(bLORADEBUG)
-                                Serial.println(F("[MC-DBG] RX_TIMEOUT missed_edge recovery"));
+                                printlndeb(F("[MC-DBG] RX_TIMEOUT missed_edge recovery"));
                         }
                         #endif
 
                         // Debug B: RX_RESTART after timeout
                         if(bLORADEBUG)
                         {
-                            Serial.printf("[MC-SM] IDLE -> RX_LISTEN rc=%d\n", state);
-                            Serial.printf("[MC-DBG] RX_RESTART src=timeout state=%d\n", state);
+                            printfdeb("[MC-SM] IDLE -> RX_LISTEN rc=%d\n", state);
+                            printfdeb("[MC-DBG] RX_RESTART src=timeout state=%d\n", state);
                         }
 
                         if(bLORADEBUG)
                         {
-                            Serial.print(getTimeString());
+                            printdeb(getTimeString());
                             if (state == RADIOLIB_ERR_NONE)
-                                Serial.println(F(" [LoRa]...Receive Timeout, startReceive again with sucess"));
+                                printlndeb(F(" [LoRa]...Receive Timeout, startReceive again with sucess"));
                             else
                             {
-                                Serial.print(F(" [LoRa]...Receive Timeout, startReceive again with error = "));
-                                Serial.println(state);
+                                printdeb(F(" [LoRa]...Receive Timeout, startReceive again with error = "));
+                                printlndeb(state);
                             }
                         }
                     }
@@ -2137,8 +2148,8 @@ void esp32loop()
                 // Debug C: RX_FLAG_PROCESS
                 if(bLORADEBUG)
                 {
-                    Serial.printf("[MC-SM] RX_LISTEN -> RX_PROCESS rc=0\n");
-                    Serial.printf("[MC-DBG] RX_FLAG_PROCESS ts=%lu\n", millis());
+                    printlndeb("[MC-SM] RX_LISTEN -> RX_PROCESS rc=0\n");
+                    printfdeb("[MC-DBG] RX_FLAG_PROCESS ts=%lu\n", millis());
                 }
 
                 // reset flags first
@@ -2170,22 +2181,22 @@ void esp32loop()
                 // Debug G: TX_DONE
                 if(bLORADEBUG)
                 {
-                    Serial.printf("[MC-SM] TX_ACTIVE -> TX_DONE rc=%d\n", transmissionState);
-                    Serial.printf("[MC-DBG] TX_DONE state=%d ts=%lu\n", transmissionState, millis());
+                    printfdeb("[MC-SM] TX_ACTIVE -> TX_DONE rc=%d\n", transmissionState);
+                    printfdeb("[MC-DBG] TX_DONE state=%d ts=%lu\n", transmissionState, millis());
                 }
 
                 if (transmissionState == RADIOLIB_ERR_NONE)
                 {
                     // packet was successfully sent
                     if(bLORADEBUG)
-                        Serial.println(F("transmission finished!"));
+                        printlndeb("transmission finished!");
                 }
                 else
                 {
                     if(bLORADEBUG)
                     {
-                        Serial.print(F("failed, code <3> "));
-                        Serial.println(transmissionState);
+                        printdeb("failed, code <3> ");
+                        printlndeb(transmissionState);
                     }
                 }
 
@@ -2230,24 +2241,24 @@ void esp32loop()
                 {
                     receiveFlag = true;
                     if(bLORADEBUG)
-                        Serial.println(F("[MC-DBG] RX_RESTART missed_edge recovery"));
+                        printlndeb(F("[MC-DBG] RX_RESTART missed_edge recovery"));
                 }
                 #endif
 
                 // Debug H: RX_RESTARTED after TX
                 if(bLORADEBUG)
                 {
-                    Serial.printf("[MC-SM] TX_DONE -> RX_LISTEN rc=%d\n", state);
-                    Serial.printf("[MC-DBG] RX_RESTARTED src=after_tx state=%d\n", state);
+                    printfdeb("[MC-SM] TX_DONE -> RX_LISTEN rc=%d\n", state);
+                    printfdeb("[MC-DBG] RX_RESTARTED src=after_tx state=%d\n", state);
                 }
 
                 if (state != RADIOLIB_ERR_NONE)
                 {
                     if(bLORADEBUG)
                     {
-                        Serial.print(F("[LoRa]...Starting to listen again (1)... "));
-                        Serial.print(F("failed, code "));
-                        Serial.println(state);
+                        printdeb(F("[LoRa]...Starting to listen again (1)... "));
+                        printdeb(F("failed, code "));
+                        printlndeb(state);
                     }
                 }
 
@@ -2271,8 +2282,8 @@ void esp32loop()
                 // Debug E: TX_GATE_ENTER
                 if(bLORADEBUG)
                 {
-                    Serial.printf("[MC-SM] IDLE -> TX_PREPARE rc=0\n");
-                    Serial.printf("[MC-DBG] TX_GATE_ENTER qlen=%d cad_attempt=%d\n",
+                    printfdeb("[MC-SM] IDLE -> TX_PREPARE rc=0\n");
+                    printfdeb("[MC-DBG] TX_GATE_ENTER qlen=%d cad_attempt=%d\n",
                         (_w >= _r) ? (_w - _r) : (MAX_RING - _r + _w),
                         cad_attempt);
                 }
@@ -2290,7 +2301,7 @@ void esp32loop()
                         is_receiving = true;
                         irq_rx_active = true;
                         if(bLORADEBUG)
-                            Serial.printf("[MC-DBG] IRQ_POLL hdr/pre=0x%04X -> TX_ABORT\n",
+                            printfdeb("[MC-DBG] IRQ_POLL hdr/pre=0x%04X -> TX_ABORT\n",
                                           irqStatus);
                         iReceiveTimeOutTime = millis();
                         csma_timeout = csma_compute_timeout(cad_attempt);
@@ -2304,18 +2315,18 @@ void esp32loop()
                 radio.clearPacketReceivedAction();
 
                 if(bLORADEBUG)
-                    Serial.println("[CHECK] radio.scanChannel() / 1");
+                    printfdeb("[CHECK] radio.scanChannel() / 1");
 
                 // CAD Scan 1
                 #if defined(BOARD_T_ETH_ELITE)
                 int cad_result = RADIOLIB_CHANNEL_FREE; //!!!!!!!!!!!!!! ACHTUNG !!!!!!!!!!!!!!!! muss raus
                 if(bLORADEBUG)
-                    Serial.println("[CHECK] T_ETH_ELITE BUG please fixit");
+                    printfdeb("[CHECK] T_ETH_ELITE BUG please fixit");
                 #else
                 int cad_result = radio.scanChannel();
                 #endif
                 if(bLORADEBUG)
-                    Serial.printf("[MC-DBG] CAD_SCAN result=%d\n", cad_result);
+                    printfdeb("[MC-DBG] CAD_SCAN result=%d\n", cad_result);
 
                 bool channel_free = false;
                 if(cad_result == RADIOLIB_CHANNEL_FREE)
@@ -2326,18 +2337,18 @@ void esp32loop()
                 {
                     // Double-Check: second scan to filter false positives
                     if(bLORADEBUG)
-                        Serial.printf("[MC-DBG] CAD_BUSY_1 attempt=%d, double-check...\n", cad_attempt);
+                        printfdeb("[MC-DBG] CAD_BUSY_1 attempt=%d, double-check...\n", cad_attempt);
 
                     if(bLORADEBUG)
-                        Serial.println("[CHECK] radio.scanChannel() / 2");
+                        printfdeb("[CHECK] radio.scanChannel() / 2");
 
                     cad_result = radio.scanChannel();
                     if(bLORADEBUG)
-                        Serial.printf("[MC-DBG] CAD_SCAN result=%d\n", cad_result);
+                        printfdeb("[MC-DBG] CAD_SCAN result=%d\n", cad_result);
                     if(cad_result == RADIOLIB_CHANNEL_FREE)
                     {
                         if(bLORADEBUG)
-                            Serial.printf("[MC-DBG] CAD_FALSE_POSITIVE\n");
+                            printfdeb("[MC-DBG] CAD_FALSE_POSITIVE\n");
                         channel_free = true;
                     }
                 }
@@ -2345,7 +2356,7 @@ void esp32loop()
                 if(channel_free)
                 {
                     if(bLORADEBUG)
-                        Serial.printf("[MC-DBG] CAD_FREE attempt=%d\n", cad_attempt);
+                        printfdeb("[MC-DBG] CAD_FREE attempt=%d\n", cad_attempt);
 
                     csma_reset();
 
@@ -2363,10 +2374,10 @@ void esp32loop()
                         // Debug F: TX_START
                         if(bLORADEBUG)
                         {
-                            Serial.printf("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
+                            printfdeb("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
                             int __w = iWrite;
                             int __r = iRead;
-                            Serial.printf("[MC-DBG] TX_START qlen=%d\n",
+                            printfdeb("[MC-DBG] TX_START qlen=%d\n",
                                 (__w >= __r) ? (__w - __r) : (MAX_RING - __r + __w));
                         }
                     }
@@ -2379,7 +2390,7 @@ void esp32loop()
                         // doTX() returned false (no ready slot) — restore RX
                         // and set timeout to prevent CAD spin loop
                         if(bLORADEBUG)
-                            Serial.printf("[MC-DBG] CAD_FREE_NO_TX restoring RX\n");
+                            printfdeb("[MC-DBG] CAD_FREE_NO_TX restoring RX\n");
                         bEnableInterruptTransmit = false;
                         radio.clearPacketSentAction();
 
@@ -2401,8 +2412,8 @@ void esp32loop()
 
                     if(bLORADEBUG)
                     {
-                        Serial.printf("[MC-SM] TX_PREPARE -> IDLE rc=-1\n");
-                        Serial.printf("[MC-DBG] CAD_BUSY attempt=%d next_timeout=%lu\n",
+                        printfdeb("[MC-SM] TX_PREPARE -> IDLE rc=-1\n");
+                        printfdeb("[MC-DBG] CAD_BUSY attempt=%d next_timeout=%lu\n",
                             cad_attempt, csma_timeout);
                     }
 
@@ -2512,7 +2523,7 @@ void esp32loop()
             uint16_t Minute = now.minute();
             uint16_t Second = now.second();
 
-            //Serial.printf("%04i.%02i.%02i %02i:%02i:%02i\n", Year, Month, Day, Hour, Minute, Second);
+            //printfdeb("%04i.%02i.%02i %02i:%02i:%02i\n", Year, Month, Day, Hour, Minute, Second);
 
             // check valid Date & Time
             if(Year > 2013)
@@ -2714,7 +2725,7 @@ void esp32loop()
     if(hasMsgFromPhone)
     {
         if(bBLEDEBUG)
-            Serial.printf("[LOOP] hasMsgFromPhone\n");
+            printfdeb("[LOOP] hasMsgFromPhone\n");
         
         if(memcmp(textbuff_phone, ":", 1) == 0)
             sendMessage(textbuff_phone, txt_msg_len_phone);
@@ -2850,30 +2861,30 @@ void esp32loop()
                     
                     if(iGPSDEBUG > 0)
                     {
-                        Serial.printf("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
+                        printfdeb("[GPS ]...fix:%s sat:%i hdop:%.1lf\n", (posinfo_fix?"yes":"no"), gpsData.satellites, gpsData.hdop);
 
-                        Serial.print("[GPS ]...Time <UTC>: ");
-                        if (gpsData.hour < 10) Serial.print(F("0"));
-                        Serial.print(gpsData.hour);
-                        Serial.print(F(":"));
-                        if (gpsData.minute < 10) Serial.print(F("0"));
-                        Serial.print(gpsData.minute);
-                        Serial.print(F(":"));
-                        if (gpsData.second < 10) Serial.print(F("0"));
-                        Serial.print(gpsData.second);
+                        printdeb("[GPS ]...Time <UTC>: ");
+                        if (gpsData.hour < 10) printdeb(F("0"));
+                        printdeb(gpsData.hour);
+                        printdeb(F(":"));
+                        if (gpsData.minute < 10) printdeb(F("0"));
+                        printdeb(gpsData.minute);
+                        printdeb(F(":"));
+                        if (gpsData.second < 10) printdeb(F("0"));
+                        printdeb(gpsData.second);
 
-                        Serial.print(F(" / Date: "));
-                        Serial.print(gpsData.year);
-                        Serial.print(F("."));
-                        if (gpsData.month < 10) Serial.print(F("0"));
-                        Serial.print(gpsData.month);
-                        Serial.print(F("."));
-                        if (gpsData.day < 10) Serial.print(F("0"));
-                        Serial.println(gpsData.day);
+                        printdeb(F(" / Date: "));
+                        printdeb(gpsData.year);
+                        printdeb(F("."));
+                        if (gpsData.month < 10) printdeb(F("0"));
+                        printdeb(gpsData.month);
+                        printdeb(F("."));
+                        if (gpsData.day < 10) printdeb(F("0"));
+                        printdeb(gpsData.day);
 
                         if(posinfo_fix)
                         {
-                            Serial.printf("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
+                            printfdeb("[GPS ]...position  : lat:%.6lf lon:%.6lf alt:%.1lf\n", gpsData.latitude, gpsData.longitude, gpsData.altitude);
                         }
 
                     }
@@ -2924,8 +2935,8 @@ void esp32loop()
         {
             if(bDisplayInfo)
             {
-                Serial.print(getTimeString());
-                Serial.printf(" [POS]...sendPostion initialized F:%i S:%i\n", bPosFirst, posinfo_shot);
+                printdeb(getTimeString());
+                printfdeb(" [POS]...sendPostion initialized F:%i S:%i\n", bPosFirst, posinfo_shot);
             }
 
             bPosFirst = false;
@@ -3006,7 +3017,7 @@ void esp32loop()
             trickle_interval_ms = TRICKLE_IMIN_S * 1000UL;
             trickle_consistent_count = 0;
             if(bLORADEBUG)
-                Serial.printf("[MC-TRICKLE] TOPO_CHANGE neighbors=%d->%d interval_reset=%lums\n",
+                printfdeb("[MC-TRICKLE] TOPO_CHANGE neighbors=%d->%d interval_reset=%lums\n",
                     trickle_last_neighbor_count, current_neighbors, trickle_interval_ms);
         }
         trickle_last_neighbor_count = current_neighbors;
@@ -3015,14 +3026,14 @@ void esp32loop()
         if(trickle_consistent_count >= TRICKLE_K)
         {
             if(bLORADEBUG)
-                Serial.printf("[MC-TRICKLE] SUPPRESS consistent=%d>=k=%d interval=%lums neighbors=%d\n",
+                printfdeb("[MC-TRICKLE] SUPPRESS consistent=%d>=k=%d interval=%lums neighbors=%d\n",
                     trickle_consistent_count, TRICKLE_K, trickle_interval_ms, current_neighbors);
         }
         else
         {
             sendHey();
             if(bLORADEBUG)
-                Serial.printf("[MC-TRICKLE] SEND consistent=%d<k=%d interval=%lums neighbors=%d\n",
+                printfdeb("[MC-TRICKLE] SEND consistent=%d<k=%d interval=%lums neighbors=%d\n",
                     trickle_consistent_count, TRICKLE_K, trickle_interval_ms, current_neighbors);
         }
 
@@ -3098,7 +3109,7 @@ void esp32loop()
         BattTimeWait = millis() - 1000;
 
 
-    //Serial.printf("BattTimeWait:%i millis():%i tx:%i rx:%i\n", BattTimeWait, millis(), tx_is_active, is_receiving);
+    //printfdeb("BattTimeWait:%i millis():%i tx:%i rx:%i\n", BattTimeWait, millis(), tx_is_active, is_receiving);
 
     if ((BattTimeWait + 1000) < millis())  // 1 sec OE3WAS
     {
@@ -3115,7 +3126,7 @@ void esp32loop()
                     if(global_proz < 0)
                     {
                         if(bDisplayCont)
-                            Serial.println("[readBatteryVoltage]...no battery is connected");
+                            printfdeb("[readBatteryVoltage]...no battery is connected");
                             
                         global_batt = (float)PMU->getVbusVoltage();
                         global_proz=100.0;
@@ -3133,7 +3144,7 @@ void esp32loop()
                 }
 
                 if(bDisplayCont)
-                    Serial.printf("[readBatteryVoltage]...PMU.volt %.1f PMU.proz %i %i\n", global_batt, global_proz, pmu_proz);
+                    printfdeb("[readBatteryVoltage]...PMU.volt %.1f PMU.proz %i %i\n", global_batt, global_proz, pmu_proz);
             #else
             
                 global_batt = read_batt();
@@ -3143,7 +3154,7 @@ void esp32loop()
                 if(bDisplayCont)  // neue Ausgabe erfolgt in batt_functions
                 {
                     #if not defined(BOARD_T_DECK_PRO) and not defined(BOARD_TBEAM_1W)
-                    Serial.printf("[readBatteryVoltage] %s ... %.2f V %i%% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
+                    printfdeb("[readBatteryVoltage] %s ... %.2f V %i%% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
                     #endif
                 }
                 #endif
@@ -3168,7 +3179,7 @@ void esp32loop()
             }
 
             if(bWXDEBUG)
-                Serial.printf("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
+                printfdeb("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
                 
             meshcom_settings.node_ntctemp = NTCtemp;
 
@@ -3196,13 +3207,13 @@ void esp32loop()
                 lFreeHeap = ESP.getFreeHeap();
                 lFreePsram = ESP.getFreePsram();
 
-                Serial.printf("%s;[HEAP];%lu;%d;%d;(mon)\n",
+                printfdeb("%s;[HEAP];%lu;%d;%d;(mon)\n",
                     getTimeString().c_str(),
                     lFreeHeap,
                     ESP.getMinFreeHeap(),
                     ESP.getMaxAllocHeap());
                 #if defined(BOARD_HAS_PSRAM)
-                Serial.printf("%s;[PSRM];%lu;(mon)\n",
+                printfdeb("%s;[PSRM];%lu;(mon)\n",
                     getTimeString().c_str(),
                     lFreePsram);
                 #endif
@@ -3431,14 +3442,14 @@ void esp32loop()
                 if (hb_age > (HB_WARN_TIME * 1000) && !hb_warn_logged)
                 {
                     bool wifi_ok = (WiFi.status() == WL_CONNECTED);
-                    Serial.printf("[UDP] Server not responding for %lus — WiFi %s\n",
+                    printfdeb("[UDP] Server not responding for %lus — WiFi %s\n",
                                   hb_age / 1000, wifi_ok ? "CONNECTED" : "NOT_CONNECTED");
                     hb_warn_logged = true;
 
                     // WiFi actually down → reset immediately, don't wait
                     if (!wifi_ok)
                     {
-                        Serial.println("[UDP] WiFi down — resetting");
+                        printfdeb("[UDP] WiFi down — resetting");
                         resetMeshComUDP();
                         last_upd_timer = millis();
                         hb_warn_logged = false;
@@ -3452,13 +3463,13 @@ void esp32loop()
 
                     if (!wifi_ok)
                     {
-                        Serial.printf("[UDP] Heartbeat timeout %lus — WiFi NOT_CONNECTED, resetting\n",
+                        printfdeb("[UDP] Heartbeat timeout %lus — WiFi NOT_CONNECTED, resetting\n",
                                       hb_age / 1000);
                         resetMeshComUDP();
                     }
                     else
                     {
-                        Serial.printf("[UDP] Heartbeat timeout %lus — WiFi CONNECTED, server unresponsive, waiting\n",
+                        printfdeb("[UDP] Heartbeat timeout %lus — WiFi CONNECTED, server unresponsive, waiting\n",
                                       hb_age / 1000);
                     }
 
@@ -3508,9 +3519,9 @@ void esp32loop()
                             {
                                 // First boot failure — full radio power-cycle and retry
                                 #if defined(HAST_ETHERNET)
-                                    Serial.println("[ETH]...no connection at boot — reset and retrying");
+                                    printfdeb("[ETH]...no connection at boot — reset and retrying");
                                 #else
-                                    Serial.println("[WIFI]...no connection at boot — full radio reset and retrying");
+                                    printfdeb("[WIFI]...no connection at boot — full radio reset and retrying");
                                     WiFi.disconnect(true, true);
                                     WiFi.mode(WIFI_OFF);
                                     delay(1500);
@@ -3520,7 +3531,7 @@ void esp32loop()
                             }
                             else
                             {
-                                Serial.println("[WIFI]...SET but no Wifi connect ...please wait for next try (5 min)");
+                                printfdeb("[WIFI]...SET but no Wifi connect ...please wait for next try (5 min)");
                             }
 
                             bAllStarted=true;
@@ -3574,7 +3585,7 @@ void esp32loop()
 
     if ((tdeck_tft_timer + (TDECK_TFT_TIMEOUT * 1000)) < millis())
     {
-        // Serial.printf("Loop: Timeout reached. Timer: %lu, Millis: %lu\n", tdeck_tft_timer, millis());
+        // printfdeb("Loop: Timeout reached. Timer: %lu, Millis: %lu\n", tdeck_tft_timer, millis());
         tft_off();
     }
 
@@ -3583,6 +3594,10 @@ void esp32loop()
     #endif
 
     //
+    ////////////////////////////////////////////////
+
+    ////////////////////////////////////////////////
+    }   // else from DEEPSLEEP
     ////////////////////////////////////////////////
 
     // WOR/KBC not necesary     delay(100);
@@ -3622,8 +3637,8 @@ int checkRX(bool bRadio)
         // FIX BUG #2: Save RSSI/SNR/FreqError BEFORE restarting RX.
         // These read from SX1262 hardware registers via SPI and would be
         // invalidated once startReceive() transitions the radio to standby+RX.
-        int16_t saved_rssi = (int16_t)radio.getRSSI();
-        int8_t  saved_snr  = (int8_t)radio.getSNR();
+        int saved_rssi = (int)radio.getRSSI();
+        int saved_snr  = (int)radio.getSNR();
         float   saved_ferr = radio.getFrequencyError();
 
         // FIX BUG #2: Restart RX immediately after reading FIFO, BEFORE processing.
@@ -3644,34 +3659,34 @@ int checkRX(bool bRadio)
             {
                 receiveFlag = true;
                 if(bLORADEBUG)
-                    Serial.println(F("[MC-DBG] CHECKRX missed_edge recovery"));
+                    printlndeb("[MC-DBG] CHECKRX missed_edge recovery");
             }
             #endif
 
             // Debug D: RX_RESTARTED after readData
             if(bLORADEBUG)
-                Serial.printf("[MC-DBG] RX_RESTARTED src=after_readData state=%d\n", rxstate);
+                printfdeb("[MC-DBG] RX_RESTARTED src=after_readData state=%d\n", rxstate);
         }
 
         if(bLORADEBUG)
         {
             // packet was successfully received
-            Serial.print(F("[LoRa]...Received packet: "));
+            printdeb(F("[LoRa]...Received packet: "));
 
             // print RSSI (Received Signal Strength Indicator)
-            Serial.print(F("RSSI:\t\t"));
-            Serial.print(saved_rssi);
-            Serial.print(F(" dBm / "));
+            printdeb(F("RSSI:\t\t"));
+            printdeb(saved_rssi);
+            printdeb(F(" dBm / "));
 
             // print SNR (Signal-to-Noise Ratio)
-            Serial.print(F("SNR:\t\t"));
-            Serial.print(saved_snr);
-            Serial.print(F(" dB / "));
+            printdeb(F("SNR:\t\t"));
+            printdeb(saved_snr);
+            printdeb(F(" dB / "));
 
             // print frequency error
-            Serial.print(F("Frequency error:\t"));
-            Serial.print(saved_ferr);
-            Serial.println(F(" Hz"));
+            printdeb(F("Frequency error:\t"));
+            printdeb(saved_ferr);
+            printlndeb(" Hz");
         }
 
         // RX channel utilization: calculate airtime from packet length
@@ -3684,7 +3699,7 @@ int checkRX(bool bRadio)
     if (state == RADIOLIB_ERR_CRC_MISMATCH)
     {
         if(bLORADEBUG)
-            Serial.printf("OnRxError\n");
+            printfdeb("OnRxError\n");
 
         // RSSI/SNR/FreqError VOR RX-Restart sichern (Register werden ungueltig)
         int16_t saved_crc_rssi = (int16_t)radio.getRSSI();
@@ -3704,7 +3719,7 @@ int checkRX(bool bRadio)
             int rxstate = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
 
             if(bLORADEBUG)
-                Serial.printf("[MC-DBG] RX_RESTARTED src=after_crc_error state=%d\n", rxstate);
+                printfdeb("[MC-DBG] RX_RESTARTED src=after_crc_error state=%d\n", rxstate);
         }
 
         // RX channel utilization: CRC-failed packet still occupied the channel
@@ -3713,21 +3728,21 @@ int checkRX(bool bRadio)
         // Diagnose-Output: RSSI/SNR + kompletter Payload-Hex-Dump
         if(bLORADEBUG)
         {
-            Serial.printf("[MC-DBG] CRC_ERROR rssi=%d snr=%d freq_err=%.1f size=%d ts=%lu\n",
+            printfdeb("[MC-DBG] CRC_ERROR rssi=%d snr=%d freq_err=%.1f size=%d ts=%lu\n",
                 saved_crc_rssi, saved_crc_snr, saved_crc_ferr, (int)ibytes, millis());
 
             // Hex-Dump des beschaedigten Payloads (max 255 Bytes)
             int dump_len = (ibytes > 255) ? 255 : (int)ibytes;
-            Serial.printf("[MC-DBG] CRC_PAYLOAD[%d]: ", dump_len);
+            printfdeb("[MC-DBG] CRC_PAYLOAD[%d]: ", dump_len);
             for(int i = 0; i < dump_len; i++)
-                Serial.printf("%02X ", payload[i]);
-            Serial.println();
+                printfdeb("%02X ", payload[i]);
+            printfdeb("");
         }
     }
     else
     {
         if(bLORADEBUG)
-            Serial.printf("OnRxError\n");
+            printfdeb("OnRxError\n");
 
         // RX-Restart auch bei unbekannten Fehlern -- ohne dies bleibt
         // das Radio im Standby (BLINDSPOT fuer Empfang!)
@@ -3746,21 +3761,21 @@ int checkRX(bool bRadio)
             int rxstate = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
 
             if(bLORADEBUG)
-                Serial.printf("[MC-DBG] RX_RESTARTED src=after_other_error state=%d\n", rxstate);
+                printfdeb("[MC-DBG] RX_RESTARTED src=after_other_error state=%d\n", rxstate);
         }
 
         // Immer loggen (nicht nur bLORADEBUG) -- unbekannte Fehler sind kritisch
-        Serial.printf("[MC-DBG] RX_OTHER_ERROR code=%d rssi=%d snr=%d size=%d ts=%lu\n",
+        printfdeb("[MC-DBG] RX_OTHER_ERROR code=%d rssi=%d snr=%d size=%d ts=%lu\n",
             state, saved_err_rssi, saved_err_snr, (int)ibytes, millis());
 
         // Payload-Dump bei Debug aktiv
         if(bLORADEBUG && ibytes > 0)
         {
             int dump_len = (ibytes > 255) ? 255 : (int)ibytes;
-            Serial.printf("[MC-DBG] ERR_PAYLOAD[%d]: ", dump_len);
+            printfdeb("[MC-DBG] ERR_PAYLOAD[%d]: ", dump_len);
             for(int i = 0; i < dump_len; i++)
-                Serial.printf("%02X ", payload[i]);
-            Serial.println();
+                printfdeb("%02X ", payload[i]);
+            printfdeb("");
         }
     }
 
@@ -3777,7 +3792,7 @@ void checkSerialCommand(void)
     if(Serial.available() > 0)
     {
         char rd = (char)Serial.read();
-        Serial.print(rd);   // echo to USB + net console via MSerial
+        printdeb(rd);   // echo to USB + net console via MSerial
         strText += rd;
     }
 
@@ -3795,7 +3810,7 @@ void checkSerialCommand(void)
         }
         else if(rd != '\r')         // strip CR, keep LF
         {
-            Serial.print(rd);       // echo back via MSerial (server-side echo)
+            printdeb(rd);       // echo back via MSerial (server-side echo)
             strText += rd;
         }
     }
@@ -3844,7 +3859,7 @@ void checkSerialCommand(void)
                 if(strText.startsWith("--"))
                     commandAction(msg_buffer, isPhoneReady, false);
                 else
-                    Serial.printf("\n...wrong command %s\n", strText.c_str());
+                    printfdeb("\n...wrong command %s\n", strText.c_str());
 
             strText="";
         }
@@ -3855,7 +3870,7 @@ void checkSerialCommand(void)
         {
             if(!strText.startsWith("\n") && !strText.startsWith("\r"))
             {
-                Serial.printf("MSG:%02X..not sent\n", (unsigned char)strText[0]);
+                printfdeb("MSG:%02X..not sent\n", (unsigned char)strText[0]);
             }
         }
         strText="";
