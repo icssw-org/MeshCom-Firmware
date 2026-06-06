@@ -4,6 +4,8 @@
 
 #include <Preferences.h>
 
+#include "printfdeb_functions.h"
+
 Preferences preferences;
 
 s_meshcom_settings meshcom_settings;
@@ -252,6 +254,8 @@ void init_flash(void)
     strVar = preferences.getString("node_via");
     snprintf(meshcom_settings.node_via, sizeof(meshcom_settings.node_via), "%s", strVar.c_str());
 
+    meshcom_settings.node_sset4 = preferences.getInt("node_sset4", 0x0000);
+
     preferences.end();
 }
 
@@ -259,13 +263,13 @@ void clear_flash(void)
 {
     preferences.begin("Credentials", false);
 
-    Serial.printf("[INIT]...FLASH #entries %i bevor clear\n", preferences.freeEntries());
+    printfdeb("[INIT]...FLASH #entries %i bevor clear\n", (int)preferences.freeEntries());
 
     preferences.freeEntries();
     
     preferences.clear();
 
-    Serial.printf("[INIT]...FLASH #entries %i after clear\n", preferences.freeEntries());
+    printfdeb("[INIT]...FLASH #entries %i after clear\n", preferences.freeEntries());
     preferences.end();
 }
 
@@ -512,7 +516,9 @@ void save_settings(void)
     strVar = meshcom_settings.node_via;
     preferences.putString("node_via", strVar); 
 
-    //Serial.printf("[INIT]...FLASH #entries %i after write\n", preferences.freeEntries());
+    preferences.putInt("node_sset4", meshcom_settings.node_sset4);
+
+    //printfdeb("[INIT]...FLASH #entries %i after write\n", (int)preferences.freeEntries());
     preferences.end();
 
     //Test only Serial.println("flash save...");

@@ -33,6 +33,8 @@ extern int iWlanWait;
 extern volatile bool bSetLoRaAPRS;
 
 extern bool bDEBUG;
+extern bool bDEBUGCSV;
+extern bool bDEBUGEN;
 extern bool bLORADEBUG;
 extern bool bBLEDEBUG;
 extern bool bWXDEBUG;

@@ -11,10 +11,16 @@
 // int printdeb(const char *text)                       --> Serial.print(text)
 // int printlndeb(const char *text)                     --> Serial.println(text)
 //
+// Commands:
+// --debug csv/man
+// --debug de/en
 
 #include <Arduino.h>
 
 #include "printfdeb_functions.h"
+
+#include "loop_functions.h"
+#include "loop_functions_extern.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -23,15 +29,30 @@
 #include "net_console.h"
 #endif
 
-int printfdeb(const char *format, ...)
+int printfdeb(const char *uformat, ...)
 {
+    char nformat[300]; 
+    strncpy(nformat, uformat, sizeof(nformat) - 1);
+    nformat[sizeof(nformat) - 1] = '\0'; 
+
+    for(int in=0; in<strlen(nformat); in++)
+    {
+        if(!bDEBUGCSV)
+        {
+            if(nformat[in] == ';')
+            {
+                nformat[in] = ' ';
+            }
+        }   
+    }
+
     char loc_buf[64];
     char * temp = loc_buf;
     va_list arg;
     va_list copy;
-    va_start(arg, format);
+    va_start(arg, uformat);
     va_copy(copy, arg);
-    int len = vsnprintf(temp, sizeof(loc_buf), format, copy);
+    int len = vsnprintf(temp, sizeof(loc_buf), nformat, copy);
     va_end(copy);
     if(len < 0) {
         va_end(arg);
@@ -43,7 +64,7 @@ int printfdeb(const char *format, ...)
             va_end(arg);
             return 0;
         }
-        len = vsnprintf(temp, len+1, format, arg);
+        len = vsnprintf(temp, len+1, nformat, arg);
     }
     va_end(arg);
     Serial.printf(temp);

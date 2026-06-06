@@ -336,6 +336,8 @@ struct s_meshcom_settings
 
 	char node_via[10] = {0};
 
+	int node_sset4 = 0;
+
 	// nicht im Flash
 	float node_specstart = 432.0;
 	float node_specend = 434.0;
@@ -559,6 +561,8 @@ struct s_meshcomcompat_settings
 	int node_relay = 0x0000;
 
 	char node_via[10] = {0};
+
+	int node_sset4 = 0x0000;
 
 	// not within RAK Flash
 	float node_specstart = 432.0;

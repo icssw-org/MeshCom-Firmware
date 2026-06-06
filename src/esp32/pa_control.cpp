@@ -19,7 +19,7 @@ void initPAControl() {
     pinMode(P_LORA_PA_TX_EN, OUTPUT);
     digitalWrite(P_LORA_PA_TX_EN, LOW);
 
-    Serial.println(F("[PA  ]...Heltec V4 PA control initialized"));
+    printlndeb("[PA  ]...Heltec V4 PA control initialized");
 }
 
 void enablePATransmit() {

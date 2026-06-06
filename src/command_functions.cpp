@@ -2354,6 +2354,70 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"debug csv") == 0)
+    {
+        bDEBUGCSV=true;
+
+        meshcom_settings.node_sset4 = meshcom_settings.node_sset4 | 0x0001;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--debug csv");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"debug man") == 0)
+    {
+        bDEBUGCSV=false;
+
+        meshcom_settings.node_sset4 &= ~0x0001;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--debug man");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"debug en") == 0)
+    {
+        bDEBUGEN=true;
+
+        meshcom_settings.node_sset4 = meshcom_settings.node_sset4 | 0x0002;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--debug en");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"debug de") == 0)
+    {
+        bDEBUGEN=false;
+
+        meshcom_settings.node_sset4 &= ~0x0002;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--debug de");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"loradebug on") == 0)
     {
         bLORADEBUG=true;
@@ -4644,11 +4708,13 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s ... SOFTSERREAD %s\n...PASSWD <%s>\n",
                 (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), (bSOFTSERREAD?"on":"off"), meshcom_settings.node_passwd);
 
+            printfdeb("...DEBUG %s ...DEBUG %s\n", (bDEBUGCSV?"csv":"man"), (bDEBUGEN?"en":"de"));
+
             printfdeb("...DEBUG %s ...LORADEBUG %s ...CHECKMESH %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
-                    (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bCHECKMESH?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
+                (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bCHECKMESH?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
             printfdeb("...DisplayInfo %s ...DisplayCont %s ...contrast %i\n",
-                    (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), meshcom_settings.node_contrast);
+                (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), meshcom_settings.node_contrast);
 
             printfdeb("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
 
