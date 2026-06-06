@@ -19,7 +19,9 @@
 #include <t-deck/tdeck_extern.h>
 
 #include <loop_functions_extern.h>
- 
+
+#include "printfdeb_functions.h"
+
 Audio audio;
 SemaphoreHandle_t audioSemaphore;
 

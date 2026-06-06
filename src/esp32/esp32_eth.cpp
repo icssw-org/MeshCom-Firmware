@@ -1,5 +1,7 @@
 #include <configuration.h>
 
+#include "printfdeb_functions.h"
+
 #ifdef HAS_ETHERNET
 
 #include "esp32_eth.h"

@@ -12,6 +12,8 @@
 #include <loop_functions_extern.h>
 #include <lora_setchip.h>
 
+#include "printfdeb_functions.h"
+
 #include "esp32_flash.h"
 
 #if defined(BOARD_T5_EPAPER)
