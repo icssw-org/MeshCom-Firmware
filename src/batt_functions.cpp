@@ -2,8 +2,8 @@
  * @file batt_functions.cpp
  * @author W.Zelinka (OE3WAS, https://github.com/karamo)
  * @brief 
- * @version 0.4
- * @date 2026-05-13
+ * @version 0.5
+ * @date 2026-06-06
  * 
  * @copyright Copyright (c) 2026
  * 
@@ -223,6 +223,10 @@ float read_batt(void)
 	BatVoltage = filteredVoltage;
 
 	// Board spezifische Modifikation
+	#if defined(BOARD_E22)       // TODO: und auch die anderen E22 !!!
+		if (BatVoltage < 3.0) { BatVoltage = 0; }	// ADC-Eingang nicht mit Versorgungsspannung verbunden
+	#endif
+
 	#if defined(BOARD_TBEAM_1W)
 		// T-Beam 1W uses 7.4V 2S-battery (max. 8.1V)
 		// USB-Spannung kann nicht gemessen werden, nur die AKKU-Spannung
@@ -237,7 +241,10 @@ float read_batt(void)
 		// letzte Ausgabe erzwingen
 		snprintf(Buffer, sizeof(Buffer), "[BATT];%s; raw: ;%.3f; V max: ;%.2f; V fact: ;%.4f; filt: ;%.3f; V ;%.0f; %%",
 			getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
-		// Abschaltmeldung ausgeben
+			// durchlaufe Array, bis Ende-Zeichen '\0' und '.' => ',' für deutsche CSV-Kompatibilität
+			for (int i = 0; Buffer[i] != '\0'; i++) { if (Buffer[i] == '.') { Buffer[i] = ','; } }
+			Serial.printf("%s\n",Buffer);
+			// Abschaltmeldung ausgeben
 		Serial.print("[ERR]...low Voltage Accu > goto deepsleep\n");
 		delay(1000); // für Ausgabe ermöglichen !!!
 
@@ -297,9 +304,9 @@ float mv_to_percent(float mvolts)
 	if(mvolts < 1000.0) { return 100.0; }
 
 	// fBattMax = Parameter aus Flash
-  	float rproz = (mvolts/1000.0 - BAT_MIN_VOLTAGE)/(fBattMax - BAT_MIN_VOLTAGE) *100.0;
-  	if (rproz > 100.0) { rproz = 100.0; }
-
+  float rproz = (mvolts/1000.0 - BAT_MIN_VOLTAGE)/(fBattMax - BAT_MIN_VOLTAGE) *100.0;
+  if (rproz > 100.0) { rproz = 100.0; }
+  if (rproz < 0.0) { rproz = 0.0; }
 	return round(rproz);
 
 #else

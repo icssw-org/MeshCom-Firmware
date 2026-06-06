@@ -29,12 +29,12 @@ definitions for E22 Board
   #define BATTERY_PIN             32
   #define BAT_VOLT_PIN            BATTERY_PIN
   // voltage divider connected here to measure battery voltage
-  #define BAT_ADC_PULLUP_RES      100000.0  //extern
-  #define BAT_ADC_PULLDOWN_RES    100000.0  //extern
+  #define BAT_ADC_PULLUP_RES      47000.0  //extern
+  #define BAT_ADC_PULLDOWN_RES    47000.0  //extern
   #define BAT_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
   #define BAT_MAX_VOLTAGE         4.1     //für Volt => Proz Umrechnung, definiert durch Akku
   #define BAT_MIN_VOLTAGE         3.3       //für Volt => Proz Umrechnung, definiert durch LDO
-  #define BAT_VOLT_OFFSET         0         //offset
+  #define BAT_VOLT_OFFSET         -0.28     //offset
   #define BAT_VOLT_FACTOR         1      //factor
   #define BAT_ATTEN               ADC_11db
   #define BAT_WIDTH               12

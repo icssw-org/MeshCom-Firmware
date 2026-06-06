@@ -1333,7 +1333,7 @@ void esp32setup()
         save_settings();
         printfdeb("[LoRa]...RF_POWER: %d dBm\n", tx_power);
 
-        if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+        if (radio.setOutputPower(tx_power,false) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
             printlndeb(F("Selected output power is invalid for this module!"));
             while (true);
         }
