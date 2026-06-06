@@ -559,6 +559,9 @@ void nrf52setup()
     bBMP3ON = meshcom_settings.node_sset3 & 0x0010;
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
 
+    bDEBUGCSV = meshcom_settings.node_sset4 & 0x0001;
+    bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
+
     bDisplayInfo = bLORADEBUG;
 
     meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;

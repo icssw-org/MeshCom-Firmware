@@ -1,5 +1,7 @@
 #include <configuration.h>
 
+#include "printfdeb_functions.h"
+
 #ifdef HAS_ETHERNET
 
 #include "esp32_eth.h"
@@ -7,7 +9,7 @@
 
 void EspETH::initethDHCP()
 {
-    Serial.println("[ETH] init");
+    printlndeb("[ETH] init");
 
     ETH.begin(
         ETH_PHY_W5500,
@@ -23,7 +25,7 @@ void EspETH::initethDHCP()
 
     delay(1000);
 
-    Serial.println(ETH.linkUp() ? "[ETH] LINK UP" : "[ETH] LINK DOWN");
+    printlndeb(ETH.linkUp() ? "[ETH] LINK UP" : "[ETH] LINK DOWN");
 
     IPAddress cfg_ip;
     cfg_ip.fromString(meshcom_settings.node_ownip);
@@ -43,8 +45,8 @@ void EspETH::initethDHCP()
 
         ETH.config(cfg_ip, gw, mask, dns);
 
-        Serial.print("[ETH] STATIC IP: ");
-        Serial.println(cfg_ip);
+        printdeb("[ETH] STATIC IP: ");
+        printlndeb(cfg_ip);
 
         snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
         snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
@@ -52,14 +54,14 @@ void EspETH::initethDHCP()
         snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
 
         meshcom_settings.node_hasIPaddress = true;
-        Serial.printf("[ETH] node_hasIPaddress=%d\n", meshcom_settings.node_hasIPaddress);
+        printfdeb("[ETH] node_hasIPaddress=%d\n", meshcom_settings.node_hasIPaddress);
     }
     else
     {
         // -----------------------------
         // DHCP MODE
         // -----------------------------
-        Serial.println("[ETH] DHCP mode");
+        printlndeb("[ETH] DHCP mode");
 
         IPAddress ip;
 
@@ -75,8 +77,8 @@ void EspETH::initethDHCP()
 
         if(ip[0] != 0)
         {
-            Serial.print("[ETH] DHCP IP: ");
-            Serial.println(ip);
+            printdeb("[ETH] DHCP IP: ");
+            printlndeb(ip);
 
             meshcom_settings.node_hasIPaddress = true;
 
@@ -98,7 +100,7 @@ void EspETH::initethDHCP()
         }
         else
         {
-            Serial.println("[ETH] DHCP failed -> fallback 192.168.4.1");
+            printlndeb("[ETH] DHCP failed -> fallback 192.168.4.1");
 
             IPAddress ip(192,168,4,1);
             IPAddress gw(192,168,4,1);
@@ -115,7 +117,7 @@ void EspETH::initethDHCP()
 
 void EspETH::initethfixIP()
 {
-    Serial.println("[ETH] init FIX-IP");
+    printlndeb("[ETH] init FIX-IP");
 
     ETH.begin();
 
@@ -125,13 +127,13 @@ void EspETH::initethfixIP()
 
     if(ip[0] != 0)
     {
-        Serial.print("[ETH] IP: ");
-        Serial.println(ip);
+        printdeb("[ETH] IP: ");
+        printlndeb(ip);
         meshcom_settings.node_hasIPaddress = true;
     }
     else
     {
-        Serial.println("[ETH] IP error");
+        printlndeb("[ETH] IP error");
         meshcom_settings.node_hasIPaddress = true;
     }
 

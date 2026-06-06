@@ -2,6 +2,8 @@
  * PA Control implementation for Heltec V4 (868/915MHz with PA only)
  */
 
+#include "printfdeb_functions.h"
+
 #include "pa_control.h"
 
 #if defined(BOARD_HELTEC_V4) && defined(HELTEC_V4_HAS_PA)
@@ -19,7 +21,7 @@ void initPAControl() {
     pinMode(P_LORA_PA_TX_EN, OUTPUT);
     digitalWrite(P_LORA_PA_TX_EN, LOW);
 
-    Serial.println(F("[PA  ]...Heltec V4 PA control initialized"));
+    printlndeb("[PA  ]...Heltec V4 PA control initialized");
 }
 
 void enablePATransmit() {

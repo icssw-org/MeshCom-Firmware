@@ -8,6 +8,8 @@
 #include "esp32_flash.h"
 #include <math.h>
 
+#include "printfdeb_functions.h"
+
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <command_functions.h>
 
@@ -62,7 +64,7 @@ void setupPMU()
      * just input the wire, because the wire has been initialized in main.cpp
      */
 
-     Serial.printf("[INIT]...Start check AXP\n");
+     printfdeb("[INIT]...Start check AXP\n");
 
     if (!PMU)
     {
@@ -70,13 +72,13 @@ void setupPMU()
 
         if (!PMU->init())
         {
-            Serial.printf("[INIT]...Failed to find AXP2101 power management\n");
+            printfdeb("[INIT]...Failed to find AXP2101 power management\n");
             delete PMU;
             PMU = NULL;
         }
         else
         {
-            Serial.printf("[INIT]...AXP2101 PMU init succeeded, using AXP2101 PMU\n");
+            printfdeb("[INIT]...AXP2101 PMU init succeeded, using AXP2101 PMU\n");
         }
     }
 
@@ -85,13 +87,13 @@ void setupPMU()
         PMU = new XPowersAXP192(*w);
         if (!PMU->init())
         {
-            Serial.printf("[INIT]...Failed to find AXP192 power management\n");
+            printfdeb("[INIT]...Failed to find AXP192 power management\n");
             delete PMU;
             PMU = NULL;
         }
         else
         {
-            Serial.printf("[INIT]...AXP192 PMU init succeeded, using AXP192 PMU\n");
+            printfdeb("[INIT]...AXP192 PMU init succeeded, using AXP192 PMU\n");
         }
     }
 
@@ -105,11 +107,11 @@ void setupPMU()
         return;
     }
 
-    Serial.printf("[INIT]...AXP-Chip-Model:%i AXP-Chip-ID:%i\n", PMU->getChipModel(), PMU->getChipID());
+    printfdeb("[INIT]...AXP-Chip-Model:%i AXP-Chip-ID:%i\n", PMU->getChipModel(), PMU->getChipID());
 
     if(PMU->getChipModel() == XPOWERS_AXP192)
     {
-        Serial.printf("[INIT]...AXP192 chip\n");
+        printfdeb("[INIT]...AXP192 chip\n");
 
         //TODO PMU->setProtectedChannel(XPOWERS_DCDC3);
 
@@ -141,14 +143,14 @@ void setupPMU()
         // Set up the charging voltage
         PMU->setChargeTargetVoltage(XPOWERS_AXP192_CHG_VOL_4V2);
 
-        Serial.println("[INIT]...AXP192 PMU init succeeded, using AXP192 PMU");
+        printlndeb("[INIT]...AXP192 PMU init succeeded, using AXP192 PMU");
     }
     else
     if(PMU->getChipModel() == XPOWERS_AXP2101)
     {
         #if defined(BOARD_TBEAM_V3)
 
-        Serial.printf("[INIT]...AXP2101 SUPREME chip\n");
+        printfdeb("[INIT]...AXP2101 SUPREME chip\n");
 
         //t-beam m.2 inface
         //gps
@@ -162,7 +164,7 @@ void setupPMU()
         // In order to avoid bus occupation, during initialization, the SD card and QMC sensor are powered off and restarted
         /*
         if (ESP_SLEEP_WAKEUP_UNDEFINED == esp_sleep_get_wakeup_cause()) {
-            Serial.println("Power off and restart ALDO BLDO..");
+            printlndeb("Power off and restart ALDO BLDO..");
             PMU->disablePowerOutput(XPOWERS_ALDO1);
             PMU->disablePowerOutput(XPOWERS_ALDO2);
             PMU->disablePowerOutput(XPOWERS_BLDO1);
@@ -212,7 +214,7 @@ void setupPMU()
         
         #else
 
-        Serial.printf("[INIT]...AXP2101 chip\n");
+        printfdeb("[INIT]...AXP2101 chip\n");
         // Unuse power channel
         PMU->disablePowerOutput(XPOWERS_DCDC2);
         PMU->disablePowerOutput(XPOWERS_DCDC3);
@@ -263,70 +265,70 @@ void setupPMU()
 
         #endif
 
-        Serial.printf("=======================================================================\n");
+        printfdeb("=======================================================================\n");
         if (PMU->isChannelAvailable(XPOWERS_DCDC1)) {
-            Serial.printf("DC1  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC1) ? "+" : "-",
+            printfdeb("DC1  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC1) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_DCDC1));
         }
         if (PMU->isChannelAvailable(XPOWERS_DCDC2)) {
-            Serial.printf("DC2  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC2) ? "+" : "-",
+            printfdeb("DC2  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC2) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_DCDC2));
         }
         if (PMU->isChannelAvailable(XPOWERS_DCDC3)) {
-            Serial.printf("DC3  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC3) ? "+" : "-",
+            printfdeb("DC3  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC3) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_DCDC3));
         }
         if (PMU->isChannelAvailable(XPOWERS_DCDC4)) {
-            Serial.printf("DC4  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC4) ? "+" : "-",
+            printfdeb("DC4  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC4) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_DCDC4));
         }
         if (PMU->isChannelAvailable(XPOWERS_LDO2)) {
-            Serial.printf("LDO2 : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_LDO2) ? "+" : "-",
+            printfdeb("LDO2 : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_LDO2) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_LDO2));
         }
         if (PMU->isChannelAvailable(XPOWERS_LDO3)) {
-            Serial.printf("LDO3 : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_LDO3) ? "+" : "-",
+            printfdeb("LDO3 : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_LDO3) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_LDO3));
         }
         if (PMU->isChannelAvailable(XPOWERS_ALDO1)) {
-            Serial.printf("ALDO1: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO1) ? "+" : "-",
+            printfdeb("ALDO1: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO1) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_ALDO1));
         }
         if (PMU->isChannelAvailable(XPOWERS_ALDO2)) {
-            Serial.printf("ALDO2: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO2) ? "+" : "-",
+            printfdeb("ALDO2: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO2) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_ALDO2));
         }
         if (PMU->isChannelAvailable(XPOWERS_ALDO3)) {
-            Serial.printf("ALDO3: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO3) ? "+" : "-",
+            printfdeb("ALDO3: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO3) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_ALDO3));
         }
         if (PMU->isChannelAvailable(XPOWERS_ALDO4)) {
-            Serial.printf("ALDO4: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO4) ? "+" : "-",
+            printfdeb("ALDO4: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO4) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_ALDO4));
         }
         if (PMU->isChannelAvailable(XPOWERS_BLDO1)) {
-            Serial.printf("BLDO1: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_BLDO1) ? "+" : "-",
+            printfdeb("BLDO1: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_BLDO1) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_BLDO1));
         }
         if (PMU->isChannelAvailable(XPOWERS_BLDO2)) {
-            Serial.printf("BLDO2: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_BLDO2) ? "+" : "-",
+            printfdeb("BLDO2: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_BLDO2) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_BLDO2));
         }
         if (PMU->isChannelAvailable(XPOWERS_VBACKUP)) {
-            Serial.printf("VBACK: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_VBACKUP) ? "+" : "-",
+            printfdeb("VBACK: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_VBACKUP) ? "+" : "-",
                     PMU->getPowerChannelVoltage(XPOWERS_VBACKUP));
         }
-        Serial.printf("=======================================================================\n");
+        printfdeb("=======================================================================\n");
 
         #ifndef BOARD_TBEAM_V3
             BOARD_HARDWARE = TBEAM_AXP2101;
         #endif
         
-        Serial.println("[INIT]...All AXP2101 started");
+        printlndeb("[INIT]...All AXP2101 started");
     }
     else
     {
-        Serial.println("[INIT]...Failed to find AXP power management chip");
+        printlndeb("[INIT]...Failed to find AXP power management chip");
         delete PMU;
         PMU = NULL;
     }

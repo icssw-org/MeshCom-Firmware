@@ -229,9 +229,13 @@ bool bETHERNET = false;
 
 String strTime;
 String strDate;
-String strText = "";
 String str;
 
+// CheckSerialConsole
+String strTextWork;
+char strText[600] = {0};
+int iTxtPos = 0;
+int iTxtLen = 0;
 /*
     Video: https://www.youtube.com/watch?v=oCMOYS71NIU
     Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
@@ -594,17 +598,14 @@ void esp32setup()
     ///< Initialize T5-EPAPER GUI
     ///< delay for ESP32-S3 nativ USB [OE3WAS]
     ///< um Terminal verbinden zu können
-    #if not defined(BOARD_T_DECK_PRO)
-    timerSerial.start(2000);  //timeout falls keine USB verbunden ist
-    #endif
     Serial.begin(MONITOR_SPEED);
+    Serial.setTimeout(50);
     
-    #if defined(BOARD_T_DECK_PRO)
-    while (!Serial) // && !timerSerial.time_over());
-    #else
-    while (!Serial && !timerSerial.time_over());
-    #endif
-    if (Serial) { for (int i=0;i<5;i++) { printlndeb("."); delay(1000); } } //delay for Terminal connect
+    // Wartet maximal 3 Sekunden auf den seriellen Monitor
+    unsigned long startTime = millis();
+    while (!Serial && (millis() - startTime < 5000)) {
+        delay(10); // Verhindert das Auslösen des Watchdog-Timers
+    }
 
     #if defined(HAS_TFT_CONNECT)
 
@@ -788,6 +789,9 @@ void esp32setup()
     bGPSAutosymbol = meshcom_settings.node_sset3 & 0x1000;
     bGPSUBLOX = meshcom_settings.node_sset3 & 0x2000;
     bGPSL76K = meshcom_settings.node_sset3 & 0x4000;
+
+    bDEBUGCSV = meshcom_settings.node_sset4 & 0x0001;
+    bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
 
     // Time from Flash
     loadTimePersistence();
@@ -1333,10 +1337,17 @@ void esp32setup()
         save_settings();
         printfdeb("[LoRa]...RF_POWER: %d dBm\n", tx_power);
 
-        if (radio.setOutputPower(tx_power,false) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+        #if defined(BOARD_T_DECK_PRO)
+        if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
             printlndeb(F("Selected output power is invalid for this module!"));
             while (true);
         }
+        #else
+        if (radio.setOutputPower(tx_power, false) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
+            printlndeb(F("Selected output power is invalid for this module!"));
+            while (true);
+        }
+        #endif
 
         // set over current protection limit (accepted range is 0 - 140 mA)
         // NOTE: set value to 0 to disable overcurrent protection
@@ -3788,12 +3799,17 @@ int checkRX(bool bRadio)
 
 void checkSerialCommand(void)
 {
+    // Serial available
+    if(!Serial)
+        return;
+
     // Check USB Serial input (Serial == MSerial after telnet_functions.h include)
     if(Serial.available() > 0)
     {
         char rd = (char)Serial.read();
         printdeb(rd);   // echo to USB + net console via MSerial
-        strText += rd;
+        strText[iTxtPos] = rd;
+        iTxtPos++;
     }
 
     // Check net console input
@@ -3811,25 +3827,31 @@ void checkSerialCommand(void)
         else if(rd != '\r')         // strip CR, keep LF
         {
             printdeb(rd);       // echo back via MSerial (server-side echo)
-            strText += rd;
+            strText[iTxtPos] = rd;
+            iTxtPos++;
         }
     }
     #endif
 
-    if(strText.length() == 0)
+    iTxtLen = strlen(strText);
+    if(iTxtLen == 0)
         return;
 
-    if(strText.startsWith(":") || strText.startsWith("-") || strText.startsWith("{"))
+    if(strText[0] == ':' || strText[0] == '-' || strText[0] == '{')
     {
-        if(strText.endsWith("\n") || strText.endsWith("\r"))
+        if(strText[iTxtLen-1] == '\n' || strText[iTxtLen-1] == '\r')
         {
-            strText.trim();
-            strncpy(msg_text, strText.c_str(), sizeof(msg_text) - 1);
+            strTextWork = strText;
+            strTextWork.trim();
+            snprintf(strText, sizeof(strText), "%s", strTextWork.c_str());
+
+            strncpy(msg_text, strText, sizeof(msg_text) - 1);
             msg_text[sizeof(msg_text) - 1] = '\0';
 
             int inext=0;
             char msg_buffer[600];
-            for(int itx=0; itx<(int)strText.length(); itx++)
+            iTxtLen = strlen(strText);
+            for(int itx=0; itx<iTxtLen; itx++)
             {
                 if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
                 {
@@ -3851,28 +3873,31 @@ void checkSerialCommand(void)
                 }
             }
 
-            if(strText.startsWith("::"))
+            if(strText[0] == ':' && strText[1] == ':')
             {
                 sendMessage(msg_buffer, inext);
             }
             else
-                if(strText.startsWith("--"))
+                if(strText[0] == '-' && strText[1] == '-')
                     commandAction(msg_buffer, isPhoneReady, false);
                 else
-                    printfdeb("\n...wrong command %s\n", strText.c_str());
+                    printfdeb("\n...wrong command %s\n", strText);
 
-            strText="";
+            memset(strText, 0x00, sizeof(strText));
+            iTxtPos = 0;
         }
     }
     else
     {
         if(bDEBUG)
         {
-            if(!strText.startsWith("\n") && !strText.startsWith("\r"))
+            if(strText[0] != '\n' && strText[0] != '\r')
             {
                 printfdeb("MSG:%02X..not sent\n", (unsigned char)strText[0]);
             }
         }
-        strText="";
+
+        memset(strText, 0x00, sizeof(strText));
+        iTxtPos = 0;
     }
 }

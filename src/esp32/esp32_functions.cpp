@@ -12,6 +12,8 @@
 #include <loop_functions_extern.h>
 #include <lora_setchip.h>
 
+#include "printfdeb_functions.h"
+
 #include "esp32_flash.h"
 
 #if defined(BOARD_T5_EPAPER)
@@ -113,12 +115,12 @@ void initDisplay()
         g_epaper_display = new EInkDisplay_WirelessPaperV1_2();   // E0213A367 (V1.0 / V1.1.1 / V1.2)
         g_wp_panel_name  = "E0213A367";
     }
-    Serial.printf("[INIT]...Wireless Paper E-Ink chipId=0x%02X -> %s\n", chipId, g_wp_panel_name);
+    printfdeb("[INIT]...Wireless Paper E-Ink chipId=0x%02X -> %s\n", chipId, g_wp_panel_name);
 #endif
 
 #if ! (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
 
-    Serial.println(F("[INIT]...Auto detecting display:"));
+    printlndeb("[INIT]...Auto detecting display:");
         
     int idtype = esp32_isSSD1306(0x3C);
 
