@@ -168,8 +168,7 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 
         if(bDisplayCont)
         {
-            printdeb("MORE:");
-            printfdeb(msg_detail);
+            printfdeb("MORE:%s\n", msg_detail);
         }
 
         commandAction(msg_detail, ble);
@@ -178,8 +177,7 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     {
         if(bDisplayCont)
         {
-            printdeb("ONE:");
-            printlndeb(msg_text);
+            printfdeb("ONE:%s\n", msg_text);
         }
 
         commandAction(msg_text, ble);
