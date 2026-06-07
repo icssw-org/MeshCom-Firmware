@@ -3230,7 +3230,7 @@ void esp32loop()
                     ESP.getMinFreeHeap(),
                     ESP.getMaxAllocHeap());
                 #if defined(BOARD_HAS_PSRAM)
-                printfdeb("%s;[PSRM];%lu;(mon)\n",
+                printfdeb("[PSRM];%s;%lu;(mon)\n",
                     getTimeString().c_str(),
                     lFreePsram);
                 #endif
