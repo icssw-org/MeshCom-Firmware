@@ -14,6 +14,11 @@
 // Commands:
 // --debug csv/man
 // --debug de/en
+//
+// damit ein printfdeb() auch die Commands --debug de/en umsetzt
+// muss vor jedem printfdeb() die Variable
+// bDEBUGLNG = true
+// gesetzt werden
 
 #include <Arduino.h>
 
@@ -41,7 +46,21 @@ int printfdeb(const char *uformat, ...)
         if(!bDEBUGCSV)
         {
             if(uformat[in] == ';')
-                continue;
+            {
+                if(uformat[in-1] == ' ' || uformat[in+1] == ' ')
+                {
+                    continue;
+                }
+                else
+                {
+                    if(inn < (int)sizeof(nformat)-2)
+                    {
+                        nformat[inn] = ' ';
+                        inn++;
+                        continue;
+                    }
+                }
+            }
         }
 
         if(inn < (int)sizeof(nformat)-2)
@@ -74,9 +93,11 @@ int printfdeb(const char *uformat, ...)
     va_end(arg);
 
     // durchlaufe Array, bis Ende-Zeichen '\0' und '.' => ',' für deutsche CSV-Kompatibilität
-    if(!bDEBUGEN && bDEBUGCSV)
+    if(!bDEBUGEN && bDEBUGCSV && bDEBUGLNG)
         for (int i = 0; temp[i] != '\0'; i++) { if (temp[i] == '.') { temp[i] = ','; } }
 
+    bDEBUGLNG = false; // wieder deaktivieren
+    
     Serial.printf(temp);
 
     if(temp != loc_buf){

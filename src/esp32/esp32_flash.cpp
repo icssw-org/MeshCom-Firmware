@@ -254,8 +254,7 @@ void init_flash(void)
     strVar = preferences.getString("node_via");
     snprintf(meshcom_settings.node_via, sizeof(meshcom_settings.node_via), "%s", strVar.c_str());
 
-    meshcom_settings.node_sset4 = preferences.getInt("node_sset4", 0x0000);
-
+    meshcom_settings.node_sset4 = preferences.getInt("node_sset4", 0x0002); // defaut 0x0002: DEBUGEN = true
     preferences.end();
 }
 
