@@ -211,8 +211,11 @@ float read_batt(void)
 	{
 		batt_show_timer = millis();
 
-		bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
-		printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%.0f;%% \n", getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
+        if(bDisplayCont)
+		{
+			bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
+			printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%.0f;%% \n", getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
+		}
 	}
 
 	BatVoltage = filteredVoltage;
@@ -233,9 +236,12 @@ float read_batt(void)
 	// da sich der Akku auch etwas erholt.
 	if (BatVoltage <= (BAT_MIN_VOLTAGE) && BatVoltage > 1.0)  // 6.5V für T-Beam 1W, 3.3V für andere Boards
 	{
-		bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
-		printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%.0f;%% \nn",
-			getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
+        if(bDisplayCont)
+		{
+			bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
+			printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%.0f;%% \nn",
+				getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
+		}
 
 		// Abschaltmeldung ausgeben
 		printlndeb("[ERR]...low Voltage Accu > goto deepsleep");
