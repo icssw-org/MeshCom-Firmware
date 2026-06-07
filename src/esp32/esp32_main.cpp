@@ -3165,7 +3165,7 @@ void esp32loop()
                 if(bDisplayCont)  // neue Ausgabe erfolgt in batt_functions
                 {
                     #if not defined(BOARD_T_DECK_PRO) and not defined(BOARD_TBEAM_1W)
-                    printfdeb("[readBatteryVoltage] %s ... %.2f V %i%% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
+                    printfdeb("[readBatteryVoltage] %s ... %.2f V %i0/0 max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
                     #endif
                 }
                 #endif
@@ -3800,18 +3800,17 @@ int checkRX(bool bRadio)
 void checkSerialCommand(void)
 {
     // Serial available
-    if(!Serial)
-        return;
-
-    // Check USB Serial input (Serial == MSerial after telnet_functions.h include)
-    if(Serial.available() > 0)
+    if(Serial)
     {
-        char rd = (char)Serial.read();
-        printdeb(rd);   // echo to USB + net console via MSerial
-        strText[iTxtPos] = rd;
-        iTxtPos++;
+        // Check USB Serial input (Serial == MSerial after telnet_functions.h include)
+        if(Serial.available() > 0)
+        {
+            char rd = (char)Serial.read();
+            printdeb(rd);   // echo to USB + net console via MSerial
+            strText[iTxtPos] = rd;
+            iTxtPos++;
+        }
     }
-
     // Check net console input
     #ifndef DISABLE_NET_CONSOLE
     if(netConsoleAvailable())
