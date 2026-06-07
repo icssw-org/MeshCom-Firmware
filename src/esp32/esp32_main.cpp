@@ -222,6 +222,8 @@ bool bTeleFirst = true;
 
 bool bAllStarted = true;
 
+int BattWaitCounter = 0;
+
 #if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
 EspETH neth;
 bool bETHERNET = false;
@@ -3119,11 +3121,10 @@ void esp32loop()
     if(BattTimeWait == 0)
         BattTimeWait = millis() - 1000;
 
-
-    //printfdeb("BattTimeWait:%i millis():%i tx:%i rx:%i\n", BattTimeWait, millis(), tx_is_active, is_receiving);
-
     if ((BattTimeWait + 1000) < millis())  // 1 sec OE3WAS
     {
+        BattWaitCounter++;
+
         if (tx_is_active == false && is_receiving == false)
         {
             #if defined(MODUL_FW_TBEAM)
@@ -3154,7 +3155,7 @@ void esp32loop()
                     global_proz = 0;
                 }
 
-                if(bDisplayCont)
+                if(bDisplayCont && BattWaitCounter > 20)
                     printfdeb("[readBatteryVoltage]...PMU.volt %.1f PMU.proz %i %i\n", global_batt, global_proz, pmu_proz);
             #else
             
@@ -3162,10 +3163,10 @@ void esp32loop()
                 global_proz = mv_to_percent(global_batt);
                 
                 #ifndef USE_BATT
-                if(bDisplayCont)  // neue Ausgabe erfolgt in batt_functions
+                if(bDisplayCont && BattWaitCounter > 20)  // neue Ausgabe erfolgt in batt_functions
                 {
                     #if not defined(BOARD_T_DECK_PRO) and not defined(BOARD_TBEAM_1W)
-                    printfdeb("[readBatteryVoltage] %s ... %.2f V %i%% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
+                    printfdeb("[readBatteryVoltage] %s ... %.2f V %i0/0 max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
                     #endif
                 }
                 #endif
@@ -3189,7 +3190,7 @@ void esp32loop()
                     digitalWrite(FAN_CTRL, LOW);
             }
 
-            if(bWXDEBUG)
+            if(bWXDEBUG && BattWaitCounter > 20)
                 printfdeb("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
                 
             meshcom_settings.node_ntctemp = NTCtemp;
@@ -3202,6 +3203,11 @@ void esp32loop()
             #endif
 
             BattTimeWait = millis();
+
+            if(BattWaitCounter > 20)
+            {
+                BattWaitCounter = 0;
+            }
         }
     }
 
@@ -3800,18 +3806,20 @@ int checkRX(bool bRadio)
 void checkSerialCommand(void)
 {
     // Serial available
-    if(!Serial)
-        return;
-
-    // Check USB Serial input (Serial == MSerial after telnet_functions.h include)
-    if(Serial.available() > 0)
+    if(Serial)
     {
-        char rd = (char)Serial.read();
-        printdeb(rd);   // echo to USB + net console via MSerial
-        strText[iTxtPos] = rd;
-        iTxtPos++;
+        // Check USB Serial input (Serial == MSerial after telnet_functions.h include)
+        if(Serial.available() > 0)
+        {
+            char rd = (char)Serial.read();
+            printdeb(rd);   // echo to USB + net console via MSerial
+            strText[iTxtPos] = rd;
+            if(iTxtPos < sizeof(strText) - 1)
+            {
+                iTxtPos++;
+            }
+        }
     }
-
     // Check net console input
     #ifndef DISABLE_NET_CONSOLE
     if(netConsoleAvailable())
@@ -3828,7 +3836,10 @@ void checkSerialCommand(void)
         {
             printdeb(rd);       // echo back via MSerial (server-side echo)
             strText[iTxtPos] = rd;
-            iTxtPos++;
+            if(iTxtPos < sizeof(strText) - 1)
+            {
+                iTxtPos++;
+            }
         }
     }
     #endif
