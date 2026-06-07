@@ -31,19 +31,24 @@
 
 int printfdeb(const char *uformat, ...)
 {
-    char nformat[300]; 
-    strncpy(nformat, uformat, sizeof(nformat) - 1);
-    nformat[sizeof(nformat) - 1] = '\0'; 
+    char nformat[300];
+    memset(nformat,0x00, sizeof(nformat));
 
-    for(int in=0; in<strlen(nformat); in++)
+    int inn=0;
+
+    for(int in=0; in<(int)strlen(uformat); in++)
     {
         if(!bDEBUGCSV)
         {
-            if(nformat[in] == ';')
-            {
-                nformat[in] = ' ';
-            }
-        }   
+            if(uformat[in] == ';')
+                continue;
+        }
+
+        if(inn < (int)sizeof(nformat)-2)
+        {
+            nformat[inn] = uformat[in];
+            inn++;
+        }
     }
 
     char loc_buf[64];
@@ -67,7 +72,13 @@ int printfdeb(const char *uformat, ...)
         len = vsnprintf(temp, len+1, nformat, arg);
     }
     va_end(arg);
+
+    // durchlaufe Array, bis Ende-Zeichen '\0' und '.' => ',' für deutsche CSV-Kompatibilität
+    if(!bDEBUGEN && bDEBUGCSV)
+        for (int i = 0; temp[i] != '\0'; i++) { if (temp[i] == '.') { temp[i] = ','; } }
+
     Serial.printf(temp);
+
     if(temp != loc_buf){
         free(temp);
     }

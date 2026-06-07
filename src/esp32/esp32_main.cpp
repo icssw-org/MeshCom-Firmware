@@ -691,9 +691,9 @@ void esp32setup()
     lFreeHeap =  ESP.getFreeHeap();
     lFreePsram = ESP.getFreePsram();
 
-    printfdeb("%s;[HEAP];%lu;%d;%d;(init)\n", getTimeString().c_str(),
+    printfdeb("[HEAP];%s;%lu;%d;%d;(init)\n", getTimeString().c_str(),
        lFreeHeap, ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    printfdeb("%s;[PSRM];%lu\n", getTimeString().c_str(), lFreePsram);
+    printfdeb("[PSRM];%s;%lu\n", getTimeString().c_str(), lFreePsram);
     
     check_efuse();
 
@@ -3218,7 +3218,7 @@ void esp32loop()
                 lFreeHeap = ESP.getFreeHeap();
                 lFreePsram = ESP.getFreePsram();
 
-                printfdeb("%s;[HEAP];%lu;%d;%d;(mon)\n",
+                printfdeb("[HEAP];%s;%lu;%d;%d;(mon)\n",
                     getTimeString().c_str(),
                     lFreeHeap,
                     ESP.getMinFreeHeap(),
