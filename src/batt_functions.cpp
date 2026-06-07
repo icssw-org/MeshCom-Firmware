@@ -9,6 +9,7 @@
  * 
  */
 #include <configuration.h>
+#include "printfdeb_functions.h"
 
 #if defined(USE_NEW_BATT)
 
@@ -38,8 +39,9 @@ unsigned long BattTimeWait = 0;
 #endif
 
 
-void check_efuse(void) { 	// NOT TESTED, wird nicht benötigt
-  Serial.printf("[INIT]...efuse not used\n");
+void check_efuse(void)
+{ 	// NOT TESTED, wird nicht benötigt
+  printlndeb("[INIT]...efuse not used");
 }
 
 
@@ -80,7 +82,7 @@ void check_efuse(void) { 	// NOT TESTED, wird nicht benötigt
 void init_batt(void)
 {
 #ifdef USE_BATT
-Serial.printf("[INIT]...init_batt\n");
+	printlndeb("[INIT]...init_batt");
 	firstReading = true;
 
 	// nach Änderung durch Befehl in command_functions.cpp muss init_batt() aufgerufen werden!
@@ -163,8 +165,6 @@ float read_batt(void)
 {
 #ifdef USE_BATT
 
-	char Buffer[100];
-
 	#if defined(ADC_CTRL_PIN)
 		//Heltec V3.1 --- hat keine eigene variants !?!?
 		#if defined(BOARD_HELTEC_V31) || defined(BOARD_WIRELESS_PAPER)
@@ -211,13 +211,8 @@ float read_batt(void)
 	{
 		batt_show_timer = millis();
 
-		snprintf(Buffer, sizeof(Buffer), "[BATT];%s; raw: ;%.3f; V max: ;%.2f; V fact: ;%.4f; filt: ;%.3f; V ;%.0f; %%",
-			getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
-		
-		// durchlaufe Array, bis Ende-Zeichen '\0' und '.' => ',' für deutsche CSV-Kompatibilität
-		for (int i = 0; Buffer[i] != '\0'; i++) { if (Buffer[i] == '.') { Buffer[i] = ','; } }
-
-		Serial.printf("%s\n",Buffer);
+		bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
+		printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%.0f;%% \n", getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
 	}
 
 	BatVoltage = filteredVoltage;
@@ -238,14 +233,13 @@ float read_batt(void)
 	// da sich der Akku auch etwas erholt.
 	if (BatVoltage <= (BAT_MIN_VOLTAGE) && BatVoltage > 1.0)  // 6.5V für T-Beam 1W, 3.3V für andere Boards
 	{
-		// letzte Ausgabe erzwingen
-		snprintf(Buffer, sizeof(Buffer), "[BATT];%s; raw: ;%.3f; V max: ;%.2f; V fact: ;%.4f; filt: ;%.3f; V ;%.0f; %%",
+		bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
+		printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%.0f;%% \nn",
 			getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
-			// durchlaufe Array, bis Ende-Zeichen '\0' und '.' => ',' für deutsche CSV-Kompatibilität
-			for (int i = 0; Buffer[i] != '\0'; i++) { if (Buffer[i] == '.') { Buffer[i] = ','; } }
-			Serial.printf("%s\n",Buffer);
-			// Abschaltmeldung ausgeben
-		Serial.print("[ERR]...low Voltage Accu > goto deepsleep\n");
+
+		// Abschaltmeldung ausgeben
+		printlndeb("[ERR]...low Voltage Accu > goto deepsleep");
+
 		delay(1000); // für Ausgabe ermöglichen !!!
 
 		#if defined(BOARD_T_ECHO)   // = NRF52

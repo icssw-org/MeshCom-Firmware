@@ -86,6 +86,7 @@ volatile bool bSetLoRaAPRS = false;
 bool bDEBUG = false;
 bool bDEBUGCSV = false;
 bool bDEBUGEN = false;
+bool bDEBUGLNG = false;
 bool bLORADEBUG = false;
 bool bBLEDEBUG = false;
 bool bWXDEBUG = false;

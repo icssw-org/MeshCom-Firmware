@@ -35,6 +35,7 @@ extern volatile bool bSetLoRaAPRS;
 extern bool bDEBUG;
 extern bool bDEBUGCSV;
 extern bool bDEBUGEN;
+extern bool bDEBUGLNG;
 extern bool bLORADEBUG;
 extern bool bBLEDEBUG;
 extern bool bWXDEBUG;

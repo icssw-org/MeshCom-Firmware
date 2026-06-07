@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <configuration.h>
+#include "printfdeb_functions.h"
 
 #ifndef USE_NEW_BATT
 
@@ -135,34 +136,34 @@ void check_efuse(void)
 #if defined(CONFIG_IDF_TARGET_ESP32)
     //Check if TP is burned into eFuse
     if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
-        Serial.printf("[EFUS]...Two Point: Supported\n");
+        printfdeb("[EFUS]...Two Point: Supported\n");
     } else {
-        Serial.printf("[EFUS]...Two Point: NOT supported\n");
+        printfdeb("[EFUS]...Two Point: NOT supported\n");
     }
     //Check Vref is burned into eFuse
     if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK) {
-        Serial.printf("[EFUS]...Vref: Supported\n");
+        printfdeb("[EFUS]...Vref: Supported\n");
     } else {
-        Serial.printf("[EFUS]...Vref: NOT supported\n");
+        printfdeb("[EFUS]...Vref: NOT supported\n");
     }
 #elif defined(CONFIG_IDF_TARGET_ESP32S2)
     if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
-        Serial.printf("[EFUS]...Two Point: Supported\n");
+        printfdeb("[EFUS]...Two Point: Supported\n");
     } else {
-        Serial.printf("[EFUS]...Cannot retrieve eFuse Two Point calibration values. Default calibration values will be used.\n");
+        printfdeb("[EFUS]...Cannot retrieve eFuse Two Point calibration values. Default calibration values will be used.\n");
     }
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 	//Check if TP is burned into eFuse
 	if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
-		Serial.printf("[EFUS]...Two Point: Supported\n");
+		printfdeb("[EFUS]...Two Point: Supported\n");
 	} else {
-		Serial.printf("[EFUS]...Two Point: NOT supported\n");
+		printfdeb("[EFUS]...Two Point: NOT supported\n");
 	}
 	//Check Vref is burned into eFuse
 	if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK) {
-		Serial.printf("[EFUS]...Vref: Supported\n");
+		printfdeb("[EFUS]...Vref: Supported\n");
 	} else {
-		Serial.printf("[EFUS]...Vref: NOT supported\n");
+		printfdeb("[EFUS]...Vref: NOT supported\n");
 	}
 #else
 #error "[EFUS]...This example is configured for ESP32/ESP32S2/ESP32S3."
@@ -173,11 +174,11 @@ void check_efuse(void)
 void print_char_val_type(esp_adc_cal_value_t val_type)
 {
     if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-        Serial.printf("[ADC ]...Characterized using Two Point Value\n");
+        printfdeb("[ADC ]...Characterized using Two Point Value\n");
     } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        Serial.printf("[ADC ]...Characterized using eFuse Vref\n");
+        printfdeb("[ADC ]...Characterized using eFuse Vref\n");
     } else {
-        Serial.printf("[ADC ]...Characterized using Default Vref\n");
+        printfdeb("[ADC ]...Characterized using Default Vref\n");
     }
 }
 
@@ -209,7 +210,7 @@ void VextOFF(void)  // Vext default OFF
  */
 void init_batt(void)
 {
-    Serial.println("[INIT]...init_batt");
+    printlndeb("[INIT]...init_batt");
 
 // geht für HELTEC V3/V4 und für V3.2  wichtig für Display
 #if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
@@ -319,7 +320,7 @@ void init_batt(void)
  */
 float read_batt(void)
 {
-	//Serial.println("read_batt");
+	//printlndeb("read_batt");
 
 	float raw = 0.0;
 
@@ -339,7 +340,7 @@ float read_batt(void)
 
 		raw = (float)adc_reading;
 
-		//Serial.printf("Raw: %d\n", adc_reading);
+		//printfdeb("Raw: %d\n", adc_reading);
 
 	#elif defined(BOARD_TLORA_OLV216)
 
@@ -348,7 +349,7 @@ float read_batt(void)
   
    		raw = (float)(analogRead(vbat_pin)) / 4095*2*3.3*1.1;
 		
-		// Serial.printf("ADC analog value = <%f>\n", raw);
+		// printfdeb("ADC analog value = <%f>\n", raw);
 
 	#elif defined(BOARD_T3S3_V13)
 
@@ -370,7 +371,7 @@ float read_batt(void)
    		uint16_t battery_levl = analogRead(vbat_pin);
 
 		if(bDisplayCont)
-		 Serial.printf("ADC analog value = <%i>\n", battery_levl);
+		 printfdeb("ADC analog value = <%i>\n", battery_levl);
 
 		raw = (float)battery_levl;
 
@@ -391,7 +392,7 @@ float read_batt(void)
 		raw = (float)umv * ADC_MULTIPLIER;
 
 		if(bDisplayCont)
-			Serial.printf("%s [BATT]...Wireless Paper pin_mV=%u -> %.0f mV\n", getTimeString().c_str(), umv, raw);
+			printfdeb("%s [BATT]...Wireless Paper pin_mV=%u -> %.0f mV\n", getTimeString().c_str(), umv, raw);
 
 	#elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 
@@ -497,12 +498,12 @@ float read_batt(void)
 
 		if(bDEBUG && bDisplayInfo)
 		{
-			Serial.print("[readBatteryVoltage] ADC : ");
-			Serial.println(analogValue);
-			Serial.print("[readBatteryVoltage] Float : ");
-			Serial.println(floatVoltage,3);
-			Serial.print("[readBatteryVoltage] milliVolts : ");
-			Serial.println(voltage);
+			printdeb("[readBatteryVoltage] ADC : ");
+			printlndeb(analogValue);
+			printdeb("[readBatteryVoltage] Float : ");
+			printlndeb(floatVoltage,3);
+			printdeb("[readBatteryVoltage] milliVolts : ");
+			printlndeb(voltage);
 		}
 
 		raw = floatVoltage * 1000.0;
@@ -529,7 +530,7 @@ float read_batt(void)
 
 		if(bDisplayCont)
 		{
-			Serial.printf("%s [BATT]...reading: %u factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), uraw, (float)((3300 * ADC_MULTIPLIER) / 4095), raw);
+			printfdeb("%s [BATT]...reading: %u factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), uraw, (float)((3300 * ADC_MULTIPLIER) / 4095), raw);
 		}
 
 		#elif defined(BOARD_E22_S3)
@@ -540,7 +541,7 @@ float read_batt(void)
 
 		if(bDisplayCont)
 		{
-			Serial.printf("%s [BATT]...reading: %u factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), analogValue, fBattFaktor, raw);
+			printfdeb("%s [BATT]...reading: %u factor: %.4f voltage: %.2f mV\n", getTimeString().c_str(), analogValue, fBattFaktor, raw);
 		}
 
 	#elif defined(BOARD_HELTEC)
