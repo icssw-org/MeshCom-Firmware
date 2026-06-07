@@ -62,6 +62,7 @@ int printfdeb(const char *uformat, ...)
                 }
             }
         }
+        
 
         if(inn < (int)sizeof(nformat)-2)
         {
