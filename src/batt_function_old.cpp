@@ -501,7 +501,7 @@ float read_batt(void)
 			printdeb("[readBatteryVoltage] ADC : ");
 			printlndeb(analogValue);
 			printdeb("[readBatteryVoltage] Float : ");
-			printlndeb(floatVoltage,3);
+			printfdeb("%.3f\n", floatVoltage);
 			printdeb("[readBatteryVoltage] milliVolts : ");
 			printlndeb(voltage);
 		}
