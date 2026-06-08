@@ -214,7 +214,7 @@ float read_batt(void)
         if(bDisplayCont)
 		{
 			bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
-			printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%.0f;0/0 \n", getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
+			printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%%;0/0 \n", getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
 		}
 	}
 
@@ -239,7 +239,7 @@ float read_batt(void)
         if(bDisplayCont)
 		{
 			bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
-			printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%.0f;0/0 \nn",
+			printfdeb("[BATT];%s; raw:;%.3f;V max:;%.2f;V fact:;%.4f; filt:;%.3f;V ;%.0f;0/0 \n",
 				getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
 		}
 
