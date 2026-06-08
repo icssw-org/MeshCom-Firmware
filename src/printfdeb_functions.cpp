@@ -22,6 +22,8 @@
 
 #include <Arduino.h>
 
+static auto& s_hwSerial = Serial;
+
 #include "printfdeb_functions.h"
 
 #include "loop_functions.h"
@@ -43,6 +45,20 @@ int printfdeb(const char *uformat, ...)
 
     for(int in=0; in<(int)strlen(uformat); in++)
     {
+        if(uformat[in] == '%')
+        {
+            if(uformat[in+1] == '%')
+            {
+                if(inn < (int)sizeof(nformat)-3)
+                {
+                    nformat[inn] = '%';
+                    inn++;
+                    nformat[inn] = '%';
+                    inn++;
+                }
+            }
+        }
+
         if(!bDEBUGCSV)
         {
             if(uformat[in] == ';')
@@ -71,7 +87,7 @@ int printfdeb(const char *uformat, ...)
         }
     }
 
-    char loc_buf[64];
+    char loc_buf[600];
     char * temp = loc_buf;
     va_list arg;
     va_list copy;

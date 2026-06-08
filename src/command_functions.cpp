@@ -127,7 +127,7 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 
     // loop more commands from one string
     // --setcall OE3WAS-10 --setpwd 12345678 --setssid Drei_H288A_24G_yAFG --webserver on --button gpio 12 --button on ......
-    if(bDisplayCont)
+    if(bDisplayCont && bDisplayInfo)
     {
         printfdeb("");
         printfdeb("START CHECK:");
@@ -144,9 +144,7 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 
             if(bDisplayCont)
             {
-                printdeb("MORE:<");
-                printdeb(msg_detail);
-                printfdeb(">");
+                printfdeb("MORE:<%s>\n",msg_detail);
             }
 
             commandAction(msg_detail, ble);
@@ -166,18 +164,18 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
         memcpy(msg_detail, msg_text + inext, detail_len);
         msg_detail[detail_len] = '\0';
 
-        if(bDisplayCont)
+        if(bDisplayCont && bDisplayInfo)
         {
-            printfdeb("MORE:%s\n", msg_detail);
+            printfdeb("MORE:<%s>\n", msg_detail);
         }
 
         commandAction(msg_detail, ble);
 }
     else
     {
-        if(bDisplayCont)
+        if(bDisplayCont && bDisplayInfo)
         {
-            printfdeb("ONE:%s\n", msg_text);
+            printfdeb("ONE:<%s>\n", msg_text);
         }
 
         commandAction(msg_text, ble);

@@ -51,6 +51,22 @@ definitions for LilyGo T3_S3_V1_3
 
 #define ADC_PIN                     (1)
 
+#define USE_NEW_BATT              // neu batt_functions.cpp nehmen (kommt wenn alle Nodes umgestellt sind raus)
+#define USE_BATT
+#ifdef USE_BATT
+  #define BATTERY_PIN             1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+  #define BAT_VOLT_PIN            BATTERY_PIN
+  #define BAT_ADC_PULLUP_RES      10000.0  //extern
+  #define BAT_ADC_PULLDOWN_RES    10000.0  //extern
+  #define BAT_MULTIPLIER (BAT_ADC_PULLUP_RES+BAT_ADC_PULLDOWN_RES)/BAT_ADC_PULLDOWN_RES
+  #define BAT_MAX_VOLTAGE         4.1     //für Volt => Proz Umrechnung, definiert durch Akku
+  #define BAT_MIN_VOLTAGE         3.3       //für Volt => Proz Umrechnung, definiert durch LDO
+  #define BAT_VOLT_OFFSET         0         //offset
+  #define BAT_VOLT_FACTOR         1      //factor
+  #define BAT_ATTEN               ADC_11db
+  #define BAT_WIDTH               12
+#endif
+
 #define ANALOG_PIN ADC_PIN  //testweise
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
