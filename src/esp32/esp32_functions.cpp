@@ -36,6 +36,7 @@ extern const char*  g_wp_panel_name;
 #endif
 
 #include "Fonts/FreeSans9pt7b.h"
+#include "Fonts/FreeSansBold10pt7b.h"
 #include "Fonts/FreeSansBold12pt7b.h"
 #include "Fonts/FreeSans12pt7b.h"
 #include "Fonts/FreeSans18pt7b.h"
@@ -171,16 +172,56 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     // Der erkannte Panel-Controller wird zusaetzlich als DEBUG-Zeile am Terminal
     // ausgegeben (siehe initDisplay()).
     epaper_display.fillCircle(10, 10, 10, BLACK);
+    #if defined(BOARD_WIRELESS_PAPER)
+    // WP (250px schmal): 10pt-Fettschrift. Titel "MeshCom <version> <land>" so weit nach RECHTS
+    // (Richtung Original-Position x=20) setzen, wie er GARANTIERT in eine Zeile passt: Breite
+    // messen, x = min(20, 250 - Breite - 4). So nie Umbruch, aber maximal rechts. E290: 12pt @ x20.
+    {
+      char wtitle[40];
+      snprintf(wtitle, sizeof(wtitle), "MeshCom %s", cvers);
+      int16_t bx, by; uint16_t bw, bh;
+      epaper_display.setFont( &FreeSansBold10pt7b );
+      epaper_display.getTextBounds(wtitle, 0, 50, &bx, &by, &bw, &bh);
+      int tx = 250 - (int)bw - 4;
+      if(tx > 20) tx = 20;
+      if(tx < 0)  tx = 0;
+      epaper_display.setCursor(tx, 50);
+      epaper_display.println(wtitle);
+    }
+    #else
     epaper_display.setFont( &FreeSansBold12pt7b );
     epaper_display.setCursor(20, 50);
     epaper_display.printf("MeshCom %s\n", cvers);
+    #endif
+    #if defined(BOARD_WIRELESS_PAPER)
+    // WP: die unteren 3 Zeilen (Board-Name, @BY-Zeile, Rufzeichen) horizontal ZENTRIEREN.
+    // Textbreite per getTextBounds messen, x = (Panelbreite 250 - Breite) / 2.
+    {
+      const int WPW = 250;
+      int16_t bx, by; uint16_t bw, bh;
+      const char *boardName = "Heltec PaperW";
+
+      epaper_display.setFont( &FreeSans12pt7b );
+      epaper_display.getTextBounds(boardName, 0, 80, &bx, &by, &bw, &bh);
+      epaper_display.setCursor((WPW - (int)bw) / 2, 80);
+      epaper_display.println(boardName);
+
+      epaper_display.setFont( &FreeSans9pt7b );
+      epaper_display.getTextBounds(line2, 0, 100, &bx, &by, &bw, &bh);
+      epaper_display.setCursor((WPW - (int)bw) / 2, 100);
+      epaper_display.println(line2);
+
+      epaper_display.getTextBounds(line3, 0, 120, &bx, &by, &bw, &bh);
+      epaper_display.setCursor((WPW - (int)bw) / 2, 120);
+      epaper_display.println(line3);
+
+      epaper_display.setCursor(30, 18);          // "...starting now" bleibt oben
+      epaper_display.println(line1);
+    }
+    #else
     epaper_display.setCursor(65, 80);
     epaper_display.setFont( &FreeSans12pt7b );
-    #if defined(BOARD_WIRELESS_PAPER)
-    epaper_display.println("Heltec PaperW");   // Board-Name, Layout bleibt E290-Standard
-    #else
     epaper_display.println("HELTEC E290");
-    #endif
     epaper_display.setFont( &FreeSans9pt7b );
     epaper_display.setCursor(30, 18);
     epaper_display.println(line1);
@@ -188,6 +229,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     epaper_display.println(line2);
     epaper_display.setCursor(65, 120);
     epaper_display.println(line3);
+    #endif
 
     epaper_display.update();
 
