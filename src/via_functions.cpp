@@ -96,28 +96,36 @@ void checkVia(struct aprsMessage &aprsmsg)
         }
         else
         {
-            char cMH[10];
-            int inct=0;
-            // insert mheard-calls to routing informnation
-            for(int iset=0; iset<MAX_MHEARD; iset++)
+            if(bGATEWAY)
             {
-                if(mheardCalls[iset][0] != 0x00)
+                aprsmsg.msg_destination_path = "G,";
+                aprsmsg.msg_destination_path.concat(aprsmsg.msg_destination_call);
+            }
+            else
+            {
+                char cMH[10];
+                int inct=0;
+                // insert mheard-calls to routing informnation
+                for(int iset=0; iset<MAX_MHEARD; iset++)
                 {
-                    if(mheardNCount[iset] > 1 && mheardNCount[iset] > inct)
+                    if(mheardCalls[iset][0] != 0x00)
                     {
-                        memset(cMH, 0x00, sizeof(cMH));
-                        strncpy(cMH, mheardCalls[iset], sizeof(cMH));
+                        if(mheardNCount[iset] > 1 && mheardNCount[iset] > inct)
+                        {
+                            memset(cMH, 0x00, sizeof(cMH));
+                            strncpy(cMH, mheardCalls[iset], sizeof(cMH));
 
-                        inct = mheardNCount[iset];
+                            inct = mheardNCount[iset];
+                        }
                     }
                 }
-            }
 
-            if(inct > 0)
-            {
-                aprsmsg.msg_destination_path = cMH;
-                aprsmsg.msg_destination_path.concat(",");
-                aprsmsg.msg_destination_path.concat(aprsmsg.msg_destination_call);
+                if(inct > 0)
+                {
+                    aprsmsg.msg_destination_path = cMH;
+                    aprsmsg.msg_destination_path.concat(",");
+                    aprsmsg.msg_destination_path.concat(aprsmsg.msg_destination_call);
+                }
             }
         }
     }
