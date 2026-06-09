@@ -772,7 +772,7 @@ void esp32setup()
     #ifndef DISABLE_NET_CONSOLE
     netConsoleSetPassword(meshcom_settings.node_passwd);
     #endif
-    bCHECKMESH = meshcom_settings.node_sset2 & 0x2000;
+    //xxxxxxx   = meshcom_settings.node_sset2 & 0x2000;
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  bMHONLY =  meshcom_settings.node_sset3 & 0x0001;

@@ -256,7 +256,7 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
         else
         {
             // ACK nur weitersenden wenn es eine neue MSG-ID ist && MESH = on && nicht eine MSG-ID ist welche nicht selbst ausgesendet wurde
-            if((print_buff[5] & 0x7F) > 0x00 && checkMesh() && itxcheck < 0 && !checkServerRx(print_buff+6))
+            if((print_buff[5] & 0x7F) > 0x00 && bMESH && itxcheck < 0 && !checkServerRx(print_buff+6))
             {
                 print_buff[5]--;
 
@@ -700,7 +700,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // XX0XXX-999,AA0AAA-99,...
 
                         char destination_call[20];
-                        snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
+                        snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_last.c_str());
 
                         bool bMeshDestination = true;
 
@@ -1024,8 +1024,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         // resend only Packet to all and !owncall
                         // bSetLoRaAPRS = APRS via 433.775 usw.
-                        if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && checkMesh() && bMeshDestination)
+
+//Serial.printf("[INFO....]...destination_call:%s meshcom_settings.node_call:%s\n", destination_call, meshcom_settings.node_call);
+
+                        if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && checkMesh(aprsmsg) && bMeshDestination)
                         {
+//Serial.printf("[INFO....]...aprsmsg.max_hop:%i\n", aprsmsg.max_hop);
+
                             // MESH only max. hops (default 3...TEXT 1...POS)
                             if(aprsmsg.max_hop > 0)
                             {
@@ -1560,7 +1565,10 @@ bool doTX()
 
         // For out-of-order reads: clear slot data length so getNextTxSlot skips it
         // and advance iRead past any empty leading slots
+        #if not defined BOARD_RAK4630
         int iReadBeforeAdvance = iRead; // saved for startTransmit failure rollback
+        #endif
+
         ringBuffer[txSlot][0] = 0; // Mark as consumed (data is in lora_tx_buffer)
         advanceIReadPastEmpty();
 

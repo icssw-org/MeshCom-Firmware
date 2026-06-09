@@ -171,7 +171,7 @@ struct s_meshcom_settings
 
 	int node_relay = 0x0000;
 
-	char node_via[10] = {0}; 
+	char node_via[40] = {0}; 
 
  	int node_sset4 = 0x0002;	//DEBUGEN = true
 

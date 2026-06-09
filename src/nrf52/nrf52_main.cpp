@@ -137,6 +137,8 @@ void sendHeartbeat();
 
 #include <onewire_functions.h>
 
+#include "printfdeb_functions.h"
+
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 SFE_UBLOX_GNSS myGPS;
 
@@ -277,7 +279,11 @@ extern bool ble_busy_flag;    // flag to signal bluetooth uart is active
 //variables and helper functions
 uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
 
-String strText="";
+// CheckSerialConsole
+String strTextWork;
+char strText[600] = {0};
+int iTxtPos = 0;
+int iTxtLen = 0;
 
 // TinyGPS
 TinyGPSPlus tinyGPSPlus;
@@ -549,8 +555,8 @@ void nrf52setup()
     //free !! meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
-    bCHECKMESH = meshcom_settings.node_sset2 & 0x2000;
-    bVIA = !(meshcom_settings.node_sset2 & 0x4000);
+    //xxxxx = meshcom_settings.node_sset2 & 0x2000;
+    bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
@@ -2489,77 +2495,88 @@ unsigned int getGPS(void)
 
 void checkSerialCommand(void)
 {
-    //  Check Serial connected
-    if(!Serial)
+    // Serial available
+    if(Serial)
     {
-        DEBUG_MSG("SERIAL", "not connected");
-        return;
+        // Check USB Serial input (Serial == MSerial after telnet_functions.h include)
+        if(Serial.available() > 0)
+        {
+            char rd = (char)Serial.read();
+            printdeb(rd);   // echo to USB + net console via MSerial
+            strText[iTxtPos] = rd;
+            if(iTxtPos < sizeof(strText) - 1)
+            {
+                iTxtPos++;
+            }
+        }
     }
 
- 	//check if we got from the serial input
-    if(Serial.available() > 0)
+    iTxtLen = strlen(strText);
+    if(iTxtLen == 0)
+        return;
+
+    if(strText[0] == ':' || strText[0] == '-' || strText[0] == '{')
     {
-        char rd = Serial.read();
-
-        Serial.print(rd);
-
-        strText += rd;
-
-        if(strText.startsWith(":") || strText.startsWith("-"))
+        if(strText[iTxtLen-1] == '\n' || strText[iTxtLen-1] == '\r')
         {
-            if(strText.endsWith("\n") || strText.endsWith("\r"))
+            strTextWork = strText;
+            strTextWork.trim();
+            snprintf(strText, sizeof(strText), "%s", strTextWork.c_str());
+
+            strncpy(msg_text, strText, sizeof(msg_text) - 1);
+            msg_text[sizeof(msg_text) - 1] = '\0';
+
+            int inext=0;
+            char msg_buffer[600];
+            iTxtLen = strlen(strText);
+            for(int itx=0; itx<iTxtLen; itx++)
             {
-                strText.trim();
-                strncpy(msg_text, strText.c_str(), sizeof(msg_text) - 1);
-                msg_text[sizeof(msg_text) - 1] = '\0';
-
-                int inext = 0;
-                char msg_buffer[600];
-                for(int itx=0; itx<(int)strText.length(); itx++)
+                if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
                 {
-                    if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
-                    {
-                        inext--;
-                        if(inext < 0)
-                            inext=0;
-                            
-                        msg_buffer[inext+1]=0x00;
-                    }
-                    else
-                    {
-                        msg_buffer[inext]=msg_text[itx];
-                        msg_buffer[inext+1]=0x00;
-                        inext++;
-
-                        // buffer size reached
-                        if(inext > (int)sizeof(msg_buffer)-2)
-                            break;
-                    }
+                    inext--;
+                    if(inext < 0)
+                        inext=0;
+                        
+                    msg_buffer[inext+1]=0x00;
                 }
-
-                if(strText.startsWith("::"))
-                    sendMessage(msg_buffer+1, inext-1);
                 else
-                    if(strText.startsWith("--"))
-                        commandAction(msg_buffer, isPhoneReady, false);
-                    else
-                        Serial.printf("\n...wrong command %s\n", strText.c_str());
-
-                strText="";
-            }
-        }
-        else
-        {
-            if(bDEBUG)
-            {
-                if(!strText.startsWith("\n") && !strText.startsWith("\r"))
                 {
-                    printf("MSG:%02X", rd);
-                    printf("..not sent\n");
+                    msg_buffer[inext]=msg_text[itx];
+                    msg_buffer[inext+1]=0x00;
+                    inext++;
+
+                    // buffer size reached
+                    if(inext > sizeof(msg_buffer)-2)
+                        break;
                 }
             }
-            strText="";
+
+            if(strText[0] == ':' && strText[1] == ':')
+            {
+                sendMessage(msg_buffer, inext);
+            }
+            else
+                if(strText[0] == '-' && strText[1] == '-')
+                    commandAction(msg_buffer, isPhoneReady, false);
+                else
+                    printfdeb("\n...wrong command %s\n", strText);
+
+            memset(strText, 0x00, sizeof(strText));
+            iTxtPos = 0;
         }
+    }
+    else
+    {
+        if(bDEBUG)
+        {
+            if(strText[0] != '\n' && strText[0] != '\r')
+            {
+                printfdeb("MSG:%02X..not sent\n", (unsigned char)strText[0]);
+            }
+        }
+
+        memset(strText, 0x00, sizeof(strText));
+        iTxtPos = 0;
     }
 }
 
