@@ -296,6 +296,7 @@ extern int global_proz;
 extern unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
 extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Update Time
+extern int mheardNCount[MAX_MHEARD];
 
 extern char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardPathEpoch[MAX_MHPATH];  //Ringbuffer for MHeard EPoch Update Time

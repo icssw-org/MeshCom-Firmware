@@ -21,6 +21,8 @@
 
 #include "printfdeb_functions.h"
 
+#include "via_functions.h"
+
 bool gpsDetected = false;
 bool gpsInitDone = false;
 
@@ -591,11 +593,14 @@ void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
     aprsmsg.msg_len = 0;
     aprsmsg.payload_type = ':';
     aprsmsg.msg_id = millis();
+    aprsmsg.msg_destination_path="*";
     aprsmsg.msg_destination_call="*";
     aprsmsg.msg_source_path="response";
     aprsmsg.msg_payload=text;
 
     aprsmsg.msg_app_offline = true; // Rückmeldungen niemals annoucen
+
+    checkVia(aprsmsg);
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -3053,9 +3058,9 @@ void sendMessage(char *msg_text, int len)
     
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = strDestinationCall;  //Later FW insert PATH from HEY! collecting
+    aprsmsg.msg_destination_call = strDestinationCall;  //Later FW insert PATH from HEY! collecting
     aprsmsg.msg_payload = strMsg;
 
-    
     // ACK add request only DM Calls
     if(bDM)
     {
@@ -3070,6 +3075,8 @@ void sendMessage(char *msg_text, int len)
 
     // Flash rewrite
     save_settings();
+
+    checkVia(aprsmsg);
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -3568,10 +3575,13 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
             }
 
             aprsmsg.msg_destination_path = "*";
+            aprsmsg.msg_destination_call = "*";
             aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, co2, qfe, qnh);
             
             if(aprsmsg.msg_payload == "")
                 return;
+
+            checkVia(aprsmsg);
 
             encodeAPRS(msg_buffer, aprsmsg);
             
@@ -3613,6 +3623,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
 
         aprsmsg.msg_source_path = meshcom_settings.node_call;
         aprsmsg.msg_destination_path = "*";
+        aprsmsg.msg_destination_call = "*";
         aprsmsg.msg_payload = PositionToAPRS(true, bsendTele, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, co2, qfe, qnh);
         
         if(aprsmsg.msg_payload == "")
@@ -3624,6 +3635,8 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
             
         // Flash rewrite
         save_settings();
+
+        checkVia(aprsmsg);
 
         encodeAPRS(msg_buffer, aprsmsg);
 
@@ -3691,6 +3704,7 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
 
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = "*";
+    aprsmsg.msg_destination_call = "*";
     aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, 0, 0, 0, 0, temp2, 0, 0, 0, 0);
     
     if(aprsmsg.msg_payload == "")
@@ -3702,6 +3716,8 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
         
     // Flash rewrite
     save_settings();
+
+    checkVia(aprsmsg);
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -3778,6 +3794,8 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
     else
         addLoraRxBuffer(aprsmsg.msg_id, false);
 
+    checkVia(aprsmsg);
+
     encodeAPRS(msg_buffer, aprsmsg);
 
     // ACK-Message send to LoRa TX
@@ -3833,6 +3851,8 @@ void sendHey()
     else
         aprsmsg.msg_destination_path = "H";
 
+    aprsmsg.msg_destination_call = aprsmsg.msg_destination_path;
+
     aprsmsg.msg_payload = "R" + String(getMheardCount()) + ";";
    
     meshcom_settings.node_msgid++;
@@ -3841,6 +3861,8 @@ void sendHey()
 
     // Flash rewrite
     save_settings();
+
+    checkVia(aprsmsg);
 
     encodeAPRS(msg_buffer, aprsmsg);
 
@@ -3918,6 +3940,7 @@ void sendTelemetry(int ID)
     
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     
+    aprsmsg.msg_destination_call = "100001";
     aprsmsg.msg_destination_path = "100001";
 
     if(iNextTelemetry == 0)
@@ -4108,6 +4131,8 @@ void sendTelemetry(int ID)
 
         // Flash rewrite
         save_settings();
+
+        checkVia(aprsmsg);
 
         encodeAPRS(msg_buffer, aprsmsg);
 

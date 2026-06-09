@@ -5,7 +5,8 @@
 #include <configuration.h>
 #include <debugconf.h>
 
-bool checkMesh();
+bool checkMesh(struct aprsMessage &aprsmsg);
+void checkVia(struct aprsMessage &aprsmsg);
 
 
 #endif

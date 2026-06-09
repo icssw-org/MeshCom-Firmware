@@ -2451,44 +2451,9 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"checkmesh on") == 0)
-    {
-        bCHECKMESH=true;
-
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x2000;   //
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--checkmesh on");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"checkmesh off") == 0)
-    {
-        bCHECKMESH=false;
-
-        meshcom_settings.node_sset2 &= ~0x2000;   //
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--checkmesh off");
-        }
-
-        save_settings();
-
-        
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"via on") == 0)
     {
         bVIA=true;
-
-        memset(meshcom_settings.node_via, 0x00, sizeof(meshcom_settings.node_via));
 
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x4000;   //
 
@@ -2506,8 +2471,6 @@ void commandAction(char *umsg_text, bool ble)
     {
         bVIA=false;
 
-        memset(meshcom_settings.node_via, 0x00, sizeof(meshcom_settings.node_via));
-
         meshcom_settings.node_sset2 &= ~0x4000;   //
 
         if(ble)
@@ -2516,8 +2479,30 @@ void commandAction(char *umsg_text, bool ble)
         }
 
         save_settings();
-
         
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"via ") == 0)
+    {
+        sVar = msg_text+6;
+        sVar.trim();
+        sVar.toUpperCase();
+
+        snprintf(meshcom_settings.node_via, sizeof(meshcom_settings.node_via), "%s", sVar.c_str());
+
+        // max 39 chars
+        // OE1KBC-24,OE1KFR-12
+
+        meshcom_settings.node_via[39] = 0x00;
+
+        if(is_equ(meshcom_settings.node_via, "NONE"))
+        {
+            memset(meshcom_settings.node_via, 0x00, sizeof(meshcom_settings.node_via));
+        }
+
+        save_settings();
+
         return;
     }
     #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || \
@@ -3531,7 +3516,7 @@ void commandAction(char *umsg_text, bool ble)
         // max. 40 char
         msg_text[50]=0x00;
 
-        snprintf(meshcom_settings.node_ownntp, sizeof(meshcom_settings.node_ownntp), "%s", msg_text+11);
+        snprintf(meshcom_settings.node_ownntp, sizeof(meshcom_settings.node_ownntp), "%s", msg_text+12);
 
         if(ble)
         {
@@ -4706,8 +4691,8 @@ void commandAction(char *umsg_text, bool ble)
 
             printfdeb("...DEBUG %s ...DEBUG %s\n", (bDEBUGCSV?"csv":"man"), (bDEBUGEN?"en":"de"));
 
-            printfdeb("...DEBUG %s ...LORADEBUG %s ...CHECKMESH %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
-                (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bCHECKMESH?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
+            printfdeb("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
+                (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
             printfdeb("...DisplayInfo %s ...DisplayCont %s ...contrast %i\n",
                 (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), meshcom_settings.node_contrast);
@@ -4728,6 +4713,11 @@ void commandAction(char *umsg_text, bool ble)
 
                     printfdeb("GC-%i:%i ", ig+1, meshcom_settings.node_gcb[ig]);
                 }
+            }
+
+            if(bVIA)
+            {
+                printfdeb("\n...VIA %s <%s>\n", (bVIA?"on":"off"), meshcom_settings.node_via);
             }
 
             #if defined(RELAY_SWITCH)
