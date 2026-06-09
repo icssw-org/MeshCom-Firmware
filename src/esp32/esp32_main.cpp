@@ -3119,9 +3119,9 @@ void esp32loop()
     checkSerialCommand();
 
     if(BattTimeWait == 0)
-        BattTimeWait = millis() - 1000;
+        BattTimeWait = millis() - 500;
 
-    if ((BattTimeWait + 1000) < millis())  // 1 sec OE3WAS
+    if ((BattTimeWait + 500) < millis())  // 0.5 sec OE3WAS
     {
         BattWaitCounter++;
 
