@@ -17,6 +17,10 @@
 #include "ArduinoJson.h"
 #include "web_functions/web_functions.h"
 
+#include "printfdeb_functions.h"
+
+#include "via_functions.h"
+
 #if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
 #include "esp32/esp32_eth.h"
 extern EspETH neth;
@@ -124,8 +128,6 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
         zerocount = 0;
     }
 
-    //Serial.printf("zerocount:%i\n", zerocount);
-
     if (zerocount <= MAX_ZEROS)
     {
       /* we now need to distinguish if we got a LoRa packet to send from the server
@@ -203,7 +205,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           if(bDisplayInfo)
           {
             printBuffer_aprs((char*)"RX-UDP ", aprsmsg);
-            Serial.println();
+            printlndeb("");
           }
 
           bLED_ORANGE = true;
@@ -217,6 +219,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
 
           memset(convBuffer, 0x00, UDP_TX_BUF_SIZE);
+
+          checkVia(aprsmsg);
 
           uint16_t size = encodeAPRS(convBuffer, aprsmsg);
 
@@ -277,7 +281,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                       }
 
                     if(bDisplayInfo)
-                      Serial.printf("[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X ACK...%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5]);
+                      printfdeb("[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X ACK...%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5]);
 
                     addBLEOutBuffer(print_buff, 7);
 
@@ -303,6 +307,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
                 aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node
                 aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
+
+                checkVia(aprsmsg);
 
                 uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
@@ -374,7 +380,7 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
         // we got an heartbeat from server which we use to check connection (saving time we got it)
         if(bDisplayInfo)
-          Serial.println("[BEAT]...Heartbeat from server received");
+          printlndeb("[BEAT]...Heartbeat from server received");
 
         /**
          * TODO check HB accordingly to format not only BEAT at beginning
@@ -423,13 +429,13 @@ void sendMeshComUDP()
             if (!Udp.write(ringBufferUDPout[udpRead] + 1, msg_len))
             {
                 if(bDisplayCont)
-                  Serial.println("[ERROR]...Sending UDP Packet failed");
+                  printlndeb("[ERROR]...Sending UDP Packet failed");
 
                 err_cnt_udp_tx++;
                 // if we have too much errors sending, reset UDP
                 if (err_cnt_udp_tx >= MAX_ERR_UDP_TX)
                 {
-                    Serial.printf("[WIFI-DBG] UDP TX error limit (%d) reached, calling resetMeshComUDP\n", MAX_ERR_UDP_TX);
+                    printfdeb("[WIFI-DBG] UDP TX error limit (%d) reached, calling resetMeshComUDP\n", MAX_ERR_UDP_TX);
 
                     // avoid TX and UDP
                     hasIPaddress = false;
@@ -458,7 +464,7 @@ void sendMeshComUDP()
               if(bDisplayInfo)
               {
                 printBuffer_aprs((char*)"TX-UDP ", aprsmsg);
-                Serial.println("");
+                printlndeb("");
               }
             }
 
@@ -484,7 +490,7 @@ void sendMeshComUDP()
 
       if(meshcom_settings.node_netmode == 1)
       {
-          Serial.println("[NET] Ethernet mode");
+          printlndeb("[NET] Ethernet mode");
           
           if(!meshcom_settings.node_hasIPaddress)
               neth.initethDHCP();
@@ -498,18 +504,18 @@ void sendMeshComUDP()
   {
     if (!meshcom_settings.node_wifion)
     {
-      Serial.println("[WIFI]...disabled by Settings (node_wifion=false)");
+      printlndeb("[WIFI]...disabled by Settings (node_wifion=false)");
       return false;
     }
 
-    Serial.println("[WIFI]...enabled by Settings (node_wifion=true)");
+    printlndeb("[WIFI]...enabled by Settings (node_wifion=true)");
   }
   #endif
 
   if(meshcom_settings.node_netmode == 0 && meshcom_settings.node_hasIPaddress)
   {
     if (bDEBUG)
-        Serial.println("[WIFI]...meshcom_settings.node_hasIPaddress=true");
+        printlndeb("[WIFI]...meshcom_settings.node_hasIPaddress=true");
 
     return false;
   }
@@ -522,7 +528,7 @@ void sendMeshComUDP()
   if (bWIFIAP)
   {
     if (bDEBUG)
-        Serial.println("[WIFI]...bWIFIAP=true");
+        printlndeb("[WIFI]...bWIFIAP=true");
 
     WiFi.disconnect(true, true);
     WiFi.mode(WIFI_OFF);
@@ -539,7 +545,7 @@ void sendMeshComUDP()
     else
       WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
-    Serial.printf("[WIFI]...AP mode ssid<%s> connected\n", meshcom_settings.node_call);
+    printfdeb("[WIFI]...AP mode ssid<%s> connected\n", meshcom_settings.node_call);
 
     startMeshComUDP();
     
@@ -548,17 +554,17 @@ void sendMeshComUDP()
   else
   {
     if (bDEBUG)
-        Serial.println("[WIFI]...bWIFIAP=false");
+        printlndeb("[WIFI]...bWIFIAP=false");
 
     if(strcmp(meshcom_settings.node_ssid, "none") == 0)
     {
-      Serial.printf("[WIFI]...ST no ssid<%s> pwd<%s> not connected\n", meshcom_settings.node_ssid, meshcom_settings.node_pwd);
+      printfdeb("[WIFI]...ST no ssid<%s> pwd<%s> not connected\n", meshcom_settings.node_ssid, meshcom_settings.node_pwd);
       return false;
     }
   }
 
   if (bDEBUG)
-      Serial.println("[WIFI]...WiFi full radio reset");
+      printlndeb("[WIFI]...WiFi full radio reset");
 
   WiFi.disconnect(true, true);
   WiFi.mode(WIFI_OFF);
@@ -577,13 +583,15 @@ void sendMeshComUDP()
   {
      if(strcmp(WiFi.SSID(i).c_str(), meshcom_settings.node_ssid) == 0)
      {
-      Serial.printf("[WIFI]...SSID: %s CHAN: %d RSSI: %d BSSID: ", WiFi.SSID(i).c_str(), (int) WiFi.channel(i), (int) WiFi.RSSI(i));
-      uint8_t *bssid = WiFi.BSSID(i);
-      for (byte i = 0; i < 6; i++){
-        Serial.print(*bssid++, HEX);
-        if (i < 5) Serial.print(":");
-      }
-      Serial.println("");
+        printfdeb("[WIFI]...SSID: %s CHAN: %d RSSI: %d BSSID: ", WiFi.SSID(i).c_str(), (int) WiFi.channel(i), (int) WiFi.RSSI(i));
+        uint8_t *bssid = WiFi.BSSID(i);
+        
+        for (byte i = 0; i < 6; i++)
+        {
+          printfdeb("%02X", *bssid++);
+          if (i < 5) printfdeb(":");
+        }
+        Serial.println("");
 
         if(WiFi.RSSI(i) > best_rssi)
         {
@@ -596,7 +604,7 @@ void sendMeshComUDP()
   if(best_idx == -1)
   {
     // ESP32 - force connecting (in case of hidden ssid or out of range atm)
-    Serial.printf("[WIFI]...try connecting to SSID: %s \n",meshcom_settings.node_ssid);	
+    printfdeb("[WIFI]...try connecting to SSID: %s \n",meshcom_settings.node_ssid);	
     WiFi.mode(WIFI_STA);
     
     if(meshcom_settings.node_wifi_power > 0)
@@ -612,15 +620,14 @@ void sendMeshComUDP()
   else
   {
     // ESP32 - connecting to strongest ssid
-    Serial.printf("[WIFI]...connecting to CHAN: %d BSSID: ",(int) WiFi.channel(best_idx));	
+    printfdeb("[WIFI]...connecting to CHAN: %d BSSID: ",(int) WiFi.channel(best_idx));	
     uint8_t *bssid = WiFi.BSSID(best_idx);
-    for (byte i = 0; i < 6; i++){
-      Serial.print(*bssid++, HEX);
-      if (i < 5) Serial.print(":");
-      }
+    for (byte i = 0; i < 6; i++)
+    {
+      printfdeb("%02X", *bssid++);
+      if (i < 5) printfdeb(":");
+    }
     Serial.println("");
-
-    //esp_wifi_set_max_tx_power(16);  //OE3WAS testweise verringert
 
     WiFi.mode(WIFI_STA);
 
@@ -637,7 +644,7 @@ void sendMeshComUDP()
   
   delay(500);
 
-  Serial.printf("[WIFI]...power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
+  printfdeb("[WIFI]...power: %i RSSI:%i\n", WiFi.getTxPower(), WiFi.RSSI());
 
   iWlanWait = 1;
 
@@ -647,26 +654,26 @@ void sendMeshComUDP()
 bool doWiFiConnect()
 {
   if(iWlanWait == 1)
-    Serial.print("[WIFI]...Wait connect ");
+    printdeb("[WIFI]...Wait connect ");
 
   while(WiFi.status() != WL_CONNECTED)
   {
 
-    Serial.print(".");
+    printdeb(".");
 
     iWlanWait++;
 
     if(iWlanWait > 10)
     {
-      Serial.printf("\n[WIFI]...ssid<%s> connection error\n", meshcom_settings.node_ssid);
+      printfdeb("\n[WIFI]...ssid<%s> connection error\n", meshcom_settings.node_ssid);
     }
 
     return false;
 
   }
 
-  Serial.println("");
-  Serial.println("[WIFI]...connect OK");
+  printlndeb("");
+  printlndeb("[WIFI]...connect OK");
 
   iWlanWait = 0;
 
@@ -693,11 +700,11 @@ bool checkWifiPing()
     {
       ifalseping--;
 
-      Serial.printf("%s [WIFI]..WiFi not connected, count:%i\n", getTimeString().c_str(), ifalseping);
+      printfdeb("%s [WIFI]..WiFi not connected, count:%i\n", getTimeString().c_str(), ifalseping);
 
       if(ifalseping <= 0)
       {
-        Serial.println("[WIFI-DBG] checkWifiPing: ifalseping exhausted, disconnecting WiFi");
+        printlndeb("[WIFI-DBG] checkWifiPing: ifalseping exhausted, disconnecting WiFi");
 
         Udp.stop();
 
@@ -718,7 +725,7 @@ bool checkWifiPing()
     else
     {
       if(bDEBUG && bDisplayCont)
-        Serial.printf("%s [WIFI]..WiFi connected\n", getTimeString().c_str());
+        printfdeb("%s [WIFI]..WiFi connected\n", getTimeString().c_str());
     }
   }
 
@@ -729,13 +736,13 @@ String udpUpdateTimeClient()
 {
   if(!timeClient.update())
   {
-    Serial.println("TimeClient no update possible --> CPU-Mode");
+    printlndeb("TimeClient no update possible --> CPU-Mode");
 
     /*
     if(!timeClient.forceUpdate())
     {
-      Serial.println("TimeClient no force update possible");
-      Serial.println("[WIFI-DBG] NTP update failed, will retry next cycle");
+      printlndeb("TimeClient no force update possible");
+      printlndeb("[WIFI-DBG] NTP update failed, will retry next cycle");
     }
     */
 
@@ -745,8 +752,8 @@ String udpUpdateTimeClient()
   {
     if(bDisplayInfo)
     {
-      Serial.print("TimeClient now (UTC): ");
-      Serial.println(timeClient.getFormattedTime());
+      printdeb("TimeClient now (UTC): ");
+      printlndeb(timeClient.getFormattedTime());
     }
 
     return timeClient.getFormattedTime();
@@ -816,7 +823,7 @@ void startMeshComUDP()
     // Configures static IP address
     if (!WiFi.config(node_ip, node_gw, node_ms, node_dns))
     {
-      Serial.println("[Error] STA Failed to configure");
+      printlndeb("[Error] STA Failed to configure");
     }
   }
   else
@@ -850,14 +857,14 @@ void startMeshComUDP()
     if(strcmp(s_node_ip.c_str(), "0.0.0.0") == 0)
     {
       hasIPaddress=false;
-      Serial.printf("[WIFI]..not connected for UDP port %d\n",  LOCAL_PORT);
+      printfdeb("[WIFI]..not connected for UDP port %d\n",  LOCAL_PORT);
     }
     else
     {
       hasIPaddress=true;
       ifalseping=5;
 
-      Serial.printf("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
+      printfdeb("[WIFI]...now listening at IP %s, UDP port %d\n",  s_node_ip.c_str(), LOCAL_PORT);
     }
 
     meshcom_settings.node_hasIPaddress = hasIPaddress;
@@ -871,14 +878,14 @@ void startMeshComUDP()
         if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
         {
           // MeshCom DL-Server
-          Serial.println("[WIFI]...Hamnet UDP-DEST meshcom.hamnet.cloud");
+          printlndeb("[WIFI]...Hamnet UDP-DEST meshcom.hamnet.cloud");
           WiFi.hostByName("meshcom.hamnet.cloud", node_hostip);
           s_node_hostip = node_hostip.toString();
         }
         else
         {
           // MeshCom OE-Server
-          Serial.println("[WIFI]...Hamnet UDP-DEST 44.143.8.143");
+          printlndeb("[WIFI]...Hamnet UDP-DEST 44.143.8.143");
           node_hostip = IPAddress(44, 143, 8, 143);
           s_node_hostip = node_hostip.toString();
         }
@@ -887,7 +894,7 @@ void startMeshComUDP()
         // Austria
         if(strlen(meshcom_settings.node_ntp) >= 7)
         {
-          Serial.printf("[WIFI]...Internet NTP-DEST %s\n", meshcom_settings.node_ntp);
+          printfdeb("[WIFI]...Internet NTP-DEST %s\n", meshcom_settings.node_ntp);
           IPAddress ntpServer;
           WiFi.hostByName(meshcom_settings.node_ntp, ntpServer);
           timeClient.setPoolServerIP(ntpServer);
@@ -896,13 +903,13 @@ void startMeshComUDP()
         {
           if(node_ip[1] == 143)
           {
-            Serial.println("[WIFI]...Hamnet NTP-DEST 44.143.0.9");
+            printlndeb("[WIFI]...Hamnet NTP-DEST 44.143.0.9");
             timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
           }
           // other
           else
           {
-            Serial.println("[WIFI]...Hamnet NTP-DEST 44.148.224.123");
+            printlndeb("[WIFI]...Hamnet NTP-DEST 44.148.224.123");
             timeClient.setPoolServerIP(IPAddress(44, 148, 224, 123));
           }
         }
@@ -912,27 +919,27 @@ void startMeshComUDP()
       {
         if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
         {
-          Serial.println("[WIFI]...Internet UDP-DEST DL 192.68.17.26");
+          printlndeb("[WIFI]...Internet UDP-DEST DL 192.68.17.26");
           node_hostip = IPAddress(192, 68, 17, 26);
           s_node_hostip = node_hostip.toString();
         }
         else
         {
-          Serial.println("[WIFI]...Internet UDP-DEST meshcom.oevsv.at");
+          printlndeb("[WIFI]...Internet UDP-DEST meshcom.oevsv.at");
           WiFi.hostByName("meshcom.oevsv.at", node_hostip);
           s_node_hostip = node_hostip.toString();
         }
 
         if(strlen(meshcom_settings.node_ntp) >= 7)
         {
-          Serial.printf("[WIFI]...Internet NTP-DEST %s\n", meshcom_settings.node_ntp);
+          printfdeb("[WIFI]...Internet NTP-DEST %s\n", meshcom_settings.node_ntp);
           IPAddress ntpServer;
           WiFi.hostByName(meshcom_settings.node_ntp, ntpServer);
           timeClient.setPoolServerIP(ntpServer);
         }
         else
         {
-          Serial.println("[WIFI]...Internet NTP-DEST pool.ntp.org");
+          printlndeb("[WIFI]...Internet NTP-DEST pool.ntp.org");
           IPAddress ntpServer;
           WiFi.hostByName("pool.ntp.org", ntpServer);
           timeClient.setPoolServerIP(ntpServer);
@@ -945,8 +952,8 @@ void startMeshComUDP()
   }
   else
   {
-    Serial.print("[WIFIAP]...node_ip ");
-    Serial.println(node_ip);
+    printdeb("[WIFIAP]...node_ip ");
+    printlndeb(node_ip);
   
     hasIPaddress=true;
     meshcom_settings.node_hasIPaddress = hasIPaddress;
@@ -1002,7 +1009,7 @@ void resetMeshComUDP()
   iWlanWait = 0;
   web_timer = 0;
 
-  Serial.println("[WIFI-DBG] resetMeshComUDP: WiFi disconnected, flags reset for reconnect");
+  printlndeb("[WIFI-DBG] resetMeshComUDP: WiFi disconnected, flags reset for reconnect");
 
   sendDisplayHead(false);
 }
@@ -1022,7 +1029,7 @@ void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
     ringBufferUDPout[udpWrite][0] = len;
     memcpy(ringBufferUDPout[udpWrite] + 1, buffer, len + 1);
 
-    //Serial.printf("UDP out Ringbuffer added element: %u\n", udpWrite);
+    //printfdeb("UDP out Ringbuffer added element: %u\n", udpWrite);
     //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
     //neth.printBuffer(ringBufferUDPout[udpWrite], len + 1);
 
@@ -1059,7 +1066,7 @@ void sendKEEP()
   // add HB message to the ringbuffer
   if(bLORADEBUG)
   {
-    Serial.printf("[KEEP]...%s\n", keep_buffer);
+    printfdeb("[KEEP]...%s\n", keep_buffer);
   }
 
   addUdpOutBuffer(hb_buffer, hb_buffer_size);
@@ -1097,7 +1104,7 @@ void addNodeData(uint8_t msg_buffer[UDP_TX_BUF_SIZE], uint16_t size, int16_t rss
 
   if(bLORADEBUG)
   {
-    Serial.printf("[DATA]...%s\n", data_buffer);
+    printfdeb("[DATA]...%s\n", data_buffer);
   }
 }
 
