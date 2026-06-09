@@ -98,7 +98,7 @@ void checkVia(struct aprsMessage &aprsmsg)
         {
             if(bGATEWAY)
             {
-                aprsmsg.msg_destination_path = "G,";
+                aprsmsg.msg_destination_path = "HG,";
                 aprsmsg.msg_destination_path.concat(aprsmsg.msg_destination_call);
             }
             else
