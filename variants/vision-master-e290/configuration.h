@@ -100,6 +100,8 @@ definitions for HELTEC E290
 //#define USE_NEW_BATT              // neu batt_functions.cpp nehmen (kommt wenn alle Nodes umgestellt sind raus)
 #define BATTERY_PIN             7
 #define ADC_MULTIPLIER 4.9245
+
+
 /*
 #define USE_BATT
 #ifdef USE_BATT

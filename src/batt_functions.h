@@ -6,6 +6,7 @@
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
 #include "command_functions.h"
+#include "printfdeb_functions.h"
 
 #if defined(USE_NEW_BATT)
 
@@ -16,6 +17,12 @@ float mv_to_percent(float mvolts);
 void setMaxBatt(float u_max_batt);
 
 void check_efuse(void);
+
+void VextON(void);
+void VextOFF(void);  // Vext default OFF
+
+void ADC_BATT_ON(void);
+void ADC_BATT_OFF(void);
 
 #else
 
@@ -28,7 +35,7 @@ void check_efuse(void);
 	#include <esp_adc_cal.h>
 #endif
 
-#if defined(BOARD_E290)
+#if defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)
 	void VextON(void);
 	void VextOFF(void);  // Vext default OFF
 #endif
