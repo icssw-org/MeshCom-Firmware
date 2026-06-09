@@ -272,6 +272,26 @@ bool bWpCompactLayout = false;
 // 0 = kein Index (Home/Status, frische Nachricht). Wird in wpRefreshClock mitgezeichnet, damit
 // der 10-s-Statuszeilen-Refresh die Ziffer nicht wegloescht.
 int wpMsgIdx = 0;
+
+#if defined(BOARD_WIRELESS_PAPER)
+// Nachrichtentext-Font: gleiche 9pt-fett-Glyphen wie WP_FONT9, aber enger Zeilenabstand
+// (yAdvance=15 statt ~22), damit eine volle Nachricht (bis ~160 Zeichen) auf das Panel passt.
+// Wird SOWOHL beim Live-Empfang (sendDisplayText) ALS AUCH beim Durchblaettern ("#N") genutzt
+// -> identischer Zeilenabstand in beiden Faellen (Browse == Live). Lazy-Init beim ersten Aufruf.
+const GFXfont* wpMsgFont()
+{
+    static GFXfont f;
+    static bool ready = false;
+    if(!ready)
+    {
+        memcpy_P(&f, WP_FONT9, sizeof(GFXfont));
+        f.yAdvance = 15;
+        ready = true;
+    }
+    return &f;
+}
+#endif
+
 void wpApplyLayout(bool compact)
 {
     bWpCompactLayout = compact;
@@ -950,6 +970,9 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                             epaper_display.println(pageTextLong1);
 
                             epaper_display.setCursor(0, dzeile[2]);
+                            #if defined(BOARD_WIRELESS_PAPER)
+                            epaper_display.setFont(wpMsgFont());   // enger Zeilenabstand (15) wie Live-Empfang -> Browse == Live
+                            #endif
                             epaper_display.println(pageTextLong2);
                         }
                     }
@@ -2200,17 +2223,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     strAscii = utf8ascii(aprsmsg.msg_payload);
 
     #if defined(BOARD_WIRELESS_PAPER)
-    // Nachrichtentext mit kompakter Schrift (gleiche 9pt-Glyphen, aber enger
-    // Zeilenabstand 15 statt 22) -> bis zu 160 Zeichen passen auf das Panel.
-    static GFXfont fontMsgCompact;
-    static bool fontMsgCompactReady = false;
-    if(!fontMsgCompactReady)
-    {
-        memcpy_P(&fontMsgCompact, WP_FONT9, sizeof(GFXfont));
-        fontMsgCompact.yAdvance = 15;
-        fontMsgCompactReady = true;
-    }
-    epaper_display.setFont(&fontMsgCompact);
+    // Nachrichtentext mit kompakter Schrift (enger Zeilenabstand 15 statt 22) -> bis zu 160
+    // Zeichen passen auf das Panel. Gleicher Font wie beim Durchblaettern -> Browse == Live.
+    epaper_display.setFont(wpMsgFont());
     #endif
 
     epaper_display.println(strAscii);
