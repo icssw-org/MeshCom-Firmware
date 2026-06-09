@@ -695,9 +695,7 @@ int checkOwnTx(unsigned int msg_id)
         if(own_id == msg_id)
         {
             if(bDisplayInfo)
-            {
                 printfdeb("%s checkOwnTx:%08X own_msg_id:%08X <%02X%02X%02X%02X> %02X\n", getTimeString().c_str(), msg_id, own_id, own_msg_id[ilo][3], own_msg_id[ilo][2], own_msg_id[ilo][1], own_msg_id[ilo][0], own_msg_id[ilo][4]);
-            }
 
             return ilo;
         }
@@ -2946,8 +2944,7 @@ void sendMessage(char *msg_text, int len)
 
     if(bDisplayCont)
     {
-        printdeb("SendMessage in:");
-        printlndeb(msg_text_check);
+        printfdeb("SendMessage in:%s\n", msg_text_check);
     }
 
     int iulng=0;
@@ -3003,8 +3000,7 @@ void sendMessage(char *msg_text, int len)
 
     if(bDisplayCont)
     {
-        printdeb("SendMessage out:");
-        printlndeb(msg_text_checked);
+        printfdeb("SendMessage out:%s\n", msg_text_checked);
     }
 
     /*

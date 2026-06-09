@@ -239,8 +239,7 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
 
                 if(bDisplayInfo)
                 {
-                    printfdeb("\n");
-                    printfdeb("%s", getTimeString().c_str());
+                    printfdeb("\n%s", getTimeString().c_str());
                     printfdeb(" ACK to Phone  %02X %02X%02X%02X%02X %02X %02X", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
                 }
 
@@ -662,6 +661,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     if(bDisplayInfo)
                     {
                         printBuffer_aprs((char*)"RX-LoRa2", aprsmsg);
+                        bNewLine=true;
                     }
             
                     // we add now Longname (up to 20), ID - 4, RSSI - 2, SNR - 1 and MODE BYTE - 1
@@ -1025,12 +1025,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // resend only Packet to all and !owncall
                         // bSetLoRaAPRS = APRS via 433.775 usw.
 
-//Serial.printf("[INFO....]...destination_call:%s meshcom_settings.node_call:%s\n", destination_call, meshcom_settings.node_call);
-
                         if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && checkMesh(aprsmsg) && bMeshDestination)
                         {
-//Serial.printf("[INFO....]...aprsmsg.max_hop:%i\n", aprsmsg.max_hop);
-
                             // MESH only max. hops (default 3...TEXT 1...POS)
                             if(aprsmsg.max_hop > 0)
                             {
@@ -1106,16 +1102,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 addTxRingEntry("rx_relay");
 
                                 /*
-                                iWrite++;
-                                if(iWrite >= MAX_RING)
-                                    iWrite=0;
-                                */
-                                
                                 if(bDisplayInfo)
                                 {
                                     printfdeb(" This packet to mesh\n");
                                     bNewLine=true;
                                 }
+                                */
                             }
                             skip_relay: ;
                         }
@@ -1731,13 +1723,11 @@ bool doTX()
                     {
                         if(lora_tx_buffer[0] == MSG_TYPE_ACK)
                         {
-                            printBuffer_ack((char*)"TX-Lora", lora_tx_buffer, sendlng);
-                            printfdeb("");
+                            printBuffer_ack((char*)"TX-Lora ", lora_tx_buffer, sendlng);
                         }
                         else
                         {
-                            printBuffer_aprs((char*)"TX-LoRa", aprsmsg);
-                            printfdeb("");
+                            printBuffer_aprs((char*)"TX-LoRa ", aprsmsg);
                         }
                     }
 

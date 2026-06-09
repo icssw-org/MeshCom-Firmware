@@ -268,7 +268,10 @@ const uint8_t UBX_CFG_PRT[] = {
 
 
 void sendUBX_CFG_PRT() {  // Binäres Paket senden
-  Serial.printf("UBX_CFG_PRT %li\n", new_baud);
+
+  if(iGPSDEBUG >= 2)
+    Serial.printf("[GPS ]...UBX_CFG_PRT %li\n", new_baud);
+
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   for (int i = 0; i < (int)sizeof(UBX_CFG_PRT); i++)
   {
@@ -295,7 +298,10 @@ const uint8_t UBX_CFG_RATE[] = {
 };
 
 void sendUBX_CFG_RATE() {  // Binäres Paket senden
-  Serial.println("Sende UBX_CFG_RATE");
+
+  if(iGPSDEBUG >= 2)
+    Serial.println("[GPS ]...Sende UBX_CFG_RATE");
+
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   for (int i = 0; i < (int)sizeof(UBX_CFG_RATE); i++)
   {
@@ -318,7 +324,10 @@ const uint8_t UBX_MON_VER[] = {  // Size 8, swVersion, hwVersion
 };
 
 void sendUBX_MON_VER() {  // Binäres Paket senden
-  Serial.println("Sende UBX_MON_VER");
+  
+  if(iGPSDEBUG >= 2)
+    Serial.println("[GPS ]...Sende UBX_MON_VER");
+
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write(UBX_MON_VER, sizeof(UBX_MON_VER));
   #else
@@ -340,8 +349,11 @@ const uint8_t UBX_CFG_CFG[] = {  // Size 21, 'Configuration'
 };
 
 void sendUBX_CFG_CFG() {  // Binäres Paket senden
-  Serial.println("\nSende UBX_CFG_CFG");
-  #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
+  
+  if(iGPSDEBUG >= 2)
+    Serial.println("[GPS ]...Sende UBX_CFG_CFG");
+  
+    #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write(UBX_CFG_CFG, sizeof(UBX_CFG_CFG));
   #else
   for (int i = 0; i < sizeof(UBX_CFG_CFG); i++)
@@ -476,15 +488,17 @@ void SetupUBLOX()
   //Save the current settings to flash and BBR
   sendUBX_CFG_CFG();
   if(iGPSDEBUG >= 2)
+  {
     Serial.printf("[GPS ]...UBLOX Flash save\n");
-
-  Serial.printf("[GPS ]...UBLOX config finished\n");
+    Serial.printf("[GPS ]...UBLOX config finished\n");
+  }
 
   WaitPause(); // Pause zwischen Blöcken erreicht
 
   sendUBX_MON_VER();
   ver = readUBXbin();
-  Serial.printf("[GPS_VER] %s\n", ver.c_str());
+  if(iGPSDEBUG >= 2)
+    Serial.printf("[GPS_VER] %s\n", ver.c_str());
 
 }
 

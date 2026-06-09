@@ -54,7 +54,8 @@ bool checkMesh(struct aprsMessage &aprsmsg)
     // check sorce_call
     if(aprsmsg.msg_source_call == meshcom_settings.node_call)
     {
-        printlndeb("[MESH]...own call detected, return MESH=false");
+        if(bDisplayCont)
+            printlndeb("[MESH]...own call detected, return MESH=false");
         return false;   // no MESH for own messages
     }
 
@@ -62,8 +63,8 @@ bool checkMesh(struct aprsMessage &aprsmsg)
 
     if(is_equ(aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_destination_last.c_str()) != 0)
     {
-        if(bDisplayCont)
-            printfdeb("[MESH]...<no via info>return MESH=%s\n", bMESH?"true":"false");
+        if((bDisplayInfo && bMESH) || bDisplayCont)
+            printfdeb("%s MESH    : <no via info>return MESH=%s\n", getTimeString().c_str(), bMESH?"true":"false");
         return bMESH;   // if no destination_path (vai) return bMESH 
     }
 
@@ -76,8 +77,8 @@ bool checkMesh(struct aprsMessage &aprsmsg)
         return false;   // if no own_call in source_path (vai) return bMESH
     }
 
-    if(bDisplayCont)
-        printlndeb("[MESH]...<with via info and match own-call>...return MESH=true");
+    if(bDisplayInfo)
+        printfdeb("%s MESH    : <with via info and match own-call>...return MESH=true\n", getTimeString().c_str());
 
     return true;   // bMESH is true, but no VIA-Rule mached, so return bMESH
 }
