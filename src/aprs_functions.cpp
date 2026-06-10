@@ -274,7 +274,6 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         // Destination Path
         bool bDestinationEndOk=false;
-        bool bDestinationCall=true;
         uint16_t inextstart=inext;
 
         memset(cConcat1, 0x00, UDP_TX_BUF_SIZE);
@@ -304,31 +303,21 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
                 if(RcvBuffer[ib] == ',')
                 {
-                    bDestinationCall=false;
-
-                    //aprsmsg.msg_destination_last="";
+                    //aprsmsg.msg_destination_call="";
                     memset(cConcat2, 0x00, UDP_TX_BUF_SIZE);
                     iConcat2 = 0;
                 }
                 else
                 {
-                    //aprsmsg.msg_destination_last.concat((char)RcvBuffer[ib]);
+                    //aprsmsg.msg_destination_call.concat((char)RcvBuffer[ib]);
                     cConcat2[iConcat2] = (char)RcvBuffer[ib];
                     iConcat2++;
-                }
-
-                if(bDestinationCall)
-                {
-                    //aprsmsg.msg_destination_call.concat((char)RcvBuffer[ib]);
-                    cConcat3[iConcat3] = (char)RcvBuffer[ib];
-                    iConcat3++;
                 }
             }
         }
 
-        aprsmsg.msg_destination_path = cConcat1;
-        aprsmsg.msg_destination_last = cConcat2;
-        aprsmsg.msg_destination_call = cConcat3;
+        aprsmsg.msg_destination_path = cConcat1;    // routing & message to
+        aprsmsg.msg_destination_call = cConcat2;    // message to
 
         if(!bDestinationEndOk)
         {
@@ -341,18 +330,6 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             }
 
             return 0x00;
-        }
-
-        if(CheckGroup(aprsmsg.msg_destination_last) == 0)
-        {
-            if(!checkRegexCall(aprsmsg.msg_destination_last))
-            {
-                if(bLORADEBUG)
-                {
-                    Serial.printf("APRS decode - Destination-Last-CallSign Error [%s]\n", aprsmsg.msg_destination_last.c_str());
-                }
-                bCallsignOk=false;
-            }
         }
 
         if(CheckGroup(aprsmsg.msg_destination_call) == 0)

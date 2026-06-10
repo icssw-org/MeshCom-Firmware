@@ -2088,7 +2088,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
     }
     else
-    if(aprsmsg.msg_destination_path.compareTo("100001") == 0 && !bSOFTSERREAD)
+    if(aprsmsg.msg_destination_call.compareTo("100001") == 0 && !bSOFTSERREAD)
     {
         return;
     }
@@ -2158,12 +2158,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         String strPath = "M * <" + aprsmsg.msg_source_call + ">";
         
         // DM
-        if(CheckGroup(aprsmsg.msg_destination_path))
+        if(CheckGroup(aprsmsg.msg_destination_call))
         {
-            strPath = "GM " + aprsmsg.msg_destination_path + " <" + aprsmsg.msg_source_call + ">";
+            strPath = "GM " + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
         }
         else
-            if(aprsmsg.msg_destination_path != "*")
+            if(aprsmsg.msg_destination_call != "*")
             {
                 strPath = "DM <" + aprsmsg.msg_source_call + ">";
             }
@@ -2192,12 +2192,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     String strPath = "M* <" + aprsmsg.msg_source_call + ">";
     // DM
-    if(CheckGroup(aprsmsg.msg_destination_path))
+    if(CheckGroup(aprsmsg.msg_destination_call))
     {
-        strPath = "GM" + aprsmsg.msg_destination_path + " <" + aprsmsg.msg_source_call + ">";
+        strPath = "GM" + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
     }
     else
-        if(aprsmsg.msg_destination_path != "*")
+        if(aprsmsg.msg_destination_call != "*")
         {
             strPath = "DM <" + aprsmsg.msg_source_call + ">";
         }
@@ -2249,12 +2249,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     String strPath = "M* <" + aprsmsg.msg_source_call + ">";
     // DM
-    if(CheckGroup(aprsmsg.msg_destination_path))
+    if(CheckGroup(aprsmsg.msg_destination_call))
     {
-        strPath = "GM" + aprsmsg.msg_destination_path + " <" + aprsmsg.msg_source_call + ">";
+        strPath = "GM" + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
     }
     else
-        if(aprsmsg.msg_destination_path != "*")
+        if(aprsmsg.msg_destination_call != "*")
         {
             strPath = "DM <" + aprsmsg.msg_source_call + ">";
         }
@@ -2301,12 +2301,12 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     String strPath = aprsmsg.msg_source_path;
     // DM
-    if(CheckGroup(aprsmsg.msg_destination_path))
+    if(CheckGroup(aprsmsg.msg_destination_call))
     {
-        strPath = "GM" + aprsmsg.msg_destination_path + " <" + aprsmsg.msg_source_call + ">";
+        strPath = "GM" + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
     }
     else
-        if(aprsmsg.msg_destination_path != "*")
+        if(aprsmsg.msg_destination_call != "*")
         {
             strPath = "DM <" + aprsmsg.msg_source_call + ">";
         }
@@ -3105,7 +3105,7 @@ void sendMessage(char *msg_text, int len)
         if(bGATEWAY && meshcom_settings.node_hasIPaddress)
         {
             // set Info message send and Server reached, not on DM
-            if(!bDM && (aprsmsg.msg_destination_path == "*" || CheckGroup(strDestinationCall)))
+            if(!bDM && (aprsmsg.msg_destination_call == "*" || CheckGroup(strDestinationCall)))
             {
                 uint8_t print_buff[8];
 
@@ -3128,8 +3128,8 @@ void sendMessage(char *msg_text, int len)
     #endif
     
     #if defined(BOARD_T_DECK_PRO)
-    String strPath="<"+aprsmsg.msg_source_path+"> "+aprsmsg.msg_destination_path;
-    TDeck_pro_lora_disp(strPath, aprsmsg.msg_payload);
+    String strCall="<"+aprsmsg.msg_source_call+"> "+aprsmsg.msg_destination_call;
+    TDeck_pro_lora_disp(strCall, aprsmsg.msg_payload);
     #endif
 
     // store last message to compare later on

@@ -2504,7 +2504,7 @@ void checkSerialCommand(void)
             char rd = (char)Serial.read();
             printdeb(rd);   // echo to USB + net console via MSerial
             strText[iTxtPos] = rd;
-            if(iTxtPos < sizeof(strText) - 1)
+            if(iTxtPos < (int)sizeof(strText) - 1)
             {
                 iTxtPos++;
             }
@@ -2546,7 +2546,7 @@ void checkSerialCommand(void)
                     inext++;
 
                     // buffer size reached
-                    if(inext > sizeof(msg_buffer)-2)
+                    if(inext > (int)sizeof(msg_buffer)-2)
                         break;
                 }
             }
@@ -2638,8 +2638,7 @@ void sendUDP()
                     // print aprs message
                     if(bDisplayInfo)
                     {
-                        printBuffer_aprs((char*)"TX-UDP ", aprsmsg);
-                        Serial.println("");
+                        printBuffer_aprs((char*)"TX-UDP  ", aprsmsg);
                     }
                 }
             }

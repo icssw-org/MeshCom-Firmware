@@ -51,7 +51,7 @@ bool checkMesh(struct aprsMessage &aprsmsg)
     if(bDisplayCont)
         printfdeb("[MESH]...<%s>...Payload<%s>\n", bMESH?"true":"false", aprsmsg.msg_payload.c_str());
 
-    // check sorce_call
+    // check source_call
     if(aprsmsg.msg_source_call == meshcom_settings.node_call)
     {
         if(bDisplayCont)
@@ -61,7 +61,7 @@ bool checkMesh(struct aprsMessage &aprsmsg)
 
     //printfdeb("aprsmsg.msg_destination_last:<%s>  aprsmsg.msg_destination_call:<%s> aprsmsg.msg_destination_path:<%s>\n", aprsmsg.msg_destination_last.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_destination_path.c_str());
 
-    if(is_equ(aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_destination_last.c_str()) != 0)
+    if(is_equ(aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_destination_call.c_str()) != 0)
     {
         if((bDisplayInfo && bMESH) || bDisplayCont)
             printfdeb("%s MESH    : <no via info>return MESH=%s\n", getTimeString().c_str(), bMESH?"true":"false");

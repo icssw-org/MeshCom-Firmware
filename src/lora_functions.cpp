@@ -700,7 +700,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // XX0XXX-999,AA0AAA-99,...
 
                         char destination_call[20];
-                        snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_last.c_str());
+                        snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
 
                         bool bMeshDestination = true;
 
@@ -870,7 +870,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         if(checkOwnTx(aprsmsg.msg_id) >= 0)
                                         {
                                             // und an alle geht Wolke mit Hackerl an BLE senden
-                                            if(aprsmsg.msg_destination_path == "*")
+                                            if(aprsmsg.msg_destination_call == "*")
                                             {
                                                 print_buff[5]=MSG_TYPE_ACK;
                                                 print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00
