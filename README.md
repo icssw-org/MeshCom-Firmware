@@ -125,6 +125,11 @@ MeshCom 4.0 verwendet für die Payload-Daten das AX.25 Protokoll, wie es für AP
 - 50 T-Deck Pro
 - 51 LilyGo T-Beam 1W
 - 52 Heltec Wifi Lora 32 v4 
+- 53 Lilygo T-ETH-ELite
+- 54 Heltec T114
+- 55 Lilygo T3 S3 V1.3
+- 56 Lilygo T-Connect Pro
+- 57 Heltec Wireless Paper
 
 
 ## Preparations for platform.io VSCode plugin
@@ -164,7 +169,7 @@ For an ESP-S3 like the Heltec V3, E290, etc:
 `esptool.py -p <SERIAL_PORT> write_flash 0x0000 <PATH-TO-BIN-FILE>/bootloader.bin 0xE000 otadata.bin 0x8000 <PATH-TO-BIN-FILE>/partitions.bin 0x10000 <PATH-TO-BIN-FILE>/safeboot-s3.bin 0xC0000 <PATH-TO-BIN-FILE>/firmware.bin `<br/>
 
 Ready build firmware can also be flashed via the online tool (Chrome, Edge, Opera):<br/>
-https://oe1kfr.com/esptool/<br/>
+https://esptool.oevsv.at/<br/>
 
 ### OTA-Update:
 The safeboot.bin or safeboot-s3.bin contains the factory image which holds the OTA-Update firmware. To update via OTA after you have initially flashed the board, you can either enter the command `--ota-update` on the serial console or hit the OTA-Update Button in the webserver or in the phone app. The node then boots into the ota-firmware. If you had already configured your wifi credentials and had a connection to your wifi router, the node will try to connect again to that. Open the website via `<YOUR-NodeCALLSIGN>.local` or via its IP address. If there was no wifi configured upfront, the node then activates the AP mode and you can find a WiFi AP named `MeshCom-OTA` and the website of the OTA can either be accessed via the IP address: `192.168.4.1` or via `MeshCom-OTA.local`<br>
