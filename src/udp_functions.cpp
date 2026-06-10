@@ -464,7 +464,6 @@ void sendMeshComUDP()
               if(bDisplayInfo)
               {
                 printBuffer_aprs((char*)"TX-UDP ", aprsmsg);
-                printlndeb("");
               }
             }
 

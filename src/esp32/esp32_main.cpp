@@ -3814,7 +3814,7 @@ void checkSerialCommand(void)
             char rd = (char)Serial.read();
             printdeb(rd);   // echo to USB + net console via MSerial
             strText[iTxtPos] = rd;
-            if(iTxtPos < sizeof(strText) - 1)
+            if(iTxtPos < (int)sizeof(strText) - 1)
             {
                 iTxtPos++;
             }

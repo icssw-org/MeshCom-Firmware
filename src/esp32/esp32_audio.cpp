@@ -35,7 +35,7 @@ TaskHandle_t xHandle = NULL;
  */
 void init_audio()
 {
-    printlndeb("[audio]...initializing");
+    printlndeb("[AUDIO]..initializing");
 
     audioSemaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(audioSemaphore);
@@ -47,7 +47,7 @@ void init_audio()
     audio.setVolume(12); // Set a default volume
 
     if (meshcom_settings.node_mute) {
-        if (bDEBUG) printlndeb("[audio]...initially muted, disabling hardware");
+        if (bDEBUG) printlndeb("[AUDIO]..initially muted, disabling hardware");
         i2s_driver_uninstall(i2s_num);
     }
 }
@@ -61,7 +61,7 @@ bool play_file_from_sd(const char *filename, int volume)
     {
         if (bDEBUG)
         {
-            printlndeb("[audio]...muted");
+            printlndeb("[AUDIO]..muted");
         }
         return true;
     }
@@ -89,12 +89,12 @@ bool play_file_from_sd(const char *filename, int volume)
                 audio.connecttoFS(SD, strAudioWithType.c_str());
             
             if (bDEBUG)
-                printfdeb("[audio]...playing %s in background\n", strAudioWithType.c_str());
+                printfdeb("[AUDIO]..playing %s in background\n", strAudioWithType.c_str());
 
             if(xHandle != NULL)
             {
                 if(bDEBUG)
-                    printlndeb("[audio]...resume play_function");
+                    printlndeb("[AUDIO]..resume play_function");
 
                 vTaskResume(xHandle);
 
@@ -118,7 +118,7 @@ bool play_file_from_sd(const char *filename, int volume)
         }
         else
         {
-            printfdeb("[audio]...file %s not found on SD\n", filename);
+            printfdeb("[AUDIO]..file %s not found on SD\n", filename);
 
             xSemaphoreGive(audioSemaphore);
             
@@ -127,7 +127,7 @@ bool play_file_from_sd(const char *filename, int volume)
     }
     else
     {
-        printlndeb("[audio]...currently playing another file");
+        printlndeb("[AUDIO]..currently playing another file");
         return true;
     }
 }
@@ -148,7 +148,7 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
     if (meshcom_settings.node_mute)
     {
         if (bDEBUG)
-            printlndeb("[audio]...muted");
+            printlndeb("[AUDIO]..muted");
         return true;
     }
     
@@ -173,7 +173,7 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
         }
 
         if (bDEBUG)
-            printfdeb("[audio]...playing %s\n", strAudioWithType.c_str());
+            printfdeb("[AUDIO]..playing %s\n", strAudioWithType.c_str());
 
         while (audio.isRunning())
         {
@@ -188,7 +188,7 @@ bool play_file_from_sd_blocking(const char *filename, int volume)
     }
     else
     {
-        printfdeb("[audio]...file %s not found on SD\n", filename);
+        printfdeb("[AUDIO]..file %s not found on SD\n", filename);
         return false;
     }
 }
@@ -233,7 +233,7 @@ void playTone(int duration_ms, int volume_percent) {
         esp_err_t err = i2s_write(i2s_num, buffer, sizeof(buffer), &bytes_written, 100 / portTICK_PERIOD_MS);
         if (err != ESP_OK) {
             if (bDEBUG) 
-                printfdeb("[audio]...i2s_write failed: %d\n", err);
+                printfdeb("[AUDIO]..i2s_write failed: %d\n", err);
             break; // Exit loop on error to prevent freeze
         }
         total_ms--;
@@ -248,7 +248,7 @@ void play_cw(const char character, int volume)
     if (meshcom_settings.node_mute)
     {
         if (bDEBUG)
-            printlndeb("[audio]...muted");
+            printlndeb("[AUDIO]..muted");
         return;
     }
 
@@ -445,12 +445,12 @@ void play_cw_start()
     if (meshcom_settings.node_mute)
     {
         if (bDEBUG)
-            printlndeb("[audio]...muted");
+            printlndeb("[AUDIO]..muted");
         return;
     }
 
     if (bDEBUG)
-        printlndeb("[audio]...playing CW start");
+        printlndeb("[AUDIO]..playing CW start");
 
     const char *morseCode = "-.-.-";
 
@@ -475,7 +475,7 @@ void play_function(void *parameter)
 {
     if(bDEBUG)
     {
-        printdeb("[audio]...play_function running on core ");
+        printdeb("[AUDIO]..play_function running on core ");
         printlndeb(xPortGetCoreID());
         printlndeb("");
     }
@@ -510,7 +510,7 @@ void audio_set_mute(bool mute) {
     
     if (mute) {
         if (bDEBUG)
-            printlndeb("[audio]...muting and disabling hardware");
+            printlndeb("[AUDIO]..muting and disabling hardware");
         // Stop any playing audio
         if (audio.isRunning()) {
             audio.stopSong();
@@ -519,7 +519,7 @@ void audio_set_mute(bool mute) {
         i2s_driver_uninstall(i2s_num);
     } else {
         if (bDEBUG)
-            printlndeb("[audio]...unmuting and enabling hardware");
+            printlndeb("[AUDIO]..unmuting and enabling hardware");
         // Re-install I2S driver with default settings (same as Audio lib default)
         i2s_config_t i2s_config = {
             .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),

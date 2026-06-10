@@ -517,7 +517,7 @@ int getMheardCount()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+60*60*12) > getUnixClock())  // mhread last hour
+            if((mheardEpoch[iset]+60*60*12) > getUnixClock())  // mheard last hour
             {
                 imhcount++;
             }

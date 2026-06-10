@@ -18,6 +18,10 @@
 #include <NTPClient.h>
 #include <time.h>
 
+#include "printfdeb_functions.h"
+
+#include "via_functions.h"
+
 EthernetUDP Udp;
 
 NTPClient timeClient(Udp);
@@ -81,7 +85,7 @@ void NrfETH::initethfixIP()
   while (Ethernet.linkStatus() == LinkOFF)
   {
     if(iWaitStatus == 1)
-      Serial.printf("ERROR: Ethernet cable is not connected (%i).\n", iWaitStatus);
+      printfdeb("ERROR: Ethernet cable is not connected (%i).\n", iWaitStatus);
       
     delay(500);
     
@@ -91,15 +95,15 @@ void NrfETH::initethfixIP()
       return;
   }
 
-  Serial.print("\nMy IP address: ");
-  Serial.println(ip); // Print your local IP address.
-  Serial.print("Default GW address: ");
-  Serial.println(gw);
-  Serial.print("DNS address: ");
-  Serial.println(dns);
-  Serial.print("SNM: ");
-  Serial.println(subnet);
-  Serial.println("");
+  printdeb("\nMy IP address: ");
+  printlndeb(ip); // Print your local IP address.
+  printdeb("Default GW address: ");
+  printlndeb(gw);
+  printdeb("DNS address: ");
+  printlndeb(dns);
+  printdeb("SNM: ");
+  printlndeb(subnet);
+  printlndeb("");
 
   hasIPaddress = true;
 
@@ -128,7 +132,7 @@ void NrfETH::initethDHCP()
 
   if(!hasETHHardware)
   {
-    Serial.println("no ETH hardware found");
+    printlndeb("no ETH hardware found");
     return;
   }
 
@@ -149,8 +153,8 @@ void NrfETH::initethDHCP()
   }
   else 
   {
-    Serial.println("ERROR: DHCP No Answer");
-    Serial.println("ERROR: Set to fixed IP!");
+    printlndeb("ERROR: DHCP No Answer");
+    printlndeb("ERROR: Set to fixed IP!");
     hasIPaddress = false;
   }
 }
@@ -165,7 +169,7 @@ bool NrfETH::sendUDP(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_buf_size)
   
   if(bDEBUG)
   {
-    Serial.print("UDP Out Buff:");
+    printdeb("UDP Out Buff:");
     printBuffer(buffer, rx_buf_size);
   }
 
@@ -191,7 +195,7 @@ int NrfETH::checkUDP()
 {
   if(Udp.check() < 0)
   {
-    Serial.println("[UDP ERROR] checkUDP");
+    printlndeb("[UDP ERROR] checkUDP");
     return -1;
   }
 
@@ -215,7 +219,7 @@ int NrfETH::getUDP()
   // HEARTBEAT keine Ausgabe
   //if(packetSize != 22 && packetSize > 0 && bDEBUG)
   if(packetSize > 0 && bDEBUG)
-    Serial.printf("[UDP_ETH] UDP Packet received with length: %i\n", packetSize);
+    printfdeb("[UDP_ETH] UDP Packet received with length: %i\n", packetSize);
 
   if (packetSize <= UDP_TX_BUF_SIZE && packetSize > 0)
   {
@@ -236,7 +240,7 @@ int NrfETH::getUDP()
     }
 
     if(packetSize > 0 && bDEBUG)// && bDEBUG)
-      Serial.printf("[UDP_ETH] UDP zerocount: %i ? > 6\n", zerocount);
+      printfdeb("[UDP_ETH] UDP zerocount: %i ? > 6\n", zerocount);
 
     if (zerocount <= MAX_ZEROS)
     {
@@ -259,7 +263,7 @@ int NrfETH::getUDP()
       {
 
         if(bDEBUG)
-          Serial.printf("[GATE] Received a LoRa packet to transmit\n");
+          printfdeb("[GATE] Received a LoRa packet to transmit\n");
 
         last_upd_timer = millis();
 
@@ -298,7 +302,6 @@ int NrfETH::getUDP()
             if(bDisplayInfo)
             {
               printBuffer_aprs((char*)"RX-UDP ", aprsmsg);
-              Serial.println();
             }
 
             bool bUDPtoLoraSend = true;
@@ -316,11 +319,13 @@ int NrfETH::getUDP()
 
             if(bDEBUG)
             {
-              Serial.printf("RX-UDP Source-Path:%s\n",  aprsmsg.msg_source_path.c_str());
+              printfdeb("RX-UDP Source-Path:%s\n",  aprsmsg.msg_source_path.c_str());
             }
 
 
             memset(convBuffer, 0x00, UDP_TX_BUF_SIZE);
+
+            checkVia(aprsmsg);
 
             uint16_t size = encodeAPRS(convBuffer, aprsmsg);
 
@@ -329,7 +334,7 @@ int NrfETH::getUDP()
 
             if(bDEBUG)
             {
-              Serial.printf("RX-UDP Check-payload (%i):%02X \n", size, msg_type_b);
+              printfdeb("RX-UDP Check-payload (%i):%02X \n", size, msg_type_b);
             }
 
             if(msg_type_b == 0x3A)
@@ -379,7 +384,7 @@ int NrfETH::getUDP()
                       print_buff[6]=0x00;
                       
                       if(bDisplayInfo)
-                          Serial.printf("\n[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[1], print_buff[2], print_buff[3], print_buff[4]);
+                          printfdeb("\n[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[1], print_buff[2], print_buff[3], print_buff[4]);
 
                       int iackcheck = checkOwnTx(msg_counter);
                       if(iackcheck >= 0)
@@ -414,6 +419,8 @@ int NrfETH::getUDP()
                   aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node
                   aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
 
+                  checkVia(aprsmsg);
+
                   uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
                   addBLEOutBuffer(tempRcvBuffer, tempsize);
@@ -442,7 +449,7 @@ int NrfETH::getUDP()
               int icheck = checkOwnTx(aprsmsg.msg_id);
 
               if(bDisplayInfo)
-                Serial.printf("OWN-TX-CHECK-UDP msg_id:%08X check:%i\n", aprsmsg.msg_id, icheck);
+                printfdeb("OWN-TX-CHECK-UDP msg_id:%08X check:%i\n", aprsmsg.msg_id, icheck);
 
               if(icheck < 0)
               {
@@ -467,7 +474,7 @@ int NrfETH::getUDP()
                   {
                       if(bDEBUG)
                       {
-                        Serial.printf("RX-UDP addBLEOutBuffer\n");
+                        printfdeb("RX-UDP addBLEOutBuffer\n");
                       }
 
                       addBLEOutBuffer(convBuffer, size);
@@ -483,8 +490,8 @@ int NrfETH::getUDP()
 
         if(bDisplayInfo)
         {
-          Serial.print(getTimeString());
-          Serial.printf("[CONF] received from server\n");
+          printdeb(getTimeString());
+          printfdeb("[CONF] received from server\n");
         }
 
         last_upd_timer = millis();
@@ -522,7 +529,7 @@ int NrfETH::getUDP()
             memcpy(call_arr, config_buf + 2, call_len);
             _longname = String(call_arr);
             DEBUG_MSG("CONF", "Got callsign (longanme) from server: ");
-            Serial.println(_longname);
+            printlndeb(_longname);
             DEBUG_MSG("CONF", "Callsign Length: %d", call_len);
 
             // shortname
@@ -535,7 +542,7 @@ int NrfETH::getUDP()
               short_arr[short_len] = '\0';
               shortname = String(short_arr);
               DEBUG_MSG_VAL("CONF", short_len, "Shortname received: ");
-              Serial.println(shortname);
+              printlndeb(shortname);
             }
 
             int inpos= 2 + call_len + short_len + 2;
@@ -566,12 +573,12 @@ int NrfETH::getUDP()
           }
           else
           {
-            Serial.printf("[ERROR] Incoming config message not known! Discarding!\n");
+            printfdeb("[ERROR] Incoming config message not known! Discarding!\n");
           }
         }
         else
         {
-            Serial.printf("[ERROR] Incoming config message not known! Discarding!\n");
+            printfdeb("[ERROR] Incoming config message not known! Discarding!\n");
         }
       }
       else if (memcmp(indicator_b, beat, UDP_MSG_INDICATOR_LEN) == 0)
@@ -580,8 +587,8 @@ int NrfETH::getUDP()
         // we got an heartbeat from server which we use to check connection (saving time we got it)
         if(bDEBUG)
         {
-          Serial.print(getTimeString());
-          Serial.printf(" [BEAT] Heartbeat from server\n");
+          printdeb(getTimeString());
+          printfdeb(" [BEAT] Heartbeat from server\n");
         }
 
         last_upd_timer = millis();
@@ -594,7 +601,7 @@ int NrfETH::getUDP()
       }
       else
       {
-        Serial.printf("[ERROR] Received udp message without indicator\n");
+        printfdeb("[ERROR] Received udp message without indicator\n");
         last_upd_timer = millis();
       }
 
@@ -606,7 +613,7 @@ int NrfETH::getUDP()
     } 
     else
     {
-      Serial.printf("[ERROR] UDP Message has too much Zeros\n");
+      printfdeb("[ERROR] UDP Message has too much Zeros\n");
       resetDHCP();
     }
   }
@@ -682,13 +689,13 @@ void NrfETH::getMyMac()
   memcpy(macaddr +1, &result, sizeof(result) -3);
 
   /*
-  Serial.print("MAC ADDR: ");
+  printdeb("MAC ADDR: ");
 
   for (int i = 0; i < 6; i++)
   {
-    Serial.printf("%02X:", macaddr[i]);
+    printfdeb("%02X:", macaddr[i]);
   }
-  Serial.println("");
+  printlndeb("");
   */
 
   // setting now the GW-ID
@@ -763,14 +770,14 @@ int NrfETH::startETH()
   if(hasIPaddress)
     return 0;
 
-  Serial.println("\nInitialize Ethernet"); // start the Ethernet connection.
+  printlndeb("\nInitialize Ethernet"); // start the Ethernet connection.
 
   if (Ethernet.begin(macaddr, 10000UL) == 0)
   {
-    Serial.println("Failed to configure Ethernet using FIX/DHCP");
+    printlndeb("Failed to configure Ethernet using FIX/DHCP");
     if (Ethernet.hardwareStatus() == EthernetNoHardware) // Check for Ethernet hardware present.
     {
-      Serial.println("Ethernet shield was not found.\nGateway or WEBService can't run without ETH-hardware.");
+      printlndeb("Ethernet shield was not found.\nGateway or WEBService can't run without ETH-hardware.");
 
       hasETHHardware=false;
       
@@ -783,19 +790,19 @@ int NrfETH::startETH()
     return 2;
   }
 
-  Serial.print("Ethernet.localIP(): ");
-  Serial.println(Ethernet.localIP());
+  printdeb("Ethernet.localIP(): ");
+  printlndeb(Ethernet.localIP());
 
   if (Ethernet.localIP() != IPAddress(0, 0, 0, 0))
   {
-    Serial.print("My IP address: ");
-    Serial.println(Ethernet.localIP()); // Print your local IP address.
-    Serial.print("Default GW address: ");
-    Serial.println(Ethernet.gatewayIP());
-    Serial.print("DNS address: ");
-    Serial.println(Ethernet.dnsServerIP());
-    Serial.print("SNM: ");
-    Serial.println(Ethernet.subnetMask());
+    printdeb("My IP address: ");
+    printlndeb(Ethernet.localIP()); // Print your local IP address.
+    printdeb("Default GW address: ");
+    printlndeb(Ethernet.gatewayIP());
+    printdeb("DNS address: ");
+    printlndeb(Ethernet.dnsServerIP());
+    printdeb("SNM: ");
+    printlndeb(Ethernet.subnetMask());
 
     snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2], Ethernet.localIP()[3]);
     snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
@@ -862,7 +869,7 @@ void NrfETH::startUDP()
       if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
       {
         if(bDisplayCont)
-          Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.148.230.197");
+          printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.148.230.197");
 
         udp_dest_addr = IPAddress(44, 148, 230, 197);
 
@@ -872,7 +879,7 @@ void NrfETH::startUDP()
       else
       {
         if(bDisplayCont)
-          Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
+          printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
 
         udp_dest_addr = IPAddress(44, 143, 8, 143);
 
@@ -883,7 +890,7 @@ void NrfETH::startUDP()
     else
     {
       if(bDisplayCont)
-        Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
+        printlndeb("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
 
       //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
       udp_dest_addr = IPAddress(89, 185, 97, 38);
@@ -915,23 +922,25 @@ String NrfETH::udpUpdateTimeClient()
 
   if(!timeClient.update())
   {
-    Serial.println("TimeClient no update posible");
+
+    printlndeb("TimeClient no update posible");
 
     if(!timeClient.forceUpdate())
     {
-      Serial.println("TimeClient no force update posible");
+      printlndeb("TimeClient no force update posible");
 
       timeClient.end();
       delay(2000);
       timeClient.begin();
+  
       return "none";
-    }
+    }    
   }
 
   if(bDisplayInfo)
   {
-    Serial.print("TimeClient now (UTC): ");
-    Serial.println(timeClient.getFormattedTime());
+    printdeb("TimeClient now (UTC): ");
+    printlndeb(timeClient.getFormattedTime());
   }
 
   return timeClient.getFormattedTime();
@@ -964,7 +973,7 @@ void NrfETH::startFIXUDP()
     if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
     {
       if(bDisplayCont)
-        Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.148.230.197");
+        printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.148.230.197");
 
       udp_dest_addr = IPAddress(44, 148, 230, 197);
     
@@ -974,7 +983,7 @@ void NrfETH::startFIXUDP()
     else
     {
       if(bDisplayCont)
-        Serial.println("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
+        printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
 
       udp_dest_addr = IPAddress(44, 143, 8, 143);
     
@@ -986,7 +995,7 @@ void NrfETH::startFIXUDP()
   else
   {
     if(bDisplayCont)
-      Serial.println("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
+      printlndeb("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
       
     udp_dest_addr = IPAddress(89, 185, 97, 38);
 
@@ -999,8 +1008,8 @@ void NrfETH::startFIXUDP()
 
   Udp.begin(LOCAL_PORT); // Start UDP.
 
-  Serial.print("[UDP_ETH]...UDP init successful - Port:");
-  Serial.println(LOCAL_PORT);
+  printdeb("[UDP_ETH]...UDP init successful - Port:");
+  printlndeb(LOCAL_PORT);
 
   timeClient.begin();
 

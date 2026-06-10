@@ -4167,7 +4167,7 @@ void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
 
     String conversation = is_outgoing ? aprsmsg.msg_destination_call : aprsmsg.msg_source_call;
     if(conversation.length() == 0)
-        conversation = is_outgoing ? aprsmsg.msg_destination_path : aprsmsg.msg_source_path;
+        conversation = is_outgoing ? aprsmsg.msg_destination_call : aprsmsg.msg_source_path; //aprsmsg.msg_destination_path : aprsmsg.msg_source_path;
     conversation.trim();
     if(conversation.length() == 0)
         conversation = "MSG";
@@ -4177,7 +4177,7 @@ void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
     bubble.timestamp = build_timestamp_string();
 
     String source_descriptor = aprsmsg.msg_source_path.length() > 0 ? aprsmsg.msg_source_path : aprsmsg.msg_source_call;
-    String dest_descriptor = aprsmsg.msg_destination_path.length() > 0 ? aprsmsg.msg_destination_path : aprsmsg.msg_destination_call;
+    String dest_descriptor = aprsmsg.msg_destination_call; // routing nicht berücksichtigt aprsmsg.msg_destination_path.length() > 0 ? aprsmsg.msg_destination_path : aprsmsg.msg_destination_call;
 
     if(source_descriptor.length() == 0)
         source_descriptor = local_call.length() > 0 ? local_call : String("You");
