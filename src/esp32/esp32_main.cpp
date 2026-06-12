@@ -603,6 +603,9 @@ void esp32setup()
     Serial.begin(MONITOR_SPEED);
     Serial.setTimeout(50);
     
+// 1.1.1??   pinMode(45,OUTPUT);
+// 1.1.1??    digitalWrite(45, LOW);
+
     // Wartet maximal 3 Sekunden auf den seriellen Monitor
     unsigned long startTime = millis();
     while (!Serial && (millis() - startTime < 5000)) {

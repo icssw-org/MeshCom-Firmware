@@ -796,6 +796,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                     queueDisplayText(aprsmsg, rssi, snr);
 
+                                    if(bDisplayVia)
+                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+
+
                                     addBLEOutBuffer(tempRcvBuffer, tempsize);
                                 }
                                 else
@@ -804,6 +808,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     // next sequence to send incomming DM-Message to Display and/or APP via BLE
                                     //
                                     queueDisplayText(aprsmsg, rssi, snr);
+
+                                    if(bDisplayVia)
+                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
 
                                     addBLEOutBuffer(RcvBuffer, size);
                                 }
@@ -817,12 +824,20 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 if(memcmp(aprsmsg.msg_payload.c_str(), "{MCP}", 5) == 0)
                                 {
                                     queueDisplayText(aprsmsg, rssi, snr);
+
+                                    if(bDisplayVia)
+                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+
                                     bSendAckGateway=false;
                                 }
                                 else
                                 if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
                                 {
                                     queueDisplayText(aprsmsg, rssi, snr);
+
+                                    if(bDisplayVia)
+                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+
                                     bSendAckGateway=false;
                                 }
                                 else
@@ -831,7 +846,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}<", 6) == 0)
                                         bMeshDestination = false;   // falsche Zeit nicht weiter geben
                                     else
+                                    {
                                         queueDisplayText(aprsmsg, rssi, snr);
+
+                                        if(bDisplayVia)
+                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+                                    }
 
                                     bSendAckGateway=false;
                                 }
@@ -843,6 +863,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || CheckOwnGroup(destination_call))
                                     {
                                         queueDisplayText(aprsmsg, rssi, snr);
+
+                                        if(bDisplayVia)
+                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
 
                                         // APP Offline
                                         if(isPhoneReady == 0)
@@ -874,6 +897,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                             if(bSOFTSERREAD)
                                             {
                                                 queueDisplayText(aprsmsg, rssi, snr);
+
+                                                if(bDisplayVia)
+                                                    printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+
                                                 displaySOFTSER(aprsmsg);
                                             }
                                         #endif
@@ -1073,6 +1100,20 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         goto skip_relay;
                                     }
                                 }
+
+                                ////////////////////////////////////////////////////////////
+                                //Next hop new via
+                                if(bDisplayVia)
+                                    printfdeb("[MESH<]...DEST-CALL:%s ... DEST-PATH:%s\n", aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_destination_path.c_str());
+
+                                aprsmsg.msg_destination_path = aprsmsg.msg_destination_call;
+
+                                checkVia(aprsmsg);
+
+                                if(bDisplayVia)
+                                    printfdeb("[MESH>]...SRC-PATH:%s ... DEST-PATH:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str());
+                                //
+                                ////////////////////////////////////////////////////////////
 
                                 if(bSHORTPATH)
                                 {
