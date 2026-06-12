@@ -63,6 +63,14 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    if(setupData->paramName.equals("setvia")) {        
+        snprintf(message_text, sizeof(message_text), "--via %s", setupData->paramValue.c_str());                   // set command string
+        commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
+        setupData->returnCode = strcmp(meshcom_settings.node_via, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parameter was accepted, return with corresponding code
+        setupData->returnValue = meshcom_settings.node_via;                                                           // send back the current used value
+        return;
+    } else
+
     if(setupData->paramName.equals("onewiregpio")) {        
         snprintf(message_text, sizeof(message_text), "--onewire gpio %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
@@ -612,6 +620,11 @@ void webSetup_getParam(setupStruct *setupData){
 
     if(setupData->paramName.equals("setcall")) {        
         setupData->returnValue = meshcom_settings.node_call;    // send back the current used value
+        return;
+    } else
+
+    if(setupData->paramName.equals("setvia")) {        
+        setupData->returnValue = meshcom_settings.node_via;    // send back the current used value
         return;
     } else
 

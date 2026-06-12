@@ -470,8 +470,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             if(!is_equ(aprsmsg.msg_source_last.c_str(), meshcom_settings.node_call))
             {
-
-            //printfdeb("2:msg_source_last:%s node_call:%s\n", aprsmsg.msg_source_last.c_str(), meshcom_settings.node_call);
+                // print aprs message
+                if(bDisplayInfo)
+                {
+                    printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
+                    printfdeb("\n");
+                    bNewLine=true;
+                }
+                //
+                ///////////////////////////////////////////////
             
                 struct mheardLine mheardLine;
 
@@ -526,13 +533,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         }
                     }
 
-                    if(aprsmsg.msg_source_call == aprsmsg.msg_source_last)
+                    if(msg_type_b_lora == MSG_TYPE_POSITION) // Position
                     {
-                        if(msg_type_b_lora == MSG_TYPE_POSITION) // Position
-                        {
-                            struct aprsPosition aprspos;
+                        struct aprsPosition aprspos;
 
-                            if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
+                        if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
+                        {
+                            if(aprsmsg.msg_source_call == aprsmsg.msg_source_last)
                             {
                                 // Display Distance, Direction
                                 lat = conv_coord_to_dec(aprspos.lat);
@@ -552,38 +559,54 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     mheardLat[ipos]=lat;
                                     mheardLon[ipos]=lon;
                                     mheardAlt[ipos]=alt;
+
+                                    // ab version v4.35p.06.11 kommt das als /N99 mit der Position auch mit
+                                    if(aprspos.ncnt > 0)
+                                    {
+                                        // ab version v4.35p.06.11 kommt das als /N99 mit der Position auch mit
+                                        mheardNCount[ipos]=aprspos.ncnt;
+                                    }
+                                }
+
+                                #if not defined(BOARD_T5_EPAPER)
+                                if(lat != 0.0 && lon != 0.0 && meshcom_settings.node_lat != 0.0 && meshcom_settings.node_lon != 0.0)
+                                {
+                                    #if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS)
+                                    mheardLine.mh_dist = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
+                                    //printfdeb("mheardLine.mh_dist:%.2lf lat:%.4lf, lon:%.4lf  lat:%.4lf, lon:%.4lf\n", mheardLine.mh_dist, lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon);
+                                    #else
+                                    mheardLine.mh_dist = 0;
+                                    #endif
+                                }
+                                #endif
+                            }
+                            else
+                            {
+                                // ab version v4.35p.06.11 kommt das als /N99 mit der Position auch mit
+                                if(aprspos.ncnt > 0)
+                                {
+                                    for(int iset=0; iset<MAX_MHEARD; iset++)
+                                    {
+                                        if(mheardCalls[iset][0] != 0x00)
+                                        {
+                                            if(is_equ(mheardCalls[iset], aprsmsg.msg_source_call.c_str()))
+                                            {
+                                                // ab version v4.35p.06.11 kommt das als /N99 mit der Position auch mit
+                                                mheardNCount[iset]=aprspos.ncnt;
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-
-                    #if not defined(BOARD_T5_EPAPER)
-                    if(lat != 0.0 && lon != 0.0 && meshcom_settings.node_lat != 0.0 && meshcom_settings.node_lon != 0.0)
-                    {
-                        #if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS)
-                        mheardLine.mh_dist = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;    // km;
-                        //printfdeb("mheardLine.mh_dist:%.2lf lat:%.4lf, lon:%.4lf  lat:%.4lf, lon:%.4lf\n", mheardLine.mh_dist, lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon);
-                        #else
-                        mheardLine.mh_dist = 0;
-                        #endif
-                    }
-                    #endif
                 }
 
                 updateMheard(mheardLine, isPhoneReady);
                 
                 // last heard LoRa MeshCom-Packet
                 lastHeardTime = millis();
-
-                // print aprs message
-                if(bLORADEBUG && bDisplayInfo)
-                {
-                    printBuffer_aprs((char*)"MH-LoRa", aprsmsg);
-                    printfdeb("\n");
-                    bNewLine=true;
-                }
-                //
-                ///////////////////////////////////////////////
 
                 if(aprsmsg.payload_type == '@')
                 {

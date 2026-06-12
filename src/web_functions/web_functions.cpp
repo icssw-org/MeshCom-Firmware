@@ -1059,6 +1059,7 @@ void sub_page_setup()
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid grid3\">");
     _create_setup_textinput_element("nodecall", "Call-Sign", meshcom_settings.node_call, "AB1CDE-12", "setcall", 9, false, false); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("viacall", "Via-Call-Sign", meshcom_settings.node_via, "AB1CDE-12", "setvia", 9, false, false); // create Textinput-Element including Label and Button
 
     web_client.println("<label for=\"country\">Country</label>");
     web_client.println("<select id=\"country\" name=\"country\">");
@@ -1082,6 +1083,7 @@ void sub_page_setup()
     //NOT USED _create_setup_switch_element("small", "small Display", "reduce content for small displays", bSMALLDISPLAY); // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("volt", "Voltage", "show batt. voltage, not percent", bDisplayVolt);           // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("mesh", "Mesh", "enable mesh/forwarding of received LoRa messages", bMESH);    // create Switch-Element inclucing Label and Description
+    _create_setup_switch_element("via", "Via", "enable via", bVIA);    // create Switch-Element inclucing Label and Description
 
 // We support OTA only for ESP based devices, not RAK
 #ifdef ESP32
@@ -1498,6 +1500,7 @@ void sub_page_info()
     web_client.printf("Gateway: %s<br>", (bGATEWAY ? "on" : "off"));
     web_client.printf("Analog: %s<br>", (bAnalogCheck ? "on" : "off"));
     web_client.printf("Mesh: %s<br>", (bMESH ? "on" : "off"));
+    web_client.printf("Routing: %s<br>", (bVIA ? "on" : "off"));
     web_client.printf("Button: %s<br>", (bButtonCheck ? "on" : "off"));
     web_client.printf("Debug: %s<br>", (bDEBUG ? "on" : "off"));
     web_client.printf("Debug LoRa: %s<br>", (bLORADEBUG ? "on" : "off"));
