@@ -468,6 +468,7 @@ int gps_refresh_track = 0;
 unsigned long posinfo_timer = 0;        // we check periodically to send GPS
 unsigned long posinfo_timer_min = 0;    // we check min. periodically to send GPS
 unsigned long heyinfo_timer = 0;        // we check periodically to send HEY
+int ncnt_hold = 0;
 
 // Priority Queue arrays
 uint8_t ringPriority[MAX_RING];                 // Prio 1-5 pro Slot
@@ -3247,6 +3248,7 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     char cgasres[15]={0};
     char cco2[15]={0};
     char cgrc[50]={0};
+    char cncnt[5]={0};
 
     char csfpegel[15]={0};
     char csfpegel2[15]={0};
@@ -3381,6 +3383,14 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
             if(memcmp(cpress, "/C=nan", 6) == 0)
                 return "";
         }
+
+        int incnt = getMheardCount();
+        if(incnt > 99)
+            incnt=99;
+        if(incnt > 0)
+        {
+            snprintf(cncnt, sizeof(cncnt), "/N%i", incnt);
+        }
     }
 
     /////////////////////////////////////////////////////////////////
@@ -3425,6 +3435,7 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     strconcat.concat(cinaU);
     strconcat.concat(cinaI);
     strconcat.concat(ctele);
+    strconcat.concat(cncnt);
 
     snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, strconcat.c_str());
 

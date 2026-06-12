@@ -230,7 +230,8 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+60*60*12) < getUnixClock())    // 12h
+            // DELETE after 12h
+            if((mheardEpoch[iset]+60*60*12) < getUnixClock())   // mheard last 12 hours
             {
                 mheardCalls[iset][0] = 0x00;
             }
@@ -254,22 +255,25 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
     //printfdeb("inext:%i ipos:%i\n", inext, ipos);
 
-    bool bNew=false;
+    bool bOld=true;
 
-    if(inext >= 0 && ipos == -1)
+    if(ipos == -1)
     {
-        ipos=inext;
-        bNew=false;
-    }
-    else
-    if(inext == -1 && ipos == -1)
-    {
-        ipos=mheardWrite;
-        
-        mheardWrite++;
+        if(inext >= 0)
+        {
+            ipos=inext;
+        }
+        else
+        {
+            ipos=mheardWrite;
+            
+            mheardWrite++;
 
-        if(mheardWrite >= MAX_MHEARD)
-            mheardWrite=0;
+            if(mheardWrite >= MAX_MHEARD)
+                mheardWrite=0;
+        }
+
+        bOld=false;
     }
 
     memset(mheardCalls[ipos], 0x00, sizeof(mheardCalls[ipos]));
@@ -277,21 +281,23 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     
     mheardEpoch[ipos] = getUnixClock();
 
-    // REP action
-    decodeMHeard(mheardBuffer[ipos], mheardLine_save);
-
-    // da bei dem eintreffen von updateMHeard kein NCOUNT dabei ist
-    // wird dieser aus dem bestehenden Tabellen-Wert  mheardNCount[]; ergänzt
-    if(bNew)
-        mheardLine.mh_ncount = 0;
-    else
+    if(bOld)
     {
-        mheardLine.mh_ncount = mheardLine_save.mh_ncount;
+        // REP action
+        decodeMHeard(mheardBuffer[ipos], mheardLine_save);
+
+        // da bei dem eintreffen von updateMHeard kein NCOUNT dabei ist
+        // wird dieser aus dem bestehenden Tabellen-Wert  mheardNCount[]; ergänzt
+        
+        if(mheardLine.mh_ncount == 0)
+            mheardLine.mh_ncount = mheardNCount[ipos]; // 8immer aus array nehmen
+
+        // Distance only on new calculation
+        if(mheardLine.mh_dist < 0)
+            mheardLine.mh_dist = mheardLine_save.mh_dist;
     }
 
-    // Distance only on new calculation
-    if(mheardLine.mh_dist < 0)
-        mheardLine.mh_dist = mheardLine_save.mh_dist;
+    mheardNCount[ipos] = mheardLine.mh_ncount;
 
     char cBuffer[sizeof(mheardBuffer[ipos])];
     snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
@@ -383,41 +389,35 @@ void updateHeyPath(struct mheardLine &mheardLine)
                 // NeighborCount einfügen
                 // check new/old format
                 // new R99; R99;77,7 ...
-                // old R99,99,99;77,7 ... oder R99,77 
-                
+                // old R99,99,99;77,7 ... oder R99,77  ... oder R99
+
+                // correct old format
+                mheardLine.mh_path_payload.concat(";");
+
                 int ipos=mheardLine.mh_path_payload.indexOf(";");
 
-                if(ipos > 0)
+                if(ipos > 0 && mheardLine.mh_path_payload.startsWith("R"))
                 {
-                    // check old format
-                    if(mheardLine.mh_path_payload.substring(0, ipos).indexOf(",") < 0)
+                    if(bDisplayCont)
                     {
-                        if(bDisplayCont)
-                        {
-                            printdeb(mheardLine.mh_path_payload.substring(1, ipos));
-                            printdeb(" count:");
-                        }
-
-                        mheardNCount[imh] = mheardLine.mh_path_payload.substring(1, ipos).toInt();
-                        mheardLine.mh_ncount = mheardNCount[imh];
-
-                        // REP action
-                        decodeMHeard(mheardBuffer[imh], mheardLine_save);
-
-                        if(bDisplayCont)
-                            printdeb(mheardLine.mh_ncount);
-
-                        char cBuffer[sizeof(mheardBuffer[imh])];
-                        snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine_save.mh_hw,
-                        mheardLine_save.mh_mod, mheardLine_save.mh_rssi, mheardLine_save.mh_snr, mheardLine_save.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
-                        memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
+                        printdeb(mheardLine.mh_path_payload.substring(1, ipos));
+                        printdeb(" count:");
                     }
+
+                    mheardLine.mh_ncount = mheardLine.mh_path_payload.substring(1, ipos).toInt();
+                    mheardNCount[imh] = mheardLine.mh_ncount;
+
+                    // REP action
+                    decodeMHeard(mheardBuffer[imh], mheardLine_save);
+
+                    char cBuffer[sizeof(mheardBuffer[imh])];
+                    snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine_save.mh_hw,
+                    mheardLine_save.mh_mod, mheardLine_save.mh_rssi, mheardLine_save.mh_snr, mheardLine_save.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
+                    memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
                 }
 
                 if(bDisplayCont)
                     printlndeb("");
-
-                return; // call heard direct
             }
         }
     }
@@ -428,8 +428,8 @@ void updateHeyPath(struct mheardLine &mheardLine)
     {
         if(mheardPathCalls[iset][0] != 0x00)
         {
-            // PATH DELETE after 12 Hours
-            if((mheardPathEpoch[iset]+60*60*12) < getUnixClock())
+            // PATH DELETE after 1 Hours
+            if((mheardPathEpoch[iset]+60*60*12) < getUnixClock())  // mheard last 12 hours
             {
                 mheardPathCalls[iset][0] = 0x00;
             }
@@ -517,7 +517,7 @@ int getMheardCount()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+60*60*12) > getUnixClock())  // mheard last hour
+            if((mheardEpoch[iset]+60*60) > getUnixClock())  // mheard count only last hour
             {
                 imhcount++;
             }
@@ -551,8 +551,7 @@ void sendMheard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            // PATH DELETE after 12 Hours
-            if((mheardEpoch[iset]+60*60*12) > getUnixClock()) // 12h
+            if((mheardEpoch[iset]+60*60*12) > getUnixClock())  // mheard last 12 hours
             {
                 initMheardLine(mheardLine);
 
@@ -604,7 +603,8 @@ void sendMheard()
                 mhdoc["DIST"] = mheardLine.mh_dist;
                 mhdoc["PL"] = mheardLine.mh_path_len;
                 mhdoc["MESH"] = mheardLine.mh_mesh;
-                mhdoc["NCNT"] = mheardLine.mh_ncount;
+                mheardLine.mh_ncount = mheardNCount[iset];
+                mhdoc["NCNT"] = mheardNCount[iset]; // 8immer aus array nehmen
 
                 // send to Phone
                 uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
@@ -628,7 +628,7 @@ void showMHeard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+60*60*12) > getUnixClock())
+            if((mheardEpoch[iset]+60*60*12) > getUnixClock())  // mheard last 12 hours
             {
                 printlndeb("|------------|------------|----------|-----|-----------------|-----|------|------|------|----|---|----|");
 
@@ -649,7 +649,7 @@ void showMHeard()
                 printfdeb("%5.1lf |", mheardLine.mh_dist);
                 printfdeb("%3i |", mheardLine.mh_path_len);
                 printfdeb("%2i |", mheardLine.mh_mesh);
-                printfdeb("%3i |\n", mheardLine.mh_ncount);
+                printfdeb("%3i |\n", mheardNCount[iset]); // 8immer aus array nehmen
             }
         }
     }
@@ -666,7 +666,7 @@ void showPath()
     {
         if(mheardPathCalls[iset][0] != 0x00)
         {
-            if((mheardPathEpoch[iset]+60*60*12) > getUnixClock())    // 12h
+            if((mheardPathEpoch[iset]+60*60*12) > getUnixClock())  // path last 12 hours
             {
                 printlndeb("|---------------------|-----------------------------------------------------------------|");
 
@@ -830,7 +830,7 @@ void showMHeardTDECK()
             snprintf(buf, 7, "%4i", mheardLine.mh_snr);
             lv_table_set_cell_value(mheard_ta, row, 5, buf);
 
-            snprintf(buf, 7, "%4i", mheardLine.mh_ncount);
+            snprintf(buf, 7, "%4i", mheardNCount[iset]); // 8immer aus array nehmen
             lv_table_set_cell_value(mheard_ta, row, 6, buf);
 
             row++;

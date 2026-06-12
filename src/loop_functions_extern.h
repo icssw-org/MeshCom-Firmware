@@ -283,6 +283,8 @@ extern int gps_refresh_track;
 extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long posinfo_timer_min;
 extern unsigned long heyinfo_timer;      // we check periodically to send HEY
+extern int ncnt_hold;
+
 extern unsigned long telemetry_timer;    // we check periodically to send TELEMETRY
 extern unsigned long temphum_timer;      // we check periodically get TEMP/HUM
 extern unsigned long druck_timer;        // we check periodically get AIRPRESURE

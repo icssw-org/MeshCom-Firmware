@@ -517,6 +517,7 @@ void initAPRSPOS(struct aprsPosition &aprspos)
     aprspos.qnh = 0.0;
     aprspos.gasres = 0.0;
     aprspos.co2 = 0.0;
+    aprspos.ncnt = 0;
 
     aprspos.version = 0;
     aprspos.telemetry = 0;
@@ -530,7 +531,7 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     unsigned int itxt=0;
     int istarttext = 0;
 
-    
+    PayloadBuffer.concat(" ");
 
     memset(decode_text, 0x00, sizeof(decode_text));
     int ipt=0;
@@ -859,6 +860,34 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
                 }
 
                 if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
+            }
+
+            break;
+        }
+    }
+
+    // check NCNT
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+    
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'N')
+        {
+            for(unsigned int id=itxt+2;id<PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
+                {
+                    sscanf(decode_text, "%d", &aprspos.ncnt);
+                    break;
+                }
+
+                if(ipt < 3)
                 {
                     decode_text[ipt]=PayloadBuffer.charAt(id);
                     ipt++;

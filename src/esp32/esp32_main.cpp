@@ -2940,11 +2940,23 @@ void esp32loop()
         gps_refresh_timer = millis();
     }
 
+    // check NCNT modified
+    int incnt = getMheardCount();
+    if(ncnt_hold != incnt)
+    {
+        // minimal alle 60 sec
+        if((posinfo_timer_min + 60000) < millis())
+        {
+            posinfo_shot = true;
+            ncnt_hold = incnt;
+        }
+    }
+
     // posinfo_interval in Seconds
     if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
     {
-        // minimal transmit time only max 15 sec
-        if((posinfo_timer_min + 15000) < millis())
+        // minimal transmit time only max 30 sec
+        if((posinfo_timer_min + 30000) < millis())
         {
             if(bDisplayInfo)
             {

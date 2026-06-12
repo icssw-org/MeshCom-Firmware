@@ -57,6 +57,7 @@ struct aprsPosition
     float qnh;
     float gasres;
     float co2;
+    int ncnt;
 
     // more
     int version;

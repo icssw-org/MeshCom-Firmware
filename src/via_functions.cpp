@@ -111,12 +111,15 @@ void checkVia(struct aprsMessage &aprsmsg)
                 {
                     if(mheardCalls[iset][0] != 0x00)
                     {
-                        if(mheardNCount[iset] > 1 && mheardNCount[iset] > inct)
+                        if((mheardEpoch[iset]+60*60) < getUnixClock())   // mheard only last hour
                         {
-                            memset(cMH, 0x00, sizeof(cMH));
-                            strncpy(cMH, mheardCalls[iset], sizeof(cMH));
+                            if(mheardNCount[iset] > 1 && mheardNCount[iset] > inct)
+                            {
+                                memset(cMH, 0x00, sizeof(cMH));
+                                strncpy(cMH, mheardCalls[iset], sizeof(cMH));
 
-                            inct = mheardNCount[iset];
+                                inct = mheardNCount[iset];
+                            }
                         }
                     }
                 }
