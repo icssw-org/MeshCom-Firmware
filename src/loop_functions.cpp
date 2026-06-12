@@ -101,6 +101,7 @@ bool bDisplayOff = false;
 bool bDisplayIsOff = false;
 bool bDisplayVolt = false;
 bool bDisplayInfo = false;
+bool bDisplayVia = false;
 bool bDisplayCont = false;
 bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;

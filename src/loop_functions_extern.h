@@ -50,6 +50,7 @@ extern bool bDisplayOff;
 extern bool bDisplayIsOff;
 extern bool bDisplayVolt;
 extern bool bDisplayInfo;
+extern bool bDisplayVia;
 extern bool bDisplayCont;
 extern bool bDisplayRetx;
 extern unsigned long DisplayOffWait;

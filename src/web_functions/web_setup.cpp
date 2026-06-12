@@ -165,6 +165,14 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    if(setupData->paramName.equals("via")) {
+        snprintf(message_text, sizeof(message_text), "--via %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = bVIA == (setupData->paramValue.compareTo("on")==0)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bVIA?"on":"off";
+        return;
+    } else
+
     if(setupData->paramName.equals("mesh")) {
         snprintf(message_text, sizeof(message_text), "--mesh %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
@@ -682,6 +690,11 @@ void webSetup_getParam(setupStruct *setupData){
 
     if(setupData->paramName.equals("volt")) {
         setupData->returnValue = bDisplayVolt?"on":"off";
+        return;
+    } else
+
+    if(setupData->paramName.equals("via")) {
+        setupData->returnValue = bVIA?"on":"off";
         return;
     } else
 

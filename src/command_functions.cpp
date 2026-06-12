@@ -2451,6 +2451,30 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"viadebug on") == 0)
+    {
+        bDisplayVia=true;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--viadebug on");
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"viadebug off") == 0)
+    {
+        bDisplayVia=false;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--viadebug off");
+        }
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"via on") == 0)
     {
         bVIA=true;
