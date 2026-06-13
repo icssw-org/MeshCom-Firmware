@@ -656,6 +656,8 @@ void btn_event_handler_setup(lv_event_t * e)
 
         save_settings();
 
+        tdeck_refresh_SET_view();
+
         lv_tabview_set_act(tv, 0, LV_ANIM_ON);
     }
     else
