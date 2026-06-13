@@ -196,11 +196,11 @@ void init_flash(void)
     meshcom_settings.node_kbllightlock = preferences.getBool("node_kllock", false);
     meshcom_settings.node_modus = preferences.getInt("node_modus", 0);
     meshcom_settings.node_mute = preferences.getBool("node_mute", false);
-    meshcom_settings.node_persist_to_flash = preferences.getBool("node_perflash", true);
-    meshcom_settings.node_persist_to_sd = preferences.getBool("node_persd", true);
+    meshcom_settings.node_persist_to_flash = preferences.getBool("node_perflash", false);
+    meshcom_settings.node_persist_to_sd = preferences.getBool("node_persd", false);
     meshcom_settings.node_immediate_save = preferences.getBool("node_immsave", false);
     meshcom_settings.node_kbl_sync = preferences.getBool("node_kblsync", false);
-    meshcom_settings.node_wifion = preferences.getBool("node_wifion", true);
+    meshcom_settings.node_wifion = preferences.getBool("node_wifion", false);
     #endif
 
     meshcom_settings.node_wifi_power = preferences.getInt("node_wifip", 60);

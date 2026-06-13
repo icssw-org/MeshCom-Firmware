@@ -1300,7 +1300,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_align_to(btn_persist_to_flash, setup_save_label, LV_ALIGN_OUT_RIGHT_TOP, 5, -2);
     lv_obj_set_size(btn_persist_to_flash, 75, 35);
 
-    /* Make the button checkable (like a toggle) */
+    // Make the button checkable (like a toggle) 
     lv_obj_add_flag(btn_persist_to_flash, LV_OBJ_FLAG_CHECKABLE);
     lv_obj_set_style_bg_color(btn_persist_to_flash, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(btn_persist_to_flash, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
@@ -1315,7 +1315,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_align_to(btn_persist_to_SD, btn_persist_to_flash, LV_ALIGN_OUT_RIGHT_TOP, 5, 0);
     lv_obj_set_size(btn_persist_to_SD, 75, 35);
 
-    /* Make the button checkable (like a toggle) */
+    // Make the button checkable (like a toggle)
     lv_obj_add_flag(btn_persist_to_SD, LV_OBJ_FLAG_CHECKABLE);
     lv_obj_set_style_bg_color(btn_persist_to_SD, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(btn_persist_to_SD, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
@@ -1330,7 +1330,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_align_to(btn_persist_immediate, btn_persist_to_SD, LV_ALIGN_OUT_RIGHT_TOP, 5, 0);
     lv_obj_set_size(btn_persist_immediate, 75, 35);
 
-    /* Make the button checkable (like a toggle) */
+    // Make the button checkable (like a toggle)
     lv_obj_add_flag(btn_persist_immediate, LV_OBJ_FLAG_CHECKABLE);
     lv_obj_set_style_bg_color(btn_persist_immediate, lv_color_make(0xd2, 0xd2, 0xd2), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(btn_persist_immediate, lv_color_make(0x00, 0xa3, 0x00), LV_PART_MAIN | LV_STATE_CHECKED);
