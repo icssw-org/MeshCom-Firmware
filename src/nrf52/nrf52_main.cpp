@@ -570,6 +570,11 @@ void nrf52setup()
 
     bDisplayInfo = bLORADEBUG;
 
+    if(strlen(meshcom_settings.node_aprsmc) < 4)
+    {
+        strcpy(meshcom_settings.node_aprsmc, (char*)"APRSMC");  // default
+    }
+
     meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
     meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
 
@@ -2648,9 +2653,16 @@ void sendUDP()
                     decodeAPRS(convBuffer, msg_len, aprsmsg);
 
                     // print aprs message
-                    if(bDisplayInfo)
+                    if(bDisplayVia)
                     {
-                        printBuffer_aprs((char*)"TX-UDP  ", aprsmsg);
+                        printBuffer_aprs((char*)"[MESHu]...TX-UDP  ", aprsmsg);
+                    }
+                    else
+                    {
+                        if(bDisplayInfo)
+                        {
+                            printBuffer_aprs((char*)"TX-UDP  ", aprsmsg);
+                        }
                     }
                 }
             }

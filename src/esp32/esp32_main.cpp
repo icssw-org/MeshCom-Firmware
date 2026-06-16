@@ -798,6 +798,11 @@ void esp32setup()
     bDEBUGCSV = meshcom_settings.node_sset4 & 0x0001;
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
 
+    if(strlen(meshcom_settings.node_aprsmc) < 4)
+    {
+        strcpy(meshcom_settings.node_aprsmc, (char*)"APRSMC");  // default
+    }
+
     // Time from Flash
     loadTimePersistence();
     snprintf(cTimeSource, sizeof(cTimeSource), (char*)"INIT");
@@ -943,7 +948,7 @@ void esp32setup()
         save_settings();
     }
 
-    global_batt = 4125.0;
+    global_batt = 4200.0;
 
     posinfo_interval = POSINFO_INTERVAL;
 
@@ -982,6 +987,15 @@ void esp32setup()
         {
             bButtonCheck = true;
             meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0035;	// bDisplayPos = true, bButtonCheck = true, bGPSON = true
+            save_settings();
+        }
+    #endif
+
+    #ifdef SET_BUTTON_PIN
+        if(meshcom_settings.node_sset == 0x0000)
+        {
+            bButtonCheck = true;
+            meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0010;
             save_settings();
         }
     #endif

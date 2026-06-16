@@ -67,7 +67,7 @@ struct s_meshcom_settings
 
 	float node_temp2 = 0;
 
-	float node_utcoff = 1;
+	float node_utcoff = 2;
 
 	// BME680
 	float node_gas_res = 0;
@@ -174,6 +174,8 @@ struct s_meshcom_settings
 	char node_via[40] = {0}; 
 
  	int node_sset4 = 0x0002;	//DEBUGEN = true
+
+	char node_aprsmc[10] = {0};
 
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// nicht im Flash

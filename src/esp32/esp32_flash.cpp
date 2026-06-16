@@ -255,6 +255,10 @@ void init_flash(void)
     snprintf(meshcom_settings.node_via, sizeof(meshcom_settings.node_via), "%s", strVar.c_str());
 
     meshcom_settings.node_sset4 = preferences.getInt("node_sset4", 0x0002); // defaut 0x0002: DEBUGEN = true
+
+    strVar = preferences.getString("node_aprsmc");
+    snprintf(meshcom_settings.node_aprsmc, sizeof(meshcom_settings.node_aprsmc), "%s", strVar.c_str());
+
     preferences.end();
 }
 
@@ -516,6 +520,9 @@ void save_settings(void)
     preferences.putString("node_via", strVar); 
 
     preferences.putInt("node_sset4", meshcom_settings.node_sset4);
+
+    strVar = meshcom_settings.node_aprsmc;
+    preferences.putString("node_aprsmc", strVar); 
 
     //printfdeb("[INIT]...FLASH #entries %i after write\n", (int)preferences.freeEntries());
     preferences.end();
