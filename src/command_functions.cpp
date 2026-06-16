@@ -4232,6 +4232,19 @@ void commandAction(char *umsg_text, bool ble)
         bAnalogSetting=true;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"aprsmc ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
+
+        String strCallSign = _owner_c;
+        
+        strCallSign.toUpperCase();
+    
+        snprintf(meshcom_settings.node_aprsmc, sizeof(meshcom_settings.node_aprsmc), "%s", strCallSign.c_str());
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"aprsset") == 0)
     {
         sendAPRSset();
@@ -4669,8 +4682,8 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
 
             printfdeb("...BTCODE %06i\n", meshcom_settings.bt_code);
-            printfdeb("...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
-                    meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"),  (bDisplayOff?"off":"on"),
+            printfdeb("...APRSMC: %s\n...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
+                    meshcom_settings.node_aprsmc, meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"),  (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
 
             for(int ig=0;ig<6;ig++)
