@@ -983,7 +983,7 @@ void esp32setup()
     }
 
     #ifdef MODUL_FW_TBEAM
-        if(meshcom_settings.node_sset == 0x0000)
+        if(meshcom_settings.node_sset == 0x0004)
         {
             bButtonCheck = true;
             meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0035;	// bDisplayPos = true, bButtonCheck = true, bGPSON = true
@@ -992,7 +992,7 @@ void esp32setup()
     #endif
 
     #ifdef SET_BUTTON_PIN
-        if(meshcom_settings.node_sset == 0x0000)
+        if(meshcom_settings.node_sset == 0x0004)
         {
             bButtonCheck = true;
             meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0010;
