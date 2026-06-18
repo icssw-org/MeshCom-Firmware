@@ -111,7 +111,7 @@ void checkVia(struct aprsMessage &aprsmsg)
                 {
                     if(mheardCalls[iset][0] != 0x00)
                     {
-                        if((mheardEpoch[iset]+60*60) > getUnixClock())   // mheard only last hour
+                        if((mheardEpoch[iset]+(60*60)) > getUnixClock())   // mheard only last hour
                         {
                             if(mheardNCount[iset] > 1 && mheardNCount[iset] > inct)
                             {

@@ -231,7 +231,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
         if(mheardCalls[iset][0] != 0x00)
         {
             // DELETE after 12h
-            if((mheardEpoch[iset]+60*60*12) < getUnixClock())   // mheard last 12 hours
+            if((mheardEpoch[iset]+(60*60*12)) < getUnixClock())   // mheard last 12 hours
             {
                 mheardCalls[iset][0] = 0x00;
             }
@@ -429,7 +429,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
         if(mheardPathCalls[iset][0] != 0x00)
         {
             // PATH DELETE after 1 Hours
-            if((mheardPathEpoch[iset]+60*60*12) < getUnixClock())  // mheard last 12 hours
+            if((mheardPathEpoch[iset]+(60*60*12)) < getUnixClock())  // mheard last 12 hours
             {
                 mheardPathCalls[iset][0] = 0x00;
             }
@@ -517,7 +517,7 @@ int getMheardCount()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+60*60) > getUnixClock())  // mheard count only last hour
+            if((mheardEpoch[iset]+(60*60)) > getUnixClock())  // mheard count only last hour
             {
                 imhcount++;
             }
@@ -551,7 +551,7 @@ void sendMheard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+60*60*12) > getUnixClock())  // mheard last 12 hours
+            if((mheardEpoch[iset]+(60*60*12)) > getUnixClock())  // mheard last 12 hours
             {
                 initMheardLine(mheardLine);
 
@@ -619,7 +619,7 @@ void sendMheard()
 
 void showMHeard()
 {
-    printlndeb("/-----------------------------------------------------------------------------------------------------\\");
+    printlndeb("\n/-----------------------------------------------------------------------------------------------------\\");
     printlndeb("|MHeard call |    date    |   time   | typ | source hardware | mod | rssi |  snr | dist | pl | m | nc |");
 
     mheardLine mheardLine;
@@ -628,7 +628,7 @@ void showMHeard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+60*60*12) > getUnixClock())  // mheard last 12 hours
+            if((mheardEpoch[iset]+(60*60*12)) > getUnixClock())  // mheard last 12 hours
             {
                 printlndeb("|------------|------------|----------|-----|-----------------|-----|------|------|------|----|---|----|");
 
@@ -659,14 +659,14 @@ void showMHeard()
 
 void showPath()
 {
-    printlndeb("/---------------------------------------------------------------------------------------\\");
+    printlndeb("\n/---------------------------------------------------------------------------------------\\");
     printlndeb("|       date          | lng/Gate/Path                                                   |");
 
     for(int iset=0; iset<MAX_MHPATH; iset++)
     {
         if(mheardPathCalls[iset][0] != 0x00)
         {
-            if((mheardPathEpoch[iset]+60*60*12) > getUnixClock())  // path last 12 hours
+            if((mheardPathEpoch[iset]+(60*60*12)) > getUnixClock())  // path last 12 hours
             {
                 printlndeb("|---------------------|-----------------------------------------------------------------|");
 
