@@ -235,14 +235,20 @@ static bool decodeConfigEcho(const Frame& f, RadioConfig& out) {
 // ---------------------------------------------------------------------------
 void parserReset(Parser& p) { p.have = 0; }
 
-size_t parserPush(Parser& p, const uint8_t* data, size_t n) {
-    if (n == 0 || !data) return 0;
+ParserPushStatus parserPush(Parser& p, const uint8_t* data, size_t n, size_t& consumed) {
+    consumed = 0;
+    if (n == 0) return PARSER_PUSH_OK;               // nothing to do
+    if (!data)  return PARSER_PUSH_INVALID_INPUT;    // null with nonzero length
     const size_t space = sizeof(p.buf) - p.have;
-    const size_t take  = (n < space) ? n : space;   // consume only what currently fits
-    if (take == 0) return 0;                         // buffer full: caller must pop first
-    std::memcpy(p.buf + p.have, data, take);
-    p.have += take;
-    return take;
+    const size_t take  = (n < space) ? n : space;    // consume only what currently fits
+    if (take) {
+        std::memcpy(p.buf + p.have, data, take);
+        p.have   += take;
+        consumed  = take;
+    }
+    // NEED_DRAIN whenever the buffer could not take everything (a prefix, possibly
+    // zero, was consumed). The caller pops frames and retries the remainder.
+    return (take == n) ? PARSER_PUSH_OK : PARSER_PUSH_NEED_DRAIN;
 }
 
 PopResult parserPop(Parser& p, Frame& out, uint8_t& err) {
@@ -290,9 +296,11 @@ void Session::clearVolatile() {
     std::memset(&last_rx_, 0, sizeof(last_rx_));
 }
 
-void Session::setDesiredConfig(const RadioConfig& cfg) {
+bool Session::setDesiredConfig(const RadioConfig& cfg) {
+    if (!radioConfigValid(cfg)) return false;   // invalid: leave session state untouched
     cfg_      = cfg;
     have_cfg_ = true;
+    return true;
 }
 
 Event Session::fail(uint8_t reason) {

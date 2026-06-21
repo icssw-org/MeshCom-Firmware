@@ -56,7 +56,9 @@ static uint16_t buildRxPayload(uint8_t* buf, int16_t rssi, int16_t snr,
 
 // Push a single complete frame into a parser with room for it.
 static void pushOne(Parser& p, const uint8_t* d, size_t n) {
-    TEST_ASSERT_EQUAL_size_t(n, parserPush(p, d, n));
+    size_t consumed = 0;
+    TEST_ASSERT_EQUAL(PARSER_PUSH_OK, parserPush(p, d, n, consumed));
+    TEST_ASSERT_EQUAL_size_t(n, consumed);
 }
 
 // Stream an entire input buffer through the bounded parser, collecting frames.
@@ -70,9 +72,11 @@ static int streamAll(Parser& p, const uint8_t* data, size_t n,
         if (r == POP_GOT_FRAME) { if (cnt < maxOut) out[cnt] = f; ++cnt; continue; }
         if (r == POP_ERROR) { err = e; return cnt; }
         if (off >= n) break;                       // need more bytes; none left
-        size_t took = parserPush(p, data + off, n - off);
+        size_t took = 0;
+        ParserPushStatus st = parserPush(p, data + off, n - off, took);
         off += took;
-        if (took == 0) { stuck = true; break; }    // buffer full, no frame => impossible frame
+        if (st == PARSER_PUSH_INVALID_INPUT) { stuck = true; break; }
+        if (st == PARSER_PUSH_NEED_DRAIN && took == 0) { stuck = true; break; }  // impossible frame
     }
     return cnt;
 }
@@ -87,7 +91,7 @@ static size_t buildMaxRxFrame(uint8_t* out, size_t cap, int16_t rssi, int16_t sn
 }
 
 static void driveToReady(Session& s) {
-    s.setDesiredConfig(sampleConfig());
+    TEST_ASSERT_TRUE(s.setDesiredConfig(sampleConfig()));
     TEST_ASSERT_EQUAL(EV_NONE, s.onConnecting());
     TEST_ASSERT_EQUAL(EV_SEND_HELLO, s.onConnected());
     uint8_t ver = kVersion;
@@ -103,7 +107,7 @@ static void driveToReady(Session& s) {
 }
 
 // Drive to a chosen pre-operational state for PING/state tests.
-static void driveToHandshake(Session& s)      { s.setDesiredConfig(sampleConfig()); s.onConnecting(); s.onConnected(); }
+static void driveToHandshake(Session& s)      { TEST_ASSERT_TRUE(s.setDesiredConfig(sampleConfig())); s.onConnecting(); s.onConnected(); }
 static void driveToAuthenticating(Session& s) { driveToHandshake(s); uint8_t v=kVersion; s.onFrame(makeFrame(MSG_HELLO_ACK,0,&v,1)); }
 static void driveToConfiguring(Session& s)    { driveToAuthenticating(s); uint8_t ok=AUTH_OK; s.onFrame(makeFrame(MSG_AUTH_RESULT,0,&ok,1)); }
 
@@ -153,7 +157,9 @@ void test_partial_then_rest(void) {
     Parser p; parserReset(p);
     Frame f; uint8_t err;
     for (size_t i = 0; i < n; ++i) {
-        TEST_ASSERT_EQUAL_size_t(1, parserPush(p, frame + i, 1));
+        size_t c = 0;
+        TEST_ASSERT_EQUAL(PARSER_PUSH_OK, parserPush(p, frame + i, 1, c));
+        TEST_ASSERT_EQUAL_size_t(1, c);
         PopResult r = parserPop(p, f, err);
         if (i < n - 1) TEST_ASSERT_EQUAL(POP_NEED_MORE, r);
         else           TEST_ASSERT_EQUAL(POP_GOT_FRAME, r);
@@ -207,8 +213,10 @@ void test_null_and_size_guards(void) {
     TEST_ASSERT_EQUAL_size_t(0, encodeTxRequest(frame, sizeof(frame), 0, body, sizeof(body)));
     TEST_ASSERT_EQUAL_size_t(0, encodeTxRequest(frame, sizeof(frame), 1, nullptr, 4));
     Parser p; parserReset(p);
-    TEST_ASSERT_EQUAL_size_t(0, parserPush(p, nullptr, 4));   // null data
-    TEST_ASSERT_EQUAL_size_t(0, parserPush(p, nullptr, 0));   // empty
+    size_t c = 0;
+    TEST_ASSERT_EQUAL(PARSER_PUSH_INVALID_INPUT, parserPush(p, nullptr, 4, c));   // null data
+    TEST_ASSERT_EQUAL_size_t(0, c);
+    TEST_ASSERT_EQUAL(PARSER_PUSH_OK, parserPush(p, nullptr, 0, c));              // empty no-op
 }
 
 // ===========================================================================
@@ -274,8 +282,10 @@ void test_stream_one_frame_split_at_offsets(void) {
     for (size_t si = 0; si < 4; ++si) {
         size_t upto = splits[si];
         while (pos < upto) {
-            size_t took = parserPush(p, frame + pos, upto - pos);
+            size_t took = 0;
+            ParserPushStatus st = parserPush(p, frame + pos, upto - pos, took);
             pos += took;
+            TEST_ASSERT_NOT_EQUAL(PARSER_PUSH_INVALID_INPUT, st);
             TEST_ASSERT_TRUE(took > 0);
         }
         PopResult r = parserPop(p, f, err);
@@ -318,15 +328,59 @@ void test_stream_capacity_boundary_no_silent_discard(void) {
     const size_t total = n1 + n2;
 
     Parser p; parserReset(p);
-    size_t took1 = parserPush(p, buf, total);
-    TEST_ASSERT_EQUAL_size_t(kMaxFrame, took1);     // fills exactly one max frame
-    size_t took2 = parserPush(p, buf + took1, total - took1);
-    TEST_ASSERT_EQUAL_size_t(0, took2);             // full => 0, nothing discarded
+    size_t took1 = 0;
+    TEST_ASSERT_EQUAL(PARSER_PUSH_NEED_DRAIN, parserPush(p, buf, total, took1));  // > one frame
+    TEST_ASSERT_EQUAL_size_t(kMaxFrame, took1);     // fills exactly one max frame (prefix)
+    size_t took2 = 0;
+    TEST_ASSERT_EQUAL(PARSER_PUSH_NEED_DRAIN, parserPush(p, buf + took1, total - took1, took2));
+    TEST_ASSERT_EQUAL_size_t(0, took2);             // full => 0 consumed, nothing discarded
 
     Frame f; uint8_t err;
     TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f, err));   // drain one frame
-    size_t took3 = parserPush(p, buf + took1, total - took1); // now progress resumes
+    size_t took3 = 0;
+    ParserPushStatus st3 = parserPush(p, buf + took1, total - took1, took3);  // progress resumes
     TEST_ASSERT_TRUE(took3 > 0);
+    TEST_ASSERT_NOT_EQUAL(PARSER_PUSH_INVALID_INPUT, st3);
+}
+
+// parser push status: input-error vs backpressure
+void test_parser_push_invalid_input(void) {
+    Parser p; parserReset(p);
+    size_t c = 123;
+    TEST_ASSERT_EQUAL(PARSER_PUSH_INVALID_INPUT, parserPush(p, nullptr, 5, c));
+    TEST_ASSERT_EQUAL_size_t(0, c);                 // nothing consumed
+}
+
+void test_parser_push_ok_reports_consumed(void) {
+    uint8_t frame[kMaxFrame];
+    size_t n = encode(frame, sizeof(frame), MSG_PING, 0, nullptr, 0);
+    Parser p; parserReset(p);
+    size_t c = 0;
+    TEST_ASSERT_EQUAL(PARSER_PUSH_OK, parserPush(p, frame, n, c));
+    TEST_ASSERT_EQUAL_size_t(n, c);                 // exact consumed count
+}
+
+void test_parser_push_need_drain_then_progress(void) {
+    uint8_t buf[kMaxFrame * 2];
+    size_t n1 = buildMaxRxFrame(buf, sizeof(buf), -10, 1, 0x00);
+    size_t n2 = buildMaxRxFrame(buf + n1, sizeof(buf) - n1, -20, 2, 0x40);
+    const size_t total = n1 + n2;
+    Parser p; parserReset(p);
+    size_t c1 = 0;
+    TEST_ASSERT_EQUAL(PARSER_PUSH_NEED_DRAIN, parserPush(p, buf, total, c1));  // cannot take all
+    TEST_ASSERT_EQUAL_size_t(kMaxFrame, c1);        // a valid prefix was consumed (nothing lost)
+    Frame f1; uint8_t err;
+    TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f1, err));   // drain a complete frame
+    size_t c2 = 0;
+    TEST_ASSERT_EQUAL(PARSER_PUSH_OK, parserPush(p, buf + c1, total - c1, c2));  // remainder fits
+    TEST_ASSERT_EQUAL_size_t(total - c1, c2);
+    Frame f2;
+    TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f2, err));   // second frame intact => no discard
+    RxPacket a, b;
+    TEST_ASSERT_TRUE(decodeRxPacket(f1, a));
+    TEST_ASSERT_TRUE(decodeRxPacket(f2, b));
+    TEST_ASSERT_EQUAL_INT16(-10, a.rssi);
+    TEST_ASSERT_EQUAL_INT16(-20, b.rssi);
 }
 
 // ===========================================================================
@@ -492,6 +546,42 @@ void test_config_failure_rejected(void) {
     Session s; driveToConfiguring(s);
     uint8_t status = CFG_UNSUPPORTED;
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_CONFIG_RESULT, 0, &status, 1)));
+}
+
+// ===========================================================================
+// session: setDesiredConfig validation
+// ===========================================================================
+
+void test_setdesiredconfig_rejects_invalid_crc(void) {
+    Session s;
+    RadioConfig c = sampleConfig(); c.crc = 2;
+    TEST_ASSERT_FALSE(s.setDesiredConfig(c));
+    TEST_ASSERT_FALSE(s.hasDesiredConfig());        // no config-present state created
+}
+
+void test_setdesiredconfig_rejects_invalid_ldro(void) {
+    Session s;
+    RadioConfig c = sampleConfig(); c.ldro = 255;
+    TEST_ASSERT_FALSE(s.setDesiredConfig(c));
+    TEST_ASSERT_FALSE(s.hasDesiredConfig());
+}
+
+void test_setdesiredconfig_valid_unchanged_after_invalid(void) {
+    Session s;
+    RadioConfig good = sampleConfig();
+    TEST_ASSERT_TRUE(s.setDesiredConfig(good));
+    TEST_ASSERT_TRUE(s.hasDesiredConfig());
+    RadioConfig bad = sampleConfig(); bad.ldro = 9; bad.freq_hz = 1;  // would change, but invalid
+    TEST_ASSERT_FALSE(s.setDesiredConfig(bad));
+    TEST_ASSERT_TRUE(s.hasDesiredConfig());
+    TEST_ASSERT_TRUE(configEqual(good, s.desiredConfig()));           // stored config untouched
+}
+
+void test_setdesiredconfig_valid_succeeds_and_encodes(void) {
+    Session s;
+    TEST_ASSERT_TRUE(s.setDesiredConfig(sampleConfig()));
+    uint8_t frame[kMaxFrame];
+    TEST_ASSERT_TRUE(encodeConfigure(frame, sizeof(frame), s.desiredConfig()) > 0);  // CONFIGURE path
 }
 
 // ===========================================================================
@@ -677,6 +767,9 @@ int main(int, char**) {
     RUN_TEST(test_stream_one_frame_split_at_offsets);
     RUN_TEST(test_stream_invalid_after_valid);
     RUN_TEST(test_stream_capacity_boundary_no_silent_discard);
+    RUN_TEST(test_parser_push_invalid_input);
+    RUN_TEST(test_parser_push_ok_reports_consumed);
+    RUN_TEST(test_parser_push_need_drain_then_progress);
 
     // validation / config
     RUN_TEST(test_sequence_rules);
@@ -702,6 +795,10 @@ int main(int, char**) {
     RUN_TEST(test_config_mismatch_bw_rejected);
     RUN_TEST(test_config_echo_invalid_boolean_rejected);
     RUN_TEST(test_config_failure_rejected);
+    RUN_TEST(test_setdesiredconfig_rejects_invalid_crc);
+    RUN_TEST(test_setdesiredconfig_rejects_invalid_ldro);
+    RUN_TEST(test_setdesiredconfig_valid_unchanged_after_invalid);
+    RUN_TEST(test_setdesiredconfig_valid_succeeds_and_encodes);
 
     // RX / TX semantics
     RUN_TEST(test_rx_when_ready);

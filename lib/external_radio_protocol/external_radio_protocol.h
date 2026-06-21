@@ -202,6 +202,14 @@ bool decodeRxPacket(const Frame& f, RxPacket& out);
 // ---------------------------------------------------------------------------
 enum PopResult { POP_NEED_MORE, POP_GOT_FRAME, POP_ERROR };
 
+// Result of parserPush(): separates a caller-input error from buffer backpressure
+// so the transport can react correctly and log precisely.
+enum ParserPushStatus {
+    PARSER_PUSH_OK,             // all input bytes were accepted
+    PARSER_PUSH_NEED_DRAIN,     // not all bytes fit: pop frames, then retry the remainder
+    PARSER_PUSH_INVALID_INPUT,  // null data with nonzero length (caller bug)
+};
+
 struct Parser {
     uint8_t buf[kMaxFrame];
     size_t  have;
@@ -211,11 +219,15 @@ void      parserReset(Parser& p);
 
 // Streaming-safe ingest. TCP may deliver any number of whole and/or partial
 // frames per read, but the parser stores at most ONE maximum frame. parserPush()
-// copies only as many leading bytes as currently fit and returns that count
-// (0..n); the caller drains complete frames with parserPop() between pushes, so
-// no more than one incomplete frame is ever buffered. Returns 0 on a null buffer
-// or when the internal buffer is full (the caller must pop first). No input byte
-// is ever silently discarded — unconsumed bytes stay in the caller's buffer.
+// copies only as many leading bytes as currently fit; *consumed always receives
+// that count (0..n, reported even with NEED_DRAIN). The caller drains complete
+// frames with parserPop() between pushes, so no more than one incomplete frame is
+// ever buffered, and no input byte is silently discarded — bytes that did not fit
+// stay the caller's to re-offer. The status separates the two non-OK cases:
+//   PARSER_PUSH_OK            all n bytes accepted
+//   PARSER_PUSH_NEED_DRAIN    not all fit (a prefix may be consumed): pop frames,
+//                             then retry with the remaining n-consumed bytes
+//   PARSER_PUSH_INVALID_INPUT null data with nonzero length (no bytes consumed)
 //
 // Caller loop (the future TCP transport), for a socket read of n bytes:
 //   size_t off = 0;
@@ -225,11 +237,15 @@ void      parserReset(Parser& p);
 //     if (r == POP_GOT_FRAME) { handle(f); continue; }
 //     if (r == POP_ERROR)     { disconnect(); parserReset(p); break; }   // fail closed
 //     if (off >= n) break;                                  // need more bytes from socket
-//     size_t took = parserPush(p, data + off, n - off);
+//     size_t took;
+//     ParserPushStatus st = parserPush(p, data + off, n - off, took);
 //     off += took;
-//     if (took == 0) { disconnect(); parserReset(p); break; }  // stuck => impossible frame
+//     if (st == PARSER_PUSH_INVALID_INPUT) { disconnect(); break; }      // caller bug
+//     if (st == PARSER_PUSH_NEED_DRAIN && took == 0) {                   // impossible frame
+//       disconnect(); parserReset(p); break;
+//     }
 //   }
-size_t    parserPush(Parser& p, const uint8_t* data, size_t n);
+ParserPushStatus parserPush(Parser& p, const uint8_t* data, size_t n, size_t& consumed);
 
 // Extract one frame (payload copied into out.payload, so it stays valid across
 // later parser calls). On POP_ERROR, *err carries the reason and the caller must
@@ -295,7 +311,10 @@ public:
 
     // The desired radio configuration the firmware will request and against which
     // the CONFIG_RESULT echo is checked exactly. Set once before connecting.
-    void  setDesiredConfig(const RadioConfig& cfg);
+    // Validates cfg first: on an invalid config (crc/ldro not boolean) it changes
+    // NOTHING and returns false; the caller must treat false as a local config
+    // error and must not begin configuration/connection. Returns true when stored.
+    bool  setDesiredConfig(const RadioConfig& cfg);
     bool  hasDesiredConfig() const { return have_cfg_; }
     const RadioConfig& desiredConfig() const { return cfg_; }
 

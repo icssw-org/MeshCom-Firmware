@@ -75,8 +75,11 @@ maximum frame** and is never grown to hold "N frames" — TCP can coalesce any
 number.
 
 The ingest API is therefore prefix-based: `parserPush()` copies only as many
-leading bytes as currently fit and returns that count; the caller drains all
-complete frames with `parserPop()` between pushes, so at most one *incomplete*
+leading bytes as currently fit, reports how many it consumed, and returns a
+status — `PARSER_PUSH_OK` (all bytes accepted), `PARSER_PUSH_NEED_DRAIN` (a
+prefix, possibly none, was accepted: pop frames and retry the remainder), or
+`PARSER_PUSH_INVALID_INPUT` (null data with nonzero length). The caller drains
+all complete frames with `parserPop()` between pushes, so at most one *incomplete*
 frame is ever buffered. No input byte is silently discarded — bytes that did not
 fit remain the caller's to re-offer after popping. Required caller loop, per
 socket read of `n` bytes:
@@ -88,8 +91,10 @@ for (;;) {
   if (r == POP_GOT_FRAME) { handle(f); continue; }   // payload is owned by f
   if (r == POP_ERROR)     { disconnect(); parserReset(p); break; }  // fail closed
   if (off >= n) break;                               // need more bytes from socket
-  off += parserPush(p, data + off, n - off);
-  if (no progress && buffer full) { disconnect(); parserReset(p); break; }
+  size_t took; ParserPushStatus st = parserPush(p, data + off, n - off, took);
+  off += took;
+  if (st == PARSER_PUSH_INVALID_INPUT) { disconnect(); break; }                 // caller bug
+  if (st == PARSER_PUSH_NEED_DRAIN && took == 0) { disconnect(); parserReset(p); break; }
 }
 ```
 
