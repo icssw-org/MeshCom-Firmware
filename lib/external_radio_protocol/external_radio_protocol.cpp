@@ -41,7 +41,12 @@ bool configEqual(const RadioConfig& a, const RadioConfig& b) {
            a.crc == b.crc && a.ldro == b.ldro;
 }
 
-// Serialize a RadioConfig into a 17-byte buffer (caller guarantees capacity).
+bool radioConfigValid(const RadioConfig& c) {
+    return isBool(c.crc) && isBool(c.ldro);
+}
+
+// Serialize a RadioConfig into a 17-byte buffer (caller guarantees capacity and
+// that the config is valid; crc/ldro are written verbatim, never coerced).
 static void packConfig(uint8_t* p, const RadioConfig& cfg) {
     put32(p + 0, cfg.freq_hz);
     put32(p + 4, cfg.bw_hz);
@@ -50,8 +55,8 @@ static void packConfig(uint8_t* p, const RadioConfig& cfg) {
     put16(p + 10, cfg.sync_word);
     put16(p + 12, cfg.preamble);
     p[14] = static_cast<uint8_t>(cfg.tx_power_dbm);
-    p[15] = cfg.crc ? 1 : 0;
-    p[16] = cfg.ldro ? 1 : 0;
+    p[15] = cfg.crc;
+    p[16] = cfg.ldro;
 }
 
 // Parse a 17-byte config blob; rejects non-boolean crc/ldro bytes.
@@ -179,6 +184,7 @@ size_t encodeAuthResponse(uint8_t* out, size_t out_cap, const uint8_t* hmac32) {
 }
 
 size_t encodeConfigure(uint8_t* out, size_t out_cap, const RadioConfig& cfg) {
+    if (!radioConfigValid(cfg)) return 0;       // reject non-boolean crc/ldro, no coercion
     uint8_t body[kConfigPayloadSize];
     packConfig(body, cfg);
     return encode(out, out_cap, MSG_CONFIGURE, 0, body, sizeof(body));
@@ -229,13 +235,14 @@ static bool decodeConfigEcho(const Frame& f, RadioConfig& out) {
 // ---------------------------------------------------------------------------
 void parserReset(Parser& p) { p.have = 0; }
 
-bool parserPush(Parser& p, const uint8_t* data, size_t n) {
-    if (n == 0) return true;
-    if (!data) return false;                    // null with nonzero length
-    if (p.have + n > sizeof(p.buf)) return false;
-    std::memcpy(p.buf + p.have, data, n);
-    p.have += n;
-    return true;
+size_t parserPush(Parser& p, const uint8_t* data, size_t n) {
+    if (n == 0 || !data) return 0;
+    const size_t space = sizeof(p.buf) - p.have;
+    const size_t take  = (n < space) ? n : space;   // consume only what currently fits
+    if (take == 0) return 0;                         // buffer full: caller must pop first
+    std::memcpy(p.buf + p.have, data, take);
+    p.have += take;
+    return take;
 }
 
 PopResult parserPop(Parser& p, Frame& out, uint8_t& err) {
@@ -318,16 +325,16 @@ bool Session::onDisconnected() {
 Event Session::onTimeout(TimeoutKind kind) {
     switch (kind) {
         case TO_HANDSHAKE:
-            if (state_ == ST_CONNECTING || state_ == ST_HANDSHAKE) return fail(ERR_BAD_STATE);
+            if (state_ == ST_CONNECTING || state_ == ST_HANDSHAKE) return fail(ERR_TIMEOUT);
             return EV_NONE;
         case TO_AUTH:
-            if (state_ == ST_AUTHENTICATING) return fail(ERR_AUTH);
+            if (state_ == ST_AUTHENTICATING) return fail(ERR_TIMEOUT);
             return EV_NONE;
         case TO_CONFIG:
-            if (state_ == ST_CONFIGURING) return fail(ERR_CONFIG);
+            if (state_ == ST_CONFIGURING) return fail(ERR_TIMEOUT);
             return EV_NONE;
         case TO_PENDING_TX:
-            if (state_ == ST_TX_PENDING) return fail(ERR_BAD_STATE);  // marks UNKNOWN
+            if (state_ == ST_TX_PENDING) return fail(ERR_TIMEOUT);    // marks UNKNOWN
             return EV_NONE;
     }
     return EV_NONE;
@@ -342,10 +349,11 @@ Event Session::onFrame(const Frame& f) {
     // 2) Connection-wide control messages.
     if (f.type == MSG_ERROR) return fail(ERR_REMOTE);
     if (f.type == MSG_PING) {
-        // Answer only on an established connection.
-        if (state_ >= ST_HANDSHAKE && state_ <= ST_TX_PENDING) return EV_SEND_PONG;
+        // Bridge->firmware keepalive; valid only when operational.
+        if (state_ == ST_READY_RX || state_ == ST_TX_PENDING) return EV_SEND_PONG;
         return fail(ERR_BAD_STATE);
     }
+    if (f.type == MSG_PONG) return fail(ERR_BAD_STATE);   // firmware never receives PONG in v1
 
     // 3) State-specific handling.
     switch (state_) {

@@ -67,6 +67,36 @@ Fixed limits: max payload `300` bytes; max raw LoRa packet `255` bytes; header
 bad magic, version, type, or length (no byte-level resynchronization). After any
 parser or session error the transport must disconnect and reset the parser.
 
+### TCP stream handling
+
+TCP is a byte stream: a single read may deliver a partial frame, exactly one
+frame, or several coalesced frames. The parser owns a **fixed buffer of one
+maximum frame** and is never grown to hold "N frames" — TCP can coalesce any
+number.
+
+The ingest API is therefore prefix-based: `parserPush()` copies only as many
+leading bytes as currently fit and returns that count; the caller drains all
+complete frames with `parserPop()` between pushes, so at most one *incomplete*
+frame is ever buffered. No input byte is silently discarded — bytes that did not
+fit remain the caller's to re-offer after popping. Required caller loop, per
+socket read of `n` bytes:
+
+```
+size_t off = 0;
+for (;;) {
+  PopResult r = parserPop(p, f, err);
+  if (r == POP_GOT_FRAME) { handle(f); continue; }   // payload is owned by f
+  if (r == POP_ERROR)     { disconnect(); parserReset(p); break; }  // fail closed
+  if (off >= n) break;                               // need more bytes from socket
+  off += parserPush(p, data + off, n - off);
+  if (no progress && buffer full) { disconnect(); parserReset(p); break; }
+}
+```
+
+Because the buffer holds exactly one maximum frame and every legal frame fits in
+it, a full buffer always either yields a frame or fails closed — the loop cannot
+deadlock and uses bounded memory regardless of how TCP chunks the stream.
+
 ## Message types
 
 | type | name | direction | payload |
@@ -81,9 +111,25 @@ parser or session error the transport must disconnect and reset the parser.
 | 0x08 | RX_PACKET | bridge→fw | rssi[2] snr[2] len[2] data[len], len ≤ 255 |
 | 0x09 | TX_REQUEST | fw→bridge | raw MeshCom packet bytes, ≤ 255 |
 | 0x0A | TX_RESULT | bridge→fw | 1 byte: 0=SUCCESS,1=CHANNEL_BUSY,2=TIMEOUT,3=RADIO_ERROR |
-| 0x0B | PING | either | empty |
-| 0x0C | PONG | either | empty |
+| 0x0B | PING | bridge→fw | empty |
+| 0x0C | PONG | fw→bridge | empty |
 | 0x0D | ERROR | either | 1 byte error code (0..3) |
+
+### RX metadata (RX_PACKET)
+
+`rssi` and `snr` are signed **big-endian `int16_t`**: `rssi` in **centi-dBm**
+(e.g. `-12050` = −120.50 dBm) and `snr` in **centi-dB** (e.g. `-275` = −2.75 dB),
+followed by a 2-byte data length and `len` raw bytes (`len ≤ 255`). The firmware
+carries these raw; conversion to MeshCom internal units is a later TX/RX
+integration concern.
+
+### Keepalive (PING/PONG)
+
+One-way in v1: the **bridge sends PING**, the **firmware replies PONG**. Both are
+`seq = 0` with empty payload, and are valid only while operational (`READY_RX` or
+`TX_PENDING`). The firmware never originates PING and **rejects an incoming
+PONG**, a PING before it is operational, or any nonzero sequence/payload (fail
+closed).
 
 ### Sequence rules
 
@@ -155,8 +201,10 @@ DISCONNECTED → CONNECTING → HANDSHAKE → AUTHENTICATING → CONFIGURING →
 
 Wall-clock timing belongs to the transport, which calls `onTimeout(kind)` for
 `HANDSHAKE`, `AUTH`, `CONFIG`, or `PENDING_TX`. Every timeout fails closed and
-requests disconnect; a pending-TX timeout additionally resolves the in-flight TX
-as `UNKNOWN`. No timeout ever becomes TX success or triggers a resend.
+requests disconnect, reporting the distinct reason `ERR_TIMEOUT` (so a timeout is
+diagnosable separately from a protocol/state violation); a pending-TX timeout
+additionally resolves the in-flight TX as `UNKNOWN`. No timeout ever becomes TX
+success or triggers a resend.
 
 ## TX result semantics and retry safety
 

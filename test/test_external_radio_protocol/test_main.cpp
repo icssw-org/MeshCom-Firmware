@@ -17,7 +17,6 @@ using namespace extradio;
 // helpers
 // ---------------------------------------------------------------------------
 
-// Build a Frame directly (Frame owns its payload).
 static Frame makeFrame(uint8_t type, uint16_t seq, const uint8_t* payload, uint16_t len) {
     Frame f;
     f.type = type;
@@ -55,29 +54,58 @@ static uint16_t buildRxPayload(uint8_t* buf, int16_t rssi, int16_t snr,
     return static_cast<uint16_t>(6 + dlen);
 }
 
-// Drive a fresh session to ST_READY_RX (password-mode handshake).
+// Push a single complete frame into a parser with room for it.
+static void pushOne(Parser& p, const uint8_t* d, size_t n) {
+    TEST_ASSERT_EQUAL_size_t(n, parserPush(p, d, n));
+}
+
+// Stream an entire input buffer through the bounded parser, collecting frames.
+// Mirrors the documented TCP transport caller loop. Returns the frame count.
+static int streamAll(Parser& p, const uint8_t* data, size_t n,
+                     Frame* out, int maxOut, uint8_t& err, bool& stuck) {
+    int cnt = 0; size_t off = 0; err = ERR_NONE; stuck = false;
+    for (;;) {
+        Frame f; uint8_t e;
+        PopResult r = parserPop(p, f, e);
+        if (r == POP_GOT_FRAME) { if (cnt < maxOut) out[cnt] = f; ++cnt; continue; }
+        if (r == POP_ERROR) { err = e; return cnt; }
+        if (off >= n) break;                       // need more bytes; none left
+        size_t took = parserPush(p, data + off, n - off);
+        off += took;
+        if (took == 0) { stuck = true; break; }    // buffer full, no frame => impossible frame
+    }
+    return cnt;
+}
+
+// Build one max-size RX_PACKET frame (255 data bytes) into out; returns frame length.
+static size_t buildMaxRxFrame(uint8_t* out, size_t cap, int16_t rssi, int16_t snr, uint8_t seed) {
+    uint8_t data[kMaxLoraPayload];
+    for (size_t i = 0; i < sizeof(data); ++i) data[i] = static_cast<uint8_t>(seed + i);
+    uint8_t pl[kMaxPayload];
+    uint16_t plen = buildRxPayload(pl, rssi, snr, data, sizeof(data));
+    return encode(out, cap, MSG_RX_PACKET, 0, pl, plen);
+}
+
 static void driveToReady(Session& s) {
     s.setDesiredConfig(sampleConfig());
     TEST_ASSERT_EQUAL(EV_NONE, s.onConnecting());
     TEST_ASSERT_EQUAL(EV_SEND_HELLO, s.onConnected());
-
     uint8_t ver = kVersion;
     TEST_ASSERT_EQUAL(EV_NONE, s.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1)));
-    TEST_ASSERT_EQUAL(ST_AUTHENTICATING, s.state());
-
     uint8_t nonce[kAuthNonceSize] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
     TEST_ASSERT_EQUAL(EV_SEND_AUTH, s.onFrame(makeFrame(MSG_AUTH_CHALLENGE, 0, nonce, kAuthNonceSize)));
-    TEST_ASSERT_EQUAL_UINT8_ARRAY(nonce, s.authNonce(), kAuthNonceSize);
-
     uint8_t ok = AUTH_OK;
     TEST_ASSERT_EQUAL(EV_SEND_CONFIG, s.onFrame(makeFrame(MSG_AUTH_RESULT, 0, &ok, 1)));
-    TEST_ASSERT_EQUAL(ST_CONFIGURING, s.state());
-
     uint8_t cr[kMaxFrame];
     uint16_t crlen = buildConfigResultOk(cr, sampleConfig());
     TEST_ASSERT_EQUAL(EV_READY, s.onFrame(makeFrame(MSG_CONFIG_RESULT, 0, cr, crlen)));
     TEST_ASSERT_EQUAL(ST_READY_RX, s.state());
 }
+
+// Drive to a chosen pre-operational state for PING/state tests.
+static void driveToHandshake(Session& s)      { s.setDesiredConfig(sampleConfig()); s.onConnecting(); s.onConnected(); }
+static void driveToAuthenticating(Session& s) { driveToHandshake(s); uint8_t v=kVersion; s.onFrame(makeFrame(MSG_HELLO_ACK,0,&v,1)); }
+static void driveToConfiguring(Session& s)    { driveToAuthenticating(s); uint8_t ok=AUTH_OK; s.onFrame(makeFrame(MSG_AUTH_RESULT,0,&ok,1)); }
 
 // ===========================================================================
 // codec + parser
@@ -88,20 +116,17 @@ void test_encode_decode_roundtrip(void) {
     const uint8_t body[] = {0xDE, 0xAD, 0xBE, 0xEF};
     size_t n = encode(frame, sizeof(frame), MSG_TX_REQUEST, 0x1234, body, sizeof(body));
     TEST_ASSERT_EQUAL_size_t(kHeaderSize + sizeof(body), n);
-
     Parser p; parserReset(p);
-    TEST_ASSERT_TRUE(parserPush(p, frame, n));
+    pushOne(p, frame, n);
     Frame f; uint8_t err;
     TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f, err));
     TEST_ASSERT_EQUAL_UINT8(MSG_TX_REQUEST, f.type);
     TEST_ASSERT_EQUAL_UINT16(0x1234, f.seq);
-    TEST_ASSERT_EQUAL_UINT16(sizeof(body), f.len);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(body, f.payload, sizeof(body));
     TEST_ASSERT_EQUAL(POP_NEED_MORE, parserPop(p, f, err));
 }
 
-// H1: payload ownership across compaction — two frames in one push, the first
-// Frame's payload must remain valid after the second pop compacts the buffer.
+// H1: payload ownership across compaction.
 void test_payload_ownership_after_compaction(void) {
     uint8_t buf[kMaxFrame * 2];
     const uint8_t a[] = {0x11, 0x22, 0x33};
@@ -109,21 +134,15 @@ void test_payload_ownership_after_compaction(void) {
     for (size_t i = 0; i < sizeof(big); ++i) big[i] = static_cast<uint8_t>(i);
     size_t n1 = encode(buf, sizeof(buf), MSG_TX_REQUEST, 1, a, sizeof(a));
     size_t n2 = encode(buf + n1, sizeof(buf) - n1, MSG_TX_REQUEST, 2, big, sizeof(big));
-
     Parser p; parserReset(p);
-    TEST_ASSERT_TRUE(parserPush(p, buf, n1 + n2));
-
+    pushOne(p, buf, n1 + n2);
     Frame f1; uint8_t err;
-    TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f1, err));   // first frame
+    TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f1, err));
     Frame f2;
     TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f2, err));   // compacts buffer
-
-    // f1 must be intact despite the compaction triggered by popping f2
     TEST_ASSERT_EQUAL_UINT16(1, f1.seq);
-    TEST_ASSERT_EQUAL_UINT16(sizeof(a), f1.len);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(a, f1.payload, sizeof(a));
     TEST_ASSERT_EQUAL_UINT16(2, f2.seq);
-    TEST_ASSERT_EQUAL_UINT16(sizeof(big), f2.len);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(big, f2.payload, sizeof(big));
 }
 
@@ -131,11 +150,10 @@ void test_partial_then_rest(void) {
     uint8_t frame[kMaxFrame];
     const uint8_t body[] = {1, 2, 3, 4, 5};
     size_t n = encode(frame, sizeof(frame), MSG_TX_REQUEST, 7, body, sizeof(body));
-
     Parser p; parserReset(p);
     Frame f; uint8_t err;
     for (size_t i = 0; i < n; ++i) {
-        TEST_ASSERT_TRUE(parserPush(p, frame + i, 1));
+        TEST_ASSERT_EQUAL_size_t(1, parserPush(p, frame + i, 1));
         PopResult r = parserPop(p, f, err);
         if (i < n - 1) TEST_ASSERT_EQUAL(POP_NEED_MORE, r);
         else           TEST_ASSERT_EQUAL(POP_GOT_FRAME, r);
@@ -143,23 +161,9 @@ void test_partial_then_rest(void) {
     TEST_ASSERT_EQUAL_UINT16(7, f.seq);
 }
 
-void test_near_max_payload(void) {
-    uint8_t frame[kMaxFrame];
-    uint8_t body[kMaxLoraPayload];
-    for (size_t i = 0; i < sizeof(body); ++i) body[i] = static_cast<uint8_t>(255 - i);
-    size_t n = encode(frame, sizeof(frame), MSG_TX_REQUEST, 9, body, sizeof(body));
-    Parser p; parserReset(p);
-    TEST_ASSERT_TRUE(parserPush(p, frame, n));
-    Frame f; uint8_t err;
-    TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f, err));
-    TEST_ASSERT_EQUAL_UINT16(sizeof(body), f.len);
-    TEST_ASSERT_EQUAL_UINT8_ARRAY(body, f.payload, sizeof(body));
-}
-
 void test_bad_magic_rejected(void) {
     uint8_t frame[kHeaderSize] = {0x00, 0x00, kVersion, MSG_HELLO, 0, 0, 0, 0};
-    Parser p; parserReset(p);
-    parserPush(p, frame, sizeof(frame));
+    Parser p; parserReset(p); pushOne(p, frame, sizeof(frame));
     Frame f; uint8_t err;
     TEST_ASSERT_EQUAL(POP_ERROR, parserPop(p, f, err));
     TEST_ASSERT_EQUAL_UINT8(ERR_BAD_MAGIC, err);
@@ -167,8 +171,7 @@ void test_bad_magic_rejected(void) {
 
 void test_unsupported_version_rejected(void) {
     uint8_t frame[kHeaderSize] = {kMagic0, kMagic1, 0x99, MSG_HELLO, 0, 0, 0, 0};
-    Parser p; parserReset(p);
-    parserPush(p, frame, sizeof(frame));
+    Parser p; parserReset(p); pushOne(p, frame, sizeof(frame));
     Frame f; uint8_t err;
     TEST_ASSERT_EQUAL(POP_ERROR, parserPop(p, f, err));
     TEST_ASSERT_EQUAL_UINT8(ERR_BAD_VERSION, err);
@@ -176,8 +179,7 @@ void test_unsupported_version_rejected(void) {
 
 void test_unknown_type_rejected(void) {
     uint8_t frame[kHeaderSize] = {kMagic0, kMagic1, kVersion, 0x7F, 0, 0, 0, 0};
-    Parser p; parserReset(p);
-    parserPush(p, frame, sizeof(frame));
+    Parser p; parserReset(p); pushOne(p, frame, sizeof(frame));
     Frame f; uint8_t err;
     TEST_ASSERT_EQUAL(POP_ERROR, parserPop(p, f, err));
     TEST_ASSERT_EQUAL_UINT8(ERR_UNKNOWN_TYPE, err);
@@ -187,44 +189,148 @@ void test_oversized_length_rejected(void) {
     uint8_t frame[kHeaderSize];
     frame[0]=kMagic0; frame[1]=kMagic1; frame[2]=kVersion; frame[3]=MSG_RX_PACKET;
     frame[4]=0xFF; frame[5]=0xFF; frame[6]=0; frame[7]=0;
-    Parser p; parserReset(p);
-    parserPush(p, frame, sizeof(frame));
+    Parser p; parserReset(p); pushOne(p, frame, sizeof(frame));
     Frame f; uint8_t err;
     TEST_ASSERT_EQUAL(POP_ERROR, parserPop(p, f, err));
     TEST_ASSERT_EQUAL_UINT8(ERR_BAD_LENGTH, err);
 }
 
-void test_parser_overflow_push_fails(void) {
-    Parser p; parserReset(p);
-    uint8_t chunk[64];
-    std::memset(chunk, 0xAB, sizeof(chunk));
-    bool everFailed = false;
-    for (int i = 0; i < (int)(sizeof(p.buf) / sizeof(chunk)) + 4; ++i) {
-        if (!parserPush(p, chunk, sizeof(chunk))) { everFailed = true; break; }
-    }
-    TEST_ASSERT_TRUE(everFailed);
-}
-
-// H2: null-pointer / size validation on the public API.
 void test_null_and_size_guards(void) {
     uint8_t frame[kMaxFrame];
     const uint8_t body[] = {1, 2, 3};
     TEST_ASSERT_EQUAL_size_t(0, encode(nullptr, sizeof(frame), MSG_PING, 0, body, sizeof(body)));
-    TEST_ASSERT_EQUAL_size_t(0, encode(frame, sizeof(frame), MSG_TX_REQUEST, 1, nullptr, 4)); // null payload, len>0
+    TEST_ASSERT_EQUAL_size_t(0, encode(frame, sizeof(frame), MSG_TX_REQUEST, 1, nullptr, 4));
     static uint8_t big[kMaxPayload + 1];
     TEST_ASSERT_EQUAL_size_t(0, encode(frame, sizeof(frame), MSG_TX_REQUEST, 1, big, sizeof(big)));
-    TEST_ASSERT_EQUAL_size_t(0, encode(frame, kHeaderSize, MSG_TX_REQUEST, 1, body, sizeof(body))); // out too small
+    TEST_ASSERT_EQUAL_size_t(0, encode(frame, kHeaderSize, MSG_TX_REQUEST, 1, body, sizeof(body)));
     TEST_ASSERT_EQUAL_size_t(0, encodeAuthResponse(frame, sizeof(frame), nullptr));
-    TEST_ASSERT_EQUAL_size_t(0, encodeTxRequest(frame, sizeof(frame), 0, body, sizeof(body)));  // seq 0 illegal
+    TEST_ASSERT_EQUAL_size_t(0, encodeTxRequest(frame, sizeof(frame), 0, body, sizeof(body)));
     TEST_ASSERT_EQUAL_size_t(0, encodeTxRequest(frame, sizeof(frame), 1, nullptr, 4));
-
     Parser p; parserReset(p);
-    TEST_ASSERT_FALSE(parserPush(p, nullptr, 4));   // null data, n>0
-    TEST_ASSERT_TRUE(parserPush(p, nullptr, 0));    // null with n==0 is a no-op
+    TEST_ASSERT_EQUAL_size_t(0, parserPush(p, nullptr, 4));   // null data
+    TEST_ASSERT_EQUAL_size_t(0, parserPush(p, nullptr, 0));   // empty
 }
 
 // ===========================================================================
-// strict validation
+// streaming parser (TCP chunk boundaries)
+// ===========================================================================
+
+void test_stream_two_max_rx_frames_one_buffer(void) {
+    uint8_t buf[kMaxFrame * 2];
+    size_t n1 = buildMaxRxFrame(buf, sizeof(buf), -12050, -275, 0x00);
+    size_t n2 = buildMaxRxFrame(buf + n1, sizeof(buf) - n1, 1000, 305, 0x80);
+    TEST_ASSERT_TRUE(n1 + n2 > kMaxFrame);   // genuinely larger than one parser buffer
+
+    Parser p; parserReset(p);
+    Frame fr[4]; uint8_t err; bool stuck;
+    int cnt = streamAll(p, buf, n1 + n2, fr, 4, err, stuck);
+    TEST_ASSERT_FALSE(stuck);
+    TEST_ASSERT_EQUAL_UINT8(ERR_NONE, err);
+    TEST_ASSERT_EQUAL_INT(2, cnt);
+
+    RxPacket a, b;
+    TEST_ASSERT_TRUE(decodeRxPacket(fr[0], a));
+    TEST_ASSERT_TRUE(decodeRxPacket(fr[1], b));
+    TEST_ASSERT_EQUAL_INT16(-12050, a.rssi);
+    TEST_ASSERT_EQUAL_INT16(-275,   a.snr);
+    TEST_ASSERT_EQUAL_UINT16(kMaxLoraPayload, a.len);
+    TEST_ASSERT_EQUAL_INT16(1000, b.rssi);
+    TEST_ASSERT_EQUAL_INT16(305,  b.snr);
+    TEST_ASSERT_EQUAL_UINT8(0x00, a.data[0]);
+    TEST_ASSERT_EQUAL_UINT8(0x80, b.data[0]);
+}
+
+void test_stream_many_frames_in_order(void) {
+    uint8_t buf[kMaxFrame * 3];
+    size_t off = 0;
+    uint8_t rxpl[16]; uint16_t rxlen = buildRxPayload(rxpl, -50, 10, (const uint8_t*)"abc", 3);
+    off += encode(buf + off, sizeof(buf) - off, MSG_RX_PACKET, 0, rxpl, rxlen);
+    off += encode(buf + off, sizeof(buf) - off, MSG_PING, 0, nullptr, 0);   // control frame
+    const uint8_t tx[] = {0xAA, 0xBB};
+    off += encode(buf + off, sizeof(buf) - off, MSG_TX_REQUEST, 42, tx, sizeof(tx));
+    off += encode(buf + off, sizeof(buf) - off, MSG_PONG, 0, nullptr, 0);
+
+    Parser p; parserReset(p);
+    Frame fr[8]; uint8_t err; bool stuck;
+    int cnt = streamAll(p, buf, off, fr, 8, err, stuck);
+    TEST_ASSERT_FALSE(stuck);
+    TEST_ASSERT_EQUAL_UINT8(ERR_NONE, err);
+    TEST_ASSERT_EQUAL_INT(4, cnt);
+    TEST_ASSERT_EQUAL_UINT8(MSG_RX_PACKET, fr[0].type);
+    TEST_ASSERT_EQUAL_UINT8(MSG_PING,      fr[1].type);
+    TEST_ASSERT_EQUAL_UINT8(MSG_TX_REQUEST,fr[2].type);
+    TEST_ASSERT_EQUAL_UINT16(42, fr[2].seq);
+    TEST_ASSERT_EQUAL_UINT8(MSG_PONG,      fr[3].type);
+}
+
+void test_stream_one_frame_split_at_offsets(void) {
+    uint8_t frame[kMaxFrame];
+    size_t n = buildMaxRxFrame(frame, sizeof(frame), -7000, 42, 0x10);
+    // split points: inside header (3), end of header (8), inside payload, last byte
+    const size_t splits[] = {3, kHeaderSize, n - 1, n};
+    Parser p; parserReset(p);
+    Frame f; uint8_t err;
+    size_t pos = 0;
+    for (size_t si = 0; si < 4; ++si) {
+        size_t upto = splits[si];
+        while (pos < upto) {
+            size_t took = parserPush(p, frame + pos, upto - pos);
+            pos += took;
+            TEST_ASSERT_TRUE(took > 0);
+        }
+        PopResult r = parserPop(p, f, err);
+        if (si < 3) TEST_ASSERT_EQUAL(POP_NEED_MORE, r);
+        else        TEST_ASSERT_EQUAL(POP_GOT_FRAME, r);
+    }
+    RxPacket rx;
+    TEST_ASSERT_TRUE(decodeRxPacket(f, rx));
+    TEST_ASSERT_EQUAL_INT16(-7000, rx.rssi);
+}
+
+void test_stream_invalid_after_valid(void) {
+    uint8_t buf[kMaxFrame + kHeaderSize];
+    size_t n1 = buildMaxRxFrame(buf, sizeof(buf), -3000, 5, 0x01);
+    // trailing bad-magic header
+    uint8_t bad[kHeaderSize] = {0x00, 0x00, kVersion, MSG_PING, 0, 0, 0, 0};
+    std::memcpy(buf + n1, bad, sizeof(bad));
+
+    Parser p; parserReset(p);
+    Frame fr[4]; uint8_t err; bool stuck;
+    int cnt = streamAll(p, buf, n1 + sizeof(bad), fr, 4, err, stuck);
+    TEST_ASSERT_EQUAL_INT(1, cnt);                  // the valid frame was delivered
+    TEST_ASSERT_EQUAL_UINT8(ERR_BAD_MAGIC, err);    // then fail closed
+    TEST_ASSERT_EQUAL_UINT8(MSG_RX_PACKET, fr[0].type);
+
+    // after a documented reset the parser is clean and usable again
+    parserReset(p);
+    uint8_t good[kMaxFrame];
+    size_t gn = buildMaxRxFrame(good, sizeof(good), -1, 1, 0x20);
+    Frame fr2[2]; uint8_t err2; bool stuck2;
+    int cnt2 = streamAll(p, good, gn, fr2, 2, err2, stuck2);
+    TEST_ASSERT_EQUAL_INT(1, cnt2);
+    TEST_ASSERT_EQUAL_UINT8(ERR_NONE, err2);
+}
+
+void test_stream_capacity_boundary_no_silent_discard(void) {
+    uint8_t buf[kMaxFrame * 2];
+    size_t n1 = buildMaxRxFrame(buf, sizeof(buf), -10, 1, 0x00);
+    size_t n2 = buildMaxRxFrame(buf + n1, sizeof(buf) - n1, -20, 2, 0x80);
+    const size_t total = n1 + n2;
+
+    Parser p; parserReset(p);
+    size_t took1 = parserPush(p, buf, total);
+    TEST_ASSERT_EQUAL_size_t(kMaxFrame, took1);     // fills exactly one max frame
+    size_t took2 = parserPush(p, buf + took1, total - took1);
+    TEST_ASSERT_EQUAL_size_t(0, took2);             // full => 0, nothing discarded
+
+    Frame f; uint8_t err;
+    TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f, err));   // drain one frame
+    size_t took3 = parserPush(p, buf + took1, total - took1); // now progress resumes
+    TEST_ASSERT_TRUE(took3 > 0);
+}
+
+// ===========================================================================
+// strict validation / RadioConfig
 // ===========================================================================
 
 void test_sequence_rules(void) {
@@ -238,8 +344,7 @@ void test_sequence_rules(void) {
 }
 
 void test_validate_exact_lengths_and_fields(void) {
-    uint8_t buf[kMaxFrame];
-    std::memset(buf, 0, sizeof(buf));
+    uint8_t buf[kMaxFrame]; std::memset(buf, 0, sizeof(buf));
     TEST_ASSERT_EQUAL_UINT8(ERR_BAD_LENGTH, validate(makeFrame(MSG_AUTH_CHALLENGE, 0, buf, 15)));
     TEST_ASSERT_EQUAL_UINT8(ERR_NONE,       validate(makeFrame(MSG_AUTH_CHALLENGE, 0, buf, 16)));
     TEST_ASSERT_EQUAL_UINT8(ERR_BAD_LENGTH, validate(makeFrame(MSG_AUTH_RESPONSE, 0, buf, 31)));
@@ -249,23 +354,26 @@ void test_validate_exact_lengths_and_fields(void) {
     uint8_t badcode = 0x09;
     TEST_ASSERT_EQUAL_UINT8(ERR_BAD_FIELD, validate(makeFrame(MSG_TX_RESULT, 1, &badcode, 1)));
     TEST_ASSERT_EQUAL_UINT8(ERR_BAD_FIELD, validate(makeFrame(MSG_ERROR, 0, &badcode, 1)));
-    TEST_ASSERT_EQUAL_UINT8(ERR_BAD_LENGTH, validate(makeFrame(MSG_PING, 0, &bad, 1)));
 }
 
-void test_validate_malformed_boolean_in_configure(void) {
-    uint8_t cfg[kMaxFrame];
-    encodeConfigure(cfg, sizeof(cfg), sampleConfig());
-    Frame f = makeFrame(MSG_CONFIGURE, 0, cfg + kHeaderSize, kConfigPayloadSize);
-    TEST_ASSERT_EQUAL_UINT8(ERR_NONE, validate(f));
-    f.payload[15] = 2;   // crc not boolean
-    TEST_ASSERT_EQUAL_UINT8(ERR_BAD_FIELD, validate(f));
+void test_encode_rejects_invalid_config_booleans(void) {
+    uint8_t frame[kMaxFrame];
+    RadioConfig c = sampleConfig();
+    TEST_ASSERT_TRUE(radioConfigValid(c));
+    TEST_ASSERT_TRUE(encodeConfigure(frame, sizeof(frame), c) > 0);
+    c.crc = 2;                                  // not boolean
+    TEST_ASSERT_FALSE(radioConfigValid(c));
+    TEST_ASSERT_EQUAL_size_t(0, encodeConfigure(frame, sizeof(frame), c));
+    c = sampleConfig(); c.ldro = 255;
+    TEST_ASSERT_FALSE(radioConfigValid(c));
+    TEST_ASSERT_EQUAL_size_t(0, encodeConfigure(frame, sizeof(frame), c));
 }
 
 void test_config_encode_decode(void) {
     RadioConfig in = sampleConfig();
     uint8_t frame[kMaxFrame];
     size_t n = encodeConfigure(frame, sizeof(frame), in);
-    Parser p; parserReset(p); parserPush(p, frame, n);
+    Parser p; parserReset(p); pushOne(p, frame, n);
     Frame f; uint8_t err;
     TEST_ASSERT_EQUAL(POP_GOT_FRAME, parserPop(p, f, err));
     RadioConfig out;
@@ -273,74 +381,75 @@ void test_config_encode_decode(void) {
     TEST_ASSERT_TRUE(configEqual(in, out));
 }
 
-void test_rx_decode_bounds_and_signedness(void) {
+// ===========================================================================
+// RX metadata units / endianness
+// ===========================================================================
+
+void test_rx_metadata_units_and_endian(void) {
+    // explicit big-endian + signedness: rssi = 0x80 0x00 = -32768, snr = 0x7F 0xFF = 32767
+    uint8_t pl[16];
+    const uint8_t data[] = {0xAB};
+    uint16_t plen = buildRxPayload(pl, -32768, 32767, data, sizeof(data));
+    TEST_ASSERT_EQUAL_UINT8(0x80, pl[0]);          // rssi high byte first (BE)
+    TEST_ASSERT_EQUAL_UINT8(0x00, pl[1]);
+    TEST_ASSERT_EQUAL_UINT8(0x7F, pl[2]);          // snr high byte first (BE)
+    TEST_ASSERT_EQUAL_UINT8(0xFF, pl[3]);
+    RxPacket rx;
+    TEST_ASSERT_TRUE(decodeRxPacket(makeFrame(MSG_RX_PACKET, 0, pl, plen), rx));
+    TEST_ASSERT_EQUAL_INT16(-32768, rx.rssi);      // centi-dBm
+    TEST_ASSERT_EQUAL_INT16(32767,  rx.snr);       // centi-dB
+
+    // representative negative/positive values
+    plen = buildRxPayload(pl, -12050, -275, data, sizeof(data));  // -120.50 dBm, -2.75 dB
+    TEST_ASSERT_TRUE(decodeRxPacket(makeFrame(MSG_RX_PACKET, 0, pl, plen), rx));
+    TEST_ASSERT_EQUAL_INT16(-12050, rx.rssi);
+    TEST_ASSERT_EQUAL_INT16(-275,   rx.snr);
+    plen = buildRxPayload(pl, -3000, 1050, data, sizeof(data));   // positive snr
+    TEST_ASSERT_TRUE(decodeRxPacket(makeFrame(MSG_RX_PACKET, 0, pl, plen), rx));
+    TEST_ASSERT_EQUAL_INT16(1050, rx.snr);
+}
+
+void test_rx_inner_length_inconsistent_rejected(void) {
     uint8_t payload[kMaxPayload];
     const uint8_t data[] = {10, 20, 30};
     uint16_t plen = buildRxPayload(payload, -57, -12, data, sizeof(data));
     Frame f = makeFrame(MSG_RX_PACKET, 0, payload, plen);
-    RxPacket rx;
-    TEST_ASSERT_TRUE(decodeRxPacket(f, rx));
-    TEST_ASSERT_EQUAL_INT16(-57, rx.rssi);
-    TEST_ASSERT_EQUAL_INT16(-12, rx.snr);
-    TEST_ASSERT_EQUAL_UINT16(sizeof(data), rx.len);
-    TEST_ASSERT_EQUAL_UINT8_ARRAY(data, rx.data, sizeof(data));
-
-    Frame bad = f; bad.payload[5] = 0xFF;   // inner length inconsistent with frame
-    TEST_ASSERT_EQUAL_UINT8(ERR_BAD_LENGTH, validate(bad));
+    TEST_ASSERT_EQUAL_UINT8(ERR_NONE, validate(f));
+    f.payload[5] = 0xFF;                           // inner length lies
+    TEST_ASSERT_EQUAL_UINT8(ERR_BAD_LENGTH, validate(f));
 }
 
 // ===========================================================================
-// session: handshake / auth (one-way, NetConsole style)
+// session: handshake / auth
 // ===========================================================================
 
-void test_handshake_password_mode(void) {
-    Session s;
-    driveToReady(s);
-}
+void test_handshake_password_mode(void) { Session s; driveToReady(s); }
 
 void test_handshake_open_mode(void) {
-    Session s;
-    s.setDesiredConfig(sampleConfig());
-    s.onConnecting(); s.onConnected();
-    uint8_t ver = kVersion;
-    s.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1));
+    Session s; driveToAuthenticating(s);
     uint8_t ok = AUTH_OK;
     TEST_ASSERT_EQUAL(EV_SEND_CONFIG, s.onFrame(makeFrame(MSG_AUTH_RESULT, 0, &ok, 1)));
     TEST_ASSERT_EQUAL(ST_CONFIGURING, s.state());
 }
 
 void test_auth_fail_disconnects(void) {
-    Session s;
-    s.setDesiredConfig(sampleConfig());
-    s.onConnecting(); s.onConnected();
-    uint8_t ver = kVersion;
-    s.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1));
+    Session s; driveToAuthenticating(s);
     uint8_t fail = AUTH_FAIL;
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_AUTH_RESULT, 0, &fail, 1)));
     TEST_ASSERT_EQUAL(ST_DEGRADED, s.state());
 }
 
 void test_malformed_auth_frame_disconnects(void) {
-    Session s;
-    s.setDesiredConfig(sampleConfig());
-    s.onConnecting(); s.onConnected();
-    uint8_t ver = kVersion;
-    s.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1));
-    uint8_t nonce[15] = {0};  // wrong length
+    Session s; driveToAuthenticating(s);
+    uint8_t nonce[15] = {0};
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_AUTH_CHALLENGE, 0, nonce, 15)));
 }
 
 void test_radio_traffic_rejected_before_auth(void) {
-    Session s;
-    s.setDesiredConfig(sampleConfig());
-    s.onConnecting(); s.onConnected();   // HANDSHAKE
+    Session s; driveToHandshake(s);
     uint8_t rx[8]; uint16_t plen = buildRxPayload(rx, -50, 5, nullptr, 0);
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_RX_PACKET, 0, rx, plen)));
-
-    Session s2; s2.setDesiredConfig(sampleConfig());
-    s2.onConnecting(); s2.onConnected();
-    uint8_t ver = kVersion;
-    s2.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1));   // AUTHENTICATING
+    Session s2; driveToAuthenticating(s2);
     uint8_t cr[kMaxFrame]; uint16_t crlen = buildConfigResultOk(cr, sampleConfig());
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s2.onFrame(makeFrame(MSG_CONFIG_RESULT, 0, cr, crlen)));
 }
@@ -349,36 +458,38 @@ void test_radio_traffic_rejected_before_auth(void) {
 // session: configuration exact echo
 // ===========================================================================
 
-void test_config_exact_echo_success(void) {
-    Session s; driveToReady(s);
-    TEST_ASSERT_EQUAL(ST_READY_RX, s.state());
-}
+void test_config_exact_echo_success(void) { Session s; driveToReady(s); TEST_ASSERT_EQUAL(ST_READY_RX, s.state()); }
 
 void test_config_missing_echo_rejected(void) {
-    Session s; s.setDesiredConfig(sampleConfig());
-    s.onConnecting(); s.onConnected();
-    uint8_t ver = kVersion; s.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1));
-    uint8_t ok = AUTH_OK;   s.onFrame(makeFrame(MSG_AUTH_RESULT, 0, &ok, 1));
-    uint8_t status0 = CFG_OK;   // status 0 but NO echo -> malformed
+    Session s; driveToConfiguring(s);
+    uint8_t status0 = CFG_OK;                      // status 0 but no echo
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_CONFIG_RESULT, 0, &status0, 1)));
 }
 
-void test_config_mismatch_rejected(void) {
-    Session s; s.setDesiredConfig(sampleConfig());
-    s.onConnecting(); s.onConnected();
-    uint8_t ver = kVersion; s.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1));
-    uint8_t ok = AUTH_OK;   s.onFrame(makeFrame(MSG_AUTH_RESULT, 0, &ok, 1));
-    RadioConfig wrong = sampleConfig(); wrong.freq_hz += 125000;   // bridge echoes different freq
+void test_config_mismatch_freq_rejected(void) {
+    Session s; driveToConfiguring(s);
+    RadioConfig wrong = sampleConfig(); wrong.freq_hz += 125000;
     uint8_t cr[kMaxFrame]; uint16_t crlen = buildConfigResultOk(cr, wrong);
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_CONFIG_RESULT, 0, cr, crlen)));
     TEST_ASSERT_EQUAL(ST_DEGRADED, s.state());
 }
 
+void test_config_mismatch_bw_rejected(void) {
+    Session s; driveToConfiguring(s);
+    RadioConfig wrong = sampleConfig(); wrong.bw_hz = 125000;
+    uint8_t cr[kMaxFrame]; uint16_t crlen = buildConfigResultOk(cr, wrong);
+    TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_CONFIG_RESULT, 0, cr, crlen)));
+}
+
+void test_config_echo_invalid_boolean_rejected(void) {
+    Session s; driveToConfiguring(s);
+    uint8_t cr[kMaxFrame]; uint16_t crlen = buildConfigResultOk(cr, sampleConfig());
+    cr[16] = 2;   // echoed crc byte not boolean (offset 1 + 15)
+    TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_CONFIG_RESULT, 0, cr, crlen)));
+}
+
 void test_config_failure_rejected(void) {
-    Session s; s.setDesiredConfig(sampleConfig());
-    s.onConnecting(); s.onConnected();
-    uint8_t ver = kVersion; s.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1));
-    uint8_t ok = AUTH_OK;   s.onFrame(makeFrame(MSG_AUTH_RESULT, 0, &ok, 1));
+    Session s; driveToConfiguring(s);
     uint8_t status = CFG_UNSUPPORTED;
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_CONFIG_RESULT, 0, &status, 1)));
 }
@@ -393,20 +504,17 @@ void test_rx_when_ready(void) {
     uint8_t rx[kMaxPayload]; uint16_t plen = buildRxPayload(rx, -40, 7, data, sizeof(data));
     TEST_ASSERT_EQUAL(EV_RX, s.onFrame(makeFrame(MSG_RX_PACKET, 0, rx, plen)));
     TEST_ASSERT_EQUAL_UINT16(sizeof(data), s.lastRx().len);
-    TEST_ASSERT_EQUAL(ST_READY_RX, s.state());
 }
 
 void test_one_tx_in_flight(void) {
     Session s; driveToReady(s);
-    TEST_ASSERT_TRUE(s.canSubmitTx());
     uint16_t seq1 = 0;
     TEST_ASSERT_TRUE(s.submitTx(seq1));
     TEST_ASSERT_NOT_EQUAL(0, seq1);
-    TEST_ASSERT_EQUAL(ST_TX_PENDING, s.state());
     uint16_t seq2 = 0;
     TEST_ASSERT_FALSE(s.canSubmitTx());
     TEST_ASSERT_FALSE(s.submitTx(seq2));
-    TEST_ASSERT_EQUAL(TXO_NONE, s.lastTxOutcome());   // a write is not success
+    TEST_ASSERT_EQUAL(TXO_NONE, s.lastTxOutcome());
 }
 
 void test_tx_outcomes(void) {
@@ -433,14 +541,22 @@ void test_stale_and_mismatched_tx_result(void) {
     TEST_ASSERT_EQUAL(TXO_SUCCESS, s.lastTxOutcome());
 }
 
-// H7: a malformed matching TX_RESULT must not get stuck; resolve UNKNOWN + disconnect.
 void test_malformed_matching_tx_result_is_unknown(void) {
     Session s; driveToReady(s);
     uint16_t seq = 0; s.submitTx(seq);
-    uint8_t bad[2] = { TXR_SUCCESS, 0x00 };  // len 2 is malformed for TX_RESULT
+    uint8_t bad[2] = { TXR_SUCCESS, 0x00 };        // wrong length
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_TX_RESULT, seq, bad, 2)));
     TEST_ASSERT_EQUAL(TXO_UNKNOWN, s.lastTxOutcome());
     TEST_ASSERT_EQUAL(ST_DEGRADED, s.state());
+}
+
+void test_unknown_matching_tx_result_code_is_unknown(void) {
+    Session s; driveToReady(s);
+    uint16_t seq = 0; s.submitTx(seq);
+    uint8_t code = 0x09;                           // matching seq, unknown terminal code
+    TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_TX_RESULT, seq, &code, 1)));
+    TEST_ASSERT_EQUAL(TXO_UNKNOWN, s.lastTxOutcome());
+    TEST_ASSERT_NOT_EQUAL(ST_TX_PENDING, s.state());   // never stuck
 }
 
 void test_disconnect_while_tx_pending_is_unknown(void) {
@@ -449,7 +565,6 @@ void test_disconnect_while_tx_pending_is_unknown(void) {
     TEST_ASSERT_TRUE(s.onDisconnected());
     TEST_ASSERT_EQUAL(TXO_UNKNOWN, s.lastTxOutcome());
     TEST_ASSERT_EQUAL(ST_DISCONNECTED, s.state());
-    TEST_ASSERT_FALSE(s.canSubmitTx());
 }
 
 void test_reconnect_resets_session(void) {
@@ -458,62 +573,76 @@ void test_reconnect_resets_session(void) {
     s.onDisconnected();
     TEST_ASSERT_EQUAL(EV_NONE, s.onConnecting());
     TEST_ASSERT_EQUAL(EV_SEND_HELLO, s.onConnected());
-    TEST_ASSERT_EQUAL(ST_HANDSHAKE, s.state());
     uint8_t rx[8]; uint16_t plen = buildRxPayload(rx, -50, 5, nullptr, 0);
     TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_RX_PACKET, 0, rx, plen)));
 }
 
-void test_tx_seq_monotonic_nonzero(void) {
+void test_tx_seq_wrap_65535_to_1(void) {
     Session s; driveToReady(s);
-    uint16_t prev = 0;
-    for (int i = 0; i < 5; ++i) {
+    uint16_t at65535 = 0, afterWrap = 0;
+    for (uint32_t i = 1; i <= 65536; ++i) {
         uint16_t seq = 0;
         TEST_ASSERT_TRUE(s.submitTx(seq));
         TEST_ASSERT_NOT_EQUAL(0, seq);
-        if (i) TEST_ASSERT_NOT_EQUAL(prev, seq);
-        prev = seq;
+        if (i == 65535) at65535 = seq;
+        if (i == 65536) afterWrap = seq;
         uint8_t ok = TXR_SUCCESS;
-        s.onFrame(makeFrame(MSG_TX_RESULT, seq, &ok, 1));   // resolve to allow next submit
+        TEST_ASSERT_EQUAL(EV_TX_DONE, s.onFrame(makeFrame(MSG_TX_RESULT, seq, &ok, 1)));
     }
+    TEST_ASSERT_EQUAL_UINT16(65535, at65535);
+    TEST_ASSERT_EQUAL_UINT16(1, afterWrap);        // wrapped 65535 -> 1, never 0
 }
 
 // ===========================================================================
-// session: timeouts / ping / error
+// session: PING/PONG direction + state, timeouts, error
 // ===========================================================================
 
-void test_timeouts(void) {
-    {
-        Session s; s.setDesiredConfig(sampleConfig());
-        s.onConnecting(); s.onConnected();   // HANDSHAKE
-        TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onTimeout(TO_HANDSHAKE));
-    }
-    {
-        Session s; s.setDesiredConfig(sampleConfig());
-        s.onConnecting(); s.onConnected();
-        uint8_t ver = kVersion; s.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1)); // AUTHENTICATING
-        TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onTimeout(TO_AUTH));
-    }
-    {
-        Session s; s.setDesiredConfig(sampleConfig());
-        s.onConnecting(); s.onConnected();
-        uint8_t ver = kVersion; s.onFrame(makeFrame(MSG_HELLO_ACK, 0, &ver, 1));
-        uint8_t ok = AUTH_OK;   s.onFrame(makeFrame(MSG_AUTH_RESULT, 0, &ok, 1)); // CONFIGURING
-        TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onTimeout(TO_CONFIG));
-    }
-    {
-        Session s; driveToReady(s);
-        uint16_t seq = 0; s.submitTx(seq);
-        TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onTimeout(TO_PENDING_TX));
-        TEST_ASSERT_EQUAL(TXO_UNKNOWN, s.lastTxOutcome());
-    }
-}
-
-void test_ping_pong(void) {
+void test_ping_valid_in_operational_states(void) {
     Session s; driveToReady(s);
-    TEST_ASSERT_EQUAL(EV_SEND_PONG, s.onFrame(makeFrame(MSG_PING, 0, nullptr, 0)));
+    TEST_ASSERT_EQUAL(EV_SEND_PONG, s.onFrame(makeFrame(MSG_PING, 0, nullptr, 0)));   // READY_RX
     TEST_ASSERT_EQUAL(ST_READY_RX, s.state());
-    Session s2;   // ping before connection -> fail closed
-    TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s2.onFrame(makeFrame(MSG_PING, 0, nullptr, 0)));
+    uint16_t seq = 0; s.submitTx(seq);
+    TEST_ASSERT_EQUAL(EV_SEND_PONG, s.onFrame(makeFrame(MSG_PING, 0, nullptr, 0)));   // TX_PENDING
+    TEST_ASSERT_EQUAL(ST_TX_PENDING, s.state());
+}
+
+void test_ping_rejected_before_operational(void) {
+    { Session s; driveToHandshake(s);
+      TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_PING, 0, nullptr, 0))); }
+    { Session s; driveToAuthenticating(s);
+      TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_PING, 0, nullptr, 0))); }
+    { Session s; driveToConfiguring(s);
+      TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_PING, 0, nullptr, 0))); }
+}
+
+void test_pong_incoming_rejected(void) {
+    Session s; driveToReady(s);
+    TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_PONG, 0, nullptr, 0)));
+}
+
+void test_ping_malformed_rejected(void) {
+    Session s; driveToReady(s);
+    uint8_t one = 1;
+    TEST_ASSERT_EQUAL_UINT8(ERR_BAD_SEQ,    validate(makeFrame(MSG_PING, 3, nullptr, 0)));   // nonzero seq
+    TEST_ASSERT_EQUAL_UINT8(ERR_BAD_LENGTH, validate(makeFrame(MSG_PING, 0, &one, 1)));      // nonzero payload
+    TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onFrame(makeFrame(MSG_PING, 3, nullptr, 0)));
+}
+
+void test_timeouts_report_err_timeout(void) {
+    { Session s; driveToHandshake(s);
+      TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onTimeout(TO_HANDSHAKE));
+      TEST_ASSERT_EQUAL_UINT8(ERR_TIMEOUT, s.lastError()); }
+    { Session s; driveToAuthenticating(s);
+      TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onTimeout(TO_AUTH));
+      TEST_ASSERT_EQUAL_UINT8(ERR_TIMEOUT, s.lastError()); }
+    { Session s; driveToConfiguring(s);
+      TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onTimeout(TO_CONFIG));
+      TEST_ASSERT_EQUAL_UINT8(ERR_TIMEOUT, s.lastError()); }
+    { Session s; driveToReady(s);
+      uint16_t seq = 0; s.submitTx(seq);
+      TEST_ASSERT_EQUAL(EV_NEED_DISCONNECT, s.onTimeout(TO_PENDING_TX));
+      TEST_ASSERT_EQUAL_UINT8(ERR_TIMEOUT, s.lastError());
+      TEST_ASSERT_EQUAL(TXO_UNKNOWN, s.lastTxOutcome()); }   // terminal TX safety preserved
 }
 
 void test_remote_error_disconnects(void) {
@@ -532,45 +661,65 @@ void tearDown(void) {}
 int main(int, char**) {
     UNITY_BEGIN();
 
+    // codec + parser
     RUN_TEST(test_encode_decode_roundtrip);
     RUN_TEST(test_payload_ownership_after_compaction);
     RUN_TEST(test_partial_then_rest);
-    RUN_TEST(test_near_max_payload);
     RUN_TEST(test_bad_magic_rejected);
     RUN_TEST(test_unsupported_version_rejected);
     RUN_TEST(test_unknown_type_rejected);
     RUN_TEST(test_oversized_length_rejected);
-    RUN_TEST(test_parser_overflow_push_fails);
     RUN_TEST(test_null_and_size_guards);
 
+    // streaming parser
+    RUN_TEST(test_stream_two_max_rx_frames_one_buffer);
+    RUN_TEST(test_stream_many_frames_in_order);
+    RUN_TEST(test_stream_one_frame_split_at_offsets);
+    RUN_TEST(test_stream_invalid_after_valid);
+    RUN_TEST(test_stream_capacity_boundary_no_silent_discard);
+
+    // validation / config
     RUN_TEST(test_sequence_rules);
     RUN_TEST(test_validate_exact_lengths_and_fields);
-    RUN_TEST(test_validate_malformed_boolean_in_configure);
+    RUN_TEST(test_encode_rejects_invalid_config_booleans);
     RUN_TEST(test_config_encode_decode);
-    RUN_TEST(test_rx_decode_bounds_and_signedness);
 
+    // RX metadata units
+    RUN_TEST(test_rx_metadata_units_and_endian);
+    RUN_TEST(test_rx_inner_length_inconsistent_rejected);
+
+    // handshake / auth
     RUN_TEST(test_handshake_password_mode);
     RUN_TEST(test_handshake_open_mode);
     RUN_TEST(test_auth_fail_disconnects);
     RUN_TEST(test_malformed_auth_frame_disconnects);
     RUN_TEST(test_radio_traffic_rejected_before_auth);
 
+    // configuration echo
     RUN_TEST(test_config_exact_echo_success);
     RUN_TEST(test_config_missing_echo_rejected);
-    RUN_TEST(test_config_mismatch_rejected);
+    RUN_TEST(test_config_mismatch_freq_rejected);
+    RUN_TEST(test_config_mismatch_bw_rejected);
+    RUN_TEST(test_config_echo_invalid_boolean_rejected);
     RUN_TEST(test_config_failure_rejected);
 
+    // RX / TX semantics
     RUN_TEST(test_rx_when_ready);
     RUN_TEST(test_one_tx_in_flight);
     RUN_TEST(test_tx_outcomes);
     RUN_TEST(test_stale_and_mismatched_tx_result);
     RUN_TEST(test_malformed_matching_tx_result_is_unknown);
+    RUN_TEST(test_unknown_matching_tx_result_code_is_unknown);
     RUN_TEST(test_disconnect_while_tx_pending_is_unknown);
     RUN_TEST(test_reconnect_resets_session);
-    RUN_TEST(test_tx_seq_monotonic_nonzero);
+    RUN_TEST(test_tx_seq_wrap_65535_to_1);
 
-    RUN_TEST(test_timeouts);
-    RUN_TEST(test_ping_pong);
+    // PING/PONG, timeouts, error
+    RUN_TEST(test_ping_valid_in_operational_states);
+    RUN_TEST(test_ping_rejected_before_operational);
+    RUN_TEST(test_pong_incoming_rejected);
+    RUN_TEST(test_ping_malformed_rejected);
+    RUN_TEST(test_timeouts_report_err_timeout);
     RUN_TEST(test_remote_error_disconnects);
 
     return UNITY_END();

@@ -121,6 +121,7 @@ enum ErrorCode : uint8_t {
     ERR_AUTH         = 0x09,
     ERR_CONFIG       = 0x0A,
     ERR_REMOTE       = 0x0B,  // peer sent MSG_ERROR
+    ERR_TIMEOUT      = 0x0C,  // transport-reported timeout (handshake/config/TX)
 };
 
 // ---------------------------------------------------------------------------
@@ -141,11 +142,16 @@ struct RadioConfig {
 static constexpr uint16_t kConfigPayloadSize = 4 + 4 + 1 + 1 + 2 + 2 + 1 + 1 + 1; // 17
 
 bool configEqual(const RadioConfig& a, const RadioConfig& b);
+// crc and ldro are booleans: only 0 or 1 are valid (no silent coercion).
+bool radioConfigValid(const RadioConfig& c);
 
-// A received packet decoded from RX_PACKET.
+// A received packet decoded from RX_PACKET. On the wire rssi/snr are signed
+// big-endian int16_t: rssi in centi-dBm (-12050 == -120.50 dBm), snr in
+// centi-dB (-275 == -2.75 dB). This module carries the raw values; conversion
+// to MeshCom internal units is left to a later TX/RX integration milestone.
 struct RxPacket {
-    int16_t  rssi;
-    int16_t  snr;
+    int16_t  rssi;   // centi-dBm
+    int16_t  snr;    // centi-dB
     uint16_t len;
     uint8_t  data[kMaxLoraPayload];
 };
@@ -202,11 +208,32 @@ struct Parser {
 };
 
 void      parserReset(Parser& p);
-// Append raw bytes. Returns false on a null buffer with nonzero length, or if
-// the data would overflow the bounded buffer (impossible framing) — fail closed.
-bool      parserPush(Parser& p, const uint8_t* data, size_t n);
-// Extract one frame (payload copied into out.payload). On POP_ERROR, *err carries
-// the reason and the caller must disconnect + parserReset().
+
+// Streaming-safe ingest. TCP may deliver any number of whole and/or partial
+// frames per read, but the parser stores at most ONE maximum frame. parserPush()
+// copies only as many leading bytes as currently fit and returns that count
+// (0..n); the caller drains complete frames with parserPop() between pushes, so
+// no more than one incomplete frame is ever buffered. Returns 0 on a null buffer
+// or when the internal buffer is full (the caller must pop first). No input byte
+// is ever silently discarded — unconsumed bytes stay in the caller's buffer.
+//
+// Caller loop (the future TCP transport), for a socket read of n bytes:
+//   size_t off = 0;
+//   for (;;) {
+//     Frame f; uint8_t err;
+//     PopResult r = parserPop(p, f, err);
+//     if (r == POP_GOT_FRAME) { handle(f); continue; }
+//     if (r == POP_ERROR)     { disconnect(); parserReset(p); break; }   // fail closed
+//     if (off >= n) break;                                  // need more bytes from socket
+//     size_t took = parserPush(p, data + off, n - off);
+//     off += took;
+//     if (took == 0) { disconnect(); parserReset(p); break; }  // stuck => impossible frame
+//   }
+size_t    parserPush(Parser& p, const uint8_t* data, size_t n);
+
+// Extract one frame (payload copied into out.payload, so it stays valid across
+// later parser calls). On POP_ERROR, *err carries the reason and the caller must
+// disconnect + parserReset().
 PopResult parserPop(Parser& p, Frame& out, uint8_t& err);
 
 // ---------------------------------------------------------------------------
