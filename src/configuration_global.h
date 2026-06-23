@@ -36,6 +36,15 @@
 #define T3_S3_V13 55
 #define T_CONNECT_PRO 56
 #define HELTEC_WIRELESS_PAPER 57
+#define HELTEC_E213 58
+
+// Boards mit dem 2.13"-E-Ink-Panel (E0213A367/SSD1680) UND dem gemeinsamen WP-Display-Pfad:
+// Wireless Paper + Vision Master E213. Beide nutzen identisches Layout, fette 9pt-Schrift,
+// wpApplyLayout/wpRefreshClock, Browse usw. -> der Display-Code prueft WP_DISP statt nur
+// BOARD_WIRELESS_PAPER. (Battery/Pins/USB bleiben board-spezifisch ueber BOARD_E213/-config.)
+#if defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213)
+#define WP_DISP
+#endif
 
 #define DEFAULT_PREAMPLE_LENGTH 32
 

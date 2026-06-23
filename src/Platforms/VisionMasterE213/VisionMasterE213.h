@@ -19,6 +19,8 @@
         // Don't use fallback settings
         #define PLATFORM_SUPPORTED
 
+        #define DISABLE_SDCARD                          // Nobody is going to solder an SD Card reader onto these boards.. right?
+
         // SPI
         #define CAN_MOVE_SPI_PINS       false
         #define ALL_IN_ONE              true            // Allow a short constructor: display pins are fixed
@@ -66,6 +68,8 @@
             extern void VExtOn();                                                                           // Enable power to peripherals
             extern void VExtOff();                                                                          // Disable power to perpiherals
             extern void toggleResetPin();                                                                   // Trigger the displays' reset pin
+            extern void loraToSleep();                                                                      // SX1262 -> SLEEP (Software-SPI), vor dem Deepsleep
+            extern void prepareToSleep();                                                                   // Board/Peripherie fuer Deepsleep (~18uA)
         }
 
     #endif

@@ -23,12 +23,12 @@
 #elif defined(BOARD_T_DECK_PLUS)
 #elif defined(BOARD_T_DECK_PRO)
 #elif defined(BOARD_T_CONNECT_PRO)
-#elif (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER))
+#elif (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213))
 #include "heltec-eink-modules.h"
 
 #if defined(BOARD_E290)
 extern EInkDisplay_VisionMasterE290 epaper_display;
-#elif defined(BOARD_WIRELESS_PAPER)
+#elif (defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213))
 // Display-Treiber wird zur Laufzeit per Chip-ID gewaehlt -> Zeiger statt festem Objekt.
 extern BaseDisplay* g_epaper_display;
 extern const char*  g_wp_panel_name;
@@ -48,12 +48,14 @@ extern const char*  g_wp_panel_name;
     extern U8G2 u8g2_2;
 #endif   
 
-#if defined(BOARD_WIRELESS_PAPER)
+#if (defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213))
 // Liest die Controller-Chip-ID des E-Ink-Panels per Software-SPI (Bit-Bang) aus.
 // Methode wie im Heltec-Factory-Test (Wireless_Paper_E0213A367_FactoryTest):
 // Reset -> Befehl 0x2F -> Datenleitung (SDI/MOSI) auf Eingang -> 8 Bit zuruecklesen.
-// Unterscheidet E0213A367 (V1.1.1/V1.2) von LCMEN2R13EFC1 (V1.1). Pins = WirelessPaper-Plattform.
-static uint8_t detectEinkChipId()
+// Unterscheidet E0213A367 (V1.1.1/V1.2) von LCMEN2R13EFC1 (V1.1). Pins = aktive Plattform.
+// Alte Chip-ID-Probe (Heltec-Factory-Test, Befehl 0x2F). Durch detectEinkPanelIsE0213()
+// (BUSY-Polaritaet, nicht-invasiv) abgeloest, aber als Referenz/Fallback behalten.
+static uint8_t __attribute__((unused)) detectEinkChipId()
 {
     // E-Ink mit Strom versorgen (VEXT = GPIO45, active LOW)
     pinMode(PIN_PCB_VEXT, OUTPUT);
@@ -99,27 +101,62 @@ static uint8_t detectEinkChipId()
 
     return chipId;
 }
+
+// Panel-Auto-Erkennung ueber die (invertierte) BUSY-Polaritaet der beiden 2.13"-Controller.
+// NICHT-INVASIV: kein SPI-Befehl (anders als detectEinkChipId()/0x2F, der den SSD1680 in einen
+// Dauer-BUSY-Zustand bringt -> wait()-Timeout -> Hang). Nach einem reinen Hardware-Reset-PULS und
+// kurzer Recovery treibt der Controller den BUSY-Pin auf seinen statischen IDLE-Pegel; dieser ist
+// zwischen den Controllern invertiert - bewiesen durch die wait()-Logik der Treiber:
+//   - LCMEN2R13EFC1:                wait() == "while(BUSY==LOW)"  -> IDLE = BUSY HIGH
+//   - E0213A367 (SSD1680, Base):    wait() == "while(BUSY==HIGH)" -> IDLE = BUSY LOW
+// WICHTIG: das gilt fuer den IDLE-Pegel NACH der Recovery. Das fluechtige Busy-Fenster direkt
+// nach dem Reset ist genau umgekehrt und timing-kritisch -> bewusst NICHT verwendet. Ebenso wird
+// RST nur GEPULST (nicht gehalten): im gehaltenen Reset ist der BUSY-Ausgang undefiniert.
+// Rueckgabe: true = E0213A367 (SSD1680), false = LCMEN2R13EFC1.
+static bool detectEinkPanelIsE0213()
+{
+    // E-Ink mit Strom versorgen (VEXT board-spezifisch: WP GPIO45/LOW, E213 GPIO18/HIGH)
+    pinMode(PIN_PCB_VEXT, OUTPUT);
+    digitalWrite(PIN_PCB_VEXT, VEXT_ACTIVE);
+    delay(100);
+
+    pinMode(PIN_DISPLAY_RST, OUTPUT);
+    pinMode(PIN_DISPLAY_BUSY, INPUT);
+
+    // Hardware-Reset-PULS (LOW -> HIGH), danach Recovery abwarten
+    digitalWrite(PIN_DISPLAY_RST, LOW);  delay(10);
+    digitalWrite(PIN_DISPLAY_RST, HIGH);
+    delay(100);
+
+    int busy = digitalRead(PIN_DISPLAY_BUSY);
+    printfdeb("[INIT]...2.13\" E-Ink BUSY-Probe: idle-Pegel=%s -> %s\n",
+              busy == HIGH ? "HIGH" : "LOW",
+              busy == LOW  ? "E0213A367" : "LCMEN2R13EFC1");
+    return (busy == LOW);   // IDLE LOW = SSD1680/E0213A367 ; IDLE HIGH = LCMEN2R13EFC1
+}
 #endif
 
 void initDisplay()
 {
-#if defined(BOARD_WIRELESS_PAPER)
-    // HW-Version anhand der Panel-Chip-ID bestimmen und passenden Treiber instanziieren.
-    uint8_t chipId = detectEinkChipId();
-    if ((chipId & 0x03) != 0x01)
+#if defined(WP_DISP)
+    // Gemeinsame Panel-Auto-Erkennung fuer Wireless Paper (V1.1 LCMEN / V1.1.1+V1.2 E0213) UND
+    // Vision Master E213. Nicht-invasiv ueber die invertierte BUSY-Polaritaet (siehe
+    // detectEinkPanelIsE0213()). Loest die alte 0x2F-Chip-ID-Probe ab: die war auf dem E213
+    // unzuverlaessig (waehlte faelschlich LCMEN -> Schlieren) und konnte den SSD1680 aufhaengen.
+    if (detectEinkPanelIsE0213())
+    {
+        g_epaper_display = new EInkDisplay_WirelessPaperV1_2();   // E0213A367-BW (SSD1680)
+        g_wp_panel_name  = "E0213A367";
+    }
+    else
     {
         g_epaper_display = new EInkDisplay_WirelessPaperV1_1();   // LCMEN2R13EFC1 (V1.1)
         g_wp_panel_name  = "LCMEN2R13EFC1";
     }
-    else
-    {
-        g_epaper_display = new EInkDisplay_WirelessPaperV1_2();   // E0213A367 (V1.0 / V1.1.1 / V1.2)
-        g_wp_panel_name  = "E0213A367";
-    }
-    printfdeb("[INIT]...Wireless Paper E-Ink chipId=0x%02X -> %s\n", chipId, g_wp_panel_name);
+    printfdeb("[INIT]...2.13\" E-Ink Panel -> %s\n", g_wp_panel_name);
 #endif
 
-#if ! (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+#if ! (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213)) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
 
     printlndeb("[INIT]...Auto detecting display:");
         
@@ -155,7 +192,7 @@ void initDisplay()
 
 void startDisplay(char line1[20], char line2[20], char line3[20])
 {
-    #if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER))
+    #if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213))
 
     char cvers[20];
 
@@ -172,8 +209,8 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     // Der erkannte Panel-Controller wird zusaetzlich als DEBUG-Zeile am Terminal
     // ausgegeben (siehe initDisplay()).
     epaper_display.fillCircle(10, 10, 10, BLACK);
-    #if defined(BOARD_WIRELESS_PAPER)
-    // WP (250px schmal): 10pt-Fettschrift. Titel "MeshCom <version> <land>" so weit nach RECHTS
+    #if (defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213))
+    // WP / E213 (250px schmal): 10pt-Fettschrift. Titel "MeshCom <version> <land>" so weit nach RECHTS
     // (Richtung Original-Position x=20) setzen, wie er GARANTIERT in eine Zeile passt: Breite
     // messen, x = min(20, 250 - Breite - 4). So nie Umbruch, aber maximal rechts. E290: 12pt @ x20.
     {
@@ -193,15 +230,21 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     epaper_display.setCursor(20, 50);
     epaper_display.printf("MeshCom %s\n", cvers);
     #endif
-    #if defined(BOARD_WIRELESS_PAPER)
-    // WP: die unteren 3 Zeilen (Board-Name, @BY-Zeile, Rufzeichen) horizontal ZENTRIEREN.
-    // Textbreite per getTextBounds messen, x = (Panelbreite 250 - Breite) / 2.
+    #if (defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213))
+    // WP / E213 (beide 2.13", 250px): die unteren 3 Zeilen (Board-Name, @BY-Zeile, Rufzeichen)
+    // horizontal ZENTRIEREN. Textbreite per getTextBounds messen, x = (Panelbreite 250 - Breite) / 2.
     {
       const int WPW = 250;
       int16_t bx, by; uint16_t bw, bh;
+      #if defined(BOARD_E213)
+      const char *boardName = "Heltec Vision Master E213";
+      // laenger als "Heltec PaperW" -> kleinere 9pt-Schrift, sonst passt es nicht auf 250px
+      epaper_display.setFont( &FreeSans9pt7b );
+      #else
       const char *boardName = "Heltec PaperW";
-
       epaper_display.setFont( &FreeSans12pt7b );
+      #endif
+
       epaper_display.getTextBounds(boardName, 0, 80, &bx, &by, &bw, &bh);
       epaper_display.setCursor((WPW - (int)bw) / 2, 80);
       epaper_display.println(boardName);

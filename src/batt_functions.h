@@ -24,6 +24,12 @@ void VextOFF(void);  // Vext default OFF
 void ADC_BATT_ON(void);
 void ADC_BATT_OFF(void);
 
+#if defined(BOARD_WIRELESS_PAPER)
+#define WP_VHIST_MAX 12                     // Anzahl gepufferter Spannungs-Rohwerte (AKKU-LOW-Anzeige: 4 Zeilen x 3)
+extern bool bWpAkkuLow;                    // true vor Low-Voltage-Deepsleep -> Display "AKKU LOW"
+int wpBattHistory(float* out, int maxn);   // letzte Spannungs-Rohwerte, neueste zuerst, liefert Anzahl
+#endif
+
 #else
 
 #if defined(BOARD_HELTEC_T114) || defined(BOARD_T_ECHO) || defined(NRF52_SERIES)
