@@ -67,8 +67,13 @@ bool glueConnect(void* c, const char* host, uint16_t port) {
 
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return false;
+    // Enable non-blocking mode; fail closed if either fcntl fails so we never
+    // leave a blocking socket active. The transport's backoff retries later.
     int fl = ::fcntl(fd, F_GETFL, 0);
-    ::fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+    if (fl < 0 || ::fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) {
+        ::close(fd);
+        return false;
+    }
 
     int r = ::connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
     if (r < 0 && errno != EINPROGRESS) { ::close(fd); return false; }
@@ -116,10 +121,11 @@ void glueClose(void* c) {
     g->connecting = false;
 }
 
-void glueHmac(void*, const uint8_t* key, size_t klen,
+bool glueHmac(void*, const uint8_t* key, size_t klen,
               const uint8_t* msg, size_t mlen, uint8_t out[32]) {
     const mbedtls_md_info_t* md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-    if (md) mbedtls_md_hmac(md, key, klen, msg, mlen, out);
+    if (!md) return false;                                   // backend unavailable
+    return mbedtls_md_hmac(md, key, klen, msg, mlen, out) == 0;   // true only on success
 }
 
 // Placeholder radio config (NOT bound to live MeshCom/RadioLib yet).

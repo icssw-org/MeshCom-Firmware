@@ -45,16 +45,27 @@ void TcpTransport::clear() {
 
 bool TcpTransport::begin(const char* host, uint16_t port, const RadioConfig& cfg,
                          const TcpIo& io, const AuthSource& auth, const TcpTimeouts& to) {
-    clear();
+    clear();   // safe inactive state; nothing active is stored until ALL checks pass
+    // Mandatory inputs.
+    if (!host || host[0] == '\0' || port == 0) return false;
+    if (!io.connect || !io.is_connected || !io.recv || !io.send || !io.close) return false;
+    // Timing must be usable: nonzero phase timeouts, sane backoff window.
+    if (to.connect_ms == 0 || to.handshake_ms == 0 || to.auth_ms == 0 ||
+        to.config_ms == 0 || to.tx_ms == 0) return false;
+    if (to.backoff_min_ms == 0 || to.backoff_max_ms < to.backoff_min_ms) return false;
+    // A configured password (closed mode) requires an HMAC backend; open mode
+    // (no password) legitimately has neither — do not over-validate it.
+    if (auth.password && auth.password_len > 0 && !auth.hmac_sha256) return false;
+    if (!radioConfigValid(cfg)) return false;
+
     host_ = host;
     port_ = port;
     io_   = io;
     auth_ = auth;
     to_   = to;
     backoff_ms_ = to_.backoff_min_ms;
-    // Session is fresh/DISCONNECTED here, so the desired config is accepted iff
-    // it is valid. Reject begin() on an invalid config.
-    return session_.setDesiredConfig(cfg);
+    if (!session_.setDesiredConfig(cfg)) { clear(); return false; }   // defensive; stays inactive
+    return true;
 }
 
 void TcpTransport::stop() {
@@ -126,8 +137,11 @@ bool TcpTransport::handleEvent(Event ev, uint32_t now_ms) {
                 return false;
             }
             uint8_t mac[32];
-            auth_.hmac_sha256(auth_.ctx, auth_.password, auth_.password_len,
-                              session_.authNonce(), kAuthNonceSize, mac);
+            if (!auth_.hmac_sha256(auth_.ctx, auth_.password, auth_.password_len,
+                                   session_.authNonce(), kAuthNonceSize, mac)) {
+                failClosed(now_ms, TERR_HMAC_FAILED);   // backend failed: send nothing, reconnect
+                return false;
+            }
             size_t n = encodeAuthResponse(scratch_, sizeof(scratch_), mac);
             if (!sendFrame(scratch_, n)) { failClosed(now_ms, TERR_REMOTE_CLOSED); return false; }
             return true;

@@ -62,8 +62,12 @@ static TcpIo makeIo(Fake& f) {
     return io;
 }
 
-static void stubHmac(void*, const uint8_t*, size_t, const uint8_t*, size_t, uint8_t out[32]) {
+static bool stubHmac(void*, const uint8_t*, size_t, const uint8_t*, size_t, uint8_t out[32]) {
     for (int i = 0; i < 32; ++i) out[i] = (uint8_t)(0xA0 + i);   // deterministic, not real crypto
+    return true;
+}
+static bool stubHmacFail(void*, const uint8_t*, size_t, const uint8_t*, size_t, uint8_t[32]) {
+    return false;   // backend failure: output must not be used
 }
 
 static const uint8_t kPassword[] = {'s','e','c','r','e','t'};
@@ -257,6 +261,45 @@ void test_auth_required_without_password_fails_closed(void) {
     TEST_ASSERT_FALSE(t.connected());
 }
 
+void test_auth_hmac_backend_failure_fails_closed(void) {
+    Fake f{}; TcpTransport t;
+    AuthSource a = authWithPassword(); a.hmac_sha256 = stubHmacFail;   // backend reports failure
+    TEST_ASSERT_TRUE(t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), a, defaultTimeouts()));
+    connectAndHello(t, f, 0);
+    bridgeClearOut(f);
+    uint8_t ver = kVersion; bridgeFeed(f, MSG_HELLO_ACK, 0, &ver, 1);
+    uint8_t nonce[kAuthNonceSize] = {0}; bridgeFeed(f, MSG_AUTH_CHALLENGE, 0, nonce, kAuthNonceSize);
+    t.poll(1);
+    TEST_ASSERT_FALSE(fwSent(f, MSG_AUTH_RESPONSE));   // nothing sent on backend failure
+    TEST_ASSERT_EQUAL(TERR_HMAC_FAILED, t.lastError());
+    TEST_ASSERT_FALSE(t.connected());                  // disconnected / reset
+    TEST_ASSERT_TRUE(t.nextAttemptAt() > 0);           // reconnect backoff scheduled
+}
+
+void test_begin_validation(void) {
+    Fake f{};
+    TcpIo io = makeIo(f);
+    AuthSource a = authNone();
+    TcpTimeouts to = defaultTimeouts();
+    RadioConfig cfg = sampleConfig();
+    { TcpTransport t; TEST_ASSERT_FALSE(t.begin(nullptr, 7000, cfg, io, a, to)); }       // null host
+    { TcpTransport t; TEST_ASSERT_FALSE(t.begin("", 7000, cfg, io, a, to)); }            // empty host
+    { TcpTransport t; TEST_ASSERT_FALSE(t.begin("10.0.0.1", 0, cfg, io, a, to)); }       // zero port
+    { TcpTransport t; TcpIo bad = io; bad.recv = nullptr;
+      TEST_ASSERT_FALSE(t.begin("10.0.0.1", 7000, cfg, bad, a, to)); }                   // missing callback
+    { TcpTransport t; TcpTimeouts bad = to; bad.tx_ms = 0;
+      TEST_ASSERT_FALSE(t.begin("10.0.0.1", 7000, cfg, io, a, bad)); }                   // zero timeout
+    { TcpTransport t; TcpTimeouts bad = to; bad.backoff_min_ms = 5000; bad.backoff_max_ms = 1000;
+      TEST_ASSERT_FALSE(t.begin("10.0.0.1", 7000, cfg, io, a, bad)); }                   // backoff max < min
+    { TcpTransport t; AuthSource pw; pw.password = kPassword; pw.password_len = sizeof(kPassword);
+      pw.ctx = nullptr; pw.hmac_sha256 = nullptr;
+      TEST_ASSERT_FALSE(t.begin("10.0.0.1", 7000, cfg, io, pw, to)); }                   // password, no HMAC
+    { TcpTransport t;                                                                    // valid open-mode init
+      TEST_ASSERT_TRUE(t.begin("10.0.0.1", 7000, cfg, io, a, to));
+      TEST_ASSERT_FALSE(t.connected());
+      TEST_ASSERT_EQUAL(ST_DISCONNECTED, t.sessionState()); }
+}
+
 void test_coalesced_handshake_frames_in_order(void) {
     Fake f{}; TcpTransport t;
     t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
@@ -364,6 +407,8 @@ int main(int, char**) {
     RUN_TEST(test_full_handshake_password_mode);
     RUN_TEST(test_open_mode_auth_ok_reaches_configure);
     RUN_TEST(test_auth_required_without_password_fails_closed);
+    RUN_TEST(test_auth_hmac_backend_failure_fails_closed);
+    RUN_TEST(test_begin_validation);
     RUN_TEST(test_coalesced_handshake_frames_in_order);
     RUN_TEST(test_ping_gets_pong);
     RUN_TEST(test_rx_exposed_not_injected);

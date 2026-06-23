@@ -48,12 +48,14 @@ struct TcpIo {
 
 // Optional one-way auth source. If password is null/empty there is no password
 // and an auth challenge fails closed. hmac_sha256 computes the raw 32-byte
-// HMAC-SHA256(password, nonce) on the platform (mbedtls on ESP32).
+// HMAC-SHA256(password, nonce) on the platform (mbedtls on ESP32) and returns
+// true on success; on false the transport fails closed and sends NO
+// AUTH_RESPONSE (the out buffer must not be used).
 struct AuthSource {
     const uint8_t* password;       // null => open mode only
     size_t         password_len;
     void* ctx;
-    void (*hmac_sha256)(void* ctx, const uint8_t* key, size_t key_len,
+    bool (*hmac_sha256)(void* ctx, const uint8_t* key, size_t key_len,
                         const uint8_t* msg, size_t msg_len, uint8_t out[32]);
 };
 
@@ -77,6 +79,7 @@ enum TransportError : uint8_t {
     TERR_REMOTE_CLOSED,     // peer closed or a socket error
     TERR_AUTH_NO_PASSWORD,  // bridge demanded auth but no password is provisioned
     TERR_PARSER,            // parser invalid-input / impossible frame
+    TERR_HMAC_FAILED,       // HMAC backend failed: no AUTH_RESPONSE was sent
 };
 
 // Largest single socket read processed per poll(). Bounded; a frame may span
