@@ -244,6 +244,9 @@ The HMAC itself is a transport concern and is tested there, not in the codec.
 
 ## Status
 
-Draft for issue #1015. This milestone delivers the protocol module and its
-tests only — no TCP transport, no MeshCom TX/RX integration, no RadioLib bypass.
-LoRaHAM integration remains outside MeshCom firmware.
+Draft for issue #1015. The generic protocol module (`lib/external_radio_protocol`)
+and an ESP32-only, compile-time-optional TCP transport (`lib/external_radio_tcp`
+core + `src/esp32/external_radio_glue.cpp`, enabled by `-D EXTERNAL_RADIO`) are
+implemented and host-tested. Still deferred: binding to the live MeshCom radio
+configuration, the RadioLib bypass, and injecting RX / driving the MeshCom TX
+queue. LoRaHAM integration remains outside MeshCom firmware.

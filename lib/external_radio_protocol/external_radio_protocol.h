@@ -311,9 +311,10 @@ public:
 
     // The desired radio configuration the firmware will request and against which
     // the CONFIG_RESULT echo is checked exactly. Set once before connecting.
-    // Validates cfg first: on an invalid config (crc/ldro not boolean) it changes
-    // NOTHING and returns false; the caller must treat false as a local config
-    // error and must not begin configuration/connection. Returns true when stored.
+    // Accepted ONLY while ST_DISCONNECTED and only for a valid config (crc/ldro
+    // boolean); otherwise it changes NOTHING and returns false. The caller must
+    // treat false as a local config error and must not begin connection. Returns
+    // true when stored.
     bool  setDesiredConfig(const RadioConfig& cfg);
     bool  hasDesiredConfig() const { return have_cfg_; }
     const RadioConfig& desiredConfig() const { return cfg_; }

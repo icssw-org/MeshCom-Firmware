@@ -132,6 +132,9 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include "esp32_functions.h"
 #include "tft_display_functions.h"
 #include "net_console.h"
+#if defined(EXTERNAL_RADIO)
+#include "external_radio_glue.h"
+#endif
 #include "printfdeb_functions.h"
 
 #ifdef BOARD_HELTEC_V4
@@ -786,6 +789,9 @@ void esp32setup()
     bNETCONSOLE = meshcom_settings.node_sset2 & 0x1000;
     #ifndef DISABLE_NET_CONSOLE
     netConsoleSetPassword(meshcom_settings.node_passwd);
+    #endif
+    #if defined(EXTERNAL_RADIO)
+    externalRadioSetup();
     #endif
     //xxxxxxx   = meshcom_settings.node_sset2 & 0x2000;
     bVIA = meshcom_settings.node_sset2 & 0x4000;
@@ -3593,6 +3599,10 @@ void esp32loop()
         getExternUDP();
         flushExternQueue();
     }
+
+    #if defined(EXTERNAL_RADIO)
+    externalRadioLoop();
+    #endif
 
     if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE)
     {

@@ -297,7 +297,8 @@ void Session::clearVolatile() {
 }
 
 bool Session::setDesiredConfig(const RadioConfig& cfg) {
-    if (!radioConfigValid(cfg)) return false;   // invalid: leave session state untouched
+    if (state_ != ST_DISCONNECTED) return false; // only before a connection begins
+    if (!radioConfigValid(cfg)) return false;    // invalid: leave session state untouched
     cfg_      = cfg;
     have_cfg_ = true;
     return true;

@@ -584,6 +584,20 @@ void test_setdesiredconfig_valid_succeeds_and_encodes(void) {
     TEST_ASSERT_TRUE(encodeConfigure(frame, sizeof(frame), s.desiredConfig()) > 0);  // CONFIGURE path
 }
 
+void test_setdesiredconfig_rejected_when_configuring(void) {
+    Session s; driveToConfiguring(s);                 // ST_CONFIGURING
+    RadioConfig c = sampleConfig(); c.freq_hz += 1000;
+    TEST_ASSERT_FALSE(s.setDesiredConfig(c));         // only allowed while DISCONNECTED
+    TEST_ASSERT_TRUE(configEqual(sampleConfig(), s.desiredConfig()));  // unchanged
+}
+
+void test_setdesiredconfig_rejected_when_ready(void) {
+    Session s; driveToReady(s);                       // ST_READY_RX
+    RadioConfig c = sampleConfig(); c.freq_hz += 1000;
+    TEST_ASSERT_FALSE(s.setDesiredConfig(c));
+    TEST_ASSERT_TRUE(configEqual(sampleConfig(), s.desiredConfig()));
+}
+
 // ===========================================================================
 // session: RX / TX semantics
 // ===========================================================================
@@ -799,6 +813,8 @@ int main(int, char**) {
     RUN_TEST(test_setdesiredconfig_rejects_invalid_ldro);
     RUN_TEST(test_setdesiredconfig_valid_unchanged_after_invalid);
     RUN_TEST(test_setdesiredconfig_valid_succeeds_and_encodes);
+    RUN_TEST(test_setdesiredconfig_rejected_when_configuring);
+    RUN_TEST(test_setdesiredconfig_rejected_when_ready);
 
     // RX / TX semantics
     RUN_TEST(test_rx_when_ready);
