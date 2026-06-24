@@ -2038,7 +2038,12 @@ uint32_t externalTxMarkPending(int slot)
     if(slot < 0 || slot >= MAX_RING || ringBuffer[slot][0] == 0)
         return 0;   // nothing to own
 
-    uint32_t token = g_extTxq.begin(slot, extractRingMsgId(slot));
+    // Capture the pre-pending ring status BEFORE overwriting it with EXT_PENDING,
+    // so a confirmed RF send can restore the exact native post-send state
+    // (READY -> retransmittable; DONE -> one-shot).
+    uint8_t pre_status = ringBuffer[slot][1];
+
+    uint32_t token = g_extTxq.begin(slot, extractRingMsgId(slot), pre_status);
     if(token == 0)
         return 0;   // an external TX is already pending (invariant: one at a time)
 
@@ -2053,19 +2058,39 @@ uint32_t externalTxMarkPending(int slot)
     return token;
 }
 
-// Complete the owned slot exactly once (DONE + len=0). Confirmed bridge success.
+// Confirmed bridge RF send (TXO_SUCCESS). RF success is NOT MeshCom delivery: a
+// retransmittable entry must re-enter the same native post-send waiting state so
+// it can be cleared by a later ACK or retried by retransmission maintenance. A
+// genuine one-shot entry completes exactly once (DONE + len=0).
 bool externalTxResolveSuccess(uint32_t token)
 {
     int slot = g_extTxq.slot();
+    uint8_t pre_status = g_extTxq.preStatus();
     if(g_extTxq.resolveSuccess(token) != extradio::ExtTxAction::COMPLETE_SUCCESS)
         return false;   // stale/late result: ring untouched
 
-    ringBuffer[slot][1] = RING_STATUS_DONE;
-    ringBuffer[slot][0] = 0;
-    retryCount[slot] = 0;
-
-    if(bDisplayRetx)
-        printfdeb("\n[RETX] ext-TX success retid:%i token:%lu\n", slot, (unsigned long)token);
+    if(extradio::extTxRetransmittable(pre_status, ringBuffer[slot][2],
+                                      RING_STATUS_READY, MSG_TYPE_TEXT))
+    {
+        // Retransmittable: emulate doTX()'s post-send state. Enter SENT so
+        // updateRetransmissionStatus() ages/retries it and incoming ACK handling
+        // clears it. Payload, length, message identity and retryCount are all
+        // retained (the EXT_PENDING slot never cleared its length).
+        ringBuffer[slot][1] = RING_STATUS_SENT;
+        if(bDisplayRetx)
+            printfdeb("\n[RETX] ext-TX RF-sent retid:%i token:%lu -> awaiting ACK/retransmit\n",
+                      slot, (unsigned long)token);
+    }
+    else
+    {
+        // One-shot (non-text, or relay/ACK enqueued DONE): native completion.
+        ringBuffer[slot][1] = RING_STATUS_DONE;
+        ringBuffer[slot][0] = 0;
+        retryCount[slot] = 0;
+        if(bDisplayRetx)
+            printfdeb("\n[RETX] ext-TX RF-sent retid:%i token:%lu (one-shot, complete)\n",
+                      slot, (unsigned long)token);
+    }
     return true;
 }
 

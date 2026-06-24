@@ -70,10 +70,15 @@ public:
     ExtTxResolution lastResolution() const { return last_; }
 
     // Begin ownership of a freshly selected ring slot for external transmission.
-    // Captures the slot's immutable msg_id for cross-checking. Returns a non-zero
-    // identity token on success (caller then sets RING_STATUS_EXT_PENDING), or 0
-    // if a TX is already pending (invariant: at most one external TX in flight).
-    uint32_t begin(int slot, uint32_t msg_id);
+    // Captures the slot's immutable msg_id for cross-checking and its pre-pending
+    // ring status (so a confirmed RF send can restore the exact native post-send
+    // state — retransmittable vs one-shot). Returns a non-zero identity token on
+    // success (caller then sets RING_STATUS_EXT_PENDING), or 0 if a TX is already
+    // pending (invariant: at most one external TX in flight).
+    uint32_t begin(int slot, uint32_t msg_id, uint8_t pre_status = 0);
+
+    // Ring status the slot carried at begin() (before it became EXT_PENDING).
+    uint8_t preStatus() const { return pre_status_; }
 
     // Does the live record own this slot? Used by ring-clear (ACK) hooks.
     bool owns(int slot) const { return active_ && slot_ == slot; }
@@ -110,9 +115,20 @@ private:
     int             slot_;
     uint32_t        token_;
     uint32_t        msg_id_;
-    uint32_t        gen_;      // monotonic token source (never reused)
+    uint32_t        gen_;        // monotonic token source (never reused)
+    uint8_t         pre_status_; // ring status captured at begin()
     ExtTxResolution last_;
 };
+
+// Decide whether a ring entry must remain in the MeshCom ACK/retransmission
+// lifecycle after a CONFIRMED bridge RF send (TXO_SUCCESS), rather than being
+// completed one-shot. Pure; the caller passes its own ring constants so the lib
+// stays decoupled from firmware headers. Mirrors the native doTX() restore rule:
+// a slot is retransmittable iff it was READY at selection AND is a text message.
+inline bool extTxRetransmittable(uint8_t pre_status, uint8_t msg_type,
+                                 uint8_t ready_status, uint8_t text_type) {
+    return pre_status == ready_status && msg_type == text_type;
+}
 
 // Bounded external-only TX pacing. After a CHANNEL_BUSY result the firmware must
 // NOT submit another external TX until a deadline — a true delay, not merely

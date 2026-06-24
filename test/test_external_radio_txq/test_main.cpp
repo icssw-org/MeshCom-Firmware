@@ -23,6 +23,9 @@ static constexpr uint8_t kReady      = 0x00;  // RING_STATUS_READY
 static constexpr uint8_t kSent       = 0x01;  // RING_STATUS_SENT (aging 0x01..0x14)
 static constexpr uint8_t kDone       = 0xFF;  // RING_STATUS_DONE
 static constexpr uint8_t kExtPending = 0x80;  // RING_STATUS_EXT_PENDING
+static constexpr uint8_t kText       = 0x3A;  // MSG_TYPE_TEXT
+static constexpr uint8_t kPos        = 0x21;  // MSG_TYPE_POSITION
+static constexpr uint8_t kAck        = 0x41;  // MSG_TYPE_ACK
 
 // Mirror of getNextTxSlot eligibility: only READY or DONE slots are selectable.
 static bool ringSelectable(uint8_t len, uint8_t status) {
@@ -212,9 +215,44 @@ static void test_pacer_blocks_until_deadline() {
     TEST_ASSERT_TRUE(extTxPacerReady(p, 1000));
 }
 
+// --- M9: post-RF-success transition is retransmittable vs one-shot ----------
+static void test_retransmittable_decision() {
+    // A READY text entry (user DM/broadcast) stays in the ACK/retransmit lifecycle.
+    TEST_ASSERT_TRUE (extTxRetransmittable(kReady, kText, kReady, kText));
+    // A relay text enqueued DONE is one-shot (fire-and-forget).
+    TEST_ASSERT_FALSE(extTxRetransmittable(kDone,  kText, kReady, kText));
+    // Non-text entries are always one-shot, regardless of status.
+    TEST_ASSERT_FALSE(extTxRetransmittable(kReady, kPos,  kReady, kText));
+    TEST_ASSERT_FALSE(extTxRetransmittable(kReady, kAck,  kReady, kText));
+    TEST_ASSERT_FALSE(extTxRetransmittable(kDone,  kPos,  kReady, kText));
+}
+
+// --- M9: begin() captures the pre-pending ring status for that decision -----
+static void test_begin_captures_pre_status() {
+    ExtTxq q;
+    uint32_t t = q.begin(4, 0xAABBCCDD, kReady);
+    TEST_ASSERT_NOT_EQUAL(0u, t);
+    TEST_ASSERT_EQUAL_UINT8(kReady, q.preStatus());
+    // Still readable after success resolution (success handler needs it).
+    TEST_ASSERT_EQUAL(ExtTxAction::COMPLETE_SUCCESS, q.resolveSuccess(t));
+    TEST_ASSERT_EQUAL_UINT8(kReady, q.preStatus());
+
+    // A one-shot (DONE) entry captures DONE.
+    uint32_t t2 = q.begin(4, 0x11223344, kDone);
+    TEST_ASSERT_EQUAL_UINT8(kDone, q.preStatus());
+    TEST_ASSERT_EQUAL(ExtTxAction::COMPLETE_SUCCESS, q.resolveSuccess(t2));
+
+    // Default pre_status is 0 (READY) — keeps older 2-arg callers valid.
+    uint32_t t3 = q.begin(4, 0x55667788);
+    TEST_ASSERT_EQUAL_UINT8(kReady, q.preStatus());
+    (void)t3;
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_selection_skips_ext_pending);
+    RUN_TEST(test_retransmittable_decision);
+    RUN_TEST(test_begin_captures_pre_status);
     RUN_TEST(test_pacer_blocks_until_deadline);
     RUN_TEST(test_retransmit_skips_ext_pending);
     RUN_TEST(test_single_pending_only);

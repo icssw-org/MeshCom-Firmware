@@ -10,9 +10,10 @@
 // -D EXTERNAL_RADIO_PORT=7000). With none set, the transport stays idle. The
 // host must be an IPv4 literal in this draft (no blocking DNS).
 //
-// NOTE (deferred): the RadioConfig used here is a fixed placeholder. Binding to
-// the live MeshCom radio configuration and the RadioLib bypass belong to a later
-// integration milestone, as does injecting RX / driving the MeshCom TX queue.
+// The RadioConfig is built from the live MeshCom radio settings (getFreq/getBW/
+// getSF/getCR/getPower) at setup and re-synced on runtime changes; it is not a
+// placeholder. RX is delivered into OnRxDone() and the MeshCom TX ring is driven
+// through the bridge, with the local RadioLib RX/CAD/TX path bypassed.
 
 #include "external_radio_glue.h"
 

@@ -271,9 +271,32 @@ provisioned:
   with integer truncation toward zero: RSSI `centi-dBm / 100`, SNR `centi-dB / 100`
   clamped to the signed-8-bit range;
 - **transmission** routes a selected MeshCom TX-ring entry through `TX_REQUEST`;
-  the final outcome is completed exactly once from the terminal `TX_RESULT` (or a
+  the final outcome is resolved exactly once from the terminal `TX_RESULT` (or a
   single `UNKNOWN` on disconnect/timeout/send-failure/reconfigure). A socket write
   is never success.
+
+### Bridge RF success vs MeshCom acknowledgment
+
+A bridge `SUCCESS` `TX_RESULT` means only that **the RF send completed** — it is
+**not** a MeshCom delivery acknowledgment. The two are kept distinct, exactly as
+in local-radio mode:
+
+- a **retransmittable** MeshCom entry (a user text message) is **not** completed
+  by RF success. It re-enters the normal post-send waiting state, keeping its
+  payload, message identity and retry count, until either a later incoming
+  **MeshCom ACK** clears it through the existing ACK handling or normal
+  **retransmission maintenance** exhausts the retry budget. Each retry is a fresh
+  bridge `TX_REQUEST` with its own local ownership token; only one external TX is
+  ever in flight;
+- a genuine **one-shot** entry (relay/ACK/position/HEY) is completed by RF success
+  exactly as the local path completes it;
+- retransmission maintenance runs in external mode at the normal cadence but is
+  message-level only — it never drives local CAD/TX/RX or RadioLib, and it skips
+  the in-flight `EXT_PENDING` entry;
+- `CHANNEL_BUSY` (no RF success) keeps its bounded pacing delay and retry budget;
+  `TIMEOUT`/`RADIO_ERROR`/`UNKNOWN`/disconnect/reconfigure are terminal
+  non-success — never an ACK-wait, never an immediate resend, never a false
+  success.
 
 ## Testing
 

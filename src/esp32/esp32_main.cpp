@@ -3735,12 +3735,26 @@ void esp32loop()
     }
 
     #if defined(EXTERNAL_RADIO)
+    // In external mode bRadio is false, so the local-radio loop section does not
+    // run. Re-create here ONLY the RadioLib-free, message-level maintenance the
+    // external lifecycle needs, at the same 2s cadence as the native path:
+    //
+    //  * retransmission maintenance — ages SENT entries (e.g. those entered by a
+    //    confirmed bridge RF send awaiting a MeshCom ACK), retries or gives up per
+    //    the normal budget, and skips RING_STATUS_EXT_PENDING. It touches only the
+    //    ring (no CAD/TX/RX/RadioLib). A requeued retry becomes a READY slot that
+    //    externalRadioTxStep() submits with a fresh ownership token.
+    if((retransmit_timer + (1000 * 2)) < millis())
+    {
+        updateRetransmissionStatus();
+        retransmit_timer = millis();
+    }
+
     // Non-blocking poll of the optional external-radio TCP transport, AFTER the
     // normal Wi-Fi/network-readiness maintenance above. Self-gates on Wi-Fi state.
     // poll() delivers RX synchronously via glueRxSink -> OnRxDone (main-loop
-    // context) and drives one queued external TX. In external mode bRadio is
-    // false, so the local-radio loop section (incl. its display flush) does not
-    // run — flush deferred RX display updates here instead.
+    // context) and drives one queued external TX. Flush deferred RX display
+    // updates here (the local-radio loop section that normally does so is off).
     externalRadioLoop();
     flushDeferredDisplayUpdates();
     #endif

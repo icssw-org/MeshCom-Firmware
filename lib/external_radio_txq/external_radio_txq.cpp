@@ -5,22 +5,24 @@
 namespace extradio {
 
 void ExtTxq::reset() {
-    active_ = false;
-    slot_   = -1;
-    token_  = 0;
-    msg_id_ = 0;
-    gen_    = 0;
-    last_   = ExtTxResolution::IDLE;
+    active_     = false;
+    slot_       = -1;
+    token_      = 0;
+    msg_id_     = 0;
+    gen_        = 0;
+    pre_status_ = 0;
+    last_       = ExtTxResolution::IDLE;
 }
 
-uint32_t ExtTxq::begin(int slot, uint32_t msg_id) {
+uint32_t ExtTxq::begin(int slot, uint32_t msg_id, uint8_t pre_status) {
     if (active_)
         return 0;                 // one external TX in flight at a time
-    active_ = true;
-    slot_   = slot;
-    msg_id_ = msg_id;
-    token_  = ++gen_;             // strictly increasing, never 0, never reused
-    last_   = ExtTxResolution::PENDING;
+    active_     = true;
+    slot_       = slot;
+    msg_id_     = msg_id;
+    pre_status_ = pre_status;
+    token_      = ++gen_;         // strictly increasing, never 0, never reused
+    last_       = ExtTxResolution::PENDING;
     return token_;
 }
 
