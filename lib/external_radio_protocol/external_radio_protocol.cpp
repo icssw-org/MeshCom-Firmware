@@ -2,9 +2,23 @@
 
 #include "external_radio_protocol.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace extradio {
+
+// Finite-checked conversion of a (possibly fractional) unit value to integer Hz
+// via nearest rounding. Never truncates; rejects non-finite / non-positive /
+// out-of-uint32 results.
+static bool scaleToHz(double value, double scale, uint32_t& out_hz) {
+    if (!std::isfinite(value) || value <= 0.0) return false;
+    double hz = value * scale;
+    if (!std::isfinite(hz)) return false;
+    double rounded = std::floor(hz + 0.5);              // nearest integer Hz
+    if (rounded < 1.0 || rounded > 4294967295.0) return false;
+    out_hz = static_cast<uint32_t>(rounded);
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // Big-endian helpers
@@ -43,6 +57,37 @@ bool configEqual(const RadioConfig& a, const RadioConfig& b) {
 
 bool radioConfigValid(const RadioConfig& c) {
     return isBool(c.crc) && isBool(c.ldro);
+}
+
+bool buildRadioConfig(RadioConfig& out, double freq_mhz, double bw_khz,
+                      int sf, int cr_denom, int sync_word,
+                      int preamble_symbols, int tx_power_dbm, bool crc) {
+    uint32_t freq_hz = 0, bw_hz = 0;
+    if (!scaleToHz(freq_mhz, 1000000.0, freq_hz)) return false;
+    if (!scaleToHz(bw_khz,      1000.0, bw_hz))   return false;
+    if (sf < 5 || sf > 12)                         return false;   // representable + sane LoRa range
+    if (cr_denom < 5 || cr_denom > 8)              return false;   // 4/5 .. 4/8
+    if (sync_word < 0 || sync_word > 0xFFFF)       return false;
+    if (preamble_symbols < 1 || preamble_symbols > 0xFFFF) return false;
+    if (tx_power_dbm < -128 || tx_power_dbm > 127) return false;   // int8 dBm, signed preserved
+
+    RadioConfig c;
+    c.freq_hz      = freq_hz;
+    c.bw_hz        = bw_hz;
+    c.sf           = static_cast<uint8_t>(sf);
+    c.cr_denom     = static_cast<uint8_t>(cr_denom);
+    c.sync_word    = static_cast<uint16_t>(sync_word);
+    c.preamble     = static_cast<uint16_t>(preamble_symbols);
+    c.tx_power_dbm = static_cast<int8_t>(tx_power_dbm);
+    c.crc          = crc ? 1 : 0;
+    // Effective LDRO: MeshCom uses RadioLib automatic LDRO, on when the symbol
+    // time exceeds 16 ms, i.e. (2^SF / bw_hz) * 1000 > 16. Computed with integers
+    // to avoid any rounding at the boundary.
+    c.ldro = (((uint64_t)1 << sf) * 1000ULL > (uint64_t)bw_hz * 16ULL) ? 1 : 0;
+
+    if (!radioConfigValid(c)) return false;
+    out = c;
+    return true;
 }
 
 // Serialize a RadioConfig into a 17-byte buffer (caller guarantees capacity and

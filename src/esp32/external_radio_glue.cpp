@@ -33,6 +33,9 @@
 #include <mbedtls/md.h>
 
 #include "external_radio_tcp.h"
+#include "lora_setchip.h"          // getFreq/getBW/getSF/getCR/getPower
+#include "esp32_flash.h"           // s_meshcom_settings / meshcom_settings
+#include "configuration_global.h"  // SYNC_WORD_SX127x
 
 // Overlay-provided configuration (defaults keep the feature idle/safe).
 #ifndef EXTERNAL_RADIO_HOST
@@ -129,14 +132,6 @@ bool glueHmac(void*, const uint8_t* key, size_t klen,
     return mbedtls_md_hmac(md, key, klen, msg, mlen, out) == 0;   // true only on success
 }
 
-// Placeholder radio config (NOT bound to live MeshCom/RadioLib yet).
-RadioConfig placeholderConfig() {
-    RadioConfig c;
-    c.freq_hz = 433175000u; c.bw_hz = 250000u; c.sf = 11; c.cr_denom = 6;
-    c.sync_word = 0x2B; c.preamble = 16; c.tx_power_dbm = 14; c.crc = 1; c.ldro = 0;
-    return c;
-}
-
 #ifdef EXTERNAL_RADIO_PASSWORD
 const char* const g_password = EXTERNAL_RADIO_PASSWORD;   // from untracked overlay only
 #else
@@ -178,7 +173,25 @@ void externalRadioSetup() {
     auth.ctx          = nullptr;
     auth.hmac_sha256  = glueHmac;
 
-    g_enabled = g_transport.begin(g_host, g_port, placeholderConfig(), io, auth, defaultTimeouts());
+    // Snapshot the active MeshCom radio configuration (effective values, defaults
+    // already applied by the getters) and validate it. On any unmappable value do
+    // NOT begin the transport and do NOT fall back to placeholder values.
+    // NOTE: this is a one-time boot snapshot. Live changes (--txfreq/--txbw/--txsf/
+    // --txcr/--txpower call lora_setchip_meshcom() in place, no reboot) are NOT yet
+    // reflected here; a dedicated controlled-reconfiguration milestone (M6b) is
+    // required before that path becomes usable.
+    RadioConfig cfg;
+    if (!buildRadioConfig(cfg,
+                          getFreq(), getBW(), getSF(), getCR(),
+                          SYNC_WORD_SX127x,
+                          meshcom_settings.node_preamplebits,
+                          getPower(),
+                          true /* MeshCom CRC is always enabled */)) {
+        Serial.println("[EXTRADIO] disabled: active radio config could not be mapped");
+        g_enabled = false;
+        return;
+    }
+    g_enabled = g_transport.begin(g_host, g_port, cfg, io, auth, defaultTimeouts());
     // Never log the password.
     Serial.printf("[EXTRADIO] %s, bridge %s:%u, auth=%s\n",
                   g_enabled ? "enabled" : "config-error",

@@ -145,6 +145,18 @@ bool configEqual(const RadioConfig& a, const RadioConfig& b);
 // crc and ldro are booleans: only 0 or 1 are valid (no silent coercion).
 bool radioConfigValid(const RadioConfig& c);
 
+// Build a normalized RadioConfig from active radio scalars: frequency in MHz and
+// bandwidth in kHz (both may be fractional / float-sourced), spreading factor,
+// coding-rate denominator (5..8), on-air sync word, preamble symbols, TX power in
+// dBm, and the CRC boolean. LDRO is the EFFECTIVE value from the standard LoRa
+// low-data-rate rule (symbol time > 16 ms). Frequency/bandwidth are converted to
+// integer Hz by finite-checked nearest rounding (never truncated). Returns false
+// and leaves `out` untouched on any non-finite, out-of-range, or unrepresentable
+// input — no clamping, approximation, or fallback.
+bool buildRadioConfig(RadioConfig& out, double freq_mhz, double bw_khz,
+                      int sf, int cr_denom, int sync_word,
+                      int preamble_symbols, int tx_power_dbm, bool crc);
+
 // A received packet decoded from RX_PACKET. On the wire rssi/snr are signed
 // big-endian int16_t: rssi in centi-dBm (-12050 == -120.50 dBm), snr in
 // centi-dB (-275 == -2.75 dB). This module carries the raw values; conversion

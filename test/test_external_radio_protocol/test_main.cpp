@@ -6,6 +6,7 @@
 
 #include <unity.h>
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 
@@ -756,6 +757,87 @@ void test_remote_error_disconnects(void) {
     TEST_ASSERT_EQUAL(ST_DEGRADED, s.state());
 }
 
+// ===========================================================================
+// buildRadioConfig: active-config snapshot mapping
+// ===========================================================================
+
+void test_buildconfig_valid_mapping(void) {
+    RadioConfig c;
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.175, 250.0, 11, 6, 0x2B, 16, 14, true));
+    TEST_ASSERT_EQUAL_UINT32(433175000u, c.freq_hz);
+    TEST_ASSERT_EQUAL_UINT32(250000u, c.bw_hz);
+    TEST_ASSERT_EQUAL_UINT8(11, c.sf);
+    TEST_ASSERT_EQUAL_UINT8(6, c.cr_denom);
+    TEST_ASSERT_EQUAL_UINT16(0x2B, c.sync_word);
+    TEST_ASSERT_EQUAL_UINT16(16, c.preamble);
+    TEST_ASSERT_EQUAL_INT8(14, c.tx_power_dbm);
+    TEST_ASSERT_EQUAL_UINT8(1, c.crc);
+    TEST_ASSERT_EQUAL_UINT8(0, c.ldro);          // SF11/250k -> false
+}
+
+void test_buildconfig_freq_conversion(void) {
+    RadioConfig c;
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 868.125, 125.0, 9, 5, 0x12, 8, 0, true));
+    TEST_ASSERT_EQUAL_UINT32(868125000u, c.freq_hz);   // nearest-integer, not truncated
+    RadioConfig d;
+    TEST_ASSERT_FALSE(buildRadioConfig(d, 0.0,      250.0, 11, 6, 0x2B, 16, 14, true));   // zero
+    TEST_ASSERT_FALSE(buildRadioConfig(d, -433.0,   250.0, 11, 6, 0x2B, 16, 14, true));   // negative
+    TEST_ASSERT_FALSE(buildRadioConfig(d, INFINITY, 250.0, 11, 6, 0x2B, 16, 14, true));   // non-finite
+    TEST_ASSERT_FALSE(buildRadioConfig(d, 5000.0,   250.0, 11, 6, 0x2B, 16, 14, true));   // > uint32 Hz
+}
+
+void test_buildconfig_bw_conversion(void) {
+    RadioConfig c;
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 62.5, 7, 5, 0x2B, 8, 0, false));
+    TEST_ASSERT_EQUAL_UINT32(62500u, c.bw_hz);
+    RadioConfig d;
+    TEST_ASSERT_FALSE(buildRadioConfig(d, 433.0, 0.0, 11, 6, 0x2B, 16, 14, true));        // bw zero
+}
+
+void test_buildconfig_cr_denominator(void) {
+    RadioConfig c;
+    for (int cr = 5; cr <= 8; ++cr)
+        TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 250.0, 9, cr, 0x2B, 8, 0, true));
+    RadioConfig d;
+    TEST_ASSERT_FALSE(buildRadioConfig(d, 433.0, 250.0, 9, 4, 0x2B, 8, 0, true));         // < 5
+    TEST_ASSERT_FALSE(buildRadioConfig(d, 433.0, 250.0, 9, 9, 0x2B, 8, 0, true));         // > 8
+}
+
+void test_buildconfig_signed_power(void) {
+    RadioConfig c;
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 250.0, 9, 5, 0x2B, 8, -9, true));
+    TEST_ASSERT_EQUAL_INT8(-9, c.tx_power_dbm);
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 250.0, 9, 5, 0x2B, 8, 22, true));
+    TEST_ASSERT_EQUAL_INT8(22, c.tx_power_dbm);
+}
+
+void test_buildconfig_crc_and_ldro(void) {
+    RadioConfig c;
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 250.0, 9, 5, 0x2B, 8, 0, false));
+    TEST_ASSERT_EQUAL_UINT8(0, c.crc);
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 250.0, 9, 5, 0x2B, 8, 0, true));
+    TEST_ASSERT_EQUAL_UINT8(1, c.crc);
+    // LDRO rule (symbol time > 16 ms):
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 250.0, 11, 6, 0x2B, 16, 14, true));   // SF11/250k
+    TEST_ASSERT_EQUAL_UINT8(0, c.ldro);                                               //   -> false
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 125.0, 11, 6, 0x2B, 16, 14, true));   // SF11/125k
+    TEST_ASSERT_EQUAL_UINT8(1, c.ldro);                                               //   -> true
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 62.5,  10, 6, 0x2B, 16, 14, true));   // SF10/62.5k
+    TEST_ASSERT_EQUAL_UINT8(1, c.ldro);                                               //   -> true
+    TEST_ASSERT_TRUE(buildRadioConfig(c, 433.0, 128.0, 11, 6, 0x2B, 16, 14, true));   // SF11/128k
+    TEST_ASSERT_EQUAL_UINT8(0, c.ldro);                                               //   exact threshold -> false
+}
+
+void test_buildconfig_invalid_leaves_out_untouched(void) {
+    RadioConfig c; std::memset(&c, 0, sizeof(c)); c.freq_hz = 0xDEADBEEFu;   // sentinel
+    TEST_ASSERT_FALSE(buildRadioConfig(c, 433.0, 250.0, 4,  6, 0x2B,    16, 14, true));     // SF too low
+    TEST_ASSERT_FALSE(buildRadioConfig(c, 433.0, 250.0, 13, 6, 0x2B,    16, 14, true));     // SF too high
+    TEST_ASSERT_FALSE(buildRadioConfig(c, 433.0, 250.0, 11, 6, 0x2B,     0, 14, true));     // preamble 0
+    TEST_ASSERT_FALSE(buildRadioConfig(c, 433.0, 250.0, 11, 6, 0x10000, 16, 14, true));     // sync > u16
+    TEST_ASSERT_FALSE(buildRadioConfig(c, 433.0, 250.0, 11, 6, 0x2B,    16, 200, true));    // power > int8
+    TEST_ASSERT_EQUAL_UINT32(0xDEADBEEFu, c.freq_hz);   // out never modified on failure
+}
+
 // ---------------------------------------------------------------------------
 // runner
 // ---------------------------------------------------------------------------
@@ -815,6 +897,14 @@ int main(int, char**) {
     RUN_TEST(test_setdesiredconfig_valid_succeeds_and_encodes);
     RUN_TEST(test_setdesiredconfig_rejected_when_configuring);
     RUN_TEST(test_setdesiredconfig_rejected_when_ready);
+
+    RUN_TEST(test_buildconfig_valid_mapping);
+    RUN_TEST(test_buildconfig_freq_conversion);
+    RUN_TEST(test_buildconfig_bw_conversion);
+    RUN_TEST(test_buildconfig_cr_denominator);
+    RUN_TEST(test_buildconfig_signed_power);
+    RUN_TEST(test_buildconfig_crc_and_ldro);
+    RUN_TEST(test_buildconfig_invalid_leaves_out_untouched);
 
     // RX / TX semantics
     RUN_TEST(test_rx_when_ready);

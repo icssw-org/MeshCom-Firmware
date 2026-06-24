@@ -256,11 +256,26 @@ When readiness becomes false the transport stops the link safely — a pending T
 resolves as `UNKNOWN`, never a false success — and reconnects once readiness
 returns.
 
+## Configuration snapshot
+
+`CONFIGURE` carries a snapshot of the active MeshCom radio settings, captured once
+during external-radio setup and normalized to the protocol-v1 units above
+(frequency/bandwidth converted to integer Hz by finite-checked nearest rounding;
+the coding-rate denominator and on-air sync word taken directly; CRC from the
+active setting; **LDRO** derived as the effective value from the standard LoRa
+low-data-rate rule, symbol time > 16 ms). If the active settings cannot be mapped
+to a valid `RadioConfig`, the transport does not start and no placeholder is used.
+
+This is a one-time boot snapshot; keeping it in sync with **runtime** radio
+changes is a separate, not-yet-implemented milestone. Hot reconfiguration is not
+supported.
+
 ## Status
 
-Draft for issue #1015. The generic protocol module (`lib/external_radio_protocol`)
-and an ESP32-only, compile-time-optional TCP transport (`lib/external_radio_tcp`
-core + `src/esp32/external_radio_glue.cpp`, enabled by `-D EXTERNAL_RADIO`) are
-implemented and host-tested. Still deferred: binding to the live MeshCom radio
-configuration, the RadioLib bypass, and injecting RX / driving the MeshCom TX
-queue. LoRaHAM integration remains outside MeshCom firmware.
+Draft for issue #1015. Implemented and host-tested: the generic protocol module
+(`lib/external_radio_protocol`), the ESP32-only compile-time-optional TCP transport
+(`lib/external_radio_tcp` + `src/esp32/external_radio_glue.cpp`, `-D EXTERNAL_RADIO`),
+and the boot-time active-config snapshot above. Still deferred: keeping that
+snapshot in sync with runtime radio changes, the RadioLib bypass, and injecting
+RX / driving the MeshCom TX queue. LoRaHAM integration remains outside MeshCom
+firmware.
