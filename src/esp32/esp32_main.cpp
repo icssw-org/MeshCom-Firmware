@@ -1245,7 +1245,13 @@ void esp32setup()
         #endif
         #endif
 
-        #if defined(BOARD_T_ETH_ELITE)
+        #if defined(EXTERNAL_RADIO)
+        // External radio: the bridge owns the RF chip. Do NOT initialize/begin the
+        // local RadioLib transceiver. bRadio is forced false below so no local
+        // RX/CAD/TX path runs.
+        int state = RADIOLIB_ERR_NONE;
+        (void)state;
+        #elif defined(BOARD_T_ETH_ELITE)
         int state = radio.begin(433.175);
         radio.setDio2AsRfSwitch(true);
         radio.setTCXO(1.8);
@@ -1283,6 +1289,14 @@ void esp32setup()
 
     #if defined(BOARD_E220)
         bRadio = false; // no detailed setting
+    #endif
+
+    #if defined(EXTERNAL_RADIO)
+        // External radio: no local RF chip is initialized or driven. Forcing
+        // bRadio=false makes the local radio config block and the whole local
+        // RX/CAD/TX loop section no-ops; the bridge transport (externalRadioLoop)
+        // owns RX/TX instead.
+        bRadio = false;
     #endif
 
     //#if not defined(BOARD_T_DECK_PRO)
@@ -1741,6 +1755,29 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 
 
+// Deferred display update from OnRxDone (avoid I2C inside the radio callback).
+// RACE-01 fix: snapshot under spinlock, display call outside. Factored so both
+// the local-radio loop and the external-radio path flush pending RX displays.
+static void flushDeferredDisplayUpdates()
+{
+    portENTER_CRITICAL(&displayMux);
+    bool _pendText = bPendingDisplayText;
+    bool _pendPos = bPendingDisplayPos;
+    struct aprsMessage _msg;
+    int16_t _rssi = 0;
+    int8_t _snr = 0;
+    if(_pendText || _pendPos) {
+        _msg = pendingDisplayMsg;
+        _rssi = pendingDisplayRssi;
+        _snr = pendingDisplaySnr;
+        bPendingDisplayText = false;
+        bPendingDisplayPos = false;
+    }
+    portEXIT_CRITICAL(&displayMux);
+    if(_pendText) sendDisplayText(_msg, _rssi, _snr);
+    if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
+}
+
 void esp32loop()
 {
     #if not defined(BOARD_T_DECK_PRO)
@@ -1938,25 +1975,7 @@ void esp32loop()
         }
 
         // Deferred display update from OnRxDone (avoid I2C inside radio callback)
-        // RACE-01 fix: snapshot under spinlock, display call outside
-        {
-            portENTER_CRITICAL(&displayMux);
-            bool _pendText = bPendingDisplayText;
-            bool _pendPos = bPendingDisplayPos;
-            struct aprsMessage _msg;
-            int16_t _rssi = 0;
-            int8_t _snr = 0;
-            if(_pendText || _pendPos) {
-                _msg = pendingDisplayMsg;
-                _rssi = pendingDisplayRssi;
-                _snr = pendingDisplaySnr;
-                bPendingDisplayText = false;
-                bPendingDisplayPos = false;
-            }
-            portEXIT_CRITICAL(&displayMux);
-            if(_pendText) sendDisplayText(_msg, _rssi, _snr);
-            if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
-        }
+        flushDeferredDisplayUpdates();
 
         // Channel utilization report (every 10s)
         {
@@ -3718,7 +3737,12 @@ void esp32loop()
     #if defined(EXTERNAL_RADIO)
     // Non-blocking poll of the optional external-radio TCP transport, AFTER the
     // normal Wi-Fi/network-readiness maintenance above. Self-gates on Wi-Fi state.
+    // poll() delivers RX synchronously via glueRxSink -> OnRxDone (main-loop
+    // context) and drives one queued external TX. In external mode bRadio is
+    // false, so the local-radio loop section (incl. its display flush) does not
+    // run — flush deferred RX display updates here instead.
     externalRadioLoop();
+    flushDeferredDisplayUpdates();
     #endif
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)

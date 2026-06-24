@@ -267,6 +267,23 @@ bool decodeRxPacket(const Frame& f, RxPacket& out) {
     return true;
 }
 
+int16_t rssiCentiToDbm(int16_t rssi_centi_dbm) {
+    // int16 / 100 is in [-327, 327]; always representable as int16. C++ integer
+    // division truncates toward zero, matching the existing (int) RSSI cast.
+    return static_cast<int16_t>(rssi_centi_dbm / 100);
+}
+
+int8_t snrCentiToDb(int16_t snr_centi_db) {
+    int v = snr_centi_db / 100;          // truncation toward zero, like (int8_t) cast
+    if (v > 127)  v = 127;               // clamp to int8 before narrowing
+    if (v < -128) v = -128;
+    return static_cast<int8_t>(v);
+}
+
+bool rxPayloadAcceptable(uint16_t len) {
+    return len > 0 && len <= kMaxLoraPayload;
+}
+
 // Decode the echoed RadioConfig from a CONFIG_RESULT success frame.
 static bool decodeConfigEcho(const Frame& f, RadioConfig& out) {
     if (f.type != MSG_CONFIG_RESULT) return false;

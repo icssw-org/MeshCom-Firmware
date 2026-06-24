@@ -859,6 +859,36 @@ void test_buildconfig_float_source_regression(void) {
 }
 
 // ---------------------------------------------------------------------------
+// RX metadata conversion + acceptance (centi-units -> OnRxDone units)
+// ---------------------------------------------------------------------------
+void test_rssi_centi_to_dbm(void) {
+    TEST_ASSERT_EQUAL_INT16(-120, rssiCentiToDbm(-12050));  // -120.50 dBm -> -120 (toward zero)
+    TEST_ASSERT_EQUAL_INT16(-50,  rssiCentiToDbm(-5000));   // -50.00 -> -50
+    TEST_ASSERT_EQUAL_INT16(-1,   rssiCentiToDbm(-199));    // -1.99 -> -1 (truncate toward zero)
+    TEST_ASSERT_EQUAL_INT16(0,    rssiCentiToDbm(-99));     // -0.99 -> 0
+    TEST_ASSERT_EQUAL_INT16(7,    rssiCentiToDbm(799));     //  7.99 -> 7
+}
+
+void test_snr_centi_to_db_clamped(void) {
+    TEST_ASSERT_EQUAL_INT8(-2,   snrCentiToDb(-275));       // -2.75 dB -> -2 (toward zero)
+    TEST_ASSERT_EQUAL_INT8(10,   snrCentiToDb(1050));       // 10.50 -> 10
+    TEST_ASSERT_EQUAL_INT8(0,    snrCentiToDb(50));         // 0.50 -> 0
+    TEST_ASSERT_EQUAL_INT8(0,    snrCentiToDb(-50));        // -0.50 -> 0
+    // int8 boundary clamps (centi/100 can exceed int8 range: -327..327)
+    TEST_ASSERT_EQUAL_INT8(127,  snrCentiToDb(32767));      // +327 -> clamp 127
+    TEST_ASSERT_EQUAL_INT8(-128, snrCentiToDb(-32768));     // -327 -> clamp -128
+    TEST_ASSERT_EQUAL_INT8(127,  snrCentiToDb(12800));      // +128 -> clamp 127
+    TEST_ASSERT_EQUAL_INT8(-128, snrCentiToDb(-12900));     // -129 -> clamp -128
+}
+
+void test_rx_payload_acceptable(void) {
+    TEST_ASSERT_FALSE(rxPayloadAcceptable(0));              // zero-length rejected
+    TEST_ASSERT_TRUE (rxPayloadAcceptable(1));
+    TEST_ASSERT_TRUE (rxPayloadAcceptable(kMaxLoraPayload));
+    TEST_ASSERT_FALSE(rxPayloadAcceptable(kMaxLoraPayload + 1));  // oversized rejected
+}
+
+// ---------------------------------------------------------------------------
 // runner
 // ---------------------------------------------------------------------------
 void setUp(void) {}
@@ -927,6 +957,11 @@ int main(int, char**) {
     RUN_TEST(test_buildconfig_invalid_leaves_out_untouched);
     RUN_TEST(test_buildconfig_sf_range);
     RUN_TEST(test_buildconfig_float_source_regression);
+
+    // RX metadata conversion + acceptance
+    RUN_TEST(test_rssi_centi_to_dbm);
+    RUN_TEST(test_snr_centi_to_db_clamped);
+    RUN_TEST(test_rx_payload_acceptable);
 
     // RX / TX semantics
     RUN_TEST(test_rx_when_ready);

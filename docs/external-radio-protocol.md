@@ -248,9 +248,32 @@ therefore marked as **externally pending** in the local TX ring and is **owned**
 ## Channel access
 
 In external-radio mode the **bridge is the single channel-access authority**.
-The firmware does not run native CAD/CSMA for a packet handed to the bridge;
-`CHANNEL_BUSY` maps into the existing MeshCom backoff path. (The firmware-side
-integration lands in a later milestone.)
+The firmware does not run native CAD/CSMA for a packet handed to the bridge.
+`CHANNEL_BUSY` returns the frame to the existing MeshCom retry path with a
+**bounded delay** before the next external submission (derived from the normal
+CSMA backoff timing); it is not re-sent in the same scheduling pass and is bounded
+by the normal retry limit.
+
+## Firmware integration (external-radio mode)
+
+When the firmware is built with the external-radio backend and a bridge is
+provisioned:
+
+- the **local RadioLib RF path is bypassed** — the local transceiver is not
+  begun, configured, or driven, and no local RX/CAD/TX runs; the bridge owns the
+  RF chip. Runtime radio-setting changes are still validated/accepted and trigger
+  a bridge config re-sync (whose readiness is gated by the exact `CONFIG_RESULT`
+  echo, never by a socket write);
+- **received packets** are delivered synchronously in normal main-loop context
+  (never an ISR), one validated `RX_PACKET` at a time and in arrival order, into
+  the existing MeshCom receive ingress (`OnRxDone`). Zero-length and oversized
+  frames are dropped before ingress. Wire metadata is converted to MeshCom units
+  with integer truncation toward zero: RSSI `centi-dBm / 100`, SNR `centi-dB / 100`
+  clamped to the signed-8-bit range;
+- **transmission** routes a selected MeshCom TX-ring entry through `TX_REQUEST`;
+  the final outcome is completed exactly once from the terminal `TX_RESULT` (or a
+  single `UNKNOWN` on disconnect/timeout/send-failure/reconfigure). A socket write
+  is never success.
 
 ## Testing
 

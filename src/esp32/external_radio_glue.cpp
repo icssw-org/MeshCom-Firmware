@@ -33,9 +33,11 @@
 #include <mbedtls/md.h>
 
 #include "external_radio_tcp.h"
+#include "external_radio_txq.h"     // ExtTxPacer (bounded CHANNEL_BUSY pacing)
 #include "lora_setchip.h"          // getFreq/getBW/getSF/getCR/getPower
 #include "esp32_flash.h"           // s_meshcom_settings / meshcom_settings
 #include "configuration_global.h"  // SYNC_WORD_SX127x
+#include "lora_functions.h"        // OnRxDone + external-TX ring ownership seams
 
 // Overlay-provided configuration (defaults keep the feature idle/safe).
 #ifndef EXTERNAL_RADIO_HOST
@@ -144,6 +146,47 @@ const uint16_t g_port = EXTERNAL_RADIO_PORT;
 TcpTransport g_transport;
 bool         g_enabled = false;
 
+// Bounded CHANNEL_BUSY pacing: blocks the next external submission until a
+// deadline set when a busy result is requeued (a true delay).
+extradio::ExtTxPacer g_pacer;
+
+// --- RX activation ---------------------------------------------------------
+// Synchronous, main-loop-context delivery of one validated RX_PACKET to MeshCom.
+// Rejects empty/oversized frames, converts wire centi-units to the integer units
+// OnRxDone() expects, and never retains the packet reference past the call.
+void glueRxSink(void* /*ctx*/, const RxPacket& rx) {
+    if (!rxPayloadAcceptable(rx.len)) return;            // drop zero-length / oversized
+    int16_t rssi = rssiCentiToDbm(rx.rssi);
+    int8_t  snr  = snrCentiToDb(rx.snr);
+    // OnRxDone copies out of the buffer synchronously; the const_cast is safe
+    // because it does not modify the payload.
+    OnRxDone(const_cast<uint8_t*>(rx.data), rx.len, rssi, snr);
+}
+
+// --- terminal TX-result mapping -------------------------------------------
+// Maps the single in-flight TX's final outcome onto the M8a ownership resolvers,
+// keyed by the ownership token carried back as the opaque tag. Runs in main-loop
+// context; does NOT call any transport-mutating API.
+void glueTxSink(void* /*ctx*/, uint32_t tag, TxOutcome outcome) {
+    switch (outcome) {
+        case TXO_SUCCESS:
+            externalTxResolveSuccess(tag);
+            break;
+        case TXO_CHANNEL_BUSY:
+            if (externalTxResolveChannelBusy(tag))
+                extradio::extTxPacerArm(g_pacer, millis(), externalTxBusyBackoffMs());
+            break;
+        case TXO_TIMEOUT:
+        case TXO_RADIO_ERROR:
+        case TXO_UNKNOWN:
+        default:
+            externalTxResolveUncertain(tag);             // deliberate non-success terminal
+            break;
+        case TXO_NONE:
+            break;                                        // never delivered
+    }
+}
+
 }  // namespace
 
 // Default platform network-readiness predicate: normal ESP32 Wi-Fi connectivity.
@@ -192,6 +235,10 @@ void externalRadioSetup() {
         return;
     }
     g_enabled = g_transport.begin(g_host, g_port, cfg, io, auth, defaultTimeouts());
+    // Install the synchronous RX and terminal-TX delivery sinks. They persist
+    // across reconnects/reconfigures and only run in main-loop/public-call context.
+    g_transport.setRxSink(glueRxSink, nullptr);
+    g_transport.setTxSink(glueTxSink, nullptr);
     // Never log the password.
     Serial.printf("[EXTRADIO] %s, bridge %s:%u, auth=%s\n",
                   g_enabled ? "enabled" : "config-error",
@@ -215,13 +262,39 @@ void externalRadioConfigChanged() {
     }
 }
 
+// Drive at most one external TX submission per loop: pick the next eligible ring
+// slot, mark it externally pending (M8a), and submit the retained bytes via the
+// bridge using the ownership token as the opaque TxSink tag. A socket write is NOT
+// success — the TxSink resolves the final outcome later.
+static void externalRadioTxStep(uint32_t now_ms) {
+    if (!g_transport.operational()) return;          // bridge link/config not ready
+    if (externalTxPending()) return;                 // one external TX at a time
+    if (!extradio::extTxPacerReady(g_pacer, now_ms)) return;  // CHANNEL_BUSY delay active
+
+    uint8_t  frame[kMaxLoraPayload];
+    uint16_t len = 0;
+    uint32_t token = externalTxMarkPendingNext(frame, sizeof(frame), &len);
+    if (token == 0) return;                          // nothing eligible to send
+
+    extradio::extTxPacerClear(g_pacer);              // a permitted attempt resets pacing
+
+    if (!g_transport.requestTx(frame, len, now_ms, token)) {
+        // The transport either already delivered a terminal UNKNOWN via the TxSink
+        // (then this resolve is a stale no-op) or rejected before submit (then it
+        // releases the owned slot). Never leave a pending slot orphaned.
+        externalTxResolveUncertain(token);
+    }
+}
+
 void externalRadioLoop() {
     if (!g_enabled) return;
-    // Network-readiness is now decided by the transport via the injected predicate
+    // Network-readiness is decided by the transport via the injected predicate
     // (externalRadioNetworkReady); poll() connects only when ready and stops safely
-    // when not. RX delivery (setRxSink) and TX results are intentionally NOT wired
-    // into MeshCom in this milestone — that is the dedicated activation milestone.
-    g_transport.poll(millis());
+    // when not. RX is delivered synchronously through glueRxSink during poll(); TX
+    // results through glueTxSink. After polling, attempt one queued external TX.
+    uint32_t now = millis();
+    g_transport.poll(now);
+    externalRadioTxStep(now);
 }
 
 #endif  // EXTERNAL_RADIO

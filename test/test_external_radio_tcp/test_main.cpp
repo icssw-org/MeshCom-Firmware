@@ -26,6 +26,7 @@ struct Fake {
     bool closed;
     bool net_unready;       // false (default) => network ready
     bool connect_called;    // set when the transport attempts to connect
+    bool fail_send;         // when true, fkSend reports a write failure
 };
 
 static Fake* g_fake = nullptr;
@@ -51,6 +52,7 @@ static int  fkRecv(void* ctx, uint8_t* buf, int cap) {
 }
 static int  fkSend(void* ctx, const uint8_t* buf, int len) {
     Fake* f = (Fake*)ctx;
+    if (f->fail_send) return -1;
     if (f->out_len + (size_t)len > sizeof(f->out)) return -1;
     std::memcpy(f->out + f->out_len, buf, len);
     f->out_len += len;
@@ -474,6 +476,134 @@ void test_disconnect_while_tx_pending_is_unknown(void) {
     TEST_ASSERT_FALSE(t.connected());
 }
 
+// ---------------------------------------------------------------------------
+// terminal TX-result delivery (TxSink) — exactly-once + tag correlation
+// ---------------------------------------------------------------------------
+struct TxRecorder { int count; uint32_t tag; TxOutcome outcome; };
+static void txRecSink(void* ctx, uint32_t tag, TxOutcome o) {
+    TxRecorder* r = (TxRecorder*)ctx;
+    r->count++; r->tag = tag; r->outcome = o;
+}
+static uint16_t lastTxReqSeq(Fake& f) {
+    Frame fr[16]; int n = fwFrames(f, fr, 16); uint16_t seq = 0;
+    for (int i = 0; i < n; ++i) if (fr[i].type == MSG_TX_REQUEST) seq = fr[i].seq;
+    return seq;
+}
+// submit one TX, resolve it with a TX_RESULT carrying `code`
+static void submitAndResult(TcpTransport& t, Fake& f, uint32_t tag, uint8_t code, uint32_t now) {
+    bridgeClearOut(f);
+    const uint8_t pkt[] = {0x3A, 1, 2, 3};
+    TEST_ASSERT_TRUE(t.requestTx(pkt, sizeof(pkt), now, tag));
+    uint16_t seq = lastTxReqSeq(f);
+    bridgeFeed(f, MSG_TX_RESULT, seq, &code, 1);
+    t.poll(now + 1);
+}
+
+void test_txsink_success_once_with_tag(void) {
+    Fake f{}; TcpTransport t; TxRecorder rec{};
+    t.setTxSink(txRecSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    submitAndResult(t, f, 0xABCD1234u, TXR_SUCCESS, 2);
+    TEST_ASSERT_EQUAL_INT(1, rec.count);
+    TEST_ASSERT_EQUAL_UINT32(0xABCD1234u, rec.tag);
+    TEST_ASSERT_EQUAL(TXO_SUCCESS, rec.outcome);
+}
+
+void test_txsink_channel_busy_once(void) {
+    Fake f{}; TcpTransport t; TxRecorder rec{};
+    t.setTxSink(txRecSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    submitAndResult(t, f, 0x55u, TXR_CHANNEL_BUSY, 2);
+    TEST_ASSERT_EQUAL_INT(1, rec.count);
+    TEST_ASSERT_EQUAL_UINT32(0x55u, rec.tag);
+    TEST_ASSERT_EQUAL(TXO_CHANNEL_BUSY, rec.outcome);
+}
+
+void test_txsink_timeout_and_radio_error(void) {
+    const uint8_t  codes[2]   = { TXR_TIMEOUT, TXR_RADIO_ERROR };
+    const TxOutcome want[2]   = { TXO_TIMEOUT, TXO_RADIO_ERROR };
+    for (int i = 0; i < 2; ++i) {
+        Fake f{}; TcpTransport t; TxRecorder rec{};
+        t.setTxSink(txRecSink, &rec);
+        t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+        driveOperational(t, f, 0);
+        submitAndResult(t, f, 0x900u + i, codes[i], 2);
+        TEST_ASSERT_EQUAL_INT(1, rec.count);
+        TEST_ASSERT_EQUAL_UINT32(0x900u + i, rec.tag);
+        TEST_ASSERT_EQUAL(want[i], rec.outcome);
+    }
+}
+
+void test_txsink_unknown_on_disconnect(void) {
+    Fake f{}; TcpTransport t; TxRecorder rec{};
+    t.setTxSink(txRecSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    const uint8_t pkt[] = {0x3A, 9};
+    TEST_ASSERT_TRUE(t.requestTx(pkt, sizeof(pkt), 2, 0x4242u));
+    f.recv_error = true;                                   // remote closes while TX pending
+    t.poll(3);
+    TEST_ASSERT_EQUAL_INT(1, rec.count);
+    TEST_ASSERT_EQUAL_UINT32(0x4242u, rec.tag);
+    TEST_ASSERT_EQUAL(TXO_UNKNOWN, rec.outcome);
+}
+
+void test_txsink_unknown_on_reconfigure(void) {
+    Fake f{}; TcpTransport t; TxRecorder rec{};
+    t.setTxSink(txRecSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    const uint8_t pkt[] = {0x3A, 1};
+    TEST_ASSERT_TRUE(t.requestTx(pkt, sizeof(pkt), 2, 0x7u));
+    RadioConfig c2 = sampleConfig(); c2.sf = 10;           // different config -> stop()+reapply
+    TEST_ASSERT_TRUE(t.reconfigure(c2));
+    TEST_ASSERT_EQUAL_INT(1, rec.count);
+    TEST_ASSERT_EQUAL(TXO_UNKNOWN, rec.outcome);
+}
+
+void test_txsink_unknown_on_send_failure(void) {
+    Fake f{}; TcpTransport t; TxRecorder rec{};
+    t.setTxSink(txRecSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    f.fail_send = true;                                    // socket write fails on the TX_REQUEST
+    const uint8_t pkt[] = {0x3A, 1, 2};
+    TEST_ASSERT_FALSE(t.requestTx(pkt, sizeof(pkt), 2, 0xDEADu));  // in-flight then torn down
+    TEST_ASSERT_EQUAL_INT(1, rec.count);
+    TEST_ASSERT_EQUAL_UINT32(0xDEADu, rec.tag);
+    TEST_ASSERT_EQUAL(TXO_UNKNOWN, rec.outcome);
+}
+
+void test_txsink_stale_result_no_second_call(void) {
+    Fake f{}; TcpTransport t; TxRecorder rec{};
+    t.setTxSink(txRecSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    submitAndResult(t, f, 0x111u, TXR_SUCCESS, 2);
+    TEST_ASSERT_EQUAL_INT(1, rec.count);
+    // A mismatched-seq TX_RESULT after resolution is ignored: no second delivery.
+    uint8_t code = TXR_SUCCESS;
+    bridgeFeed(f, MSG_TX_RESULT, 0xBEEF, &code, 1);
+    t.poll(5);
+    TEST_ASSERT_EQUAL_INT(1, rec.count);                  // still exactly once
+}
+
+void test_txsink_new_tx_uses_own_tag(void) {
+    Fake f{}; TcpTransport t; TxRecorder rec{};
+    t.setTxSink(txRecSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    submitAndResult(t, f, 0xAAAAu, TXR_SUCCESS, 2);
+    TEST_ASSERT_EQUAL_INT(1, rec.count);
+    TEST_ASSERT_EQUAL_UINT32(0xAAAAu, rec.tag);
+    submitAndResult(t, f, 0xBBBBu, TXR_CHANNEL_BUSY, 10);
+    TEST_ASSERT_EQUAL_INT(2, rec.count);
+    TEST_ASSERT_EQUAL_UINT32(0xBBBBu, rec.tag);            // fresh tag, old terminal state cleared
+    TEST_ASSERT_EQUAL(TXO_CHANNEL_BUSY, rec.outcome);
+}
+
 void test_pending_tx_timeout_is_unknown(void) {
     Fake f{}; TcpTransport t;
     t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
@@ -639,5 +769,13 @@ int main(int, char**) {
     RUN_TEST(test_socket_write_is_not_tx_success);
     RUN_TEST(test_disconnect_while_tx_pending_is_unknown);
     RUN_TEST(test_pending_tx_timeout_is_unknown);
+    RUN_TEST(test_txsink_success_once_with_tag);
+    RUN_TEST(test_txsink_channel_busy_once);
+    RUN_TEST(test_txsink_timeout_and_radio_error);
+    RUN_TEST(test_txsink_unknown_on_disconnect);
+    RUN_TEST(test_txsink_unknown_on_reconfigure);
+    RUN_TEST(test_txsink_unknown_on_send_failure);
+    RUN_TEST(test_txsink_stale_result_no_second_call);
+    RUN_TEST(test_txsink_new_tx_uses_own_tag);
     return UNITY_END();
 }

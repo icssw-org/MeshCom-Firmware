@@ -114,6 +114,32 @@ private:
     ExtTxResolution last_;
 };
 
+// Bounded external-only TX pacing. After a CHANNEL_BUSY result the firmware must
+// NOT submit another external TX until a deadline — a true delay, not merely
+// "next loop iteration". This pure clock comparison is the single tested source
+// of that gate; the glue holds one instance and supplies a monotonic ms clock.
+struct ExtTxPacer {
+    bool     armed;
+    uint32_t ready_at;   // earliest now_ms at which a submission is permitted
+
+    ExtTxPacer() : armed(false), ready_at(0) {}
+};
+
+// Arm the pacer: block submissions until now_ms + delay_ms.
+inline void extTxPacerArm(ExtTxPacer& p, uint32_t now_ms, uint32_t delay_ms) {
+    p.armed    = true;
+    p.ready_at = now_ms + delay_ms;
+}
+
+// True if a submission is permitted now (not armed, or the deadline has passed).
+// Wrap-safe via signed difference.
+inline bool extTxPacerReady(const ExtTxPacer& p, uint32_t now_ms) {
+    return !p.armed || (int32_t)(now_ms - p.ready_at) >= 0;
+}
+
+// Clear pacing after a permitted attempt is actually made.
+inline void extTxPacerClear(ExtTxPacer& p) { p.armed = false; }
+
 }  // namespace extradio
 
 #endif  // EXTERNAL_RADIO_TXQ_H

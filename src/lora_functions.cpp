@@ -2122,6 +2122,43 @@ bool externalTxPending(void)
 {
     return g_extTxq.active();
 }
+
+uint32_t externalTxMarkPendingNext(uint8_t *out, uint16_t out_cap, uint16_t *out_len)
+{
+    if(out == nullptr || out_len == nullptr)
+        return 0;
+
+    int slot = getNextTxSlot();
+    if(slot < 0)
+        return 0;   // nothing eligible
+
+    // Exact same payload selection as the local doTX() path: bytes start at
+    // ringBuffer[slot]+2, length is ringBuffer[slot][0] clamped to the buffer.
+    int sendlng = ringBuffer[slot][0];
+    if(sendlng <= 0)
+        return 0;
+    if(sendlng >= UDP_TX_BUF_SIZE)
+        sendlng = UDP_TX_BUF_SIZE - 1;
+    if((uint16_t)sendlng > out_cap)
+        return 0;   // caller buffer too small: do not truncate a frame
+
+    uint32_t token = externalTxMarkPending(slot);
+    if(token == 0)
+        return 0;   // already pending (one external TX at a time)
+
+    // Content is retained by the pending slot; copy it for the transport submit.
+    memcpy(out, ringBuffer[slot] + 2, sendlng);
+    *out_len = (uint16_t)sendlng;
+    return token;
+}
+
+unsigned long externalTxBusyBackoffMs(void)
+{
+    // Reuse the existing CSMA backoff timing (priority-aware, bounded). attempt 0
+    // gives a normal base+jitter delay; this is a true delay before the next
+    // external submission, not a same-pass reselect.
+    return csma_compute_timeout(0);
+}
 #endif  // EXTERNAL_RADIO
 
 /**@brief Function to be executed on Radio Tx Done event

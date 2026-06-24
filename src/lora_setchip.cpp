@@ -558,13 +558,19 @@ bool lora_setchip_meshcom()
     int rf_cr = meshcom_settings.node_cr;
     uint16_t rf_preamble_length = meshcom_settings.node_preamplebits;
     bool rf_crc = true;
-    bool rf_ok = lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, SYNC_WORD_SX127x, rf_preamble_length, rf_crc);
     #if defined(EXTERNAL_RADIO)
-    // After a SUCCESSFUL local radio (re)configuration, re-sync the external-radio
-    // transport. No-op unless the effective normalized config actually changed.
-    if(rf_ok) externalRadioConfigChanged();
-    #endif
+    // External radio: the bridge owns the RF chip. Accept the normal MeshCom
+    // settings WITHOUT touching local RadioLib, then re-sync the bridge. The
+    // bridge validates and applies the new normalized config; readiness is gated
+    // by the exact CONFIG_RESULT echo inside the transport, never claimed here.
+    (void)rf_freq; (void)rf_bw; (void)rf_sf; (void)rf_cr;
+    (void)rf_preamble_length; (void)rf_crc;
+    externalRadioConfigChanged();
+    return true;
+    #else
+    bool rf_ok = lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, SYNC_WORD_SX127x, rf_preamble_length, rf_crc);
     return rf_ok;
+    #endif
 #endif
 
     return true;
@@ -680,6 +686,14 @@ bool lora_setchip_aprs()
 
 bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_syncword, uint16_t rf_preamble_length, bool rf_crc)
 {
+
+#if defined(EXTERNAL_RADIO)
+    // External radio mode never drives the local RF chip. Accept as a no-op so any
+    // residual caller cannot touch RadioLib hardware.
+    (void)rf_freq; (void)rf_bw; (void)rf_sf; (void)rf_cr;
+    (void)rf_syncword; (void)rf_preamble_length; (void)rf_crc;
+    return true;
+#endif
 
 #if defined(BOARD_T5_EPAPER)
 //extra source

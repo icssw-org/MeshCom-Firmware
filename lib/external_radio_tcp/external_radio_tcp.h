@@ -100,13 +100,30 @@ static constexpr int kReadChunk = 256;
 // earlier packet can never be overwritten by a later one. Bounded work per poll.
 typedef void (*RxSink)(void* ctx, const RxPacket& rx);
 
+// Synchronous terminal TX-result delivery callback. Invoked EXACTLY ONCE for each
+// accepted requestTx(), correlated to the opaque `user_tag` the caller passed to
+// requestTx(). It fires from normal cooperative main-loop / public-call context
+// (poll()/requestTx()/reconfigure()/stop()), NEVER from an ISR. `outcome` is the
+// final result: TXO_SUCCESS / TXO_CHANNEL_BUSY / TXO_TIMEOUT / TXO_RADIO_ERROR
+// from a TX_RESULT, or TXO_UNKNOWN when a disconnect, timeout, send failure,
+// reconfigure, or explicit stop invalidates the in-flight TX (never a false
+// success). The sink MUST NOT call back into transport-mutating APIs (poll/stop/
+// reconfigure/requestTx); it is for result bookkeeping only.
+typedef void (*TxSink)(void* ctx, uint32_t user_tag, TxOutcome outcome);
+
 class TcpTransport {
 public:
-    TcpTransport() : rx_sink_(nullptr), rx_sink_ctx_(nullptr) { clear(); }
+    TcpTransport()
+        : rx_sink_(nullptr), rx_sink_ctx_(nullptr),
+          tx_sink_(nullptr), tx_sink_ctx_(nullptr) { clear(); }
 
     // Install the synchronous RX delivery sink. May be set before or after begin();
     // it persists across reconnects/reconfigures (clear() does not touch it).
     void setRxSink(RxSink sink, void* ctx) { rx_sink_ = sink; rx_sink_ctx_ = ctx; }
+
+    // Install the synchronous terminal TX-result sink. Like the RX sink it may be
+    // set before or after begin() and persists across reconnects/reconfigures.
+    void setTxSink(TxSink sink, void* ctx) { tx_sink_ = sink; tx_sink_ctx_ = ctx; }
 
     // Configure once before polling. host must remain valid for the transport's
     // lifetime (typically a static buffer). cfg must be a valid RadioConfig.
@@ -138,7 +155,13 @@ public:
     // Submit a raw MeshCom packet for transmission via the bridge. Returns false
     // if not operational or a TX is already in flight. A successful socket write
     // is NOT TX success — the outcome stays TXO_NONE until a TX_RESULT arrives.
-    bool requestTx(const uint8_t* data, uint16_t len, uint32_t now_ms);
+    //
+    // `user_tag` is an opaque caller correlation handle (e.g. the M8a ownership
+    // token) stored for this single in-flight TX and handed back verbatim to the
+    // TxSink on the terminal result. It is never placed on the wire. If the sink
+    // is installed, it fires EXACTLY ONCE for this TX (including the failure paths
+    // where this call returns false after the TX was already in flight).
+    bool requestTx(const uint8_t* data, uint16_t len, uint32_t now_ms, uint32_t user_tag = 0);
 
     // RX is delivered through the synchronous sink (setRxSink); the TX outcome is
     // still exposed here. Neither is wired into MeshCom in this milestone.
@@ -155,6 +178,10 @@ private:
     void clear();
     void startConnect(uint32_t now_ms);
     void driveRx(uint32_t now_ms);
+    // Deliver the single in-flight TX's terminal result to the TxSink exactly
+    // once. Clears the stored tag BEFORE invoking the sink, so a duplicate, stale,
+    // or re-entrant terminal event cannot produce a second completion.
+    void deliverTx(TxOutcome outcome);
     bool sendFrame(const uint8_t* buf, size_t n);     // false => failClosed already done
     bool handleEvent(Event ev, uint32_t now_ms);      // false => link torn down
     void armDeadline(uint32_t now_ms);
@@ -188,6 +215,10 @@ private:
     TxOutcome last_tx_outcome_;   // owned: survives the session reset on disconnect
     RxSink    rx_sink_;           // synchronous RX delivery (persists across reconnects)
     void*     rx_sink_ctx_;
+    TxSink    tx_sink_;           // synchronous terminal TX delivery (persists too)
+    void*     tx_sink_ctx_;
+    bool      tx_tag_valid_;      // a tagged TX is in flight awaiting terminal delivery
+    uint32_t  tx_tag_;            // opaque caller correlation handle for that TX
 
     uint8_t  scratch_[kHeaderSize + kMaxPayload];     // outbound frame builder
 };

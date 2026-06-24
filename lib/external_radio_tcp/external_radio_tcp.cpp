@@ -47,8 +47,17 @@ void TcpTransport::clear() {
     last_err_         = TERR_NONE;
     last_tx_outcome_  = TXO_NONE;
     cfg_valid_        = false;
-    // rx_sink_/rx_sink_ctx_ are NOT cleared here: the delivery target persists
-    // across begin()/reconnect/reconfigure (set once via setRxSink).
+    tx_tag_valid_     = false;   // no tagged TX in flight
+    tx_tag_           = 0;
+    // rx_sink_/tx_sink_ (+ctx) are NOT cleared here: the delivery targets persist
+    // across begin()/reconnect/reconfigure (set once via setRxSink/setTxSink).
+}
+
+void TcpTransport::deliverTx(TxOutcome outcome) {
+    if (!tx_tag_valid_) return;          // nothing in flight: never a phantom call
+    uint32_t tag = tx_tag_;
+    tx_tag_valid_ = false;               // clear BEFORE the sink: re-entrancy/dupe safe
+    if (tx_sink_) tx_sink_(tx_sink_ctx_, tag, outcome);
 }
 
 bool TcpTransport::begin(const char* host, uint16_t port, const RadioConfig& cfg,
@@ -105,6 +114,7 @@ void TcpTransport::stop() {
     if (io_.close) io_.close(io_.ctx);
     if (session_.onDisconnected()) unknown = true;
     if (unknown) last_tx_outcome_ = TXO_UNKNOWN;
+    deliverTx(TXO_UNKNOWN);   // exactly-once UNKNOWN if a tagged TX was in flight
     parserReset(parser_);
     phase_        = LINK_IDLE;
     has_deadline_ = false;
@@ -119,6 +129,7 @@ void TcpTransport::failClosed(uint32_t now_ms, TransportError err) {
     if (io_.close) io_.close(io_.ctx);
     if (session_.onDisconnected()) unknown = true;   // tx was still in flight
     if (unknown) last_tx_outcome_ = TXO_UNKNOWN;     // never a false success
+    deliverTx(TXO_UNKNOWN);   // exactly-once UNKNOWN if a tagged TX was in flight
     parserReset(parser_);
     phase_           = LINK_IDLE;
     has_deadline_    = false;
@@ -196,7 +207,8 @@ bool TcpTransport::handleEvent(Event ev, uint32_t now_ms) {
             return true;
         case EV_TX_DONE:
             last_tx_outcome_ = session_.lastTxOutcome();   // SUCCESS/BUSY/TIMEOUT/RADIO_ERROR
-            return true;                                   // MeshCom wiring is a later step
+            deliverTx(last_tx_outcome_);                   // exactly-once terminal delivery
+            return true;
         case EV_NEED_DISCONNECT:
             failClosed(now_ms, TERR_PROTOCOL);
             return false;
@@ -285,12 +297,16 @@ void TcpTransport::poll(uint32_t now_ms) {
     }
 }
 
-bool TcpTransport::requestTx(const uint8_t* data, uint16_t len, uint32_t now_ms) {
+bool TcpTransport::requestTx(const uint8_t* data, uint16_t len, uint32_t now_ms, uint32_t user_tag) {
     if (phase_ != LINK_UP || !session_.canSubmitTx()) return false;
     if (len > kMaxLoraPayload) return false;
     uint16_t seq = 0;
     if (!session_.submitTx(seq)) return false;       // now ST_TX_PENDING
     last_tx_outcome_ = TXO_NONE;                      // a fresh TX is unresolved
+    // Store the correlation tag BEFORE the socket write, so a send failure path
+    // (failClosed below) still delivers exactly-once UNKNOWN for this TX.
+    tx_tag_       = user_tag;
+    tx_tag_valid_ = true;
     size_t n = encodeTxRequest(scratch_, sizeof(scratch_), seq, data, len);
     if (n == 0 || !sendFrame(scratch_, n)) {
         // The TX is in flight per the session; tearing down marks it UNKNOWN.

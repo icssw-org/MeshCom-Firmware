@@ -168,6 +168,19 @@ struct RxPacket {
     uint8_t  data[kMaxLoraPayload];
 };
 
+// Conversion of the wire centi-units to the integer units MeshCom's OnRxDone()
+// expects. Integer-only (no floating point) and matching the existing local
+// float-to-int cast behaviour (truncation toward zero).
+//   - RSSI: centi-dBm / 100 -> dBm. The /100 result of any int16 always fits int16.
+//   - SNR:  centi-dB  / 100 -> dB, clamped to the int8 range OnRxDone() uses.
+int16_t rssiCentiToDbm(int16_t rssi_centi_dbm);
+int8_t  snrCentiToDb(int16_t snr_centi_db);
+
+// True if a decoded RX payload length is deliverable to MeshCom ingress: nonzero
+// and within the LoRa payload bound. Zero-length and oversized frames are dropped
+// before OnRxDone().
+bool rxPayloadAcceptable(uint16_t len);
+
 // ---------------------------------------------------------------------------
 // One decoded frame. OWNS its payload (copied out of the parser), so it stays
 // valid after subsequent parser operations.

@@ -54,6 +54,17 @@ bool externalTxResolveUncertain(uint32_t token);   // TIMEOUT/RADIO_ERROR/UNKNOW
 
 // True while an external TX is owned and awaiting a bridge result.
 bool externalTxPending(void);
+
+// Select the next eligible TX-ring slot via the normal priority selection, mark
+// it externally pending, and copy its raw MeshCom payload (the exact bytes the
+// local path would transmit) into out[0..*out_len). Returns the nonzero ownership
+// token on success, or 0 if nothing is eligible / already pending / out too small.
+// The slot content is retained (not consumed) until a bridge result resolves it.
+uint32_t externalTxMarkPendingNext(uint8_t *out, uint16_t out_cap, uint16_t *out_len);
+
+// Bounded delay (ms) to apply after a CHANNEL_BUSY result before the next external
+// submission, derived from the existing CSMA backoff timing.
+unsigned long externalTxBusyBackoffMs(void);
 #endif
 
 #endif

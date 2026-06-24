@@ -197,9 +197,25 @@ static void test_tokens_monotonic_nonzero() {
     TEST_ASSERT_TRUE(c > b);
 }
 
+// --- CHANNEL_BUSY pacing: a real delay before the next external submission ---
+static void test_pacer_blocks_until_deadline() {
+    ExtTxPacer p;
+    TEST_ASSERT_TRUE(extTxPacerReady(p, 1000));   // unarmed: always ready
+
+    extTxPacerArm(p, 1000, 500);                  // busy at t=1000, delay 500 -> ready at 1500
+    TEST_ASSERT_FALSE(extTxPacerReady(p, 1000));
+    TEST_ASSERT_FALSE(extTxPacerReady(p, 1499));  // still blocked just before deadline
+    TEST_ASSERT_TRUE (extTxPacerReady(p, 1500));  // permitted exactly at deadline
+    TEST_ASSERT_TRUE (extTxPacerReady(p, 2000));
+
+    extTxPacerClear(p);                           // a permitted attempt resets pacing
+    TEST_ASSERT_TRUE(extTxPacerReady(p, 1000));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_selection_skips_ext_pending);
+    RUN_TEST(test_pacer_blocks_until_deadline);
     RUN_TEST(test_retransmit_skips_ext_pending);
     RUN_TEST(test_single_pending_only);
     RUN_TEST(test_success_resolves_once);
