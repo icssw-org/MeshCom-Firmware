@@ -1,12 +1,12 @@
 /**
  * @file batt_functions.cpp
  * @author W.Zelinka (OE3WAS, https://github.com/karamo)
- * @brief 
+ * @brief
  * @version 0.6
  * @date 2026-06-09
- * 
+ *
  * @copyright Copyright (c) 2026
- * 
+ *
  */
 #include "batt_functions.h"
 
@@ -26,6 +26,7 @@ unsigned long batt_show_timer = 0;
 int BATTshowtime;
 #define CDcount 6
 static int CountDown = CDcount;
+
 
 // wird hier nicht verwendet, aber definiert, aber nicht freigegeben
 float global_batt = 0;  // in mV
@@ -78,9 +79,9 @@ void ADC_BATT_ON(void)
 		pinMode(ADC_CTRL_PIN, OUTPUT);
 		//Heltec V3.1 --- hat keine eigene variants !?!?
 		#if defined(BOARD_HELTEC_V31) || defined(BOARD_WIRELESS_PAPER)
-			digitalWrite(ADC_CTRL_PIN,LOW);
+			digitalWrite(ADC_CTRL_PIN,LOW);   // active LOW: LOW = Teiler durchgeschaltet/messen
 		#else
-			digitalWrite(ADC_CTRL_PIN, HIGH);
+			digitalWrite(ADC_CTRL_PIN, HIGH);   // E213/E290: active HIGH (am Geraet verifiziert: LOW->0mV, HIGH->840mV)
 		#endif
 	#endif
 }
@@ -93,7 +94,7 @@ void ADC_BATT_OFF(void)
 		#if defined(BOARD_HELTEC_V31) || defined(BOARD_WIRELESS_PAPER)
 			digitalWrite(ADC_CTRL_PIN,HIGH);
 		#else
-			digitalWrite(ADC_CTRL_PIN, LOW);
+			digitalWrite(ADC_CTRL_PIN, LOW);   // E213/E290: active HIGH -> OFF = LOW
 		#endif
 	#endif
 }
@@ -155,6 +156,33 @@ void init_batt(void)
  *
  * @return float Battery level in milli volts 0 ... 4200
  */
+#if defined(BOARD_WIRELESS_PAPER)
+// ----- "AKKU LOW"-Beobachtung (WP) -----
+// Ringpuffer der letzten Spannungs-Rohwerte. read_batt() laeuft hier mit 2x/Sekunde -> 12 Werte = 6 s.
+// bWpAkkuLow wird vor dem Low-Voltage-Deepsleep gesetzt; das WP-Display zeigt dann statt blank
+// "AKKU LOW" + diese Werte (E-Ink haelt das Bild auch im Schlaf -> ablesbar). Die Hysterese
+// (erst nach mehreren Low-Messungen schlafen) macht 0.6 selbst via CountDown.
+// WP_VHIST_MAX ist zentral in batt_functions.h definiert (auch vom Anzeige-Aufrufer genutzt).
+static float wpVHist[WP_VHIST_MAX];
+static int   wpVHistCount = 0;
+static int   wpVHistHead  = 0;
+bool bWpAkkuLow = false;
+static void wpPushVolt(float v)
+{
+    wpVHist[wpVHistHead] = v;
+    wpVHistHead = (wpVHistHead + 1) % WP_VHIST_MAX;
+    if(wpVHistCount < WP_VHIST_MAX) wpVHistCount++;
+}
+// Kopiert die letzten Werte NEUESTE ZUERST nach out[], liefert die Anzahl.
+int wpBattHistory(float* out, int maxn)
+{
+    int n = (wpVHistCount < maxn) ? wpVHistCount : maxn;
+    for(int i = 0; i < n; i++)
+        out[i] = wpVHist[(wpVHistHead - 1 - i + 2 * WP_VHIST_MAX) % WP_VHIST_MAX];
+    return n;
+}
+#endif
+
 float read_batt(void)
 {
 	#ifdef USE_BATT
@@ -180,8 +208,15 @@ float read_batt(void)
 
 		// einfache Filterfunktion: exponentielle Glättung 1. Ordnung
 		rawVoltage = (float)analogReadMilliVolts(BAT_VOLT_PIN)*BAT_MULTIPLIER/1000.0 * fBattFaktor + BAT_VOLT_OFFSET;
-		if (firstReading) { filteredVoltage = BAT_MAX_VOLTAGE; firstReading = false; } // verhindert deepsleep nach REBOOT
+		if (firstReading) { filteredVoltage = fBattMax; } // verhindert deepsleep nach REBOOT
 		else { filteredVoltage = alpha * rawVoltage + (1.0f - alpha) * filteredVoltage; }
+
+
+		firstReading = false;
+
+		#if defined(BOARD_WIRELESS_PAPER)
+		wpPushVolt(rawVoltage);   // 2x/s -> letzte 10 Rohwerte fuer die "AKKU LOW"-Anzeige
+		#endif
 
 		if ((batt_show_timer + (1000 * std::max(1,BATTshowtime))) < millis())  // 1 .. 99s
 		{
@@ -191,7 +226,7 @@ float read_batt(void)
 			{
 				bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
 				printfdeb("[BATT];%s;raw:;%.3f;V;max:;%.2f;V;fact:;%.4f;filt:;%.3f;V;%.0f;%%\n",
-				getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
+					getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
 			}
 		}
 
@@ -211,6 +246,11 @@ float read_batt(void)
 		// falls die Akku-Spannung BAT_MIN_VOLTAGE erreicht wird, soll ein --deepsleep erfolgen.
 		// Dieses erlaubt es, nach einem händischen RESET zum Aufwecken noch kurz nachzusehen,
 		// da sich der Akku auch etwas erholt.
+		// E213: Akku-Messung am Geraet verifiziert 2026-06-23 (Faktor 4.9245, ADC_CTRL active HIGH):
+		// Voll ~4.14 V, Leer-Cutoff ~3.26 V (unter Last; im Boot ~3.5 V = Last-Sag bei leerem LiPo).
+		// Low-voltage-Deepsleep wieder scharf wie bei allen anderen Boards. BAT_MIN_VOLTAGE = 3.3 V
+		// loest knapp vor dem 3.26-V-Cutoff aus; der firstReading-Seed (filteredVoltage = fBattMax)
+		// verhindert den Boot-Deepsleep beim Laden.
 		if ((BatVoltage <= (BAT_MIN_VOLTAGE)) && (BatVoltage > 1.0))  // 6.5V für T-Beam 1W, 3.3V für andere Boards
 		{
 			CountDown--;
@@ -232,7 +272,11 @@ float read_batt(void)
 					//boardPWROff();  // nrf52_functions
 				#else
 					ADC_BATT_OFF();
+					// Andere Boards / Original: Display regulaer ausschalten (persistiert node_sset).
 					commandAction((char*)"--display off", isPhoneReady, false);
+					#if defined(BOARD_WIRELESS_PAPER)
+					bWpAkkuLow = true;   // WP-Display zeigt "AKKU LOW" + letzte Werte statt blank
+					#endif
 					commandAction((char*)"--deepsleep", isPhoneReady, false);
 				#endif
 				// Node stopped
@@ -280,7 +324,7 @@ float read_batt(void)
 /**
  * @brief Set the Max Batt object
  * @todo genauso wie fBattFaktor behandeln und in main
- * 
+ *
  * @param u_max_batt [mV]
  */
 void setMaxBatt(float u_max_batt)
@@ -295,7 +339,7 @@ void setMaxBatt(float u_max_batt)
 /**
  * @brief Volt => Prozent Umrechnung über lineare Näherung
  * @note max_batt = Parameter aus Flash
- * 
+ *
  * @param mvolts [mV]
  * @return rproz
  */

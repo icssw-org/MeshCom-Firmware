@@ -55,7 +55,7 @@ bool gpsInitDone = false;
 // gps (TinyGPSPlus) wird in gps_functions.cpp unbedingt instanziiert und hier nur fuer
 // reine Distanz-/Kursberechnungen (distanceBetween/courseTo) genutzt - kein GPS-Modul noetig.
 // Daher auch fuer Wireless Paper (ohne ENABLE_GPS) sichtbar machen.
-#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS) || defined(BOARD_WIRELESS_PAPER)
+#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS) || defined(WP_DISP)
 extern TinyGPSPlus gps;
 #endif
 
@@ -221,12 +221,12 @@ char msg_text[MAX_MSG_LEN_PHONE * 2] = {0};
 
 unsigned int _GW_ID = 0x12345678; // ID of our Node
 
-#if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER))
+#if (defined(BOARD_E290) || defined(WP_DISP) || defined(BOARD_E213))
 #include "heltec-eink-modules.h"
 
 #if defined(BOARD_E290)
 EInkDisplay_VisionMasterE290 epaper_display;
-#elif defined(BOARD_WIRELESS_PAPER)
+#elif (defined(WP_DISP) || defined(BOARD_E213))
 // Wireless Paper: Panel-Controller variiert je HW-Version (E0213A367 ab V1.1.1,
 // LCMEN2R13EFC1 bei V1.1). Welcher verbaut ist, wird zur Laufzeit per Chip-ID erkannt
 // (detectEinkChipId() in esp32_functions.cpp) und der passende Treiber dynamisch
@@ -256,13 +256,13 @@ const char*  g_wp_panel_name  = "?";
 // Strich satt schwarz erscheint, muss er aus MEHREREN Pixeln bestehen - genau das liefert die
 // fette FreeSansBold9pt (Striche ~2 Pixel breit). Gleiche Schriftgroesse (9pt), nur kraeftiger
 // -> auf E-Ink klar lesbar und richtig schwarz statt grau.
-#if defined(BOARD_WIRELESS_PAPER)
+#if defined(WP_DISP)
 #define WP_FONT9 (&FreeSansBold9pt7b)
 #else
 #define WP_FONT9 (&FreeSans9pt7b)
 #endif
 
-#if defined(BOARD_WIRELESS_PAPER)
+#if defined(WP_DISP)
 // Standard-Layout (Statusseiten wie Info/Position/Track: gross, ueber das ganze
 // Panel verteilt). Nur die Nachrichtenseite (iDisplayType 0) schaltet via
 // wpApplyLayout() auf ein kompaktes Layout (kleine Statuszeile, enge Zeilen) um,
@@ -274,11 +274,21 @@ bool bWpCompactLayout = false;
 // der 10-s-Statuszeilen-Refresh die Ziffer nicht wegloescht.
 int wpMsgIdx = 0;
 
-#if defined(BOARD_WIRELESS_PAPER)
+
+void wpApplyLayout(bool compact)
+{
+    bWpCompactLayout = compact;
+    // dzeile[0] = Statuszeilen-Baseline. Bewusst in BEIDEN Layouts 12, damit die 9pt-Schrift
+    // vollstaendig in das 16px-Refresh-Fenster passt (bei 16 wurde die unterste Pixelreihe der
+    // Statuszeile auf den Info-/Track-Seiten abgeschnitten). Body-Zeilen bleiben layout-abhaengig.
+    if(compact) { dzeile[0]=12; dzeile[1]=32; dzeile[2]=47; dzeile[3]=62; dzeile[4]=77; dzeile[5]=92; }
+    else        { dzeile[0]=12; dzeile[1]=41; dzeile[2]=61; dzeile[3]=81; dzeile[4]=101; dzeile[5]=121; }
+}
+
 // Nachrichtentext-Font: gleiche 9pt-fett-Glyphen wie WP_FONT9, aber enger Zeilenabstand
 // (yAdvance=15 statt ~22), damit eine volle Nachricht (bis ~160 Zeichen) auf das Panel passt.
 // Wird SOWOHL beim Live-Empfang (sendDisplayText) ALS AUCH beim Durchblaettern ("#N") genutzt
-// -> identischer Zeilenabstand in beiden Faellen (Browse == Live). Lazy-Init beim ersten Aufruf.
+// -> identischer Zeilenabstand in beiden Faellen. Lazy-Init beim ersten Aufruf.
 const GFXfont* wpMsgFont()
 {
     static GFXfont f;
@@ -290,17 +300,6 @@ const GFXfont* wpMsgFont()
         ready = true;
     }
     return &f;
-}
-#endif
-
-void wpApplyLayout(bool compact)
-{
-    bWpCompactLayout = compact;
-    // dzeile[0] = Statuszeilen-Baseline. Bewusst in BEIDEN Layouts 12, damit die 9pt-Schrift
-    // vollstaendig in das 16px-Refresh-Fenster passt (bei 16 wurde die unterste Pixelreihe der
-    // Statuszeile auf den Info-/Track-Seiten abgeschnitten). Body-Zeilen bleiben layout-abhaengig.
-    if(compact) { dzeile[0]=12; dzeile[1]=32; dzeile[2]=47; dzeile[3]=62; dzeile[4]=77; dzeile[5]=92; }
-    else        { dzeile[0]=12; dzeile[1]=41; dzeile[2]=61; dzeile[3]=81; dzeile[4]=101; dzeile[5]=121; }
 }
 #else
 int dzeile[maxdisplines] = {16, 41, 61, 81, 101, 121, 0};
@@ -341,7 +340,7 @@ int dzeile[maxdisplines] = {42, 52, 62, 0, 0, 0, 0};
 int dzeile[maxdisplines] = {8, 21, 31, 41, 51, 61, 0};
 #endif
 
-#if !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+#if !defined(BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
 
 #include <U8g2lib.h>
 
@@ -732,7 +731,7 @@ void insertOwnTx(unsigned int msg_id)
 #if defined(BOARD_T_ECHO)
 #define maxdisplines 11
 #define PAGE_MAX 6
-#elif defined(BOARD_WIRELESS_PAPER)
+#elif defined(WP_DISP)
 #define maxdisplines 7
 #define PAGE_MAX 10   // Wireless Paper: bis zu 9 gespeicherte Nachrichten in einer Loop durchblaettern
 #else
@@ -871,7 +870,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
 
-    #if !defined (BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+    #if !defined (BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -893,7 +892,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 
             epaper_display.fastmodeOn();
 
-            #if defined(BOARD_WIRELESS_PAPER)
+            #if defined(WP_DISP)
             // Nachrichtenseite: kleine Statuszeile (9pt) -> Platz fuer 160 Zeichen.
             // Statusseiten: gewohnte groessere Schrift (12pt).
             epaper_display.setFont(bWpCompactLayout ? WP_FONT9 : &FreeSans12pt7b);
@@ -970,7 +969,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                             epaper_display.println(pageTextLong1);
 
                             epaper_display.setCursor(0, dzeile[2]);
-                            #if defined(BOARD_WIRELESS_PAPER)
+                            #if defined(WP_DISP)
                             epaper_display.setFont(wpMsgFont());   // enger Zeilenabstand (15) wie Live-Empfang -> Browse == Live
                             #endif
                             epaper_display.println(pageTextLong2);
@@ -979,8 +978,9 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     else
                     if(memcmp(pageText[its], "#L", 2) == 0)
                     {
-                        #if defined(BOARD_WIRELESS_PAPER)
-                        // Nachrichtenseite: Linie hoeher (kleine Statuszeile); Statusseiten: wie gewohnt bei 22
+                        #if defined(WP_DISP)
+                        // Nachrichtenseite (kompakt): Linie hoeher bei y=17; Statusseiten bei y=22.
+                        // Die Statusseite darf bewusst anders sein als die Nachrichten-/Blaetter-Ansicht.
                         epaper_display.drawLine(0, bWpCompactLayout ? 17 : 22, 250, bWpCompactLayout ? 17 : 22, GxEPD_BLACK);
                         #else
                         epaper_display.drawLine(0, 22, 320, 22, GxEPD_BLACK);
@@ -1002,7 +1002,18 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                 }
 
             	if(memcmp(text, "#S", 2) != 0 && memcmp(text, "#F", 2) != 0)
+                {
+                    #if defined(WP_DISP)
+                    // Der "#N"-Render kommt AUSSCHLIESSLICH von wpShowStoredMessage (Nachrichten-
+                    // Blaettern) und schiebt UNMITTELBAR danach selbst einen fastmodeOff()+update()
+                    // = Voll-Refresh nach (zeigt denselben Framebuffer inkl. Browse-Ziffer). Dieses
+                    // erste "#N"-update() ist daher auf BEIDEN Panels redundant und erzeugt nur einen
+                    // zusaetzlichen Refresh/Blitzer pro Klick. Auf der ganzen Wireless Paper (V1.1 UND
+                    // V1.2) ueberspringen -> je Blaetter-Schritt nur EIN Voll-Refresh.
+                    if(memcmp(text, "#N", 2) != 0)
+                    #endif
                     epaper_display.update();
+                }
             }
             
         #elif defined(BOARD_TRACKER) || defined(BOARD_HELTEC_T114) || defined(BOARD_T_CONNECT_PRO)
@@ -1184,8 +1195,8 @@ void sendDisplayHead(bool bInit)
 
     bSetDisplay=true;
 
-    #if defined(BOARD_WIRELESS_PAPER)
-    wpMsgIdx = 0;   // Home/Info-Seite -> keine Nachrichten-Ziffer oben rechts
+    #if defined(WP_DISP)
+    wpMsgIdx = 0;       // Home/Info-Seite -> keine Nachrichten-Ziffer oben rechts
     #endif
 
     #ifdef BOARD_T5_EPAPER
@@ -1230,7 +1241,7 @@ void sendDisplayHead(bool bInit)
 
     sendDisplayMainline();
 
-    #if defined(BOARD_WIRELESS_PAPER)
+    #if defined(WP_DISP)
     // Info-Seite in EINEM Voll-Refresh aufbauen (fastmodeOff vor dem Zeichnen). Sonst
     // wuerde ein Fastmode-Partial-Update ueber ein zuvor gecleartes (weisses) Panel nichts
     // anzeigen -> die Seite bliebe leer (z.B. beim Zurueckschalten aus dem Track-Modus).
@@ -1320,7 +1331,7 @@ void sendDisplayTrack()
 
         sendDisplayMainline();
 
-        #if defined(BOARD_WIRELESS_PAPER)
+        #if defined(WP_DISP)
         // Direkt im Voll-Refresh aufbauen (fastmodeOff vor dem Zeichnen) - kein Fastmode-
         // Partial-Zwischenframe. Zusaetzlich die Track-Seite kleiner setzen (FreeSans 9pt
         // statt 12pt): die RATE-Zeile ("RATE: 1800 NEXT 1778") ist bei 12pt so breit, dass
@@ -1344,7 +1355,7 @@ void sendDisplayTrack()
         snprintf(msg_text, sizeof(msg_text), "NEXT:%5i", pos_seconds);
         sendDisplay1306(false, false, 3, dzeile[4], msg_text);
         #else
-        #if defined(BOARD_WIRELESS_PAPER)
+        #if defined(WP_DISP)
         // Kompaktere Beschriftung fuer die fette WP-Schrift (FreeSansBold ist breiter), damit die
         // Zeile nicht umbricht. E290 behaelt die ausfuehrliche Beschriftung.
         snprintf(msg_text, sizeof(msg_text), "RATE:%4i N:%4i", (int)posinfo_interval, pos_seconds);
@@ -1455,7 +1466,7 @@ void sendDisplayTime()
             pagePointer=PAGE_MAX-1;
     }
 
-    #if !defined (BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK)  && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+    #if !defined (BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK)  && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         if(u8g2 == NULL)
             return;
     #endif
@@ -1537,7 +1548,7 @@ void sendDisplayTime()
 
 void sendDisplayMainline()
 {
-    #if defined(BOARD_WIRELESS_PAPER)
+    #if defined(WP_DISP)
     // Nachrichtenseite (0) und die zeilenreiche Positions-Anzeige (1) kompakt
     // darstellen; die Info-/Track-Seiten (9) im grossen Standardlayout. Wird hier
     // zentral umgeschaltet, da jede Seite sendDisplayMainline() nach dem Setzen
@@ -1593,7 +1604,7 @@ void sendDisplayMainline()
     sendDisplay1306(false, false, 3, dzeile[0]+3, (char*)"#L");
 }
 
-#if defined(BOARD_WIRELESS_PAPER)
+#if defined(WP_DISP)
 // Zeichnet die Nachrichten-Ziffer oben rechts (neueste=N..aelteste=1) in den Framebuffer.
 // Muss VOR jedem update() der obersten Zeile aufgerufen werden (wpShowStoredMessage UND
 // wpRefreshClock), sonst loescht der 10-s-Statuszeilen-Refresh die Ziffer weg.
@@ -1624,6 +1635,9 @@ void wpRefreshClock()
     // NUR alle 60 s (1x pro Minute) per Voll-Refresh aktualisiert - haeufigere Voll-Refreshes
     // wuerden die Display-Lebensdauer spuerbar verkuerzen. Auf V1.2 bleibt es beim schonenden
     // 10-s-Teil-Refresh.
+    // E213 hat das E0213A367 (= WP V1.2) -> partial-window/Teilrefresh moeglich (Uhr alle 10 s ohne
+    // Blitzen). bV11 nur fuer das LCMEN2R13EFC1-Panel (WP V1.1, kein partielles Fenster). Der
+    // wait()-Timeout in BaseDisplay sichert gegen ein etwaiges Haengen ab.
     const bool bV11 = (memcmp(g_wp_panel_name, "LCMEN", 5) == 0);
 
     // Wechsel der Batterieanzeige VOLT<->PROZ (bDisplayVolt, via --volt/--proz oder Web-Client)
@@ -1709,8 +1723,13 @@ void wpShowStoredMessage(int slot, int idx)
         pageLine[its][2] = pageLastLine[slot][its][2];
         memcpy(pageText[its], pageLastText[slot][its], 25);
     }
-    strncpy(pageTextLong1, pageLastTextLong1[slot], sizeof(pageTextLong1));
-    strncpy(pageTextLong2, pageLastTextLong2[slot], sizeof(pageTextLong2));
+    // Defensiv (analog sendDisplayText weiter unten): strncpy garantiert KEINE Terminierung,
+    // wenn die Quelle die volle Puffergroesse fuellt -> mit sizeof()-1 kopieren und das letzte
+    // Byte explizit auf '\0' setzen.
+    strncpy(pageTextLong1, pageLastTextLong1[slot], sizeof(pageTextLong1) - 1);
+    pageTextLong1[sizeof(pageTextLong1) - 1] = '\0';
+    strncpy(pageTextLong2, pageLastTextLong2[slot], sizeof(pageTextLong2) - 1);
+    pageTextLong2[sizeof(pageTextLong2) - 1] = '\0';
 
     sendDisplay1306(false, true, 0, 0, (char*)"#N");
 
@@ -1722,6 +1741,55 @@ void wpShowStoredMessage(int slot, int idx)
 
     epaper_display.fastmodeOff();   // Voll-Refresh nachschieben -> Status-Screen physisch weg
     epaper_display.update();
+}
+
+
+// E-Ink beim Deepsleep loeschen (Voll-Clear). Zwei Faelle:
+//  - LOW-VOLTAGE-Deepsleep (bWpAkkuLow): "AKKU LOW" + die letzten Spannungs-Rohwerte anzeigen
+//    (zur Beobachtung; E-Ink haelt das Bild auch im Schlaf -> bleibt ablesbar).
+//  - MANUELLER Button-Deepsleep: nur loeschen (kein Text - das Original kennt keinen).
+// Hintergrund: "Display off" ergibt auf E-Ink keinen Sinn (bistabil, zieht statisch keinen Strom);
+// ohne Clear bliebe das letzte Bild stehen und der Sleep waere nicht erkennbar. Aufwecken per RESET.
+void wpShowDeepSleep()
+{
+    iDisplayType = 0;
+    wpApplyLayout(true);
+    epaper_display.fastmodeOff();
+    // Nur den Framebuffer leeren (KEIN eigener Panel-Refresh). clear() wuerde intern activate()
+    // ausfuehren -> zusammen mit dem update() unten waeren das ZWEI Voll-Refreshes direkt
+    // hintereinander. Bei fast leerem Akku reicht die Boost-Spannung dann nicht fuer beide ->
+    // das zweite (mit "AKKU LOW" + Werten) wird grau/unvollstaendig. clearMemory() + EIN update()
+    // = nur ein Refresh -> halber Stromhunger, Werte bleiben sichtbar.
+    epaper_display.clearMemory();
+    #if defined(BOARD_WIRELESS_PAPER)
+    // WP-spezifische AKKU-LOW-Anzeige (Spannungs-History aus batt_functions). Der E213 nutzt den
+    // gemeinsamen Display-Pfad (WP_DISP) mit, hat aber eine andere Akku-Mess-Logik (ADC_CTRL=46) -
+    // daher hier kein bWpAkkuLow/wpBattHistory fuer E213.
+    if(bWpAkkuLow)
+    {
+        epaper_display.setFont(WP_FONT9);
+        epaper_display.setCursor(3, dzeile[0]);
+        epaper_display.print("AKKU LOW");
+        float h[WP_VHIST_MAX];
+        int n = wpBattHistory(h, WP_VHIST_MAX);   // letzte Werte, neueste zuerst
+        char ln[48];
+        int row = 1;
+        for(int i = 0; i < n && row <= 5; row++)
+        {
+            ln[0] = '\0';
+            for(int k = 0; k < 3 && i < n; k++, i++)
+            {
+                char one[14];
+                snprintf(one, sizeof(one), "%s%.2fV", (k ? "  " : ""), h[i]);
+                strncat(ln, one, sizeof(ln) - strlen(ln) - 1);
+            }
+            epaper_display.setCursor(3, dzeile[row]);
+            epaper_display.print(ln);
+        }
+        bWpAkkuLow = false;
+    }
+    #endif
+    epaper_display.update();                  // Voll-Refresh -> sichtbar (haelt im Schlaf)
 }
 #endif
 
@@ -1749,7 +1817,7 @@ void mainStartTimeLoop()
         {
             bDisplayIsOff = false;
 
-            #if !defined(BOARD_WIRELESS_PAPER)
+            #if !defined(WP_DISP)
             sendDisplayHead(true);
             #else
             // E-Ink (Wireless Paper): den ERSTEN von zwei Boot-Aufbauten ueberspringen.
@@ -1791,7 +1859,7 @@ void mainStartTimeLoop()
                         iDisplayChange=1;
                 }
 
-                #if defined(BOARD_WIRELESS_PAPER)
+                #if defined(WP_DISP)
                 // E-Ink: Beim Umschalten des Track-Modus den Bildschirm physisch loeschen
                 // und sofort die passende Seite neu aufbauen. Sonst (a) schreibt die
                 // Track-Seite beim Einschalten ueber den alten Inhalt und (b) bleibt beim
@@ -1834,7 +1902,7 @@ void mainStartTimeLoop()
 
                 if(bDisplayTrack)
                 {
-                    #if defined(BOARD_WIRELESS_PAPER)
+                    #if defined(WP_DISP)
                     // ============================================================================
                     // Konsequente Tracking-Anzeige-Logik fuer die GPS-LOSE Wireless Paper
                     // ----------------------------------------------------------------------------
@@ -1936,7 +2004,7 @@ void mainStartTimeLoop()
                 }
                 else
                 {
-                    #if defined(BOARD_WIRELESS_PAPER)
+                    #if defined(WP_DISP)
                     // E-Ink schonen: Uhrzeit nur alle 10 s aktualisieren (Teilbereich-Refresh
                     // der Statuszeile), statt sekuendlich. sendDisplayTime() ist fuer E-Paper
                     // ohnehin deaktiviert. Im aus-Zustand (--display off) NICHT refreshen.
@@ -2110,8 +2178,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     DisplayOffWait = millis() + (30 * 1000); // 30 seconds
     bDisplayIsOff=false;
 
-    #if defined(BOARD_WIRELESS_PAPER)
-    wpMsgIdx = 0;   // frisch eintreffende Nachricht -> kein (alter) Browse-Index oben rechts
+    #if defined(WP_DISP)
+    wpMsgIdx = 0;       // frisch eintreffende Nachricht -> kein (alter) Browse-Index oben rechts
     #endif
     //
     ///////////////////////////////////////////////////////////
@@ -2222,7 +2290,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     strAscii = utf8ascii(aprsmsg.msg_payload);
 
-    #if defined(BOARD_WIRELESS_PAPER)
+    #if defined(WP_DISP)
     // Nachrichtentext mit kompakter Schrift (enger Zeilenabstand 15 statt 22) -> bis zu 160
     // Zeichen passen auf das Panel. Gleicher Font wie beim Durchblaettern -> Browse == Live.
     epaper_display.setFont(wpMsgFont());
@@ -2235,7 +2303,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
     pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
 
-    #if defined(BOARD_WIRELESS_PAPER)
+    #if defined(WP_DISP)
     // Neue Nachricht per Voll-Refresh aufbauen -> gestochen scharf, tiefschwarz,
     // kein Ghosting. Die schnellen Partial-Updates (Uhrzeit) bleiben unberuehrt.
     epaper_display.fastmodeOff();
@@ -2768,7 +2836,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
     #endif
 
-    #if defined(BOARD_WIRELESS_PAPER)
+    #if defined(WP_DISP)
     // Nach dem partiellen Aufbau einen Voll-Refresh nachschieben: loescht die zuvor
     // angezeigte Nachricht physisch (kein Ueberlagern), die Position erscheint sauber.
     epaper_display.fastmodeOff();
