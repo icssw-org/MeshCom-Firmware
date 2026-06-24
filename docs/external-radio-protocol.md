@@ -242,6 +242,20 @@ pio test -e native_extradio
 
 The HMAC itself is a transport concern and is tested there, not in the codec.
 
+## Platform network readiness
+
+The TCP transport connects only when the node's IP network is usable. That check
+is a small generic predicate injected into the transport, kept platform-agnostic:
+
+- the normal ESP32 build uses Wi-Fi connectivity as the predicate;
+- an alternative platform integration may supply its own IP-network readiness
+  predicate by providing a strong override of the weak `externalRadioNetworkReady()`
+  symbol at link time, without modifying any tracked firmware source.
+
+When readiness becomes false the transport stops the link safely — a pending TX
+resolves as `UNKNOWN`, never a false success — and reconnects once readiness
+returns.
+
 ## Status
 
 Draft for issue #1015. The generic protocol module (`lib/external_radio_protocol`)

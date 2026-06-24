@@ -24,16 +24,20 @@ struct Fake {
     bool fail_connect;
     bool recv_error;
     bool closed;
+    bool net_unready;       // false (default) => network ready
+    bool connect_called;    // set when the transport attempts to connect
 };
 
 static Fake* g_fake = nullptr;
 
 static bool fkConnect(void* ctx, const char*, uint16_t) {
     Fake* f = (Fake*)ctx;
+    f->connect_called = true;
     if (f->fail_connect) return false;
     f->closed = false;
     return true;
 }
+static bool fkNetReady(void* ctx) { return !((Fake*)ctx)->net_unready; }
 static bool fkIsConnected(void* ctx) { return ((Fake*)ctx)->want_connected; }
 static int  fkRecv(void* ctx, uint8_t* buf, int cap) {
     Fake* f = (Fake*)ctx;
@@ -59,6 +63,7 @@ static TcpIo makeIo(Fake& f) {
     io.ctx = &f;
     io.connect = fkConnect; io.is_connected = fkIsConnected;
     io.recv = fkRecv; io.send = fkSend; io.close = fkClose;
+    io.network_ready = fkNetReady;
     return io;
 }
 
@@ -294,6 +299,11 @@ void test_begin_validation(void) {
     { TcpTransport t; AuthSource pw; pw.password = kPassword; pw.password_len = sizeof(kPassword);
       pw.ctx = nullptr; pw.hmac_sha256 = nullptr;
       TEST_ASSERT_FALSE(t.begin("10.0.0.1", 7000, cfg, io, pw, to)); }                   // password, no HMAC
+    { TcpTransport t; TcpIo bad = io; bad.network_ready = nullptr;
+      TEST_ASSERT_FALSE(t.begin("10.0.0.1", 7000, cfg, bad, a, to)); }                   // no readiness predicate
+    { TcpTransport t; AuthSource bad; bad.password = nullptr; bad.password_len = 5;
+      bad.ctx = nullptr; bad.hmac_sha256 = stubHmac;
+      TEST_ASSERT_FALSE(t.begin("10.0.0.1", 7000, cfg, io, bad, to)); }                  // null ptr + nonzero len
     { TcpTransport t;                                                                    // valid open-mode init
       TEST_ASSERT_TRUE(t.begin("10.0.0.1", 7000, cfg, io, a, to));
       TEST_ASSERT_FALSE(t.connected());
@@ -393,6 +403,55 @@ void test_pending_tx_timeout_is_unknown(void) {
     TEST_ASSERT_EQUAL(TERR_TIMEOUT, t.lastError());
 }
 
+// network-readiness seam
+void test_readiness_false_prevents_connect(void) {
+    Fake f{}; f.net_unready = true;          // platform network not ready
+    TcpTransport t;
+    TEST_ASSERT_TRUE(t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts()));
+    t.poll(0); t.poll(0); t.poll(1000);
+    TEST_ASSERT_FALSE(f.connect_called);     // never attempted a connection
+    TEST_ASSERT_FALSE(t.connected());
+    TEST_ASSERT_EQUAL(ST_DISCONNECTED, t.sessionState());
+}
+
+void test_readiness_true_allows_connect(void) {
+    Fake f{};                                // ready by default
+    TcpTransport t;
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    f.want_connected = true;
+    t.poll(0); t.poll(0);
+    TEST_ASSERT_TRUE(f.connect_called);
+    TEST_ASSERT_TRUE(t.connected());
+    TEST_ASSERT_TRUE(fwSent(f, MSG_HELLO));
+}
+
+void test_readiness_loss_while_tx_pending_is_unknown(void) {
+    Fake f{}; TcpTransport t;
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    const uint8_t pkt[] = {0x3A, 1, 2};
+    TEST_ASSERT_TRUE(t.requestTx(pkt, sizeof(pkt), 2));
+    f.net_unready = true;                    // network drops while a TX is pending
+    t.poll(3);
+    TEST_ASSERT_FALSE(t.connected());        // transport stopped safely
+    TEST_ASSERT_EQUAL(TXO_UNKNOWN, t.lastTxOutcome());   // never a false success
+}
+
+void test_saturating_backoff_no_wrap(void) {
+    Fake f{}; f.fail_connect = true;
+    TcpTransport t;
+    TcpTimeouts to = defaultTimeouts();
+    to.backoff_min_ms = 0x80000000u;         // near the top of the uint32 range
+    to.backoff_max_ms = 0xFFFFFFFFu;
+    TEST_ASSERT_TRUE(t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), to));
+    t.poll(0);                               // fail: doubling would overflow -> saturate to max
+    TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, t.backoffMs());
+    uint32_t now = t.nextAttemptAt();
+    t.poll(now);                             // fail again: stays capped, never wraps to a tiny delay
+    TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, t.backoffMs());
+    TEST_ASSERT_TRUE(t.backoffMs() >= to.backoff_min_ms);
+}
+
 // ---------------------------------------------------------------------------
 void setUp(void) {}
 void tearDown(void) {}
@@ -409,6 +468,10 @@ int main(int, char**) {
     RUN_TEST(test_auth_required_without_password_fails_closed);
     RUN_TEST(test_auth_hmac_backend_failure_fails_closed);
     RUN_TEST(test_begin_validation);
+    RUN_TEST(test_readiness_false_prevents_connect);
+    RUN_TEST(test_readiness_true_allows_connect);
+    RUN_TEST(test_readiness_loss_while_tx_pending_is_unknown);
+    RUN_TEST(test_saturating_backoff_no_wrap);
     RUN_TEST(test_coalesced_handshake_frames_in_order);
     RUN_TEST(test_ping_gets_pong);
     RUN_TEST(test_rx_exposed_not_injected);

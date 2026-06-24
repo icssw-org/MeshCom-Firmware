@@ -44,6 +44,12 @@ struct TcpIo {
     int  (*send)(void* ctx, const uint8_t* buf, int len);
     // Close and release the connection (idempotent).
     void (*close)(void* ctx);
+    // Platform IP-network readiness predicate, narrowly scoped to this transport:
+    //   true  -> the transport may connect/poll/reconnect
+    //   false -> the transport stops the link safely (no connect attempts)
+    // Consulted every poll(); must be non-blocking. The ESP32 default uses Wi-Fi;
+    // an out-of-tree platform overlay can supply a different predicate. Required.
+    bool (*network_ready)(void* ctx);
 };
 
 // Optional one-way auth source. If password is null/empty there is no password

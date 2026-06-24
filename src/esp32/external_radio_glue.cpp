@@ -91,9 +91,10 @@ bool glueIsConnected(void* c) {
     int s = ::select(g->fd + 1, nullptr, &wf, nullptr, &tv);
     if (s > 0 && FD_ISSET(g->fd, &wf)) {
         int err = 0; socklen_t l = sizeof(err);
-        ::getsockopt(g->fd, SOL_SOCKET, SO_ERROR, &err, &l);
-        if (err == 0) { g->connecting = false; return true; }
-        ::close(g->fd); g->fd = -1; g->connecting = false;   // connect failed
+        int rc = ::getsockopt(g->fd, SOL_SOCKET, SO_ERROR, &err, &l);
+        if (rc == 0 && err == 0) { g->connecting = false; return true; }
+        // getsockopt failed OR connect reported an error: not connected.
+        ::close(g->fd); g->fd = -1; g->connecting = false;
     }
     return false;
 }
@@ -150,6 +151,15 @@ bool         g_enabled = false;
 
 }  // namespace
 
+// Default platform network-readiness predicate: normal ESP32 Wi-Fi connectivity.
+// Declared weak (matching the repo's user-hook style, e.g. src/nrf52/WisBlock-API.h)
+// so an out-of-tree platform overlay can override this symbol at link time with a
+// different IP-network readiness check WITHOUT modifying any tracked source. It is
+// fully generic: it only answers "is this node's IP network usable right now?".
+bool __attribute__((weak)) externalRadioNetworkReady(void* /*ctx*/) {
+    return WiFi.status() == WL_CONNECTED;
+}
+
 void externalRadioSetup() {
     if (g_host[0] == '\0' || g_port == 0) {
         Serial.println("[EXTRADIO] disabled: no bridge host/port provisioned");
@@ -160,6 +170,7 @@ void externalRadioSetup() {
     io.ctx = &g_ctx;
     io.connect = glueConnect; io.is_connected = glueIsConnected;
     io.recv = glueRecv; io.send = glueSend; io.close = glueClose;
+    io.network_ready = externalRadioNetworkReady;   // weak default = Wi-Fi; overlay may override
 
     AuthSource auth;
     auth.password     = reinterpret_cast<const uint8_t*>(g_password);
@@ -177,10 +188,11 @@ void externalRadioSetup() {
 
 void externalRadioLoop() {
     if (!g_enabled) return;
-    if (WiFi.status() != WL_CONNECTED) { g_transport.stop(); return; }   // wait for Wi-Fi
+    // Network-readiness is now decided by the transport via the injected predicate
+    // (externalRadioNetworkReady); poll() connects only when ready and stops safely
+    // when not. RX and TX results are intentionally NOT injected into MeshCom in
+    // this milestone; they are available via g_transport.hasRx()/lastTxOutcome().
     g_transport.poll(millis());
-    // RX and TX results are intentionally NOT injected into MeshCom in this
-    // milestone; they are available via g_transport.hasRx()/lastTxOutcome().
 }
 
 #endif  // EXTERNAL_RADIO

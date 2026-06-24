@@ -6,6 +6,13 @@
 
 namespace extradio {
 
+// Double v but never overflow and never exceed cap (overflow-safe saturation).
+static uint32_t saturatingDoubleCap(uint32_t v, uint32_t cap) {
+    if (v >= cap)      return cap;
+    if (v > cap / 2)   return cap;   // doubling would meet/exceed cap
+    return v * 2;                    // here v <= cap/2, so v*2 <= cap: no wrap
+}
+
 // Defaults chosen conservatively for a LAN bridge: long enough to tolerate a
 // slow bridge / Wi-Fi jitter, short enough to recover quickly. The reconnect
 // backoff is exponential (1s..30s) so a missing bridge never hot-loops.
@@ -48,11 +55,15 @@ bool TcpTransport::begin(const char* host, uint16_t port, const RadioConfig& cfg
     clear();   // safe inactive state; nothing active is stored until ALL checks pass
     // Mandatory inputs.
     if (!host || host[0] == '\0' || port == 0) return false;
-    if (!io.connect || !io.is_connected || !io.recv || !io.send || !io.close) return false;
+    if (!io.connect || !io.is_connected || !io.recv || !io.send || !io.close ||
+        !io.network_ready) return false;
     // Timing must be usable: nonzero phase timeouts, sane backoff window.
     if (to.connect_ms == 0 || to.handshake_ms == 0 || to.auth_ms == 0 ||
         to.config_ms == 0 || to.tx_ms == 0) return false;
     if (to.backoff_min_ms == 0 || to.backoff_max_ms < to.backoff_min_ms) return false;
+    // Password/length consistency: reject a null pointer with a nonzero length.
+    // Legitimate open mode is null pointer + zero length (no HMAC required).
+    if (!auth.password && auth.password_len > 0) return false;
     // A configured password (closed mode) requires an HMAC backend; open mode
     // (no password) legitimately has neither — do not over-validate it.
     if (auth.password && auth.password_len > 0 && !auth.hmac_sha256) return false;
@@ -92,8 +103,7 @@ void TcpTransport::failClosed(uint32_t now_ms, TransportError err) {
     has_deadline_    = false;
     last_err_        = err;
     next_attempt_at_ = now_ms + backoff_ms_;
-    uint32_t next    = backoff_ms_ * 2;
-    backoff_ms_      = (next > to_.backoff_max_ms) ? to_.backoff_max_ms : next;
+    backoff_ms_      = saturatingDoubleCap(backoff_ms_, to_.backoff_max_ms);
 }
 
 void TcpTransport::startConnect(uint32_t now_ms) {
@@ -222,6 +232,11 @@ void TcpTransport::driveRx(uint32_t now_ms) {
 }
 
 void TcpTransport::poll(uint32_t now_ms) {
+    if (!io_.network_ready) return;                 // not configured (begin not called/failed)
+    if (!io_.network_ready(io_.ctx)) {              // platform network not ready
+        if (phase_ != LINK_IDLE) stop();            // stop safely; preserves UNKNOWN if TX pending
+        return;
+    }
     switch (phase_) {
         case LINK_IDLE:
             if ((int32_t)(now_ms - next_attempt_at_) >= 0) startConnect(now_ms);
