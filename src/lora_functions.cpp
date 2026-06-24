@@ -181,9 +181,10 @@ static uint32_t extractRingMsgId(int slot)
 // Defined here (above the ACK-clear paths) so those paths can invalidate it.
 static extradio::ExtTxq g_extTxq;
 
-// M10: bounded external channel-access (CHANNEL_BUSY) attempt budget, counted
-// separately from the MeshCom delivery retryCount.
-static extradio::ExtBusyTracker g_extBusy;
+// M10/M10a: bounded external channel-access (CHANNEL_BUSY) attempt budget,
+// counted separately from the MeshCom delivery retryCount and tracked PER RING
+// SLOT so interleaving queued messages keep independent, bounded episodes.
+static extradio::ExtBusyEntry g_extBusy[MAX_RING];
 
 // If `slot` is the externally-pending slot, drop the ownership record (the slot
 // is about to be cleared by receive-side ACK handling). Returns true if it was
@@ -194,7 +195,7 @@ static bool extTxqAckInvalidateIfOwned(int slot)
     if(!g_extTxq.owns(slot))
         return false;
     g_extTxq.ackInvalidate(slot);
-    extradio::extBusyReset(g_extBusy);   // ACK invalidates any channel-access budget too
+    extradio::extBusyResetSlot(g_extBusy, MAX_RING, slot);  // ACK clears this slot's busy episode
     return true;
 }
 #endif
@@ -2082,7 +2083,7 @@ bool externalTxResolveSuccess(uint32_t token)
         // clears it. Payload, length, message identity and retryCount are all
         // retained (the EXT_PENDING slot never cleared its length).
         ringBuffer[slot][1] = RING_STATUS_SENT;
-        extradio::extBusyReset(g_extBusy);   // RF send succeeded: reset channel-access attempts
+        extradio::extBusyResetSlot(g_extBusy, MAX_RING, slot);  // RF success: clear this slot's busy episode
         if(bDisplayRetx)
             printfdeb("\n[RETX] ext-TX RF-sent retid:%i token:%lu -> awaiting ACK/retransmit\n",
                       slot, (unsigned long)token);
@@ -2093,7 +2094,7 @@ bool externalTxResolveSuccess(uint32_t token)
         ringBuffer[slot][1] = RING_STATUS_DONE;
         ringBuffer[slot][0] = 0;
         retryCount[slot] = 0;
-        extradio::extBusyReset(g_extBusy);   // RF send succeeded: reset channel-access attempts
+        extradio::extBusyResetSlot(g_extBusy, MAX_RING, slot);  // RF success: clear this slot's busy episode
         if(bDisplayRetx)
             printfdeb("\n[RETX] ext-TX RF-sent retid:%i token:%lu (one-shot, complete)\n",
                       slot, (unsigned long)token);
@@ -2116,21 +2117,23 @@ bool externalTxResolveChannelBusy(uint32_t token)
     if(g_extTxq.resolveBusy(token) != extradio::ExtTxAction::REQUEUE_RETRY)
         return false;   // stale/late result: ring untouched, no pacing
 
-    if(extradio::extBusyOnBusy(g_extBusy, mid, slot, EXT_BUSY_MAX_ATTEMPTS)
+    if(extradio::extBusyOnBusy(g_extBusy, MAX_RING, slot, mid, EXT_BUSY_MAX_ATTEMPTS)
        == extradio::ExtBusyResult::RETRY)
     {
         // Content intact; re-selectable on a LATER pass once the pacing deadline
         // (armed by the glue) elapses. The MeshCom delivery retryCount is NOT
-        // touched — channel access is not message delivery.
+        // touched — channel access is not message delivery. This slot's episode
+        // counter advances independently of any other interleaved message.
         ringBuffer[slot][1] = RING_STATUS_READY;
         if(bDisplayRetx)
             printfdeb("\n[RETX] ext-TX busy retid:%i channel-access attempt:%d/%d (retryCount kept)\n",
-                      slot, g_extBusy.attempts, EXT_BUSY_MAX_ATTEMPTS);
+                      slot, (slot >= 0 && slot < MAX_RING) ? g_extBusy[slot].attempts : 0,
+                      EXT_BUSY_MAX_ATTEMPTS);
         return true;
     }
 
     // Bounded channel-access budget exhausted: deliberate non-success terminal.
-    extradio::extBusyReset(g_extBusy);
+    extradio::extBusyResetSlot(g_extBusy, MAX_RING, slot);
     ringBuffer[slot][1] = RING_STATUS_DONE;
     ringBuffer[slot][0] = 0;
     retryCount[slot] = 0;
@@ -2151,7 +2154,7 @@ bool externalTxResolveUncertain(uint32_t token)
     ringBuffer[slot][1] = RING_STATUS_DONE;
     ringBuffer[slot][0] = 0;
     retryCount[slot] = 0;
-    extradio::extBusyReset(g_extBusy);   // terminal: reset channel-access attempts
+    extradio::extBusyResetSlot(g_extBusy, MAX_RING, slot);  // terminal: clear this slot's busy episode
 
     if(bDisplayRetx)
         printfdeb("\n[RETX] ext-TX uncertain retid:%i token:%lu released (no resend)\n",

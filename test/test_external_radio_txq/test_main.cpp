@@ -94,7 +94,7 @@ static void test_channel_busy_delayed_retry() {
     uint32_t t = q.begin(2, 0x01020304);
 
     // resolveBusy now only validates the token and releases ownership; the
-    // bounded requeue-vs-give-up decision lives in ExtBusyTracker (M10). The
+    // bounded requeue-vs-give-up decision lives in the per-slot busy table. The
     // record is released, so the slot is NOT auto-pending — it must be re-selected
     // and re-begun on a later pass, which prevents same-pass reselection.
     TEST_ASSERT_EQUAL(ExtTxAction::REQUEUE_RETRY, q.resolveBusy(t));
@@ -246,65 +246,110 @@ static void test_begin_captures_pre_status() {
     (void)t3;
 }
 
-// --- M10: channel-access (CHANNEL_BUSY) budget separate from delivery retry ---
+// --- M10/M10a: per-slot channel-access (CHANNEL_BUSY) budget -----------------
+// Busy attempts are tracked per ring slot in a fixed table, independently of the
+// MeshCom delivery retryCount.
+
+static constexpr int kBusyCap = 4;   // local table capacity for these tests
 
 // Busy bookkeeping never references the MeshCom delivery retry counter.
 static void test_busy_does_not_touch_delivery_budget() {
-    ExtBusyTracker bt;
+    ExtBusyEntry table[kBusyCap];
     uint8_t delivery_retryCount = 0;   // stands in for the ring's retryCount[slot]
     for (int i = 0; i < 5; ++i)
-        (void)extBusyOnBusy(bt, 0xAAAA, 3, /*max*/8);
-    TEST_ASSERT_EQUAL_UINT8(5, bt.attempts);            // counted in the busy tracker...
+        (void)extBusyOnBusy(table, kBusyCap, /*slot*/0, 0xAAAA, /*max*/8);
+    TEST_ASSERT_EQUAL_UINT8(5, table[0].attempts);      // counted in the per-slot table...
     TEST_ASSERT_EQUAL_UINT8(0, delivery_retryCount);    // ...not in the delivery budget
 }
 
 // The busy cap is enforced independently and at its own value (not MAX_RETRANSMIT).
 static void test_busy_cap_independent_and_exhaustion() {
-    ExtBusyTracker bt;
+    ExtBusyEntry table[kBusyCap];
     // With cap 3: two retries then exhaustion on the third busy.
-    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY,     extBusyOnBusy(bt, 0x1, 1, 3));  // attempts=1
-    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY,     extBusyOnBusy(bt, 0x1, 1, 3));  // attempts=2
-    TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED, extBusyOnBusy(bt, 0x1, 1, 3));  // attempts=3
+    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY,     extBusyOnBusy(table, kBusyCap, 1, 0x1, 3));
+    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY,     extBusyOnBusy(table, kBusyCap, 1, 0x1, 3));
+    TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED, extBusyOnBusy(table, kBusyCap, 1, 0x1, 3));
 
     // A larger cap (8, the firmware default) clearly differs from delivery's 3.
-    ExtBusyTracker bt2;
+    ExtBusyEntry t2[kBusyCap];
     for (int i = 0; i < 7; ++i)
-        TEST_ASSERT_EQUAL(ExtBusyResult::RETRY, extBusyOnBusy(bt2, 0x2, 1, 8));
-    TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED, extBusyOnBusy(bt2, 0x2, 1, 8));  // 8th
+        TEST_ASSERT_EQUAL(ExtBusyResult::RETRY, extBusyOnBusy(t2, kBusyCap, 2, 0x2, 8));
+    TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED, extBusyOnBusy(t2, kBusyCap, 2, 0x2, 8));  // 8th
 }
 
-// RF success / terminal resets channel-access tracking (next message starts fresh).
-static void test_busy_reset() {
-    ExtBusyTracker bt;
-    extBusyOnBusy(bt, 0x9, 4, 8);
-    extBusyOnBusy(bt, 0x9, 4, 8);
-    TEST_ASSERT_TRUE(bt.active);
-    TEST_ASSERT_EQUAL_UINT8(2, bt.attempts);
-    extBusyReset(bt);
-    TEST_ASSERT_FALSE(bt.active);
-    TEST_ASSERT_EQUAL_UINT8(0, bt.attempts);
-    // After reset, a busy for the same identity restarts at 1.
-    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY, extBusyOnBusy(bt, 0x9, 4, 8));
-    TEST_ASSERT_EQUAL_UINT8(1, bt.attempts);
+// M10a-1: interleaving A/B/A preserves A's counter (the M10 bug fix).
+static void test_busy_interleave_preserves_count() {
+    ExtBusyEntry table[kBusyCap];
+    extBusyOnBusy(table, kBusyCap, /*slot*/0, /*A*/0xAAAA, 8);   // A attempt 1
+    extBusyOnBusy(table, kBusyCap, /*slot*/1, /*B*/0xBBBB, 8);   // B attempt 1 (different slot)
+    extBusyOnBusy(table, kBusyCap, /*slot*/0, /*A*/0xAAAA, 8);   // A attempt 2 (NOT reset by B)
+    TEST_ASSERT_EQUAL_UINT8(2, table[0].attempts);
+    TEST_ASSERT_EQUAL_UINT8(1, table[1].attempts);
 }
 
-// A different message identity (msg_id or slot) re-keys the tracker from zero, so
-// a replacement after ACK/reuse never inherits a stale count.
-static void test_busy_identity_rekeys() {
-    ExtBusyTracker bt;
-    extBusyOnBusy(bt, 0xAAAA, 5, 8);
-    extBusyOnBusy(bt, 0xAAAA, 5, 8);
-    TEST_ASSERT_EQUAL_UINT8(2, bt.attempts);
+// M10a-2: interleaving cannot bypass A's bounded cap.
+static void test_busy_interleave_respects_cap() {
+    ExtBusyEntry table[kBusyCap];
+    const uint8_t cap = 3;
+    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY,
+                      extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, cap));  // A=1
+    extBusyOnBusy(table, kBusyCap, 1, 0xBBBB, cap);                     // B interleaved
+    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY,
+                      extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, cap));  // A=2
+    extBusyOnBusy(table, kBusyCap, 1, 0xBBBB, cap);                     // B interleaved
+    TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED,
+                      extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, cap));  // A=3 -> exhausted at its real cap
+}
 
-    // Same slot, different msg_id (slot reused for another message) -> fresh.
-    extBusyOnBusy(bt, 0xBBBB, 5, 8);
-    TEST_ASSERT_EQUAL_UINT32(0xBBBBu, bt.msg_id);
-    TEST_ASSERT_EQUAL_UINT8(1, bt.attempts);
+// M10a-3: a different message reusing A's slot starts fresh.
+static void test_busy_slot_reuse_resets() {
+    ExtBusyEntry table[kBusyCap];
+    extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, 8);
+    extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, 8);
+    TEST_ASSERT_EQUAL_UINT8(2, table[0].attempts);
+    // Same slot, different msg_id (slot reused) -> fresh episode at 1.
+    extBusyOnBusy(table, kBusyCap, 0, 0xCCCC, 8);
+    TEST_ASSERT_EQUAL_UINT32(0xCCCCu, table[0].msg_id);
+    TEST_ASSERT_EQUAL_UINT8(1, table[0].attempts);
+}
 
-    // Same msg_id, different slot (e.g. a delivery-retransmit copy) -> fresh too.
-    extBusyOnBusy(bt, 0xBBBB, 9, 8);
-    TEST_ASSERT_EQUAL_INT(9, bt.slot);
-    TEST_ASSERT_EQUAL_UINT8(1, bt.attempts);
+// M10a-4: same msg_id at a different slot is a separate episode (per-slot rule).
+// This is the delivery-retransmission-copy case: success already reset the
+// original slot, the copy occupies a new slot with a fresh budget.
+static void test_busy_same_msgid_different_slot() {
+    ExtBusyEntry table[kBusyCap];
+    extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, 8);
+    extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, 8);
+    TEST_ASSERT_EQUAL_UINT8(2, table[0].attempts);
+    extBusyOnBusy(table, kBusyCap, 2, 0xAAAA, 8);   // same msg_id, slot 2 -> fresh
+    TEST_ASSERT_EQUAL_UINT8(1, table[2].attempts);
+    TEST_ASSERT_EQUAL_UINT8(2, table[0].attempts);  // original slot untouched
+}
+
+// M10a-5/6/7: a reset clears ONLY the matching slot; others keep their episode.
+static void test_busy_reset_only_matching() {
+    ExtBusyEntry table[kBusyCap];
+    extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, 8);   // A=1
+    extBusyOnBusy(table, kBusyCap, 1, 0xBBBB, 8);   // B=1
+    extBusyResetSlot(table, kBusyCap, 0);           // success/terminal/ACK for A only
+    TEST_ASSERT_FALSE(table[0].active);
+    TEST_ASSERT_EQUAL_UINT8(0, table[0].attempts);
+    TEST_ASSERT_TRUE(table[1].active);
+    TEST_ASSERT_EQUAL_UINT8(1, table[1].attempts);  // B untouched
+    // A fresh, B continues from where it was.
+    extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, 8);
+    TEST_ASSERT_EQUAL_UINT8(1, table[0].attempts);
+    extBusyOnBusy(table, kBusyCap, 1, 0xBBBB, 8);
+    TEST_ASSERT_EQUAL_UINT8(2, table[1].attempts);
+}
+
+// Out-of-range slots are fail-safe (EXHAUSTED, no out-of-bounds write).
+static void test_busy_out_of_range_slot() {
+    ExtBusyEntry table[kBusyCap];
+    TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED, extBusyOnBusy(table, kBusyCap, -1, 0x1, 8));
+    TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED, extBusyOnBusy(table, kBusyCap, kBusyCap, 0x1, 8));
+    extBusyResetSlot(table, kBusyCap, -1);          // no-op, must not crash
+    extBusyResetSlot(table, kBusyCap, kBusyCap);    // no-op, must not crash
 }
 
 int main(int, char**) {
@@ -314,8 +359,12 @@ int main(int, char**) {
     RUN_TEST(test_begin_captures_pre_status);
     RUN_TEST(test_busy_does_not_touch_delivery_budget);
     RUN_TEST(test_busy_cap_independent_and_exhaustion);
-    RUN_TEST(test_busy_reset);
-    RUN_TEST(test_busy_identity_rekeys);
+    RUN_TEST(test_busy_interleave_preserves_count);
+    RUN_TEST(test_busy_interleave_respects_cap);
+    RUN_TEST(test_busy_slot_reuse_resets);
+    RUN_TEST(test_busy_same_msgid_different_slot);
+    RUN_TEST(test_busy_reset_only_matching);
+    RUN_TEST(test_busy_out_of_range_slot);
     RUN_TEST(test_pacer_blocks_until_deadline);
     RUN_TEST(test_retransmit_skips_ext_pending);
     RUN_TEST(test_single_pending_only);

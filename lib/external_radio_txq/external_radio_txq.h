@@ -45,7 +45,7 @@ enum class ExtTxResolution : uint8_t {
     PENDING,           // a TX is owned and awaiting a bridge result
     SUCCESS,           // confirmed TXR_SUCCESS
     BUSY_REQUEUED,     // CHANNEL_BUSY, ownership released (requeue/drop decided by
-                       //   the separate bounded ExtBusyTracker, NOT retryCount)
+                       //   the separate per-slot busy table, NOT retryCount)
     UNCERTAIN,         // UNKNOWN / TIMEOUT / RADIO_ERROR / disconnect / reconfigure
     ACK_RESOLVED,      // a receive-side ACK cleared the message before any result
 };
@@ -97,8 +97,9 @@ public:
 
     // TXR_CHANNEL_BUSY: validate the token and release ownership. Returns
     // REQUEUE_RETRY on a match (channel access was denied; the caller decides,
-    // via the separate ExtBusyTracker, whether to requeue or give up — CHANNEL_BUSY
-    // must NOT consume the MeshCom delivery retry budget), or NONE if stale/late.
+    // via the separate per-slot busy table, whether to requeue or give up —
+    // CHANNEL_BUSY must NOT consume the MeshCom delivery retry budget), or NONE if
+    // stale/late.
     ExtTxAction resolveBusy(uint32_t token);
 
     // TXR_TIMEOUT / TXR_RADIO_ERROR / UNKNOWN / disconnect / reconfigure. Never a
@@ -160,43 +161,53 @@ inline void extTxPacerClear(ExtTxPacer& p) { p.armed = false; }
 // Bounded, external-only channel-access attempt budget. A bridge CHANNEL_BUSY
 // means "channel access was not granted", NOT "a MeshCom delivery retry was
 // consumed", so these attempts are counted SEPARATELY from the ring's delivery
-// retryCount/MAX_RETRANSMIT. Tracking is keyed by message identity (msg_id +
-// slot) — the same identity M8a uses — so it cannot bleed onto a replacement
-// message after an ACK or slot reuse. Pure/testable; the firmware holds one
-// instance (there is only one external TX in flight at a time).
-struct ExtBusyTracker {
-    bool     active;
-    uint32_t msg_id;
-    int      slot;
-    uint8_t  attempts;
-
-    ExtBusyTracker() : active(false), msg_id(0), slot(-1), attempts(0) {}
-};
-
+// retryCount/MAX_RETRANSMIT.
+//
+// The budget is tracked PER RING SLOT in a fixed, caller-owned table (one entry
+// per ring slot, indexed by slot). Each slot's count is independent, so a
+// channel-access episode for message A keeps advancing across busy outcomes even
+// when another queued message B is selected and gets busy between A's attempts —
+// "another message was selected" is NOT a reset condition. An entry restarts only
+// when its slot is reused by a DIFFERENT message (msg_id changes). No dynamic
+// allocation: the firmware holds one fixed array sized to the ring.
 enum class ExtBusyResult : uint8_t {
     RETRY,       // attempts remain below the bounded cap: requeue for a paced retry
     EXHAUSTED,   // bounded channel-access budget spent: terminal non-success
 };
 
-// Record one CHANNEL_BUSY for the message identified by (msg_id, slot). If this is
-// a different message than currently tracked, tracking restarts from zero (so a
-// preempted or replaced message never inherits a stale count). Increments the
-// bounded channel-access attempt counter only — never the delivery retryCount.
-// Returns RETRY while attempts < max_attempts, else EXHAUSTED.
-inline ExtBusyResult extBusyOnBusy(ExtBusyTracker& t, uint32_t msg_id, int slot,
-                                   uint8_t max_attempts) {
-    if (!(t.active && t.msg_id == msg_id && t.slot == slot)) {
-        t.active = true; t.msg_id = msg_id; t.slot = slot; t.attempts = 0;
+struct ExtBusyEntry {
+    bool     active;
+    uint32_t msg_id;   // identity occupying this slot (detects slot reuse)
+    uint8_t  attempts; // channel-access attempts for the current episode
+
+    ExtBusyEntry() : active(false), msg_id(0), attempts(0) {}
+};
+
+// Record one CHANNEL_BUSY for ring slot `slot` carrying message `msg_id`, in a
+// caller-owned per-slot table of `capacity` entries. Only table[slot] is touched,
+// so interleaving busy outcomes for other slots never disturbs this episode. If
+// the slot's stored msg_id differs (the slot was reused by a different message),
+// the count restarts at 1. Increments the bounded channel-access counter only —
+// never the delivery retryCount. Returns RETRY while attempts < max_attempts,
+// else EXHAUSTED. An out-of-range slot yields EXHAUSTED (fail-safe: no retry).
+inline ExtBusyResult extBusyOnBusy(ExtBusyEntry* table, int capacity, int slot,
+                                   uint32_t msg_id, uint8_t max_attempts) {
+    if (slot < 0 || slot >= capacity) return ExtBusyResult::EXHAUSTED;
+    ExtBusyEntry& e = table[slot];
+    if (!(e.active && e.msg_id == msg_id)) {     // fresh episode (new/ reused slot)
+        e.active = true; e.msg_id = msg_id; e.attempts = 0;
     }
-    if (t.attempts < 0xFF) t.attempts++;
-    return (t.attempts >= max_attempts) ? ExtBusyResult::EXHAUSTED
+    if (e.attempts < 0xFF) e.attempts++;
+    return (e.attempts >= max_attempts) ? ExtBusyResult::EXHAUSTED
                                         : ExtBusyResult::RETRY;
 }
 
-// Reset channel-access tracking. Called on confirmed RF success, terminal
-// failure, ACK invalidation, or slot replacement.
-inline void extBusyReset(ExtBusyTracker& t) {
-    t.active = false; t.msg_id = 0; t.slot = -1; t.attempts = 0;
+// Clear ONE slot's channel-access episode. Called on confirmed RF success, busy
+// exhaustion, uncertain/terminal failure, or ACK resolution for that slot. Other
+// slots' episodes are left untouched.
+inline void extBusyResetSlot(ExtBusyEntry* table, int capacity, int slot) {
+    if (slot < 0 || slot >= capacity) return;
+    table[slot].active = false; table[slot].msg_id = 0; table[slot].attempts = 0;
 }
 
 }  // namespace extradio

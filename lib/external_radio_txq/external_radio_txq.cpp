@@ -40,7 +40,8 @@ ExtTxAction ExtTxq::resolveBusy(uint32_t token) {
     active_ = false;                            // release ownership for this attempt
     last_   = ExtTxResolution::BUSY_REQUEUED;
     // The bounded requeue-vs-give-up decision lives in the firmware's separate
-    // ExtBusyTracker, NOT here: CHANNEL_BUSY must not consume the delivery budget.
+    // per-slot busy table, NOT here: CHANNEL_BUSY must not consume the delivery
+    // budget.
     return ExtTxAction::REQUEUE_RETRY;
 }
 

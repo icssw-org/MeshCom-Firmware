@@ -296,10 +296,14 @@ in local-radio mode:
 - `CHANNEL_BUSY` means **channel access was not granted** (no RF send). It is paced
   by a real bounded delay and uses its **own bounded channel-access attempt budget,
   separate from the MeshCom delivery retransmission accounting** — a busy outcome
-  never consumes the delivery `retryCount`. The budget is keyed to the message
-  identity, so it cannot bleed onto a replacement after an ACK or slot reuse, and a
-  confirmed RF send resets it before MeshCom ACK waiting begins. Exhausting the
-  channel-access budget is a deliberate non-success terminal;
+  never consumes the delivery `retryCount`. The budget is **independently bounded
+  per queued channel-access episode** (tracked per ring slot): selecting and
+  attempting other queued messages between two of a message's busy outcomes does
+  **not** reset its count, so a message exhausts at its real configured cap. A
+  different message reusing a slot starts fresh; a confirmed RF send resets that
+  slot's episode before MeshCom ACK waiting begins. Exhausting the channel-access
+  budget is a deliberate non-success terminal. The pacing delay itself stays
+  global — any busy result delays the next external submission;
 - `TIMEOUT`/`RADIO_ERROR`/`UNKNOWN`/disconnect/reconfigure are terminal
   non-success — never an ACK-wait, never an immediate resend, never a false
   success.
