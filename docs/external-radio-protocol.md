@@ -273,7 +273,10 @@ provisioned:
 - **transmission** routes a selected MeshCom TX-ring entry through `TX_REQUEST`;
   the final outcome is resolved exactly once from the terminal `TX_RESULT` (or a
   single `UNKNOWN` on disconnect/timeout/send-failure/reconfigure). A socket write
-  is never success.
+  is never success. The in-flight entry is held in the ring as `EXT_PENDING` and is
+  protected from priority-overflow eviction, and each terminal result re-verifies
+  the slot still carries the owned message (status + message id) before mutating
+  it — so a result can never disturb a slot that was meanwhile freed or reused.
 
 ### Bridge RF success vs MeshCom acknowledgment
 

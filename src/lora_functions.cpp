@@ -1624,7 +1624,16 @@ void addTxRingEntry(const char* source)
         int scan = r;
         while(scan != w)
         {
-            if(ringBuffer[scan][0] > 0 && ringPriority[scan] > worst_prio)
+            bool evictable = ringBuffer[scan][0] > 0;
+#if defined(EXTERNAL_RADIO)
+            // Never evict an in-flight external-TX slot: its length must stay
+            // valid until the bridge result resolves it, and the ownership record
+            // is not notified by this overflow path. Dropping it here would lose a
+            // pending TX or let a late result corrupt the reused slot.
+            if(ringBuffer[scan][1] == RING_STATUS_EXT_PENDING)
+                evictable = false;
+#endif
+            if(evictable && ringPriority[scan] > worst_prio)
             {
                 worst_prio = ringPriority[scan];
                 worst_slot = scan;
@@ -2072,8 +2081,22 @@ bool externalTxResolveSuccess(uint32_t token)
 {
     int slot = g_extTxq.slot();
     uint8_t pre_status = g_extTxq.preStatus();
+    uint32_t mid = g_extTxq.msgId();
     if(g_extTxq.resolveSuccess(token) != extradio::ExtTxAction::COMPLETE_SUCCESS)
         return false;   // stale/late result: ring untouched
+
+    if(slot < 0 || slot >= MAX_RING ||
+       !extradio::extTxOwnsRingSlot(ringBuffer[slot][1], extractRingMsgId(slot),
+                                    RING_STATUS_EXT_PENDING, mid))
+    {
+        // Token matched but the slot no longer holds the owned message (e.g. an
+        // un-notified ring clear): release accounting, never touch the ring.
+        extradio::extBusyResetSlot(g_extBusy, MAX_RING, slot);
+        if(bDisplayRetx)
+            printfdeb("\n[RETX] ext-TX success retid:%i token:%lu: slot reused, dropped\n",
+                      slot, (unsigned long)token);
+        return false;
+    }
 
     if(extradio::extTxRetransmittable(pre_status, ringBuffer[slot][2],
                                       RING_STATUS_READY, MSG_TYPE_TEXT))
@@ -2117,6 +2140,16 @@ bool externalTxResolveChannelBusy(uint32_t token)
     if(g_extTxq.resolveBusy(token) != extradio::ExtTxAction::REQUEUE_RETRY)
         return false;   // stale/late result: ring untouched, no pacing
 
+    if(slot < 0 || slot >= MAX_RING ||
+       !extradio::extTxOwnsRingSlot(ringBuffer[slot][1], extractRingMsgId(slot),
+                                    RING_STATUS_EXT_PENDING, mid))
+    {
+        // Slot no longer holds the owned message (un-notified clear): release the
+        // busy episode, touch no ring, and do not arm pacing.
+        extradio::extBusyResetSlot(g_extBusy, MAX_RING, slot);
+        return false;
+    }
+
     if(extradio::extBusyOnBusy(g_extBusy, MAX_RING, slot, mid, EXT_BUSY_MAX_ATTEMPTS)
        == extradio::ExtBusyResult::RETRY)
     {
@@ -2148,8 +2181,19 @@ bool externalTxResolveChannelBusy(uint32_t token)
 bool externalTxResolveUncertain(uint32_t token)
 {
     int slot = g_extTxq.slot();
+    uint32_t mid = g_extTxq.msgId();
     if(g_extTxq.resolveUncertain(token) != extradio::ExtTxAction::RELEASE_TERMINAL)
         return false;   // stale/late result: ring untouched
+
+    if(slot < 0 || slot >= MAX_RING ||
+       !extradio::extTxOwnsRingSlot(ringBuffer[slot][1], extractRingMsgId(slot),
+                                    RING_STATUS_EXT_PENDING, mid))
+    {
+        // Slot no longer holds the owned message (un-notified clear): release the
+        // busy episode, touch no ring.
+        extradio::extBusyResetSlot(g_extBusy, MAX_RING, slot);
+        return false;
+    }
 
     ringBuffer[slot][1] = RING_STATUS_DONE;
     ringBuffer[slot][0] = 0;

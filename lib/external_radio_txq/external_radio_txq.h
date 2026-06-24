@@ -122,6 +122,18 @@ private:
     ExtTxResolution last_;
 };
 
+// Defence-in-depth ring-identity check used by the terminal resolvers before they
+// mutate the owned ring slot. The M8a token already gates stale/late results, but
+// the ownership record is NOT notified by every possible ring-clear path (e.g. a
+// priority-overflow eviction). Re-verifying that the slot STILL carries the
+// owned message — same EXT_PENDING status AND same msg_id — guarantees a resolve
+// can never write onto a slot that was freed and reused for another message. Pure;
+// the caller passes its own ring constants.
+inline bool extTxOwnsRingSlot(uint8_t ring_status, uint32_t ring_msg_id,
+                              uint8_t pending_status, uint32_t owned_msg_id) {
+    return ring_status == pending_status && ring_msg_id == owned_msg_id;
+}
+
 // Decide whether a ring entry must remain in the MeshCom ACK/retransmission
 // lifecycle after a CONFIRMED bridge RF send (TXO_SUCCESS), rather than being
 // completed one-shot. Pure; the caller passes its own ring constants so the lib

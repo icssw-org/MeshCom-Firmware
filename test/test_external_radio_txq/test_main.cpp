@@ -225,6 +225,17 @@ static void test_retransmittable_decision() {
     TEST_ASSERT_FALSE(extTxRetransmittable(kDone,  kPos,  kReady, kText));
 }
 
+// --- O1: ring-identity re-check before a resolve mutates the owned slot ------
+static void test_owns_ring_slot_identity() {
+    // Same EXT_PENDING status + same msg_id -> the slot still holds the owned msg.
+    TEST_ASSERT_TRUE (extTxOwnsRingSlot(kExtPending, 0xDEADBEEF, kExtPending, 0xDEADBEEF));
+    // Status changed (slot freed/reused) -> not owned: a resolve must not mutate it.
+    TEST_ASSERT_FALSE(extTxOwnsRingSlot(kReady, 0xDEADBEEF, kExtPending, 0xDEADBEEF));
+    TEST_ASSERT_FALSE(extTxOwnsRingSlot(kDone,  0xDEADBEEF, kExtPending, 0xDEADBEEF));
+    // Same status but different msg_id (slot reused) -> not owned.
+    TEST_ASSERT_FALSE(extTxOwnsRingSlot(kExtPending, 0x11112222, kExtPending, 0xDEADBEEF));
+}
+
 // --- M9: begin() captures the pre-pending ring status for that decision -----
 static void test_begin_captures_pre_status() {
     ExtTxq q;
@@ -356,6 +367,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_selection_skips_ext_pending);
     RUN_TEST(test_retransmittable_decision);
+    RUN_TEST(test_owns_ring_slot_identity);
     RUN_TEST(test_begin_captures_pre_status);
     RUN_TEST(test_busy_does_not_touch_delivery_budget);
     RUN_TEST(test_busy_cap_independent_and_exhaustion);
