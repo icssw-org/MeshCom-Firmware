@@ -5,6 +5,10 @@
 
 #include "lora_setchip.h"
 
+#if defined(EXTERNAL_RADIO)
+#include "esp32/external_radio_glue.h"   // externalRadioConfigChanged() re-sync hook
+#endif
+
 #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
 #include <nrf52/nrf52_radio.h>
 #endif
@@ -554,7 +558,13 @@ bool lora_setchip_meshcom()
     int rf_cr = meshcom_settings.node_cr;
     uint16_t rf_preamble_length = meshcom_settings.node_preamplebits;
     bool rf_crc = true;
-    return lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, SYNC_WORD_SX127x, rf_preamble_length, rf_crc);
+    bool rf_ok = lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, SYNC_WORD_SX127x, rf_preamble_length, rf_crc);
+    #if defined(EXTERNAL_RADIO)
+    // After a SUCCESSFUL local radio (re)configuration, re-sync the external-radio
+    // transport. No-op unless the effective normalized config actually changed.
+    if(rf_ok) externalRadioConfigChanged();
+    #endif
+    return rf_ok;
 #endif
 
     return true;

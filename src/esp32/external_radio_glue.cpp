@@ -199,6 +199,22 @@ void externalRadioSetup() {
                   g_password ? "password" : "open");
 }
 
+void externalRadioConfigChanged() {
+    if (!g_enabled) return;   // external-radio setup not completed -> harmless no-op
+    RadioConfig cfg;
+    if (buildRadioConfig(cfg,
+                         getFreq(), getBW(), getSF(), getCR(),
+                         SYNC_WORD_SX127x,
+                         meshcom_settings.node_preamplebits,
+                         getPower(),
+                         true /* MeshCom CRC is always enabled */)) {
+        g_transport.reconfigure(cfg);   // no-op if unchanged, else controlled reset + reconnect
+    } else {
+        g_transport.configInvalid();    // unmappable runtime settings: stop, no stale config active
+        Serial.println("[EXTRADIO] runtime radio config unmappable; transport stopped");
+    }
+}
+
 void externalRadioLoop() {
     if (!g_enabled) return;
     // Network-readiness is now decided by the transport via the injected predicate

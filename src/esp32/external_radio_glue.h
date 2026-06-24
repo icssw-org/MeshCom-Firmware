@@ -9,8 +9,9 @@
 #ifndef EXTERNAL_RADIO_GLUE_H
 #define EXTERNAL_RADIO_GLUE_H
 
-void externalRadioSetup();   // one-time init (reads overlay-provided host/port)
-void externalRadioLoop();    // non-blocking poll; call from the main loop
+void externalRadioSetup();          // one-time init (reads overlay-provided host/port)
+void externalRadioLoop();           // non-blocking poll; call from the main loop
+void externalRadioConfigChanged();  // call after a successful local radio (re)configuration
 
 // Platform IP-network readiness predicate for the external-radio transport.
 // Default (weak) implementation returns ESP32 Wi-Fi connectivity; an out-of-tree

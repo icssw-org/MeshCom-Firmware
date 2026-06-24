@@ -109,6 +109,16 @@ public:
     // backoff window). Used by the glue on Wi-Fi loss.
     void stop();
 
+    // Controlled runtime reconfiguration. If cfg equals the current desired config,
+    // it is a no-op (the live session is kept). If it differs, the link is reset
+    // safely (a pending TX resolves UNKNOWN) and reconnects to apply the new config
+    // through the normal HELLO/AUTH/CONFIGURE lifecycle (exact echo still required).
+    // Returns false (and stops the transport, see configInvalid) if cfg is invalid.
+    bool reconfigure(const RadioConfig& cfg);
+    // Runtime settings became unmappable: stop safely and stay inactive (no stale
+    // bridge config) until a later valid reconfigure() — no persistent failure latch.
+    void configInvalid();
+
     bool           operational() const { return phase_ == LINK_UP && session_.state() == ST_READY_RX; }
     bool           connected()   const { return phase_ == LINK_UP; }
     TransportError lastError()   const { return last_err_; }
@@ -162,6 +172,7 @@ private:
     TimeoutKind    deadline_kind_;
     State          armed_state_;
     TransportError last_err_;
+    bool           cfg_valid_;     // false => runtime config unmappable; do not connect
 
     // transport-visible results
     bool      rx_pending_;

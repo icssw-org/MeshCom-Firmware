@@ -838,6 +838,26 @@ void test_buildconfig_invalid_leaves_out_untouched(void) {
     TEST_ASSERT_EQUAL_UINT32(0xDEADBEEFu, c.freq_hz);   // out never modified on failure
 }
 
+void test_buildconfig_sf_range(void) {
+    RadioConfig c;
+    TEST_ASSERT_FALSE(buildRadioConfig(c, 433.0, 250.0, 5,  6, 0x2B, 16, 14, true));  // SF5 rejected
+    TEST_ASSERT_TRUE (buildRadioConfig(c, 433.0, 250.0, 6,  6, 0x2B, 16, 14, true));  // SF6 ok
+    TEST_ASSERT_TRUE (buildRadioConfig(c, 433.0, 250.0, 12, 6, 0x2B, 16, 14, true));  // SF12 ok
+    TEST_ASSERT_FALSE(buildRadioConfig(c, 433.0, 250.0, 13, 6, 0x2B, 16, 14, true));  // SF13 rejected
+}
+
+void test_buildconfig_float_source_regression(void) {
+    // Expected values reflect IEEE-754 float source values + nearest-Hz rounding,
+    // NOT decimal text. Must not be rejected for non-integral scaling.
+    RadioConfig c;
+    TEST_ASSERT_TRUE(buildRadioConfig(c, static_cast<double>(433.175f),  250.0, 11, 6, 0x2B, 16, 14, true));
+    TEST_ASSERT_EQUAL_UINT32(433174988u, c.freq_hz);
+    TEST_ASSERT_TRUE(buildRadioConfig(c, static_cast<double>(439.9125f), 250.0, 11, 6, 0x2B, 16, 14, true));
+    TEST_ASSERT_EQUAL_UINT32(439912506u, c.freq_hz);
+    TEST_ASSERT_TRUE(buildRadioConfig(c, static_cast<double>(869.525f),  250.0, 9,  5, 0x2B,  8, 14, true));
+    TEST_ASSERT_EQUAL_UINT32(869525024u, c.freq_hz);
+}
+
 // ---------------------------------------------------------------------------
 // runner
 // ---------------------------------------------------------------------------
@@ -905,6 +925,8 @@ int main(int, char**) {
     RUN_TEST(test_buildconfig_signed_power);
     RUN_TEST(test_buildconfig_crc_and_ldro);
     RUN_TEST(test_buildconfig_invalid_leaves_out_untouched);
+    RUN_TEST(test_buildconfig_sf_range);
+    RUN_TEST(test_buildconfig_float_source_regression);
 
     // RX / TX semantics
     RUN_TEST(test_rx_when_ready);

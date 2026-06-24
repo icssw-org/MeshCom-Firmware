@@ -266,16 +266,18 @@ active setting; **LDRO** derived as the effective value from the standard LoRa
 low-data-rate rule, symbol time > 16 ms). If the active settings cannot be mapped
 to a valid `RadioConfig`, the transport does not start and no placeholder is used.
 
-This is a one-time boot snapshot; keeping it in sync with **runtime** radio
-changes is a separate, not-yet-implemented milestone. Hot reconfiguration is not
-supported.
+Runtime radio-setting changes that flow through the normal MeshCom
+reconfiguration path trigger a **controlled external transport reset**: the link
+is closed, the fresh snapshot becomes the desired config, and the bridge must
+receive and **exactly echo** a new `CONFIGURE` before the link is ready again. A
+pending external TX interrupted by reconfiguration resolves as `UNKNOWN` and is
+**not** immediately retried. An unchanged configuration is a no-op.
 
 ## Status
 
 Draft for issue #1015. Implemented and host-tested: the generic protocol module
 (`lib/external_radio_protocol`), the ESP32-only compile-time-optional TCP transport
 (`lib/external_radio_tcp` + `src/esp32/external_radio_glue.cpp`, `-D EXTERNAL_RADIO`),
-and the boot-time active-config snapshot above. Still deferred: keeping that
-snapshot in sync with runtime radio changes, the RadioLib bypass, and injecting
-RX / driving the MeshCom TX queue. LoRaHAM integration remains outside MeshCom
-firmware.
+the active-config snapshot above, and controlled re-sync on runtime radio
+changes. Still deferred: the RadioLib bypass, and injecting RX / driving the
+MeshCom TX queue. LoRaHAM integration remains outside MeshCom firmware.

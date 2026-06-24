@@ -324,15 +324,18 @@ void test_coalesced_handshake_frames_in_order(void) {
     TEST_ASSERT_TRUE(fwSent(f, MSG_CONFIGURE));
 }
 
-// drive to operational (open mode)
-static void driveOperational(TcpTransport& t, Fake& f, uint32_t now) {
+// drive to operational (open mode) with a chosen config echoed by the bridge
+static void driveOperationalCfg(TcpTransport& t, Fake& f, uint32_t now, const RadioConfig& cfg) {
     connectAndHello(t, f, now);
     uint8_t ver = kVersion; uint8_t ok = AUTH_OK;
     bridgeFeed(f, MSG_HELLO_ACK, 0, &ver, 1);
     bridgeFeed(f, MSG_AUTH_RESULT, 0, &ok, 1);
-    bridgeFeedConfigResultOk(f, sampleConfig());
+    bridgeFeedConfigResultOk(f, cfg);
     t.poll(now + 1);
     TEST_ASSERT_TRUE(t.operational());
+}
+static void driveOperational(TcpTransport& t, Fake& f, uint32_t now) {
+    driveOperationalCfg(t, f, now, sampleConfig());
 }
 
 void test_ping_gets_pong(void) {
@@ -452,6 +455,76 @@ void test_saturating_backoff_no_wrap(void) {
     TEST_ASSERT_TRUE(t.backoffMs() >= to.backoff_min_ms);
 }
 
+// runtime reconfiguration
+static RadioConfig changedConfig() { RadioConfig c = sampleConfig(); c.freq_hz += 125000u; return c; }
+
+void test_reconfigure_same_is_noop(void) {
+    Fake f{}; TcpTransport t;
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    bridgeClearOut(f);
+    TEST_ASSERT_TRUE(t.reconfigure(sampleConfig()));   // identical config
+    t.poll(5);
+    TEST_ASSERT_TRUE(t.operational());                 // session kept
+    TEST_ASSERT_FALSE(fwSent(f, MSG_HELLO));            // no new handshake
+    TEST_ASSERT_FALSE(fwSent(f, MSG_CONFIGURE));        // no new CONFIGURE
+}
+
+void test_reconfigure_changed_resets_and_reapplies(void) {
+    Fake f{}; TcpTransport t;
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    RadioConfig changed = changedConfig();
+    TEST_ASSERT_TRUE(t.reconfigure(changed));
+    TEST_ASSERT_FALSE(t.connected());                  // link reset
+    TEST_ASSERT_EQUAL(ST_DISCONNECTED, t.sessionState());
+    // reconnect through the normal lifecycle; next CONFIGURE carries the fresh config
+    bridgeClearOut(f);
+    driveOperationalCfg(t, f, 100, changed);
+    Frame fr[8]; int n = fwFrames(f, fr, 8); RadioConfig sent; bool got = false;
+    for (int i = 0; i < n; ++i) if (fr[i].type == MSG_CONFIGURE) got = decodeConfig(fr[i], sent);
+    TEST_ASSERT_TRUE(got);
+    TEST_ASSERT_TRUE(configEqual(changed, sent));
+}
+
+void test_reconfigure_while_tx_pending_is_unknown(void) {
+    Fake f{}; TcpTransport t;
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    const uint8_t pkt[] = {0x3A, 1, 2};
+    TEST_ASSERT_TRUE(t.requestTx(pkt, sizeof(pkt), 2));
+    bridgeClearOut(f);                                 // drop the original TX_REQUEST from the wire
+    TEST_ASSERT_TRUE(t.reconfigure(changedConfig()));  // config change while TX pending
+    TEST_ASSERT_EQUAL(TXO_UNKNOWN, t.lastTxOutcome());  // never a false success
+    TEST_ASSERT_NOT_EQUAL(TXO_SUCCESS, t.lastTxOutcome());
+    TEST_ASSERT_FALSE(t.connected());
+    TEST_ASSERT_FALSE(fwSent(f, MSG_TX_REQUEST));       // no automatic resend
+}
+
+void test_reconfigure_invalid_stops_then_recovers(void) {
+    Fake f{}; TcpTransport t;
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    RadioConfig bad = sampleConfig(); bad.crc = 2;      // invalid (non-boolean)
+    TEST_ASSERT_FALSE(t.reconfigure(bad));
+    TEST_ASSERT_FALSE(t.connected());                  // stopped, old config not active
+    f.connect_called = false;
+    t.poll(5); t.poll(100);                            // must NOT reconnect with stale config
+    TEST_ASSERT_FALSE(f.connect_called);
+    // a later valid config recovers the transport (no persistent latch)
+    RadioConfig good = sampleConfig(); good.freq_hz += 250000u;
+    TEST_ASSERT_TRUE(t.reconfigure(good));
+    f.want_connected = true;
+    t.poll(200); t.poll(200);
+    TEST_ASSERT_TRUE(f.connect_called);
+    TEST_ASSERT_TRUE(t.connected());
+}
+
+void test_reconfigure_before_begin_is_harmless(void) {
+    TcpTransport t;
+    TEST_ASSERT_FALSE(t.reconfigure(sampleConfig()));  // not begun -> false, no crash/connect
+}
+
 // ---------------------------------------------------------------------------
 void setUp(void) {}
 void tearDown(void) {}
@@ -472,6 +545,11 @@ int main(int, char**) {
     RUN_TEST(test_readiness_true_allows_connect);
     RUN_TEST(test_readiness_loss_while_tx_pending_is_unknown);
     RUN_TEST(test_saturating_backoff_no_wrap);
+    RUN_TEST(test_reconfigure_same_is_noop);
+    RUN_TEST(test_reconfigure_changed_resets_and_reapplies);
+    RUN_TEST(test_reconfigure_while_tx_pending_is_unknown);
+    RUN_TEST(test_reconfigure_invalid_stops_then_recovers);
+    RUN_TEST(test_reconfigure_before_begin_is_harmless);
     RUN_TEST(test_coalesced_handshake_frames_in_order);
     RUN_TEST(test_ping_gets_pong);
     RUN_TEST(test_rx_exposed_not_injected);

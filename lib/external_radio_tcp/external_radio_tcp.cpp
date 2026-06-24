@@ -47,6 +47,7 @@ void TcpTransport::clear() {
     last_err_         = TERR_NONE;
     rx_pending_       = false;
     last_tx_outcome_  = TXO_NONE;
+    cfg_valid_        = false;
     std::memset(&last_rx_, 0, sizeof(last_rx_));
 }
 
@@ -76,7 +77,27 @@ bool TcpTransport::begin(const char* host, uint16_t port, const RadioConfig& cfg
     to_   = to;
     backoff_ms_ = to_.backoff_min_ms;
     if (!session_.setDesiredConfig(cfg)) { clear(); return false; }   // defensive; stays inactive
+    cfg_valid_ = true;
     return true;
+}
+
+bool TcpTransport::reconfigure(const RadioConfig& cfg) {
+    if (!io_.network_ready) return false;                  // not begun
+    if (!radioConfigValid(cfg)) { configInvalid(); return false; }
+    // Same effective config as the live session -> keep everything as-is.
+    if (cfg_valid_ && configEqual(cfg, session_.desiredConfig())) return true;
+    // Different (or recovering from invalid): reset the link safely, then apply.
+    stop();                                                // pending TX -> UNKNOWN, parser/session reset
+    session_.setDesiredConfig(cfg);                        // session DISCONNECTED after stop
+    cfg_valid_       = true;
+    backoff_ms_      = to_.backoff_min_ms;                 // prompt, bounded reconnect
+    next_attempt_at_ = 0;                                  // eligible to connect on the next poll
+    return true;
+}
+
+void TcpTransport::configInvalid() {
+    stop();                                                // pending TX -> UNKNOWN; link down
+    cfg_valid_ = false;                                    // no reconnect until a valid reconfigure()
 }
 
 void TcpTransport::stop() {
@@ -233,6 +254,10 @@ void TcpTransport::driveRx(uint32_t now_ms) {
 
 void TcpTransport::poll(uint32_t now_ms) {
     if (!io_.network_ready) return;                 // not configured (begin not called/failed)
+    if (!cfg_valid_) {                              // runtime config unmappable: stay stopped
+        if (phase_ != LINK_IDLE) stop();            // (recovers on a later valid reconfigure)
+        return;
+    }
     if (!io_.network_ready(io_.ctx)) {              // platform network not ready
         if (phase_ != LINK_IDLE) stop();            // stop safely; preserves UNKNOWN if TX pending
         return;

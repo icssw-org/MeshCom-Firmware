@@ -65,7 +65,7 @@ bool buildRadioConfig(RadioConfig& out, double freq_mhz, double bw_khz,
     uint32_t freq_hz = 0, bw_hz = 0;
     if (!scaleToHz(freq_mhz, 1000000.0, freq_hz)) return false;
     if (!scaleToHz(bw_khz,      1000.0, bw_hz))   return false;
-    if (sf < 5 || sf > 12)                         return false;   // representable + sane LoRa range
+    if (sf < 6 || sf > 12)                         return false;   // MeshCom treats SF<6 as invalid
     if (cr_denom < 5 || cr_denom > 8)              return false;   // 4/5 .. 4/8
     if (sync_word < 0 || sync_word > 0xFFFF)       return false;
     if (preamble_symbols < 1 || preamble_symbols > 0xFFFF) return false;
