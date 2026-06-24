@@ -181,6 +181,10 @@ static uint32_t extractRingMsgId(int slot)
 // Defined here (above the ACK-clear paths) so those paths can invalidate it.
 static extradio::ExtTxq g_extTxq;
 
+// M10: bounded external channel-access (CHANNEL_BUSY) attempt budget, counted
+// separately from the MeshCom delivery retryCount.
+static extradio::ExtBusyTracker g_extBusy;
+
 // If `slot` is the externally-pending slot, drop the ownership record (the slot
 // is about to be cleared by receive-side ACK handling). Returns true if it was
 // owned. A late bridge result for the dropped token is afterwards rejected as
@@ -190,6 +194,7 @@ static bool extTxqAckInvalidateIfOwned(int slot)
     if(!g_extTxq.owns(slot))
         return false;
     g_extTxq.ackInvalidate(slot);
+    extradio::extBusyReset(g_extBusy);   // ACK invalidates any channel-access budget too
     return true;
 }
 #endif
@@ -2077,6 +2082,7 @@ bool externalTxResolveSuccess(uint32_t token)
         // clears it. Payload, length, message identity and retryCount are all
         // retained (the EXT_PENDING slot never cleared its length).
         ringBuffer[slot][1] = RING_STATUS_SENT;
+        extradio::extBusyReset(g_extBusy);   // RF send succeeded: reset channel-access attempts
         if(bDisplayRetx)
             printfdeb("\n[RETX] ext-TX RF-sent retid:%i token:%lu -> awaiting ACK/retransmit\n",
                       slot, (unsigned long)token);
@@ -2087,6 +2093,7 @@ bool externalTxResolveSuccess(uint32_t token)
         ringBuffer[slot][1] = RING_STATUS_DONE;
         ringBuffer[slot][0] = 0;
         retryCount[slot] = 0;
+        extradio::extBusyReset(g_extBusy);   // RF send succeeded: reset channel-access attempts
         if(bDisplayRetx)
             printfdeb("\n[RETX] ext-TX RF-sent retid:%i token:%lu (one-shot, complete)\n",
                       slot, (unsigned long)token);
@@ -2094,35 +2101,43 @@ bool externalTxResolveSuccess(uint32_t token)
     return true;
 }
 
-// CHANNEL_BUSY: return the frame to the normal delayed-retry path (restore READY)
-// while the budget allows; otherwise give up deliberately (terminal, not success).
-// Never re-selectable in the same scheduling pass and never reported as success.
+// CHANNEL_BUSY: channel access was not granted (NOT an RF send and NOT a consumed
+// MeshCom delivery retry). Uses a bounded, separate channel-access budget
+// (g_extBusy / EXT_BUSY_MAX_ATTEMPTS) keyed by message identity. Within budget the
+// frame returns to READY for a LATER paced reselect (retryCount untouched);
+// exhausting the budget is a deliberate non-success terminal. Returns true if the
+// owned message was acted on (the glue then arms the real pacing delay), false if
+// the result was stale/late (ring untouched).
 bool externalTxResolveChannelBusy(uint32_t token)
 {
-    int slot = g_extTxq.slot();
-    uint8_t rc = (slot >= 0 && slot < MAX_RING) ? retryCount[slot] : 0;
+    int      slot = g_extTxq.slot();
+    uint32_t mid  = g_extTxq.msgId();
 
-    extradio::ExtTxAction a = g_extTxq.resolveBusy(token, rc, MAX_RETRANSMIT);
+    if(g_extTxq.resolveBusy(token) != extradio::ExtTxAction::REQUEUE_RETRY)
+        return false;   // stale/late result: ring untouched, no pacing
 
-    if(a == extradio::ExtTxAction::REQUEUE_RETRY)
+    if(extradio::extBusyOnBusy(g_extBusy, mid, slot, EXT_BUSY_MAX_ATTEMPTS)
+       == extradio::ExtBusyResult::RETRY)
     {
-        if(slot >= 0 && slot < MAX_RING && retryCount[slot] < 0xFF)
-            retryCount[slot]++;                  // count this busy attempt
-        ringBuffer[slot][1] = RING_STATUS_READY; // content intact; eligible on a LATER pass
+        // Content intact; re-selectable on a LATER pass once the pacing deadline
+        // (armed by the glue) elapses. The MeshCom delivery retryCount is NOT
+        // touched — channel access is not message delivery.
+        ringBuffer[slot][1] = RING_STATUS_READY;
         if(bDisplayRetx)
-            printfdeb("\n[RETX] ext-TX busy retid:%i retry:%d delayed\n", slot, retryCount[slot]);
+            printfdeb("\n[RETX] ext-TX busy retid:%i channel-access attempt:%d/%d (retryCount kept)\n",
+                      slot, g_extBusy.attempts, EXT_BUSY_MAX_ATTEMPTS);
         return true;
     }
-    if(a == extradio::ExtTxAction::RELEASE_TERMINAL)
-    {
-        ringBuffer[slot][1] = RING_STATUS_DONE;  // budget exhausted: drop, NOT success
-        ringBuffer[slot][0] = 0;
-        retryCount[slot] = 0;
-        if(bDisplayRetx)
-            printfdeb("\n[RETX] ext-TX busy retid:%i budget exhausted, dropped\n", slot);
-        return true;
-    }
-    return false;   // stale/late result: ring untouched
+
+    // Bounded channel-access budget exhausted: deliberate non-success terminal.
+    extradio::extBusyReset(g_extBusy);
+    ringBuffer[slot][1] = RING_STATUS_DONE;
+    ringBuffer[slot][0] = 0;
+    retryCount[slot] = 0;
+    if(bDisplayRetx)
+        printfdeb("\n[RETX] ext-TX busy retid:%i channel-access budget (%d) exhausted, dropped\n",
+                  slot, EXT_BUSY_MAX_ATTEMPTS);
+    return true;
 }
 
 // UNKNOWN / TIMEOUT / RADIO_ERROR / disconnect / reconfigure: deliberate,
@@ -2136,6 +2151,7 @@ bool externalTxResolveUncertain(uint32_t token)
     ringBuffer[slot][1] = RING_STATUS_DONE;
     ringBuffer[slot][0] = 0;
     retryCount[slot] = 0;
+    extradio::extBusyReset(g_extBusy);   // terminal: reset channel-access attempts
 
     if(bDisplayRetx)
         printfdeb("\n[RETX] ext-TX uncertain retid:%i token:%lu released (no resend)\n",

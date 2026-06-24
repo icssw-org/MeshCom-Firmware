@@ -293,8 +293,14 @@ in local-radio mode:
 - retransmission maintenance runs in external mode at the normal cadence but is
   message-level only — it never drives local CAD/TX/RX or RadioLib, and it skips
   the in-flight `EXT_PENDING` entry;
-- `CHANNEL_BUSY` (no RF success) keeps its bounded pacing delay and retry budget;
-  `TIMEOUT`/`RADIO_ERROR`/`UNKNOWN`/disconnect/reconfigure are terminal
+- `CHANNEL_BUSY` means **channel access was not granted** (no RF send). It is paced
+  by a real bounded delay and uses its **own bounded channel-access attempt budget,
+  separate from the MeshCom delivery retransmission accounting** — a busy outcome
+  never consumes the delivery `retryCount`. The budget is keyed to the message
+  identity, so it cannot bleed onto a replacement after an ACK or slot reuse, and a
+  confirmed RF send resets it before MeshCom ACK waiting begins. Exhausting the
+  channel-access budget is a deliberate non-success terminal;
+- `TIMEOUT`/`RADIO_ERROR`/`UNKNOWN`/disconnect/reconfigure are terminal
   non-success — never an ACK-wait, never an immediate resend, never a false
   success.
 

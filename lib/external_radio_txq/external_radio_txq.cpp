@@ -34,16 +34,14 @@ ExtTxAction ExtTxq::resolveSuccess(uint32_t token) {
     return ExtTxAction::COMPLETE_SUCCESS;
 }
 
-ExtTxAction ExtTxq::resolveBusy(uint32_t token, uint8_t retry_count, uint8_t max_retry) {
+ExtTxAction ExtTxq::resolveBusy(uint32_t token) {
     if (!matches(token))
-        return ExtTxAction::NONE;
-    active_ = false;
-    if (retry_count >= max_retry) {
-        last_ = ExtTxResolution::BUSY_EXHAUSTED;
-        return ExtTxAction::RELEASE_TERMINAL;   // give up; not a success
-    }
-    last_ = ExtTxResolution::BUSY_REQUEUED;
-    return ExtTxAction::REQUEUE_RETRY;          // delayed retry, never immediate
+        return ExtTxAction::NONE;               // stale/late: leave state alone
+    active_ = false;                            // release ownership for this attempt
+    last_   = ExtTxResolution::BUSY_REQUEUED;
+    // The bounded requeue-vs-give-up decision lives in the firmware's separate
+    // ExtBusyTracker, NOT here: CHANNEL_BUSY must not consume the delivery budget.
+    return ExtTxAction::REQUEUE_RETRY;
 }
 
 ExtTxAction ExtTxq::resolveUncertain(uint32_t token) {

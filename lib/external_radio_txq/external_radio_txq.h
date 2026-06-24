@@ -44,8 +44,8 @@ enum class ExtTxResolution : uint8_t {
     IDLE = 0,          // no external TX has been owned yet
     PENDING,           // a TX is owned and awaiting a bridge result
     SUCCESS,           // confirmed TXR_SUCCESS
-    BUSY_REQUEUED,     // CHANNEL_BUSY, returned to delayed retry
-    BUSY_EXHAUSTED,    // CHANNEL_BUSY but retry budget spent -> terminal, not success
+    BUSY_REQUEUED,     // CHANNEL_BUSY, ownership released (requeue/drop decided by
+                       //   the separate bounded ExtBusyTracker, NOT retryCount)
     UNCERTAIN,         // UNKNOWN / TIMEOUT / RADIO_ERROR / disconnect / reconfigure
     ACK_RESOLVED,      // a receive-side ACK cleared the message before any result
 };
@@ -95,10 +95,11 @@ public:
     // Confirmed TXR_SUCCESS. Completes the slot exactly once.
     ExtTxAction resolveSuccess(uint32_t token);
 
-    // TXR_CHANNEL_BUSY. Within the retry budget -> REQUEUE_RETRY (delayed retry,
-    // never immediate); budget exhausted -> RELEASE_TERMINAL (give up, not
-    // success). retry_count is the slot's current count; max_retry the cap.
-    ExtTxAction resolveBusy(uint32_t token, uint8_t retry_count, uint8_t max_retry);
+    // TXR_CHANNEL_BUSY: validate the token and release ownership. Returns
+    // REQUEUE_RETRY on a match (channel access was denied; the caller decides,
+    // via the separate ExtBusyTracker, whether to requeue or give up — CHANNEL_BUSY
+    // must NOT consume the MeshCom delivery retry budget), or NONE if stale/late.
+    ExtTxAction resolveBusy(uint32_t token);
 
     // TXR_TIMEOUT / TXR_RADIO_ERROR / UNKNOWN / disconnect / reconfigure. Never a
     // resend, never success: RELEASE_TERMINAL with an UNCERTAIN resolution.
@@ -155,6 +156,48 @@ inline bool extTxPacerReady(const ExtTxPacer& p, uint32_t now_ms) {
 
 // Clear pacing after a permitted attempt is actually made.
 inline void extTxPacerClear(ExtTxPacer& p) { p.armed = false; }
+
+// Bounded, external-only channel-access attempt budget. A bridge CHANNEL_BUSY
+// means "channel access was not granted", NOT "a MeshCom delivery retry was
+// consumed", so these attempts are counted SEPARATELY from the ring's delivery
+// retryCount/MAX_RETRANSMIT. Tracking is keyed by message identity (msg_id +
+// slot) — the same identity M8a uses — so it cannot bleed onto a replacement
+// message after an ACK or slot reuse. Pure/testable; the firmware holds one
+// instance (there is only one external TX in flight at a time).
+struct ExtBusyTracker {
+    bool     active;
+    uint32_t msg_id;
+    int      slot;
+    uint8_t  attempts;
+
+    ExtBusyTracker() : active(false), msg_id(0), slot(-1), attempts(0) {}
+};
+
+enum class ExtBusyResult : uint8_t {
+    RETRY,       // attempts remain below the bounded cap: requeue for a paced retry
+    EXHAUSTED,   // bounded channel-access budget spent: terminal non-success
+};
+
+// Record one CHANNEL_BUSY for the message identified by (msg_id, slot). If this is
+// a different message than currently tracked, tracking restarts from zero (so a
+// preempted or replaced message never inherits a stale count). Increments the
+// bounded channel-access attempt counter only — never the delivery retryCount.
+// Returns RETRY while attempts < max_attempts, else EXHAUSTED.
+inline ExtBusyResult extBusyOnBusy(ExtBusyTracker& t, uint32_t msg_id, int slot,
+                                   uint8_t max_attempts) {
+    if (!(t.active && t.msg_id == msg_id && t.slot == slot)) {
+        t.active = true; t.msg_id = msg_id; t.slot = slot; t.attempts = 0;
+    }
+    if (t.attempts < 0xFF) t.attempts++;
+    return (t.attempts >= max_attempts) ? ExtBusyResult::EXHAUSTED
+                                        : ExtBusyResult::RETRY;
+}
+
+// Reset channel-access tracking. Called on confirmed RF success, terminal
+// failure, ACK invalidation, or slot replacement.
+inline void extBusyReset(ExtBusyTracker& t) {
+    t.active = false; t.msg_id = 0; t.slot = -1; t.attempts = 0;
+}
 
 }  // namespace extradio
 

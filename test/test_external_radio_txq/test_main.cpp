@@ -88,23 +88,21 @@ static void test_success_resolves_once() {
     TEST_ASSERT_FALSE(q.active());
 }
 
-// --- 5. CHANNEL_BUSY -> delayed retry, not immediate, retains limits --------
+// --- 5. CHANNEL_BUSY releases ownership for a (paced) later retry -----------
 static void test_channel_busy_delayed_retry() {
     ExtTxq q;
     uint32_t t = q.begin(2, 0x01020304);
 
-    // Within budget: requeue (delayed). The record is released, so the slot is
-    // NOT auto-pending again — it must be re-selected and re-begun on a later
-    // pass, which is what prevents same-pass reselection.
-    TEST_ASSERT_EQUAL(ExtTxAction::REQUEUE_RETRY, q.resolveBusy(t, /*retry*/0, /*max*/3));
+    // resolveBusy now only validates the token and releases ownership; the
+    // bounded requeue-vs-give-up decision lives in ExtBusyTracker (M10). The
+    // record is released, so the slot is NOT auto-pending — it must be re-selected
+    // and re-begun on a later pass, which prevents same-pass reselection.
+    TEST_ASSERT_EQUAL(ExtTxAction::REQUEUE_RETRY, q.resolveBusy(t));
     TEST_ASSERT_FALSE(q.active());
     TEST_ASSERT_EQUAL(ExtTxResolution::BUSY_REQUEUED, q.lastResolution());
 
-    // Budget exhausted: terminal release, never reported as success.
-    uint32_t t2 = q.begin(2, 0x01020304);
-    TEST_ASSERT_EQUAL(ExtTxAction::RELEASE_TERMINAL, q.resolveBusy(t2, /*retry*/3, /*max*/3));
-    TEST_ASSERT_FALSE(q.active());
-    TEST_ASSERT_EQUAL(ExtTxResolution::BUSY_EXHAUSTED, q.lastResolution());
+    // A stale/late busy result (no live record) is inert.
+    TEST_ASSERT_EQUAL(ExtTxAction::NONE, q.resolveBusy(t));
 }
 
 // --- 6. UNKNOWN / TIMEOUT / RADIO_ERROR: no resend, not success -------------
@@ -132,7 +130,7 @@ static void test_ack_before_result() {
 
     // A bridge result that arrives afterwards is stale: no transition at all.
     TEST_ASSERT_EQUAL(ExtTxAction::NONE, q.resolveSuccess(t));
-    TEST_ASSERT_EQUAL(ExtTxAction::NONE, q.resolveBusy(t, 0, 3));
+    TEST_ASSERT_EQUAL(ExtTxAction::NONE, q.resolveBusy(t));
     TEST_ASSERT_EQUAL(ExtTxAction::NONE, q.resolveUncertain(t));
     TEST_ASSERT_FALSE(q.active());
 }
@@ -181,7 +179,7 @@ static void test_wrong_token_is_inert() {
 
     TEST_ASSERT_EQUAL(ExtTxAction::NONE, q.resolveSuccess(t + 999));
     TEST_ASSERT_EQUAL(ExtTxAction::NONE, q.resolveUncertain(t + 999));
-    TEST_ASSERT_EQUAL(ExtTxAction::NONE, q.resolveBusy(t + 999, 0, 3));
+    TEST_ASSERT_EQUAL(ExtTxAction::NONE, q.resolveBusy(t + 999));
     TEST_ASSERT_TRUE(q.active());          // live record untouched
     TEST_ASSERT_EQUAL_INT(6, q.slot());
 
@@ -248,11 +246,76 @@ static void test_begin_captures_pre_status() {
     (void)t3;
 }
 
+// --- M10: channel-access (CHANNEL_BUSY) budget separate from delivery retry ---
+
+// Busy bookkeeping never references the MeshCom delivery retry counter.
+static void test_busy_does_not_touch_delivery_budget() {
+    ExtBusyTracker bt;
+    uint8_t delivery_retryCount = 0;   // stands in for the ring's retryCount[slot]
+    for (int i = 0; i < 5; ++i)
+        (void)extBusyOnBusy(bt, 0xAAAA, 3, /*max*/8);
+    TEST_ASSERT_EQUAL_UINT8(5, bt.attempts);            // counted in the busy tracker...
+    TEST_ASSERT_EQUAL_UINT8(0, delivery_retryCount);    // ...not in the delivery budget
+}
+
+// The busy cap is enforced independently and at its own value (not MAX_RETRANSMIT).
+static void test_busy_cap_independent_and_exhaustion() {
+    ExtBusyTracker bt;
+    // With cap 3: two retries then exhaustion on the third busy.
+    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY,     extBusyOnBusy(bt, 0x1, 1, 3));  // attempts=1
+    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY,     extBusyOnBusy(bt, 0x1, 1, 3));  // attempts=2
+    TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED, extBusyOnBusy(bt, 0x1, 1, 3));  // attempts=3
+
+    // A larger cap (8, the firmware default) clearly differs from delivery's 3.
+    ExtBusyTracker bt2;
+    for (int i = 0; i < 7; ++i)
+        TEST_ASSERT_EQUAL(ExtBusyResult::RETRY, extBusyOnBusy(bt2, 0x2, 1, 8));
+    TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED, extBusyOnBusy(bt2, 0x2, 1, 8));  // 8th
+}
+
+// RF success / terminal resets channel-access tracking (next message starts fresh).
+static void test_busy_reset() {
+    ExtBusyTracker bt;
+    extBusyOnBusy(bt, 0x9, 4, 8);
+    extBusyOnBusy(bt, 0x9, 4, 8);
+    TEST_ASSERT_TRUE(bt.active);
+    TEST_ASSERT_EQUAL_UINT8(2, bt.attempts);
+    extBusyReset(bt);
+    TEST_ASSERT_FALSE(bt.active);
+    TEST_ASSERT_EQUAL_UINT8(0, bt.attempts);
+    // After reset, a busy for the same identity restarts at 1.
+    TEST_ASSERT_EQUAL(ExtBusyResult::RETRY, extBusyOnBusy(bt, 0x9, 4, 8));
+    TEST_ASSERT_EQUAL_UINT8(1, bt.attempts);
+}
+
+// A different message identity (msg_id or slot) re-keys the tracker from zero, so
+// a replacement after ACK/reuse never inherits a stale count.
+static void test_busy_identity_rekeys() {
+    ExtBusyTracker bt;
+    extBusyOnBusy(bt, 0xAAAA, 5, 8);
+    extBusyOnBusy(bt, 0xAAAA, 5, 8);
+    TEST_ASSERT_EQUAL_UINT8(2, bt.attempts);
+
+    // Same slot, different msg_id (slot reused for another message) -> fresh.
+    extBusyOnBusy(bt, 0xBBBB, 5, 8);
+    TEST_ASSERT_EQUAL_UINT32(0xBBBBu, bt.msg_id);
+    TEST_ASSERT_EQUAL_UINT8(1, bt.attempts);
+
+    // Same msg_id, different slot (e.g. a delivery-retransmit copy) -> fresh too.
+    extBusyOnBusy(bt, 0xBBBB, 9, 8);
+    TEST_ASSERT_EQUAL_INT(9, bt.slot);
+    TEST_ASSERT_EQUAL_UINT8(1, bt.attempts);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_selection_skips_ext_pending);
     RUN_TEST(test_retransmittable_decision);
     RUN_TEST(test_begin_captures_pre_status);
+    RUN_TEST(test_busy_does_not_touch_delivery_budget);
+    RUN_TEST(test_busy_cap_independent_and_exhaustion);
+    RUN_TEST(test_busy_reset);
+    RUN_TEST(test_busy_identity_rekeys);
     RUN_TEST(test_pacer_blocks_until_deadline);
     RUN_TEST(test_retransmit_skips_ext_pending);
     RUN_TEST(test_single_pending_only);
