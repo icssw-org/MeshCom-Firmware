@@ -29,4 +29,31 @@ void csma_reset(void);
 uint8_t getMessagePriority(int slot);
 int getNextTxSlot(void);
 
+#if defined(EXTERNAL_RADIO)
+// --- M8a: asynchronous external-radio TX queue ownership ------------------
+// Narrow internal seams that let a later milestone (M8b) submit a ring slot to
+// the bridge and resolve the async TX_RESULT WITHOUT redesigning queue
+// ownership. None of these are wired into doTX()/the transport yet.
+//
+// All operate on the single global external-TX ownership record and the local
+// TX ring. A successful socket write is NOT TX success: only externalTxResolve*
+// based on a final bridge TX_RESULT completes a slot.
+
+// Claim a freshly selected ring slot for external transmission. Sets the slot to
+// RING_STATUS_EXT_PENDING and returns a non-zero identity token, or 0 if a slot
+// is already pending or the slot is empty. The slot content is retained; it is
+// not consumed at submission (unlike the local radio path).
+uint32_t externalTxMarkPending(int slot);
+
+// Resolve the outstanding external TX with the final bridge outcome, keyed by the
+// token from externalTxMarkPending(). A non-matching/late token is rejected
+// (returns false, ring untouched). Each returns true if it applied a transition.
+bool externalTxResolveSuccess(uint32_t token);     // TXR_SUCCESS
+bool externalTxResolveChannelBusy(uint32_t token); // TXR_CHANNEL_BUSY (delayed retry)
+bool externalTxResolveUncertain(uint32_t token);   // TIMEOUT/RADIO_ERROR/UNKNOWN/disconnect
+
+// True while an external TX is owned and awaiting a bridge result.
+bool externalTxPending(void);
+#endif
+
 #endif

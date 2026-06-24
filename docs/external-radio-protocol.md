@@ -224,6 +224,27 @@ success or triggers a resend.
   resend could duplicate a transmission that actually went out). No local retry
   logic lives in this milestone.
 
+## Asynchronous TX queue ownership
+
+Because a final `TX_RESULT` arrives asynchronously, the firmware must hold the
+selected outbound packet until the bridge resolves it. A submitted packet is
+therefore marked as **externally pending** in the local TX ring and is **owned**
+(retained, not consumed at submission) until the final bridge outcome:
+
+- a pending slot is excluded from normal TX selection and from retransmission
+  maintenance — it cannot be re-sent, aged, or dropped while owned;
+- at most one external TX is pending at a time;
+- the pending slot has a stable identity (a monotonic token plus the message id),
+  so a late or duplicate result can never complete, requeue, or alter a slot that
+  was meanwhile resolved by an incoming ACK and reused for another packet;
+- **confirmed success** (a `SUCCESS` `TX_RESULT`) completes the slot exactly once
+  and is distinct from request submission / socket acceptance;
+- `CHANNEL_BUSY` returns the frame to the existing delayed-retry path (subject to
+  the normal retry limit) and is distinct from an uncertain/failure outcome;
+- `TIMEOUT`, `RADIO_ERROR`, `UNKNOWN`, disconnect, or reconfigure-while-pending
+  release the slot through a deliberate, observable non-success terminal path —
+  never a silent disappearance, never a false success, never an automatic resend.
+
 ## Channel access
 
 In external-radio mode the **bridge is the single channel-access authority**.

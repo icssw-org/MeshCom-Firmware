@@ -60,6 +60,9 @@
 #endif
 
 #include "lora_functions.h"
+#if defined(EXTERNAL_RADIO)
+#include "external_radio_txq.h"   // M8a: async external-TX ownership record
+#endif
 #include "loop_functions.h"
 #include <loop_functions_extern.h>
 #include "aprs_functions.h"
@@ -172,6 +175,25 @@ static uint32_t extractRingMsgId(int slot)
             (uint32_t)ringBuffer[slot][3];
 }
 
+#if defined(EXTERNAL_RADIO)
+// M8a: the single in-flight external-radio TX ownership record. At most one ring
+// slot may be RING_STATUS_EXT_PENDING at a time (enforced by ExtTxq::begin).
+// Defined here (above the ACK-clear paths) so those paths can invalidate it.
+static extradio::ExtTxq g_extTxq;
+
+// If `slot` is the externally-pending slot, drop the ownership record (the slot
+// is about to be cleared by receive-side ACK handling). Returns true if it was
+// owned. A late bridge result for the dropped token is afterwards rejected as
+// stale, so it can never resurrect or alter the (possibly reused) slot.
+static bool extTxqAckInvalidateIfOwned(int slot)
+{
+    if(!g_extTxq.owns(slot))
+        return false;
+    g_extTxq.ackInvalidate(slot);
+    return true;
+}
+#endif
+
 /**
  * Find and stop retransmission of a message by uint32_t msg_id.
  * Sets slot status to RING_STATUS_DONE and clears retryCount.
@@ -185,6 +207,17 @@ static int findAndStopRingSlot(uint32_t msgId)
         {
             if(extractRingMsgId(i) == msgId)
             {
+#if defined(EXTERNAL_RADIO)
+                // M8a: ACK-before-result. If this slot is owned by an in-flight
+                // external TX, drop the ownership record now (deliberate release)
+                // so a late bridge result for it is later rejected as stale and
+                // cannot resurrect or alter the slot once it is reused.
+                if(extTxqAckInvalidateIfOwned(i))
+                {
+                    if(bDisplayRetx)
+                        printfdeb("\n[RETX] ext-pending slot retid:%i ACK-resolved before bridge result\n", i);
+                }
+#endif
                 ringBuffer[i][1] = RING_STATUS_DONE;
                 ringBuffer[i][0] = 0;  // clear len so getNextTxSlot skips this slot
                 retryCount[i] = 0;
@@ -415,6 +448,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             uint8_t dbg_status = ringBuffer[rxSlot][1];
             uint8_t dbg_lng = ringBuffer[rxSlot][0];
             uint8_t dbg_type = ringBuffer[rxSlot][2];
+
+#if defined(EXTERNAL_RADIO)
+            // M8a: ACK-before-result — drop external ownership before releasing
+            // the slot so a late bridge result is later rejected as stale.
+            extTxqAckInvalidateIfOwned(rxSlot);
+#endif
 
             // Jetzt erst release
             ringBuffer[rxSlot][1] = RING_STATUS_DONE;
@@ -1481,6 +1520,18 @@ int getNextTxSlot(void)
     int pos = iRead;
     while(pos != iWrite)
     {
+#if defined(EXTERNAL_RADIO)
+        // M8a invariant 1: a slot owned by an in-flight external TX must never be
+        // reselected. RING_STATUS_EXT_PENDING is neither READY nor DONE, so the
+        // test below already skips it; this explicit skip states the intent.
+        if(ringBuffer[pos][1] == RING_STATUS_EXT_PENDING)
+        {
+            pos++;
+            if(pos >= MAX_RING)
+                pos = 0;
+            continue;
+        }
+#endif
         // Only consider slots with data that are ready to send (READY or DONE/fire-and-forget).
         // Skip slots with status SENT..threshold (awaiting retransmission timer).
         if(ringBuffer[pos][0] > 0 &&
@@ -1881,6 +1932,14 @@ bool updateRetransmissionStatus()
     for(int ircheck = 0; ircheck < MAX_RING; ircheck++)
     {
 
+#if defined(EXTERNAL_RADIO)
+        // M8a invariant 2: a slot owned by an in-flight external TX must not be
+        // aged, coerced to DONE, retransmitted, or dropped here. Its outcome is
+        // owned solely by externalTxResolve*() once the bridge TX_RESULT arrives.
+        if(ringBuffer[ircheck][1] == RING_STATUS_EXT_PENDING)
+            continue;
+#endif
+
         // Non-text messages: force no-retransmit
         if(ringBuffer[ircheck][2] != MSG_TYPE_TEXT)
         {
@@ -1965,6 +2024,105 @@ bool updateRetransmissionStatus()
 
     return false;
 }
+
+#if defined(EXTERNAL_RADIO)
+// --- M8a: asynchronous external-radio TX ownership helpers -----------------
+// These hold a selected ring slot across an asynchronous bridge TX_RESULT. They
+// are the seams M8b wires to the transport (externalTxMarkPending after a
+// requestTx(), externalTxResolve* from the TX_RESULT callback). Nothing here is
+// called from doTX()/the transport yet. A socket write is NOT success: only a
+// final bridge result completes a slot.
+
+uint32_t externalTxMarkPending(int slot)
+{
+    if(slot < 0 || slot >= MAX_RING || ringBuffer[slot][0] == 0)
+        return 0;   // nothing to own
+
+    uint32_t token = g_extTxq.begin(slot, extractRingMsgId(slot));
+    if(token == 0)
+        return 0;   // an external TX is already pending (invariant: one at a time)
+
+    // Retain content; do NOT consume the slot at submission (unlike the local
+    // radio path). The slot is locked out of selection and retransmission until a
+    // bridge result resolves it.
+    ringBuffer[slot][1] = RING_STATUS_EXT_PENDING;
+
+    if(bDisplayRetx)
+        printfdeb("\n[RETX] ext-TX pending retid:%i msg-id:%08X token:%lu\n",
+                  slot, extractRingMsgId(slot), (unsigned long)token);
+    return token;
+}
+
+// Complete the owned slot exactly once (DONE + len=0). Confirmed bridge success.
+bool externalTxResolveSuccess(uint32_t token)
+{
+    int slot = g_extTxq.slot();
+    if(g_extTxq.resolveSuccess(token) != extradio::ExtTxAction::COMPLETE_SUCCESS)
+        return false;   // stale/late result: ring untouched
+
+    ringBuffer[slot][1] = RING_STATUS_DONE;
+    ringBuffer[slot][0] = 0;
+    retryCount[slot] = 0;
+
+    if(bDisplayRetx)
+        printfdeb("\n[RETX] ext-TX success retid:%i token:%lu\n", slot, (unsigned long)token);
+    return true;
+}
+
+// CHANNEL_BUSY: return the frame to the normal delayed-retry path (restore READY)
+// while the budget allows; otherwise give up deliberately (terminal, not success).
+// Never re-selectable in the same scheduling pass and never reported as success.
+bool externalTxResolveChannelBusy(uint32_t token)
+{
+    int slot = g_extTxq.slot();
+    uint8_t rc = (slot >= 0 && slot < MAX_RING) ? retryCount[slot] : 0;
+
+    extradio::ExtTxAction a = g_extTxq.resolveBusy(token, rc, MAX_RETRANSMIT);
+
+    if(a == extradio::ExtTxAction::REQUEUE_RETRY)
+    {
+        if(slot >= 0 && slot < MAX_RING && retryCount[slot] < 0xFF)
+            retryCount[slot]++;                  // count this busy attempt
+        ringBuffer[slot][1] = RING_STATUS_READY; // content intact; eligible on a LATER pass
+        if(bDisplayRetx)
+            printfdeb("\n[RETX] ext-TX busy retid:%i retry:%d delayed\n", slot, retryCount[slot]);
+        return true;
+    }
+    if(a == extradio::ExtTxAction::RELEASE_TERMINAL)
+    {
+        ringBuffer[slot][1] = RING_STATUS_DONE;  // budget exhausted: drop, NOT success
+        ringBuffer[slot][0] = 0;
+        retryCount[slot] = 0;
+        if(bDisplayRetx)
+            printfdeb("\n[RETX] ext-TX busy retid:%i budget exhausted, dropped\n", slot);
+        return true;
+    }
+    return false;   // stale/late result: ring untouched
+}
+
+// UNKNOWN / TIMEOUT / RADIO_ERROR / disconnect / reconfigure: deliberate,
+// observable non-success terminal. Never a resend, never confirmed success.
+bool externalTxResolveUncertain(uint32_t token)
+{
+    int slot = g_extTxq.slot();
+    if(g_extTxq.resolveUncertain(token) != extradio::ExtTxAction::RELEASE_TERMINAL)
+        return false;   // stale/late result: ring untouched
+
+    ringBuffer[slot][1] = RING_STATUS_DONE;
+    ringBuffer[slot][0] = 0;
+    retryCount[slot] = 0;
+
+    if(bDisplayRetx)
+        printfdeb("\n[RETX] ext-TX uncertain retid:%i token:%lu released (no resend)\n",
+                  slot, (unsigned long)token);
+    return true;
+}
+
+bool externalTxPending(void)
+{
+    return g_extTxq.active();
+}
+#endif  // EXTERNAL_RADIO
 
 /**@brief Function to be executed on Radio Tx Done event
  */

@@ -1,0 +1,12 @@
+{
+  "name": "external_radio_txq",
+  "version": "0.1.0",
+  "description": "Pure ownership record for a single in-flight external-radio TX: stable identity (token + msg_id + slot), outcome state machine, and stale/late-result rejection. Ring-agnostic, Arduino/socket/protocol-free, host unit-testable. Used only by the optional EXTERNAL_RADIO backend.",
+  "keywords": "meshcom, external-radio, tx-queue",
+  "license": "GPL-3.0-or-later",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "."
+  }
+}

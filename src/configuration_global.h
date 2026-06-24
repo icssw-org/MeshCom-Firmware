@@ -156,8 +156,14 @@
 
 // Ring Buffer Slot Status (ringBuffer[slot][1])
 #define RING_STATUS_READY     0x00   // Ready to send
-#define RING_STATUS_SENT      0x01   // Sent, waiting for ACK/timer
+#define RING_STATUS_SENT      0x01   // Sent, waiting for ACK/timer (0x01..0x14 = aging counter)
 #define RING_STATUS_DONE      0xFF   // Final, no retransmission
+// 0x80: slot owned by an in-flight external-radio TX awaiting an async bridge
+// TX_RESULT (EXTERNAL_RADIO only). Deliberately outside READY(0x00), the SENT
+// aging window (0x01..0x15) and DONE(0xFF) so normal selection skips it and
+// retransmission maintenance must skip it explicitly. Used only when the optional
+// EXTERNAL_RADIO backend is compiled in; otherwise no slot ever carries it.
+#define RING_STATUS_EXT_PENDING 0x80
 
 // Message Priority Classes (lower = higher priority)
 #define MSG_PRIO_CRITICAL   1   // ACK (0x41) + persoenliche DM
