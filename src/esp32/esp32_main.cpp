@@ -790,9 +790,9 @@ void esp32setup()
     #ifndef DISABLE_NET_CONSOLE
     netConsoleSetPassword(meshcom_settings.node_passwd);
     #endif
-    #if defined(EXTERNAL_RADIO)
-    externalRadioSetup();
-    #endif
+    // NOTE: externalRadioSetup() runs later, AFTER lora_setcountry() has applied
+    // the effective freq/bw/sf/cr/preamble, so the bridge config snapshot is built
+    // from the same effective radio settings the local radio path would use.
     //xxxxxxx   = meshcom_settings.node_sset2 & 0x2000;
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
@@ -1310,9 +1310,29 @@ void esp32setup()
     #endif
 
     lora_setcountry(meshcom_settings.node_country);
-    
+
+    #if defined(EXTERNAL_RADIO)
+    // The local-radio path normalizes the -20 "use default" power sentinel to the
+    // board default inside its bRadio block, which is skipped in external mode.
+    // Apply the same default here so the bridge snapshot uses the intended default
+    // power (getPower() then clamps to the valid range) instead of the clamped
+    // sentinel. Mirrors the bRadio-block normalization; RAM-only (no extra flash
+    // write — a later --txpower change persists normally).
+    if(meshcom_settings.node_power == -20)
+        meshcom_settings.node_power = TX_OUTPUT_POWER;
+
+    // Build the bridge RadioConfig snapshot from the EFFECTIVE radio settings:
+    // lora_setcountry() above has just normalized freq/bw/sf/cr/preamble to the
+    // active country. Taking the snapshot here (rather than before lora_setcountry)
+    // ensures the bridge is configured with the same effective values the local
+    // radio path would use, including on first boot / country change / flash clear.
+    // Runtime setting changes are still re-synced via
+    // lora_setchip_meshcom() -> externalRadioConfigChanged().
+    externalRadioSetup();
+    #endif
+
     //#endif
-    
+
     // you can also change the settings at runtime
     // and check if the configuration was changed successfully
     #if defined(BOARD_T5_EPAPER)

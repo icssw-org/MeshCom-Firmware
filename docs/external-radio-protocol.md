@@ -339,7 +339,11 @@ returns.
 ## Configuration snapshot
 
 `CONFIGURE` carries a snapshot of the active MeshCom radio settings, captured once
-during external-radio setup and normalized to the protocol-v1 units above
+during external-radio setup **after the effective radio settings are finalized**
+(country/region normalization applied and power defaulted/clamped), so the bridge
+is configured with the same effective frequency/bandwidth/SF/coding-rate/preamble/
+power the local radio path would use — including on first boot, a country change,
+or a flash clear. The snapshot is normalized to the protocol-v1 units above
 (frequency/bandwidth converted to integer Hz by finite-checked nearest rounding;
 the coding-rate denominator and on-air sync word taken directly; CRC from the
 active setting; **LDRO** derived as the effective value from the standard LoRa
