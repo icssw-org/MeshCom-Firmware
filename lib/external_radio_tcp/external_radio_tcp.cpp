@@ -45,10 +45,10 @@ void TcpTransport::clear() {
     deadline_kind_    = TO_HANDSHAKE;
     armed_state_      = ST_DISCONNECTED;
     last_err_         = TERR_NONE;
-    rx_pending_       = false;
     last_tx_outcome_  = TXO_NONE;
     cfg_valid_        = false;
-    std::memset(&last_rx_, 0, sizeof(last_rx_));
+    // rx_sink_/rx_sink_ctx_ are NOT cleared here: the delivery target persists
+    // across begin()/reconnect/reconfigure (set once via setRxSink).
 }
 
 bool TcpTransport::begin(const char* host, uint16_t port, const RadioConfig& cfg,
@@ -132,7 +132,6 @@ void TcpTransport::startConnect(uint32_t now_ms) {
     // with the desired config preserved by clearVolatile(). Do NOT reset() — that
     // would wipe the config. onConnecting() makes the DISCONNECTED->CONNECTING move.
     parserReset(parser_);
-    rx_pending_ = false;
     session_.onConnecting();
     if (!io_.connect || !io_.connect(io_.ctx, host_, port_)) {
         failClosed(now_ms, TERR_CONNECT_FAILED);
@@ -191,8 +190,9 @@ bool TcpTransport::handleEvent(Event ev, uint32_t now_ms) {
             backoff_ms_ = to_.backoff_min_ms;     // healthy link: reset reconnect backoff
             return true;
         case EV_RX:
-            last_rx_    = session_.lastRx();
-            rx_pending_ = true;                    // exposed only; not injected into MeshCom yet
+            // Deliver synchronously, in arrival order, while still in poll()/driveRx
+            // context. No buffering, so a coalesced later RX cannot overwrite this one.
+            if (rx_sink_) rx_sink_(rx_sink_ctx_, session_.lastRx());
             return true;
         case EV_TX_DONE:
             last_tx_outcome_ = session_.lastTxOutcome();   // SUCCESS/BUSY/TIMEOUT/RADIO_ERROR

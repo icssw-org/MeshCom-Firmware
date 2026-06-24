@@ -114,6 +114,29 @@ static void bridgeFeedConfigResultOk(Fake& f, const RadioConfig& c) {
     bridgeFeed(f, MSG_CONFIG_RESULT, 0, body, sizeof(body));
 }
 
+// append raw bytes (for split-frame tests)
+static void bridgeFeedRaw(Fake& f, const uint8_t* bytes, size_t n) {
+    std::memcpy(f.in + f.in_len, bytes, n);
+    f.in_len += n;
+}
+
+// build an RX_PACKET payload: rssi[2] snr[2] len[2] data[len]
+static uint16_t buildRx(uint8_t* buf, int16_t rssi, int16_t snr, const uint8_t* data, uint16_t dlen) {
+    buf[0] = (uint8_t)(rssi >> 8); buf[1] = (uint8_t)(rssi & 0xFF);
+    buf[2] = (uint8_t)(snr >> 8);  buf[3] = (uint8_t)(snr & 0xFF);
+    buf[4] = (uint8_t)(dlen >> 8); buf[5] = (uint8_t)(dlen & 0xFF);
+    if (dlen) std::memcpy(buf + 6, data, dlen);
+    return (uint16_t)(6 + dlen);
+}
+
+// fixed-capacity RX sink (no dynamic allocation)
+struct RxRecorder { RxPacket items[8]; int count; };
+static void recSink(void* ctx, const RxPacket& rx) {
+    RxRecorder* r = (RxRecorder*)ctx;
+    if (r->count < 8) r->items[r->count] = rx;
+    r->count++;
+}
+
 // parse the frames the firmware has sent (into out[])
 static int fwFrames(Fake& f, Frame* out, int maxOut) {
     Parser p; parserReset(p);
@@ -348,19 +371,75 @@ void test_ping_gets_pong(void) {
     TEST_ASSERT_TRUE(fwSent(f, MSG_PONG));
 }
 
-void test_rx_exposed_not_injected(void) {
-    Fake f{}; TcpTransport t;
+void test_rx_delivered_via_sink(void) {
+    Fake f{}; RxRecorder rec{}; TcpTransport t;
+    t.setRxSink(recSink, &rec);
     t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
     driveOperational(t, f, 0);
-    uint8_t pl[16];
-    pl[0]=0xFF; pl[1]=0x38; pl[2]=0x00; pl[3]=0x0A; pl[4]=0x00; pl[5]=0x02; pl[6]='h'; pl[7]='i'; // rssi -200, snr 10, len 2
-    bridgeFeed(f, MSG_RX_PACKET, 0, pl, 8);
+    uint8_t pl[16]; uint16_t plen = buildRx(pl, -200, 10, (const uint8_t*)"hi", 2);  // raw centi-units
+    bridgeFeed(f, MSG_RX_PACKET, 0, pl, plen);
     t.poll(2);
-    TEST_ASSERT_TRUE(t.hasRx());
-    TEST_ASSERT_EQUAL_INT16(-200, t.rx().rssi);
-    TEST_ASSERT_EQUAL_UINT16(2, t.rx().len);
-    t.clearRx();
-    TEST_ASSERT_FALSE(t.hasRx());
+    TEST_ASSERT_EQUAL_INT(1, rec.count);
+    TEST_ASSERT_EQUAL_INT16(-200, rec.items[0].rssi);
+    TEST_ASSERT_EQUAL_INT16(10,   rec.items[0].snr);
+    TEST_ASSERT_EQUAL_UINT16(2,   rec.items[0].len);
+    TEST_ASSERT_EQUAL_UINT8('h',  rec.items[0].data[0]);
+}
+
+void test_rx_coalesced_delivered_in_order(void) {
+    Fake f{}; RxRecorder rec{}; TcpTransport t;
+    t.setRxSink(recSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    uint8_t a[16], b[16];
+    uint16_t alen = buildRx(a, -3000, 5, (const uint8_t*)"A", 1);
+    uint16_t blen = buildRx(b, -4000, 6, (const uint8_t*)"B", 1);
+    bridgeFeed(f, MSG_RX_PACKET, 0, a, alen);
+    bridgeFeed(f, MSG_RX_PACKET, 0, b, blen);   // two frames, one TCP chunk
+    t.poll(2);                                  // single poll
+    TEST_ASSERT_EQUAL_INT(2, rec.count);        // both delivered, none overwritten
+    TEST_ASSERT_EQUAL_INT16(-3000, rec.items[0].rssi);  // in arrival order
+    TEST_ASSERT_EQUAL_INT16(-4000, rec.items[1].rssi);
+    TEST_ASSERT_EQUAL_UINT8('A', rec.items[0].data[0]);
+    TEST_ASSERT_EQUAL_UINT8('B', rec.items[1].data[0]);
+}
+
+void test_rx_partial_then_complete_once(void) {
+    Fake f{}; RxRecorder rec{}; TcpTransport t;
+    t.setRxSink(recSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    uint8_t pl[16]; uint16_t plen = buildRx(pl, -50, 5, (const uint8_t*)"abc", 3);
+    uint8_t frame[kHeaderSize + kMaxPayload];
+    size_t fn = encode(frame, sizeof(frame), MSG_RX_PACKET, 0, pl, plen);
+    bridgeFeedRaw(f, frame, 4);             // header fragment only
+    t.poll(2);
+    TEST_ASSERT_EQUAL_INT(0, rec.count);    // incomplete -> not delivered
+    bridgeFeedRaw(f, frame + 4, fn - 4);    // remainder
+    t.poll(3);
+    TEST_ASSERT_EQUAL_INT(1, rec.count);    // delivered exactly once
+}
+
+void test_rx_sink_not_called_before_ready(void) {
+    Fake f{}; RxRecorder rec{}; TcpTransport t;
+    t.setRxSink(recSink, &rec);
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    connectAndHello(t, f, 0);               // HANDSHAKE, not operational
+    uint8_t pl[16]; uint16_t plen = buildRx(pl, -50, 5, nullptr, 0);
+    bridgeFeed(f, MSG_RX_PACKET, 0, pl, plen);
+    t.poll(2);
+    TEST_ASSERT_EQUAL_INT(0, rec.count);    // RX before ready -> rejected, not delivered
+    TEST_ASSERT_FALSE(t.connected());       // fail closed
+}
+
+void test_rx_no_sink_is_safe(void) {
+    Fake f{}; TcpTransport t;                // no setRxSink
+    t.begin("10.0.0.1", 7000, sampleConfig(), makeIo(f), authNone(), defaultTimeouts());
+    driveOperational(t, f, 0);
+    uint8_t pl[16]; uint16_t plen = buildRx(pl, -50, 5, (const uint8_t*)"x", 1);
+    bridgeFeed(f, MSG_RX_PACKET, 0, pl, plen);
+    t.poll(2);
+    TEST_ASSERT_TRUE(t.operational());      // no crash, still operational
 }
 
 void test_socket_write_is_not_tx_success(void) {
@@ -552,7 +631,11 @@ int main(int, char**) {
     RUN_TEST(test_reconfigure_before_begin_is_harmless);
     RUN_TEST(test_coalesced_handshake_frames_in_order);
     RUN_TEST(test_ping_gets_pong);
-    RUN_TEST(test_rx_exposed_not_injected);
+    RUN_TEST(test_rx_delivered_via_sink);
+    RUN_TEST(test_rx_coalesced_delivered_in_order);
+    RUN_TEST(test_rx_partial_then_complete_once);
+    RUN_TEST(test_rx_sink_not_called_before_ready);
+    RUN_TEST(test_rx_no_sink_is_safe);
     RUN_TEST(test_socket_write_is_not_tx_success);
     RUN_TEST(test_disconnect_while_tx_pending_is_unknown);
     RUN_TEST(test_pending_tx_timeout_is_unknown);

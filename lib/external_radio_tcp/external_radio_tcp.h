@@ -92,9 +92,21 @@ enum TransportError : uint8_t {
 // several reads via the parser, and several frames may be drained from one read.
 static constexpr int kReadChunk = 256;
 
+// Synchronous per-frame RX delivery callback. Invoked once for each validated
+// RX_PACKET while poll() processes it (cooperative main-loop context, in arrival
+// order). The sink MUST consume/copy synchronously — the RxPacket reference is
+// valid only for the duration of the call. There is no queue and no buffering:
+// coalesced RX frames are delivered one-by-one before the next is parsed, so an
+// earlier packet can never be overwritten by a later one. Bounded work per poll.
+typedef void (*RxSink)(void* ctx, const RxPacket& rx);
+
 class TcpTransport {
 public:
-    TcpTransport() { clear(); }
+    TcpTransport() : rx_sink_(nullptr), rx_sink_ctx_(nullptr) { clear(); }
+
+    // Install the synchronous RX delivery sink. May be set before or after begin();
+    // it persists across reconnects/reconfigures (clear() does not touch it).
+    void setRxSink(RxSink sink, void* ctx) { rx_sink_ = sink; rx_sink_ctx_ = ctx; }
 
     // Configure once before polling. host must remain valid for the transport's
     // lifetime (typically a static buffer). cfg must be a valid RadioConfig.
@@ -128,10 +140,8 @@ public:
     // is NOT TX success — the outcome stays TXO_NONE until a TX_RESULT arrives.
     bool requestTx(const uint8_t* data, uint16_t len, uint32_t now_ms);
 
-    // Narrow transport-visible results (NOT injected into MeshCom this milestone).
-    bool            hasRx() const { return rx_pending_; }
-    const RxPacket& rx() const { return last_rx_; }
-    void            clearRx() { rx_pending_ = false; }
+    // RX is delivered through the synchronous sink (setRxSink); the TX outcome is
+    // still exposed here. Neither is wired into MeshCom in this milestone.
     TxOutcome       lastTxOutcome() const { return last_tx_outcome_; }
 
     // Diagnostics / test introspection.
@@ -175,9 +185,9 @@ private:
     bool           cfg_valid_;     // false => runtime config unmappable; do not connect
 
     // transport-visible results
-    bool      rx_pending_;
-    RxPacket  last_rx_;
     TxOutcome last_tx_outcome_;   // owned: survives the session reset on disconnect
+    RxSink    rx_sink_;           // synchronous RX delivery (persists across reconnects)
+    void*     rx_sink_ctx_;
 
     uint8_t  scratch_[kHeaderSize + kMaxPayload];     // outbound frame builder
 };

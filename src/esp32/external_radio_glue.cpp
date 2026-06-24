@@ -219,8 +219,8 @@ void externalRadioLoop() {
     if (!g_enabled) return;
     // Network-readiness is now decided by the transport via the injected predicate
     // (externalRadioNetworkReady); poll() connects only when ready and stops safely
-    // when not. RX and TX results are intentionally NOT injected into MeshCom in
-    // this milestone; they are available via g_transport.hasRx()/lastTxOutcome().
+    // when not. RX delivery (setRxSink) and TX results are intentionally NOT wired
+    // into MeshCom in this milestone — that is the dedicated activation milestone.
     g_transport.poll(millis());
 }
 
