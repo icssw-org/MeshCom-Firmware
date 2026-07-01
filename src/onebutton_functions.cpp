@@ -21,6 +21,12 @@
 #include "nrf52_functions.h"
 #endif
 
+#if defined(WP_DISP)
+// Anzahl der per 1x-Klick durchblaetterbaren letzten Nachrichten (Wireless Paper + E213,
+// gemeinsamer 2.13"-Display-Pfad): die letzten 4 (original-kompatibel).
+#define WP_MSG_BROWSE_MAX 4
+#endif
+
 void singleClick()
 {
   if(bDisplayCont)
@@ -35,6 +41,76 @@ void singleClick()
   {
     if(bDisplayCont)
         Serial.printf("BUTTON single press last:%i pointer:%i lines:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer]);
+
+    #if defined(WP_DISP)
+    // ===== Wireless Paper + E213: die letzten WP_MSG_BROWSE_MAX Nachrichten + Status in einer LOOP =====
+    // Eigene Logik statt des Magic-Status-Slots: der konnte haengenbleiben, wenn die NEUESTE
+    // Nachricht zufaellig im Status-Slot landete (Original "verhaspelte" sich nach ~3). Die WP hat
+    // zudem keinen pageHold-Timeout (sendDisplayTime laeuft hier nicht), daher wird der Loop hier
+    // explizit geschlossen. Rotation: neueste -> ... -> Fensterrand -> Status -> neueste -> ...
+    // Das Browse-Fenster ist auf WP_MSG_BROWSE_MAX (=4, vorbereitet fuer 9) begrenzt - der Ring
+    // (PAGE_MAX=10) koennte mehr, aus Kompatibilitaet zeigen wir aber nur die letzten 4.
+    {
+      static bool wpStatusStep = false;                 // naechster Klick zeigt die Status-Seite
+      int wpNewest = pageLastPointer - 1;               // Slot der neuesten Nachricht
+      if(wpNewest < 0) wpNewest += PAGE_MAX;
+
+      // KEINE Nachricht im Ringpuffer: Original/PR -> Statusschirm; Preview -> "No Message".
+      if(pageLastLineAnz[wpNewest] == 0)
+      {
+        sendDisplayHead(true);
+        wpStatusStep = false;
+        pagePointer  = wpNewest;
+        return;
+      }
+
+      // Status-Schritt (nach dem Fensterrand/der aeltesten) -> Statusschirm, dann Loop
+      if(wpStatusStep)
+      {
+        sendDisplayHead(true);
+        wpStatusStep = false;
+        pagePointer  = wpNewest;
+        return;
+      }
+
+      if(pageLastLineAnz[pagePointer] == 0)             // Sicherheit: aktueller Slot leer -> neueste
+        pagePointer = wpNewest;
+
+      // Anzahl gespeicherter Nachrichten (zusammenhaengend ab der neuesten)
+      int wpN = 0;
+      {
+        int s = wpNewest;
+        for(int n = 0; n < PAGE_MAX; n++)
+        {
+          if(pageLastLineAnz[s] == 0) break;
+          wpN++;
+          s--; if(s < 0) s += PAGE_MAX;
+        }
+      }
+      // sichtbares Fenster = min(vorhanden, WP_MSG_BROWSE_MAX)
+      int wpShow  = (wpN < WP_MSG_BROWSE_MAX) ? wpN : WP_MSG_BROWSE_MAX;
+      // Schritte unterhalb der neuesten (0 = neueste); ausserhalb Fenster -> auf neueste zuruecksetzen
+      int wpSteps = (wpNewest - pagePointer + PAGE_MAX) % PAGE_MAX;
+      if(wpSteps >= wpShow) { pagePointer = wpNewest; wpSteps = 0; }
+
+      // Index oben rechts: neueste = wpShow (max 4) ... Fensterrand = 1; 0 = Home/Status.
+      int wpRank = wpShow - wpSteps;
+
+      // Nachricht anzeigen (Helper in loop_functions.cpp; kompaktes Layout + Voll-Refresh).
+      wpShowStoredMessage(pagePointer, wpRank);
+
+      // naechste (aeltere) bestimmen; am Fensterrand (wpSteps+1 >= wpShow) ODER aelteste erreicht
+      // (naechster Slot leer) -> naechster Klick zeigt Status, danach wieder bei der neuesten.
+      int wpNext = pagePointer - 1;
+      if(wpNext < 0) wpNext += PAGE_MAX;
+      if((wpSteps + 1) >= wpShow || pageLastLineAnz[wpNext] == 0)
+        wpStatusStep = true;
+      else
+        pagePointer = wpNext;
+
+      return;
+    }
+    #endif
 
     if(pagePointer == 5)
     {
@@ -161,7 +237,12 @@ void PressLong()
 
   bShowHead=false;
 
-  #if defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)
+  #if defined(WP_DISP)
+      // Long Press auf Wireless Paper + E213 -> Deepsleep (Strom sparen im Akkubetrieb). #992
+      // "--display off" ist auf E-Ink SINNLOS (bistabiles Panel zieht statisch keinen Strom);
+      // der --deepsleep-Pfad loescht stattdessen das Panel sichtbar (wpShowDeepSleep).
+      commandAction((char*)"--deepsleep", isPhoneReady, false);
+  #elif defined(BOARD_E290)
       sendDisplayMainline();
       E290DisplayUpdate();
   #else
@@ -215,7 +296,7 @@ void init_onebutton()
 /* Initialize a new OneButton instance for a button connected to digital
 *  pin and GND, which is active low [2] and uses the internal pull-up resistor.
 */
-    #if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER))
+    #if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213))
       // btn.setup( /*GPIO=*/ iButtonPin, /*active LOW=*/ true, /*pull-up=*/ false);
       btn.setup( /*GPIO=*/ iButtonPin, INPUT, /*active LOW=*/ true);
     #else

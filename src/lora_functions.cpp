@@ -89,7 +89,7 @@ extern int mheardAlt[MAX_MHEARD];
 
 // TinyGPS
 // gps nur fuer Distanz-/Kursberechnung (distanceBetween) - auch ohne ENABLE_GPS sichtbar machen.
-#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS) || defined(BOARD_WIRELESS_PAPER)
+#if defined(ENABLE_GPS) || defined(ENABLE_RAK_GPS) || defined(WP_DISP)
 extern TinyGPSPlus gps;
 #endif
 

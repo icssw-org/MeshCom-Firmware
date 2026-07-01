@@ -43,13 +43,20 @@
 //TEST #include "compress_functions.h"
 
 // For display contrast control
-#if !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+#if !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_E213) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
     #include <U8g2lib.h>
     extern U8G2 *u8g2;
 #endif
 
 #if defined(ENABLE_BMX680)
 #include "bme680.h"
+#endif
+
+#if defined(BOARD_E213)
+// prepareToSleep()/loraToSleep() sind im E213-Platform-Layer (Namespace Platform) definiert
+// (VisionMasterE213/power_controls.cpp). Forward-Deklaration statt schwergewichtigem
+// Platform-Header-Include. prepareToSleep(): voller Deepsleep-Strom-Spar-Pfad (E213-Long-Press).
+namespace Platform { void prepareToSleep(); void loraToSleep(); }
 #endif
 
 unsigned long rebootAuto = 0;
@@ -804,6 +811,30 @@ void commandAction(char *umsg_text, bool ble)
                 bDEEP_SLEEP = true;
             }
         #else
+            #if defined(WP_DISP)
+            // E-Ink vor dem Schlafen sichtbar loeschen (sonst bleibt das letzte Bild stehen und
+            // der Deepsleep ist am bistabilen Panel nicht erkennbar). #992.
+            wpShowDeepSleep();
+            #if defined(BOARD_E213)
+            // PRG-Button (GPIO0, active LOW) als Aufweckquelle armieren. Ohne Wakeup-Quelle
+            // schlaeft der ESP32-S3 nach dem Deepsleep bis zum Power-Cycle/RESET - das bistabile
+            // E-Ink bliebe scheinbar fuer immer eingefroren. Mit ext1 weckt ein Tastendruck.
+            // Wakeup-Quelle(n): immer GPIO0 (PRG/BOOT) + der TATSAECHLICH konfigurierte
+            // Bedien-Button (iButtonPin; E213 = GPIO21 aus node_button_pin, WP = GPIO0). Beide
+            // active LOW. Ohne den Bedien-Button wuerde ein per Long-Press (USER-Taste) ausgeloester
+            // Deepsleep an genau dieser Taste NICHT mehr aufwecken. iButtonPin 0..21 = RTC-faehiger
+            // GPIO (ESP32-S3 ext1); 99 = kein Button -> nur GPIO0.
+            uint64_t wake_mask = (1ULL << 0);
+            if (iButtonPin < 22) wake_mask |= (1ULL << iButtonPin);
+            esp_sleep_enable_ext1_wakeup(wake_mask, ESP_EXT1_WAKEUP_ANY_LOW);
+            // Schlafstrom senken. Kurzes Settle, damit der E-Ink-Voll-Refresh aus wpShowDeepSleep()
+            // sicher fertig ist, dann prepareToSleep(): SX1262 -> SLEEP (sonst Dauer-RX ~5 mA),
+            // VEXT (Display-/LoRa-Versorgung) aus, LoRa-Pins hochohmig -> Ziel ~18 uA. Ohne das
+            // entlaedt der "Deepsleep" den Akku weiter. E213 nutzt dieselbe Sequenz (gleiche Pins).
+            delay(100);
+            Platform::prepareToSleep();
+            #endif
+            #endif
             #if not defined(BOARD_RAK4630)
             esp_deep_sleep_start();
             #endif
@@ -814,7 +845,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"contrast ") == 0)
     {
-        #if !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+        #if !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_E213) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         int contrast_value = atoi(msg_text + 11);  // "--" + "contrast " = 2 + 9 = 11
         if(contrast_value <= 0) contrast_value = 1;
         if(contrast_value > 255) contrast_value = 255;
@@ -835,7 +866,7 @@ void commandAction(char *umsg_text, bool ble)
             addBLECommandBack(response);
         }
         
-        #elif !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+        #elif !defined(BOARD_E290) && !defined(BOARD_WIRELESS_PAPER) && !defined(BOARD_E213) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
         if(u8g2 != NULL)
         {
             u8g2->setContrast(contrast_value);

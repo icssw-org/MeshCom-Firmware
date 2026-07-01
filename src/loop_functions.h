@@ -16,8 +16,9 @@ unsigned long getUnixClock();
 
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text);
 void sendDisplayHead(bool bInit);
-#if defined(BOARD_WIRELESS_PAPER)
+#if defined(WP_DISP)
 void wpShowStoredMessage(int slot, int idx);   // idx = Index oben rechts (neueste=N..aelteste=1, 0=keiner)
+void wpShowDeepSleep();                         // E-Ink nur loeschen (kein Text) vor dem Deepsleep -> Sleep sichtbar
 #endif
 void sendDisplayTrack();
 void sendDisplayWX();
@@ -77,7 +78,7 @@ double cround4abs(double dvar);
 int conv_fuss(int alt_meter);
 int conv_meter(int alt_fuss);
 
-#if defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER)
+#if defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213)
 void DrawDirection(float angle, int cx, int cy, int radius);
 void DrawRssi(int cx, int cy, int16_t rssi);
 double degreesToRadians(double degrees);
