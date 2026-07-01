@@ -1534,6 +1534,11 @@ void nrf52loop()
     }
     #endif
 
+    #if defined(ENABLE_GPS)
+        gKeyNum = 2;
+    #endif
+
+
     if(gKeyNum == 1)
     {
         Serial.println("gKeyNum == 1");
@@ -1547,9 +1552,6 @@ void nrf52loop()
 
     if(gKeyNum == 2)
     {
-        //if(iGPSDEBUG > 1)
-        //    Serial.println("gKeyNum == 2");
-
         #if defined(ENABLE_RAK_GPS)
         if(bGPSON)
         {

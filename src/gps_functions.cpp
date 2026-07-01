@@ -766,6 +766,11 @@ int WZ_GPS_Loop() {
 
     int igps = POSINFO_INTERVAL;
 
+    if(iGPSDEBUG > 2)
+    {
+      Serial.printf("[GPS ]...igps: %i\n", igps);
+    }
+
     if (!gpsDetected) return igps;
 
     NMEAlineIndex = 0;
