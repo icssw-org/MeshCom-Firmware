@@ -203,7 +203,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 
     epaper_display.landscape();
 
-    epaper_display.setRotation(270);
+    epaper_display.setRotation(90); // top/down (270);
 
     // Start-Screen im Original-E290-Layout - nur der Board-Name ist board-spezifisch.
     // Der erkannte Panel-Controller wird zusaetzlich als DEBUG-Zeile am Terminal
