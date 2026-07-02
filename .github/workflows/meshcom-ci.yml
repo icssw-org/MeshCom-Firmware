@@ -84,6 +84,7 @@ jobs:
       mv .pio/build/ttgo_tbeam_SX1268/firmware.bin .pio/build/ttgo_tbeam_SX1268/ttgo_tbeam_SX1268.bin &
       mv .pio/build/ttgo_tbeam_supreme/firmware.bin .pio/build/ttgo_tbeam_supreme/ttgo_tbeam_supreme.bin &
       mv .pio/build/vision-master-e290/firmware.bin .pio/build/vision-master-e290/vision-master-e290.bin &
+      mv .pio/build/vision-master-e213/firmware.bin .pio/build/vision-master-e213/vision-master-e213.bin &
       mv .pio/build/wireless-paper/firmware.bin .pio/build/wireless-paper/wireless-paper.bin &
       mv .pio/build/LilyGo_T-Beam-1W/firmware.bin .pio/build/LilyGo_T-Beam-1W/T-Beam-1W.bin &
       mv .pio/build/LilyGo_T3_S3_V1_3/firmware.bin .pio/build/LilyGo_T3_S3_V1_3/T3_S3_V13.bin &
@@ -117,6 +118,7 @@ jobs:
         .pio/build/ttgo_tbeam_SX1268/ttgo_tbeam_SX1268.bin,
         .pio/build/ttgo_tbeam_supreme/ttgo_tbeam_supreme.bin,
         .pio/build/vision-master-e290/vision-master-e290.bin,
+        .pio/build/vision-master-e213/vision-master-e213.bin,
         .pio/build/wireless-paper/wireless-paper.bin,
         .pio/build/LilyGo_T-Beam-1W/T-Beam-1W.bin,
         .pio/build/LilyGo_T3_S3_V1_3/T3_S3_V13.bin,
