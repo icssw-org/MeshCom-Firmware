@@ -31,6 +31,7 @@
 
 #### E-PAPER
 - vision-master-e290.bin
+- vision-master-e213.bin
 
 #### T-DECK
 - t_deck.bin
