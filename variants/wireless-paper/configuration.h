@@ -60,6 +60,7 @@ Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
 
 // PRG-Taster der Wireless Paper liegt auf GPIO0
+// PRG-Taster der Wireless Paper E213 1.1.1 liegt auf GPIO21
 #define BUTTON_PIN 0
 
 // Onboard-LED der Wireless Paper auf GPIO18 (active HIGH, einfache LED - KEIN NeoPixel).
