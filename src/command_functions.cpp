@@ -377,7 +377,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"volt") == 0)
+    if(commandCheck(msg_text+2, (char*)"volt on") == 0 || commandCheck(msg_text+2, (char*)"proz off") == 0)
     {
         bDisplayVolt = true;
 
@@ -393,7 +393,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"proz") == 0)
+    if(commandCheck(msg_text+2, (char*)"proz on") == 0 || commandCheck(msg_text+2, (char*)"volt off") == 0)
     {
         bDisplayVolt = false;
 
@@ -617,7 +617,7 @@ void commandAction(char *umsg_text, bool ble)
             delay(100);
             printlndeb("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--aprscomment  set APRS Comment/none\n--showI2C\n");
             delay(100);
-            printlndeb("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt    show battery voltage\n--proz    show battery proz.\n");
+            printlndeb("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt on/off   show battery voltage\n--proz on/off    show battery proz.\n");
             delay(100);
             printfdeb("--setgrc 9;..9;  set groups\n--nomsgall on/off  '*'-msg on display\n");
             delay(100);
