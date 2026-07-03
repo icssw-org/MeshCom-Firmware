@@ -63,6 +63,12 @@ struct s_meshcom_settings
 	char node_atxt[40] = {0};
 
 	int node_sset2 = 0x0000;
+
+	// Display-Dreh-Offset fuer das Kommando --rotate 0/90/180/270 (Grad).
+	// Board-uebergreifend ADDITIV auf die Werks-Basisrotation (siehe applyDisplayRotation()).
+	// 0 = Werksausrichtung. Persistiert in NVS (Key "node_disrot").
+	int node_disp_rot = 0;
+
 	int node_owgpio = 36;
 
 	float node_temp2 = 0;

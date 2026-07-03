@@ -273,6 +273,41 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+#if defined(WP_DISP)
+    if(commandCheck(msg_text+2, (char*)"rotate ") == 0)
+    {
+        // --rotate 0/90/180/270 : persistenter Display-Dreh-Offset (Grad), board-uebergreifend
+        // ADDITIV auf die Werks-Basisrotation. "--rotate " = 9 Zeichen -> Wert ab msg_text+9.
+        // Nur Wireless Paper + Vision Master E213. Hinweis: 0/180 = Querformat, 90/270 = Hochformat.
+        int iRot = -1;
+        sscanf(msg_text+9, "%d", &iRot);
+
+        if(iRot == 0 || iRot == 90 || iRot == 180 || iRot == 270)
+        {
+            meshcom_settings.node_disp_rot = iRot;   // -> NVS via save_settings()
+            g_dispRotOffset = iRot;                  // sofort im laufenden Betrieb wirksam
+
+            save_settings();
+
+            if(bBLEDEBUG)
+                printfdeb("[COMMAND]rotate: display offset -> %i deg\n", iRot);
+
+            // Neue Rotation SOFORT anwenden (gleiche Quelle wie beim Boot), DANN Voll-Refresh:
+            // sendDisplayHead(true) ruft fastmodeOff() -> voller Panel-Refresh (V1.1 LCMEN kann
+            // kein Partial-Update). Reihenfolge zwingend: erst drehen, dann zeichnen.
+            applyDisplayRotation();
+            sendDisplayHead(true);
+        }
+        else
+        {
+            if(bBLEDEBUG)
+                printfdeb("[COMMAND]rotate: ungueltiger Wert %i (erlaubt: 0/90/180/270)\n", iRot);
+        }
+
+        return;
+    }
+    else
+#endif
     if(commandCheck(msg_text+2, (char*)"settime") == 0)
     {
         // 2025.02.27 13:18:24
@@ -619,6 +654,10 @@ void commandAction(char *umsg_text, bool ble)
             delay(100);
             printlndeb("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt on/off   show battery voltage\n--proz on/off    show battery proz.\n");
             delay(100);
+#if defined(WP_DISP)
+            printlndeb("--rotate 0/90/180/270  E-Ink Display drehen (persistent, board-uebergreifend)\n");
+            delay(100);
+#endif
             printfdeb("--setgrc 9;..9;  set groups\n--nomsgall on/off  '*'-msg on display\n");
             delay(100);
             printlndeb("--maxv    100%% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n−−settime yyyy.mm.dd hh:mm:ss\n");
