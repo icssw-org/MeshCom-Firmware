@@ -3563,7 +3563,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"sethamnet") == 0 || commandCheck(msg_text+2, (char*)"setinet off") == 0)
+    if(commandCheck(msg_text+2, (char*)"sethamnet on") == 0 || commandCheck(msg_text+2, (char*)"setinet off") == 0)
     {
         meshcom_settings.node_hamnet_only = 1;
         
