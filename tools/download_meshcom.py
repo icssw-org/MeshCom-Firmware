@@ -31,6 +31,8 @@ def get_target_hardware(asset):
     hw_dict = {
     "vision-master-e290.bin": "heltec_e290",
     "vision-master-e213.bin": "heltec_e213",
+    "esp32-loraprs-e22.bin": "esp32-loraprs-e22",
+    "esp32-loraprs-ra01.bin": "esp32-loraprs-ra01",
     "heltec_wifi_lora_32_V2.bin": "heltecv2",
     "heltec_wifi_lora_32_V3.bin": "heltecv3",
     "heltec_wifi_lora_32_V4.bin": "heltecv4",
@@ -64,6 +66,8 @@ def get_target_hardware(asset):
     bootloader_dict = {
     "vision-master-e290.bin": "bootloader-s3.bin",
     "vision-master-e213.bin": "bootloader-s3.bin",
+    "esp32-loraprs-e22.bin": "bootloader-s3.bin",
+    "esp32-loraprs-ra01.bin": "bootloader-s3.bin",
     "heltec_wifi_lora_32_V2.bin": "bootloader.bin",
     "heltec_wifi_lora_32_V3.bin": "bootloader-s3.bin",
     "heltec_wifi_lora_32_V4.bin": "bootloader-s3.bin",
@@ -97,6 +101,8 @@ def get_target_hardware(asset):
     safeboot_dict = {
     "vision-master-e290.bin": "safeboot-s3.bin",
     "vision-master-e213.bin": "safeboot-s3.bin",
+    "esp32-loraprs-e22.bin": "safeboot-s3.bin",
+    "esp32-loraprs-ra01.bin": "safeboot-s3.bin",
     "heltec_wifi_lora_32_V2.bin": "safeboot.bin",
     "heltec_wifi_lora_32_V3.bin": "safeboot-s3.bin",
     "heltec_wifi_lora_32_V4.bin": "safeboot-s3.bin",
