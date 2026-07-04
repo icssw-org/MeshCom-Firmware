@@ -136,9 +136,32 @@ static bool detectEinkPanelIsE0213()
 }
 #endif
 
+#if defined(WP_DISP)
+// Persistenter Display-Dreh-Offset (Terminalkommando --rotate 0/90/180/270), in Grad.
+// Wird in initDisplay() aus meshcom_settings.node_disp_rot geladen und von applyDisplayRotation()
+// ADDITIV auf die Werks-Basisrotation aufaddiert. 0 = Werksausrichtung.
+int g_dispRotOffset = 0;
+
+// EINZIGE Stelle, die die Betriebs-Rotation des E-Ink setzt: Board-Werks-Basis + --rotate-Offset.
+// Wird beim Boot (startDisplay) UND live vom --rotate-Handler aufgerufen -> Boot und Live nutzen
+// GARANTIERT dieselbe Ausrichtung. setRotation() rechnet intern die Fenster-Bounds (setWindow) neu.
+void applyDisplayRotation()
+{
+    #if defined(BOARD_E213)
+    epaper_display.setRotation((90 + g_dispRotOffset) % 360);    // E213-Basis 90° (OE1KBC, ef998aa)
+    #else  // BOARD_WIRELESS_PAPER  (WP_DISP = WP || E213)
+    epaper_display.setRotation((270 + g_dispRotOffset) % 360);   // WP-Basis 270°
+    #endif
+}
+#endif
+
 void initDisplay()
 {
 #if defined(WP_DISP)
+    // Persistenten Display-Dreh-Offset (--rotate) aus den bereits geladenen Settings uebernehmen
+    // (init_flash() lief in esp32setup() VOR initDisplay()). Greift in startDisplay() + Live-Handler.
+    g_dispRotOffset = meshcom_settings.node_disp_rot;
+
     // Gemeinsame Panel-Auto-Erkennung fuer Wireless Paper (V1.1 LCMEN / V1.1.1+V1.2 E0213) UND
     // Vision Master E213. Nicht-invasiv ueber die invertierte BUSY-Polaritaet (siehe
     // detectEinkPanelIsE0213()). Loest die alte 0x2F-Chip-ID-Probe ab: die war auf dem E213
@@ -203,7 +226,14 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
 
     epaper_display.landscape();
 
+    // Betriebs-Rotation (Werks-Basis + --rotate-Offset) setzen. Bei WP_DISP ueber die gemeinsame
+    // applyDisplayRotation(): Wireless Paper 270°, E213 90° (OE1KBC, ef998aa). Das setzt das global
+    // gesetztes setRotation(90) fuer WP wieder auf die korrekte 270°-Basis; E290 bleibt unveraendert.
+    #if defined(WP_DISP)
+    applyDisplayRotation();
+    #else
     epaper_display.setRotation(90); // top/down (270);
+    #endif
 
     // Start-Screen im Original-E290-Layout - nur der Board-Name ist board-spezifisch.
     // Der erkannte Panel-Controller wird zusaetzlich als DEBUG-Zeile am Terminal
