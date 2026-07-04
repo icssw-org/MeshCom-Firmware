@@ -63,6 +63,7 @@ void init_flash(void)
     snprintf(meshcom_settings.node_atxt, sizeof(meshcom_settings.node_atxt), "%s", strVar.c_str());
 
     meshcom_settings.node_sset2 = preferences.getInt("node_sset2", 0x0000);
+    meshcom_settings.node_disp_rot = preferences.getInt("node_disrot", 0);   // Display-Dreh-Offset (--rotate); Default 0 = Werksausrichtung
     meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 0);
 
     meshcom_settings.node_temp2 = preferences.getFloat("node_temp2", 0.0);
@@ -329,6 +330,7 @@ void save_settings(void)
     preferences.putString("node_atxt", strVar); 
 
     preferences.putInt("node_sset2", meshcom_settings.node_sset2);
+    preferences.putInt("node_disrot", meshcom_settings.node_disp_rot);   // Display-Dreh-Offset (--rotate)
     preferences.putInt("node_owgpio", meshcom_settings.node_owgpio);
 
     preferences.putFloat("node_temp2", meshcom_settings.node_temp2);

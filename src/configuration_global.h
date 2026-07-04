@@ -208,3 +208,12 @@
 
 // OLED
 #define SSD1306_ADDRESS 0x3C
+
+// --- Persistenter Display-Dreh-Offset (Terminalkommando --rotate 0/90/180/270) --------------
+// g_dispRotOffset (Grad) wird board-uebergreifend ADDITIV auf die Werks-Basisrotation
+// aufaddiert: setRotation((basis + g_dispRotOffset) % 360). 0 = Werksausrichtung. Persistiert
+// als meshcom_settings.node_disp_rot (NVS "node_disrot"), beim Boot in initDisplay() gespiegelt.
+// Definition in esp32_functions.cpp. Nur Wireless Paper + Vision Master E213 (WP_DISP).
+#if defined(WP_DISP)
+extern int g_dispRotOffset;
+#endif

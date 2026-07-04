@@ -2050,7 +2050,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         char clfd[10];
         memset(clfd, 0x00, sizeof(clfd));
-        snprintf(clfd, sizeof(cset), "%03i", (int)(aprsmsg.msg_id & 0x3FF));
+        snprintf(clfd, sizeof(clfd), "%03i", (int)(aprsmsg.msg_id & 0x3FF));   // fix: was sizeof(cset)=30 written into clfd[10] (cppcheck bufferAccessOutOfBounds)
 
         // check pwd
         bool bpass=true;
