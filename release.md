@@ -12,6 +12,10 @@
 - E22_1262-DevKitC.bin (868 MHz)
 - E22_1262_S3-DevKitC.bin (868 MHz)
 
+### ESP32 Lora-Aprs
+- esp32-loraprs-e22
+- esp32-loraprs-ra01
+
 ### HELTEC
 - heltec_wifi_lora_32_V2.bin
 - heltec_wifi_lora_32_V3.bin
