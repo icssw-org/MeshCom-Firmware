@@ -3272,7 +3272,7 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
         return "";
     }
 
-    char msg_start[150] = {0};
+    char msg_start[250] = {0};
 
     // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
     // 09:30:28 RX-LoRa: 105 ! xAE48E347 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.51E#/B=005/A=000272/P=1005.1/H=42.5/T=29.4/Q=1005.7/R=232;2321; HW:04 MOD:03 FCS:15DC FW:17 LH:09
@@ -3483,30 +3483,44 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     //
     /////////////////////////////////////////////////////////////////
 
-    String strconcat = catxt;
-    strconcat.concat(cname);
-    strconcat.concat(cbatt);
-    strconcat.concat(calt);
-    strconcat.concat(cpress);
-    strconcat.concat(chum);
-    strconcat.concat(ctemp);
-    strconcat.concat(ctemp2);
-    strconcat.concat(cqfe);
-    strconcat.concat(cqnh);
-    strconcat.concat(cgasres);
-    strconcat.concat(cco2);
-    strconcat.concat(cgrc);
-    strconcat.concat(csfpegel);
-    strconcat.concat(csfpegel2);
-    strconcat.concat(csftemp);
-    strconcat.concat(csfbatt);
-    strconcat.concat(cversion);
-    strconcat.concat(cinaU);
-    strconcat.concat(cinaI);
-    strconcat.concat(ctele);
-    strconcat.concat(cncnt);
+    //strcpy(strconcat, catxt);
+    //strcat(strconcat, cname);
 
-    snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, strconcat.c_str());
+    char strconcat[150]={0};
+    strcpy(strconcat, cbatt);
+    strncat(strconcat, calt, sizeof(strconcat)-1);
+    strncat(strconcat, cncnt, sizeof(strconcat)-1);
+    strncat(strconcat, cpress, sizeof(strconcat)-1);
+    strncat(strconcat, chum, sizeof(strconcat)-1);
+    strncat(strconcat, ctemp, sizeof(strconcat)-1);
+    strncat(strconcat, ctemp2, sizeof(strconcat)-1);
+    strncat(strconcat, cqfe, sizeof(strconcat)-1);
+    strncat(strconcat, cqnh, sizeof(strconcat)-1);
+    strncat(strconcat, cgasres, sizeof(strconcat)-1);
+    strncat(strconcat, cco2, sizeof(strconcat)-1);
+    strncat(strconcat, cgrc, sizeof(strconcat)-1);
+    strncat(strconcat, csfpegel, sizeof(strconcat)-1);
+    strncat(strconcat, csfpegel2, sizeof(strconcat)-1);
+    strncat(strconcat, csftemp, sizeof(strconcat)-1);
+    strncat(strconcat, csfbatt, sizeof(strconcat)-1);
+    strncat(strconcat, cversion, sizeof(strconcat)-1);    
+    strncat(strconcat, cinaU, sizeof(strconcat)-1);   
+    strncat(strconcat, cinaI, sizeof(strconcat)-1);
+    strncat(strconcat, ctele, sizeof(strconcat)-1);
+
+    // wenn die concatenation zu lang ist, dann catxt und cname löschen
+    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 150)
+    {
+        catxt[0]=0x00;
+    }
+
+    // wenn die concatenation zu lang ist, dann catxt und cname löschen
+    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 150)
+    {
+        cname[0]=0x00;
+    }
+    
+    snprintf(msg_start, sizeof(msg_start), "%07.2lf%c%c%08.2lf%c%c%s%s%s", slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt, cname, strconcat);
 
     return String(msg_start);
 }
