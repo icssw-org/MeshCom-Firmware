@@ -226,6 +226,10 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
     int ipos=-1;
     int inext=-1;
+    
+    unsigned long ulmin = getUnixClock();
+    int imin = -1;
+
     for(int iset=0; iset<MAX_MHEARD; iset++)
     {
         if(mheardCalls[iset][0] != 0x00)
@@ -234,6 +238,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
             if((mheardEpoch[iset]+(60*60*12)) < getUnixClock())   // mheard last 12 hours
             {
                 mheardCalls[iset][0] = 0x00;
+                inext = iset;   // gerade frei geworden
             }
             else
             {
@@ -244,12 +249,18 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
                     if(inext >= 0)
                         break;
                 }
+                else
+                {
+                    if(mheardEpoch[iset] < ulmin)
+                    {
+                        ulmin = mheardEpoch[iset];
+                    }
+                }
             }
         }
         else
         {
-            if(inext < 0)
-                inext=iset;
+            inext=iset; // diese position ist frei
         }
     }
 
@@ -265,19 +276,29 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
         }
         else
         {
-            ipos=mheardWrite;
-            
-            mheardWrite++;
+            if(imin >= 0)
+            {
+                ipos=imin;
+            }
+            else
+            {
+                ipos=mheardWrite;
+                
+                mheardWrite++;
 
-            if(mheardWrite >= MAX_MHEARD)
-                mheardWrite=0;
+                if(mheardWrite >= MAX_MHEARD)
+                    mheardWrite=0;
+            }
         }
 
         bOld=false;
     }
 
     memset(mheardCalls[ipos], 0x00, sizeof(mheardCalls[ipos]));
-    memcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str(), sizeof(mheardCalls[ipos]));
+    int icsize=mheardLine.mh_callsign.length();
+    if(icsize > sizeof(mheardCalls[ipos])-1)
+        icsize=sizeof(mheardCalls[ipos])-1;
+    memcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str(), icsize);
     
     mheardEpoch[ipos] = getUnixClock();
 
