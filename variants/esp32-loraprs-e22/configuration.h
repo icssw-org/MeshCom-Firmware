@@ -1,5 +1,5 @@
 /*
-definitions for esp32_loraprs Board
+definitions for esp32_loraprs E22 Board
 */
 
 #pragma once
@@ -9,7 +9,7 @@ definitions for esp32_loraprs Board
 #include <configuration_global.h>
 
 // esp32_loraprs specific config
-#define MODUL_HARDWARE ESP32_LORAPRS
+#define MODUL_HARDWARE ESP32_LORAPRS_E22
 #define RF_FREQUENCY 433.175000 // 432.900000   // Hz
 #define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define SX126X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
