@@ -95,15 +95,16 @@ void NrfETH::initethfixIP()
       return;
   }
 
-  printdeb("\nMy IP address: ");
-  printlndeb(ip); // Print your local IP address.
-  printdeb("Default GW address: ");
-  printlndeb(gw);
-  printdeb("DNS address: ");
-  printlndeb(dns);
-  printdeb("SNM: ");
-  printlndeb(subnet);
-  printlndeb("");
+  // diese Meldungen gehen nicht zu TELNET-Console
+  Serial.print("\nMy IP address: ");
+  Serial.println(ip); // Print your local IP address.
+  Serial.print("Default GW address: ");
+  Serial.println(gw);
+  Serial.print("DNS address: ");
+  Serial.println(dns);
+  Serial.print("SNM: ");
+  Serial.println(subnet);
+  Serial.println("");
 
   hasIPaddress = true;
 
@@ -795,14 +796,15 @@ int NrfETH::startETH()
 
   if (Ethernet.localIP() != IPAddress(0, 0, 0, 0))
   {
-    printdeb("My IP address: ");
-    printlndeb(Ethernet.localIP()); // Print your local IP address.
-    printdeb("Default GW address: ");
-    printlndeb(Ethernet.gatewayIP());
-    printdeb("DNS address: ");
-    printlndeb(Ethernet.dnsServerIP());
-    printdeb("SNM: ");
-    printlndeb(Ethernet.subnetMask());
+    // diese Meldungen gehen nicht zu TELNET-Console
+    Serial.print("\nMy IP address: ");
+    Serial.println(Ethernet.localIP()); // Print your local IP address.
+    Serial.print("Default GW address: ");
+    Serial.println(Ethernet.gatewayIP());
+    Serial.print("DNS address: ");
+    Serial.println(Ethernet.dnsServerIP());
+    Serial.print("SNM: ");
+    Serial.println(Ethernet.subnetMask());
 
     snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%i.%i.%i.%i", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2], Ethernet.localIP()[3]);
     snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%i.%i.%i.%i", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
