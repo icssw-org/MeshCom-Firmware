@@ -489,8 +489,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_sourcecallsign = aprsmsg.msg_source_call;
                 mheardLine.mh_destinationpath = aprsmsg.msg_destination_path;
                 mheardLine.mh_hw = aprsmsg.msg_last_hw & 0x7F;
-                mheardLine.mh_fw_version = aprsmsg.msg_source_fw_version;
-                mheardLine.mh_fw_sub_version = aprsmsg.msg_source_fw_sub_version;
                 
                 if((aprsmsg.msg_last_hw & 0x80) == 0x80)    // Last-Sending
                     mheardLine.mh_mod = aprsmsg.msg_source_mod;
