@@ -391,54 +391,57 @@ void updateHeyPath(struct mheardLine &mheardLine)
     if(mheardLine.mh_sourcecallsign == meshcom_settings.node_call)
         return;
 
-    // check MHEARD exists
-    for(int imh=0; imh<MAX_MHEARD; imh++)
+    // check MHEARD exists and FW Version >= 4.35 p
+    if(mheardLine.mh_fw_version > 35 || (mheardLine.mh_fw_version == 35 && mheardLine.mh_fw_sub_version >= 'p'))
     {
-        if(mheardCalls[imh][0] != 0x00)
+        for(int imh=0; imh<MAX_MHEARD; imh++)
         {
-            if(is_equ(mheardCalls[imh], mheardLine.mh_sourcecallsign.c_str()))
+            if(mheardCalls[imh][0] != 0x00)
             {
-                if(bDisplayCont)
-                {
-                    printdeb("Path_Payload:");
-                    printdeb(mheardLine.mh_sourcecallsign);
-                    printdeb(" ");
-                    printdeb(mheardLine.mh_path_payload);
-                    printdeb(" ");
-                }
-
-                // NeighborCount einfügen
-                // check new/old format
-                // new R99; R99;77,7 ...
-                // old R99,99,99;77,7 ... oder R99,77  ... oder R99
-
-                // correct old format
-                mheardLine.mh_path_payload.concat(";");
-
-                int ipos=mheardLine.mh_path_payload.indexOf(";");
-
-                if(ipos > 0 && mheardLine.mh_path_payload.startsWith("R"))
+                if(is_equ(mheardCalls[imh], mheardLine.mh_sourcecallsign.c_str()))
                 {
                     if(bDisplayCont)
                     {
-                        printdeb(mheardLine.mh_path_payload.substring(1, ipos));
-                        printdeb(" count:");
+                        printdeb("Path_Payload:");
+                        printdeb(mheardLine.mh_sourcecallsign);
+                        printdeb(" ");
+                        printdeb(mheardLine.mh_path_payload);
+                        printdeb(" ");
                     }
 
-                    mheardLine.mh_ncount = mheardLine.mh_path_payload.substring(1, ipos).toInt();
-                    mheardNCount[imh] = mheardLine.mh_ncount;
+                    // NeighborCount einfügen
+                    // check new/old format
+                    // new R99; R99;77,7 ...
+                    // old R99,99,99;77,7 ... oder R99,77  ... oder R99
 
-                    // REP action
-                    decodeMHeard(mheardBuffer[imh], mheardLine_save);
+                    // correct old format
+                    mheardLine.mh_path_payload.concat(";");
 
-                    char cBuffer[sizeof(mheardBuffer[imh])];
-                    snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine_save.mh_hw,
-                    mheardLine_save.mh_mod, mheardLine_save.mh_rssi, mheardLine_save.mh_snr, mheardLine_save.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
-                    memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
+                    int ipos=mheardLine.mh_path_payload.indexOf(";");
+
+                    if(ipos > 0 && mheardLine.mh_path_payload.startsWith("R"))
+                    {
+                        if(bDisplayCont)
+                        {
+                            printdeb(mheardLine.mh_path_payload.substring(1, ipos));
+                            printdeb(" count:");
+                        }
+
+                        mheardLine.mh_ncount = mheardLine.mh_path_payload.substring(1, ipos).toInt();
+                        mheardNCount[imh] = mheardLine.mh_ncount;
+
+                        // REP action
+                        decodeMHeard(mheardBuffer[imh], mheardLine_save);
+
+                        char cBuffer[sizeof(mheardBuffer[imh])];
+                        snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine_save.mh_hw,
+                        mheardLine_save.mh_mod, mheardLine_save.mh_rssi, mheardLine_save.mh_snr, mheardLine_save.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
+                        memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
+                    }
+
+                    if(bDisplayCont)
+                        printlndeb("");
                 }
-
-                if(bDisplayCont)
-                    printlndeb("");
             }
         }
     }
