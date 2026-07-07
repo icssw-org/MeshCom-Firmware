@@ -3454,10 +3454,11 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
         }
 
         int incnt = getMheardCount();
-        if(incnt > 99)
-            incnt=99;
         if(incnt > 0)
         {
+            if(incnt > 99)
+                incnt=99;
+                
             snprintf(cncnt, sizeof(cncnt), "/N%i", incnt);
         }
     }

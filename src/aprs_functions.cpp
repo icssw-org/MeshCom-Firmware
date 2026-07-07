@@ -876,7 +876,7 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     
     for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
     {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'N')
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'N' && PayloadBuffer.charAt(itxt+2) >= '1' && PayloadBuffer.charAt(itxt+2) <= '9')
         {
             for(unsigned int id=itxt+2;id<PayloadBuffer.length();id++)
             {
