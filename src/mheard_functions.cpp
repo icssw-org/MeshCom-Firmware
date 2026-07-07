@@ -437,7 +437,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
                         // ungültig
                         // R99,99;
                         
-                        if(icomma == 0 || icomma == 1)
+                        if(icomma == 0 || icomma == 2)
                         {
                             if(bDisplayCont)
                             {
