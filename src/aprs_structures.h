@@ -82,8 +82,6 @@ struct mheardLine
     uint8_t mh_path_len;
     uint8_t mh_mesh;
     uint8_t mh_ncount;
-    uint8_t mh_fw_version;
-    char mh_fw_sub_version;
 };
 
 #endif // _APRS_STRUCTURES_H_
