@@ -52,10 +52,10 @@
 #include "bme680.h"
 #endif
 
-#if defined(BOARD_E213)
-// prepareToSleep()/loraToSleep() sind im E213-Platform-Layer (Namespace Platform) definiert
-// (VisionMasterE213/power_controls.cpp). Forward-Deklaration statt schwergewichtigem
-// Platform-Header-Include. prepareToSleep(): voller Deepsleep-Strom-Spar-Pfad (E213-Long-Press).
+#if defined(WP_DISP)
+// prepareToSleep()/loraToSleep() sind im jeweiligen Platform-Layer (Namespace Platform) definiert
+// (WirelessPaper/ bzw. VisionMasterE213/power_controls.cpp). Forward-Deklaration statt
+// schwergewichtigem Platform-Header-Include. prepareToSleep(): voller Deepsleep-Strom-Spar-Pfad.
 namespace Platform { void prepareToSleep(); void loraToSleep(); }
 #endif
 
@@ -851,10 +851,16 @@ void commandAction(char *umsg_text, bool ble)
             }
         #else
             #if defined(WP_DISP)
+            // GRAU-FIX (v.a. Akku-leer-Pfad): Bei fast leerem Akku konkurriert der energiehungrige
+            // E-Ink-Voll-Refresh (OTP-Waveform) mit dem noch laufenden SX1262-RX (~mehrere mA) um die
+            // schwache Akkuspannung -> der interne Display-Boost schwingt nicht an, der Refresh wird
+            // grau. Daher den LoRa-Chip ZUERST schlafen legen und der Akkuspannung kurz Zeit zum
+            // Erholen geben (beim manuellen Deepsleep mit voller Spannung schadet der Vorlauf nicht).
+            Platform::loraToSleep();
+            delay(200);   // LiPo erholt sich nach Lastwegnahme
             // E-Ink vor dem Schlafen sichtbar loeschen (sonst bleibt das letzte Bild stehen und
             // der Deepsleep ist am bistabilen Panel nicht erkennbar). #992.
             wpShowDeepSleep();
-            #if defined(BOARD_E213)
             // PRG-Button (GPIO0, active LOW) als Aufweckquelle armieren. Ohne Wakeup-Quelle
             // schlaeft der ESP32-S3 nach dem Deepsleep bis zum Power-Cycle/RESET - das bistabile
             // E-Ink bliebe scheinbar fuer immer eingefroren. Mit ext1 weckt ein Tastendruck.
@@ -869,10 +875,9 @@ void commandAction(char *umsg_text, bool ble)
             // Schlafstrom senken. Kurzes Settle, damit der E-Ink-Voll-Refresh aus wpShowDeepSleep()
             // sicher fertig ist, dann prepareToSleep(): SX1262 -> SLEEP (sonst Dauer-RX ~5 mA),
             // VEXT (Display-/LoRa-Versorgung) aus, LoRa-Pins hochohmig -> Ziel ~18 uA. Ohne das
-            // entlaedt der "Deepsleep" den Akku weiter. E213 nutzt dieselbe Sequenz (gleiche Pins).
+            // entlaedt der "Deepsleep" den Akku weiter. WP und E213 nutzen dieselbe Sequenz.
             delay(100);
             Platform::prepareToSleep();
-            #endif
             #endif
             #if not defined(BOARD_RAK4630)
             esp_deep_sleep_start();
