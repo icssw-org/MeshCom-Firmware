@@ -712,15 +712,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // add rcvMsg to BLE out Buff
                         // size message is int -> uint16_t buffer size
 
-                        // destinalion_pah
+                        // destination_path without path
                         // *
                         // 99999
                         // XX0XXX-99
                         //
-                        // with path
-                        // *,AA00AAA-99,...
-                        // 99999.AA0AAA-99,.....
-                        // XX0XXX-999,AA0AAA-99,...
+                        // destination_path with path
+                        // AA0AAA-99,...,*
+                        // AA0AAA-99,...,99999
+                        // AA0AAA-99,...,XX0XXX-99
 
                         char destination_call[20];
                         snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
