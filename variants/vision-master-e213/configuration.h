@@ -26,7 +26,11 @@ Pinbelegung verifiziert aus offiziellem Heltec-Schaltplan HT-VME213_V1.0:
 #define LORA_APRS_FREQUENCY 433.775000   // Hz
 
 // --- Keine Onboard-Sensoren auf dem E213 -> bewusst NICHT aktiviert ---
-// (kein ENABLE_GPS / BMX280 / BMP390 / AHT20 / SHT21 / BMX680 / MCP23017 / INA226 / MCU811 / RTC / SOFTSER)
+// (BMX280 / BMP390 / AHT20 / SHT21 / BMX680 / MCP23017 / INA226 / MCU811 / RTC / SOFTSER)
+#define ENABLE_GPS
+#define GPS_RX_PIN 44
+#define GPS_TX_PIN 43
+#define GPS_MODULE_REFRESH_INTERVAL 60 // sec
 
 #define TX_POWER_MAX 22  // max 22 dBm
 #define TX_POWER_MIN 2
@@ -68,11 +72,6 @@ Pinbelegung verifiziert aus offiziellem Heltec-Schaltplan HT-VME213_V1.0:
 // ungeschuetzt Wire.begin(I2C_SDA, I2C_SCL) auf; kollidiert nicht mit E-Ink 1-6 oder LoRa 8-14.
 #define I2C_SDA 39
 #define I2C_SCL 38
-
-// esp32_pmu.cpp legt ohne ENABLE_GPS ein SoftwareSerial gpsSerial(GPS_RX_PIN, GPS_TX_PIN) an.
-// E213 hat KEIN GPS -> Pins nur Platzhalter (UART-Header), das Objekt bleibt schlafend.
-#define GPS_RX_PIN 44  // ungenutzt (kein GPS) - U0RXD-Header
-#define GPS_TX_PIN 43  // ungenutzt (kein GPS) - U0TXD-Header
 
 #define OneWire_GPIO  99 // ungenutzt
 
