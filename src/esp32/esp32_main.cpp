@@ -2863,9 +2863,19 @@ void esp32loop()
     // gps display refresh every 5 sec
     gps_refresh_intervall = GPS_REFRESH_INTERVAL;
 
+    #if defined(GPS_MODULE_REFRESH_INTERVAL)
+        gps_refresh_intervall = GPS_MODULE_REFRESH_INTERVAL;
+    #endif
+
     // TRACK ON
     if(bDisplayTrack)
+    {
         gps_refresh_intervall = 1.0;
+        
+        #if defined(GPS_MODULE_REFRESH_INTERVAL)
+            gps_refresh_intervall = GPS_REFRESH_INTERVAL;
+        #endif
+    }
 
     if ((gps_refresh_timer + ((unsigned long)gps_refresh_intervall * 1000)) < millis())
     {
@@ -2920,7 +2930,7 @@ void esp32loop()
                         printdeb(gpsData.month);
                         printdeb(F("."));
                         if (gpsData.day < 10) printdeb(F("0"));
-                        printdeb(gpsData.day);
+                        printlndeb(gpsData.day);
 
                         if(posinfo_fix)
                         {
