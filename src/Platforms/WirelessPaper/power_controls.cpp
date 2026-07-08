@@ -36,10 +36,13 @@ namespace Platform {
         digitalWrite(PIN_DISPLAY_RST, HIGH);
     }
 
-    void prepareToSleep() {
-
-        // Set SX1262 to SLEEP mode - Software SPI so we can "trample" stuff
-        // -----------------------------------------------------------------
+    // Set SX1262 to SLEEP mode - Software SPI so we can "trample" stuff.
+    // Bewusst SEPARAT von prepareToSleep(): erlaubt, den LoRa-RX-Strom (~mehrere mA)
+    // schon VOR dem E-Ink-Voll-Refresh zu entfernen, OHNE die Display-Versorgung (VEXT)
+    // zu kappen. Bei fast leerem Akku bekommt der energiehungrige OTP-Refresh dadurch das
+    // volle Energie-Budget (sonst graut er aus). Die Sequenz ist idempotent -> prepareToSleep()
+    // ruft sie unten erneut auf, das schadet nicht.
+    void loraToSleep() {
 
         // Default pin states
         digitalWrite(PIN_LORA_NSS, HIGH);
@@ -52,7 +55,7 @@ namespace Platform {
         pinMode(PIN_LORA_MOSI, OUTPUT);
 
         // CS LOW
-        digitalWrite(PIN_LORA_NSS, LOW); 
+        digitalWrite(PIN_LORA_NSS, LOW);
 
         // TX data and params
         shiftOut(PIN_LORA_MOSI, PIN_LORA_SCK, MSBFIRST, 0x84);  // Command: Enter SLEEP mode
@@ -60,6 +63,13 @@ namespace Platform {
 
         // CS HIGH - all done
         digitalWrite(PIN_LORA_NSS, HIGH);
+    }
+
+    void prepareToSleep() {
+
+        // Set SX1262 to SLEEP mode - Software SPI so we can "trample" stuff
+        // -----------------------------------------------------------------
+        loraToSleep();
 
 
         // Set the GPIOs for sleep
