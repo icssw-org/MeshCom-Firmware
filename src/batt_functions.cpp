@@ -251,6 +251,8 @@ float read_batt(void)
 		// Low-voltage-Deepsleep wieder scharf wie bei allen anderen Boards. BAT_MIN_VOLTAGE = 3.3 V
 		// loest knapp vor dem 3.26-V-Cutoff aus; der firstReading-Seed (filteredVoltage = fBattMax)
 		// verhindert den Boot-Deepsleep beim Laden.
+
+		/* issue #1053 Had to remove battery, boot with USB, change max. Voltage from 4.2 to 8.2 
 		if ((BatVoltage <= (BAT_MIN_VOLTAGE)) && (BatVoltage > 1.0))  // 6.5V für T-Beam 1W, 3.3V für andere Boards
 		{
 			CountDown--;
@@ -285,6 +287,7 @@ float read_batt(void)
 		} else {
 			CountDown = CDcount; // retrigger
 		}
+		*/
 
 		// wenn keine AKKU am BATT PIN ist immmer 0V aber 100% ausgeben
 		if(BatVoltage < 1.0) { BatVoltage = 0; }

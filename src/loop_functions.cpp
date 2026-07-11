@@ -3557,6 +3557,14 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         bSendViaAPRS=false;
     }
 
+    if(intervall == 0xFFFF)
+    {
+        intervall = 0;
+        bsendTele = false;
+        bSendViaMesh=false;  // only via LoRa-APRS
+        bSendViaAPRS=true;
+    }
+
     if(lastHeardTime + 15000 < millis() && (intervall == POSINFO_INTERVAL || intervall == 0x9999)) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auch via MeshCom
     {
         bSendViaMesh = true;
