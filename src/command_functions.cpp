@@ -4869,10 +4869,10 @@ void commandAction(char *umsg_text, bool ble)
 
             printdeb("...NETWORK Mode:");
             if(meshcom_settings.node_netmode == 0)
-                printfdeb("WiFi");
+                printlndeb("WiFi");
             else
             if(meshcom_settings.node_netmode == 1)
-                printfdeb("ETH");
+                printlndeb("ETH");
 
             printfdeb("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
             if(meshcom_settings.node_hasIPaddress || meshcom_settings.node_netmode == 1)
