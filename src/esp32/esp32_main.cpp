@@ -1319,6 +1319,11 @@ void esp32setup()
         if (radio.setFrequency(meshcom_settings.node_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
             printlndeb(F("Selected frequency is invalid for this module!"));
         }
+        else
+        {
+            if(meshcom_settings.node_freq > 440)
+                printlndeb(F("[LoRa]...SAT Only Frequency out of Band"));
+        }
 
         // set bandwidth 
         printfdeb("[LoRa]...RF_BANDWIDTH: %.0f kHz\n", meshcom_settings.node_bw);
