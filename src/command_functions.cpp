@@ -273,7 +273,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-#if defined(WP_DISP)
+#if defined(WP_DISP) or defined(BOARD_E290)
     if(commandCheck(msg_text+2, (char*)"rotate ") == 0)
     {
         // --rotate 0/90/180/270 : persistenter Display-Dreh-Offset (Grad), board-uebergreifend

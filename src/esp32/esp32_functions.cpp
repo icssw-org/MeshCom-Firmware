@@ -136,7 +136,7 @@ static bool detectEinkPanelIsE0213()
 }
 #endif
 
-#if defined(WP_DISP)
+#if defined(WP_DISP) or defined(BOARD_E290)
 // Persistenter Display-Dreh-Offset (Terminalkommando --rotate 0/90/180/270), in Grad.
 // Wird in initDisplay() aus meshcom_settings.node_disp_rot geladen und von applyDisplayRotation()
 // ADDITIV auf die Werks-Basisrotation aufaddiert. 0 = Werksausrichtung.
@@ -229,7 +229,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
     // Betriebs-Rotation (Werks-Basis + --rotate-Offset) setzen. Bei WP_DISP ueber die gemeinsame
     // applyDisplayRotation(): Wireless Paper 270°, E213 90° (OE1KBC, ef998aa). Das setzt das global
     // gesetztes setRotation(90) fuer WP wieder auf die korrekte 270°-Basis; E290 bleibt unveraendert.
-    #if defined(WP_DISP)
+    #if defined(WP_DISP) or defined(BOARD_E290)
     applyDisplayRotation();
     #else
     epaper_display.setRotation(90); // top/down (270);

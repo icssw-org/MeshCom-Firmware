@@ -376,3 +376,6 @@ extern volatile bool bPendingRadioRx;
 extern struct aprsMessage pendingDisplayMsg;
 extern int16_t pendingDisplayRssi;
 extern int8_t  pendingDisplaySnr;
+
+// special
+extern int g_dispRotOffset;
