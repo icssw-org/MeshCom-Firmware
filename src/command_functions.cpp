@@ -2896,6 +2896,7 @@ void commandAction(char *umsg_text, bool ble)
     }
     else
 #if defined(ENABLE_XML)
+    /* only for testing
     if(commandCheck(msg_text+2, (char*)"softser test0") == 0)
     {
         iNextTelemetry = 0;
@@ -2918,6 +2919,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    */
 #endif
     if(commandCheck(msg_text+2, (char*)"softser baud ") == 0)
     {
@@ -2977,6 +2979,7 @@ void commandAction(char *umsg_text, bool ble)
     }
 #endif
 
+/* for testing only
 #if defined(ENABLE_XML)
     if(commandCheck(msg_text+2, (char*)"softser xml") == 0)
     {
@@ -2985,6 +2988,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
 #endif
+*/
 
     else
     if(commandCheck(msg_text+2, (char*)"passwd ") == 0)

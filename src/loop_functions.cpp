@@ -3487,7 +3487,7 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     //strcpy(strconcat, catxt);
     //strcat(strconcat, cname);
 
-    char strconcat[150]={0};
+    char strconcat[100]={0};
     strcpy(strconcat, cbatt);
     strncat(strconcat, calt, sizeof(strconcat)-1);
     strncat(strconcat, cncnt, sizeof(strconcat)-1);
@@ -3510,13 +3510,13 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     strncat(strconcat, ctele, sizeof(strconcat)-1);
 
     // wenn die concatenation zu lang ist, dann catxt und cname löschen
-    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 150)
+    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 100)
     {
         catxt[0]=0x00;
     }
 
     // wenn die concatenation zu lang ist, dann catxt und cname löschen
-    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 150)
+    if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 100)
     {
         cname[0]=0x00;
     }

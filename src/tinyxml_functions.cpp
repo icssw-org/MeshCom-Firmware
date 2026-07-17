@@ -14,6 +14,7 @@ using namespace tinyxml2;
 
 XMLDocument xmlDocument;
 
+/* only for tresting
 void testTinyXML()
 {
 //char * testDocument = (char*)"<StationDataList><StationData stationId=\"0077234567\" name=\"DemoStationNetDL500\" timezone=\"+01:00\"><ChannelData channelId=\"0050\" name=\"Wassertemperatur\" unit=\"&#176;C\"><Values><VT t=\"2025-04-22T13:00:00\">25.2</VT><VT>35.2</VT></Values></ChannelData><ChannelData channelId=\"0065\" name=\"Batteriespannung\" unit=\"V\"><Values><VT>2.2</VT><VT>3.2</VT></Values></ChannelData></StationData></StationDataList>";
@@ -77,6 +78,7 @@ String testDocument = "<StationDataList><StationData stationId=\"0077234567\" na
   decodeTinyXML(testDocument);
 
 }
+*/
 
 ////////////////////////////////////////////////////////
 // SOFTSER APP=1 DECODE
@@ -87,10 +89,14 @@ extern String strTELE_DATETIME;
 extern String strTELE_CH_ID;
 extern String strTELE_UTCOFF;
 
+extern unsigned long  lTELE_TIMER;
+
 String strChannelId="";
 
 bool decodeTinyXML(String document)
 {
+  lTELE_TIMER = millis();
+
   if(bSOFTSERDEBUG)Serial.println("decodeTinyXML started....");
 
 //  if(bSOFTSERDEBUG)Serial.println(document);
