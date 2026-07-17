@@ -2667,6 +2667,23 @@ void esp32loop()
     #if defined(ENABLE_SOFTSER)
         if(bSOFTSERON)
         {
+            // Reset Node on XML not working
+            #if defined(ENABLE_XML)
+            extern unsigned long lTELE_TIMER;
+            if(lTELE_TIMER == 0)
+            {
+                lTELE_TIMER = millis();
+            }
+
+            // check every 50 seconds to check telemetry via serial interface is ok
+            if ((lTELE_TIMER + 50000) < millis())
+            {
+                printfdeb("[SOFTSER] Reset Node, XML not working\n");
+                delay(1000);
+                ESP.restart();
+            }
+            #endif
+
             // check every 5 seconds to ready next telemetry via serial interface
             if ((softser_refresh_timer + 5000) < millis() && softserFunktion == 0)
             {

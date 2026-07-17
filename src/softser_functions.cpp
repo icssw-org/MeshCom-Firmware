@@ -131,6 +131,8 @@ String strTELE_DATETIME="";
 String strTELE_CH_ID="";
 String strTELE_UTCOFF="";
 
+unsigned long  lTELE_TIMER = 0;
+
 bool appSOFTSER(int ID)
 {
     if(!bSOFTSERON)
