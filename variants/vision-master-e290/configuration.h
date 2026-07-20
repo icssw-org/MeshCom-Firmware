@@ -140,3 +140,5 @@ definitions for HELTEC E290
 #define ENABLE_GPS
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
+
+#define GPS_SWITCH 42
