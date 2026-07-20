@@ -819,6 +819,10 @@ void commandAction(char *umsg_text, bool ble)
             digitalWrite(ADC_CTRL, LOW);
         #endif
 
+        #if defined(GPS_SWITCH)
+            digitalWrite(GPS_SWITCH, LOW);   // externes GPS im deepsleep ausschalten, Flashwerte aber für wakeup bestehen lassen
+        #endif
+
         #if defined(BOARD_HELTEC) || defined(BOARD_HELTEC_V3)
             printlndeb(F("[INIT]...Disbling Vext for OLED power"));
             pinMode(Vext, OUTPUT);
@@ -1390,7 +1394,7 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"track on") == 0)
     {
         bDisplayTrack=true;
-        
+
         track_to_meshcom_timer=0;   // damit auch alle 5 minuten zu MeshCom gesendet wird wenn TRACK ON
 
         meshcom_settings.node_sset |= 0x0020;
@@ -5144,6 +5148,8 @@ void sendGpsJson()
     memset(print_buff, 0, sizeof(print_buff));
 
     serializeJson(pdoc, print_buff, measureJson(pdoc));
+
+    Serial.printf("GPS<%s>\n", print_buff);
 
     json_len = strlen(print_buff);
     if (json_len > MAX_MSG_LEN_PHONE - 2) {

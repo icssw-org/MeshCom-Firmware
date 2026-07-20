@@ -2627,9 +2627,24 @@ void esp32loop()
     }
 
     #if defined(ENABLE_GPS)
+
+    #if defined(GPS_SWITCH)
+        pinMode(GPS_SWITCH, OUTPUT);
+    #endif
+
     if(bGPSON)
     {
+        #if defined(GPS_SWITCH)
+            digitalWrite(GPS_SWITCH, HIGH);
+        #endif
+
         WZ_GPS_Init();
+    }
+    else
+    {
+        #if defined(GPS_SWITCH)
+            digitalWrite(GPS_SWITCH, LOW);
+        #endif
     }
     #endif
 
@@ -2893,10 +2908,6 @@ void esp32loop()
     if(bDisplayTrack)
     {
         gps_refresh_intervall = 1.0;
-        
-        #if defined(GPS_MODULE_REFRESH_INTERVAL)
-            gps_refresh_intervall = GPS_REFRESH_INTERVAL;
-        #endif
     }
 
     if ((gps_refresh_timer + ((unsigned long)gps_refresh_intervall * 1000)) < millis())
@@ -3208,7 +3219,7 @@ void esp32loop()
                     // no BATT
                     if(global_proz < 0)
                     {
-                        if(bDisplayCont)
+                        if(bDisplayCont && BattWaitCounter > 20)
                             printfdeb("[readBatteryVoltage]...no battery is connected");
                             
                         global_batt = (float)PMU->getVbusVoltage();
