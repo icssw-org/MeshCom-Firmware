@@ -30,7 +30,9 @@ Pinbelegung verifiziert aus offiziellem Heltec-Schaltplan HT-VME213_V1.0:
 #define ENABLE_GPS
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
-#define GPS_MODULE_REFRESH_INTERVAL 60 // sec
+#define GPS_MODULE_REFRESH_INTERVAL 20 // sec
+
+#define GPS_SWITCH 42
 
 #define TX_POWER_MAX 22  // max 22 dBm
 #define TX_POWER_MIN 2

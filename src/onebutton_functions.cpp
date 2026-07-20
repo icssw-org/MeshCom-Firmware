@@ -221,9 +221,15 @@ void tripleClick()
   bDisplayIsOff=false;
 
   if(bDisplayTrack)
+  {
+      commandAction((char*)"--gps on", false);
       commandAction((char*)"--track on", false);
+  }
   else
+  {
+      commandAction((char*)"--gps off", false);
       commandAction((char*)"--track off", false);
+  }
 
   bOneButton = true;
 
