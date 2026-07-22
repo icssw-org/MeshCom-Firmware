@@ -99,11 +99,14 @@ void checkVia(struct aprsMessage &aprsmsg)
         {
             if(bGATEWAY)
             {
+                /* 22.07.2026 - zum Test entfernt
                 aprsmsg.msg_destination_path = "HG,";
                 aprsmsg.msg_destination_path.concat(aprsmsg.msg_destination_call);
+                */
             }
             else
             {
+                /* 22.07.2026 - zum Test entfernt
                 char cMH[10];
                 int inct=0;
                 // insert mheard-calls to routing informnation
@@ -130,6 +133,7 @@ void checkVia(struct aprsMessage &aprsmsg)
                     aprsmsg.msg_destination_path.concat(",");
                     aprsmsg.msg_destination_path.concat(aprsmsg.msg_destination_call);
                 }
+                */
             }
         }
     }
