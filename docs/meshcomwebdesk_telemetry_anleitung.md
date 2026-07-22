@@ -1,100 +1,108 @@
-# Anleitung: Externe Sensorwerte aus MeshComWebDesk senden
+# Guide: Sending external sensor values from MeshComWebDesk
 
-Praktische Schritt-für-Schritt-Anleitung, um das `"type":"tele"`-UDP-Telegramm aus
-MeshComWebDesk heraus zu nutzen. Die vollständige Protokoll-Referenz (Feldnamen,
-Grenzen, Fehlercodes) steht in [`ext_udp_telemetry.md`](ext_udp_telemetry.md) — diese
-Anleitung beschreibt nur die praktischen Schritte bis zum ersten funktionierenden Test.
+Practical step-by-step guide for using the `"type":"tele"` UDP telegram from
+MeshComWebDesk. The full protocol reference (field names, limits, error codes)
+is in [`ext_udp_telemetry.md`](ext_udp_telemetry.md) — this guide only covers
+the practical steps up to the first working test.
 
-**Wichtig zum Verständnis:** Die Werte werden **nicht** als eigenständiges
-Telemetrie-Paket gesendet, sondern direkt in die Sensor-Variablen des Nodes
-geschrieben und fließen automatisch ins nächste Positions-Beacon ein — genau wie
-bei einem Node mit echter Sensorik. Sie sind dadurch für jeden Monitor/jedes
-Dashboard **nicht von echter Sensorik unterscheidbar**.
-
----
-
-## 1. Voraussetzungen
-
-- Node läuft mit der Firmware, die `handleExternTelemetry()` in `src/extudp_functions.cpp`
-  enthält.
-- Node und der Rechner mit MeshComWebDesk befinden sich **im selben WLAN/LAN**.
-- UDP-Port `1799` ist zwischen beiden nicht durch eine Firewall blockiert.
-- Der Node hat **keine echte Sensorik verbaut** (BME280/BMP3xx/AHT20/SHT21) — ist
-  welche vorhanden, ignoriert der Node die externen Werte bewusst, um die echte
-  Sensorik nicht zu stören.
+**Important to understand:** The values are **not** sent as a standalone
+telemetry packet — they are written directly into the node's sensor variables
+and flow automatically into the next position beacon, exactly like a node
+with real sensor hardware. They are therefore **indistinguishable from real
+sensor data** to any monitor/dashboard.
 
 ---
 
-## 2. Einmalige Konfiguration am Node
+## 1. Prerequisites
 
-Die extern-UDP-Schnittstelle ist standardmäßig **aus**. Sie muss einmalig über die
-Konsole des Nodes (Serial, BLE, oder die entsprechenden Felder in der offiziellen
-MeshCom-App) aktiviert werden:
+- The node runs firmware that includes `handleExternTelemetry()` in
+  `src/extudp_functions.cpp`.
+- The node and the computer running MeshComWebDesk are on **the same
+  WiFi/LAN**.
+- UDP port `1799` is not blocked by a firewall between the two.
+- The node has **no real sensor hardware installed** (BME280/BMP3xx/AHT20/
+  SHT21) — if it does, the node deliberately ignores the external values to
+  avoid disturbing the real sensor hardware.
+
+---
+
+## 2. One-time configuration on the node
+
+The extern-UDP interface is **off** by default. It must be enabled once via
+the node's console (serial, BLE, or the corresponding fields in the official
+MeshCom app):
 
 ```
---extudpip <IP-Adresse-von-MeshComWebDesk>
+--extudpip <IP-address-of-MeshComWebDesk>
 --extudp on
 ```
 
-Beispiel, wenn der Rechner mit MeshComWebDesk die IP `192.168.1.43` hat:
+Example, if the computer running MeshComWebDesk has the IP `192.168.1.43`:
 
 ```
 --extudpip 192.168.1.43
 --extudp on
 ```
 
-**Wichtig:** `--extudp on` schlägt fehl ("Please set EXPUDP IP first"), wenn vorher
-keine gültige IP mit `--extudpip` gesetzt wurde. Die IP darf außerdem nicht mit der
-eigenen Node-IP identisch sein.
+**Important:** `--extudp on` fails ("Please set EXPUDP IP first") if no valid
+IP was set beforehand with `--extudpip`. The IP also must not be identical to
+the node's own IP.
 
-> Diese Konfiguration ist **unabhängig** vom eigentlichen `"tele"`-Feature — sie ist
-> dieselbe extudp-Einrichtung, die MeshComWebDesk vermutlich schon für den
-> Nachrichtenversand (`"type":"msg"`) und den Empfang der Node-eigenen `"type":"pos"`/
-> `"type":"tele"`-Ausgaben nutzt. Ist das bei dir schon eingerichtet, kannst du
-> Schritt 2 überspringen.
+> This configuration is **independent** of the actual `"tele"` feature — it's
+> the same extudp setup that MeshComWebDesk presumably already uses for
+> sending messages (`"type":"msg"`) and receiving the node's own `"type":"pos"`/
+> `"type":"tele"` output. If that's already set up on your end, you can skip
+> step 2.
 
-Anders als bei einer früheren Version dieser Erweiterung spielen `--gateway`/
-`--track` hier **keine** Rolle — der Positions-Beacon geht davon unabhängig immer
-auch über LoRa raus.
+Unlike an earlier version of this extension, `--gateway`/`--track` play **no**
+role here — the position beacon always goes out over LoRa regardless of those
+settings.
 
 ---
 
-## 3. Das Telegramm von MeshComWebDesk senden
+## 3. Sending the telegram from MeshComWebDesk
 
-Ein einfaches UDP-Paket (kein TCP, keine Verbindung nötig) an `<Node-IP>:1799` mit
-folgendem JSON-Inhalt — alle Felder optional, nur angegebene werden übernommen:
+A simple UDP packet (no TCP, no connection needed) to `<node-IP>:1799` with
+the following JSON payload — all fields optional, only the ones present are
+applied:
 
 ```json
 {"type":"tele","temp":23.3,"hum":60,"press":1018.5}
 ```
 
-| Feld     | Inhalt                                      |
-|----------|----------------------------------------------|
-| `type`   | immer `"tele"`                                |
-| `temp`   | Temperatur in °C                              |
-| `hum`    | Luftfeuchte in %                              |
-| `press`  | Luftdruck (QFE) in hPa                        |
-| `temp2`  | 2. Temperatursensor (optional)                |
-| `qnh`    | Luftdruck auf Meereshöhe (optional)            |
-| `gasres` | Gaswiderstand (optional)                       |
-| `co2`    | CO2-Wert (optional)                            |
+| Field    | Content                                |
+|----------|------------------------------------------|
+| `type`   | always `"tele"`                           |
+| `temp`   | temperature in °C                         |
+| `hum`    | relative humidity in %                    |
+| `press`  | air pressure (QFE) in hPa                 |
+| `temp2`  | 2nd temperature sensor (optional)         |
+| `qnh`    | sea-level air pressure (optional)         |
+| `gasres` | gas resistance (optional)                 |
+| `co2`    | CO2 reading (optional)                    |
 
-Ein Feld für Regenmenge o.ä. gibt es aktuell nicht — nur diese 7 festen Felder, weil
-nur dafür ein passendes APRS-Kommentarfeld existiert (siehe Protokoll-Referenz).
+There is currently no field for rainfall or similar — only these 7 fixed
+fields, because only these have a matching APRS comment field (see protocol
+reference).
 
-### Schneller Vorab-Test ohne MeshComWebDesk (PowerShell)
+**Important:** values must be sent as JSON **numbers** (`"temp":23.3`), not
+as strings (`"temp":"23.3"`) — ArduinoJson on the node side does not
+automatically convert strings to numbers; a string value would silently
+become `0.0`.
+
+### Quick test without MeshComWebDesk (PowerShell)
 
 ```powershell
 $client = New-Object System.Net.Sockets.UdpClient
 $json = '{"type":"tele","temp":23.3,"hum":60,"press":1018.5}'
 $bytes = [System.Text.Encoding]::ASCII.GetBytes($json)
-$client.Send($bytes, $bytes.Length, "<Node-IP>", 1799) | Out-Null
+$client.Send($bytes, $bytes.Length, "<node-IP>", 1799) | Out-Null
 $client.Close()
 ```
 
-`<Node-IP>` durch die tatsächliche IP-Adresse des Nodes ersetzen.
+Replace `<node-IP>` with the node's actual IP address.
 
-### Beispiel in C# (falls MeshComWebDesk .NET nutzt)
+### Example in C# (if MeshComWebDesk uses .NET)
 
 ```csharp
 using System.Net.Sockets;
@@ -109,34 +117,51 @@ client.Send(bytes, bytes.Length, nodeIpAddress, 1799);
 
 ---
 
-## 4. Prüfen, ob es angekommen ist
+## 4. Verifying it arrived
 
-Am Node (serielle Konsole mitlesen):
+On the node (watching the serial console):
 
 ```
 [EXT] tele accepted: temp=23.3 hum=60.0 press=1018.5 temp2=0.0 qnh=0.0 gasres=0.0 co2=0.0
 ```
 
-Direkt danach löst der Node einen sofortigen Positions-Beacon aus. Im Monitor/Dashboard
-sollte die Station kurz danach mit den neuen Werten erscheinen — genau wie eine
-Station mit echter Sensorik (z.B. `/T=23.3/H=60.0/P=1018.5` im Positions-Kommentar).
+Right after that, the node triggers an immediate position beacon. Shortly
+after, the station should appear in the monitor/dashboard with the new
+values — exactly like a station with real sensor hardware (e.g.
+`/T=23.3/H=60.0/P=1018.5` in the position comment).
 
-Falls stattdessen diese Meldung im Log erscheint, sieh in
-[`ext_udp_telemetry.md`, Abschnitt 4](ext_udp_telemetry.md#4-fehlerf%C3%A4lle-log-meldungen-am-node)
-nach der genauen Ursache:
+If instead this message appears in the log, see
+[`ext_udp_telemetry.md`, section 4](ext_udp_telemetry.md#4-error-cases-log-messages-on-the-node)
+for the exact cause:
 
 - `[EXT] tele ignored: real sensor hardware detected on this node`
 - `[EXT] tele missing recognized fields (temp/hum/press/temp2/qnh/gasres/co2)`
 
 ---
 
-## 5. Kurz zusammengefasst
+## 5. Quick summary
 
-1. Einmalig: `--extudpip <IP>` + `--extudp on` am Node setzen.
-2. Aus MeshComWebDesk: UDP-Paket mit dem `"type":"tele"`-JSON an `<Node-IP>:1799` senden
-   (nur die 7 bekannten Felder: `temp`, `hum`, `press`, `temp2`, `qnh`, `gasres`, `co2`).
-3. Node meldet `[EXT] tele accepted: ...` im Log, setzt die Sensor-Variablen und
-   sendet sofort einen Positions-Beacon mit den neuen Werten.
-4. Die Werte bleiben dauerhaft gesetzt (nicht nur einmalig) und fließen in jeden
-   weiteren Beacon ein, bis sie überschrieben werden oder der Node neu startet.
-5. Funktioniert nur, solange der Node **keine** echte Sensorik verbaut hat.
+1. One-time: set `--extudpip <IP>` + `--extudp on` on the node.
+2. From MeshComWebDesk: send a UDP packet with the `"type":"tele"` JSON to
+   `<node-IP>:1799` (only the 7 known fields: `temp`, `hum`, `press`, `temp2`,
+   `qnh`, `gasres`, `co2`, as JSON numbers, not strings).
+3. The node logs `[EXT] tele accepted: ...`, sets the sensor variables, and
+   immediately sends a position beacon with the new values.
+4. The values stay set permanently (not just once) and flow into every
+   subsequent beacon until overwritten or the node restarts.
+5. Only works as long as the node has **no** real sensor hardware installed.
+
+---
+
+## 6. WebDesk-side configuration (Settings → Telemetry)
+
+In the measurement mapping table, each row has a **Role** column. This one
+column now drives two things at once:
+
+- The map popup (roles `temp`/`humidity`/`pressure`, as before)
+- The native extudp telegram (all 7 roles: `temp`/`humidity`/`pressure`/
+  `temp2`/`qnh`/`gasres`/`co2`) — when "Extudp enabled" is turned on
+
+There is no separate "slot" column anymore. Only one row may be assigned to a
+given role (if assigned to multiple rows: the first row in the list wins,
+further ones are ignored when sending).
