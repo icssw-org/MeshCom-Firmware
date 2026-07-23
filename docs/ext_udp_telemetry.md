@@ -2,8 +2,8 @@
 
 Extends the existing JSON UDP interface (port `1799`, `src/extudp_functions.cpp`)
 with a new incoming message type `"tele"`, which lets an external client
-(e.g. MeshComWebDesk) supply sensor values for a node that has **no physical
-sensor hardware of its own**. The values are written directly into the node's
+supply sensor values for a node that has **no physical sensor hardware of
+its own**. The values are written directly into the node's
 sensor variables (`meshcom_settings.node_temp`, `node_hum`, `node_press`, ...)
 and therefore flow automatically into the next position beacon — exactly like
 a node with real sensor hardware (e.g. `/T=23.9/H=34.3/Q=1013.6` in the APRS
@@ -72,7 +72,7 @@ remain unchanged (no value in the JSON = no change to that variable).
 
 ---
 
-## 3. Limitations (please note in MeshComWebDesk)
+## 3. Limitations (please note in client implementations)
 
 - **Protects real sensor hardware.** If the node detects physically installed
   sensor hardware (`bmx_found`/`bmp3_found`/`aht20_found`/`sht21_found` —
