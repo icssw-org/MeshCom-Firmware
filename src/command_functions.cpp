@@ -3369,7 +3369,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         meshcom_settings.node_pingcount = 0;
 
-        save_settings();
+        bReturn = true;
     }
     else
     if(commandCheck(msg_text+2, (char*)"pingmax max") == 0)
