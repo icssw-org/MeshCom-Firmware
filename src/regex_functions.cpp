@@ -45,7 +45,10 @@ bool checkRegexCall(String callsign)
 	if(callsign.compareTo("APRS2SOTA") == 0)
 		return true;
 
-	regex_call.Target((char*)callsign.c_str());
+	if(callsign.compareTo("OE2YOTA-1") == 0)
+		return true;
+
+		regex_call.Target((char*)callsign.c_str());
 
 	if(regex_call.Match(regex_call_match) <= 0)
 		return false;
