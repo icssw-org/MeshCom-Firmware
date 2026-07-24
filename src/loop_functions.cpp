@@ -4355,11 +4355,25 @@ void sendTelemetry(int ID)
         if(memcmp(meshcom_settings.node_values, "T:", 2) == 0)
         {
             strValue = meshcom_settings.node_values;
-            
-            strTelemetry.concat(",");
-            strTelemetry.concat(strValue.substring(2));
 
-            strTelemetry.concat(",0,0,00000000,");  // + zwei Messwerte
+            String strRealValues = strValue.substring(2);
+
+            strTelemetry.concat(",");
+            strTelemetry.concat(strRealValues);
+
+            // pad with zero-values up to the standard 5 APRS TLM analog slots
+            // (was hardcoded to always add exactly 2 zeros, assuming exactly
+            // 3 real values - now counts the real values so it stays backward
+            // compatible with that case while supporting fewer/more values)
+            int realCount = 1;
+            for(unsigned int ci = 0; ci < strRealValues.length(); ci++)
+                if(strRealValues[ci] == ',')
+                    realCount++;
+
+            for(int pad = realCount; pad < 5; pad++)
+                strTelemetry.concat(",0");
+
+            strTelemetry.concat(",00000000,");
             strTelemetry.concat(meshcom_settings.node_parm_t);
             strTelemetry.concat(",");
             strTelemetry.concat(meshcom_settings.node_parm_id);

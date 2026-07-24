@@ -136,6 +136,84 @@ void startExternUDP()
 
 
 
+// {"type":"tele","temp":23.3,"hum":60,"press":1018.5,"temp2":..,"qnh":..,"gasres":..,"co2":..}
+// Writes externally supplied values directly into the node's own sensor
+// variables (meshcom_settings.node_temp/node_hum/...) so the next position
+// beacon embeds them exactly like a real onboard sensor would (/T=/H=/Q=...
+// fields in PositionToAPRS()) - indistinguishable from genuine sensor data
+// to any receiving station. All fields are optional; only the ones present
+// in the message are applied. See docs/ext_udp_telemetry.md for details.
+static void handleExternTelemetry(JsonDocument &inputJson)
+{
+  // Never touch a node that has real, physically detected sensor hardware -
+  // that hardware's own read loop owns these variables and must keep
+  // working exactly as before.
+  if(bmx_found || bmp3_found || aht20_found || sht21_found)
+  {
+    Serial.println("[EXT] tele ignored: real sensor hardware detected on this node");
+    return;
+  }
+
+  bool bAny = false;
+
+  if(!inputJson["temp"].isNull())
+  {
+    meshcom_settings.node_temp = inputJson["temp"].as<float>();
+    bAny = true;
+  }
+  if(!inputJson["hum"].isNull())
+  {
+    meshcom_settings.node_hum = inputJson["hum"].as<float>();
+    bAny = true;
+  }
+  if(!inputJson["press"].isNull())
+  {
+    meshcom_settings.node_press = inputJson["press"].as<float>();
+    bAny = true;
+  }
+  if(!inputJson["temp2"].isNull())
+  {
+    meshcom_settings.node_temp2 = inputJson["temp2"].as<float>();
+    bAny = true;
+  }
+  if(!inputJson["qnh"].isNull())
+  {
+    meshcom_settings.node_press_asl = inputJson["qnh"].as<float>();
+    bAny = true;
+  }
+  if(!inputJson["gasres"].isNull())
+  {
+    meshcom_settings.node_gas_res = inputJson["gasres"].as<float>();
+    bAny = true;
+  }
+  if(!inputJson["co2"].isNull())
+  {
+    meshcom_settings.node_co2 = inputJson["co2"].as<float>();
+    bAny = true;
+  }
+
+  if(!bAny)
+  {
+    Serial.println("[EXT] tele missing recognized fields (temp/hum/press/temp2/qnh/gasres/co2)");
+    return;
+  }
+
+  Serial.printf("[EXT] tele accepted: temp=%.1f hum=%.1f press=%.1f temp2=%.1f qnh=%.1f gasres=%.1f co2=%.1f\n",
+                meshcom_settings.node_temp, meshcom_settings.node_hum, meshcom_settings.node_press,
+                meshcom_settings.node_temp2, meshcom_settings.node_press_asl,
+                meshcom_settings.node_gas_res, meshcom_settings.node_co2);
+
+  // Push an immediate position beacon (same mechanism as the "--sendpos"
+  // console command) so the new values go out right away, embedded in the
+  // position comment, instead of waiting for the next periodic beacon
+  // (up to POSINFO_INTERVAL, 30 minutes by default).
+  sendPosition(0x9999, meshcom_settings.node_lat, meshcom_settings.node_lat_c,
+               meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt,
+               meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp,
+               meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2,
+               meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+}
+
 void getExtern(unsigned char incoming[], int len)
 {
   #ifdef ESP32
@@ -149,6 +227,7 @@ void getExtern(unsigned char incoming[], int len)
   // Decode
   // {"type":"msg","dst":"*","msg":"Meldungstext"}
   // {"type": "msg", "dst": "OE5BYE-1", "msg": "Test 1 2 3"}
+  // {"type":"tele","temp":23.3,"hum":60,"press":1018.5}
 
   initAPRS(aprsmsg, ':');
 
@@ -166,6 +245,13 @@ void getExtern(unsigned char incoming[], int len)
   if (error)
   {
     Serial.printf("[EXT] deserializeJson() failed: %s\n", error.c_str());
+    return;
+  }
+
+  const char* msg_type = inputJson["type"];
+  if(msg_type != nullptr && strcmp(msg_type, "tele") == 0)
+  {
+    handleExternTelemetry(inputJson);
     return;
   }
 
