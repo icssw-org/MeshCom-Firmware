@@ -3365,6 +3365,22 @@ void commandAction(char *umsg_text, bool ble)
         save_settings();
     }
     else
+    if(commandCheck(msg_text+2, (char*)"ping stop") == 0)
+    {
+        meshcom_settings.node_pingcount = 0;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"pingmax max") == 0)
+    {
+        meshcom_settings.node_pingmax = 100;
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"pingmax ") == 0)
     {
         sscanf(msg_text+10, "%d", &meshcom_settings.node_pingmax);
@@ -3373,15 +3389,6 @@ void commandAction(char *umsg_text, bool ble)
         {
             meshcom_settings.node_pingmax = PING_MAX;
         }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"pingmax max") == 0)
-    {
-        meshcom_settings.node_pingmax = 100;
 
         bReturn = true;
 
