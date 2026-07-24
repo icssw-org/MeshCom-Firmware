@@ -3297,6 +3297,58 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"pingcall ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+11);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        
+        sVar = _owner_c;
+        sVar.trim();
+        sVar.toUpperCase();
+
+        if(sVar.compareTo("NONE") == 0)
+        {
+            sVar = "";
+
+            printfdeb("Ping-Call cleared\n");
+        }
+        else
+        {
+            if(!checkRegexCall(sVar))
+            {
+                printfdeb("\n[ERR]..Ping-Callsign <%s> not valid\n", sVar.c_str());
+                return;
+            }
+        }
+
+        snprintf(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_call), "%s", sVar.c_str());
+
+         if(meshcom_settings.node_pingcall[0] == 0x00)
+            meshcom_settings.node_pingtime = 0;
+        else
+        {
+            if(meshcom_settings.node_pingtime == 0)
+                meshcom_settings.node_pingtime = PING_INTERVAL;
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"pingtime ") == 0)
+    {
+        sscanf(msg_text+11, "%d", &meshcom_settings.node_pingtime);
+
+        if(meshcom_settings.node_pingtime < 15 || meshcom_settings.node_pingtime > PING_INTERVAL * 5)
+        {
+            meshcom_settings.node_pingtime = PING_INTERVAL;
+        }
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
 
 #ifndef BOARD_RAK4630
     if(commandCheck(msg_text+2, (char*)"setssid ") == 0)
@@ -4796,6 +4848,11 @@ void commandAction(char *umsg_text, bool ble)
             if(bVIA)
             {
                 printfdeb("\n...VIA %s <%s>\n", (bVIA?"on":"off"), meshcom_settings.node_via);
+            }
+
+            if(meshcom_settings.node_pingcall[0] != 0x00 || meshcom_settings.node_pingtime > 0)
+            {
+                printfdeb("\n...PING  CALL %s Time:%i\n", meshcom_settings.node_pingcall, meshcom_settings.node_pingtime);
             }
 
             #if defined(RELAY_SWITCH)

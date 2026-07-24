@@ -75,6 +75,8 @@ bool bLED_ORANGE=false;
 bool bLED_CLEAR=false;
 bool bLED_DELAY=false;
 
+bool bPingSend=false;
+
 extern unsigned long rebootAuto;
 extern bool g_ble_uart_is_connected;
 
@@ -2048,7 +2050,8 @@ void mainStartTimeLoop()
                     if(!bDisplayIsOff && meshcom_settings.node_date_second % 10 == 0)
                         wpRefreshClock();
                     #else
-                    sendDisplayTime(); // Time only
+                    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0)
+                        sendDisplayTime(); // Time only
                     #endif
                 }
 
@@ -2076,9 +2079,31 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // S1 ... A0 switch A0-7 B0-7
     // aa ... ON or OF
 
+    char cset[30];
+    char cmsg[30];
+
+    if(aprsmsg.msg_payload.startsWith("{ping}") > 0)
+    {
+        return;
+    }
+    else
+    if(aprsmsg.msg_payload.startsWith("{pong}") > 0)
+    {
+        printfdeb("[PONG] from:%s <%s> rssi:%i snr:%i\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_payload.substring(14,17).c_str(), rssi, snr);
+
+        snprintf(cmsg, sizeof(cmsg), "PONG %s", aprsmsg.msg_payload.substring(14,17).c_str());
+        snprintf(cset, sizeof(cset), "R:%i S:%i", rssi, snr);
+        DisplayPong((char*)cmsg, (char*)aprsmsg.msg_source_call.c_str(), (char*)cset);
+
+        // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
+        DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
+        bDisplayIsOff=false;
+
+        return;
+    }
+    else
     if(aprsmsg.msg_payload.startsWith("{MCP}") || aprsmsg.msg_payload.startsWith("{mcp}"))
     {
-        char cset[30];
         memset(cset, 0x00, sizeof(cset));
 
         snprintf(cset, sizeof(cset), "%s", aprsmsg.msg_payload.c_str());
@@ -3005,6 +3030,178 @@ void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_
 
 ///////////////////////////////////////////////////////////////////////////
 // APRS Meldungen
+void DisplayPong(char line1[20], char line2[20], char line3[20])
+{
+    #if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213))
+    // do nothing
+    #elif defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_TRACKER) || defined (BOARD_T5_EPAPER) || defined(BOARD_T_DECK_PRO) || defined(BOARD_T_CONNECT_PRO)
+    // do nothing
+    #else
+
+    if(u8g2 == NULL)
+        return;
+
+    u8g2->clearDisplay();
+    u8g2->firstPage();
+
+    do
+    {
+        
+        #if defined (BOARD_TRACKER)
+        //TODO
+        #elif defined (BOARD_STICK_V3)
+            u8g2->setFont(u8g2_font_6x10_tf);
+            u8g2->drawStr(36, 42, "MeshCom 4");
+            snprintf(cvers, sizeof(cvers), "%s/%s %s", SOURCE_VERSION, SOURCE_VERSION_SUB, getCountry(meshcom_settings.node_country).c_str());
+            u8g2->drawStr(36, 52, cvers);
+            u8g2->drawStr(36, 62, "icssw.org");
+        #else
+            u8g2->setFont(u8g2_font_10x20_mf);
+            u8g2->drawStr(5, 18, line1);
+            u8g2->drawStr(5, 36, line2);
+//            u8g2->setFont(u8g2_font_6x10_mf);
+            u8g2->drawStr(5, 54, line3);
+        #endif
+    } while (u8g2->nextPage());
+
+    #endif
+}
+
+void sendPing(char msg_call[10])
+{
+    // no ping within track mode
+    if(bDisplayTrack)
+        return;
+
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+
+    struct aprsMessage aprsmsg;
+
+    initAPRS(aprsmsg, ':');
+
+    aprsmsg.msg_len = 0;
+
+    // MSG ID zusammen setzen    
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
+    
+    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    
+    aprsmsg.msg_destination_call = msg_call;
+    aprsmsg.msg_destination_path = msg_call;
+
+    memset(msg_text, 0x00, sizeof(msg_text));
+    snprintf(msg_text, sizeof(msg_text), "{ping}");
+
+    aprsmsg.msg_payload = msg_text;
+    
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 999)
+        meshcom_settings.node_msgid=0;
+
+    // Flash rewrite
+    save_settings();
+
+    checkVia(aprsmsg);
+
+    encodeAPRS(msg_buffer, aprsmsg);
+
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-PING", aprsmsg);
+        printfdeb("");
+    }
+
+    // store last message to compare later on
+    insertOwnTx(aprsmsg.msg_id);
+
+    // Master RingBuffer for transmission
+    // local messages send to LoRa TX
+    ringBuffer[iWrite][0] = aprsmsg.msg_len;
+    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
+
+    addTxRingEntry("phone_msg");
+
+    if(!bPingSend)
+    {
+        char cmsg[30];
+        snprintf(cmsg, sizeof(cmsg), "%i", aprsmsg.msg_id);
+        char cmsg1[30];
+        snprintf(cmsg1, sizeof(cmsg1), "PING %c%c%c", cmsg[7], cmsg[8], cmsg[9]);
+        DisplayPong((char*)cmsg1, (char*)msg_call, (char*)"SENT");
+    }
+
+    // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
+    DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
+    bDisplayIsOff=false;
+
+    bPingSend=true;
+}
+
+void PongFail(String msg_call)
+{
+    DisplayPong((char*)"PONG", (char*)msg_call.c_str(), (char*)"FAILED");
+
+    // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
+    DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
+    bDisplayIsOff=false;
+}
+
+void SendPong(String msg_call, unsigned int msg_id)
+{
+    // no ping within track mode
+    if(bDisplayTrack)
+        return;
+
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+
+    struct aprsMessage aprsmsg;
+
+    initAPRS(aprsmsg, ':');
+
+    aprsmsg.msg_len = 0;
+
+    // MSG ID zusammen setzen    
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
+    
+    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    
+    aprsmsg.msg_destination_call = msg_call;
+    aprsmsg.msg_destination_path = msg_call;
+
+    memset(msg_text, 0x00, sizeof(msg_text));
+    snprintf(msg_text, sizeof(msg_text), "{pong}{%03i}", msg_id);
+
+    aprsmsg.msg_payload = msg_text;
+    
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 999)
+        meshcom_settings.node_msgid=0;
+
+    // Flash rewrite
+    save_settings();
+
+    checkVia(aprsmsg);
+
+    encodeAPRS(msg_buffer, aprsmsg);
+
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-PONG", aprsmsg);
+        printfdeb("");
+    }
+
+    // store last message to compare later on
+    insertOwnTx(aprsmsg.msg_id);
+
+    // Master RingBuffer for transmission
+    // local messages send to LoRa TX
+    ringBuffer[iWrite][0] = aprsmsg.msg_len;
+    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
+    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
+
+    addTxRingEntry("phone_msg");
+}
 
 void sendMessage(char *msg_text, int len)
 {
@@ -3984,6 +4181,9 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
 // Send Hey-Message
 void sendHey()
 {
+    if(meshcom_settings.node_call[0] != 0x00 && meshcom_settings.node_pingtime > 0)
+        return;
+
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
     struct aprsMessage aprsmsg;

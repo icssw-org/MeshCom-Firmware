@@ -45,6 +45,8 @@ extern bool bLED_DELAY;
 extern bool bTDECKDEBUG;
 extern bool bCHECKMESH;
 
+extern bool bPingSend;
+
 extern bool bPosDisplay;
 extern bool bDisplayOff;
 extern bool bDisplayIsOff;

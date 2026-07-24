@@ -731,88 +731,127 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         {
                             if(strcmp(destination_call, meshcom_settings.node_call) == 0)
                             {
-                                int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
-                                int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
-                                
-                                if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
+                                ///////////////////////////////////////////////////////////////
+                                // check ping
+                                if(aprsmsg.msg_payload.startsWith("{ping}"))
                                 {
-                                    //
-                                    // next sequence only to mark a massage to node_call with ACK
-                                    //
-                                    unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
-                                    msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
-
-                                    print_buff[0]=MSG_TYPE_ACK;
-                                    print_buff[1]=msg_counter & 0xFF;
-                                    print_buff[2]=(msg_counter >> 8) & 0xFF;
-                                    print_buff[3]=(msg_counter >> 16) & 0xFF;
-                                    print_buff[4]=(msg_counter >> 24) & 0xFF;
-                                    print_buff[5]=0x02;  // ACK
-                                    print_buff[6]=0x00;
-                                    
                                     if(bDisplayInfo)
                                     {
                                         printfdeb("\n");
                                         printfdeb("%s", getTimeString().c_str());
-                                        printfdeb("[ACK-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1]);
+                                        printfdeb("[PING] from:%s to:%s via:%s\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_source_path.c_str());
                                         bNewLine=true;
                                     }
-                            
-                                    int iackcheck = checkOwnTx(msg_counter);
-                                    if(iackcheck >= 0)
-                                    {
-                                        own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
 
-                                        // BUG #8 fix: clear ringBuffer entry to stop retransmission
-                                        int dmSlot = findAndStopRingSlot(msg_counter);
-                                        if(dmSlot >= 0 && bDisplayRetx)
-                                            printfdeb("\n[RETX] DM-ACK for retid:%i stop retransmit msg-id:%08X\n",
-                                                          dmSlot, msg_counter);
-                                    }
+                                    SendPong(aprsmsg.msg_source_call, aprsmsg.msg_id);
 
-                                    addBLEOutBuffer(print_buff, 7);
                                 }
+                                ///////////////////////////////////////////////////////////////
                                 else
-                                if(iEnqPos > 0)
+                                ///////////////////////////////////////////////////////////////
+                                // check pong
+                                if(aprsmsg.msg_payload.startsWith("{pong}"))
                                 {
-                                    //
-                                    // next sequence only reply to a DM-Message
-                                    //
-                                    unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
-                                    
-                                    if(bDisplayInfo && !bNewLine)
+                                    if(bDisplayInfo)
                                     {
                                         printfdeb("\n");
+                                        printfdeb("%s", getTimeString().c_str());
+                                        printfdeb("[PONG] from:%s to:%s via:%s\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_source_path.c_str());
                                         bNewLine=true;
                                     }
 
-                                    SendAckMessage(aprsmsg.msg_source_call, iAckId);
-
-                                    aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
-                                    
-                                    uint8_t tempRcvBuffer[255];
-
-                                    uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
-
                                     queueDisplayText(aprsmsg, rssi, snr);
+                                    
+                                    bPingSend = false;
 
-                                    if(bDisplayVia)
-                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
-
-
-                                    addBLEOutBuffer(tempRcvBuffer, tempsize);
                                 }
+                                ///////////////////////////////////////////////////////////////
                                 else
                                 {
-                                    //
-                                    // next sequence to send incomming DM-Message to Display and/or APP via BLE
-                                    //
-                                    queueDisplayText(aprsmsg, rssi, snr);
 
-                                    if(bDisplayVia)
-                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+                                    int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
+                                    int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
+                                    
+                                    if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
+                                    {
+                                        //
+                                        // next sequence only to mark a massage to node_call with ACK
+                                        //
+                                        unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
+                                        msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
 
-                                    addBLEOutBuffer(RcvBuffer, size);
+                                        print_buff[0]=MSG_TYPE_ACK;
+                                        print_buff[1]=msg_counter & 0xFF;
+                                        print_buff[2]=(msg_counter >> 8) & 0xFF;
+                                        print_buff[3]=(msg_counter >> 16) & 0xFF;
+                                        print_buff[4]=(msg_counter >> 24) & 0xFF;
+                                        print_buff[5]=0x02;  // ACK
+                                        print_buff[6]=0x00;
+                                        
+                                        if(bDisplayInfo)
+                                        {
+                                            printfdeb("\n");
+                                            printfdeb("%s", getTimeString().c_str());
+                                            printfdeb("[ACK-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1]);
+                                            bNewLine=true;
+                                        }
+                                
+                                        int iackcheck = checkOwnTx(msg_counter);
+                                        if(iackcheck >= 0)
+                                        {
+                                            own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
+
+                                            // BUG #8 fix: clear ringBuffer entry to stop retransmission
+                                            int dmSlot = findAndStopRingSlot(msg_counter);
+                                            if(dmSlot >= 0 && bDisplayRetx)
+                                                printfdeb("\n[RETX] DM-ACK for retid:%i stop retransmit msg-id:%08X\n",
+                                                            dmSlot, msg_counter);
+                                        }
+
+                                        addBLEOutBuffer(print_buff, 7);
+                                    }
+                                    else
+                                    if(iEnqPos > 0)
+                                    {
+                                        //
+                                        // next sequence only reply to a DM-Message
+                                        //
+                                        unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
+                                        
+                                        if(bDisplayInfo && !bNewLine)
+                                        {
+                                            printfdeb("\n");
+                                            bNewLine=true;
+                                        }
+
+                                        SendAckMessage(aprsmsg.msg_source_call, iAckId);
+
+                                        aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
+                                        
+                                        uint8_t tempRcvBuffer[255];
+
+                                        uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
+
+                                        queueDisplayText(aprsmsg, rssi, snr);
+
+                                        if(bDisplayVia)
+                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+
+
+                                        addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                    }
+                                    else
+                                    {
+                                        //
+                                        // next sequence to send incomming DM-Message to Display and/or APP via BLE
+                                        //
+                                        queueDisplayText(aprsmsg, rssi, snr);
+
+                                        if(bDisplayVia)
+                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+
+                                        addBLEOutBuffer(RcvBuffer, size);
+                                    }
                                 }
                             }
                             else
@@ -821,6 +860,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 // next sequence to decode special broadcast messages
                                 //
                                 bool bSendAckGateway=true;
+                                if(aprsmsg.msg_payload.startsWith("{ping}"))
+                                {
+                                    bSendAckGateway = false;
+                                    bMeshDestination = false;
+                                }
+                                else
+                                if(aprsmsg.msg_payload.startsWith("{pong}"))
+                                {
+                                    bSendAckGateway=false;
+                                    bMeshDestination = false;
+                                }
+                                else
                                 if(memcmp(aprsmsg.msg_payload.c_str(), "{MCP}", 5) == 0)
                                 {
                                     queueDisplayText(aprsmsg, rssi, snr);
@@ -888,7 +939,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     if(aprsmsg.msg_server)
                                         bSendAckGateway=false;
 
-                                    // Telemetry no ACK
+                                    // Telemetry/Ping no ACK
                                     if(strcmp(destination_call, "100001") == 0)
                                     {
                                         bSendAckGateway=false;
@@ -1052,10 +1103,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             else
                             if(strcmp(destination_call, "100001") == 0)
                                 bMeshDestination = false;
-                        }
-                        // more then 4 callsigns within source_path no need to MESH via a gateWay
-                        if(bGATEWAY)
-                        {
+
                             if(aprsmsg.payload_type == ':' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_text+1)    // TEXT
                                 bMeshDestination = false;
                             if(aprsmsg.payload_type == '!' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_pos+1)    // POS
@@ -1064,6 +1112,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             //KBC not usefull if(aprsmsg.payload_type == '@' && meshcom_settings.node_hasIPaddress)    // HEY no Mesh on GATEWAYs with Server-Connected
                             //KBC not usefill bMeshDestination = false;
                         }
+
+                        // ping no mesh
+                        if(aprsmsg.payload_type == ':' && strcmp(destination_call, "100001") == 0 && aprsmsg.msg_payload.startsWith("{ping}"))    // TEXT
+                            bMeshDestination = false;
 
                         // GATEWAY action before MESH
                         // and not MESHed from another Gateways

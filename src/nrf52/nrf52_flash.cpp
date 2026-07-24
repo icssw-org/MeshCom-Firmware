@@ -245,6 +245,8 @@ void init_flash(void)
 
 		memcpy(meshcom_settings.node_aprsmc, old_struct.node_aprsmc, sizeof(meshcom_settings.node_aprsmc));
 
+		meshcom_settings.node_pingtime = old_struct.node_pingtime;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();
