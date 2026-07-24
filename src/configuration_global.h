@@ -2,7 +2,7 @@
 #define SOURCE_VERSION_SUB "p"
 #define SOURCE_VERSION_WEB_SUB "p"
 
-#define FLASH_VERSION 20260720
+#define FLASH_VERSION 20260724
 
 //Hardware Types
 #define TLORA_V2 1
@@ -70,6 +70,7 @@
 #define HEYINFO_INTERVAL 15 * 60           // HEYINFO interval in minutes default 15 minutes
 #define TELEMETRY_INTERVAL 30 * 60         // TELEMETRY interval in minutes default 30 minutes
 #define PING_INTERVAL 60                   // PING interval in seconds default 60 seconds
+#define PING_MAX 5                         // Maximum number of PING attempts
 #define GPS_REFRESH_INTERVAL 3             // GPS Refresh in seconds
 #define TEMPHUM_INTERVAL 3000              // TEMPHUM interval in milliseconds
 #define DRUCK_INTERVAL 3000                // DRUCK interval in milliseconds

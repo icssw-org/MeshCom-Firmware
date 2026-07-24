@@ -3166,7 +3166,7 @@ void esp32loop()
         telemetry_timer = millis();
     }
 
-    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0)
+    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
         mainStartTimeLoop();
 
     #if not defined(BOARD_T_DECK_PRO)
@@ -3183,7 +3183,7 @@ void esp32loop()
                 digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
                 #endif
 
-                if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0)
+                if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
                     sendDisplay1306(true, true, 0, 0, (char*)"#C");
             }
         }
@@ -3689,7 +3689,7 @@ void esp32loop()
     if (resendPing == 0)
         resendPing = millis();
 
-    if(meshcom_settings.node_pingtime > 29 && meshcom_settings.node_pingcall[0] != 0x00)
+    if(meshcom_settings.node_pingtime > 29 && meshcom_settings.node_pingcall[0] != 0x00 && meshcom_settings.node_pingcount > 0)
     {
         if((resendPing + meshcom_settings.node_pingtime * 1000) < millis())
         {
@@ -3701,9 +3701,11 @@ void esp32loop()
 
             resendPing = millis();
 
-            printfdeb("[PING]...send Ping to %s\n", meshcom_settings.node_pingcall);
+            printfdeb("[PING]...send Ping to %s <%i>\n", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
 
             sendPing(meshcom_settings.node_pingcall);
+
+            meshcom_settings.node_pingcount--;
         }
     }
 

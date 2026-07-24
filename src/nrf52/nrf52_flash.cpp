@@ -247,6 +247,10 @@ void init_flash(void)
 
 		meshcom_settings.node_pingtime = old_struct.node_pingtime;
 
+		memcpy(meshcom_settings.node_pingcall, old_struct.node_pingcall, sizeof(meshcom_settings.node_pingcall));
+
+		meshcom_settings.node_pingmax = old_struct.node_pingmax;
+
 		save_settings();
 		// delay(1000);
 		// sd_nvic_SystemReset();

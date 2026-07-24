@@ -341,6 +341,8 @@ struct s_meshcom_settings
 	char node_aprsmc[10] = {0};
 
 	int node_pingtime = 0;
+	char node_pingcall[10] = {0};
+	int node_pingmax = 0;
 
 	//////////////////////////////////////////////////////////////////////////////////////////////
 	// nicht im Flash
@@ -379,7 +381,8 @@ struct s_meshcom_settings
 	float node_ntctemp = 0.0;
 	bool node_fanon = false;
 
-	char node_pingcall[10] = {0};
+	int node_pingcount = 0;
+	unsigned long node_pingduration = 0;
 
 };
 
@@ -574,6 +577,8 @@ struct s_meshcomcompat_settings
 	char node_aprsmc[10] = {0};
 
 	int node_pingtime = 0;
+	char node_pingcall[10] = {0};
+	int node_pingmax = 0;
 
 	//////////////////////////////////////////////////////////////////////////////////////////////
 	// not within RAK Flash
@@ -594,6 +599,10 @@ struct s_meshcomcompat_settings
 
 	float node_ntctemp = 0.0;
 	bool node_fanon = false;
+
+	int node_pingcount = 0;
+	unsigned long node_pingduration = 0;
+
 };
 
 // Flash

@@ -2050,7 +2050,7 @@ void mainStartTimeLoop()
                     if(!bDisplayIsOff && meshcom_settings.node_date_second % 10 == 0)
                         wpRefreshClock();
                     #else
-                    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0)
+                    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
                         sendDisplayTime(); // Time only
                     #endif
                 }
@@ -2080,6 +2080,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // aa ... ON or OF
 
     char cset[30];
+    char cdur[30];
     char cmsg[30];
 
     if(aprsmsg.msg_payload.startsWith("{ping}") > 0)
@@ -2093,7 +2094,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         snprintf(cmsg, sizeof(cmsg), "PONG %s", aprsmsg.msg_payload.substring(14,17).c_str());
         snprintf(cset, sizeof(cset), "R:%i S:%i", rssi, snr);
-        DisplayPong((char*)cmsg, (char*)aprsmsg.msg_source_call.c_str(), (char*)cset);
+
+        meshcom_settings.node_pingduration = millis() - meshcom_settings.node_pingduration;
+        float fdur = meshcom_settings.node_pingduration;
+        fdur=fdur/1000;
+        snprintf(cdur, sizeof(cdur), "D:%.3f s", fdur);
+
+        DisplayPong((char*)cmsg, (char*)aprsmsg.msg_source_call.c_str(), (char*)cset, (char*)cdur);
 
         // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
         DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
@@ -2867,7 +2874,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                         sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
                         izeile++;
                     #else
-                        snprintf(msg_text, sizeof(msg_text), "ALT:%im   rssi:%i", alt, rssi);
+                        snprintf(msg_text, sizeof(msg_text), "ALT :%4im", alt);
                         msg_text[20]=0x00;
                         sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
                         izeile++;
@@ -3030,7 +3037,7 @@ void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_
 
 ///////////////////////////////////////////////////////////////////////////
 // APRS Meldungen
-void DisplayPong(char line1[20], char line2[20], char line3[20])
+void DisplayPong(char line1[20], char line2[20], char line3[20], char line4[20])
 {
     #if (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213))
     // do nothing
@@ -3060,9 +3067,10 @@ void DisplayPong(char line1[20], char line2[20], char line3[20])
         #else
             u8g2->setFont(u8g2_font_10x20_mf);
             u8g2->drawStr(5, 18, line1);
-            u8g2->drawStr(5, 36, line2);
-//            u8g2->setFont(u8g2_font_6x10_mf);
-            u8g2->drawStr(5, 54, line3);
+            u8g2->drawStr(5, 34, line2);
+            u8g2->drawStr(5, 50, line3);
+            u8g2->setFont(u8g2_font_6x10_mf);
+            u8g2->drawStr(5, 60, line4);
         #endif
     } while (u8g2->nextPage());
 
@@ -3130,19 +3138,20 @@ void sendPing(char msg_call[10])
         snprintf(cmsg, sizeof(cmsg), "%i", aprsmsg.msg_id);
         char cmsg1[30];
         snprintf(cmsg1, sizeof(cmsg1), "PING %c%c%c", cmsg[7], cmsg[8], cmsg[9]);
-        DisplayPong((char*)cmsg1, (char*)msg_call, (char*)"SENT");
+        DisplayPong((char*)cmsg1, (char*)msg_call, (char*)"SENT", (char*)"");
     }
 
     // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
     DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
     bDisplayIsOff=false;
 
+    meshcom_settings.node_pingduration = millis();
     bPingSend=true;
 }
 
 void PongFail(String msg_call)
 {
-    DisplayPong((char*)"PONG", (char*)msg_call.c_str(), (char*)"FAILED");
+    DisplayPong((char*)"PONG", (char*)msg_call.c_str(), (char*)"FAILED", (char*)"");
 
     // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
     DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
