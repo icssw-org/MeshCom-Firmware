@@ -260,6 +260,8 @@ void init_flash(void)
     strVar = preferences.getString("node_aprsmc");
     snprintf(meshcom_settings.node_aprsmc, sizeof(meshcom_settings.node_aprsmc), "%s", strVar.c_str());
 
+    meshcom_settings.node_pingtime = preferences.getInt("node_pingtime", 0);
+
     preferences.end();
 }
 
@@ -525,6 +527,8 @@ void save_settings(void)
 
     strVar = meshcom_settings.node_aprsmc;
     preferences.putString("node_aprsmc", strVar); 
+
+    preferences.putInt("node_pingtime", meshcom_settings.node_pingtime);
 
     //printfdeb("[INIT]...FLASH #entries %i after write\n", (int)preferences.freeEntries());
     preferences.end();

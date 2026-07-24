@@ -51,6 +51,14 @@ bool checkMesh(struct aprsMessage &aprsmsg)
     if(bDisplayCont)
         printfdeb("[MESH]...<%s>...Payload<%s>\n", bMESH?"true":"false", aprsmsg.msg_payload.c_str());
 
+    // check ping
+    if(aprsmsg.msg_payload.startsWith("ping"))
+    {
+        if(bDisplayCont)
+            printlndeb("[MESH]...ping received, return MESH=false");
+        return false;   // no MESH for own messages
+    }
+
     // check source_call
     if(aprsmsg.msg_source_call == meshcom_settings.node_call)
     {

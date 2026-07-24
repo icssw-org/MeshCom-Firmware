@@ -340,6 +340,8 @@ struct s_meshcom_settings
 
 	char node_aprsmc[10] = {0};
 
+	int node_pingtime = 0;
+
 	//////////////////////////////////////////////////////////////////////////////////////////////
 	// nicht im Flash
 	float node_specstart = 432.0;
@@ -376,6 +378,8 @@ struct s_meshcom_settings
 
 	float node_ntctemp = 0.0;
 	bool node_fanon = false;
+
+	char node_pingcall[10] = {0};
 
 };
 
@@ -568,6 +572,8 @@ struct s_meshcomcompat_settings
 	int node_sset4 = 0x0002;
 
 	char node_aprsmc[10] = {0};
+
+	int node_pingtime = 0;
 
 	//////////////////////////////////////////////////////////////////////////////////////////////
 	// not within RAK Flash

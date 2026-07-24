@@ -101,6 +101,9 @@ unsigned long retransmit_timer = 0;
 // flag to update NTP Time
 unsigned long updateTimeClient = 0;
 
+// resend Ping Timer
+unsigned long resendPing = 0;
+
 // timers
 uint32_t dhcp_timer = 0;         // dhcp refresh timer
 
@@ -2322,6 +2325,24 @@ void nrf52loop()
         }
 
     }
+
+    if (resendPing == 0)
+        resendPing = millis();
+
+    if(meshcom_settings.node_pingtime > 29)
+    {
+        if((resendPing + meshcom_settings.node_pingtime * 1000) < millis())
+        {
+            resendPing = millis();
+
+            if(bDisplayInfo)
+                printfdeb("[PING]...send Ping to %s\n", meshcom_settings.node_pingcall);
+
+            if(meshcom_settings.node_pingcall[0] != 0x00)
+                sendPing(meshcom_settings.node_pingcall);
+        }
+    }
+
 
     #if defined(HAS_TFT_114) or defined(BOARD_T_ECHO)
     }   // else from 

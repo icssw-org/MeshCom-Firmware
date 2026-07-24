@@ -479,6 +479,9 @@ unsigned long led_timer = 0;
 // flag to update NTP Time
 unsigned long updateTimeClient = 0;
 
+// resend Ping
+unsigned long resendPing = 0;
+
 #if defined(ESP8266) || defined(ESP32)
   ICACHE_RAM_ATTR
 #endif
@@ -3163,7 +3166,8 @@ void esp32loop()
         telemetry_timer = millis();
     }
 
-    mainStartTimeLoop();
+    if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0)
+        mainStartTimeLoop();
 
     #if not defined(BOARD_T_DECK_PRO)
     if(DisplayOffWait > 0)
@@ -3179,7 +3183,8 @@ void esp32loop()
                 digitalWrite(PIN_TFT_LEDA_CTL, HIGH);   // TFT OFF
                 #endif
 
-                sendDisplay1306(true, true, 0, 0, (char*)"#C");
+                if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0)
+                    sendDisplay1306(true, true, 0, 0, (char*)"#C");
             }
         }
     }
@@ -3680,6 +3685,28 @@ void esp32loop()
             startExternUDP();
         }
     }
+
+    if (resendPing == 0)
+        resendPing = millis();
+
+    if(meshcom_settings.node_pingtime > 29 && meshcom_settings.node_pingcall[0] != 0x00)
+    {
+        if((resendPing + meshcom_settings.node_pingtime * 1000) < millis())
+        {
+            if(bPingSend)
+            {
+                printfdeb("[PONG]...fail from %s\n", meshcom_settings.node_pingcall);
+                PongFail(meshcom_settings.node_pingcall);
+            }
+
+            resendPing = millis();
+
+            printfdeb("[PING]...send Ping to %s\n", meshcom_settings.node_pingcall);
+
+            sendPing(meshcom_settings.node_pingcall);
+        }
+    }
+
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 
