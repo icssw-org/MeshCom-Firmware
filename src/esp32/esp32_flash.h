@@ -184,6 +184,8 @@ struct s_meshcom_settings
 	char node_aprsmc[10] = {0};
 
 	int node_pingtime = 0;
+	char node_pingcall[10] = {0};
+	int node_pingmax = 0;
 
 	///////////////////////////////////////////////////////////////////////////////////////////
 	// nicht im Flash
@@ -216,7 +218,8 @@ struct s_meshcom_settings
 	float node_ntctemp = 0;
 	bool node_fanon = false;
 
-	char node_pingcall[10] = {0};
+	int node_pingcount = 0;
+	unsigned long node_pingduration = 0;
 
 	#if defined(BOARD_T_DECK) || defined (BOARD_T_DECK_PLUS) || defined (BOARD_T_DECK_PRO)
 	int node_map = 0;

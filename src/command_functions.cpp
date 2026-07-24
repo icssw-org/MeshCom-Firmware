@@ -3332,6 +3332,8 @@ void commandAction(char *umsg_text, bool ble)
                 meshcom_settings.node_pingtime = PING_INTERVAL;
         }
 
+        save_settings();
+
         return;
     }
     else
@@ -3343,6 +3345,43 @@ void commandAction(char *umsg_text, bool ble)
         {
             meshcom_settings.node_pingtime = PING_INTERVAL;
         }
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"ping start") == 0)
+    {
+        if(meshcom_settings.node_pingmax < 1)
+        {
+            meshcom_settings.node_pingmax = PING_MAX;
+        }
+
+        bReturn = true;
+
+        meshcom_settings.node_pingcount = meshcom_settings.node_pingmax;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"pingmax ") == 0)
+    {
+        sscanf(msg_text+10, "%d", &meshcom_settings.node_pingmax);
+
+        if(meshcom_settings.node_pingmax < 1 || meshcom_settings.node_pingmax > PING_MAX)
+        {
+            meshcom_settings.node_pingmax = PING_MAX;
+        }
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"pingmax max") == 0)
+    {
+        meshcom_settings.node_pingmax = 100;
 
         bReturn = true;
 
@@ -4852,7 +4891,7 @@ void commandAction(char *umsg_text, bool ble)
 
             if(meshcom_settings.node_pingcall[0] != 0x00 || meshcom_settings.node_pingtime > 0)
             {
-                printfdeb("\n...PING  CALL %s Time:%i\n", meshcom_settings.node_pingcall, meshcom_settings.node_pingtime);
+                printfdeb("\n...PING  CALL %s Time:%i Max:%i Count:%i\n", meshcom_settings.node_pingcall, meshcom_settings.node_pingtime, meshcom_settings.node_pingmax, meshcom_settings.node_pingcount);
             }
 
             #if defined(RELAY_SWITCH)
