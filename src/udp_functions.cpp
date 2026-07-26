@@ -611,7 +611,7 @@ void sendMeshComUDP()
     else
       WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
-    if(strcmp(meshcom_settings.node_pwd, "none") == 0)
+    if(strcmp(meshcom_settings.node_pwd, "empty") == 0)
       WiFi.begin(meshcom_settings.node_ssid, NULL);
     else
       WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd);  
@@ -635,7 +635,7 @@ void sendMeshComUDP()
     else
       WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
-    if(strcmp(meshcom_settings.node_pwd, "none") == 0)
+    if(strcmp(meshcom_settings.node_pwd, "empty") == 0)
       WiFi.begin(meshcom_settings.node_ssid, NULL, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
     else
       WiFi.begin(meshcom_settings.node_ssid, meshcom_settings.node_pwd, WiFi.channel(best_idx), WiFi.BSSID(best_idx),true);
