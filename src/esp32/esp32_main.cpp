@@ -3754,6 +3754,18 @@ void esp32loop()
         }
     }
 
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+
+    if ((tdeck_tft_timer + (TDECK_TFT_TIMEOUT * 1000)) < millis())
+    {
+        // printfdeb("Loop: Timeout reached. Timer: %lu, Millis: %lu\n", tdeck_tft_timer, millis());
+        tft_off();
+    }
+
+    lv_task_handler();
+
+    #endif
+
     #if defined(EXTERNAL_RADIO)
     // In external mode bRadio is false, so the local-radio loop section does not
     // run. Re-create here ONLY the RadioLib-free, message-level maintenance the
@@ -3777,18 +3789,6 @@ void esp32loop()
     // updates here (the local-radio loop section that normally does so is off).
     externalRadioLoop();
     flushDeferredDisplayUpdates();
-    #endif
-
-    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-
-    if ((tdeck_tft_timer + (TDECK_TFT_TIMEOUT * 1000)) < millis())
-    {
-        // printfdeb("Loop: Timeout reached. Timer: %lu, Millis: %lu\n", tdeck_tft_timer, millis());
-        tft_off();
-    }
-
-    lv_task_handler();
-
     #endif
 
     //
