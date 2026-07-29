@@ -2,6 +2,8 @@
 
 #include "external_radio_txq.h"
 
+#if defined(EXTERNAL_RADIO)
+
 namespace extradio {
 
 void ExtTxq::reset() {
@@ -63,3 +65,5 @@ void ExtTxq::ackInvalidate(int slot) {
 }
 
 }  // namespace extradio
+
+#endif  // EXTERNAL_RADIO

@@ -414,13 +414,13 @@ void test_validate_exact_lengths_and_fields(void) {
 void test_encode_rejects_invalid_config_booleans(void) {
     uint8_t frame[kMaxFrame];
     RadioConfig c = sampleConfig();
-    TEST_ASSERT_TRUE(radioConfigValid(c));
+    TEST_ASSERT_TRUE(radioConfigWellFormed(c));
     TEST_ASSERT_TRUE(encodeConfigure(frame, sizeof(frame), c) > 0);
     c.crc = 2;                                  // not boolean
-    TEST_ASSERT_FALSE(radioConfigValid(c));
+    TEST_ASSERT_FALSE(radioConfigWellFormed(c));
     TEST_ASSERT_EQUAL_size_t(0, encodeConfigure(frame, sizeof(frame), c));
     c = sampleConfig(); c.ldro = 255;
-    TEST_ASSERT_FALSE(radioConfigValid(c));
+    TEST_ASSERT_FALSE(radioConfigWellFormed(c));
     TEST_ASSERT_EQUAL_size_t(0, encodeConfigure(frame, sizeof(frame), c));
 }
 

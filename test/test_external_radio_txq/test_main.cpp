@@ -1,8 +1,8 @@
-// Host unit tests for the M8a asynchronous external-radio TX ownership record
+// Host unit tests for the asynchronous external-radio TX ownership record
 // (lib/external_radio_txq) and the ring-status skip invariants it underpins.
 //
 // The ownership record is pure and ring-agnostic, so these tests drive it
-// directly. The ring-selection / retransmission skip rules (invariants 1 & 2)
+// directly. The ring-selection / retransmission skip rules (owned-slot status/reuse)
 // are firmware-side; here we mirror their exact predicates against the
 // RING_STATUS_EXT_PENDING value so the "EXT_PENDING is never picked" property has
 // a tested, single-source expression.
@@ -32,9 +32,9 @@ static bool ringSelectable(uint8_t len, uint8_t status) {
     return len > 0 && (status == kReady || status == kDone);
 }
 // Mirror of updateRetransmissionStatus processing: it touches a slot only when it
-// has data and is neither READY, DONE, nor (M8a) EXT_PENDING.
+// has data and is neither READY, DONE, nor EXT_PENDING.
 static bool ringRetransmitProcesses(uint8_t len, uint8_t status) {
-    if (status == kExtPending) return false;   // M8a invariant 2 guard
+    if (status == kExtPending) return false;   // owned-slot reuse invariant guard
     return len > 0 && status != kReady && status != kDone;
 }
 
@@ -161,7 +161,7 @@ static void test_reconfigure_disconnect_uncertain() {
     ExtTxq q;
     uint32_t t = q.begin(0, 0x12121212);
 
-    // M8b maps a disconnect/reconfigure-during-pending-TX onto resolveUncertain.
+    // A disconnect/reconfigure-during-pending-TX maps onto resolveUncertain.
     TEST_ASSERT_EQUAL(ExtTxAction::RELEASE_TERMINAL, q.resolveUncertain(t));
     TEST_ASSERT_FALSE(q.active());
     TEST_ASSERT_EQUAL(ExtTxResolution::UNCERTAIN, q.lastResolution());
@@ -213,7 +213,7 @@ static void test_pacer_blocks_until_deadline() {
     TEST_ASSERT_TRUE(extTxPacerReady(p, 1000));
 }
 
-// --- M9: post-RF-success transition is retransmittable vs one-shot ----------
+// --- post-RF-success transition is retransmittable vs one-shot --------------
 static void test_retransmittable_decision() {
     // A READY text entry (user DM/broadcast) stays in the ACK/retransmit lifecycle.
     TEST_ASSERT_TRUE (extTxRetransmittable(kReady, kText, kReady, kText));
@@ -225,7 +225,7 @@ static void test_retransmittable_decision() {
     TEST_ASSERT_FALSE(extTxRetransmittable(kDone,  kPos,  kReady, kText));
 }
 
-// --- O1: ring-identity re-check before a resolve mutates the owned slot ------
+// --- ring-identity re-check before a resolve mutates the owned slot ---------
 static void test_owns_ring_slot_identity() {
     // Same EXT_PENDING status + same msg_id -> the slot still holds the owned msg.
     TEST_ASSERT_TRUE (extTxOwnsRingSlot(kExtPending, 0xDEADBEEF, kExtPending, 0xDEADBEEF));
@@ -236,7 +236,7 @@ static void test_owns_ring_slot_identity() {
     TEST_ASSERT_FALSE(extTxOwnsRingSlot(kExtPending, 0x11112222, kExtPending, 0xDEADBEEF));
 }
 
-// --- M9: begin() captures the pre-pending ring status for that decision -----
+// --- begin() captures the pre-pending ring status for that decision ---------
 static void test_begin_captures_pre_status() {
     ExtTxq q;
     uint32_t t = q.begin(4, 0xAABBCCDD, kReady);
@@ -257,7 +257,7 @@ static void test_begin_captures_pre_status() {
     (void)t3;
 }
 
-// --- M10/M10a: per-slot channel-access (CHANNEL_BUSY) budget -----------------
+// --- per-slot channel-access (CHANNEL_BUSY) budget --------------------------
 // Busy attempts are tracked per ring slot in a fixed table, independently of the
 // MeshCom delivery retryCount.
 
@@ -288,7 +288,7 @@ static void test_busy_cap_independent_and_exhaustion() {
     TEST_ASSERT_EQUAL(ExtBusyResult::EXHAUSTED, extBusyOnBusy(t2, kBusyCap, 2, 0x2, 8));  // 8th
 }
 
-// M10a-1: interleaving A/B/A preserves A's counter (the M10 bug fix).
+// interleaving A/B/A preserves A's counter (the per-slot-budget fix).
 static void test_busy_interleave_preserves_count() {
     ExtBusyEntry table[kBusyCap];
     extBusyOnBusy(table, kBusyCap, /*slot*/0, /*A*/0xAAAA, 8);   // A attempt 1
@@ -298,7 +298,7 @@ static void test_busy_interleave_preserves_count() {
     TEST_ASSERT_EQUAL_UINT8(1, table[1].attempts);
 }
 
-// M10a-2: interleaving cannot bypass A's bounded cap.
+// interleaving cannot bypass A's bounded cap.
 static void test_busy_interleave_respects_cap() {
     ExtBusyEntry table[kBusyCap];
     const uint8_t cap = 3;
@@ -312,7 +312,7 @@ static void test_busy_interleave_respects_cap() {
                       extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, cap));  // A=3 -> exhausted at its real cap
 }
 
-// M10a-3: a different message reusing A's slot starts fresh.
+// a different message reusing A's slot starts fresh.
 static void test_busy_slot_reuse_resets() {
     ExtBusyEntry table[kBusyCap];
     extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, 8);
@@ -324,7 +324,7 @@ static void test_busy_slot_reuse_resets() {
     TEST_ASSERT_EQUAL_UINT8(1, table[0].attempts);
 }
 
-// M10a-4: same msg_id at a different slot is a separate episode (per-slot rule).
+// same msg_id at a different slot is a separate episode (per-slot rule).
 // This is the delivery-retransmission-copy case: success already reset the
 // original slot, the copy occupies a new slot with a fresh budget.
 static void test_busy_same_msgid_different_slot() {
@@ -337,7 +337,7 @@ static void test_busy_same_msgid_different_slot() {
     TEST_ASSERT_EQUAL_UINT8(2, table[0].attempts);  // original slot untouched
 }
 
-// M10a-5/6/7: a reset clears ONLY the matching slot; others keep their episode.
+// a reset clears ONLY the matching slot; others keep their episode.
 static void test_busy_reset_only_matching() {
     ExtBusyEntry table[kBusyCap];
     extBusyOnBusy(table, kBusyCap, 0, 0xAAAA, 8);   // A=1

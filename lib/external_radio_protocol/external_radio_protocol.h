@@ -3,7 +3,7 @@
 // Generic, transport-agnostic companion protocol for an OPTIONAL external-radio
 // backend. Pure C++17 (no Arduino, no sockets, no RadioLib, NO cryptography) so
 // it can be unit-tested on a host (`pio test -e native_extradio`) and reused by
-// the ESP32 transport added in a later milestone.
+// the ESP32 transport (`lib/external_radio_tcp`).
 //
 // Scope of this file: binary frame codec, a bounded streaming parser, strict
 // per-message validation, and a session state machine. It performs NO I/O and
@@ -143,7 +143,7 @@ static constexpr uint16_t kConfigPayloadSize = 4 + 4 + 1 + 1 + 2 + 2 + 1 + 1 + 1
 
 bool configEqual(const RadioConfig& a, const RadioConfig& b);
 // crc and ldro are booleans: only 0 or 1 are valid (no silent coercion).
-bool radioConfigValid(const RadioConfig& c);
+bool radioConfigWellFormed(const RadioConfig& c);
 
 // Build a normalized RadioConfig from active radio scalars: frequency in MHz and
 // bandwidth in kHz (both may be fractional / float-sourced), spreading factor,
@@ -159,8 +159,8 @@ bool buildRadioConfig(RadioConfig& out, double freq_mhz, double bw_khz,
 
 // A received packet decoded from RX_PACKET. On the wire rssi/snr are signed
 // big-endian int16_t: rssi in centi-dBm (-12050 == -120.50 dBm), snr in
-// centi-dB (-275 == -2.75 dB). This module carries the raw values; conversion
-// to MeshCom internal units is left to a later TX/RX integration milestone.
+// centi-dB (-275 == -2.75 dB). This module carries the raw values; rssiCentiToDbm/
+// snrCentiToDb (below) convert them to the integer units MeshCom's OnRxDone() expects.
 struct RxPacket {
     int16_t  rssi;   // centi-dBm
     int16_t  snr;    // centi-dB

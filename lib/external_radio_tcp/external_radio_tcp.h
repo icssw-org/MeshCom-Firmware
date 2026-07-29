@@ -13,9 +13,9 @@
 // Constraints: fixed-size buffers only, no dynamic allocation, no blocking, no
 // threads. poll() is called repeatedly with a monotonic millisecond clock.
 //
-// This milestone deliberately does NOT inject RX into MeshCom or drive the
-// MeshCom TX queue — received packets and TX outcomes are only exposed in a
-// narrow transport-visible form for a later integration milestone.
+// The transport exposes received packets and TX outcomes through synchronous
+// sinks (setRxSink/setTxSink); the ESP32 glue wires these into MeshCom's RX
+// ingress (OnRxDone) and the external-TX ring ownership resolvers.
 
 #ifndef EXTERNAL_RADIO_TCP_H
 #define EXTERNAL_RADIO_TCP_H
@@ -156,15 +156,16 @@ public:
     // if not operational or a TX is already in flight. A successful socket write
     // is NOT TX success — the outcome stays TXO_NONE until a TX_RESULT arrives.
     //
-    // `user_tag` is an opaque caller correlation handle (e.g. the M8a ownership
+    // `user_tag` is an opaque caller correlation handle (e.g. the external-TX ownership
     // token) stored for this single in-flight TX and handed back verbatim to the
     // TxSink on the terminal result. It is never placed on the wire. If the sink
     // is installed, it fires EXACTLY ONCE for this TX (including the failure paths
     // where this call returns false after the TX was already in flight).
     bool requestTx(const uint8_t* data, uint16_t len, uint32_t now_ms, uint32_t user_tag = 0);
 
-    // RX is delivered through the synchronous sink (setRxSink); the TX outcome is
-    // still exposed here. Neither is wired into MeshCom in this milestone.
+    // RX is delivered through the synchronous sink (setRxSink); the last TX outcome
+    // is also exposed here for diagnostics. The ESP32 glue wires both sinks into
+    // MeshCom.
     TxOutcome       lastTxOutcome() const { return last_tx_outcome_; }
 
     // Diagnostics / test introspection.

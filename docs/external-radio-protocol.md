@@ -124,9 +124,9 @@ deadlock and uses bounded memory regardless of how TCP chunks the stream.
 
 `rssi` and `snr` are signed **big-endian `int16_t`**: `rssi` in **centi-dBm**
 (e.g. `-12050` = −120.50 dBm) and `snr` in **centi-dB** (e.g. `-275` = −2.75 dB),
-followed by a 2-byte data length and `len` raw bytes (`len ≤ 255`). The firmware
-carries these raw; conversion to MeshCom internal units is a later TX/RX
-integration concern.
+followed by a 2-byte data length and `len` raw bytes (`len ≤ 255`). The protocol
+module carries these raw; the ESP32 integration converts them to MeshCom units
+(RSSI `centi-dBm / 100`, SNR `centi-dB / 100` clamped) when delivering RX.
 
 ### Keepalive (PING/PONG)
 
@@ -222,7 +222,7 @@ success or triggers a resend.
   backoff/retry path. `TIMEOUT`, `RADIO_ERROR`, and `UNKNOWN` are **not**
   immediate-retry signals and must not trigger an automatic local resend (a
   resend could duplicate a transmission that actually went out). No local retry
-  logic lives in this milestone.
+  logic lives in this protocol module.
 
 ## Asynchronous TX queue ownership
 
@@ -362,6 +362,6 @@ pending external TX interrupted by reconfiguration resolves as `UNKNOWN` and is
 Draft for issue #1015. Implemented and host-tested: the generic protocol module
 (`lib/external_radio_protocol`), the ESP32-only compile-time-optional TCP transport
 (`lib/external_radio_tcp` + `src/esp32/external_radio_glue.cpp`, `-D EXTERNAL_RADIO`),
-the active-config snapshot above, and controlled re-sync on runtime radio
-changes. Still deferred: the RadioLib bypass, and injecting RX / driving the
-MeshCom TX queue. LoRaHAM integration remains outside MeshCom firmware.
+the active-config snapshot above, controlled re-sync on runtime radio changes, the
+local RadioLib bypass, and RX injection / MeshCom TX-queue driving through the
+bridge. LoRaHAM integration remains outside MeshCom firmware.

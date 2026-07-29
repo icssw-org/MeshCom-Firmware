@@ -2,6 +2,8 @@
 
 #include "external_radio_tcp.h"
 
+#if defined(EXTERNAL_RADIO)
+
 #include <cstring>
 
 namespace extradio {
@@ -77,7 +79,7 @@ bool TcpTransport::begin(const char* host, uint16_t port, const RadioConfig& cfg
     // A configured password (closed mode) requires an HMAC backend; open mode
     // (no password) legitimately has neither — do not over-validate it.
     if (auth.password && auth.password_len > 0 && !auth.hmac_sha256) return false;
-    if (!radioConfigValid(cfg)) return false;
+    if (!radioConfigWellFormed(cfg)) return false;
 
     host_ = host;
     port_ = port;
@@ -92,7 +94,7 @@ bool TcpTransport::begin(const char* host, uint16_t port, const RadioConfig& cfg
 
 bool TcpTransport::reconfigure(const RadioConfig& cfg) {
     if (!io_.network_ready) return false;                  // not begun
-    if (!radioConfigValid(cfg)) { configInvalid(); return false; }
+    if (!radioConfigWellFormed(cfg)) { configInvalid(); return false; }
     // Same effective config as the live session -> keep everything as-is.
     if (cfg_valid_ && configEqual(cfg, session_.desiredConfig())) return true;
     // Different (or recovering from invalid): reset the link safely, then apply.
@@ -157,10 +159,7 @@ void TcpTransport::startConnect(uint32_t now_ms) {
 bool TcpTransport::sendFrame(const uint8_t* buf, size_t n) {
     if (n == 0) return true;
     if (!io_.send || io_.send(io_.ctx, buf, static_cast<int>(n)) != static_cast<int>(n)) {
-        // The caller is mid-poll; tear down now. Use 0 as a neutral "now" — the
-        // backoff window is recomputed from the real clock on the next poll path;
-        // callers always pass a real now to the public entry points, so reuse it.
-        return false;
+        return false;   // caller fails closed with the real clock (see callers)
     }
     return true;
 }
@@ -318,3 +317,5 @@ bool TcpTransport::requestTx(const uint8_t* data, uint16_t len, uint32_t now_ms,
 }
 
 }  // namespace extradio
+
+#endif  // EXTERNAL_RADIO

@@ -14,9 +14,9 @@
 // the firmware keeps full ownership of ring layout while the subtle late-result /
 // slot-reuse race logic lives here, where it can be tested in isolation.
 //
-// Scope (M8a): foundation only. Nothing in this module submits a TX_REQUEST or
-// consumes a TX_RESULT — the firmware glue (a later milestone) maps the
-// transport TxOutcome onto resolveSuccess/resolveBusy/resolveUncertain.
+// Scope: this module is the ownership record only — it never submits a TX_REQUEST
+// or consumes a TX_RESULT. The ESP32 glue maps the transport TxOutcome onto
+// resolveSuccess/resolveBusy/resolveUncertain.
 
 #ifndef EXTERNAL_RADIO_TXQ_H
 #define EXTERNAL_RADIO_TXQ_H
@@ -123,7 +123,7 @@ private:
 };
 
 // Defence-in-depth ring-identity check used by the terminal resolvers before they
-// mutate the owned ring slot. The M8a token already gates stale/late results, but
+// mutate the owned ring slot. The ownership token already gates stale/late results, but
 // the ownership record is NOT notified by every possible ring-clear path (e.g. a
 // priority-overflow eviction). Re-verifying that the slot STILL carries the
 // owned message — same EXT_PENDING status AND same msg_id — guarantees a resolve

@@ -568,8 +568,7 @@ bool lora_setchip_meshcom()
     externalRadioConfigChanged();
     return true;
     #else
-    bool rf_ok = lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, SYNC_WORD_SX127x, rf_preamble_length, rf_crc);
-    return rf_ok;
+    return lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, SYNC_WORD_SX127x, rf_preamble_length, rf_crc);
     #endif
 #endif
 

@@ -2,6 +2,8 @@
 
 #include "external_radio_protocol.h"
 
+#if defined(EXTERNAL_RADIO)
+
 #include <cmath>
 #include <cstring>
 
@@ -55,7 +57,7 @@ bool configEqual(const RadioConfig& a, const RadioConfig& b) {
            a.crc == b.crc && a.ldro == b.ldro;
 }
 
-bool radioConfigValid(const RadioConfig& c) {
+bool radioConfigWellFormed(const RadioConfig& c) {
     return isBool(c.crc) && isBool(c.ldro);
 }
 
@@ -85,7 +87,7 @@ bool buildRadioConfig(RadioConfig& out, double freq_mhz, double bw_khz,
     // to avoid any rounding at the boundary.
     c.ldro = (((uint64_t)1 << sf) * 1000ULL > (uint64_t)bw_hz * 16ULL) ? 1 : 0;
 
-    if (!radioConfigValid(c)) return false;
+    if (!radioConfigWellFormed(c)) return false;
     out = c;
     return true;
 }
@@ -229,7 +231,7 @@ size_t encodeAuthResponse(uint8_t* out, size_t out_cap, const uint8_t* hmac32) {
 }
 
 size_t encodeConfigure(uint8_t* out, size_t out_cap, const RadioConfig& cfg) {
-    if (!radioConfigValid(cfg)) return 0;       // reject non-boolean crc/ldro, no coercion
+    if (!radioConfigWellFormed(cfg)) return 0;       // reject non-boolean crc/ldro, no coercion
     uint8_t body[kConfigPayloadSize];
     packConfig(body, cfg);
     return encode(out, out_cap, MSG_CONFIGURE, 0, body, sizeof(body));
@@ -360,7 +362,7 @@ void Session::clearVolatile() {
 
 bool Session::setDesiredConfig(const RadioConfig& cfg) {
     if (state_ != ST_DISCONNECTED) return false; // only before a connection begins
-    if (!radioConfigValid(cfg)) return false;    // invalid: leave session state untouched
+    if (!radioConfigWellFormed(cfg)) return false;    // invalid: leave session state untouched
     cfg_      = cfg;
     have_cfg_ = true;
     return true;
@@ -500,3 +502,5 @@ bool Session::submitTx(uint16_t& out_seq) {
 }
 
 }  // namespace extradio
+
+#endif  // EXTERNAL_RADIO

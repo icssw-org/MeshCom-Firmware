@@ -30,10 +30,11 @@ uint8_t getMessagePriority(int slot);
 int getNextTxSlot(void);
 
 #if defined(EXTERNAL_RADIO)
-// --- M8a: asynchronous external-radio TX queue ownership ------------------
-// Narrow internal seams that let a later milestone (M8b) submit a ring slot to
-// the bridge and resolve the async TX_RESULT WITHOUT redesigning queue
-// ownership. None of these are wired into doTX()/the transport yet.
+// --- asynchronous external-radio TX queue ownership -----------------------
+// Narrow internal seams the ESP32 glue uses to submit a ring slot to the bridge
+// and resolve the async TX_RESULT WITHOUT redesigning queue ownership. They are
+// driven by the external-radio glue (externalRadioTxStep / the TxSink resolvers),
+// not by doTX() or the local RadioLib path.
 //
 // All operate on the single global external-TX ownership record and the local
 // TX ring. A successful socket write is NOT TX success: only externalTxResolve*

@@ -2,13 +2,14 @@
 //
 // ESP32-only adapter that wires the pure external-radio TCP transport core to
 // real non-blocking POSIX/lwIP sockets, mbedtls HMAC-SHA256, and millis(). The
-// whole file compiles to nothing unless EXTERNAL_RADIO is defined, so normal
-// firmware builds are byte-identical.
+// whole file compiles to nothing unless EXTERNAL_RADIO is defined, so it adds
+// nothing to normal firmware builds.
 //
 // Bridge host/port (and an optional password) are provided at build time by an
 // external, untracked overlay (e.g. -D EXTERNAL_RADIO_HOST=\"192.168.1.10\"
-// -D EXTERNAL_RADIO_PORT=7000). With none set, the transport stays idle. The
-// host must be an IPv4 literal in this draft (no blocking DNS).
+// -D EXTERNAL_RADIO_PORT=7000). Both host and port are required — a missing value
+// is a compile error, not a silent no-bridge fallback. The host must be an IPv4
+// literal in this draft (no blocking DNS).
 //
 // The RadioConfig is built from the live MeshCom radio settings (getFreq/getBW/
 // getSF/getCR/getPower) at setup and re-synced on runtime changes; it is not a
@@ -40,12 +41,11 @@
 #include "configuration_global.h"  // SYNC_WORD_SX127x
 #include "lora_functions.h"        // OnRxDone + external-TX ring ownership seams
 
-// Overlay-provided configuration (defaults keep the feature idle/safe).
-#ifndef EXTERNAL_RADIO_HOST
-#define EXTERNAL_RADIO_HOST ""
-#endif
-#ifndef EXTERNAL_RADIO_PORT
-#define EXTERNAL_RADIO_PORT 0
+// Overlay-provided configuration. EXTERNAL_RADIO requires an explicit bridge host
+// and port from the build overlay; a missing value is a build error, never a
+// silent "no bridge" fallback.
+#if !defined(EXTERNAL_RADIO_HOST) || !defined(EXTERNAL_RADIO_PORT)
+#error "EXTERNAL_RADIO requires EXTERNAL_RADIO_HOST and EXTERNAL_RADIO_PORT from the build overlay"
 #endif
 
 using namespace extradio;
@@ -165,7 +165,7 @@ void glueRxSink(void* /*ctx*/, const RxPacket& rx) {
 }
 
 // --- terminal TX-result mapping -------------------------------------------
-// Maps the single in-flight TX's final outcome onto the M8a ownership resolvers,
+// Maps the single in-flight TX's final outcome onto the ownership resolvers,
 // keyed by the ownership token carried back as the opaque tag. Runs in main-loop
 // context; does NOT call any transport-mutating API.
 void glueTxSink(void* /*ctx*/, uint32_t tag, TxOutcome outcome) {
@@ -200,6 +200,10 @@ bool __attribute__((weak)) externalRadioNetworkReady(void* /*ctx*/) {
 }
 
 void externalRadioSetup() {
+    // Defence-in-depth against an explicitly empty/zero overlay value
+    // (-D EXTERNAL_RADIO_HOST="" or -D EXTERNAL_RADIO_PORT=0). A MISSING overlay
+    // macro is already a build error (see the #error above), so this covers only
+    // the explicit-but-unusable case.
     if (g_host[0] == '\0' || g_port == 0) {
         Serial.println("[EXTRADIO] disabled: no bridge host/port provisioned");
         g_enabled = false;
@@ -220,10 +224,10 @@ void externalRadioSetup() {
     // Snapshot the active MeshCom radio configuration (effective values, defaults
     // already applied by the getters) and validate it. On any unmappable value do
     // NOT begin the transport and do NOT fall back to placeholder values.
-    // NOTE: this is a one-time boot snapshot. Live changes (--txfreq/--txbw/--txsf/
-    // --txcr/--txpower call lora_setchip_meshcom() in place, no reboot) are NOT yet
-    // reflected here; a dedicated controlled-reconfiguration milestone (M6b) is
-    // required before that path becomes usable.
+    // NOTE: this is the one-time boot snapshot. Live changes (--txfreq/--txbw/--txsf/
+    // --txcr/--txpower call lora_setchip_meshcom() in place, no reboot) are re-synced
+    // to the bridge through externalRadioConfigChanged() below (wired from
+    // lora_setchip_meshcom() in src/lora_setchip.cpp).
     RadioConfig cfg;
     if (!buildRadioConfig(cfg,
                           getFreq(), getBW(), getSF(), getCR(),
@@ -264,7 +268,7 @@ void externalRadioConfigChanged() {
 }
 
 // Drive at most one external TX submission per loop: pick the next eligible ring
-// slot, mark it externally pending (M8a), and submit the retained bytes via the
+// slot, mark it externally pending, and submit the retained bytes via the
 // bridge using the ownership token as the opaque TxSink tag. A socket write is NOT
 // success — the TxSink resolves the final outcome later.
 static void externalRadioTxStep(uint32_t now_ms) {

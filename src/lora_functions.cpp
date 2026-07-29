@@ -61,7 +61,7 @@
 
 #include "lora_functions.h"
 #if defined(EXTERNAL_RADIO)
-#include "external_radio_txq.h"   // M8a: async external-TX ownership record
+#include "external_radio_txq.h"   // async external-TX ownership record
 #endif
 #include "loop_functions.h"
 #include <loop_functions_extern.h>
@@ -176,12 +176,12 @@ static uint32_t extractRingMsgId(int slot)
 }
 
 #if defined(EXTERNAL_RADIO)
-// M8a: the single in-flight external-radio TX ownership record. At most one ring
+// The single in-flight external-radio TX ownership record. At most one ring
 // slot may be RING_STATUS_EXT_PENDING at a time (enforced by ExtTxq::begin).
 // Defined here (above the ACK-clear paths) so those paths can invalidate it.
 static extradio::ExtTxq g_extTxq;
 
-// M10/M10a: bounded external channel-access (CHANNEL_BUSY) attempt budget,
+// Bounded external channel-access (CHANNEL_BUSY) attempt budget,
 // counted separately from the MeshCom delivery retryCount and tracked PER RING
 // SLOT so interleaving queued messages keep independent, bounded episodes.
 static extradio::ExtBusyEntry g_extBusy[MAX_RING];
@@ -214,7 +214,7 @@ static int findAndStopRingSlot(uint32_t msgId)
             if(extractRingMsgId(i) == msgId)
             {
 #if defined(EXTERNAL_RADIO)
-                // M8a: ACK-before-result. If this slot is owned by an in-flight
+                // ACK-before-result. If this slot is owned by an in-flight
                 // external TX, drop the ownership record now (deliberate release)
                 // so a late bridge result for it is later rejected as stale and
                 // cannot resurrect or alter the slot once it is reused.
@@ -456,7 +456,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             uint8_t dbg_type = ringBuffer[rxSlot][2];
 
 #if defined(EXTERNAL_RADIO)
-            // M8a: ACK-before-result — drop external ownership before releasing
+            // ACK-before-result — drop external ownership before releasing
             // the slot so a late bridge result is later rejected as stale.
             extTxqAckInvalidateIfOwned(rxSlot);
 #endif
@@ -1527,7 +1527,7 @@ int getNextTxSlot(void)
     while(pos != iWrite)
     {
 #if defined(EXTERNAL_RADIO)
-        // M8a invariant 1: a slot owned by an in-flight external TX must never be
+        // owned-slot status invariant: a slot owned by an in-flight external TX must never be
         // reselected. RING_STATUS_EXT_PENDING is neither READY nor DONE, so the
         // test below already skips it; this explicit skip states the intent.
         if(ringBuffer[pos][1] == RING_STATUS_EXT_PENDING)
@@ -1948,7 +1948,7 @@ bool updateRetransmissionStatus()
     {
 
 #if defined(EXTERNAL_RADIO)
-        // M8a invariant 2: a slot owned by an in-flight external TX must not be
+        // owned-slot reuse invariant: a slot owned by an in-flight external TX must not be
         // aged, coerced to DONE, retransmitted, or dropped here. Its outcome is
         // owned solely by externalTxResolve*() once the bridge TX_RESULT arrives.
         if(ringBuffer[ircheck][1] == RING_STATUS_EXT_PENDING)
@@ -2041,12 +2041,12 @@ bool updateRetransmissionStatus()
 }
 
 #if defined(EXTERNAL_RADIO)
-// --- M8a: asynchronous external-radio TX ownership helpers -----------------
+// --- asynchronous external-radio TX ownership helpers ----------------------
 // These hold a selected ring slot across an asynchronous bridge TX_RESULT. They
-// are the seams M8b wires to the transport (externalTxMarkPending after a
-// requestTx(), externalTxResolve* from the TX_RESULT callback). Nothing here is
-// called from doTX()/the transport yet. A socket write is NOT success: only a
-// final bridge result completes a slot.
+// are the seams the ESP32 glue drives (externalTxMarkPendingNext when submitting
+// a bridge TX, externalTxResolve* from the TxSink on the terminal TX_RESULT).
+// They are not called from doTX() or the local RadioLib path. A socket write is
+// NOT success: only a final bridge result completes a slot.
 
 uint32_t externalTxMarkPending(int slot)
 {
