@@ -472,6 +472,7 @@ float read_batt(void)
 		#elif defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4)
 
 		// ADC resolution
+		/* faktor fix defined configuration.h
 		const int resolution = 12;
 		const int adcMax = (1 << resolution) -1;
 		const float adcMaxVoltage = 3.3;
@@ -483,6 +484,9 @@ float read_batt(void)
 		const float reportedVoltage = 4.095;
 		// Calibration factor
 		const float factor = (adcMaxVoltage / adcMax) * ((R1 + R2)/(float)R2) * (measuredVoltage / reportedVoltage);
+		*/
+		
+		const float factor = ADC_MULTIPLIER;
 		
 		//V3.1 digitalWrite(ADC_CTRL_PIN,LOW);
 		digitalWrite(ADC_CTRL_PIN, HIGH);
@@ -494,9 +498,9 @@ float read_batt(void)
 		digitalWrite(ADC_CTRL_PIN, LOW);
 
 		float floatVoltage = factor * analogValue;
-		uint16_t voltage = (int)(floatVoltage * 1000.0);
+		uint16_t voltage = (int)(floatVoltage);
 
-		if(bDEBUG && bDisplayInfo)
+		if(bDEBUG && bDisplayCont)
 		{
 			printdeb("[readBatteryVoltage] ADC : ");
 			printlndeb(analogValue);
@@ -506,7 +510,7 @@ float read_batt(void)
 			printlndeb(voltage);
 		}
 
-		raw = floatVoltage * 1000.0;
+		raw = floatVoltage;
 
 		#elif defined(BOARD_TBEAM_1W)
 

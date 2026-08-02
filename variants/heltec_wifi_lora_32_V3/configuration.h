@@ -68,7 +68,7 @@ definitions for HELTEC_V3
 #define SET_BUTTON_PIN
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_MULTIPLIER 4.9245
+#define ADC_MULTIPLIER 4.18
 
 #define USE_SX1262
 
