@@ -206,9 +206,9 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
 
     uint8_t print_buff[30];
 
-    if(bDisplayInfo)
+    if(bDisplayLog)
     {
-        printBuffer_ack((char*)"RX-Lora1", payload, size);
+        printBuffer_ack((char*)"[LOG]", payload, size);
     }
 
     memcpy(print_buff, payload, 12);
@@ -438,12 +438,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         int icheck = checkOwnTx(aprsmsg.msg_id);
 
-        if(bDisplayCont)
+        if(bDisplayLog)
         {
-            printBuffer_aprs((char*)"RX-LoRa-All", aprsmsg);
+            printBuffer_aprs((char*)"[LOG]", aprsmsg);
         }
-
-        
 
         if(msg_type_b_lora == 0x00)
         {

@@ -66,8 +66,8 @@
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin
-#define ADC_MULTIPLIER 5.42  // V4 has different ADC calibration
-#define ADC_CTRL_PIN 37      // V4 has ADC control pin
+#define ADC_MULTIPLIER 4.3270     // V4 has different ADC calibration
+#define ADC_CTRL_PIN 37         // V4 has ADC control pin
 
 #define USE_SX1262
 

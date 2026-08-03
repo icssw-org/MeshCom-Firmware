@@ -105,6 +105,7 @@ bool bDisplayVolt = false;
 bool bDisplayInfo = false;
 bool bDisplayVia = false;
 bool bDisplayCont = false;
+bool bDisplayLog = false;
 bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
@@ -3021,17 +3022,17 @@ void charBuffer_aprs(struct aprsMessage &aprsmsg)
 
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
 {
-    printfdeb("%s %s: %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+    printfdeb("%s %s %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
         aprsmsg.msg_source_hw, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
 }
 
-void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int8_t size)
+void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int16_t size)
 {
     if(size == 7)
-        printfdeb("%s %s: %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
+        printfdeb("%s %s 007 %c x%02X%02X%02X%02X H%02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
     else
-        printfdeb("%s %s: %02X %02X%02X%02X%02X %02X %02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
+        printfdeb("%s %s 012 %c x%02X%02X%02X%02X H%02X x%02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
 }
 
 

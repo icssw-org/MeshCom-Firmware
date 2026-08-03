@@ -700,9 +700,12 @@ void esp32setup()
     lFreeHeap =  ESP.getFreeHeap();
     lFreePsram = ESP.getFreePsram();
 
-    printfdeb("[HEAP];%s;%lu;%d;%d;(init)\n", getTimeString().c_str(),
-       lFreeHeap, ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    printfdeb("[PSRM];%s;%lu\n", getTimeString().c_str(), lFreePsram);
+    if(!bDisplayLog)
+    {
+        printfdeb("[HEAP];%s;%lu;%d;%d;(init)\n", getTimeString().c_str(),
+            lFreeHeap, ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+        printfdeb("[PSRM];%s;%lu\n", getTimeString().c_str(), lFreePsram);
+    }
     
     check_efuse();
 
@@ -809,6 +812,7 @@ void esp32setup()
 
     bDEBUGCSV = meshcom_settings.node_sset4 & 0x0001;
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
+    bDisplayLog = meshcom_settings.node_sset4 & 0x0004;
 
     if(strlen(meshcom_settings.node_aprsmc) < 4)
     {
@@ -2011,9 +2015,12 @@ void esp32loop()
         if((millis() - stat_hwm_timer) > (unsigned long)(PRIO_HWM_INTERVAL_S * 1000UL))
         {
             stat_hwm_timer = millis();
-            printfdeb("[MC-HWM] uptime=%lus queue_hwm=%d/%d csma_hwm=%d trickle=%lums\n",
-                millis() / 1000, stat_queue_hwm, MAX_RING,
-                stat_csma_hwm_attempts, trickle_interval_ms);
+            if(!bDisplayLog)
+            {
+                printfdeb("[MC-HWM] uptime=%lus queue_hwm=%d/%d csma_hwm=%d trickle=%lums\n",
+                    millis() / 1000, stat_queue_hwm, MAX_RING,
+                    stat_csma_hwm_attempts, trickle_interval_ms);
+            }
         }
 
         // TX-IRQ Watchdog: Wenn bEnableInterruptTransmit zu lange true bleibt
@@ -3253,7 +3260,7 @@ void esp32loop()
                 if(bDisplayCont && BattWaitCounter > 20)  // neue Ausgabe erfolgt in batt_functions
                 {
                     #if not defined(BOARD_T_DECK_PRO) and not defined(BOARD_TBEAM_1W)
-                    printfdeb("[readBatteryVoltage] %s ... %.2f V %i0/0 max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
+                    printfdeb("[readBatteryVoltage] %s ... %.2f V %i %% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
                     #endif
                 }
                 #endif
@@ -3311,16 +3318,19 @@ void esp32loop()
                 lFreeHeap = ESP.getFreeHeap();
                 lFreePsram = ESP.getFreePsram();
 
-                printfdeb("[HEAP];%s;%lu;%d;%d;(mon)\n",
-                    getTimeString().c_str(),
-                    lFreeHeap,
-                    ESP.getMinFreeHeap(),
-                    ESP.getMaxAllocHeap());
-                #if defined(BOARD_HAS_PSRAM)
-                printfdeb("[PSRM];%s;%lu;(mon)\n",
-                    getTimeString().c_str(),
-                    lFreePsram);
-                #endif
+                if(!bDisplayLog)
+                {
+                    printfdeb("[HEAP];%s;%lu;%d;%d;(mon)\n",
+                        getTimeString().c_str(),
+                        lFreeHeap,
+                        ESP.getMinFreeHeap(),
+                        ESP.getMaxAllocHeap());
+                    #if defined(BOARD_HAS_PSRAM)
+                    printfdeb("[PSRM];%s;%lu;(mon)\n",
+                        getTimeString().c_str(),
+                        lFreePsram);
+                    #endif
+                }
             }
 
             heapMonTimer = millis();

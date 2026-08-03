@@ -488,6 +488,32 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"setlog off") == 0)
+    {
+        printfdeb("\nsetlog off");
+
+        bDisplayLog=false;
+
+        meshcom_settings.node_sset4 = meshcom_settings.node_sset4 & 0x7FFA;
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setlog on") == 0)
+    {
+        printlndeb("\nsetlog on");
+
+        bDisplayLog=true;
+
+        meshcom_settings.node_sset4 |= 0x0004;
+
+        save_settings();
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"setretx off") == 0)
     {
         printlndeb("\nsetretx off");
@@ -4870,8 +4896,8 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
                 (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
             
-            printfdeb("...DisplayInfo %s ...DisplayCont %s ...contrast %i\n",
-                (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), meshcom_settings.node_contrast);
+            printfdeb("...DisplayInfo %s ...DisplayCont %s ...DisplyLog %s ...contrast %i\n",
+                (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), (bDisplayLog?"on":"off"), meshcom_settings.node_contrast);
 
             printfdeb("...EXTUDP %s ...EXT IP %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern);
 

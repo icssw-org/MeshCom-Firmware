@@ -570,6 +570,7 @@ void nrf52setup()
 
     bDEBUGCSV = meshcom_settings.node_sset4 & 0x0001;
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
+    bDisplayLog = meshcom_settings.node_sset4 & 0x0004;
 
     bDisplayInfo = bLORADEBUG;
 

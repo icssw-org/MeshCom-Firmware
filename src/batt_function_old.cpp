@@ -485,10 +485,11 @@ float read_batt(void)
 		// Calibration factor
 		const float factor = (adcMaxVoltage / adcMax) * ((R1 + R2)/(float)R2) * (measuredVoltage / reportedVoltage);
 		*/
-		
 		const float factor = ADC_MULTIPLIER;
+		/**/
 		
-		//V3.1 digitalWrite(ADC_CTRL_PIN,LOW);
+		//V3.1
+		//digitalWrite(ADC_CTRL_PIN, LOW);
 		digitalWrite(ADC_CTRL_PIN, HIGH);
 
 		delay(100);
