@@ -494,7 +494,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bDisplayLog=false;
 
-        meshcom_settings.node_sset4 = meshcom_settings.node_sset4 & 0x7FFA;
+        meshcom_settings.node_sset4 = meshcom_settings.node_sset4 & 0x7FFB;
 
         save_settings();
 
