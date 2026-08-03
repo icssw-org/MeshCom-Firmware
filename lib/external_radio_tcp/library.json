@@ -1,0 +1,16 @@
+{
+  "name": "external_radio_tcp",
+  "version": "0.1.0",
+  "description": "Pure C++ transport core for the optional external-radio TCP client: connection lifecycle, reconnect backoff, timeouts, bounded receive loop, and session-event mapping. Arduino/socket/crypto-free (I/O and HMAC injected); host unit-testable. Depends on external_radio_protocol.",
+  "keywords": "meshcom, external-radio, tcp",
+  "license": "GPL-3.0-or-later",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": {
+    "external_radio_protocol": "*"
+  },
+  "build": {
+    "srcDir": ".",
+    "flags": ["-std=gnu++17"]
+  }
+}

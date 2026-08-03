@@ -1,0 +1,13 @@
+{
+  "name": "external_radio_protocol",
+  "version": "0.2.0",
+  "description": "Generic external-radio companion protocol: binary frame codec, bounded streaming parser and session state machine. Pure C++17, hardware- and transport-independent, host unit-testable.",
+  "keywords": "meshcom, external-radio, protocol",
+  "license": "GPL-3.0-or-later",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": ".",
+    "flags": ["-std=gnu++17"]
+  }
+}

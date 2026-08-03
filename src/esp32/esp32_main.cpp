@@ -132,6 +132,9 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include "esp32_functions.h"
 #include "tft_display_functions.h"
 #include "net_console.h"
+#if defined(EXTERNAL_RADIO)
+#include "external_radio_glue.h"
+#endif
 #include "printfdeb_functions.h"
 
 #ifdef BOARD_HELTEC_V4
@@ -787,6 +790,9 @@ void esp32setup()
     #ifndef DISABLE_NET_CONSOLE
     netConsoleSetPassword(meshcom_settings.node_passwd);
     #endif
+    // NOTE: externalRadioSetup() runs later, AFTER lora_setcountry() has applied
+    // the effective freq/bw/sf/cr/preamble, so the bridge config snapshot is built
+    // from the same effective radio settings the local radio path would use.
     //xxxxxxx   = meshcom_settings.node_sset2 & 0x2000;
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
@@ -1239,7 +1245,13 @@ void esp32setup()
         #endif
         #endif
 
-        #if defined(BOARD_T_ETH_ELITE)
+        #if defined(EXTERNAL_RADIO)
+        // External radio: the bridge owns the RF chip. Do NOT initialize/begin the
+        // local RadioLib transceiver. bRadio is forced false below so no local
+        // RX/CAD/TX path runs.
+        int state = RADIOLIB_ERR_NONE;
+        (void)state;
+        #elif defined(BOARD_T_ETH_ELITE)
         int state = radio.begin(433.175);
         radio.setDio2AsRfSwitch(true);
         radio.setTCXO(1.8);
@@ -1279,6 +1291,14 @@ void esp32setup()
         bRadio = false; // no detailed setting
     #endif
 
+    #if defined(EXTERNAL_RADIO)
+        // External radio: no local RF chip is initialized or driven. Forcing
+        // bRadio=false makes the local radio config block and the whole local
+        // RX/CAD/TX loop section no-ops; the bridge transport (externalRadioLoop)
+        // owns RX/TX instead.
+        bRadio = false;
+    #endif
+
     //#if not defined(BOARD_T_DECK_PRO)
     // extra source
     // > 4.34w we use EU8 instead of EU
@@ -1290,9 +1310,29 @@ void esp32setup()
     #endif
 
     lora_setcountry(meshcom_settings.node_country);
-    
+
+    #if defined(EXTERNAL_RADIO)
+    // The local-radio path normalizes the -20 "use default" power sentinel to the
+    // board default inside its bRadio block, which is skipped in external mode.
+    // Apply the same default here so the bridge snapshot uses the intended default
+    // power (getPower() then clamps to the valid range) instead of the clamped
+    // sentinel. Mirrors the bRadio-block normalization; RAM-only (no extra flash
+    // write — a later --txpower change persists normally).
+    if(meshcom_settings.node_power == -20)
+        meshcom_settings.node_power = TX_OUTPUT_POWER;
+
+    // Build the bridge RadioConfig snapshot from the EFFECTIVE radio settings:
+    // lora_setcountry() above has just normalized freq/bw/sf/cr/preamble to the
+    // active country. Taking the snapshot here (rather than before lora_setcountry)
+    // ensures the bridge is configured with the same effective values the local
+    // radio path would use, including on first boot / country change / flash clear.
+    // Runtime setting changes are still re-synced via
+    // lora_setchip_meshcom() -> externalRadioConfigChanged().
+    externalRadioSetup();
+    #endif
+
     //#endif
-    
+
     // you can also change the settings at runtime
     // and check if the configuration was changed successfully
     #if defined(BOARD_T5_EPAPER)
@@ -1735,6 +1775,29 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 
 
 
+// Deferred display update from OnRxDone (avoid I2C inside the radio callback).
+// RACE-01 fix: snapshot under spinlock, display call outside. Factored so both
+// the local-radio loop and the external-radio path flush pending RX displays.
+static void flushDeferredDisplayUpdates()
+{
+    portENTER_CRITICAL(&displayMux);
+    bool _pendText = bPendingDisplayText;
+    bool _pendPos = bPendingDisplayPos;
+    struct aprsMessage _msg;
+    int16_t _rssi = 0;
+    int8_t _snr = 0;
+    if(_pendText || _pendPos) {
+        _msg = pendingDisplayMsg;
+        _rssi = pendingDisplayRssi;
+        _snr = pendingDisplaySnr;
+        bPendingDisplayText = false;
+        bPendingDisplayPos = false;
+    }
+    portEXIT_CRITICAL(&displayMux);
+    if(_pendText) sendDisplayText(_msg, _rssi, _snr);
+    if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
+}
+
 void esp32loop()
 {
     #if not defined(BOARD_T_DECK_PRO)
@@ -1932,25 +1995,7 @@ void esp32loop()
         }
 
         // Deferred display update from OnRxDone (avoid I2C inside radio callback)
-        // RACE-01 fix: snapshot under spinlock, display call outside
-        {
-            portENTER_CRITICAL(&displayMux);
-            bool _pendText = bPendingDisplayText;
-            bool _pendPos = bPendingDisplayPos;
-            struct aprsMessage _msg;
-            int16_t _rssi = 0;
-            int8_t _snr = 0;
-            if(_pendText || _pendPos) {
-                _msg = pendingDisplayMsg;
-                _rssi = pendingDisplayRssi;
-                _snr = pendingDisplaySnr;
-                bPendingDisplayText = false;
-                bPendingDisplayPos = false;
-            }
-            portEXIT_CRITICAL(&displayMux);
-            if(_pendText) sendDisplayText(_msg, _rssi, _snr);
-            if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
-        }
+        flushDeferredDisplayUpdates();
 
         // Channel utilization report (every 10s)
         {
@@ -3709,7 +3754,6 @@ void esp32loop()
         }
     }
 
-
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 
     if ((tdeck_tft_timer + (TDECK_TFT_TIMEOUT * 1000)) < millis())
@@ -3720,6 +3764,31 @@ void esp32loop()
 
     lv_task_handler();
 
+    #endif
+
+    #if defined(EXTERNAL_RADIO)
+    // In external mode bRadio is false, so the local-radio loop section does not
+    // run. Re-create here ONLY the RadioLib-free, message-level maintenance the
+    // external lifecycle needs, at the same 2s cadence as the native path:
+    //
+    //  * retransmission maintenance — ages SENT entries (e.g. those entered by a
+    //    confirmed bridge RF send awaiting a MeshCom ACK), retries or gives up per
+    //    the normal budget, and skips RING_STATUS_EXT_PENDING. It touches only the
+    //    ring (no CAD/TX/RX/RadioLib). A requeued retry becomes a READY slot that
+    //    externalRadioTxStep() submits with a fresh ownership token.
+    if((retransmit_timer + (1000 * 2)) < millis())
+    {
+        updateRetransmissionStatus();
+        retransmit_timer = millis();
+    }
+
+    // Non-blocking poll of the optional external-radio TCP transport, AFTER the
+    // normal Wi-Fi/network-readiness maintenance above. Self-gates on Wi-Fi state.
+    // poll() delivers RX synchronously via glueRxSink -> OnRxDone (main-loop
+    // context) and drives one queued external TX. Flush deferred RX display
+    // updates here (the local-radio loop section that normally does so is off).
+    externalRadioLoop();
+    flushDeferredDisplayUpdates();
     #endif
 
     //
