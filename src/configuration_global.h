@@ -39,6 +39,7 @@
 #define HELTEC_E213 58
 #define ESP32_LORAPRS_E22 59
 #define ESP32_LORAPRS_RA01 60
+#define T_WATCH_S3 61
 
 // Boards mit dem 2.13"-E-Ink-Panel (E0213A367/SSD1680) UND dem gemeinsamen WP-Display-Pfad:
 // Wireless Paper + Vision Master E213. Beide nutzen identisches Layout, fette 9pt-Schrift,

@@ -37,12 +37,12 @@ uint8_t mheardPathLen[MAX_MHPATH];
 uint8_t mheardWrite = 0;   // counter for ringbuffer
 uint8_t mheardPathWrite = 0;   // counter for ringbuffer
 
-#define max_hardware 35
+#define max_hardware 36
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    String HardWare[max_hardware] = {"no info", "TLO_V2", "TLO_V1", "TLV2_1p6", "TBEAM", "TB_1268", "TB_0p7", "TECHO", "TDECK", "RAK4631", "HELTV21", "HELTV1", "TB_2101", "EB_E22", "HELTV3", "HELT_E290", "TB_1262", "TDECK+", "TB_SUPR", "ES3_E22", "TRACKER_V3", "STICK_V3", "T5_EPAPER", "TPAGER", "TDECKpro", "TBEAM_1W", "HETLV4", "T_ETH_EL", "HETL_T114", "T3S3V13", "TCONPRO", "WLPAPER", "HELT_E213", "ESP32_LORAPRS_E22", "ESP32_LORAPRS_RA01"};
+    String HardWare[max_hardware] = {"no info", "TLO_V2", "TLO_V1", "TLV2_1p6", "TBEAM", "TB_1268", "TB_0p7", "TECHO", "TDECK", "RAK4631", "HELTV21", "HELTV1", "TB_2101", "EB_E22", "HELTV3", "HELT_E290", "TB_1262", "TDECK+", "TB_SUPR", "ES3_E22", "TRACKER_V3", "STICK_V3", "T5_EPAPER", "TPAGER", "TDECKpro", "TBEAM_1W", "HETLV4", "T_ETH_EL", "HETL_T114", "T3S3V13", "TCONPRO", "WLPAPER", "HELT_E213", "ESP32_LORAPRS_E22", "ESP32_LORAPRS_RA01", "T_WATCH_S3"};
 #else
-    String HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "TDECK", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "TBEAM_AXP2101", "EBYTE_E22", "HELTEC_V3", "HELTEC_E290", "TBEAM_1262", "TDECK_PLUS", "TBEAM_SUPREME", "ESP_S3_E22", "TRACK_V3", "STICK_V3", "T5_EPAPER", "TPAGER", "TDECKpro", "TBEAM_1W", "HELTEC_V4", "T_ETH_ELITE", "HELTEC_T114", "T3_S3_V13", "T_CON_PRO", "WIRELESS_PAPER", "HELTEC_E213", "ESP32_LORAPRS_E22", "ESP32_LORAPRS_RA01"};
+    String HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "TDECK", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "TBEAM_AXP2101", "EBYTE_E22", "HELTEC_V3", "HELTEC_E290", "TBEAM_1262", "TDECK_PLUS", "TBEAM_SUPREME", "ESP_S3_E22", "TRACK_V3", "STICK_V3", "T5_EPAPER", "TPAGER", "TDECKpro", "TBEAM_1W", "HELTEC_V4", "T_ETH_ELITE", "HELTEC_T114", "T3_S3_V13", "T_CON_PRO", "WIRELESS_PAPER", "HELTEC_E213", "ESP32_LORAPRS_E22", "ESP32_LORAPRS_RA01", "T_WATCH_S3"};
 #endif
 
 void initMheard()
@@ -786,8 +786,10 @@ String getHardwareLong(uint8_t hwid)
         ihw=32;   // HELTEC_E213 (Vision Master E213) -> Array-Index 32
     if(ihw == 59)
         ihw=33;   // ESP32_LORAPRS_E22 -> Array-Index 33
-    if(ihw == 30)
+    if(ihw == 60)
         ihw=34;   // ESP32_LORAPRS_RA01 -> Array-Index 34
+    if(ihw == 61)
+        ihw=35;   // T_WACH_s3
     if(ihw < 0 || ihw >= max_hardware)
         ihw=0;
 
