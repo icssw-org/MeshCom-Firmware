@@ -59,11 +59,11 @@ bool rf_crc = true;
 uint16_t rf_preamble_length = LORA_PREAMBLE_LENGTH;
 
 //0...EU  1...UK, 2...ON, 3...EA, 4...OM, 8...EU8, 10...US, ..... 5...868, 6...915, 7...MAN
-String strCountry[max_country] = {"EU", "UK", "ON", "EA", "LA", "868", "915", "MAN", "EU8", "UK8", "US", "VR2", "435", "436", "442", "none"};
+String strCountry[max_country] = {"EU", "UK", "ON", "EA", "LA", "868", "915", "MAN", "EU8", "UK8", "US", "VR2", "435", "436", "442", "PL", "none"};
 
 String getCountry(int iCtry)
 {
-    if(iCtry < 0 || iCtry > 15)
+    if(iCtry < 0 || iCtry >= max_country)
     {
         return "none";
     }
@@ -73,7 +73,7 @@ String getCountry(int iCtry)
 
 int getCountryID(String strCtry)
 {
-    for(int ic=0;ic<16;ic++)
+    for(int ic=0;ic<max_country;ic++)
     {
         if(strCountry[ic] == strCtry)
             return ic;
@@ -460,6 +460,25 @@ void lora_setcountry(int iCtry)
             meshcom_settings.node_preamplebits = 8;
             break;
 
+        case 15:  // PL
+            meshcom_settings.node_freq = RF_FREQUENCY;
+
+            #if defined(BOARD_RAK4630) || defined(USE_HELTEC_T114) || defined(BOARD_T_ECHO)
+                meshcom_settings.node_bw = 1;
+                meshcom_settings.node_cr = 2;
+            #else
+                meshcom_settings.node_bw = 250.0;
+                meshcom_settings.node_cr = 6;
+            #endif
+
+            meshcom_settings.node_sf = LORA_SF;
+
+            meshcom_settings.node_track_freq = 434.855; // LORA_APRS_FREQUENCY for Poland
+
+            meshcom_settings.node_preamplebits = 8;
+
+            break;
+
         default:    // EU
             meshcom_settings.node_freq = RF_FREQUENCY;
 
@@ -590,7 +609,7 @@ bool lora_setchip_aprs()
     // not used because APRS using radioInit SYNCWORD ... Radio.SetCustomSyncWord(0x242b);
 
     if(bLORADEBUG)
-        Serial.printf("[LoRa]...RF_FREQUENCY: %.4f kHz\n", LORA_APRS_FREQUENCY/1000000.);
+        Serial.printf("[LoRa]...RF_FREQUENCY: %.4f kHz\n", meshcom_settings.node_track_freq/1000000.);
 
     //  Set the LoRa Frequency
     Radio.SetChannel((uint32_t)LORA_APRS_FREQUENCY);
@@ -662,7 +681,7 @@ bool lora_setchip_aprs()
 
 #else
     // Set LoRaAPRS parameter
-    float rf_freq = LORA_APRS_FREQUENCY;
+    float rf_freq = meshcom_settings.node_track_freq;
     float rf_bw = 125.0;
     int rf_sf = 12;
     int rf_cr = 5;
@@ -675,6 +694,13 @@ bool lora_setchip_aprs()
     {
         rf_sf = 7;
         rf_cr = 6;
+    }
+
+    // "PL" LoRa_APRS
+    if(meshcom_settings.node_country == 15)
+    {
+        rf_sf = 9;
+        rf_cr = 7;
     }
 
     return lora_setchip_new(rf_freq, rf_bw, rf_sf, rf_cr, 0x12, rf_preamble_length, rf_crc);

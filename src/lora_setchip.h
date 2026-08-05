@@ -7,7 +7,7 @@
 #include <configuration.h>
 #include <debugconf.h>
 
-#define max_country 16
+#define max_country 17
 extern String strCountry[max_country];
 
 float getFreq();
