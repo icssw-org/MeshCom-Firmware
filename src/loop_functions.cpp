@@ -2681,15 +2681,9 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // immer deklarieren, nicht nur unter ENABLE_GPS. Sonst bricht ein E-Paper-Board
     // ohne GPS (z.B. Wireless Paper) die Kompilierung.
     float d_dir_to = 0;
-    #if defined(ENABLE_GPS)
     d_dir_to = gps.courseTo(meshcom_settings.node_lat, meshcom_settings.node_lon, lat, lon);
     dir_to = d_dir_to;
-
     dist_to = gps.distanceBetween(lat, lon, meshcom_settings.node_lat, meshcom_settings.node_lon)/1000.0;
-    #else
-    dir_to = 0;
-    dist_to = 0;
-    #endif
 
     sendDisplayMainline();
 
@@ -4594,9 +4588,7 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
 
     double distance = 0.;
     
-    #if defined(ENABLE_GPS)
     distance = gps.distanceBetween(posinfo_last_lat, posinfo_last_lon, dlat, dlon);    // meters
-    #endif
     
     //posinfo_distance += distance;
     posinfo_distance = distance; // KBC 25.11.14
@@ -4610,21 +4602,15 @@ unsigned int setSMartBeaconing(double dlat, double dlon)
     }
     else
     {
-        #if defined(ENABLE_GPS)
         posinfo_direction = gps.courseTo(posinfo_prev_lat, posinfo_prev_lon, dlat, dlon);    // Grad
-        #else
-        posinfo_direction = 0;
-        #endif
     }
 
     // Use GPS speed if available (more accurate than distance/interval)
     double speed_mps = 0.0;
 
-    #if defined(ENABLE_GPS)
     if(gps.speed.isValid())
         speed_mps = gps.speed.mps();
     else
-    #endif
         speed_mps = distance / gps_refresh_intervall; // Fallback
 
     // Stationary / Drift suppression
