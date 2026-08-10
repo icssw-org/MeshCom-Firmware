@@ -59,6 +59,7 @@ bool gpsInitDone = false;
 extern TinyGPSPlus gps;
 #endif
 
+
 bool bnextread=false;
 
 int ifalseping = 0;
