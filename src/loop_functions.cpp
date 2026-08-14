@@ -3245,7 +3245,7 @@ void sendMessage(char *msg_text, int len)
     char msg_text_check[200];
     char msg_text_checked[200];
     int len_check=len;
-    if(len_check > sizeof(msg_text_check)-1)
+    if(len_check > (int)sizeof(msg_text_check)-1)
         len_check = sizeof(msg_text_check)-1;
 
     memset(msg_text_checked, 0x00, sizeof(msg_text_checked));
