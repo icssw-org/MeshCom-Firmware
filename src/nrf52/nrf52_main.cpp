@@ -2057,6 +2057,7 @@ void nrf52loop()
     }
 
     // Heap Monitor — always active, 60s interval
+    if(!bDisplayLog)
     {
         static unsigned long heapMonTimer = 0;
         if (heapMonTimer == 0)

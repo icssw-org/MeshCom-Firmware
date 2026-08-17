@@ -440,7 +440,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         if(bDisplayLog)
         {
-            printBuffer_aprs((char*)"[LOG]", aprsmsg);
+            if(LogCallsign[0] != 0x00)
+            {
+                if(is_equ((char*)LogCallsign, aprsmsg.msg_source_call.c_str()))
+                    printBuffer_aprs((char*)"[LOG]", aprsmsg);
+            }
+            else
+                printBuffer_aprs((char*)"[LOG]", aprsmsg);
         }
 
         if(msg_type_b_lora == 0x00)

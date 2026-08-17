@@ -106,7 +106,10 @@ bool bDisplayVolt = false;
 bool bDisplayInfo = false;
 bool bDisplayVia = false;
 bool bDisplayCont = false;
+
 bool bDisplayLog = false;
+char LogCallsign[10] = {0};
+
 bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
@@ -4488,8 +4491,8 @@ void sendTelemetry(int ID)
         snprintf(msg_text, sizeof(msg_text), "%s", strTelemetry.c_str());
 
         iNextTelemetry++;
-        // Alle 10 Werte - PARM, UNIT. EQNS. BITS. neuerlich senden
-        if(iNextTelemetry > 13)
+        // Alle 20 Werte - PARM, UNIT. EQNS. BITS. neuerlich senden
+        if(iNextTelemetry > 23)
             iNextTelemetry=0;
     }
 

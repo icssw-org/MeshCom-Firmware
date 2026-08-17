@@ -54,7 +54,10 @@ extern bool bDisplayVolt;
 extern bool bDisplayInfo;
 extern bool bDisplayVia;
 extern bool bDisplayCont;
+
 extern bool bDisplayLog;
+extern char LogCallsign[10];
+
 extern bool bDisplayRetx;
 extern unsigned long DisplayOffWait;
 extern int DisplayTimeWait;

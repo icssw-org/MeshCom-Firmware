@@ -493,6 +493,7 @@ void commandAction(char *umsg_text, bool ble)
         printfdeb("\nsetlog off");
 
         bDisplayLog=false;
+        memset(LogCallsign, 0x00, sizeof(LogCallsign));
 
         meshcom_settings.node_sset4 = meshcom_settings.node_sset4 & 0x7FFB;
 
@@ -504,6 +505,34 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"setlog on") == 0)
     {
         printlndeb("\nsetlog on");
+        memset(LogCallsign, 0x00, sizeof(LogCallsign));
+
+        bDisplayLog=true;
+
+        meshcom_settings.node_sset4 |= 0x0004;
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setlog ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
+        if(_owner_c[strlen(_owner_c)-1] == 0x0a)
+            _owner_c[strlen(_owner_c)-1] = 0x00;
+        
+        sVar = _owner_c;
+        sVar.trim();
+        sVar.toUpperCase();
+
+        if(!checkRegexCall(sVar))
+        {
+            printfdeb("\n[ERR]..Callsign <%s> not valid\n", sVar.c_str());
+            return;
+        }
+
+        snprintf(LogCallsign, sizeof(LogCallsign), "%s", sVar.c_str());
 
         bDisplayLog=true;
 
