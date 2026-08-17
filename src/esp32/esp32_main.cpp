@@ -2745,8 +2745,8 @@ void esp32loop()
                 lTELE_TIMER = millis();
             }
 
-            // check every 50 seconds to check telemetry via serial interface is ok
-            if ((lTELE_TIMER + 50000) < millis())
+            // check every 15 minuten to check telemetry via serial interface is ok
+            if ((lTELE_TIMER + (15 * 60 * 1000)) < millis())
             {
                 printfdeb("[SOFTSER] Reset Node, XML not working\n");
                 delay(1000);
@@ -3155,7 +3155,11 @@ void esp32loop()
 
 
     // Trickle-HEY: adaptive interval (RFC 6206)
-    if (((heyinfo_timer + trickle_interval_ms) < millis()) || (bHeyFirst && bAllStarted))
+    unsigned long extra_hey_time = 0;
+    #if defined(ENABLE_SOFTSER)
+        extra_hey_time = 10 * 60 * 1000; // 10 minutes extra
+    #endif
+    if (((heyinfo_timer + trickle_interval_ms + extra_hey_time) < millis()) || (bHeyFirst && bAllStarted))
     {
         bHeyFirst = false;
 
