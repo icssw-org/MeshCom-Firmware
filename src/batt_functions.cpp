@@ -24,8 +24,9 @@ static float filteredVoltage = 0.0f;
 const float alpha = 0.05f;  // Glaettungsfaktor (0.05 = träger, 0.2 = schneller)
 unsigned long batt_show_timer = 0;
 int BATTshowtime;
-#define CDcount 6
-static int CountDown = CDcount;
+
+//#define CDcount 6
+//static int CountDown = CDcount;
 
 
 // wird hier nicht verwendet, aber definiert, aber nicht freigegeben
