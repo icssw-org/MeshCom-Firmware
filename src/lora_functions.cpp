@@ -1168,7 +1168,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         // GATEWAY action before MESH
                         // and not MESHed from another Gateways
-                        if(bGATEWAY && !aprsmsg.msg_server) 
+                        if(bGATEWAY && (!aprsmsg.msg_server || aprsmsg.payload_type == '@'))  // HEY always send to Server
                         {
                             addNodeData(RcvBuffer, size, rssi, snr);
                         }
