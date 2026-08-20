@@ -1755,6 +1755,13 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     lv_coord_t x = 0;
     lv_coord_t y = 0;
 
+        if (!sdmap_in_current_tile(dlat, dlon))
+    {
+        // Station liegt nicht in der aktuell sichtbaren Kachel - keinen Punkt zeichnen
+        return;
+    }
+
+    
     int16_t sx = 0, sy = 0;
     sdmap_project(dlat, dlon, &sx, &sy);
     x = (lv_coord_t)sx;

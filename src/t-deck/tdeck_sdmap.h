@@ -25,6 +25,7 @@ void sdmap_zoom_out();
 // Laedt die passende Kachel fuer lat/lon beim aktuellen Zoom und zeigt sie in img an.
 // Rueckgabe true, wenn die Kachel erfolgreich geladen wurde.
 bool sdmap_refresh(lv_obj_t * img, double lat, double lon);
+bool sdmap_in_current_tile(double lat, double lon);
 
 // Liefert die Pixelposition (0..255) von lat/lon innerhalb der zuletzt geladenen Kachel.
 void sdmap_project(double lat, double lon, int16_t * x, int16_t * y);

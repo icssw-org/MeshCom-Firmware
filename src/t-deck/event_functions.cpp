@@ -860,7 +860,7 @@ void btn_event_handler_zoomout(lv_event_t * e)
             sdmap_lastKnownLon = gpsData.longitude;
         }
 
-        sdmap_zoom_in();
+        sdmap_zoom_out();
         sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
         add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
     }

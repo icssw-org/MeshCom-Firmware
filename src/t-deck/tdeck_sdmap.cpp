@@ -16,6 +16,10 @@ static char sdmap_dirs[SDMAP_SET_COUNT][40];
 static char sdmap_names[SDMAP_SET_COUNT][SDMAP_NAME_LEN];
 static int  sdmap_setCount  = 0;
 static int  sdmap_activeSet = 0;
+static int sdmap_currentTileX = -1;
+static int sdmap_currentTileY = -1;
+
+
 
 void sdmap_set_active_set(int idx)
 {
@@ -53,6 +57,13 @@ static double sdmap_lat2yf(double lat, int zoom)
 {
     double latRad = lat * M_PI / 180.0;
     return (1.0 - asinh(tan(latRad)) / M_PI) / 2.0 * (double)(1 << zoom);
+}
+
+bool sdmap_in_current_tile(double lat, double lon)
+{
+    int xt = (int)sdmap_lon2xf(lon, sdmap_zoom);
+    int yt = (int)sdmap_lat2yf(lat, sdmap_zoom);
+    return (xt == sdmap_currentTileX && yt == sdmap_currentTileY);
 }
 
 void sdmap_init()
@@ -115,6 +126,8 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
 
     int xtile = (int)sdmap_lon2xf(lon, sdmap_zoom);
     int ytile = (int)sdmap_lat2yf(lat, sdmap_zoom);
+    sdmap_currentTileX = xtile;
+    sdmap_currentTileY = ytile;
 
     char path[64];
     snprintf(path, sizeof(path), "%s/%d/%d/%d.png", sdmap_dirs[sdmap_activeSet], sdmap_zoom, xtile, ytile);
