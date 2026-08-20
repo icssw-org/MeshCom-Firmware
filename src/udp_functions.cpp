@@ -876,6 +876,15 @@ void startMeshComUDP()
 
       if (node_ip[0] == 44 || meshcom_settings.node_hamnet_only == 1)
       {
+        // Hamnet only not available for IT-Server, so we use Internet for IT-Server
+        if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
+        {
+          // MeshCom IT-Server
+          printlndeb("[WIFI]...Internet (no HAMNET) UDP-DEST meshcom.dig-italia.it");
+          WiFi.hostByName("meshcom.dig-italia.it", node_hostip);
+          s_node_hostip = node_hostip.toString();
+        }
+        else
         if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
         {
           // MeshCom DL-Server
@@ -918,10 +927,11 @@ void startMeshComUDP()
       }
       else
       {
-        if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
+        if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
         {
-          printlndeb("[WIFI]...Internet UDP-DEST DL 192.68.17.26");
-          node_hostip = IPAddress(192, 68, 17, 26);
+          // MeshCom IT-Server
+          printlndeb("[WIFI]...Internet UDP-DEST meshcom.dig-italia.it");
+          WiFi.hostByName("meshcom.dig-italia.it", node_hostip);
           s_node_hostip = node_hostip.toString();
         }
         else

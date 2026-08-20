@@ -2145,9 +2145,9 @@ void commandAction(char *umsg_text, bool ble)
         String strCtry = _owner_c;
         strCtry.toUpperCase();
 
-        if(strCtry != "OE" && strCtry != "DL")
+        if(strCtry != "OE" && strCtry != "DL" && strCtry != "IT")
         {
-            printfdeb("\nGateway-Server fault <%s> please only OE or DL\n", strCtry.c_str());
+            printfdeb("\nGateway-Server fault <%s> please only OE or DL or IT\n", strCtry.c_str());
             return;
         }
 

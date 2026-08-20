@@ -868,6 +868,16 @@ void NrfETH::startUDP()
   {
     if (local_addr[0] == 44 || meshcom_settings.node_hamnet_only)
     {
+      if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
+      {
+        if(bDisplayCont)
+          printlndeb("[UDP-DEST] Setting I-NET UDP-DEST 145.239.75.155");
+          
+        udp_dest_addr = IPAddress(145, 239, 75, 155);
+
+        timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+      }
+      else
       if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
       {
         if(bDisplayCont)
@@ -972,6 +982,16 @@ void NrfETH::startFIXUDP()
 
   if (memcmp(meshcom_settings.node_ip, "44", 2) == 0 || meshcom_settings.node_hamnet_only)
   {
+    if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
+    {
+      if(bDisplayCont)
+        printlndeb("[UDP-DEST] Setting I-NET UDP-DEST 145.239.75.155");
+        
+      udp_dest_addr = IPAddress(145, 239, 75, 155);
+
+      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+    }
+    else
     if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
     {
       if(bDisplayCont)
@@ -996,13 +1016,25 @@ void NrfETH::startFIXUDP()
   }
   else
   {
-    if(bDisplayCont)
-      printlndeb("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
-      
-    udp_dest_addr = IPAddress(89, 185, 97, 38);
+    if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
+    {
+      if(bDisplayCont)
+        printlndeb("[UDP-DEST] Internet UDP-DEST IT 145.239.75.155");
+        
+      udp_dest_addr = IPAddress(145, 239, 75, 155);
 
-    //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
-    timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+    }
+    else
+    {
+      if(bDisplayCont)
+        printlndeb("[UDP-DEST] Setting I-NET UDP-DEST OE 89.185.97.38");
+        
+      udp_dest_addr = IPAddress(89, 185, 97, 38);
+
+      //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
+      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+    }
   }
 
   snprintf(sn, sizeof(sn), "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
