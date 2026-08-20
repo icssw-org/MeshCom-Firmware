@@ -64,6 +64,8 @@ extern lv_obj_t    *btn_batt_label4;
 extern lv_obj_t    *text_input;
 extern lv_obj_t    *position_ta;
 extern lv_obj_t    *map_ta;
+extern double       sdmap_lastKnownLat;
+extern double       sdmap_lastKnownLon;
 extern lv_obj_t    *mheard_ta;
 extern lv_obj_t    *path_ta;
 extern lv_obj_t    *tv;

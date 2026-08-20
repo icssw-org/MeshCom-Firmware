@@ -14,6 +14,11 @@
 #include <Arduino.h>
 #include <configuration.h>
 
+extern String strMaps[MAX_MAP];
+
+#include <Arduino.h>
+#include <configuration.h>
+
 extern bool clicked;
 extern bool bInputSelected;
 extern bool bTouchDected;
