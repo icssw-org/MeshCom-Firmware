@@ -15,6 +15,7 @@
 #include <AceButton.h>
 using namespace ace_button;
 #include <lvgl.h>
+#include "tdeck_sdmap.h"
 
 void box_event_cb(lv_event_t * e);
 void btn_event_handler_aprs(lv_event_t * e);

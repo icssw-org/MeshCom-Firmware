@@ -22,6 +22,7 @@
 #include <RadioLib.h>
 #include <Wire.h>
 #include <SD.h>
+#include "tdeck_sdmap.h"
 
 #include <AceButton.h>
 using namespace ace_button;
@@ -229,6 +230,17 @@ bool setupSD()
             Serial.printf("[INIT]...SD Card Size: %u MB\n", cardSize);
             Serial.printf("[INIT]...Total space: %u MB\n",  cardTotal);
             //Serial.printf("Used space: %lu MB\n",   cardUsed);
+            sdmap_init();
+
+            for (int i = 0; i < SDMAP_SET_COUNT; i++)
+            {
+                if (i < sdmap_get_set_count())
+                    strMaps[i] = String(sdmap_get_set_name(i));
+                else
+                    strMaps[i] = "-";
+            }
+
+            lv_dropdown_set_options(dropdown_mapselect, getMapDropbox().c_str());
             return true;
         }
     }

@@ -35,6 +35,8 @@ extern TFT_eSPI tft;
 #include <udp_functions.h>
 #include <Preferences.h>
 
+#include <gps_functions.h>
+
 #ifdef GPS_L76K
 #include "gps_l76k.h"
 #endif 
@@ -831,17 +833,17 @@ void btn_event_handler_sendpos(lv_event_t * e)
  */
 void btn_event_handler_zoomin(lv_event_t * e)
 {
-    lv_event_code_t code = lv_event_get_code(e);
-
-    if(code == LV_EVENT_CLICKED)
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
     {
-        if(bDisplayCont)
-            Serial.println("zoomin Clicked");
+        if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
+        {
+            sdmap_lastKnownLat = gpsData.latitude;
+            sdmap_lastKnownLon = gpsData.longitude;
+        }
 
-        if (meshcom_settings.node_map < MAX_MAP-1)
-            meshcom_settings.node_map++;
-
-        set_map(meshcom_settings.node_map);
+        sdmap_zoom_in();
+        sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+        add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
     }
 }
 
@@ -850,17 +852,17 @@ void btn_event_handler_zoomin(lv_event_t * e)
  */
 void btn_event_handler_zoomout(lv_event_t * e)
 {
-    lv_event_code_t code = lv_event_get_code(e);
-
-    if(code == LV_EVENT_CLICKED)
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
     {
-        if(bDisplayCont)
-            Serial.println("zoomout Clicked");
+        if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
+        {
+            sdmap_lastKnownLat = gpsData.latitude;
+            sdmap_lastKnownLon = gpsData.longitude;
+        }
 
-        if (meshcom_settings.node_map > 0)
-            meshcom_settings.node_map--;
-        
-        set_map(meshcom_settings.node_map);
+        sdmap_zoom_out();
+        sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+        add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
     }
 }
 

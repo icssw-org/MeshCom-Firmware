@@ -25,12 +25,14 @@
 #include <vector>
 #include <SD.h>
 #include <SPI.h>
-
+#include "tdeck_sdmap.h"
 #include "event_functions.h"
 #include <lora_setchip.h>
 #include <WiFi.h>
 #include <Preferences.h>
 #include <TFT_eSPI.h>
+#include <gps_functions.h>
+
 
 extern TFT_eSPI tft;
 
@@ -45,6 +47,9 @@ extern TFT_eSPI tft;
 #endif
 
 int         iKeyBoardType=1;
+
+double sdmap_lastKnownLat = 0.0;
+double sdmap_lastKnownLon = 0.0;
 
 lv_obj_t    *btnlabelup;
 
@@ -384,12 +389,7 @@ static void tab_menu_button_event_cb(lv_event_t * e)
 }
 
 //////////////////////////////////////////////
-// MAP variables
-LV_IMG_DECLARE(map_europe);
-LV_IMG_DECLARE(map_deutschland);
-LV_IMG_DECLARE(map_oesterreich);
-LV_IMG_DECLARE(map_wien_umgebung);
-LV_IMG_DECLARE(map_wien);
+
 
 double map_lat_min[MAX_MAP]={0};
 double map_lat_max[MAX_MAP]={0};
@@ -1450,7 +1450,7 @@ void setDisplayLayout(lv_obj_t *parent)
     ////////////////////////////////////////////////////////////////////////////
     // MAP
     map_ta = lv_img_create(t7);
-    lv_img_set_src(map_ta, &map_europe);
+    
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_size(map_ta, 300, LV_VER_RES * 0.74);
@@ -1755,32 +1755,17 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     lv_coord_t x = 0;
     lv_coord_t y = 0;
 
-    // check on map
-    if(dlat > map_lat_min[meshcom_settings.node_map] || dlat < map_lat_max[meshcom_settings.node_map])
+        if (!sdmap_in_current_tile(dlat, dlon))
     {
-        if (bDEBUG)
-            Serial.printf("[ MAP ]...LAT: %.4lf not on map: %i\n", dlat, meshcom_settings.node_map);
+        // Station liegt nicht in der aktuell sichtbaren Kachel - keinen Punkt zeichnen
+        return;
     }
 
-    if(dlon < map_lon_min[meshcom_settings.node_map] || dlon > map_lon_max[meshcom_settings.node_map])
-    {
-        if (bDEBUG)
-            Serial.printf("[ MAP ]...LON: %.4lf not on map: %i\n", dlon, meshcom_settings.node_map);
-    }
-
-    double latdiff = map_lat_min[meshcom_settings.node_map] - map_lat_max[meshcom_settings.node_map];
-    double londiff = map_lon_max[meshcom_settings.node_map] - map_lon_min[meshcom_settings.node_map];
-
-    double ye = (double)map_y[meshcom_settings.node_map] / latdiff;
-    double xe = (double)map_x[meshcom_settings.node_map] / londiff;
-
-    y = (lv_coord_t)((map_lat_min[meshcom_settings.node_map] - dlat) * ye);
-    x = (lv_coord_t)((dlon - map_lon_min[meshcom_settings.node_map]) * xe);
-
-    if(x > map_x[meshcom_settings.node_map])
-        x = map_x[meshcom_settings.node_map];
-    if(y > map_y[meshcom_settings.node_map])
-        y = map_y[meshcom_settings.node_map];
+    
+    int16_t sx = 0, sy = 0;
+    sdmap_project(dlat, dlon, &sx, &sy);
+    x = (lv_coord_t)sx;
+    y = (lv_coord_t)sy;
 
     if(!bFound)
         ipoint = map_point_count;
@@ -1809,8 +1794,9 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     }
 
     if (bDEBUG)
-        Serial.printf("\n[ MAP ]...%-10.10s point:%2i node_lat:%.4lf node_lon:%.4lf latd:%.4lf lonf:%.4lf xe:%.4lf, ye:%.4lf <%3i/%3i)\n", callsign.c_str(), ipoint, dlat, dlon, latdiff, londiff, xe, ye, x, y);
+         Serial.printf("\n[ MAP ]...%-10.10s point:%2i node_lat:%.4lf node_lon:%.4lf <%3i/%3i)\n", callsign.c_str(), ipoint, dlat, dlon, x, y);
 
+   
     map_point[ipoint] = lv_obj_create(map_ta);
     lv_obj_set_size(map_point[ipoint],10, 10);
     lv_obj_set_pos(map_point[ipoint], x, y);
@@ -1835,41 +1821,6 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
  */
 void init_map()
 {
-    map_lat_min[0] = 62.18341;
-    map_lat_max[0] = 38.90292;
-    map_lon_min[0] = -12.68952;
-    map_lon_max[0] = 47.28335;
-    map_x[0] = 320;
-    map_y[0] = 201;
-    
-    map_lat_min[1] = 54.29605;
-    map_lat_max[1] = 47.24435;
-    map_lon_min[1] = 02.76120;
-    map_lon_max[1] = 20.60340;
-    map_x[1] = 320;
-    map_y[1] = 201;
-    
-    map_lat_min[2] = 49.89170;
-    map_lat_max[2] = 45.44086;
-    map_lon_min[2] = 07.54073;
-    map_lon_max[2] = 18.12056;
-    map_x[2] = 320;
-    map_y[2] = 200;
-    
-    map_lat_min[3] = 48.38202;
-    map_lat_max[3] = 48.07556;
-    map_lon_min[3] = 15.79216;
-    map_lon_max[3] = 16.65630;
-    map_x[3] = 320;
-    map_y[3] = 163;
-
-    map_lat_min[4] = 48.31630;
-    map_lat_max[4] = 48.11084;
-    map_lon_min[4] = 16.09416;
-    map_lon_max[4] = 16.69725;
-    map_x[4] = 320;
-    map_y[4] = 164;
-
     for(int im=0; im<MAX_POINTS; im++)
     {
         map_point[im] = NULL;
@@ -1914,30 +1865,26 @@ void set_map(int iMap)
     if(bDEBUG)
         Serial.printf("[ MAP ]...set to %i - %s\n", iMap, getMap(iMap).c_str());
 
-    switch (iMap)
+        switch (iMap)
     {
-        case 0:  // Europe 
-            lv_img_set_src(map_ta, &map_europe);
-            break;
-
+        case 0:
         case 1:
-            lv_img_set_src(map_ta, &map_deutschland);
-            break;
-
         case 2:
-            lv_img_set_src(map_ta, &map_oesterreich);
-            break;
         case 3:
-            lv_img_set_src(map_ta, &map_wien_umgebung);
-            break;
         case 4:
-            lv_img_set_src(map_ta, &map_wien);
-            break;
+        {
+            sdmap_set_active_set(iMap);
 
-        default:
-            lv_img_set_src(map_ta, &map_europe);
+            if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
+            {
+                sdmap_lastKnownLat = gpsData.latitude;
+                sdmap_lastKnownLon = gpsData.longitude;
+            }
+            sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+            map_x[iMap] = SDMAP_TILE_PX;
+            map_y[iMap] = SDMAP_TILE_PX;
             break;
-
+        }
     }
 
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
@@ -1958,6 +1905,11 @@ void set_map(int iMap)
     }
 
     refresh_map(iMap);
+
+    // jetzt immer SD-Kartenmodus
+    add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
+    
+
 }
 
 /**
@@ -3619,8 +3571,18 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
     add_map_point(callsign, dlat, dlon, bHome);
     
     map_pos_count++;
+
     if (map_pos_count >= MAX_POINTS)
+    {
         map_pos_count = 1;
+    }
+
+    if (bHome)
+    {
+        sdmap_lastKnownLat = dlat;
+        sdmap_lastKnownLon = dlon;
+        sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+    }
 
     #endif
 }
