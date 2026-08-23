@@ -885,7 +885,14 @@ void tabview_event_cb(lv_event_t * e)
                 break;
             case 2: // POS
                 break;
-            case 3: // MAP
+                        case 3: // MAP
+                if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
+                {
+                    sdmap_lastKnownLat = gpsData.latitude;
+                    sdmap_lastKnownLon = gpsData.longitude;
+                }
+                sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+                refresh_map(meshcom_settings.node_map);
                 break;
             case 4: // GPS
                 tdeck_refresh_track_view();

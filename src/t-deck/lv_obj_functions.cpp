@@ -102,7 +102,8 @@ lv_obj_t    *btn_batt_label2;
 lv_obj_t    *btn_batt_label4;
 lv_obj_t    *text_input;
 lv_obj_t    *position_ta;
-lv_obj_t    *map_ta;
+lv_obj_t    *map_ta; 
+lv_obj_t    * map_no_data_label = NULL;
 lv_obj_t    *mheard_ta;
 lv_obj_t    *path_ta;
 lv_obj_t    *tv;
@@ -1450,11 +1451,19 @@ void setDisplayLayout(lv_obj_t *parent)
     ////////////////////////////////////////////////////////////////////////////
     // MAP
     map_ta = lv_img_create(t7);
+
+    map_no_data_label = lv_label_create(t7);
+    lv_label_set_text(map_no_data_label, "Keine Karte ausgewaehlt\noder vorhanden!");
+    lv_obj_set_style_text_color(map_no_data_label, lv_color_white(), 0);
+    lv_obj_set_style_text_align(map_no_data_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(map_no_data_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(map_no_data_label, 200);
+    lv_obj_align(map_no_data_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_add_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
     // Kontrast erhöhen
     lv_obj_set_style_img_recolor(map_ta, lv_color_black(), 0);
     lv_obj_set_style_img_recolor_opa(map_ta, LV_OPA_40, 0);   // 0 = kein Effekt, 255 = komplett schwarz
     
-    lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_size(map_ta, 300, LV_VER_RES * 0.74);
     
