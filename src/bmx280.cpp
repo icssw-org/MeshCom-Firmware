@@ -123,7 +123,7 @@ void setupBMX280(bool bNewStart)
 		bBMPON=false;
 		bBMEON=false;
 		bmx_found=false;
-		return; 
+		return;
 	}
 
   	if(bBMPON)
@@ -135,7 +135,11 @@ void setupBMX280(bool bNewStart)
 			Wire.endTransmission(true);
 		#endif
 
-		bmx_i2c_address = I2C_ADDRESS_BMP;
+		#ifdef BMP280_I2C_ADDRESS
+			bmx_i2c_address = BMP280_I2C_ADDRESS;
+		#else
+			bmx_i2c_address = I2C_ADDRESS_BMP;
+		#endif
 	}
   	else
     	if(bBMEON)
@@ -147,7 +151,11 @@ void setupBMX280(bool bNewStart)
 				Wire.endTransmission(true);
 			#endif
 
-			bmx_i2c_address = I2C_ADDRESS_BME;
+			#ifdef BME280_I2C_ADDRESS
+				bmx_i2c_address = BME280_I2C_ADDRESS;
+			#else
+				bmx_i2c_address = I2C_ADDRESS_BME;
+			#endif
 		}
     	else
       		return;
@@ -163,9 +171,9 @@ void setupBMX280(bool bNewStart)
 	bmx_found = false;
 
 	fTemp = 0.0;
-	fPress = 0.0;	
+	fPress = 0.0;
 	fHum = 0.0;
-		
+
 	#if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
 		Wire.end();
 		Wire.begin(I2C_SDA, I2C_SCL);
@@ -184,7 +192,7 @@ void setupBMX280(bool bNewStart)
 
 	//by default sensing is disabled and must be enabled by setting a non-zero
 	//oversampling setting.
-	//set an oversampling setting for pressure and temperature measurements. 
+	//set an oversampling setting for pressure and temperature measurements.
 	bmx280.writeOversamplingPressure(BMx280MI::OSRS_P_x16);
 	bmx280.writeOversamplingTemperature(BMx280MI::OSRS_T_x16);
 
@@ -192,12 +200,10 @@ void setupBMX280(bool bNewStart)
 	if (bmx280.isBME280())
 		bmx280.writeOversamplingHumidity(BMx280MI::OSRS_H_x16);
 
-	
-	if(bBMEON)
-    	Serial.printf("[INIT]...BME280 startet\n");
-
-	if(bBMPON)
-    	Serial.printf("[INIT]...BMP280 startet\n");
+	if(bmx280.isBME280())
+		Serial.printf("[INIT]...BME280 started\n");
+	else
+		Serial.printf("[INIT]...BMP280 started\n");
 
 	bmx_found = true;
 }
