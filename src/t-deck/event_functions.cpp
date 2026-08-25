@@ -846,7 +846,7 @@ void btn_event_handler_zoomin(lv_event_t * e)
             sdmap_lastKnownLat = meshcom_settings.node_lat; // gpsData.latitude;
             sdmap_lastKnownLon = meshcom_settings.node_lon; // gpsData.longitude;
         }
-
+        
         sdmap_zoom_in();
         sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
         refresh_map(meshcom_settings.node_map);
@@ -872,7 +872,7 @@ void btn_event_handler_zoomout(lv_event_t * e)
             sdmap_lastKnownLat = meshcom_settings.node_lat; // gpsData.latitude;
             sdmap_lastKnownLon = meshcom_settings.node_lon; // gpsData.longitude;
         }
-
+        
         sdmap_zoom_out();
         sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
         refresh_map(meshcom_settings.node_map);
