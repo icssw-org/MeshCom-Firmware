@@ -164,45 +164,25 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
     sdmap_lastLat = lat;
     sdmap_lastLon = lon;
 
-    int useZoom = sdmap_zoom;
-    int xtile = 0, ytile = 0;
-    char path[64];
-    bool bTileFound = false;
-
-    while (useZoom >= SDMAP_MIN_ZOOM)
-    {
-        xtile = (int)sdmap_lon2xf(lon, useZoom);
-        ytile = (int)sdmap_lat2yf(lat, useZoom);
-
-        snprintf(path, sizeof(path), "%s/%d/%d/%d.png", sdmap_dirs[sdmap_activeSet], useZoom, xtile, ytile);
-
-        if (SD.exists(path))
-        {
-            bTileFound = true;
-            break;
-        }
-
-        useZoom--;
-    }
-
-    if (!bTileFound)
-    {
-        Serial.printf("[ SDMAP ]...Keine Kachel fuer diese Position in %s gefunden (Zoom %d bis %d geprueft)\n",
-                      sdmap_dirs[sdmap_activeSet], sdmap_zoom, SDMAP_MIN_ZOOM);
-        if (map_no_data_label != NULL)
-            lv_obj_clear_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
-        return false;
-    }
-
-    if (useZoom != sdmap_zoom)
-    {
-        Serial.printf("[ SDMAP ]...Zoom automatisch angepasst: %d -> %d (Originalzoom hatte keine Kachel)\n", sdmap_zoom, useZoom);
-        sdmap_zoom = useZoom;
-    }
+    int xtile = (int)sdmap_lon2xf(lon, sdmap_zoom);
+    int ytile = (int)sdmap_lat2yf(lat, sdmap_zoom);
 
     sdmap_currentTileX = xtile;
     sdmap_currentTileY = ytile;
 
+    char path[64];
+    snprintf(path, sizeof(path), "%s/%d/%d/%d.png", sdmap_dirs[sdmap_activeSet], sdmap_zoom, xtile, ytile);
+
+    if (!SD.exists(path))
+    {
+        Serial.printf("[ SDMAP ]...Kachel fehlt: %s\n", path);
+
+        snprintf(path, sizeof(path), "%s/1/1/1.png", sdmap_dirs[sdmap_activeSet]);
+        if (!SD.exists(path))
+            return false;
+    }
+
+    
     File f = SD.open(path, FILE_READ);
     if (!f)
     {
