@@ -3,10 +3,9 @@
 #include <SD.h>
 #include <math.h>
 #include <loop_functions_extern.h>   // fuer bDEBUG
-#include "lv_obj_functions_extern.h"
+#include "lv_obj_functions_extern.h" // fuer map_no_data_label
+
 // lodepng-Funktionen direkt deklarieren statt lodepng.h einzubinden
-// (das spart uns fragile verschachtelte Include-Pfade tief in der LVGL-Bibliothek -
-// die eigentlichen Funktionen sind laengst mitkompiliert, LVGL nutzt sie ja selbst)
 extern "C" {
     unsigned lodepng_decode32(unsigned char** out, unsigned* w, unsigned* h,
                                const unsigned char* in, size_t insize);
@@ -17,28 +16,10 @@ static char sdmap_dirs[SDMAP_SET_COUNT][40];
 static char sdmap_names[SDMAP_SET_COUNT][SDMAP_NAME_LEN];
 static int  sdmap_setCount  = 0;
 static int  sdmap_activeSet = 0;
-static int sdmap_currentTileX = -1;
-static int sdmap_currentTileY = -1;
-
-
-
-void sdmap_set_active_set(int idx)
-{
-    if (idx < 0) idx = 0;
-    if (idx >= SDMAP_SET_COUNT) idx = SDMAP_SET_COUNT - 1;
-    sdmap_activeSet = idx;
-}
-
-int sdmap_get_set_count()
-{
-    return sdmap_setCount;
-}
-
-const char * sdmap_get_set_name(int idx)
-{
-    if (idx < 0 || idx >= sdmap_setCount) return "";
-    return sdmap_names[idx];
-}
+static int  sdmap_currentTileX = -1;
+static int  sdmap_currentTileY = -1;
+static int  sdmap_setMinZoom[SDMAP_SET_COUNT];
+static int  sdmap_setMaxZoom[SDMAP_SET_COUNT];
 
 static int      sdmap_zoom   = 8;
 static uint8_t *sdmap_buf    = nullptr;
@@ -65,6 +46,29 @@ bool sdmap_in_current_tile(double lat, double lon)
     int xt = (int)sdmap_lon2xf(lon, sdmap_zoom);
     int yt = (int)sdmap_lat2yf(lat, sdmap_zoom);
     return (xt == sdmap_currentTileX && yt == sdmap_currentTileY);
+}
+
+void sdmap_set_active_set(int idx)
+{
+    if (idx < 0) idx = 0;
+    if (idx >= SDMAP_SET_COUNT) idx = SDMAP_SET_COUNT - 1;
+    sdmap_activeSet = idx;
+
+    if (sdmap_zoom < sdmap_setMinZoom[idx])
+        sdmap_zoom = sdmap_setMinZoom[idx];
+    if (sdmap_zoom > sdmap_setMaxZoom[idx])
+        sdmap_zoom = sdmap_setMaxZoom[idx];
+}
+
+int sdmap_get_set_count()
+{
+    return sdmap_setCount;
+}
+
+const char * sdmap_get_set_name(int idx)
+{
+    if (idx < 0 || idx >= sdmap_setCount) return "";
+    return sdmap_names[idx];
 }
 
 void sdmap_init()
@@ -94,7 +98,43 @@ void sdmap_init()
 
             snprintf(sdmap_dirs[sdmap_setCount], sizeof(sdmap_dirs[sdmap_setCount]), "/maps/%s", base);
 
-            Serial.printf("[ SDMAP ]...Kartenset %d gefunden: %s\n", sdmap_setCount + 1, sdmap_dirs[sdmap_setCount]);
+            // Vorhandene Zoomstufen dieses Sets ermitteln (Ordnernamen 0,1,2,... darunter)
+            int minZ = 999, maxZ = -1;
+            File zoomRoot = SD.open(sdmap_dirs[sdmap_setCount]);
+            if (zoomRoot && zoomRoot.isDirectory())
+            {
+                File zoomEntry = zoomRoot.openNextFile();
+                while (zoomEntry)
+                {
+                    if (zoomEntry.isDirectory())
+                    {
+                        const char * zn = zoomEntry.name();
+                        const char * zbase = strrchr(zn, '/');
+                        zbase = zbase ? zbase + 1 : zn;
+
+                        int z = atoi(zbase);
+                        if (z >= 0 && z <= SDMAP_MAX_ZOOM)
+                        {
+                            if (z < minZ) minZ = z;
+                            if (z > maxZ) maxZ = z;
+                        }
+                    }
+                    zoomEntry = zoomRoot.openNextFile();
+                }
+                zoomRoot.close();
+            }
+
+            if (maxZ < 0)
+            {
+                minZ = SDMAP_MIN_ZOOM;
+                maxZ = SDMAP_MAX_ZOOM;
+            }
+
+            sdmap_setMinZoom[sdmap_setCount] = minZ;
+            sdmap_setMaxZoom[sdmap_setCount] = maxZ;
+
+            Serial.printf("[ SDMAP ]...Kartenset %d gefunden: %s (Zoom %d-%d)\n",
+                          sdmap_setCount + 1, sdmap_dirs[sdmap_setCount], minZ, maxZ);
 
             sdmap_setCount++;
         }
@@ -110,13 +150,13 @@ int sdmap_get_zoom()
 
 void sdmap_zoom_in()
 {
-    if (sdmap_zoom < SDMAP_MAX_ZOOM)
+    if (sdmap_zoom < sdmap_setMaxZoom[sdmap_activeSet])
         sdmap_zoom++;
 }
 
 void sdmap_zoom_out()
 {
-    if (sdmap_zoom > SDMAP_MIN_ZOOM)
+    if (sdmap_zoom > sdmap_setMinZoom[sdmap_activeSet])
         sdmap_zoom--;
 }
 
