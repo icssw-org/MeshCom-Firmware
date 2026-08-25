@@ -126,17 +126,23 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
 
     int xtile = (int)sdmap_lon2xf(lon, sdmap_zoom);
     int ytile = (int)sdmap_lat2yf(lat, sdmap_zoom);
+
     sdmap_currentTileX = xtile;
     sdmap_currentTileY = ytile;
 
     char path[64];
     snprintf(path, sizeof(path), "%s/%d/%d/%d.png", sdmap_dirs[sdmap_activeSet], sdmap_zoom, xtile, ytile);
+
     if (!SD.exists(path))
     {
         Serial.printf("[ SDMAP ]...Kachel fehlt: %s\n", path);
-        return false;
+
+        snprintf(path, sizeof(path), "%s/1/1/1.png", sdmap_dirs[sdmap_activeSet]);
+        if (!SD.exists(path))
+            return false;
     }
 
+    
     File f = SD.open(path, FILE_READ);
     if (!f)
     {
