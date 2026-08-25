@@ -65,6 +65,8 @@ Timeout timerSerial;
     extern GPSData gpsData;
 #endif
 
+#include <t-deck/tdeck_sdmap.h>
+
 #if defined(HAS_TFT_CONNECT)
 #include "tft_display_functions.h"
 
@@ -3051,12 +3053,32 @@ void esp32loop()
         }
 
 
-        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
+                    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             gps_refresh_track++;
             if(gps_refresh_track > 4)
             {
                 tdeck_refresh_track_view();
                 gps_refresh_track=0;
+            }
+
+            // SD-Kartenmodus: alle 30 Sekunden pruefen, ob die eigene Position die
+            // aktuell geladene Kachel verlassen hat, und bei Bedarf nachladen -
+            // nur solange der Kartenbildschirm auch tatsaechlich sichtbar ist.
+            static unsigned long sdmap_boundary_timer = 0;
+            if ((sdmap_boundary_timer + 30000UL) < millis())
+            {
+                sdmap_boundary_timer = millis();
+
+                if (lv_tabview_get_tab_act(tv) == 3 && (gpsData.latitude != 0.0 || gpsData.longitude != 0.0))
+                {
+                    if (!sdmap_in_current_tile(gpsData.latitude, gpsData.longitude))
+                    {
+                        sdmap_lastKnownLat = gpsData.latitude;
+                        sdmap_lastKnownLon = gpsData.longitude;
+                        sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+                        refresh_map(meshcom_settings.node_map);
+                    }
+                }
             }
         #endif
 

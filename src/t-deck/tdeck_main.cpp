@@ -23,6 +23,7 @@
 #include <Wire.h>
 #include <SD.h>
 #include "tdeck_sdmap.h"
+#include <gps_functions.h>
 
 #include <AceButton.h>
 using namespace ace_button;
@@ -239,7 +240,12 @@ bool setupSD()
                 else
                     strMaps[i] = "-";
             }
-
+            
+            if (meshcom_settings.node_map >= sdmap_get_set_count())
+            {
+                Serial.printf("[ SDMAP ]...Gespeicherte Kartenauswahl (%d) nicht gefunden, falle zurueck auf Set 0\n", meshcom_settings.node_map);
+                meshcom_settings.node_map = 0;
+            }
             lv_dropdown_set_options(dropdown_mapselect, getMapDropbox().c_str());
             return true;
         }
@@ -577,22 +583,34 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
                 bSPEC=true;
             }
 
-            if(act_key == 0x2b) // SYM + O
+                       if(act_key == 0x2b) // SYM + O -> Zoom raus (wie Touch-Button)
             {
-                if (meshcom_settings.node_map > 0)
-                    meshcom_settings.node_map--;
-                
-                set_map(meshcom_settings.node_map);
+                if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
+                {
+                    sdmap_lastKnownLat = gpsData.latitude;
+                    sdmap_lastKnownLon = gpsData.longitude;
+                }
+
+                sdmap_zoom_out();
+                sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+                refresh_map(meshcom_settings.node_map);
+                add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
 
                 bSPEC=true;
             }
 
-            if(act_key == 0x2d) // SYM + I
+            if(act_key == 0x2d) // SYM + I -> Zoom rein (wie Touch-Button)
             {
-                if (meshcom_settings.node_map < MAX_MAP-1)
-                    meshcom_settings.node_map++;
+                if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
+                {
+                    sdmap_lastKnownLat = gpsData.latitude;
+                    sdmap_lastKnownLon = gpsData.longitude;
+                }
 
-                set_map(meshcom_settings.node_map);
+                sdmap_zoom_in();
+                sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+                refresh_map(meshcom_settings.node_map);
+                add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
 
                 bSPEC=true;
             }
