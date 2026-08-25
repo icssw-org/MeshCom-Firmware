@@ -98,7 +98,6 @@ void sdmap_init()
 
             snprintf(sdmap_dirs[sdmap_setCount], sizeof(sdmap_dirs[sdmap_setCount]), "/maps/%s", base);
 
-            // Vorhandene Zoomstufen dieses Sets ermitteln (Ordnernamen 0,1,2,... darunter)
             int minZ = 999, maxZ = -1;
             File zoomRoot = SD.open(sdmap_dirs[sdmap_setCount]);
             if (zoomRoot && zoomRoot.isDirectory())
@@ -287,21 +286,3 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
     sdmap_dsc.data_size = sdmap_bufLen;
 
     lv_img_set_src(img, &sdmap_dsc);
-
-    if (map_no_data_label != NULL)
-        lv_obj_add_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
-
-    Serial.printf("[ SDMAP ]...Kachel geladen & dekodiert: %s (%ux%u, %u Bytes)\n",
-                  path, pngW, pngH, (unsigned)nativeSize);
-
-    return true;
-}
-
-void sdmap_project(double lat, double lon, int16_t * x, int16_t * y)
-{
-    double xf = sdmap_lon2xf(lon, sdmap_zoom);
-    double yf = sdmap_lat2yf(lat, sdmap_zoom);
-
-    *x = (int16_t)((xf - floor(xf)) * SDMAP_TILE_PX);
-    *y = (int16_t)((yf - floor(yf)) * SDMAP_TILE_PX);
-}
