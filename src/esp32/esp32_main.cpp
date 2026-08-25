@@ -65,7 +65,9 @@ Timeout timerSerial;
     extern GPSData gpsData;
 #endif
 
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
 #include <t-deck/tdeck_sdmap.h>
+#endif
 
 #if defined(HAS_TFT_CONNECT)
 #include "tft_display_functions.h"
@@ -3053,7 +3055,7 @@ void esp32loop()
         }
 
 
-                    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
+        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             gps_refresh_track++;
             if(gps_refresh_track > 4)
             {
