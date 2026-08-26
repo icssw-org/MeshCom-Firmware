@@ -1453,7 +1453,7 @@ void setDisplayLayout(lv_obj_t *parent)
     map_ta = lv_img_create(t7);
 
     map_no_data_label = lv_label_create(t7);
-    lv_label_set_text(map_no_data_label, "Keine Karte ausgewaehlt\noder vorhanden!");
+    lv_label_set_text(map_no_data_label, "No card selected\nor present!");
     lv_obj_set_style_text_color(map_no_data_label, lv_color_white(), 0);
     lv_obj_set_style_text_align(map_no_data_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(map_no_data_label, LV_LABEL_LONG_WRAP);
@@ -1465,13 +1465,15 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_img_recolor_opa(map_ta, LV_OPA_40, 0);   // 0 = kein Effekt, 255 = komplett schwarz
     
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_size(map_ta, 300, LV_VER_RES * 0.74);
+    lv_obj_set_size(map_ta, 300, LV_VER_RES * 0.72);
+
+    // MAP in das Fenster einpassen dann passen aber die positioen nicht mehr
+    //lv_img_set_zoom(map_ta, LV_HOR_RES);
     
-    lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
 
     lv_obj_t * btzoomout = lv_btn_create(t7);
-    lv_obj_set_pos(btzoomout, 240, 135);
-    lv_obj_set_size(btzoomout, 20, 20);
+    lv_obj_set_pos(btzoomout, -11, 165);
+    lv_obj_set_size(btzoomout, 28, 28);
     lv_obj_add_event_cb(btzoomout, btn_event_handler_zoomout, LV_EVENT_ALL, NULL);
 
     lv_obj_t * btnlabelzoomout = lv_label_create(btzoomout);
@@ -1479,8 +1481,8 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_center(btnlabelzoomout);
 
     lv_obj_t * btzoomin = lv_btn_create(t7);
-    lv_obj_set_pos(btzoomin, 270, 135);
-    lv_obj_set_size(btzoomin, 20, 20);
+    lv_obj_set_pos(btzoomin, -11, 135);
+    lv_obj_set_size(btzoomin, 28, 28);
     lv_obj_add_event_cb(btzoomin, btn_event_handler_zoomin, LV_EVENT_ALL, NULL);
 
     lv_obj_t * btnlabelzoomin = lv_label_create(btzoomin);
@@ -1772,7 +1774,7 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     lv_coord_t x = 0;
     lv_coord_t y = 0;
 
-        if (!sdmap_in_current_tile(dlat, dlon))
+    if (!sdmap_in_current_tile(dlat, dlon))
     {
         // Station liegt nicht in der aktuell sichtbaren Kachel - keinen Punkt zeichnen
         return;
@@ -3575,21 +3577,21 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
     for(int ip = 0; ip < MAX_POINTS; ip++)
     {
         if (map_pos_call[ip] == callsign)
-{
-    if(map_pos_lat[ip] == dlat && map_pos_lon[ip] == dlon)
-        return;
+        {
+            if(map_pos_lat[ip] == dlat && map_pos_lon[ip] == dlon)
+                return;
 
-    map_pos_lat[ip] = dlat;
-    map_pos_lon[ip] = dlon;
+            map_pos_lat[ip] = dlat;
+            map_pos_lon[ip] = dlon;
 
-    bool bHome=false;
-    if (callsign.compareTo(meshcom_settings.node_call) == 0)
-        bHome=true;
+            bool bHome=false;
+            if (callsign.compareTo(meshcom_settings.node_call) == 0)
+                bHome=true;
 
-    add_map_point(callsign, dlat, dlon, bHome);
+            add_map_point(callsign, dlat, dlon, bHome);
 
-    return;
-}
+            return;
+        }
     }
 
     map_pos_call[map_pos_count] = callsign;
@@ -3613,6 +3615,13 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
     {
         sdmap_lastKnownLat = dlat;
         sdmap_lastKnownLon = dlon;
+
+        if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
+        {
+            sdmap_lastKnownLat = meshcom_settings.node_lat;
+            sdmap_lastKnownLon = meshcom_settings.node_lon;
+        }
+
         sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
     }
 
