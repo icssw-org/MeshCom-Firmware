@@ -3,9 +3,9 @@
 #include <SD.h>
 #include <math.h>
 #include <loop_functions_extern.h>   // fuer bDEBUG
+#include "lv_obj_functions_extern.h" // fuer map_no_data_label
+
 // lodepng-Funktionen direkt deklarieren statt lodepng.h einzubinden
-// (das spart uns fragile verschachtelte Include-Pfade tief in der LVGL-Bibliothek -
-// die eigentlichen Funktionen sind laengst mitkompiliert, LVGL nutzt sie ja selbst)
 extern "C" {
     unsigned lodepng_decode32(unsigned char** out, unsigned* w, unsigned* h,
                                const unsigned char* in, size_t insize);
@@ -16,28 +16,10 @@ static char sdmap_dirs[SDMAP_SET_COUNT][40];
 static char sdmap_names[SDMAP_SET_COUNT][SDMAP_NAME_LEN];
 static int  sdmap_setCount  = 0;
 static int  sdmap_activeSet = 0;
-static int sdmap_currentTileX = -1;
-static int sdmap_currentTileY = -1;
-
-
-
-void sdmap_set_active_set(int idx)
-{
-    if (idx < 0) idx = 0;
-    if (idx >= SDMAP_SET_COUNT) idx = SDMAP_SET_COUNT - 1;
-    sdmap_activeSet = idx;
-}
-
-int sdmap_get_set_count()
-{
-    return sdmap_setCount;
-}
-
-const char * sdmap_get_set_name(int idx)
-{
-    if (idx < 0 || idx >= sdmap_setCount) return "";
-    return sdmap_names[idx];
-}
+static int  sdmap_currentTileX = -1;
+static int  sdmap_currentTileY = -1;
+static int  sdmap_setMinZoom[SDMAP_SET_COUNT];
+static int  sdmap_setMaxZoom[SDMAP_SET_COUNT];
 
 static int      sdmap_zoom   = 8;
 static uint8_t *sdmap_buf    = nullptr;
@@ -64,6 +46,29 @@ bool sdmap_in_current_tile(double lat, double lon)
     int xt = (int)sdmap_lon2xf(lon, sdmap_zoom);
     int yt = (int)sdmap_lat2yf(lat, sdmap_zoom);
     return (xt == sdmap_currentTileX && yt == sdmap_currentTileY);
+}
+
+void sdmap_set_active_set(int idx)
+{
+    if (idx < 0) idx = 0;
+    if (idx >= SDMAP_SET_COUNT) idx = SDMAP_SET_COUNT - 1;
+    sdmap_activeSet = idx;
+
+    if (sdmap_zoom < sdmap_setMinZoom[idx])
+        sdmap_zoom = sdmap_setMinZoom[idx];
+    if (sdmap_zoom > sdmap_setMaxZoom[idx])
+        sdmap_zoom = sdmap_setMaxZoom[idx];
+}
+
+int sdmap_get_set_count()
+{
+    return sdmap_setCount;
+}
+
+const char * sdmap_get_set_name(int idx)
+{
+    if (idx < 0 || idx >= sdmap_setCount) return "";
+    return sdmap_names[idx];
 }
 
 void sdmap_init()
@@ -93,7 +98,42 @@ void sdmap_init()
 
             snprintf(sdmap_dirs[sdmap_setCount], sizeof(sdmap_dirs[sdmap_setCount]), "/maps/%s", base);
 
-            Serial.printf("[ SDMAP ]...Kartenset %d gefunden: %s\n", sdmap_setCount + 1, sdmap_dirs[sdmap_setCount]);
+            int minZ = 999, maxZ = -1;
+            File zoomRoot = SD.open(sdmap_dirs[sdmap_setCount]);
+            if (zoomRoot && zoomRoot.isDirectory())
+            {
+                File zoomEntry = zoomRoot.openNextFile();
+                while (zoomEntry)
+                {
+                    if (zoomEntry.isDirectory())
+                    {
+                        const char * zn = zoomEntry.name();
+                        const char * zbase = strrchr(zn, '/');
+                        zbase = zbase ? zbase + 1 : zn;
+
+                        int z = atoi(zbase);
+                        if (z >= 0 && z <= SDMAP_MAX_ZOOM)
+                        {
+                            if (z < minZ) minZ = z;
+                            if (z > maxZ) maxZ = z;
+                        }
+                    }
+                    zoomEntry = zoomRoot.openNextFile();
+                }
+                zoomRoot.close();
+            }
+
+            if (maxZ < 0)
+            {
+                minZ = SDMAP_MIN_ZOOM;
+                maxZ = SDMAP_MAX_ZOOM;
+            }
+
+            sdmap_setMinZoom[sdmap_setCount] = minZ;
+            sdmap_setMaxZoom[sdmap_setCount] = maxZ;
+
+            Serial.printf("[ SDMAP ]...Kartenset %d gefunden: %s (Zoom %d-%d)\n",
+                          sdmap_setCount + 1, sdmap_dirs[sdmap_setCount], minZ, maxZ);
 
             sdmap_setCount++;
         }
@@ -109,13 +149,13 @@ int sdmap_get_zoom()
 
 void sdmap_zoom_in()
 {
-    if (sdmap_zoom < SDMAP_MAX_ZOOM)
+    if (sdmap_zoom < sdmap_setMaxZoom[sdmap_activeSet])
         sdmap_zoom++;
 }
 
 void sdmap_zoom_out()
 {
-    if (sdmap_zoom > SDMAP_MIN_ZOOM)
+    if (sdmap_zoom > sdmap_setMinZoom[sdmap_activeSet])
         sdmap_zoom--;
 }
 
@@ -124,23 +164,51 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
     sdmap_lastLat = lat;
     sdmap_lastLon = lon;
 
-    int xtile = (int)sdmap_lon2xf(lon, sdmap_zoom);
-    int ytile = (int)sdmap_lat2yf(lat, sdmap_zoom);
-    sdmap_currentTileX = xtile;
-    sdmap_currentTileY = ytile;
-
+    int useZoom = sdmap_zoom;
+    int xtile = 0, ytile = 0;
     char path[64];
-    snprintf(path, sizeof(path), "%s/%d/%d/%d.png", sdmap_dirs[sdmap_activeSet], sdmap_zoom, xtile, ytile);
-    if (!SD.exists(path))
+    bool bTileFound = false;
+
+    while (useZoom >= SDMAP_MIN_ZOOM)
     {
-        Serial.printf("[ SDMAP ]...Kachel fehlt: %s\n", path);
+        xtile = (int)sdmap_lon2xf(lon, useZoom);
+        ytile = (int)sdmap_lat2yf(lat, useZoom);
+
+        snprintf(path, sizeof(path), "%s/%d/%d/%d.png", sdmap_dirs[sdmap_activeSet], useZoom, xtile, ytile);
+
+        if (SD.exists(path))
+        {
+            bTileFound = true;
+            break;
+        }
+
+        useZoom--;
+    }
+
+    if (!bTileFound)
+    {
+        Serial.printf("[ SDMAP ]...Keine Kachel fuer diese Position in %s gefunden (Zoom %d bis %d geprueft)\n",
+                      sdmap_dirs[sdmap_activeSet], sdmap_zoom, SDMAP_MIN_ZOOM);
+        if (map_no_data_label != NULL)
+            lv_obj_clear_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
         return false;
     }
+
+    if (useZoom != sdmap_zoom)
+    {
+        Serial.printf("[ SDMAP ]...Zoom automatisch angepasst: %d -> %d (Originalzoom hatte keine Kachel)\n", sdmap_zoom, useZoom);
+        sdmap_zoom = useZoom;
+    }
+
+    sdmap_currentTileX = xtile;
+    sdmap_currentTileY = ytile;
 
     File f = SD.open(path, FILE_READ);
     if (!f)
     {
         Serial.printf("[ SDMAP ]...Kachel konnte nicht geoeffnet werden: %s\n", path);
+        if (map_no_data_label != NULL)
+            lv_obj_clear_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
         return false;
     }
 
@@ -150,6 +218,8 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
     {
         Serial.println("[ SDMAP ]...malloc fuer PNG-Rohdaten fehlgeschlagen");
         f.close();
+        if (map_no_data_label != NULL)
+            lv_obj_clear_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
         return false;
     }
 
@@ -160,10 +230,11 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
     {
         Serial.println("[ SDMAP ]...Lesefehler beim Kachel-Import");
         free(pngRaw);
+        if (map_no_data_label != NULL)
+            lv_obj_clear_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
         return false;
     }
 
-        // PNG SELBST dekodieren (RGBA, lodepng_decode32 ist bereits im Projekt gelinkt)
     unsigned char * rgba32 = nullptr;
     unsigned pngW = 0, pngH = 0;
     unsigned err = lodepng_decode32(&rgba32, &pngW, &pngH, pngRaw, fsize);
@@ -174,10 +245,11 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
         Serial.printf("[ SDMAP ]...PNG-Dekodierfehler %u: %s\n", err, lodepng_error_text(err));
         if (rgba32 != nullptr)
             free(rgba32);
+        if (map_no_data_label != NULL)
+            lv_obj_clear_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
         return false;
     }
 
-    // In LVGLs natives Farbformat konvertieren (RGB565 bei LV_COLOR_DEPTH=16)
     size_t pixelCount = (size_t)pngW * pngH;
     size_t nativeSize = pixelCount * sizeof(lv_color_t);
 
@@ -186,13 +258,14 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
     {
         Serial.println("[ SDMAP ]...ps_malloc fuer Kachel fehlgeschlagen");
         free(rgba32);
+        if (map_no_data_label != NULL)
+            lv_obj_clear_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
         return false;
     }
 
     lv_color_t * dst = (lv_color_t *)newbuf;
     for (size_t i = 0; i < pixelCount; i++)
     {
-        // rgba32 liegt als R,G,B,A pro Pixel vor (4 Bytes) - Alpha ignorieren, Kacheln sind deckend
         dst[i] = lv_color_make(rgba32[i * 4 + 0], rgba32[i * 4 + 1], rgba32[i * 4 + 2]);
     }
 
@@ -206,13 +279,16 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon)
     sdmap_buf    = newbuf;
     sdmap_bufLen = nativeSize;
 
-    sdmap_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;   // schon fertig dekodiert!
+    sdmap_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
     sdmap_dsc.header.w  = (lv_coord_t)pngW;
     sdmap_dsc.header.h  = (lv_coord_t)pngH;
     sdmap_dsc.data      = sdmap_buf;
     sdmap_dsc.data_size = sdmap_bufLen;
 
     lv_img_set_src(img, &sdmap_dsc);
+
+    if (map_no_data_label != NULL)
+        lv_obj_add_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
 
     Serial.printf("[ SDMAP ]...Kachel geladen & dekodiert: %s (%ux%u, %u Bytes)\n",
                   path, pngW, pngH, (unsigned)nativeSize);

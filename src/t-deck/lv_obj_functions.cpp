@@ -102,7 +102,8 @@ lv_obj_t    *btn_batt_label2;
 lv_obj_t    *btn_batt_label4;
 lv_obj_t    *text_input;
 lv_obj_t    *position_ta;
-lv_obj_t    *map_ta;
+lv_obj_t    *map_ta; 
+lv_obj_t    * map_no_data_label = NULL;
 lv_obj_t    *mheard_ta;
 lv_obj_t    *path_ta;
 lv_obj_t    *tv;
@@ -401,7 +402,7 @@ int map_y[MAX_MAP] = {0};
 
 //////////////////////////////////////////////
 // MAP points
-lv_obj_t * map_point[MAX_POINTS];
+lv_obj_t * map_point[MAX_POINTS];lv_obj_t * map_point_label[MAX_POINTS];
 
 String map_point_call[MAX_POINTS];
 double map_point_lat[MAX_POINTS];
@@ -1450,8 +1451,19 @@ void setDisplayLayout(lv_obj_t *parent)
     ////////////////////////////////////////////////////////////////////////////
     // MAP
     map_ta = lv_img_create(t7);
+
+    map_no_data_label = lv_label_create(t7);
+    lv_label_set_text(map_no_data_label, "Keine Karte ausgewaehlt\noder vorhanden!");
+    lv_obj_set_style_text_color(map_no_data_label, lv_color_white(), 0);
+    lv_obj_set_style_text_align(map_no_data_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(map_no_data_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(map_no_data_label, 200);
+    lv_obj_align(map_no_data_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_add_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
+    // Kontrast erhöhen
+    lv_obj_set_style_img_recolor(map_ta, lv_color_black(), 0);
+    lv_obj_set_style_img_recolor_opa(map_ta, LV_OPA_40, 0);   // 0 = kein Effekt, 255 = komplett schwarz
     
-    lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_size(map_ta, 300, LV_VER_RES * 0.74);
     
@@ -1744,6 +1756,11 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
                 delay(19);
             }
 
+            if(map_point_label[ip] != NULL)
+            {
+                lv_obj_del(map_point_label[ip]);
+            }
+
             ipoint = ip;
 
             bFound = true;
@@ -1787,8 +1804,14 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
             delay(10);
         }
 
+        if(map_point_label[map_point_count] != NULL)
+        {
+            lv_obj_del(map_point_label[map_point_count]);
+        }
+
         map_point_call[map_point_count] = ""; // wieder frei machen;
         map_point[map_point_count] = NULL;
+        map_point_label[map_point_count] = NULL;
         map_point_lat[map_point_count] = 0.0;
         map_point_lon[map_point_count] = 0.0;
     }
@@ -1807,6 +1830,13 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
 
     lv_obj_set_style_radius(map_point[ipoint] , LV_RADIUS_CIRCLE, 0);
 
+    // Rufzeichen als kleine Beschriftung unter dem Punkt
+    map_point_label[ipoint] = lv_label_create(map_ta);
+    lv_label_set_text(map_point_label[ipoint], callsign.c_str());
+    lv_obj_set_style_text_font(map_point_label[ipoint], &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(map_point_label[ipoint], lv_color_black(), 0);
+    lv_obj_set_pos(map_point_label[ipoint], x - 5, y + 11);
+
     // MAP screen
     /*
     lv_tabview_set_act(tv, 3, LV_ANIM_OFF);
@@ -1823,7 +1853,8 @@ void init_map()
 {
     for(int im=0; im<MAX_POINTS; im++)
     {
-        map_point[im] = NULL;
+        map_point[im] = NULL; map_point_label[im] = NULL;
+        
         map_point_call[im] = "";
         
         map_pos_call[im] = "";
@@ -1841,7 +1872,6 @@ void refresh_map(int iMap)
     if(bDEBUG)
         Serial.printf("[ MAP ]...set to %i - %s\n", iMap, getMap(iMap).c_str());
 
-    // pos update
     for(int im = 0; im < MAX_POINTS; im++)
     {
         if(map_pos_call[im].length() > 0)
@@ -1850,7 +1880,14 @@ void refresh_map(int iMap)
             if(map_pos_call[im].compareTo(meshcom_settings.node_call) == 0)
                 bHome=true;
 
-            add_map_point(map_pos_call[im], map_pos_lat[im], map_pos_lon[im], bHome);
+            if (bHome)
+            {
+                add_map_point(map_pos_call[im], sdmap_lastKnownLat, sdmap_lastKnownLon, bHome);
+            }
+            else
+            {
+                add_map_point(map_pos_call[im], map_pos_lat[im], map_pos_lon[im], bHome);
+            }
         }
     }
 }
@@ -1891,17 +1928,12 @@ void set_map(int iMap)
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_size(map_ta, map_x[iMap], map_y[iMap]);
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
-
+    lv_obj_clean(map_ta);   // entfernt WIRKLICH alle Kind-Objekte (Punkte + Labels), auch verwaiste
     for(int im = 0; im < MAX_POINTS; im++)
     {
-        if(map_point[im] != NULL && lv_obj_is_valid(map_point[im]))
-        {
-            lv_obj_del(map_point[im]);
-
-            delay(10);
-        }
-
-        map_point[im]=NULL;
+        map_point[im] = NULL;
+        map_point_label[im] = NULL;
+        map_point_call[im] = "";
     }
 
     refresh_map(iMap);
@@ -3542,22 +3574,22 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
 
     for(int ip = 0; ip < MAX_POINTS; ip++)
     {
-        if(map_pos_call[ip] == callsign)
-        {
-            if(map_pos_lat[ip] == dlat && map_pos_lon[ip] == dlon)
-                return;
+        if (map_pos_call[ip] == callsign)
+{
+    if(map_pos_lat[ip] == dlat && map_pos_lon[ip] == dlon)
+        return;
 
-            map_pos_lat[ip] = dlat;
-            map_pos_lon[ip] = dlon;
+    map_pos_lat[ip] = dlat;
+    map_pos_lon[ip] = dlon;
 
-            bool bHome=false;
-            if (map_pos_call[map_pos_count].compareTo(meshcom_settings.node_call) == 0)
-                bHome=true;
+    bool bHome=false;
+    if (callsign.compareTo(meshcom_settings.node_call) == 0)
+        bHome=true;
 
-            add_map_point(callsign, dlat, dlon, bHome);
+    add_map_point(callsign, dlat, dlon, bHome);
 
-            return;
-        }
+    return;
+}
     }
 
     map_pos_call[map_pos_count] = callsign;

@@ -345,14 +345,23 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     // Datensatz zu haengen kostet Platz im BLE-Puffer, ohne etwas zu sagen.
     if(mheardLine.mh_path_payload.length() > 0)
         mhdoc["PP"] = mheardLine.mh_path_payload.c_str();
+    // Ursprung des Pakets: CALL ist der letzte Hop, SRC der Absender. Beides liegt hier
+    // bereits im Struct (lora_functions.cpp fuellt es aus aprsmsg.msg_source_call).
+    mhdoc["SRC"] = mheardLine.mh_sourcecallsign.c_str();
+    // HEY-Baken eines Gateways tragen "HG" statt "H" als Ziel - dieselbe Auskunft, die
+    // updateMheardPath() unten schon fuer die eigene Pfadtabelle auswertet (| 0x80).
+    mhdoc["GW"] = (mheardLine.mh_destinationpath == "HG") ? 1 : 0;
 
     // send to Phone
     uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
     bleBuffer[0] = 0x44;
-    serializeJson(mhdoc, bleBuffer+1, measureJson(mhdoc)+1);
+    // Puffergroesse begrenzen, nicht die gemessene JSON-Laenge: serializeJson schreibt
+    // hoechstens so viele Bytes wie erlaubt und liefert die tatsaechlich geschriebene
+    // Anzahl zurueck. 1 Byte Header + Null-Terminator bleiben reserviert.
+    size_t json_len = serializeJson(mhdoc, bleBuffer+1, sizeof(bleBuffer)-1);
 
     if(isPhoneReady == 1)
-        addBLEOutBuffer(bleBuffer, measureJson(mhdoc)+1);
+        addBLEOutBuffer(bleBuffer, json_len+1);
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 
@@ -652,9 +661,10 @@ void sendMheard()
                 // send to Phone
                 uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
                 bleBuffer[0] = 0x44;
-                serializeJson(mhdoc, bleBuffer+1, measureJson(mhdoc)+1);
+                // wie oben: Puffergroesse begrenzen statt der gemessenen JSON-Laenge
+                size_t json_len = serializeJson(mhdoc, bleBuffer+1, sizeof(bleBuffer)-1);
 
-                addBLEComToOutBuffer(bleBuffer, measureJson(mhdoc)+1);
+                addBLEComToOutBuffer(bleBuffer, json_len+1);
             }
         }
     }

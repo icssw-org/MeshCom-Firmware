@@ -4866,6 +4866,10 @@ void commandAction(char *umsg_text, bool ble)
 
             idoc["TYP"] = "I";
             idoc["FWVER"] = fwver;
+            // Build-Datum als eigener Schluessel: FWVER traegt nur "4.35 p", damit sind
+            // Sub-Releases fuer die App nicht unterscheidbar. FWVER selbst bleibt
+            // unveraendert, damit bestehende Apps weiter damit rechnen koennen.
+            idoc["FWDATE"] = FLASH_VERSION;
             idoc["CALL"] = meshcom_settings.node_call;
             idoc["ID"] = _GW_ID;
             idoc["HWID"] = BOARD_HARDWARE;
