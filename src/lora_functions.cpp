@@ -553,7 +553,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
                 mheardLine.mh_mesh = aprsmsg.msg_mesh;
                 mheardLine.mh_ncount = 0;
-                mheardLine.mh_path_payload = "";
+                // HEY-Baken tragen die Link-Kette (R<ncnt>;<ncnt>,<rssi>,<snr>;...) in der
+                // Nutzlast. Hier setzen, bei den uebrigen Feldern, statt erst nach dem Aufruf
+                // von updateMheard() - sonst ist sie im MH-JSON noch leer. Die spaetere
+                // Zuweisung fuer updateHeyPath() bleibt unberuehrt.
+                mheardLine.mh_path_payload = (aprsmsg.payload_type == '@') ? aprsmsg.msg_payload : "";
 
                 ///////////////////////////////////////////////
                 // MHeard
