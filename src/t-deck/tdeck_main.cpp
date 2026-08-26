@@ -583,12 +583,18 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
                 bSPEC=true;
             }
 
-                       if(act_key == 0x2b) // SYM + O -> Zoom raus (wie Touch-Button)
+            if(act_key == 0x2b) // SYM + O -> Zoom raus (wie Touch-Button)
             {
                 if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
                 {
                     sdmap_lastKnownLat = gpsData.latitude;
                     sdmap_lastKnownLon = gpsData.longitude;
+                }
+
+                if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
+                {
+                    sdmap_lastKnownLat = meshcom_settings.node_lat;
+                    sdmap_lastKnownLon = meshcom_settings.node_lon;
                 }
 
                 sdmap_zoom_out();
@@ -605,6 +611,12 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
                 {
                     sdmap_lastKnownLat = gpsData.latitude;
                     sdmap_lastKnownLon = gpsData.longitude;
+                }
+
+                if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
+                {
+                    sdmap_lastKnownLat = meshcom_settings.node_lat;
+                    sdmap_lastKnownLon = meshcom_settings.node_lon;
                 }
 
                 sdmap_zoom_in();

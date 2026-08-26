@@ -3077,6 +3077,13 @@ void esp32loop()
                     {
                         sdmap_lastKnownLat = gpsData.latitude;
                         sdmap_lastKnownLon = gpsData.longitude;
+
+                        if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
+                        {
+                            sdmap_lastKnownLat = meshcom_settings.node_lat;
+                            sdmap_lastKnownLon = meshcom_settings.node_lon;
+                        }
+
                         sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
                         refresh_map(meshcom_settings.node_map);
                     }
