@@ -848,6 +848,7 @@ void btn_event_handler_zoomin(lv_event_t * e)
         }
 
         
+        refresh_map_del(meshcom_settings.node_map);
         sdmap_zoom_in();
         sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
         refresh_map(meshcom_settings.node_map);
@@ -875,6 +876,7 @@ void btn_event_handler_zoomout(lv_event_t * e)
         }
         
         
+        refresh_map_del(meshcom_settings.node_map);
         sdmap_zoom_out();
         sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
         refresh_map(meshcom_settings.node_map);

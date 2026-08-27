@@ -301,6 +301,6 @@ void sdmap_project(double lat, double lon, int16_t * x, int16_t * y)
     double xf = sdmap_lon2xf(lon, sdmap_zoom);
     double yf = sdmap_lat2yf(lat, sdmap_zoom);
 
-    *x = (int16_t)((xf - floor(xf)) * SDMAP_TILE_PX);
+    *x = ((int16_t)((xf - floor(xf)) * 320))-32;
     *y = (int16_t)((yf - floor(yf)) * SDMAP_TILE_PX);
 }
