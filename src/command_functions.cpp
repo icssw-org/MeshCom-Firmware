@@ -4963,7 +4963,10 @@ void commandAction(char *umsg_text, bool ble)
             // Build-Datum als eigener Schluessel: FWVER traegt nur "4.35 p", damit sind
             // Sub-Releases fuer die App nicht unterscheidbar. FWVER selbst bleibt
             // unveraendert, damit bestehende Apps weiter damit rechnen koennen.
-            char cfwdate[20];
+            // 21 Byte Minimum: __DATE__ ("Mmm dd yyyy", 11) + ' ' + __TIME__
+            // ("hh:mm:ss", 8) + NUL. Mit [20] schnitt snprintf die letzte
+            // Sekundenstelle ab.
+            char cfwdate[24];
             snprintf(cfwdate, sizeof(cfwdate), "%s %s", __DATE__, __TIME__);
             idoc["FWDATE"] = cfwdate;
             idoc["CALL"] = meshcom_settings.node_call;
