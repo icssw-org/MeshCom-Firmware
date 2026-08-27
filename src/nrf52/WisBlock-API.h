@@ -123,6 +123,10 @@ void init_ble_name(void);
 BLEService init_settings_characteristic(void);
 void restart_advertising(uint16_t timeout);
 void stop_advertising();
+// CONC-17: applies a settings write staged by settings_rx_callback() from the
+// Main Loop task, so a concurrent radio/loop read of meshcom_settings never
+// observes a torn struct. Call once per loop iteration.
+void applyPendingBleSettings(void);
 extern BLECharacteristic g_lora_data;
 extern BLEUart g_ble_uart;
 extern bool g_ble_uart_is_connected;

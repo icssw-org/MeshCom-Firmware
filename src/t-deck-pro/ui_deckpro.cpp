@@ -2132,7 +2132,7 @@ void ui_track_disp(bool bSend)
             {
                 snprintf(ctrack, sizeof(ctrack), "TRACK:on %s %i\nDATE :%s\nTIME :%s\nLAT  :%08.4lf %c\nLON  :%08.4lf %c\nDIST :%.0lf m\nDIR  :old %.0lf\nDIR  :new %.0lf\nRATE :%4lisec\nNEXT :%isec",
                 (posinfo_fix ? "fix" : "nofix"), 
-                posinfo_hdop, 
+                (int)fposinfo_hdop, 
                 cDatum, 
                 cZeit, 
                 meshcom_settings.node_lat, 
@@ -2149,7 +2149,7 @@ void ui_track_disp(bool bSend)
             {
                 snprintf(ctrack, sizeof(ctrack), "GPS  :on %s %i\nDATE :%s\nTIME :%s\nLAT  :%08.4lf %c\nLON  :%08.4lf %c\nALT  :%i\nSAT  :%u\nDIR  :%.0lf\nRATE :%4lisec\nNEXT :%isec",
                 (posinfo_fix ? "fix" : "nofix"), 
-                posinfo_hdop, 
+                (int)fposinfo_hdop, 
                 cDatum, 
                 cZeit, 
                 meshcom_settings.node_lat, 
@@ -2187,7 +2187,7 @@ void ui_track_disp(bool bSend)
         snprintf(ctrack, sizeof(ctrack), "%s %s %i\n%s\nDATE :%s\nTIME :%s\nLAT  :%08.4lf %c\nLON  :%08.4lf %c\nALT  :%i m\nAGE  :%u\nSAT  :%u",
             ctypegps,
             (posinfo_fix ? "fix" : "nofix"),
-            posinfo_hdop,
+            (int)fposinfo_hdop,
             ctypetrack,
             cDatum,
             cZeit,

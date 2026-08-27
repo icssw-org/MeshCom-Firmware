@@ -25,7 +25,7 @@ DateTime now;
 
 bool setupRTC()
 {  
-    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+    #if defined(BOARD_TBEAM_V3) || defined(BOARD_E22_S3)
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
     #endif
@@ -68,7 +68,7 @@ bool loopRTC()
     if(!bRTCON)
         return false;
 
-    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+    #if defined(BOARD_TBEAM_V3) || defined(BOARD_E22_S3)
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
     #endif
@@ -80,7 +80,7 @@ bool loopRTC()
 
 void setRTCNow(String strDate)
 {
-    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+    #if defined(BOARD_TBEAM_V3) || defined(BOARD_E22_S3)
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
     #endif
@@ -96,7 +96,7 @@ void setRTCNow(String strDate)
 
 void setRTCNow(int year, int month, int day, int hour, int minute, int second)
 {
-    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+    #if defined(BOARD_TBEAM_V3) || defined(BOARD_E22_S3)
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
     #endif

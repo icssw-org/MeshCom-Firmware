@@ -1,4 +1,6 @@
-// (C) 2023 OE1KBC Kurt Baumann, OE1KFR Rainer 
+#pragma once
+
+// (C) 2023 OE1KBC Kurt Baumann, OE1KFR Rainer
 // (C) 2016, 2017, 2018, 2018, 2019, 2020 OE1KBC Kurt Baumann
 //
 // 20230326: Version 4.00: START
@@ -78,6 +80,8 @@ extern float fBattFaktor;
 
 extern bool bDisplayTrack;
 extern bool bOneButton;
+extern bool bEnterDfu;       // --dfu (nur nRF52): UF2-Bootloader statt normalem Neustart
+extern bool bDisplayDirty;   // ALT-35: Render-Anforderung, unabhaengig vom Tastendruck
 
 extern bool bGPSON;
 extern bool bGPSAutosymbol;
@@ -177,14 +181,24 @@ extern float BATTexp12;
 extern float BATexp12pre;
 extern float BATexp2;
 
+// ring_index_t liegt jetzt in ring_index.h (reine Verschiebung), damit
+// einzelne Ringe in eigene Uebersetzungseinheiten wandern koennen.
+#include "ring_index.h"
+
 // RINGBUFFER for incoming UDP lora packets for lora TX
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5];
-extern volatile int iWrite;
-extern volatile int iRead;
+extern ring_index_t iWrite;
+extern ring_index_t iRead;
 extern int iRetransmit;
 extern uint8_t retryCount[MAX_RING];
 extern uint8_t ringPriority[MAX_RING];         // Prio 1-5 pro Slot
 extern uint32_t ringEnqueueTime[MAX_RING];     // millis() timestamp when enqueued
+
+// N-14: kanonische Deklaration mit Default-Argumenten steht in loop_functions.h
+// (ein Default darf pro Parameter nur einmal je Uebersetzungseinheit stehen);
+// diese Zeile deckt nur TUs ab, die ausschliesslich dieses Extern-Header ziehen.
+int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
+                    const char* source, int retryCountIn, bool clearSlotFirst);
 
 extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5];
 extern int RAWLoRaWrite;
@@ -207,18 +221,32 @@ extern unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE+5];
 extern int ComToPhoneWrite;
 extern int ComToPhoneRead;
 
-extern uint8_t ringBufferLoraRX[MAX_DEDUP_RING][5]; //Ringbuffer for received msg_id deduplication
-extern std::atomic<uint8_t> loraWrite;   // counter for ringbuffer
+// ringBufferLoraRX/loraWrite werden jetzt in dedup_functions.h deklariert.
 
-extern std::atomic<bool> is_receiving;   // flag to store we are receiving a lora packet.
+// is_receiving: same reasoning as ch_util_rx_start_t below -- on ESP32, OnRxDone()/OnTxDone()
+// and friends run synchronously off the esp32loop() -> checkRX() call chain (no ISR, no
+// second task touches this flag there), so the atomic is unnecessary overhead. nRF52
+// registers these as real interrupt callbacks -- genuine concurrency, keep std::atomic. N-13.
+#if defined(ESP32)
+struct is_receiving_t {
+    bool v = false;
+    is_receiving_t() = default;
+    is_receiving_t(bool nv) : v(nv) {}
+    is_receiving_t &operator=(bool nv) { v = nv; return *this; }
+    operator bool() const { return v; }
+};
+#else
+using is_receiving_t = std::atomic<bool>;
+#endif
+extern is_receiving_t is_receiving;   // flag to store we are receiving a lora packet.
 extern std::atomic<bool> tx_is_active;   // flag to store we are transmitting  a lora packet.
 
 extern int cad_attempt;
 extern unsigned long csma_timeout;
 extern int rx_irq_defer_count;
-extern volatile bool cad_in_progress;
-extern volatile bool cad_done_flag;
-extern volatile bool cad_double_check;
+extern std::atomic<bool> cad_in_progress;
+extern std::atomic<bool> cad_done_flag;
+extern std::atomic<bool> cad_double_check;
 
 
 // RACE-01 fix: spinlock for deferred display update (ISR → main loop)
@@ -227,10 +255,38 @@ extern portMUX_TYPE displayMux;
 #endif
 
 // Channel utilization tracking (10s window)
-extern std::atomic<unsigned long> ch_util_rx_start;
-extern std::atomic<unsigned long> ch_util_tx_start;
-extern std::atomic<unsigned long> ch_util_rx_accum;
-extern std::atomic<unsigned long> ch_util_tx_accum;
+#if defined(ESP32)
+// ESP32 never registers OnHeaderDetect as a radio callback (see esp32_main.cpp),
+// so ch_util_rx_start has no writer reachable from an ISR or any concurrent task
+// on this platform -- no atomic needed. N-13.
+struct ch_util_rx_start_t {
+    unsigned long v = 0;
+    ch_util_rx_start_t() = default;
+    ch_util_rx_start_t(unsigned long nv) : v(nv) {}
+    ch_util_rx_start_t &operator=(unsigned long nv) { v = nv; return *this; }
+    unsigned long exchange(unsigned long nv) { unsigned long old = v; v = nv; return old; }
+};
+
+// Same reasoning for the accumulators/timestamps below: on ESP32 they are only touched
+// from OnRxDone()/OnTxDone()/checkRX(), all called synchronously from esp32loop() -- no
+// ISR, no second task. nRF52 runs these as real interrupt callbacks, keep std::atomic.
+struct ch_util_ulong_t {
+    unsigned long v = 0;
+    ch_util_ulong_t() = default;
+    ch_util_ulong_t(unsigned long nv) : v(nv) {}
+    ch_util_ulong_t &operator=(unsigned long nv) { v = nv; return *this; }
+    operator unsigned long() const { return v; }
+    unsigned long exchange(unsigned long nv) { unsigned long old = v; v = nv; return old; }
+    unsigned long fetch_add(unsigned long nv) { unsigned long old = v; v += nv; return old; }
+};
+#else
+using ch_util_rx_start_t = std::atomic<unsigned long>;
+using ch_util_ulong_t = std::atomic<unsigned long>;
+#endif
+extern ch_util_rx_start_t ch_util_rx_start;
+extern ch_util_ulong_t ch_util_tx_start;
+extern ch_util_ulong_t ch_util_rx_accum;
+extern ch_util_ulong_t ch_util_tx_accum;
 
 
 // Trickle-HEY state
@@ -277,7 +333,6 @@ extern double posinfo_prev_lat;
 extern double posinfo_prev_lon;
 extern double posinfo_last_direction;
 extern uint32_t posinfo_satcount;
-extern int posinfo_hdop;
 extern float fposinfo_hdop;
 extern bool posinfo_fix;
 extern bool posinfo_shot;
@@ -325,7 +380,6 @@ extern int softserFunktion;
 extern String strSOFTSERAPP_ID;    // ID der Messstelle
 extern String strSOFTSERAPP_NAME;  // Name der Messstelle
 
-extern String strSOFTSERAPP_ID;
 extern String strSOFTSERAPP_PEGEL;
 extern String strSOFTSERAPP_PEGEL2;
 extern String strSOFTSERAPP_TEMP;

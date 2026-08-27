@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <atomic>
 
 #include <extudp_functions.h>
 #include <loop_functions.h>
@@ -51,7 +52,7 @@ struct externQueueEntry {
     int16_t  rssi;
     int8_t   snr;
     char     src_type[8];
-    bool     used;
+    std::atomic<bool> used{false};
 };
 static struct externQueueEntry externQueue[MAX_EXTERN_QUEUE];
 static int externQueueWrite = 0;
@@ -295,6 +296,32 @@ void getExternUDP()
   if(!hasExternIPaddress)
     return;
 
+#ifdef MC_TEST_HOOKS
+  // N-20-Soak-Instrumentierung (compile-gated, Produktionsbuilds unberuehrt):
+  // sequenznummerierter Takt an den EXTUDP-Peer alle 500 ms. Eine Luecke in
+  // seq zeigt von aussen praezise, WANN der Sendepfad stockte; der Abgleich
+  // mit der Serial-Echo-Probe unterscheidet "Netz weg, Loop lebt" von
+  // "Loop-Task haengt". Bewusst im normalen Loop-Kontext gesendet -- der
+  // Takt IST die Last auf genau dem Socket-Pfad, den der Kabel-Flap trifft.
+  {
+    static uint32_t hb_seq = 0;
+    static unsigned long hb_last = 0;
+    if((unsigned long)(millis() - hb_last) >= 500)
+    {
+      hb_last = millis();
+      char hb[80];
+      int hlen = snprintf(hb, sizeof(hb), "{\"type\":\"hb\",\"seq\":%lu,\"ms\":%lu}",
+                          (unsigned long)hb_seq++, (unsigned long)millis());
+      if(hlen > 0)
+      {
+        UdpExtern.beginPacket(apip, EXTERN_PORT);
+        UdpExtern.write((const uint8_t *)hb, (size_t)hlen);
+        UdpExtern.endPacket();
+      }
+    }
+  }
+#endif
+
   int len=0;
 
   if(bEXTUDP && (int)strlen(meshcom_settings.node_extern) > 7)
@@ -304,7 +331,7 @@ void getExternUDP()
     
     if (packetExtSize > 0)
     {
-      len = UdpExtern.read(incomingExtPacket, UDP_TX_BUF_SIZE);
+      len = UdpExtern.read(incomingExtPacket, UDP_TX_BUF_SIZE - 1);
     }
   }
 
@@ -319,6 +346,7 @@ void getExternUDP()
 
 void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t rssi, int8_t snr)
 {
+  (void)bUDP;
   #ifdef ESP32
     if(bWIFIAP)
       return;
@@ -340,8 +368,18 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     return;
   }
 
+  // ESP32 Loop-Task-Stack = 8 KB → 1000 B auf Stack ok.
+  // nRF52 Loop-Task-Stack = 4 KB → BSS, sonst Stack-Overflow Crash bei
+  // sendPosition → sendExtern (siehe Commit 1951aa7d, fix RAK4631).
+#ifdef ESP32
   char c_json[500] = {0};
   char c_tjson[500] = {0};
+#else
+  static char c_json[500];
+  static char c_tjson[500];
+  memset(c_json, 0, sizeof(c_json));
+  memset(c_tjson, 0, sizeof(c_tjson));
+#endif
 
   char escape_symbol[3];
   char escape_group[3];
@@ -582,13 +620,17 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
 void queueExtern(char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t rssi, int8_t snr)
 {
     struct externQueueEntry *entry = &externQueue[externQueueWrite];
-    if(buflen > 500) buflen = 500;
+    if(buflen > sizeof(entry->buffer)) {
+        Serial.printf("[EXT] queueExtern: buflen %u > %u, dropped\n",
+                      (unsigned)buflen, (unsigned)sizeof(entry->buffer));
+        return;
+    }
     memcpy(entry->buffer, buffer, buflen);
     entry->buflen = buflen;
     entry->rssi = rssi;
     entry->snr = snr;
     snprintf(entry->src_type, sizeof(entry->src_type), "%s", src_type);
-    entry->used = true;
+    entry->used.store(true, std::memory_order_release);
     externQueueWrite = (externQueueWrite + 1) % MAX_EXTERN_QUEUE;
 }
 
@@ -596,11 +638,11 @@ void flushExternQueue()
 {
     for(int i = 0; i < MAX_EXTERN_QUEUE; i++)
     {
-        if(externQueue[i].used)
+        if(externQueue[i].used.load(std::memory_order_acquire))
         {
             sendExtern(true, externQueue[i].src_type, externQueue[i].buffer,
                        externQueue[i].buflen, externQueue[i].rssi, externQueue[i].snr);
-            externQueue[i].used = false;
+            externQueue[i].used.store(false, std::memory_order_relaxed);
         }
     }
 }

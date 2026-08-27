@@ -1,6 +1,14 @@
 #include "configuration.h"
 
-#ifndef BOARD_RAK4630
+// ESP-IDF ADC calibration API (esp_adc_cal.h) and analogReadMilliVolts() are
+// ESP32-Arduino-core-only. The previous `#ifndef BOARD_RAK4630` guard only
+// worked for wiscore_rak4631 by coincidence of a platformio.ini section-name
+// collision (see Wave 0.2 notes) that leaked BOARD_RAK4630 into every other
+// nRF52 variant's build; on a correctly isolated build it left heltec_t114
+// and t_echo trying to compile ESP-IDF headers. loop_ADCFunctions() is only
+// ever called from src/esp32/esp32_main.cpp, so gating on ESP32 directly
+// keeps every board's compiled behavior identical to before.
+#if defined(ESP32)
 
 #include "loop_functions_extern.h"
 
@@ -67,7 +75,7 @@ void loop_ADCFunctions()
             if (ADCalpha == 0.0) { ADCalpha = 0.001; }
 
             int ADCintervall = (int)meshcom_settings.node_analog_alpha % 100;
-            if ((analog_oversample_timer + std::max(2,ADCintervall)) < millis())  //min. 2ms, max. 99ms
+            if ((uint32_t)(millis() - analog_oversample_timer) >= (uint32_t)std::max(2,ADCintervall))  //min. 2ms, max. 99ms
             {
                 //digitalWrite(BOARD_LED, LOW);  // OE3WAS für TEST Timing
                 //digitalWrite(BOARD_LED, HIGH);  // OE3WAS für TEST
@@ -94,7 +102,7 @@ void loop_ADCFunctions()
             }
 
             int ADCshowtime = (int)meshcom_settings.node_analog_alpha / 100;
-            if ((analog_show_timer + (1000 * std::max(1,ADCshowtime))) < millis())  // 1 .. 99s
+            if ((uint32_t)(millis() - analog_show_timer) >= (uint32_t)(1000 * std::max(1,ADCshowtime)))  // 1 .. 99s
             {
                 Serial.printf("[ADC1]; GPIO%d; %s; %u; %.3f; %u; %u; %.1f; %.1f; %.1f\n",
                     meshcom_settings.node_analog_pin, getTimeString().c_str(),

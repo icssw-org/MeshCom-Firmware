@@ -64,24 +64,58 @@ void sendToPhone()
 		// we need to insert the first byte text msg flag
 		uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
 		// MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
-		uint8_t blelen = BLEtoPhoneBuff[toPhoneRead][0];
+		uint8_t blelen;
+		uint8_t statusByte;
+		// CONC-18: snapshot the slot's length/status/payload bytes under a
+		// single lock, instead of reading blelen here and memcpy-ing from the
+		// live ring further down. addBLEOutBuffer() (CONC-15) can wrap the
+		// ring and overwrite this exact slot from OnRxDone (nRF52 timer-
+		// service task, see C-01) in the gap between the two; a snapshot
+		// buffer makes what follows immune to that regardless of timing.
+		uint8_t ringSnapshot[MAX_MSG_LEN_PHONE];
+#if defined(NRF52_SERIES)
+		taskENTER_CRITICAL();
+#endif
+		blelen = BLEtoPhoneBuff[toPhoneRead][0];
+		statusByte = BLEtoPhoneBuff[toPhoneRead][1];
+		if(blelen > 0)
+			memcpy(ringSnapshot, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
+		// Advance the read pointer here, still under the lock: the slot's
+		// content is already captured above, and this keeps the index update
+		// atomic with addBLEOutBuffer()'s writer-side overflow check
+		// (addRingPointer(), CONC-15) instead of racing it later.
+		toPhoneRead++;
+		if (toPhoneRead >= MAX_RING)
+			toPhoneRead = 0;
+#if defined(NRF52_SERIES)
+		taskEXIT_CRITICAL();
+#endif
+
+		// N-04 residual: the producer clamp only closed the RF-reachable path;
+		// blelen==0 here would underflow to 255 below and memcpy past the
+		// actual payload.
+		if(blelen == 0)
+		{
+			ble_busy_flag = false;
+			return;
+		}
 
 		//Mheard
-		if(BLEtoPhoneBuff[toPhoneRead][1] == 0x91)
+		if(statusByte == 0x91)
 		{
-			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen-1);
+			memcpy(toPhoneBuff, ringSnapshot, blelen-1);
 		}
-		else 
+		else
 		// Data Message (JSON)
-		if(BLEtoPhoneBuff[toPhoneRead][1] == 0x44)
-		{		
-			memcpy(toPhoneBuff, BLEtoPhoneBuff[toPhoneRead]+1, blelen);	
-		} 
+		if(statusByte == 0x44)
+		{
+			memcpy(toPhoneBuff, ringSnapshot, blelen);
+		}
 		else
 		// Text Message and Position
 		{
 			toPhoneBuff[0] = 0x40;
-			memcpy(toPhoneBuff+1, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
+			memcpy(toPhoneBuff+1, ringSnapshot, blelen);
 		}
 
 		// send to phone
@@ -94,10 +128,6 @@ void sendToPhone()
 		#else
 			g_ble_uart.write(toPhoneBuff, blelen + 2);
 		#endif
-
-		toPhoneRead++;
-		if (toPhoneRead >= MAX_RING)
-			toPhoneRead = 0;
 
 		if(bBLEDEBUG)
 		{
@@ -134,11 +164,21 @@ void sendComToPhone()
 		// MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
 		uint8_t blelen = BLEComToPhoneBuff[ComToPhoneRead][0];
 
+		// N-04 residual: see sendToPhone() above.
+		if(blelen == 0)
+		{
+			ComToPhoneRead++;
+			if (ComToPhoneRead >= MAX_RING)
+				ComToPhoneRead = 0;
+			ble_busy_flag = false;
+			return;
+		}
+
 		//Mheard
 		if(BLEComToPhoneBuff[ComToPhoneRead][1] == 0x91)
 		{
 			memcpy(ComToPhoneBuff, BLEComToPhoneBuff[ComToPhoneRead]+1, blelen-1);
-		} else 
+		} else
 		// Data Message (JSON)
 		if(BLEComToPhoneBuff[ComToPhoneRead][1] == 0x44)
 		{
@@ -523,6 +563,13 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 		case 0xA0: {
 			// length 1B - Msg ID 1B - Text
 
+			if(msg_len < 2)
+			{
+				// malformed frame: declared length too short for the length+type
+				// header, avoid unsigned underflow of txt_msg_len_phone below
+				break;
+			}
+
 			txt_msg_len_phone = msg_len - 2;	// now zero escape for lora TX
 
 			// Spin-wait removed: readPhoneCommand now runs in Main Loop,
@@ -550,17 +597,38 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			// 1B - SSID Length - SSID - 1B PWD Length - PWD
 
 			DEBUG_MSG("BLE", "Wifi Setting from phone");
-			
+
 			uint8_t ssid_len = conf_data[2];
+
+			// bound ssid_len against the declared frame length before reading
+			// the pwd length byte that follows the SSID field
+			if((unsigned)(4 + ssid_len) > msg_len)
+			{
+				break;
+			}
+
 			uint8_t pwd_len = conf_data[ssid_len + 3];
+
+			// bound the full frame (len+type+ssid_len+SSID+pwd_len+PWD) against
+			// the declared frame length before touching the password bytes
+			if((unsigned)(4 + ssid_len + pwd_len) > msg_len)
+			{
+				break;
+			}
 
 			if(ssid_len > 0 && pwd_len > 0)
 			{
-				char ssid_arr [ssid_len +1] = {0};
-				char pwd_arr [pwd_len +1] = {0};
+				// fixed-size buffers matching meshcom_settings.node_ssid/node_pwd;
+				// avoids VLAs sized directly from untrusted input and clamps the
+				// copy length to the destination capacity
+				char ssid_arr [sizeof(meshcom_settings.node_ssid)] = {0};
+				char pwd_arr [sizeof(meshcom_settings.node_pwd)] = {0};
 
-				memcpy(ssid_arr, conf_data + 3, ssid_len);
-				memcpy(pwd_arr, conf_data + (4 + ssid_len), pwd_len);
+				uint8_t ssid_copy_len = (ssid_len < sizeof(ssid_arr) - 1) ? ssid_len : (sizeof(ssid_arr) - 1);
+				uint8_t pwd_copy_len = (pwd_len < sizeof(pwd_arr) - 1) ? pwd_len : (sizeof(pwd_arr) - 1);
+
+				memcpy(ssid_arr, conf_data + 3, ssid_copy_len);
+				memcpy(pwd_arr, conf_data + (4 + ssid_len), pwd_copy_len);
 
 				String s_SSID = ssid_arr;
 				String s_PWD = pwd_arr;

@@ -83,22 +83,43 @@ void setupBME680()
     Serial.println("[INIT]...Could not find BME680 sensor or Address conflict!");
     return;
   }
-  else
-  {
-    bme680_found = true;
-  }
 
-  // Initialize the BME680
+  // N-27: Ein ACK auf die Adresse beweist nur, dass dort UEBERHAUPT jemand
+  // antwortet -- nicht, dass es ein BME680 ist. 0x76 und 0x77 teilen sich
+  // BME280, BMP280 und BME680, wie der Kommentar oben selbst festhaelt.
+  // Erst begin() liest die Chip-ID und ist damit die einzige Stelle, die die
+  // drei auseinanderhaelt. Der Rueckgabewert wurde bisher verworfen und
+  // bme680_found allein aus dem ACK gesetzt: auf einem Board mit BME280 an
+  // 0x76 meldete der Node dann "BME680 sensor found", "--wx" zeigte
+  // "BME680: on (found)", und jeder Lesezyklus druckte dauerhaft
+  // "Failed to complete reading :(", ohne dass irgendetwas den Zustand
+  // zuruecksetzte.
+  bool bme680_begin_ok = false;
+
   switch (foundAddr)
   {
     case 1:
-      bme.begin(I2C_ADDRESS_BME680_1);
+      bme680_begin_ok = bme.begin(I2C_ADDRESS_BME680_1);
       break;
     case 2:
-      bme.begin(I2C_ADDRESS_BME680_2);
+      bme680_begin_ok = bme.begin(I2C_ADDRESS_BME680_2);
       break;
   }
-  
+
+  if(!bme680_begin_ok)
+  {
+    Serial.printf("[INIT]...BME680 an 0x%02X antwortet, ist aber keiner (Chip-ID passt nicht) - BME680 aus\n",
+                  (foundAddr == 1) ? I2C_ADDRESS_BME680_1 : I2C_ADDRESS_BME680_2);
+    Serial.println("[INIT]...Vermutlich ein BME280/BMP280 - mit --bme on bzw. --bmp on aktivieren");
+
+    bme680_found = false;
+    bBME680ON = false;   // wie im Konflikt-Zweig oben: nur Laufzeit, nicht gespeichert
+
+    return;
+  }
+
+  bme680_found = true;
+
   // Set up oversampling and filter initialization
   bme.setTemperatureOversampling(BME680_OS_8X);
   bme.setHumidityOversampling(BME680_OS_2X);

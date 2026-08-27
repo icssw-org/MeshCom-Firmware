@@ -46,6 +46,66 @@ void check_efuse(void)
 }
 
 
+// Compile-Zeit-Fallback, bis die Probe (falls ADC_CTRL_PIN vorhanden) gelaufen ist bzw. auf
+// Boards ohne ADC_CTRL_PIN dauerhaft: Wireless Paper ist als active LOW dokumentiert, alle
+// anderen (E213/E290) als active HIGH ("am Geraet verifiziert").
+#if defined(BOARD_WIRELESS_PAPER)
+batt_probe_t battProbeState = BATT_PROBE_ACTIVE_LOW;
+#else
+batt_probe_t battProbeState = BATT_PROBE_ACTIVE_HIGH;
+#endif
+
+bool battHardwarePresent(void)
+{
+	return battProbeState != BATT_PROBE_NONE;   // fail-safe: nur bei positiv erkanntem "kein Teiler" false
+}
+
+
+#if defined(ADC_CTRL_PIN)
+// battProbeState startet bewusst NICHT auf BATT_PROBE_UNKNOWN (siehe oben), daher braucht das
+// "einmalig ausfuehren"-Gating ein eigenes Flag statt eines Vergleichs gegen battProbeState.
+// Nur hier deklariert: ohne ADC_CTRL_PIN gibt es keine Probe und das Flag waere ungenutzt.
+static bool battProbeDone = false;
+
+// Einmalige Polaritaets-Probe (siehe Begruendung in batt_functions.h). Wird lazy beim ersten
+// ADC_BATT_ON() aufgerufen (also beim Boot, aus init_batt()) und danach nie wieder (battProbeDone).
+static void battProbeADCPolarity(void)
+{
+	int countsHigh = 0;
+	int countsLow  = 0;
+
+	digitalWrite(ADC_CTRL_PIN, HIGH);
+	delay(100);   // Teiler braucht ~100ms zum Einschwingen (wie an anderer Stelle bereits verwendet)
+	for (int i = 0; i < 8; i++) { countsHigh += analogRead(BAT_VOLT_PIN); }
+	countsHigh /= 8;
+
+	digitalWrite(ADC_CTRL_PIN, LOW);
+	delay(100);
+	for (int i = 0; i < 8; i++) { countsLow += analogRead(BAT_VOLT_PIN); }
+	countsLow /= 8;
+
+	if (countsHigh >= BATT_PROBE_MIN_COUNTS && countsHigh > countsLow)
+	{
+		battProbeState = BATT_PROBE_ACTIVE_HIGH;
+		digitalWrite(ADC_CTRL_PIN, LOW);    // Ruhezustand: Teiler getrennt (Strom sparen)
+	}
+	else if (countsLow >= BATT_PROBE_MIN_COUNTS && countsLow > countsHigh)
+	{
+		battProbeState = BATT_PROBE_ACTIVE_LOW;
+		digitalWrite(ADC_CTRL_PIN, HIGH);   // Ruhezustand: Teiler getrennt (Strom sparen)
+	}
+	else
+	{
+		battProbeState = BATT_PROBE_NONE;   // kein Teiler bestueckt -> keine Batteriehardware
+	}
+
+	printfdeb("[INIT]...ADC_CTRL_PIN probe: high=%d;low=%d;-> %s\n", countsHigh, countsLow,
+		(battProbeState == BATT_PROBE_ACTIVE_HIGH) ? "active HIGH" :
+		(battProbeState == BATT_PROBE_ACTIVE_LOW)  ? "active LOW"  : "keine Batteriehardware (kein Teiler)");
+}
+#endif
+
+
 void VextON(void)
 {
 	#if defined(BOARD_WIRELESS_PAPER)
@@ -78,12 +138,17 @@ void ADC_BATT_ON(void)
 {
 	#if defined(ADC_CTRL_PIN)
 		pinMode(ADC_CTRL_PIN, OUTPUT);
-		//Heltec V3.1 --- hat keine eigene variants !?!?
-		#if defined(BOARD_HELTEC_V31) || defined(BOARD_WIRELESS_PAPER)
-			digitalWrite(ADC_CTRL_PIN,LOW);   // active LOW: LOW = Teiler durchgeschaltet/messen
-		#else
-			digitalWrite(ADC_CTRL_PIN, HIGH);   // E213/E290: active HIGH (am Geraet verifiziert: LOW->0mV, HIGH->840mV)
-		#endif
+
+		if (!battProbeDone)
+		{
+			battProbeADCPolarity();   // einmalig: Polaritaet des Teiler-Schalters ermitteln
+			battProbeDone = true;
+		}
+
+		if (battProbeState == BATT_PROBE_ACTIVE_LOW)
+			digitalWrite(ADC_CTRL_PIN, LOW);    // active LOW: LOW = Teiler durchgeschaltet/messen (z.B. Wireless Paper)
+		else
+			digitalWrite(ADC_CTRL_PIN, HIGH);   // active HIGH (Default/Fallback): E213/E290 am Geraet verifiziert
 	#endif
 }
 
@@ -91,12 +156,11 @@ void ADC_BATT_OFF(void)
 {
 	#if defined(ADC_CTRL_PIN)
 		pinMode(ADC_CTRL_PIN, OUTPUT);
-		//Heltec V3.1 --- hat keine eigene variants !?!?
-		#if defined(BOARD_HELTEC_V31) || defined(BOARD_WIRELESS_PAPER)
-			digitalWrite(ADC_CTRL_PIN,HIGH);
-		#else
-			digitalWrite(ADC_CTRL_PIN, LOW);   // E213/E290: active HIGH -> OFF = LOW
-		#endif
+
+		if (battProbeState == BATT_PROBE_ACTIVE_LOW)
+			digitalWrite(ADC_CTRL_PIN, HIGH);   // active LOW -> OFF = HIGH
+		else
+			digitalWrite(ADC_CTRL_PIN, LOW);    // active HIGH (Default/Fallback) -> OFF = LOW
 	#endif
 }
 
@@ -219,7 +283,7 @@ float read_batt(void)
 		wpPushVolt(rawVoltage);   // 2x/s -> letzte 10 Rohwerte fuer die "AKKU LOW"-Anzeige
 		#endif
 
-		if ((batt_show_timer + (1000 * std::max(1,BATTshowtime))) < millis())  // 1 .. 99s
+		if ((uint32_t)(millis() - batt_show_timer) >= (uint32_t)(1000 * std::max(1,BATTshowtime)))  // 1 .. 99s
 		{
 			batt_show_timer = millis();
 

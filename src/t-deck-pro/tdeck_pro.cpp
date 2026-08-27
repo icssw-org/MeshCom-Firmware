@@ -649,7 +649,7 @@ unsigned int tdeck_get_gps()
         posinfo_fix = false;
 
         posinfo_satcount = 0;
-        posinfo_hdop = 0;
+        fposinfo_hdop = 0.0;
         posinfo_direction = 0;
         posinfo_distance = 0;
         posinfo_age = 0;
@@ -695,7 +695,7 @@ unsigned int tdeck_get_gps()
             meshcom_settings.node_alt = (int)(alt + 0.5);
 
         posinfo_satcount = vsat;
-        posinfo_hdop = hdop;
+        fposinfo_hdop = hdop;
         
 
         posinfo_age = 0;

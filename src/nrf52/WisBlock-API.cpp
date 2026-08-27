@@ -33,6 +33,7 @@ bool g_enable_ble = false;
  */
 void periodic_wakeup(TimerHandle_t unused)
 {
+	(void)unused;
 	// Switch on LED to show we are awake
 	digitalWrite(LED_GREEN, HIGH);
 	api_wake_loop(STATUS);

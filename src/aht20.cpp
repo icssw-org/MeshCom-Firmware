@@ -37,12 +37,13 @@ float fAHT20Hum = 0.0;
 
 void setupAHT20(bool bInit)
 {
+    (void)bInit;
     aht20_found = false;
 
     if(!bAHT20ON)
 		return;
 		
-    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+    #if MC_I2C_NEEDS_BUS_RESET
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
     #endif
@@ -67,7 +68,7 @@ bool loopAHT20()
 	if(!aht20_found)
 		return false;
 
-    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+    #if MC_I2C_NEEDS_BUS_RESET
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
     #endif
@@ -81,7 +82,7 @@ bool loopAHT20()
 
     if(bWXDEBUG)
     {	
-        Serial.printf("Temperature (AHT20): %.1f °C\n", fAHT20Temp);        
+        Serial.printf("Temperature (AHT20): %.1f ï¿½C\n", fAHT20Temp);        
         Serial.printf("Humidity (AHT20): %.1f %%rH\n", fAHT20Hum);
     }
 

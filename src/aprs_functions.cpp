@@ -6,6 +6,8 @@
 #include <debugconf.h>
 #include <configuration.h>
 
+#define MAX_APRS_FRAME_SIZE 340
+
 char shortSUBVERSION()
 {
     char csfw[2]={0};
@@ -143,6 +145,9 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         return 0x00;
     }
+
+    if(rsize > MAX_APRS_FRAME_SIZE)
+        return 0x00;
 
     aprsmsg.payload_type = RcvBuffer[0];
 
@@ -379,6 +384,20 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             if(bLORADEBUG)
             {
                 Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - PayloadEnd (0x00) missing!\n");
+
+                if(rsize < 255)
+                    printAsciiBuffer(RcvBuffer, rsize);
+            }
+
+            return 0x00;
+        }
+
+        // Trailer (hw + mod + 2-byte FCS = 4 bytes) must fully fit within rsize
+        if((inext + 4) > rsize)
+        {
+            if(bLORADEBUG)
+            {
+                Serial.printf("APRS decode - Packet discarded, wrong APRS-protocol - Trailer (HW/MOD/FCS) truncated!\n");
 
                 if(rsize < 255)
                     printAsciiBuffer(RcvBuffer, rsize);
@@ -1102,9 +1121,23 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
     return inext;
 }
 
+// Append the per-hop HEY signal report "NCT,RSSI,SNR;" to a '@' payload.
+// NCT = mheard neighbour count, RSSI as positive number, SNR in dB.
+// Used by the mesh relay path and the gateway UDP upload (same wire format).
+void appendHeySignalReport(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, int mheard_count)
+{
+    aprsmsg.msg_payload.concat(String(mheard_count));
+    aprsmsg.msg_payload.concat(',');
+    aprsmsg.msg_payload.concat(String(rssi*-1.0, 0));
+    aprsmsg.msg_payload.concat(',');
+    aprsmsg.msg_payload.concat(String(snr));
+    aprsmsg.msg_payload.concat(';');
+}
+
 // OE1KBC-17>APLT00-1,WIDE1-1,qAS,OE3CGG-10:!4807.01N/01619.20E[(T-ECHO by F4AVI)
 uint16_t encodeLoRaAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10], double lat, char lat_c, double lon, char lon_c, int alt)
 {
+    (void)alt;
     char msg_start[UDP_TX_BUF_SIZE];
 
     uint16_t ilng = 0;
@@ -1154,6 +1187,7 @@ uint16_t encodeLoRaAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10
 
 uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10], double lat, char lat_c, double lon, char lon_c, int alt)
 {
+    (void)alt;
     if(lat == 0.0 or lon == 0.0)
     {
         if(bDisplayCont)

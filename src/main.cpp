@@ -6,6 +6,7 @@
 #endif
 
 #include <configuration.h>
+#include <capture_functions.h>
 
 #ifdef ESP32
   #include <esp32/esp32_main.h>
@@ -67,4 +68,8 @@ void loop()
     esp32loop();
   #endif
 
+  // Rohframe-Mitschnitt ausgeben. Die Erfassung sitzt im Radio-Callback bzw.
+  // zwischen CAD und startTransmit() und darf dort nicht drucken; hier ist
+  // Loop-Kontext. Ein Frame je Durchlauf, siehe capture_functions.h.
+  captureDrain();
 }

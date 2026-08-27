@@ -496,7 +496,11 @@ void webSetup_setParam(setupStruct *setupData){
         commandAction(message_text, bPhoneReady);
         
         //MCP Module has 16 IO Ports named A0...7 and B0...7 ... but internally they are 0....15
-        uint8_t t_io = (uint8_t)port.charAt(1) - 48;            //ASCII '0' is numarically 48 
+        if((port.charAt(0)!='A' && port.charAt(0)!='B') || port.charAt(1)<'0' || port.charAt(1)>'7') {
+            setupData->returnCode = WS_RETURNCODE_FAIL;
+            return;
+        }
+        uint8_t t_io = (uint8_t)port.charAt(1) - 48;            //ASCII '0' is numarically 48
         if(port.charAt(0)=='B') t_io+=8;
 
         uint16_t bitmask = 1 << t_io;
@@ -523,7 +527,11 @@ void webSetup_setParam(setupStruct *setupData){
         commandAction(message_text, bPhoneReady);
         
         //MCP Module has 16 IO Ports named A0...7 and B0...7 ... but internally they are 0....15
-        uint8_t t_io = (uint8_t)port.charAt(1) - 48;            //ASCII '0' is numarically 48 
+        if((port.charAt(0)!='A' && port.charAt(0)!='B') || port.charAt(1)<'0' || port.charAt(1)>'7') {
+            setupData->returnCode = WS_RETURNCODE_FAIL;
+            return;
+        }
+        uint8_t t_io = (uint8_t)port.charAt(1) - 48;            //ASCII '0' is numarically 48
         if(port.charAt(0)=='B') t_io+=8;
 
         uint16_t bitmask = 1 << t_io;
@@ -546,6 +554,10 @@ void webSetup_setParam(setupStruct *setupData){
         }
 
         //MCP Module has 16 IO Ports named A0...7 and B0...7 ... but internally they are 0....15
+        if((port.charAt(0)!='A' && port.charAt(0)!='B') || port.charAt(1)<'0' || port.charAt(1)>'7') {
+            setupData->returnCode = WS_RETURNCODE_FAIL;
+            return;
+        }
         uint8_t t_io = (uint8_t)port.charAt(1) - 48;            //ASCII '0' is numarically 48
         if(port.charAt(0)=='B') t_io+=8;
 

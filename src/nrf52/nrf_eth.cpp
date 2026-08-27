@@ -9,6 +9,7 @@
 #include <debugconf.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include "dedup_functions.h"
 #include <command_functions.h>
 #include <time_functions.h>
 #include <lora_setchip.h>
@@ -383,15 +384,23 @@ int NrfETH::getUDP()
                       print_buff[4]=(msg_counter >> 24) & 0xFF;
                       print_buff[5]=0x01;  // ACK
                       print_buff[6]=0x00;
-                      
-                      if(bDisplayInfo)
-                          printfdeb("\n[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X\n", print_buff[1], print_buff[2], print_buff[3], print_buff[4]);
 
                       int iackcheck = checkOwnTx(msg_counter);
                       if(iackcheck >= 0)
                       {
                           own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
+                          // DRY-21: von der ESP32-Kopie (udp_functions.cpp) abgedriftet —
+                          // dort bekommt die App fuer die eigene Nachricht den ACK-Level
+                          // 0x02 ("eigene Nachricht bestaetigt"); hier blieb es bei 0x01,
+                          // die App zeigte auf nRF52-Gateways nie den vollen ACK-Status.
+                          print_buff[5]=0x02;  // 02...ACK
                       }
+
+                      // DRY-21: Debug-Ausgabe wie in der ESP32-Kopie — nach dem
+                      // checkOwnTx (damit der ACK-Level stimmt) und mit der msg_id in
+                      // MSB-Reihenfolge statt verdreht.
+                      if(bDisplayInfo)
+                          printfdeb("[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X ACK...%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5]);
 
                       addBLEOutBuffer(print_buff, 7);
 
@@ -460,12 +469,7 @@ int NrfETH::getUDP()
                   // store last message to compare later on
                   insertOwnTx(aprsmsg.msg_id);
 
-                  ringBuffer[iWrite][0] = size;
-                  ringBuffer[iWrite][1] = RING_STATUS_DONE; // fire-and-forget, no retransmission for UDP relay
-                  memcpy(ringBuffer[iWrite] + 2, convBuffer, size);
-
-                  retryCount[iWrite] = 0;
-                  addTxRingEntry("udp_rx");
+                  addTxRingEntry(convBuffer, size, RING_STATUS_DONE, "udp_rx", 0); // fire-and-forget, no retransmission for UDP relay
 
                   addLoraRxBuffer(aprsmsg.msg_id, true);
 
@@ -512,9 +516,14 @@ int NrfETH::getUDP()
         {
           memcpy(config_buf, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, packetSize - UDP_MSG_INDICATOR_LEN);
           // fill rest of buffer with 0
-          for (int i = 0; i < UDP_CONF_BUFF_SIZE; i++)
+          // N-03: Laufindex startet beim Ende der Nutzdaten und laeuft bis zum
+          // Pufferende. Vorher lief i von 0..UDP_CONF_BUFF_SIZE-1 und wurde
+          // zusaetzlich um die Paketlaenge versetzt -> Schreibzugriff bis
+          // config_buf[packetSize-4+254], bei packetSize=255 also 251 Bytes
+          // hinter dem 255-Byte-Stackpuffer.
+          for (int i = packetSize - UDP_MSG_INDICATOR_LEN; i < UDP_CONF_BUFF_SIZE; i++)
           {
-            config_buf[packetSize - UDP_MSG_INDICATOR_LEN + i] = 0x00;
+            config_buf[i] = 0x00;
           }
 
           // print the message
@@ -636,7 +645,7 @@ void NrfETH::fillUDP_RING_BUFFER(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_b
   ringBuffer[iWrite][1] = 0xFF;
   memcpy(ringBuffer[iWrite] + 2, buffer, rx_buf_size);
 
-  DEBUG_MSG_VAL("RADIO", iWrite, "fill LORA Send:");
+  DEBUG_MSG_VAL("RADIO", (int)iWrite, "fill LORA Send:");
 
   iWrite++;
   if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
@@ -773,6 +782,34 @@ int NrfETH::startETH()
 
   printlndeb("\nInitialize Ethernet"); // start the Ethernet connection.
 
+  // N-20: Ohne Link ist Ethernet.begin() ein blockierender DHCP-Versuch gegen
+  // ein totes Kabel (10 s Timeout, in der W5100S-Bibliothek nichtdeterministisch
+  // auch deutlich laenger) — und dieser Pfad laeuft nicht nur im Setup, sondern
+  // periodisch aus nrf52loop() (initethDHCP/resetDHCP alle MAX_HB_RX_TIME).
+  // Der Link-Status ist ein einzelnes SPI-Registerlesen: erst pruefen und nur
+  // bei vorhandenem Link den blockierenden Teil starten.
+  //
+  // Wichtig: die Aufrufer laufen ueber initETH_HW(), das den W5100S per
+  // Hardware-Reset neu startet — die PHY-Aushandlung braucht danach 1–3 s.
+  // Deshalb begrenzt auf LinkON warten (max. 3 s in 100-ms-Schritten) statt
+  // sofort abzubrechen; ein Sofort-Check meldet nach dem Reset immer LinkOFF
+  // und wuerde die Wiederverbindung dauerhaft verhindern (auf Hardware
+  // beobachtet). Nur das explizite LinkOFF bricht ab — Unknown (z.B. Modul
+  // fehlt/liefert Muell) laeuft in den bestehenden Pfad samt
+  // EthernetNoHardware-Erkennung.
+  EthernetLinkStatus elink = Ethernet.linkStatus();
+  uint32_t linkWait = millis();
+  while (elink == LinkOFF && (uint32_t)(millis() - linkWait) < 3000)
+  {
+    delay(100);
+    elink = Ethernet.linkStatus();
+  }
+  if (elink == LinkOFF)
+  {
+    printlndeb("Ethernet link OFF - skip DHCP");
+    return 2;
+  }
+
   if (Ethernet.begin(macaddr, 10000UL) == 0)
   {
     printlndeb("Failed to configure Ethernet using FIX/DHCP");
@@ -791,8 +828,12 @@ int NrfETH::startETH()
     return 2;
   }
 
-  printdeb("Ethernet.localIP(): ");
-  printlndeb(Ethernet.localIP());
+  // IPAddress dezimal ausgeben — printlndeb(Ethernet.localIP()) lief ueber die
+  // implizite uint32_t-Konvertierung in die int-Ueberladung und druckte den
+  // Roh-Integer (z.B. "1145350336" statt "192.168.68.68").
+  printfdeb("Ethernet.localIP(): %i.%i.%i.%i\n",
+            Ethernet.localIP()[0], Ethernet.localIP()[1],
+            Ethernet.localIP()[2], Ethernet.localIP()[3]);
 
   if (Ethernet.localIP() != IPAddress(0, 0, 0, 0))
   {

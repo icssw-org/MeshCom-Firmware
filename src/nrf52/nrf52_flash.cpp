@@ -260,19 +260,33 @@ void init_flash(void)
 		// Found new structure
 		lora_file.close();
 		lora_file.open(settings_name, FILE_O_READ);
+		// Groesse VOR dem Lesen sichern -- close() unten macht sie nicht mehr abfragbar.
+		uint32_t stored_size = lora_file.size();
 		lora_file.read((uint8_t *)&meshcom_settings, sizeof(s_meshcom_settings));
 		lora_file.close();
 
 		//printf("meshcom_settings%s\n", meshcom_settings.node_call);
 
 		// Check if it is LPWAN settings^
-		if ((meshcom_settings.valid_mark_1 != 0xAA) || (meshcom_settings.valid_mark_2 != MESHCOM_DATA_MARKER))
+		// Groessen-Check (N-12): eine Struktur-Layout-Aenderung faellt hier auf, wenn die abgelegte
+		// Datei nicht mehr sizeof(s_meshcom_settings) gross ist -- sonst wuerde stillschweigend mit
+		// verschobenen/fehlinterpretierten Feldern weitergearbeitet. Padding-neutrale Feldvertauschungen,
+		// die sizeof unveraendert lassen, bleiben davon unentdeckt -- Layout-Aenderungen muessen daher
+		// FLASH_VERSION erhoehen. Der 0x57-Kompat-Pfad oben bekommt bewusst KEINE Groessenpruefung,
+		// da alte Dateien diesem Schema vorausgehen.
+		if ((meshcom_settings.valid_mark_1 != 0xAA) || (meshcom_settings.valid_mark_2 != MESHCOM_DATA_MARKER) ||
+			(stored_size != sizeof(s_meshcom_settings)))
 		{
-			// Data is not valid, reset to defaults
-			DEBUG_MSG("FLASH", "Invalid data set, deleting and restart node");
-			InternalFS.format();
-			delay(1000);
-			sd_nvic_SystemReset();
+			// Daten sind ungueltig oder die Dateigroesse passt nicht mehr zur aktuellen Struktur:
+			// sauberer Reset auf Defaults statt stillem Weiterlaufen mit Datenmuell (N-12).
+			// flash_reset() invalidiert dabei init_flash_done, ein erneuter Aufruf hier ist daher
+			// nicht noetig und wuerde auch keine Rekursion ausloesen -- wir lesen direkt die frisch
+			// geschriebene Default-Datei zurueck (einmaliger Reset, kein Retry-Loop).
+			DEBUG_MSG("FLASH", "Invalid data set or size mismatch, resetting to defaults");
+			flash_reset();
+			lora_file.open(settings_name, FILE_O_READ);
+			lora_file.read((uint8_t *)&meshcom_settings, sizeof(s_meshcom_settings));
+			lora_file.close();
 		}
 		log_settings();
 		init_flash_done = true;
@@ -341,11 +355,19 @@ void flash_reset(void)
 	InternalFS.format();
 	if (lora_file.open(settings_name, FILE_O_WRITE))
 	{
+		// default_settings ist default-konstruiert -> die Member-Initializer in s_meshcom_settings
+		// setzen gueltige Marker (0xAA/MESHCOM_DATA_MARKER) sowie alle Default-Werte.
 		s_meshcom_settings default_settings;
 		lora_file.write((uint8_t *)&default_settings, sizeof(s_meshcom_settings));
 		lora_file.flush();
 		lora_file.close();
 	}
+
+	// Cache invalidieren: ohne dies ist der naechste init_flash()-Aufruf ein No-Op (Guard oben),
+	// und save_settings() wuerde die alte RAM-Kopie zurueckschreiben, obwohl das Log einen
+	// sauberen Reset meldet (N-12). flash_reset() muss also erzwingen, dass frisch von Flash
+	// gelesen wird.
+	init_flash_done = false;
 }
 
 /**
