@@ -711,12 +711,15 @@ bool lora_setchip_aprs()
 
 bool lora_setchip_new(float rf_freq, float rf_bw, int rf_sf, int rf_cr, int rf_syncword, uint16_t rf_preamble_length, bool rf_crc)
 {
+    // Only the ESP32/RadioLib branch below actually uses these — on every other
+    // platform (e.g. nRF52, which configures its SX126x driver elsewhere) this
+    // function compiles down to a no-op, leaving all seven parameters unused.
+    (void)rf_freq; (void)rf_bw; (void)rf_sf; (void)rf_cr;
+    (void)rf_syncword; (void)rf_preamble_length; (void)rf_crc;
 
 #if defined(EXTERNAL_RADIO)
     // External radio mode never drives the local RF chip. Accept as a no-op so any
     // residual caller cannot touch RadioLib hardware.
-    (void)rf_freq; (void)rf_bw; (void)rf_sf; (void)rf_cr;
-    (void)rf_syncword; (void)rf_preamble_length; (void)rf_crc;
     return true;
 #endif
 

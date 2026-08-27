@@ -46,12 +46,13 @@ float fAltidude = 0;
 
 void setupBMP390(bool bInit)
 {
+    (void)bInit;
     bmp3_found = false;
 
     if(!bBMP3ON)
 		return;
 		
-    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+    #if MC_I2C_NEEDS_BUS_RESET
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
     #endif
@@ -81,7 +82,7 @@ bool loopBMP390()
 	if(!bmp3_found)
 		return false;
 
-    #if defined(BOARD_TBEAM_V3) || (BOARD_E22_S3)
+    #if MC_I2C_NEEDS_BUS_RESET
         Wire.end();
         Wire.begin(I2C_SDA, I2C_SCL);
     #endif

@@ -7,6 +7,7 @@
 #endif
 
 #include "loop_functions.h"
+#include "dedup_functions.h"
 #include "mheard_functions.h"
 #include "command_functions.h"
 
@@ -114,6 +115,9 @@ bool bDisplayRetx = false;
 unsigned long DisplayOffWait = 0;
 bool bDisplayTrack = false;
 bool bOneButton = false;
+bool bEnterDfu = false;   // --dfu: beim naechsten faelligen rebootAuto in den UF2-Bootloader statt Neustart
+// ALT-35: getrennt von bOneButton -- "Anzeige neu aufbauen", nicht "Taste gedrueckt".
+bool bDisplayDirty = false;
 bool bGPSON = false;
 bool bGPSAutosymbol = false;
 bool bGPSUBLOX = false;
@@ -388,16 +392,15 @@ int iWriteOwn=0;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
 unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5] = {0};
-volatile int iWrite = 0;
-volatile int iRead = 0;
+ring_index_t iWrite{0};
+ring_index_t iRead{0};
 int iRetransmit=-1;
 
 // FIX: Per-slot retry counter for retransmit cap
 uint8_t retryCount[MAX_RING] = {0};
 
 // RINGBUFFER for incomming LoRa RX msg_id
-uint8_t ringBufferLoraRX[MAX_DEDUP_RING][5] = {0};
-std::atomic<uint8_t> loraWrite{0};   // counter for ringbuffer
+// ringBufferLoraRX/loraWrite liegen jetzt in dedup_functions.cpp.
 
 // RINGBUFFER RAW LoRa RX
 unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5] = {0};
@@ -425,7 +428,7 @@ int ComToPhoneRead=0;
 bool hasMsgFromPhone = false;
 
 // LoRa RX/TX sequence control
-std::atomic<bool> is_receiving{false};  // flag to store we are receiving a lora packet.
+is_receiving_t is_receiving{false};  // flag to store we are receiving a lora packet.
 std::atomic<bool> tx_is_active{false};  // flag to store we are transmitting  a lora packet.
 
 int cad_attempt = 0;
@@ -433,10 +436,10 @@ unsigned long csma_timeout = CSMA_BASE_0;
 int rx_irq_defer_count = 0;
 
 // Channel utilization tracking (10s window)
-std::atomic<unsigned long> ch_util_rx_start{0};   // timestamp when RX started
-std::atomic<unsigned long> ch_util_tx_start{0};   // timestamp when TX started
-std::atomic<unsigned long> ch_util_rx_accum{0};   // accumulated RX airtime (ms) in current window
-std::atomic<unsigned long> ch_util_tx_accum{0};   // accumulated TX airtime (ms) in current window
+ch_util_rx_start_t ch_util_rx_start{0};   // timestamp when RX started
+ch_util_ulong_t ch_util_tx_start{0};   // timestamp when TX started
+ch_util_ulong_t ch_util_rx_accum{0};   // accumulated RX airtime (ms) in current window
+ch_util_ulong_t ch_util_tx_accum{0};   // accumulated TX airtime (ms) in current window
 
 int isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
@@ -461,7 +464,6 @@ double posinfo_last_direction = 0.0;
 unsigned int posinfo_last_rate = POSINFO_INTERVAL;  // seconds
 
 uint32_t posinfo_satcount = 0;
-int posinfo_hdop = 0;
 float fposinfo_hdop = 0.0;
 bool posinfo_fix = false;
 bool posinfo_shot=false;
@@ -531,8 +533,23 @@ unsigned long getUnixClock()
  */
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 {
-    if (len > UDP_TX_BUF_SIZE)
-        len = UDP_TX_BUF_SIZE-4; // just for safety
+    // Das Laengenbyte unten ist ein uint8_t. Im Nicht-'D'-Zweig kommen noch 4 Byte
+    // Zeitstempel dazu, dort muss also len+4 hineinpassen; im 'D'-Zweig (JSON) wird
+    // len unveraendert abgelegt und darf die vollen 255 nutzen.
+    uint16_t maxlen = (buffer[0] != 'D') ? (UDP_TX_BUF_SIZE - 4) : UDP_TX_BUF_SIZE;
+    if (len > maxlen)
+        len = maxlen;
+
+    // CONC-15: toPhoneWrite/toPhoneRead are plain ints. addBLEOutBuffer() is
+    // reachable from OnRxDone (the FreeRTOS timer-service task on nRF52,
+    // priority 2, see C-01) while sendToPhone() drains the same ring from the
+    // Main Loop task. Snapshot the target slot before the critical section so
+    // the debug print below (kept outside the lock — it can call into
+    // Serial/heap) still reports the slot this call actually wrote.
+    uint8_t debugSlot = (uint8_t)toPhoneWrite;
+#if defined(NRF52_SERIES)
+    taskENTER_CRITICAL();
+#endif
 
     //first two bytes are always the message length
     memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
@@ -540,7 +557,7 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     if(buffer[0] != 'D')
     {
         unsigned long unix_time = getUnixClock();
-        
+
         //printfdeb("UNIX TME:%lu\n", unix_time);
 
         uint8_t tbuffer[5];
@@ -555,15 +572,19 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     else
         BLEtoPhoneBuff[toPhoneWrite][0] = len;
 
-    if(bBLEDEBUG)
-    {
-        printfdeb("<%02X>BLEtoPhone RingBuff added len=%i to element: %u\n", buffer[0], len, toPhoneWrite);
-        printBuffer(BLEtoPhoneBuff[toPhoneWrite], len + 1 + 4);
-    }
-
     //printfdeb("toPhone write:%i read:%i max:%i ", toPhoneWrite, toPhoneRead, MAX_RING);
 
     addRingPointer(toPhoneWrite, toPhoneRead, MAX_RING, "phone");
+
+#if defined(NRF52_SERIES)
+    taskEXIT_CRITICAL();
+#endif
+
+    if(bBLEDEBUG)
+    {
+        printfdeb("<%02X>BLEtoPhone RingBuff added len=%i to element: %u\n", buffer[0], len, debugSlot);
+        printBuffer(BLEtoPhoneBuff[debugSlot], len + 1 + 4);
+    }
 
     //printfdeb("next write:%i read:%i max:%i\n", toPhoneWrite, toPhoneRead, MAX_RING);
 
@@ -586,6 +607,7 @@ void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
     if (len > 245)
     {
         printfdeb("[ERR]...BLE out-buffer to long <%i> <%-245.245s>\n", len, buffer);
+        len = 245; // clamp - length byte and destination buffer both size to this
     }
 
     //first two bytes are always the message length
@@ -635,59 +657,8 @@ void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
     addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
 }
 
-/**@brief Function adding messages into outgoing UDP ringbuffer
- * 
- */
-void addLoraRxBuffer(unsigned int msg_id, bool bserver)
-{
-    // RACE-03 fix: local copy for atomic index — write buffer content first,
-    // then atomically update index so readers see complete entries
-    uint8_t slot = loraWrite.load();
-
-    if(bLORADEBUG)
-        printfdeb("[MC-DBG] RX_DEDUP_ADD msg_id=%08X srv=%d slot=%d/%d\n",
-                      msg_id, bserver, slot, MAX_DEDUP_RING);
-
-    // byte 0-3 msg_id
-    ringBufferLoraRX[slot][3] = msg_id >> 24;
-    ringBufferLoraRX[slot][2] = msg_id >> 16;
-    ringBufferLoraRX[slot][1] = msg_id >> 8;
-    ringBufferLoraRX[slot][0] = msg_id;
-    ringBufferLoraRX[slot][4] = bserver ? 1 : 0;
-
-    uint8_t next = slot + 1;
-    if (next >= MAX_DEDUP_RING)
-        next = 0;
-    loraWrite.store(next);
-}
-
-int checkOwnRx(uint8_t compBuffer[4])
-{
-    for(int ilo=0; ilo<MAX_DEDUP_RING; ilo++)
-    {
-        if(memcmp(ringBufferLoraRX[ilo], compBuffer, 4) == 0)
-            return ilo;
-    }
-
-    return -1;
-}
-
-bool checkServerRx(uint8_t compBuffer[4])
-{
-    for(int ilo=0; ilo<MAX_DEDUP_RING; ilo++)
-    {
-        if(memcmp(ringBufferLoraRX[ilo], compBuffer, 4) == 0)
-        {
-            // MSG wurde von einem anderen GW gesendet
-            if(ringBufferLoraRX[ilo][4] == 1)
-                return true;
-
-            break;
-        }
-    }
-
-    return false;
-}
+// addLoraRxBuffer()/checkOwnRx()/checkServerRx() sind nach
+// dedup_functions.cpp gewandert (reine Verschiebung).
 
 int checkOwnTx(unsigned int msg_id)
 {
@@ -1332,9 +1303,10 @@ void sendDisplayTrack()
     iDisplayType=9;
 
     // nur alle 15 sekunden
-    if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton)
+    if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton || bDisplayDirty)
     {
-        bOneButton = false;
+        bOneButton    = false;
+        bDisplayDirty = false;
 
         sendDisplayMainline();
 
@@ -1539,9 +1511,10 @@ void sendDisplayTime()
         snprintf(cstatus, sizeof(cstatus),  "%-4.4s%-1.1s ", SOURCE_VERSION, SOURCE_VERSION_SUB);
 
     // nur alle 15 sekunden
-    if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton)
+    if(meshcom_settings.node_date_second == 0 || meshcom_settings.node_date_second == 15 || meshcom_settings.node_date_second == 30 || meshcom_settings.node_date_second == 45 || bOneButton || bDisplayDirty)
     {
-        bOneButton = false;
+        bOneButton    = false;
+        bDisplayDirty = false;
 
         #ifdef BOARD_T_ECHO
         snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i   %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
@@ -1916,7 +1889,7 @@ void mainStartTimeLoop()
                     {
                         epaper_display.clear();          // physischer Voll-Clear (weiss)
                         if(bDisplayTrack)
-                            bOneButton = true;           // Track-Seite sofort aufbauen
+                            bDisplayDirty = true;        // Track-Seite sofort aufbauen (kein Tastendruck)
                         else
                             sendDisplayHead(true);       // normale Info-Seite wiederherstellen
                     }
@@ -1968,7 +1941,7 @@ void mainStartTimeLoop()
                     // letzten Track-Render geaendert. Quelle eines Updates auf der GPS-losen WP:
                     // Phone-App/BLE (phone_commands.cpp), empfangenes Mesh-Pos-Paket bzw. manuelles
                     // --setlat/--setlon (command_functions.cpp) - oder, auf GPS-Modulen, ein Fix.
-                    // Die Track-Seite wird beim Einschalten (bOneButton aus dem Track-Transition-
+                    // Die Track-Seite wird beim Einschalten (bDisplayDirty aus dem Track-Transition-
                     // Handler weiter oben) und bei jedem echten Positionsupdate fuer ~10 s gezeigt
                     // und blendet danach AUTOMATISCH zurueck auf die Normalansicht (neueste
                     // Nachricht; ersatzweise Info-/Statusseite). Grund: auf der GPS-losen WP aendern
@@ -1989,7 +1962,7 @@ void mainStartTimeLoop()
                                      || (meshcom_settings.node_lat != wpTrackLat)
                                      || (meshcom_settings.node_lon != wpTrackLon);
 
-                    if(DisplayOffWait == 0 && (wpPosUpdated || bOneButton))
+                    if(DisplayOffWait == 0 && (wpPosUpdated || bOneButton || bDisplayDirty))
                     {
                         // echtes Positionsupdate (oder erstmaliger Aufbau): Track-/WX-Seite zeichnen
                         // und den 10s-Rueckblende-Timer (neu) starten.
@@ -1997,7 +1970,7 @@ void mainStartTimeLoop()
                         wpTrackLon     = meshcom_settings.node_lon;
                         wpTrackInit    = true;
                         wpTrackShownAt = millis();
-                        bOneButton     = true;   // erzwingt sofortigen Aufbau (umgeht das 15s-Raster in sendDisplayTrack)
+                        bDisplayDirty  = true;   // erzwingt sofortigen Aufbau (umgeht das 15s-Raster in sendDisplayTrack)
 
                         if(iDisplayChange > 10)
                             sendDisplayWX(); // Show WX
@@ -2196,7 +2169,27 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     {
         char cset[30];
         snprintf(cset, sizeof(cset), "%s", aprsmsg.msg_payload.c_str());
-        sscanf(cset+5, "%d;%d;", &meshcom_settings.max_hop_text, &meshcom_settings.max_hop_pos);
+
+        // Ohne Bereichspruefung landete ein Tippfehler wie {SET}44;2; direkt im
+        // Hop-Feld der ausgesendeten Pakete. Byte 5 einer ACK fuehrt max_hop in
+        // 7 Bit, der Weiterleitungspfad dekrementiert nur und begrenzt nicht
+        // nach oben -- ein solcher Knoten wuerde das Netz mit Paketen fluten,
+        // die 44 statt 4 Relaissprunge weit laufen.
+        //
+        // Wie bisher wird jedes Feld einzeln uebernommen, sobald sscanf es
+        // gelesen hat ({SET}4; setzt weiterhin nur max_hop_text). Neu ist
+        // ausschliesslich, dass Werte ausserhalb 0..MAX_HOP_LIMIT den
+        // bisherigen Wert stehen lassen, statt ihn zu ueberschreiben.
+        int iHopText = meshcom_settings.max_hop_text;
+        int iHopPos  = meshcom_settings.max_hop_pos;
+
+        int iParsed = sscanf(cset+5, "%d;%d;", &iHopText, &iHopPos);
+
+        if(iParsed >= 1 && iHopText >= 0 && iHopText <= MAX_HOP_LIMIT)
+            meshcom_settings.max_hop_text = iHopText;
+
+        if(iParsed >= 2 && iHopPos >= 0 && iHopPos <= MAX_HOP_LIMIT)
+            meshcom_settings.max_hop_pos = iHopPos;
 
         return;
     }
@@ -2576,7 +2569,7 @@ void init_loop_function()
 {
     posinfo_last_direction = 0.0;
     posinfo_satcount = 0;
-    posinfo_hdop = 0;
+    fposinfo_hdop = 0.0;
     posinfo_fix = false;
 
     meshcom_settings.node_vbus = 0.0f;
@@ -2610,6 +2603,7 @@ void initAnalogPin()
 
 void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
+    (void)snr;
     //printfdeb("bPosDisplay:%i DisplayOffWait:%i bSetDisplay:%i pageHold:%i bDisplayTrack:%i bDisplayIsOff:%i\n", bPosDisplay, DisplayOffWait, bSetDisplay, pageHold, bDisplayTrack, bDisplayIsOff);
 
     if(!bPosDisplay)
@@ -3125,11 +3119,7 @@ void sendPing(char msg_call[10])
 
     // Master RingBuffer for transmission
     // local messages send to LoRa TX
-    ringBuffer[iWrite][0] = aprsmsg.msg_len;
-    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
-
-    addTxRingEntry("phone_msg");
+    addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "phone_msg"); // 0xFF no retransmission
 
     if(!bPingSend)
     {
@@ -3206,11 +3196,7 @@ void SendPong(String msg_call, unsigned int msg_id)
 
     // Master RingBuffer for transmission
     // local messages send to LoRa TX
-    ringBuffer[iWrite][0] = aprsmsg.msg_len;
-    ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
-
-    addTxRingEntry("phone_msg");
+    addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "phone_msg"); // 0xFF no retransmission
 }
 
 void sendMessage(char *msg_text, int len)
@@ -3245,8 +3231,23 @@ void sendMessage(char *msg_text, int len)
     int ii=0;
     int in=0;
     unsigned int ib=0;
+    // N-22: der Loop-Task-Stack auf nRF52 ist 4 KB (LOOP_STACK_SZ im
+    // Adafruit-Core, nicht per Build-Flag ueberschreibbar). Der Pfad
+    // checkSerialCommand() -> sendMessage() -> sendExtern() lief mit
+    // Stack-Watermark 0 (auf Hardware gemessen, 2026-08-21) und zerstoerte
+    // Nachbar-RAM — Absturz Sekunden spaeter (SREQ). Grosse Puffer deshalb
+    // in BSS; sendMessage() laeuft auf nRF52 ausschliesslich im Loop-Task
+    // (Aufrufer: checkSerialCommand, hasMsgFromPhone-Zweig in nrf52loop,
+    // getExtern — alle Loop-Kontext). Gleiches Muster wie Commit 1951aa7d
+    // in sendExtern(). Die memset()-Aufrufe direkt darunter initialisieren
+    // beide Puffer ohnehin bei jedem Aufruf.
+#if defined(NRF52_SERIES)
+    static char msg_text_check[200];
+    static char msg_text_checked[200];
+#else
     char msg_text_check[200];
     char msg_text_checked[200];
+#endif
     int len_check=len;
     if(len_check > (int)sizeof(msg_text_check)-1)
         len_check = sizeof(msg_text_check)-1;
@@ -3263,8 +3264,16 @@ void sendMessage(char *msg_text, int len)
 
     int iulng=0;
 
-    for(int iu=ispos; iu<=len_check; iu++)
+    // Loop is driven by ii, the real source-consumption index (advances by
+    // up to 12 per multi-byte %-escape), not by a decoupled counter.
+    while(ii < len_check)
     {
+        // Bound every destination write: never let 'in' reach or pass the
+        // last byte of msg_text_checked, which must stay NUL (buffer is
+        // used as a C string afterwards).
+        if(in >= (int)sizeof(msg_text_checked)-1)
+            break;
+
         if(memcmp(msg_text_check+ii, "%C2", 3) == 0)
             iulng=6;
         if(memcmp(msg_text_check+ii, "%EF", 3) == 0)
@@ -3286,6 +3295,12 @@ void sendMessage(char *msg_text, int len)
         {
             for(int is=1;is<iulng;is=is+3)
             {
+                if(ii+is+1 >= (int)sizeof(msg_text_check))
+                    break;
+
+                if(in >= (int)sizeof(msg_text_checked)-1)
+                    break;
+
                 if(msg_text_check[ii+is] >= 'A')
                     ib = (msg_text_check[ii+is] - 'A') + 10;
                 else
@@ -3353,7 +3368,7 @@ void sendMessage(char *msg_text, int len)
             {
                 char cId[4] = {0};
                 snprintf(cId, sizeof(cId), "%03i", meshcom_settings.node_msgid);
-                char cnewMsg[10];
+                char cnewMsg[64];
                 snprintf(cnewMsg, sizeof(cnewMsg), "{mcp}%c%s%c%s%c%s", cId[0], strMsg.substring(5, 7).c_str(), cId[1], strMsg.substring(7, 9).c_str(), cId[2], strMsg.substring(9).c_str());
                 strMsg = cnewMsg;
             }
@@ -3370,7 +3385,13 @@ void sendMessage(char *msg_text, int len)
         }
     }
 
+    // N-22: siehe Kommentar bei msg_text_check oben — auf nRF52 in BSS,
+    // encodeAPRS() beschreibt den Puffer bei jedem Aufruf vollstaendig.
+#if defined(NRF52_SERIES)
+    static uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+#else
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+#endif
 
     struct aprsMessage aprsmsg;
 
@@ -3456,30 +3477,31 @@ void sendMessage(char *msg_text, int len)
 
     // Master RingBuffer for transmission
     // local messages send to LoRa TX
-    ringBuffer[iWrite][0]=aprsmsg.msg_len;
-    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
-    
-    if (ringBuffer[iWrite][2] == 0x3A) // only Messages
+    if (iWrite == iRead) {   // ring full: about to overwrite an unread slot
+        Serial.printf("[RING] overflow, slot %d dropped\n", (int)iWrite);
+    }
+    // Status vorab aus msg_buffer bestimmen (statt aus dem Ring zu lesen): der
+    // Slot wird erst in addTxRingEntry() unter Lock gewaehlt/beschrieben.
+    uint8_t user_msg_status;
+    if (msg_buffer[0] == 0x3A) // only Messages
     {
         if(aprsmsg.msg_payload.startsWith("{CET}") || aprsmsg.msg_payload.startsWith("{MCP}") || aprsmsg.msg_payload.startsWith("{SET}"))
-            ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+            user_msg_status = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
         else
-            ringBuffer[iWrite][1] = 0x00; // retransmission Status ...0xFF no retransmission
+            user_msg_status = 0x00; // retransmission Status ...0xFF no retransmission
     }
     else
     {
-        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-    }   
+        user_msg_status = 0xFF; // retransmission Status ...0xFF no retransmission
+    }
 
-    if(bDisplayRetx)
+    int w = addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, user_msg_status, "user_msg", 0);
+
+    if(bDisplayRetx && w >= 0)
     {
-        int w = iWrite;
         unsigned int ring_msg_id = (ringBuffer[w][6]<<24) | (ringBuffer[w][5]<<16) | (ringBuffer[w][4]<<8) | ringBuffer[w][3];
         printfdeb("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", w, ringBuffer[w][1], ringBuffer[w][0], ringBuffer[w][2], ring_msg_id);
     }
-
-    retryCount[iWrite] = 0;
-    addTxRingEntry("user_msg");
 
     /*
     iWrite++;
@@ -3612,7 +3634,12 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
             else
                 snprintf(calt, sizeof(calt), "/A=%05i", alt);
         }
-        snprintf(cbatt, sizeof(cbatt), "/B=%i", global_proz);
+        // /B= immer senden wenn Batterie-Hardware vorhanden ist, auch bei 0 Prozent
+        // (leerer Tag wuerde sonst "kein Akku bestueckt" bedeuten statt "leer")
+        if(battHardwarePresent())
+        {
+            snprintf(cbatt, sizeof(cbatt), "/B=%03d", global_proz);
+        }
         snprintf(cinaU, sizeof(cinaU), "/U=%.2f", meshcom_settings.node_vbus);
         snprintf(cinaI, sizeof(cinaI), "/I=%.1f", meshcom_settings.node_vcurrent);
 
@@ -3623,7 +3650,9 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     }
     else
     {
-        if(global_proz > 0)
+        // /B= immer senden wenn Batterie-Hardware vorhanden ist, auch bei 0 Prozent
+        // (leerer Tag wuerde sonst "kein Akku bestueckt" bedeuten statt "leer")
+        if(battHardwarePresent())
         {
             snprintf(cbatt, sizeof(cbatt), "/B=%03d", global_proz);
         }
@@ -3809,7 +3838,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         bSendViaAPRS=true;
     }
 
-    if(lastHeardTime + 15000 < millis() && (intervall == POSINFO_INTERVAL || intervall == 0x9999)) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auch via MeshCom
+    if((uint32_t)(millis() - lastHeardTime) >= 15000 && (intervall == POSINFO_INTERVAL || intervall == 0x9999)) // wenn die letzte gehörte LoRa-Nachricht < 5sec dann auch via MeshCom
     {
         bSendViaMesh = true;
 
@@ -3817,7 +3846,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         posfixinterall = millis();
     }
 
-    if(((posfixinterall + (POSINFO_INTERVAL * 1000)) < millis()))
+    if((uint32_t)(millis() - posfixinterall) >= (POSINFO_INTERVAL * 1000))
     {
         bSendViaMesh = true;
 
@@ -3832,7 +3861,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
     // set default
     // Symbol Table / \ 0-9 A-Z  (compressed a-z)
     bool bSymbolTable = false;
-    if(meshcom_settings.node_symid == '/' || meshcom_settings.node_symid != '\'')
+    if(meshcom_settings.node_symid == '/' || meshcom_settings.node_symid == '\\')
         bSymbolTable = true;
     else
     if(meshcom_settings.node_symid >= '0' && meshcom_settings.node_symid <= '9')
@@ -3867,11 +3896,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         }
 
         // local LoRa-APRS position-messages send to LoRa TX
-        ringBuffer[iWrite][0]=ilng;
-        ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
-        memcpy(ringBuffer[iWrite]+2, msg_buffer, ilng);
-
-        addTxRingEntry("user_pos");
+        addTxRingEntry(msg_buffer, (uint16_t)ilng, 0xFF, "user_pos"); // 0xFF no retransmission
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             tdeck_send_track_view();
@@ -4005,11 +4030,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         }
 
         // local position-messages send to LoRa TX
-        ringBuffer[iWrite][0]=aprsmsg.msg_len;
-        ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
-        memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
-
-        addTxRingEntry("user_wx");
+        addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "user_wx"); // 0xFF no retransmission
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             tdeck_send_track_view();
@@ -4086,11 +4107,7 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
     }
 
     // local position-messages send to LoRa TX
-    ringBuffer[iWrite][0]=aprsmsg.msg_len;
-    ringBuffer[iWrite][1]=0xFF;    // Status byte for retransmission 0xFF no retransmission
-    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
-
-    addTxRingEntry("user_hey");
+    addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "user_hey"); // 0xFF no retransmission
 
     /*
     iWrite++;
@@ -4163,14 +4180,22 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
         printfdeb("");
     }
 
-    int savedAckSlot = iWrite;
-    ringBuffer[iWrite][0]=aprsmsg.msg_len;
-    ringBuffer[iWrite][1]=0x00;  // temp READY (0x00) so getMessagePriority parses destination correctly
-    memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
+    // Status kann nicht vorab auf 0xFF (DONE) gesetzt werden: getMessagePriority()
+    // liest innerhalb von addTxRingEntry() das Status-Byte und stuft eine TEXT-
+    // Nachricht mit Status DONE als "Relay" (MSG_PRIO_NORMAL) statt als echte
+    // Ziel-Message (MSG_PRIO_CRITICAL) ein. Also mit temp-READY (0x00) einreihen,
+    // damit die Prio-Klassifizierung den Zielrufzeichen-Pfad parst, und danach
+    // per zurueckgegebenem Slot auf DONE setzen. Restrisiko des Nachtrags:
+    // preemptet der Timer-Service-Task GENAU zwischen den beiden Statements UND
+    // ist der Ring voll UND waehlt dessen Eviction ausgerechnet diesen frisch
+    // als HIGH/CRITICAL eingestuften Slot als niedrigste Prio, traefe das 0xFF
+    // einen fremden Eintrag. Akzeptiert: alle drei Bedingungen zusammen sind
+    // praktisch ausgeschlossen, und das Fenster ist strikt kleiner als das der
+    // alten Vorab-iWrite-Schreibsequenz (N-14).
+    int savedAckSlot = addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0x00, "beacon");
 
-    addTxRingEntry("beacon");
-
-    ringBuffer[savedAckSlot][1]=0xFF;   // no retransmission (set after priority is recorded)
+    if(savedAckSlot >= 0)
+        ringBuffer[savedAckSlot][1]=0xFF;   // no retransmission (set after priority is recorded)
 
     /*
     iWrite++;
@@ -4246,11 +4271,7 @@ void sendHey()
     {
         // Master RingBuffer for transmission
         // local messages send to LoRa TX
-        ringBuffer[iWrite][0] = aprsmsg.msg_len;
-        ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-        memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
-
-        addTxRingEntry("auto_pos");
+        addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "auto_pos"); // 0xFF no retransmission
 
         /*
         iWrite++;
@@ -4530,12 +4551,8 @@ void sendTelemetry(int ID)
         {
             // Master RingBuffer for transmission
             // local messages send to LoRa TX
-            ringBuffer[iWrite][0] = aprsmsg.msg_len;
-            ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-            memcpy(ringBuffer[iWrite]+2, msg_buffer, aprsmsg.msg_len);
-
             if(!bDisplayTrack)
-                addTxRingEntry("phone_msg");
+                addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "phone_msg"); // 0xFF no retransmission
         }
 
         // send value messages to Lora-APRS
@@ -4547,11 +4564,7 @@ void sendTelemetry(int ID)
 
             // Master RingBuffer for transmission
             // local messages send to LoRa TX
-            ringBuffer[iWrite][0] = tlng;
-            ringBuffer[iWrite][1] = 0xFF; // retransmission Status ...0xFF no retransmission
-            memcpy(ringBuffer[iWrite]+2, msg_buffer, tlng);
-
-            addTxRingEntry("phone_raw");
+            addTxRingEntry(msg_buffer, tlng, 0xFF, "phone_raw"); // 0xFF no retransmission
         }
     }
 }
@@ -4973,7 +4986,7 @@ void addRingPointer(volatile int &pWrite, volatile int &pRead, int iMAX, const c
             if (pRead >= iMAX) // if the buffer is full we start at index 0 -> take care of overwriting!
                 pRead = 0;
 
-            if(bLORADEBUG && strcmp(bufName, "raw_rx") != 0 && strcmp(bufName, "phone") != 0)
+            if(bLORADEBUG && strcmp(bufName, "raw_rx") != 0 && strcmp(bufName, "phone") != 0 && strcmp(bufName, "udp") != 0)
             {
                 printfdeb("[MC-DBG] RING_OVERFLOW buf=%s\n", bufName);
             }

@@ -8,6 +8,28 @@
 #include "command_functions.h"
 #include "printfdeb_functions.h"
 
+// ----- ADC_CTRL_PIN Polaritaets-Probe -----
+// Manche Boards schalten den Spannungsteiler aktiv HIGH durch (E213/E290, am Geraet
+// verifiziert), manche aktiv LOW (Wireless Paper). Der bisherige Compile-Zeit-Test auf
+// BOARD_HELTEC_V31 war toter Code (dieses Define existiert nirgends im Baum) und hat auf
+// keinem realen Board je die active-LOW-Variante ausgewaehlt. Statt weiter zu raten, wird
+// die Polaritaet einmalig beim Boot per ADC-Probe gemessen: Teiler HIGH schalten, einschwingen
+// lassen, Rohwert lesen; danach LOW, einschwingen, lesen. Am Geraet gemessen liefert ein
+// durchgeschalteter Teiler ~902-906 Rohwerte (12-bit ADC), ein getrennter/offener Pin nur
+// 1-4 Rohwerte - drei Groessenordnungen Abstand. BATT_PROBE_MIN_COUNTS=50 (~200 mV bei
+// 12-bit/3.3V) liegt sicher dazwischen und toleriert ADC-Rauschen auf der "aus"-Seite.
+#define BATT_PROBE_MIN_COUNTS 50
+
+typedef enum {
+    BATT_PROBE_UNKNOWN = 0,   // Probe noch nicht gelaufen
+    BATT_PROBE_NONE,          // kein Teiler bestueckt -> keine Batteriehardware
+    BATT_PROBE_ACTIVE_HIGH,   // Teiler durchgeschaltet, wenn ADC_CTRL_PIN HIGH
+    BATT_PROBE_ACTIVE_LOW     // Teiler durchgeschaltet, wenn ADC_CTRL_PIN LOW
+} batt_probe_t;
+
+extern batt_probe_t battProbeState;
+bool battHardwarePresent(void);   // false NUR bei BATT_PROBE_NONE
+
 #if defined(USE_NEW_BATT)
 
 // Battery
@@ -37,7 +59,7 @@ int wpBattHistory(float* out, int maxn);   // letzte Spannungs-Rohwerte, neueste
 	#include "nrf52/t_echo_utilities.h"
 #endif
 
-#if not defined(BOARD_RAK4630)
+#if !defined(NRF52_SERIES)
 	#include <esp_adc_cal.h>
 #endif
 

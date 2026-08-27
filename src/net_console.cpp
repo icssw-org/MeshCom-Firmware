@@ -168,31 +168,23 @@ static void authTask(void* arg)
 
         if (readOk)
         {
-            Serial.printf("[CON ]...s_password:<%s> lng:%i resoBuf:<%s>\n", s_password, strlen(s_password), respBuf);
+            Serial.printf("[CON ]...s_password:<***> lng:%i resoBuf:<***>\n", strlen(s_password));
 
-            // KBC check without SHA256
-            if(memcmp(respBuf, s_password, strlen(s_password)) != 0)
+            // 4. Compute expected HMAC-SHA256(password, nonce)
+            uint8_t expected[32];
+            const mbedtls_md_info_t* md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+            if (md && mbedtls_md_hmac(md,
+                                    (const uint8_t*)s_password, strlen(s_password),
+                                    nonce, sizeof(nonce), expected) == 0)
             {
-                // 4. Compute expected HMAC-SHA256(password, nonce)
-                uint8_t expected[32];
-                const mbedtls_md_info_t* md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-                if (md && mbedtls_md_hmac(md,
-                                        (const uint8_t*)s_password, strlen(s_password),
-                                        nonce, sizeof(nonce), expected) == 0)
+                // 5. Hex-decode response, constant-time compare
+                uint8_t received[32];
+                if (strlen(respBuf) == 64 &&
+                    hex_to_bytes(respBuf, 64, received, 32) &&
+                    ct_equal(expected, received, 32))
                 {
-                    // 5. Hex-decode response, constant-time compare
-                    uint8_t received[32];
-                    if (strlen(respBuf) == 64 &&
-                        hex_to_bytes(respBuf, 64, received, 32) &&
-                        ct_equal(expected, received, 32))
-                    {
-                        authOk = true;
-                    }
+                    authOk = true;
                 }
-            }
-            else
-            {
-                authOk = true;
             }
         }
     }
@@ -289,14 +281,19 @@ void stopNetConsole()
 {
     if (!s_started) return;
     s_started        = false;
-    s_mutex          = xSemaphoreCreateMutex();
     s_server_pending = false;   // open socket on next loopNetConsole() call
 
     // stop
     if(s_listen_fd >= 0)
-        ::close(s_listen_fd); s_listen_fd = -1;
+    {
+        ::close(s_listen_fd);
+    }
+    s_listen_fd = -1;
 
-    teardownClient();
+    if (s_mutex && xSemaphoreTake(s_mutex, portMAX_DELAY) == pdTRUE)
+    {
+        teardownClient();
+    }
 
     s_hwSerial.println("[CON ]...HMAC console stopped.");
 }

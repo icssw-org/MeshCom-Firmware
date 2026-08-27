@@ -2,7 +2,79 @@
 #define SOURCE_VERSION_SUB "p"
 #define SOURCE_VERSION_WEB_SUB "p"
 
+// Werkseinstellung des Rufzeichens und der zugehoerige "Node ist noch nicht
+// konfiguriert"-Test. Beides stand bisher als Literal an fuenf Stellen in drei
+// Images (esp32_main, nrf52_main, safeboot) und wurde dort unterschiedlich
+// geprueft -- safeboot testete vier Formen, die Mains drei, und der Default wurde
+// an einer weiteren Stelle erneut als Literal hingeschrieben. Aendert sich die
+// Werkseinstellung, muss das genau einmal hier passieren. ALT-34.
+#define DEFAULT_CALL "XX0XXX-00"
+#define DEFAULT_CALL_PREFIX "XX0XXX"
+
+// true, wenn das Rufzeichen noch die Werkseinstellung ist (oder leer/"none").
+// Der 6-Zeichen-Praefixtest deckt "XX0XXX-00" mit ab -- die vier Formen, die
+// safeboot einzeln geprueft hat, sind damit vollstaendig abgedeckt.
+#ifdef __cplusplus
+inline bool isNodeUnconfigured(const char *call)
+{
+    if (call == nullptr || call[0] == 0x00)
+        return true;
+    if (__builtin_memcmp(call, DEFAULT_CALL_PREFIX, 6) == 0)
+        return true;
+    if (__builtin_memcmp(call, "none", 4) == 0)
+        return true;
+    return false;
+}
+#endif
+
+// ---------------------------------------------------------------------------
+// Settings-Persistenz: Build-Kennung und Layout-Generation sind ZWEI Dinge
+//
+// FLASH_VERSION ist die Build-/Release-Kennung. Sie wird pro Release
+// hochgezogen, wird in --info angezeigt und ist rein informativ.
+//
+// FLASH_STRUCT_VERSION benennt die Generation des Settings-Layouts, also den
+// Aufbau von struct s_meshcom_settings. Sie wird NUR hochgezogen, wenn sich
+// dieses Layout tatsaechlich aendert -- Feld hinzugefuegt, entfernt, Typ oder
+// Reihenfolge geaendert.
+//
+// Nur FLASH_STRUCT_VERSION entscheidet ueber clear_flash(). Vorher wurde
+// FLASH_VERSION verglichen: damit hat JEDES Release mit neuem Datum die
+// Konfiguration jedes aktualisierenden Knotens geloescht -- Rufzeichen, WLAN,
+// Sensoren --, auch wenn sich am Layout nichts geaendert hatte. Genau das ist
+// beim Sprung 20260724 -> 20260821 passiert: dieser Commit hat esp32_flash.h
+// nicht angefasst, die Einstellungen aller Knoten aber trotzdem verworfen.
+//
+// Letzte echte Layout-Aenderung: 6e7c012a (2026-07-24), node_pingmax,
+// node_pingcount und node_pingduration kamen hinzu. Daher 20260724.
 #define FLASH_VERSION 20260724
+#define FLASH_STRUCT_VERSION 20260724
+
+// Bestandsschutz. Diese Staende tragen dasselbe Layout wie
+// FLASH_STRUCT_VERSION, haben aber wegen der alten Semantik noch ihr
+// Build-Datum in node_fversion stehen. Sie duerfen nicht zurueckgesetzt
+// werden, nur weil sich die Bedeutung des Feldes geaendert hat.
+//
+// Die Liste waechst NICHT weiter: ab dieser Version speichert der Knoten
+// FLASH_STRUCT_VERSION in node_fversion, nicht mehr das Datum.
+#define FLASH_STRUCT_LEGACY_COUNT 1
+static const int FLASH_STRUCT_LEGACY[FLASH_STRUCT_LEGACY_COUNT] = { 20260821 };
+
+/// @return true, wenn der gespeicherte Wert dasselbe Settings-Layout meint
+///         wie dieser Build -- dann darf NICHT geloescht werden.
+static inline bool flashLayoutCompatible(int stored)
+{
+    if (stored == FLASH_STRUCT_VERSION)
+        return true;
+
+    for (int i = 0; i < FLASH_STRUCT_LEGACY_COUNT; i++)
+    {
+        if (stored == FLASH_STRUCT_LEGACY[i])
+            return true;
+    }
+
+    return false;
+}
 
 //Hardware Types
 #define TLORA_V2 1
@@ -79,14 +151,24 @@
 #define ALIVERESET_INTERVAL 2 * 10 * 30    // 1/2 Stunde
 #define BLEBLINK_INTERVAL 3000             // BLEBLINK interval in milliseconds
 
-#if defined(ENABLE_XML)
-#define MAX_MHEARD 50                      // max count of messages in mheard ringbuffer
-#define MAX_MHPATH 50                      // max count of messages in mhpath ringbuffer
-#define MAX_RING 20                        // max count of messages in ringbuffer
-#define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
-#define MAX_LOG 20                         // max count of messages in ringbuffer
-#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
-#elif defined(ENABLE_SBUFFER)
+// Auf diesen Boards muss der I2C-Bus vor einem Sensorzugriff neu aufgesetzt
+// werden (Wire.end() + Wire.begin()), sonst haengt der Bus. Die Bedingung stand
+// bisher an neun Stellen in vier Sensordateien einzeln -- und war bereits
+// auseinandergelaufen: bmx280.cpp fragte an zwei Stellen nur BOARD_TBEAM_V3 ab
+// und liess BOARD_E22_S3 aus. Einmal zentral definiert, damit das nicht wieder
+// driften kann. DRY-25.
+#if defined(BOARD_TBEAM_V3) || defined(BOARD_E22_S3)
+#define MC_I2C_NEEDS_BUS_RESET 1
+#else
+#define MC_I2C_NEEDS_BUS_RESET 0
+#endif
+
+// Eine Speicherklasse pro Zweig. Jeder Zweig MUSS alle sechs Konstanten setzen --
+// wer eine vergisst, bekommt keinen stillen Fehlwert, sondern einen Compile-Fehler,
+// weil die Konstanten Array-Groessen sind. ALT-33.
+#if defined(ENABLE_XML) || defined(ENABLE_SBUFFER)
+// ENABLE_XML und ENABLE_SBUFFER hatten bis 2026-08-18 zwei byte-identische Zweige
+// nebeneinander; zusammengelegt, damit sie nicht auseinanderlaufen koennen.
 #define MAX_MHEARD 50                      // max count of messages in mheard ringbuffer
 #define MAX_MHPATH 50                      // max count of messages in mhpath ringbuffer
 #define MAX_RING 20                        // max count of messages in ringbuffer
@@ -126,6 +208,9 @@
 
 #define MAX_HOP_TEXT_DEFAULT 4             // max hop set on text-message
 #define MAX_HOP_POS_DEFAULT 2              // max hop set on pos-message
+#define MAX_HOP_LIMIT 7                    // obere Schranke fuer {SET} und ACK-Plausibilitaet
+                                           // (Byte 5 einer ACK fuehrt max_hop in 7 Bit; im Feld
+                                           //  beobachtet: gueltige ACKs 0..4, Textpakete bis 5)
 
 #define RECEIVE_TIMEOUT 4500               // [SX126x] 4.5sec
 #define RADIOLIB_SX126X_CAD 0x07           // 0x00...length off    0x07...32-bit detect

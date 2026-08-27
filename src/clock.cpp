@@ -69,7 +69,7 @@ Clock::EEvent Clock::CheckEvent()
 	uint8_t        u8Day, u8Hour;
 
 	// check for next minute
-	if (millis() > u32Next_m)
+	if ((int32_t)(millis() - u32Next_m) > 0)
 	{
 		// next minute
 		u8Day      = suClock_m.tm_mday;

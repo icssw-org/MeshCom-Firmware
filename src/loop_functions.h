@@ -48,11 +48,16 @@ void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int16
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLECommandBack(char *text);
-void addLoraRxBuffer(unsigned int msg_id, bool msg_server);
-void addTxRingEntry(const char* source);
+// addLoraRxBuffer() wird jetzt in dedup_functions.h deklariert.
+// N-14: kompletter TX-Ring-Enqueue (Slot-Wahl, Payload-Kopie, Prio/Overflow,
+// iWrite/iRead) in einer Funktion unter einem Lock (nRF52) -- siehe
+// lora_functions.cpp fuer Details/Locking-Begruendung. Rueckgabe: Slot-Index
+// oder -1 wenn die Overflow-Logik den Eintrag verworfen hat.
+// retryCountIn: -1 (Default) laesst retryCount[Slot] unangetastet.
+int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
+                    const char* source, int retryCountIn = -1, bool clearSlotFirst = false);
 
-int checkOwnRx(uint8_t compBuffer[4]);
-bool checkServerRx(uint8_t compBuffer[4]);
+// checkOwnRx()/checkServerRx() werden jetzt in dedup_functions.h deklariert.
 int checkOwnTx(unsigned int msg_id);
 void insertOwnTx(unsigned int id);
 

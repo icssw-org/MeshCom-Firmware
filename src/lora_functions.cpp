@@ -2,6 +2,10 @@
 #include "configuration.h"
 
 #include "printfdeb_functions.h"
+#include "txring_functions.h"
+#include "ack_functions.h"
+#include "capture_functions.h"
+#include "dedup_functions.h"
 
 #ifdef SX127X
     #include <RadioLib.h>
@@ -128,18 +132,14 @@ portMUX_TYPE displayMux = portMUX_INITIALIZER_UNLOCKED;
 // Queue display text update for main loop execution
 static void queueDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
-#if defined(ESP32)
-    portENTER_CRITICAL(&displayMux);
-#elif defined(BOARD_RAK4630)
+#if defined(BOARD_RAK4630)
     taskENTER_CRITICAL();
 #endif
     pendingDisplayMsg = aprsmsg;
     pendingDisplayRssi = rssi;
     pendingDisplaySnr = snr;
     bPendingDisplayText = true;
-#if defined(ESP32)
-    portEXIT_CRITICAL(&displayMux);
-#elif defined(BOARD_RAK4630)
+#if defined(BOARD_RAK4630)
     taskEXIT_CRITICAL();
 #endif
 }
@@ -147,18 +147,14 @@ static void queueDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t s
 // Queue display position update for main loop execution
 static void queueDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
-#if defined(ESP32)
-    portENTER_CRITICAL(&displayMux);
-#elif defined(BOARD_RAK4630)
+#if defined(BOARD_RAK4630)
     taskENTER_CRITICAL();
 #endif
     pendingDisplayMsg = aprsmsg;
     pendingDisplayRssi = rssi;
     pendingDisplaySnr = snr;
     bPendingDisplayPos = true;
-#if defined(ESP32)
-    portEXIT_CRITICAL(&displayMux);
-#elif defined(BOARD_RAK4630)
+#if defined(BOARD_RAK4630)
     taskEXIT_CRITICAL();
 #endif
 }
@@ -240,8 +236,25 @@ static int findAndStopRingSlot(uint32_t msgId)
  */
 static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
 {
+    (void)rssi;
+    (void)snr;
     if(payload[0] != MSG_TYPE_ACK)
         return false;
+
+    if(size < 12)
+        return false;
+
+    // Plausibilitaetspruefung vor jeder weiteren Verarbeitung: 0x41 ist als
+    // ASCII der Buchstabe 'A', ohne diese Pruefung laeuft jedes Bruchstueck,
+    // das damit beginnt, durch den ACK-Pfad und wird mit Prio 1 weitergesendet.
+    // Begruendung und Feldmessung siehe ack_functions.h.
+    if(!isPlausibleAckFrame(payload, size, MAX_HOP_LIMIT))
+    {
+        if(bLORADEBUG)
+            printfdeb("[MC-DBG] ACK_REJECT b5=%02X len=%u\n", payload[5], (unsigned)size);
+
+        return false;
+    }
 
     uint8_t print_buff[30];
 
@@ -298,12 +311,7 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
             {
                 print_buff[5]--;
 
-                ringBuffer[iWrite][0]=12;
-                ringBuffer[iWrite][1]=RING_STATUS_DONE; // no retransmission
-                memcpy(ringBuffer[iWrite]+2, print_buff, 12);
-
-                retryCount[iWrite] = 0;
-                addTxRingEntry("rx_ack_fwd");
+                addTxRingEntry(print_buff, 12, RING_STATUS_DONE, "rx_ack_fwd", 0);
 
                 if(bDisplayInfo)
                 {
@@ -326,6 +334,20 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
+    // Testfang-Hook (Katalog doc 08 §4, Mechanismus 2): akzeptierte Frames als
+    // Rohbytes — das Gegenstueck zum CRC_PAYLOAD-Dump der VERWORFENEN Frames
+    // in checkRX (esp32_main.cpp). OnRxDone ist auf beiden Plattformen der
+    // erste Punkt, den nur akzeptierte Frames erreichen.
+    //
+    // Frueher hing das hinter `-D MC_TEST_HOOKS` und druckte hier direkt, was
+    // in keinem Produktionsbuild lief: der Dump saesse im Radio-Callback
+    // (nRF52: Timer-Service-Task, 1 KB Stack) und printfdeb() braucht davon
+    // allein ~900 Byte, dazu ~48 ms Serial-Zeit mitten im RX-Pfad.
+    // captureFrame() kopiert nur; ausgegeben wird aus dem Loop
+    // (captureDrain() in main.cpp), siehe capture_functions.h.
+    if(bLORADEBUG)
+        captureFrame('R', payload, size, rssi, snr);
+
     // Debug I: OnRxDone timing — capture start time
     unsigned long _onrxdone_start = millis();
 
@@ -365,9 +387,17 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     // Debug logging outside critical section
     if(_overwrite)
+    {
+#ifdef LORA_ISR_DEBUG
         printfdeb("[MC-DBG] RX_BUF_OVERWRITE buf=%d (still in use)\n", rxBufIndex);
+#endif
+    }
     else if(bLORADEBUG)
+    {
+#ifdef LORA_ISR_DEBUG
         printfdeb("[MC-DBG] RX_BUF_SWITCH buf=%d\n", rxBufIndex);
+#endif
+    }
     // SPI guard: defer Radio.Rx() if Ethernet (W5100S) owns the shared SPI bus
     if(bSPI_ETH_Active) {
         bPendingRadioRx = true;
@@ -384,13 +414,25 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     }
     taskEXIT_CRITICAL();
     if(_cad_was_active && bLORADEBUG)
+    {
+#ifdef LORA_ISR_DEBUG
         printfdeb("[MC-DBG] CAD_ABORT_BY_RX\n");
+#endif
+    }
     if(bLORADEBUG)
+    {
+#ifdef LORA_ISR_DEBUG
         printfdeb("[MC-DBG] RX_RESTART_EARLY src=OnRxDone\n");
+#endif
+    }
     // Log RX_LISTEN -> RX_PROCESS here (not in OnHeaderDetect ISR where
     // Serial.printf is unreliable on nRF52)
     if(bLORADEBUG)
+    {
+#ifdef LORA_ISR_DEBUG
         printfdeb("[MC-SM] RX_LISTEN -> RX_PROCESS rc=0\n");
+#endif
+    }
     #endif
 
     // only for Test T5_EPAPER
@@ -1061,17 +1103,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00
                                                 print_buff[11]=0x00;     // msg always 0x00 at the end
                                                 
-                                                ringBuffer[iWrite][0]=12;
-                                                ringBuffer[iWrite][1]=RING_STATUS_DONE; // no retransmission
-                                                memcpy(ringBuffer[iWrite]+2, print_buff, 12);
-
-                                                addTxRingEntry("rx_dm_ack_gw");
-
-                                                /*
-                                                iWrite++;
-                                                if(iWrite >= MAX_RING)
-                                                    iWrite=0;
-                                                */
+                                                addTxRingEntry(print_buff, 12, RING_STATUS_DONE, "rx_dm_ack_gw");
 
                                                 if(bDisplayInfo)
                                                 {
@@ -1095,17 +1127,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 print_buff[3]=(msg_counter >> 16) & 0xFF;
                                                 print_buff[4]=(msg_counter >> 24) & 0xFF;
 
-                                                ringBuffer[iWrite][0]=12;
-                                                ringBuffer[iWrite][1]=RING_STATUS_DONE; // no retransmission
-                                                memcpy(ringBuffer[iWrite]+2, print_buff, 12);
-
-                                                addTxRingEntry("rx_dm_ack_new");
-
-                                                /*
-                                                iWrite++;
-                                                if(iWrite >= MAX_RING)
-                                                    iWrite=0;
-                                                */
+                                                addTxRingEntry(print_buff, 12, RING_STATUS_DONE, "rx_dm_ack_new");
 
                                                 mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
                                                 
@@ -1172,8 +1194,23 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         // GATEWAY action before MESH
                         // and not MESHed from another Gateways
+                        bool bHeyReportAppended = false;
                         if(bGATEWAY && (!aprsmsg.msg_server || aprsmsg.payload_type == '@'))  // HEY always send to Server
                         {
+                            if(aprsmsg.payload_type == '@')
+                            {
+                                // append own signal report (NCT,RSSI,SNR) before UDP out, so the
+                                // server gets the same report the mesh gets — the relay path below
+                                // skips its append (RcvBuffer is re-encoded there anyway)
+                                appendHeySignalReport(aprsmsg, rssi, snr, getMheardCount());
+                                bHeyReportAppended = true;
+
+                                memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
+                                size = encodeAPRS(RcvBuffer, aprsmsg);
+                                if(size + 2 > UDP_TX_BUF_SIZE)
+                                    size = UDP_TX_BUF_SIZE - 2;
+                            }
+
                             addNodeData(RcvBuffer, size, rssi, snr);
                         }
 
@@ -1234,15 +1271,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
                                 }
 
-                                if(aprsmsg.payload_type == '@')
-                                {
-                                    aprsmsg.msg_payload.concat(String(getMheardCount()));
-                                    aprsmsg.msg_payload.concat(',');
-                                    aprsmsg.msg_payload.concat(String(rssi*-1.0, 0));
-                                    aprsmsg.msg_payload.concat(',');
-                                    aprsmsg.msg_payload.concat(String(snr));
-                                    aprsmsg.msg_payload.concat(';');
-                                }
+                                if(aprsmsg.payload_type == '@' && !bHeyReportAppended)
+                                    appendHeySignalReport(aprsmsg, rssi, snr, getMheardCount());
                                 
                                 memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
 
@@ -1251,24 +1281,20 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 if(size + 2 > UDP_TX_BUF_SIZE)
                                     size = UDP_TX_BUF_SIZE - 2;
 
-                                memset(ringBuffer[iWrite], 0x00, UDP_TX_BUF_SIZE+1);
-
-                                ringBuffer[iWrite][0]=size;
-                                memcpy(ringBuffer[iWrite]+2, RcvBuffer, size);
-
                                 // FIX: Relay messages are fire-and-forget.
                                 // Only the ORIGINATING node should retransmit.
-                                ringBuffer[iWrite][1] = RING_STATUS_DONE; // no retransmission for ANY relay message
-
                                 if(bLORADEBUG)
                                 {
-                                    unsigned int relay_msg_id = (ringBuffer[iWrite][6]<<24) | (ringBuffer[iWrite][5]<<16) | (ringBuffer[iWrite][4]<<8) | ringBuffer[iWrite][3];
+                                    // Werte aus RcvBuffer statt aus dem Ring lesen: der Slot wird
+                                    // erst innerhalb von addTxRingEntry() unter Lock gewaehlt/beschrieben.
+                                    unsigned int relay_msg_id = (RcvBuffer[4]<<24) | (RcvBuffer[3]<<16) | (RcvBuffer[2]<<8) | RcvBuffer[1];
                                     printfdeb("[MC-DBG] RELAY_QUEUED msg_id=%08X type=%02X len=%d\n",
-                                        relay_msg_id, ringBuffer[iWrite][2], size);
+                                        relay_msg_id, RcvBuffer[0], size);
                                 }
 
-                                retryCount[iWrite] = 0;
-                                addTxRingEntry("rx_relay");
+                                // no retransmission for ANY relay message; Slot vorher komplett
+                                // nullen (Alt-Verhalten: memset des ganzen Rings vor dem Schreiben)
+                                addTxRingEntry(RcvBuffer, size, RING_STATUS_DONE, "rx_relay", 0, true);
 
                                 /*
                                 if(bDisplayInfo)
@@ -1410,281 +1436,14 @@ void OnRxError(void)
     is_receiving = false;
 }
 
-/**@brief Function to check if we have a Lora packet already received
- */
-bool is_new_packet(uint8_t compBuffer[4])
-{
-    for(int ib=0; ib<MAX_DEDUP_RING; ib++)
-    {
-            if (memcmp(compBuffer, ringBufferLoraRX[ib], 4) == 0)
-            {
-                if(bLORADEBUG)
-                {
-                    uint32_t dup_id = (uint32_t)compBuffer[0] |
-                                      ((uint32_t)compBuffer[1] << 8) |
-                                      ((uint32_t)compBuffer[2] << 16) |
-                                      ((uint32_t)compBuffer[3] << 24);
-                    if(bLORADEBUG)
-                        printfdeb("[MC-DBG] RX_DEDUP_DUP msg_id=%08X slot=%d\n",dup_id, ib);
-                }
-                return false;
-            }
-    }
-
-    if(bLORADEBUG)
-    {
-        uint32_t new_id = (uint32_t)compBuffer[0] |
-                          ((uint32_t)compBuffer[1] << 8) |
-                          ((uint32_t)compBuffer[2] << 16) |
-                          ((uint32_t)compBuffer[3] << 24);
-        if(bLORADEBUG)
-            printfdeb("[MC-DBG] RX_DEDUP_NEW msg_id=%08X\n", new_id);
-    }
-    return true;
-}
+// is_new_packet() ist nach dedup_functions.cpp gewandert (reine Verschiebung).
 
 //////////////////////////////////////////////////////////////////////////
 // LoRa TX functions
-
-/**
- * Determine message priority from ring buffer slot content.
- * Ring buffer layout: [0]=len, [1]=status, [2]=payload_type, [3-6]=msg_id, [7]=flags, [8+]=path
- * Encoded path format: "SOURCE>DEST:" starting at offset 8 (relative to ringBuffer[slot]+2)
- * i.e. ringBuffer[slot][8] is the first char of the source callsign.
- */
-uint8_t getMessagePriority(int slot)
-{
-    uint8_t msg_type = ringBuffer[slot][2];
-
-    if(msg_type == MSG_TYPE_ACK)
-        return MSG_PRIO_CRITICAL;
-
-    if(msg_type == MSG_TYPE_POSITION)
-        return MSG_PRIO_LOW;
-
-    if(msg_type == MSG_TYPE_HEY)
-        return MSG_PRIO_BACKGROUND;
-
-    if(msg_type == MSG_TYPE_TEXT)
-    {
-        // Relay detection: OnRxDone sets RING_STATUS_DONE for relayed packets
-        if(ringBuffer[slot][1] == RING_STATUS_DONE)
-            return MSG_PRIO_NORMAL; // Relay
-
-        // User-originated text: parse destination from encoded APRS path
-        // Path starts at ringBuffer[slot][8] (offset 6 in encoded data = after type+id+flags)
-        // Format: "SOURCE>DEST:" — find '>' then read until payload_type char
-        int len = ringBuffer[slot][0];
-        int path_start = 8; // slot[2] + 6 bytes header = slot[8]
-        int dest_start = -1;
-        int dest_end = -1;
-
-        for(int i = path_start; i < len + 2 && i < (UDP_TX_BUF_SIZE + 4); i++)
-        {
-            if(ringBuffer[slot][i] == '>' && dest_start < 0)
-            {
-                dest_start = i + 1;
-            }
-            else if(dest_start >= 0 && (ringBuffer[slot][i] == ':' || ringBuffer[slot][i] == MSG_TYPE_TEXT))
-            {
-                dest_end = i;
-                break;
-            }
-        }
-
-        if(dest_start >= 0 && dest_end > dest_start)
-        {
-            char dest[12] = {0};
-            int dlen = dest_end - dest_start;
-            if(dlen > 10) dlen = 10;
-            memcpy(dest, &ringBuffer[slot][dest_start], dlen);
-            dest[dlen] = 0;
-
-            if(strcmp(dest, "*") == 0)
-                return MSG_PRIO_HIGH; // Broadcast
-
-            if(CheckGroup(String(dest)) != 0)
-                return MSG_PRIO_HIGH; // Group message
-
-            return MSG_PRIO_CRITICAL; // Personal DM
-        }
-
-        // Fallback: treat as high priority if parsing fails
-        return MSG_PRIO_HIGH;
-    }
-
-    // Unknown type: normal priority
-    return MSG_PRIO_NORMAL;
-}
-
-/**
- * Find the next slot to transmit from the ring buffer, based on priority.
- * Scans all occupied slots between iRead and iWrite.
- * Returns slot index, or -1 if empty.
- * Within same priority, oldest entry (closest to iRead) wins (FIFO).
- */
-int getNextTxSlot(void)
-{
-    if(iWrite == iRead)
-        return -1;
-
-    int best_slot = -1;
-    uint8_t best_prio = 255;
-
-    int pos = iRead;
-    while(pos != iWrite)
-    {
-#if defined(EXTERNAL_RADIO)
-        // owned-slot status invariant: a slot owned by an in-flight external TX must never be
-        // reselected. RING_STATUS_EXT_PENDING is neither READY nor DONE, so the
-        // test below already skips it; this explicit skip states the intent.
-        if(ringBuffer[pos][1] == RING_STATUS_EXT_PENDING)
-        {
-            pos++;
-            if(pos >= MAX_RING)
-                pos = 0;
-            continue;
-        }
-#endif
-        // Only consider slots with data that are ready to send (READY or DONE/fire-and-forget).
-        // Skip slots with status SENT..threshold (awaiting retransmission timer).
-        if(ringBuffer[pos][0] > 0 &&
-           (ringBuffer[pos][1] == RING_STATUS_READY || ringBuffer[pos][1] == RING_STATUS_DONE))
-        {
-            uint8_t prio = ringPriority[pos];
-            if(prio < best_prio)
-            {
-                best_prio = prio;
-                best_slot = pos;
-            }
-            // Same prio: keep first found (= oldest = FIFO)
-        }
-
-        pos++;
-        if(pos >= MAX_RING)
-            pos = 0;
-    }
-
-    return best_slot;
-}
-
-/**
- * Advance iRead past any empty (already-transmitted) slots at the front.
- */
-static void advanceIReadPastEmpty(void)
-{
-    int localRead = iRead;
-    int localWrite = iWrite;
-    while(localRead != localWrite && ringBuffer[localRead][0] == 0)
-    {
-        localRead++;
-        if(localRead >= MAX_RING)
-            localRead = 0;
-    }
-    iRead = localRead;
-}
-
-/**
- * Log + advance TX ring buffer write pointer.
- * Replaces direct addRingPointer(iWrite, iRead, MAX_RING, "tx") calls.
- * @param source  Short label for the calling code path (e.g. "rx_relay", "udp")
- */
-void addTxRingEntry(const char* source)
-{
-    int w = iWrite;
-    int r = iRead;
-
-    if(bLORADEBUG)
-    {
-        uint32_t mid = ((uint32_t)ringBuffer[w][6] << 24) |
-                       ((uint32_t)ringBuffer[w][5] << 16) |
-                       ((uint32_t)ringBuffer[w][4] << 8)  |
-                        (uint32_t)ringBuffer[w][3];
-        int queued = (w >= r) ? (w - r) : (MAX_RING - r + w);
-        if(bLORADEBUG)
-            printfdeb("[MC-DBG] RING_WRITE slot=%d type=%02X status=%02X "
-                      "len=%d msg_id=%08X queued=%d/%d src=%s\n",
-                      w, ringBuffer[w][2], ringBuffer[w][1],
-                      ringBuffer[w][0], mid, queued, MAX_RING, source);
-    }
-
-    // Assign priority and enqueue timestamp
-    ringPriority[w] = getMessagePriority(w);
-    ringEnqueueTime[w] = millis();
-
-    // Track queue depth for high-water mark
-    int queued_now = (w >= r) ? (w - r) : (MAX_RING - r + w);
-    if(queued_now + 1 > stat_queue_hwm)
-        stat_queue_hwm = queued_now + 1;
-
-    if(bLORADEBUG)
-        printfdeb("[MC-DBG] RING_PRIO slot=%d prio=%d\n", w, ringPriority[w]);
-
-    // Priority-aware overflow: when queue is full, drop lowest-priority oldest entry
-    int nextWrite = w + 1;
-    if(nextWrite >= MAX_RING) nextWrite = 0;
-    if(nextWrite == r && ringBuffer[r][0] > 0)
-    {
-        // Find the oldest entry of the lowest priority in the queue
-        uint8_t new_prio = ringPriority[w];
-        int worst_slot = -1;
-        uint8_t worst_prio = 0;
-        int scan = r;
-        while(scan != w)
-        {
-            bool evictable = ringBuffer[scan][0] > 0;
-#if defined(EXTERNAL_RADIO)
-            // Never evict an in-flight external-TX slot: its length must stay
-            // valid until the bridge result resolves it, and the ownership record
-            // is not notified by this overflow path. Dropping it here would lose a
-            // pending TX or let a late result corrupt the reused slot.
-            if(ringBuffer[scan][1] == RING_STATUS_EXT_PENDING)
-                evictable = false;
-#endif
-            if(evictable && ringPriority[scan] > worst_prio)
-            {
-                worst_prio = ringPriority[scan];
-                worst_slot = scan;
-            }
-            scan++;
-            if(scan >= MAX_RING) scan = 0;
-        }
-
-        if(worst_slot >= 0 && new_prio < worst_prio)
-        {
-            // Drop the lowest-priority entry to make room
-            uint32_t lost_id = ((uint32_t)ringBuffer[worst_slot][6] << 24) |
-                               ((uint32_t)ringBuffer[worst_slot][5] << 16) |
-                               ((uint32_t)ringBuffer[worst_slot][4] << 8)  |
-                                (uint32_t)ringBuffer[worst_slot][3];
-            if(bLORADEBUG)
-                printfdeb("[MC-DBG] RING_DROP_PRIO slot=%d prio=%d type=%02X "
-                          "msg_id=%08X replaced_by_prio=%d src=%s\n",
-                          worst_slot, worst_prio, ringBuffer[worst_slot][2],
-                          lost_id, new_prio, source);
-            stat_drop_count[worst_prio]++;
-            ringBuffer[worst_slot][0] = 0; // Mark as empty
-            advanceIReadPastEmpty();
-        }
-        else
-        {
-            // New packet is same or lower priority than everything in queue — drop it
-            uint32_t lost_id = ((uint32_t)ringBuffer[w][6] << 24) |
-                               ((uint32_t)ringBuffer[w][5] << 16) |
-                               ((uint32_t)ringBuffer[w][4] << 8)  |
-                                (uint32_t)ringBuffer[w][3];
-            if(bLORADEBUG)
-                printfdeb("[MC-DBG] RING_DROP_NEW slot=%d prio=%d type=%02X "
-                          "msg_id=%08X (queue full, no lower prio to evict)\n",
-                          w, new_prio, ringBuffer[w][2], lost_id);
-            stat_drop_count[new_prio]++;
-            ringBuffer[w][0] = 0; // Don't enqueue
-            return; // Don't advance write pointer
-        }
-    }
-
-    addRingPointer(iWrite, iRead, MAX_RING, "tx");
-}
+//
+// getMessagePriority/getNextTxSlot/advanceIReadPastEmpty/addTxRingEntry
+// wurden nach txring_functions.cpp verschoben -- reine Verschiebung, Logik
+// unveraendert. Siehe txring_functions.h/.cpp.
 
 /**@brief our Lora TX sequence — priority-based slot selection
  */
@@ -1759,6 +1518,19 @@ bool doTX()
         // restore the slot and retry on the next call.
         // For rollback: we restore ringBuffer[save_read][0] = sendlng.
 
+        // Testfang-Hook TX (siehe capture_functions.h): die Bytes, die dieser
+        // Knoten gleich auf den Kanal legt. Ohne diese Seite zeigt der
+        // Mitschnitt nur, was empfangen wurde -- ob unser eigenes
+        // Re-Enkodieren auf dem Relay-Pfad (Hop-Dekrement, Pfadanhang)
+        // byte-treu ist, laesst sich daraus nicht pruefen.
+        //
+        // Nur puffern, nicht drucken: diese Stelle liegt zwischen der
+        // CAD-Entscheidung "Kanal frei" und startTransmit(); eine halbe
+        // Sekunde Serial-Ausgabe dazwischen wuerde die Kanalmessung
+        // entwerten, auf der der Sendezeitpunkt beruht.
+        if(bTXCAPTURE && sendlng > 0)
+            captureFrame('T', lora_tx_buffer, (uint16_t)sendlng, 0, 0);
+
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
@@ -1771,12 +1543,19 @@ bool doTX()
                 // you can transmit C-string or Arduino string up to
                 // 256 characters long
                 // Position zumindest alle funf Minuten auch zu MeshCom senden
-                if(millis() > track_to_meshcom_timer + 1000 * 60 * 5)
+                if((uint32_t)(millis() - track_to_meshcom_timer) >= 1000 * 60 * 5)
                 {
                     #if defined BOARD_RAK4630
-                        taskENTER_CRITICAL();
+                        // N-16: taskENTER_CRITICAL() masks interrupts, including the
+                        // tick — SX126xWaitOnBusy() inside Radio.Send() calls delay(1)
+                        // in a loop, which needs the tick to ever return, so the old
+                        // critical section could hang forever. vTaskSuspendAll() only
+                        // blocks task scheduling, which is enough to keep the FreeRTOS
+                        // timer-service task (OnRxDone, priority 2, see C-01) from
+                        // touching the radio mid-send, without freezing the tick.
+                        vTaskSuspendAll();
                         Radio.Send(lora_tx_buffer, sendlng);
-                        taskEXIT_CRITICAL();
+                        xTaskResumeAll();
                     #else
                         #ifndef BOARD_T5_EPAPER
                         #ifdef RADIO_CTRL
@@ -1815,9 +1594,11 @@ bool doTX()
                 // you can transmit C-string or Arduino string up to
                 // 256 characters long
                 #if defined BOARD_RAK4630
-                    taskENTER_CRITICAL();
+                    // N-16, see the "track" send above for why vTaskSuspendAll()
+                    // replaces taskENTER_CRITICAL() here.
+                    vTaskSuspendAll();
                     Radio.Send(lora_tx_buffer, sendlng);
-                    taskEXIT_CRITICAL();
+                    xTaskResumeAll();
                 #else
                     #ifndef BOARD_T5_EPAPER
                     #ifdef RADIO_CTRL
@@ -1876,9 +1657,11 @@ bool doTX()
                     // you can transmit C-string or Arduino string up to
                     // 256 characters long
                     #if defined BOARD_RAK4630
-                        taskENTER_CRITICAL();
+                        // N-16, see the "track" send above for why vTaskSuspendAll()
+                        // replaces taskENTER_CRITICAL() here.
+                        vTaskSuspendAll();
                         Radio.Send(lora_tx_buffer, sendlng);
-                        taskEXIT_CRITICAL();
+                        xTaskResumeAll();
                     #else
                         #ifndef BOARD_T5_EPAPER
                         #ifdef RADIO_CTRL
@@ -2023,22 +1806,22 @@ bool updateRetransmissionStatus()
                     printfdeb("");
                 }
 
-                // Copy message to new slot BEFORE clearing original (len must still be valid)
-                memcpy(ringBuffer[iWrite], ringBuffer[ircheck], size + 2);
+                // ready for doTX (text messages) or fire-and-forget, wie zuvor
+                uint8_t retransmitStatus = (ringBuffer[ircheck][2] == MSG_TYPE_TEXT)
+                                            ? RING_STATUS_READY : RING_STATUS_DONE;
 
-                if (ringBuffer[iWrite][2] == MSG_TYPE_TEXT) // text messages
-                    ringBuffer[iWrite][1] = RING_STATUS_READY;  // ready for doTX; timer starts after send
-                else
-                    ringBuffer[iWrite][1] = RING_STATUS_DONE;
-
-                // Transfer and increment retry count
-                retryCount[iWrite] = retryCount[ircheck] + 1;
+                // Quelle ist ircheck, Ziel wird erst innerhalb der Funktion (unter
+                // Lock) gewaehlt — ircheck != iWrite im Normalfall (iWrite zeigt auf
+                // einen leeren Slot); selbst im theoretischen Gleichstand ist
+                // memcpy(dst==src) hier folgenlos (Quelle == Ziel-Byte fuer Byte).
+                // Original erst NACH dem Kopieren freigeben, damit die Payload beim
+                // Kopiervorgang garantiert noch gueltig ist.
+                addTxRingEntry(&ringBuffer[ircheck][2], (uint16_t)size, retransmitStatus,
+                                "retransmit", retryCount[ircheck] + 1);
 
                 // Mark original as done and free slot (after copy, so len is correct in new slot)
                 ringBuffer[ircheck][1] = RING_STATUS_DONE;
                 ringBuffer[ircheck][0] = 0;  // free slot so getNextTxSlot skips it
-
-                addTxRingEntry("retransmit");
 
                 return true;
             }

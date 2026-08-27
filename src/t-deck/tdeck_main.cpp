@@ -260,7 +260,7 @@ void addMessage(const char *str)
 {
     tdeck_add_system_message(str);
     uint32_t run = millis() + 2000;
-    while (millis() < run)
+    while ((int32_t)(millis() - run) < 0)
     {
         lv_task_handler();
         delay(5);

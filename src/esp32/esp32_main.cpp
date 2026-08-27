@@ -12,6 +12,8 @@
 #include <Arduino.h>
 #include <atomic>
 #include <configuration.h>
+#include "capture_functions.h"
+#include "dedup_functions.h"
 #include <RadioLib.h>
 
 #include <Wire.h>               
@@ -26,6 +28,8 @@ SPIClass ethSPI(FSPI);
 #include "esp32_pmu.h"
 #include "esp32_flash.h"
 #include <esp_adc_cal.h>
+#include "esp_system.h"
+#include "esp_task_wdt.h"
 
 #if not defined(BOARD_T_DECK_PRO)
 //====== Timer for periodical events u.a.
@@ -474,10 +478,7 @@ unsigned long inoReceiveTimeOutTime = 0;
 std::atomic<bool> transmittedFlag{false};
 std::atomic<bool> bEnableInterruptTransmit{false};
 
-// flag to indicate that a packet was detected or CAD timed out
-volatile bool scanFlag = false;
-
-// flag to indicate one second 
+// flag to indicate one second
 unsigned long retransmit_timer = 0;
 
 // blink frequency for board_led
@@ -585,7 +586,7 @@ float getTempForNTC()
 {
     static float temperature = 0.0f;
     static uint32_t check_temperature = 0;
-    if (millis() > check_temperature) {
+    if ((int32_t)(millis() - check_temperature) > 0) {
         analogSetAttenuation(ADC_11db); // bis <2,2V
         float voltage = analogReadMilliVolts(NTC_PIN);
         uint16_t raw = analogReadRaw(NTC_PIN);
@@ -617,10 +618,13 @@ void esp32setup()
 // 1.1.1??   pinMode(45,OUTPUT);
 // 1.1.1??    digitalWrite(45, LOW);
 
-    // Wartet maximal 3 Sekunden auf den seriellen Monitor
+    // Wartet maximal 5 Sekunden auf den seriellen Monitor.
+    // Achtung: delay() füttert den Task-Watchdog NICHT -- nur
+    // esp_task_wdt_reset() tut das. Diese Schleife ist nur deshalb
+    // unkritisch, weil esp32setup() bewusst nicht überwacht wird (N-25/S1).
     unsigned long startTime = millis();
     while (!Serial && (millis() - startTime < 5000)) {
-        delay(10); // Verhindert das Auslösen des Watchdog-Timers
+        delay(10);
     }
 
     #if defined(HAS_TFT_CONNECT)
@@ -731,9 +735,12 @@ void esp32setup()
 
     printfdeb("[INIT]...build %s / %s\n", __DATE__, __TIME__);
 
-    if(meshcom_settings.node_fversion != FLASH_VERSION || bClear)
+    // Geloescht wird nur bei echter Layout-Aenderung, nicht bei jedem neuen
+    // Build-Datum. Siehe configuration_global.h.
+    if(!flashLayoutCompatible(meshcom_settings.node_fversion) || bClear)
     {
-        printfdeb("[INIT]...FLASH cleared new version %i\n", FLASH_VERSION);
+        printfdeb("[INIT]...FLASH cleared, Settings-Layout %i -> %i\n",
+                  meshcom_settings.node_fversion, FLASH_STRUCT_VERSION);
 
         initTimePersistence();
 
@@ -741,13 +748,14 @@ void esp32setup()
     }
     else
     {
-        printfdeb("[INIT]...FLASH version %i\n", meshcom_settings.node_fversion);
+        printfdeb("[INIT]...FLASH layout %i ok, build %i\n",
+                  meshcom_settings.node_fversion, FLASH_VERSION);
     }
 
     if(bClear)
         init_flash();
 
-    meshcom_settings.node_fversion = FLASH_VERSION;
+    meshcom_settings.node_fversion = FLASH_STRUCT_VERSION;
     meshcom_settings.node_mversion = MODUL_HARDWARE;
     meshcom_settings.node_cleanflash = 0;
     snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%-4.4s%-1.1s", SOURCE_VERSION, SOURCE_VERSION_SUB);
@@ -823,6 +831,7 @@ void esp32setup()
     bDEBUGCSV = meshcom_settings.node_sset4 & 0x0001;
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
     bDisplayLog = meshcom_settings.node_sset4 & 0x0004;
+    bTXCAPTURE = meshcom_settings.node_sset4 & 0x0008;
 
     if(strlen(meshcom_settings.node_aprsmc) < 4)
     {
@@ -866,7 +875,7 @@ void esp32setup()
     #endif
 
     // if Node not set --> WifiAP Mode on
-    if(memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0 || meshcom_settings.node_call[0] == 0x00 || memcmp(meshcom_settings.node_call, "none", 4) == 0)
+    if(isNodeUnconfigured(meshcom_settings.node_call))
     {
         bWIFIAP = true;
         printlndeb("[INIT]...WIFIAP starting...");
@@ -1002,7 +1011,7 @@ void esp32setup()
         #endif
     }
 
-    if(memcmp(meshcom_settings.node_ssid, "XX0XXX", 6) == 0)
+    if(memcmp(meshcom_settings.node_ssid, DEFAULT_CALL_PREFIX, 6) == 0)
     {
         snprintf(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid), (char*)"none");
         snprintf(meshcom_settings.node_pwd, sizeof(meshcom_settings.node_pwd), (char*)"none");
@@ -1424,12 +1433,14 @@ void esp32setup()
         #if defined(BOARD_T_DECK_PRO)
         if (radio.setOutputPower(tx_power) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
             printlndeb(F("Selected output power is invalid for this module!"));
-            while (true);
+            Serial.printf("[LoRa] radio config failed, restarting\n");
+            esp_restart();
         }
         #else
         if (radio.setOutputPower(tx_power, false) == RADIOLIB_ERR_INVALID_OUTPUT_POWER) {
             printlndeb(F("Selected output power is invalid for this module!"));
-            while (true);
+            Serial.printf("[LoRa] radio config failed, restarting\n");
+            esp_restart();
         }
         #endif
 
@@ -1437,7 +1448,8 @@ void esp32setup()
         // NOTE: set value to 0 to disable overcurrent protection
         if (radio.setCurrentLimit(CURRENT_LIMIT) == RADIOLIB_ERR_INVALID_CURRENT_LIMIT) {
             printlndeb(F("Selected current limit is invalid for this module!"));
-            while (true);
+            Serial.printf("[LoRa] radio config failed, restarting\n");
+            esp_restart();
         }
 
         // set LoRa preamble length to 15 symbols (accepted range is 6 - 65535)
@@ -1445,7 +1457,8 @@ void esp32setup()
         
         if (radio.setPreambleLength(meshcom_settings.node_preamplebits) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
             printlndeb(F("Selected preamble length is invalid for this module!"));
-            while (true);
+            Serial.printf("[LoRa] radio config failed, restarting\n");
+            esp_restart();
         }
 
         #if defined(SX127X)
@@ -1455,7 +1468,8 @@ void esp32setup()
         if (radio.setGain(0) == RADIOLIB_ERR_INVALID_GAIN)
         {
             printlndeb(F("Selected gain is invalid for this module!"));
-            while (true);
+            Serial.printf("[LoRa] radio config failed, restarting\n");
+            esp_restart();
         }
 
         // set the function that will be called
@@ -1492,7 +1506,8 @@ void esp32setup()
         if (radio.setCRC(true) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
         {
             printlndeb(F("Selected CRC is invalid for this module!"));
-            while (true);
+            Serial.printf("[LoRa] radio config failed, restarting\n");
+            esp_restart();
         }
 
         #endif
@@ -1532,7 +1547,8 @@ void esp32setup()
         if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
         {
             printlndeb(F("Selected CRC is invalid for this module!"));
-            while (true);
+            Serial.printf("[LoRa] radio config failed, restarting\n");
+            esp_restart();
         }
         #endif
 
@@ -1565,10 +1581,11 @@ void esp32setup()
             if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION)
             {
                 printlndeb("Selected CRC is invalid for this module!");
-                while (true);
+                Serial.printf("[LoRa] radio config failed, restarting\n");
+                esp_restart();
             }
         #endif
-        
+
         // setup for E220 Radios
         #if defined(BOARD_E220)
 
@@ -1591,9 +1608,10 @@ void esp32setup()
             // enable CRC
             if (radio.setCRC(2) == RADIOLIB_ERR_INVALID_CRC_CONFIGURATION) {
                 printlndeb(F("Selected CRC is invalid for this module!"));
-                while (true);
+                Serial.printf("[LoRa] radio config failed, restarting\n");
+                esp_restart();
             }
-        
+
         #endif
     }
 
@@ -1604,7 +1622,7 @@ void esp32setup()
 
     if(meshcom_settings.node_call[0] == 0x00)
     {
-        snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", (char*)"XX0XXX-00");
+        snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", (char*)DEFAULT_CALL);
     }
 
     // Create the BLE Device & WiFiAP
@@ -1769,6 +1787,14 @@ void esp32setup()
             digitalWrite(RELAY_SWITCH, HIGH);
     #endif
 
+    // N-25/S1: Der Task-Watchdog wird erst hier scharf geschaltet, nicht am
+    // Anfang von esp32setup(). setup() führt legitim sekundenlange
+    // Einmal-Initialisierung aus (USB-CDC-Wartezeit, Display-Timeouts,
+    // MCU811, die while(true)-Fehlerpfade der Peripherie-Init). Diese zu
+    // überwachen war nie Sinn der Maßnahme -- sie hätte diagnostizierbare
+    // Hänger in einen anonymen Boot-Loop verwandelt. Bewacht wird ab jetzt
+    // ausschließlich esp32loop(), das sich in :esp32loop() selbst füttert.
+    esp_task_wdt_add(NULL);
 }
 
 // BLE TX Function -> Node to Client
@@ -1788,7 +1814,6 @@ void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 // the local-radio loop and the external-radio path flush pending RX displays.
 static void flushDeferredDisplayUpdates()
 {
-    portENTER_CRITICAL(&displayMux);
     bool _pendText = bPendingDisplayText;
     bool _pendPos = bPendingDisplayPos;
     struct aprsMessage _msg;
@@ -1801,13 +1826,14 @@ static void flushDeferredDisplayUpdates()
         bPendingDisplayText = false;
         bPendingDisplayPos = false;
     }
-    portEXIT_CRITICAL(&displayMux);
     if(_pendText) sendDisplayText(_msg, _rssi, _snr);
     if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
 }
 
 void esp32loop()
 {
+    esp_task_wdt_reset();
+
     #if not defined(BOARD_T_DECK_PRO)
     btn.tick();
     #endif
@@ -1895,7 +1921,7 @@ void esp32loop()
             }
             else
             {
-                if(pixels_delay + DELAYVAL < millis())
+                if((uint32_t)(millis() - pixels_delay) >= DELAYVAL)
                 {
                     pixels_delay = 0;
                     bLED_CLEAR=true;
@@ -1908,7 +1934,7 @@ void esp32loop()
     #ifdef BOARD_LED
         if(bUSER_BOARD_LED)
         {
-            if ((led_timer + 1000) < millis())   // repeat 1 seconds
+            if ((uint32_t)(millis() - led_timer) >= 1000)   // repeat 1 seconds
             {
                 #ifdef LED_PIN
                     if(pixels_delay == 0 && !bLED_CLEAR)
@@ -1948,7 +1974,7 @@ void esp32loop()
         if(inoReceiveTimeOutTime > 0)
         {
             // Timeout RECEIVE_TIMEOUT
-            if((inoReceiveTimeOutTime + (60 * 6 * 1000)) < millis())  // 6 Minuten
+            if((uint32_t)(millis() - inoReceiveTimeOutTime) >= (60 * 6 * 1000))  // 6 Minuten
             {
                 inoReceiveTimeOutTime=0;
 
@@ -1964,7 +1990,7 @@ void esp32loop()
         // Retransmission status must tick on ALL nodes (including gateways).
         // Without this, gateway text messages stay stuck at RING_STATUS_SENT
         // forever if no echo is received via LoRa (RING_ZOMBIE).
-        if ((retransmit_timer + (1000 * 2)) < millis())
+        if ((uint32_t)(millis() - retransmit_timer) >= (1000 * 2))
         {
             updateRetransmissionStatus();
 
@@ -2115,7 +2141,7 @@ void esp32loop()
         if(iReceiveTimeOutTime > 0)
         {
             // Timeout csma_timeout (slot-basierter Backoff)
-            if((iReceiveTimeOutTime + csma_timeout) < millis())
+            if((uint32_t)(millis() - iReceiveTimeOutTime) >= csma_timeout)
             {
                 // Debug A: RX_TIMEOUT_FIRE
                 if(bLORADEBUG)
@@ -2554,7 +2580,7 @@ void esp32loop()
         strTime = "none";
 
         // every 15 minutes
-        if((updateTimeClient + 1000 * 60 * 15) < millis() || updateTimeClient == 0)
+        if((uint32_t)(millis() - updateTimeClient) >= 1000 * 60 * 15 || updateTimeClient == 0)
         {
             strTime = udpUpdateTimeClient();
 
@@ -2606,7 +2632,7 @@ void esp32loop()
 
         if(posinfo_fix) // GPS hat Vorang zur RTC und setzt RTC
         {
-            if((rtc_refresh_timer + 60000) > millis())
+            if((uint32_t)(millis() - rtc_refresh_timer) < 60000)
             {
                 //only every minute
                 setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
@@ -2673,7 +2699,7 @@ void esp32loop()
             #if defined(ENABLE_RTC)
             if(bRTCON && bNTPDateTimeValid) // NTP hat Vorang zur RTC und setzt RTC
             {
-                if((rtc_refresh_timer + 60000) > millis())
+                if((uint32_t)(millis() - rtc_refresh_timer) < 60000)
                 {
                     //only every minute
                     setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
@@ -2708,7 +2734,7 @@ void esp32loop()
     #endif
 
     // check WiFI connected with Ping every 30 sec
-    if(meshcom_settings.node_netmode == 0 && (wifi_active_timer + 30000) < millis())
+    if(meshcom_settings.node_netmode == 0 && (uint32_t)(millis() - wifi_active_timer) >= 30000)
     {
         if(!checkWifiPing())
         {
@@ -2750,7 +2776,7 @@ void esp32loop()
             }
 
             // check every 15 minuten to check telemetry via serial interface is ok
-            if ((lTELE_TIMER + (15 * 60 * 1000)) < millis())
+            if ((int32_t)(millis() - (lTELE_TIMER + (15 * 60 * 1000))) > 0)
             {
                 printfdeb("[SOFTSER] Reset Node, XML not working\n");
                 delay(1000);
@@ -2759,7 +2785,7 @@ void esp32loop()
             #endif
 
             // check every 5 seconds to ready next telemetry via serial interface
-            if ((softser_refresh_timer + 5000) < millis() && softserFunktion == 0)
+            if ((uint32_t)(millis() - softser_refresh_timer) >= 5000 && softserFunktion == 0)
             {
                 if(lastSOFTSER_MINUTE != meshcom_settings.node_date_minute && meshcom_settings.node_date_second > 20)
                 {
@@ -2892,7 +2918,7 @@ void esp32loop()
         else
         {
             // wait after BLE Connect 3 sec.
-            if(millis() < config_to_phone_prepare_timer + 3000)
+            if((uint32_t)(millis() - config_to_phone_prepare_timer) < 3000)
                 iPhoneState = 0;
 
             if (iPhoneState > 3)   // only every 3 times of mainloop send to phone - main loop has no additional delay anymore! 14.06.2025
@@ -2903,7 +2929,7 @@ void esp32loop()
                 if (ComToPhoneWrite != ComToPhoneRead)
                 {
                     // check every 300 ms to send to phone
-                    if ((ble_wait + 300) < millis())
+                    if ((uint32_t)(millis() - ble_wait) >= 300)
                     {
                         sendComToPhone();
 
@@ -2913,7 +2939,7 @@ void esp32loop()
                 else if (toPhoneWrite != toPhoneRead)
                 {
                     // wait for each message to send to phone
-                    if ((ble_wait + 400) < millis())
+                    if ((uint32_t)(millis() - ble_wait) >= 400)
                     {
                         sendToPhone();
 
@@ -2934,7 +2960,7 @@ void esp32loop()
         }
 
         // 5 minuten
-        if((config_to_phone_datetime_timer + (5 * 60 * 1000)) < millis())
+        if((uint32_t)(millis() - config_to_phone_datetime_timer) >= (5 * 60 * 1000))
         {
             bNTPDateTimeValid=false;
 
@@ -2945,7 +2971,7 @@ void esp32loop()
 
     #if defined(ENABLE_MCP23017)
     // 5 sec
-    if ((mcp_refresh_timer + 5000) < millis())
+    if ((uint32_t)(millis() - mcp_refresh_timer) >= 5000)
     {
         // get i/o state
         if(loopMCP23017())
@@ -2969,7 +2995,7 @@ void esp32loop()
         gps_refresh_intervall = 1.0;
     }
 
-    if ((gps_refresh_timer + ((unsigned long)gps_refresh_intervall * 1000)) < millis())
+    if ((uint32_t)(millis() - gps_refresh_timer) >= ((unsigned long)gps_refresh_intervall * 1000))
     {
         #ifdef ENABLE_GPS
 
@@ -2992,7 +3018,7 @@ void esp32loop()
 
             posinfo_fix = false;
             posinfo_satcount = 0;
-            posinfo_hdop = 0;
+            fposinfo_hdop = 0.0;
         }
         else
         {
@@ -3101,7 +3127,7 @@ void esp32loop()
     if(ncnt_hold != incnt)
     {
         // minimal alle 60 sec
-        if((posinfo_timer_min + 60000) < millis())
+        if((uint32_t)(millis() - posinfo_timer_min) >= 60000)
         {
             posinfo_shot = true;
             ncnt_hold = incnt;
@@ -3109,10 +3135,10 @@ void esp32loop()
     }
 
     // posinfo_interval in Seconds
-    if (((posinfo_timer + (posinfo_interval * 1000)) < millis()) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
+    if (((uint32_t)(millis() - posinfo_timer) >= (posinfo_interval * 1000)) || (millis() > 100000 && millis() < 130000 && bPosFirst) || posinfo_shot)
     {
         // minimal transmit time only max 30 sec
-        if((posinfo_timer_min + 30000) < millis())
+        if((uint32_t)(millis() - posinfo_timer_min) >= 30000)
         {
             if(bDisplayInfo)
             {
@@ -3190,7 +3216,7 @@ void esp32loop()
     #if defined(ENABLE_SOFTSER)
         extra_hey_time = 10 * 60 * 1000; // 10 minutes extra
     #endif
-    if (((heyinfo_timer + trickle_interval_ms + extra_hey_time) < millis()) || (bHeyFirst && bAllStarted))
+    if (((uint32_t)(millis() - heyinfo_timer) >= (trickle_interval_ms + extra_hey_time)) || (bHeyFirst && bAllStarted))
     {
         bHeyFirst = false;
 
@@ -3243,7 +3269,7 @@ void esp32loop()
         akt_timer = 20 * 1000; // 20 Seconds PARM, UNIT, EQNS and 1st T-Message
     }
         
-    if (((telemetry_timer + akt_timer) < millis()) || (bTeleFirst && bAllStarted))
+    if (((uint32_t)(millis() - telemetry_timer) >= akt_timer) || (bTeleFirst && bAllStarted))
     {
         bTeleFirst=false;
 
@@ -3259,7 +3285,7 @@ void esp32loop()
     #if not defined(BOARD_T_DECK_PRO)
     if(DisplayOffWait > 0)
     {
-        if (millis() > DisplayOffWait)
+        if ((int32_t)(millis() - DisplayOffWait) > 0)
         {
             DisplayOffWait = 0;
             if(bDisplayOff)
@@ -3280,7 +3306,7 @@ void esp32loop()
     // rebootAuto
     if(rebootAuto > 0)
     {
-        if (millis() > rebootAuto)
+        if ((int32_t)(millis() - rebootAuto) > 0)
         {
             rebootAuto = 0;
 
@@ -3295,7 +3321,7 @@ void esp32loop()
     if(BattTimeWait == 0)
         BattTimeWait = millis() - 500;
 
-    if ((BattTimeWait + 500) < millis())  // 0.5 sec OE3WAS
+    if ((uint32_t)(millis() - BattTimeWait) >= 500)  // 0.5 sec OE3WAS
     {
         BattWaitCounter++;
 
@@ -3327,6 +3353,12 @@ void esp32loop()
                 {
                     global_batt = 0;
                     global_proz = 0;
+
+                    // Ohne PMU gibt es keine Messung. Ohne diese Zeile wuerde
+                    // PositionToAPRS() jetzt dauerhaft "/B=000" senden und damit
+                    // "Akku leer" behaupten, wo in Wahrheit "nicht messbar" gilt --
+                    // genau die Falschmeldung, die der /B=000-Fix beseitigen soll.
+                    battProbeState = BATT_PROBE_NONE;
                 }
 
                 if(bDisplayCont && BattWaitCounter > 20)
@@ -3391,7 +3423,7 @@ void esp32loop()
         if (heapMonTimer == 0)
             heapMonTimer = millis();
 
-        if ((heapMonTimer + 60000) < millis())
+        if ((uint32_t)(millis() - heapMonTimer) >= 60000)
         {
             if(ESP.getFreeHeap() != lFreeHeap || ESP.getFreePsram() != lFreePsram)
             {
@@ -3420,7 +3452,7 @@ void esp32loop()
     #ifdef OneWire_GPIO
     if(bONEWIRE)
     {
-        if ((onewireTimeWait + 30000) < millis())  // 30 sec
+        if ((uint32_t)(millis() - onewireTimeWait) >= 30000)  // 30 sec
         {
             unsigned long lreduction = 0;
 
@@ -3460,7 +3492,7 @@ void esp32loop()
     {
         unsigned long lreduction = 0;
 
-        if ((BMXTimeWait + 60000) < millis())   // 60 sec
+        if ((uint32_t)(millis() - BMXTimeWait) >= 60000)   // 60 sec
         {
             #if defined(ENABLE_BMX280)
                 if(loopBMX280())
@@ -3523,7 +3555,7 @@ void esp32loop()
     #if defined(ENABLE_BMP390)
     if((bBMP3ON && bmp3_found))
     {
-        if ((BMP3TimeWait + 60000) < millis())   // 60 sec
+        if ((uint32_t)(millis() - BMP3TimeWait) >= 60000)   // 60 sec
         {
             if(loopBMP390())
             {
@@ -3544,7 +3576,7 @@ void esp32loop()
     #if defined(ENABLE_MC811)
     if(bMCU811ON && mcu811_found)
     {
-        if ((MCU811TimeWait + 60000) < millis())   // 60 sec
+        if ((uint32_t)(millis() - MCU811TimeWait) >= 60000)   // 60 sec
         {
             // read MCU-811 Sensor
             if(loopMCU811())
@@ -3569,7 +3601,7 @@ void esp32loop()
         if(INA226TimeWait == 0)
             INA226TimeWait = millis() - 10000;
 
-        if ((INA226TimeWait + 15000) < millis())   // 15 sec
+        if ((uint32_t)(millis() - INA226TimeWait) >= 15000)   // 15 sec
         {
             // read INA226 Sensor
             if(loopINA226())
@@ -3589,7 +3621,7 @@ void esp32loop()
     #if defined(ENABLE_BMX680)
     if(bBME680ON && bme680_found)
     {
-        if ((bme680_timer + 60000) < millis() || delay_bme680 <= 0)
+        if ((uint32_t)(millis() - bme680_timer) >= 60000 || delay_bme680 <= 0)
         {
             #if defined(ENABLE_BMX280)
                 
@@ -3623,7 +3655,7 @@ void esp32loop()
         sendMeshComUDP();
 
         // heartbeat
-        if ((hb_timer + (HEARTBEAT_INTERVAL * 1000)) < millis())
+        if ((uint32_t)(millis() - hb_timer) >= (HEARTBEAT_INTERVAL * 1000))
         {
             sendMeshComHeartbeat();
             hb_timer = millis();
@@ -3686,7 +3718,7 @@ void esp32loop()
 
     if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE)
     {
-        if (web_timer == 0 || (iWlanWait > 0 && ((web_timer + 1000) < millis())) || ((web_timer + (HEARTBEAT_INTERVAL * 1000 * 10)) < millis()))   // repeat 5 minutes
+        if (web_timer == 0 || (iWlanWait > 0 && ((uint32_t)(millis() - web_timer) >= 1000)) || ((uint32_t)(millis() - web_timer) >= (HEARTBEAT_INTERVAL * 1000 * 10)))   // repeat 5 minutes
         {
 
             web_timer = millis();
@@ -3781,7 +3813,7 @@ void esp32loop()
 
     if(meshcom_settings.node_pingtime > 29 && meshcom_settings.node_pingcall[0] != 0x00 && meshcom_settings.node_pingcount > 0)
     {
-        if((resendPing + meshcom_settings.node_pingtime * 1000) < millis())
+        if((int32_t)(millis() - (resendPing + meshcom_settings.node_pingtime * 1000)) > 0)
         {
             if(bPingSend)
             {
@@ -3801,7 +3833,7 @@ void esp32loop()
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 
-    if ((tdeck_tft_timer + (TDECK_TFT_TIMEOUT * 1000)) < millis())
+    if ((uint32_t)(millis() - tdeck_tft_timer) >= (TDECK_TFT_TIMEOUT * 1000))
     {
         // printfdeb("Loop: Timeout reached. Timer: %lu, Millis: %lu\n", tdeck_tft_timer, millis());
         tft_off();
@@ -3821,7 +3853,7 @@ void esp32loop()
     //    the normal budget, and skips RING_STATUS_EXT_PENDING. It touches only the
     //    ring (no CAD/TX/RX/RadioLib). A requeued retry becomes a READY slot that
     //    externalRadioTxStep() submits with a fresh ownership token.
-    if((retransmit_timer + (1000 * 2)) < millis())
+    if((int32_t)(millis() - (retransmit_timer + (1000 * 2))) > 0)
     {
         updateRetransmissionStatus();
         retransmit_timer = millis();
@@ -3870,8 +3902,27 @@ int checkRX(bool bRadio)
     is_receiving=true;
 
     uint8_t payload[UDP_TX_BUF_SIZE+10];
-    
-    size_t ibytes = UDP_TX_BUF_SIZE;
+
+    // Die echte Paketlaenge muss VOR readData() vom Chip gelesen werden.
+    // RadioLib nimmt `len` per WERT und schreibt die tatsaechliche Laenge NICHT
+    // zurueck -- es dient nur als obere Schranke (SX126x::readData, dokumentiert
+    // in SX126x.h: "getPacketLength method must be called BEFORE calling
+    // readData!"). Wer hier UDP_TX_BUF_SIZE uebergibt, bekommt fuer JEDES Paket
+    // 255 heraus, egal wie kurz der Frame war: readData fuellt nur die echten
+    // Bytes, der Rest von `payload` bleibt uninitialisierter Stackinhalt.
+    //
+    // Am Mitschnitt eines laufenden Knotens gemessen (DK5EN-98, 25.08.2026):
+    // jedes RX_FRAME meldete len=255 bei tatsaechlich 48-133 Byte, gefolgt von
+    // immer demselben Stackmuster. Zwei Folgen davon:
+    //   - Kanalauslastung: getTimeOnAir(255) buchte fuer JEDEN Empfang 2476 ms
+    //     statt der echten 608-1394 ms -- rx war um Faktor 1,8-4,1 zu hoch.
+    //   - Korpus/Diagnose: CRC_PAYLOAD- und Mitschnitt-Dumps hingen ~190 Byte
+    //     RAM-Inhalt an jeden Frame.
+    // Auf nRF52 tritt das nicht auf, dort liefert der Radio-Callback die Laenge.
+    size_t ibytes = radio.getPacketLength();
+
+    if(ibytes > UDP_TX_BUF_SIZE)
+        ibytes = UDP_TX_BUF_SIZE;
 
     state = radio.readData(payload, ibytes);
 
@@ -3934,9 +3985,19 @@ int checkRX(bool bRadio)
 
         // RX channel utilization: calculate airtime from packet length
         // (ESP32 has no OnHeaderDetect, so ch_util_rx_start is never set)
-        ch_util_rx_accum.fetch_add(radio.getTimeOnAir(ibytes) / 1000);  // us -> ms
+        if(ibytes > 0)
+        {
+            ch_util_rx_accum.fetch_add(radio.getTimeOnAir(ibytes) / 1000);  // us -> ms
 
-        OnRxDone(payload, (uint16_t)ibytes, saved_rssi, saved_snr);
+            OnRxDone(payload, (uint16_t)ibytes, saved_rssi, saved_snr);
+        }
+        else
+        if(bLORADEBUG)
+        {
+            // Laenge 0 heisst: der Chip hat nichts im Puffer. Frueher lief das
+            // als 255-Byte-Frame aus uninitialisiertem Stack weiter.
+            printlndeb("[MC-DBG] CHECKRX zero_length");
+        }
     }
     else
     if (state == RADIOLIB_ERR_CRC_MISMATCH)

@@ -1,5 +1,6 @@
 //2025-09-16 23:036
 #include "command_functions.h"
+#include "capture_functions.h"
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
 #include "printfdeb_functions.h"
@@ -611,6 +612,33 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    #if defined(NRF52_SERIES)
+    // --dfu: in den UF2-Bootloader neu starten, das Board meldet sich dann als
+    // USB-Laufwerk (RAK4631) und laesst sich per Datei-Kopie flashen.
+    //
+    // Warum das existiert: der UF2-Bootloader wird sonst nur per Doppeldruck auf
+    // Reset oder per 1200-Baud-Touch auf der USB-CDC erreicht. Beides faellt aus,
+    // wenn die CDC-Verbindung haengt -- dann bleibt nur physischer Zugriff aufs
+    // Geraet. Ueber diesen Befehl geht es auch per BLE oder Netz-Konsole.
+    //
+    // Der eigentliche Sprung passiert verzoegert im Loop (bEnterDfu), damit die
+    // Quittung noch rausgeht; ein Reset direkt hier verschluckt sie.
+    if(commandCheck(msg_text+2, (char*)"dfu") == 0)
+    {
+        if(ble)
+        {
+            addBLECommandBack((char*)"--dfu now");
+        }
+
+        printfdeb("...starte in den UF2-Bootloader, Board meldet sich als USB-Laufwerk\n");
+
+        bEnterDfu = true;
+        rebootAuto = millis() + 2000;   // 2 s, damit BLE/Seriell die Quittung noch senden
+
+        return;
+    }
+    else
+    #endif
     if(commandCheck(msg_text+2, (char*)"reboot") == 0)
     {
         if(ble)
@@ -693,6 +721,9 @@ void commandAction(char *umsg_text, bool ble)
 //        else
         {
             printfdeb("MeshCom %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--operatorname set first name/none\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
+            #if defined(NRF52_SERIES)
+            printfdeb("--dfu      reboot into UF2 bootloader (node appears as USB drive)\n");
+            #endif
             delay(100);
 
             printlndeb("--setssid  WLAN SSID/none\n--setpwd   WLAN PASSWORD/none\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--setowndns 255.255.255.255\n--setownntp 255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255/none\n");
@@ -707,7 +738,7 @@ void commandAction(char *umsg_text, bool ble)
             delay(100);
             printlndeb("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--aprscomment  set APRS Comment/none\n--showI2C\n");
             delay(100);
-            printlndeb("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt on/off   show battery voltage\n--proz on/off    show battery proz.\n");
+            printlndeb("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--txcapture on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt on/off   show battery voltage\n--proz on/off    show battery proz.\n");
             delay(100);
 #if defined(WP_DISP)
             printlndeb("--rotate 0/90/180/270  E-Ink Display drehen (persistent, board-uebergreifend)\n");
@@ -1575,6 +1606,17 @@ void commandAction(char *umsg_text, bool ble)
 
         gpsInitDone = false;
 
+        // A-9 ist hier WIDERLEGT und braucht kein bReturn: der Zweig kehrt
+        // sofort zurueck und erreicht den bReturn-Konsumenten am Ende von
+        // commandAction() gar nicht erst. Ein "wrong command" kann also nicht
+        // entstehen -- auf Hardware gegengeprueft, das Log enthaelt keines.
+        // Ein bReturn = true waere hier ein toter Store.
+        //
+        // Was bleibt: ueber BLE gibt dieser Zweig keine Rueckmeldung, weil er
+        // kein addBLECommandBack() ruft. Auf der seriellen Konsole ist die
+        // GPS-Init-Ausgabe die Rueckmeldung. Welcher Text an die App gehen
+        // soll, ist eine Produktentscheidung und nicht Teil einer
+        // Aufraeumwelle.
         return;
     }
     else
@@ -1871,6 +1913,21 @@ void commandAction(char *umsg_text, bool ble)
         
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;   // BME280/BMP280 off
         meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FEF;   // BMP390 off
+
+        // N-28: "--bmx" ist das Sammelkommando, und die Hilfe sagt seit jeher
+        // "--bmx BME/BMP/680 off". Der BME680 wurde davon aber nie erfasst.
+        // Folge: wer der Hilfe folgte und danach "--bme on" gab, bekam
+        // "BME680 and BMx280 can't be used together!" und stand ohne Sensor da.
+        // Nur das Sammelkommando raeumt mit auf -- "--bme off" und "--bmp off"
+        // meinen weiterhin genau ihren Chip. Kollateralschaden gibt es keinen:
+        // BME680 und BMx280 teilen sich die Adressen und koennen ohnehin nie
+        // gleichzeitig aktiv sein.
+        if(commandCheck(msg_text+2, (char*)"bmx off") == 0)
+        {
+            bBME680ON = false;
+            bme680_found = false;
+            meshcom_settings.node_sset2 &= ~0x0004;   // BME680 off
+        }
 
         if(ble)
         {
@@ -2521,6 +2578,43 @@ void commandAction(char *umsg_text, bool ble)
         if(ble)
         {
             addBLECommandBack((char*)"--loradebug on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"txcapture on") == 0)
+    {
+        // Rohframe-Mitschnitt der SENDESEITE (siehe capture_functions.h).
+        // Eigener Schalter statt an bLORADEBUG gehaengt: die Empfangsseite
+        // will man oft dauerhaft mitlaufen lassen, die Sendeseite nur fuer
+        // gezielte Interop-Messungen -- und sie kostet je Frame eine weitere
+        // ~550 Zeichen lange Logzeile.
+        bTXCAPTURE=true;
+
+        meshcom_settings.node_sset4 = meshcom_settings.node_sset4 | 0x0008;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--txcapture on");
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"txcapture off") == 0)
+    {
+        bTXCAPTURE=false;
+
+        meshcom_settings.node_sset4 &= ~0x0008;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--txcapture off");
         }
 
         save_settings();
@@ -3209,14 +3303,14 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"symid") == 0)
+    if(commandCheck(msg_text+2, (char*)"symid ") == 0)
     {
         _owner_c[0] = meshcom_settings.node_symid;
 
         meshcom_settings.node_symid=msg_text[8];
 
         bool bSymbolTable = false;
-        if(meshcom_settings.node_symid == '/' || meshcom_settings.node_symid != '\'')
+        if(meshcom_settings.node_symid == '/' || meshcom_settings.node_symid == '\\')
             bSymbolTable = true;
         else
         if(meshcom_settings.node_symid >= '0' && meshcom_settings.node_symid <= '9')
@@ -3239,7 +3333,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"symcd") == 0)
+    if(commandCheck(msg_text+2, (char*)"symcd ") == 0)
     {
         _owner_c[0] = meshcom_settings.node_symcd;
 
@@ -4924,7 +5018,7 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("...Flash-Version %i\n", meshcom_settings.node_fversion);
 
             printfdeb("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s ... SOFTSERREAD %s\n...PASSWD <%s>\n",
-                (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), (bSOFTSERREAD?"on":"off"), meshcom_settings.node_passwd);
+                (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), (bSOFTSERREAD?"on":"off"), maskSecret(meshcom_settings.node_passwd));
 
             printfdeb("...DEBUG %s ...DEBUG %s\n", (bDEBUGCSV?"csv":"man"), (bDEBUGEN?"en":"de"));
 
@@ -4998,7 +5092,7 @@ void commandAction(char *umsg_text, bool ble)
 
             #ifndef BOARD_T_ECHO
             printfdeb("\n...Webserver  %s", (bWEBSERVER?"on":"off"));
-            printfdeb(" / Webpwd <%s>", meshcom_settings.node_webpwd);
+            printfdeb(" / Webpwd <%s>", maskSecret(meshcom_settings.node_webpwd));
             printfdeb(" / Gateway %s %s\n", (bGATEWAY?"on":"off"), (bGATEWAY_NOPOS?"nopos":""));
 
             #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
@@ -5021,7 +5115,7 @@ void commandAction(char *umsg_text, bool ble)
                         printfdeb("...SSID <>");
 
                     if(strlen(meshcom_settings.node_pwd) > 0)
-                        printfdeb(" / PASSWORD <%s>\n", meshcom_settings.node_pwd);
+                        printfdeb(" / PASSWORD <%s>\n", maskSecret(meshcom_settings.node_pwd));
                     else
                         printfdeb(" / PASSWORD <>\n");
                 }
@@ -5300,7 +5394,7 @@ void sendGpsJson()
     pdoc["ALT"] = meshcom_settings.node_alt;
     pdoc["SAT"] = (int)posinfo_satcount;
     pdoc["SFIX"] = posinfo_fix;
-    pdoc["HDOP"] = posinfo_hdop;
+    pdoc["HDOP"] = (int)fposinfo_hdop;
     pdoc["RATE"] = (int)posinfo_interval;
     pdoc["NEXT"] = (int)(((posinfo_timer + (posinfo_interval * 1000)) - millis()) / 1000);
     pdoc["DIST"] = posinfo_distance;

@@ -13,6 +13,7 @@
 #include <esp_partition.h>
  
 #include <Preferences.h>
+#include "../configuration_global.h"
 #include "../esp32/esp32_flash.h"
  
 #define TAG "SafeBoot"
@@ -55,7 +56,7 @@ void wifiConnect() {
   
 
   // Set the hostname from the callsign. If the callsign is not set, use the default hostname
-  if (!((meshcom_settings.node_call[0] == 0x00) || (memcmp(meshcom_settings.node_call, "none", 4) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX", 6) == 0) || (memcmp(meshcom_settings.node_call, "XX0XXX-00", 9) == 0)))
+  if (!isNodeUnconfigured(meshcom_settings.node_call))
   {
     hostname = meshcom_settings.node_call;
   }

@@ -4,6 +4,7 @@
 #include <Arduino.h>
 //#include <configuration.h>
 #include <debugconf.h>
+#include <mask_secret.h>
 
 void commandAction(char *msg_text, bool ble);
 void commandAction(char *msg_text, int iphone, bool rxFromPhone);

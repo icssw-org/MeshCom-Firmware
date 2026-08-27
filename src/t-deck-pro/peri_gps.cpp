@@ -283,7 +283,7 @@ bool setupGPS()
         while (SerialGPS.available()) {
             Serial.print(".");
             SerialGPS.readString();
-            if (millis() > startTimeout) {
+            if ((int32_t)(millis() - startTimeout) > 0) {
                 Serial.println("Wait L76K stop NMEA timeout!");
                 return false;
             }
@@ -296,7 +296,7 @@ bool setupGPS()
         startTimeout = millis() + 500;
         String ver = "";
         while (!SerialGPS.available()) {
-            if (millis() > startTimeout) {
+            if ((int32_t)(millis() - startTimeout) > 0) {
                 Serial.println("Get L76K timeout!");
                 return false;
             }

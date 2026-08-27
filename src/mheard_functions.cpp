@@ -159,7 +159,7 @@ void saveMHeardPersistence()
         }
 
         // check to save to SD only every 30 sec
-        if(lastsaveMHEARDPersistence + 30000 > millis())
+        if((uint32_t)(millis() - lastsaveMHEARDPersistence) < 30000)
             return;
 
         lastsaveMHEARDPersistence = millis();
@@ -191,7 +191,7 @@ void savePathPersistence()
         }
 
         // check to save to SD only every 30 sec
-        if(lastsavePATHPersistence + 30000 > millis())
+        if((uint32_t)(millis() - lastsavePATHPersistence) < 30000)
             return;
 
         lastsavePATHPersistence = millis();
@@ -530,19 +530,24 @@ void updateHeyPath(struct mheardLine &mheardLine)
     int ipc = mheardLine.mh_sourcepath.length() - ips;
     if(ipc > 37)
         ipc = 37;
+    if(ipc < 0)
+        ipc = 0;
 
-    
+
     // only MHEARD HEY
     if(ips <= 0)
         return;
 
     memset(mheardPathCalls[ipos], 0x00, sizeof(mheardPathCalls[ipos]));
-    memcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str(), sizeof(mheardPathCalls[ipos]));
+    int icallsize = mheardLine.mh_sourcecallsign.length();
+    if(icallsize > (int)sizeof(mheardPathCalls[ipos])-1)
+        icallsize = (int)sizeof(mheardPathCalls[ipos])-1;
+    memcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str(), icallsize);
 
     //printfdeb("PATH:%i <%s> <%s> %i %i\n", ipos,  mheardLine.mh_sourcepath.c_str(), mheardLine.mh_sourcepath.substring(ips).c_str(), ips, ipc);
 
     memset(mheardPathBuffer1[ipos], 0x00, sizeof(mheardPathBuffer1[ipos]));
-    memcpy(mheardPathBuffer1[ipos], mheardLine.mh_sourcepath.substring(ips).c_str(), sizeof(mheardPathBuffer1[ipos]));
+    memcpy(mheardPathBuffer1[ipos], mheardLine.mh_sourcepath.substring(ips).c_str(), ipc);
     mheardPathBuffer1[ipos][49] = 0x00;
     // TODO second 30 chars
 
