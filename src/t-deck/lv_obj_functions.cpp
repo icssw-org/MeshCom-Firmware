@@ -1465,10 +1465,10 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_img_recolor_opa(map_ta, LV_OPA_40, 0);   // 0 = kein Effekt, 255 = komplett schwarz
     
     lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_size(map_ta, 300, LV_VER_RES * 0.72);
+    lv_obj_set_size(map_ta, LV_HOR_RES, LV_VER_RES * 0.72);
 
-    // MAP in das Fenster einpassen dann passen aber die positioen nicht mehr
-    //lv_img_set_zoom(map_ta, LV_HOR_RES);
+    lv_img_set_zoom(map_ta, 320);
+    lv_img_set_zoom(map_no_data_label, 320);
     
 
     lv_obj_t * btzoomout = lv_btn_create(t7);
@@ -1754,13 +1754,16 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
             if(map_point[ip] != NULL)
             {
                 lv_obj_del(map_point[ip]);
+                delay(40);
+                map_point[ip] = NULL;
 
-                delay(19);
             }
 
             if(map_point_label[ip] != NULL)
             {
                 lv_obj_del(map_point_label[ip]);
+                delay(40);
+                map_point_label[ip] = NULL;
             }
 
             ipoint = ip;
@@ -1849,6 +1852,37 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
 }
 
 /**
+ * add a point to the map
+ */
+void del_map_point(String callsign, double dlat, double dlon, bool bHome)
+{
+    if(bDEBUG)
+        Serial.printf("[ MAP ]...check add call: %s\n", callsign.c_str());
+ 
+    for(int ip = 0; ip < MAX_POINTS; ip++)
+    {
+        if(map_point_call[ip] == callsign)
+        {
+            if(map_point[ip] != NULL)
+            {
+                lv_obj_del(map_point[ip]);
+                delay(40);
+                map_point[ip] = NULL;
+            }
+
+            if(map_point_label[ip] != NULL)
+            {
+                lv_obj_del(map_point_label[ip]);
+                delay(40);
+                map_point_label[ip] = NULL;
+            }
+
+            break;
+        }
+    }
+}
+
+/**
  * initializes the default maps
  */
 void init_map()
@@ -1889,6 +1923,31 @@ void refresh_map(int iMap)
             else
             {
                 add_map_point(map_pos_call[im], map_pos_lat[im], map_pos_lon[im], bHome);
+            }
+        }
+    }
+}
+
+void refresh_map_del(int iMap)
+{
+    if(bDEBUG)
+        Serial.printf("[ MAP ]...set to %i - %s\n", iMap, getMap(iMap).c_str());
+
+    for(int im = 0; im < MAX_POINTS; im++)
+    {
+        if(map_pos_call[im].length() > 0)
+        {
+            bool bHome=false;
+            if(map_pos_call[im].compareTo(meshcom_settings.node_call) == 0)
+                bHome=true;
+
+            if (bHome)
+            {
+                del_map_point(map_pos_call[im], sdmap_lastKnownLat, sdmap_lastKnownLon, bHome);
+            }
+            else
+            {
+                del_map_point(map_pos_call[im], map_pos_lat[im], map_pos_lon[im], bHome);
             }
         }
     }
