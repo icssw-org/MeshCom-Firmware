@@ -1907,7 +1907,7 @@ void set_map(int iMap)
     if(bDEBUG)
         Serial.printf("[ MAP ]...set to %i - %s\n", iMap, getMap(iMap).c_str());
 
-        switch (iMap)
+    switch (iMap)
     {
         case 0:
         case 1:
@@ -1929,10 +1929,9 @@ void set_map(int iMap)
         }
     }
 
-    lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
+    //lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_size(map_ta, map_x[iMap], map_y[iMap]);
-    lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
+//    lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_clean(map_ta);   // entfernt WIRKLICH alle Kind-Objekte (Punkte + Labels), auch verwaiste
     for(int im = 0; im < MAX_POINTS; im++)
     {
