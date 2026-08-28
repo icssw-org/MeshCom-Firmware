@@ -341,10 +341,6 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     mhdoc["PL"] = mheardLine.mh_path_len;
     mhdoc["MESH"] = mheardLine.mh_mesh;
     mhdoc["NCNT"] = mheardLine.mh_ncount;
-    // Link-Kette der HEY-Bake, RSSI/SNR je Hop. Nur wenn belegt - ein leeres Feld in jeden
-    // Datensatz zu haengen kostet Platz im BLE-Puffer, ohne etwas zu sagen.
-    if(mheardLine.mh_path_payload.length() > 0)
-        mhdoc["PP"] = mheardLine.mh_path_payload.c_str();
     // Ursprung des Pakets: CALL ist der letzte Hop, SRC der Absender. Beides liegt hier
     // bereits im Struct (lora_functions.cpp fuellt es aus aprsmsg.msg_source_call).
     mhdoc["SRC"] = mheardLine.mh_sourcecallsign.c_str();
