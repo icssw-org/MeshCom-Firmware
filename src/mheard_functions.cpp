@@ -341,12 +341,6 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     mhdoc["PL"] = mheardLine.mh_path_len;
     mhdoc["MESH"] = mheardLine.mh_mesh;
     mhdoc["NCNT"] = mheardLine.mh_ncount;
-    // Ursprung des Pakets: CALL ist der letzte Hop, SRC der Absender. Beides liegt hier
-    // bereits im Struct (lora_functions.cpp fuellt es aus aprsmsg.msg_source_call).
-    mhdoc["SRC"] = mheardLine.mh_sourcecallsign.c_str();
-    // HEY-Baken eines Gateways tragen "HG" statt "H" als Ziel - dieselbe Auskunft, die
-    // updateMheardPath() unten schon fuer die eigene Pfadtabelle auswertet (| 0x80).
-    mhdoc["GW"] = (mheardLine.mh_destinationpath == "HG") ? 1 : 0;
 
     // send to Phone
     uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
