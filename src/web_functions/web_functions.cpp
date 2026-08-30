@@ -1127,6 +1127,7 @@ void sub_page_setup()
     #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
     _create_setup_switch_element("kiss", "KISS/TCP", "enable KISS interface (port 8001)", bKISS);
     _create_setup_switch_element("kisstx", "KISS TX", "allow transmit from KISS clients", bKISSTX);
+    _create_setup_switch_element("kissmeta", "KISS RxMeta", "send RSSI/SNR frames (KISS port 1)", bKISSMETA);
     #endif
     _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);   // create Switch-Element inclucing Label and Description
 

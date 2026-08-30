@@ -23,7 +23,8 @@ The on-air MeshCom protocol is unchanged; the node stays fully in the mesh.
 
 ## Enable
 
-Serial console or web UI (`Settings → KISS/TCP`):
+Serial / net console, or web UI (`Settings` — switches **KISS/TCP**,
+**KISS TX**, **KISS RxMeta**):
 
 ```
 --kiss on            # start the server (needs WiFi + IP)
@@ -34,6 +35,16 @@ Serial console or web UI (`Settings → KISS/TCP`):
 ```
 
 Persisted in `node_sset4` (bits `0x0010` / `0x0020` / `0x0040`).
+
+## Verified (2026-08-30, Heltec V3, live mesh)
+
+- RX text / position / message → AX.25 UI; `aprslib` parses position
+  (lat/lon/alt/symbol) and message (addressee/text).
+- TX: APRS message from a KISS client injected into the mesh, delivered
+  to the target node.
+- RxMeta: `META` frame (snr int8 = 6 dB, rssi int16 LE = -47 dBm) after
+  each data frame when `--kiss meta on`.
+- Builds: `heltec_wifi_lora_32_V3`, `ttgo-lora32-v21`, `wiscore_rak4631`.
 
 ## Wire format
 

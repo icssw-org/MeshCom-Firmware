@@ -497,6 +497,14 @@ void webSetup_setParam(setupStruct *setupData){
         setupData->returnValue = bKISSTX?"on":"off";
         return;
     } else
+
+    if(setupData->paramName.equals("kissmeta")) {
+        snprintf(message_text, sizeof(message_text), "--kiss meta %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bKISSMETA == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bKISSMETA?"on":"off";
+        return;
+    } else
     #endif
 
     /// ###################################### MCPIO ######################################
@@ -918,6 +926,11 @@ void webSetup_getParam(setupStruct *setupData){
 
     if(setupData->paramName.equals("kisstx")) {
         setupData->returnValue = bKISSTX?"on":"off";
+        return;
+    }
+
+    if(setupData->paramName.equals("kissmeta")) {
+        setupData->returnValue = bKISSMETA?"on":"off";
         return;
     }
     #endif
