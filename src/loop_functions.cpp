@@ -3202,7 +3202,7 @@ void SendPong(String msg_call, unsigned int msg_id)
     addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "phone_msg"); // 0xFF no retransmission
 }
 
-void sendMessage(char *msg_text, int len)
+void sendMessage(char *msg_text, int len, const char *src_override)
 {
     if(memcmp(msg_text, "-", 1) == 0)
     {
@@ -3405,7 +3405,7 @@ void sendMessage(char *msg_text, int len)
     // MSG ID zusammen setzen    
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max in real only 0-999
     
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    aprsmsg.msg_source_path = (src_override && src_override[0]) ? String(src_override) : String(meshcom_settings.node_call);
     aprsmsg.msg_destination_path = strDestinationCall;  //Later FW insert PATH from HEY! collecting
     aprsmsg.msg_destination_call = strDestinationCall;  //Later FW insert PATH from HEY! collecting
     aprsmsg.msg_payload = strMsg;
@@ -3527,6 +3527,56 @@ void sendMessage(char *msg_text, int len)
     if(bConsoleText)
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
 
+}
+
+// Inject an APRS position (received over the KISS interface) into the mesh
+// under a foreign source callsign. Mirrors the ring-insertion sequence of
+// SendAckMessage()/sendMessage(); the caller (kiss_functions) has already
+// verified that srcCall's base matches this node's call.
+void sendInjectedPosition(const char *srcCall, const char *posData)
+{
+    if(!srcCall || !srcCall[0] || !posData || strlen(posData) < 4)
+        return;
+
+    struct aprsMessage aprsmsg;
+
+    initAPRS(aprsmsg, '!');
+
+    aprsmsg.msg_len = 0;
+
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
+
+    aprsmsg.msg_source_path      = srcCall;
+    aprsmsg.msg_destination_path = "*";
+    aprsmsg.msg_destination_call = "*";
+    aprsmsg.msg_payload          = posData;
+
+    meshcom_settings.node_msgid++;
+    if(meshcom_settings.node_msgid > 999)
+        meshcom_settings.node_msgid = 0;
+
+    save_settings();
+
+    insertOwnTx(aprsmsg.msg_id);
+    addLoraRxBuffer(aprsmsg.msg_id, false);
+    checkVia(aprsmsg);
+
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+    encodeAPRS(msg_buffer, aprsmsg);
+
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"KISS-POS", aprsmsg);
+        printfdeb("");
+    }
+
+    addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "kiss_pos");   // position: no retransmission
+
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+        addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+
+    if(bEXTUDP)
+        sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len, 0, 0);
 }
 
 String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, char lat_c, double plon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)

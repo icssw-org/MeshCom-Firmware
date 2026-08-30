@@ -11,6 +11,7 @@
 #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
 
 #include <atomic>
+#include <ctype.h>
 #include <WiFi.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -194,8 +195,37 @@ static size_t buildAx25(const struct aprsMessage &m, uint8_t *out, size_t outsz)
     return o;
 }
 
+// decode an AX.25 address (7 bytes) into "CALL" or "CALL-SSID"
+static void ax25DecodeCall(const uint8_t *a, char *out, size_t outsz)
+{
+    char base[7] = {0};
+    int  n = 0;
+    for (int i = 0; i < 6; i++)
+    {
+        char c = (char)(a[i] >> 1);
+        if (c != ' ') base[n++] = c;
+    }
+    int ssid = (a[6] >> 1) & 0x0F;
+    if (ssid > 0) snprintf(out, outsz, "%s-%d", base, ssid);
+    else          snprintf(out, outsz, "%s", base);
+}
+
+// base callsign (strip -SSID), case-insensitive compare
+static bool baseCallMatches(const char *a, const char *b)
+{
+    while (*a && *a != '-' && *b && *b != '-')
+    {
+        if (toupper((unsigned char)*a) != toupper((unsigned char)*b))
+            return false;
+        a++; b++;
+    }
+    return (*a == 0 || *a == '-') && (*b == 0 || *b == '-');
+}
+
 // ───────────────────────────────────────────────────────────────────────────
-// Inbound: a complete AX.25 UI frame from the client -> APRS message -> mesh.
+// Inbound: a complete AX.25 UI frame from the client -> MeshCom message/position.
+// The client's callsign is preserved on the mesh, but only if its base call
+// matches this node's call (no foreign calls / spoofing).
 static void handleInboundAx25(const uint8_t *f, size_t len)
 {
     if (!bKISSTX)
@@ -220,57 +250,87 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
     if (addrs < 2 || p + 2 > len)
         return;
 
+    // source call = 2nd address (bytes 7..13)
+    char srcCall[12] = {0};
+    ax25DecodeCall(f + 7, srcCall, sizeof(srcCall));
+
+    if (!baseCallMatches(srcCall, meshcom_settings.node_call))
+    {
+        if (bLORADEBUG)
+            Serial.printf("[KISS] TX rejected: src '%s' != node '%s'\n",
+                          srcCall, meshcom_settings.node_call);
+        return;
+    }
+
     p += 2;              // skip control + PID
     if (p >= len)
         return;
 
     const char *info = (const char *)(f + p);
     size_t      ilen = len - p;
+    if (ilen < 2)
+        return;
 
-    // Only APRS message payloads are injected in v1.
-    if (ilen < 2 || info[0] != ':')
+    char dt = info[0];
+
+    // ── APRS message ──────────────────────────────────────────────────────
+    if (dt == ':')
     {
+        char addr[10] = {0};
+        char text[170] = {0};
+        if (ilen >= 11 && info[10] == ':')
+        {
+            memcpy(addr, info + 1, 9);
+            for (int i = 8; i >= 0 && addr[i] == ' '; i--) addr[i] = 0;
+            size_t tl = ilen - 11;
+            if (tl > sizeof(text) - 1) tl = sizeof(text) - 1;
+            memcpy(text, info + 11, tl);
+        }
+        else
+        {
+            size_t tl = ilen - 1;
+            if (tl > sizeof(text) - 1) tl = sizeof(text) - 1;
+            memcpy(text, info + 1, tl);
+        }
+
+        char *brace = strrchr(text, '{');   // drop a trailing APRS msg number "{nn"
+        if (brace) *brace = 0;
+        if (strlen(text) < 1)
+            return;
+
+        char out[190];
+        if (strlen(addr) > 0) snprintf(out, sizeof(out), ":{%s}%s", addr, text);
+        else                  snprintf(out, sizeof(out), "::%s", text);
+
         if (bLORADEBUG)
-            Serial.println("[KISS] inbound non-message payload ignored");
+            Serial.printf("[KISS] inject msg as %s: %s\n", srcCall, out);
+
+        sendMessage(out, strlen(out), srcCall);
         return;
     }
 
-    // ":ADDRESSEE :text" — addressee is 9 chars, then ':'  (loop-task stack)
-    char addr[10] = {0};
-    char text[170] = {0};
-    if (ilen >= 11 && info[10] == ':')
+    // ── APRS position ─────────────────────────────────────────────────────
+    // '!'/'=' = no timestamp;  '@'/'/' = 7-char timestamp after the type char
+    if (dt == '!' || dt == '=' || dt == '@' || dt == '/')
     {
-        memcpy(addr, info + 1, 9);
-        for (int i = 8; i >= 0 && addr[i] == ' '; i--) addr[i] = 0;
-        size_t tl = ilen - 11;
-        if (tl > sizeof(text) - 1) tl = sizeof(text) - 1;
-        memcpy(text, info + 11, tl);
-    }
-    else
-    {
-        // loose form ":text" — treat as to-all
-        size_t tl = ilen - 1;
-        if (tl > sizeof(text) - 1) tl = sizeof(text) - 1;
-        memcpy(text, info + 1, tl);
-    }
+        size_t skip = (dt == '@' || dt == '/') ? 8 : 1;
+        if (ilen <= skip + 4)
+            return;
 
-    // strip a trailing APRS message number "{nn"
-    char *brace = strrchr(text, '{');
-    if (brace) *brace = 0;
+        char pos[190] = {0};
+        size_t pl = ilen - skip;
+        if (pl > sizeof(pos) - 1) pl = sizeof(pos) - 1;
+        memcpy(pos, info + skip, pl);
 
-    if (strlen(text) < 1)
+        if (bLORADEBUG)
+            Serial.printf("[KISS] inject pos as %s: %s\n", srcCall, pos);
+
+        sendInjectedPosition(srcCall, pos);
         return;
-
-    char out[190];
-    if (strlen(addr) > 0)
-        snprintf(out, sizeof(out), ":{%s}%s", addr, text);
-    else
-        snprintf(out, sizeof(out), "::%s", text);
+    }
 
     if (bLORADEBUG)
-        Serial.printf("[KISS] inject: %s\n", out);
-
-    sendMessage(out, strlen(out));
+        Serial.printf("[KISS] inbound payload type '%c' not supported\n", dt);
 }
 
 // feed one received byte through the KISS deframer

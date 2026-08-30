@@ -11,10 +11,14 @@ compiled in by default (opt-out `-D DISABLE_KISS_TCP`).
   Dedup is already done, so each mesh packet is delivered once.
   HEY / ACK frames are not converted.
 - **TX (client → mesh, opt-in):** an AX.25 UI frame whose info field is an APRS
-  **message** (`:ADDRESSEE :text`) is injected via the normal
-  `sendMessage()` path. `msg_id`, hop byte, FCS are set by the firmware.
-  The client's source callsign is **ignored** in v1 — the frame goes out as
-  this node. Position / other inbound payloads are ignored.
+  **message** (`:ADDRESSEE :text`) or **position** (`!` `=` `@` `/`) is
+  injected into the mesh. `msg_id`, hop byte, FCS are set by the firmware.
+  The frame goes out **under the client's callsign** (so e.g. a phone as
+  `DH1FR-7` tracks separately from the node `DH1FR-2`) — but **only if the
+  client's base callsign matches this node's call**; frames from any other
+  callsign are rejected (no spoofing). Timestamped position formats have the
+  7-char timestamp stripped; the position is sent as a MeshCom `!` beacon.
+  HEY / ACK / telemetry-only payloads are ignored.
 - **RxMeta (opt-in):** after each RX data frame, a second KISS frame on
   **KISS port 1** (type byte `0x10`) with 3 bytes: `snr` (int8, dB),
   `rssi` (int16 little-endian, dBm). Standard KISS clients ignore it.
@@ -116,12 +120,13 @@ k.read(callback=f)
 |---|---|
 | **YAAC** (Windows/Java) | Configure → Ports → Add → **NetworkKISS**, host = node IP, port `8001` |
 | **APRSdroid** (Android, same WiFi) | Connd. Protocol **TCP/IP**, `IP:8001`, connection type **KISS** |
+| **PocketPacket** (iOS) | TNC → KISS over TCP, `IP:8001` |
 | **PinPoint APRS** (Windows) | TNC type "KISS over TCP", `IP:8001` |
 
-TX test (`--kiss tx on`): send an APRS message from YAAC / APRSdroid to a
-callsign that is on the mesh → it appears in that node's MeshCom app;
-`--loradebug on` on the KISS node shows the injected frame with a firmware
-`msg_id`.
+**Set the client's callsign to your own call** (any SSID, e.g. `-7` for a
+phone). TX (`--kiss tx on`): send an APRS message or position from the client →
+it appears on the mesh **under that callsign**. A client using a different
+callsign is silently rejected (`--loradebug on` shows `TX rejected: src ...`).
 
 ### 4. Linux / WSL (optional — iGate)
 
@@ -131,12 +136,18 @@ sudo kissattach /tmp/kt radio && axlisten -a
 ```
 or point **aprx** at `/tmp/kt` as a KISS serial interface for an RX-only iGate.
 
-## Limitations (v1)
+## Limitations
 
 - ESP32 only. nRF52 (RAK) compiles the feature out.
 - Single client. For multiple consumers use a host-side hub (e.g. Direwolf's
   KISS server, or WebDesk re-serving).
-- No auth — keep it on a trusted LAN.
-- TX: message payloads only; source callsign forced to the node; no APRS-ack
-  bridging (MeshCom ACKs stay firmware-internal).
-- HEY / ACK / telemetry-only frames are not surfaced.
+- No auth — keep it on a trusted LAN. The callsign gate (base call must match
+  the node call) is the only TX restriction; there is no per-SSID whitelist
+  and no "gateway mode" that relays arbitrary calls yet.
+- TX: APRS message + position payloads. No APRS-ack bridging (MeshCom ACKs stay
+  firmware-internal). Injected positions are sent as a MeshCom `!` beacon
+  (no timestamp, no telemetry extension).
+- Injected frames carry the HW-type / firmware-version bytes of the KISS node
+  (set by `encodeAPRS()`), so a phone injecting as `DH1FR-7` shows up with the
+  node's hardware (e.g. "HELTEC-V3") in other nodes' MHeard lists.
+- RX: HEY / ACK / telemetry-only frames are not surfaced.

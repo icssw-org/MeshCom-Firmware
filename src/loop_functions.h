@@ -68,7 +68,16 @@ void sendPing(char msg_call[10]);
 void SendPong(String msg_source_call, unsigned int msg_id);
 void PongFail(String msg_source_call);
 
-void sendMessage(char *msg_text, int len);
+// src_override: NULL = send under the node call (normal case). A non-empty
+// string sends the message under that callsign instead — used by the KISS
+// interface to preserve the client's callsign (its base must match the node
+// call, checked by the caller).
+void sendMessage(char *msg_text, int len, const char *src_override = nullptr);
+
+// Inject an APRS position received over the KISS interface, under srcCall.
+// posData is the APRS position payload without the leading data-type char
+// (and without any timestamp). The caller has already verified srcCall.
+void sendInjectedPosition(const char *srcCall, const char *posData);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);
 void sendPosition(unsigned long intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
