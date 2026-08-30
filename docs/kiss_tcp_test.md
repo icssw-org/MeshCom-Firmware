@@ -1,0 +1,131 @@
+# KISS/TCP interface — v1 (ESP32) usage & test guide
+
+Implementation of Variant C from `docs/kiss_mode_analysis.md`. ESP32 only,
+compiled in by default (opt-out `-D DISABLE_KISS_TCP`).
+
+## What v1 does
+
+- TCP server on **port 8001**, **single client**, no authentication (LAN-only).
+- **RX (mesh → client):** received MeshCom **text** and **position** frames are
+  converted to **AX.25 UI frames** (no FCS) and sent as KISS data frames.
+  Dedup is already done, so each mesh packet is delivered once.
+  HEY / ACK frames are not converted.
+- **TX (client → mesh, opt-in):** an AX.25 UI frame whose info field is an APRS
+  **message** (`:ADDRESSEE :text`) is injected via the normal
+  `sendMessage()` path. `msg_id`, hop byte, FCS are set by the firmware.
+  The client's source callsign is **ignored** in v1 — the frame goes out as
+  this node. Position / other inbound payloads are ignored.
+- **RxMeta (opt-in):** after each RX data frame, a second KISS frame on
+  **KISS port 1** (type byte `0x10`) with 3 bytes: `snr` (int8, dB),
+  `rssi` (int16 little-endian, dBm). Standard KISS clients ignore it.
+
+The on-air MeshCom protocol is unchanged; the node stays fully in the mesh.
+
+## Enable
+
+Serial console or web UI (`Settings → KISS/TCP`):
+
+```
+--kiss on            # start the server (needs WiFi + IP)
+--kiss tx on         # allow transmit from the client   (default off)
+--kiss meta on       # send RxMeta frames               (default off)
+--kiss                # show status
+--info               # KISS state is listed here too
+```
+
+Persisted in `node_sset4` (bits `0x0010` / `0x0020` / `0x0040`).
+
+## Wire format
+
+```
+KISS frame :  C0 <type> <data, SLIP-escaped> C0
+              escape:  DB DC = C0 ,  DB DD = DB
+type 0x00  :  AX.25 UI frame  (dest7, src7, 0..8 digi7, 0x03, 0xF0, info)
+type 0x10  :  RxMeta          (snr:int8, rssi:int16 LE)   [only with --kiss meta on]
+```
+
+AX.25 addresses: 6 chars each `<< 1` (space-padded), then SSID byte
+`C/H<<7 | 0x60 | SSID<<1 | ext`. Destination = the node's APRS-MC tocall
+(`--aprsmc <call>`, default `APRSMC`). Digipeaters = the mesh relays, H-bit set.
+
+## Testing on Windows
+
+### 1. Raw frames — PowerShell, no install
+
+```powershell
+$ip = "192.168.x.x"; $port = 8001
+$c = [Net.Sockets.TcpClient]::new($ip, $port)
+$s = $c.GetStream(); $buf = [Collections.Generic.List[byte]]::new()
+$rx = [byte[]]::new(4096)
+function Show-Frame([byte[]]$f) {
+  if ($f.Count -lt 1) { return }
+  $o = [Collections.Generic.List[byte]]::new()
+  for ($i = 0; $i -lt $f.Count; $i++) {
+    if ($f[$i] -eq 0xDB -and $i+1 -lt $f.Count) {
+      $i++; if ($f[$i] -eq 0xDC) {$o.Add(0xC0)} elseif ($f[$i] -eq 0xDD) {$o.Add(0xDB)}
+    } else { $o.Add($f[$i]) }
+  }
+  $t = $o[0]; $d = $o[1..($o.Count-1)]
+  $k = if ($t -eq 0) {"DATA"} elseif ($t -eq 0x10) {"META"} else {"0x{0:x2}" -f $t}
+  $asc = -join ($d | % { if ($_ -ge 32 -and $_ -lt 127) {[char]$_} else {"."} })
+  Write-Host "$k  $asc" -ForegroundColor Cyan
+}
+while ($true) {
+  $n = $s.Read($rx,0,$rx.Length); if ($n -le 0) { break }
+  for ($i=0; $i -lt $n; $i++) {
+    if ($rx[$i] -eq 0xC0) { if ($buf.Count) { Show-Frame $buf.ToArray(); $buf.Clear() } }
+    else { $buf.Add($rx[$i]) }
+  }
+}
+```
+
+Expect `DATA` lines whose ASCII column reads like
+`<call>  APRSMC ... !DDMM.mmN/DDDMM.mmE#...` (position) or
+`... ::ADDRESSEE :text` (message), and — with `--kiss meta on` — a `META`
+line after each.
+
+### 2. Decode APRS — Python
+
+```
+py -m pip install kiss3 aprslib
+```
+```python
+import aprslib, kiss
+def f(fr):
+    raw = bytes(fr)
+    try:    print(aprslib.parse(raw.decode("latin1")))
+    except Exception: print("raw:", raw[1:].decode("latin1", "replace"))
+k = kiss.TCPKISS(host="192.168.x.x", port=8001); k.start()
+k.read(callback=f)
+```
+
+### 3. APRS software
+
+| Software | Setup |
+|---|---|
+| **YAAC** (Windows/Java) | Configure → Ports → Add → **NetworkKISS**, host = node IP, port `8001` |
+| **APRSdroid** (Android, same WiFi) | Connd. Protocol **TCP/IP**, `IP:8001`, connection type **KISS** |
+| **PinPoint APRS** (Windows) | TNC type "KISS over TCP", `IP:8001` |
+
+TX test (`--kiss tx on`): send an APRS message from YAAC / APRSdroid to a
+callsign that is on the mesh → it appears in that node's MeshCom app;
+`--loradebug on` on the KISS node shows the injected frame with a firmware
+`msg_id`.
+
+### 4. Linux / WSL (optional — iGate)
+
+```
+socat PTY,link=/tmp/kt,raw TCP:192.168.x.x:8001 &
+sudo kissattach /tmp/kt radio && axlisten -a
+```
+or point **aprx** at `/tmp/kt` as a KISS serial interface for an RX-only iGate.
+
+## Limitations (v1)
+
+- ESP32 only. nRF52 (RAK) compiles the feature out.
+- Single client. For multiple consumers use a host-side hub (e.g. Direwolf's
+  KISS server, or WebDesk re-serving).
+- No auth — keep it on a trusted LAN.
+- TX: message payloads only; source callsign forced to the node; no APRS-ack
+  bridging (MeshCom ACKs stay firmware-internal).
+- HEY / ACK / telemetry-only frames are not surfaced.

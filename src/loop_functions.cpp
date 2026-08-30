@@ -163,6 +163,9 @@ bool bWEBSERVER = false;
 bool bWIFIAP = false;
 bool bEXTUDP = false;
 bool bNETCONSOLE = false;
+bool bKISS = false;
+bool bKISSTX = false;
+bool bKISSMETA = false;
 
 bool bSHORTPATH = false;
 //bool bGPSDEBUG = false;

@@ -129,6 +129,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include <lora_functions.h>
 #include <udp_functions.h>
 #include <extudp_functions.h>
+#include <kiss_functions.h>
 #include <web_functions/web_functions.h>
 #include <mheard_functions.h>
 #include <time_functions.h>
@@ -832,6 +833,11 @@ void esp32setup()
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
     bDisplayLog = meshcom_settings.node_sset4 & 0x0004;
     bTXCAPTURE = meshcom_settings.node_sset4 & 0x0008;
+    #ifndef DISABLE_KISS_TCP
+    bKISS = meshcom_settings.node_sset4 & 0x0010;
+    bKISSTX = meshcom_settings.node_sset4 & 0x0020;
+    bKISSMETA = meshcom_settings.node_sset4 & 0x0040;
+    #endif
 
     if(strlen(meshcom_settings.node_aprsmc) < 4)
     {
@@ -3716,7 +3722,12 @@ void esp32loop()
         flushExternQueue();
     }
 
-    if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE)
+    #ifndef DISABLE_KISS_TCP
+    if(bKISS)
+        flushKissQueue();
+    #endif
+
+    if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE || bKISS)
     {
         if (web_timer == 0 || (iWlanWait > 0 && ((uint32_t)(millis() - web_timer) >= 1000)) || ((uint32_t)(millis() - web_timer) >= (HEARTBEAT_INTERVAL * 1000 * 10)))   // repeat 5 minutes
         {
@@ -3791,6 +3802,21 @@ void esp32loop()
             else
             {
                 stopNetConsole();
+            }
+        }
+        #endif
+
+        #ifndef DISABLE_KISS_TCP
+        if(iWlanWait == 0)
+        {
+            if(bKISS)
+            {
+                kissSetup();
+                kissLoop();
+            }
+            else
+            {
+                kissStop();
             }
         }
         #endif

@@ -74,6 +74,7 @@
 #include <mheard_functions.h>
 #include <udp_functions.h>
 #include <extudp_functions.h>
+#include <kiss_functions.h>
 #include <lora_setchip.h>
 
 #include "softser_functions.h"
@@ -770,6 +771,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     // Extern Server (deferred — avoid blocking UDP in radio callback)
                     if(bEXTUDP)
                         queueExtern((char*)"lora", RcvBuffer, size, rssi, snr);
+
+                    // KISS/TCP interface (deferred — same reason)
+                    #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+                    if(bKISS)
+                        queueKiss(RcvBuffer, size, rssi, snr);
+                    #endif
 
                     // print aprs message
                     if(bDisplayInfo)

@@ -766,6 +766,10 @@ void commandAction(char *umsg_text, bool ble)
                 printlndeb("--netconsole on/off  (net console port 2323)\n");
                 printfdeb("--passwd xxxx/none   (net console password, none=clear)\n");
                 delay(100);
+                #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+                    printlndeb("--kiss on/off | tx on/off | meta on/off  (KISS/TCP port 8001)\n");
+                    delay(100);
+                #endif
             #endif
             delay(100);
             printlndeb("--softser   on/off/send/app/baud/fixpegel/fixpegel2/fixtemp");
@@ -2257,6 +2261,71 @@ void commandAction(char *umsg_text, bool ble)
         // show current net console status; return early to prevent match against --tls... handler
         snprintf(_owner_c, sizeof(_owner_c), "on (%s port 2323)", meshcom_settings.node_ip);
         printfdeb("...net console is %s\n", bNETCONSOLE ? _owner_c : "off");
+        return;
+    }
+    else
+    #endif
+    #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+    if(commandCheck(msg_text+2, (char*)"kiss on") == 0)
+    {
+        bKISS = true;
+        meshcom_settings.node_sset4 |= 0x0010;
+        save_settings();
+        printfdeb("...KISS/TCP on (%s port %d)\n", meshcom_settings.node_ip, KISS_TCP_PORT);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"kiss off") == 0)
+    {
+        bKISS = false;
+        meshcom_settings.node_sset4 &= ~0x0010;
+        save_settings();
+        printfdeb("...KISS/TCP off\n");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"kiss tx on") == 0)
+    {
+        bKISSTX = true;
+        meshcom_settings.node_sset4 |= 0x0020;
+        save_settings();
+        printfdeb("...KISS/TCP TX on\n");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"kiss tx off") == 0)
+    {
+        bKISSTX = false;
+        meshcom_settings.node_sset4 &= ~0x0020;
+        save_settings();
+        printfdeb("...KISS/TCP TX off\n");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"kiss meta on") == 0)
+    {
+        bKISSMETA = true;
+        meshcom_settings.node_sset4 |= 0x0040;
+        save_settings();
+        printfdeb("...KISS/TCP RxMeta on\n");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"kiss meta off") == 0)
+    {
+        bKISSMETA = false;
+        meshcom_settings.node_sset4 &= ~0x0040;
+        save_settings();
+        printfdeb("...KISS/TCP RxMeta off\n");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"kiss") == 0)
+    {
+        printfdeb("...KISS/TCP is %s", bKISS ? "on" : "off");
+        if(bKISS)
+            printfdeb(" (%s port %d)", meshcom_settings.node_ip, KISS_TCP_PORT);
+        printfdeb("  TX:%s  RxMeta:%s\n", bKISSTX ? "on" : "off", bKISSMETA ? "on" : "off");
         return;
     }
     else
@@ -5091,6 +5160,13 @@ void commandAction(char *umsg_text, bool ble)
 
             #if defined(ESP32) && !defined(DISABLE_TLS_CONSOLE)
             printfdeb("...NETConsole %s\n", (bNETCONSOLE ? "on (port 2323)" : "off"));
+            #endif
+
+            #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+            printfdeb("...KISS/TCP   %s", (bKISS ? "on" : "off"));
+            if(bKISS)
+                printfdeb(" (port %d)", KISS_TCP_PORT);
+            printfdeb(" / TX %s / RxMeta %s\n", (bKISSTX?"on":"off"), (bKISSMETA?"on":"off"));
             #endif
 
 
