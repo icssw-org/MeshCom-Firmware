@@ -33,7 +33,14 @@
 #define KISS_TFESC  0xDD
 
 #define KISS_CMD_DATA    0x00   // port 0, cmd 0 — AX.25 UI frame
-#define KISS_TYPE_META   0x10   // port 1, cmd 0 — MeshCom RxMeta {snr,rssi}
+#define KISS_TYPE_META   0x10   // port 1 — MeshCom RxMeta {snr,rssi}
+#define KISS_TYPE_TXRES  0xF0   // port 15 — TX result of an inbound frame
+
+// KISS_TYPE_TXRES payload: [status] (+ [msg_id: 4 B LE] when status == OK)
+#define KISS_TXRES_OK        0x01   // accepted, queued for LoRa TX
+#define KISS_TXRES_BADCALL   0x02   // rejected: src base call != node call
+#define KISS_TXRES_TXOFF     0x03   // rejected: --kiss tx off
+#define KISS_TXRES_BADFRAME  0x04   // rejected: unparseable / unsupported payload
 
 // ── Socket state (all touched only from the loop task) ───────────────────────
 static int  s_listen_fd = -1;
@@ -222,6 +229,23 @@ static bool baseCallMatches(const char *a, const char *b)
     return (*a == 0 || *a == '-') && (*b == 0 || *b == '-');
 }
 
+// TX result frame back to the client (private KISS port 15 — standard clients ignore it)
+static void kissTxResult(uint8_t status, uint32_t msg_id)
+{
+    uint8_t p[5];
+    p[0] = status;
+    size_t n = 1;
+    if (status == KISS_TXRES_OK)
+    {
+        p[1] = (uint8_t)(msg_id & 0xFF);
+        p[2] = (uint8_t)((msg_id >> 8) & 0xFF);
+        p[3] = (uint8_t)((msg_id >> 16) & 0xFF);
+        p[4] = (uint8_t)((msg_id >> 24) & 0xFF);
+        n = 5;
+    }
+    kissWrite(KISS_TYPE_TXRES, p, n);
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Inbound: a complete AX.25 UI frame from the client -> MeshCom message/position.
 // The client's callsign is preserved on the mesh, but only if its base call
@@ -232,10 +256,14 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
     {
         if (bLORADEBUG)
             Serial.println("[KISS] TX frame ignored (--kiss tx off)");
+        kissTxResult(KISS_TXRES_TXOFF, 0);
         return;
     }
     if (len < 16)
+    {
+        kissTxResult(KISS_TXRES_BADFRAME, 0);
         return;
+    }
 
     // Walk the address field: 7 bytes each until the extension bit (LSB) is set.
     size_t p = 0;
@@ -248,7 +276,10 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
         if (last) break;
     }
     if (addrs < 2 || p + 2 > len)
+    {
+        kissTxResult(KISS_TXRES_BADFRAME, 0);
         return;
+    }
 
     // source call = 2nd address (bytes 7..13)
     char srcCall[12] = {0};
@@ -259,19 +290,21 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
         if (bLORADEBUG)
             Serial.printf("[KISS] TX rejected: src '%s' != node '%s'\n",
                           srcCall, meshcom_settings.node_call);
+        kissTxResult(KISS_TXRES_BADCALL, 0);
         return;
     }
 
     p += 2;              // skip control + PID
-    if (p >= len)
-        return;
-
     const char *info = (const char *)(f + p);
-    size_t      ilen = len - p;
+    size_t      ilen = (p <= len) ? len - p : 0;
     if (ilen < 2)
+    {
+        kissTxResult(KISS_TXRES_BADFRAME, 0);
         return;
+    }
 
-    char dt = info[0];
+    char         dt = info[0];
+    unsigned int id = 0;
 
     // ── APRS message ──────────────────────────────────────────────────────
     if (dt == ':')
@@ -295,42 +328,42 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
 
         char *brace = strrchr(text, '{');   // drop a trailing APRS msg number "{nn"
         if (brace) *brace = 0;
-        if (strlen(text) < 1)
-            return;
+        if (strlen(text) >= 1)
+        {
+            char out[190];
+            if (strlen(addr) > 0) snprintf(out, sizeof(out), ":{%s}%s", addr, text);
+            else                  snprintf(out, sizeof(out), "::%s", text);
 
-        char out[190];
-        if (strlen(addr) > 0) snprintf(out, sizeof(out), ":{%s}%s", addr, text);
-        else                  snprintf(out, sizeof(out), "::%s", text);
+            if (bLORADEBUG)
+                Serial.printf("[KISS] inject msg as %s: %s\n", srcCall, out);
 
-        if (bLORADEBUG)
-            Serial.printf("[KISS] inject msg as %s: %s\n", srcCall, out);
-
-        sendMessage(out, strlen(out), srcCall);
-        return;
+            id = sendMessage(out, strlen(out), srcCall);
+        }
     }
-
     // ── APRS position ─────────────────────────────────────────────────────
     // '!'/'=' = no timestamp;  '@'/'/' = 7-char timestamp after the type char
-    if (dt == '!' || dt == '=' || dt == '@' || dt == '/')
+    else if (dt == '!' || dt == '=' || dt == '@' || dt == '/')
     {
         size_t skip = (dt == '@' || dt == '/') ? 8 : 1;
-        if (ilen <= skip + 4)
-            return;
+        if (ilen > skip + 4)
+        {
+            char pos[190] = {0};
+            size_t pl = ilen - skip;
+            if (pl > sizeof(pos) - 1) pl = sizeof(pos) - 1;
+            memcpy(pos, info + skip, pl);
 
-        char pos[190] = {0};
-        size_t pl = ilen - skip;
-        if (pl > sizeof(pos) - 1) pl = sizeof(pos) - 1;
-        memcpy(pos, info + skip, pl);
+            if (bLORADEBUG)
+                Serial.printf("[KISS] inject pos as %s: %s\n", srcCall, pos);
 
-        if (bLORADEBUG)
-            Serial.printf("[KISS] inject pos as %s: %s\n", srcCall, pos);
-
-        sendInjectedPosition(srcCall, pos);
-        return;
+            id = sendInjectedPosition(srcCall, pos);
+        }
+    }
+    else if (bLORADEBUG)
+    {
+        Serial.printf("[KISS] inbound payload type '%c' not supported\n", dt);
     }
 
-    if (bLORADEBUG)
-        Serial.printf("[KISS] inbound payload type '%c' not supported\n", dt);
+    kissTxResult(id ? KISS_TXRES_OK : KISS_TXRES_BADFRAME, id);
 }
 
 // feed one received byte through the KISS deframer

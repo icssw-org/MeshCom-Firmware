@@ -3202,7 +3202,7 @@ void SendPong(String msg_call, unsigned int msg_id)
     addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "phone_msg"); // 0xFF no retransmission
 }
 
-void sendMessage(char *msg_text, int len, const char *src_override)
+unsigned int sendMessage(char *msg_text, int len, const char *src_override)
 {
     if(memcmp(msg_text, "-", 1) == 0)
     {
@@ -3210,7 +3210,7 @@ void sendMessage(char *msg_text, int len, const char *src_override)
             printfdeb("COMMAND:%s\n", msg_text);
 
         commandAction(msg_text, false);
-        return;
+        return 0;
     }
 
     uint8_t ispos = 0;
@@ -3352,7 +3352,7 @@ void sendMessage(char *msg_text, int len, const char *src_override)
     if(strMsg.length() < 1 || strMsg.length() > 160)
     {
         printfdeb("sendMessage wrong text length:%i\n", strMsg.length());
-        return;
+        return 0;
     }
 
     bool bDM=false;
@@ -3384,7 +3384,7 @@ void sendMessage(char *msg_text, int len, const char *src_override)
         if(strDestinationCall.compareTo(meshcom_settings.node_call) == 0)
         {
             printfdeb("[ERROR]...DM to own-all not allowed");
-            return;
+            return 0;
         }
     }
 
@@ -3527,16 +3527,17 @@ void sendMessage(char *msg_text, int len, const char *src_override)
     if(bConsoleText)
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
 
+    return aprsmsg.msg_id;
 }
 
 // Inject an APRS position (received over the KISS interface) into the mesh
 // under a foreign source callsign. Mirrors the ring-insertion sequence of
 // SendAckMessage()/sendMessage(); the caller (kiss_functions) has already
 // verified that srcCall's base matches this node's call.
-void sendInjectedPosition(const char *srcCall, const char *posData)
+unsigned int sendInjectedPosition(const char *srcCall, const char *posData)
 {
     if(!srcCall || !srcCall[0] || !posData || strlen(posData) < 4)
-        return;
+        return 0;
 
     struct aprsMessage aprsmsg;
 
@@ -3577,6 +3578,8 @@ void sendInjectedPosition(const char *srcCall, const char *posData)
 
     if(bEXTUDP)
         sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len, 0, 0);
+
+    return aprsmsg.msg_id;
 }
 
 String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, char lat_c, double plon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)

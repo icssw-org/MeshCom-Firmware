@@ -22,6 +22,10 @@ compiled in by default (opt-out `-D DISABLE_KISS_TCP`).
 - **RxMeta (opt-in):** after each RX data frame, a second KISS frame on
   **KISS port 1** (type byte `0x10`) with 3 bytes: `snr` (int8, dB),
   `rssi` (int16 little-endian, dBm). Standard KISS clients ignore it.
+- **TX result:** for every inbound frame the node replies with a `type 0xF0`
+  frame (port 15): `0x01`+msg_id (LE) = accepted, `0x02` = bad callsign,
+  `0x03` = `--kiss tx off`, `0x04` = bad/unsupported frame. Standard clients
+  ignore it.
 
 The on-air MeshCom protocol is unchanged; the node stays fully in the mesh.
 

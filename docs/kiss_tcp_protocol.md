@@ -28,10 +28,13 @@ escape :  0xDB 0xDC  ->  0xC0        0xDB 0xDD  ->  0xDB
 ```
 
 - `type` = `(port << 4) | command`. Command is always `0` here.
-  - `0x00` — **data** frame (AX.25 UI), port 0
-  - `0x10` — **RxMeta** frame, port 1 (only with `--kiss meta on`)
+  - `0x00` — **data** frame (AX.25 UI), port 0 — both directions
+  - `0x10` — **RxMeta** frame, port 1, node→client (only with `--kiss meta on`)
+  - `0xF0` — **TX result** frame, port 15, node→client (reply to a client
+    `0x00` frame — see §5)
 - Consecutive `FEND`s / empty frames → ignore.
-- A client that only understands standard KISS ignores port 1 automatically.
+- A client that only understands standard KISS ignores ports 1 and 15
+  automatically.
 
 ## 3. RX — data frame (`type 0x00`)
 
@@ -118,6 +121,27 @@ Send a `type 0x00` KISS frame containing an AX.25 UI frame:
 
 Rate: no limit enforced, but LoRa airtime is ~1–2 s per frame — don't burst.
 
+### TX result (`type 0xF0`, node → client)
+
+For **every** inbound `type 0x00` frame the node replies with one `0xF0`
+frame — so a KISS-only client knows the outcome without needing the ext-udp
+node-echo:
+
+```
+[ status : 1 byte ]  [ msg_id : 4 bytes LE ]   (msg_id only when status = 0x01)
+
+0x01  accepted — queued for LoRa TX (msg_id follows; matches the msg_id the
+      node will use on the air and, if ext-udp is also connected, in the
+      "node" echo)
+0x02  rejected — src base callsign != node call
+0x03  rejected — --kiss tx off
+0x04  rejected — unparseable frame / unsupported payload type / empty text
+```
+
+`0x01` means *handed to the LoRa TX ring*, not *delivered* — end-to-end
+delivery is still only known via a MeshCom ACK (DMs) or the APRS message
+`ack` round-trip. Standard KISS clients ignore port 15.
+
 ## 6. What KISS does not give you (still use ext-udp for)
 
 | | ext-udp | KISS |
@@ -140,9 +164,14 @@ list** and **`/N` neighbour count**, the **digipeater path**, and a
 - Monitor view: `src`, path (`digis`), info field, RSSI/SNR — one row per frame,
   all frame types visible.
 - TX: build the AX.25 UI frame with the operator call as source; message or
-  position in the info field; one KISS frame per send.
+  position in the info field; one KISS frame per send. Read the `0xF0` reply
+  for a per-send outcome (accepted + msg_id / rejected + reason) — this is the
+  read-only "KISS TX: ok / rejected" status, no config needed. Fall back to the
+  ACK / echo-timeout heuristic for actual end-to-end delivery.
 - KISS and ext-udp can run together — e.g. KISS for the raw monitor, ext-udp
-  for the telemetry panel.
+  for the telemetry panel. The ext-udp `src_type:"node"` echo also fires for
+  KISS-injected sends, so if you keep ext-udp connected you get that
+  confirmation too (msg_id matches the `0xF0` frame).
 
 ## 8. Reference: minimal Python
 
@@ -181,6 +210,13 @@ for raw in frames(s):
         snr=f[1]-256 if f[1]>127 else f[1]
         rssi=int.from_bytes(f[2:4],"little",signed=True)
         print("meta", snr, rssi); continue
+    if f[0]==0xF0:                       # TX result of one of our sends
+        st=f[1]
+        if st==0x01:
+            print("tx accepted, msg_id", int.from_bytes(f[2:6],"little"))
+        else:
+            print("tx rejected", {2:"bad call",3:"tx off",4:"bad frame"}.get(st,st))
+        continue
     b=f[1:]; p=0; addrs=[]
     while p+7<=len(b):
         addrs.append(b[p:p+7]); last=b[p+6]&1; p+=7
