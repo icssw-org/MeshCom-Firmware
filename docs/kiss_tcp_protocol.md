@@ -68,8 +68,11 @@ Payload = an **AX.25 UI frame, without FCS**:
   `/R=` relay-node list). `aprslib.parse()` decodes lat/lon/alt/symbol/comment.
 - **Message** — `info` starts with `:`  →  `:ADDRESSEE :text`
   (addressee is 9 chars space-padded, then `:`). A group/`*` addressee = broadcast.
+  A MeshCom message ACK arrives as an ordinary message: `:YOURCALL  :ackNN`
+  (`ackNN` rewritten to the `nn` you sent on the original message — see §5).
 
-HEY (`@`), ACK, and telemetry-only frames are **not** sent over KISS.
+MeshCom binary HEY (`@`) / ACK (`0x41`) frames and telemetry-only frames are
+**not** sent over KISS. (The text ACK above *is* forwarded.)
 
 ### Reconstruct a TNC2 string for a standard APRS parser
 
@@ -114,7 +117,7 @@ Send a `type 0x00` KISS frame containing an AX.25 UI frame:
 
 | Kind | info | Result |
 |---|---|---|
-| Message | `:ADDRESSEE :text` (9-char addressee, then `:`) | MeshCom DM / group message. A trailing `{nn` APRS msg-number is stripped. |
+| Message | `:ADDRESSEE :text{nn` (9-char addressee, then `:`) | MeshCom DM / group message. The client's `{nn` is remembered: MeshCom renumbers on the air, but the `:ackNN` coming back is rewritten to the client's original `nn` before it reaches the client, so APRS-message ACK matching works for a directly-connected client (no hub needed). Numeric `nn` recommended (MeshCom's ack number is 3-digit decimal). |
 | Message to all | `:*        :text` or `::text` | broadcast |
 | Position | `!DDMM.mmN/DDDMM.mmE<sym>comment` (or `=…`) | MeshCom `!` beacon under your call |
 | Position + timestamp | `@DDHHMMz…` or `/DDHHMMz…` | 7-char timestamp stripped, sent as `!` |

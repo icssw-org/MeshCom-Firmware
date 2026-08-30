@@ -67,6 +67,59 @@ static size_t  s_rx_len   = 0;
 static bool    s_rx_esc   = false;
 static bool    s_rx_active = false;   // seen opening FEND
 
+// ── APRS message-number map ────────────────────────────────────────────────
+// APRS clients use their own {nn on a message and expect ":ackNN" back with
+// the same nn. MeshCom renumbers ({NNN = node_msgid) and acks that. For a
+// direct client (no host-side hub) we translate: remember node number -> the
+// client's nn on inject, and rewrite the ack on the way back.
+#define KISS_ACKMAP_SLOTS 8
+struct kissAckMap {
+    uint32_t msg_id;      // full node msg_id of the injected message (0 = free)
+    char     dst[12];     // where the ack will be addressed (= the client's call)
+    char     nn[8];       // the client's original {nn
+};
+static struct kissAckMap s_ackmap[KISS_ACKMAP_SLOTS];
+static int s_ackmap_w = 0;
+
+static void ackmapPut(uint32_t id, const char *ackDst, const char *nn)
+{
+    if (id == 0 || !nn || !nn[0]) return;
+    struct kissAckMap *e = &s_ackmap[s_ackmap_w];
+    e->msg_id = id;
+    snprintf(e->dst, sizeof(e->dst), "%s", ackDst ? ackDst : "");
+    snprintf(e->nn,  sizeof(e->nn),  "%s", nn);
+    s_ackmap_w = (s_ackmap_w + 1) % KISS_ACKMAP_SLOTS;
+}
+
+// Rewrite ":ack<node-nn>" / ":rej<node-nn>" in an incoming ACK to the client's
+// original {nn, if we injected the message it acknowledges.
+static void ackmapRewrite(struct aprsMessage &m)
+{
+    int ap = m.msg_payload.indexOf(":ack");
+    if (ap < 0) ap = m.msg_payload.indexOf(":rej");
+    if (ap < 0) return;
+
+    String tail = m.msg_payload.substring(ap + 4);
+    int nd = 0;
+    while (nd < (int)tail.length() && isdigit((unsigned char)tail[nd])) nd++;
+    if (nd == 0) return;
+    uint32_t node_nn = (uint32_t)tail.substring(0, nd).toInt();
+
+    for (int i = 0; i < KISS_ACKMAP_SLOTS; i++)
+    {
+        if (s_ackmap[i].msg_id == 0) continue;
+        if ((s_ackmap[i].msg_id & 0x3FF) != node_nn) continue;
+        if (!m.msg_destination_path.equalsIgnoreCase(s_ackmap[i].dst)) continue;
+
+        m.msg_payload = m.msg_payload.substring(0, ap + 4) + s_ackmap[i].nn + tail.substring(nd);
+        s_ackmap[i].msg_id = 0;   // consume
+        if (bLORADEBUG)
+            Serial.printf("[KISS] ack %lu -> %s for %s\n",
+                          (unsigned long)node_nn, s_ackmap[i].nn, s_ackmap[i].dst);
+        return;
+    }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 static void kissRawSend(const uint8_t *b, size_t n)
 {
@@ -162,15 +215,33 @@ static size_t buildAx25(const struct aprsMessage &m, uint8_t *out, size_t outsz)
     int  ilen = 0;
     if (m.payload_type == MSG_TYPE_TEXT)
     {
-        // APRS message: ":ADDRESSEE :text"  (addressee padded to 9)
         String addr = m.msg_destination_path;
-        if (addr == "*" || addr.length() < 1)
-            addr = "";
-        int c = m.msg_destination_path.indexOf(',');   // strip any path on the dst
-        if (c >= 0) addr = m.msg_destination_path.substring(0, c);
-        char addr9[10];
-        snprintf(addr9, sizeof(addr9), "%-9.9s", addr.c_str());
-        ilen = snprintf(info, sizeof(info), ":%s:%s", addr9, m.msg_payload.c_str());
+        int c = addr.indexOf(',');                     // strip any path on the dst
+        if (c >= 0) addr = addr.substring(0, c);
+        if (addr == "*") addr = "";
+
+        // MeshCom ACK/REJ messages already carry "<addressee> :ackNN" as the
+        // payload — use it verbatim, don't prepend a second addressee.
+        int pc = m.msg_payload.indexOf(':');
+        bool preformatted = false;
+        if (pc >= 1 && pc <= 9)
+        {
+            String left = m.msg_payload.substring(0, pc);
+            left.trim();
+            if (left.length() > 0 && left.equalsIgnoreCase(addr))
+                preformatted = true;
+        }
+
+        if (preformatted)
+        {
+            ilen = snprintf(info, sizeof(info), ":%s", m.msg_payload.c_str());
+        }
+        else
+        {
+            char addr9[10];
+            snprintf(addr9, sizeof(addr9), "%-9.9s", addr.c_str());
+            ilen = snprintf(info, sizeof(info), ":%s:%s", addr9, m.msg_payload.c_str());
+        }
     }
     else if (m.payload_type == MSG_TYPE_POSITION)
     {
@@ -326,8 +397,17 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
             memcpy(text, info + 1, tl);
         }
 
-        char *brace = strrchr(text, '{');   // drop a trailing APRS msg number "{nn"
-        if (brace) *brace = 0;
+        // capture the client's APRS message number "{nn" (up to '}'), then drop it
+        char clientNn[8] = {0};
+        char *brace = strrchr(text, '{');
+        if (brace)
+        {
+            snprintf(clientNn, sizeof(clientNn), "%s", brace + 1);
+            char *rb = strchr(clientNn, '}');
+            if (rb) *rb = 0;
+            *brace = 0;
+        }
+
         if (strlen(text) >= 1)
         {
             char out[190];
@@ -338,6 +418,10 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
                 Serial.printf("[KISS] inject msg as %s: %s\n", srcCall, out);
 
             id = sendMessage(out, strlen(out), srcCall);
+
+            // remember node-number -> client-{nn so we can rewrite the ack back
+            if (id && clientNn[0])
+                ackmapPut(id, srcCall, clientNn);
         }
     }
     // ── APRS position ─────────────────────────────────────────────────────
@@ -439,6 +523,9 @@ void flushKissQueue()
         uint16_t t = decodeAPRS(s_queue[i].buffer, s_queue[i].buflen, m);
         if (t == MSG_TYPE_TEXT || t == MSG_TYPE_POSITION)
         {
+            if (t == MSG_TYPE_TEXT)
+                ackmapRewrite(m);   // node ack-number -> client's original {nn
+
             uint8_t ax[KISS_AX25_MAX];   // loop-task stack
             size_t  axlen = buildAx25(m, ax, sizeof(ax));
             if (axlen > 0)
@@ -560,6 +647,7 @@ void kissStop()
     if (s_client_fd >= 0) { ::close(s_client_fd); s_client_fd = -1; }
     if (s_listen_fd >= 0) { ::close(s_listen_fd); s_listen_fd = -1; }
     s_rx_len = 0; s_rx_esc = false; s_rx_active = false;
+    for (int i = 0; i < KISS_ACKMAP_SLOTS; i++) s_ackmap[i].msg_id = 0;
     if (s_started)
         Serial.println("[KISS]...server stopped");
     s_started = false;
