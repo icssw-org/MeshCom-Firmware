@@ -4,6 +4,8 @@
 
 #include <Arduino.h>
 
+#include <cctype>
+
 #if defined(ENABLE_XML)
 
 #include <tinyxml_functions.h>
@@ -131,7 +133,11 @@ bool decodeTinyXML(String document)
     if(bSOFTSERDEBUG)Serial.printf("Station timezone...%s\n", strTELE_UTCOFF.c_str());
 
     if(bSOFTSERDEBUG)Serial.print("  while ChannelData:");
+#ifndef NATIVE_BUILD
+    // Native Serial-Stub (test/support/Arduino.h) hat kein print(int) --
+    // dieser Debug-Zweig ist hardwareonly, siehe PT-01 native_xml.
     if(bSOFTSERDEBUG)Serial.print(station->ChildElementCount("ChannelData"));
+#endif
 
     XMLElement * channel = station->FirstChildElement("ChannelData");
 
@@ -168,7 +174,10 @@ bool decodeTinyXML(String document)
       if(bSOFTSERDEBUG)
       {
         Serial.print("   while values:");
+#ifndef NATIVE_BUILD
+        // Native Serial-Stub hat kein println(int) -- hardwareonly, siehe PT-01 native_xml.
         Serial.println(channel->ChildElementCount("Values"));
+#endif
       }
 
       XMLElement * values = channel->FirstChildElement("Values");
@@ -176,7 +185,10 @@ bool decodeTinyXML(String document)
       while(values != NULL)
       {
         if(bSOFTSERDEBUG)Serial.print("    while VT:");
+#ifndef NATIVE_BUILD
+        // Native Serial-Stub hat kein println(int) -- hardwareonly, siehe PT-01 native_xml.
         if(bSOFTSERDEBUG)Serial.println(values->ChildElementCount("VT"));
+#endif
 
         XMLElement * vt = values->LastChildElement("VT");
 
@@ -192,11 +204,29 @@ bool decodeTinyXML(String document)
           if(strTELE_DATETIME.length() < 1)
             strTELE_DATETIME.concat(vt->Attribute("t"));
 
-          float val;
+          float val = 0.0f;
 
-          vt->QueryFloatText(&val);
+          // PT-01 finding 7: tinyxml2 leaves `val` untouched on
+          // XML_NO_TEXT_NODE / XML_CAN_NOT_CONVERT_TEXT (e.g. an empty or
+          // non-numeric <VT>), so the old unchecked call formatted an
+          // uninitialized stack float into strTELE_VALUES / node_values and
+          // relayed it as telemetry. strTELE_PARM and strTELE_VALUES are
+          // built in lockstep -- exactly one entry per channel -- and
+          // sendTelemetry() (loop_functions.cpp) consumes both lists
+          // positionally, so this reading cannot simply be skipped without
+          // shifting every later channel's value out of alignment with its
+          // PARM name. Emit an explicit 0.0 placeholder instead and flag it
+          // on the console.
+          if(vt->QueryFloatText(&val) != XML_SUCCESS)
+          {
+            val = 0.0f;
+            Serial.printf("[TXML];vt;novalue\n");
+          }
 
+#ifndef NATIVE_BUILD
+          // Native Serial-Stub hat kein println(float) -- hardwareonly, siehe PT-01 native_xml.
           if(bSOFTSERDEBUG)Serial.println(val);
+#endif
 
           char cval[10];
           snprintf(cval, sizeof(cval), "%.1f", val);
@@ -238,11 +268,48 @@ bool decodeTinyXML(String document)
   snprintf(meshcom_settings.node_parm_id, sizeof(meshcom_settings.node_parm_id), "%s", strTELE_CH_ID.c_str());
   if(bSOFTSERDEBUG)Serial.println(meshcom_settings.node_parm_id);
   
-  /*
-  strTELE_UTCOFF.replace(":", ".");
-  meshcom_settings.node_utcoff = strTELE_UTCOFF.toDouble();
-  */
-  meshcom_settings.node_utcoff = 0.0;
+  // PT-01 finding 8: convert the station's "+HH:MM" / "-HH:MM" timezone
+  // attribute (already captured correctly in strTELE_UTCOFF above) into
+  // decimal hours, e.g. "+01:00" -> 1.0, "-03:30" -> -3.5. The previous
+  // `replace(":", ".")` + toFloat() shortcut is wrong for non-zero minutes
+  // (-03:30 -> -3.30, not -3.5), so hours and minutes are parsed and
+  // combined separately here. Only overwrite node_utcoff when the attribute
+  // is present and well-formed; otherwise leave it untouched rather than
+  // stomping a previously-good value with a bogus 0.0. This restores the
+  // dead timezone path -- on XML-station nodes node_utcoff now follows the
+  // station's reported offset instead of always reading 0.0, which changes
+  // the displayed local time (MyClock.setCurrentTime, the web UI); that is
+  // the intended effect of fixing this defect, not a side effect.
+  if(strTELE_UTCOFF.length() >= 4 &&
+     (strTELE_UTCOFF.charAt(0) == '+' || strTELE_UTCOFF.charAt(0) == '-'))
+  {
+    int colonPos = strTELE_UTCOFF.indexOf(':');
+
+    if(colonPos > 1)
+    {
+      String hourPart = strTELE_UTCOFF.substring(1, colonPos);
+      String minPart  = strTELE_UTCOFF.substring(colonPos + 1);
+
+      bool hourNumeric = hourPart.length() > 0;
+      for(unsigned int i = 0; i < hourPart.length() && hourNumeric; i++)
+        if(!isdigit((unsigned char)hourPart.charAt(i)))
+          hourNumeric = false;
+
+      bool minNumeric = minPart.length() > 0;
+      for(unsigned int i = 0; i < minPart.length() && minNumeric; i++)
+        if(!isdigit((unsigned char)minPart.charAt(i)))
+          minNumeric = false;
+
+      if(hourNumeric && minNumeric)
+      {
+        float offset = hourPart.toFloat() + (minPart.toFloat() / 60.0f);
+        if(strTELE_UTCOFF.charAt(0) == '-')
+          offset = -offset;
+
+        meshcom_settings.node_utcoff = offset;
+      }
+    }
+  }
 
   return true;
   

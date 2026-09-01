@@ -22,7 +22,7 @@ extern int isPhoneReady;
 extern bool ble_busy_flag;
 extern uint16_t swap2bytes(uint16_t value);
 extern void commandAction(char *msg_text, int len, bool ble);
-extern void sendMessage(char *buffer, int len);
+extern int sendMessage(char *buffer, int len);
 extern bool hasMsgFromPhone;
 extern char textbuff_phone [MAX_MSG_LEN_PHONE];
 extern uint8_t txt_msg_len_phone;
@@ -302,7 +302,7 @@ BLEService init_settings_characteristic(void)
 
 // CONC-17: settings_rx_callback() runs in the BLE stack's task context, which
 // can be preempted mid-memcpy by the FreeRTOS timer-service task that drives
-// OnRxDone (priority 2) — a torn copy of
+// OnRxDone (priority 2, see C-01/09-concurrency-map.md) — a torn copy of
 // meshcom_settings could put a beacon on the air with a spliced callsign or
 // frequency. The callback stages the incoming struct into this private
 // buffer (no shared state touched) and only sets a flag; applyPendingBleSettings(),

@@ -55,9 +55,79 @@ batt_probe_t battProbeState = BATT_PROBE_ACTIVE_LOW;
 batt_probe_t battProbeState = BATT_PROBE_ACTIVE_HIGH;
 #endif
 
+// ----- BAT-01: no-battery detection state (siehe batt_functions.h) -----
+// Pure Zustandsmaschine: keine Arduino-Aufrufe, daher nativ testbar (test/test_batt_detect/).
+void battDetectReset(batt_detect_state_t *state)
+{
+	state->haveLast = false;
+	state->lastMv = 0.0f;
+	state->implausibleStreak = 0;
+	state->plausibleStreak = 0;
+	state->present = true;   // fail-safe: erst nach BATT_DETECT_ABSENT_STREAK unplausiblen Samples "false"
+}
+
+bool battDetectUpdate(batt_detect_state_t *state, float rawMv, float minPlausibleMv, float maxPlausibleMv)
+{
+	bool implausible = (rawMv < minPlausibleMv) || (rawMv > maxPlausibleMv);
+
+	if (state->haveLast)
+	{
+		float delta = state->lastMv - rawMv;
+		if (delta < 0) { delta = -delta; }
+		if (delta > BATT_DETECT_MAX_DELTA_MV) { implausible = true; }
+	}
+
+	state->lastMv = rawMv;
+	state->haveLast = true;
+
+	if (implausible)
+	{
+		state->implausibleStreak++;
+		state->plausibleStreak = 0;
+	}
+	else
+	{
+		state->plausibleStreak++;
+		state->implausibleStreak = 0;
+	}
+
+	if (state->present && state->implausibleStreak >= BATT_DETECT_ABSENT_STREAK)
+		state->present = false;
+	else if (!state->present && state->plausibleStreak >= BATT_DETECT_PRESENT_STREAK)
+		state->present = true;
+
+	return state->present;
+}
+
+// Produktions-Instanz (ein Zustand pro Node -- es gibt nur einen VBAT-Kanal). read_batt()
+// speist sie mit dem rohen (ungefilterten) Sample, battHardwarePresent() liest das Urteil.
+static batt_detect_state_t battDetectState;
+static bool battDetectStateInit = false;
+
+static bool battDetectFeed(float rawMv, float minPlausibleMv, float maxPlausibleMv)
+{
+	if (!battDetectStateInit)
+	{
+		battDetectReset(&battDetectState);
+		battDetectStateInit = true;
+	}
+	return battDetectUpdate(&battDetectState, rawMv, minPlausibleMv, maxPlausibleMv);
+}
+
+static bool battDetected(void)
+{
+	if (!battDetectStateInit) { return true; }   // fail-safe vor dem ersten read_batt()
+	return battDetectState.present;
+}
+
+
 bool battHardwarePresent(void)
 {
-	return battProbeState != BATT_PROBE_NONE;   // fail-safe: nur bei positiv erkanntem "kein Teiler" false
+	// fail-safe: nur bei positiv erkanntem "kein Teiler" (Probe) ODER positiv erkannter
+	// Abwesenheit (Laufzeit-Detektion, BAT-01) false. battDetected() bleibt auf boards ohne
+	// USE_BATT (kein read_batt()-Aufruf, s.o.) dauerhaft auf dem fail-safe "true" stehen,
+	// aendert dort also nichts -- betrifft nur den ADC-Pfad, fuer den es gebaut wurde.
+	return battProbeState != BATT_PROBE_NONE && battDetected();
 }
 
 
@@ -134,6 +204,12 @@ void VextOFF(void)  // Vext default OFF
 	#endif
 }
 
+#if defined(ADC_CTRL_PIN)
+// BAT-01 Nebenbefund: verhindert ein woertliches delay() bei jedem 500ms-read_batt()-Zyklus
+// (siehe ADC_BATT_ON() unten) -- nur der tatsaechliche AUS->AN-Wechsel muss einschwingen.
+static bool battDividerSettled = false;
+#endif
+
 void ADC_BATT_ON(void)
 {
 	#if defined(ADC_CTRL_PIN)
@@ -149,6 +225,16 @@ void ADC_BATT_ON(void)
 			digitalWrite(ADC_CTRL_PIN, LOW);    // active LOW: LOW = Teiler durchgeschaltet/messen (z.B. Wireless Paper)
 		else
 			digitalWrite(ADC_CTRL_PIN, HIGH);   // active HIGH (Default/Fallback): E213/E290 am Geraet verifiziert
+
+		// Settle-Zeit nur beim AUS->AN-Wechsel (Boot/Deepsleep-Aufwachen); danach bleibt der
+		// Teiler zwischen den 500ms-Zyklen an -- kein delay() im Hot Path. Kuerzer als
+		// battProbeADCPolarity()'s 100ms: dort muss der Messwert selbst stabil sein, hier
+		// reicht es, den allerersten ADC-Read nicht noch waehrend des Einschwingens abzugreifen.
+		if (!battDividerSettled)
+		{
+			delay(20);
+			battDividerSettled = true;
+		}
 	#endif
 }
 
@@ -161,6 +247,8 @@ void ADC_BATT_OFF(void)
 			digitalWrite(ADC_CTRL_PIN, HIGH);   // active LOW -> OFF = HIGH
 		else
 			digitalWrite(ADC_CTRL_PIN, LOW);    // active HIGH (Default/Fallback) -> OFF = LOW
+
+		battDividerSettled = false;   // naechstes ADC_BATT_ON() ist wieder ein AUS->AN-Wechsel
 	#endif
 }
 
@@ -273,6 +361,15 @@ float read_batt(void)
 
 		// einfache Filterfunktion: exponentielle Glättung 1. Ordnung
 		rawVoltage = (float)analogReadMilliVolts(BAT_VOLT_PIN)*BAT_MULTIPLIER/1000.0 * fBattFaktor + BAT_VOLT_OFFSET;
+
+		// BAT-01: Laufzeit-Erkennung "kein Akku" auf dem rohen (ungefilterten) Sample --
+		// die EMA-Glaettung unten wuerde genau das Sample-zu-Sample-Springen wegbuegeln, das
+		// den floatenden Teiler verraet. Plausibles Band relativ zu fBattMax (siehe
+		// batt_functions.h), nicht absolut: deckt die 2S-Packs (TBEAM_1W/E22) auf demselben
+		// Pfad mit ab.
+		bool battPresentNow = battDetectFeed(rawVoltage*1000.0,
+			fBattMax*1000.0*BATT_DETECT_MIN_BAND_FACTOR, fBattMax*1000.0*BATT_DETECT_MAX_BAND_FACTOR);
+
 		if (firstReading) { filteredVoltage = fBattMax; } // verhindert deepsleep nach REBOOT
 		else { filteredVoltage = alpha * rawVoltage + (1.0f - alpha) * filteredVoltage; }
 
@@ -355,7 +452,10 @@ float read_batt(void)
 		*/
 
 		// wenn keine AKKU am BATT PIN ist immmer 0V aber 100% ausgeben
-		if(BatVoltage < 1.0) { BatVoltage = 0; }
+		// BAT-01: dasselbe gilt, wenn die Laufzeit-Erkennung "kein Akku" meldet (floatender
+		// Teiler) -- reused die bestehende global_batt==0.0 -> "USB"-Konvention (loop_functions.cpp),
+		// statt eine zweite Anzeige-Fallunterscheidung einzufuehren.
+		if(BatVoltage < 1.0 || !battPresentNow) { BatVoltage = 0; }
 
 		return BatVoltage*1000.0;  // [mV]
 

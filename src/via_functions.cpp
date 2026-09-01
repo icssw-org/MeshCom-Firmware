@@ -5,6 +5,7 @@
 
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
+#include "mheard_functions.h"
 
 #include "printfdeb_functions.h"
 
@@ -122,7 +123,7 @@ void checkVia(struct aprsMessage &aprsmsg)
                 {
                     if(mheardCalls[iset][0] != 0x00)
                     {
-                        if((mheardEpoch[iset]+(60*60)) > getUnixClock())   // mheard only last hour
+                        if(mheardFreshMs(iset, 60UL*60UL*1000UL))   // mheard only last hour (NC-02: millis(), not wall clock)
                         {
                             if(mheardNCount[iset] > 1 && mheardNCount[iset] > inct)
                             {

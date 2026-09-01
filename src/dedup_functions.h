@@ -5,9 +5,10 @@
 // Aus lora_functions.cpp (is_new_packet) und loop_functions.cpp (Ring,
 // addLoraRxBuffer, checkOwnRx, checkServerRx) herausgeloest -- REINE
 // VERSCHIEBUNG, Logik unveraendert. Dieselbe Bewegung wie bei
-// txring_functions.cpp und aus demselben Grund: die vier Funktionen greifen
-// auf genau ein Array zu, haengen an nichts weiter, und lassen sich so gegen
-// den Ereignismitschnitt echter Knoten nachfahren.
+// txring_functions.cpp (QA-Welle 2026-08-22, N-14) und aus demselben Grund:
+// die vier Funktionen greifen auf genau ein Array zu, haengen an nichts
+// weiter, und lassen sich so gegen den Ereignismitschnitt echter Knoten
+// nachfahren (test/test_dedup_replay).
 //
 // Was der Ring tut: er merkt sich die letzten MAX_DEDUP_RING msg_id und
 // verhindert, dass dieselbe Nachricht ein zweites Mal ins Mesh geflutet wird.

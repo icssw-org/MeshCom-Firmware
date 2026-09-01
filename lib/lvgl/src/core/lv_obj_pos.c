@@ -834,6 +834,9 @@ void lv_obj_get_transformed_area(const lv_obj_t * obj, lv_area_t * area, bool re
 }
 
 
+/* MeshCom: redraw trace hook */
+void __attribute__((weak)) lv_obj_invalidate_hook(const lv_obj_t * obj, const lv_area_t * area, void * ret_addr) { (void)obj;(void)area;(void)ret_addr; }
+
 void lv_obj_invalidate_area(const lv_obj_t * obj, const lv_area_t * area)
 {
     LV_ASSERT_OBJ(obj, MY_CLASS);
@@ -845,6 +848,8 @@ void lv_obj_invalidate_area(const lv_obj_t * obj, const lv_area_t * area)
     lv_area_copy(&area_tmp, area);
     if(!lv_obj_area_is_visible(obj, &area_tmp)) return;
 
+    /* MeshCom: redraw trace hook */
+    lv_obj_invalidate_hook(obj, &area_tmp, __builtin_return_address(0));
     _lv_inv_area(lv_obj_get_disp(obj),  &area_tmp);
 }
 

@@ -7,7 +7,10 @@
 #endif
 
 #include "loop_functions.h"
+#include "txring_functions.h"
+#include "bp_notice_frame.h"
 #include "dedup_functions.h"
+#include "beacon_rate.h"
 #include "mheard_functions.h"
 #include "command_functions.h"
 
@@ -23,6 +26,7 @@
 #include "printfdeb_functions.h"
 
 #include "via_functions.h"
+#include "charset_filter.h"
 
 bool gpsDetected = false;
 bool gpsInitDone = false;
@@ -354,18 +358,21 @@ int dzeile[maxdisplines] = {8, 21, 31, 41, 51, 61, 0};
 #if !defined(BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
 
 #include <U8g2lib.h>
+#include "instrument.h"
 
 U8G2 *u8g2;
 
 #if defined(BOARD_HELTEC)
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0, 16, 15, 4);
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0, 16, 15, 4);
-#elif defined(BOARD_HELTEC_V3) || defined(BOARD_HELTEC_V4)
-    U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, 21);
-    U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, 18, 17, 21);
-#elif defined(BOARD_STICK_V3)
-    U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2_1(U8G2_R0, 18, 17, 21);
-    U8G2_SH1106_128X64_NONAME_1_SW_I2C u8g2_2(U8G2_R0, 18, 17, 21);
+#elif defined(BOARD_HELTEC_V3) || defined(BOARD_HELTEC_V4) || defined(BOARD_STICK_V3)
+    // Hardware-I2C auf Wire1 (SDA_PIN/SCL_PIN werden vor begin() mit
+    // Wire1.setPins() gesetzt, siehe esp32_functions.cpp) statt Software-
+    // Bitbanging mit 1-Seiten-Puffer: ein Bild kostete 579 ms auf dem
+    // Hauptschleifen-Task (gemessen DK5EN-93, [INSTR-FLUSH]), jetzt einige ms.
+    // Wire selbst haengt auf diesen Boards an den Sensoren (I2C_SDA/I2C_SCL).
+    U8G2_SSD1306_128X64_NONAME_F_2ND_HW_I2C u8g2_1(U8G2_R0, 21);
+    U8G2_SH1106_128X64_NONAME_F_2ND_HW_I2C u8g2_2(U8G2_R0, 21);
 #elif defined(BOARD_RAK4630)
     U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0);  //RESET CLOCK DATA
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0);  //RESET CLOCK DATA
@@ -376,7 +383,11 @@ U8G2 *u8g2;
     DISPLAY_MODEL u8g2_1(U8G2_R0, U8X8_PIN_NONE);  //RESET CLOCK DATA
     DISPLAY_MODEL u8g2_2(U8G2_R0, U8X8_PIN_NONE);
 #else
-    U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2_1(U8G2_R0);
+    // TM-22: Vollbild-Puffer (_F_) auch fuer den SSD1306, wie beim SH1106 --
+    // im Seitenmodus (_1_) kostete ein Bild 8 I2C-Transfers und jedes Bild
+    // musste komplett neu gezeichnet werden; mit dem Puffer im RAM kann
+    // sendDisplay1306() ein unveraendertes Bild ueberspringen (TM-10).
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2_1(U8G2_R0);
     U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2_2(U8G2_R0);
 #endif
 #endif
@@ -476,6 +487,16 @@ int gps_refresh_track = 0;
 // Loop timers
 unsigned long posinfo_timer = 0;        // we check periodically to send GPS
 unsigned long posinfo_timer_min = 0;    // we check min. periodically to send GPS
+// Zeitpunkt des letzten selbst erzeugten Positions-Beacons und ob es ihn schon
+// gab -- Schranke fuer den Sofort-Pfad in sendPosition(), siehe beacon_rate.h.
+static unsigned long lastOwnPosTx = 0;
+static bool bHaveOwnPosTx = false;
+static unsigned long iShotSuppressed = 0;
+// Dasselbe fuer den Sofort-Pfad von sendHey() (FL-02) -- eigener Zeitstempel,
+// unabhaengig vom Positions-Pfad. Siehe sendHeyShot() unten und beacon_rate.h.
+static unsigned long lastOwnHeyTx = 0;
+static bool bHaveOwnHeyTx = false;
+static unsigned long iHeyShotSuppressed = 0;
 unsigned long heyinfo_timer = 0;        // we check periodically to send HEY
 int ncnt_hold = 0;
 
@@ -732,6 +753,52 @@ int pageLastLineAnz[PAGE_MAX] = {0};
 int pageLastPointer=0;
 int pagePointer=0;
 int pageHold=PAGE_MAX-1;
+
+// Bench-Harness: Bildaufbau-Zeit des OLED und Seitenzustand (--oledstat, --oledlog)
+bool bOledLog = false;
+uint32_t oled_last_frame_us = 0;
+uint32_t oled_frames = 0;
+uint32_t oled_skipped = 0;          // TM-10: Bilder, die unveraendert waren und nicht gesendet wurden
+uint32_t oled_last_crc = 0;         // TM-27: CRC32 des zuletzt gezeichneten Bildpuffers
+static bool oled_last_crc_valid = false;
+
+#if !defined(BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+// CRC32 (IEEE, bitweise) ueber den U8g2-Bildpuffer: 1 KB fuer 128x64, ~50 us.
+static uint32_t oledBufferCrc(void)
+{
+    const uint8_t *p = u8g2->getBufferPtr();
+    size_t n = (size_t)u8g2->getBufferTileHeight() * (size_t)u8g2->getBufferTileWidth() * 8u;
+    uint32_t crc = 0xFFFFFFFFu;
+    for(size_t i = 0; i < n; i++)
+    {
+        crc ^= p[i];
+        for(int k = 0; k < 8; k++)
+            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+    }
+    return ~crc;
+}
+
+// TM-10: true, wenn der gerade gezeichnete Puffer dem zuletzt gesendeten Bild
+// entspricht -- nur im Vollbild-Modus (_F_), im Seitenmodus liegt nie das
+// ganze Bild im RAM und es wird immer gesendet. Merkt sich die CRC (TM-27).
+static bool oledFrameUnchanged(void)
+{
+    if(u8g2->getBufferTileHeight() * 8 < u8g2->getDisplayHeight())
+        return false;
+    uint32_t crc = oledBufferCrc();
+    bool same = oled_last_crc_valid && crc == oled_last_crc;
+    oled_last_crc = crc;
+    oled_last_crc_valid = true;
+    return same;
+}
+#endif
+
+// Nach jedem Zeichnen am Display vorbei an sendDisplay1306() (DisplayPong,
+// Track-Seite, clearDisplay beim Start) muss das naechste Bild wieder gesendet werden.
+void oledInvalidate(void)
+{
+    oled_last_crc_valid = false;
+}
 
 bool bSetDisplay = false;
 bool bShowHead = false;;
@@ -1047,6 +1114,9 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
         #elif defined (BOARD_STICK_V3)
         // extra source
 
+        INSTR_T0(t_oled);                 // OLED frame push time -> [INSTR-FLUSH]
+        uint32_t t_oled_us = micros();
+        bool oled_skip = false;
         u8g2->firstPage();
         do
         {
@@ -1107,10 +1177,32 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 
             }
 
+            if(oledFrameUnchanged())    // TM-10: Bild identisch -> Transfer sparen
+            {
+                oled_skip = true;
+                oled_skipped++;
+                if(bOledLog)
+                    Serial.printf("[OLED];skip;n;%lu;crc;%08lx;page;%d\n", (unsigned long)oled_skipped,
+                                  (unsigned long)oled_last_crc, pagePointer);
+                break;
+            }
         } while (u8g2->nextPage());
+        if(!oled_skip)
+        {
+            INSTR_FLUSH(t_oled);
+            oled_last_frame_us = micros() - t_oled_us;
+            oled_frames++;
+            if(bOledLog)
+                Serial.printf("[OLED];frame;us;%lu;n;%lu;page;%d;last;%d;lines;%d;crc;%08lx;skipped;%lu\n", (unsigned long)oled_last_frame_us,
+                              (unsigned long)oled_frames, pagePointer, pageLastPointer, pageLineAnz,
+                              (unsigned long)oled_last_crc, (unsigned long)oled_skipped);
+        }
 
         #else
         
+        INSTR_T0(t_oled);                 // OLED frame push time -> [INSTR-FLUSH]
+        uint32_t t_oled_us = micros();
+        bool oled_skip = false;
         u8g2->firstPage();
         do
         {
@@ -1147,7 +1239,26 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 
             }
 
+            if(oledFrameUnchanged())    // TM-10: Bild identisch -> Transfer sparen
+            {
+                oled_skip = true;
+                oled_skipped++;
+                if(bOledLog)
+                    Serial.printf("[OLED];skip;n;%lu;crc;%08lx;page;%d\n", (unsigned long)oled_skipped,
+                                  (unsigned long)oled_last_crc, pagePointer);
+                break;
+            }
         } while (u8g2->nextPage());
+        if(!oled_skip)
+        {
+            INSTR_FLUSH(t_oled);
+            oled_last_frame_us = micros() - t_oled_us;
+            oled_frames++;
+            if(bOledLog)
+                Serial.printf("[OLED];frame;us;%lu;n;%lu;page;%d;last;%d;lines;%d;crc;%08lx;skipped;%lu\n", (unsigned long)oled_last_frame_us,
+                              (unsigned long)oled_frames, pagePointer, pageLastPointer, pageLineAnz,
+                              (unsigned long)oled_last_crc, (unsigned long)oled_skipped);
+        }
         
         #endif
 
@@ -1164,6 +1275,24 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
     }
 
     #endif
+}
+
+// Bench-Harness: Seitenzustand des OLED in einer Zeile
+void oledStat()
+{
+    Serial.printf("[OLEDSTAT];page;%d;last;%d;hold;%d;lines;%d;info;%d;track;%d;off;%d;isoff;%d;type;%d;frames;%lu;last_us;%lu;posdisp;%d;offwait_ms;%ld;u8g2;%d;crc;%08lx;skipped;%lu\n",
+                  pagePointer, pageLastPointer, pageHold,
+                  (pagePointer >= 0 && pagePointer < PAGE_MAX) ? pageLastLineAnz[pagePointer] : -1,
+                  bDisplayInfo ? 1 : 0, bDisplayTrack ? 1 : 0, bDisplayOff ? 1 : 0, bDisplayIsOff ? 1 : 0,
+                  iDisplayType, (unsigned long)oled_frames, (unsigned long)oled_last_frame_us,
+                  bPosDisplay ? 1 : 0,
+                  DisplayOffWait > 0 ? (long)((int32_t)(DisplayOffWait - millis())) : 0L,
+    #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO)
+                  u8g2 != NULL ? 1 : 0
+    #else
+                  -1
+    #endif
+                  , (unsigned long)oled_last_crc, (unsigned long)oled_skipped);
 }
 
 void sendDisplayHead(bool bInit)
@@ -3044,6 +3173,7 @@ void DisplayPong(char line1[20], char line2[20], char line3[20], char line4[20])
         return;
 
     u8g2->clearDisplay();
+    oledInvalidate();
     u8g2->firstPage();
 
     do
@@ -3199,7 +3329,316 @@ void SendPong(String msg_call, unsigned int msg_id)
     addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "phone_msg"); // 0xFF no retransmission
 }
 
-void sendMessage(char *msg_text, int len)
+// ===========================================================================
+// BP-01 (BACKLOG) / TM-37 — back-pressure to the sender, in Q-codes.
+//
+// Until now sendMessage() threw addTxRingEntry()'s return value away: a user
+// could type into a full ring and the message vanished without a word. The
+// state machine lives in src/backpressure.h (Arduino-free, unit-tested in
+// test/test_backpressure); everything below is only the wiring — which
+// transport gets told, and when.
+//
+// Two rules the operator set that shape this code:
+//   * the notice goes back on the transport the message came from and NEVER
+//     over the air — a notice that is radiated adds to the congestion it
+//     reports, so nothing here ever touches addTxRingEntry()/sendMessage().
+//   * only locally originated user messages are refused. Relay traffic, ACKs
+//     and beacons never pass through sendMessage() and never set an origin,
+//     so the node stays a working relay while the flooding user is throttled.
+// ===========================================================================
+
+// Thresholds come from MAX_RING, which differs per board (10 / 20, MEM-01,
+// configuration_global.h) — a hardcoded 16 would warn at 160 % on a T-Beam.
+static BackPressure bp_state(MAX_RING);
+
+// Set by each caller immediately before sendMessage(), cleared right after.
+static MsgOrigin bp_origin = ORIGIN_NONE;
+
+// The transport the episode's warnings went to. Needed because the QRV that
+// closes an episode is usually emitted from the drain poll, long after
+// bp_origin was cleared. "on the same transport the warnings went to".
+//
+// BP-05 note: a QRS-only episode now closes SILENTLY (enterQuiet() returns
+// NONE), so this is no longer cleared on that path -- the stale value is
+// harmless as long as every sendMessage() caller tags bp_origin (all eight
+// do today; each latching notice overwrites it before any QRV reads it).
+// If an untagged sendMessage() caller is ever added, revisit this.
+static MsgOrigin bp_episode_origin = ORIGIN_NONE;
+
+// BP-06: the destination of the message currently being handled in
+// sendMessage() -- a group, a DM call, or "*". Unlike bp_origin (set by the
+// caller before sendMessage(), cleared right after), this is set INSIDE
+// sendMessage() itself and simply stands until the next call overwrites it;
+// there is no caller-side set/clear pair to mirror, so no reset is needed.
+static char bp_origin_dst[12] = "*";
+
+// The destination the episode's warnings went to, latched exactly like
+// bp_episode_origin above -- the QRV that closes an episode reads this,
+// long after bp_origin_dst may have moved on to a different message.
+static char bp_episode_dst[12] = "*";
+
+void setMsgOrigin(MsgOrigin origin)
+{
+    bp_origin = origin;
+}
+
+MsgOrigin getMsgOrigin(void)
+{
+    return bp_origin;
+}
+
+// E5 (2026-09-01, operator finding): msg_id must stay unique across every BP
+// frame or the chat app's dedup filter swallows whichever of two notices
+// lands in the same millisecond. The BP-08 QTA path (Welle 2) emits two
+// frames from a single sendMessage() call -- the latched episode notice and
+// the NOT-SENT nack -- both drawing from this same counter via bpDeliver().
+// A plain "id = millis()" would very likely hand both the same value.
+//
+// No rollover problem: the bump is a plain uint32 addition, and a jump past
+// millis()'s current reading self-corrects on the next call once the clock
+// has genuinely caught back up past it.
+//
+// Non-static, unlike the rest of this file's BP-01 machinery:
+// extudp_functions.cpp (sendExternNotice()) needs it too. Declared in
+// loop_functions_extern.h (Welle 3 / BP-09 cleanup -- that header was out of
+// scope for BP-07 Welle 1, which is why extudp_functions.cpp used to carry
+// its own hand-written extern for this instead).
+static uint32_t bp_last_msg_id = 0;
+
+uint32_t bpNextMsgId(void)
+{
+    uint32_t id = millis();
+    if(id <= bp_last_msg_id)
+        id = bp_last_msg_id + 1;
+
+    // M8: id == 0 happens exactly once per ~49.7-day millis() rollover --
+    // bp_last_msg_id == 0xFFFFFFFF, the +1 above wraps to 0. checkOwnTx()
+    // (this file) treats msg_id == 0 as "no id" / never matches, so a BP
+    // frame with id 0 would silently fail its own-tx bookkeeping. Skip it.
+    if(id == 0)
+        id = 1;
+
+    bp_last_msg_id = id;
+    return id;
+}
+
+/**
+ * Put one notice in front of the operator, on their own transport.
+ *
+ * The raw [BP];notice; line is unconditional and deliberately Serial.printf,
+ * not printfdeb/DEBUG_MSG: those compile away with debug off, and the bench
+ * has to be able to assert the notice regardless of which transport (or
+ * none) carried it.
+ */
+/**
+ * BP notice to phone app / web GUI, framed under the node's own callsign.
+ *
+ * Not addBLECommandBack(): that frames with source "response", which is not
+ * a valid callsign — McApp files such senders under its spam class (group
+ * 9999) and the notice never reaches the operator. Command responses keep
+ * the "response" framing; only the back-pressure notices travel as
+ * <node_call>>*:<text>. The framing itself lives in bp_notice_frame.h,
+ * where the native suite pins it (test/test_bp_notice_frame).
+ */
+static void bpNoticeToPhone(const char *text, const char *dst)
+{
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+
+    struct aprsMessage aprsmsg;
+
+    bpNoticeFillFrame(aprsmsg, meshcom_settings.node_call, text, bpNextMsgId(), dst);
+
+    checkVia(aprsmsg);
+
+    encodeAPRS(msg_buffer, aprsmsg);
+
+    addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+}
+
+// BP-07: the transport switch, split out of bpEmitNotice() so bpEmitNack()
+// (below) can share it verbatim -- both a notice and a nack are, at this
+// point, just "some already-composed text going to some origin/dst"; only
+// the [BP] console marker in front of them differs by message class.
+//
+// BP-06: dst is the destination of the message that triggered the
+// notice/nack (a group, a DM call, or "*") -- forwarded from bp_origin_dst /
+// bp_episode_dst by the two callers below. Serial and the T-Deck GUI stay
+// plain text and unaddressed (an operator watching the console/screen
+// already sees which target they typed into); only the BLE/web and EXTUDP
+// paths, which render into a per-destination chat view, need it.
+static void bpDeliver(const char *text, MsgOrigin origin, const char *dst)
+{
+    switch(origin)
+    {
+        case ORIGIN_SERIAL:
+            Serial.printf("\n%s\n", text);
+            break;
+
+        case ORIGIN_BLE:
+        case ORIGIN_WEB:
+            // Both land in BLEtoPhoneBuff via bpNoticeToPhone(): the phone
+            // app drains it in sendToPhone(), the web GUI reads the same ring
+            // for its message list (web_functions.cpp ~1293). Framed under
+            // the node's own callsign (msg_id via bpNextMsgId(), E5;
+            // msg_app_offline -> never announced, never retransmitted); see
+            // bpNoticeToPhone() for why not addBLECommandBack()'s "response"
+            // sender.
+            //
+            // If the transport dropped off meanwhile, skip rather than queue
+            // it — a notice/nack that arrives with the next connect is
+            // noise, not information.
+            if((origin == ORIGIN_BLE && g_ble_uart_is_connected) ||
+               (origin == ORIGIN_WEB && bWEBSERVER))
+            {
+                bpNoticeToPhone(text, dst);
+            }
+            break;
+
+        case ORIGIN_EXTUDP:
+            sendExternNotice(text, dst);
+            break;
+
+        case ORIGIN_GUI:
+            // dst intentionally ignored: the T-Deck screen/console already
+            // shows the operator which destination they just typed into.
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            addMessage(text);
+            #elif defined(BOARD_T_DECK_PRO)
+            TDeck_pro_lora_disp(String("node"), String(text));
+            #endif
+            break;
+
+        case ORIGIN_NONE:
+        default:
+            break;
+    }
+}
+
+static void bpEmitNotice(BpNotice notice, MsgOrigin origin, const char *dst)
+{
+    if(notice == BP_NOTICE_NONE)
+        return;
+
+    Serial.printf("[BP];notice;%s;depth;%d;max;%d;ms;%lu\n",
+                  bpNoticeCode(notice), txRingDepth(), (int)MAX_RING,
+                  (unsigned long)millis());
+
+    bpDeliver(bpNoticeText(notice), origin, dst);
+}
+
+// BP-07 (L1/L2): the per-message counterpart to bpEmitNotice() above --
+// "QRT NOT SENT - <text>" / "QTA NOT SENT - <text>", one per lost message,
+// never latched (unlike the episode notice). msg_text is the operator's own,
+// still-unrefused text (strMsg.c_str() at the refuse call site) -- truncated
+// and sanitized by bpNackCompose() (bp_notice_frame.h) before it goes out.
+static void bpEmitNack(BpNack n, MsgOrigin origin, const char *dst, const char *msg_text)
+{
+    if(n == BP_NACK_NONE)
+        return;
+
+    // E2: framed exactly like the episode notices (msg_app_offline, msg_id
+    // via bpNextMsgId(), never a real one -- BP-01 refuses on purpose to
+    // consume none for a message that never went out).
+    //
+    // H3: composed BEFORE the [BP];nack; marker below and logged instead of
+    // the raw msg_text. msg_text is operator content, unsanitized -- a real
+    // LF in it (e.g. EXTUDP {"msg":"a\nb"}) used to split the marker line in
+    // two and could forge a bogus [MC-DBG] marker inside it, misleading
+    // tools/serial_monitor.py and tools/loganalyse.sh. body has already been
+    // through bpNackCompose()'s control-byte-to-space rule (rule 2 in
+    // bp_notice_frame.h), so it cannot contain a raw LF or any other
+    // control byte.
+    // M1: on nRF52 the loop stack is 4 KB and this sits on the
+    // getExtern -> sendMessage path N-22 measured at watermark 0 (see the
+    // msg_text_check / msg_buffer comment above in sendMessage()) -- static
+    // moves it to BSS, same pattern as the rest of this file. bpEmitNack()
+    // is loop-context only (called from sendMessage(), never from an ISR or
+    // another task), so a static buffer here is not shared across contexts.
+#if defined(NRF52_SERIES)
+    static char body[16 + BP_NACK_TEXT_MAX + 4];   // prefix (<=15) + text (<=120) + "..." (<=3) + NUL
+#else
+    char body[16 + BP_NACK_TEXT_MAX + 4];
+#endif
+    bpNackCompose(body, sizeof(body), bpNackPrefix(n), msg_text);
+
+    // [BP];nack; is its own marker, never [BP];notice; -- the Runbook's BP-01
+    // bench assertion greps for "notice;" specifically and must stay valid.
+    // E6: the message text is operator content and goes out only with
+    // bLORADEBUG on; the rest of the line is unconditional, same as every
+    // other [BP] marker. txt; is last because body can itself contain
+    // semicolons -- a left-to-right parser stays intact either way.
+    if(bLORADEBUG)
+        Serial.printf("[BP];nack;%s;dst;%s;ms;%lu;txt;%s\n",
+                      bpNackCode(n), dst, (unsigned long)millis(), body);
+    else
+        Serial.printf("[BP];nack;%s;dst;%s;ms;%lu\n",
+                      bpNackCode(n), dst, (unsigned long)millis());
+
+    // M4: mirror bpRoute()'s non-QRV latch below -- without this, a sender
+    // refused in the middle of an episode a DIFFERENT transport opened gets
+    // this loss notice but is never remembered for the closing QRV, so it
+    // never hears the all-clear. Same target-resolution and the same
+    // "only touch bp_episode_dst when bp_origin is set" guard as bpRoute()
+    // (its comment explains why: with bp_origin == ORIGIN_NONE the episode
+    // must keep ITS opener's destination, not a future untagged caller's).
+    if(bp_origin != ORIGIN_NONE)
+    {
+        bp_episode_origin = bp_origin;
+        snprintf(bp_episode_dst, sizeof(bp_episode_dst), "%s", bp_origin_dst);
+    }
+
+    bpDeliver(body, origin, dst);
+}
+
+/// Route a notice: to the sender that just spoke, else to the one the episode
+/// was opened for. Also remembers the transport and destination for the
+/// closing QRV (BP-06: bp_episode_dst mirrors bp_episode_origin exactly).
+static void bpRoute(BpNotice notice)
+{
+    if(notice == BP_NOTICE_NONE)
+        return;
+
+    if(notice == BP_NOTICE_QRV)
+    {
+        // M5: capture into locals and reset the globals BEFORE emitting, not
+        // after. bpEmitNotice() -> bpDeliver() can re-enter sendMessage() on
+        // a T-Deck: addMessage() (ORIGIN_GUI) spins lv_task_handler() for up
+        // to 100 ms and can dispatch the on-screen send button from within
+        // that spin, which runs sendMessage() -> bpRoute() again and
+        // freshly latches bp_episode_origin/bp_episode_dst for THAT send.
+        // Resetting the globals only after this outer call returns would
+        // then wipe the nested call's latch right after it set it.
+        MsgOrigin origin = bp_episode_origin;
+        char dst[sizeof(bp_episode_dst)];
+        snprintf(dst, sizeof(dst), "%s", bp_episode_dst);
+
+        bp_episode_origin = ORIGIN_NONE;
+        snprintf(bp_episode_dst, sizeof(bp_episode_dst), "*");
+
+        bpEmitNotice(notice, origin, dst);
+        return;
+    }
+
+    MsgOrigin target = (bp_origin != ORIGIN_NONE) ? bp_origin : bp_episode_origin;
+    bp_episode_origin = target;
+
+    // Copy the dst only when the origin side is also being re-latched from
+    // the current sender (bp_origin set): with bp_origin == ORIGIN_NONE the
+    // episode keeps ITS opener's destination -- a future untagged
+    // sendMessage() caller must not clobber where the episode's QRV goes.
+    // (Semantic guard, not an aliasing concern -- the buffers are disjoint.)
+    if(bp_origin != ORIGIN_NONE)
+        snprintf(bp_episode_dst, sizeof(bp_episode_dst), "%s", bp_origin_dst);
+
+    bpEmitNotice(notice, target, bp_episode_dst);
+}
+
+void bpPollDrain(void)
+{
+    bpRoute(bp_state.poll(txRingDepth(), millis()));
+}
+
+int sendMessage(char *msg_text, int len)
 {
     if(memcmp(msg_text, "-", 1) == 0)
     {
@@ -3207,7 +3646,7 @@ void sendMessage(char *msg_text, int len)
             printfdeb("COMMAND:%s\n", msg_text);
 
         commandAction(msg_text, false);
-        return;
+        return BP_SEND_OK;
     }
 
     uint8_t ispos = 0;
@@ -3349,7 +3788,7 @@ void sendMessage(char *msg_text, int len)
     if(strMsg.length() < 1 || strMsg.length() > 160)
     {
         printfdeb("sendMessage wrong text length:%i\n", strMsg.length());
-        return;
+        return BP_SEND_INVALID;
     }
 
     bool bDM=false;
@@ -3381,8 +3820,53 @@ void sendMessage(char *msg_text, int len)
         if(strDestinationCall.compareTo(meshcom_settings.node_call) == 0)
         {
             printfdeb("[ERROR]...DM to own-all not allowed");
-            return;
+            return BP_SEND_INVALID;
         }
+    }
+
+    // BP-06: strDestinationCall is authoritative here (fully parsed,
+    // upper-cased, trimmed) -- set bp_origin_dst before the refuse check
+    // below so a refused message's nack is addressed to the target the
+    // sender actually named, not the "*" default.
+    // M7 / BP-06/2: an empty or whitespace-only {} target (e.g. "{}Hallo",
+    // trim() above already strips the whitespace-only case to "") has
+    // nowhere for a notice to land -- fall back to "*", the deliberate rule
+    // the deleted bpPeekDst() used to enforce, lost when that second-guess
+    // parser was removed (BP-07 comment above). Only bp_origin_dst (the
+    // notice/nack destination) gets this fallback -- strDestinationCall
+    // itself, and therefore the actual outgoing message's destination, is
+    // untouched.
+    snprintf(bp_origin_dst, sizeof(bp_origin_dst), "%.11s",
+             (strDestinationCall.length() == 0) ? "*" : strDestinationCall.c_str());
+
+    // BP-01/BP-07: refuse a locally originated user message while the ring
+    // sits in the QRT band. Grundentscheidung (bp-l1-l4-impl-plan.md): this
+    // check used to sit before the %-decode loop and the {ZIEL} parsing
+    // above, which is why bp_notice_frame.h used to carry its own
+    // second-guess parse of the raw, still-encoded text -- the authoritative
+    // parse (strMsg, strDestinationCall) happened only later. Moved to here,
+    // the check gets both fully decoded and side-effect free: no
+    // node_msgid++, no save_settings(), no insertOwnTx(), no
+    // addLoraRxBuffer() has happened yet, so a message that is never
+    // enqueued does not consume a message id either, and that second-guess
+    // parser is gone -- deleted, not superseded.
+    //
+    // Two consequences, both intended: an invalid-length message or a DM to
+    // the node's own call is now refused by the checks above BEFORE this
+    // one runs (the right reason: "buffer full" is the wrong explanation for
+    // a malformed message); and a message that IS going to be refused now
+    // runs through the decode loop first -- pure CPU, no side effects, BSS
+    // buffers on nRF52 (N-22), so the extra work is free.
+    //
+    // An untagged caller (origin NONE) is never refused; that is what keeps
+    // relay/ACK/beacon traffic flowing through a congested node.
+    if(bp_origin != ORIGIN_NONE && bp_state.refusing())
+    {
+        Serial.printf("[BP];refuse;depth;%d;max;%d;ms;%lu\n",
+                      txRingDepth(), (int)MAX_RING, (unsigned long)millis());
+
+        bpEmitNack(bp_state.onRefuse(), bp_origin, bp_origin_dst, strMsg.c_str());
+        return BP_SEND_REFUSED;
     }
 
     // N-22: siehe Kommentar bei msg_text_check oben — auf nRF52 in BSS,
@@ -3405,6 +3889,7 @@ void sendMessage(char *msg_text, int len)
     aprsmsg.msg_source_path = meshcom_settings.node_call;
     aprsmsg.msg_destination_path = strDestinationCall;  //Later FW insert PATH from HEY! collecting
     aprsmsg.msg_destination_call = strDestinationCall;  //Later FW insert PATH from HEY! collecting
+
     aprsmsg.msg_payload = strMsg;
 
     // ACK add request only DM Calls
@@ -3431,49 +3916,6 @@ void sendMessage(char *msg_text, int len)
         printBuffer_aprs((char*)"NEW-TXT", aprsmsg);
         printfdeb("");
     }
-
-    // An APP als Anzeige retour senden
-    if(hasMsgFromPhone)
-    {
-        addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
-
-        if(bGATEWAY && meshcom_settings.node_hasIPaddress)
-        {
-            // set Info message send and Server reached, not on DM
-            if(!bDM && (aprsmsg.msg_destination_call == "*" || CheckGroup(strDestinationCall)))
-            {
-                uint8_t print_buff[8];
-
-                print_buff[0]=0x41;
-                print_buff[1]=aprsmsg.msg_id & 0xFF;
-                print_buff[2]=(aprsmsg.msg_id >> 8) & 0xFF;
-                print_buff[3]=(aprsmsg.msg_id >> 16) & 0xFF;
-                print_buff[4]=(aprsmsg.msg_id >> 24) & 0xFF;
-                print_buff[5]=0x01;     // 0x01 ... server reached
-                print_buff[6]=0x00;     // msg always 0x00 at the end
-                
-                addBLEOutBuffer(print_buff, (uint16_t)7);
-            }
-        }
-
-    }
-
-    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    tdeck_add_MSG(aprsmsg, false);
-    #endif
-    
-    #if defined(BOARD_T_DECK_PRO)
-    String strCall="<"+aprsmsg.msg_source_call+"> "+aprsmsg.msg_destination_call;
-    TDeck_pro_lora_disp(strCall, aprsmsg.msg_payload);
-    #endif
-
-    // store last message to compare later on
-    insertOwnTx(aprsmsg.msg_id);
-
-    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
-        addLoraRxBuffer(aprsmsg.msg_id, true);
-    else
-        addLoraRxBuffer(aprsmsg.msg_id, false);
 
     // Master RingBuffer for transmission
     // local messages send to LoRa TX
@@ -3503,6 +3945,93 @@ void sendMessage(char *msg_text, int len)
         printfdeb("einfügen retid:%i status:%02X lng;%02X msg-id: %c-%08X\n", w, ringBuffer[w][1], ringBuffer[w][0], ringBuffer[w][2], ring_msg_id);
     }
 
+    if(w < 0)
+    {
+        // H2: addTxRingEntry() returns -1 for three different reasons, only
+        // one of which is back-pressure -- (1) an unconfigured callsign
+        // (txring_functions.cpp:401, TX-01), (2) a length-invariant
+        // violation (len == 0 || len > UDP_TX_BUF_SIZE,
+        // txring_functions.cpp:423), (3) the ring's overflow logic found no
+        // lower-priority entry to evict (genuine back-pressure). Treating
+        // every -1 as (3) forced BP_QRT on an EMPTY ring for a
+        // factory-fresh node (reason 1) and printed "TX buffer full" for a
+        // message that was never even ring-eligible -- a wrong state
+        // transition with a wrong explanation, once per typed message.
+        // Distinguish (3) from (1)/(2) by depth: the ring is only actually
+        // under pressure once txRingDepth() has reached
+        // bp_state.refuseThreshold() (the same threshold onSend() itself
+        // gates its QRT/QRS decision on); (1) and (2) fire regardless of
+        // depth and typically on an empty or low ring.
+        if(txRingDepth() >= bp_state.refuseThreshold())
+        {
+            // Symmetrie (Operatorentscheidung 2026-09-01, E4): was nicht auf HF geht,
+            // geht auch nicht ins Backbone. Kein Echo, kein UDP-Uplink, kein
+            // EXTUDP-Spiegel, keine Eigen-TX-/Dedup-Buchung -- nur die Rueckmeldung
+            // an den Absender. Die Nachricht ist vollstaendig nicht passiert.
+            bpRoute(bp_state.onSend(txRingDepth(), true, millis()));   // Episoden-QTA
+            bpEmitNack(BP_NACK_QTA, bp_origin, bp_origin_dst, strMsg.c_str());
+            return BP_SEND_DROPPED;
+        }
+
+        // Reason (1) or (2): the ring is not under pressure, so this is not
+        // a back-pressure event -- no bp_state.onSend() call (no state
+        // transition), no nack (nothing to apologize for congestion-wise).
+        // Own marker, distinct from [BP];refuse;/[BP];nack;, so the
+        // bench/console can still tell "operator typed something the ring
+        // can never accept" apart from a real refuse/drop cycle.
+        Serial.printf("[BP];invalid;depth;%d;max;%d;ms;%lu\n",
+                      txRingDepth(), (int)MAX_RING, (unsigned long)millis());
+        return BP_SEND_INVALID;
+    }
+
+    // An APP als Anzeige retour senden
+    if(hasMsgFromPhone)
+    {
+        addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+
+        if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+        {
+            // set Info message send and Server reached, not on DM
+            if(!bDM && (aprsmsg.msg_destination_call == "*" || CheckGroup(strDestinationCall)))
+            {
+                uint8_t print_buff[8];
+
+                print_buff[0]=0x41;
+                print_buff[1]=aprsmsg.msg_id & 0xFF;
+                print_buff[2]=(aprsmsg.msg_id >> 8) & 0xFF;
+                print_buff[3]=(aprsmsg.msg_id >> 16) & 0xFF;
+                print_buff[4]=(aprsmsg.msg_id >> 24) & 0xFF;
+                print_buff[5]=0x01;     // 0x01 ... server reached
+                print_buff[6]=0x00;     // msg always 0x00 at the end
+
+                addBLEOutBuffer(print_buff, (uint16_t)7);
+            }
+        }
+
+    }
+
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    tdeck_add_MSG(aprsmsg, false);
+    #endif
+
+    #if defined(BOARD_T_DECK_PRO)
+    String strCall="<"+aprsmsg.msg_source_call+"> "+aprsmsg.msg_destination_call;
+    TDeck_pro_lora_disp(strCall, aprsmsg.msg_payload);
+    #endif
+
+    // store last message to compare later on
+    insertOwnTx(aprsmsg.msg_id);
+
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+        addLoraRxBuffer(aprsmsg.msg_id, true);
+    else
+        addLoraRxBuffer(aprsmsg.msg_id, false);
+
+    // BP-01/BP-08: the ring accepted the frame above (w < 0 already returned
+    // early), so this call always signals success -- the new depth after
+    // enqueuing decides between silence, QRS and QRT.
+    bpRoute(bp_state.onSend(txRingDepth(), false, millis()));
+
     /*
     iWrite++;
     if(iWrite >= MAX_RING)
@@ -3524,6 +4053,7 @@ void sendMessage(char *msg_text, int len)
     if(bConsoleText)
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
 
+    return BP_SEND_OK;
 }
 
 String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, char lat_c, double plon, char lon_c, int alt,  float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
@@ -3597,7 +4127,17 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
 
     if(strcmp(meshcom_settings.node_atxt, "none") != 0 && meshcom_settings.node_atxt[0] != 0x00)
     {
-        snprintf(catxt,  sizeof(catxt), "%s", meshcom_settings.node_atxt);
+        // CHR-02: strip APRS structure separators and truncate on a UTF-8
+        // boundary at the same 25-byte cap decodeAPRSPOS() applies on
+        // receive (aprs_functions.cpp:632) -- otherwise a receiver's
+        // byte-counting parser can inherit a split multi-byte sequence.
+        char catxt_src[sizeof(meshcom_settings.node_atxt)];
+        snprintf(catxt_src, sizeof(catxt_src), "%s", meshcom_settings.node_atxt);
+        size_t iatxt = charset_filter_apply(catxt_src, strlen(catxt_src), CHARSET_FILTER_STRIP_SEPARATORS);
+        iatxt = charset_utf8_safe_truncate(catxt_src, iatxt, 25);
+        catxt_src[iatxt] = 0x00;
+
+        snprintf(catxt,  sizeof(catxt), "%s", catxt_src);
     }
 
     if(strcmp(meshcom_settings.node_name, "none") != 0 && meshcom_settings.node_name[0] != 0x00)
@@ -3805,6 +4345,35 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
     if(lat == 0.0 && lon == 0.0)
         return;
 
+    // Mindestabstand fuer den Sofort-Pfad (0x9999: --sendpos, User-Button,
+    // EXTUDP-Telemetrie). Begruendung und Feldbefund: src/beacon_rate.h.
+    // Der periodische Pfad (uintervall == posinfo_interval) und die
+    // Track-/WX-Pfade (0xEEEE/0xFFFF) bleiben unberuehrt, sie tragen ihre
+    // eigene Kadenz.
+    if(uintervall == 0x9999 &&
+       !beaconShotAllowed(millis(), lastOwnPosTx, bHaveOwnPosTx, BEACON_SHOT_MIN_MS))
+    {
+        // Roher Serial.printf statt printfdeb: der Marker muss auch bei
+        // --debug off sichtbar sein, und ';' darf nicht gefiltert werden.
+        // Nur die ERSTE Unterdrueckung je Sperrfenster wird gemeldet -- unter
+        // einem Ausloeser-Sturm waeren es sonst 20 Zeilen/s (TM-21).
+        if(iShotSuppressed == 0)
+            Serial.printf("[POS];shot;suppressed;since_ms;%lu;min_ms;%lu\n",
+                          (unsigned long)(millis() - lastOwnPosTx),
+                          (unsigned long)BEACON_SHOT_MIN_MS);
+        iShotSuppressed++;
+        return;
+    }
+
+    if(uintervall == 0x9999 && iShotSuppressed > 0)
+    {
+        Serial.printf("[POS];shot;resumed;suppressed;%lu\n", (unsigned long)iShotSuppressed);
+        iShotSuppressed = 0;
+    }
+
+    lastOwnPosTx = millis();
+    bHaveOwnPosTx = true;
+
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
 
     bool bSendViaAPRS = false;
@@ -3920,6 +4489,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
                 char cvers[20];
 
                 u8g2->clearDisplay();
+                oledInvalidate();
                 u8g2->firstPage();
 
                 do
@@ -4261,13 +4831,13 @@ void sendHey()
     // store last message to compare later on
     insertOwnTx(aprsmsg.msg_id);
 
-    if(bGATEWAY)
-    {
-	    // UDP out
-		addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
-    }
+    // GW-01: no gateway self-upload of the own '@' HEY. The bare copy
+    // (rssi/snr 0, no signal report) always reached the server seconds before
+    // the neighbours' enriched copies of the same msg_id and could win over
+    // them there; with --gateway off the enriched copies alone carry the
+    // link data. Measured 2026-08-31, see docs/BACKLOG.md 3.8i.
 
-    // and also to LoRa
+    // to LoRa
     {
         // Master RingBuffer for transmission
         // local messages send to LoRa TX
@@ -4279,6 +4849,40 @@ void sendHey()
             iWrite=0;
         */
     }
+}
+
+// Sofort-Pfad fuer sendHey() (FL-02): --sendhey ruft diese Funktion statt
+// sendHey() direkt auf, damit derselbe Mindestabstand gilt wie beim
+// Positions-Sofort-Pfad (siehe beacon_rate.h). Der periodische Trickle-
+// Scheduler (esp32_main.cpp/nrf52_main.cpp) ruft weiterhin sendHey() direkt
+// auf und bleibt unberuehrt -- sonst waere er doppelt gegated.
+bool sendHeyShot()
+{
+    if(!beaconShotAllowed(millis(), lastOwnHeyTx, bHaveOwnHeyTx, BEACON_SHOT_MIN_MS))
+    {
+        // Roher Serial.printf statt printfdeb: der Marker muss auch bei
+        // --debug off sichtbar sein, und ';' darf nicht gefiltert werden.
+        // Nur die ERSTE Unterdrueckung je Sperrfenster wird gemeldet -- unter
+        // einem Ausloeser-Sturm waeren es sonst 20 Zeilen/s (TM-21).
+        if(iHeyShotSuppressed == 0)
+            Serial.printf("[HEY];shot;suppressed;since_ms;%lu;min_ms;%lu\n",
+                          (unsigned long)(millis() - lastOwnHeyTx),
+                          (unsigned long)BEACON_SHOT_MIN_MS);
+        iHeyShotSuppressed++;
+        return false;
+    }
+
+    if(iHeyShotSuppressed > 0)
+    {
+        Serial.printf("[HEY];shot;resumed;suppressed;%lu\n", (unsigned long)iHeyShotSuppressed);
+        iHeyShotSuppressed = 0;
+    }
+
+    lastOwnHeyTx = millis();
+    bHaveOwnHeyTx = true;
+
+    sendHey();
+    return true;
 }
 
 // Telemetry with own Parameters

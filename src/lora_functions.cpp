@@ -78,6 +78,8 @@
 
 #include "softser_functions.h"
 
+#include "test_inject.h"   // TM-06: raw-inject drain / TX-burst ticker, serviced from OnRxDone()
+
 #include "via_functions.h"
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -169,6 +171,40 @@ static uint32_t extractRingMsgId(int slot)
            ((uint32_t)ringBuffer[slot][5] << 16) |
            ((uint32_t)ringBuffer[slot][4] << 8)  |
             (uint32_t)ringBuffer[slot][3];
+}
+
+// RX-01 (BACKLOG 3.8k): counts and rate-limits the "frame from an
+// unconfigured node, dropped" marker. Not static -- udp_functions.cpp's
+// GATE-in path (the "second door", server -> LoRa) shares this counter and
+// marker via a local extern declaration there. Raw Serial.printf, not
+// printfdeb/DEBUG_MSG (stripped/compiled away with --debug off, see the
+// FL-01 marker note) -- at most one line per 10 s, folding any elided drops
+// into the "dropped" count on the next line that does print (TM-21's
+// lesson).
+uint32_t stat_rx_drop_unconfigured = 0;
+
+void logRxDropUnconfigured(const char *call)
+{
+    static bool s_have_marker = false;
+    static uint32_t s_last_marker_ms = 0;
+    static uint32_t s_dropped_since_marker = 0;
+
+    stat_rx_drop_unconfigured++;
+    s_dropped_since_marker++;
+
+    uint32_t now = (uint32_t)millis();
+    // s_have_marker, not "s_last_marker_ms == 0": millis()==0 is a real,
+    // reachable timestamp (boot), and must not double as a "never printed
+    // yet" sentinel -- that would let a second drop still at ms=0 bypass
+    // the floor.
+    if(!s_have_marker || (uint32_t)(now - s_last_marker_ms) >= 10000UL)
+    {
+        Serial.printf("[RX];drop;unconfigured;src;%s;ms;%lu;dropped;%lu\n",
+                      call, (unsigned long)now, (unsigned long)s_dropped_since_marker);
+        s_have_marker = true;
+        s_last_marker_ms = now;
+        s_dropped_since_marker = 0;
+    }
 }
 
 #if defined(EXTERNAL_RADIO)
@@ -461,6 +497,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         iReceiveTimeOutTime = millis();
         csma_timeout = csma_compute_timeout(cad_attempt);
+
+        // TM-06: state above is fully settled -- safe point for
+        // test_inject_service() to recurse into OnRxDone() (see there).
+        test_inject_service();
+
         return;
     }
 
@@ -521,6 +562,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         // print which message type we got
         uint16_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
 
+        // TM-06(a): no-op unless this call is draining a staged raw-inject
+        // frame (test_inject.cpp) -- see test_inject_service() below.
+        test_inject_raw_report(size, msg_type_b_lora);
+
         size = aprsmsg.msg_len;
 
         int icheck = checkOwnTx(aprsmsg.msg_id);
@@ -540,6 +585,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         {
             if(bDisplayCont)
                 printfdeb("[LORA-ERROR]...%03i RCV:%s\n", size, RcvBuffer+6);
+        }
+        else if(isUnconfiguredCall(aprsmsg.msg_source_call.c_str()))
+        {
+            // RX-01 (BACKLOG 3.8k): a node still on the factory callsign is
+            // not identifying itself, so nothing it sends is legal to
+            // relay -- drop it here, before mheard, display, phone/BLE out,
+            // the gateway upload and the relay decision below.
+            logRxDropUnconfigured(aprsmsg.msg_source_call.c_str());
         }
         else
         {
@@ -1359,6 +1412,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     if(bLORADEBUG)
         printfdeb("[MC-SM] RX_PROCESS -> RX_LISTEN rc=0\n");
     is_receiving = false;
+
+    // TM-06: state above is fully settled -- safe point for
+    // test_inject_service() to recurse into OnRxDone() (see there).
+    test_inject_service();
 }
 
 /**@brief Function to be executed on Radio Rx Timeout event
@@ -1438,8 +1495,9 @@ void OnRxError(void)
 // LoRa TX functions
 //
 // getMessagePriority/getNextTxSlot/advanceIReadPastEmpty/addTxRingEntry
-// wurden nach txring_functions.cpp verschoben -- reine Verschiebung, Logik
-// unveraendert. Siehe txring_functions.h/.cpp.
+// wurden nach txring_functions.cpp verschoben (QA-Welle 2026-08-22, N-14) --
+// reine Verschiebung, Logik unveraendert. Siehe txring_functions.h/.cpp und
+// test/test_txring/test_txring.cpp.
 
 /**@brief our Lora TX sequence — priority-based slot selection
  */
@@ -1487,9 +1545,11 @@ bool doTX()
                               ((uint32_t)ringBuffer[txSlot][5] << 16) |
                               ((uint32_t)ringBuffer[txSlot][4] << 8)  |
                                (uint32_t)ringBuffer[txSlot][3];
-            int tw = iWrite;
-            int tr = iRead;
-            int queued = (tw >= tr) ? (tw - tr) : (MAX_RING - tr + tw);
+            // BP-02: qlen/queued in TX markers is txRingDepth() (occupied
+            // slots), not the raw index distance -- this marker fires on
+            // every TX and would otherwise dominate a log with the old
+            // hole-counting number right next to an honest RING_STATUS.
+            int queued = txRingDepth();
             if(bLORADEBUG)
                 printfdeb("[MC-DBG] RING_TX_READ slot=%d prio=%d type=%02X status=%02X "
                           "len=%d msg_id=%08X retry=%d queued=%d/%d lat=%lums\n",
@@ -1530,6 +1590,19 @@ bool doTX()
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
+            // TX-01 (BACKLOG 3.8k): hard backstop -- an unconfigured node
+            // (factory callsign) must not transmit, no matter what made it
+            // into the ring. addTxRingEntry() already refuses to enqueue
+            // for such a node; this is the runtime sibling of TX_ENABLE at
+            // the only place in the tree that calls
+            // Radio.Send()/startTransmit(). Non-rollback: the slot was
+            // already marked consumed above, same as the TX-disabled and
+            // decode-failure drop paths below.
+            if(isUnconfiguredCall(meshcom_settings.node_call))
+            {
+                logTxRefuseUnconfigured();
+                return false;
+            }
 
 #ifndef BOARD_TLORA_OLV216
             if(lora_tx_buffer[0] == '<' && bDisplayTrack)
@@ -1714,7 +1787,7 @@ bool doTX()
             DEBUG_MSG("RADIO", "TX DISABLED");
         }
 
-        // Non-rollback drop paths (TX disabled or decode failure) — slot stays cleared
+        // Non-rollback drop paths (TX disabled, unconfigured node, or decode failure) — slot stays cleared
     }
 
     //#endif

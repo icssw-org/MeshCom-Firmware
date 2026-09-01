@@ -325,8 +325,19 @@ void btn_event_handler_setup_btn(lv_event_t * e)
             Serial.println("[TDECK]...btn_event_handler - btn_soundon pressed");
 
         // MUTE
-        audio_set_mute(! lv_obj_has_state(btn_soundon, LV_STATE_CHECKED));
-        save_settings();
+        // HL-03: der Schalter rief nur audio_set_mute() und liess
+        // meshcom_settings.node_mute unberuehrt -- gespeichert wurde also der
+        // ALTE Wert, und nach dem naechsten Reset stand der Ton wieder wie
+        // vorher. Ueber commandAction() geht er jetzt denselben Weg wie
+        // "--mute on/off" und wie alle anderen Schalter dieser Seite; Zustand
+        // und Persistenz koennen nicht mehr auseinanderlaufen.
+        // Knopf ist "Sound on": gedrueckt == Ton an == nicht stumm.
+        // commandAction() speichert selbst (wie bei --track/--gps), deshalb
+        // kein zweites save_settings() mehr.
+        if (lv_obj_has_state(btn_soundon, LV_STATE_CHECKED))
+            commandAction((char*)"--mute off", false);
+        else
+            commandAction((char*)"--mute on", false);
 
         return;
     }
@@ -700,9 +711,26 @@ void btn_event_handler_send(lv_event_t * e)
             message_text[iml] = 0x00;
         }
 
-        sendMessage(message_text, iml);
-        
-        lv_textarea_set_text(text_input, "");
+        // BP-01: origin GUI -- a QRS/QRT/QTA/QRV lands in the on-screen
+        // message list (addMessage()), the same place a received text goes.
+        setMsgOrigin(ORIGIN_GUI);
+        int bp_rc = sendMessage(message_text, iml);
+        setMsgOrigin(ORIGIN_NONE);
+
+        // BP-07/BP-09 interaction: a refusal writes its "QRT/QTA NOT SENT"
+        // receipt as a system bubble on the message tab (tdeck_add_system_message()
+        // -> msg_focus_and_alert(false), which never switches tabs on its own --
+        // see lv_obj_functions.cpp). So the tab switch below must stay
+        // unconditional, or a refused send is silently invisible to the
+        // operator. Only the typed-text clear is gated on BP_SEND_OK: on
+        // REFUSED/DROPPED/INVALID the text stays in the field so the operator
+        // can resend after the QRV instead of retyping. The DM callsign field
+        // is left alone either way -- it names the target, not the attempt,
+        // and the operator may want to keep sending to the same station.
+        if(bp_rc == BP_SEND_OK)
+        {
+            lv_textarea_set_text(text_input, "");
+        }
         lv_tabview_set_act(tv, 0, LV_ANIM_ON);
     }
     else if(code == LV_EVENT_VALUE_CHANGED)
@@ -835,23 +863,7 @@ void btn_event_handler_zoomin(lv_event_t * e)
 {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED)
     {
-        if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
-        {
-            sdmap_lastKnownLat = gpsData.latitude;
-            sdmap_lastKnownLon = gpsData.longitude;
-        }
-
-        if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
-        {
-            sdmap_lastKnownLat = meshcom_settings.node_lat; // gpsData.latitude;
-            sdmap_lastKnownLon = meshcom_settings.node_lon; // gpsData.longitude;
-        }
-
-        
-        sdmap_zoom_in();
-        sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
-        refresh_map(meshcom_settings.node_map);
-        add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
+        tdeck_map_zoom(1);
     }
 }
 
@@ -862,23 +874,7 @@ void btn_event_handler_zoomout(lv_event_t * e)
 {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED)
     {
-        if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
-        {
-            sdmap_lastKnownLat = gpsData.latitude;
-            sdmap_lastKnownLon = gpsData.longitude;
-        }
-
-        if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
-        {
-            sdmap_lastKnownLat = meshcom_settings.node_lat; // gpsData.latitude;
-            sdmap_lastKnownLon = meshcom_settings.node_lon; // gpsData.longitude;
-        }
-        
-        
-        sdmap_zoom_out();
-        sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
-        refresh_map(meshcom_settings.node_map);
-        add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
+        tdeck_map_zoom(-1);
     }
 }
 
@@ -912,9 +908,16 @@ void tabview_event_cb(lv_event_t * e)
                     sdmap_lastKnownLon = meshcom_settings.node_lon;
                 }
 
-                sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+                // TD-07: do not yank the view back to the own position on tab
+                // switch while the user has panned -- see tdeck_map_pan(). The
+                // own-position marker still gets repositioned either way (it
+                // must not fight the pan, but it must not go stale either);
+                // refresh_map() only moves marker widgets against whatever
+                // origin the last sdmap_refresh() set, it does not redraw tiles.
+                if (!tdeck_map_user_panned())
+                    sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
                 refresh_map(meshcom_settings.node_map);
-                
+
                 break;
             case 4: // GPS
                 tdeck_refresh_track_view();

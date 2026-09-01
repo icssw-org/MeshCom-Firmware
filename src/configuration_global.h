@@ -25,6 +25,31 @@ inline bool isNodeUnconfigured(const char *call)
         return true;
     return false;
 }
+
+// RX-01/TX-01 (BACKLOG 3.8k): same "factory default" test as
+// isNodeUnconfigured() above, applied to a FRAME's source callsign instead
+// of this node's own. Prefix-only compare (first 6 bytes), so it matches
+// regardless of any "-SSID" suffix -- "XX0XXX-00", "XX0XXX-1" etc. all
+// match, same as isNodeUnconfigured() does for meshcom_settings.node_call.
+//
+// Not a straight call-through to isNodeUnconfigured(): that helper's
+// memcmp() reads a fixed 6 (or 4) bytes unconditionally, which is safe for
+// meshcom_settings.node_call (a fixed 10-byte buffer, its only caller) but
+// not for an arbitrary decoded frame's source call
+// (aprsmsg.msg_source_call.c_str()), which is not guaranteed to be that
+// long. strlen()-bound the compares first so a short/corrupt source call
+// cannot read past its own terminator.
+inline bool isUnconfiguredCall(const char *call)
+{
+    if (call == nullptr || call[0] == 0x00)
+        return true;
+    unsigned long clen = __builtin_strlen(call);
+    if (clen >= 6 && __builtin_memcmp(call, DEFAULT_CALL_PREFIX, 6) == 0)
+        return true;
+    if (clen == 4 && __builtin_memcmp(call, "none", 4) == 0)
+        return true;
+    return false;
+}
 #endif
 
 // ---------------------------------------------------------------------------
@@ -45,9 +70,15 @@ inline bool isNodeUnconfigured(const char *call)
 // beim Sprung 20260724 -> 20260821 passiert: dieser Commit hat esp32_flash.h
 // nicht angefasst, die Einstellungen aller Knoten aber trotzdem verworfen.
 //
-// Letzte echte Layout-Aenderung: 6e7c012a (2026-07-24), node_pingmax,
-// node_pingcount und node_pingduration kamen hinzu. Daher 20260724.
-#define FLASH_VERSION 20260724
+// FLASH_VERSION 20260901 ist der Release-Stempel v4.35p.09.01-stability --
+// rein informativ, loest kein clear_flash() aus.
+//
+// FLASH_STRUCT_VERSION bleibt 20260724: letzte echte Layout-Aenderung war
+// 6e7c012a (2026-07-24), node_pingmax, node_pingcount und node_pingduration
+// kamen hinzu. Alles seither (auch die neuen Features wie max_hop_text) nutzt
+// auf ESP32 eigene NVS-Keys bzw. freie Bits bestehender Felder und aendert
+// das Struct-Layout nicht.
+#define FLASH_VERSION 20260901
 #define FLASH_STRUCT_VERSION 20260724
 
 // Bestandsschutz. Diese Staende tragen dasselbe Layout wie
@@ -194,10 +225,17 @@ static inline bool flashLayoutCompatible(int stored)
 // ESP32 original (~160 KB DRAM) — reduced buffer sizes due to RAM constraints
 #define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer (was 20, limited by DRAM)
 #define MAX_MHPATH 40                      // max count of messages in mhpath ringbuffer (was 30, limited by DRAM)
-#define MAX_RING 30                        // max count of messages in ringbuffer
+// MEM-01 (2026-08-30): 30/25 -> 20/20, same as every other board. MAX_RING
+// feeds five static rings (ringBuffer, both BLE*toPhoneBuff, retry/prio) --
+// at 30 the classic-ESP32 dram0_0_seg had 0.5 kB (T-Beam) / 1.7 kB (E22)
+// headroom left and the next static buffer failed the link. TM-31 measured
+// that even a 20-slot ring saturates long before the radio drains it, so the
+// extra 10 slots only ever bought ~4 minutes of deeper backlog. BP-01's 80 %
+// threshold follows MAX_RING automatically.
+#define MAX_RING 20                        // max count of messages in ringbuffer (was 30, MEM-01)
 #define MAX_DEDUP_RING 70                  // dedup ring for received msg_ids (was 60)
 #define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
-#define MAX_RING_UDP 25                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
+#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa (was 25, MEM-01)
 #endif
 
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message
@@ -211,6 +249,16 @@ static inline bool flashLayoutCompatible(int stored)
 #define MAX_HOP_LIMIT 7                    // obere Schranke fuer {SET} und ACK-Plausibilitaet
                                            // (Byte 5 einer ACK fuehrt max_hop in 7 Bit; im Feld
                                            //  beobachtet: gueltige ACKs 0..4, Textpakete bis 5)
+
+// Obergrenze fuer die HEY-Link-Kette ('@'-Nutzlast). appendHeySignalReport()
+// haengt je Relais eine Gruppe "<ncnt>,<rssi>,<snr>;" an -- unguenstigst
+// "80,-128,-128;", also HEY_REPORT_GROUP_MAX Zeichen. Bei regulaerem Betrieb
+// begrenzt MAX_HOP_LIMIT die Zahl der Gruppen; ein fehlerhaft oder boeswillig
+// ueberlanges '@'-Paket von der Luftschnittstelle ist dadurch nicht begrenzt.
+// Der Wert deckt die laengste regulaere Kette ab ("R<ncnt>;" + MAX_HOP_LIMIT
+// Gruppen), damit die Schranke nie einen gueltigen Pfad kuerzt.
+#define HEY_REPORT_GROUP_MAX 14
+#define HEY_PATH_PAYLOAD_MAX (8 + MAX_HOP_LIMIT * HEY_REPORT_GROUP_MAX)
 
 #define RECEIVE_TIMEOUT 4500               // [SX126x] 4.5sec
 #define RADIOLIB_SX126X_CAD 0x07           // 0x00...length off    0x07...32-bit detect
@@ -265,6 +313,15 @@ static inline bool flashLayoutCompatible(int stored)
 #define MSG_PRIO_LOW        4   // Position (0x21)
 #define MSG_PRIO_BACKGROUND 5   // HEY (0x40)
 
+// BP-03 (DJ8MEH-RCA 2026-08-31, Teil 2): max age (ms) a BACKGROUND (HEY,
+// prio 5) ring entry may sit unsent before txRingAgeBackground()
+// (txring_functions.cpp) drops it. Tradeoff accepted: a node's OWN HEY
+// beacon ages out the same way, and at trickle intervals up to 480 s the
+// next copy may follow minutes later -- but a neighbourhood report that
+// cannot be transmitted for 3 minutes is worthless on air, and the
+// DJ8MEH blocker that motivated this sat unsent for 10 minutes.
+#define RING_BG_MAX_AGE_MS 180000UL   // 3 min
+
 // Priority-dependent CSMA base timeouts (ms)
 #define CSMA_PRIO_BASE_1    3000   // ACK/DM
 #define CSMA_PRIO_BASE_2    3000   // Gruppen/Broadcast
@@ -298,6 +355,17 @@ static inline bool flashLayoutCompatible(int stored)
 
 // BLE Settings
 #define MAX_MSG_LEN_PHONE 300
+
+// Nutzbare JSON-Nutzlast eines BLE-Rahmens zum Telefon, in Zeichen.
+//
+// NICHT MAX_MSG_LEN_PHONE-2: das ist die Pruefung, die in den Registerbauern
+// sichtbar ist, aber nie greift. Wirksam ist die Klemmung in
+// addBLEComToOutBuffer() bei 245 Byte, abzueglich 1 Byte Typkennung (0x44).
+// addBLEOutBuffer() laesst im 'D'-Zweig zwar 255 zu, dort rechnet
+// sendToPhone() die Schreiblaenge aber in einem uint8_t aus: ab 253 Zeichen
+// JSON laeuft blelen+2 auf ESP32/ESP8266 ueber und der Rahmen geht ohne
+// Meldung verloren. 244 ist damit die Zahl, die auf beiden Pfaden traegt.
+#define BLE_JSON_PAYLOAD_MAX 244
 #define PAIRING_PIN "000000"    // Pairing PIN for BLE Connection
 
 #define BLE_TEST 0

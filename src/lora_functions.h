@@ -26,7 +26,8 @@ unsigned long csma_compute_timeout(int attempt);
 unsigned long csma_compute_timeout_prio(int attempt, uint8_t priority);
 void csma_reset(void);
 
-// getMessagePriority/getNextTxSlot: siehe txring_functions.h (verschoben).
+// getMessagePriority/getNextTxSlot: siehe txring_functions.h (verschoben,
+// QA-Welle 2026-08-22, N-14).
 
 #if defined(EXTERNAL_RADIO)
 // --- asynchronous external-radio TX queue ownership -----------------------

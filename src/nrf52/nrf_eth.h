@@ -1,5 +1,15 @@
 //RAK13800 Ethernet Shield
+#pragma once
 #include <configuration.h>
+
+// TM-35 / N-20 instrumentation (parity with the ESP32 [WIFI] markers, see
+// udp_functions.cpp): every blocking W5100S call reports itself as
+// [ETH];stall;<site>;ms;N;task;X above ETH_STALL_MS, link/IP changes as
+// [ETH];event;..., a 60-s [ETH];link heartbeat, --ethstat, --ethdrop.
+void ethLinkPoll();          // once per loop: link up/down edge -> [ETH];event;link
+void ethLinkHeartbeat();     // [ETH];link every 60 s
+void ethStat();              // --ethstat
+void ethDrop();              // --ethdrop: Udp.stop + DHCP renew + UDP restart, timed
 
 class NrfETH {
 
@@ -38,6 +48,11 @@ class NrfETH {
     bool sendUDP(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_buf_size);
 
     int getUDP();
+
+    // TM-45: harvest-only substitute for getUDP(), for a bGATEWAY-off node.
+    // Call this instead when nothing else is draining the socket this loop
+    // pass, so a non-gateway node's own NTP replies still get read.
+    void harvestNTP();
 
     void fillUDP_RING_BUFFER(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_buf_size);
 

@@ -5,6 +5,7 @@
 #include <regex_functions.h>
 #include <debugconf.h>
 #include <configuration.h>
+#include <charset_filter.h>
 
 #define MAX_APRS_FRAME_SIZE 340
 
@@ -377,6 +378,15 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             }
         }
 
+        // CHR-01: strip C0/C1 controls, invalid/overlong UTF-8 and bidi/
+        // zero-width format characters from the RX text before it goes
+        // anywhere -- this one site covers both LoRa RX and UDP-from-server
+        // RX, since both call decodeAPRS(). PLAIN mode: this payload can
+        // also be a position or telemetry frame, whose structural bytes
+        // ('/', '{', ':', ...) are printable ASCII and must survive.
+        iConcat1 = (int)charset_filter_apply(cConcat1, (size_t)iConcat1, CHARSET_FILTER_PLAIN);
+        cConcat1[iConcat1] = 0x00;
+
         aprsmsg.msg_payload = cConcat1;
 
         if(!bPayloadEndOk)
@@ -559,6 +569,14 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     {
         if(PayloadBuffer.charAt(itxt) == 'N' || PayloadBuffer.charAt(itxt) == 'S' || ipt > 10)
         {
+            // ipt>10 alone is an overrun brake, not a hemisphere match --
+            // only accept the byte at the cut-off as lat_c/aprs_group when it
+            // really is 'N'/'S'. Otherwise reject the position (keep the
+            // initAPRSPOS() defaults) instead of reading a fabricated
+            // hemisphere/group byte and an 11-digit fantasy lat.
+            if(PayloadBuffer.charAt(itxt) != 'N' && PayloadBuffer.charAt(itxt) != 'S')
+                return 0x00;
+
             decode_text[ipt]=0x00;
 
             sscanf(decode_text, "%lf", &aprspos.lat);
@@ -587,6 +605,10 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     {
         if(PayloadBuffer.charAt(itxt) == 'W' || PayloadBuffer.charAt(itxt) == 'E' || ipt > 10)
         {
+            // Same overrun-vs-hemisphere check as the latitude loop above.
+            if(PayloadBuffer.charAt(itxt) != 'W' && PayloadBuffer.charAt(itxt) != 'E')
+                return 0x00;
+
             decode_text[ipt]=0x00;
 
             sscanf(decode_text, "%lf", &aprspos.lon);
@@ -1053,8 +1075,20 @@ uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMes
     auto ilng = aprsmsg.msg_payload.length();
     if(ilng >= UDP_TX_BUF_SIZE)
         ilng = UDP_TX_BUF_SIZE - 1;
-    memcpy(msg_buffer, aprsmsg.msg_payload.c_str(), ilng);
-    return static_cast<uint16_t>(ilng);
+
+    // CHR-01: strip C0/C1 controls, invalid/overlong UTF-8 and bidi/
+    // zero-width format characters from the outgoing text before it hits
+    // the wire. This single memcpy is the chokepoint for every TX
+    // composer (serial, BLE, web, T-Deck, ...), since they all converge on
+    // sendMessage() -> encodeAPRS() -> here. PLAIN mode: this payload can
+    // also be a position or telemetry frame, whose structural bytes
+    // ('/', '{', ':', ...) are printable ASCII and must survive.
+    char cFiltered[UDP_TX_BUF_SIZE];
+    memcpy(cFiltered, aprsmsg.msg_payload.c_str(), ilng);
+    size_t filtered_len = charset_filter_apply(cFiltered, ilng, CHARSET_FILTER_PLAIN);
+
+    memcpy(msg_buffer, cFiltered, filtered_len);
+    return static_cast<uint16_t>(filtered_len);
 }
 
 //10:30:29 RX-LoRa: 105 ! xAE48D54D 05 1 0 9V1LH-1,OE1KBC-12>*!0122.64N/10356.52E#/B=005/A=000161/P=1004.9/H=40.2/T=28.9/Q=1005.4/G232;2321 HW:04 MOD:03 FCS:15D5 FW:17 LH:09
@@ -1126,6 +1160,17 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
 // Used by the mesh relay path and the gateway UDP upload (same wire format).
 void appendHeySignalReport(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, int mheard_count)
 {
+    // Die Kette waechst mit jedem Relais um bis zu HEY_REPORT_GROUP_MAX Zeichen.
+    // Regulaer begrenzt MAX_HOP_LIMIT die Zahl der Gruppen, ein von der
+    // Luftschnittstelle hereingereichtes '@'-Paket mit ueberlanger Nutzlast aber
+    // nicht. Ohne Schranke waechst der re-encodierte Rahmen ueber
+    // UDP_TX_BUF_SIZE, wo lora_functions.cpp ihn auf Byteebene kappt -- also
+    // mitten in einer Gruppe, was updateHeyPath() nicht mehr parsen kann. Die
+    // Kette hier zu beenden ist der verlustaermere Weg: was bereits drinsteht,
+    // bleibt gueltig.
+    if (aprsmsg.msg_payload.length() + HEY_REPORT_GROUP_MAX > HEY_PATH_PAYLOAD_MAX)
+        return;
+
     aprsmsg.msg_payload.concat(String(mheard_count));
     aprsmsg.msg_payload.concat(',');
     aprsmsg.msg_payload.concat(String(rssi*-1.0, 0));
@@ -1167,11 +1212,21 @@ uint16_t encodeLoRaAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10
 
     // Create buffer
     msg_buffer[0]='<';
-    
+
     msg_buffer[1]=0xFF;
     msg_buffer[2]=0x01;
 
-    snprintf(msg_start, sizeof(msg_start), "%s>APLT00-1,WIDE1-1:!%07.2lf%c%c%08.2lf%c%c%s", cSourceCall, slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, meshcom_settings.node_atxt);
+    // CHR-02: strip APRS structure separators and truncate on a UTF-8
+    // boundary at the same 25-byte cap decodeAPRSPOS() applies on receive
+    // (aprs_functions.cpp:632), so a receiver's byte-counting parser never
+    // inherits a split multi-byte sequence.
+    char catxt[sizeof(meshcom_settings.node_atxt)];
+    snprintf(catxt, sizeof(catxt), "%s", meshcom_settings.node_atxt);
+    size_t iatxt = charset_filter_apply(catxt, strlen(catxt), CHARSET_FILTER_STRIP_SEPARATORS);
+    iatxt = charset_utf8_safe_truncate(catxt, iatxt, 25);
+    catxt[iatxt] = 0x00;
+
+    snprintf(msg_start, sizeof(msg_start), "%s>APLT00-1,WIDE1-1:!%07.2lf%c%c%08.2lf%c%c%s", cSourceCall, slat, lat_c, meshcom_settings.node_symid, slon, lon_c, meshcom_settings.node_symcd, catxt);
 
     ilng = strlen(msg_start) + 3;
 
@@ -1275,10 +1330,17 @@ uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSou
 
     String strtmp = meshcom_settings.node_atxt;
     strtmp.trim();
-    if(strtmp.length() > 16)
-        strtmp = strtmp.substring(0, 16);
 
-    snprintf(msg_start, sizeof(msg_start), "%s>%s:!%c%c%c%c%c%c%c%c%c%c P[%s", cSourceCall, meshcom_settings.node_aprsmc, meshcom_settings.node_symid, clat[0], clat[1], clat[2], clat[3], clon[0], clon[1], clon[2], clon[3], meshcom_settings.node_symcd, strtmp.c_str());
+    // CHR-02: strip APRS structure separators and truncate on a UTF-8
+    // boundary -- replaces the previous byte-blind substring(0,16), which
+    // could cut a multi-byte sequence in half.
+    char catxt[sizeof(meshcom_settings.node_atxt)];
+    snprintf(catxt, sizeof(catxt), "%s", strtmp.c_str());
+    size_t iatxt = charset_filter_apply(catxt, strlen(catxt), CHARSET_FILTER_STRIP_SEPARATORS);
+    iatxt = charset_utf8_safe_truncate(catxt, iatxt, 16);
+    catxt[iatxt] = 0x00;
+
+    snprintf(msg_start, sizeof(msg_start), "%s>%s:!%c%c%c%c%c%c%c%c%c%c P[%s", cSourceCall, meshcom_settings.node_aprsmc, meshcom_settings.node_symid, clat[0], clat[1], clat[2], clat[3], clon[0], clon[1], clon[2], clon[3], meshcom_settings.node_symcd, catxt);
 
     ilng = strlen(msg_start) + 3;
 
