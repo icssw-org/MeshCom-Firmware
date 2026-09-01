@@ -69,7 +69,15 @@ definitions for HELTEC_V3
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_MULTIPLIER 4.9245
+// Referenzmessung OE3LCR 2026-09-01 (Metrahit ISO, TRMS) am Wireless Stick V3:
+// Multimeter am Akku 4,093 V (unter Last) / 4,127 V (Leerlauf), Firmware zeigte 4,88 V
+// -> 19 % zu hoch. Am ADC-Pin liegen 991 counts = 798,6 mV, echtes Teilerverhaeltnis 5,125.
+// Korrekter Multiplikator: 4,9245 x 4093/4880 = 4,13. Der bisherige Wert 4,9245 ist identisch
+// mit dem des Vision Master E213 und wurde offenbar beim Anlegen dieser Variante uebernommen.
+// Mit 4,9245 faellt die Messung aus dem Plausibilitaetsband von battDetectUpdate()
+// (1,15 x MAXV) -> der Node meldete "keine Batteriehardware", BATT 0.00 V, kein /B= in den
+// APRS-Positionen. Siehe icssw-org/MeshCom-Firmware Issue #1116.
+#define ADC_MULTIPLIER 4.13
 
 #define USE_SX1262
 
