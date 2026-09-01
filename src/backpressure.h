@@ -19,7 +19,10 @@
 // Episode model (operator decision 2026-08-30, QRS threshold and QRV gating
 // revised 2026-08-31 after a gateway field measurement):
 //   - QRS once when the queue genuinely builds (depth >= 5, fixed across
-//     boards, independent of MAX_RING; the gateway baseline sits at 1-4).
+//     boards, independent of MAX_RING; the gateway baseline sits at 1-4) AND
+//     the sender has put at least 3 messages of their own onto that
+//     already-full ring (QRS_MIN_USER_MSGS, 2026-09-01: depth alone counts
+//     relay/ACK/beacon traffic and warned the sender on their first message).
 //     DK5EN-98 2026-08-31: a 5.5-minute normal-operation capture with no
 //     burst in sight showed baseline depth 1-4 (mode 2) and three false
 //     QRS/QRV pairs under the old rule (depth > 1, i.e. > QUIET_DEPTH),
@@ -187,6 +190,17 @@ public:
     /// 5 on every ring size (10/20/30), not a percentage of MAX_RING.
     static const int QRS_MIN_DEPTH = 5;
 
+    /// How many locally originated user messages must land on a ring that is
+    /// already at/above qrsThreshold() before QRS fires. Operator decision
+    /// 2026-09-01: txRingDepth() counts relay frames, ACKs and beacons too, so
+    /// a gateway idling at depth 4 handed the very first typed message a QRS
+    /// for a queue the sender had not built. onSend() is called exactly once
+    /// per typed message and never for relay/ACK/beacon traffic, so counting
+    /// its calls counts the sender's own contribution. The counter restarts
+    /// whenever the ring is seen below qrsThreshold() again -- a sender whose
+    /// messages drain between keystrokes is not the problem.
+    static const int QRS_MIN_USER_MSGS = 3;
+
     explicit BackPressure(int max_ring) { configure(max_ring); }
 
     /// (Re)bind to a ring size and drop any running episode.
@@ -202,6 +216,7 @@ public:
         latch_        = BP_NOTICE_NONE;
         quiet_armed_  = false;
         quiet_since_  = 0;
+        qrs_user_msgs_ = 0;
     }
 
     int maxRing() const { return max_ring_; }
@@ -269,6 +284,10 @@ public:
         if(depth > QUIET_DEPTH)
             quiet_armed_ = false;
 
+        // Below the QRS line the sender's own run is over (QRS_MIN_USER_MSGS).
+        if(depth < qrsThreshold())
+            qrs_user_msgs_ = 0;
+
         // A real drop is the most specific news there is, so it outranks the
         // plain threshold notice — and it always implies the refusal state.
         if(dropped)
@@ -293,6 +312,14 @@ public:
             // an already-open QRT episode is untouched by this branch (the
             // guard above keeps state_ at BP_QRT) and still only releases at
             // the quiet band below, same as before.
+            //
+            // QRS_MIN_USER_MSGS: the first two typed messages that find the
+            // ring at/above the line stay silent -- the depth may be relay
+            // traffic the sender did not cause. An open QRT episode dipping
+            // through this band is unaffected either way: state_ stays
+            // BP_QRT (guard below) and its latch already sits above QRS.
+            if(++qrs_user_msgs_ < QRS_MIN_USER_MSGS)
+                return BP_NOTICE_NONE;
             if(state_ != BP_QRT)
                 state_ = BP_QRS;
             return latchIfHigher(BP_NOTICE_QRS);
@@ -325,6 +352,12 @@ public:
     {
         if(depth < 0)
             depth = 0;
+
+        // Same rule as onSend(): a ring seen below the QRS line ends the
+        // sender's own run (QRS_MIN_USER_MSGS). The drain poll is where that
+        // sighting usually happens, between two typed messages.
+        if(depth < qrsThreshold())
+            qrs_user_msgs_ = 0;
 
         if(depth > QUIET_DEPTH)
         {
@@ -400,6 +433,7 @@ private:
     BpNotice latch_;
     bool     quiet_armed_;
     uint32_t quiet_since_;
+    int      qrs_user_msgs_;
 };
 
 #endif // __cplusplus
