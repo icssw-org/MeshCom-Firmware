@@ -68,12 +68,16 @@ void sendPing(char msg_call[10]);
 void SendPong(String msg_source_call, unsigned int msg_id);
 void PongFail(String msg_source_call);
 
-void sendMessage(char *msg_text, int len);
+// BP-09: return value lets a caller keep the operator's typed text instead
+// of clearing an input field for a message that never went out -- see
+// BpSendResult in backpressure.h.
+int sendMessage(char *msg_text, int len);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);
 void sendPosition(unsigned long intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
 void SendAckMessage(String dest_call, unsigned int iAckId);
 void sendHey();
+bool sendHeyShot();
 void sendTelemetry(int ID);
 
 unsigned int setSMartBeaconing(double flat, double flon);
@@ -104,6 +108,9 @@ int count_char(String s, char c);
 
 void addRingPointer(volatile int &toWrite, volatile int &toRead, int iMAX, const char* bufName = "?");
 
+void oledStat();
+void oledInvalidate();
+extern bool bOledLog;
 bool is_equ(const char* buf1, const char* buf2);
 int is_pos(const char* buf, const char* comp_buf);
 

@@ -30,14 +30,19 @@
 extern Audio audio;
 
 void init_audio();
+// Alle Aufrufe stellen nur einen Auftrag in die Audio-Queue und kehren sofort
+// zurueck; abgespielt wird ausschliesslich im Audio-Task.
 bool play_file_from_sd(const char *filename);
 bool play_file_from_sd(const char *filename, int volume);
-bool play_file_from_sd_blocking(const char *filename);
-bool play_file_from_sd_blocking(const char *filename, int volume);
+// cw_fallback: Morsezeichen, das der Audio-Task spielt, wenn die Datei fehlt;
+// AUDIO_CW_START fuer die Startkennung, 0 fuer keinen Ersatz.
+#define AUDIO_CW_START  '\x01'
+bool audio_play_file_or_cw(const char *filename, int volume, char cw_fallback);
 void play_cw(const char character);
 void play_cw(const char character, int volume);
 void play_cw_start();
-void play_function(void *parameter);
 void audio_set_mute(bool mute);
+bool audio_play_tone(const char *what);
+extern int audio_dbg_mode;
 
 #endif

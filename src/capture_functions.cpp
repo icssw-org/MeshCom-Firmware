@@ -3,7 +3,9 @@
 #include <string.h>
 
 // Spitze Klammern (nicht Anfuehrungszeichen) fuer configuration.h und
-// printfdeb_functions.h -- siehe die gleiche Begruendung in
+// printfdeb_functions.h: Anfuehrungszeichen suchen zuerst im Verzeichnis
+// DIESER Datei (src/) und wuerden im nativen Testbuild an den Shims in
+// test/support/ vorbeigreifen -- siehe die gleiche Begruendung in
 // txring_functions.cpp.
 #include <configuration.h>
 #include <printfdeb_functions.h>
@@ -11,6 +13,8 @@
 #include "capture_functions.h"
 
 bool bTXCAPTURE = false;
+
+#if MC_CAPTURE   // bTXCAPTURE oben bleibt immer definiert (siehe Header)
 
 // Der RX-Mitschnitt haengt an bLORADEBUG (lora_functions.cpp). Hier nur
 // deklariert statt ueber loop_functions_extern.h gezogen: dieses Modul soll
@@ -220,3 +224,5 @@ void captureDrain(void)
     if(captureFormatNext(line, sizeof(line)))
         printfdeb("%s\n", line);
 }
+
+#endif // MC_CAPTURE

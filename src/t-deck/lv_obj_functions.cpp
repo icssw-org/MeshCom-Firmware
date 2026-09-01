@@ -18,6 +18,7 @@
 #include "tdeck_extern.h"
 #include "lv_obj_functions_extern.h"
 #include "tdeck_helpers.h"
+#include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
 #include <loop_functions_extern.h>
 #include <math.h>
 #include <cstring>
@@ -195,6 +196,29 @@ static unsigned long last_flush_millis = 0;
 // flush each incoming message so persisted state is always on flash.
 static const unsigned long FLUSH_INTERVAL_MS = 5UL * 60UL * 1000UL; // 5 minutes
 
+#if INSTRUMENT_ENABLED
+/* TEMPORARY -- measurement accessors, see src/instrument.h. These live here
+ * because msg_list, msg_tab_entries and persisted_msgs are file-local to this
+ * translation unit. Removed together with the rest of the scaffolding. */
+uint32_t instrument_msg_list_children(void)
+{
+    return (msg_list != NULL) ? (uint32_t)lv_obj_get_child_cnt(msg_list) : 0u;
+}
+
+uint32_t instrument_persisted_msg_count(void)
+{
+    return (uint32_t)persisted_msgs.size();
+}
+
+uint32_t instrument_active_tab_bubble_count(void)
+{
+    if (msg_active_tab_index < 0 || (size_t)msg_active_tab_index >= msg_tab_entries.size())
+        return 0u;
+
+    return (uint32_t)msg_tab_entries[(size_t)msg_active_tab_index].bubbles.size();
+}
+#endif
+
 static void msg_flush_timer_cb(lv_timer_t *t);
 static lv_timer_t *msg_flush_timer = NULL;
 static lv_timer_t *track_clear_timer = NULL;
@@ -230,6 +254,7 @@ static void msg_tabs_clear_all(void);
 static void msg_render_active_tab(void);
 static void msg_list_show_hint(const char *text);
 static void msg_list_append_bubble(const MsgBubble &bubble);
+static void msg_list_trim_view(void);
 
 struct HeaderEventData
 {
@@ -1457,18 +1482,18 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_text_color(map_no_data_label, lv_color_white(), 0);
     lv_obj_set_style_text_align(map_no_data_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(map_no_data_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(map_no_data_label, 320);
+    lv_obj_set_width(map_no_data_label, 200);
     lv_obj_align(map_no_data_label, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
     // Kontrast erhöhen
     lv_obj_set_style_img_recolor(map_ta, lv_color_black(), 0);
     lv_obj_set_style_img_recolor_opa(map_ta, LV_OPA_40, 0);   // 0 = kein Effekt, 255 = komplett schwarz
     
-    //lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_size(map_ta, 320, LV_VER_RES * 0.72);
+    lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_size(map_ta, 300, LV_VER_RES * 0.72);
 
-    lv_img_set_zoom(map_ta, 320);
-    //lv_img_set_zoom(map_no_data_label, 320);
+    // MAP in das Fenster einpassen dann passen aber die positioen nicht mehr
+    //lv_img_set_zoom(map_ta, LV_HOR_RES);
     
 
     lv_obj_t * btzoomout = lv_btn_create(t7);
@@ -1751,18 +1776,18 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     {
         if(map_point_call[ip] == callsign)
         {
+            // G01: the slot must not keep a pointer to a deleted object -- the
+            // off-screen early return below leaves the slot as it is, and the next
+            // refresh would delete it again (use-after-free, reboot on zoom).
             if(map_point[ip] != NULL)
             {
                 lv_obj_del(map_point[ip]);
-                delay(40);
                 map_point[ip] = NULL;
-
             }
 
             if(map_point_label[ip] != NULL)
             {
                 lv_obj_del(map_point_label[ip]);
-                delay(40);
                 map_point_label[ip] = NULL;
             }
 
@@ -1777,15 +1802,13 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     lv_coord_t x = 0;
     lv_coord_t y = 0;
 
-    if (!sdmap_in_current_tile(dlat, dlon))
+    int16_t sx = 0, sy = 0;
+    sdmap_project_view(dlat, dlon, &sx, &sy);
+    if (sx < -10 || sy < -10 || sx > sdmap_view_w() + 10 || sy > sdmap_view_h() + 10)
     {
-        // Station liegt nicht in der aktuell sichtbaren Kachel - keinen Punkt zeichnen
+        // Station liegt ausserhalb des sichtbaren Kartenausschnitts - keinen Punkt zeichnen
         return;
     }
-
-    
-    int16_t sx = 0, sy = 0;
-    sdmap_project(dlat, dlon, &sx, &sy);
     x = (lv_coord_t)sx;
     y = (lv_coord_t)sy;
 
@@ -1804,9 +1827,11 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
 
         if(map_point[map_point_count] != NULL)
         {
+            // UP-02: no delay here -- this runs on the LoRa RX path
+            // (OnRxDone -> tdeck_add_pos_point) and 30x inside refresh_map();
+            // the lost-flush symptom it papered over is covered by the
+            // NULL-immediately fix (G01) and the bus mitigation.
             lv_obj_del(map_point[map_point_count]);
-
-            delay(10);
         }
 
         if(map_point_label[map_point_count] != NULL)
@@ -1827,7 +1852,7 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
    
     map_point[ipoint] = lv_obj_create(map_ta);
     lv_obj_set_size(map_point[ipoint],10, 10);
-    lv_obj_set_pos(map_point[ipoint], x, y);
+    lv_obj_set_pos(map_point[ipoint], x - 5, y - 5);      // dot centred on the position
     if(bHome)
         lv_obj_set_style_bg_color(map_point[ipoint] , (lv_color_t)LV_COLOR_MAKE(0, 0, 255), 0);
     else
@@ -1840,7 +1865,18 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     lv_label_set_text(map_point_label[ipoint], callsign.c_str());
     lv_obj_set_style_text_font(map_point_label[ipoint], &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(map_point_label[ipoint], lv_color_black(), 0);
-    lv_obj_set_pos(map_point_label[ipoint], x - 5, y + 11);
+    lv_obj_set_pos(map_point_label[ipoint], x - 5, y + 6);
+
+    // The composed map image (sdmap_refresh) has the own position at its centre by
+    // construction; report the residual so the harness can verify it.
+    if(bHome)
+    {
+        int vw = sdmap_view_w(), vh = sdmap_view_h();
+        Serial.printf("[MAP];zoom;%d;home_px;%d;%d;view;%d;%d;map_pos;%d;%d;center_err;%d;%d\n",
+                      sdmap_get_zoom(), (int)x, (int)y, vw, vh,
+                      (int)lv_obj_get_x(map_ta), (int)lv_obj_get_y(map_ta),
+                      (int)(x - vw / 2), (int)(y - vh / 2));
+    }
 
     // MAP screen
     /*
@@ -1867,6 +1903,120 @@ void init_map()
 
     map_point_count = 0;
 
+}
+
+/**
+ * zoom the SD map in (dir > 0) or out (dir < 0) around the own position.
+ * Single implementation for the keyboard, the touch buttons and --mapzoom.
+ */
+void tdeck_map_zoom(int dir)
+{
+    if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
+    {
+        sdmap_lastKnownLat = gpsData.latitude;
+        sdmap_lastKnownLon = gpsData.longitude;
+    }
+    if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
+    {
+        sdmap_lastKnownLat = meshcom_settings.node_lat;
+        sdmap_lastKnownLon = meshcom_settings.node_lon;
+    }
+    if (dir > 0) sdmap_zoom_in();
+    else         sdmap_zoom_out();
+    sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+    refresh_map(meshcom_settings.node_map);
+    add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
+}
+
+// TD-07: pan state. While s_map_user_panned is set, the four auto-recentre
+// call sites (tab switch to MAP, set_map(), tdeck_add_pos_point() on an own-
+// position beacon, the 30 s tile-boundary poll in esp32_main.cpp) must not
+// override the view centre the user panned to. sdmap_lastKnownLat/Lon keep
+// tracking the real GPS/own position throughout -- that is what the own-
+// position marker (add_map_point / refresh_map) draws from, so panning never
+// moves the GPS marker itself, only the viewport around it.
+static bool   s_map_user_panned = false;
+static double s_map_pan_lat = 0.0;
+static double s_map_pan_lon = 0.0;
+
+bool tdeck_map_user_panned()
+{
+    return s_map_user_panned;
+}
+
+/**
+ * pans the SD map by (dxPx, dyPx) screen pixels at the current zoom, keeping
+ * the pan centred wherever the user left it until tdeck_map_recenter() is
+ * called. Single implementation for the keyboard i/j/k/l keys.
+ */
+void tdeck_map_pan(int dxPx, int dyPx)
+{
+    double lat = s_map_user_panned ? s_map_pan_lat : sdmap_lastKnownLat;
+    double lon = s_map_user_panned ? s_map_pan_lon : sdmap_lastKnownLon;
+    if (lat == 0.0 && lon == 0.0)
+    {
+        lat = meshcom_settings.node_lat;
+        lon = meshcom_settings.node_lon;
+    }
+    sdmap_pan_latlon(&lat, &lon, dxPx, dyPx);
+    s_map_pan_lat = lat;
+    s_map_pan_lon = lon;
+    s_map_user_panned = true;
+
+    // PERF (TD-07, tile cache filed separately): sdmap_refresh() has no
+    // decoded-tile cache -- every call here re-reads and re-decodes every
+    // intersecting SD tile from scratch. Measured 0.33-0.79 s per recompose
+    // at 20 MHz SD clock (docs/tdeck-findings-20260828.md SS5), PNG decode
+    // dominating at ~170 ms/tile. Each pan keypress pays this cost; a held
+    // key repeats it per repeat event, so it is discrete-step usable but not
+    // smooth. Accepted for v1 per operator decision.
+    sdmap_refresh(map_ta, s_map_pan_lat, s_map_pan_lon);
+    refresh_map(meshcom_settings.node_map);
+    // The GPS/own-position marker always tracks the real position, never the
+    // pan point (TD-07 requirement: pan must not fight the marker draw).
+    add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
+}
+
+/**
+ * current SD map view centre: the panned point while the user has panned,
+ * the tracked own/GPS position otherwise. Used by call sites that redraw the
+ * viewport (e.g. on a map-set switch) so a pan survives them.
+ */
+static void tdeck_map_view_center(double * lat, double * lon)
+{
+    if (s_map_user_panned)
+    {
+        *lat = s_map_pan_lat;
+        *lon = s_map_pan_lon;
+    }
+    else
+    {
+        *lat = sdmap_lastKnownLat;
+        *lon = sdmap_lastKnownLon;
+    }
+}
+
+/**
+ * clears the pan and recentres the SD map on the own position, like the
+ * automatic recentre paths used to do unconditionally.
+ */
+void tdeck_map_recenter()
+{
+    s_map_user_panned = false;
+
+    if (gpsData.latitude != 0.0 || gpsData.longitude != 0.0)
+    {
+        sdmap_lastKnownLat = gpsData.latitude;
+        sdmap_lastKnownLon = gpsData.longitude;
+    }
+    if (sdmap_lastKnownLat == 0.0 && sdmap_lastKnownLon == 0.0)
+    {
+        sdmap_lastKnownLat = meshcom_settings.node_lat;
+        sdmap_lastKnownLon = meshcom_settings.node_lon;
+    }
+    sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+    refresh_map(meshcom_settings.node_map);
+    add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
 }
 
 /**
@@ -1922,16 +2072,30 @@ void set_map(int iMap)
                 sdmap_lastKnownLat = gpsData.latitude;
                 sdmap_lastKnownLon = gpsData.longitude;
             }
-            sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
-            map_x[iMap] = SDMAP_TILE_PX;
-            map_y[iMap] = SDMAP_TILE_PX;
+            {
+                lv_obj_t *vp = lv_obj_get_parent(map_ta);
+                if(vp != NULL)
+                {
+                    lv_obj_clear_flag(vp, LV_OBJ_FLAG_SCROLLABLE);
+                    lv_obj_set_scrollbar_mode(vp, LV_SCROLLBAR_MODE_OFF);
+                }
+            }
+            // TD-07: a map-set switch still redraws (the tile set changed),
+            // but stays on the panned point instead of yanking back to GPS.
+            {
+                double centerLat, centerLon;
+                tdeck_map_view_center(&centerLat, &centerLon);
+                sdmap_refresh(map_ta, centerLat, centerLon);
+            }
+            map_x[iMap] = sdmap_view_w();
+            map_y[iMap] = sdmap_view_h();
             break;
         }
     }
 
-    //lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_align(map_ta, LV_ALIGN_TOP_LEFT);
+    lv_obj_set_pos(map_ta, 0, 0);
     lv_obj_set_size(map_ta, map_x[iMap], map_y[iMap]);
-//    lv_obj_align(map_ta, LV_ALIGN_CENTER, 0, 0);
     lv_obj_clean(map_ta);   // entfernt WIRKLICH alle Kind-Objekte (Punkte + Labels), auch verwaiste
     for(int im = 0; im < MAX_POINTS; im++)
     {
@@ -1955,6 +2119,10 @@ void tft_on()
 {
     if (bDEBUG)
         Serial.println("[TDECK]...tft_on: called");
+    // Bench-Harness: Zustandswechsel des Panels protokollieren (nur wenn es
+    // tatsaechlich dunkel war -- tft_on() kommt bei jedem Tastendruck).
+    if (tft_is_sleeping || current_brightness_level == 0)
+        Serial.printf("[TFT];on;ms;%lu;was_sleeping;%d\n", (unsigned long)millis(), tft_is_sleeping ? 1 : 0);
     // Ensure we have a valid brightness to restore
     if(pre_sleep_brightness_level == 0) pre_sleep_brightness_level = BRIGHTNESS_STEPS;
 
@@ -2001,6 +2169,8 @@ void tft_off()
         tft.writecommand(TFT_DISPOFF);
         tft.writecommand(TFT_SLPIN);
         tft_is_sleeping = true;
+        Serial.printf("[TFT];off;ms;%lu;idle_ms;%lu\n", (unsigned long)millis(),
+                      (unsigned long)(millis() - tdeck_tft_timer));
     }
 
     // always turn off keyboard backlight
@@ -2012,6 +2182,30 @@ void tft_off()
 }
 
 
+// TM-08: the header is refreshed every 500 ms; with partial refresh every
+// lv_label_set_text() / style write invalidates its area even when nothing
+// changed -- that was the idle repaint driver (2.5 full flushes/s with
+// full_refresh=1). Only touch the object when the value differs.
+static void label_set_if_changed(lv_obj_t *obj, const char *text)
+{
+    if(obj == NULL || text == NULL)
+        return;
+    const char *cur = lv_label_get_text(obj);
+    if(cur != NULL && strcmp(cur, text) == 0)
+        return;
+    lv_label_set_text(obj, text);
+}
+
+static void text_color_set_if_changed(lv_obj_t *obj, lv_color_t color)
+{
+    if(obj == NULL)
+        return;
+    lv_color_t cur = lv_obj_get_style_text_color(obj, LV_PART_MAIN);
+    if(cur.full == color.full)
+        return;
+    lv_obj_set_style_text_color(obj, color, LV_PART_MAIN);
+}
+
 static void update_header_sat_indicator(void)
 {
     if(header_sat_label == NULL || header_sat_icon == NULL)
@@ -2020,8 +2214,8 @@ static void update_header_sat_indicator(void)
     // If GPS was turned off via the command/UI show the icon as 'off' (white)
     if(!bGPSON)
     {
-        lv_label_set_text(header_sat_label, "0");
-        lv_obj_set_style_text_color(header_sat_icon, lv_color_white(), LV_PART_MAIN);
+        label_set_if_changed(header_sat_label, "0");
+        text_color_set_if_changed(header_sat_icon, lv_color_white());
         lv_obj_add_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
         return;
@@ -2029,12 +2223,12 @@ static void update_header_sat_indicator(void)
 
     char sat_text[8];
     snprintf(sat_text, sizeof(sat_text), "%u", (unsigned int)posinfo_satcount);
-    lv_label_set_text(header_sat_label, sat_text);
+    label_set_if_changed(header_sat_label, sat_text);
 
     // Show green when we have a fix OR at least some satellites visible, red when GPS on but no sats/fix
     lv_color_t icon_color = (posinfo_fix || posinfo_satcount > 0) ? lv_palette_main(LV_PALETTE_GREEN)
                                                                          : lv_palette_main(LV_PALETTE_RED);
-    lv_obj_set_style_text_color(header_sat_icon, icon_color, LV_PART_MAIN);
+    text_color_set_if_changed(header_sat_icon, icon_color);
     lv_obj_clear_flag(header_sat_label, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(header_sat_icon, LV_OBJ_FLAG_HIDDEN);
 }
@@ -2045,20 +2239,24 @@ static void update_header_batt_indicator(float batt, int proz)
         return;
 
     const float usb_voltage_threshold = 4.2f;
-    const bool usb_powered = (batt > usb_voltage_threshold);
+    // BAT-01: batt==0.0f is the established "no reading" convention (grounded pin, or the
+    // ADC-path no-battery detection in batt_functions.cpp) -- without this, a genuinely
+    // absent battery fell through to the percent branch below and showed a misleading
+    // "100%"/full-battery icon (mv_to_percent() returns 100 for <1000 mV).
+    const bool usb_powered = (batt <= 0.0f) || (batt > usb_voltage_threshold);
 
     if(usb_powered)
     {
-        lv_label_set_text(header_batt_label, "USB");
-        lv_label_set_text(header_batt_icon, LV_SYMBOL_USB);
-        lv_obj_set_style_text_color(header_batt_icon, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_MAIN);
+        label_set_if_changed(header_batt_label, "USB");
+        label_set_if_changed(header_batt_icon, LV_SYMBOL_USB);
+        text_color_set_if_changed(header_batt_icon, lv_palette_main(LV_PALETTE_ORANGE));
         return;
     }
 
     int clamped_proz = clamp_int(proz, 0, 100);
     char percent_text[8];
     snprintf(percent_text, sizeof(percent_text), "%d%%", clamped_proz);
-    lv_label_set_text(header_batt_label, percent_text);
+    label_set_if_changed(header_batt_label, percent_text);
 
     const char *icon = LV_SYMBOL_BATTERY_EMPTY;
     lv_color_t icon_color = lv_palette_main(LV_PALETTE_LIGHT_GREEN);
@@ -2080,8 +2278,8 @@ static void update_header_batt_indicator(float batt, int proz)
         icon = LV_SYMBOL_BATTERY_1;
     }
 
-    lv_label_set_text(header_batt_icon, icon);
-    lv_obj_set_style_text_color(header_batt_icon, icon_color, LV_PART_MAIN);
+    label_set_if_changed(header_batt_icon, icon);
+    text_color_set_if_changed(header_batt_icon, icon_color);
 }
 
 /* WiFi / Bluetooth status in header
@@ -2105,8 +2303,8 @@ static void update_header_wifi_indicator(void)
             if (bDEBUG)
                 Serial.printf("[TDECK]...update_header_wifi_indicator: node_wifion=false, WiFi.status=%d, ssid='%s'\n", (int)WiFi.status(), meshcom_settings.node_ssid);
             
-            lv_obj_set_style_text_color(header_wifi_icon, lv_color_white(), LV_PART_MAIN);
-            lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+            text_color_set_if_changed(header_wifi_icon, lv_color_white());
+            label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
             lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
             return;
         }
@@ -2119,8 +2317,8 @@ static void update_header_wifi_indicator(void)
 
     if(is_connected || is_ap_active)
     {
-        lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
-        lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+        text_color_set_if_changed(header_wifi_icon, lv_palette_main(LV_PALETTE_GREEN));
+        label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
         lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
         return;
     }
@@ -2129,15 +2327,15 @@ static void update_header_wifi_indicator(void)
     // Only if global switch is ON (which we checked above, but double check logic)
     if (bWIFIAP || bWEBSERVER || (strlen(meshcom_settings.node_ssid) > 1))
     {
-        lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN);  //ex lv_palette_main(LV_PALETTE_RED)
-        lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+        text_color_set_if_changed(header_wifi_icon, lv_palette_main(LV_PALETTE_LIME));  //ex lv_palette_main(LV_PALETTE_RED)
+        label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
         lv_obj_clear_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
     else
     {
         // Not enabled/configured -> White
-        lv_obj_set_style_text_color(header_wifi_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
-        lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
+        text_color_set_if_changed(header_wifi_icon, lv_palette_main(LV_PALETTE_GREY)); //ex lv_color_white()
+        label_set_if_changed(header_wifi_icon, LV_SYMBOL_WIFI);
         lv_obj_add_flag(header_wifi_icon, LV_OBJ_FLAG_HIDDEN);
     }
 }
@@ -2147,8 +2345,8 @@ static void update_header_bt_indicator(void)
     if(header_bt_icon == NULL)
         return;
     // Always render the icon glyph in white
-    lv_obj_set_style_text_color(header_bt_icon, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN); //ex lv_color_white()
-    lv_label_set_text(header_bt_icon, LV_SYMBOL_BLUETOOTH);
+    text_color_set_if_changed(header_bt_icon, lv_palette_main(LV_PALETTE_GREY)); //ex lv_color_white()
+    label_set_if_changed(header_bt_icon, LV_SYMBOL_BLUETOOTH);
 
     /* KBC
     // Ensure a square touch/visual area for the icon
@@ -2166,7 +2364,7 @@ static void update_header_bt_indicator(void)
     if (deviceConnected)
     {
         // Connected: blue logo
-        lv_obj_set_style_text_color(header_bt_icon, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_make(0x00, 0x00, 0xff)
+        text_color_set_if_changed(header_bt_icon, lv_palette_main(LV_PALETTE_LIME)); //ex lv_color_make(0x00, 0x00, 0xff)
     }
     else
     {
@@ -2488,6 +2686,28 @@ static void msg_flush_timer_cb(lv_timer_t *t)
     }
 }
 
+// TD-03 / H1: die Ansicht (msg_list) auf dieselbe Obergrenze wie das Modell
+// (msg_tabs_trim_history) kuerzen. Der Schnellpfad in msg_tabs_add_message()
+// haengt neue Bubbles nur an; ohne diesen Schnitt wuchs die Ansicht des
+// gerade offenen Tabs unbegrenzt (2 760 B PSRAM pro Nachricht, tdeck-baseline
+// Run 2). lv_obj_del() loest LV_EVENT_DELETE aus, das HeaderEventData und
+// DeleteEventData der Bubble freigibt.
+static void msg_list_trim_view(void)
+{
+    if(msg_list == NULL)
+        return;
+
+    while(lv_obj_get_child_cnt(msg_list) > MSG_TAB_MAX_MESSAGES)
+    {
+        lv_obj_t *oldest = lv_obj_get_child(msg_list, 0);
+        if(oldest == NULL)
+            break;
+        if(oldest == msg_list_hint_label)
+            msg_list_hint_label = NULL;
+        lv_obj_del(oldest);
+    }
+}
+
 static void msg_tabs_trim_history(std::vector<MsgBubble> &bubbles)
 {
     if(bubbles.size() <= MSG_TAB_MAX_MESSAGES)
@@ -2768,8 +2988,9 @@ static void msg_tabs_add_message(const String &group, const MsgBubble &bubble)
     {
         if (index == msg_active_tab_index)
         {
-            // Already active, just append to view
+            // Already active, just append to view -- and trim it like the model
             msg_list_append_bubble(bubble);
+            msg_list_trim_view();
 
             lv_obj_t *last = lv_obj_get_child(msg_list, -1);
             if(last != NULL)
@@ -3496,7 +3717,9 @@ void tdeck_update_batt_label(float batt, int proz)
         snprintf(vChar, sizeof(vChar), "Batt: %.2fV (%i%%)", batt, proz);
     }
 
-    if(batt > 4.2)
+    // BAT-01: same batt<=0 convention as update_header_batt_indicator() below -- otherwise a
+    // genuinely absent battery showed "Batt: 0.00V (100%)" instead of "Batt: USB".
+    if(batt <= 0.0 || batt > 4.2)
     {
         if(posinfo_fix > 0)
         {
@@ -3536,13 +3759,13 @@ void tdeck_update_time_label()
         meshcom_settings.node_date_second);
 
     if(btn_time_label != NULL)
-        lv_label_set_text(btn_time_label, cTime);
+        label_set_if_changed(btn_time_label, cTime);
     if(btn_time_label1 != NULL)
-        lv_label_set_text(btn_time_label1, cTime);
+        label_set_if_changed(btn_time_label1, cTime);
     if(btn_time_label2 != NULL)
-        lv_label_set_text(btn_time_label2, cTime);
+        label_set_if_changed(btn_time_label2, cTime);
     if(btn_time_label4 != NULL)
-        lv_label_set_text(btn_time_label4, cTime);
+        label_set_if_changed(btn_time_label4, cTime);
 
     if(header_time_label != NULL)
     {
@@ -3550,7 +3773,7 @@ void tdeck_update_time_label()
         snprintf(header_time, sizeof(header_time), "%02i:%02i",
             meshcom_settings.node_date_hour,
             meshcom_settings.node_date_minute);
-        lv_label_set_text(header_time_label, header_time);
+        label_set_if_changed(header_time_label, header_time);
     }
 
     // update_header_locator_label();
@@ -3624,7 +3847,11 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
             sdmap_lastKnownLon = meshcom_settings.node_lon;
         }
 
-        sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
+        // TD-07: an incoming own-position beacon still updates the tracked
+        // GPS position above and the marker draw at the call site below, but
+        // must not snap the viewport back while the user has panned.
+        if (!tdeck_map_user_panned())
+            sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
     }
 
     #endif
@@ -3978,13 +4205,9 @@ static void msg_focus_and_alert(bool bWithAudio)
         if (bDEBUG)
             Serial.println("[TDECK]...msg_focus_and_alert: Playing audio...");
 
-        if (!play_file_from_sd(meshcom_settings.node_audio_msg.c_str(), 12))
-        {
-            play_cw('r');
-        }
-        
-        if (bDEBUG)
-            Serial.println("[TDECK]...msg_focus_and_alert: Audio finished.");
+        // Einreihen, nicht abspielen: die SD-Suche und der Ton laufen im
+        // Audio-Task, loopTask (LVGL) steht dafuer nicht mehr 1.1 s still.
+        audio_play_file_or_cw(meshcom_settings.node_audio_msg.c_str(), 12, 'r');
     }
 }
 

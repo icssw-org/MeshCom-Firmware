@@ -4,6 +4,7 @@
 // 20230326: Version 4.00: START
 
 #include <Arduino.h>
+#include <Wire.h>
 #include <configuration.h>
 
 #if defined(ESP32)
@@ -205,7 +206,24 @@ void initDisplay()
         u8g2 = &u8g2_2;
     }
 
+    #if defined(BOARD_HELTEC_V3) || defined(BOARD_HELTEC_V4) || defined(BOARD_STICK_V3)
+        // OLED auf dem zweiten I2C-Controller (Wire1, Pins des Displays),
+        // Wire bleibt den Sensoren; U8g2 ruft Wire1.begin() ohne Pins auf und
+        // uebernimmt die hier gesetzten. 400 kHz statt 100 kHz.
+        Wire1.setPins(SDA_PIN, SCL_PIN);
+        u8g2->setBusClock(400000);
+    #endif
+
     u8g2->begin();
+
+    #if defined(BOARD_HELTEC_V3) || defined(BOARD_HELTEC_V4) || defined(BOARD_STICK_V3)
+    {
+        // Boot-Diagnose: antwortet das Panel auf Wire1? (0 = ACK)
+        Wire1.beginTransmission(0x3C);
+        int ack = Wire1.endTransmission();
+        printfdeb("[INIT]...OLED on Wire1 SDA %d SCL %d: ack=%d clock=%lu\n", SDA_PIN, SCL_PIN, ack, (unsigned long)Wire1.getClock());
+    }
+    #endif
 
     u8g2->setContrast(meshcom_settings.node_contrast);
 
@@ -316,6 +334,7 @@ void startDisplay(char line1[20], char line2[20], char line3[20])
         return;
 
     u8g2->clearDisplay();
+    oledInvalidate();
     u8g2->firstPage();
 
     do

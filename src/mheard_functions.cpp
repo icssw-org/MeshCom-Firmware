@@ -3,11 +3,21 @@
 #include <loop_functions_extern.h>
 #include <debugconf.h>
 #include <ArduinoJson.h>
+#include <ble_json_frame.h>
 #include <time_functions.h>
 #include <mheard_functions.h>
 
 #include "printfdeb_functions.h"
 
+// NATIVE_BUILD (pio test -e native_parsers, PT-01): these headers pull in
+// SD/SPI and the T-Deck LVGL UI chain. The BOARD_T_DECK*/BOARD_T_DECK_PRO
+// guards below already keep them out of any non-T-Deck firmware build, but
+// PlatformIO's Library Dependency Finder text-scans #include lines without
+// evaluating those macros, so it still tries (and fails) to pull lvgl into
+// the native test build. NATIVE_BUILD is never defined for a firmware
+// build, so this changes nothing there -- it only keeps the native test
+// binary, which never needs these headers, from tripping over the LDF scan.
+#ifndef NATIVE_BUILD
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <SD.h>
 #include <SPI.h>
@@ -18,6 +28,7 @@
 #if defined(BOARD_T_DECK_PRO)
 #include <t-deck-pro/tdeck_pro.h>
 #endif
+#endif // NATIVE_BUILD
 
 extern bool bDEBUG;
 
@@ -27,11 +38,41 @@ double mheardLat[MAX_MHEARD];
 double mheardLon[MAX_MHEARD];
 int mheardAlt[MAX_MHEARD];
 unsigned long mheardEpoch[MAX_MHEARD];
+
+// NC-01 (BACKLOG SS3.8o): monotonic heard-time, parallel to mheardEpoch[].
+// mheardEpoch[] stays wall-clock-based (getUnixClock()) and unchanged for
+// display/JSON, but a node with no NTP/GPS has no valid wall clock --
+// getUnixClock() runs mktime() on unset date fields, which yields garbage
+// (up to (unsigned long)-1). Aging entries by mheardEpoch[]+window vs.
+// getUnixClock() then wraps and every entry looks stale, even ones just
+// heard (loop_functions.cpp NCNT tag stays 0 forever). mheardMillis[] ages
+// entries by millis() instead, which needs no wall clock. Declared uint32_t
+// (not unsigned long): millis() is a 32-bit counter on every real target
+// (nRF52840/ESP32 `unsigned long` is 4 bytes there), and the rollover-safe
+// subtraction below relies on that width -- on the native/x86_64 test host
+// `unsigned long` is 8 bytes, so an explicit uint32_t keeps the same
+// wraparound behaviour there too instead of silently losing it.
+uint32_t mheardMillis[MAX_MHEARD];
 int mheardNCount[MAX_MHEARD];
+
+// NC-01: aging windows in milliseconds, mirroring the epoch-second windows
+// they replace (1 h / 12 h) at every mheardMillis[] comparison below. Both
+// are far below the ~49.7 day uint32_t rollover, so plain rollover-safe
+// unsigned subtraction (see comparisons below) is correct with no extra
+// rollover handling.
+#define MHEARD_AGE_WINDOW_MS   (60UL*60UL*1000UL)         // 1 h -- getMheardCount()
+#define MHEARD_PRUNE_WINDOW_MS (60UL*60UL*12UL*1000UL)    // 12 h -- updateMheard()/sendMheard()/showMHeard()
 
 unsigned char mheardPathBuffer1[MAX_MHPATH][50]; //Ringbuffer for MHeard Sourcepath
 char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 unsigned long mheardPathEpoch[MAX_MHPATH];
+
+// NC-02 (BACKLOG SS3.8o): mheardMillis[]'s (NC-01, above) exact counterpart
+// for the path ringbuffer -- mheardPathEpoch[] has the identical
+// clockless-node hazard at updateHeyPath()'s PATH DELETE check and at
+// showPath(). Same uint32_t rationale as mheardMillis[] (rollover-safe
+// millis() width on native/x86_64).
+uint32_t mheardPathMillis[MAX_MHPATH];
 uint8_t mheardPathLen[MAX_MHPATH];
 
 uint8_t mheardWrite = 0;   // counter for ringbuffer
@@ -57,6 +98,7 @@ void initMheard()
         mheardLon[iset]=0;
         mheardAlt[iset]=0;
         mheardEpoch[iset]=0;
+        mheardMillis[iset]=0;
         mheardNCount[iset]=0;
     }
 
@@ -65,6 +107,7 @@ void initMheard()
         memset(mheardPathBuffer1[iset], 0x00, sizeof(mheardPathBuffer1[iset]));
         memset(mheardPathCalls[iset], 0x00, sizeof(mheardPathCalls[iset]));
         mheardPathEpoch[iset]=0;
+        mheardPathMillis[iset]=0;
         mheardPathLen[iset]=0;
     }
 
@@ -129,9 +172,20 @@ void decodeMHeard(unsigned char u_mh_buffer[sizeof(mheardBuffer[0])], struct mhe
         {
             switch (itype)
             {
-                case 1: mheardLine.mh_date.concat(mh_buffer[iset]); break;
-                case 2: mheardLine.mh_time.concat(mh_buffer[iset]); break;
-                case 3: mheardLine.mh_payload_type = mh_buffer[iset]; break;
+                // mh_date/mh_time are fixed-width ("YYYY-MM-DD" / "HH:MM:SS",
+                // see getDateString()/getTimeString() in loop_functions.cpp,
+                // the only writer via updateMheard()'s snprintf format) --
+                // stop at that width instead of absorbing the rest of the
+                // 55-byte scan window (incl. NUL padding) when a truncated
+                // record has no closing '|'.
+                case 1: if(mheardLine.mh_date.length() < 10) mheardLine.mh_date.concat(mh_buffer[iset]); break;
+                case 2: if(mheardLine.mh_time.length() < 8) mheardLine.mh_time.concat(mh_buffer[iset]); break;
+                // Take only the first byte of the type field -- without a
+                // closing '|' the loop kept overwriting mh_payload_type with
+                // every subsequent byte (typically the zero padding that
+                // follows in a real ring-buffer slot), losing the type byte
+                // that was actually sent.
+                case 3: if(mheardLine.mh_payload_type == 0x00) mheardLine.mh_payload_type = mh_buffer[iset]; break;
                 case 4:
                 case 5:
                 case 6:
@@ -175,6 +229,9 @@ void saveMHeardPersistence()
         file.write((uint8_t*)mheardLat, sizeof(mheardLat));
         file.write((uint8_t*)mheardLon, sizeof(mheardLon));
         file.write((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
+        // mheardMillis[] (NC-01) is intentionally NOT persisted: millis()
+        // resets to 0 every boot, so a saved monotonic stamp would be
+        // meaningless after a reboot. loadMHeardPersistence() re-derives it.
         file.write((uint8_t*)mheardNCount, sizeof(mheardNCount));
         file.close();
     #endif
@@ -205,6 +262,9 @@ void savePathPersistence()
         file.write((uint8_t*)mheardPathCalls, sizeof(mheardPathCalls));
         file.write((uint8_t*)mheardPathBuffer1, sizeof(mheardPathBuffer1));
         file.write((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
+        // mheardPathMillis[] (NC-02) is intentionally NOT persisted, same
+        // reasoning as mheardMillis[] in saveMHeardPersistence() above:
+        // millis() resets to 0 every boot. loadPathPersistence() re-derives it.
         file.write((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
         file.close();
     #endif
@@ -226,16 +286,25 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
     int ipos=-1;
     int inext=-1;
-    
-    unsigned long ulmin = getUnixClock();
+
+    // MH-02 (BACKLOG SS3.8o): eviction candidate when the table is full and
+    // this callsign is new -- the entry with the largest monotonic age
+    // (millis() elapsed since last heard) is the oldest, so it is evicted
+    // first. Was tracked by mheardEpoch[] (wall clock) via `ulmin`, but
+    // `imin` was never assigned in the loop below, so this branch was dead
+    // (fell through to the sequential mheardWrite ring, see below). Ages by
+    // mheardMillis[] instead of mheardEpoch[], same clockless-node reason as
+    // NC-01: mheardEpoch[] can be garbage on a node with no valid wall clock.
+    uint32_t agemax = 0;
     int imin = -1;
 
     for(int iset=0; iset<MAX_MHEARD; iset++)
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            // DELETE after 12h
-            if((mheardEpoch[iset]+(60*60*12)) < getUnixClock())   // mheard last 12 hours
+            // DELETE after 12h -- aged by millis(), not by the (possibly
+            // clockless) wall clock, see mheardMillis[] above (NC-01).
+            if((uint32_t)(millis() - mheardMillis[iset]) >= MHEARD_PRUNE_WINDOW_MS)
             {
                 mheardCalls[iset][0] = 0x00;
                 inext = iset;   // gerade frei geworden
@@ -251,9 +320,11 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
                 }
                 else
                 {
-                    if(mheardEpoch[iset] < ulmin)
+                    uint32_t age = (uint32_t)(millis() - mheardMillis[iset]);
+                    if(age >= agemax)
                     {
-                        ulmin = mheardEpoch[iset];
+                        agemax = age;
+                        imin = iset;   // MH-02: oldest-so-far, evict this one if needed
                     }
                 }
             }
@@ -301,6 +372,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     memcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str(), icsize);
     
     mheardEpoch[ipos] = getUnixClock();
+    mheardMillis[ipos] = (uint32_t)millis();   // NC-01: monotonic heard-time
 
     if(bOld)
     {
@@ -345,10 +417,11 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     // send to Phone
     uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
     bleBuffer[0] = 0x44;
-    serializeJson(mhdoc, bleBuffer+1, measureJson(mhdoc)+1);
+    // Schranke ist der Puffer, nicht die JSON-Laenge (UP-01, BND-03)
+    uint16_t frame_len = bleJsonFrame(mhdoc, bleBuffer, sizeof(bleBuffer));
 
     if(isPhoneReady == 1)
-        addBLEOutBuffer(bleBuffer, measureJson(mhdoc)+1);
+        addBLEOutBuffer(bleBuffer, frame_len);
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 
@@ -467,8 +540,10 @@ void updateHeyPath(struct mheardLine &mheardLine)
     {
         if(mheardPathCalls[iset][0] != 0x00)
         {
-            // PATH DELETE after 1 Hours
-            if((mheardPathEpoch[iset]+(60*60*12)) < getUnixClock())  // mheard last 12 hours
+            // PATH DELETE after 12 Hours -- aged by millis(), not by the
+            // (possibly clockless) wall clock (NC-02, mirrors mheardMillis[]
+            // above / NC-01).
+            if(!mheardPathFreshMs(iset, MHEARD_PRUNE_WINDOW_MS))
             {
                 mheardPathCalls[iset][0] = 0x00;
             }
@@ -545,12 +620,34 @@ void updateHeyPath(struct mheardLine &mheardLine)
         mheardPathLen[ipos] = mheardLine.mh_path_len;
     
     mheardPathEpoch[ipos] = getUnixClock();
+    mheardPathMillis[ipos] = (uint32_t)millis();   // NC-02: monotonic heard-time
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     showPathTDECK();
     #endif
 
     savePathPersistence();
+}
+
+// NC-02: exported freshness helpers (see mheard_functions.h) -- give callers
+// outside this file (via_functions.cpp, web_functions.cpp) the same
+// rollover-safe millis()-age comparison used internally throughout this
+// file (NC-01), without externing mheardMillis[]/mheardPathMillis[] and
+// re-implementing the comparison at each call site.
+bool mheardFreshMs(int iset, uint32_t window_ms)
+{
+    if(iset < 0 || iset >= MAX_MHEARD)
+        return false;
+
+    return (uint32_t)(millis() - mheardMillis[iset]) < window_ms;
+}
+
+bool mheardPathFreshMs(int iset, uint32_t window_ms)
+{
+    if(iset < 0 || iset >= MAX_MHPATH)
+        return false;
+
+    return (uint32_t)(millis() - mheardPathMillis[iset]) < window_ms;
 }
 
 int getMheardCount()
@@ -561,7 +658,10 @@ int getMheardCount()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+(60*60)) > getUnixClock())  // mheard count only last hour
+            // NC-01: aged by millis(), see mheardMillis[] above -- a node
+            // with no valid wall clock still counts its recently-heard
+            // neighbours (this is the /N tag in the position beacon).
+            if((uint32_t)(millis() - mheardMillis[iset]) < MHEARD_AGE_WINDOW_MS)  // mheard count only last hour
             {
                 imhcount++;
             }
@@ -595,7 +695,7 @@ void sendMheard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+(60*60*12)) > getUnixClock())  // mheard last 12 hours
+            if((uint32_t)(millis() - mheardMillis[iset]) < MHEARD_PRUNE_WINDOW_MS)  // mheard last 12 hours (NC-01: millis(), not wall clock)
             {
                 initMheardLine(mheardLine);
 
@@ -653,9 +753,10 @@ void sendMheard()
                 // send to Phone
                 uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
                 bleBuffer[0] = 0x44;
-                serializeJson(mhdoc, bleBuffer+1, measureJson(mhdoc)+1);
+                // Schranke ist der Puffer, nicht die JSON-Laenge (UP-01, BND-03)
+                uint16_t frame_len = bleJsonFrame(mhdoc, bleBuffer, sizeof(bleBuffer));
 
-                addBLEComToOutBuffer(bleBuffer, measureJson(mhdoc)+1);
+                addBLEComToOutBuffer(bleBuffer, frame_len);
             }
         }
     }
@@ -672,7 +773,7 @@ void showMHeard()
     {
         if(mheardCalls[iset][0] != 0x00)
         {
-            if((mheardEpoch[iset]+(60*60*12)) > getUnixClock())  // mheard last 12 hours
+            if((uint32_t)(millis() - mheardMillis[iset]) < MHEARD_PRUNE_WINDOW_MS)  // mheard last 12 hours (NC-01: millis(), not wall clock)
             {
                 printlndeb("|------------|------------|----------|-----|-----------------|-----|------|------|------|----|---|----|");
 
@@ -710,7 +811,7 @@ void showPath()
     {
         if(mheardPathCalls[iset][0] != 0x00)
         {
-            if((mheardPathEpoch[iset]+(60*60*12)) > getUnixClock())  // path last 12 hours
+            if(mheardPathFreshMs(iset, MHEARD_PRUNE_WINDOW_MS))  // path last 12 hours (NC-02: millis(), not wall clock)
             {
                 printlndeb("|---------------------|-----------------------------------------------------------------|");
 
@@ -936,6 +1037,21 @@ void showPathTDECK()
 }
 #endif
 
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+// NC-01: is the wall clock (meshcom_settings.node_date_*) trustworthy right
+// now? Mirrors updateMheard()'s own "strYear.toInt() < 2025" guard -- a
+// node with no NTP/GPS boots with node_date_year unset (0, see
+// nrf52_main.cpp/esp32_main.cpp), never a real year >= 2025. Only needed at
+// SD-persistence load time (below), to decide how to seed mheardMillis[]
+// for entries restored from a previous boot; the millis()-based aging in
+// updateMheard()/getMheardCount()/sendMheard()/showMHeard() never calls
+// this. File-local: not a replacement for getUnixClock() callers elsewhere.
+static bool isWallClockValid()
+{
+    return meshcom_settings.node_date_year >= 2025;
+}
+#endif
+
 void loadMHeardPersistence()
 {
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -967,6 +1083,40 @@ void loadMHeardPersistence()
         file.read((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
         file.read((uint8_t*)mheardNCount, sizeof(mheardNCount));
         file.close();
+
+        // NC-01: mheardMillis[] was not in the file (see saveMHeardPersistence()) --
+        // millis() restarts at 0 every boot, so re-derive an initial age instead
+        // of leaving it at its zero-init value (which would read every restored
+        // entry as heard 0 ms ago AND as heard `now`, wrongly extending its
+        // 12h/1h lifetime by a full boot's worth of elapsed wall-clock time).
+        // If the wall clock is valid already (RTC battery, or a fast NTP/GPS
+        // fix before this runs), convert the saved epoch age into an
+        // equivalent millis() age. Otherwise -- no valid wall clock yet,
+        // exactly the NC-01 scenario -- treat every restored entry as just
+        // heard: an unverifiable age is safer treated as fresh (still shown,
+        // still counted) than silently dropped.
+        uint32_t loadMillis = (uint32_t)millis();
+        bool bWallClockValid = isWallClockValid();
+        unsigned long nowEpoch = bWallClockValid ? getUnixClock() : 0;
+        for(int i=0; i<MAX_MHEARD; i++)
+        {
+            if(mheardCalls[i][0] == 0x00)
+            {
+                mheardMillis[i] = 0;
+                continue;
+            }
+
+            if(bWallClockValid && nowEpoch > mheardEpoch[i])
+            {
+                unsigned long ageMs = (nowEpoch - mheardEpoch[i]) * 1000UL;
+                mheardMillis[i] = (ageMs < loadMillis) ? (loadMillis - (uint32_t)ageMs) : 0;
+            }
+            else
+            {
+                mheardMillis[i] = loadMillis;   // treat as just heard
+            }
+        }
+
         showMHeardTDECK();
     #endif
 }
@@ -1000,6 +1150,32 @@ void loadPathPersistence()
         file.read((uint8_t*)mheardPathEpoch, sizeof(mheardPathEpoch));
         file.read((uint8_t*)mheardPathLen, sizeof(mheardPathLen));
         file.close();
+
+        // NC-02: mheardPathMillis[] was not in the file (see
+        // savePathPersistence()) -- re-derive it exactly the way
+        // loadMHeardPersistence() re-derives mheardMillis[] above.
+        uint32_t loadMillisPath = (uint32_t)millis();
+        bool bWallClockValidPath = isWallClockValid();
+        unsigned long nowEpochPath = bWallClockValidPath ? getUnixClock() : 0;
+        for(int i=0; i<MAX_MHPATH; i++)
+        {
+            if(mheardPathCalls[i][0] == 0x00)
+            {
+                mheardPathMillis[i] = 0;
+                continue;
+            }
+
+            if(bWallClockValidPath && nowEpochPath > mheardPathEpoch[i])
+            {
+                unsigned long ageMs = (nowEpochPath - mheardPathEpoch[i]) * 1000UL;
+                mheardPathMillis[i] = (ageMs < loadMillisPath) ? (loadMillisPath - (uint32_t)ageMs) : 0;
+            }
+            else
+            {
+                mheardPathMillis[i] = loadMillisPath;   // treat as just heard
+            }
+        }
+
         showPathTDECK();
     #endif
 }

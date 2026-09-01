@@ -574,13 +574,22 @@ void SetupUBLOX()
     Serial.printf("[GPS ]...UBLOX config finished\n");
   }
 
-  WaitPause(); // Pause zwischen Blöcken erreicht
-
-  sendUBX_MON_VER();
-  ver = readUBXbin();
+  // TM-16 (Bootzeit): die Versionsabfrage kostet jeden Boot fest ueber eine
+  // halbe Sekunde -- WaitPause() wartet auf den naechsten Zeichenblock (bis
+  // 1000 ms) und readUBXbin() laeuft immer bis zu seinem 500-ms-Timeout aus,
+  // weil es nur nachtriggert und nie vorzeitig zurueckkehrt. Der einzige
+  // Verbraucher des Ergebnisses ist die Debug-Zeile darunter: `ver` ist in
+  // dieser Datei lokal und wird sonst nirgends gelesen. Also nur noch abfragen,
+  // wenn die Ausgabe auch erscheint. Auf dem T-Deck Plus gemessen: SetupUBLOX()
+  // 1,93 s -> 1,33 s, ohne Aenderung an der Modulkonfiguration selbst.
   if(iGPSDEBUG >= 2)
-    Serial.printf("[GPS_VER] %s\n", ver.c_str());
+  {
+    WaitPause(); // Pause zwischen Blöcken erreicht
 
+    sendUBX_MON_VER();
+    ver = readUBXbin();
+    Serial.printf("[GPS_VER] %s\n", ver.c_str());
+  }
 }
 
 /**

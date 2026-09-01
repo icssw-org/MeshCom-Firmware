@@ -23,6 +23,10 @@ void add_pos_point(String callsign, double u_dlat, char lat_c, double u_dlon, ch
 void set_map(int iMap);
 void init_map();
 void refresh_map(int iMap);
+void tdeck_map_zoom(int dir);
+void tdeck_map_pan(int dxPx, int dyPx);
+void tdeck_map_recenter();
+bool tdeck_map_user_panned();
 
 void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c);
 void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_dlon, char lon_c, int alt);
