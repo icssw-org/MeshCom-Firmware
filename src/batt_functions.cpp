@@ -154,7 +154,17 @@ static void battProbeADCPolarity(void)
 	for (int i = 0; i < 8; i++) { countsLow += analogRead(BAT_VOLT_PIN); }
 	countsLow /= 8;
 
-	if (countsHigh >= BATT_PROBE_MIN_COUNTS && countsHigh > countsLow)
+	int probeDelta = countsHigh - countsLow;
+	if (probeDelta < 0) probeDelta = -probeDelta;
+	if (countsHigh >= BATT_PROBE_MIN_COUNTS && countsLow >= BATT_PROBE_MIN_COUNTS && probeDelta < BATT_PROBE_MIN_COUNTS)
+	{
+		// Beide Messungen plausibel und praktisch gleich: der Teiler liegt fest an, der
+		// Steuerpin bewirkt nichts (z.B. Wireless Stick V3). Batteriehardware vorhanden,
+		// Polaritaet ohne Bedeutung -> nicht als "kein Teiler" fehlinterpretieren.
+		battProbeState = BATT_PROBE_ACTIVE_HIGH;
+		digitalWrite(ADC_CTRL_PIN, LOW);
+	}
+	else if (countsHigh >= BATT_PROBE_MIN_COUNTS && countsHigh > countsLow)
 	{
 		battProbeState = BATT_PROBE_ACTIVE_HIGH;
 		digitalWrite(ADC_CTRL_PIN, LOW);    // Ruhezustand: Teiler getrennt (Strom sparen)
@@ -170,6 +180,7 @@ static void battProbeADCPolarity(void)
 	}
 
 	printfdeb("[INIT]...ADC_CTRL_PIN probe: high=%d;low=%d;-> %s\n", countsHigh, countsLow,
+		(battProbeState == BATT_PROBE_ACTIVE_HIGH && probeDelta < BATT_PROBE_MIN_COUNTS && countsLow >= BATT_PROBE_MIN_COUNTS) ? "fester Teiler (active HIGH)" :
 		(battProbeState == BATT_PROBE_ACTIVE_HIGH) ? "active HIGH" :
 		(battProbeState == BATT_PROBE_ACTIVE_LOW)  ? "active LOW"  : "keine Batteriehardware (kein Teiler)");
 }
