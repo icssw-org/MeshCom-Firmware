@@ -1924,7 +1924,10 @@ void tdeck_map_zoom(int dir)
     if (dir > 0) sdmap_zoom_in();
     else         sdmap_zoom_out();
     sdmap_refresh(map_ta, sdmap_lastKnownLat, sdmap_lastKnownLon);
-    refresh_map(meshcom_settings.node_map);
+    // refresh_map() bewusst NICHT hier: zeichnet alle fremden Stationen neu
+    // (teure LVGL-Objekt-Churn) und triggerte bei schnellem/wiederholtem Zoom
+    // in Kombination mit SD-Kacheldecoding den ESP32-Watchdog. Fremde Stationen
+    // aktualisieren sich stattdessen über den periodischen Boundary-Poll.
     add_map_point(meshcom_settings.node_call, sdmap_lastKnownLat, sdmap_lastKnownLon, true);
 }
 
