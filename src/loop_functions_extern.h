@@ -138,6 +138,10 @@ extern bool bWEBSERVER;
 extern bool bWIFIAP;
 extern bool bEXTUDP;
 extern bool bNETCONSOLE;
+extern bool bKISS;
+extern bool bKISSTX;
+extern bool bKISSMETA;
+extern bool bKISSAUTH;
 
 extern float fBaseAltidude;
 extern float fBaseAltidude680;

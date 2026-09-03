@@ -75,6 +75,7 @@
 #include <mheard_functions.h>
 #include <udp_functions.h>
 #include <extudp_functions.h>
+#include <kiss_functions.h>
 #include <lora_setchip.h>
 
 #include "softser_functions.h"
@@ -888,6 +889,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     // Extern Server (deferred — avoid blocking UDP in radio callback)
                     if(bEXTUDP)
                         queueExtern((char*)"lora", RcvBuffer, size, rssi, snr);
+
+                    // KISS/TCP interface (deferred — same reason). HEY frames are
+                    // not representable as AX.25 (buildAx25 discards them) — don't
+                    // let them evict text/position from the 2-slot queue.
+                    #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+                    if(bKISS && msg_type_b_lora != MSG_TYPE_HEY)
+                        queueKiss(RcvBuffer, size, rssi, snr);
+                    #endif
 
                     // print aprs message
                     if(bDisplayInfo)

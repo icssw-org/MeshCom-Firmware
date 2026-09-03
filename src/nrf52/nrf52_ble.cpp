@@ -22,7 +22,6 @@ extern int isPhoneReady;
 extern bool ble_busy_flag;
 extern uint16_t swap2bytes(uint16_t value);
 extern void commandAction(char *msg_text, int len, bool ble);
-extern int sendMessage(char *buffer, int len);
 extern bool hasMsgFromPhone;
 extern char textbuff_phone [MAX_MSG_LEN_PHONE];
 extern uint8_t txt_msg_len_phone;
