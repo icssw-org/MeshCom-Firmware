@@ -63,7 +63,7 @@ int mheardNCount[MAX_MHEARD];
 #define MHEARD_AGE_WINDOW_MS   (60UL*60UL*1000UL)         // 1 h -- getMheardCount()
 #define MHEARD_PRUNE_WINDOW_MS (60UL*60UL*12UL*1000UL)    // 12 h -- updateMheard()/sendMheard()/showMHeard()
 
-unsigned char mheardPathBuffer1[MAX_MHPATH][50]; //Ringbuffer for MHeard Sourcepath
+unsigned char mheardPathBuffer1[MAX_MHPATH][52]; //Ringbuffer for MHeard Sourcepath
 char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 unsigned long mheardPathEpoch[MAX_MHPATH];
 
@@ -590,8 +590,8 @@ void updateHeyPath(struct mheardLine &mheardLine)
     // OE3YCB-15,OE3XOC-12,OE3SPR-1>
     int ips = mheardLine.mh_sourcepath.indexOf(',') + 1;
     int ipc = mheardLine.mh_sourcepath.length() - ips;
-    if(ipc > 37)
-        ipc = 37;
+    if(ipc > 51)
+        ipc = 51;
     if(ipc < 0)
         ipc = 0;
 
@@ -610,7 +610,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
 
     memset(mheardPathBuffer1[ipos], 0x00, sizeof(mheardPathBuffer1[ipos]));
     memcpy(mheardPathBuffer1[ipos], mheardLine.mh_sourcepath.substring(ips).c_str(), ipc);
-    mheardPathBuffer1[ipos][49] = 0x00;
+    mheardPathBuffer1[ipos][51] = 0x00;
     // TODO second 30 chars
 
     // check HEY! comming from gateway
@@ -804,8 +804,8 @@ void showMHeard()
 
 void showPath()
 {
-    printlndeb("\n/---------------------------------------------------------------------------------------\\");
-    printlndeb("|       date          | lng/Gate/Path                                                   |");
+    printlndeb("\n/-----------------------------------------------------------------------------------------\\");
+    printlndeb("|       date          | lng/Gate/Path                                                     |");
 
     for(int iset=0; iset<MAX_MHPATH; iset++)
     {
@@ -813,7 +813,7 @@ void showPath()
         {
             if(mheardPathFreshMs(iset, MHEARD_PRUNE_WINDOW_MS))  // path last 12 hours (NC-02: millis(), not wall clock)
             {
-                printlndeb("|---------------------|-----------------------------------------------------------------|");
+                printlndeb("|---------------------|-------------------------------------------------------------------|");
 
                 //printfdeb("| %-10.10s | ", mheardPathCalls[iset]);
 
@@ -821,7 +821,7 @@ void showPath()
                 
                 printfdeb("| %-19.19s | ", convertUNIXtoString(lt).c_str()); // yyyy.mm.dd hh:mm:ss
 
-                printfdeb("%01u%s/%-10.10s %-49.49s |\n", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathCalls[iset], mheardPathBuffer1[iset]);
+                printfdeb("%01u%s/%-10.10s %-51.51s |\n", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathCalls[iset], mheardPathBuffer1[iset]);
             }
             else
             {
@@ -830,7 +830,7 @@ void showPath()
         }
     }
 
-    printlndeb("\\---------------------------------------------------------------------------------------/\n");
+    printlndeb("\\-----------------------------------------------------------------------------------------/\n");
 }
 
 char* getPayloadType(char ptype)
@@ -1028,7 +1028,7 @@ void showPathTDECK()
             snprintf(buf, 20, "%s", convertUNIXtoString(lt).substring(11, 16).c_str());
             lv_table_set_cell_value(path_ta, row, 1, buf);
 
-            snprintf(buf, 50, "%01u%s/%s", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathBuffer1[iset]);
+            snprintf(buf, 52, "%01u%s/%s", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80)?"G":" "), mheardPathBuffer1[iset]);
             lv_table_set_cell_value(path_ta, row, 2, buf);
 
             row++;
