@@ -79,6 +79,11 @@
 #define BAUD_CHARS 250
 #define GPS_RX_PIN        44
 #define GPS_TX_PIN        43
+// GPS-06: Zweitbelegung fuer selbst verdrahtete Module nach der Belegung bis
+// 4.35d (SoftwareSerial RX=43/TX=44). Greift nur, wenn auf RX=44/TX=43 kein
+// NMEA-Satz gefunden wird; siehe detectBaudrate() in gps_functions.cpp.
+#define GPS_FALLBACK_RX_PIN 43
+#define GPS_FALLBACK_TX_PIN 44
 
 #define LORA_RST  17
 #define LORA_DIO0 13 // aka BUSY Pin

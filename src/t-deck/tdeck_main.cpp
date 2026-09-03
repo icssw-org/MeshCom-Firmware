@@ -36,6 +36,7 @@ using namespace ace_button;
 #include "lv_obj_functions.h"
 #include "lv_obj_functions_extern.h"
 #include "tdeck_debug.h"
+#include "kbd_repeat.h"
 #include <soc/spi_struct.h>
 #include <loop_functions_extern.h>
 #include <batt_functions.h>
@@ -62,6 +63,10 @@ void scanDevices(TwoWire*);
 bool setupCoder();
 void setupLvgl();
 bool setupSD();
+
+// TD-10: keyboard raw-mode command, defined next to keypad_get_key() below;
+// forward-declared here so setup() can force key mode right after checkKb().
+static void kbdRawMode(bool on);
 
 // LVGL functions
 static void disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
@@ -215,6 +220,12 @@ void initTDeck()
 
     //! Keyboard
     kbDected = checkKb();
+
+    // TD-10 (K2): an ESP32 reset (WDT, OTA) mid-hold leaves a powered C3 in
+    // raw mode, where 1-byte key reads return column bitmasks as characters.
+    // Nothing else ever sends 0x04, so establish key mode once at boot.
+    if (kbDected)
+        kbdRawMode(false);
 
     //! Screen initialisation
     setupLvgl();
@@ -775,15 +786,106 @@ static uint32_t keypad_get_key(void)
     return key_ch;
 }
 
+// TD-10: raw-mode I2C helpers for key auto-repeat -- same beginTransmission/
+// write/endTransmission pattern as setKeyboardBacklight() (tdeck_helpers.cpp).
+// 0x03 switches the C3 to bitmask-per-poll output, 0x04 back to one-char-
+// per-key; an old keyboard firmware ignores both silently.
+static void kbdRawMode(bool on)
+{
+    Wire.beginTransmission(0x55);
+    Wire.write(on ? 0x03 : 0x04);
+    Wire.endTransmission();
+}
+
+// Reads the 5-byte raw matrix frame; false unless exactly 5 bytes arrived
+// (a stale/short response is discarded rather than partially applied).
+static bool kbdRawRead(uint8_t *frame)
+{
+    uint8_t n = (uint8_t)Wire.requestFrom(0x55, KBD_RAW_FRAME_LEN);
+    if (n != KBD_RAW_FRAME_LEN)
+    {
+        while (Wire.available() > 0)
+            Wire.read();
+        return false;
+    }
+    for (uint8_t i = 0; i < KBD_RAW_FRAME_LEN; i++)
+        frame[i] = (uint8_t)Wire.read();
+    return true;
+}
 
 /**
  * Will be called by the library to read the mouse
  */
+// TD-10: auto-repeat window state; support/probes persist across holds
+// (per-boot verdict on this keyboard's firmware), the rest per-hold. File
+// scope so --info can report the verdict (tdeck_kbd_raw_support_str()).
+static struct KbdRepeat s_rep = {};
+
+const char *tdeck_kbd_raw_support_str(void)
+{
+    switch (s_rep.support)
+    {
+        case KBD_RAW_YES: return "yes";
+        case KBD_RAW_NO:  return "no";
+        default:          return "unknown";
+    }
+}
+
 static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
 {
     static uint32_t last_key = 0;
+
+    if (s_rep.active)
+    {
+        // A hold is in progress: keep reporting PR with the armed key for as
+        // long as the raw frame still shows it down, the window has not
+        // timed out, and the keyboard has not been locked meanwhile.
+        uint8_t f[KBD_RAW_FRAME_LEN] = {0, 0, 0, 0, 0};
+        uint32_t now = millis();
+        bool i2c_ok  = kbdRawRead(f);
+        enum kbd_hold hold = i2c_ok ? kbdRepeatHold(&s_rep, f, now) : KBD_HOLD_RELEASED;
+        bool locked  = meshcom_settings.node_keyboardlock;
+        // K5: LVGL re-resolves the focused object on every repeat tick, and a
+        // touch anywhere moves keypad focus (indev_click_focus). End the hold
+        // rather than keep typing into whatever was touched.
+        bool refocused = ((void *)lv_group_get_focused(lv_group_get_default()) != s_rep.focus);
+
+        if (i2c_ok && hold == KBD_HOLD_ACTIVE && !locked && !refocused)
+        {
+            data->state = LV_INDEV_STATE_PR;
+            data->key = s_rep.key;
+            return;
+        }
+
+        const char *reason;
+        if (!i2c_ok)
+            reason = "i2c";
+        else if (locked)
+            reason = "lock";
+        else if (refocused)
+            reason = "focus";
+        else if (hold == KBD_HOLD_TIMEOUT)
+            reason = "timeout";
+        else
+            reason = "release";
+
+        kbdRawMode(false);
+        Serial.printf("[KBD];repeat;key;%02x;held_ms;%lu;reason;%s\n",
+                      (unsigned)s_rep.key, (unsigned long)(now - s_rep.since_ms), reason);
+        last_key = s_rep.key;
+        kbdRepeatClear(&s_rep);
+        data->state = LV_INDEV_STATE_REL;
+        data->key = last_key;
+        return;
+    }
+
     uint32_t act_key ;
     act_key = keypad_get_key();
+    // TD-10 (K1): the physical matrix cell must be derived from the byte the
+    // keyboard actually sent -- in iKeyBoardType 2/3/4 act_key below is a
+    // remap ('a' -> 'A', 'w' -> '1', 'q' -> '#') whose character sits on a
+    // different cell than the key under the finger.
+    const uint32_t raw_key = act_key;
     if (act_key != 0)
     {
         bool bSPEC=false;
@@ -988,6 +1090,51 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
                 #else
                 meshcom_settings.node_mute = !meshcom_settings.node_mute;
                 #endif
+            }
+        }
+
+        // TD-10: open a raw-mode repeat window for this key -- once armed,
+        // keypad_read() reports PR on every poll until it releases/times
+        // out/locks. Enter, Alt+C, SYM combos (all bSPEC), a locked keyboard
+        // and the SYM+M mute toggle (0x2e outside the message/status tabs,
+        // which does not set bSPEC) never open a window; once a keyboard
+        // has failed KBD_RAW_PROBE_MAX probes it is skipped for the rest
+        // of this boot.
+        uint32_t tab_act_now = lv_tabview_get_tab_act(tv);
+        uint8_t exp_col = 0;
+        uint8_t exp_row = 0;
+        bool has_cell = kbdExpectedCell((uint8_t)raw_key, &exp_col, &exp_row);
+        bool eligible = !bSPEC && !meshcom_settings.node_keyboardlock
+                     && act_key != 0x00 && act_key != 0x0D && act_key != 0x0C
+                     && !(act_key == 0x2e && tab_act_now != 1 && tab_act_now != 7)
+                     && has_cell
+                     && s_rep.support != KBD_RAW_NO;
+
+        if (eligible)
+        {
+            uint8_t f[KBD_RAW_FRAME_LEN] = {0, 0, 0, 0, 0};
+            kbdRawMode(true);
+            uint8_t supportBeforeProbe = s_rep.support;
+            // A 0-byte read is an I2C failure, not a partial frame: hand the
+            // arm a 0xFF-filled frame so it counts as a probe failure.
+            if (!kbdRawRead(f))
+                memset(f, 0xFF, KBD_RAW_FRAME_LEN);
+
+            bool armed = kbdRepeatArm(&s_rep, f, act_key, exp_col, exp_row, millis());
+            if (armed)
+                s_rep.focus = (void *)lv_group_get_focused(lv_group_get_default());
+            else
+                kbdRawMode(false);             // degrade: one char per press, as today
+
+            // Only while the verdict is still open, and hard-capped per boot;
+            // support legend: 0 = unknown (KBD_RAW_UNKNOWN), 1 = yes
+            // (KBD_RAW_YES), 2 = no (KBD_RAW_NO).
+            static uint8_t s_probe_lines = 0;
+            if (supportBeforeProbe == KBD_RAW_UNKNOWN && s_probe_lines < (KBD_RAW_PROBE_MAX + 2))
+            {
+                s_probe_lines++;
+                Serial.printf("[KBD];rawprobe;%02x %02x %02x %02x %02x;key;%02x;support;%d\n",
+                              f[0], f[1], f[2], f[3], f[4], (unsigned)act_key, (int)s_rep.support);
             }
         }
 

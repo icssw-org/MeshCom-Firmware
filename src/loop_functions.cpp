@@ -27,6 +27,7 @@
 
 #include "via_functions.h"
 #include "charset_filter.h"
+#include "setlog_lines.h"
 
 bool gpsDetected = false;
 bool gpsInitDone = false;
@@ -451,6 +452,21 @@ ch_util_rx_start_t ch_util_rx_start{0};   // timestamp when RX started
 ch_util_ulong_t ch_util_tx_start{0};   // timestamp when TX started
 ch_util_ulong_t ch_util_rx_accum{0};   // accumulated RX airtime (ms) in current window
 ch_util_ulong_t ch_util_tx_accum{0};   // accumulated TX airtime (ms) in current window
+
+// SL-05 -- Zaehler fuer die 5-Minuten-STAT-Zeile unter `--setlog on`.
+// std::atomic wie ch_util_*_accum daneben: geschrieben werden sie im LORA-Task
+// (OnRxDone/OnRxError, SL-01/SL-04) und in loop() (doTX, SL-03), gelesen und
+// per exchange(0) zurueckgesetzt in setlogFillStat().
+std::atomic<uint32_t> stat_newid{0};       // neue msg_id im Dedup-Ring
+std::atomic<uint32_t> stat_dup{0};         // erkannte Kopien
+std::atomic<uint32_t> stat_rx_err{0};      // RX-/CRC-Fehler
+std::atomic<uint32_t> stat_txn{0};         // eigene Sendungen
+std::atomic<uint32_t> stat_txfail{0};      // vom TX-Watchdog abgebrochen
+std::atomic<uint32_t> stat_util_rx_5m{0};  // RX-Luftzeit im 5-min-Fenster (ms)
+std::atomic<uint32_t> stat_util_tx_5m{0};  // TX-Luftzeit im 5-min-Fenster (ms)
+// Hochwasser von txRingDepth(); in addTxRingEntry() mitgefuehrt
+// (txring_functions.cpp), im STAT-Druck zurueckgesetzt.
+std::atomic<uint8_t> stat_ring_max{0};
 
 int isPhoneReady = 0;      // flag we receive from phone when itis ready to receive data
 
@@ -3119,6 +3135,57 @@ String getTimeString()
     return (String)currTime;
 }
 
+// SL -- `HH:MM:SS [LOG] <body>` ohne die String-Allokation von
+// getTimeString(): die RX-Pfade drucken zwei bis vier solcher Zeilen je Frame.
+void setlogPrint(const char *body)
+{
+    char ts[10];
+    snprintf(ts, sizeof(ts), "%02i:%02i:%02i", meshcom_settings.node_date_hour,
+             meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
+
+    printfdeb("%s [LOG] %s\n", ts, body);
+}
+
+// SL-05 -- Felder der STAT-Zeile fuellen. Die Intervallzaehler werden hier
+// geleert (exchange(0)); stat_drop_count[] wird nur gelesen, das Nullen bleibt
+// plattformseitig (ESP32 memset, nRF52 unter taskENTER_CRITICAL()).
+void setlogFillStat(struct setlogStatFields *f, uint32_t heap)
+{
+    if(f == NULL)
+        return;
+
+    uint32_t rx5 = stat_util_rx_5m.exchange(0);
+    uint32_t tx5 = stat_util_tx_5m.exchange(0);
+    uint32_t util = 100UL * (rx5 + tx5) / (uint32_t)(PRIO_STAT_INTERVAL_S * 1000UL);
+    if(util > 100)
+        util = 100;
+
+    f->util_pct       = (uint8_t)util;
+    f->rx_ms          = rx5;
+    f->tx_ms          = tx5;
+    f->newid          = stat_newid.exchange(0);
+    f->dup            = stat_dup.exchange(0);
+    f->err            = stat_rx_err.exchange(0);
+    f->txn            = stat_txn.exchange(0);
+    f->txfail         = stat_txfail.exchange(0);
+    f->ringmax        = stat_ring_max.exchange(0);
+    f->ring_size      = MAX_RING;
+    f->drop[0]        = stat_drop_count[1];
+    f->drop[1]        = stat_drop_count[2];
+    f->drop[2]        = stat_drop_count[3];
+    f->drop[3]        = stat_drop_count[4];
+    f->drop[4]        = stat_drop_count[5];
+    f->mh             = (uint16_t)getMheardCount();
+    f->heap           = heap;
+    f->trk_interval_s = trickle_interval_ms / 1000UL;
+    f->trk_consistent = trickle_consistent_count;
+    f->fw_major       = shortVERSION();
+    f->fw_sub         = shortSUBVERSION();
+    f->flash          = FLASH_VERSION;
+    f->up_s           = millis() / 1000UL;
+    f->t_ms           = millis();
+}
+
 void charBuffer_aprs(struct aprsMessage &aprsmsg)
 {
     char internal_message[UDP_TX_BUF_SIZE];
@@ -3141,19 +3208,21 @@ void charBuffer_aprs(struct aprsMessage &aprsmsg)
     memcpy(ringbufferRAWLoraRX[RAWLoRaWrite], internal_message, UDP_TX_BUF_SIZE-1);
 }
 
-void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg)
+// SL-01: `tail` haengt VOR dem `\n` an die bestehende Zeile an -- leer bei
+// jedem Aufrufer ausser der RX-Zeile, die Zeile bleibt damit byteidentisch.
+void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg, const char *tail)
 {
-    printfdeb("%s %s %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
+    printfdeb("%s %s %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X%s\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
         aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
-        aprsmsg.msg_source_hw, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw);
+        aprsmsg.msg_source_hw, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw, tail);
 }
 
-void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int16_t size)
+void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int16_t size, const char *tail)
 {
     if(size == 7)
-        printfdeb("%s %s 007 %c x%02X%02X%02X%02X H%02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6]);
+        printfdeb("%s %s 007 %c x%02X%02X%02X%02X H%02X %02X%s\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[6], tail);
     else
-        printfdeb("%s %s 012 %c x%02X%02X%02X%02X H%02X x%02X%02X%02X%02X %02X %02X\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11]);
+        printfdeb("%s %s 012 %c x%02X%02X%02X%02X H%02X x%02X%02X%02X%02X %02X %02X%s\n", getTimeString().c_str(), msgSource, payload[0], payload[4], payload[3], payload[2], payload[1], payload[5], payload[9], payload[8], payload[7], payload[6], payload[10], payload[11], tail);
 }
 
 
@@ -4301,26 +4370,28 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     //strcat(strconcat, cname);
 
     char strconcat[100]={0};
-    strcpy(strconcat, cbatt);
-    strncat(strconcat, calt, sizeof(strconcat)-1);
-    strncat(strconcat, cncnt, sizeof(strconcat)-1);
-    strncat(strconcat, cpress, sizeof(strconcat)-1);
-    strncat(strconcat, chum, sizeof(strconcat)-1);
-    strncat(strconcat, ctemp, sizeof(strconcat)-1);
-    strncat(strconcat, ctemp2, sizeof(strconcat)-1);
-    strncat(strconcat, cqfe, sizeof(strconcat)-1);
-    strncat(strconcat, cqnh, sizeof(strconcat)-1);
-    strncat(strconcat, cgasres, sizeof(strconcat)-1);
-    strncat(strconcat, cco2, sizeof(strconcat)-1);
-    strncat(strconcat, cgrc, sizeof(strconcat)-1);
-    strncat(strconcat, csfpegel, sizeof(strconcat)-1);
-    strncat(strconcat, csfpegel2, sizeof(strconcat)-1);
-    strncat(strconcat, csftemp, sizeof(strconcat)-1);
-    strncat(strconcat, csfbatt, sizeof(strconcat)-1);
-    strncat(strconcat, cversion, sizeof(strconcat)-1);    
-    strncat(strconcat, cinaU, sizeof(strconcat)-1);   
-    strncat(strconcat, cinaI, sizeof(strconcat)-1);
-    strncat(strconcat, ctele, sizeof(strconcat)-1);
+    // C02: strncat(dst, src, sizeof(dst)-1) bounds the source, not the remaining room;
+    // the worst-case tag set (~111 B) overran strconcat[100]. Bound by the room left.
+    snprintf(strconcat, sizeof(strconcat), "%s", cbatt);
+    strncat(strconcat, calt, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, cncnt, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, cpress, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, chum, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, ctemp, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, ctemp2, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, cqfe, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, cqnh, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, cgasres, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, cco2, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, cgrc, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, csfpegel, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, csfpegel2, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, csftemp, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, csfbatt, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, cversion, sizeof(strconcat) - strlen(strconcat) - 1);    
+    strncat(strconcat, cinaU, sizeof(strconcat) - strlen(strconcat) - 1);   
+    strncat(strconcat, cinaI, sizeof(strconcat) - strlen(strconcat) - 1);
+    strncat(strconcat, ctele, sizeof(strconcat) - strlen(strconcat) - 1);
 
     // wenn die concatenation zu lang ist, dann catxt und cname löschen
     if((strlen(strconcat) + strlen(catxt) + strlen(cname)) > 100)

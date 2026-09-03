@@ -774,7 +774,7 @@ void commandAction(char *umsg_text, bool ble)
 
             printlndeb("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analog check on/off\n");
             delay(100);
-            printfdeb("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m\n");
+            printfdeb("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m, with GPS: seeds the altitude filter, GPS keeps refining\n");
             delay(100);
             printlndeb("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--aprscomment  set APRS Comment/none\n--showI2C\n");
             delay(100);
@@ -2293,7 +2293,10 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setpress") == 0)
     {
-        fBaseAltidude = (float)meshcom_settings.node_alt;
+        // GPS-04/F9: nicht direkt schreiben -- baroBaseRelatch() zieht JEDE
+        // vorhandene Basishoehe nach (BMx280 und BME680), der direkte Griff
+        // auf fBaseAltidude liess die des BME680 stehen.
+        baroBaseRelatch((float)meshcom_settings.node_alt);
         fBasePress = meshcom_settings.node_press;
 
         printfdeb("\nBase Press set to: %.1f at %.1f m\n", fBasePress, fBaseAltidude);
@@ -4125,10 +4128,28 @@ void commandAction(char *umsg_text, bool ble)
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
         sscanf(_owner_c, "%d", &iVar);
 
+        // GPS-03/F7: Ein Tippfehler darf die Hoehe nicht auf 0 klemmen -- das
+        // hat frueher den Schaetzer auf 0 m geseedet UND die barometrische
+        // Referenz auf 0 m nachgezogen. Unbrauchbare Eingabe wird verworfen.
         if(iVar < 0 || iVar > 40000)
-            iVar = 0;
+        {
+            printfdeb("alt out of range (0..40000 m), ignored\n");
+
+            if(ble)
+            {
+                addBLECommandBack((char*)msg_text);
+            }
+
+            return;
+        }
 
         meshcom_settings.node_alt=iVar;
+
+        #ifdef ENABLE_GPS
+        WZ_GPS_AltSeed((float)iVar);
+        #else
+        baroBaseRelatch((float)iVar);
+        #endif
 
         printfdeb("set alt to %i m\n", meshcom_settings.node_alt);
 
@@ -5798,6 +5819,14 @@ void commandAction(char *umsg_text, bool ble)
             
             printfdeb("...DisplayInfo %s ...DisplayCont %s ...DisplyLog %s ...contrast %i\n",
                 (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), (bDisplayLog?"on":"off"), meshcom_settings.node_contrast);
+
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            // TD-10: raw-mode verdict of the keyboard controller. "no" or a
+            // lasting "unknown" after typing means the controller firmware
+            // predates raw mode and keys cannot auto-repeat on this unit.
+            printfdeb("...KBD raw-mode %s ...KEYLOCK %s\n", tdeck_kbd_raw_support_str(),
+                (meshcom_settings.node_keyboardlock?"on":"off"));
+            #endif
 
             printfdeb("...EXTUDP %s ...EXT IP %s ...NOPMOTHER %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern,
                     ((meshcom_settings.node_sset3 & 0x8000)?"on":"off"));

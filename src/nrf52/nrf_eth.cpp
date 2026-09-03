@@ -24,6 +24,7 @@
 #include "via_functions.h"
 #include "regex_functions.h"
 #include "conf_frame.h"
+#include "setlog_lines.h"
 
 EthernetUDP Udp;
 
@@ -655,7 +656,16 @@ int NrfETH::getUDP()
 
                   addTxRingEntry(convBuffer, size, RING_STATUS_DONE, "udp_rx", 0); // fire-and-forget, no retransmission for UDP relay
 
+                  if(bDisplayLog)
+                  {
+                      char buf[96];
+                      setlogFormatGwi(buf, sizeof(buf), aprsmsg.msg_id, aprsmsg.payload_type,
+                                       aprsmsg.max_hop & 0x0F, aprsmsg.msg_source_call.c_str(), (uint32_t)millis());
+                      setlogPrint(buf);
+                  }
+
                   addLoraRxBuffer(aprsmsg.msg_id, true);
+                  stat_newid.fetch_add(1); // S2: server-injected ids occupy dedup-ring slots too
 
                   // add rcvMsg to BLE out Buff
                   // size message is int -> uint16_t buffer size

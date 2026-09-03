@@ -41,9 +41,11 @@ String getTimeString();
 
 void printBuffer(uint8_t *buffer, int len);
 void printAsciiBuffer(uint8_t *buffer, int len);
-void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
+// SL-01: `tail` wird VOR dem `\n` angehaengt (Pegel-/Dedup-Anhang der
+// RX-Zeile, siehe setlogFormatRxTail()); leer heisst Zeile wie bisher.
+void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage, const char *tail = "");
 void charBuffer_aprs(struct aprsMessage &aprsMessage);
-void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int16_t size);
+void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int16_t size, const char *tail = "");
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len);
@@ -85,6 +87,7 @@ unsigned int setSMartBeaconing(double flat, double flon);
 String convertCallToShort(char callsign[10]);
 
 uint8_t shortVERSION();
+char shortSUBVERSION();
 
 double cround4(double dvar);
 double cround4abs(double dvar);

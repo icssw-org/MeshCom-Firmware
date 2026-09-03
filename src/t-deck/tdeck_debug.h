@@ -129,6 +129,12 @@ void tdeck_dbg_spitrace_note_sd(void);
  * the GT911 hardware. */
 bool tdeck_touch_inject(const char *subcmd, int x, int y, int dur_ms);
 
+/* TD-10: per-boot verdict on the keyboard controller's raw-mode support,
+ * "yes" / "no" / "unknown" (no eligible key pressed yet, or every probe so
+ * far answered all-zero -- the pre-2025-06 LilyGo controller firmware).
+ * Implemented in tdeck_main.cpp, printed by --info. */
+const char *tdeck_kbd_raw_support_str(void);
+
 #ifdef __cplusplus
 }
 #endif

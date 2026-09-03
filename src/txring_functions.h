@@ -16,6 +16,14 @@
 #include <Arduino.h>
 #include <configuration.h>
 
+// SL-03/SL-06: Herkunft je Ring-Slot, 'o' eigene Nachricht, 'r' Relay eines
+// Empfangs, 'g' vom Server eingespeist. Gesetzt in addTxRingEntry() aus dem
+// `source`-Label, das dort bisher nur in der `RING_WRITE ... src=`-Zeile
+// auftauchte; bei der Prio-Verdraengung mitkopiert wie ringEnqueueTime[].
+// Die TX-Zeile aus SL-03 druckt den Wert als `src=`.
+// MAX_RING Byte (20 auf allen aktuellen Boards).
+extern uint8_t ringSource[MAX_RING];
+
 uint8_t getMessagePriority(int slot);
 int getNextTxSlot(void);
 void advanceIReadPastEmpty(void);

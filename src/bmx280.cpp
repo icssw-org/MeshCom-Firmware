@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
+#include "gps_functions.h"
 
 #if defined (ENABLE_BMX280)
 
@@ -323,7 +324,7 @@ float getPressASL(int current_alt)
 	//fBasePress = meshcom_settings.node_press;
 	
 	// 
-	if(fBaseAltidude == 0)
+	if(fBaseAltidude == 0 && baroBaseLatchAllowed())
 		fBaseAltidude = (float)current_alt;
 
 	return fPress / powf(1 - ((0.0065 * fBaseAltidude) /
