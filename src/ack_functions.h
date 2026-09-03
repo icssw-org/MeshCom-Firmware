@@ -49,7 +49,7 @@
  * @brief Prueft, ob ein empfangener Frame als ACK verarbeitet werden darf.
  *
  * Reine Funktion ohne Seiteneffekte und ohne globale Abhaengigkeiten, damit
- * sie isoliert pruefbar ist.
+ * sie nativ testbar ist (test/test_ack_validate).
  *
  * @param payload  Empfangspuffer, darf NULL sein.
  * @param size     Laenge des Empfangspuffers in Byte.

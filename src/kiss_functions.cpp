@@ -434,7 +434,10 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
             if (bLORADEBUG)
                 Serial.printf("[KISS] inject msg as %s: %s\n", srcCall, out);
 
-            id = sendMessage(out, strlen(out), srcCall);
+            // BP-09: sendMessage() returns a BpSendResult; the msg_id comes
+            // back via the out-param, and only on BP_SEND_OK.
+            unsigned int mid = 0;
+            id = (sendMessage(out, strlen(out), srcCall, &mid) == BP_SEND_OK) ? mid : 0;
 
             // remember node-number -> client "{nn" for the ack rewrite — DM only
             // (a group / broadcast inject gets no "{NNN" and could never consume

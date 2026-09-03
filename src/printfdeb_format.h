@@ -8,8 +8,8 @@
 // ueberstehen.
 //
 // Warum als eigener Header und nicht inline in printfdeb_functions.cpp: nur so
-// laesst sich der Umbau ohne Arduino pruefen -- dieselbe Trennung wie bei
-// isPlausibleAckFrame() in ack_functions.h.
+// laesst sich der Umbau ohne Arduino nativ pruefen (test/test_printfdeb_format)
+// -- dieselbe Trennung wie bei isPlausibleAckFrame() in ack_functions.h.
 
 #include <stddef.h>
 

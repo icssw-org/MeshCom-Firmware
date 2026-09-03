@@ -144,6 +144,7 @@ extern bool bKISSMETA;
 extern bool bKISSAUTH;
 
 extern float fBaseAltidude;
+extern float fBaseAltidude680;
 extern float fBasePress;
 
 extern unsigned long onewireTimeWait;
@@ -203,6 +204,41 @@ extern uint32_t ringEnqueueTime[MAX_RING];     // millis() timestamp when enqueu
 // diese Zeile deckt nur TUs ab, die ausschliesslich dieses Extern-Header ziehen.
 int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
                     const char* source, int retryCountIn, bool clearSlotFirst);
+
+// BP-01 (BACKLOG) / TM-37: back-pressure to the sender, in Q-codes.
+//
+// sendMessage() has no transport parameter, so the only way it can answer on
+// the transport a message came in on is a tag the caller sets immediately
+// before the call and clears right after. Relay, ACK and beacon paths never
+// go through sendMessage() and never set this -- so a station on the air can
+// never push this node into "not accepting".
+#include "backpressure.h"
+
+void setMsgOrigin(MsgOrigin origin);
+MsgOrigin getMsgOrigin(void);
+
+// E5 (2026-09-01): msg_id must stay unique across every BP frame or the chat
+// app's dedup filter swallows whichever of two notices lands in the same
+// millisecond -- see the comment at the definition in loop_functions.cpp.
+// Welle 3 (BP-09) cleanup: this used to be a hand-written extern local to
+// extudp_functions.cpp because loop_functions_extern.h was out of scope for
+// that wave; a header declaration is compiler-checked against the
+// definition, the hand-written one was not.
+uint32_t bpNextMsgId(void);
+
+// Per-loop drain check. Closes a back-pressure episode with QRV once the ring
+// has emptied again, even when no further user message arrives to observe it.
+void bpPollDrain(void);
+
+// BP-01: the EXTUDP reply path for a notice -- framed as a regular text
+// message from the node's own callsign on the same socket the message
+// arrived on. Defined in extudp_functions.cpp; declared here rather than in
+// extudp_functions.h so the whole BP contract sits in one place. No-op
+// unless bEXTUDP and a peer address are set.
+//
+// BP-06: dst is the destination of the triggering message (group, DM call,
+// or "*"), not a hardcoded broadcast.
+void sendExternNotice(const char *text, const char *dst);
 
 extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5];
 extern int RAWLoRaWrite;
@@ -291,6 +327,28 @@ extern ch_util_rx_start_t ch_util_rx_start;
 extern ch_util_ulong_t ch_util_tx_start;
 extern ch_util_ulong_t ch_util_rx_accum;
 extern ch_util_ulong_t ch_util_tx_accum;
+
+// SL-05 -- Zaehler der 5-Minuten-STAT-Zeile unter `--setlog on`.
+// Definitionsstelle ist loop_functions.cpp neben ch_util_*_accum; alle sind
+// std::atomic, weil LORA-Task (SL-01/SL-04) und loop() (SL-03/SL-05) sie
+// gleichzeitig anfassen. Zuruecksetzen im STAT-Druck per exchange(0).
+extern std::atomic<uint32_t> stat_newid;       // neue msg_id im Dedup-Ring
+extern std::atomic<uint32_t> stat_dup;         // erkannte Kopien
+extern std::atomic<uint32_t> stat_rx_err;      // RX-/CRC-Fehler
+extern std::atomic<uint32_t> stat_txn;         // eigene Sendungen
+extern std::atomic<uint32_t> stat_txfail;      // vom TX-Watchdog abgebrochen
+extern std::atomic<uint32_t> stat_util_rx_5m;  // RX-Luftzeit im Fenster (ms)
+extern std::atomic<uint32_t> stat_util_tx_5m;  // TX-Luftzeit im Fenster (ms)
+extern std::atomic<uint8_t>  stat_ring_max;    // Hochwasser von txRingDepth()
+
+// SL: prints `HH:MM:SS [LOG] <body>` via printfdeb without a String allocation
+// (definition in loop_functions.cpp next to getTimeString()).
+void setlogPrint(const char *body);
+// SL-05: fills the STAT fields from the interval counters (drains them), the
+// mheard/trickle/version globals and uptime; heap is platform-specific and passed in.
+// stat_drop_count[] is read, not cleared -- the platform tick clears it.
+struct setlogStatFields;
+void setlogFillStat(struct setlogStatFields *f, uint32_t heap);
 
 
 // Trickle-HEY state

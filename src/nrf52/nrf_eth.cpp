@@ -16,18 +16,30 @@
 #include <lora_functions.h>
 #include <extudp_functions.h>
 
-#include <NTPClient.h>
+#include "ntp_async.h"
 #include <time.h>
 
 #include "printfdeb_functions.h"
 
 #include "via_functions.h"
+#include "regex_functions.h"
+#include "conf_frame.h"
+#include "setlog_lines.h"
 
 EthernetUDP Udp;
 
-NTPClient timeClient(Udp);
+NtpAsync timeClient(Udp);   // TM-35: non-blocking, reply harvested in getUDP()
 
 bool btimeClient = false;
+
+// TM-38 follow-up / TM-39: the ESP32 side's bUDPLOG (udp_functions.cpp,
+// --udplog on/off there) is declared inside "#if defined(ESP32)" in both
+// udp_functions.cpp and udp_functions.h, so it does not exist as a symbol
+// in the nRF52 build at all -- a plain "extern bool bUDPLOG;" here fails to
+// link. Same name, same default, own definition; see the report for the
+// 4-line nRF52 command-table hook that would let an operator flip it (no
+// such command exists yet -- command_functions.cpp is not in this file set).
+bool bUDPLOG = false;
 
 // byte macaddr[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEC}; // Set the MAC address, do not repeat in a network.
 uint8_t macaddr[6] = {0};
@@ -37,6 +49,113 @@ unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE+5]; // Buffer to hold incoming pack
 String s_node_ip;
 String s_node_hostip;
 String strSource_call;
+
+// ---- TM-35 / N-20 instrumentation ------------------------------------------
+#if !defined(ETH_STALL_MS)
+  #define ETH_STALL_MS 50
+#endif
+
+struct EthStall
+{
+  const char *site;
+  uint32_t t0;
+  EthStall(const char *s) : site(s), t0(millis()) {}
+  ~EthStall()
+  {
+    uint32_t d = (uint32_t)(millis() - t0);
+    if(d >= ETH_STALL_MS)
+      Serial.printf("[ETH];stall;%s;ms;%lu;task;%s\n", site, (unsigned long)d, pcTaskGetName(NULL));
+  }
+};
+
+static int      s_ethLinkState = -1;      // -1 unknown, 0 down, 1 up
+static uint32_t s_ethLinkSinceMs = 0;     // last link edge
+static uint32_t s_ethLinkDowns = 0;
+static uint32_t s_ethGotIpCount = 0;
+static uint32_t s_ethLastGotIpMs = 0;
+static uint32_t s_ethDhcpRenews = 0;
+static uint32_t s_ethDhcpFails = 0;
+static uint32_t s_ethResets = 0;          // resetDHCP()/--ethdrop
+static uint32_t s_ethUdpRx = 0;
+static uint32_t s_ethUdpTxFail = 0;
+static uint32_t s_ethUdpRxMaxMs = 0;
+static uint32_t s_ethUdpTxMaxMs = 0;
+extern NrfETH neth;
+
+// Link-Zustand aus dem W5100S-Register (ein SPI-Lesen). Kante -> Ereignis.
+void ethLinkPoll()
+{
+  if(!neth.hasETHHardware)
+    return;
+  static uint32_t s_last = 0;
+  if(s_last != 0 && (uint32_t)(millis() - s_last) < 1000)
+    return;
+  s_last = millis();
+
+  EthernetLinkStatus st;
+  { EthStall x("link"); st = Ethernet.linkStatus(); }
+  int up = (st == LinkOFF) ? 0 : 1;   // Unknown zaehlt wie bisher (hasETHlink) als up
+  if(up != s_ethLinkState)
+  {
+    if(s_ethLinkState != -1 && up == 0)
+      s_ethLinkDowns++;
+    s_ethLinkState = up;
+    s_ethLinkSinceMs = millis();
+    Serial.printf("[ETH];event;link;%s;ip;%d;ms;%lu\n", up ? "up" : "down", neth.hasIPaddress ? 1 : 0, (unsigned long)millis());
+  }
+}
+
+static void ethLinkLog(const char *tag)
+{
+  unsigned long now = millis();
+  IPAddress ip = Ethernet.localIP();
+  Serial.printf("[ETH];%s;%s;link;%d;link_age_s;%lu;ip;%d.%d.%d.%d;dest;%s;hb_age_s;%lu;got_ip_n;%lu;downs;%lu;renews;%lu;renew_fail;%lu;resets;%lu;rx_n;%lu;rx_max_ms;%lu;tx_fail;%lu;tx_max_ms;%lu;ms;%lu\n",
+    tag, neth.hasIPaddress ? "up" : "down", s_ethLinkState,
+    (unsigned long)(s_ethLinkSinceMs ? (now - s_ethLinkSinceMs) / 1000 : 0),
+    ip[0], ip[1], ip[2], ip[3], s_node_hostip.c_str(),
+    (unsigned long)(neth.last_upd_timer ? (now - neth.last_upd_timer) / 1000 : 0),
+    (unsigned long)s_ethGotIpCount, (unsigned long)s_ethLinkDowns,
+    (unsigned long)s_ethDhcpRenews, (unsigned long)s_ethDhcpFails, (unsigned long)s_ethResets,
+    (unsigned long)s_ethUdpRx, (unsigned long)s_ethUdpRxMaxMs,
+    (unsigned long)s_ethUdpTxFail, (unsigned long)s_ethUdpTxMaxMs, now);
+}
+
+void ethLinkHeartbeat()
+{
+  if(!neth.hasETHHardware)
+    return;
+  static uint32_t s_last = 0;
+  if(s_last != 0 && (uint32_t)(millis() - s_last) < 60000)
+    return;
+  s_last = millis();
+  ethLinkLog("link");
+}
+
+void ethStat()
+{
+  ethLinkLog("stat");
+  Serial.printf("[ETH];stat;hw;%d;hasip;%d;busy;%d;last_got_ip_ms;%lu;stall_ms;%d\n",
+    neth.hasETHHardware ? 1 : 0, neth.hasIPaddress ? 1 : 0, neth.udp_is_busy ? 1 : 0,
+    (unsigned long)s_ethLastGotIpMs, (int)ETH_STALL_MS);
+}
+
+// Bench-/Feldhaken: der Wiederherstellungspfad der Firmware (resetDHCP: UDP
+// stoppen, DHCP erneuern, UDP neu starten), mit Zeit. Kein Kabel-Ereignis --
+// das kann nur der Operator ausloesen (N-20-Soak).
+void ethDrop()
+{
+  if(!neth.hasETHHardware)
+  {
+    Serial.println("[ETH];drop;err;no ETH hardware");
+    return;
+  }
+  uint32_t t0 = millis();
+  Serial.printf("[ETH];drop;ms;%lu\n", (unsigned long)t0);
+  neth.hasIPaddress = false;
+  int rc = neth.resetDHCP();
+  Serial.printf("[ETH];drop;done;rc;%d;took_ms;%lu;ip;%d;ms;%lu\n", rc, (unsigned long)(millis() - t0), neth.hasIPaddress ? 1 : 0, (unsigned long)millis());
+}
+// ------------------------------------------------------------------------------
 
 String NrfETH::getNodeIP()
 {
@@ -167,6 +286,8 @@ void NrfETH::initethDHCP()
  */
 bool NrfETH::sendUDP(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_buf_size)
 {
+  EthStall st("udp_tx");
+  uint32_t t0 = millis();
   Udp.beginPacket(udp_dest_addr, UDP_PORT);
   
   if(bDEBUG)
@@ -180,15 +301,21 @@ bool NrfETH::sendUDP(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_buf_size)
     Udp.write(buffer[i]);
   }
 
-  if(Udp.endPacket())
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  } 
+  bool ok = Udp.endPacket();
+  uint32_t d = (uint32_t)(millis() - t0);
+  if(d > s_ethUdpTxMaxMs) s_ethUdpTxMaxMs = d;
+  if(!ok) s_ethUdpTxFail++;
 
+  // TM-38 follow-up: per-datagram parity marker, see getUDP() above.
+  // nRF52's IPAddress (Adafruit core) has no toString() -- format by octet,
+  // same pattern as startUDP()/getMyMac() elsewhere in this file.
+  if(bUDPLOG)
+    Serial.printf("[UDP];tx;ip;%d.%d.%d.%d;port;%u;len;%u;ok;%d;ms;%lu\n",
+                   udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3],
+                   (unsigned)UDP_PORT, (unsigned)rx_buf_size,
+                   ok ? 1 : 0, (unsigned long)millis());
+
+  return ok;
 }
 
 /**@brief Method to check UDP packets
@@ -205,6 +332,21 @@ int NrfETH::checkUDP()
 
 }
 
+/**@brief TM-45: harvest-only substitute for getUDP(), for a bGATEWAY-off
+ * node (nrf52_main.cpp only calls getUDP() from the bGATEWAY-on branch, so
+ * without this the reply to timeClient's own sendRequest() never gets
+ * read). Same socket, same NtpAsync instance -- but none of getUDP()'s
+ * GATE/CONF/BEAT parsing or gateway bookkeeping (last_upd_timer, [GW];rx,
+ * ...), since there is no gateway consumer for a non-NTP datagram here.
+ */
+void NrfETH::harvestNTP()
+{
+  if(!hasIPaddress)
+    return;
+
+  ntpHarvestReply(Udp, timeClient);
+}
+
 /**@brief Method to receive UDP packets
  */
 int NrfETH::getUDP()
@@ -216,7 +358,9 @@ int NrfETH::getUDP()
 
   udp_is_busy = true;   //setting the busy flag
 
-  int packetSize = Udp.parsePacket(); // If there's data available, read a packet.
+  int packetSize;
+  uint32_t t0 = millis();
+  { EthStall st("udp_rx"); packetSize = Udp.parsePacket(); } // If there's data available, read a packet.
 
   // HEARTBEAT keine Ausgabe
   //if(packetSize != 22 && packetSize > 0 && bDEBUG)
@@ -225,8 +369,31 @@ int NrfETH::getUDP()
 
   if (packetSize <= UDP_TX_BUF_SIZE && packetSize > 0)
   {
+    IPAddress remote_ip = Udp.remoteIP();
+    uint16_t remote_port = Udp.remotePort();
+
     // read the packet
-    Udp.read(inc_udp_buffer, UDP_TX_BUF_SIZE); // Read the packet into packetBufffer.
+    { EthStall st("udp_read"); Udp.read(inc_udp_buffer, UDP_TX_BUF_SIZE); } // Read the packet into packetBufffer.
+    s_ethUdpRx++;
+
+    // TM-38 follow-up: per-datagram parity marker with the ESP32/RAK-WiFi
+    // [UDP];rx (udp_functions.cpp getMeshComUDP()). Gated by the same
+    // bUDPLOG flag -- default false here too, but nRF52 has no --udplog
+    // command yet (command_functions.cpp is not in this file set); see the
+    // report for the 4-line command-table hook needed to toggle it.
+    if(bUDPLOG)
+      Serial.printf("[UDP];rx;ip;%d.%d.%d.%d;port;%u;len;%d;ms;%lu\n",
+                     remote_ip[0], remote_ip[1], remote_ip[2], remote_ip[3],
+                     (unsigned)remote_port, packetSize, (unsigned long)millis());
+    { uint32_t d = (uint32_t)(millis() - t0); if(d > s_ethUdpRxMaxMs) s_ethUdpRxMaxMs = d; }
+
+    // TM-35: the NTP reply shares this socket with the gateway traffic
+    if(timeClient.tryConsume(remote_ip, remote_port, inc_udp_buffer, packetSize))
+    {
+      memset(inc_udp_buffer, 0, UDP_TX_BUF_SIZE);
+      udp_is_busy = false;
+      return 0;
+    }
 
     // if more than n values are 00 we might have received a faulty message
     uint8_t zerocount = 0;
@@ -337,6 +504,24 @@ int NrfETH::getUDP()
             if(bDEBUG)
             {
               printfdeb("RX-UDP Check-payload (%i):%02X \n", size, msg_type_b);
+            }
+
+            // TM-39: raw & unconditional (printfdeb needs --debug and strips
+            // ';' outside csv) -- classify by the same {SET}/{CET} prefixes
+            // the dispatch below matches; everything else in a GATE frame is
+            // a relayed mesh frame (position/text/hey) going back down to LoRa.
+            {
+              const char *gwRxType = "DATA";
+              if(msg_type_b == 0x3A)
+              {
+                if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
+                  gwRxType = "SET";
+                else if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
+                  gwRxType = "CET";
+              }
+              // DATA (a relayed mesh frame) is high-rate on a busy gateway: only with --udplog
+              if(gwRxType[0] != 'D' || bUDPLOG)
+                Serial.printf("[GW];rx;type;%s;len;%d;ms;%lu\n", gwRxType, packetSize, (unsigned long)millis());
             }
 
             if(msg_type_b == 0x3A)
@@ -471,7 +656,16 @@ int NrfETH::getUDP()
 
                   addTxRingEntry(convBuffer, size, RING_STATUS_DONE, "udp_rx", 0); // fire-and-forget, no retransmission for UDP relay
 
+                  if(bDisplayLog)
+                  {
+                      char buf[96];
+                      setlogFormatGwi(buf, sizeof(buf), aprsmsg.msg_id, aprsmsg.payload_type,
+                                       aprsmsg.max_hop & 0x0F, aprsmsg.msg_source_call.c_str(), (uint32_t)millis());
+                      setlogPrint(buf);
+                  }
+
                   addLoraRxBuffer(aprsmsg.msg_id, true);
+                  stat_newid.fetch_add(1); // S2: server-injected ids occupy dedup-ring slots too
 
                   // add rcvMsg to BLE out Buff
                   // size message is int -> uint16_t buffer size
@@ -499,96 +693,82 @@ int NrfETH::getUDP()
           printfdeb("[CONF] received from server\n");
         }
 
+        // TM-39: raw & unconditional, so rx-by-type sums match total RX.
+        // CONF (server-pushed callsign/lat/lon/alt) is not part of the
+        // SET/CET/BEAT/DATA/OTHER taxonomy; kept as its own type. Since
+        // b624bd33 the ESP32/RAK-WiFi getMeshComUDPpacket() recognizes CONF
+        // too (used to fall into OTHER there).
+        Serial.printf("[GW];rx;type;CONF;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
+
         last_upd_timer = millis();
 
         had_initial_udp_conn = true;
 
-        /* Handling Config Messages (sticking for now without own method)
-         * first 4 bytes are 'CONF' (already checked at this point)
-         * 5th byte is an indicator which setting is coming:
-         * 0x00 -> Callsign - length of chars - chars - 0x01 - length - shortname
-         * CONF 0x00 LL bytes(rufzeichen) - 0x01 - shortname(3)
-         */
-
-        uint8_t config_buf[UDP_CONF_BUFF_SIZE] = {0};
-
-        if (packetSize <= UDP_CONF_BUFF_SIZE && packetSize >= UDP_MSG_INDICATOR_LEN)
+        // CONF-01: guard, parse and apply mirror the ESP32 handler
+        // (src/udp_functions.cpp, commit b624bd33) via the shared
+        // bounds-checked parseConfFrame() (src/conf_frame.cpp). Applied
+        // only when the datagram's source matches the resolved gateway
+        // server -- on nRF52 that is udp_dest_addr (the address
+        // startUDP()/startFIXUDP() set as GATE/BEAT/CONF destination and
+        // origin). remote_ip above was read fresh for this exact packet,
+        // so unlike the ESP32 side (which tracks a separate "last seen rx
+        // IP" across getUDP() calls) there is no staleness window here.
+        if (packetSize < UDP_MSG_INDICATOR_LEN || packetSize > UDP_CONF_BUFF_SIZE)
         {
-          memcpy(config_buf, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, packetSize - UDP_MSG_INDICATOR_LEN);
-          // fill rest of buffer with 0
-          // N-03: Laufindex startet beim Ende der Nutzdaten und laeuft bis zum
-          // Pufferende. Vorher lief i von 0..UDP_CONF_BUFF_SIZE-1 und wurde
-          // zusaetzlich um die Paketlaenge versetzt -> Schreibzugriff bis
-          // config_buf[packetSize-4+254], bei packetSize=255 also 251 Bytes
-          // hinter dem 255-Byte-Stackpuffer.
-          for (int i = packetSize - UDP_MSG_INDICATOR_LEN; i < UDP_CONF_BUFF_SIZE; i++)
-          {
-            config_buf[i] = 0x00;
-          }
-
-          // print the message
-          // printBuffer(config_buf, packetSize - UDP_MSG_INDICATOR_LEN);
-
-          // check which config arrived and proceed
-          if (config_buf[0] == 0x00)
-          {
-            // we got a callsign from server
-            int call_len = config_buf[1];
-            char call_arr[call_len + 1];
-            call_arr[call_len] = '\0';
-            memcpy(call_arr, config_buf + 2, call_len);
-            _longname = String(call_arr);
-            DEBUG_MSG("CONF", "Got callsign (longanme) from server: ");
-            printlndeb(_longname);
-            DEBUG_MSG("CONF", "Callsign Length: %d", call_len);
-
-            // shortname
-            int short_len=0;
-            if (config_buf[2 + call_len] == 0x01)
-            {
-              short_len = config_buf[2 + call_len + 1];
-              char short_arr[short_len + 1];
-              memcpy(short_arr, config_buf + (2 + call_len + 2), short_len);
-              short_arr[short_len] = '\0';
-              shortname = String(short_arr);
-              DEBUG_MSG_VAL("CONF", short_len, "Shortname received: ");
-              printlndeb(shortname);
-            }
-
-            int inpos= 2 + call_len + short_len + 2;
-
-            // lat
-            if (config_buf[inpos] == 0x02)
-            {
-              _lat=config_buf[inpos+1] | (config_buf[inpos+2] << 8) | (config_buf[inpos+3] << 16) | (config_buf[inpos+4] << 24);
-              DEBUG_MSG_VAL("CONF", _lat, "LAT received: ");
-              inpos=inpos+5;
-            }
-
-            // lon
-            if (config_buf[inpos] == 0x03)
-            {
-              _lon=config_buf[inpos+1] | (config_buf[inpos+2] << 8) | (config_buf[inpos+3] << 16) | (config_buf[inpos+4] << 24);
-              DEBUG_MSG_VAL("CONF", _lon, "LON received: ");
-              inpos=inpos+5;
-            }
-
-            // lat
-            if (config_buf[inpos] == 0x04)
-            {
-              _alt=config_buf[inpos+1] | (config_buf[inpos+2] << 8) | (config_buf[inpos+3] << 16) | (config_buf[inpos+4] << 24);
-              DEBUG_MSG_VAL("CONF", _alt, "ALT received: ");
-              inpos=inpos+5;
-            }
-          }
-          else
-          {
-            printfdeb("[ERROR] Incoming config message not known! Discarding!\n");
-          }
+          printfdeb("[CONF] ignored: size %d out of bounds\n", packetSize);
+        }
+        else if (!(remote_ip == udp_dest_addr))   // nRF52 IPAddress has no operator!=
+        {
+          printfdeb("[CONF] ignored: source %d.%d.%d.%d does not match gateway server %d.%d.%d.%d\n",
+                     remote_ip[0], remote_ip[1], remote_ip[2], remote_ip[3],
+                     udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
         }
         else
         {
-            printfdeb("[ERROR] Incoming config message not known! Discarding!\n");
+          ConfFrame cf;
+
+          if (!parseConfFrame(inc_udp_buffer + UDP_MSG_INDICATOR_LEN, packetSize - UDP_MSG_INDICATOR_LEN, cf))
+          {
+            printfdeb("[CONF] ignored: malformed frame\n");
+          }
+          else
+          {
+            // lat/lon/alt: parsed for visibility, not applied -- same as
+            // the ESP32 side.
+            if(cf.hasLat)
+              printfdeb("[CONF] lat received (not applied): %ld\n", (long)cf.lat);
+            if(cf.hasLon)
+              printfdeb("[CONF] lon received (not applied): %ld\n", (long)cf.lon);
+            if(cf.hasAlt)
+              printfdeb("[CONF] alt received (not applied): %ld\n", (long)cf.alt);
+
+            String sCall = String(cf.call);
+            sCall.trim();
+            sCall.toUpperCase();
+
+            if (!checkRegexCall(sCall))
+            {
+              printfdeb("[CONF] ignored: callsign <%s> from server not valid\n", sCall.c_str());
+            }
+            else
+            {
+              snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sCall.c_str());
+
+              if(cf.hasShort)
+                snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", cf.shortname);
+              else
+                snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());
+
+              printfdeb("[CONF] Call:%s Short:%s set from server\n", meshcom_settings.node_call, meshcom_settings.node_short);
+
+              save_settings();
+
+              // same auto-reboot as --setcall (src/command_functions.cpp:3452).
+              // No T-Deck exception needed here -- BOARD_T_DECK/BOARD_T_DECK_PLUS
+              // are ESP32-only board defines, never set in an nRF52 build.
+              rebootAuto = millis() + 15 * 1000; // 15 Sekunden
+            }
+          }
         }
       }
       else if (memcmp(indicator_b, beat, UDP_MSG_INDICATOR_LEN) == 0)
@@ -601,6 +781,9 @@ int NrfETH::getUDP()
           printfdeb(" [BEAT] Heartbeat from server\n");
         }
 
+        // TM-39: raw & unconditional
+        Serial.printf("[GW];rx;type;BEAT;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
+
         last_upd_timer = millis();
         
         /**
@@ -612,6 +795,8 @@ int NrfETH::getUDP()
       else
       {
         printfdeb("[ERROR] Received udp message without indicator\n");
+        // TM-39: raw & unconditional
+        Serial.printf("[GW];rx;type;OTHER;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
         last_upd_timer = millis();
       }
 
@@ -657,6 +842,7 @@ void NrfETH::fillUDP_RING_BUFFER(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_b
  */
 bool NrfETH::hasETHlink()
 {
+  EthStall st("link");
   if (Ethernet.linkStatus() == LinkON)
   {
     DEBUG_MSG("ETH", "Has Link UP");
@@ -721,8 +907,10 @@ void NrfETH::getMyMac()
  */
 int NrfETH::resetDHCP()
 {
+  s_ethResets++;
+  Serial.printf("[ETH];event;reset;ms;%lu\n", (unsigned long)millis());
   // stop UDP
-  Udp.stop();
+  { EthStall st("udp_stop"); Udp.stop(); }
 
   //restart ETH HW Board
   //digitalWrite(WB_IO2, LOW); // disable power supply.
@@ -758,6 +946,7 @@ int NrfETH::resetDHCP()
  */
 void NrfETH::initETH_HW()
 {
+  EthStall st("hw_init");
   pinMode(WB_IO2, OUTPUT);
   digitalWrite(WB_IO2, HIGH); // Enable power supply.
 
@@ -810,7 +999,9 @@ int NrfETH::startETH()
     return 2;
   }
 
-  if (Ethernet.begin(macaddr, 10000UL) == 0)
+  int dhcp_rc;
+  { EthStall st("dhcp_begin"); dhcp_rc = Ethernet.begin(macaddr, 10000UL); }
+  if (dhcp_rc == 0)
   {
     printlndeb("Failed to configure Ethernet using FIX/DHCP");
     if (Ethernet.hardwareStatus() == EthernetNoHardware) // Check for Ethernet hardware present.
@@ -853,6 +1044,9 @@ int NrfETH::startETH()
     snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%i.%i.%i.%i", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2], Ethernet.subnetMask()[3]);
 
     hasIPaddress = true;
+    s_ethGotIpCount++;
+    s_ethLastGotIpMs = millis();
+    Serial.printf("[ETH];event;got_ip;%s;ms;%lu\n", meshcom_settings.node_ip, (unsigned long)millis());
 
     // update phone status
     if (isPhoneReady == 1)
@@ -873,7 +1067,12 @@ int NrfETH::startETH()
  */
 int NrfETH::checkDHCP()
 {
-  int rc = Ethernet.maintain();
+  int rc;
+  { EthStall st("dhcp_maintain"); rc = Ethernet.maintain(); }
+  if(rc == 2 || rc == 4) s_ethDhcpRenews++;
+  else if(rc == 1 || rc == 3) s_ethDhcpFails++;
+  if(rc != 0)
+    Serial.printf("[ETH];event;dhcp;rc;%d;ms;%lu\n", rc, (unsigned long)millis());
 
   switch (rc)
   {
@@ -907,14 +1106,17 @@ void NrfETH::startUDP()
   }
   else
   {
+    const char *srv_path = NULL;   // TM-39: "hamnet" or "inet", matches the printlndeb text below
+
     if (local_addr[0] == 44 || meshcom_settings.node_hamnet_only)
     {
       if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
       {
         if(bDisplayCont)
           printlndeb("[UDP-DEST] Setting I-NET UDP-DEST 145.239.75.155");
-          
+
         udp_dest_addr = IPAddress(145, 239, 75, 155);
+        srv_path = "inet";
 
         timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
       }
@@ -925,6 +1127,7 @@ void NrfETH::startUDP()
           printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.148.230.197");
 
         udp_dest_addr = IPAddress(44, 148, 230, 197);
+        srv_path = "hamnet";
 
         //DEBUG_MSG("NTP", "Setting Hamnet NTP");
         timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
@@ -935,6 +1138,7 @@ void NrfETH::startUDP()
           printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
 
         udp_dest_addr = IPAddress(44, 143, 8, 143);
+        srv_path = "hamnet";
 
         //DEBUG_MSG("NTP", "Setting Hamnet NTP");
         timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
@@ -942,24 +1146,49 @@ void NrfETH::startUDP()
     }
     else
     {
-      if(bDisplayCont)
-        printlndeb("[UDP-DEST] Setting I-NET UDP-DEST 89.185.97.38");
+      // CTY-01: mirrors the country split startFIXUDP() already has on its
+      // non-hamnet branch -- this path (DHCP, no hamnet) had none and always
+      // fell through to the OE default, regardless of node_gwsrv.
+      if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
+      {
+        if(bDisplayCont)
+          printlndeb("[UDP-DEST] Internet UDP-DEST IT 145.239.75.155");
 
-      //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
-      udp_dest_addr = IPAddress(89, 185, 97, 38);
+        udp_dest_addr = IPAddress(145, 239, 75, 155);
+        srv_path = "inet";
 
-      //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
-      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+        timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+      }
+      else
+      {
+        if(bDisplayCont)
+          printlndeb("[UDP-DEST] Setting I-NET UDP-DEST OE 89.185.97.38");
+
+        //DEBUG_MSG("UDP-DEST", "Setting I-NET UDP-DEST 213.47.219.169");
+        udp_dest_addr = IPAddress(89, 185, 97, 38);
+        srv_path = "inet";
+
+        //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
+        timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+      }
     }
 
     snprintf(sn, sizeof(sn), "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
     s_node_hostip = sn;
+
+    // TM-39: raw & unconditional, once per (re)connect. nRF52 has no DNS
+    // resolver on this path -- host is always the literal dotted-quad IP,
+    // never a hostname (unlike the ESP32 [GW];srv, which logs a hostname
+    // for IT/DL and only falls back to a literal for the else-case).
+    Serial.printf("[GW];srv;%.2s;host;%s;path;%s;ms;%lu\n",
+                   meshcom_settings.node_gwsrv, s_node_hostip.c_str(), srv_path, (unsigned long)millis());
 
     Udp.begin(LOCAL_PORT); // Start UDP.
 
     DEBUG_MSG("UDP_ETH", "UDP init successful!");
 
     timeClient.begin();
+    timeClient.setUpdateInterval(3600000);   // the 15-min caller drives it; this is the safety net
 
     btimeClient = true;
   }
@@ -973,22 +1202,13 @@ String NrfETH::udpUpdateTimeClient()
   if(!btimeClient)
     return "none";
 
-  if(!timeClient.update())
-  {
+  // TM-35: ask for a refresh and return at once; the reply lands in getUDP()
+  EthStall st("ntp");
+  timeClient.requestNow();
+  timeClient.loop();
 
-    printlndeb("TimeClient no update posible");
-
-    if(!timeClient.forceUpdate())
-    {
-      printlndeb("TimeClient no force update posible");
-
-      timeClient.end();
-      delay(2000);
-      timeClient.begin();
-  
-      return "none";
-    }    
-  }
+  if(!timeClient.isTimeSet())
+    return "none";
 
   if(bDisplayInfo)
   {
@@ -1004,6 +1224,11 @@ String NrfETH::udpGetTimeClient()
   if(!btimeClient)
     return "none";
 
+  timeClient.loop();
+
+  if(!timeClient.isTimeSet())
+    return "none";
+
   return timeClient.getFormattedTime();
 }
 
@@ -1011,7 +1236,10 @@ String NrfETH::udpGetDateClient()
 {
   if(!btimeClient)
     return "none";
-    
+
+  if(!timeClient.isTimeSet())
+    return "none";
+
   return getDateTime(timeClient.getEpochTime());
 }
 
@@ -1087,6 +1315,7 @@ void NrfETH::startFIXUDP()
   printlndeb(LOCAL_PORT);
 
   timeClient.begin();
+  timeClient.setUpdateInterval(3600000);   // the 15-min caller drives it; this is the safety net
 
   btimeClient = true;
 

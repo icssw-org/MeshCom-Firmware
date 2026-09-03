@@ -1,6 +1,17 @@
 #include <Arduino.h>
 
 #include "esp32_flash.h"
+#if !defined(MC_SAFEBOOT)
+// TM-32: der Sanitize-Pfad braucht Varianten-Konstanten (configuration.h via
+// lora_setchip.h), die der minimale Safeboot-Build nicht hat -- und kein Radio,
+// dessen Parameter zu plausibilisieren waeren.
+#include <settings_sanitize.h>
+#include <lora_setchip.h>
+#else
+#include <maxhop.h>   // MAXHOP_TEXT_FALLBACK, dependency-frei (siehe unten)
+#endif
+
+void save_settings(void);
 
 #include <Preferences.h>
 
@@ -11,6 +22,42 @@ Preferences preferences;
 s_meshcom_settings meshcom_settings;
 
 // Get LoRa parameter
+// TM-32: Plausibilitaet der geladenen Radio-Parameter (Marker und Groesse
+// prueft N-12, den Inhalt bisher niemand). Korrekturen werden geloggt.
+#if !defined(MC_SAFEBOOT)
+static void sanitize_log(const char *field, const char *oldv, const char *newv)
+{
+    Serial.printf("[FLASH]...sanitized %s: %s -> %s\n", field, oldv, newv);
+}
+
+void sanitize_loaded_settings(void)
+{
+    RadioLimits lim = { TX_POWER_MIN, TX_POWER_MAX, 400.0f, 960.0f, 0, 0, max_country };
+    RadioParams p = { meshcom_settings.node_power, meshcom_settings.node_freq, meshcom_settings.node_bw,
+                      meshcom_settings.node_sf, meshcom_settings.node_cr, meshcom_settings.node_country };
+    int fixed = sanitize_radio_params(p, lim, sanitize_log);
+    if(fixed > 0)
+    {
+        meshcom_settings.node_power = p.power;
+        meshcom_settings.node_freq = p.freq;
+        meshcom_settings.node_bw = p.bw;
+        meshcom_settings.node_sf = p.sf;
+        meshcom_settings.node_cr = p.cr;
+        meshcom_settings.node_country = p.country;
+    }
+
+    // CS-01: derselbe Plausibilitaetspfad fuer das persistente Hop-Limit
+    if(sanitize_max_hop_text(meshcom_settings.max_hop_text, sanitize_log))
+        fixed++;
+
+    if(fixed > 0)
+    {
+        Serial.printf("[FLASH]...%d setting(s) out of range, reset to default\n", fixed);
+        save_settings();    // einmal zurueckschreiben, sonst meldet jeder Boot dieselbe Korrektur
+    }
+}
+#endif // !MC_SAFEBOOT
+
 void init_flash(void)
 {
     Serial.println("[INIT]...init_flash");
@@ -125,6 +172,23 @@ void init_flash(void)
 
     meshcom_settings.node_country = preferences.getInt("node_ctry");    // 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
 
+    // CS-01: Hop-Limit fuer Textnachrichten. Bis 2026-08-30 gab es keinen
+    // NVS-Key dafuer -- der Wert war faktisch eine Compile-Zeit-Konstante.
+    // max_hop_pos bleibt bewusst beim Default (esp32_main.cpp). Im Safeboot
+    // kommt MAX_HOP_TEXT_DEFAULT (configuration_global.h) nicht mit --
+    // dort tut es der Spiegelwert aus maxhop.h.
+    #if defined(MC_SAFEBOOT)
+    meshcom_settings.max_hop_text = preferences.getInt("max_hop_text", MAXHOP_TEXT_FALLBACK);
+    #else
+    meshcom_settings.max_hop_text = preferences.getInt("max_hop_text", MAX_HOP_TEXT_DEFAULT);
+    #endif
+
+    // TM-32 (upstream #661/#57): Radio-Parameter auf Plausibilitaet pruefen,
+    // bevor sie in radio.setOutputPower() & Co. landen. Sentinels bleiben.
+    #if !defined(MC_SAFEBOOT)
+    sanitize_loaded_settings();
+    #endif
+
     meshcom_settings.node_track_freq = preferences.getFloat("node_track", 0);
     meshcom_settings.node_preamplebits = preferences.getInt("node_pream", 32);
 
@@ -201,7 +265,7 @@ void init_flash(void)
     meshcom_settings.node_persist_to_sd = preferences.getBool("node_persd", false);
     meshcom_settings.node_immediate_save = preferences.getBool("node_immsave", false);
     meshcom_settings.node_kbl_sync = preferences.getBool("node_kblsync", false);
-    meshcom_settings.node_wifion = preferences.getBool("node_wifion", false);
+    meshcom_settings.node_wifion = preferences.getBool("node_wifion", true);   // HL-02: struct default is true
     #endif
 
     meshcom_settings.node_wifi_power = preferences.getInt("node_wifip", 60);
@@ -326,6 +390,10 @@ void save_settings(void)
 
     preferences.putInt("node_msgid", meshcom_settings.node_msgid);
     preferences.putInt("node_ackid", meshcom_settings.node_ackid);
+
+    // CS-01: Hop-Limit fuer Textnachrichten (--maxhop). max_hop_pos wird bewusst
+    // nicht gespeichert und bleibt beim Compile-Default.
+    preferences.putInt("max_hop_text", meshcom_settings.max_hop_text);
 
     preferences.putInt("node_power", meshcom_settings.node_power);
     preferences.putFloat("node_freq", meshcom_settings.node_freq);

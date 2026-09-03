@@ -41,9 +41,11 @@ String getTimeString();
 
 void printBuffer(uint8_t *buffer, int len);
 void printAsciiBuffer(uint8_t *buffer, int len);
-void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage);
+// SL-01: `tail` wird VOR dem `\n` angehaengt (Pegel-/Dedup-Anhang der
+// RX-Zeile, siehe setlogFormatRxTail()); leer heisst Zeile wie bisher.
+void printBuffer_aprs(char *msg_source, struct aprsMessage &aprsMessage, const char *tail = "");
 void charBuffer_aprs(struct aprsMessage &aprsMessage);
-void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int16_t size);
+void printBuffer_ack(char *msgSource, uint8_t payload[UDP_TX_BUF_SIZE+10], int16_t size, const char *tail = "");
 
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len);
@@ -68,13 +70,17 @@ void sendPing(char msg_call[10]);
 void SendPong(String msg_source_call, unsigned int msg_id);
 void PongFail(String msg_source_call);
 
+// BP-09: return value is a BpSendResult (see backpressure.h) -- lets a caller
+// keep the operator's typed text instead of clearing an input field for a
+// message that never went out.
 // src_override: NULL = send under the node call (normal case). A non-empty
-// string sends the message under that callsign instead — used by the KISS
+// string sends the message under that callsign instead -- used by the KISS
 // interface to preserve the client's callsign (its base must match the node
 // call, checked by the caller).
-// Returns the assigned msg_id, or 0 if nothing was sent (bad length / DM to
-// own call / command line).
-unsigned int sendMessage(char *msg_text, int len, const char *src_override = nullptr);
+// out_msg_id: when non-NULL, receives the assigned msg_id on BP_SEND_OK (the
+// KISS interface needs it for the TX-result frame and the ack map).
+int sendMessage(char *msg_text, int len, const char *src_override = nullptr,
+                unsigned int *out_msg_id = nullptr);
 
 // Inject an APRS position received over the KISS interface, under srcCall.
 // posData is the APRS position payload without the leading data-type char
@@ -89,6 +95,7 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
 // directly-connected client's APRS ack. Returns the assigned msg_id.
 unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *src_override = nullptr);
 void sendHey();
+bool sendHeyShot();
 void sendTelemetry(int ID);
 
 unsigned int setSMartBeaconing(double flat, double flon);
@@ -96,6 +103,7 @@ unsigned int setSMartBeaconing(double flat, double flon);
 String convertCallToShort(char callsign[10]);
 
 uint8_t shortVERSION();
+char shortSUBVERSION();
 
 double cround4(double dvar);
 double cround4abs(double dvar);
@@ -119,6 +127,9 @@ int count_char(String s, char c);
 
 void addRingPointer(volatile int &toWrite, volatile int &toRead, int iMAX, const char* bufName = "?");
 
+void oledStat();
+void oledInvalidate();
+extern bool bOledLog;
 bool is_equ(const char* buf1, const char* buf2);
 int is_pos(const char* buf, const char* comp_buf);
 

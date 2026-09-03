@@ -16,6 +16,5 @@ void resetExternUDP();
 
 String getJSON(unsigned char incoming, int len, char *iname);
 
-String strEsc(String strInput);
 
 #endif

@@ -15,6 +15,9 @@
 #include <rtc_functions.h>
 #include <time_functions.h>
 #include <spectral_scan.h>
+#include <maxhop.h>         // CS-02: drop-down values for the text hop limit
+#include <config_json.h>   // CS-03: config download/upload as one JSON object
+#include <ArduinoJson.h>    // JSN-01: call_function()/setparam()/getparam() JSON escaping
 
 #include "web_UIComponents.h"
 #include "web_setup.h"
@@ -56,6 +59,11 @@ bool bMDNSOK=true;
  */
 void startWebserver()
 {
+    // esp32loop() calls this every pass while iWlanWait == 0; without an IP
+    // the debug line came out ~125 times per second (TM-21). Log the state
+    // once, again only after it changed.
+    static bool s_noIpLogged = false;
+
     if (bweb_server_running)
         return;
     #ifdef HAS_ETHERNET
@@ -63,10 +71,11 @@ void startWebserver()
         {
             if (strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
             {
-                if(bDEBUG)
+                if(bDEBUG && !s_noIpLogged)
                 {
                     Serial.print("[WEB]...no ip set :");
                     Serial.println(meshcom_settings.node_ip);
+                    s_noIpLogged = true;
                 }
 
                 stopWebserver();
@@ -76,16 +85,19 @@ void startWebserver()
     #else
         if (strlen(meshcom_settings.node_ip) < 7 && !bWIFIAP)
         {
-            if(bDEBUG)
+            if(bDEBUG && !s_noIpLogged)
             {
                 Serial.print("[WEB]...no ip set :");
                 Serial.println(meshcom_settings.node_ip);
+                s_noIpLogged = true;
             }
 
             stopWebserver();
             return;
         }
     #endif
+
+    s_noIpLogged = false;               // IP is set now; log again if it goes away
 
 #ifdef ESP32
     // Check if WiFi is actually connected or AP is active before trying to start MDNS
@@ -308,6 +320,212 @@ void web_client_html(CommonWebClient web_client)
 
 /**
  * ###########################################################################################################################
+ * CS-03: config download / upload
+ *
+ * One buffer serves both directions -- the export never runs while an upload
+ * body is being read. The worst-case export (every string field filled to its
+ * limit) measures about 3.1 kB, so CONFIG_JSON_MAX is roughly a factor of two
+ * of headroom and at the same time the hard cap on what an upload may send.
+ *
+ * On the heap, NOT in BSS: 6 kB of static buffer overflows dram0_0_seg on the
+ * plain ESP32 (E22-DevKitC links with ~4 kB to spare). It is allocated for the
+ * duration of one /config.json or POST /config request and released again --
+ * both are rare, operator-triggered requests.
+ */
+static char *web_cfg_buf = NULL;
+
+static bool web_cfg_alloc(void)
+{
+    if (web_cfg_buf == NULL)
+        web_cfg_buf = (char *)malloc(CONFIG_JSON_MAX + 1);
+
+    if (web_cfg_buf != NULL)
+        web_cfg_buf[0] = '\0';
+
+    return web_cfg_buf != NULL;
+}
+
+static void web_cfg_free(void)
+{
+    if (web_cfg_buf != NULL)
+    {
+        free(web_cfg_buf);
+        web_cfg_buf = NULL;
+    }
+}
+
+/**
+ * Reads the request BODY.
+ *
+ * work_webpage() has only ever read the request HEADER -- it stops at the
+ * blank line and answers. A file upload is the first thing here that carries
+ * a body, so this is the reader for it: bounded by the Content-Length the
+ * caller picked out of the header, hard-capped at CONFIG_JSON_MAX, and given
+ * up on after WEB_TIMEOUT_TIME without a byte so a lying Content-Length
+ * cannot pin the loop.
+ *
+ * @return bytes read into web_cfg_buf (NUL-terminated), or negative:
+ *         -1 no/!invalid Content-Length, -2 too large, -3 short read.
+ */
+static int web_read_body(long content_length)
+{
+    web_cfg_buf[0] = '\0';
+
+    if (content_length <= 0)
+        return -1;
+
+    if (content_length > (long)CONFIG_JSON_MAX)
+        return -2;
+
+    long          got = 0;
+    unsigned long last = millis();
+
+    while (got < content_length && (millis() - last) <= WEB_TIMEOUT_TIME)
+    {
+        yield();
+
+        if (web_client.available())
+        {
+            int c = web_client.read();
+            if (c < 0)
+                break;
+
+            web_cfg_buf[got++] = (char)c;
+            last = millis();
+        }
+        else if (!web_client.connected())
+        {
+            break;
+        }
+    }
+
+    web_cfg_buf[got] = '\0';
+
+    return (got == content_length) ? (int)got : -3;
+}
+
+/**
+ * GET /config.json -- the whole configuration as a downloadable file.
+ *
+ * Sends its own header instead of send_http_header(): only this response
+ * carries a Content-Disposition, which is what turns a browser navigation
+ * into a download instead of a page full of JSON.
+ */
+static void sub_config_download(void)
+{
+    if (!web_cfg_alloc())
+    {
+        send_http_header(422, RESPONSE_TYPE_JSON);
+        web_client.println("{\"error\":\"out of memory\"}");
+        return;
+    }
+
+    size_t n = configExportJson(web_cfg_buf, CONFIG_JSON_MAX);
+
+    if (n == 0)
+    {
+        web_cfg_free();
+        send_http_header(422, RESPONSE_TYPE_JSON);
+        web_client.println("{\"error\":\"config export did not fit the buffer\"}");
+        return;
+    }
+
+    /* the callsign goes into a filename -- keep it to characters that cannot
+     * break out of the quoted header value or of a directory */
+    char fname[16];
+    size_t fi = 0;
+    for (const char *p = meshcom_settings.node_call; *p && fi < sizeof(fname) - 1; p++)
+    {
+        char c = *p;
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '-')
+            fname[fi++] = c;
+    }
+    fname[fi] = '\0';
+    if (fi == 0)
+        snprintf(fname, sizeof(fname), "node");
+
+    web_client.printf("HTTP/1.1 200 OK \n");
+    web_client.println("Content-type:application/json");
+    web_client.printf("Content-Disposition: attachment; filename=\"meshcom-%s.json\"\n", fname);
+    web_client.printf("Content-Length: %u\n", (unsigned int)n);
+    web_client.println("Access-Control-Allow-Origin: *");
+    web_client.println("Connection: close");
+    web_client.println("Cache-Control: no-cache, no-store, must-revalidate");
+    web_client.println("Pragma: no-cache");
+    web_client.println("Expires: 0");
+    web_client.println();
+
+    web_client.print(web_cfg_buf);
+
+    web_cfg_free();
+}
+
+/**
+ * POST /config -- restore a configuration file and reboot once.
+ *
+ * Nothing is written unless configImportJson() accepted every value; on
+ * failure the answer is a 400 with the reason and NVRAM is untouched. On
+ * success the response is flushed and the connection closed BEFORE the reset,
+ * otherwise the browser never sees the answer. Reboot pattern copied from
+ * commandAction()'s --cleanflash/--reboot (command_functions.cpp).
+ */
+static void sub_config_upload(long content_length)
+{
+    char err[160] = {0};
+
+    if (!web_cfg_alloc())
+    {
+        send_http_header(400, RESPONSE_TYPE_TEXT);
+        web_client.printf("<p>upload rejected: out of memory</p>");
+        return;
+    }
+
+    int n = web_read_body(content_length);
+
+    if (n < 0)
+    {
+        web_cfg_free();
+        send_http_header(400, RESPONSE_TYPE_TEXT);
+        web_client.printf("<p>upload rejected: %s</p>",
+                          (n == -2) ? "file too large" : (n == -1) ? "no Content-Length" : "incomplete upload");
+        /* own marker: these codes are the body reader's, not configImportJson()'s */
+        Serial.printf("[CONFIG];upload;rc;%d;len;%ld\n", n, content_length);
+        return;
+    }
+
+    int rc = configImportJson(web_cfg_buf, (size_t)n, err, sizeof(err));
+
+    web_cfg_free();
+
+    if (rc != 0)
+    {
+        send_http_header(400, RESPONSE_TYPE_TEXT);
+        web_client.printf("<p>config import failed: %s</p>", err);
+        return;
+    }
+
+    save_settings();
+
+    send_http_header(200, RESPONSE_TYPE_TEXT);
+    web_client.printf("<html><body><h3>config imported</h3><p>%s</p><p>the node reboots now.</p></body></html>", err);
+    web_client.flush();
+    web_client.stop();
+
+    Serial.printf("[CONFIG];reboot;after;import\n");
+
+    delay(2000);
+
+    #ifdef ESP32
+        ESP.restart();
+    #endif
+
+    #if defined NRF52_SERIES
+        NVIC_SystemReset();     // resets the device
+    #endif
+}
+
+/**
+ * ###########################################################################################################################
  * Handle Web requests and call the matching sub function
  */
 String work_webpage(bool bget_password, int webid)
@@ -322,6 +540,11 @@ String work_webpage(bool bget_password, int webid)
     web_previousTime = web_currentTime;
     String password_message = "";
     String web_currentLine = ""; // make a String to hold incoming data from the client
+
+    // CS-03: an upload needs its body length, and the header may well be
+    // longer than web_header_collect[]. Picked off the line as it completes,
+    // so it does not depend on that 1 kB window.
+    long web_content_length = -1;
 
     if (bDEBUG)
     {
@@ -427,6 +650,16 @@ String work_webpage(bool bget_password, int webid)
                             // ### !!function will generate a HTML header itself
                             getparam(web_header);
                         }
+                        else if (web_header.indexOf("/config.json") >= 0)
+                        { // CS-03: download the configuration as a file
+                            // ### !!function will generate a HTML header itself
+                            sub_config_download();
+                        }
+                        else if (web_header.indexOf("POST /config") >= 0)
+                        { // CS-03: restore a configuration file, then reboot
+                            // ### !!function will generate a HTML header itself
+                            sub_config_upload(web_content_length);
+                        }
                         else if (web_header.indexOf("/?page=setup") >= 0)
                         { // user requested the position page
                             send_http_header(200, RESPONSE_TYPE_TEXT);
@@ -497,6 +730,14 @@ String work_webpage(bool bget_password, int webid)
                 }
                 else
                 { // if you got a newline, then clear currentLine
+                    if (web_content_length < 0)
+                    {
+                        String hdr_name = web_currentLine;
+                        hdr_name.toLowerCase();
+                        if (hdr_name.startsWith("content-length:"))
+                            web_content_length = web_currentLine.substring(15).toInt();
+                    }
+
                     web_currentLine = "";
                 }
             }
@@ -614,15 +855,29 @@ void deliver_scaffold(bool bget_password)
     // this function is used to load content depending on the navigation button pressed
     web_client.println("function loadPage(page,sender,useSpinner) {cpage=page;csender=sender;if(useSpinner){document.getElementById(\"content_layer\").innerHTML=\"<span class=\\\"loader\\\"></span>\"};var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"content_layer\").innerHTML=this.responseText;}};xhttp.open(\"GET\",\"?page=\"+page,true);xhttp.send();Array.from(document.querySelectorAll('.nav_button.nbactive ')).forEach((el) => el.classList.remove('nbactive')); sender.classList.add('nbactive');}\n");
     // this function is used to send a message from the browser via node to the mesh
-    web_client.println("function sendMessage() {var xhttp=new XMLHttpRequest();xhttp.open(\"GET\",\"/?sendmessage&tocall=\"+document.getElementById(\"sendcall\").value+\"&message=\"+encodeURI(document.getElementById(\"messagetext\").value),true);xhttp.send();document.getElementById(\"sendcall\").value=\"\"; document.getElementById(\"messagetext\").value=\"\";}\n");
+    //
+    // BP-09: the input fields used to be cleared unconditionally, right after
+    // xhttp.send() and without ever looking at the answer -- so a message the
+    // node refused (QRT) or dropped (QTA) took the operator's typed text with
+    // it, exactly the loss BP-09 fixes on the T-Deck and T-Deck Pro. The clear
+    // now waits for the response and only fires on "sendmessage ok"; every
+    // other outcome (refused / dropped / invalid / failed) leaves the text in
+    // place so it can be resent after the QRV. updateCharsLeft() is called
+    // from the handler because the onclick chain has long since run its own
+    // call by the time the answer arrives.
+    web_client.println("function sendMessage() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200 && this.responseText.indexOf(\"sendmessage ok\")>=0){document.getElementById(\"sendcall\").value=\"\"; document.getElementById(\"messagetext\").value=\"\"; updateCharsLeft();}};xhttp.open(\"GET\",\"/?sendmessage&tocall=\"+encodeURIComponent(document.getElementById(\"sendcall\").value)+\"&message=\"+encodeURIComponent(document.getElementById(\"messagetext\").value),true);xhttp.send();}\n");
     // this functions is counting and displaying the amount of chars left that the user can use to write a message
     web_client.println("function updateCharsLeft() {let maxlength=149;if(document.getElementById(\"sendcall\").value.length>0) {maxlength-=(document.getElementById(\"sendcall\").value.length)+2;}let msglength=document.getElementById(\"messagetext\").value.length;if(msglength>maxlength){document.getElementById(\"messagetext\").value=document.getElementById(\"messagetext\").value.substring(0,maxlength);msglength=maxlength;}document.getElementById(\"indicator_charsleft\").innerHTML=maxlength-msglength;}\n");
     // this function is an ayncronous loader that is used to update the received messages without re-loading the whole page, it will re-call itself after a timeout as long as the message-page is displayed
     web_client.println("function updateMessages() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){if(document.getElementById(\"messages_panel\")!=null)document.getElementById(\"messages_panel\").innerHTML=decodeURIComponent(this.responseText);}};setTimeout(function(){xhttp.open(\"GET\",\"/?getmessages\",true);xhttp.send();},1000);}\n");
     //  this function sends a parameter:value request to the backend
-    web_client.println("function setvalue(param,value,refresh) {fetch(\"/setparam/?\"+param+\"=\"+value).then(function(response){return response.json();}).then(function(jsonResponse){if(jsonResponse['returncode']==1)alert(\"Value could not be set.\");if(jsonResponse['returncode']==2)alert(\"Parameter unknown to node.\");if(jsonResponse['returncode']>0){loadPage(cpage,csender,false)}if(refresh)loadPage(cpage,csender,false);});}\n");
+    web_client.println("function setvalue(param,value,refresh) {fetch(\"/setparam/?\"+param+\"=\"+encodeURIComponent(value)).then(function(response){return response.json();}).then(function(jsonResponse){if(jsonResponse['returncode']==1)alert(\"Value could not be set.\");if(jsonResponse['returncode']==2)alert(\"Parameter unknown to node.\");if(jsonResponse['returncode']>0){loadPage(cpage,csender,false)}if(refresh)loadPage(cpage,csender,false);});}\n");
     // this function invokes a function call to the backend passing the function name and an optional parameter (e.g. sendpos)
     web_client.println("function callfunction(functionname,functionparameter){fetch(\"/callfunction/?\"+functionname+\"=\"+functionparameter).then(function(response){return response.json();}).then(function (jsonResponse) {/*Nothing todo yet.*/})}\n");
+    // CS-03: config restore. Lives here and not in the setup page, because the
+    // sub-pages are injected with innerHTML -- a <script> inside them never runs.
+    web_client.println("function uploadconfig(){var e=document.getElementById(\"cfgfile\");if(!e||e.files.length==0){alert(\"choose a config file first\");return;}if(!confirm(\"Restore this configuration and reboot the node?\"))return;var r=new FileReader();r.onload=function(){fetch(\"/config\",{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:r.result}).then(function(x){return x.text().then(function(t){var m=t.replace(/<[^>]*>/g,\" \").trim();if(x.ok){alert(\"config imported: \"+m);}else{alert(\"import failed: \"+m);}});}).catch(function(err){alert(\"upload failed: \"+err);});};r.readAsText(e.files[0]);}\n");
+
     // This function is used to toggle a css class so setup cars can collapse / expand
     web_client.println("function togglecard(element){element.parentElement.classList.toggle(\"cardopen\");}");
 
@@ -821,6 +1076,53 @@ static int increment_mod(int i, int n) {
 
 /**
  * ###########################################################################################################################
+ * escapes a string for safe inclusion in HTML output (WEB-03a: mesh-derived strings such as
+ * message payloads, callsigns and paths are attacker-controlled and must not reach innerHTML raw)
+ */
+static String htmlEscape(const String &input)
+{
+    String out;
+    out.reserve(input.length());
+    for (unsigned int i = 0; i < input.length(); i++)
+    {
+        char c = input.charAt(i);
+        switch (c)
+        {
+            case '&':  out += "&amp;";  break;
+            case '<':  out += "&lt;";   break;
+            case '>':  out += "&gt;";   break;
+            case '"':  out += "&quot;"; break;
+            case '\'': out += "&#39;";  break;
+            default:   out += c;        break;
+        }
+    }
+    return out;
+}
+
+/**
+ * ###########################################################################################################################
+ * resolves the NTP server the node actually uses (WEB-01): own override if set, else the same
+ * default selection udp_functions.cpp:1495-1536 applies when connecting. No clean read-only
+ * extern exposes that resolved choice, so the selection is duplicated here (read-only mirror).
+ */
+static String getEffectiveNtpServer()
+{
+    if (strlen(meshcom_settings.node_ownntp) >= 7)
+        return String(meshcom_settings.node_ownntp);
+
+    IPAddress webNtpIp;
+    webNtpIp.fromString(meshcom_settings.node_ip);
+
+    bool bHamnet = (webNtpIp[0] == 44 || meshcom_settings.node_hamnet_only == 1);
+
+    if (bHamnet)
+        return (webNtpIp[1] == 143) ? "44.143.0.9 (default)" : "44.148.224.123 (default)";
+    else
+        return "pool.ntp.org (default)";
+}
+
+/**
+ * ###########################################################################################################################
  * delivers the rxlog-page to be injected into the scaffold
  */
 void sub_page_rxlog()
@@ -928,7 +1230,7 @@ void sub_page_mheard()
     {
         if (mheardCalls[iset][0] != 0x00)
         {
-            if ((mheardEpoch[iset] + 60 * 60 * 3) > getUnixClock()) // 3h {
+            if (mheardFreshMs(iset, 3UL * 60UL * 60UL * 1000UL)) // 3h (NC-02: monoton, nicht Wanduhr)
                 isShowing = true;
             decodeMHeard(mheardBuffer[iset], mheardLine);
             web_client.printf("<div class=\"cardlayout\">\n");
@@ -983,7 +1285,7 @@ void sub_page_path()
     {
         if (mheardPathCalls[iset][0] != 0x00)
         {
-            if ((mheardPathEpoch[iset] + 60 * 60 * 3) > getUnixClock())
+            if (mheardPathFreshMs(iset, 3UL * 60UL * 60UL * 1000UL)) // 3h (NC-02: monoton, nicht Wanduhr)
             { // 3h
                 isShowing = true;
                 unsigned long lt = mheardPathEpoch[iset] + (long)(meshcom_settings.node_utcoff * 3600.0);
@@ -1074,6 +1376,25 @@ void sub_page_setup()
     web_client.println("<button onclick=\"setvalue('setctry', document.getElementById('country').value,false)\"><i class=\"btncheckmark\"></i></button>");
 
     _create_setup_textinput_element("txpower", "TX Power", String(meshcom_settings.node_power), "15", "txpower", 2, false, false);                    // create Textinput-Element including Label and Button
+
+    // CS-02: Max-Hop als Drop-down. Angeboten werden 4/3/2; hat --maxhop einen
+    // Wert ausserhalb dieser Liste gesetzt (1, 5, 6), steht er zusaetzlich drin,
+    // damit die Seite den echten Zustand zeigt statt ihn stillschweigend zu
+    // aendern. Die Liste baut maxhop.h, dieselbe Quelle wie die serielle Pruefung.
+    {
+        int hops[MAXHOP_OPTION_MAX];
+        int nhops = maxHopOptionList(meshcom_settings.max_hop_text, hops, MAXHOP_OPTION_MAX);
+
+        web_client.println("<label for=\"maxhop\">Max Hop</label>");
+        web_client.println("<select id=\"maxhop\" name=\"maxhop\">");
+        for (int ih = 0; ih < nhops; ih++)
+        {
+            web_client.printf("\t<option value=\"%i\" %s>%i</option>\n", hops[ih], (hops[ih] == meshcom_settings.max_hop_text) ? "selected" : "", hops[ih]);
+        }
+        web_client.println("</select>");
+        web_client.println("<button onclick=\"setvalue('maxhop', document.getElementById('maxhop').value,false)\"><i class=\"btncheckmark\"></i></button>");
+    }
+
     _create_setup_textinput_element("utcoffset", "UTC Offset", String(meshcom_settings.node_utcoff, 1).c_str(), "1.0", "utcoffset", 4, false, false); // create Textinput-Element including Label and Button
     _create_setup_textinput_element("maxv", "max. Voltage", String(meshcom_settings.node_maxv, 3), "4.125", "maxv", 5, false, false);                 // create Textinput-Element including Label and Button
 
@@ -1257,7 +1578,27 @@ void sub_page_setup()
 
     _create_setup_switch_element("nomsgall", "No MSG All", "do not show messages send to all", bNoMSGtoALL); // create Switch-Element inclucing Label and Description
 
-    web_client.println("</div></div></div>");
+    web_client.println("</div></div>");
+
+    // Config Backup / Restore Section (CS-03)
+    // The download is a plain navigation to /config.json -- the response
+    // carries a Content-Disposition, so the browser saves it instead of
+    // rendering it. uploadconfig() lives in the scaffold's script block
+    // (this page is injected with innerHTML, an inline <script> would not run).
+    web_client.println("<div class=\"cardlayout collapsablecard\">");
+    web_client.println("<label class=\"cardlabel\">Config Backup / Restore</label>");
+    web_client.println("<span>Open this to save the whole node configuration to a file, or to restore it.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
+    web_client.println("<div class=\"grid grid2\">");
+    web_client.println("<span><b>The file contains secrets in clear text</b> &ndash; the WiFi password, the web password and the BT code. Keep it like a password store.</span><i></i>");
+    web_client.println("<span>Download the configuration as JSON</span>");
+    web_client.println("<button onclick=\"window.location='/config.json';\">download</button>");
+    web_client.println("<span>Restore a configuration file. The node checks the layout version and the checksum, applies all values at once and then reboots.</span><i></i>");
+    web_client.println("<input type=\"file\" id=\"cfgfile\" accept=\".json,application/json\">");
+    web_client.println("<button onclick=\"uploadconfig();\">restore</button>");
+    web_client.println("</div></div>");
+
+    web_client.println("</div>");
     web_client.println(); // The HTTP response ends with another blank line
 }
 
@@ -1334,17 +1675,22 @@ void sub_content_messages()
                     if (msgtxt.indexOf('{') > 0)
                         msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{'));
 
+                    // WEB-03a: mesh-derived strings (payload, path, callsigns) are attacker-controlled -- escape before HTML output
+                    String msgtxt_esc = htmlEscape(msgtxt);
+                    String msg_source_path_esc = htmlEscape(aprsmsg.msg_source_path);
+                    String msg_destination_path_esc = htmlEscape(aprsmsg.msg_destination_path);
+
                     // messages by others
                     if (is_equ(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()))
                     {
                         web_client.printf("<div class=\"message message-send\"><div>");
 
                         web_client.printf("<p class=\"font-small font-bold\">%s", ccheck.c_str());
-                        web_client.printf("<a target=\"_blank\" href=\"https://aprs.fi/?call=%s\">%s</a>", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_source_path.c_str());
-                        web_client.printf("%s%s</p>", (char *)">", aprsmsg.msg_destination_path.c_str());
+                        web_client.printf("<a target=\"_blank\" href=\"https://aprs.fi/?call=%s\">%s</a>", msg_source_path_esc.c_str(), msg_source_path_esc.c_str());
+                        web_client.printf("%s%s</p>", (char *)">", msg_destination_path_esc.c_str());
 
                         web_client.printf("<p class=\"font-small font-bold\">%s</p>", timestamp);
-                        web_client.printf("<p class=\"font-normal\">%s</p>", msgtxt.c_str());
+                        web_client.printf("<p class=\"font-normal\">%s</p>", msgtxt_esc.c_str());
                         web_client.printf("</div></div>");
                     }
                     // own messages
@@ -1353,11 +1699,11 @@ void sub_content_messages()
                         web_client.printf("<div class=\"message message-received\"><div>");
 
                         web_client.printf("<p class=\"font-small font-bold\">%s", ccheck.c_str());
-                        web_client.printf("<a target=\"_blank\" href=\"https://aprs.fi/?call=%s\">%s</a>", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_source_path.c_str());
-                        web_client.printf("%s%s</p>", (char *)">", aprsmsg.msg_destination_path.c_str());
+                        web_client.printf("<a target=\"_blank\" href=\"https://aprs.fi/?call=%s\">%s</a>", msg_source_path_esc.c_str(), msg_source_path_esc.c_str());
+                        web_client.printf("%s%s</p>", (char *)">", msg_destination_path_esc.c_str());
 
                         web_client.printf("<p class=\"font-small font-bold\">%s</p>", timestamp);
-                        web_client.printf("<p class=\"font-normal\">%s</p>", msgtxt.c_str());
+                        web_client.printf("<p class=\"font-normal\">%s</p>", msgtxt_esc.c_str());
                         web_client.printf("</div></div>");
                     }
                 }
@@ -1501,7 +1847,13 @@ void sub_page_info()
     web_client.printf("<tr><td>Call</td><td>%s</td></tr>\n", meshcom_settings.node_call);
     web_client.printf("<tr><td>Hardware</td><td>%s</td></tr>\n", getHardwareLong(BOARD_HARDWARE).c_str());
     web_client.printf("<tr><td>UTC offset</td><td>%.1f [%s]</td></tr>\n", meshcom_settings.node_utcoff, cTimeSource);
-    web_client.printf("<tr><td>Battery</td><td>%.3fV (%d%%) max %.3fV</td></tr>\n", global_batt / 1000.0, global_proz, meshcom_settings.node_maxv);
+    // BAT-01: global_batt==0.0 is the established "no reading" convention (grounded pin, or
+    // the ADC-path no-battery detection in batt_functions.cpp) -- same check the on-device
+    // displays already use, see loop_functions.cpp.
+    if(global_batt == 0.0)
+        web_client.printf("<tr><td>Battery</td><td>USB (no battery)</td></tr>\n");
+    else
+        web_client.printf("<tr><td>Battery</td><td>%.3fV (%d%%) max %.3fV</td></tr>\n", global_batt / 1000.0, global_proz, meshcom_settings.node_maxv);
     web_client.printf("<tr><td>Settings</td><td>");
     web_client.printf("Gateway: %s<br>", (bGATEWAY ? "on" : "off"));
     web_client.printf("Analog: %s<br>", (bAnalogCheck ? "on" : "off"));
@@ -1536,7 +1888,11 @@ void sub_page_info()
         if (bWIFIAP)
             web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", cBLEName);
         else
+        {
             web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", meshcom_settings.node_ssid);
+            // WEB-02: shows which AP the node associated with when several APs share the same SSID (mesh sets)
+            web_client.printf("<tr><td>WiFi BSSID</td><td>%s</td></tr>\n", WiFi.BSSIDstr().c_str());
+        }
 
         web_client.printf("<tr><td>WiFi AP</td><td>%s</td></tr>\n", (bWIFIAP ? "yes" : "no"));
         web_client.printf("<tr><td>WiFi RSSI</td><td>%i</td></tr>\n", WiFi.RSSI()); 
@@ -1560,7 +1916,7 @@ void sub_page_info()
         {
             web_client.printf("<tr><td>GW address</td><td>%s</td></tr>\n", meshcom_settings.node_gw);
             web_client.printf("<tr><td>DNS address</td><td>%s</td></tr>\n", meshcom_settings.node_dns);
-            web_client.printf("<tr><td>NTP address</td><td>%s</td></tr>\n", meshcom_settings.node_ownntp);
+            web_client.printf("<tr><td>NTP address</td><td>%s</td></tr>\n", getEffectiveNtpServer().c_str());
         }
     
     }
@@ -1713,6 +2069,9 @@ void send_http_header(uint16_t http_status_code, uint8_t content_type)
     case 200:
         status_text = "OK";
         break; // use this when ever a request was successful
+    case 400:
+        status_text = "Bad Request";
+        break; // use this when a request body was rejected (CS-03 config upload)
     case 401:
         status_text = "Unauthorized";
         break; // use this when ever a request was successful
@@ -1823,6 +2182,14 @@ void send_message(String web_header)
 
         tocall.toUpperCase();
 
+        // BP-09: default outcome string, overridden below by the actual
+        // sendMessage() result. The page's own sendMessage() JS (further
+        // below, search for "onreadystatechange") tests this response for
+        // "sendmessage ok" and only clears the input fields on a match, so
+        // a refused or dropped message leaves the operator's text on screen.
+        // Keep the four strings and that test in sync.
+        const char *bp_result_text = "sendmessage ok";
+
         if (message.length() > 0)
         {
             if (tocall.length() > 0)
@@ -1846,14 +2213,24 @@ void send_message(String web_header)
             if (iml > 0)
             {
                 hasMsgFromPhone = true;
-                sendMessage(message_text, iml);
+                setMsgOrigin(ORIGIN_WEB);   // BP-01: notice goes back to the web GUI
+                int bp_rc = sendMessage(message_text, iml);
+                setMsgOrigin(ORIGIN_NONE);
                 hasMsgFromPhone = false;
                 // Serial.print("Message send: ");
                 // Serial.println(message_text);
+
+                switch (bp_rc)
+                {
+                    case BP_SEND_REFUSED: bp_result_text = "sendmessage refused"; break;
+                    case BP_SEND_DROPPED: bp_result_text = "sendmessage dropped"; break;
+                    case BP_SEND_INVALID: bp_result_text = "sendmessage invalid"; break;
+                    default:              bp_result_text = "sendmessage ok";      break;
+                }
             }
         }
 
-        web_client.println("sendmessage ok");
+        web_client.println(bp_result_text);
     }
     else
     {
@@ -1886,8 +2263,16 @@ void call_function(String web_header)
 
     webFunctionCall(&functionData); // try to execute that command
 
-    send_http_header(functionData.returnCode == WF_RETURNCODE_OKAY ? 200 : 422, RESPONSE_TYPE_JSON);                                              // send header, either 200 if command was executed or 422 if not
-    web_client.printf("{\"%s\":\"%s\"}\n\n", functionData.functionName.c_str(), functionData.returnCode == WF_RETURNCODE_OKAY ? "ok" : "failed"); // send JSON status response containting {"functionName":"ok|failed"}
+    send_http_header(functionData.returnCode == WF_RETURNCODE_OKAY ? 200 : 422, RESPONSE_TYPE_JSON); // send header, either 200 if command was executed or 422 if not
+
+    // JSN-01: functionName is percent-decoded, attacker-controlled query input
+    // and used to land here unescaped via a raw %s -- a '"' or '\' in it broke
+    // the response. Build through a JsonDocument instead: ArduinoJson escapes
+    // both the key and the value on serialise.
+    JsonDocument doc;
+    doc[functionData.functionName] = (functionData.returnCode == WF_RETURNCODE_OKAY) ? "ok" : "failed"; // {"functionName":"ok|failed"}
+    serializeJson(doc, web_client);
+    web_client.println();
 }
 
 /**
@@ -1920,8 +2305,16 @@ void setparam(String web_header)
         send_http_header(200, RESPONSE_TYPE_JSON);
     else
         send_http_header(422, RESPONSE_TYPE_JSON);
-    // build a json object literal and return it. Example:  {"returncode":1, "setcall":"AB1CDE-12"}    rembemer: keys have to be strings
-    web_client.printf("{\"returncode\":%i, \"%s\":\"%s\"}\n", setupData.returnCode, setupData.paramName.c_str(), setupData.returnValue.c_str());
+
+    // JSN-01: paramName/returnValue are unescaped user input (SSID, password,
+    // node_atxt free text, the static IP fields, ...) landing here via a raw
+    // %s -- a '"' broke the response. Build via ArduinoJson so both key and
+    // value are escaped on serialise. Example: {"returncode":1,"setcall":"AB1CDE-12"}
+    JsonDocument doc;
+    doc["returncode"] = setupData.returnCode;
+    doc[setupData.paramName] = setupData.returnValue;
+    serializeJson(doc, web_client);
+    web_client.println();
 }
 
 /**
@@ -1931,10 +2324,24 @@ void setparam(String web_header)
  */
 void getparam(String web_header)
 {
-    web_header = web_header.substring(web_header.indexOf("/setparam/?") + 11, web_header.indexOf(" HTTP/1.1"));
+    // CS-04, zwei Fehler in zwei Zeilen -- beide auf DK5EN-98 nachgestellt:
+    //
+    //  1. Gesucht wurde "/setparam/?" statt "/getparam/?". indexOf() liefert
+    //     dann -1, und substring(-1+11 = 10, ...) schneidet den Namen aus der
+    //     falschen Stelle des Headers: aus "GET /getparam/?gateway HTTP/1.1"
+    //     wurde der Parametername "ram/?gateway" -> immer returncode 2.
+    //  2. Bei vorhandenem "=" wurde substring(indexOf("=")) genommen, also der
+    //     Teil AB dem Gleichheitszeichen. Der Kommentar sagt das Gegenteil
+    //     ("We only do need the parameter Name"): "/getparam/?gateway=" ergab
+    //     den Namen "=". Richtig ist substring(0, indexOf("=")).
+    //
+    // Damit war JEDES Lesen ueber die Web-API defekt, waehrend /setparam/
+    // funktionierte -- die Web-GUI faellt es nicht auf, weil sie ihre Werte aus
+    // den gerenderten Seiten nimmt, nicht ueber /getparam/.
+    web_header = web_header.substring(web_header.indexOf("/getparam/?") + 11, web_header.indexOf(" HTTP/1.1"));
     if (web_header.indexOf("=") > 0)
     {
-        web_header = web_header.substring(web_header.indexOf("=")); // maybe there is an unintended "=" or anything more. We only do need the parameter Name.
+        web_header = web_header.substring(0, web_header.indexOf("=")); // maybe there is an unintended "=" or anything more. We only do need the parameter Name.
     }
 
     web_header.trim();
@@ -1959,6 +2366,12 @@ void getparam(String web_header)
         send_http_header(200, RESPONSE_TYPE_JSON);
     else
         send_http_header(422, RESPONSE_TYPE_JSON);
-    // build a json object literal and return it. Example:  {"returncode":1, "setcall":"AB1CDE-12"}    rembemer: keys have to be strings
-    web_client.printf("{\"returncode\":%i, \"%s\":\"%s\"}\n", setupData.returnCode, setupData.paramName.c_str(), setupData.returnValue.c_str());
+
+    // JSN-01: same fix as setparam() above -- build via ArduinoJson instead
+    // of an unescaped %s. Example: {"returncode":1,"setcall":"AB1CDE-12"}
+    JsonDocument doc;
+    doc["returncode"] = setupData.returnCode;
+    doc[setupData.paramName] = setupData.returnValue;
+    serializeJson(doc, web_client);
+    web_client.println();
 }

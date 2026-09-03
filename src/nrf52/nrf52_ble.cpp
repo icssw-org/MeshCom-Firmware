@@ -301,7 +301,7 @@ BLEService init_settings_characteristic(void)
 
 // CONC-17: settings_rx_callback() runs in the BLE stack's task context, which
 // can be preempted mid-memcpy by the FreeRTOS timer-service task that drives
-// OnRxDone (priority 2) — a torn copy of
+// OnRxDone (priority 2, see C-01/09-concurrency-map.md) — a torn copy of
 // meshcom_settings could put a beacon on the air with a spliced callsign or
 // frequency. The callback stages the incoming struct into this private
 // buffer (no shared state touched) and only sets a flag; applyPendingBleSettings(),

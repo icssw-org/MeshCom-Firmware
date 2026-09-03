@@ -14,6 +14,9 @@
 #include <configuration.h>
 #include "capture_functions.h"
 #include "dedup_functions.h"
+#include "ntp_async.h"      // NTP-01: isPending() haelt das GPS-Gate fuer --ntpsync offen
+#include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
+#include <maxhop.h>         // CS-01: plausibility of the persisted text hop limit
 #include <RadioLib.h>
 
 #include <Wire.h>               
@@ -122,11 +125,13 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <test_inject.h>
 #include <command_functions.h>
 #include <phone_commands.h>
 #include <aprs_functions.h>
 #include <batt_functions.h>
 #include <lora_functions.h>
+#include "txring_functions.h" // BP-02: txRingDepth() declaration
 #include <udp_functions.h>
 #include <extudp_functions.h>
 #include <kiss_functions.h>
@@ -134,6 +139,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include <mheard_functions.h>
 #include <time_functions.h>
 #include <clock.h>
+#include <setlog_lines.h> // SL-04/SL-05: --setlog on line formatters (Welle 0)
 #include <onewire_functions.h>
 #include <onebutton_functions.h>
 #include <adc_functions.h>
@@ -608,6 +614,26 @@ float getTempForNTC()
 //=======================================================================================
 
 
+// TM-51: name of the last reset cause for the boot banner. A field reboot without
+// this line is indistinguishable from a power cycle (see bug-GPS-uart-overflow §3.3).
+static const char* resetReasonName(esp_reset_reason_t r)
+{
+    switch (r)
+    {
+        case ESP_RST_POWERON:   return "POWERON";
+        case ESP_RST_EXT:       return "EXT";
+        case ESP_RST_SW:        return "SW";
+        case ESP_RST_PANIC:     return "PANIC";
+        case ESP_RST_INT_WDT:   return "INT_WDT";
+        case ESP_RST_TASK_WDT:  return "TASK_WDT";
+        case ESP_RST_WDT:       return "WDT";
+        case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
+        case ESP_RST_BROWNOUT:  return "BROWNOUT";
+        case ESP_RST_SDIO:      return "SDIO";
+        default:                return "UNKNOWN";
+    }
+}
+
 void esp32setup()
 {
     ///< Initialize T5-EPAPER GUI
@@ -708,6 +734,13 @@ void esp32setup()
     printlndeb("============");
     printlndeb("CLIENT SETUP");
     printlndeb("============");
+
+    // TM-51: reset cause, raw Serial.printf so it survives --debug off (nRF52 prints
+    // [BOOT] RESETREAS=... at the same point).
+    {
+        esp_reset_reason_t rr = esp_reset_reason();
+        Serial.printf("[BOOT] RESET_REASON=%d %s\n", (int)rr, resetReasonName(rr));
+    }
 
     lFreeHeap =  ESP.getFreeHeap();
     lFreePsram = ESP.getFreePsram();
@@ -941,7 +974,10 @@ void esp32setup()
 
     bDisplayInfo = bLORADEBUG;
 
-    meshcom_settings.max_hop_text = MAX_HOP_TEXT_DEFAULT;
+    // CS-01: max_hop_text is user-settable (--maxhop) and comes out of NVS now;
+    // only a missing or out-of-range value falls back to the compile default.
+    // max_hop_pos stays a compile-time constant on purpose (operator, 2026-08-30).
+    meshcom_settings.max_hop_text = maxHopTextSanitize(meshcom_settings.max_hop_text);
     meshcom_settings.max_hop_pos = MAX_HOP_POS_DEFAULT;
 
 
@@ -1729,7 +1765,14 @@ void esp32setup()
     else
         pAdvertising->enableScanResponse(false);
     
+    #if defined(BENCH_BLE_ADV_LATE)
+    // TM-11 experiment: advertising starts in esp32loop() once [BOOT];ready
+    // fired (WiFi joined or given up) -- TD-01 hypothesis: BLE advertising
+    // during the first association attempt makes it fail.
+    printfdeb("[BLE ]...advertising deferred until the network phase settled (BENCH_BLE_ADV_LATE)\n");
+    #else
     pAdvertising->start();
+    #endif
  
     printfdeb("[BLE ]...Waiting a client connection to notify...\n");
     
@@ -1836,12 +1879,51 @@ static void flushDeferredDisplayUpdates()
         bPendingDisplayText = false;
         bPendingDisplayPos = false;
     }
+    INSTR_SECTION("display_rx");
     if(_pendText) sendDisplayText(_msg, _rssi, _snr);
     if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
 }
 
 void esp32loop()
 {
+    // Boot-Ende-Marke fuer den Bench-Harness: die Netzwerkphase ist vorbei,
+    // sobald WLAN verbunden ist (node_hasIPaddress), der Verbindungsversuch
+    // aufgegeben wurde (bAllStarted, nach Reset und Wiederholung) oder gar kein
+    // Netzwerkdienst konfiguriert ist. Bis dahin blinken die Kopfzeilen-Icons
+    // und Befehle werden verzoegert bearbeitet.
+    // Nicht nur bAllStarted: das bleibt false, wenn WLAN schon in setup()
+    // verbunden hat (iWlanWait == 0 und IP vorhanden -> der Zweig, der es auf
+    // true setzt, laeuft nie).
+    static bool s_bootReadyLogged = false;
+    if (!s_bootReadyLogged)
+    {
+        bool network_wanted = bGATEWAY || bEXTUDP || bWEBSERVER || bNETCONSOLE;
+        // hasIPaddress (global) kippt bei "now listening at IP"; die Kopie in
+        // meshcom_settings wird erst spaeter nachgezogen -- beide pruefen.
+        extern bool hasIPaddress;
+        if (!network_wanted || bAllStarted || hasIPaddress || meshcom_settings.node_hasIPaddress)
+        {
+            s_bootReadyLogged = true;
+            // Serial.printf, nicht printfdeb: das wuerde die Semikolons ausserhalb
+            // von --debug csv entfernen und der Harness faende die Marke nicht.
+            Serial.printf("[BOOT];ready;ms;%lu;ip;%d\n", (unsigned long)millis(),
+                          (hasIPaddress || meshcom_settings.node_hasIPaddress) ? 1 : 0);
+            #if defined(BENCH_BLE_ADV_LATE)
+            NimBLEDevice::getAdvertising()->start();
+            Serial.printf("[BLE ];advertising;started;ms;%lu\n", (unsigned long)millis());
+            #endif
+        }
+    }
+    // TEMPORARY -- measures the period between successive loop entries, so a
+    // stall is caught regardless of which call site blocked. See src/instrument.h
+    INSTR_LOOPTICK();
+
+    // BP-01/BP-04: close a back-pressure episode with QRV once the TX ring
+    // has drained, even when no further user message arrives to observe it.
+    // Since BP-02 an occupied-slot scan (O(MAX_RING)), since BP-04 with the
+    // water-band hold; it emits at most once per episode.
+    bpPollDrain();
+
     esp_task_wdt_reset();
 
     #if not defined(BOARD_T_DECK_PRO)
@@ -2003,6 +2085,10 @@ void esp32loop()
         if ((uint32_t)(millis() - retransmit_timer) >= (1000 * 2))
         {
             updateRetransmissionStatus();
+            // BP-03 (DJ8MEH-RCA): age out stale BACKGROUND (HEY) ring
+            // entries here, in the main-loop tick -- NOT in getNextTxSlot(),
+            // which also runs on the nRF52 timer task (Advisor F1).
+            txRingAgeBackground(millis());
 
             retransmit_timer = millis();
         }
@@ -2023,7 +2109,16 @@ void esp32loop()
                 }
                 int w = iWrite;
                 int r = iRead;
-                int queued = (w >= r) ? (w - r) : (MAX_RING - r + w);
+                // BP-02: queued is now the honest occupied-slot count (the
+                // pending/retrying/done buckets above already scan every
+                // slot and partition it exactly) instead of the raw index
+                // distance -- that distance counted freed holes left behind
+                // by a priority-starved entry parked at iRead as still
+                // queued (DJ8MEH-RCA: queued=19 vs. 3-4 real). The old
+                // arithmetic survives as `dist` below for anyone comparing
+                // against pre-BP-02 logs.
+                int queued = pending + retrying + done;
+                int dist = (w >= r) ? (w - r) : (MAX_RING - r + w);
                 int dedup_used = 0;
                 for(int i = 0; i < MAX_DEDUP_RING; i++)
                 {
@@ -2032,19 +2127,23 @@ void esp32loop()
                         dedup_used++;
                 }
                 printfdeb("[MC-DBG] RING_STATUS queued=%d pending=%d retrying=%d "
-                              "done=%d iW=%d iR=%d dedup=%d/%d\n",
+                              "done=%d iW=%d iR=%d dedup=%d/%d dist=%d\n",
                               queued, pending, retrying, done, w, r,
-                              dedup_used, MAX_DEDUP_RING);
+                              dedup_used, MAX_DEDUP_RING, dist);
             }
         }
 
         // Deferred display update from OnRxDone (avoid I2C inside radio callback)
         flushDeferredDisplayUpdates();
 
-        // Channel utilization report (every 10s)
+        // Channel utilization report (every 10s). SL-05: the drain of
+        // ch_util_rx_accum/tx_accum below feeds stat_util_rx_5m/tx_5m for the
+        // 5-minute STAT line (--setlog on), so the 10-s tick itself must not
+        // depend on bLORADEBUG any more -- only the diagnostic prints still
+        // do, unchanged from before. The 10-s accumulation math is untouched.
         {
             static unsigned long ch_util_timer = 0;
-            if(bLORADEBUG && (millis() - ch_util_timer) > 10000)
+            if((millis() - ch_util_timer) > 10000)
             {
                 unsigned long window = millis() - ch_util_timer;
                 ch_util_timer = millis();
@@ -2052,13 +2151,18 @@ void esp32loop()
                 unsigned long tx_ms = ch_util_tx_accum.exchange(0);
                 unsigned int util = (unsigned int)((rx_ms + tx_ms) * 100 / window);
                 if(util > 100) util = 100;
-                printfdeb("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
-                    rx_ms, tx_ms, util);
-                // ONRXDONE stats: report max and warn count, then reset
-                printfdeb("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
-                    onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
-                onrxdone_max_ms = 0;
-                onrxdone_warn_count = 0;
+                stat_util_rx_5m.fetch_add((uint32_t)rx_ms);
+                stat_util_tx_5m.fetch_add((uint32_t)tx_ms);
+                if(bLORADEBUG)
+                {
+                    printfdeb("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
+                        rx_ms, tx_ms, util);
+                    // ONRXDONE stats: report max and warn count, then reset
+                    printfdeb("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
+                        onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
+                    onrxdone_max_ms = 0;
+                    onrxdone_warn_count = 0;
+                }
             }
         }
 
@@ -2066,6 +2170,25 @@ void esp32loop()
         if((millis() - stat_prio_timer) > (unsigned long)(PRIO_STAT_INTERVAL_S * 1000UL))
         {
             stat_prio_timer = millis();
+
+            // SL-05: STAT line under --setlog on, independent of bLORADEBUG.
+            // setlogFillStat() reads stat_drop_count[] before the existing
+            // (unconditional) memset further below resets it -- no second
+            // reset here. The interval counters are drained on every tick
+            // (so they never grow unbounded); only the print depends on
+            // bDisplayLog.
+            {
+                struct setlogStatFields f;
+                setlogFillStat(&f, (uint32_t)ESP.getFreeHeap());
+
+                if(bDisplayLog)
+                {
+                    char buf[300];
+                    setlogFormatStat(buf, sizeof(buf), &f);
+                    setlogPrint(buf);
+                }
+            }
+
             if(bLORADEBUG)
             {
                 printfdeb("[MC-STAT] t=%ds qmax=%d/%d\n",
@@ -2119,6 +2242,9 @@ void esp32loop()
             {
                 printfdeb("[MC-WDT] TX_WATCHDOG fired after %lums — forcing RX recovery\n",
                     millis() - _tx_s);
+
+                // SL-05: abort counter for the STAT block's txfail=.
+                stat_txfail.fetch_add(1);
 
                 ch_util_tx_start = 0;
                 transmittedFlag   = false;
@@ -2299,7 +2425,7 @@ void esp32loop()
                 // DIO triggered while reception is ongoing
                 // that means we got a packet
 
-                checkRX(bRadio);
+                { INSTR_SECTION("lora_rx"); checkRX(bRadio); }
 
                 // FIX BUG #2: checkRX() now restarts RX internally.
                 // Remove redundant interrupt rewiring that would double-reconfigure.
@@ -2419,11 +2545,13 @@ void esp32loop()
             if (_w != _r)
             {
                 // Debug E: TX_GATE_ENTER
+                // BP-02: qlen is txRingDepth() (occupied slots), not the raw
+                // index distance -- see txRingDepth() doc comment.
                 if(bLORADEBUG)
                 {
                     printfdeb("[MC-SM] IDLE -> TX_PREPARE rc=0\n");
                     printfdeb("[MC-DBG] TX_GATE_ENTER qlen=%d cad_attempt=%d\n",
-                        (_w >= _r) ? (_w - _r) : (MAX_RING - _r + _w),
+                        txRingDepth(),
                         cad_attempt);
                 }
 
@@ -2511,13 +2639,13 @@ void esp32loop()
                     {
                         ch_util_tx_start = millis();
                         // Debug F: TX_START
+                        // BP-02: qlen is txRingDepth() (occupied slots), not
+                        // the raw index distance -- see txRingDepth() doc.
                         if(bLORADEBUG)
                         {
                             printfdeb("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
-                            int __w = iWrite;
-                            int __r = iRead;
                             printfdeb("[MC-DBG] TX_START qlen=%d\n",
-                                (__w >= __r) ? (__w - __r) : (MAX_RING - __r + __w));
+                                txRingDepth());
                         }
                     }
                     else
@@ -2585,7 +2713,12 @@ void esp32loop()
 
     // !posinfo_fix && !bNTPDateTimeValid
     // Time NTP
-    if(meshcom_settings.node_hasIPaddress && !posinfo_fix)
+    // NTP-01 Nachtrag (Bench-Regression): mit GPS-Fix lief dieser Block nie,
+    // ein manuelles --ntpsync setzte also nur _nextDueMs und nichts sendete.
+    // isPending() haelt den Pump offen, bis der manuelle Request ok/timeout
+    // gemeldet hat; danach schliesst das GPS-Gate wieder wie gehabt.
+    extern NtpAsync timeClient;
+    if(meshcom_settings.node_hasIPaddress && (!posinfo_fix || timeClient.isPending()))
     {
         strTime = "none";
 
@@ -2746,6 +2879,7 @@ void esp32loop()
     // check WiFI connected with Ping every 30 sec
     if(meshcom_settings.node_netmode == 0 && (uint32_t)(millis() - wifi_active_timer) >= 30000)
     {
+        INSTR_SECTION("wifi_ping");
         if(!checkWifiPing())
         {
             if(ifalseping > 0)
@@ -2890,7 +3024,7 @@ void esp32loop()
     {
         BleQueueItem bleItem;
         while (xQueueReceive(bleQueue, &bleItem, 0) == pdTRUE) {
-            readPhoneCommand(bleItem.data);
+            { INSTR_SECTION("ble_cmd"); readPhoneCommand(bleItem.data); }
         }
     }
 
@@ -2900,7 +3034,13 @@ void esp32loop()
             printfdeb("[LOOP] hasMsgFromPhone\n");
         
         if(memcmp(textbuff_phone, ":", 1) == 0)
-            sendMessage(textbuff_phone, txt_msg_len_phone);
+        {
+            // BP-01: tag the origin so the back-pressure notice goes back to
+            // the phone that just typed, and never over the air.
+            setMsgOrigin(ORIGIN_BLE);
+            (void)sendMessage(textbuff_phone, txt_msg_len_phone);
+            setMsgOrigin(ORIGIN_NONE);
+        }
 
         if(memcmp(textbuff_phone, "-", 1) == 0)
             commandAction(textbuff_phone, isPhoneReady, true);
@@ -3005,6 +3145,10 @@ void esp32loop()
         gps_refresh_intervall = 1.0;
     }
 
+    #ifdef ENABLE_GPS
+    if (bGPSON && gpsDetected) { INSTR_SECTION("gps_feed"); WZ_GPS_Feed(); }
+    #endif
+
     if ((uint32_t)(millis() - gps_refresh_timer) >= ((unsigned long)gps_refresh_intervall * 1000))
     {
         #ifdef ENABLE_GPS
@@ -3035,7 +3179,7 @@ void esp32loop()
             #if defined (ENABLE_GPS)
                 if(gpsDetected)
                 {
-                    igps = WZ_GPS_Loop();
+                    { INSTR_SECTION("gps"); igps = WZ_GPS_Loop(); }
                     
                     if(iGPSDEBUG > 0)
                     {
@@ -3103,11 +3247,12 @@ void esp32loop()
             // aktuell geladene Kachel verlassen hat, und bei Bedarf nachladen -
             // nur solange der Kartenbildschirm auch tatsaechlich sichtbar ist.
             static unsigned long sdmap_boundary_timer = 0;
-            if ((sdmap_boundary_timer + 30000UL) < millis())
+            if ((uint32_t)(millis() - sdmap_boundary_timer) >= 30000UL)   // N-08 idiom, rollover-safe
             {
                 sdmap_boundary_timer = millis();
 
-                if (lv_tabview_get_tab_act(tv) == 3 && (gpsData.latitude != 0.0 || gpsData.longitude != 0.0))
+                // TD-07: kein Auto-Recenter, solange der Nutzer manuell gepannt hat
+                if (lv_tabview_get_tab_act(tv) == 3 && !tdeck_map_user_panned() && (gpsData.latitude != 0.0 || gpsData.longitude != 0.0))
                 {
                     if (!sdmap_in_current_tile(gpsData.latitude, gpsData.longitude))
                     {
@@ -3290,7 +3435,7 @@ void esp32loop()
     }
 
     if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
-        mainStartTimeLoop();
+        { INSTR_SECTION("display_tick"); mainStartTimeLoop(); }
 
     #if not defined(BOARD_T_DECK_PRO)
     if(DisplayOffWait > 0)
@@ -3327,6 +3472,12 @@ void esp32loop()
     }
 
     checkSerialCommand();
+
+    // TM-06: service --loratx / --injectraw with the radio idle -- OnRxDone()'s
+    // own exit points only fire on RX traffic, which would stall a staged
+    // burst or injection on a quiet bench.
+    if(tx_is_active == false && is_receiving == false)
+        test_inject_service();
 
     if(BattTimeWait == 0)
         BattTimeWait = millis() - 500;
@@ -3660,9 +3811,7 @@ void esp32loop()
     // WIFI Gateway functions
     if(bGATEWAY && meshcom_settings.node_hasIPaddress)
     {
-        getMeshComUDP();
-
-        sendMeshComUDP();
+        { INSTR_SECTION("udp"); getMeshComUDP(); sendMeshComUDP(); }
 
         // heartbeat
         if ((uint32_t)(millis() - hb_timer) >= (HEARTBEAT_INTERVAL * 1000))
@@ -3719,6 +3868,14 @@ void esp32loop()
         meshcom_settings.node_last_upd_timer = hb_timer;
 
     }
+    else if(meshcom_settings.node_hasIPaddress)
+    {
+        // TM-45: bGATEWAY is off, so the block above never runs and never
+        // reads the socket -- do only the NTP-reply harvest instead, not
+        // the full gateway receive path (no double read: exactly one of
+        // the two branches runs per loop pass).
+        INSTR_SECTION("udp"); ntpHarvestUDP();
+    }
 
     if(bEXTUDP)
     {
@@ -3754,39 +3911,29 @@ void esp32loop()
                 {
                     if(iWlanWait == 0)
                     {
-                        // restart WEB-Client
-                        if(bWEBSERVER)
-                            stopWebserver();
+                        // 5-min path (F3): cycle the radio only when the driver
+                        // is truly idle -- never while it is still reconnecting
+                        // on its own (a driver-side join is harvested below).
+                        if(wifiTrulyOffline())
+                        {
+                            // restart WEB-Client
+                            if(bWEBSERVER)
+                                stopWebserver();
 
-                        startNetwork();
+                            startNetwork();
+                        }
                     }
                     else
                     {
-                        doWiFiConnect();
+                        { INSTR_SECTION("wifi_connect"); doWiFiConnect(); }
 
-                        if(iWlanWait > 15)
+                        if(iWlanWait > 20)
                         {
+                            // F3: stop the 1-s polling; the driver keeps
+                            // retrying (auto-reconnect) and got_ip is harvested
+                            // from the loop. No radio reset at boot (TM-34 §8).
                             iWlanWait = 0;
-
-                            if (!bAllStarted)
-                            {
-                                // First boot failure — full radio power-cycle and retry
-                                #if defined(HAST_ETHERNET)
-                                    printfdeb("[ETH]...no connection at boot — reset and retrying");
-                                #else
-                                    printfdeb("[WIFI]...no connection at boot — full radio reset and retrying");
-                                    WiFi.disconnect(true, true);
-                                    WiFi.mode(WIFI_OFF);
-                                    delay(1500);
-                                #endif
-
-                                startNetwork();  // sets iWlanWait = 1, triggers doWiFiConnect() polling
-                            }
-                            else
-                            {
-                                printfdeb("[WIFI]...SET but no Wifi connect ...please wait for next try (5 min)");
-                            }
-
+                            printfdeb("[WIFI]...no join within 20 s, driver keeps retrying");
                             bAllStarted=true;
                         }
                     }
@@ -3798,6 +3945,14 @@ void esp32loop()
                 }
             #endif
         }
+
+        #ifndef BOARD_RAK4630
+        // F3: harvest a driver-side (re)connect at any time (TM-17: bAllStarted)
+        if(iWlanWait == 0 && wifiHarvestGotIp())
+            bAllStarted=true;
+        wifiDnsPoll();
+        wifiLinkHeartbeat();
+        #endif
 
         if(bWEBSERVER && iWlanWait == 0)
         {
@@ -3867,7 +4022,7 @@ void esp32loop()
         tft_off();
     }
 
-    lv_task_handler();
+    { INSTR_SECTION("lvgl"); lv_task_handler(); }
 
     #endif
 
@@ -4057,6 +4212,19 @@ int checkRX(bool bRadio)
         // RX channel utilization: CRC-failed packet still occupied the channel
         ch_util_rx_accum.fetch_add(radio.getTimeOnAir(ibytes) / 1000);  // us -> ms
 
+        // SL-04: CRC/RX error, platform-independent counter for the STAT
+        // block (SL-05) and the ERR line under --setlog on. checkRX() runs
+        // in loop() context here (called from esp32loop()), so a local
+        // stack buffer is unproblematic.
+        stat_rx_err.fetch_add(1);
+        if(bDisplayLog)
+        {
+            char buf[300];
+            setlogFormatErr(buf, sizeof(buf), saved_crc_rssi, saved_crc_snr,
+                            (uint16_t)ibytes, (int32_t)saved_crc_ferr, millis());
+            setlogPrint(buf);
+        }
+
         // Diagnose-Output: RSSI/SNR + kompletter Payload-Hex-Dump
         if(bLORADEBUG)
         {
@@ -4218,7 +4386,10 @@ void checkSerialCommand(void)
 
             if(strText[0] == ':' && strText[1] == ':')
             {
-                sendMessage(msg_buffer, inext);
+                // BP-01: origin serial -- the notice comes back on the console.
+                setMsgOrigin(ORIGIN_SERIAL);
+                (void)sendMessage(msg_buffer, inext);
+                setMsgOrigin(ORIGIN_NONE);
             }
             else
                 if(strText[0] == '-' && strText[1] == '-')

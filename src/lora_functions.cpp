@@ -6,6 +6,7 @@
 #include "ack_functions.h"
 #include "capture_functions.h"
 #include "dedup_functions.h"
+#include "setlog_lines.h"
 
 #ifdef SX127X
     #include <RadioLib.h>
@@ -78,6 +79,8 @@
 #include <lora_setchip.h>
 
 #include "softser_functions.h"
+
+#include "test_inject.h"   // TM-06: raw-inject drain / TX-burst ticker, serviced from OnRxDone()
 
 #include "via_functions.h"
 
@@ -172,6 +175,40 @@ static uint32_t extractRingMsgId(int slot)
             (uint32_t)ringBuffer[slot][3];
 }
 
+// RX-01 (BACKLOG 3.8k): counts and rate-limits the "frame from an
+// unconfigured node, dropped" marker. Not static -- udp_functions.cpp's
+// GATE-in path (the "second door", server -> LoRa) shares this counter and
+// marker via a local extern declaration there. Raw Serial.printf, not
+// printfdeb/DEBUG_MSG (stripped/compiled away with --debug off, see the
+// FL-01 marker note) -- at most one line per 10 s, folding any elided drops
+// into the "dropped" count on the next line that does print (TM-21's
+// lesson).
+uint32_t stat_rx_drop_unconfigured = 0;
+
+void logRxDropUnconfigured(const char *call)
+{
+    static bool s_have_marker = false;
+    static uint32_t s_last_marker_ms = 0;
+    static uint32_t s_dropped_since_marker = 0;
+
+    stat_rx_drop_unconfigured++;
+    s_dropped_since_marker++;
+
+    uint32_t now = (uint32_t)millis();
+    // s_have_marker, not "s_last_marker_ms == 0": millis()==0 is a real,
+    // reachable timestamp (boot), and must not double as a "never printed
+    // yet" sentinel -- that would let a second drop still at ms=0 bypass
+    // the floor.
+    if(!s_have_marker || (uint32_t)(now - s_last_marker_ms) >= 10000UL)
+    {
+        Serial.printf("[RX];drop;unconfigured;src;%s;ms;%lu;dropped;%lu\n",
+                      call, (unsigned long)now, (unsigned long)s_dropped_since_marker);
+        s_have_marker = true;
+        s_last_marker_ms = now;
+        s_dropped_since_marker = 0;
+    }
+}
+
 #if defined(EXTERNAL_RADIO)
 // The single in-flight external-radio TX ownership record. At most one ring
 // slot may be RING_STATUS_EXT_PENDING at a time (enforced by ExtTxq::begin).
@@ -231,14 +268,48 @@ static int findAndStopRingSlot(uint32_t msgId)
     return -1;
 }
 
+// SL-01 -- Dedup-Verdikt zaehlen, genau einmal je Frame und dort, wo die
+// Entscheidung faellt. Die Zaehler muessen zu RX_DEDUP_NEW/RX_DEDUP_DUP passen.
+static inline bool setlogCountDedup(bool is_new)
+{
+    if(is_new)
+        stat_newid.fetch_add(1);
+    else
+        stat_dup.fetch_add(1);
+
+    return is_new;
+}
+
+// SL-01 -- eigenes Rufzeichen als vollstaendiges Pfadglied im Source-Path?
+// Wie die Loop-Erkennung im Relay-Block, aber ohne String-Allokation.
+static bool setlogPathHasCall(const char *path, const char *call)
+{
+    if(path == NULL || call == NULL || call[0] == 0x00)
+        return false;
+
+    size_t lc = strlen(call);
+    const char *p = path;
+
+    while((p = strstr(p, call)) != NULL)
+    {
+        bool left_ok  = (p == path) || (p[-1] == ',');
+        bool right_ok = (p[lc] == 0x00) || (p[lc] == ',');
+
+        if(left_ok && right_ok)
+            return true;
+
+        p += lc;
+    }
+
+    return false;
+}
+
 /**
  * Handle incoming ACK packet (msg_type 0x41).
  * Returns true if packet was processed as ACK, false otherwise.
  */
 static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
 {
-    (void)rssi;
-    (void)snr;
     if(payload[0] != MSG_TYPE_ACK)
         return false;
 
@@ -259,12 +330,19 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
 
     uint8_t print_buff[30];
 
+    memcpy(print_buff, payload, 12);
+
+    // SL-01: Dedup-Verdikt vor dem Druck, damit die [LOG]-Zeile `DUP:` fuehren
+    // kann. is_new_packet() ist eine reine Suche ohne Seiteneffekt.
+    bool bIsNew = setlogCountDedup(is_new_packet(print_buff+1));
+
     if(bDisplayLog)
     {
-        printBuffer_ack((char*)"[LOG]", payload, size);
+        // ACK-Frames tragen keinen Pfad, deshalb OWN: immer '-'.
+        char tail[56];
+        setlogFormatRxTail(tail, sizeof(tail), (int16_t)rssi, (int8_t)snr, !bIsNew, false, (uint32_t)millis());
+        printBuffer_ack((char*)"[LOG]", payload, (int16_t)size, tail);
     }
-
-    memcpy(print_buff, payload, 12);
 
     bool bServerFlag = false;
     if((print_buff[5] & 0x80) == 0x80)
@@ -272,7 +350,6 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
 
     unsigned msg_id = print_buff[6] | (print_buff[7] << 8) | (print_buff[8] << 16) | (print_buff[9] << 24);
     int itxcheck = checkOwnTx(msg_id);
-    bool bIsNew = is_new_packet(print_buff+1);
 
     if(bIsNew || itxcheck >= 0)
     {
@@ -342,8 +419,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     //
     // Frueher hing das hinter `-D MC_TEST_HOOKS` und druckte hier direkt, was
     // in keinem Produktionsbuild lief: der Dump saesse im Radio-Callback
-    // (nRF52: Timer-Service-Task, 1 KB Stack) und printfdeb() braucht davon
-    // allein ~900 Byte, dazu ~48 ms Serial-Zeit mitten im RX-Pfad.
+    // (LORA-Task) und printfdeb() braucht allein ~900 Byte Stack, dazu
+    // ~48 ms Serial-Zeit mitten im RX-Pfad.
     // captureFrame() kopiert nur; ausgegeben wird aus dem Loop
     // (captureDrain() in main.cpp), siehe capture_functions.h.
     if(bLORADEBUG)
@@ -441,6 +518,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     uint8_t print_buff[30];
 
+    // SL-02: Puffer fuer RLY/GWU (nie beide im selben Durchlauf). Laengste
+    // Zeile: "RLY x12345678 : H03 q=gwfilter prio=5 slot=19".
+    char setlog_buf[96];
+
     //printfdeb("Start OnRxDone:<%c#%-20.20s> %i\n", payload[0], payload+6, size);
 
     bNewLine=false;
@@ -462,6 +543,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         iReceiveTimeOutTime = millis();
         csma_timeout = csma_compute_timeout(cad_attempt);
+
+        // TM-06: state above is fully settled -- safe point for
+        // test_inject_service() to recurse into OnRxDone() (see there).
+        test_inject_service();
+
         return;
     }
 
@@ -522,25 +608,57 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         // print which message type we got
         uint16_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
 
+        // TM-06(a): no-op unless this call is draining a staged raw-inject
+        // frame (test_inject.cpp) -- see test_inject_service() below.
+        test_inject_raw_report(size, msg_type_b_lora);
+
         size = aprsmsg.msg_len;
 
         int icheck = checkOwnTx(aprsmsg.msg_id);
 
+        // SL-01: genau EIN is_new_packet() je Frame (die Suche druckt unter
+        // --loradebug); unten von setlogCountDedup() wiederverwendet.
+        bool rx_is_new = is_new_packet(RcvBuffer+1);
+        bool rx_dup = !rx_is_new;
+        bool rx_own_echo = false;
+
         if(bDisplayLog)
         {
+            rx_own_echo = setlogPathHasCall(aprsmsg.msg_source_path.c_str(), meshcom_settings.node_call);
+
+            char tail[56];
+            setlogFormatRxTail(tail, sizeof(tail), (int16_t)rssi, (int8_t)snr, rx_dup, rx_own_echo, (uint32_t)millis());
+
             if(LogCallsign[0] != 0x00)
             {
                 if(is_equ((char*)LogCallsign, aprsmsg.msg_source_call.c_str()))
-                    printBuffer_aprs((char*)"[LOG]", aprsmsg);
+                    printBuffer_aprs((char*)"[LOG]", aprsmsg, tail);
             }
             else
-                printBuffer_aprs((char*)"[LOG]", aprsmsg);
+                printBuffer_aprs((char*)"[LOG]", aprsmsg, tail);
         }
 
         if(msg_type_b_lora == 0x00)
         {
             if(bDisplayCont)
                 printfdeb("[LORA-ERROR]...%03i RCV:%s\n", size, RcvBuffer+6);
+        }
+        else if(isUnconfiguredCall(aprsmsg.msg_source_call.c_str()))
+        {
+            // RX-01 (BACKLOG 3.8k): a node still on the factory callsign is
+            // not identifying itself, so nothing it sends is legal to
+            // relay -- drop it here, before mheard, display, phone/BLE out,
+            // the gateway upload and the relay decision below.
+            logRxDropUnconfigured(aprsmsg.msg_source_call.c_str());
+
+            // SL-02: Ausstieg vor dem Relay-Block, gleiche Aussage "nicht
+            // weitergesendet, Grund unconf". Nur fuer neue Frames.
+            if(bDisplayLog && !rx_dup)
+            {
+                setlogFormatRly(setlog_buf, sizeof(setlog_buf), aprsmsg.msg_id,
+                                aprsmsg.payload_type, aprsmsg.max_hop & 0x0F, "unconf", 0, -1);
+                setlogPrint(setlog_buf);
+            }
         }
         else
         {
@@ -742,7 +860,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 }
             }
             else
-            if(is_new_packet(RcvBuffer+1))
+            if(setlogCountDedup(rx_is_new))    // SL-01: Verdikt von oben, Logik unveraendert
             {
                 // :|0x11223344|0x05|OE1KBC|>*:Hallo Mike, ich versuche eine APRS Meldung\0x00
                 if(bDisplayCont)
@@ -826,6 +944,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
 
                         bool bMeshDestination = true;
+
+                        // SL-02: Grund an den Ausstiegen setzen, eine RLY-Zeile
+                        // am Blockende. rly_hop ist der Hop WIE EMPFANGEN
+                        // (Relay dekrementiert aprsmsg.max_hop weiter unten).
+                        const char *rly_reason = NULL;
+                        int rly_prio = 0;
+                        int rly_slot = -1;
+                        uint8_t rly_hop = aprsmsg.max_hop & 0x0F;
 
                         if(msg_type_b_lora == MSG_TYPE_TEXT)    // text message store&forward
                         {
@@ -1184,18 +1310,33 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             if(strcmp(destination_call, "100001") == 0)
                                 bMeshDestination = false;
 
+                            if(!bMeshDestination)
+                                rly_reason = "gwfilter";    // SL-02
+
                             if(aprsmsg.payload_type == ':' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_text+1)    // TEXT
+                            {
+                                if(bMeshDestination)
+                                    rly_reason = "gwcap";   // SL-02
                                 bMeshDestination = false;
+                            }
                             if(aprsmsg.payload_type == '!' && aprsmsg.msg_last_path_cnt >= meshcom_settings.max_hop_pos+1)    // POS
+                            {
+                                if(bMeshDestination)
+                                    rly_reason = "gwcap";   // SL-02
                                 bMeshDestination = false;
-                            
+                            }
+
                             //KBC not usefull if(aprsmsg.payload_type == '@' && meshcom_settings.node_hasIPaddress)    // HEY no Mesh on GATEWAYs with Server-Connected
                             //KBC not usefill bMeshDestination = false;
                         }
 
                         // ping no mesh
                         if(aprsmsg.payload_type == ':' && strcmp(destination_call, "100001") == 0 && aprsmsg.msg_payload.startsWith("{ping}"))    // TEXT
+                        {
+                            if(bMeshDestination)
+                                rly_reason = "ping";        // SL-02
                             bMeshDestination = false;
+                        }
 
                         // GATEWAY action before MESH
                         // and not MESHed from another Gateways
@@ -1216,13 +1357,55 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     size = UDP_TX_BUF_SIZE - 2;
                             }
 
+                            // SL-06: Upload zum Server, unmittelbar vor
+                            // addNodeData() und vor dem Hop-Dekrement des Relays.
+                            if(bDisplayLog)
+                            {
+                                setlogFormatGwu(setlog_buf, sizeof(setlog_buf), aprsmsg.msg_id,
+                                                aprsmsg.payload_type, aprsmsg.max_hop & 0x0F, (uint32_t)millis());
+                                setlogPrint(setlog_buf);
+                            }
+
                             addNodeData(RcvBuffer, size, rssi, snr);
                         }
 
                         // resend only Packet to all and !owncall
                         // bSetLoRaAPRS = APRS via 433.775 usw.
 
-                        if(strcmp(destination_call, meshcom_settings.node_call) != 0 && !bSetLoRaAPRS && checkMesh(aprsmsg) && bMeshDestination)
+                        // SL-02: dieselbe Bedingung wie bisher, nur zerlegt, damit
+                        // genau ein Grund benannt wird -- Kurzschlussreihenfolge
+                        // und damit jeder checkMesh()-Aufruf bleiben erhalten.
+                        bool rly_go = false;
+
+                        if(strcmp(destination_call, meshcom_settings.node_call) == 0)
+                        {
+                            if(rly_reason == NULL)
+                                rly_reason = "self";
+                        }
+                        else
+                        if(bSetLoRaAPRS)
+                        {
+                            if(rly_reason == NULL)
+                                rly_reason = "aprs";
+                        }
+                        else
+                        if(!checkMesh(aprsmsg))
+                        {
+                            if(rly_reason == NULL)
+                                rly_reason = "nomesh";
+                        }
+                        else
+                        if(!bMeshDestination)
+                        {
+                            // Die uebrigen Ruecksetzer des Flags liegen im Zweig
+                            // "Ziel ist das eigene Rufzeichen", hier nie erreicht.
+                            if(rly_reason == NULL)
+                                rly_reason = "gwfilter";
+                        }
+                        else
+                            rly_go = true;
+
+                        if(rly_go)
                         {
                             // MESH only max. hops (default 3...TEXT 1...POS)
                             if(aprsmsg.max_hop > 0)
@@ -1244,6 +1427,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     {
                                         if(bLORADEBUG)
                                             printfdeb("[MC-DBG] RELAY_LOOP_BLOCKED own_call_in_path\n");
+                                        rly_reason = "loop";    // SL-02
                                         goto skip_relay;
                                     }
                                 }
@@ -1299,7 +1483,17 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                 // no retransmission for ANY relay message; Slot vorher komplett
                                 // nullen (Alt-Verhalten: memset des ganzen Rings vor dem Schreiben)
-                                addTxRingEntry(RcvBuffer, size, RING_STATUS_DONE, "rx_relay", 0, true);
+                                rly_slot = addTxRingEntry(RcvBuffer, size, RING_STATUS_DONE, "rx_relay", 0, true);
+
+                                // SL-02: Rueckgabe ist der belegte Slot bzw. -1,
+                                // wenn der Ring den Eintrag verworfen hat.
+                                if(rly_slot >= 0)
+                                {
+                                    rly_reason = "tx";
+                                    rly_prio = ringPriority[rly_slot];
+                                }
+                                else
+                                    rly_reason = "full";
 
                                 /*
                                 if(bDisplayInfo)
@@ -1309,12 +1503,24 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 }
                                 */
                             }
+                            else
+                                rly_reason = "hop0";    // SL-02
+
                             skip_relay: ;
                         }
                         else
                         {
                             if(bDisplayInfo && !bNewLine)
                                 printfdeb("\n");
+                        }
+
+                        // SL-02: genau eine RLY-Zeile je neuem Frame, hinter
+                        // allen Ausstiegen des Relay-Blocks (auch skip_relay).
+                        if(bDisplayLog && rly_reason != NULL)
+                        {
+                            setlogFormatRly(setlog_buf, sizeof(setlog_buf), aprsmsg.msg_id,
+                                            aprsmsg.payload_type, rly_hop, rly_reason, rly_prio, rly_slot);
+                            setlogPrint(setlog_buf);
                         }
                     }
                 }
@@ -1368,6 +1574,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     if(bLORADEBUG)
         printfdeb("[MC-SM] RX_PROCESS -> RX_LISTEN rc=0\n");
     is_receiving = false;
+
+    // TM-06: state above is fully settled -- safe point for
+    // test_inject_service() to recurse into OnRxDone() (see there).
+    test_inject_service();
 }
 
 /**@brief Function to be executed on Radio Rx Timeout event
@@ -1432,6 +1642,32 @@ void OnRxError(void)
         #endif
     }
 
+    // SL-04: verlorener Frame. Zaehler unabhaengig von jedem Debug-Flag, die
+    // Zeile nur unter --setlog. Die [MC-DBG]-Ausgabe oben bleibt unveraendert.
+    stat_rx_err.fetch_add(1);
+
+    if(bDisplayLog)
+    {
+        int16_t err_rssi = 0;
+        int8_t  err_snr  = 0;
+
+        #if defined BOARD_RAK4630
+        {
+            // Wie oben: von SX126xGetPacketStatus() in RadioBgIrqProcess
+            // gefuellt. Bei Header-Fehlern koennen die Werte alt sein.
+            extern PacketStatus_t RadioPktStatus;
+            err_rssi = (int16_t)RadioPktStatus.Params.LoRa.RssiPkt;
+            err_snr  = (int8_t)RadioPktStatus.Params.LoRa.SnrPkt;
+        }
+        #endif
+
+        // Laenge und Frequenzfehler liefert dieser Pfad nicht (die ESP32-Seite
+        // in esp32_main.cpp tut es).
+        char err_buf[64];
+        setlogFormatErr(err_buf, sizeof(err_buf), err_rssi, err_snr, 0, 0, (uint32_t)millis());
+        setlogPrint(err_buf);
+    }
+
     {
         unsigned long _rx_s = ch_util_rx_start.exchange(0);
         if(_rx_s > 0)
@@ -1447,8 +1683,19 @@ void OnRxError(void)
 // LoRa TX functions
 //
 // getMessagePriority/getNextTxSlot/advanceIReadPastEmpty/addTxRingEntry
-// wurden nach txring_functions.cpp verschoben -- reine Verschiebung, Logik
-// unveraendert. Siehe txring_functions.h/.cpp.
+// wurden nach txring_functions.cpp verschoben (QA-Welle 2026-08-22, N-14) --
+// reine Verschiebung, Logik unveraendert. Siehe txring_functions.h/.cpp und
+// test/test_txring/test_txring.cpp.
+
+// SL-03 -- eine Zeile je gestarteter Sendung (Erfolgsausgaenge von doTX()).
+// stat_txn zaehlt auch bei --setlog off.
+static void setlogPrintTx(const char *line)
+{
+    stat_txn.fetch_add(1);
+
+    if(bDisplayLog && line[0] != 0x00)
+        setlogPrint(line);
+}
 
 /**@brief our Lora TX sequence — priority-based slot selection
  */
@@ -1496,14 +1743,35 @@ bool doTX()
                               ((uint32_t)ringBuffer[txSlot][5] << 16) |
                               ((uint32_t)ringBuffer[txSlot][4] << 8)  |
                                (uint32_t)ringBuffer[txSlot][3];
-            int tw = iWrite;
-            int tr = iRead;
-            int queued = (tw >= tr) ? (tw - tr) : (MAX_RING - tr + tw);
+            // BP-02: qlen/queued in TX markers is txRingDepth() (occupied
+            // slots), not the raw index distance -- this marker fires on
+            // every TX and would otherwise dominate a log with the old
+            // hole-counting number right next to an honest RING_STATUS.
+            int queued = txRingDepth();
             if(bLORADEBUG)
                 printfdeb("[MC-DBG] RING_TX_READ slot=%d prio=%d type=%02X status=%02X "
                           "len=%d msg_id=%08X retry=%d queued=%d/%d lat=%lums\n",
                           txSlot, prio, ringBuffer[txSlot][2], ringBuffer[txSlot][1],
                           sendlng, tx_mid, retryCount[txSlot], queued, MAX_RING, (unsigned long)latency);
+        }
+
+        // SL-03: hier nur formatieren, gedruckt wird erst nach erfolgreichem
+        // Sendestart (setlogPrintTx()), damit ein Rollback keine Zeile hinterlaesst.
+        char setlog_tx_buf[128];
+        setlog_tx_buf[0] = 0x00;
+
+        if(bDisplayLog)
+        {
+            uint32_t sl_tx_mid = ((uint32_t)ringBuffer[txSlot][6] << 24) |
+                                 ((uint32_t)ringBuffer[txSlot][5] << 16) |
+                                 ((uint32_t)ringBuffer[txSlot][4] << 8)  |
+                                  (uint32_t)ringBuffer[txSlot][3];
+
+            setlogFormatTx(setlog_tx_buf, sizeof(setlog_tx_buf), sl_tx_mid,
+                           (char)ringBuffer[txSlot][2],
+                           (uint8_t)(ringBuffer[txSlot][7] & 0x0F),
+                           prio, (char)ringSource[txSlot], latency, txRingDepth(),
+                           cad_attempt, (uint16_t)sendlng, (uint32_t)millis());
         }
 
         if(ringBuffer[txSlot][1] == RING_STATUS_READY) // mark open to send
@@ -1539,6 +1807,19 @@ bool doTX()
         // we can now tx the message
         if (TX_ENABLE == 1)
         {
+            // TX-01 (BACKLOG 3.8k): hard backstop -- an unconfigured node
+            // (factory callsign) must not transmit, no matter what made it
+            // into the ring. addTxRingEntry() already refuses to enqueue
+            // for such a node; this is the runtime sibling of TX_ENABLE at
+            // the only place in the tree that calls
+            // Radio.Send()/startTransmit(). Non-rollback: the slot was
+            // already marked consumed above, same as the TX-disabled and
+            // decode-failure drop paths below.
+            if(isUnconfiguredCall(meshcom_settings.node_call))
+            {
+                logTxRefuseUnconfigured();
+                return false;
+            }
 
 #ifndef BOARD_TLORA_OLV216
             if(lora_tx_buffer[0] == '<' && bDisplayTrack)
@@ -1635,6 +1916,8 @@ bool doTX()
 
                 bSetLoRaAPRS = true;
 
+                setlogPrintTx(setlog_tx_buf);   // SL-03
+
                 // For text messages needing retransmit: restore length so
                 // updateRetransmissionStatus() can find and retransmit them.
                 if(ringBuffer[save_read][1] != (char)RING_STATUS_DONE && ringBuffer[save_read][2] == MSG_TYPE_TEXT)
@@ -1697,6 +1980,8 @@ bool doTX()
                         bLED_RED = true;
                     #endif
 
+                    setlogPrintTx(setlog_tx_buf);   // SL-03
+
                     if(bDisplayInfo)
                     {
                         if(lora_tx_buffer[0] == MSG_TYPE_ACK)
@@ -1723,7 +2008,7 @@ bool doTX()
             DEBUG_MSG("RADIO", "TX DISABLED");
         }
 
-        // Non-rollback drop paths (TX disabled or decode failure) — slot stays cleared
+        // Non-rollback drop paths (TX disabled, unconfigured node, or decode failure) — slot stays cleared
     }
 
     //#endif
@@ -1821,8 +2106,13 @@ bool updateRetransmissionStatus()
                 // memcpy(dst==src) hier folgenlos (Quelle == Ziel-Byte fuer Byte).
                 // Original erst NACH dem Kopieren freigeben, damit die Payload beim
                 // Kopiervorgang garantiert noch gueltig ist.
-                addTxRingEntry(&ringBuffer[ircheck][2], (uint16_t)size, retransmitStatus,
+                int retxSlot = addTxRingEntry(&ringBuffer[ircheck][2], (uint16_t)size, retransmitStatus,
                                 "retransmit", retryCount[ircheck] + 1);
+
+                // SL-03: "retransmit" bildet auf 'o' ab -- die Kennung des
+                // Quellslots wird deshalb mitgenommen (wie bei der Prio-Verdraengung).
+                if(retxSlot >= 0)
+                    ringSource[retxSlot] = ringSource[ircheck];
 
                 // Mark original as done and free slot (after copy, so len is correct in new slot)
                 ringBuffer[ircheck][1] = RING_STATUS_DONE;

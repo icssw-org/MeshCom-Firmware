@@ -2,18 +2,87 @@
 
 // Spitze Klammern (nicht Anfuehrungszeichen) fuer printfdeb_functions.h:
 // Anfuehrungszeichen-Includes suchen zuerst im Verzeichnis der einschliessenden
-// Datei und umgehen damit die -I-Reihenfolge aus platformio.ini. Die
-// Spitzklammer-Form haelt sich daran, so wie es
-// <configuration.h>/<debugconf.h>/<nrf52/WisBlock-API.h> in loop_functions.h
-// bereits vormachen.
+// Datei (hier src/) und wuerden IMMER src/printfdeb_functions.h finden --
+// unabhaengig von der -I-Reihenfolge in platformio.ini. Nur die
+// Spitzklammer-Form respektiert "-I test/support" vor "-I src" und laesst so
+// im nativen Testbuild test/support/printfdeb_functions.h (No-Op-Shim)
+// greifen, so wie es <configuration.h>/<debugconf.h>/<nrf52/WisBlock-API.h>
+// in loop_functions.h bereits vormachen.
 #include <printfdeb_functions.h>
 
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <aprs_functions.h>
 
+// setlogRingSourceCode() -- Header-Inline, keine Link-Abhaengigkeit auf
+// setlog_lines.cpp (env:native_aprs baut diese TU, aber nicht setlog_lines.cpp).
+#include <setlog_lines.h>
+
+#if defined(NATIVE_BUILD)
+// Native Testbuild: loop_functions.cpp (die kanonische Definitionsstelle
+// dieser Globals, siehe loop_functions_extern.h) wird hier NICHT mitgebaut
+// (build_src_filter in platformio.ini [env:native_aprs] listet nur einzelne
+// Dateien explizit auf). Damit txring_functions.o eigenstaendig linkbar ist
+// -- und zwar in JEDEM Test-Executable des Envs, nicht nur test_txring,
+// da PlatformIO build_src_filter env-weit anwendet -- stellt dieser Block
+// die Definitionen nur fuer NATIVE_BUILD bereit. Auf Hardware (ESP32/nRF52)
+// ist NATIVE_BUILD nie gesetzt, dort bleibt loop_functions.cpp die einzige
+// Definitionsstelle (kein Doppel-Definitions-Konflikt).
+unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE + 5];
+ring_index_t iWrite;
+ring_index_t iRead;
+uint8_t retryCount[MAX_RING];
+uint8_t ringPriority[MAX_RING];
+uint32_t ringEnqueueTime[MAX_RING];
+uint16_t stat_drop_count[6];
+uint8_t stat_queue_hwm;
+// SL-05: im Hardware-Build steht stat_ring_max in loop_functions.cpp neben
+// ch_util_*_accum; nativ gilt dieselbe Begruendung wie fuer die Arrays oben.
+std::atomic<uint8_t> stat_ring_max;
+#endif
+
+// SL-03/SL-06 (siehe txring_functions.h): Herkunft je Ring-Slot. Anders als
+// ringPriority[]/ringEnqueueTime[] hier definiert und nicht in
+// loop_functions.cpp -- geschrieben wird das Array ausschliesslich in dieser
+// Datei, und so braucht der native Testbuild keinen zweiten Definitionszweig.
+uint8_t ringSource[MAX_RING] = {0};
+
 //////////////////////////////////////////////////////////////////////////
 // LoRa TX functions
+
+// TX-01 (BACKLOG 3.8k): counts and rate-limits the "this node has no
+// callsign yet, transmit refused" marker. Shared by both choke points --
+// addTxRingEntry() below (so an unconfigured node's ring never even fills)
+// and doTX() in lora_functions.cpp (the hard backstop at the only caller of
+// Radio.Send()/startTransmit()). Raw Serial.printf, not printfdeb/DEBUG_MSG
+// (stripped/compiled away with --debug off, see the FL-01 marker note) --
+// at most one line per 10 s, folding any elided refusals into the
+// "refused" count on the next line that does print (TM-21's lesson).
+uint32_t stat_tx_refuse_unconfigured = 0;
+
+void logTxRefuseUnconfigured(void)
+{
+    static bool s_have_marker = false;
+    static uint32_t s_last_marker_ms = 0;
+    static uint32_t s_refused_since_marker = 0;
+
+    stat_tx_refuse_unconfigured++;
+    s_refused_since_marker++;
+
+    uint32_t now = (uint32_t)millis();
+    // s_have_marker, not "s_last_marker_ms == 0": millis()==0 is a real,
+    // reachable timestamp (boot, and every native-test setUp()), and must
+    // not double as an "never printed yet" sentinel -- that would let a
+    // second refusal still at ms=0 bypass the floor.
+    if(!s_have_marker || (uint32_t)(now - s_last_marker_ms) >= 10000UL)
+    {
+        Serial.printf("[TX];refuse;unconfigured;ms;%lu;refused;%lu\n",
+                      (unsigned long)now, (unsigned long)s_refused_since_marker);
+        s_have_marker = true;
+        s_last_marker_ms = now;
+        s_refused_since_marker = 0;
+    }
+}
 
 /**
  * Determine message priority from ring buffer slot content.
@@ -161,6 +230,145 @@ void advanceIReadPastEmpty(void)
 }
 
 /**
+ * BP-01 (BACKLOG) / TM-37 / BP-02 (DJ8MEH-RCA): current TX-ring fill level.
+ *
+ * Counts OCCUPIED slots (ringBuffer[i][0] > 0) from iRead up to (but not
+ * including) iWrite, wrapping over MAX_RING -- not the index distance
+ * iWrite-iRead. A priority-starved entry parked at iRead leaves behind
+ * freed holes (retransmitted-and-dropped, or evicted) between iRead and
+ * iWrite that the old index-distance arithmetic counted as still queued.
+ * DJ8MEH-RCA 2026-08-31: an 8-minute QRT episode ran on a phantom depth of
+ * 19 while only 3-4 slots were actually occupied, because QRV only closes
+ * at depth 0.
+ *
+ * Same occupied-slot counting style as the `queued` local inside
+ * addTxRingEntry() (that one excludes the slot being written, since it is
+ * computed before iWrite advances past it).
+ *
+ * Deliberately lock-free: both indices are read once each into locals. The
+ * occupied-count loop over up to MAX_RING slots is a read-only scan (no
+ * writes, no printf/malloc), so it stays cheap enough to keep lock-free.
+ * The worst a concurrent OnRxDone enqueue/evict on nRF52 can do mid-scan is
+ * make the answer stale by roughly the couple of slots that write touches
+ * (occupying or freeing a slot the scan has already passed or not yet
+ * reached) -- real, but irrelevant for a back-pressure notice threshold
+ * that only needs "about empty" vs. "still full", not an exact count.
+ */
+int txRingDepth(void)
+{
+    int w = (int)(uint8_t)iWrite;
+    int r = (int)(uint8_t)iRead;
+    int depth = 0;
+    int i = r;
+    while(i != w)
+    {
+        if(ringBuffer[i][0] > 0)
+            depth++;
+        i++;
+        if(i >= MAX_RING)
+            i = 0;
+    }
+    return depth;
+}
+
+/**
+ * BP-03 (DJ8MEH-RCA 2026-08-31, Teil 2): sweep the whole ring and drop every
+ * BACKGROUND (HEY, prio 5) entry older than RING_BG_MAX_AGE_MS
+ * (configuration_global.h). A priority-starved HEY parked at iRead behind a
+ * run of higher-priority traffic can sit for many minutes -- the DJ8MEH
+ * blocker sat 10 min -- and a neighbourhood report that stale is worthless
+ * on air. Tradeoff (a node's own HEY beacon ages out the same way) is
+ * documented at the RING_BG_MAX_AGE_MS definition.
+ *
+ * Deliberately its OWN function, not folded into getNextTxSlot() (Advisor
+ * F1, critical): getNextTxSlot() also runs on the nRF52 FreeRTOS timer task
+ * (OnRxDone -> csma_compute_timeout(), lora_functions.cpp) and under the
+ * EXTERNAL_RADIO bridge path -- neither may write the ring or call
+ * printf/printfdeb. This function is instead called once per 2s tick from
+ * the MAIN LOOP on both platforms (esp32_main.cpp/nrf52_main.cpp), right
+ * next to updateRetransmissionStatus() -- the same context that already
+ * frees slots today.
+ *
+ * Locking on nRF52: identical taskENTER_CRITICAL()/taskEXIT_CRITICAL()
+ * pattern as addTxRingEntry() above, and for the same reason (Advisor F2):
+ * the overflow-eviction path in addTxRingEntry() (see the N-24 comment
+ * further down) can RELOCATE an iRead entry's payload/side-arrays into a
+ * slot this sweep has already looked at or is about to look at, from the
+ * OTHER task, between an unlocked check and an unlocked drop. Every slot's
+ * occupancy/priority/age is therefore read and acted on ONCE, entirely
+ * inside a single critical section -- never decided beforehand and acted on
+ * after. No printfdeb/malloc/Serial call inside the lock (see
+ * printf-malloc-starves-nimble): dropped-slot details are collected into
+ * local arrays here and printed once, after taskEXIT_CRITICAL(). Ring size
+ * (MAX_RING, at most a few dozen) bounds both the loop and the local arrays.
+ *
+ * advanceIReadPastEmpty() runs once, inside the same critical section (same
+ * placement as its call inside addTxRingEntry() above), so the read pointer
+ * clears any run of newly-freed slots at the front in the same atomic step.
+ */
+void txRingAgeBackground(uint32_t now_ms)
+{
+    int dropSlot[MAX_RING];
+    uint32_t dropAgeS[MAX_RING];
+    uint32_t dropMsgId[MAX_RING];
+    int dropCount = 0;
+
+#if defined(NRF52_SERIES)
+    taskENTER_CRITICAL();
+#endif
+
+    for(int i = 0; i < MAX_RING; i++)
+    {
+        if(ringBuffer[i][0] == 0)
+            continue;
+        if(ringPriority[i] != MSG_PRIO_BACKGROUND)
+            continue;
+
+        uint32_t age_ms = (uint32_t)(now_ms - ringEnqueueTime[i]); // F8: rollover-safe cast
+        if(age_ms <= RING_BG_MAX_AGE_MS)
+            continue;
+
+#if defined(EXTERNAL_RADIO)
+        // Owned-slot invariant (F7, same as getNextTxSlot()/the overflow
+        // evictor above): a slot awaiting an async external-TX bridge result
+        // must never be reclaimed here, or a late TX_RESULT would corrupt
+        // whatever gets written into the reused slot next.
+        if(ringBuffer[i][1] == RING_STATUS_EXT_PENDING)
+            continue;
+#endif
+
+        uint32_t mid = ((uint32_t)ringBuffer[i][6] << 24) | ((uint32_t)ringBuffer[i][5] << 16) |
+                       ((uint32_t)ringBuffer[i][4] << 8)  |  (uint32_t)ringBuffer[i][3];
+
+        ringBuffer[i][0] = 0; // free the slot
+        retryCount[i] = 0;
+        stat_drop_count[MSG_PRIO_BACKGROUND]++;
+
+        if(dropCount < MAX_RING)
+        {
+            dropSlot[dropCount] = i;
+            dropAgeS[dropCount] = age_ms / 1000UL;
+            dropMsgId[dropCount] = mid;
+            dropCount++;
+        }
+    }
+
+    advanceIReadPastEmpty();
+
+#if defined(NRF52_SERIES)
+    taskEXIT_CRITICAL();
+#endif
+
+    // ---- Ab hier ausserhalb des Locks: nur noch Debug-Ausgabe ----
+    if(bLORADEBUG)
+    {
+        for(int k = 0; k < dropCount; k++)
+            printfdeb("[MC-DBG] RING_DROP_STALE slot=%d age_s=%lu msg_id=%08X\n",
+                      dropSlot[k], (unsigned long)dropAgeS[k], dropMsgId[k]);
+    }
+}
+
+/**
  * TX-Ring: kompletter Enqueue-Vorgang (Slot-Wahl, Payload-Kopie, Prio/Overflow,
  * iWrite/iRead-Fortschritt) in EINER Funktion unter EINEM Lock.
  * N-14: bisher schrieb der Aufrufer selbst nach ringBuffer[iWrite][...] und
@@ -195,6 +403,17 @@ void advanceIReadPastEmpty(void)
 int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
                     const char* source, int retryCountIn, bool clearSlotFirst)
 {
+    // TX-01 (BACKLOG 3.8k): an unconfigured node (factory callsign) must not
+    // transmit at all -- refuse here so its ring never even fills, on top
+    // of the hard backstop in doTX() (lora_functions.cpp, the only caller
+    // of Radio.Send()/startTransmit()). Checked first, ahead of the length
+    // clamp below: this frame is not going anywhere either way.
+    if(isUnconfiguredCall(meshcom_settings.node_call))
+    {
+        logTxRefuseUnconfigured();
+        return -1;
+    }
+
     // Verdict Finding 3: defensive Invariante. Alle heutigen Aufrufer sind auf
     // <=255 begrenzt -- encodeAPRS() klemmt intern auf UDP_TX_BUF_SIZE, der
     // Radio-Empfang liefert hoechstens die Modul-Obergrenze von 255 Byte, und
@@ -248,11 +467,31 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
     msgType = ringBuffer[w][2];
     mid = ((uint32_t)ringBuffer[w][6] << 24) | ((uint32_t)ringBuffer[w][5] << 16) |
           ((uint32_t)ringBuffer[w][4] << 8)  |  (uint32_t)ringBuffer[w][3];
-    queued = (w >= r) ? (w - r) : (MAX_RING - r + w);
+    // BP-02: occupied-slot count from iRead up to (excluding) the slot just
+    // written at w -- i.e. the depth BEFORE this entry, same counting style
+    // as txRingDepth() above. Not index distance: holes freed by retransmit
+    // drops/evictions between iRead and w must not inflate this number (see
+    // txRingDepth() doc comment, DJ8MEH-RCA). Read-only loop under the lock,
+    // no printf/malloc.
+    {
+        int occ = 0, i = r;
+        while(i != w)
+        {
+            if(ringBuffer[i][0] > 0)
+                occ++;
+            i++;
+            if(i >= MAX_RING)
+                i = 0;
+        }
+        queued = occ;
+    }
 
     // Assign priority and enqueue timestamp
     ringPriority[w] = getMessagePriority(w);
     ringEnqueueTime[w] = millis();
+    // SL-03/SL-06: Herkunft aus dem `source`-Label festhalten, solange es im
+    // Scope ist -- die TX-Zeile in doTX() sieht spaeter nur noch den Slot.
+    ringSource[w] = setlogRingSourceCode(source);
     prio = ringPriority[w];
 
     // Track queue depth for high-water mark
@@ -317,6 +556,7 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
                 memcpy(ringBuffer[worst_slot], ringBuffer[r], sizeof(ringBuffer[0]));
                 ringPriority[worst_slot]    = ringPriority[r];
                 ringEnqueueTime[worst_slot] = ringEnqueueTime[r];
+                ringSource[worst_slot]      = ringSource[r];   // SL-03/SL-06
                 retryCount[worst_slot]      = retryCount[r];
                 ringBuffer[r][0] = 0;
             }
@@ -356,7 +596,25 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
     taskEXIT_CRITICAL();
 #endif
 
-    // ---- Ab hier ausserhalb des Locks: nur noch Debug-Ausgabe ----
+    // ---- Ab hier ausserhalb des Locks ----
+
+    // SL-05: Hochwasser des Ringfuellstands im 5-Minuten-Fenster. Bewusst
+    // ausserhalb des Locks und ueber txRingDepth() (selbst lock-frei, siehe
+    // dessen Doku): iWrite ist hier bereits weitergeschaltet, die Tiefe
+    // enthaelt also den neuen Eintrag. Auch bei resultSlot < 0 gemessen -- ein
+    // verworfener Eintrag heisst voller Ring, und genau der Wert ist gesucht.
+    // Kein Ersatz fuer stat_queue_hwm -- das zaehlt seit dem Boot und wird nie
+    // zurueckgesetzt, stat_ring_max wird nach jedem STAT-Druck genullt.
+    // CAS-Schleife statt load/store, damit ein gleichzeitiger Schreiber aus
+    // dem anderen Task kein Maximum verliert.
+    {
+        uint8_t depth_now = (uint8_t)txRingDepth();
+        uint8_t seen = stat_ring_max.load();
+        while(depth_now > seen && !stat_ring_max.compare_exchange_weak(seen, depth_now))
+            ; // seen wird von compare_exchange_weak aktualisiert
+    }
+
+    // ---- nur noch Debug-Ausgabe ----
     if(bLORADEBUG)
     {
         printfdeb("[MC-DBG] RING_WRITE slot=%d type=%02X status=%02X "

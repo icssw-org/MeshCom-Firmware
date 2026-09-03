@@ -26,10 +26,16 @@ const char * sdmap_get_set_name(int idx);
 // Laedt die passende Kachel fuer lat/lon beim aktuellen Zoom und zeigt sie in img an.
 bool sdmap_refresh(lv_obj_t * img, double lat, double lon);
 
+// Verschiebt lat/lon um (dxPx, dyPx) Bildschirmpixel beim aktuellen Zoom (TD-07 Pan).
+void sdmap_pan_latlon(double * lat, double * lon, int dxPx, int dyPx);
+
 // Liefert die Pixelposition (0..255) von lat/lon innerhalb der zuletzt geladenen Kachel.
 void sdmap_project(double lat, double lon, int16_t * x, int16_t * y);
 
 // Prueft, ob lat/lon in der aktuell geladenen Kachel liegt.
 bool sdmap_in_current_tile(double lat, double lon);
+void sdmap_project_view(double lat, double lon, int16_t * x, int16_t * y);
+int  sdmap_view_w();
+int  sdmap_view_h();
 
 #endif

@@ -22,9 +22,117 @@ unsigned long BattTimeAPP = 0;
 // LOW=Teiler aus). Siehe batt_functions.h fuer die Begruendung der Probe.
 batt_probe_t battProbeState = BATT_PROBE_ACTIVE_HIGH;
 
+#if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4) || \
+	(defined(NRF52_SERIES) && not defined(BOARD_HELTEC_T114) && not defined(BOARD_T_ECHO))
+// max_batt is defined further down (near mv_to_percent(), in mV -- setMaxBatt() is always
+// called with node_maxv*1000). Forward-declared here so read_batt()'s HELTEC_V3/STICK_V3/
+// HELTEC_V4 branch (defined before max_batt in this file) can derive the detector's
+// plausible band from it.
+extern float max_batt;
+
+// ----- BAT-01/BAT-02: no-battery detection -----
+// Duplicated core, not shared: the canonical copy (with the full rationale -- floating
+// divider node, why raw/unfiltered samples, why the band is relative to max_batt, why
+// hysteresis) lives in batt_functions.h/.cpp (battDetectReset()/battDetectUpdate()). This
+// file is the USE_NEW_BATT-undefined branch (see "#ifndef USE_NEW_BATT" above) and
+// batt_functions.h declares that detector inside "#if defined(USE_NEW_BATT)", so it is not
+// visible in this translation unit -- hence a minimal, algorithmically identical duplicate
+// here rather than a shared include. Keep any change to the algorithm/thresholds in sync
+// with the canonical copy. Scoped to HELTEC_V3/STICK_V3/HELTEC_V4 (BAT-01) and the plain
+// NRF52_SERIES board -- i.e. RAK4631/WisBlock, the only nRF52 target that reaches this guard
+// since BOARD_HELTEC_T114/BOARD_T_ECHO are excluded (BAT-02). Every other board in this file
+// (TLORA_OLV216, TRACKER, T_CONNECT_PRO, ...) is untouched.
+#define BATT_DETECT_MAX_DELTA_MV        250.0f   // see canonical copy for the measured-swing justification
+#define BATT_DETECT_MIN_BAND_FACTOR     0.55f    // fraction of max_batt -- see canonical copy
+#define BATT_DETECT_MAX_BAND_FACTOR     1.15f
+#define BATT_DETECT_ABSENT_STREAK       6        // ~3s at the 500ms read_batt() cadence
+#define BATT_DETECT_PRESENT_STREAK      10       // ~5s
+
+typedef struct {
+	bool  haveLast;
+	float lastMv;
+	int   implausibleStreak;
+	int   plausibleStreak;
+	bool  present;
+} batt_detect_state_t;
+
+static void battDetectReset(batt_detect_state_t *state)
+{
+	state->haveLast = false;
+	state->lastMv = 0.0f;
+	state->implausibleStreak = 0;
+	state->plausibleStreak = 0;
+	state->present = true;   // fail-safe: erst nach BATT_DETECT_ABSENT_STREAK unplausiblen Samples "false"
+}
+
+static bool battDetectUpdate(batt_detect_state_t *state, float rawMv, float minPlausibleMv, float maxPlausibleMv)
+{
+	bool implausible = (rawMv < minPlausibleMv) || (rawMv > maxPlausibleMv);
+
+	if (state->haveLast)
+	{
+		float delta = state->lastMv - rawMv;
+		if (delta < 0) { delta = -delta; }
+		if (delta > BATT_DETECT_MAX_DELTA_MV) { implausible = true; }
+	}
+
+	state->lastMv = rawMv;
+	state->haveLast = true;
+
+	if (implausible)
+	{
+		state->implausibleStreak++;
+		state->plausibleStreak = 0;
+	}
+	else
+	{
+		state->plausibleStreak++;
+		state->implausibleStreak = 0;
+	}
+
+	if (state->present && state->implausibleStreak >= BATT_DETECT_ABSENT_STREAK)
+		state->present = false;
+	else if (!state->present && state->plausibleStreak >= BATT_DETECT_PRESENT_STREAK)
+		state->present = true;
+
+	return state->present;
+}
+
+// Produktions-Instanz (ein Zustand pro Node). read_batt() speist sie mit dem frischen,
+// ungefilterten Sample (nur wenn tatsaechlich neu vom ADC gelesen wurde, nicht in den
+// dividerArmed-Zwischenzyklen), battHardwarePresent() liest das Urteil.
+static batt_detect_state_t battDetectState;
+static bool battDetectStateInit = false;
+
+static bool battDetectFeed(float rawMv, float minPlausibleMv, float maxPlausibleMv)
+{
+	if (!battDetectStateInit)
+	{
+		battDetectReset(&battDetectState);
+		battDetectStateInit = true;
+	}
+	return battDetectUpdate(&battDetectState, rawMv, minPlausibleMv, maxPlausibleMv);
+}
+
+static bool battDetected(void)
+{
+	if (!battDetectStateInit) { return true; }   // fail-safe vor dem ersten echten Sample
+	return battDetectState.present;
+}
+#endif
+
 bool battHardwarePresent(void)
 {
+#if defined(BOARD_HELTEC_V3) || defined(BOARD_STICK_V3) || defined(BOARD_HELTEC_V4) || \
+	(defined(NRF52_SERIES) && not defined(BOARD_HELTEC_T114) && not defined(BOARD_T_ECHO))
+	// fail-safe: nur bei positiv erkanntem "kein Teiler" ODER positiv erkannter Abwesenheit
+	// (Laufzeit-Detektion, BAT-01/BAT-02). battProbeState bleibt auf dem RAK4631-Pfad
+	// permanent BATT_PROBE_ACTIVE_HIGH (nur die Heltec-Probe in init_batt() aendert ihn),
+	// dort reduziert sich der Ausdruck also praktisch auf battDetected().
+	return battProbeState != BATT_PROBE_NONE && battDetected();
+#else
 	return battProbeState != BATT_PROBE_NONE;   // fail-safe: nur bei positiv erkanntem "kein Teiler" false
+#endif
 }
 
 #if defined(NRF52_SERIES)
@@ -238,7 +346,17 @@ static void battProbeADCPolarity(uint32_t ctrlPin, uint32_t vbatPin)
 	for (int i = 0; i < 8; i++) { countsLow += analogRead(vbatPin); }
 	countsLow /= 8;
 
-	if (countsHigh >= BATT_PROBE_MIN_COUNTS && countsHigh > countsLow)
+	int probeDelta = countsHigh - countsLow;
+	if (probeDelta < 0) probeDelta = -probeDelta;
+	if (countsHigh >= BATT_PROBE_MIN_COUNTS && countsLow >= BATT_PROBE_MIN_COUNTS && probeDelta < BATT_PROBE_MIN_COUNTS)
+	{
+		// Beide Messungen plausibel und praktisch gleich: der Teiler liegt fest an, der
+		// Steuerpin bewirkt nichts (z.B. Wireless Stick V3). Batteriehardware vorhanden,
+		// Polaritaet ohne Bedeutung -> nicht als "kein Teiler" fehlinterpretieren.
+		battProbeState = BATT_PROBE_ACTIVE_HIGH;
+		digitalWrite(ctrlPin, LOW);
+	}
+	else if (countsHigh >= BATT_PROBE_MIN_COUNTS && countsHigh > countsLow)
 	{
 		battProbeState = BATT_PROBE_ACTIVE_HIGH;
 		digitalWrite(ctrlPin, LOW);    // Ruhezustand: Teiler getrennt (Strom sparen)
@@ -254,6 +372,7 @@ static void battProbeADCPolarity(uint32_t ctrlPin, uint32_t vbatPin)
 	}
 
 	printfdeb("[INIT]...ADC_CTRL_PIN probe: high=%d;low=%d;-> %s\n", countsHigh, countsLow,
+		(battProbeState == BATT_PROBE_ACTIVE_HIGH && probeDelta < BATT_PROBE_MIN_COUNTS && countsLow >= BATT_PROBE_MIN_COUNTS) ? "fester Teiler (active HIGH)" :
 		(battProbeState == BATT_PROBE_ACTIVE_HIGH) ? "active HIGH" :
 		(battProbeState == BATT_PROBE_ACTIVE_LOW)  ? "active LOW"  : "keine Batteriehardware (kein Teiler)");
 }
@@ -592,8 +711,17 @@ float read_batt(void)
 				printlndeb(voltage);
 			}
 
-			raw = floatVoltage;
-			cachedRaw = floatVoltage;
+			// BAT-01: Laufzeit-Erkennung "kein Akku" auf dem frischen Sample -- max_batt ist
+			// hier bereits in mV (setMaxBatt() wird mit node_maxv*1000 aufgerufen), daher
+			// keine weitere Skalierung noetig. Nur in diesem Zweig gefuettert (echter neuer
+			// ADC-Read), nicht in den dividerArmed-Zwischenzyklen oben/unten.
+			bool battPresentNow = battDetectFeed(floatVoltage,
+				max_batt*BATT_DETECT_MIN_BAND_FACTOR, max_batt*BATT_DETECT_MAX_BAND_FACTOR);
+
+			// dieselbe 0V/"USB"-Konvention wie ueberall sonst (loop_functions.cpp prueft
+			// global_batt==0.0), statt eine zweite Anzeige-Fallunterscheidung einzufuehren.
+			raw = battPresentNow ? floatVoltage : 0.0f;
+			cachedRaw = raw;
 		}
 		else
 		{
@@ -685,6 +813,20 @@ float read_batt(void)
 		// all done - millivolts computed directly in read path
 	#elif defined(NRF52_SERIES)
 		raw = raw * 1.25717;
+
+		// BAT-02: same runtime "no battery" detection as the Heltec V3/V4 branch (BAT-01),
+		// fed with this board's raw (unfiltered -- there is no inter-call smoothing on this
+		// path, just the intra-call multisample average above) mV sample. max_batt is in mV
+		// by the time this runs (nrf52_main.cpp calls setMaxBatt(node_maxv*1000) at boot when
+		// node_maxv is configured), same units as the Heltec copy, so no rescale needed here.
+		{
+			bool battPresentNow = battDetectFeed(raw,
+				max_batt*BATT_DETECT_MIN_BAND_FACTOR, max_batt*BATT_DETECT_MAX_BAND_FACTOR);
+
+			// dieselbe 0V/"USB"-Konvention wie ueberall sonst (loop_functions.cpp prueft
+			// global_batt==0.0), statt eine zweite Anzeige-Fallunterscheidung einzufuehren.
+			if (!battPresentNow) { raw = 0.0f; }
+		}
 	#elif defined(BOARD_TBEAM) || defined(BOARD_SX1268)
 		raw = raw * 10.7687;
 	#elif defined(BOARD_HELTEC)
