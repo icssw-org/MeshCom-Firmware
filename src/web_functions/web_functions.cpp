@@ -1445,12 +1445,6 @@ void sub_page_setup()
     #ifndef BOARD_RAK4630
     _create_setup_switch_element("netconsole", "net console", "enable net console (port 2323, HMAC auth)", bNETCONSOLE); // create Switch-Element inclucing Label and Description
     #endif
-    #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
-    _create_setup_switch_element("kiss", "KISS/TCP", "enable KISS interface (port 8001)", bKISS);
-    _create_setup_switch_element("kisstx", "KISS TX", "allow transmit from KISS clients", bKISSTX);
-    _create_setup_switch_element("kissmeta", "KISS RxMeta", "send RSSI/SNR frames (KISS port 1)", bKISSMETA);
-    _create_setup_switch_element("kissauth", "KISS Auth", "require HMAC auth on port 8001 (uses --passwd)", bKISSAUTH);
-    #endif
     _create_setup_switch_element("gateway", "Gateway", "enable gateway", bGATEWAY);   // create Switch-Element inclucing Label and Description
 
     web_client.println("</div></div>");
