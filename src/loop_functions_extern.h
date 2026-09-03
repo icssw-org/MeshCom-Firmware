@@ -422,7 +422,7 @@ extern int mheardNCount[MAX_MHEARD];
 
 extern char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardPathEpoch[MAX_MHPATH];  //Ringbuffer for MHeard EPoch Update Time
-extern unsigned char mheardPathBuffer1[MAX_MHPATH][50]; //Ringbuffer for MHeard Sourcepath
+extern unsigned char mheardPathBuffer1[MAX_MHPATH][52]; //Ringbuffer for MHeard Sourcepath
 extern uint8_t mheardPathLen[MAX_MHPATH];
 
 extern char cTimeSource[10];
