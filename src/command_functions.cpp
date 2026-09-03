@@ -435,8 +435,6 @@ void commandAction(char *umsg_text, bool ble)
         // minimum 3 Minuten
         if(meshcom_settings.node_postime < (5 * 60))
             meshcom_settings.node_postime = (5 * 60);
-        else
-            meshcom_settings.node_postime = 0;
 
         if(meshcom_settings.node_postime > 0)
             posinfo_interval = meshcom_settings.node_postime;
