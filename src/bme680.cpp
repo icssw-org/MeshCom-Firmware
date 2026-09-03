@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "loop_functions_extern.h"
+#include "gps_functions.h"
 
 #if defined (ENABLE_BMX680)
 
@@ -206,7 +207,7 @@ float getPressASL680(int current_alt)
 	//fBaseAltidude = (float)meshcom_settings.node_alt;
 	//fBasePress = meshcom_settings.node_press;
 	//
-	if(fBaseAltidude680 == 0)
+	if(fBaseAltidude680 == 0 && baroBaseLatchAllowed())
 		fBaseAltidude680 = (float)current_alt;
 
 	return meshcom_settings.node_press / powf(1 - ((0.0065 * fBaseAltidude680) /

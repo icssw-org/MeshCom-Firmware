@@ -140,6 +140,7 @@ extern bool bEXTUDP;
 extern bool bNETCONSOLE;
 
 extern float fBaseAltidude;
+extern float fBaseAltidude680;
 extern float fBasePress;
 
 extern unsigned long onewireTimeWait;
@@ -322,6 +323,28 @@ extern ch_util_rx_start_t ch_util_rx_start;
 extern ch_util_ulong_t ch_util_tx_start;
 extern ch_util_ulong_t ch_util_rx_accum;
 extern ch_util_ulong_t ch_util_tx_accum;
+
+// SL-05 -- Zaehler der 5-Minuten-STAT-Zeile unter `--setlog on`.
+// Definitionsstelle ist loop_functions.cpp neben ch_util_*_accum; alle sind
+// std::atomic, weil LORA-Task (SL-01/SL-04) und loop() (SL-03/SL-05) sie
+// gleichzeitig anfassen. Zuruecksetzen im STAT-Druck per exchange(0).
+extern std::atomic<uint32_t> stat_newid;       // neue msg_id im Dedup-Ring
+extern std::atomic<uint32_t> stat_dup;         // erkannte Kopien
+extern std::atomic<uint32_t> stat_rx_err;      // RX-/CRC-Fehler
+extern std::atomic<uint32_t> stat_txn;         // eigene Sendungen
+extern std::atomic<uint32_t> stat_txfail;      // vom TX-Watchdog abgebrochen
+extern std::atomic<uint32_t> stat_util_rx_5m;  // RX-Luftzeit im Fenster (ms)
+extern std::atomic<uint32_t> stat_util_tx_5m;  // TX-Luftzeit im Fenster (ms)
+extern std::atomic<uint8_t>  stat_ring_max;    // Hochwasser von txRingDepth()
+
+// SL: prints `HH:MM:SS [LOG] <body>` via printfdeb without a String allocation
+// (definition in loop_functions.cpp next to getTimeString()).
+void setlogPrint(const char *body);
+// SL-05: fills the STAT fields from the interval counters (drains them), the
+// mheard/trickle/version globals and uptime; heap is platform-specific and passed in.
+// stat_drop_count[] is read, not cleared -- the platform tick clears it.
+struct setlogStatFields;
+void setlogFillStat(struct setlogStatFields *f, uint32_t heap);
 
 
 // Trickle-HEY state

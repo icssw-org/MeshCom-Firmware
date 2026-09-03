@@ -121,6 +121,7 @@ void sendHeartbeat();
 #include <lora_setchip.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include "setlog_lines.h"
 #include "dedup_functions.h"
 #include <command_functions.h>
 #include <aprs_functions.h>
@@ -1348,24 +1349,61 @@ void nrf52loop()
         if(_pendPos)  sendDisplayPosition(_msg, _rssi, _snr);
     }
 
-    // Channel utilization report (every 10s)
+    // Channel utilization report (every 10s). SL-05: the drain of the
+    // ch_util accumulators feeds stat_util_rx_5m/tx_5m for the STAT line
+    // (--setlog on), so the 10-s tick runs independent of bLORADEBUG; only
+    // the diagnostic prints stay behind the flag, unchanged.
     {
         static unsigned long ch_util_timer = 0;
-        if(bLORADEBUG && (millis() - ch_util_timer) > 10000)
+        if((millis() - ch_util_timer) > 10000)
         {
             unsigned long window = millis() - ch_util_timer;
             ch_util_timer = millis();
             unsigned long rx_ms = ch_util_rx_accum.exchange(0);
             unsigned long tx_ms = ch_util_tx_accum.exchange(0);
+            stat_util_rx_5m += (uint32_t)rx_ms;
+            stat_util_tx_5m += (uint32_t)tx_ms;
             unsigned int util = (unsigned int)((rx_ms + tx_ms) * 100 / window);
             if(util > 100) util = 100;
-            Serial.printf("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
-                rx_ms, tx_ms, util);
-            // ONRXDONE stats: report max and warn count, then reset
-            Serial.printf("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
-                onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
-            onrxdone_max_ms = 0;
-            onrxdone_warn_count = 0;
+            if(bLORADEBUG)
+            {
+                Serial.printf("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
+                    rx_ms, tx_ms, util);
+                // ONRXDONE stats: report max and warn count, then reset
+                Serial.printf("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
+                    onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
+                onrxdone_max_ms = 0;
+                onrxdone_warn_count = 0;
+            }
+        }
+    }
+
+    // SL-05 STAT tick (--setlog on / bDisplayLog): runs independent of
+    // bLORADEBUG so the interval counters never grow unbounded even when the
+    // block above never fires. Reset always, print only when enabled.
+    {
+        static uint32_t setlog_stat_timer = 0;
+        if((uint32_t)(millis() - setlog_stat_timer) >= PRIO_STAT_INTERVAL_S * 1000UL)
+        {
+            setlog_stat_timer = millis();
+
+            struct setlogStatFields f;
+            setlogFillStat(&f, nrf52_getFreeHeap());
+
+            // stat_drop_count[] increments happen under this same lock in
+            // txring_functions.cpp -- clear under it too, right after the
+            // (uncleared) read inside setlogFillStat().
+            taskENTER_CRITICAL();
+            for(int i = 0; i < 5; i++)
+                stat_drop_count[i + 1] = 0;
+            taskEXIT_CRITICAL();
+
+            if(bDisplayLog)
+            {
+                char buf[300];
+                setlogFormatStat(buf, sizeof(buf), &f);
+                setlogPrint(buf);
+            }
         }
     }
 
@@ -1687,6 +1725,8 @@ void nrf52loop()
         #if defined(ENABLE_GPS)
         if(bGPSON)
         {
+            if (gpsDetected) { INSTR_SECTION("gps_feed"); WZ_GPS_Feed(); }
+
             // gps refresh every sec
             if ((uint32_t)(millis() - gps_refresh_timer) >= 1000)
             {

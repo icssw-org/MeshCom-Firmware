@@ -138,6 +138,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include <mheard_functions.h>
 #include <time_functions.h>
 #include <clock.h>
+#include <setlog_lines.h> // SL-04/SL-05: --setlog on line formatters (Welle 0)
 #include <onewire_functions.h>
 #include <onebutton_functions.h>
 #include <adc_functions.h>
@@ -612,6 +613,26 @@ float getTempForNTC()
 //=======================================================================================
 
 
+// TM-51: name of the last reset cause for the boot banner. A field reboot without
+// this line is indistinguishable from a power cycle (see bug-GPS-uart-overflow §3.3).
+static const char* resetReasonName(esp_reset_reason_t r)
+{
+    switch (r)
+    {
+        case ESP_RST_POWERON:   return "POWERON";
+        case ESP_RST_EXT:       return "EXT";
+        case ESP_RST_SW:        return "SW";
+        case ESP_RST_PANIC:     return "PANIC";
+        case ESP_RST_INT_WDT:   return "INT_WDT";
+        case ESP_RST_TASK_WDT:  return "TASK_WDT";
+        case ESP_RST_WDT:       return "WDT";
+        case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
+        case ESP_RST_BROWNOUT:  return "BROWNOUT";
+        case ESP_RST_SDIO:      return "SDIO";
+        default:                return "UNKNOWN";
+    }
+}
+
 void esp32setup()
 {
     ///< Initialize T5-EPAPER GUI
@@ -712,6 +733,13 @@ void esp32setup()
     printlndeb("============");
     printlndeb("CLIENT SETUP");
     printlndeb("============");
+
+    // TM-51: reset cause, raw Serial.printf so it survives --debug off (nRF52 prints
+    // [BOOT] RESETREAS=... at the same point).
+    {
+        esp_reset_reason_t rr = esp_reset_reason();
+        Serial.printf("[BOOT] RESET_REASON=%d %s\n", (int)rr, resetReasonName(rr));
+    }
 
     lFreeHeap =  ESP.getFreeHeap();
     lFreePsram = ESP.getFreePsram();
@@ -2098,10 +2126,14 @@ void esp32loop()
         // Deferred display update from OnRxDone (avoid I2C inside radio callback)
         flushDeferredDisplayUpdates();
 
-        // Channel utilization report (every 10s)
+        // Channel utilization report (every 10s). SL-05: the drain of
+        // ch_util_rx_accum/tx_accum below feeds stat_util_rx_5m/tx_5m for the
+        // 5-minute STAT line (--setlog on), so the 10-s tick itself must not
+        // depend on bLORADEBUG any more -- only the diagnostic prints still
+        // do, unchanged from before. The 10-s accumulation math is untouched.
         {
             static unsigned long ch_util_timer = 0;
-            if(bLORADEBUG && (millis() - ch_util_timer) > 10000)
+            if((millis() - ch_util_timer) > 10000)
             {
                 unsigned long window = millis() - ch_util_timer;
                 ch_util_timer = millis();
@@ -2109,13 +2141,18 @@ void esp32loop()
                 unsigned long tx_ms = ch_util_tx_accum.exchange(0);
                 unsigned int util = (unsigned int)((rx_ms + tx_ms) * 100 / window);
                 if(util > 100) util = 100;
-                printfdeb("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
-                    rx_ms, tx_ms, util);
-                // ONRXDONE stats: report max and warn count, then reset
-                printfdeb("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
-                    onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
-                onrxdone_max_ms = 0;
-                onrxdone_warn_count = 0;
+                stat_util_rx_5m.fetch_add((uint32_t)rx_ms);
+                stat_util_tx_5m.fetch_add((uint32_t)tx_ms);
+                if(bLORADEBUG)
+                {
+                    printfdeb("[MC-DBG] CHANNEL_UTIL rx=%lums tx=%lums util=%u%%\n",
+                        rx_ms, tx_ms, util);
+                    // ONRXDONE stats: report max and warn count, then reset
+                    printfdeb("[MC-DBG] ONRXDONE_STATS max=%lums warn=%u (>%dms)\n",
+                        onrxdone_max_ms, onrxdone_warn_count, ONRXDONE_WARN_MS);
+                    onrxdone_max_ms = 0;
+                    onrxdone_warn_count = 0;
+                }
             }
         }
 
@@ -2123,6 +2160,25 @@ void esp32loop()
         if((millis() - stat_prio_timer) > (unsigned long)(PRIO_STAT_INTERVAL_S * 1000UL))
         {
             stat_prio_timer = millis();
+
+            // SL-05: STAT line under --setlog on, independent of bLORADEBUG.
+            // setlogFillStat() reads stat_drop_count[] before the existing
+            // (unconditional) memset further below resets it -- no second
+            // reset here. The interval counters are drained on every tick
+            // (so they never grow unbounded); only the print depends on
+            // bDisplayLog.
+            {
+                struct setlogStatFields f;
+                setlogFillStat(&f, (uint32_t)ESP.getFreeHeap());
+
+                if(bDisplayLog)
+                {
+                    char buf[300];
+                    setlogFormatStat(buf, sizeof(buf), &f);
+                    setlogPrint(buf);
+                }
+            }
+
             if(bLORADEBUG)
             {
                 printfdeb("[MC-STAT] t=%ds qmax=%d/%d\n",
@@ -2176,6 +2232,9 @@ void esp32loop()
             {
                 printfdeb("[MC-WDT] TX_WATCHDOG fired after %lums — forcing RX recovery\n",
                     millis() - _tx_s);
+
+                // SL-05: abort counter for the STAT block's txfail=.
+                stat_txfail.fetch_add(1);
 
                 ch_util_tx_start = 0;
                 transmittedFlag   = false;
@@ -3076,6 +3135,10 @@ void esp32loop()
         gps_refresh_intervall = 1.0;
     }
 
+    #ifdef ENABLE_GPS
+    if (bGPSON && gpsDetected) { INSTR_SECTION("gps_feed"); WZ_GPS_Feed(); }
+    #endif
+
     if ((uint32_t)(millis() - gps_refresh_timer) >= ((unsigned long)gps_refresh_intervall * 1000))
     {
         #ifdef ENABLE_GPS
@@ -3174,7 +3237,7 @@ void esp32loop()
             // aktuell geladene Kachel verlassen hat, und bei Bedarf nachladen -
             // nur solange der Kartenbildschirm auch tatsaechlich sichtbar ist.
             static unsigned long sdmap_boundary_timer = 0;
-            if ((sdmap_boundary_timer + 30000UL) < millis())
+            if ((uint32_t)(millis() - sdmap_boundary_timer) >= 30000UL)   // N-08 idiom, rollover-safe
             {
                 sdmap_boundary_timer = millis();
 
@@ -4120,6 +4183,19 @@ int checkRX(bool bRadio)
 
         // RX channel utilization: CRC-failed packet still occupied the channel
         ch_util_rx_accum.fetch_add(radio.getTimeOnAir(ibytes) / 1000);  // us -> ms
+
+        // SL-04: CRC/RX error, platform-independent counter for the STAT
+        // block (SL-05) and the ERR line under --setlog on. checkRX() runs
+        // in loop() context here (called from esp32loop()), so a local
+        // stack buffer is unproblematic.
+        stat_rx_err.fetch_add(1);
+        if(bDisplayLog)
+        {
+            char buf[300];
+            setlogFormatErr(buf, sizeof(buf), saved_crc_rssi, saved_crc_snr,
+                            (uint16_t)ibytes, (int32_t)saved_crc_ferr, millis());
+            setlogPrint(buf);
+        }
 
         // Diagnose-Output: RSSI/SNR + kompletter Payload-Hex-Dump
         if(bLORADEBUG)

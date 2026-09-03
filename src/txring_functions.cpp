@@ -14,6 +14,10 @@
 #include <loop_functions_extern.h>
 #include <aprs_functions.h>
 
+// setlogRingSourceCode() -- Header-Inline, keine Link-Abhaengigkeit auf
+// setlog_lines.cpp (env:native_aprs baut diese TU, aber nicht setlog_lines.cpp).
+#include <setlog_lines.h>
+
 #if defined(NATIVE_BUILD)
 // Native Testbuild: loop_functions.cpp (die kanonische Definitionsstelle
 // dieser Globals, siehe loop_functions_extern.h) wird hier NICHT mitgebaut
@@ -32,7 +36,16 @@ uint8_t ringPriority[MAX_RING];
 uint32_t ringEnqueueTime[MAX_RING];
 uint16_t stat_drop_count[6];
 uint8_t stat_queue_hwm;
+// SL-05: im Hardware-Build steht stat_ring_max in loop_functions.cpp neben
+// ch_util_*_accum; nativ gilt dieselbe Begruendung wie fuer die Arrays oben.
+std::atomic<uint8_t> stat_ring_max;
 #endif
+
+// SL-03/SL-06 (siehe txring_functions.h): Herkunft je Ring-Slot. Anders als
+// ringPriority[]/ringEnqueueTime[] hier definiert und nicht in
+// loop_functions.cpp -- geschrieben wird das Array ausschliesslich in dieser
+// Datei, und so braucht der native Testbuild keinen zweiten Definitionszweig.
+uint8_t ringSource[MAX_RING] = {0};
 
 //////////////////////////////////////////////////////////////////////////
 // LoRa TX functions
@@ -476,6 +489,9 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
     // Assign priority and enqueue timestamp
     ringPriority[w] = getMessagePriority(w);
     ringEnqueueTime[w] = millis();
+    // SL-03/SL-06: Herkunft aus dem `source`-Label festhalten, solange es im
+    // Scope ist -- die TX-Zeile in doTX() sieht spaeter nur noch den Slot.
+    ringSource[w] = setlogRingSourceCode(source);
     prio = ringPriority[w];
 
     // Track queue depth for high-water mark
@@ -540,6 +556,7 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
                 memcpy(ringBuffer[worst_slot], ringBuffer[r], sizeof(ringBuffer[0]));
                 ringPriority[worst_slot]    = ringPriority[r];
                 ringEnqueueTime[worst_slot] = ringEnqueueTime[r];
+                ringSource[worst_slot]      = ringSource[r];   // SL-03/SL-06
                 retryCount[worst_slot]      = retryCount[r];
                 ringBuffer[r][0] = 0;
             }
@@ -579,7 +596,25 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
     taskEXIT_CRITICAL();
 #endif
 
-    // ---- Ab hier ausserhalb des Locks: nur noch Debug-Ausgabe ----
+    // ---- Ab hier ausserhalb des Locks ----
+
+    // SL-05: Hochwasser des Ringfuellstands im 5-Minuten-Fenster. Bewusst
+    // ausserhalb des Locks und ueber txRingDepth() (selbst lock-frei, siehe
+    // dessen Doku): iWrite ist hier bereits weitergeschaltet, die Tiefe
+    // enthaelt also den neuen Eintrag. Auch bei resultSlot < 0 gemessen -- ein
+    // verworfener Eintrag heisst voller Ring, und genau der Wert ist gesucht.
+    // Kein Ersatz fuer stat_queue_hwm -- das zaehlt seit dem Boot und wird nie
+    // zurueckgesetzt, stat_ring_max wird nach jedem STAT-Druck genullt.
+    // CAS-Schleife statt load/store, damit ein gleichzeitiger Schreiber aus
+    // dem anderen Task kein Maximum verliert.
+    {
+        uint8_t depth_now = (uint8_t)txRingDepth();
+        uint8_t seen = stat_ring_max.load();
+        while(depth_now > seen && !stat_ring_max.compare_exchange_weak(seen, depth_now))
+            ; // seen wird von compare_exchange_weak aktualisiert
+    }
+
+    // ---- nur noch Debug-Ausgabe ----
     if(bLORADEBUG)
     {
         printfdeb("[MC-DBG] RING_WRITE slot=%d type=%02X status=%02X "
