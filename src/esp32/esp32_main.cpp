@@ -806,6 +806,9 @@ void esp32setup()
     #ifndef DISABLE_NET_CONSOLE
     netConsoleSetPassword(meshcom_settings.node_passwd);
     #endif
+    #ifndef DISABLE_KISS_TCP
+    kissSetPassword(meshcom_settings.node_passwd);
+    #endif
     // NOTE: externalRadioSetup() runs later, AFTER lora_setcountry() has applied
     // the effective freq/bw/sf/cr/preamble, so the bridge config snapshot is built
     // from the same effective radio settings the local radio path would use.
@@ -837,6 +840,7 @@ void esp32setup()
     bKISS = meshcom_settings.node_sset4 & 0x0010;
     bKISSTX = meshcom_settings.node_sset4 & 0x0020;
     bKISSMETA = meshcom_settings.node_sset4 & 0x0040;
+    bKISSAUTH = meshcom_settings.node_sset4 & 0x0080;
     #endif
 
     if(strlen(meshcom_settings.node_aprsmc) < 4)
@@ -3722,9 +3726,20 @@ void esp32loop()
         flushExternQueue();
     }
 
+    // KISS/TCP lifecycle — kept OUT of the "if(bWEBSERVER||bEXTUDP||bGATEWAY||
+    // bNETCONSOLE||bKISS)" service block below: on a KISS-only node with all four
+    // others off that block is never entered, so kissStop() would be unreachable
+    // and "--kiss off" could not close the (unauthenticated) listener.
     #ifndef DISABLE_KISS_TCP
     if(bKISS)
+    {
         flushKissQueue();
+        kissLoop();   // self-guarding on WiFi.status(); opens the socket once WiFi is up
+    }
+    else
+    {
+        kissStop();
+    }
     #endif
 
     if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE || bKISS)
@@ -3806,20 +3821,7 @@ void esp32loop()
         }
         #endif
 
-        #ifndef DISABLE_KISS_TCP
-        if(iWlanWait == 0)
-        {
-            if(bKISS)
-            {
-                kissSetup();
-                kissLoop();
-            }
-            else
-            {
-                kissStop();
-            }
-        }
-        #endif
+        // KISS/TCP lifecycle is handled above, outside this service block (F3).
 
         if(bEXTUDP && iWlanWait == 0)
         {

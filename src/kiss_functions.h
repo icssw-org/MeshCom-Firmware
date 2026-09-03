@@ -25,8 +25,13 @@ void kissLoop();
 // close listening + client socket — call when bKISS is cleared
 void kissStop();
 
-// queue a received LoRa frame for conversion. Runs in the radio callback /
-// timer-service task: memcpy only, never touches sockets.
+// set the shared secret for the optional HMAC auth (reuses --passwd)
+void kissSetPassword(const char *pw);
+
+// queue a received LoRa frame for conversion — copy only, no sockets, no
+// allocation. On mainstream ESP32 targets this is called synchronously from the
+// loop task (esp32loop -> checkRX); on BOARD_T5_EPAPER it runs in lora_task, so
+// the drain side (flushKissQueue) snapshots each slot before use.
 void queueKiss(uint8_t *buffer, uint16_t buflen, int16_t rssi, int8_t snr);
 
 // drain the deferred queue: convert to AX.25, send to the client. Loop context.
@@ -39,6 +44,7 @@ bool isKissClientConnected();
 inline void kissSetup() {}
 inline void kissLoop() {}
 inline void kissStop() {}
+inline void kissSetPassword(const char *) {}
 inline void queueKiss(uint8_t *, uint16_t, int16_t, int8_t) {}
 inline void flushKissQueue() {}
 inline bool isKissClientConnected() { return false; }

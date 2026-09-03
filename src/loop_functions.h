@@ -84,7 +84,10 @@ unsigned int sendInjectedPosition(const char *srcCall, const char *posData);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);
 void sendPosition(unsigned long intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
-void SendAckMessage(String dest_call, unsigned int iAckId);
+// Send a MeshCom message ACK to dest_call. src_override (when set) puts the ACK
+// on air under a foreign source callsign — used by the KISS interface to relay a
+// directly-connected client's APRS ack. Returns the assigned msg_id.
+unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *src_override = nullptr);
 void sendHey();
 void sendTelemetry(int ID);
 

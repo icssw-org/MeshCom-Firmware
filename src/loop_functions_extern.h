@@ -141,6 +141,7 @@ extern bool bNETCONSOLE;
 extern bool bKISS;
 extern bool bKISSTX;
 extern bool bKISSMETA;
+extern bool bKISSAUTH;
 
 extern float fBaseAltidude;
 extern float fBasePress;

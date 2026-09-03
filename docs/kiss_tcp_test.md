@@ -5,7 +5,8 @@ compiled in by default (opt-out `-D DISABLE_KISS_TCP`).
 
 ## What v1 does
 
-- TCP server on **port 8001**, **single client**, no authentication (LAN-only).
+- TCP server on **port 8001**, **single client**, LAN-only (optional HMAC auth,
+  off by default).
 - **RX (mesh → client):** received MeshCom **text** and **position** frames are
   converted to **AX.25 UI frames** (no FCS) and sent as KISS data frames.
   Dedup is already done, so each mesh packet is delivered once.
@@ -22,10 +23,18 @@ compiled in by default (opt-out `-D DISABLE_KISS_TCP`).
 - **RxMeta (opt-in):** after each RX data frame, a second KISS frame on
   **KISS port 1** (type byte `0x10`) with 3 bytes: `snr` (int8, dB),
   `rssi` (int16 little-endian, dBm). Standard KISS clients ignore it.
+- **SrcInfo:** when an origin call has SSID `-16`…`-99` (clamped to `-15` in the
+  AX.25 `src`), a **KISS port 2** frame (`0x20`) with the full call is sent
+  right before the data frame. Standard KISS clients ignore it.
 - **TX result:** for every inbound frame the node replies with a `type 0xF0`
   frame (port 15): `0x01`+msg_id (LE) = accepted, `0x02` = bad callsign,
-  `0x03` = `--kiss tx off`, `0x04` = bad/unsupported frame. Standard clients
-  ignore it.
+  `0x03` = `--kiss tx off`, `0x04` = bad/unsupported frame, `0x05` = rate cap
+  (8/s) exceeded. Standard clients ignore it.
+- **APRS-ack bridging:** a client's `:CALL :ackNN` / `:rejNN` is relayed as a
+  real MeshCom ACK (stops the sender's retransmits); the reverse `:ackNN` to the
+  client is renumbered to the client's original `{nn`.
+- **Optional auth:** `--kiss auth on` + `--passwd` → HMAC-SHA256 handshake on
+  connect (see `kiss_tcp_protocol.md` §9). Standard KISS clients need auth off.
 
 The on-air MeshCom protocol is unchanged; the node stays fully in the mesh.
 
@@ -38,21 +47,40 @@ Serial / net console, or web UI (`Settings` — switches **KISS/TCP**,
 --kiss on            # start the server (needs WiFi + IP)
 --kiss tx on         # allow transmit from the client   (default off)
 --kiss meta on       # send RxMeta frames               (default off)
+--kiss auth on       # require the HMAC handshake        (default off)
 --kiss                # show status
 --info               # KISS state is listed here too
 ```
 
-Persisted in `node_sset4` (bits `0x0010` / `0x0020` / `0x0040`).
+Persisted in `node_sset4` (bits `0x0010` / `0x0020` / `0x0040` / `0x0080`).
 
-## Verified (2026-08-30, Heltec V3, live mesh)
+## Automated tests
+
+The hardware-independent logic (KISS deframer, AX.25 address codec, callsign
+gate, `{nn` extraction, ack/rej detection, ack map) lives in `lib/kiss_ax25/`
+and is host-tested:
+
+```
+pio test -e native_extradio -f test_kiss_ax25
+```
+
+## Verified (Heltec V3, live mesh)
 
 - RX text / position / message → AX.25 UI; `aprslib` parses position
   (lat/lon/alt/symbol) and message (addressee/text).
-- TX: APRS message from a KISS client injected into the mesh, delivered
-  to the target node.
-- RxMeta: `META` frame (snr int8 = 6 dB, rssi int16 LE = -47 dBm) after
-  each data frame when `--kiss meta on`.
-- Builds: `heltec_wifi_lora_32_V3`, `ttgo-lora32-v21`, `wiscore_rak4631`.
+- TX: APRS message / position from a KISS client injected into the mesh,
+  delivered to the target node; `0xF0` TX-result frame per send.
+- APRS-ack bridging both directions (client ack stops the sender's retransmits;
+  incoming ack renumbered to the client's `{nn`).
+- RxMeta: `META` frame (snr int8, rssi int16 LE) after each data frame when
+  `--kiss meta on`.
+- `--kiss off` closes the listener immediately even on a KISS-only node.
+- `--kiss auth on` + `--passwd`: raw client rejected after 15 s, HMAC client
+  accepted.
+- Builds (review fix round): `heltec_wifi_lora_32_V3`, `ttgo-lora32-v21`,
+  `E22-DevKitC`, `wiscore_rak4631` — all green. nRF52 grows ~32 B Flash / 1 B RAM
+  (the `SendAckMessage()` `src_override` parameter, shared code); KISS itself
+  still fully compiled out on nRF52. Host tests: `pio test -e native_extradio`.
 
 ## Wire format
 
@@ -61,6 +89,8 @@ KISS frame :  C0 <type> <data, SLIP-escaped> C0
               escape:  DB DC = C0 ,  DB DD = DB
 type 0x00  :  AX.25 UI frame  (dest7, src7, 0..8 digi7, 0x03, 0xF0, info)
 type 0x10  :  RxMeta          (snr:int8, rssi:int16 LE)   [only with --kiss meta on]
+type 0x20  :  SrcInfo         (full origin call, ASCII)   [only for a clamped -16..-99 SSID; precedes its 0x00 frame]
+type 0xF0  :  TX result       (status:int8 [+ msg_id:int32 LE])   [node->client, per inbound frame]
 ```
 
 AX.25 addresses: 6 chars each `<< 1` (space-padded), then SSID byte
@@ -145,12 +175,16 @@ or point **aprx** at `/tmp/kt` as a KISS serial interface for an RX-only iGate.
 - ESP32 only. nRF52 (RAK) compiles the feature out.
 - Single client. For multiple consumers use a host-side hub (e.g. Direwolf's
   KISS server, or WebDesk re-serving).
-- No auth — keep it on a trusted LAN. The callsign gate (base call must match
-  the node call) is the only TX restriction; there is no per-SSID whitelist
-  and no "gateway mode" that relays arbitrary calls yet.
-- TX: APRS message + position payloads. No APRS-ack bridging (MeshCom ACKs stay
-  firmware-internal). Injected positions are sent as a MeshCom `!` beacon
-  (no timestamp, no telemetry extension).
+- Auth is optional (`--kiss auth on`, HMAC-SHA256 on `--passwd`) and off by
+  default — keep it on a trusted LAN otherwise. The callsign gate (base call
+  must match the node call) is the only TX restriction; there is no per-SSID
+  whitelist and no "gateway mode" that relays arbitrary calls yet. A live but
+  idle authenticated client still holds the single slot until it disconnects.
+- SSIDs > 15 are clamped to `-15` on the wire (AX.25 has 4 SSID bits); a MeshCom
+  two-digit SSID cannot be addressed from a KISS client.
+- TX: APRS message / ack / position payloads. Injected positions are sent as a
+  MeshCom `!` beacon (no timestamp, no telemetry extension). `node_msgid` is
+  still persisted to NVS per injected frame (shared with all senders).
 - Injected frames carry the HW-type / firmware-version bytes of the KISS node
   (set by `encodeAPRS()`), so a phone injecting as `DH1FR-7` shows up with the
   node's hardware (e.g. "HELTEC-V3") in other nodes' MHeard lists.

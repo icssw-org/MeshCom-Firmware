@@ -1,6 +1,10 @@
 # KISS/TCP interface for MeshCom — feasibility analysis
 
-Status: **analysis / discussion basis**, not an implementation PR.
+Status: **historical feasibility notes.** The interface has since shipped
+(`kiss_functions.cpp` + `lib/kiss_ax25/`, ESP32, opt-out `-D DISABLE_KISS_TCP`);
+the wire contract lives in `kiss_tcp_protocol.md`. Some pre-implementation
+details below (task context, buffer sizes, exact hook lines) drifted from the
+final code and are kept only for the reasoning trail.
 
 **Goal:** provide a second, standards-based machine interface **alongside
 ext-udp** — same idea (an IP client reads mesh traffic and injects into it), but
@@ -220,8 +224,11 @@ Remainder of the document: detailed design for **C**.
 ```
 
 Two data paths, both **decoupled** via a deferred queue (pattern: `externQueue`
-in `extudp_functions.cpp:47`), because `OnRxDone()` runs in the radio
-callback / timer-service task and must not block or touch sockets there.
+in `extudp_functions.cpp`). `queueKiss()` does a bounded `memcpy` only and never
+touches sockets. (As shipped, the RX hook runs synchronously in the loop task on
+mainstream ESP32 targets — `esp32loop → checkRX`; only on `BOARD_T5_EPAPER` does
+the radio path run in `lora_task`, so `flushKissQueue()` snapshots each queue
+slot before use.)
 
 ### RX path (mesh → host)
 

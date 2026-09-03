@@ -59,6 +59,7 @@ To set a parameter to the node, use:
 	/setparam/?kiss=on|off 				Enables the KISS/TCP interface (ESP32, port 8001)
 	/setparam/?kisstx=on|off 			Allows transmit from connected KISS clients
 	/setparam/?kissmeta=on|off 			Sends RSSI/SNR RxMeta frames (KISS port 1)
+	/setparam/?kissauth=on|off 			Require HMAC-SHA256 auth on port 8001 (uses --passwd; standard KISS clients need auth off)
 	/setparam/?manualcommand=COMMAND	Executes a Command. The commands parameters are usually seperated by space. You may need to percent-code spaces and other characters that otherwise are not allowed in a GET request
 
 

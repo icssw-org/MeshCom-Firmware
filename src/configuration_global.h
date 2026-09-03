@@ -135,7 +135,7 @@ static inline bool flashLayoutCompatible(int stored)
 #define EXTERN_PORT 1799                   // Set the external server port.
 #define EXTERN_RAW_PORT 1798
 #define KISS_TCP_PORT 8001                 // KISS-over-TCP interface (ESP32, opt-out -D DISABLE_KISS_TCP)
-                                          // node_sset4: 0x0010 enable, 0x0020 allow-TX, 0x0040 RxMeta
+                                          // node_sset4: 0x0010 enable, 0x0020 allow-TX, 0x0040 RxMeta, 0x0080 require-auth
 #define UDP_TX_BUF_SIZE 255                // BUffer size of outgoing buffer
 #define UDP_CONF_BUFF_SIZE UDP_TX_BUF_SIZE // Buffer to hold incoming config messages
 //#define SEE_ALL_PACKETS 0                  // switch to filter multiple receives of same packets from neighbours rebroadcasted

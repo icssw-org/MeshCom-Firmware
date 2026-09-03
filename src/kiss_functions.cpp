@@ -1,10 +1,15 @@
 // KISS-over-TCP interface (Variant C, ESP32 v1) — see docs/kiss_mode_analysis.md
 //
-// TCP server (single client, no auth, LAN-only) speaking standard KISS framing.
+// TCP server (single client, LAN-only) speaking standard KISS framing.
 // RX : MeshCom text/position frame -> decodeAPRS() -> AX.25 UI frame -> KISS.
 // TX : KISS -> AX.25 UI frame -> APRS message -> sendMessage() (bKISSTX gated).
+// Optional opt-in HMAC-SHA256 challenge-response auth (bKISSAUTH, reuses
+// --passwd) — a standard KISS client works only with auth off.
 // The on-air MeshCom protocol is untouched; this only taps/injects at the
 // already-deduped frame level, exactly like ext-udp.
+//
+// Hardware-independent parsing/encoding lives in lib/kiss_ax25/ (host-tested,
+// pio test -e native_extradio). This file owns the sockets and the glue.
 
 #include "kiss_functions.h"
 
@@ -12,42 +17,58 @@
 
 #include <atomic>
 #include <ctype.h>
+#include <string.h>
+#include <strings.h>   // strcasecmp
 #include <WiFi.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <mbedtls/md.h>     // HMAC-SHA256 — already in ESP-IDF (see net_console)
+#include <esp_random.h>     // hardware TRNG
 
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <debugconf.h>
 
+#include "kiss_ax25.h"
+
 // worst-case AX.25 UI frame we emit: 14 (addr) + 56 (8 digis) + 2 (ctrl/pid)
 // + info field (data-type char / ":ADDRESSEE:" + payload; payload <= LoRa MTU)
 #define KISS_AX25_MAX  (UDP_TX_BUF_SIZE + 96)
 
-// ── KISS constants ───────────────────────────────────────────────────────────
-#define KISS_FEND   0xC0
-#define KISS_FESC   0xDB
-#define KISS_TFEND  0xDC
-#define KISS_TFESC  0xDD
-
-#define KISS_CMD_DATA    0x00   // port 0, cmd 0 — AX.25 UI frame
-#define KISS_TYPE_META   0x10   // port 1 — MeshCom RxMeta {snr,rssi}
-#define KISS_TYPE_TXRES  0xF0   // port 15 — TX result of an inbound frame
+// ── KISS type bytes (framing constants live in kiss_ax25.h) ──────────────────
+#define KISS_TYPE_META    0x10   // port 1  — MeshCom RxMeta {snr,rssi}
+#define KISS_TYPE_SRCINFO 0x20   // port 2  — full origin call when AX.25 clamped it
+#define KISS_TYPE_TXRES   0xF0   // port 15 — TX result of an inbound frame
 
 // KISS_TYPE_TXRES payload: [status] (+ [msg_id: 4 B LE] when status == OK)
-#define KISS_TXRES_OK        0x01   // accepted, queued for LoRa TX
-#define KISS_TXRES_BADCALL   0x02   // rejected: src base call != node call
-#define KISS_TXRES_TXOFF     0x03   // rejected: --kiss tx off
-#define KISS_TXRES_BADFRAME  0x04   // rejected: unparseable / unsupported payload
+#define KISS_TXRES_OK         0x01   // accepted, queued for LoRa TX
+#define KISS_TXRES_BADCALL    0x02   // rejected: src base call != node call
+#define KISS_TXRES_TXOFF      0x03   // rejected: --kiss tx off
+#define KISS_TXRES_BADFRAME   0x04   // rejected: unparseable / unsupported payload
+#define KISS_TXRES_RATELIMIT  0x05   // rejected: inject rate cap exceeded
 
-// ── Socket state (all touched only from the loop task) ───────────────────────
-static int  s_listen_fd = -1;
-static int  s_client_fd = -1;
-static bool s_started   = false;
+#define KISS_INJECT_MAX_PER_SEC 8
+#define KISS_AUTH_TIMEOUT_MS    15000
 
-// ── Deferred RX queue — filled from the radio callback, drained in the loop ──
+// ── Socket / client state (all touched only from the loop task) ──────────────
+enum KissClientState { KC_NONE, KC_AWAIT_AUTH, KC_READY };
+
+static int              s_listen_fd    = -1;
+static int              s_client_fd    = -1;
+static bool             s_started      = false;
+static bool             s_client_dead  = false;   // hard socket error seen on send
+static KissClientState  s_client_state = KC_NONE;
+
+// ── Optional auth ───────────────────────────────────────────────────────────
+static char     s_kiss_password[15] = {0};
+static uint8_t  s_auth_nonce[16];
+static uint32_t s_auth_deadline = 0;
+static char     s_auth_line[80];
+static size_t   s_auth_linelen  = 0;
+
+// ── Deferred RX queue — filled from the radio path, drained in the loop ──────
 // Mirrors externQueue in extudp_functions.cpp.
 #define KISS_QUEUE_SLOTS 2
 struct kissQueueEntry {
@@ -60,39 +81,15 @@ struct kissQueueEntry {
 static struct kissQueueEntry s_queue[KISS_QUEUE_SLOTS];
 static int s_queue_write = 0;
 
-// ── Inbound KISS deframer state ─────────────────────────────────────────────
-// un-escaped AX.25 UI frame from the client — worst realistic case ~313 B
-static uint8_t s_rx_frame[352];
-static size_t  s_rx_len   = 0;
-static bool    s_rx_esc   = false;
-static bool    s_rx_active = false;   // seen opening FEND
+// ── Inbound KISS deframer (state machine in kiss_ax25.cpp) ───────────────────
+static KissDeframer s_deframe;
 
-// ── APRS message-number map ────────────────────────────────────────────────
-// APRS clients use their own {nn on a message and expect ":ackNN" back with
-// the same nn. MeshCom renumbers ({NNN = node_msgid) and acks that. For a
-// direct client (no host-side hub) we translate: remember node number -> the
-// client's nn on inject, and rewrite the ack on the way back.
-#define KISS_ACKMAP_SLOTS 8
-struct kissAckMap {
-    uint32_t msg_id;      // full node msg_id of the injected message (0 = free)
-    char     dst[12];     // where the ack will be addressed (= the client's call)
-    char     nn[8];       // the client's original {nn
-};
-static struct kissAckMap s_ackmap[KISS_ACKMAP_SLOTS];
-static int s_ackmap_w = 0;
-
-static void ackmapPut(uint32_t id, const char *ackDst, const char *nn)
-{
-    if (id == 0 || !nn || !nn[0]) return;
-    struct kissAckMap *e = &s_ackmap[s_ackmap_w];
-    e->msg_id = id;
-    snprintf(e->dst, sizeof(e->dst), "%s", ackDst ? ackDst : "");
-    snprintf(e->nn,  sizeof(e->nn),  "%s", nn);
-    s_ackmap_w = (s_ackmap_w + 1) % KISS_ACKMAP_SLOTS;
-}
+// ── APRS message-number map (client "{nn" <-> node ack number) ───────────────
+static KissAckEntry s_ackmap[KISS_ACKMAP_SLOTS];
+static int          s_ackmap_w = 0;
 
 // Rewrite ":ack<node-nn>" / ":rej<node-nn>" in an incoming ACK to the client's
-// original {nn, if we injected the message it acknowledges.
+// original "{nn", if we injected the message it acknowledges.
 static void ackmapRewrite(struct aprsMessage &m)
 {
     int ap = m.msg_payload.indexOf(":ack");
@@ -105,38 +102,43 @@ static void ackmapRewrite(struct aprsMessage &m)
     if (nd == 0) return;
     uint32_t node_nn = (uint32_t)tail.substring(0, nd).toInt();
 
-    for (int i = 0; i < KISS_ACKMAP_SLOTS; i++)
-    {
-        if (s_ackmap[i].msg_id == 0) continue;
-        if ((s_ackmap[i].msg_id & 0x3FF) != node_nn) continue;
-        if (!m.msg_destination_path.equalsIgnoreCase(s_ackmap[i].dst)) continue;
+    // F5: compare against the true addressee (msg_destination_call), which the
+    // decoder already stripped of any leading "<via>," relay path.
+    int idx = kissAckmapFind(s_ackmap, node_nn, m.msg_destination_call.c_str());
+    if (idx < 0) return;
 
-        m.msg_payload = m.msg_payload.substring(0, ap + 4) + s_ackmap[i].nn + tail.substring(nd);
-        s_ackmap[i].msg_id = 0;   // consume
-        if (bLORADEBUG)
-            Serial.printf("[KISS] ack %lu -> %s for %s\n",
-                          (unsigned long)node_nn, s_ackmap[i].nn, s_ackmap[i].dst);
-        return;
-    }
+    m.msg_payload = m.msg_payload.substring(0, ap + 4) + s_ackmap[idx].nn + tail.substring(nd);
+    s_ackmap[idx].msg_id = 0;   // consume
+    if (bLORADEBUG)
+        Serial.printf("[KISS] ack %lu -> %s for %s\n",
+                      (unsigned long)node_nn, s_ackmap[idx].nn, s_ackmap[idx].dst);
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-static void kissRawSend(const uint8_t *b, size_t n)
+// send helper: returns false on backpressure (EAGAIN) or hard error; a hard
+// error additionally flags the client for teardown.
+static bool kissRawSend(const uint8_t *b, size_t n)
 {
     size_t sent = 0;
     while (sent < n)
     {
         int r = ::send(s_client_fd, b + sent, n - sent, MSG_DONTWAIT);
-        if (r > 0) { sent += r; }
-        else       { break; }   // client slow/gone — drop the rest
+        if (r > 0) { sent += (size_t)r; continue; }
+        if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return false;                 // slow client — caller drops the rest
+        s_client_dead = true;             // peer gone / hard error
+        return false;
     }
+    return true;
 }
 
 // KISS output — frame + SLIP-escape, streamed to the socket in small chunks
-// (no large buffer; keeps DRAM use low on classic ESP32).
+// (no large buffer; keeps DRAM use low on classic ESP32). F10: on a failed
+// chunk, abandon the rest of the frame INCLUDING the closing FEND, so a slow
+// client sees a dropped frame, never a silently truncated one.
 static void kissWrite(uint8_t type, const uint8_t *data, size_t len)
 {
-    if (s_client_fd < 0)
+    if (s_client_fd < 0 || s_client_state != KC_READY)
         return;
 
     uint8_t chunk[96];
@@ -146,45 +148,26 @@ static void kissWrite(uint8_t type, const uint8_t *data, size_t len)
     chunk[o++] = type;
     for (size_t i = 0; i < len; i++)
     {
-        if (o >= sizeof(chunk) - 2) { kissRawSend(chunk, o); o = 0; }
+        if (o >= sizeof(chunk) - 2)
+        {
+            if (!kissRawSend(chunk, o)) return;   // no closing FEND -> dropped frame
+            o = 0;
+        }
         uint8_t b = data[i];
         if (b == KISS_FEND)      { chunk[o++] = KISS_FESC; chunk[o++] = KISS_TFEND; }
         else if (b == KISS_FESC) { chunk[o++] = KISS_FESC; chunk[o++] = KISS_TFESC; }
         else                     { chunk[o++] = b; }
     }
-    if (o >= sizeof(chunk)) { kissRawSend(chunk, o); o = 0; }
+    if (o >= sizeof(chunk)) { if (!kissRawSend(chunk, o)) return; o = 0; }
     chunk[o++] = KISS_FEND;
     kissRawSend(chunk, o);
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// AX.25 address field: 6 chars << 1 (space-padded), then SSID byte.
-// topbit: 0x80 for destination and (heard) digipeaters, 0x00 for source.
-// last:   set the HDLC extension bit on the final address of the field.
-static int ax25Addr(uint8_t *out, const char *call, uint8_t topbit, bool last)
-{
-    int baselen = 0;
-    int ssid    = 0;
-    const char *dash = strchr(call, '-');
-    baselen = dash ? (int)(dash - call) : (int)strlen(call);
-    if (baselen > 6) baselen = 6;
-    if (dash) ssid = atoi(dash + 1);
-    if (ssid < 0 || ssid > 15) ssid = 0;
-
-    for (int i = 0; i < 6; i++)
-    {
-        char c = (i < baselen) ? call[i] : ' ';
-        out[i] = (uint8_t)((uint8_t)c << 1);
-    }
-    out[6] = (uint8_t)(topbit | 0x60 | ((ssid & 0x0F) << 1) | (last ? 0x01 : 0x00));
-    return 7;
-}
-
 // Build an AX.25 UI frame (no FCS — KISS carries none) from a decoded MeshCom
 // message. Returns frame length, or 0 if it cannot be represented.
 static size_t buildAx25(const struct aprsMessage &m, uint8_t *out, size_t outsz)
 {
-    // tocall — reuse the node's APRS-MC destination (same one the server path uses)
     const char *tocall = meshcom_settings.node_aprsmc;
     if (!tocall || strlen(tocall) < 4)
         tocall = "APRSMC";
@@ -193,20 +176,21 @@ static size_t buildAx25(const struct aprsMessage &m, uint8_t *out, size_t outsz)
         return 0;
 
     // Digipeater path = the relays in msg_source_path after the origin call.
-    // e.g. "OE1ABC-1,OE3XYZ-2" -> digi "OE3XYZ-2". Max 8, all H-bit set.
-    String digis[8];
-    int    ndigi = 0;
+    // Parsed in place in a private char copy — no per-frame String heap traffic.
+    char        pathbuf[128];
+    snprintf(pathbuf, sizeof(pathbuf), "%s", m.msg_source_path.c_str());
+    const char *digis[8];
+    int         ndigi = 0;
     {
-        int start = m.msg_source_path.indexOf(',');
-        while (start >= 0 && ndigi < 8)
+        char *save = nullptr;
+        (void)strtok_r(pathbuf, ",", &save);      // origin call — skip
+        for (char *tok; ((tok = strtok_r(nullptr, ",", &save)) != nullptr) && ndigi < 8; )
         {
-            int end = m.msg_source_path.indexOf(',', start + 1);
-            String d = (end < 0) ? m.msg_source_path.substring(start + 1)
-                                 : m.msg_source_path.substring(start + 1, end);
-            d.trim();
-            if (d.length() > 0 && d != "*")
-                digis[ndigi++] = d;
-            start = end;
+            while (*tok == ' ') tok++;
+            char *e = tok + strlen(tok);
+            while (e > tok && e[-1] == ' ') *--e = 0;
+            if (*tok && strcmp(tok, "*") != 0)
+                digis[ndigi++] = tok;
         }
     }
 
@@ -215,37 +199,42 @@ static size_t buildAx25(const struct aprsMessage &m, uint8_t *out, size_t outsz)
     int  ilen = 0;
     if (m.payload_type == MSG_TYPE_TEXT)
     {
-        String addr = m.msg_destination_path;
-        int c = addr.indexOf(',');                     // strip any path on the dst
-        if (c >= 0) addr = addr.substring(0, c);
-        if (addr == "*") addr = "";
+        // F5: the true addressee — the decoder resets msg_destination_call at
+        // every comma, so a "<via>,<dest>" path never leaks in here.
+        char addr[24];
+        snprintf(addr, sizeof(addr), "%s", m.msg_destination_call.c_str());
+        if (strcmp(addr, "*") == 0) addr[0] = 0;
 
-        // MeshCom ACK/REJ messages already carry "<addressee> :ackNN" as the
-        // payload — use it verbatim, don't prepend a second addressee.
-        int pc = m.msg_payload.indexOf(':');
+        const char *pl   = m.msg_payload.c_str();
+        size_t      plen = m.msg_payload.length();
+
+        // MeshCom ACK/REJ messages already carry a 9-char-padded "<addressee> :ackNN"
+        // payload. F12: only trust that when byte 9 is the ':' separator; otherwise
+        // re-pad, so we never emit a non-spec addressee that Dire Wolf/aprslib reject.
         bool preformatted = false;
-        if (pc >= 1 && pc <= 9)
+        if (plen >= 10 && pl[9] == ':' && addr[0])
         {
-            String left = m.msg_payload.substring(0, pc);
-            left.trim();
-            if (left.length() > 0 && left.equalsIgnoreCase(addr))
+            char left[10];
+            memcpy(left, pl, 9);
+            left[9] = 0;
+            for (int i = 8; i >= 0 && left[i] == ' '; i--) left[i] = 0;
+            if (left[0] && strcasecmp(left, addr) == 0)
                 preformatted = true;
         }
 
         if (preformatted)
         {
-            ilen = snprintf(info, sizeof(info), ":%s", m.msg_payload.c_str());
+            ilen = snprintf(info, sizeof(info), ":%s", pl);
         }
         else
         {
             char addr9[10];
-            snprintf(addr9, sizeof(addr9), "%-9.9s", addr.c_str());
-            ilen = snprintf(info, sizeof(info), ":%s:%s", addr9, m.msg_payload.c_str());
+            snprintf(addr9, sizeof(addr9), "%-9.9s", addr);
+            ilen = snprintf(info, sizeof(info), ":%s:%s", addr9, pl);
         }
     }
     else if (m.payload_type == MSG_TYPE_POSITION)
     {
-        // APRS position: data-type char + payload, verbatim
         ilen = snprintf(info, sizeof(info), "%c%s", (char)m.payload_type, m.msg_payload.c_str());
     }
     else
@@ -255,16 +244,16 @@ static size_t buildAx25(const struct aprsMessage &m, uint8_t *out, size_t outsz)
     if (ilen <= 0)
         return 0;
     if (ilen >= (int)sizeof(info))
-        ilen = sizeof(info) - 1;   // snprintf truncated
+        ilen = sizeof(info) - 1;
 
     size_t o = 0;
     if (outsz < (size_t)(14 + ndigi * 7 + 2 + ilen))
         return 0;
 
-    o += ax25Addr(out + o, tocall, 0x80, false);                       // destination
-    o += ax25Addr(out + o, m.msg_source_call.c_str(), 0x00, ndigi == 0); // source
+    o += ax25EncodeAddr(out + o, tocall, 0x80, false);                          // destination
+    o += ax25EncodeAddr(out + o, m.msg_source_call.c_str(), 0x00, ndigi == 0);  // source
     for (int i = 0; i < ndigi; i++)
-        o += ax25Addr(out + o, digis[i].c_str(), 0x80, i == ndigi - 1);  // digipeaters (heard)
+        o += ax25EncodeAddr(out + o, digis[i], 0x80, i == ndigi - 1);           // digipeaters
 
     out[o++] = 0x03;   // UI
     out[o++] = 0xF0;   // no layer 3
@@ -273,34 +262,7 @@ static size_t buildAx25(const struct aprsMessage &m, uint8_t *out, size_t outsz)
     return o;
 }
 
-// decode an AX.25 address (7 bytes) into "CALL" or "CALL-SSID"
-static void ax25DecodeCall(const uint8_t *a, char *out, size_t outsz)
-{
-    char base[7] = {0};
-    int  n = 0;
-    for (int i = 0; i < 6; i++)
-    {
-        char c = (char)(a[i] >> 1);
-        if (c != ' ') base[n++] = c;
-    }
-    int ssid = (a[6] >> 1) & 0x0F;
-    if (ssid > 0) snprintf(out, outsz, "%s-%d", base, ssid);
-    else          snprintf(out, outsz, "%s", base);
-}
-
-// base callsign (strip -SSID), case-insensitive compare
-static bool baseCallMatches(const char *a, const char *b)
-{
-    while (*a && *a != '-' && *b && *b != '-')
-    {
-        if (toupper((unsigned char)*a) != toupper((unsigned char)*b))
-            return false;
-        a++; b++;
-    }
-    return (*a == 0 || *a == '-') && (*b == 0 || *b == '-');
-}
-
-// TX result frame back to the client (private KISS port 15 — standard clients ignore it)
+// TX result frame back to the client (private KISS port 15)
 static void kissTxResult(uint8_t status, uint32_t msg_id)
 {
     uint8_t p[5];
@@ -315,6 +277,21 @@ static void kissTxResult(uint8_t status, uint32_t msg_id)
         n = 5;
     }
     kissWrite(KISS_TYPE_TXRES, p, n);
+}
+
+// F7: fixed per-second cap on injections — one 256-byte recv() can otherwise
+// chain ~10 sends, each a 131-key NVS rewrite + a TX-ring entry under the
+// operator's callsign.
+static bool kissInjectRateOk()
+{
+    static uint32_t win_start = 0;
+    static uint8_t  win_count = 0;
+    uint32_t now = millis();
+    if (now - win_start >= 1000) { win_start = now; win_count = 0; }
+    if (win_count >= KISS_INJECT_MAX_PER_SEC)
+        return false;
+    win_count++;
+    return true;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -337,17 +314,31 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
     }
 
     // Walk the address field: 7 bytes each until the extension bit (LSB) is set.
+    // F11: the field MUST terminate within the cap — an unterminated walk means
+    // a malformed / connected-mode frame.
     size_t p = 0;
     int    addrs = 0;
+    bool   addrTerminated = false;
     while (p + 7 <= len && addrs < 10)
     {
         bool last = (f[p + 6] & 0x01) != 0;
         p += 7;
         addrs++;
-        if (last) break;
+        if (last) { addrTerminated = true; break; }
     }
-    if (addrs < 2 || p + 2 > len)
+    if (addrs < 2 || !addrTerminated || p + 2 > len)
     {
+        kissTxResult(KISS_TXRES_BADFRAME, 0);
+        return;
+    }
+
+    // F11: only UI frames with "no layer 3" PID carry an APRS info field.
+    // SABM/I-frames (any axcall user) have a different control/PID layout.
+    if (f[p] != 0x03 || f[p + 1] != 0xF0)
+    {
+        if (bLORADEBUG)
+            Serial.printf("[KISS] TX rejected: ctrl/pid %02X %02X (not UI/0xF0)\n",
+                          f[p], f[p + 1]);
         kissTxResult(KISS_TXRES_BADFRAME, 0);
         return;
     }
@@ -362,6 +353,14 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
             Serial.printf("[KISS] TX rejected: src '%s' != node '%s'\n",
                           srcCall, meshcom_settings.node_call);
         kissTxResult(KISS_TXRES_BADCALL, 0);
+        return;
+    }
+
+    if (!kissInjectRateOk())
+    {
+        if (bLORADEBUG)
+            Serial.println("[KISS] TX rejected: inject rate limit");
+        kissTxResult(KISS_TXRES_RATELIMIT, 0);
         return;
     }
 
@@ -395,20 +394,38 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
             size_t tl = ilen - 1;
             if (tl > sizeof(text) - 1) tl = sizeof(text) - 1;
             memcpy(text, info + 1, tl);
+            // F9: documented "::text" short broadcast form -> info is "::text",
+            // text is ":text"; drop the extra leading ':' so it matches the
+            // long ":*        :text" form instead of going out as ":text".
+            if (text[0] == ':')
+                memmove(text, text + 1, strlen(text));   // strlen bytes incl. the NUL
         }
 
-        // capture the client's APRS message number "{nn" (up to '}'), then drop it
+        // F4: capture a trailing APRS message number "{nn" only when it is a
+        // well-formed end-of-field token (1..5 chars). A stray '{' in the body
+        // no longer truncates the message.
         char clientNn[8] = {0};
-        char *brace = strrchr(text, '{');
-        if (brace)
+        bool haveNn = aprsExtractMsgNo(text, clientNn, sizeof(clientNn));
+
+        if (strlen(text) < 1)
         {
-            snprintf(clientNn, sizeof(clientNn), "%s", brace + 1);
-            char *rb = strchr(clientNn, '}');
-            if (rb) *rb = 0;
-            *brace = 0;
+            kissTxResult(KISS_TXRES_BADFRAME, 0);
+            return;
         }
 
-        if (strlen(text) >= 1)
+        // F1: a standard APRS ack/rej from the client — route it through the
+        // MeshCom ack path so the original sender actually stops retransmitting,
+        // instead of injecting "ack123" as junk text.
+        unsigned int ackNum = 0;
+        bool         isRej  = false;
+        if (strlen(addr) > 0 && aprsIsAckRej(text, &ackNum, &isRej))
+        {
+            if (bLORADEBUG)
+                Serial.printf("[KISS] inject %s as %s -> %s #%u\n",
+                              isRej ? "rej" : "ack", srcCall, addr, ackNum);
+            id = SendAckMessage(String(addr), ackNum, srcCall);
+        }
+        else
         {
             char out[190];
             if (strlen(addr) > 0) snprintf(out, sizeof(out), ":{%s}%s", addr, text);
@@ -419,13 +436,14 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
 
             id = sendMessage(out, strlen(out), srcCall);
 
-            // remember node-number -> client-{nn so we can rewrite the ack back
-            if (id && clientNn[0])
-                ackmapPut(id, srcCall, clientNn);
+            // remember node-number -> client "{nn" for the ack rewrite — DM only
+            // (a group / broadcast inject gets no "{NNN" and could never consume
+            // the entry, and would evict a live DM mapping).
+            if (id && haveNn && strlen(addr) > 0)
+                kissAckmapPut(s_ackmap, &s_ackmap_w, id, srcCall, clientNn);
         }
     }
     // ── APRS position ─────────────────────────────────────────────────────
-    // '!'/'=' = no timestamp;  '@'/'/' = 7-char timestamp after the type char
     else if (dt == '!' || dt == '=' || dt == '@' || dt == '/')
     {
         size_t skip = (dt == '@' || dt == '/') ? 8 : 1;
@@ -450,43 +468,6 @@ static void handleInboundAx25(const uint8_t *f, size_t len)
     kissTxResult(id ? KISS_TXRES_OK : KISS_TXRES_BADFRAME, id);
 }
 
-// feed one received byte through the KISS deframer
-static void kissRxByte(uint8_t b)
-{
-    if (b == KISS_FEND)
-    {
-        if (s_rx_active && s_rx_len > 0)
-        {
-            uint8_t type = s_rx_frame[0];
-            if ((type & 0x0F) == KISS_CMD_DATA)
-                handleInboundAx25(s_rx_frame + 1, s_rx_len - 1);
-        }
-        s_rx_len    = 0;
-        s_rx_esc    = false;
-        s_rx_active = true;
-        return;
-    }
-    if (!s_rx_active)
-        return;
-
-    if (s_rx_esc)
-    {
-        if (b == KISS_TFEND) b = KISS_FEND;
-        else if (b == KISS_TFESC) b = KISS_FESC;
-        s_rx_esc = false;
-    }
-    else if (b == KISS_FESC)
-    {
-        s_rx_esc = true;
-        return;
-    }
-
-    if (s_rx_len < sizeof(s_rx_frame))
-        s_rx_frame[s_rx_len++] = b;
-    else
-        s_rx_active = false;   // overflow — wait for next FEND
-}
-
 // ───────────────────────────────────────────────────────────────────────────
 void queueKiss(uint8_t *buffer, uint16_t buflen, int16_t rssi, int8_t snr)
 {
@@ -505,9 +486,9 @@ void queueKiss(uint8_t *buffer, uint16_t buflen, int16_t rssi, int8_t snr)
 
 void flushKissQueue()
 {
-    if (s_client_fd < 0)
+    if (s_client_fd < 0 || s_client_state != KC_READY)
     {
-        // no client — just drain so the queue doesn't wrap stale
+        // no (ready) client — just drain so the queue doesn't wrap stale
         for (int i = 0; i < KISS_QUEUE_SLOTS; i++)
             s_queue[i].used.store(false, std::memory_order_relaxed);
         return;
@@ -518,9 +499,19 @@ void flushKissQueue()
         if (!s_queue[i].used.load(std::memory_order_acquire))
             continue;
 
+        // F13: snapshot the slot before decode/emit. On BOARD_T5_EPAPER the
+        // radio runs in lora_task and could overwrite this slot (and its
+        // rssi/snr) mid-processing.
+        uint8_t  buf[UDP_TX_BUF_SIZE];
+        uint16_t buflen = s_queue[i].buflen;
+        int16_t  rssi   = s_queue[i].rssi;
+        int8_t   snr    = s_queue[i].snr;
+        if (buflen > UDP_TX_BUF_SIZE) buflen = UDP_TX_BUF_SIZE;
+        memcpy(buf, s_queue[i].buffer, buflen);
+        s_queue[i].used.store(false, std::memory_order_release);
+
         struct aprsMessage m;
-        // s_queue[i].buffer is already a private copy made in queueKiss()
-        uint16_t t = decodeAPRS(s_queue[i].buffer, s_queue[i].buflen, m);
+        uint16_t t = decodeAPRS(buf, buflen, m);
         if (t == MSG_TYPE_TEXT || t == MSG_TYPE_POSITION)
         {
             if (t == MSG_TYPE_TEXT)
@@ -530,25 +521,154 @@ void flushKissQueue()
             size_t  axlen = buildAx25(m, ax, sizeof(ax));
             if (axlen > 0)
             {
+                // SrcInfo (KISS port 2): a station whose SSID > 15 cannot survive
+                // the 4-bit AX.25 src field (it is clamped to -15). Emit the full
+                // origin call *before* the data frame so a custom client can show
+                // / reply to the real station. Standard KISS clients ignore
+                // port 2. Not gated on --kiss meta, only sent when actually needed.
+                if (ax25CallSsid(m.msg_source_call.c_str()) > 15)
+                    kissWrite(KISS_TYPE_SRCINFO,
+                              (const uint8_t *)m.msg_source_call.c_str(),
+                              m.msg_source_call.length());
+
                 kissWrite(KISS_CMD_DATA, ax, axlen);
+
                 if (bKISSMETA)
                 {
                     // MeshCom RxMeta on KISS port 1: snr (int8, dB) + rssi (int16 LE, dBm).
-                    // Standard KISS clients ignore an unknown port; WebDesk reads 3 bytes.
-                    int16_t rssi = s_queue[i].rssi;
-                    uint8_t meta[3] = { (uint8_t)s_queue[i].snr,
+                    uint8_t meta[3] = { (uint8_t)snr,
                                         (uint8_t)(rssi & 0xFF),
                                         (uint8_t)((rssi >> 8) & 0xFF) };
                     kissWrite(KISS_TYPE_META, meta, 3);
                 }
             }
         }
-
-        s_queue[i].used.store(false, std::memory_order_release);
     }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// auth helpers (mirror net_console.cpp)
+static void bytesToHex(const uint8_t *in, size_t len, char *out)
+{
+    for (size_t i = 0; i < len; i++)
+        snprintf(out + i * 2, 3, "%02x", in[i]);
+    out[len * 2] = '\0';
+}
+
+static bool hexToBytes(const char *hex, size_t hexLen, uint8_t *out, size_t outLen)
+{
+    if (hexLen != outLen * 2) return false;
+    for (size_t i = 0; i < outLen; i++)
+    {
+        unsigned int b;
+        if (sscanf(hex + i * 2, "%02x", &b) != 1) return false;
+        out[i] = (uint8_t)b;
+    }
+    return true;
+}
+
+static bool ctEqual(const uint8_t *a, const uint8_t *b, size_t n)
+{
+    uint8_t diff = 0;
+    for (size_t i = 0; i < n; i++) diff |= a[i] ^ b[i];
+    return diff == 0;
+}
+
+static bool kissAuthVerify(const char *resp)
+{
+    const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    if (!md) return false;
+
+    uint8_t expected[32];
+    if (mbedtls_md_hmac(md, (const uint8_t *)s_kiss_password, strlen(s_kiss_password),
+                        s_auth_nonce, sizeof(s_auth_nonce), expected) != 0)
+        return false;
+
+    uint8_t received[32];
+    if (strlen(resp) != 64 || !hexToBytes(resp, 64, received, 32))
+        return false;
+
+    return ctEqual(expected, received, 32);
+}
+
+static void kissDropClient(const char *why)
+{
+    if (s_client_fd >= 0) { ::close(s_client_fd); s_client_fd = -1; }
+    s_client_state = KC_NONE;
+    s_client_dead  = false;
+    s_auth_linelen = 0;
+    kissDeframeReset(s_deframe);
+    if (why)
+        Serial.printf("[KISS]...%s\n", why);
+}
+
+static void kissBeginAuth()
+{
+    esp_fill_random(s_auth_nonce, sizeof(s_auth_nonce));
+    char line[48];
+    strcpy(line, "NONCE: ");
+    bytesToHex(s_auth_nonce, sizeof(s_auth_nonce), line + 7);
+    strcat(line, "\r\n");
+    ::send(s_client_fd, line, strlen(line), MSG_DONTWAIT);
+
+    s_auth_linelen  = 0;
+    s_auth_deadline = millis() + KISS_AUTH_TIMEOUT_MS;
+    s_client_state  = KC_AWAIT_AUTH;
+    Serial.println("[KISS]...auth challenge sent");
+}
+
+static void kissServiceAuth()
+{
+    if ((int32_t)(millis() - s_auth_deadline) >= 0)
+    {
+        ::send(s_client_fd, "FAIL\r\n", 6, MSG_DONTWAIT);
+        kissDropClient("auth timeout");
+        return;
+    }
+
+    uint8_t buf[80];
+    int r = ::recv(s_client_fd, buf, sizeof(buf), MSG_DONTWAIT);
+    if (r <= 0)
+    {
+        if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
+            kissDropClient("client disconnected");
+        return;
+    }
+
+    for (int i = 0; i < r; i++)
+    {
+        char c = (char)buf[i];
+        if (c == '\r' || c == '\n')
+        {
+            s_auth_line[s_auth_linelen] = 0;
+            if (kissAuthVerify(s_auth_line))
+            {
+                ::send(s_client_fd, "OK\r\n", 4, MSG_DONTWAIT);
+                s_client_state = KC_READY;
+                kissDeframeReset(s_deframe);
+                Serial.println("[KISS]...client authenticated");
+            }
+            else
+            {
+                ::send(s_client_fd, "FAIL\r\n", 6, MSG_DONTWAIT);
+                kissDropClient("auth failed");
+            }
+            return;
+        }
+        if (s_auth_linelen < sizeof(s_auth_line) - 1)
+            s_auth_line[s_auth_linelen++] = c;
+    }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+void kissSetPassword(const char *pw)
+{
+    snprintf(s_kiss_password, sizeof(s_kiss_password), "%s", pw ? pw : "");
+    // --passwd stores the value left-padded to 14 chars with spaces — strip them.
+    char *end = s_kiss_password + strlen(s_kiss_password) - 1;
+    while (end >= s_kiss_password && *end == ' ') *end-- = '\0';
+}
+
 void kissSetup()
 {
     if (s_started)
@@ -559,10 +679,17 @@ void kissSetup()
     if (WiFi.status() != WL_CONNECTED)
         return;
 
+    // Back off after a socket/bind/listen failure: retry every 30 s, one log
+    // line — not every loop iteration (log flood + socket churn).
+    static uint32_t s_retry_at = 0;
+    if (s_retry_at != 0 && (int32_t)(millis() - s_retry_at) < 0)
+        return;
+    s_retry_at = millis() + 30000;
+
     s_listen_fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (s_listen_fd < 0)
     {
-        Serial.println("[KISS]...socket() failed");
+        Serial.println("[KISS]...socket() failed — retry in 30s");
         return;
     }
 
@@ -578,7 +705,7 @@ void kissSetup()
     if (::bind(s_listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ||
         ::listen(s_listen_fd, 1) < 0)
     {
-        Serial.println("[KISS]...bind/listen failed");
+        Serial.println("[KISS]...bind/listen failed — retry in 30s");
         ::close(s_listen_fd);
         s_listen_fd = -1;
         return;
@@ -587,13 +714,24 @@ void kissSetup()
     int fl = fcntl(s_listen_fd, F_GETFL, 0);
     fcntl(s_listen_fd, F_SETFL, fl | O_NONBLOCK);
 
-    s_started = true;
-    Serial.printf("[KISS]...server started on port %d\n", KISS_TCP_PORT);
+    s_retry_at = 0;
+    s_started  = true;
+    Serial.printf("[KISS]...server started on port %d%s\n", KISS_TCP_PORT,
+                  (bKISSAUTH && s_kiss_password[0]) ? " (auth)" : "");
 }
 
 void kissLoop()
 {
-    if (WiFi.status() != WL_CONNECTED)
+    // F6: track the WiFi transition. When the link drops, tear the server down
+    // so a stale client socket cannot hold the single slot forever; it is
+    // rebuilt automatically once WiFi is back.
+    static bool s_was_connected = false;
+    bool nowConnected = (WiFi.status() == WL_CONNECTED);
+    if (s_was_connected && !nowConnected)
+        kissStop();
+    s_was_connected = nowConnected;
+
+    if (!nowConnected)
         return;
 
     if (!s_started)
@@ -605,19 +743,36 @@ void kissLoop()
     // service the connected client
     if (s_client_fd >= 0)
     {
-        uint8_t buf[256];
-        int r = ::recv(s_client_fd, buf, sizeof(buf), MSG_DONTWAIT);
-        if (r > 0)
+        // F6: liveness probe — a peer that vanished without FIN otherwise keeps
+        // the slot until the full TCP retransmit timeout (or forever).
+        char probe;
+        int pr = ::recv(s_client_fd, &probe, 1, MSG_PEEK | MSG_DONTWAIT);
+        if (s_client_dead || pr == 0 ||
+            (pr < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
         {
-            for (int i = 0; i < r; i++)
-                kissRxByte(buf[i]);
+            kissDropClient("connection lost");
         }
-        else if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
+        else if (s_client_state == KC_AWAIT_AUTH)
         {
-            ::close(s_client_fd);
-            s_client_fd = -1;
-            s_rx_len = 0; s_rx_esc = false; s_rx_active = false;
-            Serial.println("[KISS]...client disconnected");
+            kissServiceAuth();
+        }
+        else
+        {
+            uint8_t buf[256];
+            int r = ::recv(s_client_fd, buf, sizeof(buf), MSG_DONTWAIT);
+            if (r > 0)
+            {
+                for (int i = 0; i < r; i++)
+                {
+                    size_t n = kissDeframePush(s_deframe, buf[i]);
+                    if (n > 0 && (s_deframe.frame[0] & 0x0F) == KISS_CMD_DATA)
+                        handleInboundAx25(s_deframe.frame + 1, n - 1);
+                }
+            }
+            else if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
+            {
+                kissDropClient("client disconnected");
+            }
         }
     }
 
@@ -631,13 +786,19 @@ void kissLoop()
         {
             int fl = fcntl(fd, F_GETFL, 0);
             fcntl(fd, F_SETFL, fl | O_NONBLOCK);
-            s_client_fd = fd;
-            s_rx_len = 0; s_rx_esc = false; s_rx_active = false;
+            s_client_fd   = fd;
+            s_client_dead = false;
+            kissDeframeReset(s_deframe);
             Serial.printf("[KISS]...client connected (%lu.%lu.%lu.%lu)\n",
                           (unsigned long)(cli.sin_addr.s_addr & 0xFF),
                           (unsigned long)((cli.sin_addr.s_addr >> 8) & 0xFF),
                           (unsigned long)((cli.sin_addr.s_addr >> 16) & 0xFF),
                           (unsigned long)((cli.sin_addr.s_addr >> 24) & 0xFF));
+
+            if (bKISSAUTH && s_kiss_password[0])
+                kissBeginAuth();
+            else
+                s_client_state = KC_READY;
         }
     }
 }
@@ -646,8 +807,15 @@ void kissStop()
 {
     if (s_client_fd >= 0) { ::close(s_client_fd); s_client_fd = -1; }
     if (s_listen_fd >= 0) { ::close(s_listen_fd); s_listen_fd = -1; }
-    s_rx_len = 0; s_rx_esc = false; s_rx_active = false;
-    for (int i = 0; i < KISS_ACKMAP_SLOTS; i++) s_ackmap[i].msg_id = 0;
+    s_client_state = KC_NONE;
+    s_client_dead  = false;
+    s_auth_linelen = 0;
+    kissDeframeReset(s_deframe);
+    kissAckmapClear(s_ackmap);
+    // drop any queued RX frames so a later off/on cycle can't deliver stale
+    // frames (with stale RSSI/SNR).
+    for (int i = 0; i < KISS_QUEUE_SLOTS; i++)
+        s_queue[i].used.store(false, std::memory_order_relaxed);
     if (s_started)
         Serial.println("[KISS]...server stopped");
     s_started = false;
@@ -655,7 +823,7 @@ void kissStop()
 
 bool isKissClientConnected()
 {
-    return s_client_fd >= 0;
+    return s_client_fd >= 0 && s_client_state == KC_READY;
 }
 
 #endif // ESP32 && !DISABLE_KISS_TCP

@@ -166,6 +166,7 @@ bool bNETCONSOLE = false;
 bool bKISS = false;
 bool bKISSTX = false;
 bool bKISSMETA = false;
+bool bKISSAUTH = false;
 
 bool bSHORTPATH = false;
 //bool bGPSDEBUG = false;
@@ -3559,7 +3560,10 @@ unsigned int sendInjectedPosition(const char *srcCall, const char *posData)
     save_settings();
 
     insertOwnTx(aprsmsg.msg_id);
-    addLoraRxBuffer(aprsmsg.msg_id, false);
+    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+        addLoraRxBuffer(aprsmsg.msg_id, true);
+    else
+        addLoraRxBuffer(aprsmsg.msg_id, false);
     checkVia(aprsmsg);
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
@@ -4186,7 +4190,7 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
 
 }
 
-void SendAckMessage(String dest_call, unsigned int iAckId)
+unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *src_override)
 {
     struct aprsMessage aprsmsg;
 
@@ -4194,10 +4198,13 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
 
     aprsmsg.msg_len = 0;
 
-    // MSG ID zusammen setzen    
+    // MSG ID zusammen setzen
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
-    
-    aprsmsg.msg_source_path = meshcom_settings.node_call;   // own Call
+
+    // own Call, or a foreign source when relaying a KISS client's APRS ack
+    aprsmsg.msg_source_path = (src_override && src_override[0])
+                                  ? String(src_override)
+                                  : String(meshcom_settings.node_call);
     aprsmsg.msg_destination_path = dest_call;
     aprsmsg.msg_destination_call = dest_call;
 
@@ -4267,6 +4274,8 @@ void SendAckMessage(String dest_call, unsigned int iAckId)
             addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
         }
     }
+
+    return aprsmsg.msg_id;
 }
 
 // Send Hey-Message

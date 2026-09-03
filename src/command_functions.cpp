@@ -17,6 +17,7 @@
 #include "rtc_functions.h"
 #ifdef ESP32
 #include "net_console.h"
+#include "kiss_functions.h"
 #endif
 #include "tinyxml_functions.h"
 #include "clock.h"
@@ -767,7 +768,7 @@ void commandAction(char *umsg_text, bool ble)
                 printfdeb("--passwd xxxx/none   (net console password, none=clear)\n");
                 delay(100);
                 #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
-                    printlndeb("--kiss on/off | tx on/off | meta on/off  (KISS/TCP port 8001)\n");
+                    printlndeb("--kiss on/off | tx on/off | meta on/off | auth on/off  (KISS/TCP port 8001)\n");
                     delay(100);
                 #endif
             #endif
@@ -2320,12 +2321,31 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"kiss auth on") == 0)
+    {
+        bKISSAUTH = true;
+        meshcom_settings.node_sset4 |= 0x0080;
+        save_settings();
+        bool hasPw = (meshcom_settings.node_passwd[0] != 0x00 && meshcom_settings.node_passwd[0] != ' ');
+        printfdeb("...KISS/TCP auth on%s\n", hasPw ? "" : " (WARNING: --passwd not set — not enforced)");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"kiss auth off") == 0)
+    {
+        bKISSAUTH = false;
+        meshcom_settings.node_sset4 &= ~0x0080;
+        save_settings();
+        printfdeb("...KISS/TCP auth off\n");
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"kiss") == 0)
     {
         printfdeb("...KISS/TCP is %s", bKISS ? "on" : "off");
         if(bKISS)
             printfdeb(" (%s port %d)", meshcom_settings.node_ip, KISS_TCP_PORT);
-        printfdeb("  TX:%s  RxMeta:%s\n", bKISSTX ? "on" : "off", bKISSMETA ? "on" : "off");
+        printfdeb("  TX:%s  RxMeta:%s  Auth:%s\n", bKISSTX ? "on" : "off", bKISSMETA ? "on" : "off", bKISSAUTH ? "on" : "off");
         return;
     }
     else
@@ -3226,6 +3246,9 @@ void commandAction(char *umsg_text, bool ble)
             #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
             netConsoleSetPassword("");
             #endif
+            #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+            kissSetPassword("");
+            #endif
             printfdeb("...net console password cleared (open access)\n");
         }
         else
@@ -3233,6 +3256,9 @@ void commandAction(char *umsg_text, bool ble)
             snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%-14.14s", _owner_c);
             #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
             netConsoleSetPassword(meshcom_settings.node_passwd);
+            #endif
+            #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+            kissSetPassword(meshcom_settings.node_passwd);
             #endif
         }
 
@@ -5166,7 +5192,7 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("...KISS/TCP   %s", (bKISS ? "on" : "off"));
             if(bKISS)
                 printfdeb(" (port %d)", KISS_TCP_PORT);
-            printfdeb(" / TX %s / RxMeta %s\n", (bKISSTX?"on":"off"), (bKISSMETA?"on":"off"));
+            printfdeb(" / TX %s / RxMeta %s / Auth %s\n", (bKISSTX?"on":"off"), (bKISSMETA?"on":"off"), (bKISSAUTH?"on":"off"));
             #endif
 
 
