@@ -2596,7 +2596,14 @@ void nrf52loop()
                 printfdeb("[PING]...send Ping to %s\n", meshcom_settings.node_pingcall);
 
             if(meshcom_settings.node_pingcall[0] != 0x00)
-                sendPing(meshcom_settings.node_pingcall);
+            {
+                PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
+
+                // Fehlschlag außerhalb von bDisplayInfo sichtbar machen, sonst verstummt
+                // der Knoten für jeden, der mit Info aus läuft, ohne jede Meldung.
+                if(pingResult != PING_QUEUED)
+                    printfdeb("[PING]...FAILED Ping to %s\n", meshcom_settings.node_pingcall);
+            }
         }
     }
 
