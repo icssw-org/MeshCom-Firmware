@@ -1203,6 +1203,16 @@ void wifiDnsPoll()
   // doWiFiConnect() (1-s-Takt der Hauptschleife) protokolliert das
   // Scanergebnis und ruft wifiBegin().
   { WifiStall st("disconnect"); WiFi.disconnect(true, true); }
+
+  // Hostname hier statt in wifiInitOnce(): das laeuft nur einmal pro Boot
+  // (s_wifiInitDone) und wuerde einem Rufzeichenwechsel hinterherhinken. Der
+  // Core schreibt seinen statischen Hostname-Puffer bei jedem STA-Uebergang
+  // neu (WiFiGeneric.cpp:1265, 2.x-Core), also ist es hier billig und aktuell --
+  // wie der mDNS-Responder node_call bei jedem Webserver-Neustart neu liest.
+  char host[32];
+  if(makeDhcpHostname(host, sizeof(host), meshcom_settings.node_call))
+    WiFi.setHostname(host);
+
   { WifiStall st("mode");       WiFi.mode(WIFI_OFF); WiFi.mode(WIFI_STA); }
   hasIPaddress=false;
   meshcom_settings.node_hasIPaddress = hasIPaddress;

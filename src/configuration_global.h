@@ -50,6 +50,42 @@ inline bool isUnconfiguredCall(const char *call)
         return true;
     return false;
 }
+
+// DHCP-Option 12 (Host Name) aus dem Rufzeichen. Der arduino-esp32-Core setzt
+// sonst selbst einen Namen aus CONFIG_IDF_TARGET und den letzten drei MAC-Bytes
+// ("esp32-DBE6E4"), der im Lease-Verzeichnis nichts aussagt.
+//
+// Quelle ist bewusst node_call und nicht cBLEName: beide mDNS-Responder benennen
+// den Knoten bereits danach (web_functions.cpp MDNS.begin, safeboot/main.cpp
+// startMDNS), der Knoten hat damit EINEN Namen statt zweier. Die SSID ist im
+// Rufzeichen enthalten ("DK5EN-93"), also im Netz so eindeutig wie dieses selbst.
+//
+// Rueckgabe false => setHostname() gar nicht erst rufen, der Core-Default bleibt
+// stehen. Ein halbgares "XX0XXX-0" geht damit nie ins Netz hinaus.
+//
+// isUnconfiguredCall() statt isNodeUnconfigured(): dessen memcmp() liest feste
+// 6 bzw. 4 Byte und ist nur fuer meshcom_settings.node_call sicher, nicht fuer
+// eine beliebige Zeichenkette. Siehe die Begruendung am Helfer selbst.
+inline bool makeDhcpHostname(char *out, unsigned long n, const char *call)
+{
+    if (out == nullptr || n < 2 || isUnconfiguredCall(call))
+        return false;
+
+    unsigned long o = 0;
+    for (unsigned long i = 0; call[i] != 0 && o < n - 1; i++)
+    {
+        char c = call[i];
+        bool ok = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+                  (c >= 'a' && c <= 'z') || c == '-';
+        out[o++] = ok ? c : '-';   // checkRegexCall() filtert vorher, das hier ist die Rueckfallebene
+    }
+
+    while (o > 0 && out[o - 1] == '-')   // RFC 1123: ein Label endet alphanumerisch
+        o--;
+
+    out[o] = 0;
+    return o > 0;
+}
 #endif
 
 // ---------------------------------------------------------------------------
