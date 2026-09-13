@@ -1103,11 +1103,14 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
 
             if ((act_key == 0x2e) && (!meshcom_settings.node_keyboardlock)) // SYM + M
             {
-                #if defined(ENABLE_AUDIO)
-                audio_set_mute(!meshcom_settings.node_mute);
-                #else
-                meshcom_settings.node_mute = !meshcom_settings.node_mute;
-                #endif
+                // Same path as the "Sound on" switch (btn_soundon) and the
+                // serial command: the handler sets node_mute, mutes the
+                // hardware and saves. Calling audio_set_mute() directly here
+                // left the toggle unsaved, so the tone came back after a reset.
+                if (meshcom_settings.node_mute)
+                    commandAction((char*)"--mute off", false);
+                else
+                    commandAction((char*)"--mute on", false);
             }
         }
 
