@@ -1523,6 +1523,18 @@ void nrf52loop()
                     if(_cad_dc && bLORADEBUG)
                         Serial.printf("[MC-DBG] CAD_FALSE_POSITIVE\n");
                     // Channel free — transmit
+                    //
+                    // Marker-Paritaet mit dem ESP32 (esp32_main.cpp:2688 und 2709):
+                    // CAD_FREE meldet den freien Kanal VOR doTX(), TX_START den
+                    // tatsaechlich abgesetzten Frame. Vorher stand CAD_FREE im
+                    // Erfolgszweig und bedeutete damit dasselbe wie TX_START drueben --
+                    // gleicher Name, anderes Ereignis. Eine flottenweite Auswertung,
+                    // die CAD_FREE zaehlt, verglich damit zwei verschiedene Groessen:
+                    // auf dem ESP32 auch den Fall "Kanal frei, aber nichts gesendet"
+                    // (dort folgt CAD_FREE_NO_TX auf CAD_FREE), auf dem nRF52 nicht.
+                    if(bLORADEBUG)
+                        Serial.printf("[MC-DBG] CAD_FREE attempt=%d\n", cad_attempt);
+
                     csma_reset();
                     bool _tx_ok;
                     { INSTR_SECTION("lora_tx"); _tx_ok = doTX(); }
@@ -1532,7 +1544,9 @@ void nrf52loop()
                         if(bLORADEBUG)
                         {
                             Serial.printf("[MC-SM] TX_PREPARE -> TX_ACTIVE rc=0\n");
-                            Serial.printf("[MC-DBG] CAD_FREE attempt=%d\n", cad_attempt);
+                            // BP-02: qlen ist txRingDepth() (belegte Slots), nicht der
+                            // rohe Indexabstand -- siehe Doku-Kommentar von txRingDepth().
+                            Serial.printf("[MC-DBG] TX_START qlen=%d\n", txRingDepth());
                         }
                     }
                     else

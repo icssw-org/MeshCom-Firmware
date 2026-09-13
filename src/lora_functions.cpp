@@ -2441,6 +2441,18 @@ void OnTxTimeout(void)
 
         startRadioReceive();
 
+        // Der Semtech-Treiber ruft OnTxDone() nur im Erfolgsfall auf, der
+        // Fehlerfall landet hier. Ohne diese beiden Zeilen endete die
+        // MC-SM-Spur eines fehlgeschlagenen Sendevorgangs bei TX_ACTIVE und
+        // wurde nie geschlossen -- eine Auswertung, die Zustandsuebergaenge
+        // paart, haengt dann fuer immer im Sendezustand. rc=-1 entspricht dem
+        // ESP32, der bei Fehler TX_DONE mit einem transmissionState != 0 meldet.
+        if(bLORADEBUG)
+        {
+            printfdeb("[MC-SM] TX_ACTIVE -> TX_DONE rc=-1\n");
+            printfdeb("[MC-SM] TX_DONE -> RX_LISTEN rc=0\n");
+        }
+
     #endif
 
     tx_is_active = false;
