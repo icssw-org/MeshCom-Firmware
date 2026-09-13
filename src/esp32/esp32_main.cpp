@@ -34,6 +34,7 @@ SPIClass ethSPI(FSPI);
 #include <esp_adc_cal.h>
 #include "esp_system.h"
 #include "esp_task_wdt.h"
+#include <esp_sleep.h>
 
 #if not defined(BOARD_T_DECK_PRO)
 //====== Timer for periodical events u.a.
@@ -634,6 +635,25 @@ static const char* resetReasonName(esp_reset_reason_t r)
     }
 }
 
+// Name of the wakeup cause after a deep-sleep reset, printed next to RESET_REASON so a
+// field log shows whether the button (EXT1), a timer or something else woke the node.
+static const char* wakeCauseName(esp_sleep_source_t c)
+{
+    switch (c)
+    {
+        case ESP_SLEEP_WAKEUP_UNDEFINED: return "UNDEFINED";
+        case ESP_SLEEP_WAKEUP_ALL:       return "ALL";
+        case ESP_SLEEP_WAKEUP_EXT0:      return "EXT0";
+        case ESP_SLEEP_WAKEUP_EXT1:      return "EXT1";
+        case ESP_SLEEP_WAKEUP_TIMER:     return "TIMER";
+        case ESP_SLEEP_WAKEUP_TOUCHPAD:  return "TOUCHPAD";
+        case ESP_SLEEP_WAKEUP_ULP:       return "ULP";
+        case ESP_SLEEP_WAKEUP_GPIO:      return "GPIO";
+        case ESP_SLEEP_WAKEUP_UART:      return "UART";
+        default:                         return "OTHER";
+    }
+}
+
 void esp32setup()
 {
     ///< Initialize T5-EPAPER GUI
@@ -756,6 +776,11 @@ void esp32setup()
     {
         esp_reset_reason_t rr = esp_reset_reason();
         Serial.printf("[BOOT] RESET_REASON=%d %s\n", (int)rr, resetReasonName(rr));
+        if (rr == ESP_RST_DEEPSLEEP)
+        {
+            esp_sleep_source_t wc = esp_sleep_get_wakeup_cause();
+            Serial.printf("[BOOT] WAKE_CAUSE=%d %s\n", (int)wc, wakeCauseName(wc));
+        }
     }
 #if INSTRUMENT_ENABLED
     instrument_report_prev_boot();   // CDC-01: loop gaps of the previous boot, from RTC memory
@@ -1338,7 +1363,10 @@ void esp32setup()
             // can never go LOW after the first wake and the radio is dead until a
             // power cycle. GPIO8 is RTC-capable but the sleep side never arms
             // gpio_deep_sleep_hold_en(), so no gpio_deep_sleep_hold_dis() is needed.
-            // No-op on a cold boot. Not bench-verified: no WP/E213 hardware.
+            // No-op on a cold boot. Field-verified 2026-09-11 by OE3LCR on
+            // E213 and Wireless Paper V1.2 (PR #1135 comment): EXT1 wake, radio
+            // init and SPI traffic fine. Pre-fix 4.35p also woke with working
+            // RX there, so in practice this is a guard rather than a repair.
             gpio_hold_dis((gpio_num_t) PIN_LORA_NSS);
         #endif
 
