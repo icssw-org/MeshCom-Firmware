@@ -798,10 +798,10 @@ void commandAction(char *umsg_text, bool ble)
             printlndeb("--onewire on/off  use DSxxxx\n--onewire gpio 99\n");
             delay(100);
             // HL-03/HL-04: bis 2026-08-30 nur ueber die T-Deck-GUI erreichbar.
-            // DOC-02: these five commands are themselves gated
-            // BOARD_T_DECK/BOARD_T_DECK_PLUS in commandAction() (the whole
-            // block that also holds --tft/--screencrc/--playtone) -- this
-            // line used to advertise them on every board unconditionally.
+            // DOC-02: these five commands are gated BOARD_T_DECK/BOARD_T_DECK_PLUS
+            // in commandAction() (own field block ahead of INSTRUMENT_ENABLED,
+            // so they exist in every T-Deck image) -- this line used to
+            // advertise them on every board unconditionally.
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             printlndeb("--mute on/off  Ton stumm\n--persistflash on/off  Positionen ins Flash\n--persistsd on/off  Positionen auf SD\n--immediatesave on/off  sofort speichern\n--persiststat  Zustand der vier Schalter\n");
             delay(100);
@@ -4785,6 +4785,82 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     #endif
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    // T-Deck field switches: mute and the three position-persistence flags.
+    // Until 2026-09-13 they sat in the INSTRUMENT_ENABLED block below and were
+    // therefore compiled out of every shipped image -- the GUI "Sound on"
+    // switch (btn_soundon -> "--mute on/off") found no handler while --help
+    // still advertised the commands. The bench-only UI hooks (--tft,
+    // --screencrc, --playtone, ...) stay in the block below.
+    else
+    if(commandCheck(msg_text+2, (char*)"mute on") == 0)
+    {
+        // HL-03: node_mute wurde gesetzt, aber nie gespeichert -- nach dem
+        // naechsten Reset stand der Ton wieder wie vorher. save_settings() hier,
+        // damit der serielle Weg und der GUI-Schalter (der jetzt hierher zeigt)
+        // dieselbe Wirkung haben.
+        meshcom_settings.node_mute = true;
+        audio_set_mute(true);
+        save_settings();
+        Serial.println("[AUDIO];mute;1");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"mute off") == 0)
+    {
+        meshcom_settings.node_mute = false;
+        audio_set_mute(false);
+        save_settings();
+        Serial.println("[AUDIO];mute;0");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"persistflash on") == 0 ||
+       commandCheck(msg_text+2, (char*)"persistflash off") == 0)
+    {
+        // HL-04: bis 2026-08-30 nur ueber den T-Deck-Schalter erreichbar
+        meshcom_settings.node_persist_to_flash = (commandCheck(msg_text+2, (char*)"persistflash on") == 0);
+        save_settings();
+        Serial.printf("[PERSIST];flash;%d\n", meshcom_settings.node_persist_to_flash ? 1 : 0);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"persistsd on") == 0 ||
+       commandCheck(msg_text+2, (char*)"persistsd off") == 0)
+    {
+        // HL-04. Der GUI-Schalter laedt nach dem Umschalten die Persistenz neu;
+        // das muss der serielle Weg genauso tun, sonst arbeitet der Knoten bis
+        // zum naechsten Reset mit dem alten Bestand weiter.
+        meshcom_settings.node_persist_to_sd = (commandCheck(msg_text+2, (char*)"persistsd on") == 0);
+        save_settings();
+        loadPosPersistence();
+        Serial.printf("[PERSIST];sd;%d\n", meshcom_settings.node_persist_to_sd ? 1 : 0);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"immediatesave on") == 0 ||
+       commandCheck(msg_text+2, (char*)"immediatesave off") == 0)
+    {
+        // HL-04
+        meshcom_settings.node_immediate_save = (commandCheck(msg_text+2, (char*)"immediatesave on") == 0);
+        save_settings();
+        Serial.printf("[PERSIST];immediate;%d\n", meshcom_settings.node_immediate_save ? 1 : 0);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"persiststat") == 0)
+    {
+        // HL-03/HL-04: den Zustand aller vier Schalter in einer Zeile lesbar
+        // machen -- ohne das war ueber die serielle Schnittstelle nicht einmal
+        // pruefbar, was der GUI-Schalter gerade gesetzt hat.
+        Serial.printf("[PERSIST];stat;flash;%d;sd;%d;immediate;%d;mute;%d\n",
+                      meshcom_settings.node_persist_to_flash ? 1 : 0,
+                      meshcom_settings.node_persist_to_sd ? 1 : 0,
+                      meshcom_settings.node_immediate_save ? 1 : 0,
+                      meshcom_settings.node_mute ? 1 : 0);
+        return;
+    }
+    #endif
     //
     ///////////////////////////////////////////////////////////////////////////
 #if INSTRUMENT_ENABLED
@@ -5136,76 +5212,6 @@ void commandAction(char *umsg_text, bool ble)
     {
         sscanf(msg_text+11, "%d", &audio_dbg_mode);
         Serial.printf("[AUDIO];dbg;mode;%d\n", audio_dbg_mode);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"mute on") == 0)
-    {
-        // HL-03: node_mute wurde gesetzt, aber nie gespeichert -- nach dem
-        // naechsten Reset stand der Ton wieder wie vorher. save_settings() hier,
-        // damit der serielle Weg und der GUI-Schalter (der jetzt hierher zeigt)
-        // dieselbe Wirkung haben.
-        meshcom_settings.node_mute = true;
-        audio_set_mute(true);
-        save_settings();
-        Serial.println("[AUDIO];mute;1");
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"mute off") == 0)
-    {
-        meshcom_settings.node_mute = false;
-        audio_set_mute(false);
-        save_settings();
-        Serial.println("[AUDIO];mute;0");
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"persistflash on") == 0 ||
-       commandCheck(msg_text+2, (char*)"persistflash off") == 0)
-    {
-        // HL-04: bis 2026-08-30 nur ueber den T-Deck-Schalter erreichbar
-        meshcom_settings.node_persist_to_flash = (commandCheck(msg_text+2, (char*)"persistflash on") == 0);
-        save_settings();
-        Serial.printf("[PERSIST];flash;%d\n", meshcom_settings.node_persist_to_flash ? 1 : 0);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"persistsd on") == 0 ||
-       commandCheck(msg_text+2, (char*)"persistsd off") == 0)
-    {
-        // HL-04. Der GUI-Schalter laedt nach dem Umschalten die Persistenz neu;
-        // das muss der serielle Weg genauso tun, sonst arbeitet der Knoten bis
-        // zum naechsten Reset mit dem alten Bestand weiter.
-        meshcom_settings.node_persist_to_sd = (commandCheck(msg_text+2, (char*)"persistsd on") == 0);
-        save_settings();
-        #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-        loadPosPersistence();
-        #endif
-        Serial.printf("[PERSIST];sd;%d\n", meshcom_settings.node_persist_to_sd ? 1 : 0);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"immediatesave on") == 0 ||
-       commandCheck(msg_text+2, (char*)"immediatesave off") == 0)
-    {
-        // HL-04
-        meshcom_settings.node_immediate_save = (commandCheck(msg_text+2, (char*)"immediatesave on") == 0);
-        save_settings();
-        Serial.printf("[PERSIST];immediate;%d\n", meshcom_settings.node_immediate_save ? 1 : 0);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"persiststat") == 0)
-    {
-        // HL-03/HL-04: den Zustand aller vier Schalter in einer Zeile lesbar
-        // machen -- ohne das war ueber die serielle Schnittstelle nicht einmal
-        // pruefbar, was der GUI-Schalter gerade gesetzt hat.
-        Serial.printf("[PERSIST];stat;flash;%d;sd;%d;immediate;%d;mute;%d\n",
-                      meshcom_settings.node_persist_to_flash ? 1 : 0,
-                      meshcom_settings.node_persist_to_sd ? 1 : 0,
-                      meshcom_settings.node_immediate_save ? 1 : 0,
-                      meshcom_settings.node_mute ? 1 : 0);
         return;
     }
     else
