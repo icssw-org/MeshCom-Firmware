@@ -525,6 +525,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 void initAPRSPOS(struct aprsPosition &aprspos)
 {
     aprspos.pos_atxt = "";
+    aprspos.pos_name = "";
 
     aprspos.lat = 0.0;
     aprspos.lat_c = 0x00;
@@ -551,6 +552,12 @@ void initAPRSPOS(struct aprsPosition &aprspos)
     aprspos.version = 0;
     aprspos.telemetry = 0;
     aprspos.din[0] = 0x00;
+
+    aprspos.vbus = 0.0;
+    aprspos.vcurrent = 0.0;
+    for(int igrc=0; igrc<6; igrc++)
+        aprspos.grc[igrc] = 0;
+    aprspos.grccnt = 0;
 }
 
 uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
@@ -632,30 +639,64 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
 
     ipt=0;
 
-    char cConcat1[UDP_TX_BUF_SIZE];
-    memset(cConcat1, 0x00, UDP_TX_BUF_SIZE);
-    int iConcat1 = 0;
+    // check ATXT + #name:
+    // the comment/name region runs from istarttext up to the first /X=-style
+    // token -- '/' followed by an uppercase letter and '=', or '/N' followed
+    // by a digit '1'-'9' (the neighbour-count key, matched the same way the
+    // NCNT loop below matches it). Nothing else ends the region: not a
+    // space, not a bare '/'. Region cap mirrors the encoder's own budget
+    // (atxt 25 + '#' 1 + node_name 19 = 45 bytes); the local buffer is 48
+    // for headroom, capped at 47 to leave room for the terminator.
+    char cregion[48];
+    memset(cregion, 0x00, sizeof(cregion));
+    int iregion = 0;
 
-    // check ATXT
-    for(unsigned int id=istarttext;id<PayloadBuffer.length();id++)
+    for(unsigned int id=istarttext; id<PayloadBuffer.length() && iregion < 47; id++)
     {
-        // ENDE
-        if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 25)
+        char c = PayloadBuffer.charAt(id);
+
+        if(c == '/')
         {
-            break;
+            char c1 = PayloadBuffer.charAt(id+1);
+            char c2 = PayloadBuffer.charAt(id+2);
+
+            if((c1 >= 'A' && c1 <= 'Z' && c2 == '=') || (c1 == 'N' && c2 >= '1' && c2 <= '9'))
+                break;
         }
 
-        if(ipt < 25)
-        {
-            //aprspos.pos_atxt.concat(PayloadBuffer.charAt(id));
-            cConcat1[iConcat1] = PayloadBuffer.charAt(id);
-            iConcat1++;
+        cregion[iregion] = c;
+        iregion++;
+    }
 
-            ipt++;
+    // Split on the LAST '#' in the region: text before it is the free-text
+    // comment (pos_atxt), text after it is the node name (pos_name). No '#'
+    // -> the whole region is the comment and pos_name stays empty. A '#'
+    // can never appear in a name written via --setname (command_functions.cpp),
+    // so the last-'#' split is unambiguous for names this firmware writes;
+    // it degrades gracefully (name = everything after the last '#') for a
+    // comment that legitimately contains '#' from an older/foreign encoder.
+    int ihash = -1;
+
+    for(int ic=iregion-1; ic>=0; ic--)
+    {
+        if(cregion[ic] == '#')
+        {
+            ihash = ic;
+            break;
         }
     }
 
-    aprspos.pos_atxt = cConcat1;
+    if(ihash < 0)
+    {
+        aprspos.pos_atxt = cregion;
+        aprspos.pos_name = "";
+    }
+    else
+    {
+        cregion[ihash] = 0x00;
+        aprspos.pos_atxt = cregion;
+        aprspos.pos_name = cregion + ihash + 1;
+    }
 
     aprspos.bat = 0;
     aprspos.alt = 0;
@@ -968,6 +1009,66 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
+    // check GRC (Group-Call list) /R=; up to 6 groups separated by ';'.
+    // Own buffer sized for the worst case (6 x "99999;" = 36 chars) instead
+    // of the shared decode_text[25] the other keys use.
+    {
+        char decode_grc[40];
+        memset(decode_grc, 0x00, sizeof(decode_grc));
+        int igrc = 0;
+
+        for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+        {
+            if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'R' && PayloadBuffer.charAt(itxt+2) == '=')
+            {
+                for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
+                {
+                    // ENDE
+                    if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || igrc > 38)
+                    {
+                        break;
+                    }
+
+                    decode_grc[igrc]=PayloadBuffer.charAt(id);
+                    igrc++;
+                }
+
+                // Split on ';', validating each group with CheckGroup() (the
+                // same 1..99999 range accepted on the air) and stopping at
+                // the first token that fails -- malformed, truncated or
+                // non-numeric.
+                int istart_tok = 0;
+                char ctoken[8];
+
+                for(int ic=0; ic<=igrc && aprspos.grccnt < 6; ic++)
+                {
+                    if(ic == igrc || decode_grc[ic] == ';')
+                    {
+                        int toklen = ic - istart_tok;
+
+                        if(toklen <= 0 || toklen >= (int)sizeof(ctoken))
+                            break;
+
+                        memset(ctoken, 0x00, sizeof(ctoken));
+                        memcpy(ctoken, decode_grc + istart_tok, toklen);
+
+                        int grcval = CheckGroup(String(ctoken));
+
+                        if(grcval == 0)
+                            break;
+
+                        aprspos.grc[aprspos.grccnt] = grcval;
+                        aprspos.grccnt++;
+
+                        istart_tok = ic+1;
+                    }
+                }
+
+                break;
+            }
+        }
+    }
+
     memset(decode_text, 0x00, sizeof(decode_text));
     ipt=0;
 
@@ -995,6 +1096,65 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
             break;
         }
     }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
+    // check Bus-Voltage /U=
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'U' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
+                {
+                    sscanf(decode_text, "%f", &aprspos.vbus);
+                    break;
+                }
+
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
+            }
+
+            break;
+        }
+    }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
+
+    // check Current /I=
+    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'I' && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
+                {
+                    sscanf(decode_text, "%f", &aprspos.vcurrent);
+                    break;
+                }
+
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
+            }
+
+            break;
+        }
+    }
+
+    memset(decode_text, 0x00, sizeof(decode_text));
+    ipt=0;
 
     // check telemetry
     for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)

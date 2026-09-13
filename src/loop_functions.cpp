@@ -30,6 +30,7 @@
 #include "charset_filter.h"
 #include "setlog_lines.h"
 #include "mcp17_bits.h"
+#include "pos_tag_nan.h"
 
 bool gpsDetected = false;
 bool gpsInitDone = false;
@@ -4362,42 +4363,42 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
         if(press > 0)
         {
             snprintf(cpress, sizeof(cpress), "/P=%.1f", press);
-            if(memcmp(cpress, "/P=nan", 6) == 0)
+            if(posTagIsNan(cpress))
                 return "";
         }
 
         if(hum > 0)
         {
             snprintf(chum, sizeof(chum), "/H=%.1f", hum);
-            if(memcmp(cpress, "/H=nan", 6) == 0)
+            if(posTagIsNan(chum))
                 return "";
         }
 
         if(temp != 0)
         {
             snprintf(ctemp, sizeof(ctemp), "/T=%.1f", temp);
-            if(memcmp(cpress, "/T=nan", 6) == 0)
+            if(posTagIsNan(ctemp))
                 return "";
         }
 
         if(temp2 != 0)
         {
             snprintf(ctemp2, sizeof(ctemp2), "/O=%.1f", temp2);
-            if(memcmp(cpress, "/O=nan", 6) == 0)
+            if(posTagIsNan(ctemp2))
                 return "";
         }
 
         if(qfe > 0)
         {
             snprintf(cqfe, sizeof(cqfe), "/F=%i", qfe);
-            if(memcmp(cpress, "/F=nan", 6) == 0)
+            if(posTagIsNan(cqfe))
                 return "";
         }
 
         if(qnh > 0 && !bMCU811ON && !bBME680ON)
         {
             snprintf(cqnh, sizeof(cqnh), "/Q=%.1f", qnh);
-            if(memcmp(cpress, "/Q=nan", 6) == 0)
+            if(posTagIsNan(cqnh))
                 return "";
         }
 
@@ -4406,7 +4407,7 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
             snprintf(cversion, sizeof(cversion), "%s", "/V=3");
 
             snprintf(cgasres, sizeof(cgasres), "/G=%.1f", gasres);
-            if(memcmp(cpress, "/G=nan", 6) == 0)
+            if(posTagIsNan(cgasres))
                 return "";
         }
 
@@ -4415,7 +4416,7 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
             snprintf(cversion, sizeof(cversion),  "%s", "/V=2");
 
             snprintf(cco2, sizeof(cco2), "/C=%.0f", co2);
-            if(memcmp(cpress, "/C=nan", 6) == 0)
+            if(posTagIsNan(cco2))
                 return "";
         }
 
