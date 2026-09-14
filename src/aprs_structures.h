@@ -36,7 +36,8 @@ struct aprsMessage
 struct aprsPosition
 {
     String pos_atxt;
-    
+    String pos_name;
+
     double lat;
     char lat_c;
     double lon;
@@ -63,6 +64,12 @@ struct aprsPosition
     int version;
     int telemetry;
     char din[9]; // /D= MCP23017 port A bits, GPA0 first; "" when absent or malformed
+
+    // power
+    float vbus;      // /U= INA226 bus voltage
+    float vcurrent;  // /I= INA226 current
+    int grc[6];      // /R= Group-Call list, up to 6 groups (1..99999 each)
+    int grccnt;      // number of valid entries in grc[]
 };
 
 struct mheardLine

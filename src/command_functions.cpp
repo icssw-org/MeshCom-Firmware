@@ -2572,6 +2572,13 @@ void commandAction(char *umsg_text, bool ble)
         if(sVar == "none")
             sVar = "";
 
+        // node_name is split from the position comment on the LAST '#' in
+        // the comment region (decodeAPRSPOS(), aprs_structures.h:pos_name)
+        // -- a '#' inside the name itself would make that split ambiguous,
+        // so strip it here, the only user-input write path (the web GUI
+        // delegates to this same handler).
+        sVar.replace("#", "");
+
         if(sVar.length() > 19)
             sVar = sVar.substring(0, 19);
 
