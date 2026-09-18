@@ -136,6 +136,9 @@ void startExternUDP()
   if(WiFi.hostByName(meshcom_settings.node_extern, apip) == 1)
   {
     Serial.printf("[EXT] URL:%s to IP:%s\n", meshcom_settings.node_extern, apip.toString().c_str());
+    // str_ip feeds the "now sending to IP" line below; it was only set in
+    // the literal-IP branch, so the DNS branch printed an empty address.
+    str_ip = apip.toString();
   }
   else
   #endif
