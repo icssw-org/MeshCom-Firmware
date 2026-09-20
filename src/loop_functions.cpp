@@ -4877,12 +4877,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         // path here to guard against self-echo).
         #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
         if (bKISS)
-        {
-            if (bLORADEBUG)
-                Serial.printf("[KISS] queueKiss own position, buflen=%u client=%d\n",
-                              (unsigned)aprsmsg.msg_len, (int)isKissClientConnected());
             queueKiss(msg_buffer, aprsmsg.msg_len, 99, 0);
-        }
         #endif
     }
 
