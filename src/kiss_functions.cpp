@@ -528,6 +528,9 @@ void flushKissQueue()
 
         struct aprsMessage m;
         uint16_t t = decodeAPRS(buf, buflen, m);
+        if (bLORADEBUG)
+            Serial.printf("[KISS] flush slot %d buflen=%u decodeAPRS=0x%02X src=%s\n",
+                          i, (unsigned)buflen, t, m.msg_source_call.c_str());
         if (t == MSG_TYPE_TEXT || t == MSG_TYPE_POSITION)
         {
             if (t == MSG_TYPE_TEXT)
@@ -535,6 +538,8 @@ void flushKissQueue()
 
             uint8_t ax[KISS_AX25_MAX];   // loop-task stack
             size_t  axlen = buildAx25(m, ax, sizeof(ax));
+            if (bLORADEBUG)
+                Serial.printf("[KISS] buildAx25 axlen=%u\n", (unsigned)axlen);
             if (axlen > 0)
             {
                 // SrcInfo (KISS port 2): a station whose SSID > 15 cannot survive
