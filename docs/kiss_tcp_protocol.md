@@ -205,12 +205,16 @@ list** and **`/N` neighbour count**, the **digipeater path**, and a
 **standard format** any APRS tool can read.
 
 Also note:
-- The client sees newly received RF frames **and** TEXT/POSITION frames this
-  node's Gateway connection received from the MeshCom server (another node
-  heard those over RF and relayed them via the internet — recognisable by the
-  `snr=0, rssi=99` RxMeta sentinel, §4). It does **not** see the node's own
-  transmissions or anything injected locally (phone / web / this client). To
-  see your own digipeated traffic, watch it via another node or ext-udp.
+- The client sees newly received RF frames, TEXT/POSITION frames this node's
+  Gateway connection received from the MeshCom server (another node heard
+  those over RF and relayed them via the internet), **and** the node's own
+  locally originated text messages (phone / web / console — not a KISS
+  client's own injected send, that already gets its `0xF0` TX-result instead)
+  and its own periodic position beacon. All three are recognisable by the
+  `snr=0, rssi=99` RxMeta sentinel (§4) — none of them is a real signal
+  reading. Still not seen: HEY beacons, telemetry-only frames, and anything
+  the node only *digipeats* for another station (that traffic never becomes
+  "locally originated" here) — watch those via another node or ext-udp.
 - A message text longer than the LoRa MTU (≈160 chars minus the addressee
   overhead) is rejected with `0x04`.
 - The server needs an active **WiFi STA** connection (`WiFi.status() ==

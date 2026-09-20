@@ -20,6 +20,7 @@
 #include "batt_functions.h"
 #include "udp_functions.h"
 #include "extudp_functions.h"
+#include "kiss_functions.h"
 #include "configuration.h"
 
 #include "TinyGPSPlus.h"
@@ -4200,7 +4201,17 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
     if(bEXTUDP)
         sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len, 0, 0);
 
-                        
+    // KISS interface: mirror the ext-udp "node" echo above, but only for a
+    // locally originated send (phone/web/console -- src_override unset). A
+    // KISS-client-injected send (src_override set, from handleInboundAx25())
+    // would otherwise be echoed straight back at the very client that just
+    // sent it -- it already gets its own confirmation via the 0xF0 TX-result
+    // frame, so skip it here.
+    #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+    if (bKISS && (!src_override || !src_override[0]))
+        queueKiss(msg_buffer, aprsmsg.msg_len, 99, 0);
+    #endif
+
     // wenn text via Console kommt auch an BLE bzw. WEBService senden
     if(bConsoleText)
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
@@ -4859,6 +4870,15 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         // Extern Server
         if(bEXTUDP)
             sendExtern(true, (char*)"node", msg_buffer, aprsmsg.msg_len, 0, 0);
+
+        // KISS interface: mirror the ext-udp "node" echo above -- this is the
+        // node's own periodic position beacon, always locally originated
+        // (unlike sendMessage(), there is no src_override / client-injection
+        // path here to guard against self-echo).
+        #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+        if (bKISS)
+            queueKiss(msg_buffer, aprsmsg.msg_len, 99, 0);
+        #endif
     }
 
 }

@@ -13,8 +13,12 @@ DRAM-tight board — e.g. `E22_XML-DevKitC`, see Limitations).
   Dedup is already done, so each mesh packet is delivered once.
   HEY / ACK frames are not converted. Also includes text/position frames this
   node's **Gateway** connection got from the MeshCom server (another node
-  heard them over RF, this one only got them via the internet) — tagged with
-  the `snr=0, rssi=99` RxMeta sentinel, same dedup ring as direct RF RX.
+  heard them over RF, this one only got them via the internet), **and** the
+  node's own locally originated text messages (phone/web/console) and its own
+  periodic position beacon -- but not a KISS client's own injected send
+  (that gets its `0xF0` TX-result instead, no self-echo). All three "no real
+  RF" cases share the `snr=0, rssi=99` RxMeta sentinel, same dedup ring as
+  direct RF RX.
 - **TX (client → mesh, opt-in):** an AX.25 UI frame whose info field is an APRS
   **message** (`:ADDRESSEE :text`) or **position** (`!` `=` `@` `/`) is
   injected into the mesh. `msg_id`, hop byte, FCS are set by the firmware.
