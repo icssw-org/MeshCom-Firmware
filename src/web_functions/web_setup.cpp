@@ -203,11 +203,11 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("setlat")) {
         snprintf(message_text, sizeof(message_text), "--setlat %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        #ifdef ESP32
-        setupData->returnCode = (fabs(meshcom_settings.node_lat) == fabs(setupData->paramValue.toDouble()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        #else
-        setupData->returnCode = (meshcom_settings.node_lat == setupData->paramValue.toFloat())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        #endif
+        // node_lat ist double, der nRF52-Core hat kein String::toDouble(): ein
+        // float-Vergleich scheitert fuer fast jede Koordinate (49.997 != 49.9970016f).
+        // atof() liefert auf beiden Cores double; fabs(), weil --setlat negative
+        // Werte als Betrag plus 'S'/'W' ablegt.
+        setupData->returnCode = (fabs(meshcom_settings.node_lat - fabs(atof(setupData->paramValue.c_str()))) < 1e-7)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = String(meshcom_settings.node_lat,6);
         return;
     } else
@@ -215,11 +215,11 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("setlon")) {
         snprintf(message_text, sizeof(message_text), "--setlon %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        #ifdef ESP32
-        setupData->returnCode = (fabs(meshcom_settings.node_lon) == fabs(setupData->paramValue.toDouble()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        #else
-        setupData->returnCode = (meshcom_settings.node_lon == setupData->paramValue.toFloat())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        #endif
+        // node_lon ist double, der nRF52-Core hat kein String::toDouble(): ein
+        // float-Vergleich scheitert fuer fast jede Koordinate (49.997 != 49.9970016f).
+        // atof() liefert auf beiden Cores double; fabs(), weil --setlon negative
+        // Werte als Betrag plus 'S'/'W' ablegt.
+        setupData->returnCode = (fabs(meshcom_settings.node_lon - fabs(atof(setupData->paramValue.c_str()))) < 1e-7)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = String(meshcom_settings.node_lon,6);
         return;
     } else
