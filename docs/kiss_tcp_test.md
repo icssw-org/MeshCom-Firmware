@@ -1,9 +1,10 @@
-# KISS/TCP interface — v1 (ESP32) usage & test guide
+# KISS/TCP interface (ESP32) — usage & test guide
 
 Implementation of Variant C from `docs/kiss_mode_analysis.md`. ESP32 only,
-compiled in by default (opt-out `-D DISABLE_KISS_TCP`).
+compiled in by default (opt-out `-D DISABLE_KISS_TCP`, set per-variant for a
+DRAM-tight board — e.g. `E22_XML-DevKitC`, see Limitations).
 
-## What v1 does
+## What it does
 
 - TCP server on **port 8001**, **single client**, LAN-only (optional HMAC auth,
   off by default).
@@ -67,8 +68,11 @@ and is host-tested:
 pio test -e native_extradio -f test_kiss_ax25
 ```
 
-## Verified (Heltec V3, live mesh)
+## Verified
 
+Two different confidence levels below — kept separate on purpose:
+
+**Live-mesh verified** (Heltec V3, actual RF traffic):
 - RX text / position / message → AX.25 UI; `aprslib` parses position
   (lat/lon/alt/symbol) and message (addressee/text).
 - TX: APRS message / position from a KISS client injected into the mesh,
@@ -80,10 +84,22 @@ pio test -e native_extradio -f test_kiss_ax25
 - `--kiss off` closes the listener immediately even on a KISS-only node.
 - `--kiss auth on` + `--passwd`: raw client rejected after 15 s, HMAC client
   accepted.
-- Builds (review fix round): `heltec_wifi_lora_32_V3`, `ttgo-lora32-v21`,
-  `E22-DevKitC`, `wiscore_rak4631` — all green. nRF52 grows ~32 B Flash / 1 B RAM
-  (the `SendAckMessage()` `src_override` parameter, shared code); KISS itself
-  still fully compiled out on nRF52. Host tests: `pio test -e native_extradio`.
+
+**Build-only / host-test verified** (no live device attached while these
+landed — confirm on real hardware before relying on them):
+- Gateway/server-relayed TEXT and POSITION frames reaching KISS via
+  `udp_functions.cpp` (`snr=0, rssi=99` sentinel).
+- IRAM fix: `ttgo_tbeam`, `ttgo_tbeam_SX1262`, `ttgo_tbeam_SX1268` (previously
+  failed with `IRAM0 overflowed`) now build green.
+- `E22_XML-DevKitC` builds green with `-D DISABLE_KISS_TCP` (previously failed
+  with `DRAM0 overflowed`).
+- `heltec_wifi_lora_32_V3`, `ttgo-lora32-v21`, `E22-DevKitC`, `wiscore_rak4631`
+  — all green. nRF52 grows ~32 B Flash / 1 B RAM (the `SendAckMessage()`
+  `src_override` parameter, shared code); KISS itself still fully compiled out
+  on nRF52.
+- Host tests: `pio test -e native_extradio` (`lib/kiss_ax25/` only — the
+  Gateway tap and the digi-path parser live in ESP32-only `.cpp` files, not
+  unit-testable on the host).
 
 ## Wire format
 
@@ -175,7 +191,9 @@ or point **aprx** at `/tmp/kt` as a KISS serial interface for an RX-only iGate.
 
 ## Limitations
 
-- ESP32 only. nRF52 (RAK) compiles the feature out.
+- ESP32 only. nRF52 (RAK) compiles the feature out. `E22_XML-DevKitC` (an
+  ESP32 board) also compiles it out via `-D DISABLE_KISS_TCP` in its own
+  `platformio.ini` — too DRAM-tight for KISS alongside its other features.
 - Single client. For multiple consumers use a host-side hub (e.g. Direwolf's
   KISS server, or WebDesk re-serving).
 - Auth is optional (`--kiss auth on`, HMAC-SHA256 on `--passwd`) and off by
@@ -187,13 +205,15 @@ or point **aprx** at `/tmp/kt` as a KISS serial interface for an RX-only iGate.
   AX.25 source address; a KISS client's own source SSID is likewise limited to
   0…15. The message *addressee* has no such limit — it is free 9-char APRS
   text, so `:OE1XYZ-99:hi` reaches a two-digit-SSID station fine.
-- IRAM is razor-thin on the T-Beam family (~20 B free of 131072 before this
-  feature). `buildAx25()`'s digipeater-path parser therefore uses
-  `strchr()`/`strlen()`/`strcmp()`, not `strtok_r()` — `strtok_r` is otherwise
-  unused in the tree, and the ESP-IDF linker script keeps it IRAM-resident
-  (needed reachable with the flash cache off), so pulling it in for the first
-  time cost ~124 B of IRAM and overflowed the T-Beam link by 104 B. The
-  `strchr()` version is flash-resident and costs 0 IRAM.
+- IRAM is razor-thin on the T-Beam family (~20 B free of 131072) — a general
+  constraint on this codebase, worth minding for any *future* addition here,
+  not just KISS: `buildAx25()`'s digipeater-path parser uses
+  `strchr()`/`strlen()`/`strcmp()`, deliberately not `strtok_r()` — `strtok_r`
+  is otherwise unused in the tree, and the ESP-IDF linker script keeps it
+  IRAM-resident (reachable with the flash cache off), so pulling it in for the
+  first time cost ~124 B of IRAM and overflowed the T-Beam link by 104 B. The
+  `strchr()` version is flash-resident and costs 0 IRAM — this is resolved,
+  not an open issue.
 - TX: APRS message / ack / position payloads. Injected positions are sent as a
   MeshCom `!` beacon (no timestamp, no telemetry extension). `node_msgid` is
   still persisted to NVS per injected frame (shared with all senders).

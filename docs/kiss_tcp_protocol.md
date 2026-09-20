@@ -1,6 +1,6 @@
 # KISS/TCP interface — client protocol (for WebDesk & co.)
 
-Exact wire contract of the shipped ESP32 v1.1 KISS interface. Use this to add
+Exact wire contract of the shipped ESP32 KISS interface. Use this to add
 KISS as an optional transport next to ext-udp.
 
 ## 1. Connection
@@ -197,7 +197,8 @@ delivery is still only known via a MeshCom ACK (DMs) or the APRS message
 | structured telemetry object (`temp1/hum/qfe/...` as numbers) | ✅ `tele` JSON | only raw `/T= /H=` in the comment |
 | sender `hw_id` / `firmware` / `fw_sub` | ✅ | ✗ (no APRS field) |
 | RSSI/SNR always | ✅ in every JSON | only with `--kiss meta on` (port 1) |
-| HEY / path frames, ACK frames | partly | ✗ |
+| HEY frames | ✅ | ✗ (no AX.25 equivalent, `buildAx25()` drops them) |
+| binary MeshCom ACK (`0x41`) | ✗ (verified: no `sendExtern()`/`queueExtern()` call site handles it) | ✗ (same reason) |
 
 KISS gives, ext-udp doesn't: the **full position comment**, the **`/R=` relay
 list** and **`/N` neighbour count**, the **digipeater path**, and a
@@ -225,7 +226,9 @@ Also note:
   frame and use it as the source of the next data frame (overrides the clamped
   AX.25 `src`) — needed so replies to a `-16`…`-99` station are addressed right.
 - Monitor view: `src`, path (`digis`), info field, RSSI/SNR — one row per frame,
-  all frame types visible.
+  all frame types visible. A `snr=0, rssi=99` RxMeta pair marks a Gateway/
+  server-relayed frame (§4) — worth flagging distinctly, since it is not a
+  real signal reading.
 - TX: build the AX.25 UI frame with the operator call as source; message or
   position in the info field; one KISS frame per send. Read the `0xF0` reply
   for a per-send outcome (accepted + msg_id / rejected + reason) — this is the
