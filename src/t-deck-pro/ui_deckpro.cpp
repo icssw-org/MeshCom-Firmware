@@ -2341,6 +2341,13 @@ void btn_event_handler_save(lv_event_t * e)
             return;
         }
 
+        // SSID ergaenzen bzw. auf die kanonische Form ziehen, wie bei --setcall.
+        if(!normalizeOwnCall(sCall))
+        {
+            Serial.printf("\n[ERR]..Callsign <%s> too long with SSID\n", sCall.c_str());
+            return;
+        }
+
         snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s",  sCall.c_str());
 
         lv_textarea_set_text(call_ta, meshcom_settings.node_call);
