@@ -1826,7 +1826,7 @@ void nrf52loop()
                 commandAction((char*)config_cmds[config_cmds_index], isPhoneReady, true);
             }
 
-            sendMheard();
+            startMheardToPhone(); // MHeard erst, wenn der Kommando-Ring leer ist (siehe unten)
 
             config_to_phone_prepare_timer=millis();
 
@@ -1845,6 +1845,11 @@ void nrf52loop()
                 if (ComToPhoneWrite != ComToPhoneRead)
                 {
                     sendComToPhone();
+                }
+                else if (mheardToPhonePending())
+                {
+                    // Kommando-Ring leer: naechste Portion der MHeard-Liste nachlegen
+                    sendMheard();
                 }
                 else if (toPhoneWrite != toPhoneRead)
                 {
