@@ -10,7 +10,10 @@ compiled in by default (opt-out `-D DISABLE_KISS_TCP`).
 - **RX (mesh → client):** received MeshCom **text** and **position** frames are
   converted to **AX.25 UI frames** (no FCS) and sent as KISS data frames.
   Dedup is already done, so each mesh packet is delivered once.
-  HEY / ACK frames are not converted.
+  HEY / ACK frames are not converted. Also includes text/position frames this
+  node's **Gateway** connection got from the MeshCom server (another node
+  heard them over RF, this one only got them via the internet) — tagged with
+  the `snr=0, rssi=99` RxMeta sentinel, same dedup ring as direct RF RX.
 - **TX (client → mesh, opt-in):** an AX.25 UI frame whose info field is an APRS
   **message** (`:ADDRESSEE :text`) or **position** (`!` `=` `@` `/`) is
   injected into the mesh. `msg_id`, hop byte, FCS are set by the firmware.

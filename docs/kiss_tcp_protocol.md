@@ -106,6 +106,11 @@ Sent **immediately after** the data frame it belongs to, only when
 Example bytes `06 D1 FF` → snr `+6` dB, rssi `0xFFD1` = `-47` dBm.
 Associate it with the preceding `type 0x00` frame.
 
+`snr=0, rssi=99` marks a frame that has **no real RF measurement** — it reached
+this node via the MeshCom **server/Gateway** (another node heard it over RF and
+relayed it via the internet), not this node's own radio. Same sentinel the
+firmware already uses for gateway-relayed traffic on the phone/BLE display.
+
 ## 4a. RX — SrcInfo frame (`type 0x20`)
 
 AX.25 addresses hold only a 4-bit SSID, so an origin call with SSID `-16`…`-99`
@@ -199,9 +204,12 @@ list** and **`/N` neighbour count**, the **digipeater path**, and a
 **standard format** any APRS tool can read.
 
 Also note:
-- The client sees **only newly received RF frames** — not the node's own
-  transmissions or anything injected locally (phone / web / this client). To see
-  your own digipeated traffic, watch it via another node or ext-udp.
+- The client sees newly received RF frames **and** TEXT/POSITION frames this
+  node's Gateway connection received from the MeshCom server (another node
+  heard those over RF and relayed them via the internet — recognisable by the
+  `snr=0, rssi=99` RxMeta sentinel, §4). It does **not** see the node's own
+  transmissions or anything injected locally (phone / web / this client). To
+  see your own digipeated traffic, watch it via another node or ext-udp.
 - A message text longer than the LoRa MTU (≈160 chars minus the addressee
   overhead) is rejected with `0x04`.
 - The server needs an active **WiFi STA** connection (`WiFi.status() ==
