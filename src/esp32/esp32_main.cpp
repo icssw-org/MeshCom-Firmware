@@ -839,10 +839,10 @@ void esp32setup()
     meshcom_settings.node_cleanflash = 0;
     snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%-4.4s%-1.1s", SOURCE_VERSION, SOURCE_VERSION_SUB);
 
-    // Ein Rufzeichen ohne SSID ist im Netz nicht eindeutig, und "-0"/"-01" sind
-    // nicht die kanonische Schreibweise. Was aus dem Flash kommt, wird deshalb
-    // einmal beim Start geradegezogen -- das save_settings() darunter schreibt
-    // es ohnehin. Die Werkseinstellung bleibt unberuehrt, sie soll weiter als
+    // "-0" und "-01" sind nicht die kanonische Schreibweise der SSID. Was aus
+    // dem Flash kommt, wird deshalb einmal beim Start geradegezogen -- das
+    // save_settings() darunter schreibt es ohnehin. Ein Rufzeichen ohne SSID
+    // bleibt, wie es ist. Die Werkseinstellung bleibt unberuehrt, sie soll weiter als
     // "noch nicht konfiguriert" erkennbar sein.
     if(!isNodeUnconfigured(meshcom_settings.node_call))
     {
@@ -850,7 +850,7 @@ void esp32setup()
 
         if(normalizeOwnCall(sOwnCall) && strcmp(sOwnCall.c_str(), meshcom_settings.node_call) != 0)
         {
-            printfdeb("[INIT]...Call <%s> -> <%s> (SSID ergaenzt)\n", meshcom_settings.node_call, sOwnCall.c_str());
+            printfdeb("[INIT]...Call <%s> -> <%s> (SSID kanonisch)\n", meshcom_settings.node_call, sOwnCall.c_str());
 
             snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sOwnCall.c_str());
             snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());

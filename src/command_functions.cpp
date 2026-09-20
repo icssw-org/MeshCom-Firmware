@@ -3629,9 +3629,9 @@ void commandAction(char *umsg_text, bool ble)
             return;
         }
 
-        // Ein Rufzeichen ohne SSID ist im Netz nicht eindeutig, und "-01" ist
-        // dieselbe Station wie "-1". Beides hier einmal geradeziehen, bevor es
-        // gespeichert wird und auf die Luft geht.
+        // "-01" ist dieselbe Station wie "-1", und "-0" dasselbe wie keine SSID.
+        // Hier einmal geradeziehen, bevor es gespeichert wird und auf die Luft
+        // geht. Ein Rufzeichen ohne SSID bleibt zulaessig.
         if(!normalizeOwnCall(sVar))
         {
             printfdeb("\n[ERR]..Callsign <%s> too long with SSID\n", sVar.c_str());

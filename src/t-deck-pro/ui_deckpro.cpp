@@ -2341,7 +2341,7 @@ void btn_event_handler_save(lv_event_t * e)
             return;
         }
 
-        // SSID ergaenzen bzw. auf die kanonische Form ziehen, wie bei --setcall.
+        // SSID auf die kanonische Form ziehen, wie bei --setcall.
         if(!normalizeOwnCall(sCall))
         {
             Serial.printf("\n[ERR]..Callsign <%s> too long with SSID\n", sCall.c_str());

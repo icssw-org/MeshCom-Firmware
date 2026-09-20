@@ -60,7 +60,7 @@ void webSetup_setParam(setupStruct *setupData){
         snprintf(message_text, sizeof(message_text), "--setcall %s", setupData->paramValue.c_str());                   // set command string
         commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
         // --setcall speichert das Rufzeichen in Grossbuchstaben und mit
-        // kanonischer SSID. Der Vergleich muss deshalb gegen dieselbe Form
+        // kanonisch geschriebener SSID. Der Vergleich muss deshalb gegen dieselbe Form
         // laufen wie die, die der Knoten ablegt -- sonst meldet die GUI
         // "Value could not be set.", obwohl das Rufzeichen gesetzt wurde.
         String sWanted = setupData->paramValue;
