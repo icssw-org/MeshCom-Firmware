@@ -3,6 +3,7 @@ This file contains all web-based setup functions
 */
 #include "web_setup.h"
 #include <command_functions.h>
+#include <regex_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <string> 
@@ -58,7 +59,15 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("setcall")) {        
         snprintf(message_text, sizeof(message_text), "--setcall %s", setupData->paramValue.c_str());                   // set command string
         commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
-        setupData->returnCode = strcmp(meshcom_settings.node_call, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parameter was accepted, return with corresponding code
+        // --setcall speichert das Rufzeichen in Grossbuchstaben und mit
+        // kanonisch geschriebener SSID. Der Vergleich muss deshalb gegen dieselbe Form
+        // laufen wie die, die der Knoten ablegt -- sonst meldet die GUI
+        // "Value could not be set.", obwohl das Rufzeichen gesetzt wurde.
+        String sWanted = setupData->paramValue;
+        sWanted.trim();
+        sWanted.toUpperCase();
+        normalizeOwnCall(sWanted);
+        setupData->returnCode = strcmp(meshcom_settings.node_call, sWanted.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parameter was accepted, return with corresponding code
         setupData->returnValue = meshcom_settings.node_call;                                                           // send back the current used value
         return;
     } else
@@ -203,11 +212,11 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("setlat")) {
         snprintf(message_text, sizeof(message_text), "--setlat %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        #ifdef ESP32
-        setupData->returnCode = (fabs(meshcom_settings.node_lat) == fabs(setupData->paramValue.toDouble()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        #else
-        setupData->returnCode = (meshcom_settings.node_lat == setupData->paramValue.toFloat())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        #endif
+        // node_lat ist double, der nRF52-Core hat kein String::toDouble(): ein
+        // float-Vergleich scheitert fuer fast jede Koordinate (49.997 != 49.9970016f).
+        // atof() liefert auf beiden Cores double; fabs(), weil --setlat negative
+        // Werte als Betrag plus 'S'/'W' ablegt.
+        setupData->returnCode = (fabs(meshcom_settings.node_lat - fabs(atof(setupData->paramValue.c_str()))) < 1e-7)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = String(meshcom_settings.node_lat,6);
         return;
     } else
@@ -215,11 +224,11 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("setlon")) {
         snprintf(message_text, sizeof(message_text), "--setlon %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
-        #ifdef ESP32
-        setupData->returnCode = (fabs(meshcom_settings.node_lon) == fabs(setupData->paramValue.toDouble()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        #else
-        setupData->returnCode = (meshcom_settings.node_lon == setupData->paramValue.toFloat())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        #endif
+        // node_lon ist double, der nRF52-Core hat kein String::toDouble(): ein
+        // float-Vergleich scheitert fuer fast jede Koordinate (49.997 != 49.9970016f).
+        // atof() liefert auf beiden Cores double; fabs(), weil --setlon negative
+        // Werte als Betrag plus 'S'/'W' ablegt.
+        setupData->returnCode = (fabs(meshcom_settings.node_lon - fabs(atof(setupData->paramValue.c_str()))) < 1e-7)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = String(meshcom_settings.node_lon,6);
         return;
     } else

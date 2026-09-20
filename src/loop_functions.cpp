@@ -682,17 +682,13 @@ void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
         printfdeb("<%s> BLEComToPhone RingBuff added len=%i to element: %u\n", buffer, len, ComToPhoneWrite);
     }
 
-    ComToPhoneWrite++;
-    
-    //printfdeb("toPhoneWrite:%i\n", toPhoneWrite);
+    // Wie beim Nachrichten-Ring: beim Ueberlauf den Lesezeiger mitziehen, sonst
+    // haelt der Drain (ComToPhoneWrite != ComToPhoneRead) nach genau MAX_RING
+    // Schreibvorgaengen den Ring fuer leer und sendet gar nichts.
+    if(bBLEDEBUG && ((ComToPhoneWrite + 1) % MAX_RING) == ComToPhoneRead)
+        printfdeb("[ERR]...BLEComToPhoneRingBuff overflow! oldest element dropped\n");
 
-    if (ComToPhoneWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-    {
-        if(bBLEDEBUG)
-            printfdeb("[ERR]...BLEComToPhoneRingBuff overflow! Reset to 0 from %i\n", ComToPhoneWrite);
-
-        ComToPhoneWrite = 0;
-    }
+    addRingPointer(ComToPhoneWrite, ComToPhoneRead, MAX_RING, "com");
 }
 
 void addBLECommandBack(char text[UDP_TX_BUF_SIZE])

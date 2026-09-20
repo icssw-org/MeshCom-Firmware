@@ -127,6 +127,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <regex_functions.h>
 #include <test_inject.h>
 #include <command_functions.h>
 #include <phone_commands.h>
@@ -838,6 +839,24 @@ void esp32setup()
     meshcom_settings.node_mversion = MODUL_HARDWARE;
     meshcom_settings.node_cleanflash = 0;
     snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%-4.4s%-1.1s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+
+    // "-0" und "-01" sind nicht die kanonische Schreibweise der SSID. Was aus
+    // dem Flash kommt, wird deshalb einmal beim Start geradegezogen -- das
+    // save_settings() darunter schreibt es ohnehin. Ein Rufzeichen ohne SSID
+    // bleibt, wie es ist. Die Werkseinstellung bleibt unberuehrt, sie soll weiter als
+    // "noch nicht konfiguriert" erkennbar sein.
+    if(!isNodeUnconfigured(meshcom_settings.node_call))
+    {
+        String sOwnCall = meshcom_settings.node_call;
+
+        if(normalizeOwnCall(sOwnCall) && strcmp(sOwnCall.c_str(), meshcom_settings.node_call) != 0)
+        {
+            printfdeb("[INIT]...Call <%s> -> <%s> (SSID kanonisch)\n", meshcom_settings.node_call, sOwnCall.c_str());
+
+            snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sOwnCall.c_str());
+            snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());
+        }
+    }
 
     save_settings();
 
@@ -3132,7 +3151,7 @@ void esp32loop()
                 //sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
             }
 
-            sendMheard();
+            startMheardToPhone(); // MHeard erst, wenn der Kommando-Ring leer ist (siehe unten)
 
             config_to_phone_prepare_timer = millis();
 
@@ -3158,6 +3177,11 @@ void esp32loop()
 
                         ble_wait = millis();
                     }
+                }
+                else if (mheardToPhonePending())
+                {
+                    // Kommando-Ring leer: naechste Portion der MHeard-Liste nachlegen
+                    sendMheard();
                 }
                 else if (toPhoneWrite != toPhoneRead)
                 {

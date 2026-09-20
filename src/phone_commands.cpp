@@ -1,6 +1,7 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <phone_commands.h>
+#include <regex_functions.h>
 #include <debugconf.h>
 #include <configuration.h>
 #include <batt_functions.h>
@@ -448,6 +449,14 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			String sVar = call_arr;
 			sVar.toUpperCase();
 			sVar.trim();
+
+			// Dieselbe Normalisierung wie bei --setcall -- sonst hebt der
+			// naechste Config-Schreibvorgang des Telefons die kanonische Form
+			// wieder auf. Bewusst ohne checkRegexCall(): dieser Pfad hat noch
+			// nie geprueft, und ihn jetzt scharf zu stellen wuerde Rufzeichen
+			// abweisen, die die App bisher setzen konnte. Passt die kanonische
+			// Form nicht in node_call, bleibt das Rufzeichen wie es kam.
+			normalizeOwnCall(sVar);
 
 			snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sVar.c_str());
 

@@ -687,16 +687,54 @@ String getValue(String data, char separator, int index)
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
+// MHeard-Liste zum Telefon, wiederaufnehmbar.
+//
+// Bis 4.35t wurde die komplette Liste in einem Loop-Durchlauf direkt hinter
+// die Config-Frames in BLEComToPhoneBuff (MAX_RING Slots) geschrieben. Ab
+// MAX_RING - json_configs_cnt gehoerten Stationen (11 bzw. 12) ueberschrieb
+// die Liste die Config-Frames, bevor der Drain sie senden konnte; die App sah
+// CONFFIN ohne jemals das I-Frame bekommen zu haben (leere Node Settings,
+// erst ein Reboot der Node half, weil er die MHeard-Liste leert).
+//
+// Jetzt setzt der Connect nur den Cursor; die Main-Loop ruft sendMheard()
+// erst, wenn der Kommando-Ring leer ist, und jeder Aufruf legt nur so viele
+// Eintraege nach, wie der Ring frei hat. Cursor -1 = nichts anstehend.
+static int mheard_send_cursor = -1;
+
+void startMheardToPhone()
+{
+    mheard_send_cursor = 0;
+}
+
+bool mheardToPhonePending()
+{
+    return mheard_send_cursor >= 0;
+}
+
+static int comRingFree()
+{
+    // ein Slot bleibt frei, sonst waere Write == Read und der Ring gilt als leer
+    return (ComToPhoneRead - ComToPhoneWrite - 1 + MAX_RING) % MAX_RING;
+}
+
 void sendMheard()
 {
     struct mheardLine mheardLine;
 
-    for(int iset=0; iset<MAX_MHEARD; iset++)
+    if(mheard_send_cursor < 0)
+        return;
+
+    for(; mheard_send_cursor < MAX_MHEARD; mheard_send_cursor++)
     {
+        int iset = mheard_send_cursor;
+
         if(mheardCalls[iset][0] != 0x00)
         {
             if((uint32_t)(millis() - mheardMillis[iset]) < MHEARD_PRUNE_WINDOW_MS)  // mheard last 12 hours (NC-01: millis(), not wall clock)
             {
+                if(comRingFree() == 0)
+                    return;     // Ring voll: naechster Aufruf macht hier weiter
+
                 initMheardLine(mheardLine);
 
                 mheardLine.mh_callsign = (char *)mheardCalls[iset];
@@ -760,6 +798,8 @@ void sendMheard()
             }
         }
     }
+
+    mheard_send_cursor = -1;
 }
 
 void showMHeard()
