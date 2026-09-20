@@ -1166,13 +1166,21 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         // APP Offline
                                         if(isPhoneReady == 0)
                                         {
-                                            aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline = true
+                                            // App-Offline-Flag nur fuer die BLE-Kopie setzen: encodeAPRS() serialisiert
+                                            // es aus dem Bool (0x20). Nicht in max_hop odern -- das Hop-Nibble muss rein
+                                            // bleiben, sonst laeuft der Relay-Guard unten bei Nibble 0 in den Unterlauf
+                                            // (0x20 - 1 = 0x1F, auf Luft 15 Hops). Danach den Empfangswert wiederherstellen,
+                                            // damit der Relay-Frame (encodeAPRS unten) das Flag nicht neu bekommt.
+                                            bool prev_app_offline = aprsmsg.msg_app_offline;
+                                            aprsmsg.msg_app_offline = true;
 
                                             uint8_t tempRcvBuffer[255];
 
                                             uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
                                             addBLEOutBuffer(tempRcvBuffer, tempsize);
+
+                                            aprsmsg.msg_app_offline = prev_app_offline;
                                         }
                                         else
                                         {
@@ -1428,7 +1436,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         if(rly_go)
                         {
                             // MESH only max. hops (default 3...TEXT 1...POS)
-                            if(aprsmsg.max_hop > 0)
+                            if((aprsmsg.max_hop & 0x0F) > 0)   // nur das Hop-Nibble zaehlt, Flag-Bits oeffnen den Relay-Guard nicht
                             {
                                 // only set Serverflag if connection to MeshCom-Server
                                 if(bGATEWAY && meshcom_settings.node_hasIPaddress)
