@@ -3122,7 +3122,7 @@ void esp32loop()
                 //sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
             }
 
-            sendMheard();
+            startMheardToPhone(); // MHeard erst, wenn der Kommando-Ring leer ist (siehe unten)
 
             config_to_phone_prepare_timer = millis();
 
@@ -3148,6 +3148,11 @@ void esp32loop()
 
                         ble_wait = millis();
                     }
+                }
+                else if (mheardToPhonePending())
+                {
+                    // Kommando-Ring leer: naechste Portion der MHeard-Liste nachlegen
+                    sendMheard();
                 }
                 else if (toPhoneWrite != toPhoneRead)
                 {
