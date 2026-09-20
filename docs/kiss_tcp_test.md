@@ -180,8 +180,17 @@ or point **aprx** at `/tmp/kt` as a KISS serial interface for an RX-only iGate.
   must match the node call) is the only TX restriction; there is no per-SSID
   whitelist and no "gateway mode" that relays arbitrary calls yet. A live but
   idle authenticated client still holds the single slot until it disconnects.
-- SSIDs > 15 are clamped to `-15` on the wire (AX.25 has 4 SSID bits); a MeshCom
-  two-digit SSID cannot be addressed from a KISS client.
+- SSIDs > 15 are clamped to `-15` on the wire (AX.25 has 4 SSID bits) for the
+  AX.25 source address; a KISS client's own source SSID is likewise limited to
+  0…15. The message *addressee* has no such limit — it is free 9-char APRS
+  text, so `:OE1XYZ-99:hi` reaches a two-digit-SSID station fine.
+- IRAM is razor-thin on the T-Beam family (~20 B free of 131072 before this
+  feature). `buildAx25()`'s digipeater-path parser therefore uses
+  `strchr()`/`strlen()`/`strcmp()`, not `strtok_r()` — `strtok_r` is otherwise
+  unused in the tree, and the ESP-IDF linker script keeps it IRAM-resident
+  (needed reachable with the flash cache off), so pulling it in for the first
+  time cost ~124 B of IRAM and overflowed the T-Beam link by 104 B. The
+  `strchr()` version is flash-resident and costs 0 IRAM.
 - TX: APRS message / ack / position payloads. Injected positions are sent as a
   MeshCom `!` beacon (no timestamp, no telemetry extension). `node_msgid` is
   still persisted to NVS per injected frame (shared with all senders).

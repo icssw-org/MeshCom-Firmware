@@ -177,20 +177,33 @@ static size_t buildAx25(const struct aprsMessage &m, uint8_t *out, size_t outsz)
 
     // Digipeater path = the relays in msg_source_path after the origin call.
     // Parsed in place in a private char copy — no per-frame String heap traffic.
+    // strchr-based, not strtok_r: strtok_r is the one libc.a object nothing
+    // else in the tree pulls in, and the ESP-IDF linker script keeps it
+    // IRAM-resident (reachable with the flash cache disabled) -- on boards
+    // with only ~20 B of iram0_0_seg headroom (T-Beam family) that ~124 B
+    // overflows the link. strchr/strlen/strcmp are already linked and
+    // flash-resident, so this costs 0 IRAM. Semantics: an empty field between
+    // two commas becomes a zero-length token instead of being collapsed away
+    // like strtok_r would -- harmless, the `if (*tok && ...)` guard below
+    // already drops empty tokens either way.
     char        pathbuf[128];
     snprintf(pathbuf, sizeof(pathbuf), "%s", m.msg_source_path.c_str());
     const char *digis[8];
     int         ndigi = 0;
     {
-        char *save = nullptr;
-        (void)strtok_r(pathbuf, ",", &save);      // origin call — skip
-        for (char *tok; ((tok = strtok_r(nullptr, ",", &save)) != nullptr) && ndigi < 8; )
+        char *p = strchr(pathbuf, ',');
+        p = p ? p + 1 : nullptr;              // origin call — skip
+        while (p && ndigi < 8)
         {
+            char *c = strchr(p, ',');
+            if (c) *c = 0;
+            char *tok = p;
             while (*tok == ' ') tok++;
             char *e = tok + strlen(tok);
             while (e > tok && e[-1] == ' ') *--e = 0;
             if (*tok && strcmp(tok, "*") != 0)
                 digis[ndigi++] = tok;
+            p = c ? c + 1 : nullptr;
         }
     }
 
