@@ -10,6 +10,7 @@
 #include <mheard_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <byte_fifo.h>
 #include <time.h>
 #include <lora_setchip.h>
 #include <rtc_functions.h>
@@ -876,9 +877,9 @@ void deliver_scaffold(bool bget_password)
     web_client.println("function sendMessage() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200 && this.responseText.indexOf(\"sendmessage ok\")>=0){var sc=document.getElementById(\"sendcall\");if(!/^[0-9]+$/.test(sc.value))sc.value=\"\"; document.getElementById(\"messagetext\").value=\"\"; updateCharsLeft();}};xhttp.open(\"GET\",\"/?sendmessage&tocall=\"+encodeURIComponent(document.getElementById(\"sendcall\").value)+\"&message=\"+encodeURIComponent(document.getElementById(\"messagetext\").value),true);xhttp.send();}\n");
     // this functions is counting and displaying the amount of chars left that the user can use to write a message
     web_client.println("function updateCharsLeft() {let maxlength=149;if(document.getElementById(\"sendcall\").value.length>0) {maxlength-=(document.getElementById(\"sendcall\").value.length)+2;}let msglength=document.getElementById(\"messagetext\").value.length;if(msglength>maxlength){document.getElementById(\"messagetext\").value=document.getElementById(\"messagetext\").value.substring(0,maxlength);msglength=maxlength;}document.getElementById(\"indicator_charsleft\").innerHTML=maxlength-msglength;}\n");
-    // MC-msg-history: BLEtoPhoneBuff/MAX_RING is only 20 slots and is shared
-    // with positions and acks, so a handful of new messages can push an old
-    // message out of the node's own ring within minutes. The browser tab
+    // MC-msg-history: the phone ring (phoneRing, RING_BYTES_PHONE bytes) is
+    // shared with positions and acks, so a handful of new messages can push
+    // an old message out of the node's own ring within minutes. The browser tab
     // keeps every message it has seen for the life of the page in
     // mcHistory/mcSeen (capped at MC_HIST_MAX, oldest dropped first) so
     // switching Info -> Messages -> Info -> Messages does not lose messages
@@ -1832,41 +1833,44 @@ void sub_page_setup()
  * ###########################################################################################################################
  * This will only deliver the preformatted messages to be loaded asyncronous into the WebUI scaffold
  */
-// The ring has no reader cursor of its own. toPhoneRead only advances when a
-// BLE client with an active "hello" session drains a slot, which happens
-// within ~100 ms of the write -- following toPhoneRead here reliably finds
-// an empty window while a phone is connected. toPhoneWrite always points at
-// the oldest surviving slot (the writer fills it, then wraps toPhoneWrite
-// forward), so scan the full ring from there instead. Upstream origin
-// 87c6c200.
+// bf_iter_begin()/bf_iter_next() (src/byte_fifo.h) walk the phone ring from
+// the oldest surviving frame to the newest, including frames sendToPhone()
+// has already popped -- exactly the "history" the old index scan from the
+// write cursor relied on (Upstream origin 87c6c200). If a writer evicts
+// frames mid-walk, the iterator stops there (byte_fifo.h): the page shows
+// what it still has instead of reading stale or re-wrapped memory.
 void sub_content_messages()
 {
     int rendered = 0;
-    int iStart = toPhoneWrite; // snapshot: the writer may advance it while we scan
 
-    if (bDEBUG)
-        Serial.printf("toPhoneWrite:%i\n", iStart);
+    bf_iter_t it;
+    bf_iter_begin(&phoneRing, &it);
 
-    for (int i = 0; i < MAX_RING; i++)
+    uint8_t frameBuf[MAX_MSG_LEN_PHONE];
+    uint8_t blelen;
+
+    while ((blelen = bf_iter_next(&phoneRing, &it, frameBuf, sizeof(frameBuf))) != 0)
     {
-        int iRead = (iStart + i) % MAX_RING;
-
-        if (BLEtoPhoneBuff[iRead][0] == 0) // 0 = slot never written since reboot
-            continue;
+        // bf_iter_next() liefert wie bf_peek() die volle Frame-Laenge, auch
+        // wenn sizeof(frameBuf) weniger kopiert hat. bf_push() laesst
+        // hoechstens 255 Byte zu (byte_fifo.cpp:59), frameBuf ist groesser --
+        // eine Laufzeitklemme kann also nie greifen; die Zusicherung haelt
+        // die Annahme fest.
+        static_assert(sizeof(frameBuf) >= 255,
+                      "frameBuf muss jeden bf_push()-Frame (max 255 B) fassen");
 
         if (bDEBUG)
-            Serial.printf("iRead:%i [1]:%02X\n", iRead, BLEtoPhoneBuff[iRead][1]);
+            Serial.printf("frame type:%02X\n", frameBuf[0]);
 
         uint8_t toPhoneBuff[MAX_MSG_LEN_PHONE] = {0}; // we need to insert the first byte text msg flag
-        uint8_t blelen = BLEtoPhoneBuff[iRead][0];    // MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
 
-        if (BLEtoPhoneBuff[iRead][1] == 0x91)
+        if (frameBuf[0] == 0x91)
         { // Mheard
-          // memcpy(toPhoneBuff, BLEtoPhoneBuff[iRead]+1, blelen-1);
+          // memcpy(toPhoneBuff, frameBuf, blelen-1);
         }
-        else if (BLEtoPhoneBuff[iRead][1] == 0x44)
+        else if (frameBuf[0] == 0x44)
         { // Data Message (JSON)
-          // memcpy(toPhoneBuff, BLEtoPhoneBuff[iRead]+1, blelen);
+          // memcpy(toPhoneBuff, frameBuf, blelen);
         }
         else if (blelen >= 4 && (size_t)(blelen - 4) <= sizeof(toPhoneBuff))
         { // Text Message and Position
@@ -1875,8 +1879,8 @@ void sub_content_messages()
             char timestamp[21];
             String ccheck = "";
 
-            memcpy(toPhoneBuff, BLEtoPhoneBuff[iRead] + 1, blelen - 4);
-            memcpy(tbuffer, BLEtoPhoneBuff[iRead] + 1 + (blelen - 4), 4);
+            memcpy(toPhoneBuff, frameBuf, blelen - 4);
+            memcpy(tbuffer, frameBuf + (blelen - 4), 4);
             unix_time = (tbuffer[0] << 24) | (tbuffer[1] << 16) | (tbuffer[2] << 8) | tbuffer[3];
             time_t unix_t = (time_t)(unix_time + (long)(meshcom_settings.node_utcoff * 60 * 60));
             struct tm *oldt = gmtime(&unix_t);

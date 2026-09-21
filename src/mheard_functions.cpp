@@ -1,6 +1,7 @@
 #include <aprs_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <byte_fifo.h>
 #include <debugconf.h>
 #include <ArduinoJson.h>
 #include <ble_json_frame.h>
@@ -690,7 +691,7 @@ String getValue(String data, char separator, int index)
 // MHeard-Liste zum Telefon, wiederaufnehmbar.
 //
 // Bis 4.35t wurde die komplette Liste in einem Loop-Durchlauf direkt hinter
-// die Config-Frames in BLEComToPhoneBuff (MAX_RING Slots) geschrieben. Ab
+// die Config-Frames in den Kommando-Ring (damals MAX_RING Slots) geschrieben. Ab
 // MAX_RING - json_configs_cnt gehoerten Stationen (11 bzw. 12) ueberschrieb
 // die Liste die Config-Frames, bevor der Drain sie senden konnte; die App sah
 // CONFFIN ohne jemals das I-Frame bekommen zu haben (leere Node Settings,
@@ -711,12 +712,6 @@ bool mheardToPhonePending()
     return mheard_send_cursor >= 0;
 }
 
-static int comRingFree()
-{
-    // ein Slot bleibt frei, sonst waere Write == Read und der Ring gilt als leer
-    return (ComToPhoneRead - ComToPhoneWrite - 1 + MAX_RING) % MAX_RING;
-}
-
 void sendMheard()
 {
     struct mheardLine mheardLine;
@@ -732,9 +727,6 @@ void sendMheard()
         {
             if((uint32_t)(millis() - mheardMillis[iset]) < MHEARD_PRUNE_WINDOW_MS)  // mheard last 12 hours (NC-01: millis(), not wall clock)
             {
-                if(comRingFree() == 0)
-                    return;     // Ring voll: naechster Aufruf macht hier weiter
-
                 initMheardLine(mheardLine);
 
                 mheardLine.mh_callsign = (char *)mheardCalls[iset];
@@ -793,6 +785,19 @@ void sendMheard()
                 bleBuffer[0] = 0x44;
                 // Schranke ist der Puffer, nicht die JSON-Laenge (UP-01, BND-03)
                 uint16_t frame_len = bleJsonFrame(mhdoc, bleBuffer, sizeof(bleBuffer));
+
+                // Platz EXAKT pruefen, erst wenn die Framelaenge feststeht.
+                // Eine Schaetzung vorab (frueher comRingFree() mit einer
+                // angenommenen mittleren Framelaenge) ist hier nicht gut genug:
+                // liegt sie zu hoch, verdraengt bf_push2() beim Platzmangel die
+                // aeltesten Frames -- und das sind die, die dieser selbe
+                // sendMheard()-Aufruf gerade erst geschrieben hat. Die Liste
+                // verlor dann still Eintraege. Mit der echten Laenge kann das
+                // nicht passieren: passt sie nicht, bleibt der Cursor stehen
+                // und der naechste Aufruf macht an derselben Stelle weiter,
+                // nachdem der Drain Platz geschaffen hat.
+                if((uint32_t)bf_used(&phoneComRing) + frame_len + 1u > phoneComRing.cap)
+                    return;
 
                 addBLEComToOutBuffer(bleBuffer, frame_len);
             }

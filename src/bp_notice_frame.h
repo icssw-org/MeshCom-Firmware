@@ -21,7 +21,7 @@
 // sent to (a group, a DM call, or "*"), not a hardcoded broadcast -- a
 // notice for a message the operator typed into group 20 should show up in
 // the 20 chat, not vanish into "*". What actually keeps the frame off the
-// air is that it is only ever written to BLEtoPhoneBuff / the EXTUDP
+// air is that it is only ever written to the phone ring / the EXTUDP
 // socket, never to the TX ring, plus BP-11 (bpIsOwnWording(),
 // backpressure.h), which refuses the frame if a client feeds it back into
 // sendMessage().

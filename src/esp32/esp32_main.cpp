@@ -3168,7 +3168,7 @@ void esp32loop()
                 // prepare JSON config to phone after BLE connection
                 // send JSON config to phone after BLE connection
                 // wait at least 300ms between sending messages
-                if (ComToPhoneWrite != ComToPhoneRead)
+                if (!bf_empty(&phoneComRing))
                 {
                     // check every 300 ms to send to phone
                     if ((uint32_t)(millis() - ble_wait) >= 300)
@@ -3183,7 +3183,7 @@ void esp32loop()
                     // Kommando-Ring leer: naechste Portion der MHeard-Liste nachlegen
                     sendMheard();
                 }
-                else if (toPhoneWrite != toPhoneRead)
+                else if (!bf_empty(&phoneRing))
                 {
                     // wait for each message to send to phone
                     if ((uint32_t)(millis() - ble_wait) >= 400)

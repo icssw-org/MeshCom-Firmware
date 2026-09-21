@@ -1875,7 +1875,7 @@ void nrf52loop()
             {
                 // prepare JSON config to phone after BLE connection
                 // send JSON config to phone after BLE connection
-                if (ComToPhoneWrite != ComToPhoneRead)
+                if (!bf_empty(&phoneComRing))
                 {
                     sendComToPhone();
                 }
@@ -1884,7 +1884,7 @@ void nrf52loop()
                     // Kommando-Ring leer: naechste Portion der MHeard-Liste nachlegen
                     sendMheard();
                 }
-                else if (toPhoneWrite != toPhoneRead)
+                else if (!bf_empty(&phoneRing))
                 {
                     sendToPhone();
                 }
@@ -3053,30 +3053,41 @@ void checkSerialCommand(void)
  */
 void sendUDP()
 {
-    if(udpWrite != udpRead)
+    if(!bf_empty(&udpOutRing))
     {
         if(bDisplayCont)
-            Serial.printf("udpWrite:%i udpRead:%i neth.udp_is_busy:%i\n", udpWrite, udpRead, neth.udp_is_busy);
+            Serial.printf("udpOutRing unread:%u used:%u neth.udp_is_busy:%i\n", bf_unread(&udpOutRing), bf_used(&udpOutRing), neth.udp_is_busy);
 
         if(!neth.udp_is_busy)
         {
             // CONC-16 (nRF52-Leser): der Schreiber addUdpOutBuffer() laeuft
-            // ueber addNodeData() im Timer-Service-Task (OnRxDone, siehe
-            // C-01) und kann diesen Slot per Ring-voll-Eviction ueberholen,
-            // waehrend hier gesendet wird. Laenge und Payload deshalb als
-            // Snapshot unter kurzem Lock lesen und den Index-Advance unten
-            // gegen ein zwischenzeitliches Vorruecken sichern — gleiche
-            // Behandlung wie sendMeshComUDP() in udp_functions.cpp (ESP32).
-            // Snapshot bewusst groesser als der Quell-Slot und nullgefuellt
-            // (siehe dortige Begruendung).
+            // ueber addNodeData() im dedizierten 16 kB _lora_task (OnRxDone,
+            // siehe C-01, board.cpp:498) und kann den aeltesten Frame per
+            // Ring-voll-Eviction unter uns wegziehen, waehrend hier gesendet
+            // wird. Deshalb: bf_peek() kopiert den Frame in einen Snapshot,
+            // bf_tail_gen() wird direkt danach gemerkt, und erst nach dem
+            // Senden wird gegen den gemerkten Stand geprueft, ob tail noch
+            // auf denselben Frame zeigt, bevor bf_pop() ihn entnimmt --
+            // gleiche Behandlung wie sendMeshComUDP() in udp_functions.cpp
+            // (ESP32).
             static uint8_t udpSnapshot[UDP_TX_BUF_SIZE+64] = {0};
-            int mySlot = udpRead;
-            /*BISECT*/ memcpy(udpSnapshot, ringBufferUDPout[mySlot], sizeof(ringBufferUDPout[0]));
+            uint16_t msg_len = bf_peek(&udpOutRing, udpSnapshot, (uint16_t)sizeof(udpSnapshot));
+            // bf_peek() liefert die VOLLE Frame-Laenge, auch wenn weniger
+            // als das in outmax kopiert wurde; vor der Verwendung als Index
+            // in udpSnapshot kappen. Der 1..255-Vertrag von bf_push() macht
+            // das in der Praxis zum No-op (255 < sizeof(udpSnapshot)).
+            if (msg_len > sizeof(udpSnapshot))
+                msg_len = (uint16_t)sizeof(udpSnapshot);
 
-            uint16_t msg_len = udpSnapshot[0];
+            // Generation direkt nach dem peek: verdraengt ein Schreiber
+            // genau diesen Frame, bevor wir unten bf_pop()en, zaehlt
+            // tail_gen() weiter (siehe bf_tail_gen() in byte_fifo.h). Dann
+            // darf NICHT gepopt werden, sonst traefe es den falschen
+            // (naechsten) Frame.
+            uint16_t myGen = bf_tail_gen(&udpOutRing);
 
             // send it over UDP
-            if (!neth.sendUDP(udpSnapshot + 1, msg_len))
+            if (!neth.sendUDP(udpSnapshot, msg_len))
             {
                 Serial.printf("Sending UDP Packet failed <%i>!\n", msg_len);
 
@@ -3098,16 +3109,13 @@ void sendUDP()
             }
             else
             {
-                // UDP DATA Header 36 byte. Der Slot enthaelt msg_len Bytes ab
-                // Offset 1 (Header + APRS-Frame); msg_len Bytes ab Offset 1+36
-                // zu kopieren las 36 Bytes ueber das Geschriebene hinaus — bei
-                // msg_len > 239 sogar ueber das Slot-Ende (Slot ist
-                // UDP_TX_BUF_SIZE+20). Wahre APRS-Laenge ist msg_len-36.
-                // (Nebenbefund aus dem CONC-16-Commit; auf nRF52-Gateways
-                // aktiv — Schreiber ist addUdpOutBuffer() via addNodeData(),
-                // auf Hardware am TX-UDP-Log verifiziert.)
+                // UDP DATA Header 36 Byte. udpSnapshot enthaelt msg_len Bytes
+                // ab Offset 0 (Header + APRS-Frame) -- der alte Schlitzring
+                // hatte hier noch ein Laengen-Byte an Offset 0 und die
+                // Nutzlast begann erst bei 1; bf_peek() liefert sie schon
+                // ohne dieses Byte. Wahre APRS-Laenge ist msg_len-36.
                 uint16_t aprs_len = (msg_len > 36) ? (uint16_t)(msg_len - 36) : 0;
-                memcpy(convBuffer, udpSnapshot + 1 + 36, aprs_len);
+                memcpy(convBuffer, udpSnapshot + 36, aprs_len);
 
                 if(aprs_len > 0 && (convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40))
                 {
@@ -3131,17 +3139,14 @@ void sendUDP()
                 }
             }
 
-            // zero out sent buffer and advance the read pointer under the same
-            // lock as the writer's addRingPointer() (CONC-16). Guard against a
-            // writer having already force-advanced udpRead past us via the
-            // ring-full eviction path while we were sending.
-            /*BISECT*/ if (udpRead == mySlot)
-            {
-                memset(ringBufferUDPout[mySlot], 0, UDP_TX_BUF_SIZE);
-                udpRead++;
-                if (udpRead >= MAX_RING_UDP)
-                    udpRead = 0;
-            }
+            // Frame erst nach dem Senden entnehmen (bf_pop() sperrt intern,
+            // gleiches Schema wie der Writer, CONC-16) -- aber nur, wenn er
+            // noch der ist, den bf_peek() geliefert hat. Guard gegen einen
+            // Schreiber, der ihn waehrend des Sendens per Ring-voll-Eviction
+            // schon verdraengt hat: dann zeigt tail auf einen anderen Frame,
+            // und ein bf_pop() hier wuerde den falschen treffen.
+            if (bf_tail_gen(&udpOutRing) == myGen)
+                bf_pop(&udpOutRing);
 
         }
         else

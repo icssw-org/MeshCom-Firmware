@@ -7,6 +7,7 @@
 #endif
 
 #include "loop_functions.h"
+#include "byte_fifo.h"
 #include "ack_attribution.h"
 #include "txring_functions.h"
 #include "bp_notice_frame.h"
@@ -448,20 +449,16 @@ int RAWLoRaRead=0;
 // Flag set by app-layer auth failure to request BLE disconnection
 bool ble_disconnect_requested = false;
 
-// RINGBUFFER for outgoing UDP lora packets for lora TX
-uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE+20];
-int udpWrite=0;
-int udpRead=0;
+// RINGBUFFER for outgoing UDP lora packets for lora TX -- jetzt Byte-Ring
+// (byte_fifo.h) statt MAX_RING_UDP Schlitzen zu je UDP_TX_BUF_SIZE+20.
+static uint8_t udpOutStore[RING_BYTES_UDP];
+byte_fifo_t udpOutRing = BYTE_FIFO_INIT(udpOutStore);
 
-// RINGBUFFER BLE to phone
-unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE+5] = {0};
-int toPhoneWrite=0;
-int toPhoneRead=0;
-
-// RINGBUFFER BLE Commandos to phone
-unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE+5] = {0};
-int ComToPhoneWrite=0;
-int ComToPhoneRead=0;
+// RINGBUFFER BLE to phone -- jetzt Byte-Ringe (byte_fifo.h) statt Schlitzfelder.
+static uint8_t phoneStore[RING_BYTES_PHONE];
+static uint8_t phoneComStore[RING_BYTES_PHONECOM];
+byte_fifo_t phoneRing    = BYTE_FIFO_INIT(phoneStore);
+byte_fifo_t phoneComRing = BYTE_FIFO_INIT(phoneComStore);
 
 bool hasMsgFromPhone = false;
 
@@ -604,60 +601,44 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
     if (len > maxlen)
         len = maxlen;
 
-    // CONC-15: toPhoneWrite/toPhoneRead are plain ints. addBLEOutBuffer() is
-    // reachable from OnRxDone (the FreeRTOS timer-service task on nRF52,
-    // priority 2, see C-01) while sendToPhone() drains the same ring from the
-    // Main Loop task. Snapshot the target slot before the critical section so
-    // the debug print below (kept outside the lock — it can call into
-    // Serial/heap) still reports the slot this call actually wrote.
-    uint8_t debugSlot = (uint8_t)toPhoneWrite;
-#if defined(NRF52_SERIES)
-    taskENTER_CRITICAL();
-#endif
+    // CONC-15: addBLEOutBuffer() is reachable from OnRxDone (the FreeRTOS
+    // timer-service task on nRF52, priority 2, see C-01) while sendToPhone()
+    // drains the same ring from the Main Loop task. bf_push2() takes its own
+    // lock (BF_LOCK, byte_fifo.cpp) around the whole append -- nesting a
+    // taskENTER_CRITICAL() here around a lock that already exists inside
+    // bf_push2() would only gain a second, redundant critical section.
+    uint8_t statusByte = buffer[0];
+    int lost;
 
-    //first two bytes are always the message length
-    memcpy(BLEtoPhoneBuff[toPhoneWrite] + 1, buffer, len);
-
-    if(buffer[0] != 'D')
+    if (statusByte != 'D')
     {
         unsigned long unix_time = getUnixClock();
 
         //printfdeb("UNIX TME:%lu\n", unix_time);
 
-        uint8_t tbuffer[5];
+        uint8_t tbuffer[4];
         tbuffer[0] = (unix_time >> 24) & 0xFF;
         tbuffer[1] = (unix_time >> 16) & 0xFF;
         tbuffer[2] = (unix_time >> 8) & 0xFF;
         tbuffer[3] = (unix_time) & 0xFF;
-        memcpy(BLEtoPhoneBuff[toPhoneWrite] + len + 1, tbuffer, 4);
 
-        BLEtoPhoneBuff[toPhoneWrite][0] = len + 4;
+        lost = bf_push2(&phoneRing, buffer, (uint8_t)len, tbuffer, 4);
     }
     else
-        BLEtoPhoneBuff[toPhoneWrite][0] = len;
-
-    //printfdeb("toPhone write:%i read:%i max:%i ", toPhoneWrite, toPhoneRead, MAX_RING);
-
-    addRingPointer(toPhoneWrite, toPhoneRead, MAX_RING, "phone");
-
-#if defined(NRF52_SERIES)
-    taskEXIT_CRITICAL();
-#endif
+        lost = bf_push(&phoneRing, buffer, (uint8_t)len);
 
     if(bBLEDEBUG)
     {
-        printfdeb("<%02X>BLEtoPhone RingBuff added len=%i to element: %u\n", buffer[0], len, debugSlot);
-        printBuffer(BLEtoPhoneBuff[debugSlot], len + 1 + 4);
+        printfdeb("<%02X>BLEtoPhone RingBuff added len=%i frames=%u\n", statusByte, len, (unsigned)bf_frames(&phoneRing));
+        printBuffer(buffer, len);
     }
 
-    //printfdeb("next write:%i read:%i max:%i\n", toPhoneWrite, toPhoneRead, MAX_RING);
-
-    /*
-    toPhoneWrite++;
-    //printfdeb("toPhoneWrite:%i\n", toPhoneWrite);
-    if (toPhoneWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-        toPhoneWrite = 0;
-    */
+    // Anders als beim alten Schlitzring (addRingPointer() liess "phone"
+    // bewusst aus, um das Log nicht mit der haeufigsten Ring-Sorte
+    // zuzuschuetten) liefert bf_push2() jetzt eine echte Verdraengungszahl --
+    // die melden wir, statt sie wie zuvor stillschweigend zu verwerfen.
+    if(bLORADEBUG && lost > 0)
+        printfdeb("[MC-DBG] RING_OVERFLOW buf=phone lost=%d\n", lost);
 }
 
 /** @brief Function adding config messages into outgoing BLE ringbuffer
@@ -674,22 +655,20 @@ void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
         len = 245; // clamp - length byte and destination buffer both size to this
     }
 
-    //first two bytes are always the message length
-    BLEComToPhoneBuff[ComToPhoneWrite][0] = len;
-    memcpy(BLEComToPhoneBuff[ComToPhoneWrite] + 1, buffer, len);
+    // Anders als sein Geschwister addBLEOutBuffer() hatte dieser Schreiber nie
+    // einen eigenen kritischen Abschnitt -- eine Bestandsluecke, keine Absicht.
+    // bf_push() sperrt jetzt intern (BF_LOCK, byte_fifo.cpp) und schliesst sie
+    // als Nebeneffekt dieser Umstellung: Verhalten aendert sich, aber nur zum
+    // Besseren (gleichzeitiger Zugriff war vorher ungesichert).
+    int lost = bf_push(&phoneComRing, buffer, (uint8_t)len);
 
     if(bBLEDEBUG)
     {
-        printfdeb("<%s> BLEComToPhone RingBuff added len=%i to element: %u\n", buffer, len, ComToPhoneWrite);
+        printfdeb("<%s> BLEComToPhone RingBuff added len=%i frames=%u\n", buffer, len, (unsigned)bf_frames(&phoneComRing));
     }
 
-    // Wie beim Nachrichten-Ring: beim Ueberlauf den Lesezeiger mitziehen, sonst
-    // haelt der Drain (ComToPhoneWrite != ComToPhoneRead) nach genau MAX_RING
-    // Schreibvorgaengen den Ring fuer leer und sendet gar nichts.
-    if(bBLEDEBUG && ((ComToPhoneWrite + 1) % MAX_RING) == ComToPhoneRead)
-        printfdeb("[ERR]...BLEComToPhoneRingBuff overflow! oldest element dropped\n");
-
-    addRingPointer(ComToPhoneWrite, ComToPhoneRead, MAX_RING, "com");
+    if(bBLEDEBUG && lost > 0)
+        printfdeb("[ERR]...BLEComToPhoneRingBuff overflow! oldest element dropped (lost=%d)\n", lost);
 }
 
 void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
@@ -3659,7 +3638,7 @@ static void bpDeliver(const char *text, MsgOrigin origin, const char *dst)
 
         case ORIGIN_BLE:
         case ORIGIN_WEB:
-            // Both land in BLEtoPhoneBuff via bpNoticeToPhone(): the phone
+            // Both land in phoneRing via bpNoticeToPhone(): the phone
             // app drains it in sendToPhone(), the web GUI reads the same ring
             // for its message list (web_functions.cpp ~1293). Framed under
             // the node's own callsign (msg_id via bpNextMsgId(), E5;

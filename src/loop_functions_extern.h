@@ -9,6 +9,7 @@
  *  @date        2025-12-03
  */
 
+#include "byte_fifo.h"
 #include <atomic>
 
 // WQ-01 (2026-09-05): queue panel on the rxlog web page -- pulls in
@@ -260,22 +261,19 @@ extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5];
 extern int RAWLoRaWrite;
 extern int RAWLoRaRead;
 
-// RINGBUFFER for outgoing UDP lora packets for lora TX
-extern uint8_t ringBufferUDPout[MAX_RING_UDP][UDP_TX_BUF_SIZE+20];
-extern int udpWrite;
-extern int udpRead;
+// Die drei Ausgangsringe -- UDP-Ausgang, Telefon-Daten, Telefon-Kommandos --
+// sind Byte-Ringe (src/byte_fifo.h) statt Schlitzfelder: die Frames liegen
+// dicht hintereinander, nicht in Schlitzen zu je 246 bis 280 Byte, die im
+// Mittel zu 70 % leer standen. Die Lese- und Schreibzeiger sind jetzt
+// Interna des Rings; Aufrufer nehmen bf_push/bf_peek/bf_pop, und der Verlauf
+// fuer die Web-Nachrichtenseite laeuft ueber bf_iter_begin/bf_iter_next.
+// Jede Operation sperrt sich auf nRF52 selbst (BF_LOCK), die frueheren
+// kritischen Abschnitte an den Aufrufstellen sind deshalb entfallen.
+extern byte_fifo_t udpOutRing;
+extern byte_fifo_t phoneRing;
+extern byte_fifo_t phoneComRing;
 
 extern bool hasMsgFromPhone;
-
-// BLE Ringbuffer to phone
-extern unsigned char BLEtoPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE+5];
-extern int toPhoneWrite;
-extern int toPhoneRead;
-
-// BLE Commands Ringbuffer to phone
-extern unsigned char BLEComToPhoneBuff[MAX_RING][MAX_MSG_LEN_PHONE+5];
-extern int ComToPhoneWrite;
-extern int ComToPhoneRead;
 
 // ringBufferLoraRX/loraWrite werden jetzt in dedup_functions.h deklariert.
 

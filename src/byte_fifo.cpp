@@ -130,9 +130,17 @@ void bf_pop(byte_fifo_t *f)
 
 void bf_iter_begin(const byte_fifo_t *f, bf_iter_t *it)
 {
+    // Unter Sperre: sonst kann zwischen den drei Lesezugriffen eine
+    // Verdraengung liegen, und der Iterator startet mit einem pos von VOR
+    // und einem gen von NACH der Verdraengung. bf_iter_next() haelt das
+    // fuer gueltig, liest ein beliebiges Byte als Laenge und liefert Muell,
+    // bis left aufgebraucht ist (in-bounds, aber sichtbar auf der
+    // Web-Nachrichtenseite).
+    BF_LOCK();
     it->pos = f->oldest;
     it->left = f->frames;
     it->gen = f->evict_gen;
+    BF_UNLOCK();
 }
 
 uint8_t bf_iter_next(byte_fifo_t *f, bf_iter_t *it, uint8_t *out, uint16_t outmax)

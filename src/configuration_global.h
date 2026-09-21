@@ -244,7 +244,9 @@ static inline bool flashLayoutCompatible(int stored)
 #define MAX_RING 20                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
 #define MAX_LOG 20                         // max count of messages in ringbuffer
-#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
+#define RING_BYTES_PHONE 2048              // Byte-Ring BLE-Daten zum Telefon (war Schlitzfeld)
+#define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
+#define RING_BYTES_UDP 2048                // Byte-Ring UDP-Ausgang
 #elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(BOARD_RAK4630)
 // ESP32-S3 (320 KB SRAM) and nRF52840 (256 KB RAM) — full buffer sizes
 #define MAX_MHEARD 80                      // max count of messages in mheard ringbuffer (was 20, 85-124 H00 nodes observed)
@@ -252,14 +254,18 @@ static inline bool flashLayoutCompatible(int stored)
 #define MAX_RING 20                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 100                 // dedup ring for received msg_ids (was 60, wraparounds observed)
 #define MAX_LOG 10                         // max count of messages in LOG-ringbuffer (ram_opti)
-#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
+#define RING_BYTES_PHONE 3072              // Byte-Ring BLE-Daten zum Telefon (war Schlitzfeld)
+#define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
+#define RING_BYTES_UDP 3072                // Byte-Ring UDP-Ausgang
 #elif defined(ENABLE_TBEAM)                // very smal version only for developer tests
 #define MAX_MHEARD 10                      // max count of messages in mheard ringbuffer (was 20, limited by DRAM)
 #define MAX_MHPATH 10                      // max count of messages in mhpath ringbuffer (was 30, limited by DRAM)
 #define MAX_RING 10                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 10                  // dedup ring for received msg_ids (was 60)
 #define MAX_LOG 10                         // max count of messages in LOG-ringbuffer
-#define MAX_RING_UDP 10                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
+#define RING_BYTES_PHONE 1024              // Byte-Ring BLE-Daten zum Telefon (war Schlitzfeld)
+#define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
+#define RING_BYTES_UDP 1024                // Byte-Ring UDP-Ausgang
 #else
 // ESP32 original (~160 KB DRAM) — reduced buffer sizes due to RAM constraints
 #define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer (was 20, limited by DRAM)
@@ -274,7 +280,9 @@ static inline bool flashLayoutCompatible(int stored)
 #define MAX_RING 20                        // max count of messages in ringbuffer (was 30, MEM-01)
 #define MAX_DEDUP_RING 70                  // dedup ring for received msg_ids (was 60)
 #define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
-#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa (was 25, MEM-01)
+#define RING_BYTES_PHONE 2048              // Byte-Ring BLE-Daten zum Telefon (war Schlitzfeld)
+#define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
+#define RING_BYTES_UDP 2048                // Byte-Ring UDP-Ausgang
 #endif
 
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message

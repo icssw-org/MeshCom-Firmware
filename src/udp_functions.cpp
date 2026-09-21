@@ -667,39 +667,45 @@ void sendMeshComUDP()
     if((uint32_t)node_hostip == 0)   // F6: Serveradresse noch nicht aufgeloest
       return;
 
-    if(udpWrite != udpRead)
+    if(!bf_empty(&udpOutRing))
     {
         if(!udp_is_busy)
         {
-            // CONC-16: snapshot the slot before the (comparatively slow) UDP
-            // send touches it. addUdpOutBuffer() (CONC-16) can wrap the ring
-            // and overwrite this exact slot from OnRxDone (nRF52 timer-
-            // service task, see C-01) while Udp.write()/endPacket() below are
-            // still running; everything from here on reads udpSnapshot, never
-            // the live ring again.
+            // CONC-16: snapshot the frame before the (comparatively slow) UDP
+            // send touches it. addUdpOutBuffer() (CONC-16) can evict the very
+            // frame we are about to send from OnRxDone (nRF52 timer-service
+            // task, see C-01) while Udp.write()/endPacket() below are still
+            // running; everything from here on reads udpSnapshot, never the
+            // live ring again.
             //
-            // Sized past the source slot (UDP_TX_BUF_SIZE+20): the convBuffer
-            // copy below reads from offset 1+36 for msg_len bytes, which can
-            // run past what the producer actually wrote for a large msg_len
-            // (pre-existing in ringBufferUDPout too, not introduced here) --
-            // zero-filled so that tail is deterministic instead of reading
-            // adjacent stack memory.
+            // Sized past a full frame (UDP_TX_BUF_SIZE+64, a frame is at most
+            // UDP_TX_BUF_SIZE per bf_push()'s 1..255 contract): the convBuffer
+            // copy below reads up to msg_len bytes starting at offset 36,
+            // which stays inside what bf_peek() actually copied -- the extra
+            // headroom just keeps this a well-defined, zero-filled buffer
+            // instead of reading adjacent stack memory should that invariant
+            // ever slip.
             static uint8_t udpSnapshot[UDP_TX_BUF_SIZE+64] = {0};
-            int mySlot = udpRead;
-#if defined(NRF52_SERIES)
-            taskENTER_CRITICAL();
-#endif
-            memcpy(udpSnapshot, ringBufferUDPout[mySlot], sizeof(ringBufferUDPout[0]));
-#if defined(NRF52_SERIES)
-            taskEXIT_CRITICAL();
-#endif
-            uint16_t msg_len = (uint16_t)udpSnapshot[0];
+            uint16_t msg_len = bf_peek(&udpOutRing, udpSnapshot, (uint16_t)sizeof(udpSnapshot));
+            // bf_peek() returns the FULL frame length even if it copied less
+            // than that into outmax bytes; clamp before using it to index
+            // udpSnapshot; bf_push()'s 1..255 contract keeps this a no-op in
+            // practice (255 < sizeof(udpSnapshot)).
+            if (msg_len > sizeof(udpSnapshot))
+                msg_len = sizeof(udpSnapshot);
+
+            // Generation right after the peek: a writer that evicts this
+            // exact frame before we get to bf_pop() below bumps tail_gen, see
+            // bf_tail_gen()'s contract in byte_fifo.h. If that happens we
+            // must NOT pop -- tail would then point at a different frame and
+            // popping it here would silently drop it.
+            uint16_t myGen = bf_tail_gen(&udpOutRing);
 
             // send it over UDP
 
             Udp.beginPacket(node_hostip , UDP_PORT);
 
-            if (!Udp.write(udpSnapshot + 1, msg_len))
+            if (!Udp.write(udpSnapshot, msg_len))
             {
                 if(bDisplayCont)
                   printlndeb("[ERROR]...Sending UDP Packet failed");
@@ -731,14 +737,13 @@ void sendMeshComUDP()
                               (unsigned)msg_len, tx_ok ? 1 : 0);
             }
 
-            // Der Slot enthaelt msg_len Bytes ab Offset 1: 36 Byte UDP-Header,
-            // danach der APRS-Frame. msg_len Bytes ab Offset 1+36 zu kopieren
-            // las immer 36 Bytes ueber das tatsaechlich Geschriebene hinaus
-            // und gab decodeAPRS() eine um 36 zu grosse Laenge (der im
-            // CONC-16-Commit dokumentierte Nebenbefund). Die wahre
-            // APRS-Laenge ist msg_len-36.
+            // udpSnapshot enthaelt msg_len Bytes ab Offset 0: 36 Byte
+            // UDP-Header, danach der APRS-Frame (die alte Ring-Variante hatte
+            // hier noch ein Laengen-Byte an Offset 0 und begann die Nutzlast
+            // erst bei 1; der Byte-Ring liefert bf_peek() schon ohne dieses
+            // Byte). Die wahre APRS-Laenge ist msg_len-36.
             uint16_t aprs_len = (msg_len > 36) ? (uint16_t)(msg_len - 36) : 0;
-            memcpy(convBuffer, udpSnapshot + 1 + 36, aprs_len);
+            memcpy(convBuffer, udpSnapshot + 36, aprs_len);
 
             if(aprs_len > 0 && (convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40))
             {
@@ -752,9 +757,8 @@ void sendMeshComUDP()
               // this point in the function the send has already happened,
               // so this check cannot prevent it. It still counts/marks the
               // leak (the primary guard in lora_functions.cpp's OnRxDone
-              // should have kept an unconfigured source out of
-              // ringBufferUDPout in the first place) and skips the debug
-              // print for it.
+              // should have kept an unconfigured source out of the UDP out
+              // ring in the first place) and skips the debug print for it.
               if(isUnconfiguredCall(aprsmsg.msg_source_call.c_str()))
               {
                 logRxDropUnconfigured(aprsmsg.msg_source_call.c_str());
@@ -766,26 +770,15 @@ void sendMeshComUDP()
               }
             }
 
-            // zero out sent buffer and advance the read pointer under the same
-            // lock as the writer's addRingPointer() (CONC-16). Guard against a
-            // writer having already force-advanced udpRead past us via the
-            // ring-full eviction path in addRingPointer() while we were
-            // sending — extremely narrow (needs the ring to wrap completely
-            // during one synchronous Udp.write()/endPacket()), but skipping
-            // the advance in that case avoids a double-advance.
-#if defined(NRF52_SERIES)
-            taskENTER_CRITICAL();
-#endif
-            if (udpRead == mySlot)
-            {
-                memset(ringBufferUDPout[mySlot], 0, UDP_TX_BUF_SIZE);
-                udpRead++;
-                if (udpRead >= MAX_RING_UDP)
-                    udpRead = 0;
-            }
-#if defined(NRF52_SERIES)
-            taskEXIT_CRITICAL();
-#endif
+            // Consume the frame we just sent -- but only if it is still the
+            // one bf_peek() gave us. Guard against a writer having evicted it
+            // via bf_push()'s ring-full eviction path while we were sending
+            // — extremely narrow (needs the ring to fill up completely during
+            // one synchronous Udp.write()/endPacket()), but popping in that
+            // case would drop whatever frame tail now actually points at.
+            // bf_pop() locks internally, same as bf_peek() above (CONC-16).
+            if (bf_tail_gen(&udpOutRing) == myGen)
+                bf_pop(&udpOutRing);
 
         }
         else
@@ -1760,32 +1753,22 @@ void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
     if (len > UDP_TX_BUF_SIZE)
         len = UDP_TX_BUF_SIZE; // just for safety
 
-    // CONC-16: udpWrite/udpRead are plain ints, same class as CONC-15.
-    // addUdpOutBuffer() is reachable from OnRxDone via addNodeData()
+    // CONC-16: addUdpOutBuffer() is reachable from OnRxDone via addNodeData()
     // (lora_functions.cpp) — the FreeRTOS timer-service task on nRF52,
     // priority 2, see C-01 — while sendMeshComUDP() drains the same ring
-    // from the Main Loop task.
-#if defined(NRF52_SERIES)
-    taskENTER_CRITICAL();
-#endif
-    // first byte is always the message length
-    // LoRa/Internal messages send to UDP TX
-    ringBufferUDPout[udpWrite][0] = len;
-    // WF-01: len statt len+1. Gesendet werden ohnehin nur msg_len == len Bytes
-    // (sendMeshComUDP liest die Laenge aus Byte 0), das zusaetzliche Byte war
-    // ein Lesezugriff ein Byte hinter der Nutzlast des Aufrufers. Bei allen
-    // heutigen Aufrufern liegt es noch im Puffer (>= 20 Byte Reserve), also
-    // latent, nicht akut -- aber es gibt keinen Grund, es zu lesen.
-    memcpy(ringBufferUDPout[udpWrite] + 1, buffer, len);
-
-    //printfdeb("UDP out Ringbuffer added element: %u\n", udpWrite);
-    //DEBUG_MSG_VAL("UDP", udpWrite, "UDP Ringbuf added El.:");
-    //neth.printBuffer(ringBufferUDPout[udpWrite], len + 1);
-
-    addRingPointer(udpWrite, udpRead, MAX_RING_UDP, "udp");
-#if defined(NRF52_SERIES)
-    taskEXIT_CRITICAL();
-#endif
+    // from the Main Loop task. That used to need a taskENTER/EXIT_CRITICAL
+    // pair around the slot write here (the old write/read indices were plain
+    // ints, same class as CONC-15). The byte FIFO now locks itself (BF_LOCK in
+    // byte_fifo.cpp) for every operation, nRF52 included, so a critical
+    // section at the call site would just nest around bf_push()'s own.
+    //
+    // bf_push() also takes over the length-prefix byte the ring used to
+    // carry in slot[0] (WF-01: exactly len bytes, no off-by-one read past
+    // the caller's payload) and reports eviction of unread frames, which
+    // the old ring never did on this path.
+    int lost = bf_push(&udpOutRing, buffer, (uint8_t)len);
+    if (lost > 0 && bLORADEBUG)
+        printfdeb("[MC-DBG] RING_OVERFLOW buf=udp lost=%i\n", lost);
 }
 
 void sendKEEP()
