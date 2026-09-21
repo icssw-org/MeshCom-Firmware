@@ -2,6 +2,7 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <byte_fifo.h>
+#include <mheard_throttle.h>
 #include <debugconf.h>
 #include <ArduinoJson.h>
 #include <ble_json_frame.h>
@@ -786,17 +787,18 @@ void sendMheard()
                 // Schranke ist der Puffer, nicht die JSON-Laenge (UP-01, BND-03)
                 uint16_t frame_len = bleJsonFrame(mhdoc, bleBuffer, sizeof(bleBuffer));
 
-                // Platz EXAKT pruefen, erst wenn die Framelaenge feststeht.
-                // Eine Schaetzung vorab (frueher comRingFree() mit einer
-                // angenommenen mittleren Framelaenge) ist hier nicht gut genug:
-                // liegt sie zu hoch, verdraengt bf_push2() beim Platzmangel die
-                // aeltesten Frames -- und das sind die, die dieser selbe
-                // sendMheard()-Aufruf gerade erst geschrieben hat. Die Liste
-                // verlor dann still Eintraege. Mit der echten Laenge kann das
-                // nicht passieren: passt sie nicht, bleibt der Cursor stehen
-                // und der naechste Aufruf macht an derselben Stelle weiter,
-                // nachdem der Drain Platz geschaffen hat.
-                if((uint32_t)bf_used(&phoneComRing) + frame_len + 1u > phoneComRing.cap)
+                // Erst pruefen, wenn die Framelaenge feststeht: passt sie
+                // nicht, bleibt der Cursor stehen und der naechste Aufruf
+                // macht an derselben Stelle weiter, nachdem der Drain Platz
+                // geschaffen hat. Ohne diese Drossel verdraengt bf_push2()
+                // beim Platzmangel die aeltesten Frames -- und das sind die,
+                // die dieser selbe sendMheard()-Aufruf gerade erst
+                // geschrieben hat. Die Liste verlor dann still Eintraege.
+                //
+                // Geschrankt wird gegen die UNGELESENEN Frames, nicht gegen
+                // bf_used() (MHD-01) -- Begruendung und Einheiten stehen in
+                // src/mheard_throttle.h, host-getestet.
+                if(!mheardFrameFits(bf_unread(&phoneComRing), frame_len, phoneComRing.cap))
                     return;
 
                 addBLEComToOutBuffer(bleBuffer, frame_len);
