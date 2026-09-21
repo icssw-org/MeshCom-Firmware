@@ -534,11 +534,26 @@ static void sub_config_upload(long content_length)
  */
 String work_webpage(bool bget_password, int webid)
 {
-    static char web_header_collect[1024];        // BSS statt Heap
-    static uint16_t web_header_collect_len = 0;
-    // ...
-    web_header_collect_len = 0;
-    web_header_collect[0] = '\0';
+    // RAM-Rueckgewinn (2026-09-21): der 1-kB-Sammelpuffer web_header_collect
+    // lag als statisches Feld im DRAM und wurde am Ende ohnehin in den String
+    // kopiert. Jetzt sammelt der String selbst, mit einmaligem reserve() je
+    // Aufruf. Dieselbe Obergrenze wie vorher (WEB_HEADER_MAX: hoechstens
+    // 1023 Zeichen, exakt wie die alte Schranke sizeof(puffer)-1), nur dass
+    // sie nicht mehr im Linkerbild steht.
+    //
+    // Das ist eine Verschiebung aus dem statischen Bild in den Heap, kein
+    // Byte weniger zur Laufzeit; sie entlastet die Linkregion, die auf den
+    // klassischen ESP32 knapp ist.
+    //
+    // Nicht behaupten, die 1 kB wuerden einmalig geholt und dann behalten:
+    // der /?nodepassword-Zweig weiter unten weist web_header das Ergebnis
+    // von substring() zu. Das ist eine Move-Zuweisung von einem Temporary,
+    // der globale String uebernimmt also dessen kleinen Puffer und gibt die
+    // 1 kB frei -- die naechste Anfrage holt sie erneut. Ein malloc/free je
+    // Login, mehr nicht; der Rest der Funktion arbeitet ohnehin mit Strings.
+    static const uint16_t WEB_HEADER_MAX = 1023;
+    web_header.reserve(WEB_HEADER_MAX + 1);
+    web_header = "";
 
     web_currentTime = millis();
     web_previousTime = web_currentTime;
@@ -546,7 +561,7 @@ String work_webpage(bool bget_password, int webid)
     String web_currentLine = ""; // make a String to hold incoming data from the client
 
     // CS-03: an upload needs its body length, and the header may well be
-    // longer than web_header_collect[]. Picked off the line as it completes,
+    // longer than WEB_HEADER_MAX. Picked off the line as it completes,
     // so it does not depend on that 1 kB window.
     long web_content_length = -1;
 
@@ -570,11 +585,8 @@ String work_webpage(bool bget_password, int webid)
             if (bDEBUG)
                 Serial.write(c); // print it out the serial monitor
 
-            if (web_header_collect_len < sizeof(web_header_collect) - 1)
-            {
-                web_header_collect[web_header_collect_len++] = c;
-                web_header_collect[web_header_collect_len] = '\0';
-            }
+            if (web_header.length() < WEB_HEADER_MAX)
+                web_header += c;
 
             if (c == '\n')
             {
@@ -583,8 +595,6 @@ String work_webpage(bool bget_password, int webid)
                 // that's the end of the client HTTP request, so send a response:
                 if (web_currentLine.length() == 0)
                 {
-                    web_header = web_header_collect;
-                    
                     // Serial.println(web_header);
 
                     // user sends authentication

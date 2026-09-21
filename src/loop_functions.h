@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <configuration.h>
+#include "display_pages_cfg.h"   // HAS_LONG_PAGE_TEXT
 #include <debugconf.h>
 #include <aprs_functions.h>
 

@@ -485,17 +485,24 @@ extern int iDisplayType;
 #define PAGE_MAX 6
 #endif
 
-extern int pageLine[maxdisplines][3];
+// RAM-Rueckgewinn: Zeilenkoordinaten als int16_t statt int. Werte sind
+// Pixelkoordinaten (x, y, hoechstens 320) und eine Textlaenge (20); y kann
+// -1 sein, daher vorzeichenbehaftet. Halbiert pageLine und pageLastLine.
+extern int16_t pageLine[maxdisplines][3];
 extern char pageText[maxdisplines][25];
 extern char pageTextLong1[25];
 extern char pageTextLong2[200];
 extern int pageLineAnz;
 
 
-extern int pageLastLine[PAGE_MAX][maxdisplines][3];
+extern int16_t pageLastLine[PAGE_MAX][maxdisplines][3];
 extern char pageLastText[PAGE_MAX][maxdisplines][25];
+// Langtext-Seiten nur auf TFT/E-Paper-Boards, siehe display_pages_cfg.h.
+#include "display_pages_cfg.h"
+#if defined(HAS_LONG_PAGE_TEXT)
 extern char pageLastTextLong1[PAGE_MAX][25];
 extern char pageLastTextLong2[PAGE_MAX][200];
+#endif
 extern int pageLastLineAnz[PAGE_MAX];
 extern int pageLastPointer;
 extern int pagePointer;

@@ -756,17 +756,19 @@ void insertOwnTx(unsigned int msg_id)
 #define PAGE_MAX 6
 #endif
 
-int pageLine[maxdisplines][3] = {0};
+int16_t pageLine[maxdisplines][3] = {0};
 char pageText[maxdisplines][25] = {0};
 char pageTextLong1[25] = {0};
 char pageTextLong2[200] = {0};
 int pageLineAnz=0;
 
 
-int pageLastLine[PAGE_MAX][maxdisplines][3] = {0};
+int16_t pageLastLine[PAGE_MAX][maxdisplines][3] = {0};
 char pageLastText[PAGE_MAX][maxdisplines][25] = {0};
+#if defined(HAS_LONG_PAGE_TEXT)
 char pageLastTextLong1[PAGE_MAX][25] = {0};
 char pageLastTextLong2[PAGE_MAX][200] = {0};
+#endif
 int pageLastLineAnz[PAGE_MAX] = {0};
 int pageLastPointer=0;
 int pagePointer=0;
