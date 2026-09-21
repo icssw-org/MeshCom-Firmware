@@ -1,3 +1,4 @@
+#include <string.h>
 #include "Arduino.h"
 #include "configuration.h"
 
@@ -47,6 +48,42 @@ checkMesh   = false if bMESH == false
             = true  if bVIA == true and one bBIA-Rule mached
 */
 
+// Nennt der Via-Pfad dieses Rufzeichen als eigenen Hop?
+//
+// Der Pfad ist kommasepariert ("DB0ABC-1,OE1KBC-7,*"), und decodeAPRS()
+// validiert die Zwischen-Hops nicht -- sie koennen jedes druckbare ASCII
+// enthalten, ein abschliessendes Komma ist moeglich (checkVia() erzeugt es
+// selbst, siehe test_checkvia.cpp), und "*" steht als eigenes Token da.
+//
+// Warum nicht indexOf(): das ist eine Teilstringsuche ohne Trennzeichen und
+// trifft auf jedes Rufzeichen, dessen Praefix das eigene ist. Ein Knoten
+// DK5EN-9 hielte sich fuer den benannten Hop, sobald DK5EN-90, DK5EN-92 oder
+// DK5EN-98 im Pfad steht -- und ein Basisrufzeichen fuer jede seiner eigenen
+// SSIDs. Deshalb Token fuer Token auf volle Laenge vergleichen.
+static bool pathNamesCall(const char *path, const char *call)
+{
+    if(path == NULL || call == NULL || call[0] == 0x00)
+        return false;
+
+    size_t clen = strlen(call);
+
+    for(const char *tok = path; ; )
+    {
+        const char *komma = strchr(tok, ',');
+        size_t tlen = (komma != NULL) ? (size_t)(komma - tok) : strlen(tok);
+
+        if(tlen == clen && memcmp(tok, call, clen) == 0)
+            return true;
+
+        if(komma == NULL)
+            break;
+
+        tok = komma + 1;
+    }
+
+    return false;
+}
+
 bool checkMesh(struct aprsMessage &aprsmsg)
 {
     if(bDisplayCont)
@@ -79,7 +116,7 @@ bool checkMesh(struct aprsMessage &aprsmsg)
 
     //printfdeb("[MESH]...MESH:%s ...VIA:%s [%s]\n", bMESH?"true":"false", bVIA?"true":"false", meshcom_settings.node_via);
     
-    if(aprsmsg.msg_destination_path.indexOf(meshcom_settings.node_call) == -1)
+    if(!pathNamesCall(aprsmsg.msg_destination_path.c_str(), meshcom_settings.node_call))
     {
         if(bDisplayCont)
             printlndeb("[MESH]...<with via info no match>...return MESH=false");
@@ -89,7 +126,16 @@ bool checkMesh(struct aprsMessage &aprsmsg)
     if(bDisplayInfo)
         printfdeb("%s MESH    : <with via info and match own-call>...return MESH=true\n", getTimeString().c_str());
 
-    return true;   // bMESH is true, but no VIA-Rule mached, so return bMESH
+    // Hier stand bis 2c96f11b-Nachfolge ein hartes "return true", waehrend der
+    // Kommentar daneben schon "return bMESH" behauptete. Vor jenem Commit war
+    // die ganze Funktion "return bMESH;" -- der Via-Umbau hat den Schalter
+    // stillschweigend fallengelassen. Folge: "--mesh off" schaltete die
+    // Relay-Teilnahme nicht ab, sobald der Pfad dieses Rufzeichen nannte, und
+    // checkMesh() ist die EINZIGE Relay-Schranke (lora_functions.cpp).
+    // Der Vertrag oben in dieser Datei sagt "false if bMESH == false", ohne
+    // Ausnahme, und der Web-Schalter verspricht dem Bediener
+    // "enable mesh/forwarding of received LoRa messages".
+    return bMESH;
 }
 
 void checkVia(struct aprsMessage &aprsmsg)
