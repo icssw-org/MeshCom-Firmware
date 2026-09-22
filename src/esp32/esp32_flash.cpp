@@ -50,6 +50,13 @@ void sanitize_loaded_settings(void)
     if(sanitize_max_hop_text(meshcom_settings.max_hop_text, sanitize_log))
         fixed++;
 
+    // Akku-Maximalspannung muss ueber der Board-Leerspannung liegen (2S TBEAM_1W: nach
+    // Wipe 4.2 V < 6.5 V -> BAT-01 meldet "kein Akku", Anzeige bleibt auf USB)
+    #if defined(BAT_MIN_VOLTAGE) && defined(BAT_MAX_VOLTAGE)
+    if(sanitize_max_voltage(meshcom_settings.node_maxv, BAT_MIN_VOLTAGE, BAT_MAX_VOLTAGE, sanitize_log))
+        fixed++;
+    #endif
+
     if(fixed > 0)
     {
         Serial.printf("[FLASH]...%d setting(s) out of range, reset to default\n", fixed);
