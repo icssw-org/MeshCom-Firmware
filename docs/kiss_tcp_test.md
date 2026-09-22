@@ -88,11 +88,19 @@ Two different confidence levels below — kept separate on purpose:
 - `--kiss off` closes the listener immediately even on a KISS-only node.
 - `--kiss auth on` + `--passwd`: raw client rejected after 15 s, HMAC client
   accepted.
+- Own-transmission echo: the node's own periodic position beacon reaches a
+  connected KISS client (confirmed downstream in PinPoint APRS via a WebDesk
+  KISS hub). Root-caused a prior "own position missing" report to a dropped
+  upstream KISS connection between WebDesk and the node, not a firmware bug --
+  `queueKiss()`/`flushKissQueue()` behaved correctly (silently drop when no
+  client is connected) the whole time.
 
 **Build-only / host-test verified** (no live device attached while these
 landed — confirm on real hardware before relying on them):
 - Gateway/server-relayed TEXT and POSITION frames reaching KISS via
   `udp_functions.cpp` (`snr=0, rssi=99` sentinel).
+- Own-transmission echo for `sendMessage()` (phone/web/console text) -- only
+  the `sendPosition()` half was confirmed live so far.
 - IRAM fix: `ttgo_tbeam`, `ttgo_tbeam_SX1262`, `ttgo_tbeam_SX1268` (previously
   failed with `IRAM0 overflowed`) now build green.
 - `E22_XML-DevKitC` builds green with `-D DISABLE_KISS_TCP` (previously failed
