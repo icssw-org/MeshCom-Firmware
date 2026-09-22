@@ -51,6 +51,15 @@ bool sanitize_cstring(char *s, size_t n);
  * compile-time default (see maxhop.h). Returns true if the value was corrected. */
 bool sanitize_max_hop_text(int &v, sanitize_log_fn log);
 
+/* The stored full-charge voltage (node_maxv, --maxv) must lie above the board's
+ * empty voltage (BAT_MIN_VOLTAGE), otherwise the percent scale inverts and the
+ * no-battery detection (BAT-01, band relative to node_maxv) declares a present
+ * pack absent. Hit on the 2S TBEAM_1W: a wipe leaves the single-cell default
+ * 4.2 V, below its 6.5 V empty voltage, and the display shows "USB" for good.
+ * Resets anything at or below board_min (and NaN) to board_max. Returns true if
+ * the value was corrected. */
+bool sanitize_max_voltage(float &v, float board_min, float board_max, sanitize_log_fn log);
+
 /* #1132: resolves the stored TX power to the value the radio and the app should
  * use. Both "not set" sentinels count: 0 (structs written before v4.35p and the
  * compat merge) and -20 (default since upstream 50c1ce59). Anything else is

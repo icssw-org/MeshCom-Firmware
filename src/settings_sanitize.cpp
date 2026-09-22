@@ -118,6 +118,16 @@ bool sanitize_max_hop_text(int &v, sanitize_log_fn log)
     return true;
 }
 
+bool sanitize_max_voltage(float &v, float board_min, float board_max, sanitize_log_fn log)
+{
+    if (float_is_finite(v) && v > board_min)
+        return false;
+
+    report_float(log, "node_maxv", v, board_max);
+    v = board_max;
+    return true;
+}
+
 int resolve_tx_power(int stored, int board_default)
 {
     if (stored == 0 || stored == POWER_NOT_SET)
