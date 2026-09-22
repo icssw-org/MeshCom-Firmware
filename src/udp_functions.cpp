@@ -6,6 +6,7 @@
 
 #include <udp_functions.h>
 #include <extudp_functions.h>
+#include <kiss_functions.h>
 #include <debugconf.h>
 #include <batt_functions.h>
 #include <command_functions.h>
@@ -307,6 +308,24 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
               (uint8_t)(aprsmsg.msg_id >> 24)
           };
           bool bUdpMsgIsNew = is_new_packet(udp_mid);
+
+          // KISS/TCP interface: a message that reaches this node only via the
+          // MeshCom server (another gateway heard it over RF, not this node)
+          // never runs through lora_functions.cpp's RX path, so it would
+          // otherwise never reach a locally connected KISS client. Tap it
+          // here instead -- convBuffer/lora_tx_msg_len at this point is the
+          // same decodeAPRS()-compatible buffer the LoRa RX path passes to
+          // queueKiss(), the dedup gate is the same ring LoRa RX uses (no
+          // double delivery if this node also hears the frame directly), and
+          // rssi=99/snr=0 is the existing "no real RF measurement, this came
+          // from the server" sentinel already used by sendDisplayPosition()/
+          // sendDisplayText() below. HEY (0x40) excluded -- buildAx25()
+          // cannot represent it either way, same as the LoRa path (F14).
+          #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+          if (bKISS && bUdpMsgIsNew && !bSrcUnconfigured &&
+              (msg_type_b == 0x3A || msg_type_b == 0x21))
+              queueKiss(convBuffer, lora_tx_msg_len, 99, 0);
+          #endif
 
           bool bUDPtoLoraSend = !bSrcUnconfigured;
 
