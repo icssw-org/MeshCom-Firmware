@@ -172,15 +172,9 @@ void webSetup_setParam(setupStruct *setupData){
     } else
 
     if(setupData->paramName.equals("volt")) {
-        if(setupData->paramValue.equals("on")){
-            snprintf(message_text, sizeof(message_text), "--volt"); //, setupData->paramValue.c_str());
-            commandAction(message_text, bPhoneReady);
-            setupData->returnCode = (bDisplayVolt == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        } else {
-            snprintf(message_text, sizeof(message_text), "--proz"); //, setupData->paramValue.c_str());
-            commandAction(message_text, bPhoneReady);
-            setupData->returnCode = (bDisplayVolt == !(setupData->paramValue.compareTo("off")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
-        }
+        snprintf(message_text, sizeof(message_text), "--volt %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bDisplayVolt == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = bDisplayVolt?"on":"off";
         return;
     } else
