@@ -96,6 +96,7 @@ unsigned long rebootAuto = 0;
 void sendNodeSetting();
 void sendGpsJson();
 void sendAPRSset();
+void sendViaSet();
 void sendConfigFinish();
 
 char print_buff[350];
@@ -920,7 +921,7 @@ void commandAction(char *umsg_text, bool ble)
             #endif
             printlndeb("--io  show IO config\n--setio 99 in/out/pullup  MCP17 IO pin\n--setio clear\n--setout 99 on/off  MCP17 output\n");
             delay(100);
-            printlndeb("--seset/--wifiset/--nodeset/--analogset/--tel/--aprsset  show that settings group\n--aprsmc <call>  set APRS MYCALL/none\n");
+            printlndeb("--seset/--wifiset/--nodeset/--analogset/--tel/--aprsset/--viaset  show that settings group\n--aprsmc <call>  set APRS MYCALL/none\n");
             delay(100);
             printlndeb("--posshot  one-shot position now\n--postime 99  position interval (s)\n--regex <call>  test callsign against the validator\n");
             delay(100);
@@ -2987,7 +2988,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--via on");
+            sendViaSet();
         }
 
         save_settings();
@@ -3003,7 +3004,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--via off");
+            sendViaSet();
         }
 
         save_settings();
@@ -3030,6 +3031,9 @@ void commandAction(char *umsg_text, bool ble)
         }
 
         save_settings();
+
+        if(ble)
+            sendViaSet();
 
         return;
     }
@@ -5614,6 +5618,12 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"viaset") == 0)
+    {
+        sendViaSet();
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"conffin") == 0)
     {
         sendConfigFinish();
@@ -6444,6 +6454,19 @@ void sendAPRSset()
 
     sendBleJsonRegister(aprsdoc); // JSN-01
 
+}
+
+// sends via (manual routing) settings to the phone
+void sendViaSet()
+{
+    // {"TYP":"SV","VIA":true,"VIACALL":"OE1KFR-12"}
+    JsonDocument viadoc;
+
+    viadoc["TYP"] = "SV";
+    viadoc["VIA"] = bVIA;
+    viadoc["VIACALL"] = meshcom_settings.node_via;
+
+    sendBleJsonRegister(viadoc); // JSN-01
 }
 
 
