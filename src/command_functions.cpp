@@ -2987,7 +2987,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--via on");
+            sendNodeSetting();
         }
 
         save_settings();
@@ -3003,7 +3003,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)"--via off");
+            sendNodeSetting();
         }
 
         save_settings();
@@ -3030,6 +3030,9 @@ void commandAction(char *umsg_text, bool ble)
         }
 
         save_settings();
+
+        if(ble)
+            sendNodeSetting();
 
         return;
     }
@@ -6397,6 +6400,16 @@ void sendNodeSetting()
     nsetdoc["ASYM"] = bGPSAutosymbol;
 
     sendBleJsonRegister(nsetdoc); // JSN-01
+
+    // second node settings json
+    // {"TYP":"SN1","VIA":true,"VIACALL":"OE1KFR-12"}
+    JsonDocument nsetdoc1;
+
+    nsetdoc1["TYP"] = "SN1";
+    nsetdoc1["VIA"] = bVIA;
+    nsetdoc1["VIACALL"] = meshcom_settings.node_via;
+
+    sendBleJsonRegister(nsetdoc1); // JSN-01
 }
 
 void sendAnalogSetting()
