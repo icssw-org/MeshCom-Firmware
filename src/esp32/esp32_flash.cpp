@@ -620,3 +620,18 @@ void save_settings(void)
 
     //Test only Serial.println("flash save...");
 }
+
+// Saves only the position (node_lat/lon/alt and the hemisphere letters).
+void save_position(void)
+{
+    preferences.begin("Credentials", false);
+
+    preferences.putDouble("node_lat", meshcom_settings.node_lat);
+    preferences.putDouble("node_lon", meshcom_settings.node_lon);
+    preferences.putInt("node_alt", meshcom_settings.node_alt);
+
+    preferences.putChar("node_lat_c", meshcom_settings.node_lat_c);
+    preferences.putChar("node_lon_c", meshcom_settings.node_lon_c);
+
+    preferences.end();
+}

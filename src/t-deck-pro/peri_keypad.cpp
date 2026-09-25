@@ -255,12 +255,16 @@ void keypad_loop(void)
                     //if(!meshcom_settings.node_backlightlock)
                     //    tft_off();
 
+                    save_settings();
+
                     bNORM = false;
                 }
                 else
                 if(c == 'K' || c == 'k') // ALT + K
                 {
                     meshcom_settings.node_keyboardlock = !meshcom_settings.node_keyboardlock;
+
+                    save_settings();
 
                     bNORM = false;
                 }
@@ -272,6 +276,8 @@ void keypad_loop(void)
                     
                     //set_map(meshcom_settings.node_map);
 
+                    save_settings();
+
                     bNORM = false;
                 }
                 else
@@ -281,6 +287,8 @@ void keypad_loop(void)
                         meshcom_settings.node_map++;
 
                     //set_map(meshcom_settings.node_map);
+
+                    save_settings();
 
                     bNORM = false;
                 }
@@ -294,6 +302,8 @@ void keypad_loop(void)
                 if((c == 'M'  || c == 'm') && (!meshcom_settings.node_keyboardlock)) // ALT + M
                 {
                     meshcom_settings.node_mute = !meshcom_settings.node_mute;
+                    save_settings();
+
                     bNORM = false;
 
                 }

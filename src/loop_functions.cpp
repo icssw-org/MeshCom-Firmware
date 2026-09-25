@@ -2334,8 +2334,11 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         int iParsed = sscanf(cset+5, "%d;%d;", &iHopText, &iHopPos);
 
-        if(iParsed >= 1 && iHopText >= 0 && iHopText <= MAX_HOP_LIMIT)
+        if(iParsed >= 1 && iHopText >= 0 && iHopText <= MAX_HOP_LIMIT && iHopText != meshcom_settings.max_hop_text)
+        {
             meshcom_settings.max_hop_text = iHopText;
+            save_settings();    // max_hop_text is persistent (max_hop_pos is not)
+        }
 
         if(iParsed >= 2 && iHopPos >= 0 && iHopPos <= MAX_HOP_LIMIT)
             meshcom_settings.max_hop_pos = iHopPos;

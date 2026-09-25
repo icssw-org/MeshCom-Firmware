@@ -5653,6 +5653,8 @@ void commandAction(char *umsg_text, bool ble)
     
         snprintf(meshcom_settings.node_aprsmc, sizeof(meshcom_settings.node_aprsmc), "%s", strCallSign.c_str());
 
+        save_settings();
+
         return;
     }
     else

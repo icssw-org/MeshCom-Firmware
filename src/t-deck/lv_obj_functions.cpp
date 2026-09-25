@@ -372,6 +372,8 @@ static void tab_standby_button_event_cb(lv_event_t * e)
 
             lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         }
+
+        save_settings();
     }
 }
 
@@ -403,6 +405,8 @@ static void tab_kbl_button_event_cb(lv_event_t * e)
             setKeyboardBacklight(0);
             lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         }
+
+        save_settings();
     }
 }
 
