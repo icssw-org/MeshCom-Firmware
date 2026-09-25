@@ -2663,6 +2663,12 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
 
+        // resend SN/SN1 so the app shows the new web password (WSPWD in SN1)
+        if(ble)
+        {
+            sendNodeSetting();
+        }
+
         return;
     }
     else
@@ -6429,8 +6435,8 @@ void sendNodeSetting()
     nsetdoc["TYP"] = "SN";
     nsetdoc["GW"] = bGATEWAY;
     nsetdoc["WS"] = bWEBSERVER;
-    //KBC/KFR
-    nsetdoc["WSPWD"] = meshcom_settings.node_webpwd;
+    // WSPWD and ASYM are sent in SN1 below: with them SN exceeded
+    // BLE_JSON_PAYLOAD_MAX and bleJsonFrameFailSoft() dropped trailing fields (GWS)
     nsetdoc["DISP"] =  bDisplayOff;
     nsetdoc["BTN"] = bButtonCheck;
     nsetdoc["MSH"] = bMESH;
@@ -6447,17 +6453,18 @@ void sendNodeSetting()
     nsetdoc["NOPMOTHER"] = (bool)(meshcom_settings.node_sset3 & 0x8000);
     nsetdoc["BLED"] = bUSER_BOARD_LED;
     nsetdoc["GWS"] = meshcom_settings.node_gwsrv;
-    nsetdoc["ASYM"] = bGPSAutosymbol;
 
     sendBleJsonRegister(nsetdoc); // JSN-01
 
     // second node settings json
-    // {"TYP":"SN1","VIA":true,"VIACALL":"OE1KFR-12"}
+    // {"TYP":"SN1","VIA":true,"VIACALL":"OE1KFR-12","WSPWD":"","ASYM":false}
     JsonDocument nsetdoc1;
 
     nsetdoc1["TYP"] = "SN1";
     nsetdoc1["VIA"] = bVIA;
     nsetdoc1["VIACALL"] = meshcom_settings.node_via;
+    nsetdoc1["WSPWD"] = meshcom_settings.node_webpwd;
+    nsetdoc1["ASYM"] = bGPSAutosymbol;
 
     sendBleJsonRegister(nsetdoc1); // JSN-01
 }
