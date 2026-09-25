@@ -273,8 +273,8 @@ bool config_to_phone_prepare = false;
 bool conffin_sent = false;
 unsigned long config_to_phone_prepare_timer = 0;
 unsigned long config_to_phone_datetime_timer = 0;
-const uint8_t json_configs_cnt = 10;
-const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset", "--io", "--tel", "--viaset"};
+const uint8_t json_configs_cnt = 9;
+const char config_cmds[json_configs_cnt][20] = {"--info", "--seset", "--wifiset", "--nodeset", "--wx", "--pos", "--aprsset", "--io", "--tel"};
 uint8_t config_cmds_index = 0;
 
 /**
