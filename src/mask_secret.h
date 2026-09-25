@@ -11,7 +11,7 @@
 //
 // Sichtbar bleibt, OB ein Passwort gesetzt ist -- das ist die Information, um
 // derentwillen die Zeile in --info steht. Die Settings-JSON an die App
-// (nsetdoc["WSPWD"]) bleibt unberuehrt: sie muss den Wert tragen, damit die App
+// (nsetdoc1["WSPWD"] in SN1) bleibt unberuehrt: sie muss den Wert tragen, damit die App
 // ihn anzeigen und aendern kann.
 
 #include <stddef.h>
