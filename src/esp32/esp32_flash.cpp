@@ -621,6 +621,15 @@ void save_settings(void)
     //Test only Serial.println("flash save...");
 }
 
+// Saves only the message counter. Called after every transmission instead of
+// save_settings(): a transmission changes nothing else.
+void save_msgid(void)
+{
+    preferences.begin("Credentials", false);
+    preferences.putInt("node_msgid", meshcom_settings.node_msgid);
+    preferences.end();
+}
+
 // Saves only the position (node_lat/lon/alt and the hemisphere letters).
 void save_position(void)
 {

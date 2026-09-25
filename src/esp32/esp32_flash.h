@@ -242,8 +242,13 @@ struct s_meshcom_settings
 
 extern s_meshcom_settings meshcom_settings;
 
+// Do not rely on a transmission to persist unrelated settings. Persistent changes
+// are committed by their owning path; some UI/phone paths stage them until an
+// explicit Save. On ESP32 a transmission saves only node_msgid via save_msgid().
+// nRF52 (WisBlock-API.h): save_msgid() is save_settings().
 void save_settings(void);
 void save_position(void);
+void save_msgid(void);
 // Get LoRa parameter
 void init_flash(void);
 // LoRa parameter zurück setzen
