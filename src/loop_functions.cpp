@@ -3320,7 +3320,7 @@ PingResult sendPing(char msg_call[10])
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen
-    // bei Text beginnend mit {ping} und {pong} keine MSB für repeat markiereb 
+    // bei Text beginnend mit {ping} und {pong} keine MSB für repeat markieren
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
     aprsmsg.msg_source_path = meshcom_settings.node_call;
@@ -4985,7 +4985,6 @@ unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *s
     aprsmsg.msg_len = 0;
 
     // MSG ID zusammen setzen
-    // bei Text beginnend mit {ping} und {pong} keine MSB für repeat markiereb 
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max in real only 0-999
 
     // MSG-ID für repeat Bits frei machen
