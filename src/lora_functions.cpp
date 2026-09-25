@@ -1736,6 +1736,27 @@ static void setlogPrintTx(const char *line)
 
 /**@brief our Lora TX sequence — priority-based slot selection
  */
+// Debug K: RADIO_TX -- der Marker "ein Frame geht an den Funkchip".
+//
+// Stand bis 2026-09-13 an genau einer der drei Sendestellen in doTX(), und dort
+// nur im Nicht-RAK-Zweig. Auf dem ESP32 feuerte er damit fuer normale
+// MeshCom-Frames, nicht fuer TRACK/LoRa-APRS, auf dem RAK ueberhaupt nie -- als
+// Nachweis "gesendet" war er wertlos, und seine Abwesenheit bewies nichts.
+// Jetzt an allen sechs Varianten (drei Stellen x RAK/Nicht-RAK).
+//
+// kind= trennt die Stellen: track = Positions-Frame im Trackbetrieb,
+// aprs = LoRa-APRS-Aussendung, msg = normaler MeshCom-Frame (Ping inklusive).
+// Das Feld haengt hinten an, der Prefix "[MC-DBG] RADIO_TX len=" bleibt fuer
+// bestehende Greps unveraendert.
+//
+// Auf dem RAK bewusst VOR vTaskSuspendAll() gerufen: printfdeb() allokiert und
+// gehoert nicht in einen Abschnitt mit angehaltenem Scheduler.
+static inline void logRadioTx(int len, const char *kind)
+{
+    if(bLORADEBUG)
+        printfdeb("[MC-DBG] RADIO_TX len=%d kind=%s\n", len, kind);
+}
+
 bool doTX()
 {
     //#if not defined(BOARD_T_DECK_PRO)
@@ -1876,6 +1897,7 @@ bool doTX()
                         // blocks task scheduling, which is enough to keep the FreeRTOS
                         // timer-service task (OnRxDone, priority 2, see C-01) from
                         // touching the radio mid-send, without freezing the tick.
+                        logRadioTx(sendlng, "track");
                         vTaskSuspendAll();
                         Radio.Send(lora_tx_buffer, sendlng);
                         xTaskResumeAll();
@@ -1888,6 +1910,7 @@ bool doTX()
                         #ifdef BOARD_HELTEC_V4
                         enablePATransmit();
                         #endif
+                        logRadioTx(sendlng, "track");
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                         if(transmissionState != RADIOLIB_ERR_NONE)
                         {
@@ -1919,6 +1942,7 @@ bool doTX()
                 #if defined BOARD_RAK4630
                     // N-16, see the "track" send above for why vTaskSuspendAll()
                     // replaces taskENTER_CRITICAL() here.
+                    logRadioTx(sendlng, "aprs");
                     vTaskSuspendAll();
                     Radio.Send(lora_tx_buffer, sendlng);
                     xTaskResumeAll();
@@ -1931,6 +1955,7 @@ bool doTX()
                     #ifdef BOARD_HELTEC_V4
                     enablePATransmit();
                     #endif
+                    logRadioTx(sendlng, "aprs");
                     transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                     if(transmissionState != RADIOLIB_ERR_NONE)
                     {
@@ -1984,6 +2009,7 @@ bool doTX()
                     #if defined BOARD_RAK4630
                         // N-16, see the "track" send above for why vTaskSuspendAll()
                         // replaces taskENTER_CRITICAL() here.
+                        logRadioTx(sendlng, "msg");
                         vTaskSuspendAll();
                         Radio.Send(lora_tx_buffer, sendlng);
                         xTaskResumeAll();
@@ -1997,9 +2023,7 @@ bool doTX()
                         enablePATransmit();
                         #endif
 
-                        // Debug K: RADIO_TX
-                        if(bLORADEBUG)
-                            printfdeb("[MC-DBG] RADIO_TX len=%d\n", sendlng);
+                        logRadioTx(sendlng, "msg");
 
                         transmissionState = radio.startTransmit(lora_tx_buffer, sendlng);
                         if(transmissionState != RADIOLIB_ERR_NONE)
@@ -2440,6 +2464,18 @@ void OnTxTimeout(void)
         }
 
         startRadioReceive();
+
+        // Der Semtech-Treiber ruft OnTxDone() nur im Erfolgsfall auf, der
+        // Fehlerfall landet hier. Ohne diese beiden Zeilen endete die
+        // MC-SM-Spur eines fehlgeschlagenen Sendevorgangs bei TX_ACTIVE und
+        // wurde nie geschlossen -- eine Auswertung, die Zustandsuebergaenge
+        // paart, haengt dann fuer immer im Sendezustand. rc=-1 entspricht dem
+        // ESP32, der bei Fehler TX_DONE mit einem transmissionState != 0 meldet.
+        if(bLORADEBUG)
+        {
+            printfdeb("[MC-SM] TX_ACTIVE -> TX_DONE rc=-1\n");
+            printfdeb("[MC-SM] TX_DONE -> RX_LISTEN rc=0\n");
+        }
 
     #endif
 

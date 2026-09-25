@@ -50,6 +50,42 @@ inline bool isUnconfiguredCall(const char *call)
         return true;
     return false;
 }
+
+// DHCP-Option 12 (Host Name) aus dem Rufzeichen. Der arduino-esp32-Core setzt
+// sonst selbst einen Namen aus CONFIG_IDF_TARGET und den letzten drei MAC-Bytes
+// ("esp32-DBE6E4"), der im Lease-Verzeichnis nichts aussagt.
+//
+// Quelle ist bewusst node_call und nicht cBLEName: beide mDNS-Responder benennen
+// den Knoten bereits danach (web_functions.cpp MDNS.begin, safeboot/main.cpp
+// startMDNS), der Knoten hat damit EINEN Namen statt zweier. Die SSID ist im
+// Rufzeichen enthalten ("DK5EN-93"), also im Netz so eindeutig wie dieses selbst.
+//
+// Rueckgabe false => setHostname() gar nicht erst rufen, der Core-Default bleibt
+// stehen. Ein halbgares "XX0XXX-0" geht damit nie ins Netz hinaus.
+//
+// isUnconfiguredCall() statt isNodeUnconfigured(): dessen memcmp() liest feste
+// 6 bzw. 4 Byte und ist nur fuer meshcom_settings.node_call sicher, nicht fuer
+// eine beliebige Zeichenkette. Siehe die Begruendung am Helfer selbst.
+inline bool makeDhcpHostname(char *out, unsigned long n, const char *call)
+{
+    if (out == nullptr || n < 2 || isUnconfiguredCall(call))
+        return false;
+
+    unsigned long o = 0;
+    for (unsigned long i = 0; call[i] != 0 && o < n - 1; i++)
+    {
+        char c = call[i];
+        bool ok = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+                  (c >= 'a' && c <= 'z') || c == '-';
+        out[o++] = ok ? c : '-';   // checkRegexCall() filtert vorher, das hier ist die Rueckfallebene
+    }
+
+    while (o > 0 && out[o - 1] == '-')   // RFC 1123: ein Label endet alphanumerisch
+        o--;
+
+    out[o] = 0;
+    return o > 0;
+}
 #endif
 
 // ---------------------------------------------------------------------------
@@ -208,7 +244,9 @@ static inline bool flashLayoutCompatible(int stored)
 #define MAX_RING 20                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 60                  // dedup ring for received msg_ids (separate from TX ring)
 #define MAX_LOG 20                         // max count of messages in ringbuffer
-#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa
+#define RING_BYTES_PHONE 2048              // Byte-Ring BLE-Daten zum Telefon (war Schlitzfeld)
+#define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
+#define RING_BYTES_UDP 2048                // Byte-Ring UDP-Ausgang
 #elif defined(CONFIG_IDF_TARGET_ESP32S3) || defined(BOARD_RAK4630)
 // ESP32-S3 (320 KB SRAM) and nRF52840 (256 KB RAM) — full buffer sizes
 #define MAX_MHEARD 80                      // max count of messages in mheard ringbuffer (was 20, 85-124 H00 nodes observed)
@@ -216,14 +254,18 @@ static inline bool flashLayoutCompatible(int stored)
 #define MAX_RING 20                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 100                 // dedup ring for received msg_ids (was 60, wraparounds observed)
 #define MAX_LOG 10                         // max count of messages in LOG-ringbuffer (ram_opti)
-#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
+#define RING_BYTES_PHONE 3072              // Byte-Ring BLE-Daten zum Telefon (war Schlitzfeld)
+#define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
+#define RING_BYTES_UDP 3072                // Byte-Ring UDP-Ausgang
 #elif defined(ENABLE_TBEAM)                // very smal version only for developer tests
 #define MAX_MHEARD 10                      // max count of messages in mheard ringbuffer (was 20, limited by DRAM)
 #define MAX_MHPATH 10                      // max count of messages in mhpath ringbuffer (was 30, limited by DRAM)
 #define MAX_RING 10                        // max count of messages in ringbuffer
 #define MAX_DEDUP_RING 10                  // dedup ring for received msg_ids (was 60)
 #define MAX_LOG 10                         // max count of messages in LOG-ringbuffer
-#define MAX_RING_UDP 10                    // size of Ringbuffer for UDP TX messages received from LoRa (was 20)
+#define RING_BYTES_PHONE 1024              // Byte-Ring BLE-Daten zum Telefon (war Schlitzfeld)
+#define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
+#define RING_BYTES_UDP 1024                // Byte-Ring UDP-Ausgang
 #else
 // ESP32 original (~160 KB DRAM) — reduced buffer sizes due to RAM constraints
 #define MAX_MHEARD 30                      // max count of messages in mheard ringbuffer (was 20, limited by DRAM)
@@ -238,7 +280,9 @@ static inline bool flashLayoutCompatible(int stored)
 #define MAX_RING 20                        // max count of messages in ringbuffer (was 30, MEM-01)
 #define MAX_DEDUP_RING 70                  // dedup ring for received msg_ids (was 60)
 #define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
-#define MAX_RING_UDP 20                    // size of Ringbuffer for UDP TX messages received from LoRa (was 25, MEM-01)
+#define RING_BYTES_PHONE 2048              // Byte-Ring BLE-Daten zum Telefon (war Schlitzfeld)
+#define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
+#define RING_BYTES_UDP 2048                // Byte-Ring UDP-Ausgang
 #endif
 
 #define MAX_ZEROS 6                        // maximum number of zeros in a row in a received udp message

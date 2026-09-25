@@ -136,6 +136,9 @@ void startExternUDP()
   if(WiFi.hostByName(meshcom_settings.node_extern, apip) == 1)
   {
     Serial.printf("[EXT] URL:%s to IP:%s\n", meshcom_settings.node_extern, apip.toString().c_str());
+    // str_ip feeds the "now sending to IP" line below; it was only set in
+    // the literal-IP branch, so the DNS branch printed an empty address.
+    str_ip = apip.toString();
   }
   else
   #endif
@@ -467,18 +470,22 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     return;
   }
 
-  // ESP32 Loop-Task-Stack = 8 KB → 1000 B auf Stack ok.
-  // nRF52 Loop-Task-Stack = 4 KB → BSS, sonst Stack-Overflow Crash bei
-  // sendPosition → sendExtern (siehe Commit 1951aa7d, fix RAK4631).
-#ifdef ESP32
-  char c_json[500] = {0};
-  char c_tjson[500] = {0};
-#else
+  // Both platforms keep these two buffers in BSS, not on the stack. nRF52 has
+  // done so since 1951aa7d (4 KB loop-task stack). On ESP32 the chain
+  // esp32loop -> getExternUDP -> getExtern -> sendMessage -> sendExtern ->
+  // decodeAPRS -> printfdeb -> MeshSerial/lwIP measured 8464 B with the
+  // buffers on the stack (-fstack-usage plus the Xtensa entry prologues,
+  // Heltec V3) against the 8192 B framework default, so one ext-UDP "msg"
+  // datagram with a foreign destination reset the node deterministically.
+  // In BSS the frame loses the 1000 B of the two buffers.
+  //
+  // Static buffers are safe: every sendExtern() caller runs in the loop task.
+  // OnRxDone() never calls sendExtern() directly, only queueExtern(), and
+  // flushExternQueue() drains that queue from loop().
   static char c_json[500];
   static char c_tjson[500];
   memset(c_json, 0, sizeof(c_json));
   memset(c_tjson, 0, sizeof(c_tjson));
-#endif
 
   char escape_symbol[3];
   char escape_group[3];

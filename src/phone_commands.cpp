@@ -1,5 +1,6 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include <byte_fifo.h>
 #include <phone_commands.h>
 #include <regex_functions.h>
 #include <debugconf.h>
@@ -67,30 +68,26 @@ void sendToPhone()
 		// MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
 		uint8_t blelen;
 		uint8_t statusByte;
-		// CONC-18: snapshot the slot's length/status/payload bytes under a
-		// single lock, instead of reading blelen here and memcpy-ing from the
-		// live ring further down. addBLEOutBuffer() (CONC-15) can wrap the
-		// ring and overwrite this exact slot from OnRxDone (nRF52 timer-
-		// service task, see C-01) in the gap between the two; a snapshot
-		// buffer makes what follows immune to that regardless of timing.
+		// CONC-18: bf_peek() takes its own lock (BF_LOCK, byte_fifo.cpp) and
+		// copies the oldest unread frame out whole before returning, so
+		// addBLEOutBuffer() (CONC-15), which can run concurrently from
+		// OnRxDone (nRF52 timer-service task, see C-01), cannot tear or
+		// overwrite what ringSnapshot already holds. bf_pop() then advances
+		// the ring under its own lock -- no call-site critical section needed
+		// any more.
 		uint8_t ringSnapshot[MAX_MSG_LEN_PHONE];
-#if defined(NRF52_SERIES)
-		taskENTER_CRITICAL();
-#endif
-		blelen = BLEtoPhoneBuff[toPhoneRead][0];
-		statusByte = BLEtoPhoneBuff[toPhoneRead][1];
-		if(blelen > 0)
-			memcpy(ringSnapshot, BLEtoPhoneBuff[toPhoneRead]+1, blelen);
-		// Advance the read pointer here, still under the lock: the slot's
-		// content is already captured above, and this keeps the index update
-		// atomic with addBLEOutBuffer()'s writer-side overflow check
-		// (addRingPointer(), CONC-15) instead of racing it later.
-		toPhoneRead++;
-		if (toPhoneRead >= MAX_RING)
-			toPhoneRead = 0;
-#if defined(NRF52_SERIES)
-		taskEXIT_CRITICAL();
-#endif
+		blelen = bf_peek(&phoneRing, ringSnapshot, sizeof(ringSnapshot));
+		// bf_peek() liefert die VOLLE Framelaenge, auch wenn es weniger nach
+		// ringSnapshot kopiert hat -- als Laenge ist der Rueckgabewert also
+		// nur brauchbar, solange der Puffer jeden moeglichen Frame fasst.
+		// bf_push() laesst hoechstens 255 Byte zu (byte_fifo.cpp:59), der
+		// Puffer ist groesser: eine Laufzeitklemme kann hier nie greifen,
+		// die Zusicherung haelt die Annahme fest, falls jemand MAX_MSG_LEN_PHONE
+		// unter 255 setzt.
+		static_assert(sizeof(ringSnapshot) >= 255,
+		              "ringSnapshot muss jeden bf_push()-Frame (max 255 B) fassen");
+		statusByte = (blelen > 0) ? ringSnapshot[0] : 0;
+		bf_pop(&phoneRing);
 
 		// N-04 residual: the producer clamp only closed the RF-reachable path;
 		// blelen==0 here would underflow to 255 below and memcpy past the
@@ -133,9 +130,9 @@ void sendToPhone()
 		if(bBLEDEBUG)
 		{
 			if(toPhoneBuff[0] == ':' || toPhoneBuff[0] == '!' || toPhoneBuff[0] == '@')
-				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s lng:%i\n", toPhoneWrite, toPhoneRead, toPhoneBuff+7, blelen);
+				Serial.printf("phoneRing frames:%u buff:%s lng:%i\n", (unsigned)bf_frames(&phoneRing), toPhoneBuff+7, blelen);
 			else
-				Serial.printf("toPhoneWrite:%i toPhoneRead:%i buff:%s lng:%i\n", toPhoneWrite, toPhoneRead, toPhoneBuff, blelen);
+				Serial.printf("phoneRing frames:%u buff:%s lng:%i\n", (unsigned)bf_frames(&phoneRing), toPhoneBuff, blelen);
 		}
     }
     
@@ -163,40 +160,55 @@ void sendComToPhone()
 		// we need to insert the first byte text msg flag
 		uint8_t ComToPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
 		// MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
-		uint8_t blelen = BLEComToPhoneBuff[ComToPhoneRead][0];
+		// No critical section here -- there never was one (pre-existing gap,
+		// not this conversion's doing). bf_peek() still locks internally
+		// (BF_LOCK, byte_fifo.cpp), so the copy below is now safe against a
+		// concurrent addBLEComToOutBuffer() eviction, which the old direct
+		// ring read was not.
+		uint8_t ringSnapshot[MAX_MSG_LEN_PHONE];
+		uint8_t blelen = bf_peek(&phoneComRing, ringSnapshot, sizeof(ringSnapshot));
+		// bf_peek() liefert die VOLLE Framelaenge, auch wenn es weniger nach
+		// ringSnapshot kopiert hat -- als Laenge ist der Rueckgabewert also
+		// nur brauchbar, solange der Puffer jeden moeglichen Frame fasst.
+		// bf_push() laesst hoechstens 255 Byte zu (byte_fifo.cpp:59), der
+		// Puffer ist groesser: eine Laufzeitklemme kann hier nie greifen,
+		// die Zusicherung haelt die Annahme fest, falls jemand MAX_MSG_LEN_PHONE
+		// unter 255 setzt.
+		static_assert(sizeof(ringSnapshot) >= 255,
+		              "ringSnapshot muss jeden bf_push()-Frame (max 255 B) fassen");
 
-		// N-04 residual: see sendToPhone() above.
+		// N-04 residual: see sendToPhone() above. Nothing queued: bf_pop() on
+		// an empty ring is a safe no-op anyway, but there is no frame to
+		// consume, so we don't call it here -- only the delivering path below
+		// does.
 		if(blelen == 0)
 		{
-			ComToPhoneRead++;
-			if (ComToPhoneRead >= MAX_RING)
-				ComToPhoneRead = 0;
 			ble_busy_flag = false;
 			return;
 		}
 
 		//Mheard
-		if(BLEComToPhoneBuff[ComToPhoneRead][1] == 0x91)
+		if(ringSnapshot[0] == 0x91)
 		{
-			memcpy(ComToPhoneBuff, BLEComToPhoneBuff[ComToPhoneRead]+1, blelen-1);
+			memcpy(ComToPhoneBuff, ringSnapshot, blelen-1);
 		} else
 		// Data Message (JSON)
-		if(BLEComToPhoneBuff[ComToPhoneRead][1] == 0x44)
+		if(ringSnapshot[0] == 0x44)
 		{
-			memcpy(ComToPhoneBuff, BLEComToPhoneBuff[ComToPhoneRead]+1, blelen);
-		} 
+			memcpy(ComToPhoneBuff, ringSnapshot, blelen);
+		}
 		else
 		// Text Message
 		{
 			ComToPhoneBuff[0] = 0x40;
-			memcpy(ComToPhoneBuff+1, BLEComToPhoneBuff[ComToPhoneRead]+1, blelen-1);
+			memcpy(ComToPhoneBuff+1, ringSnapshot, blelen-1);
 
 		}
 
 		// send to phone
 		// why do we need to add 2 bytes??
 		bLED_BLUE = true;
-		
+
 		#if defined(ESP8266) || defined(ESP32)
 			blelen=blelen + 2;
 			esp32_write_ble(ComToPhoneBuff, blelen);
@@ -204,9 +216,9 @@ void sendComToPhone()
 			g_ble_uart.write(ComToPhoneBuff, blelen + 2);
 		#endif
 
-		ComToPhoneRead++;
-		if (ComToPhoneRead >= MAX_RING)
-			ComToPhoneRead = 0;
+		// Frame delivered: only now consume it from the ring, exactly as the
+		// old code only advanced its read pointer on this path.
+		bf_pop(&phoneComRing);
 
 		if(bBLEDEBUG)
 		{

@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <configuration.h>
+#include "display_pages_cfg.h"   // HAS_LONG_PAGE_TEXT
 #include <debugconf.h>
 #include <aprs_functions.h>
 
@@ -66,7 +67,19 @@ void insertOwnTx(unsigned int id);
 int esp32_isSSD1306(int address);
 
 void DisplayPong(char line1[20], char line2[20], char line3[20], char line4[20]);
-void sendPing(char msg_call[10]);
+// sendPing() kann eine Ping-Anfrage aus zwei ganz verschiedenen Gruenden nicht
+// absetzen: TRACK-Modus unterdrueckt sie bewusst (SUPPRESSED_TRACK), waehrend
+// ein voller TX-Ring einen Versuch ist, der den Ring tatsaechlich erreicht hat
+// und node_pingcount verbraucht haben kann (RING_REFUSED). Der Aufrufer muss
+// beide Faelle unterscheiden koennen, um den Ping-Zaehler korrekt zu fuehren.
+enum PingResult : uint8_t
+{
+    PING_QUEUED = 0,
+    PING_SUPPRESSED_TRACK = 1,
+    PING_RING_REFUSED = 2
+};
+
+PingResult sendPing(char msg_call[10]);
 void SendPong(String msg_source_call, unsigned int msg_id);
 void PongFail(String msg_source_call);
 

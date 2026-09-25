@@ -3168,7 +3168,7 @@ void esp32loop()
                 // prepare JSON config to phone after BLE connection
                 // send JSON config to phone after BLE connection
                 // wait at least 300ms between sending messages
-                if (ComToPhoneWrite != ComToPhoneRead)
+                if (!bf_empty(&phoneComRing))
                 {
                     // check every 300 ms to send to phone
                     if ((uint32_t)(millis() - ble_wait) >= 300)
@@ -3183,7 +3183,7 @@ void esp32loop()
                     // Kommando-Ring leer: naechste Portion der MHeard-Liste nachlegen
                     sendMheard();
                 }
-                else if (toPhoneWrite != toPhoneRead)
+                else if (!bf_empty(&phoneRing))
                 {
                     // wait for each message to send to phone
                     if ((uint32_t)(millis() - ble_wait) >= 400)
@@ -4103,11 +4103,16 @@ void esp32loop()
 
             resendPing = millis();
 
-            printfdeb("[PING]...send Ping to %s <%i>\n", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
+            PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
 
-            sendPing(meshcom_settings.node_pingcall);
+            printfdeb("[PING]...%s Ping to %s <%i>\n", (pingResult == PING_QUEUED) ? "send" : "FAILED", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
 
-            meshcom_settings.node_pingcount--;
+            // TRACK ist ein statischer Zustand: würde man das Budget trotzdem verbrauchen,
+            // liefe es in N x pingtime Sekunden auf null, ohne dass je etwas gesendet wurde,
+            // und der Knoten verstummt dauerhaft -- wirkt dann wie ein Einstellungsfehler.
+            // Ein abgelehnter Ring ist dagegen ein echter Sendeversuch und zählt mit.
+            if(pingResult != PING_SUPPRESSED_TRACK)
+                meshcom_settings.node_pingcount--;
         }
     }
 
