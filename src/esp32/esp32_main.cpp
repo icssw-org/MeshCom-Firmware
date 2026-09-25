@@ -1056,7 +1056,9 @@ void esp32setup()
     #endif
 
     // Initialize battery reading
-    #if not defined (BOARD_T_DECK_PRO)
+    #if defined(DISABLE_BATTERY)   // opt-out -D DISABLE_BATTERY: board without a battery divider
+    battProbeState = BATT_PROBE_NONE;   // no battery measurement on this board
+    #elif not defined (BOARD_T_DECK_PRO)
 	init_batt();
     #endif
 
@@ -3585,7 +3587,15 @@ void esp32loop()
 
         if (tx_is_active == false && is_receiving == false)
         {
-            #if defined(MODUL_FW_TBEAM)
+            #if defined(DISABLE_BATTERY)
+
+                // Board without battery measurement: report "not measurable", as the
+                // MODUL_FW_TBEAM branch below does without a PMU.
+                global_batt = 0;
+                global_proz = 0;
+                battProbeState = BATT_PROBE_NONE;
+
+            #elif defined(MODUL_FW_TBEAM)
                 int pmu_proz=0;
                 if(PMU != NULL)
                 {
