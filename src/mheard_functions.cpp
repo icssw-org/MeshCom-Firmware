@@ -796,8 +796,8 @@ void sendMheard()
                 // geschrieben hat. Die Liste verlor dann still Eintraege.
                 //
                 // Geschrankt wird gegen die UNGELESENEN Frames, nicht gegen
-                // bf_used() (MHD-01) -- Begruendung und Einheiten stehen in
-                // src/mheard_throttle.h, host-getestet.
+                // bf_used() -- Begruendung und Einheiten stehen in
+                // src/mheard_throttle.h.
                 if(!mheardFrameFits(bf_unread(&phoneComRing), frame_len, phoneComRing.cap))
                     return;
 

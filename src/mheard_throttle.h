@@ -18,7 +18,7 @@
 // senkt es, und die gibt genau so viel frei, wie der neue Frame braucht. Eine
 // Drossel darauf steht nach dem ersten vollen Ringumlauf dauerhaft dicht an
 // cap, ist ab da immer wahr und sendMheard() kehrt fuer immer sofort zurueck:
-// die MHeard-Liste erreicht das Telefon nie wieder (MHD-01). Umgekehrt ist
+// die MHeard-Liste erreicht das Telefon nie wieder. Umgekehrt ist
 // bf_unread() direkt gegen cap in Byte gestellt still wirkungslos.
 //
 // Richtig ist eine obere Schranke der ungelesenen Bytes: bf_push2() laesst
