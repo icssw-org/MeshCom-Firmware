@@ -132,6 +132,29 @@ static void sendBleJsonRegister(JsonDocument &doc)
         addBLEComToOutBuffer(msg_buffer, len);
 }
 
+// build date/time of this firmware as "YYYYMMDD-HHMMSS"
+// __DATE__ = "Sep 25 2026" (day with leading space if < 10), __TIME__ = "11:06:03"
+static void getBuildDate(char *buf, size_t len)
+{
+    static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    const char *build_date = __DATE__;
+    const char *build_time = __TIME__;
+
+    int month = 0;
+    for (int i = 0; i < 12; i++)
+    {
+        if (strncmp(build_date, months + i * 3, 3) == 0)
+        {
+            month = i + 1;
+            break;
+        }
+    }
+
+    snprintf(buf, len, "%04d%02d%02d-%c%c%c%c%c%c",
+        atoi(build_date + 7), month, atoi(build_date + 4),
+        build_time[0], build_time[1], build_time[3], build_time[4], build_time[6], build_time[7]);
+}
+
 int casecmp(const char *s1, const char *s2)
 {
 	while (*s1 != 0 && tolower(*s1) == tolower(*s2))
@@ -5960,6 +5983,17 @@ void commandAction(char *umsg_text, bool ble)
             idoc["BPIN"] = meshcom_settings.bt_code;
 
             sendBleJsonRegister(idoc); // JSN-01
+
+            // second info JSON, "I" is at the length limit
+            JsonDocument idoc1;
+
+            char bdate[16];     // "YYYYMMDD-HHMMSS"
+            getBuildDate(bdate, sizeof(bdate));
+
+            idoc1["TYP"] = "IS1";
+            idoc1["BDATE"] = bdate;
+
+            sendBleJsonRegister(idoc1);
         }
 
         if(!bRxFromPhone)
