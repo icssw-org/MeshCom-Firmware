@@ -41,6 +41,10 @@
 static auto& s_hwSerial = Serial;
 
 #include "net_console.h"
+#include <configuration.h>        // board defines (HAS_ETHERNET)
+#if defined(HAS_ETHERNET)
+#include <esp32/esp32_flash.h>   // meshcom_settings (Ethernet mode check)
+#endif
 // From here: Serial == MSerial
 
 // ── Password ──────────────────────────────────────────────────────────────────
@@ -345,7 +349,15 @@ void loopNetConsole()
     // und damit einen Panic/Reboot. Daher hier frueh aussteigen, solange kein WiFi verbunden
     // ist. s_server_pending bleibt erhalten, sodass der Listening-Socket geoeffnet wird, sobald
     // die WiFi-Verbindung steht. (Ohne IP kann die Netconsole ohnehin nicht arbeiten.)
-    if (WiFi.status() != WL_CONNECTED)
+    bool networkReady = (WiFi.status() == WL_CONNECTED);
+
+    #if defined(HAS_ETHERNET)
+    // Ethernet mode: WiFi never connects, the IP comes from the Ethernet interface.
+    networkReady = networkReady ||
+                   (meshcom_settings.node_netmode == 1 && meshcom_settings.node_hasIPaddress);
+    #endif
+
+    if (!networkReady)
         return;
 
     // Open listening socket on first call (triggered by startNetConsole)
