@@ -4072,7 +4072,7 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
 
     // MSG-ID für repeat Bits frei machen
     // NSB start with 00 .. repeater 1 = 01 .. repeater 2 = 10 .. repeater 3 = 11
-    aprsmsg.msg_id  = aprsmsg.msg_id & 0x3FFFFFFF;
+    //discussion ongoing aprsmsg.msg_id  = aprsmsg.msg_id & 0x3FFFFFFF;
     
     aprsmsg.msg_source_path = (src_override && src_override[0]) ? String(src_override) : String(meshcom_settings.node_call);
     aprsmsg.msg_destination_path = strDestinationCall;  //Later FW insert PATH from HEY! collecting
@@ -4989,7 +4989,7 @@ unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *s
 
     // MSG-ID für repeat Bits frei machen
     // NSB start with 00 .. repeater 1 = 01 .. repeater 2 = 10 .. repeater 3 = 11
-    aprsmsg.msg_id  = aprsmsg.msg_id & 0x3FFFFFFF;
+    // discussion ongoing aprsmsg.msg_id  = aprsmsg.msg_id & 0x3FFFFFFF;
 
     // own Call, or a foreign source when relaying a KISS client's APRS ack
     aprsmsg.msg_source_path = (src_override && src_override[0])
