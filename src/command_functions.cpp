@@ -3770,12 +3770,20 @@ void commandAction(char *umsg_text, bool ble)
             return;
         }
 
+        // Same callsign and shortname as already set: confirm it, but no flash write and no reboot.
+        bool bSameCall = (strcmp(meshcom_settings.node_call, sVar.c_str()) == 0);
+
         snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sVar.c_str());
 
 
-        snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());
+        String sShort = convertCallToShort(meshcom_settings.node_call);
+        bSameCall = bSameCall && sShort.equals(meshcom_settings.node_short);
+        snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", sShort.c_str());
 
         printfdeb("Call:%s Short:%s set\n", meshcom_settings.node_call, meshcom_settings.node_short);
+
+        if(bSameCall)
+            return;
 
         save_settings();
 

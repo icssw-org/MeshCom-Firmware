@@ -763,7 +763,7 @@ int NrfETH::getUDP()
 
               save_settings();
 
-              // same auto-reboot as --setcall (src/command_functions.cpp:3452).
+              // same auto-reboot as a changed --setcall (commandAction(), src/command_functions.cpp).
               // No T-Deck exception needed here -- BOARD_T_DECK/BOARD_T_DECK_PLUS
               // are ESP32-only board defines, never set in an nRF52 build.
               rebootAuto = millis() + 15 * 1000; // 15 Sekunden
