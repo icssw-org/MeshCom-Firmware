@@ -41,7 +41,24 @@ static uint32_t s_loop_max   = 0;
 static uint32_t s_loop_last  = 0;
 
 /* TM-13: sections, keyed by the literal's address. */
-#define INSTR_SECTION_SLOTS 16
+/* TM-13 slot capacity. Was 16, raised to 48 on 2026-09-17 while instrumenting
+ * ETH-03. The tree now carries 42 distinct INSTR_SECTION() names and slots are
+ * handed out first-come for the life of a boot (instrument_reset() clears the
+ * counts but keeps the name-to-slot binding, by design). Sixteen was therefore
+ * not a budget but a silent cutoff: instrument_note_section() checks
+ * `i < INSTR_SECTION_SLOTS` below and, when the table is full, simply returns
+ * -- no warning, no crash, just a section that never appears in the report.
+ *
+ * On the RAK4631 gateway path at least nine sections run every loop pass
+ * before the EXTUDP block is reached, plus five more when bGATEWAY is on, so
+ * the four new extudp_* / webserver_loop probes would very plausibly have been
+ * the ones cut. A measurement that is missing precisely the rows you added is
+ * worse than no measurement, because it reads as "the section never ran".
+ *
+ * Costs shipping images nothing: this entire file is inside
+ * #if INSTRUMENT_ENABLED. On a measurement build it is 32 extra SectionStat
+ * entries, 20 bytes each, ~640 B. */
+#define INSTR_SECTION_SLOTS 48
 static const uint32_t INSTR_GAP_REPORT_US = 250000;   /* a loop gap this long names its section */
 struct SectionStat { const char *name; uint32_t n; uint64_t us; uint32_t max; };
 static SectionStat  s_sect[INSTR_SECTION_SLOTS];
