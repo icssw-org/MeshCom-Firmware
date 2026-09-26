@@ -612,6 +612,8 @@ struct s_meshcomcompat_settings
 // Flash
 void init_flash(void);
 bool save_settings(void);
+// nRF52 writes the settings file only if its content changed
+#define save_msgid() save_settings()
 void log_settings(void);
 void flash_reset(void);
 extern bool init_flash_done;
