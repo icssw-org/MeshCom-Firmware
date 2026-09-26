@@ -1725,7 +1725,9 @@ String getCountryDropbox()
 
     for(int ic = 0; ic < max_country; ic++)
     {
-        int icc = strCountry[ic].compareTo("none");
+        // R3-06: strCountry ist jetzt const char* const[] statt String[]
+        // (RAM-Zeile der Welle 2), deshalb strcmp statt String::compareTo.
+        int icc = strcmp(strCountry[ic], "none");
 
         if(icc != 0)
         {
@@ -4059,8 +4061,8 @@ void tdeck_refresh_SET_view()
     snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_power);
     lv_textarea_set_text(setup_txpower, vChar);
 
-    lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start.c_str());
-    lv_textarea_set_text(setup_mtone, meshcom_settings.node_audio_msg.c_str());
+    lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start);
+    lv_textarea_set_text(setup_mtone, meshcom_settings.node_audio_msg);
     lv_textarea_set_text(setup_name, meshcom_settings.node_name);
     lv_textarea_set_text(setup_comment, meshcom_settings.node_atxt);
     lv_textarea_set_text(setup_wifissid, meshcom_settings.node_ssid);
@@ -4203,7 +4205,7 @@ static void msg_focus_and_alert(bool bWithAudio)
 
         // Einreihen, nicht abspielen: die SD-Suche und der Ton laufen im
         // Audio-Task, loopTask (LVGL) steht dafuer nicht mehr 1.1 s still.
-        audio_play_file_or_cw(meshcom_settings.node_audio_msg.c_str(), 12, 'r');
+        audio_play_file_or_cw(meshcom_settings.node_audio_msg, 12, 'r');
     }
 }
 
@@ -4386,8 +4388,8 @@ void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
     payload = utf8ascii(payload);
 
     String local_call = String(meshcom_settings.node_call);
-    bool is_outgoing = aprsmsg.msg_source_path.equalsIgnoreCase(local_call)
-        || aprsmsg.msg_source_call.equalsIgnoreCase(local_call);
+    bool is_outgoing = strcasecmp(aprsmsg.msg_source_path, local_call.c_str()) == 0
+        || strcasecmp(aprsmsg.msg_source_call, local_call.c_str()) == 0;
 
     String conversation = is_outgoing ? aprsmsg.msg_destination_call : aprsmsg.msg_source_call;
     if(conversation.length() == 0)
@@ -4400,8 +4402,8 @@ void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
     bubble.type = is_outgoing ? MsgBubbleType::Outgoing : MsgBubbleType::Incoming;
     bubble.timestamp = build_timestamp_string();
 
-    String source_descriptor = aprsmsg.msg_source_path.length() > 0 ? aprsmsg.msg_source_path : aprsmsg.msg_source_call;
-    String dest_descriptor = aprsmsg.msg_destination_call; // routing nicht berücksichtigt aprsmsg.msg_destination_path.length() > 0 ? aprsmsg.msg_destination_path : aprsmsg.msg_destination_call;
+    String source_descriptor = strlen(aprsmsg.msg_source_path) > 0 ? aprsmsg.msg_source_path : aprsmsg.msg_source_call;
+    String dest_descriptor = aprsmsg.msg_destination_call; // routing nicht berücksichtigt strlen(aprsmsg.msg_destination_path) > 0 ? aprsmsg.msg_destination_path : aprsmsg.msg_destination_call;
 
     if(source_descriptor.length() == 0)
         source_descriptor = local_call.length() > 0 ? local_call : String("You");

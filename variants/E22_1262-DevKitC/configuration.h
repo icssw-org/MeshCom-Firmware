@@ -10,21 +10,10 @@ definitions for E22 Board
 
 // E22 specifig config
 #define MODUL_HARDWARE EBYTE_E22
-#define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-#define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 
 #define BOARD_COUNTRY 5   // E22-900 -> 868
 
 #define SX1262X  // some functions differ from SX127x and SX126x in RadioLib based on Semtech Chip
-#define ENABLE_BMX280
-#define ENABLE_BMP390
-#define ENABLE_AHT20
-#define ENABLE_SHT21
-#define ENABLE_BMX680
-#define ENABLE_MCP23017
-#define ENABLE_INA226
-#define ENABLE_MC811
-#define ENABLE_RTC
 
 //#define ENABLE_SOFTSER
 
@@ -46,13 +35,9 @@ definitions for E22 Board
 #endif
 
 #define ANALOG_REFRESH_INTERVAL 30 // sec messure intervall
-#define TX_POWER_MAX 22  // max 22dBm
-#define TX_POWER_MIN -9
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
-#define TX_OUTPUT_POWER 22  // E22 / SX1262 have up to +22dBm
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
 
@@ -63,10 +48,8 @@ definitions for E22 Board
     case 7: CR_4_7;
     case 8: CR_4_8;
 */
-#define LORA_CR 6
 
 // RadioLib LoRa Bandwidth Setting in kHz
-#define LORA_BANDWIDTH 250
 
 /** RadioLib Spreading Factor
  * case 6: SF_6;
@@ -77,7 +60,6 @@ definitions for E22 Board
     case 11: SF_11;
     case 12: SF_12;
 */
-#define LORA_SF 11
 
 // Custom Board homemade E22-Ebyte Module + AZ Delivery ESP32 DevKitC v4
 
@@ -102,10 +84,14 @@ definitions for E22 Board
 
 #define OneWire_GPIO 25 // getestet OE5HWN
 
-#define ENABLE_GPS
 #define GPS_RX_PIN 16
 #define GPS_TX_PIN 17
 
 //#define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
 //#define ENABLE_GPS_UBLOX_FIX          // UBLOX wird fix festgelegt und kein setup gemacht
 //#define GPS_BAUDRATE_SETFIX 38400     // Die Baudrate für GPS wird auf FIXWERT gesetzt
+
+// W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
+// Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
+// dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.
+#include <configuration_default.h>   // W7: Flottenvorgaben, #ifndef -- was oben steht, gewinnt

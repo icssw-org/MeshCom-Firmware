@@ -11,6 +11,7 @@
 #ifdef NRF52_SERIES
 
 #include "WisBlock-API.h"
+#include "ble_settings_v1.h"
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <phone_commands.h>
@@ -26,7 +27,12 @@ extern void commandAction(char *msg_text, int len, bool ble);
 extern bool hasMsgFromPhone;
 extern char textbuff_phone [MAX_MSG_LEN_PHONE];
 extern uint8_t txt_msg_len_phone;
-extern bool bInitDisplay;
+// `extern bool bInitDisplay;` stand hier und band an NICHTS: den Namen gibt
+// es nirgendwo sonst im Baum, weder als Definition noch als zweite
+// Verwendung. Uebersetzt und linkt nur, weil ihn niemand liest -- ein
+// Symbol, das aussieht, als gaebe es irgendwo einen Display-Init-Zustand.
+// Gefunden 2026-09-16, als carve_extern_lint.py auf diese Datei erweitert
+// wurde.
 extern uint8_t dmac[6];
 extern bool config_to_phone_prepare;
 extern bool conffin_sent;
@@ -178,12 +184,6 @@ void init_ble(void)
 	Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
 	Bluefruit.Advertising.setFastTimeout(15);	// number of seconds in fast mode
 	// Bluefruit.Advertising.start(60);			// 0 = Don't stop advertising
-	// we do not need
-	// if (meshcom_settings.auto_join)
-	//{
-	//	restart_advertising(60);
-	//}
-	//else
 	{
 		restart_advertising(0);
 	}
@@ -283,6 +283,35 @@ void bleuart_rx_callback(uint16_t conn_handle)
 
 }
 
+// CONC-17: settings_rx_callback() runs in the BLE stack's task context, which
+// can be preempted mid-memcpy by the FreeRTOS timer-service task that drives
+// OnRxDone (priority 2, see C-01/09-concurrency-map.md) — a torn copy of
+// meshcom_settings could put a beacon on the air with a spliced callsign or
+// frequency. The callback stages the incoming wire-format bytes into this
+// private buffer (no shared state touched) and only sets a flag;
+// applyPendingBleSettings(), called once per Main Loop iteration, converts
+// the staged v1 image into a local s_meshcom_settings and only THEN copies
+// it into the live meshcom_settings under a short critical section.
+static s_ble_settings_v1 s_pendingBleSettingsV1;
+static volatile bool s_bBleSettingsPending = false;
+
+// Scratch buffers, file-scope static rather than on-stack: both types are
+// ~2 KB, too large to put on the Main Loop task's stack repeatedly.
+// s_convertedBleSettings holds the member-by-member conversion result of a
+// pending write, built OUTSIDE the critical section (see
+// applyPendingBleSettings()); s_bleSettingsOutBuf holds the v1 image handed
+// to write()/notify() for the read direction.
+// CONC-17: the BLE task may stage a NEW image into s_pendingBleSettingsV1 at
+// any moment, including while applyPendingBleSettings() is converting. So the
+// staging buffer is snapshotted under the lock and the conversion reads the
+// snapshot, never the shared buffer -- otherwise a second settings write
+// arriving mid-conversion splices two images into one and that spliced result
+// gets applied AND saved. Before the v1 freeze this could not happen: the only
+// read of the staging buffer was itself inside the critical section.
+static s_ble_settings_v1 s_bleSettingsSnapshot;
+static s_meshcom_settings s_convertedBleSettings;
+static s_ble_settings_v1 s_bleSettingsOutBuf;
+
 /**
  * @brief Initialize the settings characteristic
  *
@@ -293,26 +322,18 @@ BLEService init_settings_characteristic(void)
 	lora_service.begin();
 	g_lora_data.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ | CHR_PROPS_WRITE);
 	g_lora_data.setPermission(SECMODE_OPEN, SECMODE_OPEN);
-	g_lora_data.setFixedLen(sizeof(s_meshcom_settings) + 1);
+	g_lora_data.setFixedLen(sizeof(s_ble_settings_v1) + 1);
 	g_lora_data.setWriteCallback(settings_rx_callback);
 
 	g_lora_data.begin();
 
-	g_lora_data.write((void *)&meshcom_settings, sizeof(s_meshcom_settings));
+	// The characteristic ships the frozen v1 wire image, never
+	// s_meshcom_settings directly (see ble_settings_v1.h).
+	bleSettingsToV1(meshcom_settings, s_bleSettingsOutBuf);
+	g_lora_data.write((void *)&s_bleSettingsOutBuf, sizeof(s_bleSettingsOutBuf));
 
 	return lora_service;
 }
-
-// CONC-17: settings_rx_callback() runs in the BLE stack's task context, which
-// can be preempted mid-memcpy by the FreeRTOS timer-service task that drives
-// OnRxDone (priority 2, see C-01/09-concurrency-map.md) — a torn copy of
-// meshcom_settings could put a beacon on the air with a spliced callsign or
-// frequency. The callback stages the incoming struct into this private
-// buffer (no shared state touched) and only sets a flag; applyPendingBleSettings(),
-// called once per Main Loop iteration, does the actual copy into
-// meshcom_settings under a short critical section.
-static s_meshcom_settings s_pendingBleSettings;
-static volatile bool s_bBleSettingsPending = false;
 
 /**
  * Callback if data has been sent from the connected client
@@ -335,22 +356,24 @@ void settings_rx_callback(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *da
 	// Check the characteristic
 	if (chr->uuid == g_lora_data.uuid)
 	{
-		if (len != sizeof(s_meshcom_settings))
+		if (!bleSettingsV1LengthOk(len))
 		{
 			API_LOG("SETT", "Received settings have wrong size %d", len);
 			return;
 		}
 
-		s_meshcom_settings *rcvdSettings = (s_meshcom_settings *)data;
-		if ((rcvdSettings->valid_mark_1 != 0xAA) || (rcvdSettings->valid_mark_2 != MESHCOM_DATA_MARKER))
+		const s_ble_settings_v1 *rcvdSettings = (const s_ble_settings_v1 *)data;
+		if (!bleSettingsV1MarkersOk(*rcvdSettings))
 		{
 			API_LOG("SETT", "Received settings data do not have required markers");
 			return;
 		}
 
 		// CONC-17: stage only, apply from the Main Loop (see comment above
-		// s_pendingBleSettings)
-		memcpy((void *)&s_pendingBleSettings, data, sizeof(s_meshcom_settings));
+		// s_pendingBleSettingsV1). Still just a memcpy of the raw wire
+		// bytes -- the member-by-member conversion happens later, outside
+		// any critical section, in applyPendingBleSettings().
+		memcpy((void *)&s_pendingBleSettingsV1, data, sizeof(s_ble_settings_v1));
 		s_bBleSettingsPending = true;
 
 		// Notify task about the event
@@ -373,20 +396,36 @@ void applyPendingBleSettings(void)
 		return;
 	s_bBleSettingsPending = false;
 
+	// Take a consistent snapshot of the staged image before reading it: the
+	// BLE task writes s_pendingBleSettingsV1 from settings_rx_callback() and
+	// can preempt this function. One bounded memcpy, the same shape and cost
+	// as the apply below.
+	taskENTER_CRITICAL();
+	memcpy((void *)&s_bleSettingsSnapshot, (const void *)&s_pendingBleSettingsV1,
+	       sizeof(s_bleSettingsSnapshot));
+	taskEXIT_CRITICAL();
+
+	// Convert OUTSIDE the critical section: bleSettingsFromV1() walks every
+	// member one at a time and only ever touches these two scratch buffers,
+	// never meshcom_settings and never the shared staging buffer, so it can
+	// take as long as it needs without holding interrupts off.
+	bleSettingsFromV1(s_bleSettingsSnapshot, s_convertedBleSettings);
+
 	// Short, non-blocking copy — safe to run with interrupts masked, unlike
 	// the delay()-based patterns fixed under N-16.
 	taskENTER_CRITICAL();
-	memcpy((void *)&meshcom_settings, &s_pendingBleSettings, sizeof(s_meshcom_settings));
+	memcpy((void *)&meshcom_settings, &s_convertedBleSettings, sizeof(meshcom_settings));
 	taskEXIT_CRITICAL();
 
 	// Save new settings
 	save_settings();
 
 	// Update settings
-	g_lora_data.write((void *)&meshcom_settings, sizeof(s_meshcom_settings));
+	bleSettingsToV1(meshcom_settings, s_bleSettingsOutBuf);
+	g_lora_data.write((void *)&s_bleSettingsOutBuf, sizeof(s_bleSettingsOutBuf));
 
 	// Inform connected device about new settings
-	g_lora_data.notify((void *)&meshcom_settings, sizeof(s_meshcom_settings));
+	g_lora_data.notify((void *)&s_bleSettingsOutBuf, sizeof(s_bleSettingsOutBuf));
 
 	/*KBC
 	if (meshcom_settings.resetRequest)

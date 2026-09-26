@@ -13,31 +13,22 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define MODUL_HARDWARE T_ETH_ELITE_1262
 
 // Frequenze
-#define RF_FREQUENCY 433.175000
-#define LORA_APRS_FREQUENCY 433.775000
 #define BOARD_COUNTRY 8
 
 // External Hardware
-#define ENABLE_BMX280
-//#define ENABLE_BMP390
-//#define ENABLE_AHT20
-//#define ENABLE_SHT21
-//#define ENABLE_BMX680
-//#define ENABLE_MCP23017
-//#define ENABLE_INA226
-//#define ENABLE_MC811
-//#define ENABLE_RTC
+#define ENABLE_BMP390_DISABLED
+#define ENABLE_AHT20_DISABLED
+#define ENABLE_SHT21_DISABLED
+#define ENABLE_BMX680_DISABLED
+#define ENABLE_MCP23017_DISABLED
+#define ENABLE_INA226_DISABLED
+#define ENABLE_MC811_DISABLED
+#define ENABLE_RTC_DISABLED
 //#define ENABLE_SOFTSER
 
 #define CURRENT_LIMIT 140
-#define TX_POWER_MAX 22
-#define TX_POWER_MIN -9
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH
 #define WAIT_TX 5
-#define TX_OUTPUT_POWER 22
-#define LORA_CR 6
 #define LORA_BANDWIDTH 125
-#define LORA_SF 11
 
 // GPIO
 #define ANALOG_PIN 7
@@ -82,7 +73,11 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define RADIO_BUSY_PIN  16
 
 // GPS
-#define ENABLE_GPS
 #define GPS_RESET_MODE 1
 #define GPS_TX_PIN 42
 #define GPS_RX_PIN 39
+
+// W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
+// Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
+// dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.
+#include <configuration_default.h>   // W7: Flottenvorgaben, #ifndef -- was oben steht, gewinnt

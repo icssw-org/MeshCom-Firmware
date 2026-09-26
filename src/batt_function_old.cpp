@@ -195,7 +195,9 @@ uint32_t vbat_pin = ADC_PIN;
 
 #if !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC)
 //static
-esp_adc_cal_characteristics_t adc_chars[sizeof(esp_adc_cal_characteristics_t)];
+// war faelschlich als Array mit sizeof(...)-Elementen deklariert (36 Kopien statt einer
+// Instanz, ~1.3 KB DRAM) - bitte nicht wieder auf [sizeof(...)] "korrigieren"
+esp_adc_cal_characteristics_t adc_chars;
 
 #if defined(CONFIG_IDF_TARGET_ESP32)
 
@@ -483,7 +485,7 @@ void init_batt(void)
 
     //Characterize ADC
     //adc_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_chars);
+    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, &adc_chars);
 	print_char_val_type(val_type);
 
 #endif
@@ -796,7 +798,7 @@ float read_batt(void)
 	adc_reading /= NO_OF_SAMPLES;
 
 	//Convert adc_reading to voltage in mV
-	uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
+	uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, &adc_chars);
 
 	raw = voltage;
 	

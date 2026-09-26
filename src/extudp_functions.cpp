@@ -1,13 +1,20 @@
+#include "mc_text.h"
 #include <Arduino.h>
 #include <atomic>
 
 #include <extudp_functions.h>
 #include <loop_functions.h>
 #include <debugconf.h>
+#include "instrument.h"
 #include "ArduinoJson.h"
 #include "extern_notice_json.h"
 #include "extern_tele_json.h"
+#include "extern_msg_json.h"
 #include "mcp17_bits.h"
+// DR-18 part 2: queueExternAck()'s declaration and its pure JSON builder
+// buildExternAckJson() live in udp_frame.h (see that header for why -- not
+// extudp_functions.h, which is outside the U1 carve's file set).
+#include "udp_frame.h"
 
 // PT-01 (native_extern): none of the network transport below (SPI/WiFi/
 // Ethernet headers, the UdpExtern socket object, and every function that
@@ -62,13 +69,25 @@ int packetExtSize=0;
 
 // Deferred sendExtern ringbuffer — queued from OnRxDone, flushed in main loop
 #define MAX_EXTERN_QUEUE 2
+// R1-06 (DRY audit, docs/optimization-audit-20260910-appendix.md): 500 -> 264.
+// queueExtern()'s sole caller (lora_functions.cpp:950) passes RcvBuffer/size
+// straight out of OnRxDone(); size traces back to aprsmsg.msg_len <= the
+// decodeAPRS() rsize argument, which is the OnRxDone() payload length --
+// hardware/double-buffer bounded to UDP_TX_BUF_SIZE (255, see
+// lora_functions.cpp's rxPayloadCopy[2][UDP_TX_BUF_SIZE] and the raw-inject
+// path's buf[UDP_TX_BUF_SIZE] in test_inject.cpp). 264 keeps 9 B headroom
+// over that 255-B maximum; the queueExtern() clamp below still guards it.
 struct externQueueEntry {
-    uint8_t  buffer[500];
+    uint8_t  buffer[264];
     uint16_t buflen;
     int16_t  rssi;
     int8_t   snr;
     char     src_type[8];
     std::atomic<bool> used{false};
+    // DR-18 part 2: true when `buffer` already holds a finished JSON
+    // datagram (queueExternAck()) instead of raw APRS bytes for sendExtern()
+    // to decode -- same ring, same two slots, distinguished on flush so a
+    // status frame never gets fed through decodeAPRS().
 };
 static struct externQueueEntry externQueue[MAX_EXTERN_QUEUE];
 static int externQueueWrite = 0;
@@ -122,7 +141,45 @@ void startExternUDP()
   snprintf(s_extern, sizeof(s_extern), "%i.%i.%i.%i", extern_node_ip[0], extern_node_ip[1], extern_node_ip[2], extern_node_ip[3]);
   s_extern_node_ip = s_extern;
 
-  UdpExtern.begin(EXTERN_PORT);
+  // EXT-02: begin() CAN fail, and the result used to be discarded. Both
+  // implementations return 0 when no socket could be allocated -- on nRF52
+  // EthernetUDP::begin() returns 0 as soon as Ethernet.socketBegin() hands
+  // back an index >= MAX_SOCK_NUM (RAK13800_W5100S/src/EthernetUdp.cpp:35-43),
+  // and the W5100S has only four hardware sockets, shared with the port-1990
+  // socket, DHCP and the web server.
+  //
+  // Ignoring it was not a missing nicety, it was a permanent silent outage:
+  // the code went on to print "[EXT]...now listening" -- a claim it had never
+  // checked -- and set hasExternIPaddress, which is the very flag that makes
+  // startExternUDP() return early next time (:127) and getExternUDP() proceed
+  // into a dead socket (:379). Nothing retried, because the retry is gated on
+  // exactly that flag -- and --extudp off used to leave it set (its toggle
+  // row had no post-action), so cycling off/on never re-opened the socket
+  // either. Fixed: the "--extudp off" row now runs resetExternUDP() as its
+  // post-action (command_functions.cpp), which clears this flag and stops
+  // UdpExtern without reopening it. Measured on DK5EN-90 2026-09-17: socket bound "ok",
+  // three [EXT] lines printed, and then 0 of 23 corpus objects answered and
+  // not even the heartbeat below left the node -- through two reboots.
+  //
+  // Not latching on failure is what makes it recoverable: the caller
+  // (nrf52_main.cpp:2467 / esp32_main.cpp:4002) tests !hasExternIPaddress on
+  // every pass, so leaving the flag clear IS the retry. The log is rate-limited
+  // so a node that genuinely has no socket left does not flood the console.
+  if(UdpExtern.begin(EXTERN_PORT) == 0)
+  {
+      static uint32_t last_fail_log = 0;
+      static bool first_fail = true;
+      uint32_t now = millis();
+      if(first_fail || (uint32_t)(now - last_fail_log) > 30000)
+      {
+          Serial.printf("[EXT] socket busy -- UDP port %d not opened, will retry\n",
+                        EXTERN_PORT);
+          last_fail_log = now;
+          first_fail = false;
+      }
+      return;   // hasExternIPaddress stays false, so the next pass retries
+  }
+
 
   #if defined(ESP32)
   if(!WiFi.isConnected())
@@ -254,7 +311,11 @@ void getExtern(unsigned char incoming[], int len)
   // maxima. sendMessage() takes an explicit length and clamps at 199, and
   // the frame body limit further downstream is UDP_TX_BUF_SIZE (255), so
   // the full 162-character frame passes unchanged.
-  char val[2 + 9 + 1 + 150 + 1] = {0};
+  // R2-04: fuer den ECHTEN Groesstfall bemessen, nicht fuer den erwarteten.
+  // ":{" + Zielpfad + "}" + Nutzlast + NUL. Mit festen Feldbreiten kann GCC
+  // das nachrechnen -- und mit den alten 163 Byte widersprach es der
+  // Zusicherung unten. Jetzt stimmt die Zusicherung wieder.
+  char val[2 + MC_PATH_LEN + 1 + MC_PAYLOAD_LEN + 1] = {0};
   struct aprsMessage aprsmsg;
 
   // Decode
@@ -264,14 +325,14 @@ void getExtern(unsigned char incoming[], int len)
 
   initAPRS(aprsmsg, ':');
 
-  aprsmsg.msg_source_path="HOME";
-  aprsmsg.msg_destination_path="*";
+  mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), "HOME");
+  mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "*");
   // PT-01 finding 4: msg_payload used to be pre-set to the literal "none" as
   // an internal "nothing set yet" marker, which a later `== "none"` check
   // then read back -- so a legitimate message whose text is exactly "none"
   // was dropped. Presence is decided by the JSON itself below (a missing key
   // yields a null variant), not by a magic payload value.
-  aprsmsg.msg_payload="";
+  aprsmsg.msg_payload[0] = 0;
 
   //Serial.printf("len:%i icomming:%s vgldst:%s vglmsg:%s\n", len, incoming, vgldst, vglmsg);
 
@@ -319,15 +380,15 @@ void getExtern(unsigned char incoming[], int len)
     Serial.printf("[EXT] invalid lengths dst:%i msg:%i\n", strlen(dst), strlen(msg));
     return;
   }
-  aprsmsg.msg_destination_path = dst;
-  aprsmsg.msg_payload = msg;
+  mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), dst);
+  mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), msg);
   
   //Serial.printf("aprsmsg.msg_destination_path:%s aprsmsg.msg_payload:%s\n", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
   // val is sized for the largest frame the checks above can let through, and
   // snprintf() is bounded by that size -- no truncation is possible here any
   // more (PT-01 finding 5).
-  snprintf(val, sizeof(val), ":{%s}%s", aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+  snprintf(val, sizeof(val), ":{%s}%s", aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
   // BP-01: tag the origin so a QRS/QRT/QTA goes back on this socket and
   // nowhere else. Cleared right after -- everything that does not set this
@@ -392,11 +453,15 @@ void getExternUDP()
   if(bEXTUDP && (int)strlen(meshcom_settings.node_extern) > 7)
   {
     // check if we received a UDP packet
-    packetExtSize = UdpExtern.parsePacket();
-    
+    // ETH-03: prime suspect for the multi-second stall (docs/BACKLOG.md
+    // §3.8at) -- parsePacket() touches the W5100S over the SPI bus shared
+    // with the SX1262 radio; a block here holds bSPI_ETH_Active and starves
+    // loopWebserver() on the same bus.
+    { INSTR_SECTION("extudp_parse"); packetExtSize = UdpExtern.parsePacket(); }
+
     if (packetExtSize > 0)
     {
-      len = UdpExtern.read(incomingExtPacket, UDP_TX_BUF_SIZE - 1);
+      { INSTR_SECTION("extudp_read"); len = UdpExtern.read(incomingExtPacket, UDP_TX_BUF_SIZE - 1); }
 
       // UDP-02 (docs/bench-extudp-regression.md §6): we read at most
       // UDP_TX_BUF_SIZE-1 = 254 bytes, so a datagram of 255 bytes or more
@@ -470,19 +535,31 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     return;
   }
 
-  // Both platforms keep these two buffers in BSS, not on the stack. nRF52 has
-  // done so since 1951aa7d (4 KB loop-task stack). On ESP32 the chain
-  // esp32loop -> getExternUDP -> getExtern -> sendMessage -> sendExtern ->
-  // decodeAPRS -> printfdeb -> MeshSerial/lwIP measured 8464 B with the
-  // buffers on the stack (-fstack-usage plus the Xtensa entry prologues,
-  // Heltec V3) against the 8192 B framework default, so one ext-UDP "msg"
-  // datagram with a foreign destination reset the node deterministically.
-  // In BSS the frame loses the 1000 B of the two buffers.
-  //
-  // Static buffers are safe: every sendExtern() caller runs in the loop task.
-  // OnRxDone() never calls sendExtern() directly, only queueExtern(), and
-  // flushExternQueue() drains that queue from loop().
-  static char c_json[500];
+  // F2: auf beiden Plattformen jetzt BSS statt Stack (vorher nur auf nRF52,
+  // siehe Commit 1951aa7d). Grund ESP32: die Kette esp32loop -> getExternUDP
+  // -> getExtern -> sendMessage -> sendExtern -> decodeAPRS -> printfdeb ->
+  // MeshSerial/lwIP-Tail braucht am kompilierten Artefakt gemessen 8672 B,
+  // der Loop-Task hat nur 8192 B (Framework-Default) -- 2x500 B davon auf dem
+  // Stack reissen die Kette ueber die Grenze; ein Extern-UDP-{"type":"msg"}
+  // mit fremdem Ziel loeste darueber deterministisch einen Reset aus.
+  // Reentranz geprueft: alle fuenf Aufrufer von sendExtern() (hier unten in
+  // flushExternQueue(), sendMessage() und sendPosition() in
+  // loop_functions.cpp (4297 bzw. 4903), je ein
+  // Aufruf in udp_frame_esp32.cpp/udp_frame_nrf52.cpp) laufen auf beiden
+  // Plattformen ausschliesslich im Loop-Task -- NimBLE liefert per Queue an
+  // den Loop-Task zu (esp32_main.cpp: "BLE Queue: process data from NimBLE
+  // task in Main Loop context"), der Webserver ist ein synchron gepolltes
+  // WiFiServer (kein ESPAsyncWebServer in dieser Umgebung), und
+  // sendExtern() selbst ruft nichts auf, das erneut in sendMessage()/
+  // sendExtern() eintreten koennte. Der einzige bekannte Verschachtelungspfad
+  // ist bpRoute() -> bpEmitNotice() -> bpDeliver(), das auf dem T-Deck ueber
+  // lv_task_handler() einen GUI-Send re-entrant ausloesen kann (Kommentar bei
+  // bpRoute(), M5) -- der steht in sendMessage() aber VOR dem sendExtern()-
+  // Aufruf, laeuft also vollstaendig durch (inkl. seines eigenen
+  // sendExtern()) und kehrt zurueck, bevor die aeussere sendExtern()-
+  // Instanz ueberhaupt beginnt. Die beiden Aufrufe ueberlappen sich damit
+  // nie, statische Puffer sind also auch fuer diesen Pfad sicher.
+  static char c_json[EXTERN_MSG_JSON_BUF];
   static char c_tjson[500];
   memset(c_json, 0, sizeof(c_json));
   memset(c_tjson, 0, sizeof(c_tjson));
@@ -536,7 +613,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     // build the json with Arduino JSON
     cJson["src_type"] = src_type;
     cJson["type"] = "pos";
-    cJson["src"] = aprsmsg.msg_source_path.c_str();
+    cJson["src"] = aprsmsg.msg_source_path;
     cJson["msg"] = "";
     cJson["lat"] = a_lat;
     cJson["lat_dir"] = _lat_c;
@@ -547,6 +624,11 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     cJson["hw_id"] = aprsmsg.msg_source_hw;
     cJson["msg_id"] = _msgId;
     cJson["alt"] = aprspos.alt;
+    // Same three originator/hop keys as the "msg" shape (extern_msg_json.h);
+    // hw_id was already here, lora_mod (modulation nibble only) and max_hop
+    // are appended so both datagram types carry one contract.
+    cJson["lora_mod"] = aprsmsg.msg_source_mod & 0x0F;
+    cJson["max_hop"] = aprsmsg.max_hop;
     
     // add firmware version if not a node
     if(strcmp(src_type, "node") == 0)
@@ -584,7 +666,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
           mcp17PortABits(meshcom_settings.node_mcp17in, meshcom_settings.node_mcp17io, cdin);
 
       externTeleJsonNode(c_tjson, sizeof(c_tjson),
-                         aprsmsg.msg_source_path.c_str(),
+                         aprsmsg.msg_source_path,
                          meshcom_settings.node_temp, meshcom_settings.node_temp2,
                          meshcom_settings.node_hum,
                          meshcom_settings.node_press, meshcom_settings.node_press_asl,
@@ -595,7 +677,7 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     {
       // qfe = /P= (station pressure), not /F= (pressure altitude in metres).
       externTeleJsonLora(c_tjson, sizeof(c_tjson),
-                         aprsmsg.msg_source_path.c_str(), aprspos.bat,
+                         aprsmsg.msg_source_path, aprspos.bat,
                          aprspos.temp, aprspos.temp2, aprspos.hum,
                          aprspos.press, aprspos.qnh, aprspos.qfe,
                          aprspos.gasres, aprspos.co2,
@@ -620,51 +702,59 @@ void sendExtern(bool bUDP, char *src_type, uint8_t buffer[500], uint16_t buflen,
     // (today's behaviour, every deployed node already reads 0) so the
     // existing fleet forwards exactly as before, 1 = suppress -- an operator
     // opts in with "--nopmother on".
-    bool bIsGroupOrAll = (aprsmsg.msg_destination_call == "*") ||
+    bool bIsGroupOrAll = (strcmp(aprsmsg.msg_destination_call, "*") == 0) ||
                          (CheckGroup(aprsmsg.msg_destination_call) > 0);
-    bool bForOwnOrFromOwn = (aprsmsg.msg_destination_call == meshcom_settings.node_call) ||
-                            (aprsmsg.msg_source_call == meshcom_settings.node_call);
+    bool bForOwnOrFromOwn = (strcmp(aprsmsg.msg_destination_call, meshcom_settings.node_call) == 0) ||
+                            (strcmp(aprsmsg.msg_source_call, meshcom_settings.node_call) == 0);
 
     if((meshcom_settings.node_sset3 & 0x8000) && !bIsGroupOrAll && !bForOwnOrFromOwn)
     {
       Serial.printf("[EXT] pm dropped (NoPMOther): src;%s;dst;%s\n",
-                    aprsmsg.msg_source_call.c_str(), aprsmsg.msg_destination_call.c_str());
+                    aprsmsg.msg_source_call, aprsmsg.msg_destination_call);
       return;
     }
 
     // no telemetry
-    if(aprsmsg.msg_destination_path != "100001")
+    if(strcmp(aprsmsg.msg_destination_path, "100001") == 0)
     {
-      JsonDocument cJson;
+      // EXT-01 (BACKLOG.md): this leg built no JSON, so c_json stayed at its
+      // memset-cleared "" and control fell through into the shared send
+      // block below with an empty buffer. UdpExtern.write(c_json, 0) then
+      // returns 0 (nothing written) and the false-y result was read as a
+      // failed write, calling resetExternUDP() -- a full UDP socket
+      // teardown/rebuild for every telemetry text frame heard, confirmed on
+      // hardware in docs/bench/w3-baseline/README.md section 2 (resetExternUDP()
+      // re-establishes immediately, so this is churn, not an outage). Return
+      // before the send block instead of falling into it with nothing to send.
+      //
+      // Deliberate log difference: the old fall-through still printed the
+      // trailing [EXT];tx;len;... line (with len 0) on the non-EXTUDP path.
+      // That line is dropped here. It reported a send that never happened,
+      // so losing it removes a misleading entry rather than a useful one --
+      // on the EXTUDP path the old code returned early too, so nothing there
+      // changes. Noted because a log line vanishing is otherwise the kind of
+      // thing that reads as an accident later.
+      return;
+    }
 
-      // build the json with Arduino JSON
-      cJson["src_type"] = src_type;
-      cJson["type"] = "msg";
-      cJson["src"] = aprsmsg.msg_source_path.c_str();
-      cJson["dst"] = aprsmsg.msg_destination_path.c_str();
-      // JSN-01: assign raw -- ArduinoJson escapes JSON strings on
-      // serializeJson() already; a separate escaper here double-escaped.
-      cJson["msg"] = aprsmsg.msg_payload.c_str();
-      cJson["msg_id"] = _msgId;
-      
-      // add firmware version if not a node
-      if(strcmp(src_type, "node") == 0)
-      {
-        cJson["firmware"] = SOURCE_VERSION;
-      }
-      else
-      {
-        cJson["firmware"] = aprsmsg.msg_source_fw_version;
-      }
-
-      cJson["fw_sub"] = c_fw_sub;
-      cJson["rssi"] = rssi;
-      cJson["snr"] = snr;
-
-      // clear the buffer
+    {
+      // Built in extern_msg_json.h (native-tested key contract, incl. the
+      // originator hw_id/lora_mod and this copy's max_hop). "node" sends the
+      // firmware as the SOURCE_VERSION string, "lora" as the integer the
+      // originator put in the epilogue -- the helper keeps that asymmetry.
+      // JSN-01: bound by the buffer, not by measureJson(); the buffer is
+      // EXTERN_MSG_JSON_BUF because the worst frame off the air measures
+      // ~640 B (see the header).
       memset(c_json, 0x00, sizeof(c_json));
-      // JSN-01: bound by the buffer, not by measureJson().
-      serializeJson(cJson, c_json, sizeof(c_json));
+      externMsgJson(c_json, sizeof(c_json), src_type,
+                    aprsmsg.msg_source_path,
+                    aprsmsg.msg_destination_path,
+                    aprsmsg.msg_payload, _msgId,
+                    (strcmp(src_type, "node") == 0) ? SOURCE_VERSION : nullptr,
+                    aprsmsg.msg_source_fw_version, c_fw_sub,
+                    rssi, snr,
+                    aprsmsg.msg_source_hw, aprsmsg.msg_source_mod,
+                    aprsmsg.max_hop);
 
       }
   }
@@ -755,12 +845,99 @@ void queueExtern(char *src_type, uint8_t buffer[500], uint16_t buflen, int16_t r
     externQueueWrite = (externQueueWrite + 1) % MAX_EXTERN_QUEUE;
 }
 
+// DR-18 part 2 (docs/ack-wer-hat-quittiert.md §6.3): the outbound ack status
+// datagram. Builds the JSON via the header-side pure function (native
+// testable, see udp_frame.h) and queues it through the SAME ring
+// queueExtern() uses -- MAX_EXTERN_QUEUE is 2, now shared between text/
+// position frames and ack frames (doc §6.3's own caveat: hold the expected
+// combined rate against these two slots, not measure it after the fact).
+// Deliberately NOT routed through sendExtern(): that function's type switch
+// has only 0x21/0x3A branches and an `else return;` before the send block
+// (extudp_functions.cpp) -- widening it for 0x41 was considered and
+// WITHDRAWN (src/udp_frame.h). This is a separate sender that flushes to
+// the same socket.
+static void sendExternJson(const uint8_t *json, uint16_t jlen);   // Definition weiter unten
+
+void queueExternAck(uint32_t msg_id, uint8_t status, const char *from, const char *via)
+{
+    // ADVISOR-BEFUND W6b (blockierend, behoben): diese Funktion legte den Ack
+    // zuerst in externQueue[] ab. Das war FALSCH, und zwar aus zwei Gruenden
+    // gleichzeitig.
+    //
+    // ERSTENS ein Wettlauf ueber Tasks. Der Ringpuffer hat genau einen
+    // Erzeuger: queueExtern() aus OnRxDone(), also auf nRF52 dem LORA-Task --
+    // er existiert ueberhaupt nur, um Arbeit AUS dem Funk-Callback
+    // herauszuhalten ("Deferred -- avoid blocking UDP in radio callback",
+    // lora_functions.cpp:982). queueExternAck() laeuft dagegen aus
+    // gatewayService_nrf52() (nrf52_main.cpp:2070), also dem Hauptloop.
+    // externQueueWrite ist ein gewoehnlicher int ohne Sperre: zwei Tasks
+    // haetten denselben Slot gewaehlt und ihre memcpy()s verschraenkt, und der
+    // Vorruecker haette einen noch nicht geleerten Eintrag verdraengt.
+    //
+    // ZWEITENS war der Puffer hier gar nicht noetig. flushExternQueue() laeuft
+    // im SELBEN Task wie diese Funktion (nrf52_main.cpp:2427,
+    // esp32_main.cpp:3913), der Umweg ueber den Ring verschiebt also nichts --
+    // und der Handler direkt darueber ruft sendExtern() ohnehin synchron auf.
+    //
+    // Also: direkt senden, wie der Nachbaraufruf. Kein Slot, kein zweiter
+    // Erzeuger, kein Wettlauf, und die beiden Ringplaetze bleiben dem
+    // Funkpfad, fuer den sie bemessen wurden.
+    char c_json[160];
+    size_t jlen = buildExternAckJson(c_json, sizeof(c_json), msg_id, status, from, via);
+
+    if(jlen == 0)
+        return;
+
+    sendExternJson((const uint8_t *)c_json, (uint16_t)jlen);
+}
+
+// DR-18 part 2: the send half; called directly by queueExternAck() above, separate from
+// sendExtern() on purpose (see that function's comment) -- writes a
+// finished JSON buffer straight to UdpExtern instead of decoding APRS
+// bytes first. Same guard order and same write-fails-so-reset pattern as
+// sendExtern()'s send block, so a socket failure on an ack datagram is
+// handled identically to one on a text/position datagram.
+static void sendExternJson(const uint8_t *json, uint16_t jlen)
+{
+  #ifdef ESP32
+    if(bWIFIAP)
+      return;
+  #endif
+
+  if(!bEXTUDP)
+    return;
+
+  if(!hasExternIPaddress)
+    return;
+
+  if(!(bEXTUDP && hasExternIPaddress && (int)strlen(meshcom_settings.node_extern) > 7))
+  {
+    Serial.printf("%.*s\n", (int)jlen, (const char*)json);
+    return;
+  }
+
+  UdpExtern.beginPacket(apip, EXTERN_PORT);
+
+  Serial.printf("[EXT] Ack-Out: %.*s Len: %u\n", (int)jlen, (const char*)json, (unsigned)jlen);
+
+  if (!UdpExtern.write(json, jlen))
+  {
+    resetExternUDP();
+    return;
+  }
+
+  UdpExtern.endPacket();
+}
+
 void flushExternQueue()
 {
     for(int i = 0; i < MAX_EXTERN_QUEUE; i++)
     {
         if(externQueue[i].used.load(std::memory_order_acquire))
         {
+            // Ein Erzeuger, ein Verbraucher, eine Nutzlastart -- so war der
+            // Ring bemessen und so bleibt er. Der JSON-Ack aus W6b geht NICHT
+            // hier durch, siehe queueExternAck().
             sendExtern(true, externQueue[i].src_type, externQueue[i].buffer,
                        externQueue[i].buflen, externQueue[i].rssi, externQueue[i].snr);
             externQueue[i].used.store(false, std::memory_order_relaxed);

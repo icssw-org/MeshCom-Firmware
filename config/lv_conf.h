@@ -46,7 +46,27 @@
  *=========================*/
 
 /*1: use custom malloc/free, 0: use the built-in `lv_mem_alloc()` and `lv_mem_free()`*/
-#define LV_MEM_CUSTOM 0
+/* R4-01, 2026-09-16: war 0.
+ *
+ * Mit 0 legt LVGL seinen Arbeitsspeicher als STATISCHES Feld an
+ * (lib/lvgl/src/misc/lv_mem.c:95, `work_mem_int[LV_MEM_SIZE]`). Das sind
+ * 49.152 Byte im .bss -- reserviert beim Start, unabhaengig davon, wie viel
+ * die Oberflaeche je braucht, und zwingend im INTERNEN DRAM, weil ein
+ * statisches Feld nicht im PSRAM liegen kann.
+ *
+ * Diese Datei war die EINZIGE der fuenf lv_conf.h im Baum, die noch auf 0
+ * stand. variants/t_deck, variants/t_deck_plus, variants/t5_epaper und
+ * src/t-deck stehen alle seit jeher auf 1 mit ps_malloc. Der T-Deck Pro ist
+ * also nicht der Sonderfall, der einen eigenen Weg braucht, sondern die
+ * Kopie, die den Schritt nie mitgemacht hat.
+ *
+ * Dass PSRAM auf genau diesem Board oben ist, beweist das Board selbst:
+ * src/t-deck-pro/tdeck_pro.cpp:195-218 holt DREI Puffer zu je 76.800 Byte
+ * mit ps_calloc. Die dortige Rueckfallebene auf malloc kann diese Groesse
+ * im internen DRAM nicht bedienen -- liefe das PSRAM nicht, haette das Board
+ * nie eine Oberflaeche gezeigt.
+ */
+#define LV_MEM_CUSTOM 1
 #if LV_MEM_CUSTOM == 0
     /*Size of the memory available for `lv_mem_alloc()` in bytes (>= 2kB)*/
     #define LV_MEM_SIZE (48U * 1024U)          /*[bytes]*/
@@ -60,10 +80,10 @@
     #endif
 
 #else       /*LV_MEM_CUSTOM*/
-    #define LV_MEM_CUSTOM_INCLUDE <stdlib.h>   /*Header for the dynamic memory function*/
-    #define LV_MEM_CUSTOM_ALLOC   malloc
+    #define LV_MEM_CUSTOM_INCLUDE "esp32-hal-psram.h"   /*Header for the dynamic memory function*/
+    #define LV_MEM_CUSTOM_ALLOC   ps_malloc
     #define LV_MEM_CUSTOM_FREE    free
-    #define LV_MEM_CUSTOM_REALLOC realloc
+    #define LV_MEM_CUSTOM_REALLOC ps_realloc
 #endif     /*LV_MEM_CUSTOM*/
 
 /*Number of the intermediate memory buffer used during rendering and other internal processing mechanisms.

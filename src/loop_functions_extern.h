@@ -9,7 +9,7 @@
  *  @date        2025-12-03
  */
 
-#include "byte_fifo.h"
+#include "mheard_record.h"   // MheardRecord, siehe mheardRecords[] unten
 #include <atomic>
 
 // WQ-01 (2026-09-05): queue panel on the rxlog web page -- pulls in
@@ -70,6 +70,11 @@ extern char LogCallsign[10];
 extern bool bDisplayRetx;
 extern unsigned long DisplayOffWait;
 extern int DisplayTimeWait;
+// retransmit_timer/mcp_refresh_timer: each platform main defines its OWN
+// `unsigned long`, same name, no prior shared extern (D1-10 loop scheduler
+// needs one to build the shared table in loop_scheduler.cpp).
+extern unsigned long retransmit_timer;
+extern unsigned long mcp_refresh_timer;
 extern unsigned long BattTimeWait;
 extern unsigned long BattTimeAPP;
 extern unsigned long BMXTimeWait;
@@ -213,6 +218,11 @@ extern uint32_t ringEnqueueTime[MAX_RING];     // millis() timestamp when enqueu
 int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
                     const char* source, int retryCountIn, bool clearSlotFirst);
 
+// P15: kanonische Deklaration mit Default-Argumenten steht in loop_functions.h
+// (siehe Kommentar bei addTxRingEntry() oben) -- gleiche Begruendung.
+int addTxRingEntryOnce(const uint8_t* frame, uint16_t len, const char* source,
+                        int retryCountIn, bool clearSlotFirst);
+
 // BP-01 (BACKLOG) / TM-37: back-pressure to the sender, in Q-codes.
 //
 // sendMessage() has no transport parameter, so the only way it can answer on
@@ -257,21 +267,20 @@ void bpPollDrain(void);
 // or "*"), not a hardcoded broadcast.
 void sendExternNotice(const char *text, const char *dst);
 
-extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5];
+// R1-04: erst beim ersten Blick auf die rxlog-Seite angelegt, siehe
+// loop_functions.cpp. NULL heisst "noch nicht angesehen", nicht "Fehler".
+typedef unsigned char rawLogLine_t[UDP_TX_BUF_SIZE+5];
+extern rawLogLine_t *ringbufferRAWLoraRX;
+bool rawLogEnsure(void);
 extern int RAWLoRaWrite;
 extern int RAWLoRaRead;
 
-// Die drei Ausgangsringe -- UDP-Ausgang, Telefon-Daten, Telefon-Kommandos --
-// sind Byte-Ringe (src/byte_fifo.h) statt Schlitzfelder: die Frames liegen
-// dicht hintereinander, nicht in Schlitzen zu je 246 bis 280 Byte, die im
-// Mittel zu 70 % leer standen. Die Lese- und Schreibzeiger sind jetzt
-// Interna des Rings; Aufrufer nehmen bf_push/bf_peek/bf_pop, und der Verlauf
-// fuer die Web-Nachrichtenseite laeuft ueber bf_iter_begin/bf_iter_next.
-// Jede Operation sperrt sich auf nRF52 selbst (BF_LOCK), die frueheren
-// kritischen Abschnitte an den Aufrufstellen sind deshalb entfallen.
-extern byte_fifo_t udpOutRing;
-extern byte_fifo_t phoneRing;
-extern byte_fifo_t phoneComRing;
+// Die drei Ausgangsringe als Byte-Ringe (src/byte_fifo.h); Groessen in
+// configuration_global.h (RING_BYTES_*), Definition in loop_functions.cpp.
+#include "byte_fifo.h"
+extern byte_fifo_t udpOutRing;    // UDP-Ausgang (LoRa -> Gateway)
+extern byte_fifo_t phoneRing;     // BLE-Daten zum Telefon (+4 Byte Zeit je Frame ausser 'D')
+extern byte_fifo_t phoneComRing;  // BLE-Kommandos zum Telefon
 
 extern bool hasMsgFromPhone;
 
@@ -302,11 +311,6 @@ extern std::atomic<bool> cad_in_progress;
 extern std::atomic<bool> cad_done_flag;
 extern std::atomic<bool> cad_double_check;
 
-
-// RACE-01 fix: spinlock for deferred display update (ISR → main loop)
-#if defined(ESP32)
-extern portMUX_TYPE displayMux;
-#endif
 
 // Channel utilization tracking (10s window)
 #if defined(ESP32)
@@ -438,7 +442,9 @@ extern unsigned long web_timer;          // Refreshtime WEbServer
 extern float global_batt;
 extern int global_proz;
 
-extern unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
+// R2-01: war `unsigned char mheardBuffer[MAX_MHEARD][60]` -- Text je
+// Eintrag. Jetzt der Datensatz, 20 statt 60 Byte (src/mheard_record.h).
+extern MheardRecord mheardRecords[MAX_MHEARD];
 extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
 extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Update Time
 extern int mheardNCount[MAX_MHEARD];
@@ -485,9 +491,10 @@ extern int iDisplayType;
 #define PAGE_MAX 6
 #endif
 
-// RAM-Rueckgewinn: Zeilenkoordinaten als int16_t statt int. Werte sind
-// Pixelkoordinaten (x, y, hoechstens 320) und eine Textlaenge (20); y kann
-// -1 sein, daher vorzeichenbehaftet. Halbiert pageLine und pageLastLine.
+// RAM-Rueckgewinn (2026-09-20): Zeilenkoordinaten als int16_t statt int.
+// Werte sind Pixelkoordinaten (x, y, hoechstens 320) und eine Textlaenge
+// (20); y kann -1 sein, daher vorzeichenbehaftet. Halbiert pageLine und
+// pageLastLine.
 extern int16_t pageLine[maxdisplines][3];
 extern char pageText[maxdisplines][25];
 extern char pageTextLong1[25];

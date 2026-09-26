@@ -310,8 +310,8 @@ void startAudio()
 {
     // Nur einreihen; ob die Datei existiert, entscheidet der Audio-Task
     // (Ersatz: CW-Startkennung). Die Startsequenz wartet nicht auf den Ton.
-    Serial.printf("[BOOT];audio;queued;%s\n", meshcom_settings.node_audio_start.c_str());
-    audio_play_file_or_cw(meshcom_settings.node_audio_start.c_str(), 12, AUDIO_CW_START);
+    Serial.printf("[BOOT];audio;queued;%s\n", meshcom_settings.node_audio_start);
+    audio_play_file_or_cw(meshcom_settings.node_audio_start, 12, AUDIO_CW_START);
 }
 
 /**

@@ -554,16 +554,16 @@ void btn_event_handler_setup(lv_event_t * e)
 
         // START TONE
         strVar = lv_textarea_get_text(setup_stone);
-        if(meshcom_settings.node_audio_start.compareTo(strVar) != 0)
+        if (strncmp(meshcom_settings.node_audio_start, strVar.c_str(), sizeof(meshcom_settings.node_audio_start)) != 0)
         {
-            meshcom_settings.node_audio_start = strVar;
+            snprintf(meshcom_settings.node_audio_start, sizeof(meshcom_settings.node_audio_start), "%s", strVar.c_str());
         }
 
         // MESSAGE TONE
         strVar = lv_textarea_get_text(setup_mtone);
-        if (meshcom_settings.node_audio_msg.compareTo(strVar) != 0)
+        if (strncmp(meshcom_settings.node_audio_msg, strVar.c_str(), sizeof(meshcom_settings.node_audio_msg)) != 0)
         {
-            meshcom_settings.node_audio_msg = strVar;
+            snprintf(meshcom_settings.node_audio_msg, sizeof(meshcom_settings.node_audio_msg), "%s", strVar.c_str());
         }
 
         // NAME

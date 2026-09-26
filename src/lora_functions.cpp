@@ -1,3 +1,4 @@
+#include "mc_text.h"
 #include "Arduino.h"
 #include "configuration.h"
 
@@ -113,8 +114,8 @@ void loraDeepSleep()
 extern unsigned long iReceiveTimeOutTime;
 
 extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
-extern double mheardLat[MAX_MHEARD];
-extern double mheardLon[MAX_MHEARD];
+extern float mheardLat[MAX_MHEARD];   // R3-12: war double
+extern float mheardLon[MAX_MHEARD];   // R3-12: war double
 extern int mheardAlt[MAX_MHEARD];
 
 #include "TinyGPSPlus.h"
@@ -149,11 +150,35 @@ struct aprsMessage pendingDisplayMsg;
 int16_t pendingDisplayRssi = 0;
 int8_t  pendingDisplaySnr = 0;
 
-// RACE-01 fix: spinlock protects pendingDisplayMsg struct copy between ISR and main loop
-#if defined(ESP32)
-portMUX_TYPE displayMux = portMUX_INITIALIZER_UNLOCKED;
-#endif
+// RACE-01: the ESP32 spinlock that used to guard pendingDisplayMsg was removed
+// in 4a250602 along with every portENTER_CRITICAL(&displayMux) that took it;
+// the variable itself outlived them until 2026-09-12. It is gone now, and so is
+// the comment that claimed a lock existed here -- which was the actual cost of
+// leaving it: three files told a reader this struct was protected on ESP32.
+// It does not need to be. On ESP32 OnRxDone runs synchronously inside
+// esp32loop() (architecture/09-concurrency-map.md), so the producer
+// queueDisplayText()/queueDisplayPosition() and the consumer
+// flushDeferredDisplayUpdates() are the same task and cannot preempt each
+// other. On nRF52 they genuinely can -- OnRxDone runs in the LoRa task, the
+// drain in loop() -- and that side is guarded by taskENTER_CRITICAL() below,
+// on all three nRF52 boards (see the RF-07 note).
 
+// RF-07 (BACKLOG): this guard reads as RAK-only but is not. `BOARD_RAK4630`
+// is defined for ALL THREE nRF52 boards -- platformio.ini's shared
+// [nrf52_base] build_flags carries `-D BOARD_RAK4630="RAK4630"` and both
+// heltec_t114 and t_echo build on `${nrf52_base.build_flags}`, deliberately
+// (platformio.ini's own comment: "ABSICHTLICH mitgeerbt ... schaltet ueber
+// 60 nRF52-Codestellen frei"). Verified by compiling this TU for both envs
+// (`pio run -e heltec_t114/t_echo -t compiledb`) and grepping the resulting
+// command line: BOARD_RAK4630 is present on both. So the critical section
+// below already compiles in on T114/T-Echo, matching the consumer side
+// (nrf52_main.cpp's unconditional taskENTER_CRITICAL() around the drain,
+// which every nRF52 board builds). Same producer/consumer split as RAK4631
+// (OnRxDone runs in the FreeRTOS timer-service task, prio 2, see C-01 /
+// architecture/09-concurrency-map.md; the drain runs in loop() at prio 1),
+// so the race this guards against is real on T114/T-Echo too -- and already
+// covered. Closed as NOT a defect; do not widen this to `|| USE_HELTEC_T114
+// || BOARD_T_ECHO`, that would be a no-op at best and misleading at worst.
 // Queue display text update for main loop execution
 static void queueDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
@@ -170,6 +195,8 @@ static void queueDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t s
 }
 
 // Queue display position update for main loop execution
+// RF-07: same BOARD_RAK4630 note as queueDisplayText() above -- already
+// covers T114/T-Echo, see there.
 static void queueDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 {
 #if defined(BOARD_RAK4630)
@@ -227,6 +254,39 @@ void logRxDropUnconfigured(const char *call)
         s_have_marker = true;
         s_last_marker_ms = now;
         s_dropped_since_marker = 0;
+    }
+}
+
+// DR-25 (docs/testplan/drift-matrix.csv, U2): the outbound UDP-out drain's
+// own copy of the RX-01 idea (esp32/udp_drain_esp32.cpp, nrf52/udp_drain_
+// nrf52.cpp) detects an unconfigured-source frame AFTER the send has already
+// happened -- a LEAK, not a drop. It must not share stat_rx_drop_
+// unconfigured/logRxDropUnconfigured() above: a rising count at the inbound
+// doors (this file's OnRxDone guard, and udp_frame_{esp32,nrf52}.cpp's GATE)
+// means the primary guard is WORKING; a rising count here means it is NOT --
+// a frame the primary guard should have stopped reached the ring and went
+// out. Same shape (10 s marker floor, raw Serial.printf -- not printfdeb,
+// which strips ';' outside --debug csv and this line's format depends on
+// them), distinct counter and line so the two events are never conflated.
+uint32_t stat_tx_leak_unconfigured = 0;
+
+void logTxLeakUnconfigured(const char *call)
+{
+    static bool s_have_marker = false;
+    static uint32_t s_last_marker_ms = 0;
+    static uint32_t s_leaked_since_marker = 0;
+
+    stat_tx_leak_unconfigured++;
+    s_leaked_since_marker++;
+
+    uint32_t now = (uint32_t)millis();
+    if(!s_have_marker || (uint32_t)(now - s_last_marker_ms) >= 10000UL)
+    {
+        Serial.printf("[TX];leak;unconfigured;src;%s;ms;%lu;leaked;%lu\n",
+                      call, (unsigned long)now, (unsigned long)s_leaked_since_marker);
+        s_have_marker = true;
+        s_last_marker_ms = now;
+        s_leaked_since_marker = 0;
     }
 }
 
@@ -657,14 +717,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
         if(bDisplayLog)
         {
-            rx_own_echo = setlogPathHasCall(aprsmsg.msg_source_path.c_str(), meshcom_settings.node_call);
+            rx_own_echo = setlogPathHasCall(aprsmsg.msg_source_path, meshcom_settings.node_call);
 
             char tail[56];
             setlogFormatRxTail(tail, sizeof(tail), (int16_t)rssi, (int8_t)snr, rx_dup, rx_own_echo, (uint32_t)millis());
 
             if(LogCallsign[0] != 0x00)
             {
-                if(is_equ((char*)LogCallsign, aprsmsg.msg_source_call.c_str()))
+                if(is_equ((char*)LogCallsign, aprsmsg.msg_source_call))
                     printBuffer_aprs((char*)"[LOG]", aprsmsg, tail);
             }
             else
@@ -676,13 +736,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             if(bDisplayCont)
                 printfdeb("[LORA-ERROR]...%03i RCV:%s\n", size, RcvBuffer+6);
         }
-        else if(isUnconfiguredCall(aprsmsg.msg_source_call.c_str()))
+        else if(isUnconfiguredCall(aprsmsg.msg_source_call))
         {
             // RX-01 (BACKLOG 3.8k): a node still on the factory callsign is
             // not identifying itself, so nothing it sends is legal to
             // relay -- drop it here, before mheard, display, phone/BLE out,
             // the gateway upload and the relay decision below.
-            logRxDropUnconfigured(aprsmsg.msg_source_call.c_str());
+            logRxDropUnconfigured(aprsmsg.msg_source_call);
 
             // SL-02: Ausstieg vor dem Relay-Block, gleiche Aussage "nicht
             // weitergesendet, Grund unconf". Nur fuer neue Frames.
@@ -711,7 +771,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
             //printfdeb("1:msg_source_last:%s node_call:%s\n", aprsmsg.msg_source_last.c_str(), meshcom_settings.node_call);
 
-            if(!is_equ(aprsmsg.msg_source_last.c_str(), meshcom_settings.node_call))
+            if(!is_equ(aprsmsg.msg_source_last, meshcom_settings.node_call))
             {
                 // print aprs message
                 if(bDisplayInfo)
@@ -727,12 +787,17 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                 initMheardLine(mheardLine);
 
-                mheardLine.mh_callsign = aprsmsg.msg_source_last;
-                mheardLine.mh_sourcepath = aprsmsg.msg_source_path;
-                mheardLine.mh_sourcecallsign = aprsmsg.msg_source_call;
-                mheardLine.mh_destinationpath = aprsmsg.msg_destination_path;
+                // R2-04 (zweite Haelfte): msg_source_last/msg_source_path/
+                // msg_source_call/msg_destination_path sind bereits char[]
+                // mit exakt denselben Breiten wie die mheardLine-Gegenstuecke
+                // (aprs_structures.h), mcSet() also nur eine Kopie, keine
+                // Kuerzung.
+                mcSet(mheardLine.mh_callsign, sizeof(mheardLine.mh_callsign), aprsmsg.msg_source_last);
+                mcSet(mheardLine.mh_sourcepath, sizeof(mheardLine.mh_sourcepath), aprsmsg.msg_source_path);
+                mcSet(mheardLine.mh_sourcecallsign, sizeof(mheardLine.mh_sourcecallsign), aprsmsg.msg_source_call);
+                mcSet(mheardLine.mh_destinationpath, sizeof(mheardLine.mh_destinationpath), aprsmsg.msg_destination_path);
                 mheardLine.mh_hw = aprsmsg.msg_last_hw & 0x7F;
-                
+
                 if((aprsmsg.msg_last_hw & 0x80) == 0x80)    // Last-Sending
                     mheardLine.mh_mod = aprsmsg.msg_source_mod;
                 else
@@ -740,14 +805,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                 mheardLine.mh_rssi = rssi;
                 mheardLine.mh_snr = snr;
-                mheardLine.mh_date = getDateString();
-                mheardLine.mh_time = getTimeString();
+                mcSet(mheardLine.mh_date, sizeof(mheardLine.mh_date), getDateString().c_str());
+                mcSet(mheardLine.mh_time, sizeof(mheardLine.mh_time), getTimeString().c_str());
                 mheardLine.mh_payload_type = aprsmsg.payload_type;
                 mheardLine.mh_dist = -1;
                 mheardLine.mh_path_len = aprsmsg.msg_last_path_cnt;
                 mheardLine.mh_mesh = aprsmsg.msg_mesh;
                 mheardLine.mh_ncount = 0;
-                mheardLine.mh_path_payload = "";
+                mheardLine.mh_path_payload[0] = 0;
 
                 ///////////////////////////////////////////////
                 // MHeard
@@ -765,7 +830,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     {
                         if(mheardCalls[iset][0] != 0x00)
                         {
-                            if(is_equ(mheardCalls[iset], mheardLine.mh_callsign.c_str()))
+                            if(is_equ(mheardCalls[iset], mheardLine.mh_callsign))
                             {
                                 ipos=iset;
                                 lat = mheardLat[ipos];
@@ -782,7 +847,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                         if(decodeAPRSPOS(aprsmsg.msg_payload, aprspos) == 0x01)
                         {
-                            if(aprsmsg.msg_source_call == aprsmsg.msg_source_last)
+                            if(strcmp(aprsmsg.msg_source_call, aprsmsg.msg_source_last) == 0)
                             {
                                 // Display Distance, Direction
                                 lat = conv_coord_to_dec(aprspos.lat);
@@ -832,7 +897,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     {
                                         if(mheardCalls[iset][0] != 0x00)
                                         {
-                                            if(is_equ(mheardCalls[iset], aprsmsg.msg_source_call.c_str()))
+                                            if(is_equ(mheardCalls[iset], aprsmsg.msg_source_call))
                                             {
                                                 // ab version v4.35p.06.11 kommt das als /N99 mit der Position auch mit
                                                 mheardNCount[iset]=aprspos.ncnt;
@@ -855,7 +920,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 {
                     ///////////////////////////////////////////////
                     // Path
-                    mheardLine.mh_path_payload = aprsmsg.msg_payload;
+                    mcSet(mheardLine.mh_path_payload, sizeof(mheardLine.mh_path_payload), aprsmsg.msg_payload);
 
                     updateHeyPath(mheardLine);
                     //
@@ -877,14 +942,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 {
                     if(ackMsgIdFromNode(aprsmsg.msg_id, _GW_ID))
                     {
-                        uint16_t plen = buildAckPhoneFrame(print_buff, aprsmsg.msg_id, 0x00, aprsmsg.msg_source_last.c_str());
+                        uint16_t plen = buildAckPhoneFrame(print_buff, aprsmsg.msg_id, 0x00, aprsmsg.msg_source_last);
 
                         addBLEOutBuffer(print_buff, plen);
 
                         if(bDisplayInfo)
                         {
                             printfdeb("%s", getTimeString().c_str());
-                            printfdeb(" HEARD from <%s> to Phone  %02X %02X%02X%02X%02X %02X %02X\n", aprsmsg.msg_source_path.c_str(), print_buff[0], print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[6]);
+                            printfdeb(" HEARD from <%s> to Phone  %02X %02X%02X%02X%02X %02X %02X\n", aprsmsg.msg_source_path, print_buff[0], print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5], print_buff[6]);
                             bNewLine=true;
                         }
                     }
@@ -974,8 +1039,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // AA0AAA-99,...,99999
                         // AA0AAA-99,...,XX0XXX-99
 
-                        char destination_call[20];
-                        snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
+                        char destination_call[MC_CALL_LEN_Z];   // R2-04: war 20, siehe udp_frame_esp32.cpp
+                        snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call);
 
                         bool bMeshDestination = true;
 
@@ -993,13 +1058,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                             {
                                 ///////////////////////////////////////////////////////////////
                                 // check ping
-                                if(aprsmsg.msg_payload.startsWith("{ping}"))
+                                if(mcStartsWith(aprsmsg.msg_payload, "{ping}"))
                                 {
                                     if(bDisplayInfo)
                                     {
                                         printfdeb("\n");
                                         printfdeb("%s", getTimeString().c_str());
-                                        printfdeb("[PING] from:%s to:%s via:%s\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_source_path.c_str());
+                                        printfdeb("[PING] from:%s to:%s via:%s\n", aprsmsg.msg_source_call, aprsmsg.msg_destination_call, aprsmsg.msg_source_path);
                                         bNewLine=true;
                                     }
 
@@ -1010,18 +1075,24 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 else
                                 ///////////////////////////////////////////////////////////////
                                 // check pong
-                                if(aprsmsg.msg_payload.startsWith("{pong}"))
+                                if(mcStartsWith(aprsmsg.msg_payload, "{pong}"))
                                 {
                                     if(bDisplayInfo)
                                     {
                                         printfdeb("\n");
                                         printfdeb("%s", getTimeString().c_str());
-                                        printfdeb("[PONG] from:%s to:%s via:%s\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_source_path.c_str());
+                                        printfdeb("[PONG] from:%s to:%s via:%s\n", aprsmsg.msg_source_call, aprsmsg.msg_destination_call, aprsmsg.msg_source_path);
                                         bNewLine=true;
                                     }
 
                                     queueDisplayText(aprsmsg, rssi, snr);
-                                    
+
+                                    // P13: das Pong geht auch an den BLE-Client, wie jede andere
+                                    // DM an uns (else-Zweig unten). Sonst sieht ein ueber BLE
+                                    // gesendetes {ping} (App, McApp) nie eine Antwort. Roh
+                                    // weitergereicht: {pong}{<id>} ordnet es dem Ping zu.
+                                    addBLEOutBuffer(RcvBuffer, size);
+
                                     bPingSend = false;
 
                                 }
@@ -1029,18 +1100,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 else
                                 {
 
-                                    int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
-                                    int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
+                                    int iAckPos=mcIndexOfStr(aprsmsg.msg_payload, ":ack");
+                                    int iEnqPos=mcIndexOfStrFrom(aprsmsg.msg_payload, "{", 1);
                                     
-                                    if(iAckPos > 0 || aprsmsg.msg_payload.indexOf(":rej") > 0)
+                                    if(iAckPos > 0 || mcIndexOfStr(aprsmsg.msg_payload, ":rej") > 0)
                                     {
                                         //
                                         // next sequence only to mark a massage to node_call with ACK
                                         //
-                                        unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
+                                        unsigned int iAckId = (unsigned int)mcSliceToLong(aprsmsg.msg_payload, (size_t)(iAckPos+4), strlen(aprsmsg.msg_payload));
                                         msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
 
-                                        uint16_t plen = buildAckPhoneFrame(print_buff, msg_counter, 0x02, aprsmsg.msg_source_call.c_str());
+                                        uint16_t plen = buildAckPhoneFrame(print_buff, msg_counter, 0x02, aprsmsg.msg_source_call);
 
                                         if(bDisplayInfo)
                                         {
@@ -1070,7 +1141,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         //
                                         // next sequence only reply to a DM-Message
                                         //
-                                        unsigned int iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
+                                        unsigned int iAckId = (unsigned int)mcSliceToLong(aprsmsg.msg_payload, (size_t)(iEnqPos+1), strlen(aprsmsg.msg_payload));
                                         
                                         if(bDisplayInfo && !bNewLine)
                                         {
@@ -1080,7 +1151,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                         SendAckMessage(aprsmsg.msg_source_call, iAckId);
 
-                                        aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
+                                        mcTruncate(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), (size_t)(iEnqPos));
                                         
                                         uint8_t tempRcvBuffer[255];
 
@@ -1089,7 +1160,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         queueDisplayText(aprsmsg, rssi, snr);
 
                                         if(bDisplayVia)
-                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
 
                                         addBLEOutBuffer(tempRcvBuffer, tempsize);
@@ -1102,7 +1173,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         queueDisplayText(aprsmsg, rssi, snr);
 
                                         if(bDisplayVia)
-                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
                                         addBLEOutBuffer(RcvBuffer, size);
                                     }
@@ -1114,48 +1185,48 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 // next sequence to decode special broadcast messages
                                 //
                                 bool bSendAckGateway=true;
-                                if(aprsmsg.msg_payload.startsWith("{ping}"))
+                                if(mcStartsWith(aprsmsg.msg_payload, "{ping}"))
                                 {
                                     bSendAckGateway = false;
                                     bMeshDestination = false;
                                 }
                                 else
-                                if(aprsmsg.msg_payload.startsWith("{pong}"))
+                                if(mcStartsWith(aprsmsg.msg_payload, "{pong}"))
                                 {
                                     bSendAckGateway=false;
                                     bMeshDestination = false;
                                 }
                                 else
-                                if(memcmp(aprsmsg.msg_payload.c_str(), "{MCP}", 5) == 0)
+                                if(memcmp(aprsmsg.msg_payload, "{MCP}", 5) == 0)
                                 {
                                     queueDisplayText(aprsmsg, rssi, snr);
 
                                     if(bDisplayVia)
-                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
                                     bSendAckGateway=false;
                                 }
                                 else
-                                if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
+                                if(memcmp(aprsmsg.msg_payload, "{SET}", 5) == 0)
                                 {
                                     queueDisplayText(aprsmsg, rssi, snr);
 
                                     if(bDisplayVia)
-                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+                                        printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
                                     bSendAckGateway=false;
                                 }
                                 else
-                                if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
+                                if(memcmp(aprsmsg.msg_payload, "{CET}", 5) == 0)
                                 {
-                                    if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}<", 6) == 0)
+                                    if(memcmp(aprsmsg.msg_payload, "{CET}<", 6) == 0)
                                         bMeshDestination = false;   // falsche Zeit nicht weiter geben
                                     else
                                     {
                                         queueDisplayText(aprsmsg, rssi, snr);
 
                                         if(bDisplayVia)
-                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.msg_payload);
                                     }
 
                                     bSendAckGateway=false;
@@ -1170,7 +1241,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         queueDisplayText(aprsmsg, rssi, snr);
 
                                         if(bDisplayVia)
-                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+                                            printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
                                         // APP Offline
                                         if(isPhoneReady == 0)
@@ -1212,7 +1283,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                 queueDisplayText(aprsmsg, rssi, snr);
 
                                                 if(bDisplayVia)
-                                                    printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_payload.c_str());
+                                                    printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
                                                 displaySOFTSER(aprsmsg);
                                             }
@@ -1233,7 +1304,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         if(checkOwnTx(aprsmsg.msg_id) >= 0)
                                         {
                                             // und an alle geht Wolke mit Hackerl an BLE senden
-                                            if(aprsmsg.msg_destination_call == "*")
+                                            if(strcmp(aprsmsg.msg_destination_call, "*") == 0)
                                             {
                                                 // Gateway hoert seine eigene Meldung zurueck und ist selbst der
                                                 // Quittierende: Status 0x01 mit eigenem Rufzeichen.
@@ -1368,7 +1439,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         }
 
                         // ping no mesh
-                        if(aprsmsg.payload_type == ':' && strcmp(destination_call, "100001") == 0 && aprsmsg.msg_payload.startsWith("{ping}"))    // TEXT
+                        if(aprsmsg.payload_type == ':' && strcmp(destination_call, "100001") == 0 && mcStartsWith(aprsmsg.msg_payload, "{ping}"))    // TEXT
                         {
                             if(bMeshDestination)
                                 rly_reason = "ping";        // SL-02
@@ -1472,29 +1543,29 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 ////////////////////////////////////////////////////////////
                                 //Next hop new via
                                 if(bDisplayVia)
-                                    printfdeb("[MESH<]...DEST-CALL:%s ... DEST-PATH:%s\n", aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_destination_path.c_str());
+                                    printfdeb("[MESH<]...DEST-CALL:%s ... DEST-PATH:%s\n", aprsmsg.msg_destination_call, aprsmsg.msg_destination_path);
 
-                                aprsmsg.msg_destination_path = aprsmsg.msg_destination_call;
+                                mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), aprsmsg.msg_destination_call);
 
                                 checkVia(aprsmsg);
 
                                 if(bDisplayVia)
-                                    printfdeb("[MESH>]...SRC-PATH:%s ... DEST-PATH:%s\n", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str());
+                                    printfdeb("[MESH>]...SRC-PATH:%s ... DEST-PATH:%s\n", aprsmsg.msg_source_path, aprsmsg.msg_destination_path);
                                 //
                                 ////////////////////////////////////////////////////////////
 
                                 if(bSHORTPATH)
                                 {
                                     /* short path */
-                                    aprsmsg.msg_source_path=aprsmsg.msg_source_call;    //call last sending node
-                                    aprsmsg.msg_source_path.concat(',');
-                                    aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                                    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), aprsmsg.msg_source_call);    //call last sending node
+                                    mcAppendChar(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), ',');
+                                    mcAppend(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
                                 }
                                 else
                                 {
                                     /*long path*/
-                                    aprsmsg.msg_source_path.concat(',');
-                                    aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
+                                    mcAppendChar(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), ',');
+                                    mcAppend(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
                                 }
 
                                 if(aprsmsg.payload_type == '@' && !bHeyReportAppended)

@@ -331,6 +331,12 @@ bool sendSOFTSER(char cText[100])
 
 #define MAX_ID 10
 
+// R3-10 (DRY audit): NOT converted to const char*[] like R2-07/R3-06.
+// These are runtime state, not constant tables -- getSOFTSER_ID() writes
+// strSID[next_id] = ID (below), and setSOFTSER_PARM()/setSOFTSER_UNIT()/
+// setSOFTSER_SNAME() assign parsed telemetry field names/units into
+// strPARM[]/strPARM_ID[]/strUNIT[]/strSNAME[] at runtime. A const char*
+// table cannot hold that; leaving these as String is correct.
 String strSID[MAX_ID];
 
 String strSNAME[MAX_ID];
@@ -392,7 +398,7 @@ void displaySOFTSER(struct aprsMessage &aprsmsg)
         return;
     }
 
-    strSOFTSERAPP_ID = aprsmsg.msg_payload.substring(0, 9);
+    strSOFTSERAPP_ID = String(aprsmsg.msg_payload).substring(0, 9);
     strSOFTSERAPP_ID.trim();
 
     int iID = getSOFTSER_ID(strSOFTSERAPP_ID);
@@ -404,12 +410,12 @@ void displaySOFTSER(struct aprsMessage &aprsmsg)
     int impos=0;
     String sDecode="";
 
-    if(aprsmsg.msg_payload.charAt(10) == 'P')
+    if(aprsmsg.msg_payload[10] == 'P')
     {
         ipos=15;
         for(int icd=0; icd<5; icd++)
         {
-            sDecode = aprsmsg.msg_payload.substring(ipos);
+            sDecode = String(aprsmsg.msg_payload).substring(ipos);
             impos = sDecode.indexOf(',');
             if(impos >= 0)
             {
@@ -427,12 +433,12 @@ void displaySOFTSER(struct aprsMessage &aprsmsg)
         return;
     }
     else
-    if(aprsmsg.msg_payload.charAt(10) == 'U')
+    if(aprsmsg.msg_payload[10] == 'U')
     {
         ipos=15;
         for(int icd=0; icd<5; icd++)
         {
-            sDecode = aprsmsg.msg_payload.substring(ipos);
+            sDecode = String(aprsmsg.msg_payload).substring(ipos);
             impos = sDecode.indexOf(',');
             if(impos >= 0)
             {
@@ -450,15 +456,15 @@ void displaySOFTSER(struct aprsMessage &aprsmsg)
         return;
     }
     else
-    if(aprsmsg.msg_payload.charAt(10) == 'E')
+    if(aprsmsg.msg_payload[10] == 'E')
     {
         return;
     }
     else
-    if(aprsmsg.msg_payload.charAt(10) == 'B')
+    if(aprsmsg.msg_payload[10] == 'B')
     {
         ipos=23;
-        sDecode = aprsmsg.msg_payload.substring(ipos);
+        sDecode = String(aprsmsg.msg_payload).substring(ipos);
 
         setSOFTSER_SNAME(iID, sDecode);
 
@@ -466,14 +472,14 @@ void displaySOFTSER(struct aprsMessage &aprsmsg)
     }
     else
     // VALUES receiced
-    if(aprsmsg.msg_payload.charAt(10) == 'T')
+    if(aprsmsg.msg_payload[10] == 'T')
     {
         String strValue[12] = {""};
 
         ipos=16;
         for(int icd=0; icd<12; icd++)
         {
-            sDecode = aprsmsg.msg_payload.substring(ipos);
+            sDecode = String(aprsmsg.msg_payload).substring(ipos);
             impos = sDecode.indexOf(',');
             if(impos >= 0)
             {

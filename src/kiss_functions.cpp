@@ -32,6 +32,7 @@
 #include <debugconf.h>
 
 #include "kiss_ax25.h"
+#include "kiss_frame.h"
 
 // worst-case AX.25 UI frame we emit: 14 (addr) + 56 (8 digis) + 2 (ctrl/pid)
 // + info field (data-type char / ":ADDRESSEE:" + payload; payload <= LoRa MTU)
@@ -89,25 +90,17 @@ static KissAckEntry s_ackmap[KISS_ACKMAP_SLOTS];
 static int          s_ackmap_w = 0;
 
 // Rewrite ":ack<node-nn>" / ":rej<node-nn>" in an incoming ACK to the client's
-// original "{nn", if we injected the message it acknowledges.
+// original "{nn", if we injected the message it acknowledges. Thin wrapper
+// around kissAckRewrite() (kiss_frame.h/.cpp, host-testable): this keeps the
+// s_ackmap state, performs the "consume" once the pure function reports a
+// match, and prints the bLORADEBUG line.
 static void ackmapRewrite(struct aprsMessage &m)
 {
-    int ap = m.msg_payload.indexOf(":ack");
-    if (ap < 0) ap = m.msg_payload.indexOf(":rej");
-    if (ap < 0) return;
-
-    String tail = m.msg_payload.substring(ap + 4);
-    int nd = 0;
-    while (nd < (int)tail.length() && isdigit((unsigned char)tail[nd])) nd++;
-    if (nd == 0) return;
-    uint32_t node_nn = (uint32_t)tail.substring(0, nd).toInt();
-
-    // F5: compare against the true addressee (msg_destination_call), which the
-    // decoder already stripped of any leading "<via>," relay path.
-    int idx = kissAckmapFind(s_ackmap, node_nn, m.msg_destination_call.c_str());
+    uint32_t node_nn = 0;
+    int idx = kissAckRewrite(m.msg_payload, sizeof(m.msg_payload), m.msg_destination_call,
+                              s_ackmap, &node_nn);
     if (idx < 0) return;
 
-    m.msg_payload = m.msg_payload.substring(0, ap + 4) + s_ackmap[idx].nn + tail.substring(nd);
     s_ackmap[idx].msg_id = 0;   // consume
     if (bLORADEBUG)
         Serial.printf("[KISS] ack %lu -> %s for %s\n",
@@ -165,114 +158,17 @@ static void kissWrite(uint8_t type, const uint8_t *data, size_t len)
 
 // ───────────────────────────────────────────────────────────────────────────
 // Build an AX.25 UI frame (no FCS — KISS carries none) from a decoded MeshCom
-// message. Returns frame length, or 0 if it cannot be represented.
+// message. Returns frame length, or 0 if it cannot be represented. Thin
+// wrapper around kissBuildAx25() (kiss_frame.h/.cpp, host-testable): this
+// keeps the node_aprsmc / "APRSMC" fallback, the one piece that needs
+// meshcom_settings.
 static size_t buildAx25(const struct aprsMessage &m, uint8_t *out, size_t outsz)
 {
     const char *tocall = meshcom_settings.node_aprsmc;
     if (!tocall || strlen(tocall) < 4)
         tocall = "APRSMC";
 
-    if (m.msg_source_call.length() < 3)
-        return 0;
-
-    // Digipeater path = the relays in msg_source_path after the origin call.
-    // Parsed in place in a private char copy — no per-frame String heap traffic.
-    // strchr-based, not strtok_r: strtok_r is the one libc.a object nothing
-    // else in the tree pulls in, and the ESP-IDF linker script keeps it
-    // IRAM-resident (reachable with the flash cache disabled) -- on boards
-    // with only ~20 B of iram0_0_seg headroom (T-Beam family) that ~124 B
-    // overflows the link. strchr/strlen/strcmp are already linked and
-    // flash-resident, so this costs 0 IRAM. Semantics: an empty field between
-    // two commas becomes a zero-length token instead of being collapsed away
-    // like strtok_r would -- harmless, the `if (*tok && ...)` guard below
-    // already drops empty tokens either way.
-    char        pathbuf[128];
-    snprintf(pathbuf, sizeof(pathbuf), "%s", m.msg_source_path.c_str());
-    const char *digis[8];
-    int         ndigi = 0;
-    {
-        char *p = strchr(pathbuf, ',');
-        p = p ? p + 1 : nullptr;              // origin call — skip
-        while (p && ndigi < 8)
-        {
-            char *c = strchr(p, ',');
-            if (c) *c = 0;
-            char *tok = p;
-            while (*tok == ' ') tok++;
-            char *e = tok + strlen(tok);
-            while (e > tok && e[-1] == ' ') *--e = 0;
-            if (*tok && strcmp(tok, "*") != 0)
-                digis[ndigi++] = tok;
-            p = c ? c + 1 : nullptr;
-        }
-    }
-
-    // Information field (loop-task stack)
-    char info[UDP_TX_BUF_SIZE + 24];
-    int  ilen = 0;
-    if (m.payload_type == MSG_TYPE_TEXT)
-    {
-        // F5: the true addressee — the decoder resets msg_destination_call at
-        // every comma, so a "<via>,<dest>" path never leaks in here.
-        char addr[24];
-        snprintf(addr, sizeof(addr), "%s", m.msg_destination_call.c_str());
-        if (strcmp(addr, "*") == 0) addr[0] = 0;
-
-        const char *pl   = m.msg_payload.c_str();
-        size_t      plen = m.msg_payload.length();
-
-        // MeshCom ACK/REJ messages already carry a 9-char-padded "<addressee> :ackNN"
-        // payload. F12: only trust that when byte 9 is the ':' separator; otherwise
-        // re-pad, so we never emit a non-spec addressee that Dire Wolf/aprslib reject.
-        bool preformatted = false;
-        if (plen >= 10 && pl[9] == ':' && addr[0])
-        {
-            char left[10];
-            memcpy(left, pl, 9);
-            left[9] = 0;
-            for (int i = 8; i >= 0 && left[i] == ' '; i--) left[i] = 0;
-            if (left[0] && strcasecmp(left, addr) == 0)
-                preformatted = true;
-        }
-
-        if (preformatted)
-        {
-            ilen = snprintf(info, sizeof(info), ":%s", pl);
-        }
-        else
-        {
-            char addr9[10];
-            snprintf(addr9, sizeof(addr9), "%-9.9s", addr);
-            ilen = snprintf(info, sizeof(info), ":%s:%s", addr9, pl);
-        }
-    }
-    else if (m.payload_type == MSG_TYPE_POSITION)
-    {
-        ilen = snprintf(info, sizeof(info), "%c%s", (char)m.payload_type, m.msg_payload.c_str());
-    }
-    else
-    {
-        return 0;   // HEY / ACK / unknown — not represented in v1
-    }
-    if (ilen <= 0)
-        return 0;
-    if (ilen >= (int)sizeof(info))
-        ilen = sizeof(info) - 1;
-
-    size_t o = 0;
-    if (outsz < (size_t)(14 + ndigi * 7 + 2 + ilen))
-        return 0;
-
-    o += ax25EncodeAddr(out + o, tocall, 0x80, false);                          // destination
-    o += ax25EncodeAddr(out + o, m.msg_source_call.c_str(), 0x00, ndigi == 0);  // source
-    for (int i = 0; i < ndigi; i++)
-        o += ax25EncodeAddr(out + o, digis[i], 0x80, i == ndigi - 1);           // digipeaters
-
-    out[o++] = 0x03;   // UI
-    out[o++] = 0xF0;   // no layer 3
-    memcpy(out + o, info, ilen);
-    o += ilen;
-    return o;
+    return kissBuildAx25(m, tocall, out, outsz);
 }
 
 // TX result frame back to the client (private KISS port 15)
@@ -542,10 +438,10 @@ void flushKissQueue()
                 // origin call *before* the data frame so a custom client can show
                 // / reply to the real station. Standard KISS clients ignore
                 // port 2. Not gated on --kiss meta, only sent when actually needed.
-                if (ax25CallSsid(m.msg_source_call.c_str()) > 15)
+                if (ax25CallSsid(m.msg_source_call) > 15)
                     kissWrite(KISS_TYPE_SRCINFO,
-                              (const uint8_t *)m.msg_source_call.c_str(),
-                              m.msg_source_call.length());
+                              (const uint8_t *)m.msg_source_call,
+                              strlen(m.msg_source_call));
 
                 kissWrite(KISS_CMD_DATA, ax, axlen);
 

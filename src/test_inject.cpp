@@ -29,6 +29,7 @@
 // message queued this way and one queued by the real ISR path. No raw APRS
 // frame needs to be built (no encodeAPRS() round trip) because the queue
 // consumes a decoded aprsMessage, not bytes off the radio.
+#include "mc_text.h"
 #include "test_inject.h"
 
 #if MC_INJECT_HOOKS
@@ -170,13 +171,13 @@ int queueOneLoraTxFrame(int i, uint32_t *outMsgId)
     aprsmsg.msg_id = nextInjectMsgId();
     *outMsgId = aprsmsg.msg_id;
 
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
-    aprsmsg.msg_destination_call = "TEST";   // bench group, filtered by the
-    aprsmsg.msg_destination_path = "TEST";   // central server (see test_inject.h)
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "TEST");   // bench group, filtered by the
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "TEST");   // central server (see test_inject.h)
 
     char payload[32];
     snprintf(payload, sizeof(payload), "LORATX %d", i);
-    aprsmsg.msg_payload = payload;
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), payload);
 
     checkVia(aprsmsg);
 
@@ -268,15 +269,15 @@ bool inject_text_message(const char *dst, const char *text, const char *src_call
     // Mark it as received direct from src_call -- no relay hops, matching what
     // decodeAPRS() leaves in msg_source_path/msg_source_last/msg_source_call
     // for a one-hop packet (all three equal, msg_last_path_cnt == 1).
-    aprsmsg.msg_source_path = strSrc;
-    aprsmsg.msg_source_call = strSrc;
-    aprsmsg.msg_source_last = strSrc;
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), strSrc.c_str());
+    mcSet(aprsmsg.msg_source_call, sizeof(aprsmsg.msg_source_call), strSrc.c_str());
+    mcSet(aprsmsg.msg_source_last, sizeof(aprsmsg.msg_source_last), strSrc.c_str());
     aprsmsg.msg_last_path_cnt = 1;
 
-    aprsmsg.msg_destination_path = strDst;
-    aprsmsg.msg_destination_call = strDst;
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), strDst.c_str());
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), strDst.c_str());
 
-    aprsmsg.msg_payload = text;
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), text);
 
     // Same effect as lora_functions.cpp's (static, unreachable here)
     // queueDisplayText() -- see file header.
@@ -326,13 +327,13 @@ bool inject_position(const char *call, double lat, double lon, int16_t rssi, int
     initAPRS(aprsmsg, '!');
     aprsmsg.msg_id = nextInjectMsgId();
     aprsmsg.msg_len = (uint16_t)strlen(payload);
-    aprsmsg.msg_source_path = strSrc;
-    aprsmsg.msg_source_call = strSrc;
-    aprsmsg.msg_source_last = strSrc;
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), strSrc.c_str());
+    mcSet(aprsmsg.msg_source_call, sizeof(aprsmsg.msg_source_call), strSrc.c_str());
+    mcSet(aprsmsg.msg_source_last, sizeof(aprsmsg.msg_source_last), strSrc.c_str());
     aprsmsg.msg_last_path_cnt = 1;
-    aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_destination_call = "*";
-    aprsmsg.msg_payload = payload;
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "*");
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "*");
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), payload);
 #if defined(BOARD_RAK4630)
     taskENTER_CRITICAL();
 #endif

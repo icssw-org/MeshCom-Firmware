@@ -9,27 +9,17 @@ definitions for HELTEC E290
 
 // HELTEC_E290 specifig config
 #define MODUL_HARDWARE HELTEC_E290
-#define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-#define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 
-#define ENABLE_BMX280
-#define ENABLE_BMP390
-#define ENABLE_AHT20
-#define ENABLE_SHT21
-#define ENABLE_BMX680
-#define ENABLE_MCP23017
-#define ENABLE_INA226
 #define ENABLE_MCU811
-#define ENABLE_RTC
+// W7: ENABLE_MCU811 above is pre-existing and out of scope here; the source only tests
+// ENABLE_MC811, so this board's MC811 sensor code was never actually reachable.
+#define ENABLE_MC811_DISABLED
 
 #define ENABLE_SOFTSER
 
-#define TX_POWER_MAX 22  // max 22 dBm
-#define TX_POWER_MIN -9
 
 #define SX1262_E290
 
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
@@ -50,7 +40,6 @@ definitions for HELTEC E290
 // wird aber grundsätzlich in der Modem-Config benötigt!!!
 
 
-#define TX_OUTPUT_POWER 22  // SX1268 have up to +22dBm
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
@@ -61,10 +50,8 @@ definitions for HELTEC E290
     case 7: CR_4_7;
     case 8: CR_4_8;
 */
-#define LORA_CR 6
 
 // RadioLib LoRa Bandwidth Setting in kHz
-#define LORA_BANDWIDTH 250
 
 /** RadioLib Spreading Factor
  * case 6: SF_6;
@@ -75,7 +62,6 @@ definitions for HELTEC E290
     case 11: SF_11;
     case 12: SF_12;
 */
-#define LORA_SF 11
 
 #define SDA_PIN 39
 #define SCL_PIN 38
@@ -95,7 +81,18 @@ definitions for HELTEC E290
 
 #define BUTTON_PIN 21
 
-#define OneWire_GPIO  99 // please test
+// R3-03 (2026-09-16): stand hier als 99. 99 ist auf diesem Board kein
+// gueltiger GPIO -- OneWire hat hier also nie funktioniert. -1 ist die
+// Schreibweise fuer "dieses Board hat keinen OneWire-Pin", wie sie
+// T-ETH-ELITE_1262 schon benutzt: sie faellt durch den `> 0`-Test in
+// onewire_functions.cpp, der Treiber startet nicht.
+//
+// Das Makro bleibt DEFINIERT und wird nicht geloescht: die gesamte
+// OneWire-Implementierung steht in `#ifdef OneWire_GPIO`
+// (onewire_functions.cpp:13-379). Ohne das Makro koennte man den Sensor
+// auch mit `--owgpio <pin>` nicht mehr einschalten -- das waere eine
+// Funktionsentfernung, keine Bereinigung.
+#define OneWire_GPIO -1
 
 //#define USE_NEW_BATT              // neu batt_functions.cpp nehmen (kommt wenn alle Nodes umgestellt sind raus)
 #define BATTERY_PIN             7
@@ -137,8 +134,12 @@ definitions for HELTEC E290
 
 #define HAS_EPAPER
 
-#define ENABLE_GPS
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
 
 #define GPS_SWITCH 42
+
+// W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
+// Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
+// dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.
+#include <configuration_default.h>   // W7: Flottenvorgaben, #ifndef -- was oben steht, gewinnt

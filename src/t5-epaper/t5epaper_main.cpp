@@ -276,7 +276,10 @@ static void lv_port_disp_init(void)
         {
             Serial.println("[INIT] FATAL: LVGL decodebuffer PSRAM allocation failed!");
             // Fallback to internal RAM if PSRAM fails
-            decodebuffer = (lv_color_t *)malloc(sizeof(uint8_t) * (DISP_BUF_SIZE / 2));
+            // decodebuffer ist uint8_t* (:63), und der PSRAM-Zweig zwei Zeilen
+            // darueber castet korrekt auf uint8_t*. Nur dieser Rueckfallzweig
+            // stand auf lv_color_t*.
+            decodebuffer = (uint8_t *)malloc(sizeof(uint8_t) * (DISP_BUF_SIZE / 2));
         }
     #endif
 

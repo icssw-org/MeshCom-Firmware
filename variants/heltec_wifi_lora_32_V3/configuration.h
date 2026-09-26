@@ -9,30 +9,16 @@ definitions for HELTEC_V3
 
 // HELTEC_V3 specific config
 #define MODUL_HARDWARE HELTEC_V3
-#define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-#define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define SX1262_V3
 #define RX_TIMEOUT_VALUE 0      // continous rx with 0
-#define ENABLE_BMX280
-#define ENABLE_BMP390
-#define ENABLE_AHT20
-#define ENABLE_SHT21
-#define ENABLE_BMX680
-#define ENABLE_MCP23017
-#define ENABLE_MC811
-//I2C fault #define ENABLE_INA226
-#define ENABLE_RTC
+#define ENABLE_INA226_DISABLED  // I2C fault
 
 //#define ENABLE_SOFTSER
 
-#define TX_POWER_MAX 22  // max 22dBm
-#define TX_POWER_MIN -9
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
-#define TX_OUTPUT_POWER 22  // SX1262 have up to +22dBm
 
 /**
  * RadioLib Coding Rate: Allowed values range from 5 to 8.
@@ -41,10 +27,8 @@ definitions for HELTEC_V3
     case 7: CR_4_7;
     case 8: CR_4_8;
 */
-#define LORA_CR 6
 
 // RadioLib LoRa Bandwidth Setting in kHz
-#define LORA_BANDWIDTH 250
 
 /** RadioLib Spreading Factor
  * case 6: SF_6;
@@ -55,7 +39,6 @@ definitions for HELTEC_V3
     case 11: SF_11;
     case 12: SF_12;
 */
-#define LORA_SF 11
 
 #define RESET_OLED RST_OLED
 //issue #108 #define I2C_SDA 17 // I2C pins for this board
@@ -91,8 +74,23 @@ definitions for HELTEC_V3
 #define SDA_PIN 17
 #define SCL_PIN 18
 
-#define OneWire_GPIO 99 // nicht getestet !!
+// R3-03 (2026-09-16): stand hier als 99. 99 ist auf diesem Board kein
+// gueltiger GPIO -- OneWire hat hier also nie funktioniert. -1 ist die
+// Schreibweise fuer "dieses Board hat keinen OneWire-Pin", wie sie
+// T-ETH-ELITE_1262 schon benutzt: sie faellt durch den `> 0`-Test in
+// onewire_functions.cpp, der Treiber startet nicht.
+//
+// Das Makro bleibt DEFINIERT und wird nicht geloescht: die gesamte
+// OneWire-Implementierung steht in `#ifdef OneWire_GPIO`
+// (onewire_functions.cpp:13-379). Ohne das Makro koennte man den Sensor
+// auch mit `--owgpio <pin>` nicht mehr einschalten -- das waere eine
+// Funktionsentfernung, keine Bereinigung.
+#define OneWire_GPIO -1
 
-#define ENABLE_GPS
 #define GPS_RX_PIN 47
 #define GPS_TX_PIN 48
+
+// W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
+// Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
+// dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.
+#include <configuration_default.h>   // W7: Flottenvorgaben, #ifndef -- was oben steht, gewinnt

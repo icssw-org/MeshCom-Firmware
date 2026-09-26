@@ -1,3 +1,4 @@
+#include "mc_text.h"
 #include <aprs_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
@@ -8,6 +9,16 @@
 #include <charset_filter.h>
 
 #define MAX_APRS_FRAME_SIZE 340
+
+// R2-04: die Feldbreiten in aprs_structures.h stehen dort als Literale, weil
+// dieser Header nicht configuration_global.h hereinziehen darf (Begruendung
+// ebendort). Hier sind beide sichtbar, also wird die Kopplung hier geprueft --
+// laeuft MAX_CALL_LEN oder UDP_TX_BUF_SIZE weg, bricht der Build, nicht der
+// Funk.
+static_assert(MC_CALL_LEN_Z == MAX_CALL_LEN + 1,
+              "MC_CALL_LEN_Z und MAX_CALL_LEN sind auseinandergelaufen");
+static_assert(MC_PAYLOAD_LEN == UDP_TX_BUF_SIZE + 1,
+              "MC_PAYLOAD_LEN und UDP_TX_BUF_SIZE sind auseinandergelaufen");
 
 char shortSUBVERSION()
 {
@@ -103,11 +114,11 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
     aprsmsg.msg_track = false;
     aprsmsg.msg_app_offline = false;
     aprsmsg.msg_mesh = false;
-    aprsmsg.msg_source_path = "";
-    aprsmsg.msg_destination_path = "";
-    aprsmsg.msg_destination_call = "";
-    aprsmsg.msg_gateway_call = "";
-    aprsmsg.msg_payload = "";
+    aprsmsg.msg_source_path[0] = 0;
+    aprsmsg.msg_destination_path[0] = 0;
+    aprsmsg.msg_destination_call[0] = 0;
+    aprsmsg.msg_gateway_call[0] = 0;
+    aprsmsg.msg_payload[0] = 0;
     aprsmsg.msg_fcs = 0;
     aprsmsg.msg_source_hw = BOARD_HARDWARE;
     
@@ -116,7 +127,15 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
     aprsmsg.msg_source_fw_version = shortVERSION();
     aprsmsg.msg_source_fw_sub_version = shortSUBVERSION();
     aprsmsg.msg_last_hw = 0x80 | BOARD_HARDWARE;    // mit lastHeard Bit
-    aprsmsg.msg_source_last = "";
+    aprsmsg.msg_source_last[0] = 0;
+    // R2-04: msg_source_call FEHLTE hier. Solange die Felder Arduino-String
+    // waren, war ein frisch angelegtes aprsMessage auf dem Stack in diesem
+    // einen Feld trotzdem leer -- der String-Konstruktor hat es erledigt, und
+    // initAPRS() musste es nie tun. Als char[] ist ein Stack-Exemplar
+    // UNINITIALISIERT, und das Feld haette den Inhalt des vorigen Frames
+    // behalten. test_aprs_corpus (f008) hat genau das gefangen: srccall= wurde
+    // zu srccall=DK5EN-98, dem Rufzeichen aus dem Frame davor.
+    aprsmsg.msg_source_call[0] = 0;
     aprsmsg.msg_last_path_cnt = 0;
 }
 
@@ -205,7 +224,6 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 if(RcvBuffer[ib] < 0x20 || RcvBuffer[ib] > 0x7E)
                     break;
 
-                //aprsmsg.msg_source_path.concat((char)RcvBuffer[ib]);
                 cConcat1[iConcat1] = (char)RcvBuffer[ib];
                 iConcat1++;
                 
@@ -222,23 +240,21 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 }
                 else
                 {
-                    //aprsmsg.msg_source_last.concat((char)RcvBuffer[ib]);
                     cConcat2[iConcat2] = (char)RcvBuffer[ib];
                     iConcat2++;
                 }
 
                 if(bSourceCall)
                 {
-                    //aprsmsg.msg_source_call.concat((char)RcvBuffer[ib]);
                     cConcat3[iConcat3] = (char)RcvBuffer[ib];
                     iConcat3++;
                 }
             }
         }
 
-        aprsmsg.msg_source_path = cConcat1;
-        aprsmsg.msg_source_last = cConcat2;
-        aprsmsg.msg_source_call = cConcat3;
+        mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), cConcat1);
+        mcSet(aprsmsg.msg_source_last, sizeof(aprsmsg.msg_source_last), cConcat2);
+        mcSet(aprsmsg.msg_source_call, sizeof(aprsmsg.msg_source_call), cConcat3);
 
         if(!bSourceEndOk)
         {
@@ -257,7 +273,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         {
             if(bLORADEBUG)
             {
-                Serial.printf("APRS decode - Source-Last-CallSign Error [%s]\n", aprsmsg.msg_source_last.c_str());
+                Serial.printf("APRS decode - Source-Last-CallSign Error [%s]\n", aprsmsg.msg_source_last);
             }
 
             bCallsignOk=false;
@@ -267,7 +283,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         {
             if(bLORADEBUG)
             {
-                Serial.printf("APRS decode - Source-CallSign Error [%s]\n", aprsmsg.msg_source_call.c_str());
+                Serial.printf("APRS decode - Source-CallSign Error [%s]\n", aprsmsg.msg_source_call);
             }
 
             bCallsignOk=false;
@@ -303,7 +319,6 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 if(RcvBuffer[ib] < 0x20 || RcvBuffer[ib] > 0x7E)
                     break;
 
-                //aprsmsg.msg_destination_path.concat((char)RcvBuffer[ib]);
                 cConcat1[iConcat1] = (char)RcvBuffer[ib];
                 iConcat1++;
 
@@ -315,15 +330,14 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
                 }
                 else
                 {
-                    //aprsmsg.msg_destination_call.concat((char)RcvBuffer[ib]);
                     cConcat2[iConcat2] = (char)RcvBuffer[ib];
                     iConcat2++;
                 }
             }
         }
 
-        aprsmsg.msg_destination_path = cConcat1;    // routing & message to
-        aprsmsg.msg_destination_call = cConcat2;    // message to
+        mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), cConcat1);    // routing & message to
+        mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), cConcat2);    // message to
 
         if(!bDestinationEndOk)
         {
@@ -344,7 +358,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             {
                 if(bLORADEBUG)
                 {
-                    Serial.printf("APRS decode - Destination-CallSign Error [%s]\n", aprsmsg.msg_destination_call.c_str());
+                    Serial.printf("APRS decode - Destination-CallSign Error [%s]\n", aprsmsg.msg_destination_call);
                 }
                 bCallsignOk=false;
             }
@@ -362,7 +376,18 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         memset(cConcat1, 0x00, UDP_TX_BUF_SIZE);
         iConcat1=0;
 
-        for(ib=inext; ib < rsize; ib++)
+        // R2-04: die Schranke `iConcat1 < (int)sizeof(cConcat1) - 1` ist NEU.
+        // Vorher lief diese Schleife allein bis `rsize` und verliess sich
+        // darauf, dass jeder Aufrufer hoechstens UDP_TX_BUF_SIZE (255) Bytes
+        // hereingibt -- was heute stimmt (R1-06 hat es nachgewiesen: LoRa ueber
+        // rxPayloadCopy[2][UDP_TX_BUF_SIZE], BLE ueber ein uint8_t als Laenge,
+        // UDP ueber die Ringpuffer-Slots). Der Test darueber auf
+        // MAX_APRS_FRAME_SIZE (340) legt allerdings eine GROESSERE Schranke
+        // nahe, als die Puffer hier tragen: bei rsize > 255 haette diese
+        // Schleife ueber cConcat1[UDP_TX_BUF_SIZE] hinausgeschrieben, mitten in
+        // cConcat2/cConcat3 auf demselben Stack. Diese Zeile macht die
+        // Sicherheit oertlich, statt sie von den Aufrufern zu borgen.
+        for(ib=inext; ib < rsize && iConcat1 < (int)sizeof(cConcat1) - 1; ib++)
         {
             if(RcvBuffer[ib] == 0x00)
             {
@@ -372,7 +397,6 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
             }
             else
             {
-                //aprsmsg.msg_payload.concat((char)RcvBuffer[ib]);
                 cConcat1[iConcat1] = (char)RcvBuffer[ib];
                 iConcat1++;
             }
@@ -387,7 +411,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         iConcat1 = (int)charset_filter_apply(cConcat1, (size_t)iConcat1, CHARSET_FILTER_PLAIN);
         cConcat1[iConcat1] = 0x00;
 
-        aprsmsg.msg_payload = cConcat1;
+        mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), cConcat1);
 
         if(!bPayloadEndOk)
         {
@@ -438,7 +462,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         if(aprsmsg.msg_fcs != FCS_SUMME)
         {
             // Check ob es nicht das eigene packet ist
-            if(aprsmsg.msg_source_last != meshcom_settings.node_call)
+            if(strcmp(aprsmsg.msg_source_last, meshcom_settings.node_call) != 0)
             {
                 memcpy(temp, RcvBuffer, 10);
                 if(bLORADEBUG)
@@ -495,7 +519,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
 
         if(aprsmsg.msg_source_fw_version > 0 && aprsmsg.msg_source_fw_version < 35)  // 4.35a
         {
-            Serial.printf("APRS decode - Packet discarded, wrong FW-version <%s><%d>!\n", aprsmsg.msg_source_path.c_str(),  aprsmsg.msg_source_fw_version);
+            Serial.printf("APRS decode - Packet discarded, wrong FW-version <%s><%d>!\n", aprsmsg.msg_source_path,  aprsmsg.msg_source_fw_version);
 
             return 0x00;
         }
@@ -558,6 +582,90 @@ void initAPRSPOS(struct aprsPosition &aprspos)
     for(int igrc=0; igrc<6; igrc++)
         aprspos.grc[igrc] = 0;
     aprspos.grccnt = 0;
+}
+
+// DRY campaign D3-01 (docs/optimization-audit-20260910.md:200): 14 of the
+// decodeAPRSPOS() '/X=value' tag blocks (Batt/Alt/Press/Hum/Temp/Temp2/
+// QFE/QNH/GASRES/CO2/version/Bus-Voltage/Current/telemetry) shared this
+// exact loop, byte for byte, differing only in the tag letter, the sscanf
+// format and the destination field. This is that loop, extracted verbatim.
+//
+// Deliberately NOT routed through here (their clamping/offset differs, see
+// the audit and the call sites themselves): /N (NCNT, 2-char tag matched by
+// a digit range, offset +2, 3-byte cap instead of 7), /R (GRC, its own
+// buffer + ';'-split group-list parsing) and /D (Digital, 8-byte fixed-width
+// bitfield with its own validity check). Unifying those into "one true
+// helper" would have meant either adding parameters nothing else uses or
+// quietly changing their behavior -- reported instead of forced.
+//
+// Quirks preserved on purpose, not fixed:
+//  - only the first occurrence of the tag is honored (outer loop breaks on
+//    match), so a duplicate tag later in the string is ignored;
+//  - a present-but-empty value ("/X=/" or "/X= ") calls sscanf() on an
+//    empty string, which performs zero conversions and leaves *target
+//    exactly as it was (decodeAPRSPOS()'s initAPRSPOS() default, normally);
+//  - a value longer than the 7-byte capture window is silently truncated
+//    to its first 7 characters, not rejected (e.g. an 8-digit /A= parses
+//    only the leading 7 digits);
+//  - the `id == PayloadBuffer.length()` end check can never actually fire
+//    (the enclosing `for(id...; id<PayloadBuffer.length(); ...)` already
+//    exits before the body runs again at that point) -- moot in practice
+//    because decodeAPRSPOS() always concat(" ")s a trailing space onto
+//    PayloadBuffer before any of these run, so a value can never truly
+//    reach the raw end of the buffer without a delimiter first.
+// The value's type, instead of a printf format string.
+//
+// sscanf() must be reached with a LITERAL format: several envs build with
+// -Werror=format-nonliteral (it fired on E22_1262_S3-DevKitC-1-N16R8), and a
+// non-literal format also silently disables the compiler's argument-type
+// check on the void* target -- which is exactly the check worth keeping when
+// the caller hands over an address and a type separately.
+//
+// APRS_TAG_INT_AUTOBASE is "%i", NOT "%d", and the two are kept apart on
+// purpose: "%i" infers the base, so "010" reads as octal 8 and "0x10" as 16.
+// Only the version ('V') and telemetry ('Y') tags used it; collapsing them
+// into "%d" would silently change what those two fields decode to.
+enum AprsTagType
+{
+    APRS_TAG_INT,          // "%d" -> int *
+    APRS_TAG_INT_AUTOBASE, // "%i" -> int *
+    APRS_TAG_FLOAT,        // "%f" -> float *
+};
+
+static void aprsExtractTag(const String &PayloadBuffer, unsigned int istarttext, char tagchar, AprsTagType type, void *target)
+{
+    char decode_text[8];
+    memset(decode_text, 0x00, sizeof(decode_text));
+    unsigned int ipt = 0;
+
+    for(unsigned int itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
+    {
+        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == tagchar && PayloadBuffer.charAt(itxt+2) == '=')
+        {
+            for(unsigned int id=itxt+3; id<PayloadBuffer.length(); id++)
+            {
+                // ENDE
+                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
+                {
+                    switch(type)
+                    {
+                        case APRS_TAG_INT:          sscanf(decode_text, "%d", (int *)target);   break;
+                        case APRS_TAG_INT_AUTOBASE: sscanf(decode_text, "%i", (int *)target);   break;
+                        case APRS_TAG_FLOAT:        sscanf(decode_text, "%f", (float *)target); break;
+                    }
+                    break;
+                }
+
+                if(ipt < 7)
+                {
+                    decode_text[ipt]=PayloadBuffer.charAt(id);
+                    ipt++;
+                }
+            }
+
+            break;
+        }
+    }
 }
 
 uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
@@ -701,257 +809,32 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
     aprspos.bat = 0;
     aprspos.alt = 0;
 
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
-
     // check Batt
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'B' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%d", &aprspos.bat);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'B', APRS_TAG_INT, &aprspos.bat);
 
     // check Altitute
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'A' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%d", &aprspos.alt);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'A', APRS_TAG_INT, &aprspos.alt);
 
     // check Press
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'P' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.press);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'P', APRS_TAG_FLOAT, &aprspos.press);
 
     // check Hum
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'H' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.hum);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'H', APRS_TAG_FLOAT, &aprspos.hum);
 
     // check Temp
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'T' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.temp);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'T', APRS_TAG_FLOAT, &aprspos.temp);
 
     // check Temp2
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'O' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.temp2);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'O', APRS_TAG_FLOAT, &aprspos.temp2);
 
     // check QFE
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'F' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%d", &aprspos.qfe);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'F', APRS_TAG_INT, &aprspos.qfe);
 
     // check QNH
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'Q' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.qnh);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'Q', APRS_TAG_FLOAT, &aprspos.qnh);
 
     // check GASRES
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'G' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.gasres);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
+    aprsExtractTag(PayloadBuffer, istarttext, 'G', APRS_TAG_FLOAT, &aprspos.gasres);
 
     // check NCNT
     memset(decode_text, 0x00, sizeof(decode_text));
@@ -981,33 +864,8 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
-
     // check CO2
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'C' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.co2);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
+    aprsExtractTag(PayloadBuffer, istarttext, 'C', APRS_TAG_FLOAT, &aprspos.co2);
 
     // check GRC (Group-Call list) /R=; up to 6 groups separated by ';'.
     // Own buffer sized for the worst case (6 x "99999;" = 36 chars) instead
@@ -1069,117 +927,17 @@ uint16_t decodeAPRSPOS(String PayloadBuffer, struct aprsPosition &aprspos)
         }
     }
 
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
-
     // check version
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'V' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%i", &aprspos.version);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'V', APRS_TAG_INT_AUTOBASE, &aprspos.version);
 
     // check Bus-Voltage /U=
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'U' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.vbus);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'U', APRS_TAG_FLOAT, &aprspos.vbus);
 
     // check Current /I=
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'I' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%f", &aprspos.vcurrent);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
-
-    memset(decode_text, 0x00, sizeof(decode_text));
-    ipt=0;
+    aprsExtractTag(PayloadBuffer, istarttext, 'I', APRS_TAG_FLOAT, &aprspos.vcurrent);
 
     // check telemetry
-    for(itxt=istarttext; itxt<PayloadBuffer.length(); itxt++)
-    {
-        if(PayloadBuffer.charAt(itxt) == '/' && PayloadBuffer.charAt(itxt+1) == 'Y' && PayloadBuffer.charAt(itxt+2) == '=')
-        {
-            for(unsigned int id=itxt+3;id<PayloadBuffer.length();id++)
-            {
-                // ENDE
-                if(PayloadBuffer.charAt(id) == '/' || PayloadBuffer.charAt(id) == ' ' || id == PayloadBuffer.length() || ipt > 6)
-                {
-                    sscanf(decode_text, "%i", &aprspos.telemetry);
-                    break;
-                }
-
-                if(ipt < 7)
-                {
-                    decode_text[ipt]=PayloadBuffer.charAt(id);
-                    ipt++;
-                }
-            }
-
-            break;
-        }
-    }
+    aprsExtractTag(PayloadBuffer, istarttext, 'Y', APRS_TAG_INT_AUTOBASE, &aprspos.telemetry);
 
     memset(decode_text, 0x00, sizeof(decode_text));
     ipt=0;
@@ -1273,9 +1031,9 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage
     if(bMESH)
         msg_buffer[5] = msg_buffer[5] | 0x10;
 
-    snprintf(msg_start, sizeof(msg_start), "%s>%s%c", aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type);
+    snprintf(msg_start, sizeof(msg_start), "%s>%s%c", aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.payload_type);
 
-    uint16_t ilng=aprsmsg.msg_source_path.length() + 1 + aprsmsg.msg_destination_path.length() + 1;
+    uint16_t ilng=strlen(aprsmsg.msg_source_path) + 1 + strlen(aprsmsg.msg_destination_path) + 1;
     
     if(ilng >= UDP_TX_BUF_SIZE)
         ilng = UDP_TX_BUF_SIZE - 1;
@@ -1287,7 +1045,7 @@ uint16_t encodeStartAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage
 
 uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMessage &aprsmsg)
 {
-    auto ilng = aprsmsg.msg_payload.length();
+    auto ilng = strlen(aprsmsg.msg_payload);
     if(ilng >= UDP_TX_BUF_SIZE)
         ilng = UDP_TX_BUF_SIZE - 1;
 
@@ -1299,7 +1057,7 @@ uint16_t encodePayloadAPRS(uint8_t msg_buffer[MAX_MSG_LEN_PHONE], struct aprsMes
     // also be a position or telemetry frame, whose structural bytes
     // ('/', '{', ':', ...) are printable ASCII and must survive.
     char cFiltered[UDP_TX_BUF_SIZE];
-    memcpy(cFiltered, aprsmsg.msg_payload.c_str(), ilng);
+    memcpy(cFiltered, aprsmsg.msg_payload, ilng);
     size_t filtered_len = charset_filter_apply(cFiltered, ilng, CHARSET_FILTER_PLAIN);
 
     memcpy(msg_buffer, cFiltered, filtered_len);
@@ -1383,15 +1141,18 @@ void appendHeySignalReport(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr
     // mitten in einer Gruppe, was updateHeyPath() nicht mehr parsen kann. Die
     // Kette hier zu beenden ist der verlustaermere Weg: was bereits drinsteht,
     // bleibt gueltig.
-    if (aprsmsg.msg_payload.length() + HEY_REPORT_GROUP_MAX > HEY_PATH_PAYLOAD_MAX)
+    if (strlen(aprsmsg.msg_payload) + HEY_REPORT_GROUP_MAX > HEY_PATH_PAYLOAD_MAX)
         return;
 
-    aprsmsg.msg_payload.concat(String(mheard_count));
-    aprsmsg.msg_payload.concat(',');
-    aprsmsg.msg_payload.concat(String(rssi*-1.0, 0));
-    aprsmsg.msg_payload.concat(',');
-    aprsmsg.msg_payload.concat(String(snr));
-    aprsmsg.msg_payload.concat(';');
+    // Eine Gruppe, in einem Stueck. Vorher waren das sechs String-Anhaenge mit
+    // drei String-Zwischenobjekten; jetzt ein Puffer auf dem Stack und ein
+    // Anhang. Die Formate bilden die alten EXAKT ab: String(int) ist "%d",
+    // und String(double, 0) ist "%.0f" -- rssi*-1.0 ist als double ganzzahlig,
+    // also gibt es hier keine Rundungsfrage.
+    char cGroup[HEY_REPORT_GROUP_MAX + 2];
+    snprintf(cGroup, sizeof(cGroup), "%d,%.0f,%d;",
+             mheard_count, (double)(rssi * -1.0), (int)snr);
+    mcAppend(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), cGroup);
 }
 
 // OE1KBC-17>APLT00-1,WIDE1-1,qAS,OE3CGG-10:!4807.01N/01619.20E[(T-ECHO by F4AVI)

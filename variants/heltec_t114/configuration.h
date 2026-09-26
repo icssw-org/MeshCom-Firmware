@@ -12,27 +12,24 @@ definitions for RAK4631
 #define MODUL_HARDWARE HELTEC_T114
 #define RF_FREQUENCY 433175000 // 432900000   // Hz
 #define LORA_APRS_FREQUENCY 433775000 // 432900000   // Hz
-#define TX_POWER_MAX 22  // max 22 dBm
-#define TX_POWER_MIN -9
 
-//#define ENABLE_RTC
-//#define ENABLE_BMX280
-//#define ENABLE_BMP390
-//#define ENABLE_AHT20
-//#define ENABLE_BMX680
-//#define ENABLE_INA226
-//#define ENABLE_MC811
-//#define ENABLE_MCP23017
+#define ENABLE_RTC_DISABLED
+#define ENABLE_BMX280_DISABLED
+#define ENABLE_BMP390_DISABLED
+#define ENABLE_AHT20_DISABLED
+#define ENABLE_BMX680_DISABLED
+#define ENABLE_INA226_DISABLED
+#define ENABLE_MC811_DISABLED
+#define ENABLE_MCP23017_DISABLED
+#define ENABLE_SHT21_DISABLED
 
 // #define ENABLE_SOFTSER
 
 #define BUTTON_PIN 42
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define USE_HELTEC_T114
 
 // Define RAK LoRa parameters
-#define TX_OUTPUT_POWER 22       // dBm
 
 #define LORA_APRS_BANDWIDTH 0         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
 #define LORA_APRS_SPREADING_FACTOR 12 // [SF7..SF12]
@@ -40,9 +37,7 @@ definitions for RAK4631
 #define LORA_APRS_PREAMBLE_LENGTH 8  // Same for Tx and Rx
 
 #define LORA_BANDWIDTH 1         // [0: 125 kHz, 1: 250 kHz, 2: 500 kHz, 3: Reserved]
-#define LORA_SF 11 // [SF7..SF12]
 #define LORA_CR 2        // [1: 4/5, 2: 4/6,  3: 4/7,  4: 4/8]
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define LORA_SYMBOL_TIMEOUT 0    // Symbols
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
@@ -81,7 +76,6 @@ definitions for RAK4631
 // LORA Chip
 #define LORA_NRSET 25
 
-#define ENABLE_GPS
 #define GPS_RX_PIN 37
 #define GPS_TX_PIN 39
 
@@ -89,3 +83,8 @@ definitions for RAK4631
 #define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
 //#define ENABLE_GPS_UBLOX_FIX          // UBLOX wird fix festgelegt und kein setup gemacht
 //#define GPS_BAUDRATE_SETFIX 38400     // Die Baudrate für GPS wird auf FIXWERT gesetzt
+
+// W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
+// Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
+// dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.
+#include <configuration_default.h>   // W7: Flottenvorgaben, #ifndef -- was oben steht, gewinnt

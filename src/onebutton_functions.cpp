@@ -227,12 +227,16 @@ void tripleClick()
 
   if(bDisplayTrack)
   {
+      #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
       commandAction((char*)"--gps on", false);
+      #endif
       commandAction((char*)"--track on", false);
   }
   else
   {
+      #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
       commandAction((char*)"--gps off", false);
+      #endif
       commandAction((char*)"--track off", false);
   }
 

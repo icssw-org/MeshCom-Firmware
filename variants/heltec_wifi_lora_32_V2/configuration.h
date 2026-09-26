@@ -9,24 +9,12 @@ definitions for HELTEC_V2_1
 
 // HELTEC_V2_1 specific config
 #define MODUL_HARDWARE HELTEC_V2_1
-#define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-#define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 #define SX127X
-#define ENABLE_BMX280
-#define ENABLE_BMP390
-#define ENABLE_AHT20
-#define ENABLE_SHT21
-#define ENABLE_BMX680
-#define ENABLE_MCP23017
-#define ENABLE_INA226
-#define ENABLE_MC811
-#define ENABLE_RTC
 
 //#define ENABLE_SOFTSER
 
 #define TX_POWER_MAX 15
 #define TX_POWER_MIN -4
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
@@ -41,10 +29,8 @@ definitions for HELTEC_V2_1
     case 7: CR_4_7;
     case 8: CR_4_8;
 */
-#define LORA_CR 6
 
 // RadioLib LoRa Bandwidth Setting in kHz
-#define LORA_BANDWIDTH 250
 
 /** RadioLib Spreading Factor
  * case 6: SF_6;
@@ -55,7 +41,6 @@ definitions for HELTEC_V2_1
     case 11: SF_11;
     case 12: SF_12;
 */
-#define LORA_SF 11
 
 #define BUTTON_PIN 0
 
@@ -71,6 +56,10 @@ definitions for HELTEC_V2_1
 
 #define OneWire_GPIO 17 // getestet OE5HWN
 
-#define ENABLE_GPS
 #define GPS_RX_PIN 13
 #define GPS_TX_PIN 12
+
+// W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
+// Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
+// dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.
+#include <configuration_default.h>   // W7: Flottenvorgaben, #ifndef -- was oben steht, gewinnt

@@ -1,3 +1,9 @@
+// Kein Include-Guard bis 2026-09-16: jede Uebersetzungseinheit, die diesen
+// Header zweimal sah, brach mit "redefinition of 'isNodeUnconfigured'" ab.
+// Sichtbar wurde das nur in env:esp32-external-radio, weil dort zwei Pfade
+// ihn einziehen; die uebrigen Envs kamen mit genau einem Include davon.
+#pragma once
+
 #define SOURCE_VERSION "4.35"
 #define SOURCE_VERSION_SUB "t"
 #define SOURCE_VERSION_WEB_SUB "t"
@@ -106,8 +112,8 @@ inline bool makeDhcpHostname(char *out, unsigned long n, const char *call)
 // beim Sprung 20260724 -> 20260821 passiert: dieser Commit hat esp32_flash.h
 // nicht angefasst, die Einstellungen aller Knoten aber trotzdem verworfen.
 //
-// FLASH_VERSION 20260909 ist der Release-Stempel von v4.35s.09.09
-// (Release-Stempel davor war 20260906) --
+// FLASH_VERSION 20260912 ist der Release-Stempel von v4.35t.09.12.2
+// (Release-Stempel davor war 20260910) --
 // rein informativ, loest kein clear_flash() aus.
 //
 // FLASH_STRUCT_VERSION bleibt 20260724: letzte echte Layout-Aenderung war
@@ -115,7 +121,7 @@ inline bool makeDhcpHostname(char *out, unsigned long n, const char *call)
 // kamen hinzu. Alles seither (auch die neuen Features wie max_hop_text) nutzt
 // auf ESP32 eigene NVS-Keys bzw. freie Bits bestehender Felder und aendert
 // das Struct-Layout nicht.
-#define FLASH_VERSION 20260909
+#define FLASH_VERSION 20260912
 #define FLASH_STRUCT_VERSION 20260724
 
 // Bestandsschutz. Diese Staende tragen dasselbe Layout wie
@@ -189,7 +195,62 @@ static inline bool flashLayoutCompatible(int stored)
 #define WP_DISP
 #endif
 
+// GRD-01 -- EINE Stelle beantwortet "treibt dieses Board ein U8g2-OLED?".
+//
+// Dieselbe Aussage stand bis 2026-09-16 in SECHS handgeschriebenen Fassungen in
+// drei Dateien: dreimal wortgleich in loop_functions.cpp (:364, :821, :1346),
+// je einmal kuerzer in esp32_functions.cpp und nrf52_functions.cpp (dort fehlen
+// die Boards, die es auf der jeweiligen Plattform ohnehin nicht geben kann --
+// gleichbedeutend, aber anders geschrieben), und einmal als andersfoermige
+// #if/#elif-Kaskade in sendPosition(), deren #else-Zweig u8g2 benutzt.
+//
+// Diese Kaskade war die, die auseinandergelaufen ist: BOARD_T5_EPAPER stand
+// nicht darin, und der allererste Build dieser Umgebung starb mit
+// "'u8g2' was not declared in this scope". Gemerkt hat es niemand, weil
+// env:t5_epaper mangels configuration.h noch nie uebersetzt hatte.
+//
+// Wer ein Board ohne OLED hinzufuegt, aendert ab jetzt DIESE Zeile und sonst
+// keine. Muster wie WP_DISP daneben.
+#if !defined(BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && \
+    !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && \
+    !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && \
+    !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && \
+    !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+#define MC_HAS_U8G2 1
+#else
+#define MC_HAS_U8G2 0
+#endif
+
 #define DEFAULT_PREAMPLE_LENGTH 32
+
+// R3-11/D2-09 -- EIN Schalter fuer die Feld-Diagnose.
+//
+// Vorher gab es zwei voneinander unabhaengige Knoepfe, und das war doppelte
+// POLITIK, nicht doppelter Code:
+//
+//   MC_CAPTURE          default 1, per -D MC_CAPTURE=0 nur auf E22_XML aus
+//   INSTRUMENT_ENABLED  default 0, von KEINER einzigen Umgebung auf 1 gesetzt
+//
+// Die beiden sehen austauschbar aus, sind es aber nicht. INSTRUMENT_ENABLED
+// baut eine MESS-Firmware fuer die Bench (src/instrument.h) und ist ueberall
+// aus; MC_CAPTURE schaltet Diagnose, die im Feld gebraucht wird, und ist
+// ueberall an. Sie zusammenzulegen, indem man MC_CAPTURE hinter
+// INSTRUMENT_ENABLED haengt, haette --txcapture und die vier --spec*-Kommandos
+// aus JEDEM ausgelieferten Image entfernt -- genau INS-01 und INS-04 noch
+// einmal, diesmal mit Absicht. Betreiberentscheidung 2026-09-16: ein Schalter,
+// Vorgabe AN.
+//
+// MC_DIAG deckt jetzt beides ab, was vorher an zwei Namen hing: den
+// TX/RX-Mitschnittring (vormals MC_CAPTURE) und die vier
+// Spektrum-Parameterkommandos. INSTRUMENT_ENABLED bleibt, was es ist -- die
+// getrennte Opt-in-Messfirmware, kein Feld-Diagnoseschalter.
+//
+// Wer das abschaltet, verliert: --txcapture on/off, --specstart, --specend,
+// --specstep, --specsamples. Nach jeder Aenderung an diesem Makro gehoert ein
+// String-Scan der gebauten Images dazu (siehe BACKLOG INS-01).
+#ifndef MC_DIAG
+#define MC_DIAG 1
+#endif
 
 // Meshcom Params
 #define LONGNAME_MAXLEN 20 // maximum length of the longname
@@ -233,7 +294,7 @@ static inline bool flashLayoutCompatible(int stored)
 #define MC_I2C_NEEDS_BUS_RESET 0
 #endif
 
-// Eine Speicherklasse pro Zweig. Jeder Zweig MUSS alle sechs Konstanten setzen --
+// Eine Speicherklasse pro Zweig. Jeder Zweig MUSS alle acht Konstanten setzen --
 // wer eine vergisst, bekommt keinen stillen Fehlwert, sondern einen Compile-Fehler,
 // weil die Konstanten Array-Groessen sind. ALT-33.
 #if defined(ENABLE_XML) || defined(ENABLE_SBUFFER)
@@ -280,6 +341,10 @@ static inline bool flashLayoutCompatible(int stored)
 #define MAX_RING 20                        // max count of messages in ringbuffer (was 30, MEM-01)
 #define MAX_DEDUP_RING 70                  // dedup ring for received msg_ids (was 60)
 #define MAX_LOG 20                         // max count of messages in LOG-ringbuffer
+// RAM-Rueckgewinn (2026-09-20): die drei Ausgangsringe sind Byte-Ringe
+// (src/byte_fifo.h). Ein Frame ist im Dauerlauf im Mittel 77 Byte lang, die
+// 260-Byte-Schlitze waren zu 70 % Reserve. 2048 Byte fassen rund 25 typische
+// Frames, also mehr als die 20 Schlitze vorher, bei 60 % weniger RAM.
 #define RING_BYTES_PHONE 2048              // Byte-Ring BLE-Daten zum Telefon (war Schlitzfeld)
 #define RING_BYTES_PHONECOM 3072           // Byte-Ring BLE-Kommandos: muss den GANZEN Config-Burst fassen
 #define RING_BYTES_UDP 2048                // Byte-Ring UDP-Ausgang

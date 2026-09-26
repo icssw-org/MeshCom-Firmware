@@ -14,6 +14,16 @@
 
 #if defined(BOARD_RAK4630)
   #include <nrf52/nrf52_main.h>
+  // Stack of the task that runs nrf52loop(), in 32-bit words: 8 kB, twice the
+  // core's LOOP_STACK_SZ. Heap-allocated by xTaskCreate() (malloc-backed).
+  #define NRF52_LOOP_STACK_WORDS (2048)
+
+  // What the core's loop() would run for this board; see ETH-03 in setup().
+  static void nrf52LoopBody()
+  {
+    nrf52loop();
+    captureDrain();
+  }
 #endif
 
 #if defined (BOARD_T_DECK_PRO)
@@ -40,6 +50,29 @@ void setup()
   #endif
     #if defined(BOARD_RAK4630)
       nrf52setup();
+
+      // ETH-03 (docs/BACKLOG.md 3.8at): the Adafruit core runs setup()/loop()
+      // in a task with a fixed 4 kB stack (LOOP_STACK_SZ, cores/nRF5/main.cpp,
+      // not overridable by build flag). R2-04 made struct aprsMessage ~590 B of
+      // inline text, and the EXTUDP inbound path getExtern() -> sendMessage()
+      // now carries two of them plus a 381 B frame buffer on that stack: one
+      // inbound datagram overran it and reset the node (RESETREAS=0x4, the
+      // same signature as N-22). Every earlier fix of this class moved single
+      // buffers into BSS (N-22, TM-43); this moves the loop itself into a task
+      // with twice the stack, via the core's own Scheduler API, and parks the
+      // core's loop task for good. The body is the same as loop() below:
+      // nrf52loop() plus captureDrain() (the raw-frame capture ring is only
+      // drained from loop context). If the task cannot be created (heap), the
+      // core's 4 kB loop keeps running and the boot log says so.
+      if(Scheduler.startLoop(nrf52LoopBody, NRF52_LOOP_STACK_WORDS, TASK_PRIO_LOW, "mcloop"))
+      {
+        Serial.printf("[BOOT];loopstack;words;%u\n", (unsigned)NRF52_LOOP_STACK_WORDS);
+        suspendLoop();   // suspends the calling task: setup() never returns
+      }
+      else
+      {
+        Serial.println("[BOOT];loopstack;FAILED;core 4 kB loop task stays");
+      }
     #endif
 
     //#if defined (BOARD_T_DECK_PRO)

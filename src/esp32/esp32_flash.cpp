@@ -6,10 +6,17 @@
 // lora_setchip.h), die der minimale Safeboot-Build nicht hat -- und kein Radio,
 // dessen Parameter zu plausibilisieren waeren.
 #include <settings_sanitize.h>
+#include <msgid_counter.h>
 #include <lora_setchip.h>
 #else
 #include <maxhop.h>   // MAXHOP_TEXT_FALLBACK, dependency-frei (siehe unten)
 #endif
+
+#include <settings_schema.h>
+#include <settings_store.h>
+#include <counters_store.h>
+
+#include <cstring>
 
 void save_settings(void);
 
@@ -21,6 +28,177 @@ Preferences preferences;
 
 s_meshcom_settings meshcom_settings;
 
+// ---------------------------------------------------------------------------
+// D1-04 W3 Task 2: fail-closed guard against the class of defect this same
+// wave found and fixed (sanitize_loaded_settings() calling save_settings()
+// from inside init_flash()'s own open load handle -- see
+// test/test_esp32_flash_lifecycle for the full writeup and the mutation that
+// reproduces it). 245 save_settings() call sites exist in src/; any future
+// one reached while init_flash() still holds its read handle open repeats
+// the defect silently. This flag is the one thing standing between that and
+// a loud, cheap refusal: false on every call except the one window it
+// actually needs to be true, so the normal (non-init_flash) path pays one
+// bool read.
+static bool g_flash_load_in_progress = false;
+
+#if defined(NATIVE_BUILD) || defined(UNIT_TEST)
+// Test-only hook: lets a native test drive save_settings()'s refusal path
+// directly (flag on, call it, flag off) without reproducing the historical
+// call-ordering bug inside init_flash() itself, which would mean editing the
+// real control flow just to exercise the guard. Compiled out of every real
+// firmware build.
+extern "C" void mc_test_set_flash_load_in_progress(bool v) { g_flash_load_in_progress = v; }
+#endif
+
+// ---------------------------------------------------------------------------
+// D1-04 W3 Task 1: the ESP32 NVS backend for settings_schema.
+//
+// One dispatch per settings_store::FieldType, straight into/out of
+// Preferences' own typed get/put calls, keyed by FieldDescriptor::offset into
+// `meshcom_settings`. This replaces the old hand-written list of 134
+// preferences.get*()/132 preferences.put*() calls: adding a field to
+// CFG_FIELD_LIST/SETTINGS_PERSIST_ONLY_LIST (settings_schema.h) is now the
+// only edit needed to persist it on ESP32 too.
+//
+// CFG_CHR -> FieldType::U8 (settings_schema.cpp's own mapping) is dispatched
+// via preferences.getChar()/putChar() here, not getUChar()/putUChar(): every
+// U8 row in this table today is one of the four CFG_CHR fields (node_symid,
+// node_symcd, node_lat_c, node_lon_c), and the ORIGINAL hand-written code
+// already used getChar()/putChar() for exactly these -- matching that API
+// keeps the NVS value TYPE (not just the key spelling) byte-identical to
+// what every already-provisioned node has on flash today (Preferences' NVS
+// types are read back strictly by the type they were written with).
+//
+// node_gpsbaud/node_cleanflash (the two FieldType::U32 rows) were previously
+// written with putULong()/read with getUInt() -- an existing asymmetry in
+// the hand-written code that round-trips fine because `unsigned long` and
+// `uint32_t` are the same 4-byte width on this architecture, so both API
+// names produce the identical NVS type tag (PT_U32). Dispatched here via
+// getUInt()/putUInt() uniformly: same on-flash type, one call pair instead
+// of two spellings for the same thing.
+// ---------------------------------------------------------------------------
+namespace
+{
+
+void loadFieldFromPreferences(const settings_store::FieldDescriptor &d, void *base)
+{
+    void *field = (uint8_t *)base + d.offset;
+    switch (d.type)
+    {
+    case settings_store::FieldType::STRING:
+    {
+        char *buf = (char *)field;
+        // "Missing key -> keep the field's current value" (settings_store.h's
+        // own decode() contract, replicated here): the current buffer
+        // content -- already NUL-terminated within `d.size` by construction
+        // -- is passed as Preferences' own default, so an absent key leaves
+        // the field exactly as it was, and a present key overwrites it,
+        // bounded to the buffer.
+        String cur(buf);
+        String v = preferences.getString(d.key, cur);
+        snprintf(buf, d.size, "%s", v.c_str());
+        break;
+    }
+    case settings_store::FieldType::I8:
+    case settings_store::FieldType::U8:
+    {
+        int8_t *p = (int8_t *)field;
+        *p = preferences.getChar(d.key, *p);
+        break;
+    }
+    case settings_store::FieldType::I32:
+    {
+        int32_t *p = (int32_t *)field;
+        *p = preferences.getInt(d.key, *p);
+        break;
+    }
+    case settings_store::FieldType::U32:
+    {
+        uint32_t *p = (uint32_t *)field;
+        *p = preferences.getUInt(d.key, *p);
+        break;
+    }
+    case settings_store::FieldType::FLOAT:
+    {
+        float *p = (float *)field;
+        *p = preferences.getFloat(d.key, *p);
+        break;
+    }
+    case settings_store::FieldType::DOUBLE:
+    {
+        double *p = (double *)field;
+        *p = preferences.getDouble(d.key, *p);
+        break;
+    }
+    case settings_store::FieldType::BOOL:
+    {
+        bool *p = (bool *)field;
+        *p = preferences.getBool(d.key, *p);
+        break;
+    }
+    }
+}
+
+void saveFieldToPreferences(const settings_store::FieldDescriptor &d, void *base)
+{
+    void *field = (uint8_t *)base + d.offset;
+    switch (d.type)
+    {
+    case settings_store::FieldType::STRING:
+    {
+        String v = (char *)field;
+        preferences.putString(d.key, v);
+        break;
+    }
+    case settings_store::FieldType::I8:
+    case settings_store::FieldType::U8:
+        preferences.putChar(d.key, *(int8_t *)field);
+        break;
+    case settings_store::FieldType::I32:
+        preferences.putInt(d.key, *(int32_t *)field);
+        break;
+    case settings_store::FieldType::U32:
+        preferences.putUInt(d.key, *(uint32_t *)field);
+        break;
+    case settings_store::FieldType::FLOAT:
+        preferences.putFloat(d.key, *(float *)field);
+        break;
+    case settings_store::FieldType::DOUBLE:
+        preferences.putDouble(d.key, *(double *)field);
+        break;
+    case settings_store::FieldType::BOOL:
+        preferences.putBool(d.key, *(bool *)field);
+        break;
+    }
+}
+
+// Keys the LOAD walk skips -- both for reasons that only apply to loading;
+// SAVE (see save_settings() below) has no exclusions at all and writes every
+// row in settings_schema::fields() generically.
+//
+//   - "max_hop_text": its load-time default is a build-variant literal
+//     (MC_SAFEBOOT vs not, see the two-line block below) -- both variants are
+//     asserted numerically equal (command_functions.cpp's
+//     static_assert(MAXHOP_TEXT_FALLBACK == MAX_HOP_TEXT_DEFAULT, ...)), but
+//     kept as its own hand-written call rather than folded into the walk's
+//     generic "missing key -> keep the field's current value" default, to
+//     avoid this file depending on maxhop.h being reachable from both
+//     branches of the #if at the top of this file.
+//
+// "node_msgid" USED to be a second entry here (it advanced via
+// msgIdAfterLoad() right after the walk, so the walk itself had to skip it
+// or re-reading it a second time from NVS would undo the advance). It is no
+// longer a settings_schema row at all (D1-04 W3 step 4, operator decision
+// 2026-09-13): the walk never sees it, and its own load/advance/write-back
+// lives in counters_store.h's countersLoad(), called from init_flash()
+// separately -- see that call site's comment.
+bool isLoadSpecialCased(const char *key)
+{
+    return strcmp(key, "max_hop_text") == 0;
+}
+
+} // namespace
+
 // Get LoRa parameter
 // TM-32: Plausibilitaet der geladenen Radio-Parameter (Marker und Groesse
 // prueft N-12, den Inhalt bisher niemand). Korrekturen werden geloggt.
@@ -30,7 +208,16 @@ static void sanitize_log(const char *field, const char *oldv, const char *newv)
     Serial.printf("[FLASH]...sanitized %s: %s -> %s\n", field, oldv, newv);
 }
 
-void sanitize_loaded_settings(void)
+// Returns true when this call actually changed something in
+// `meshcom_settings` (a radio param or max_hop_text out of range and reset).
+// init_flash() (below) uses this to decide whether it needs to call
+// save_settings() at all -- see that call site's comment. D1-04 W3 step 4:
+// this function used to also advance and report on the message-id
+// high-water mark (msgid_counter.h); that responsibility, write-back
+// included, now lives entirely in counters_store.h's countersLoad(), called
+// separately by init_flash() -- a correction here and the counter's own
+// advance are unrelated events and no longer need to share one return path.
+bool sanitize_loaded_settings(void)
 {
     RadioLimits lim = { TX_POWER_MIN, TX_POWER_MAX, 400.0f, 960.0f, 0, 0, max_country };
     RadioParams p = { meshcom_settings.node_power, meshcom_settings.node_freq, meshcom_settings.node_bw,
@@ -58,297 +245,225 @@ void sanitize_loaded_settings(void)
     #endif
 
     if(fixed > 0)
-    {
         Serial.printf("[FLASH]...%d setting(s) out of range, reset to default\n", fixed);
-        save_settings();    // einmal zurueckschreiben, sonst meldet jeder Boot dieselbe Korrektur
+
+    return fixed > 0;
+}
+
+// ---------------------------------------------------------------------------
+// D1-04 W3 step 4: counters_store.h's ESP32 backend. Contract is that
+// header's own top comment -- read it first. Storage is a SEPARATE
+// Preferences namespace ("Counters") through a SEPARATE static Preferences
+// instance, deliberately never the global `preferences` object init_flash()/
+// save_settings() use for "Credentials": sharing one handle across two
+// unrelated call paths is exactly what bce95db5 got bitten by (a nested
+// begin()/end() pair silently closing the handle a caller further up the
+// stack was still using -- see g_flash_load_in_progress's comment above).
+// Keeping the counter on its own handle makes that class of bug structurally
+// unreachable here, not just guarded against.
+static Preferences counters_preferences;
+
+void countersLoad(void)
+{
+    if (!counters_preferences.begin("Counters", false))
+        Serial.printf("[SETST];counters;namespace_open;failed\n");
+    if (counters_preferences.isKey("node_msgid"))
+    {
+        meshcom_settings.node_msgid = counters_preferences.getInt("node_msgid", meshcom_settings.node_msgid);
     }
+    else
+    {
+        // Upgrade path: nothing in "Counters" yet -- fall back to the legacy
+        // location this value lived in before this cutover. Opened
+        // read-only, on its own short-lived Preferences instance, and NOT
+        // deleted afterwards: a downgrade back to a pre-cutover firmware
+        // must still find it in "Credentials".
+        counters_preferences.end();
+        Preferences legacy;
+        legacy.begin("Credentials", true);
+        meshcom_settings.node_msgid = legacy.getInt("node_msgid", meshcom_settings.node_msgid);
+        legacy.end();
+        counters_preferences.begin("Counters", false);
+    }
+
+    // Message-id high-water mark (msgid_counter.h). The counter is no longer
+    // persisted on every originated frame -- it reaches flash once per
+    // kMsgIdPersistStep frames -- so the stored value can be up to one step
+    // behind what the node actually used before it went down. Stepping past
+    // that whole block here, and writing the result back BEFORE returning,
+    // is what keeps an id from being handed out twice after an unclean
+    // shutdown -- see msgid_counter.h's own top comment for why the
+    // write-back is not optional.
+    meshcom_settings.node_msgid = msgIdAfterLoad(meshcom_settings.node_msgid);
+    // msgid_counter.h: the advanced block MUST reach flash before the first frame goes out. NVS can
+    // be full or the namespace can fail to open; neither is silent any more (advisor finding 6).
+    if (counters_preferences.putInt("node_msgid", meshcom_settings.node_msgid) == 0)
+        Serial.printf("[SETST];counters;load_writeback;failed\n");
+    counters_preferences.end();
+}
+
+bool countersSave(void)
+{
+    if (!counters_preferences.begin("Counters", false))
+        return false;
+    bool ok = counters_preferences.putInt("node_msgid", meshcom_settings.node_msgid) > 0;
+    counters_preferences.end();
+    return ok;
 }
 #endif // !MC_SAFEBOOT
 
 void init_flash(void)
 {
     Serial.println("[INIT]...init_flash");
-    
+
     preferences.begin("Credentials", false);
+    g_flash_load_in_progress = true;
 
-    String strVar = preferences.getString("node_call");
-    snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", strVar.c_str());
+    // -------------------------------------------------------------------
+    // Pre-load defaults.
+    //
+    // settings_store::FieldDescriptor carries no "default value" field, only
+    // a clamp range (settings_store.h) -- so the walk below treats a missing
+    // NVS key the same way settings_store::decode() documents for the nRF52
+    // keyed store: the field is left exactly as it already is in
+    // `meshcom_settings` when the walk reaches it, and only overwritten when
+    // the key is actually present. For most of the ~130 persisted fields
+    // that is already correct with NO extra code: s_meshcom_settings' own
+    // field initialiser (esp32_flash.h) already matches the literal 2nd-arg
+    // default the old hand-written preferences.getX(key, literal) call used
+    // for that field.
+    //
+    // The fields below do NOT match -- historically because every one of the
+    // 132 old load call sites carried its OWN literal instead of relying on
+    // the struct's default, and the two silently drifted apart over time
+    // (e.g. node_maxv: struct default 4.24, old load default 4.200;
+    // node_owgpio: struct default 36, old load default 0). Seeded here, once,
+    // so a truly first-ever boot (empty NVS) lands on the exact value it did
+    // before this refactor -- do NOT "fix" these to match the struct's own
+    // compiled default in esp32_flash.h instead: that header value was never
+    // what a device actually booted with, only what the walk's generic
+    // fallback rule would use if left unseeded.
+    meshcom_settings.node_call[0] = '\0';
+    meshcom_settings.node_short[0] = '\0';
+    meshcom_settings.node_lat_c = 'N';
+    meshcom_settings.node_lon_c = 'E';
+    snprintf(meshcom_settings.node_ossid, sizeof(meshcom_settings.node_ossid), "none");
+    snprintf(meshcom_settings.node_opwd, sizeof(meshcom_settings.node_opwd), "none");
+    snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "none");
+    meshcom_settings.node_maxv = 4.200f;
+    // -20 == CFG_POWER_NOT_SET (config_json.h): "no TX power stored yet",
+    // deliberately outside TX_POWER_MIN..MAX on several boards so
+    // sanitize_loaded_settings() (below) can tell "never configured" apart
+    // from a legitimately stored value.
+    meshcom_settings.node_power = -20;
+    meshcom_settings.node_owgpio = 0;
+    meshcom_settings.node_utcoff = 1.0f;
+    meshcom_settings.node_preamplebits = 32;
+    snprintf(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid), "none");
+    snprintf(meshcom_settings.node_pwd, sizeof(meshcom_settings.node_pwd), "none");
+    snprintf(meshcom_settings.node_parm, sizeof(meshcom_settings.node_parm), "none");
+    snprintf(meshcom_settings.node_unit, sizeof(meshcom_settings.node_unit), "none");
+    snprintf(meshcom_settings.node_format, sizeof(meshcom_settings.node_format), "none");
+    snprintf(meshcom_settings.node_eqns, sizeof(meshcom_settings.node_eqns), "none");
+    snprintf(meshcom_settings.node_values, sizeof(meshcom_settings.node_values), "none");
+    snprintf(meshcom_settings.node_lora_call, sizeof(meshcom_settings.node_lora_call), "none");
+    snprintf(meshcom_settings.node_gwsrv, sizeof(meshcom_settings.node_gwsrv), "OE");
+    meshcom_settings.node_fversion = 0;
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
+    meshcom_settings.node_kbl_sync = false;
+    #endif
 
-    strVar = preferences.getString("node_short");
-    snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", strVar.c_str());
-
-    meshcom_settings.node_symid = preferences.getChar("node_symid", '/');
-    meshcom_settings.node_symcd = preferences.getChar("node_symcd", '#');
-
-    meshcom_settings.node_lat = preferences.getDouble("node_lat", 0.0);
-    meshcom_settings.node_lon = preferences.getDouble("node_lon", 0.0);
-    meshcom_settings.node_alt = preferences.getInt("node_alt", 0);
-    meshcom_settings.node_lat_c = preferences.getChar("node_lat_c", 'N');
-    meshcom_settings.node_lon_c = preferences.getChar("node_lon_c", 'E');
-
-    meshcom_settings.node_temp = preferences.getFloat("node_temp", 0.0);
-    meshcom_settings.node_hum = preferences.getFloat("node_hum", 0.0);
-    meshcom_settings.node_press = preferences.getFloat("node_press", 0.0);
-
-    strVar = preferences.getString("node_ssid", "none");
-    snprintf(meshcom_settings.node_ossid, sizeof(meshcom_settings.node_ossid), "%s", strVar.c_str());
-    strVar = preferences.getString("node_pwd", "none");
-    snprintf(meshcom_settings.node_opwd, sizeof(meshcom_settings.node_opwd), "%s", strVar.c_str());
-
-    meshcom_settings.node_hamnet_only = preferences.getInt("node_honly", 0);
-
-    meshcom_settings.node_sset = preferences.getInt("node_sset", 0x0004);
-
-    meshcom_settings.node_maxv = preferences.getFloat("node_maxv", 4.200);
-
-    strVar = preferences.getString("node_extern", "none");
-    snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", strVar.c_str());
-
-    meshcom_settings.node_msgid = preferences.getInt("node_msgid", 0);
-    meshcom_settings.node_ackid = preferences.getInt("node_ackid", 0);
-
-    meshcom_settings.node_power = preferences.getInt("node_power",-20); // not set
-    meshcom_settings.node_freq = preferences.getFloat("node_freq", 0);
-    meshcom_settings.node_bw = preferences.getFloat("node_bw", 0);
-    meshcom_settings.node_sf = preferences.getInt("node_sf", 0);
-    meshcom_settings.node_cr = preferences.getInt("node_cr", 0);
-
-    strVar = preferences.getString("node_atxt");
-    snprintf(meshcom_settings.node_atxt, sizeof(meshcom_settings.node_atxt), "%s", strVar.c_str());
-
-    meshcom_settings.node_sset2 = preferences.getInt("node_sset2", 0x0000);
-    meshcom_settings.node_disp_rot = preferences.getInt("node_disrot", 0);   // Display-Dreh-Offset (--rotate); Default 0 = Werksausrichtung
-    meshcom_settings.node_owgpio = preferences.getInt("node_owgpio", 0);
-
-    meshcom_settings.node_temp2 = preferences.getFloat("node_temp2", 0.0);
-
-    meshcom_settings.node_utcoff = preferences.getFloat("node_utcof", 1.0); // UTC Zone Europe
-
-    // BME680
-    meshcom_settings.node_gas_res = preferences.getFloat("node_gas", 0.0);
-
-    // CMCU-811
-    meshcom_settings.node_co2 = preferences.getFloat("node_co2", 0.0);
-
-	// MCP23017
-    meshcom_settings.node_mcp17io = preferences.getInt("node_mcp17", 0);
-    meshcom_settings.node_mcp17out = preferences.getInt("node_mcp17o", 0);
-    meshcom_settings.node_mcp17in = preferences.getInt("node_mcp17i", 0);
-
-    strVar = preferences.getString("node_mcp170");
-    snprintf(meshcom_settings.node_mcp17t[0], sizeof(meshcom_settings.node_mcp17t[0]), "%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp171");
-    snprintf(meshcom_settings.node_mcp17t[1], sizeof(meshcom_settings.node_mcp17t[1]), "%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp172");
-    snprintf(meshcom_settings.node_mcp17t[2], sizeof(meshcom_settings.node_mcp17t[2]), "%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp173");
-    snprintf(meshcom_settings.node_mcp17t[3], sizeof(meshcom_settings.node_mcp17t[3]), "%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp174");
-    snprintf(meshcom_settings.node_mcp17t[4], sizeof(meshcom_settings.node_mcp17t[4]), "%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp175");
-    snprintf(meshcom_settings.node_mcp17t[5], sizeof(meshcom_settings.node_mcp17t[5]), "%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp176");
-    snprintf(meshcom_settings.node_mcp17t[6], sizeof(meshcom_settings.node_mcp17t[6]), "%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp177");
-    snprintf(meshcom_settings.node_mcp17t[7], sizeof(meshcom_settings.node_mcp17t[7]), "%s", strVar.c_str());
-
-    strVar = preferences.getString("node_mcp178");
-    snprintf(meshcom_settings.node_mcp17t[8], sizeof(meshcom_settings.node_mcp17t[8]), "%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp179");
-    snprintf(meshcom_settings.node_mcp17t[9], sizeof(meshcom_settings.node_mcp17t[9]),"%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp1710");
-    snprintf(meshcom_settings.node_mcp17t[10], sizeof(meshcom_settings.node_mcp17t[10]),"%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp1711");
-    snprintf(meshcom_settings.node_mcp17t[11], sizeof(meshcom_settings.node_mcp17t[11]),"%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp1712");
-    snprintf(meshcom_settings.node_mcp17t[12], sizeof(meshcom_settings.node_mcp17t[12]),"%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp1713");
-    snprintf(meshcom_settings.node_mcp17t[13], sizeof(meshcom_settings.node_mcp17t[13]),"%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp1714");
-    snprintf(meshcom_settings.node_mcp17t[14], sizeof(meshcom_settings.node_mcp17t[14]),"%s", strVar.c_str());
-    strVar = preferences.getString("node_mcp1715");
-    snprintf(meshcom_settings.node_mcp17t[15], sizeof(meshcom_settings.node_mcp17t[15]),"%s", strVar.c_str());
-
-	// GM Fields
-    meshcom_settings.node_gcb[0] = preferences.getInt("node_gcb0", 0);
-    meshcom_settings.node_gcb[1] = preferences.getInt("node_gcb1", 0);
-    meshcom_settings.node_gcb[2] = preferences.getInt("node_gcb2", 0);
-    meshcom_settings.node_gcb[3] = preferences.getInt("node_gcb3", 0);
-    meshcom_settings.node_gcb[4] = preferences.getInt("node_gcb4", 0);
-    meshcom_settings.node_gcb[5] = preferences.getInt("node_gcb5", 0);
-
-    meshcom_settings.node_country = preferences.getInt("node_ctry");    // 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
-
-    // CS-01: Hop-Limit fuer Textnachrichten. Bis 2026-08-30 gab es keinen
-    // NVS-Key dafuer -- der Wert war faktisch eine Compile-Zeit-Konstante.
-    // max_hop_pos bleibt bewusst beim Default (esp32_main.cpp). Im Safeboot
-    // kommt MAX_HOP_TEXT_DEFAULT (configuration_global.h) nicht mit --
-    // dort tut es der Spiegelwert aus maxhop.h.
+    // Explicit, non-generic load -- see isLoadSpecialCased()'s comment for
+    // why this key is not part of the walk below.
     #if defined(MC_SAFEBOOT)
     meshcom_settings.max_hop_text = preferences.getInt("max_hop_text", MAXHOP_TEXT_FALLBACK);
     #else
     meshcom_settings.max_hop_text = preferences.getInt("max_hop_text", MAX_HOP_TEXT_DEFAULT);
     #endif
 
+    // The walk: every remaining row of settings_schema::fields() -- CFG_FIELD_LIST
+    // + CFG_FIELD_LIST_PLATFORM's ESP32 branch + SETTINGS_PERSIST_ONLY_LIST[_PLATFORM]
+    // -- loaded generically, T-Deck-only rows included (the schema only
+    // contains those on a T-Deck build; see settings_schema.h).
+    for (size_t i = 0; i < settings_schema::fieldCount(); i++)
+    {
+        const settings_store::FieldDescriptor &d = settings_schema::fields()[i];
+        if (isLoadSpecialCased(d.key))
+            continue;
+        loadFieldFromPreferences(d, &meshcom_settings);
+    }
+
     // TM-32 (upstream #661/#57): Radio-Parameter auf Plausibilitaet pruefen,
     // bevor sie in radio.setOutputPower() & Co. landen. Sentinels bleiben.
+    // Called at exactly this point (radio params and max_hop_text already
+    // loaded; nothing else has been reached yet by anything OUTSIDE this
+    // function) -- same relative position this call has held since TM-32
+    // landed it. `settings_corrected` records whether it actually changed
+    // anything, for the conditional save_settings() call below.
     #if !defined(MC_SAFEBOOT)
-    sanitize_loaded_settings();
+    bool settings_corrected = sanitize_loaded_settings();
     #endif
 
-    meshcom_settings.node_track_freq = preferences.getFloat("node_track", 0);
-    meshcom_settings.node_preamplebits = preferences.getInt("node_pream", 32);
-
-    meshcom_settings.node_ss_rx_pin = preferences.getInt("node_ss_rx", 0);
-    meshcom_settings.node_ss_tx_pin = preferences.getInt("node_ss_tx", 0);
-    meshcom_settings.node_ss_baud = preferences.getInt("node_ss_bd", 0);
-
-    meshcom_settings.node_postime = preferences.getInt("node_postime", 0);
-
-    strVar = preferences.getString("node_passwd");
-    snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%s", strVar.c_str());
-
-    meshcom_settings.node_sset3 = preferences.getInt("node_sset3", 0x0000);
-
-    meshcom_settings.bt_code = preferences.getInt("bt_code", 0x000000);
-
-    meshcom_settings.node_button_pin = preferences.getInt("node_bpin", 0);
-
-    strVar = preferences.getString("node_ownip");
-    snprintf(meshcom_settings.node_ownip, sizeof(meshcom_settings.node_ownip), "%s", strVar.c_str());
-    strVar = preferences.getString("node_owngw");
-    snprintf(meshcom_settings.node_owngw, sizeof(meshcom_settings.node_owngw), "%s", strVar.c_str());
-    strVar = preferences.getString("node_ownms");
-    snprintf(meshcom_settings.node_ownms, sizeof(meshcom_settings.node_ownms), "%s", strVar.c_str());
-
-    strVar = preferences.getString("node_name");
-    snprintf(meshcom_settings.node_name, sizeof(meshcom_settings.node_name), "%s", strVar.c_str());
-
-    strVar = preferences.getString("node_webpwd");
-    snprintf(meshcom_settings.node_webpwd, sizeof(meshcom_settings.node_webpwd), "%s", strVar.c_str());
-
-    strVar = preferences.getString("node_lssid", "none");
-    snprintf(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid), "%s", strVar.c_str());
-    strVar = preferences.getString("node_lpwd", "none");
-    snprintf(meshcom_settings.node_pwd, sizeof(meshcom_settings.node_pwd), "%s", strVar.c_str());
-
-    meshcom_settings.node_analog_pin = preferences.getInt("node_apin", 99);
-    meshcom_settings.node_analog_faktor = preferences.getFloat("node_afakt", 1.0);
-
-    strVar = preferences.getString("node_parm", "none");
-    snprintf(meshcom_settings.node_parm, sizeof(meshcom_settings.node_parm), "%s", strVar.c_str());
-
-    strVar = preferences.getString("node_unit", "none");
-    snprintf(meshcom_settings.node_unit, sizeof(meshcom_settings.node_unit), "%s", strVar.c_str());
-
-    strVar = preferences.getString("node_format", "none");
-    snprintf(meshcom_settings.node_format, sizeof(meshcom_settings.node_format), "%s", strVar.c_str());
-
-    strVar = preferences.getString("node_eqns", "none");
-    snprintf(meshcom_settings.node_eqns, sizeof(meshcom_settings.node_eqns), "%s", strVar.c_str());
-
-    strVar = preferences.getString("node_values", "none");
-    snprintf(meshcom_settings.node_values, sizeof(meshcom_settings.node_values), "%s", strVar.c_str());
- 
-    meshcom_settings.node_parm_time = preferences.getInt("node_ptime", 15);
-
-    meshcom_settings.node_specstart = preferences.getFloat("node_spstart", 432.0);
-    meshcom_settings.node_specend = preferences.getFloat("node_spend", 434.0);
-    meshcom_settings.node_specstep = preferences.getFloat("node_spstep", 0.025);
-    meshcom_settings.node_specsamples = preferences.getInt("node_spsamp", 2048);
-
-    meshcom_settings.node_analog_batt_faktor = preferences.getFloat("node_bfakt", 0.0);
-
-    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
-    meshcom_settings.node_map = preferences.getInt("node_map", 0);
-    meshcom_settings.node_audio_start = preferences.getString("node_audstart", "/");
-    meshcom_settings.node_audio_msg = preferences.getString("node_audmsg", "/");
-    meshcom_settings.node_keyboardlock = preferences.getBool("node_kblock", false);
-    meshcom_settings.node_backlightlock = preferences.getBool("node_bllock", false);
-    meshcom_settings.node_kbllightlock = preferences.getBool("node_kllock", false);
-    meshcom_settings.node_modus = preferences.getInt("node_modus", 0);
-    meshcom_settings.node_mute = preferences.getBool("node_mute", false);
-    meshcom_settings.node_persist_to_flash = preferences.getBool("node_perflash", false);
-    meshcom_settings.node_persist_to_sd = preferences.getBool("node_persd", false);
-    meshcom_settings.node_immediate_save = preferences.getBool("node_immsave", false);
-    meshcom_settings.node_kbl_sync = preferences.getBool("node_kblsync", false);
-    meshcom_settings.node_wifion = preferences.getBool("node_wifion", true);   // HL-02: struct default is true
-    #endif
-
-    meshcom_settings.node_wifi_power = preferences.getInt("node_wifip", 60);
-
-    strVar = preferences.getString("node_ucall", "none");
-    snprintf(meshcom_settings.node_lora_call, sizeof(meshcom_settings.node_lora_call), "%s", strVar.c_str());
-
-    meshcom_settings.node_analog_alpha = preferences.getFloat("node_aak", 0.0);
-    meshcom_settings.node_analog_slope = preferences.getFloat("node_aslo", 1.0);
-    meshcom_settings.node_analog_offset = preferences.getFloat("node_aoff", 0.0);
-    meshcom_settings.node_analog_atten = preferences.getFloat("node_atten", 0.0);
-    
-    strVar = preferences.getString("node_gwsrv", "OE");
-    snprintf(meshcom_settings.node_gwsrv, sizeof(meshcom_settings.node_gwsrv), "%s", strVar.c_str());
-
-    meshcom_settings.node_tempi_off = preferences.getFloat("node_tmpiof", 0.0);
-    meshcom_settings.node_tempo_off = preferences.getFloat("node_tmpoof", 0.0);
-
-    meshcom_settings.node_shunt = preferences.getFloat("node_shunt", 0.002);
-    meshcom_settings.node_imax = preferences.getFloat("node_imax", 20.0);
-    meshcom_settings.node_isamp = preferences.getInt("node_isamp", 7);
-    meshcom_settings.node_isamp = preferences.getInt("node_isamp", 7);
-
-    strVar = preferences.getString("node_owndns");
-    snprintf(meshcom_settings.node_owndns, sizeof(meshcom_settings.node_owndns), "%s", strVar.c_str());
-
-    meshcom_settings.node_contrast = preferences.getInt("node_contrast", 255);
-
-    meshcom_settings.node_fversion = preferences.getInt("node_fversion", 0);
-
-    strVar = preferences.getString("node_ownntp");
-    snprintf(meshcom_settings.node_ownntp, sizeof(meshcom_settings.node_ownntp), "%s", strVar.c_str());
-
-    meshcom_settings.node_mversion = preferences.getInt("node_mversion", 0);
-
-    strVar = preferences.getString("node_fwversion");
-    snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%s", strVar.c_str());
-
-    meshcom_settings.node_gpsbaud = preferences.getUInt("node_gpsbaud", 38400);
-
-    meshcom_settings.node_cleanflash = preferences.getUInt("node_cflash", 0);
-
-    // Network Mode wifi/eth
-    meshcom_settings.node_netmode = preferences.getInt("node_netmode", 0);
-
-    // GPSDEBUG 0 ... none, 1...only valid, 2...all info
-    meshcom_settings.node_gpsdebug = preferences.getInt("node_gpsdebug", 0);
-
-    meshcom_settings.node_relay = preferences.getInt("node_relay", 0);
-
-    strVar = preferences.getString("node_via");
-    snprintf(meshcom_settings.node_via, sizeof(meshcom_settings.node_via), "%s", strVar.c_str());
-
-    meshcom_settings.node_sset4 = preferences.getInt("node_sset4", 0x0002); // defaut 0x0002: DEBUGEN = true
-
-    strVar = preferences.getString("node_aprsmc");
-    snprintf(meshcom_settings.node_aprsmc, sizeof(meshcom_settings.node_aprsmc), "%s", strVar.c_str());
-
-    meshcom_settings.node_pingtime = preferences.getInt("node_pingtime", 0);
-
-    strVar = preferences.getString("node_pingcall");
-    snprintf(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_pingcall), "%s", strVar.c_str());
-
-    meshcom_settings.node_pingmax = preferences.getInt("node_pingmax", 0);
-
+    g_flash_load_in_progress = false;
     preferences.end();
+
+    // save_settings() runs here -- after the walk above has finished and
+    // after this function's own preferences.end(), never from inside
+    // sanitize_loaded_settings() itself, where an earlier commit this same
+    // day (bce95db5, "W3: node_msgid reaches flash once per 100 frames") had
+    // put an equivalent call. Found while wiring this walk, not by that
+    // commit's own testing: calling save_settings() before every field had
+    // been loaded persists a HALF-loaded struct, so every field not yet
+    // reached at that point gets clobbered in NVS with whatever
+    // s_meshcom_settings' compiled default (or this function's own pre-load
+    // seed above) happened to still hold. Worse, save_settings() opens its
+    // OWN preferences.begin()/end() pair (Preferences::begin() is a
+    // documented no-op re-entering an already-open handle, harmless) -- but
+    // its preferences.end() is UNCONDITIONAL once the handle is open
+    // (Preferences.cpp), so it closes the handle THIS function is still
+    // using. Every following preferences.getX() call in this function (there
+    // would have been ~70 of them, everything from node_track_freq onward in
+    // the old hand-written order) would then see Preferences::_started ==
+    // false and silently return its own literal default argument, NEVER
+    // reading NVS again for the rest of this boot -- indistinguishable, from
+    // the node's point of view, from every one of those settings resetting
+    // to factory default on every single reboot. Neither half of this (the
+    // clobber, or the closed-handle short-circuit) is specific to the schema
+    // walk above; both apply identically to the original hand-written call
+    // list. This is a separate, independent defect from the one docs/...
+    // already describes as "the boot-2 settings loss was newlib-nano's
+    // printf, not a schema gap" -- flagged for its own follow-up, not fixed
+    // further than moving this one call site back out of the load path.
+    //
+    // Unlike the original one-write-per-boot shape, this call is now
+    // CONDITIONAL on sanitize_loaded_settings() having actually corrected
+    // something: with node_msgid no longer a settings_schema row (D1-04 W3
+    // step 4), nothing else in this struct changes on an ordinary boot, so
+    // an unconditional write here would just re-persist byte-identical data
+    // every single time. The message-id write-back guarantee that used to
+    // ride along with this call (bce95db5) is now countersLoad()'s own job,
+    // called separately below, through its own Preferences handle -- see
+    // that function's comment for why it is safe to call only after this
+    // preferences.end() and does not need save_settings() at all.
+    #if !defined(MC_SAFEBOOT)
+    if (settings_corrected)
+        save_settings();
+
+    countersLoad();
+    #endif
 }
 
 void clear_flash(void)
 {
+    // DECISION (W3c, advisor finding 4): only "Credentials" is cleared. The "Counters" namespace
+    // (node_msgid, counters_store.h) survives a settings reset on purpose -- a reset is not a reason
+    // to replay message ids into every neighbour's dedup ring.
     preferences.begin("Credentials", false);
 
     printfdeb("[INIT]...FLASH #entries %i bevor clear\n", (int)preferences.freeEntries());
 
     preferences.freeEntries();
-    
+
     preferences.clear();
 
     printfdeb("[INIT]...FLASH #entries %i after clear\n", preferences.freeEntries());
@@ -357,263 +472,21 @@ void clear_flash(void)
 
 void save_settings(void)
 {
+    if (g_flash_load_in_progress)
+    {
+        // D1-04 W3 Task 2 guard: refuse rather than corrupt. See the
+        // g_flash_load_in_progress comment above init_flash() for what this
+        // is standing in for.
+        Serial.printf("[FLASH]...save_settings() REFUSED: init_flash() load still in progress -- NVS not touched\n");
+        return;
+    }
+
     preferences.begin("Credentials", false);
 
-    String strVar;
-    
-    strVar = meshcom_settings.node_call;
-    preferences.putString("node_call", strVar); 
-
-    strVar = meshcom_settings.node_short;
-    preferences.putString("node_short", strVar); 
-
-    preferences.putChar("node_symid", meshcom_settings.node_symid);
-    preferences.putChar("node_symcd", meshcom_settings.node_symcd);
-
-    preferences.putDouble("node_lat", meshcom_settings.node_lat);
-    preferences.putDouble("node_lon", meshcom_settings.node_lon);
-    preferences.putInt("node_alt", meshcom_settings.node_alt);
-
-    preferences.putChar("node_lat_c", meshcom_settings.node_lat_c);
-    preferences.putChar("node_lon_c", meshcom_settings.node_lon_c);
-
-    preferences.putFloat("node_temp", meshcom_settings.node_temp);
-    preferences.putFloat("node_hum", meshcom_settings.node_hum);
-    preferences.putFloat("node_press", meshcom_settings.node_press);
-
-    strVar = meshcom_settings.node_ossid;
-    preferences.putString("node_ssid", strVar); 
-    strVar = meshcom_settings.node_opwd;
-    preferences.putString("node_pwd", strVar); 
-
-    preferences.putInt("node_honly", meshcom_settings.node_hamnet_only);
-
-    preferences.putInt("node_sset", meshcom_settings.node_sset);
-
-    preferences.putFloat("node_maxv", meshcom_settings.node_maxv);
-
-    strVar = meshcom_settings.node_extern;
-    preferences.putString("node_extern", strVar); 
-
-    preferences.putInt("node_msgid", meshcom_settings.node_msgid);
-    preferences.putInt("node_ackid", meshcom_settings.node_ackid);
-
-    // CS-01: Hop-Limit fuer Textnachrichten (--maxhop). max_hop_pos wird bewusst
-    // nicht gespeichert und bleibt beim Compile-Default.
-    preferences.putInt("max_hop_text", meshcom_settings.max_hop_text);
-
-    preferences.putInt("node_power", meshcom_settings.node_power);
-    preferences.putFloat("node_freq", meshcom_settings.node_freq);
-    preferences.putFloat("node_bw", meshcom_settings.node_bw);
-    preferences.putInt("node_sf", meshcom_settings.node_sf);
-    preferences.putInt("node_cr", meshcom_settings.node_cr);
-
-    strVar = meshcom_settings.node_atxt;
-    preferences.putString("node_atxt", strVar); 
-
-    preferences.putInt("node_sset2", meshcom_settings.node_sset2);
-    preferences.putInt("node_disrot", meshcom_settings.node_disp_rot);   // Display-Dreh-Offset (--rotate)
-    preferences.putInt("node_owgpio", meshcom_settings.node_owgpio);
-
-    preferences.putFloat("node_temp2", meshcom_settings.node_temp2);
-
-    preferences.putFloat("node_utcof", meshcom_settings.node_utcoff);
-
-    // BME680
-    preferences.putFloat("node_gas", meshcom_settings.node_gas_res);
-
-    // CMCU-811
-    preferences.putFloat("node_co2", meshcom_settings.node_co2);
-
-    // MCP23017
-    preferences.putInt("node_mcp17", meshcom_settings.node_mcp17io);
-    preferences.putInt("node_mcp17o", meshcom_settings.node_mcp17out);
-    preferences.putInt("node_mcp17i", meshcom_settings.node_mcp17in);
-    
-    strVar = meshcom_settings.node_mcp17t[0];
-    preferences.putString("node_mcp170", strVar); 
-    strVar = meshcom_settings.node_mcp17t[1];
-    preferences.putString("node_mcp171", strVar); 
-    strVar = meshcom_settings.node_mcp17t[2];
-    preferences.putString("node_mcp172", strVar); 
-    strVar = meshcom_settings.node_mcp17t[3];
-    preferences.putString("node_mcp173", strVar); 
-    strVar = meshcom_settings.node_mcp17t[4];
-    preferences.putString("node_mcp174", strVar); 
-    strVar = meshcom_settings.node_mcp17t[5];
-    preferences.putString("node_mcp175", strVar); 
-    strVar = meshcom_settings.node_mcp17t[6];
-    preferences.putString("node_mcp176", strVar); 
-    strVar = meshcom_settings.node_mcp17t[7];
-    preferences.putString("node_mcp177", strVar); 
-
-    strVar = meshcom_settings.node_mcp17t[8];
-    preferences.putString("node_mcp178", strVar); 
-    strVar = meshcom_settings.node_mcp17t[9];
-    preferences.putString("node_mcp179", strVar); 
-    strVar = meshcom_settings.node_mcp17t[10];
-    preferences.putString("node_mcp1710", strVar); 
-    strVar = meshcom_settings.node_mcp17t[11];
-    preferences.putString("node_mcp1711", strVar); 
-    strVar = meshcom_settings.node_mcp17t[12];
-    preferences.putString("node_mcp1712", strVar); 
-    strVar = meshcom_settings.node_mcp17t[13];
-    preferences.putString("node_mcp1713", strVar); 
-    strVar = meshcom_settings.node_mcp17t[14];
-    preferences.putString("node_mcp1714", strVar); 
-    strVar = meshcom_settings.node_mcp17t[15];
-    preferences.putString("node_mcp1715", strVar); 
-
-	// GM Fields
-    preferences.putInt("node_gcb0", meshcom_settings.node_gcb[0]);
-    preferences.putInt("node_gcb1", meshcom_settings.node_gcb[1]);
-    preferences.putInt("node_gcb2", meshcom_settings.node_gcb[2]);
-    preferences.putInt("node_gcb3", meshcom_settings.node_gcb[3]);
-    preferences.putInt("node_gcb4", meshcom_settings.node_gcb[4]);
-    preferences.putInt("node_gcb5", meshcom_settings.node_gcb[5]);
-
-    preferences.putInt("node_ctry", meshcom_settings.node_country);    // 0...EU  1...UK, 2...IT, 3...US, ..... 18...868, 19...915
-
-    preferences.putFloat("node_track", meshcom_settings.node_track_freq);
-    preferences.putInt("node_pream", meshcom_settings.node_preamplebits);
-
-    preferences.putInt("node_ss_rx", meshcom_settings.node_ss_rx_pin);
-    preferences.putInt("node_ss_tx", meshcom_settings.node_ss_tx_pin);
-    preferences.putInt("node_ss_bd", meshcom_settings.node_ss_baud);
-
-    preferences.putInt("node_postime", meshcom_settings.node_postime);
-
-    strVar = meshcom_settings.node_passwd;
-    preferences.putString("node_passwd", strVar); 
-
-    preferences.putInt("node_sset3", meshcom_settings.node_sset3);
-
-    preferences.putInt("bt_code", meshcom_settings.bt_code);
-
-    preferences.putInt("node_bpin", meshcom_settings.node_button_pin);
-
-    strVar = meshcom_settings.node_ownip;
-    preferences.putString("node_ownip", strVar); 
-    strVar = meshcom_settings.node_owngw;
-    preferences.putString("node_owngw", strVar); 
-    strVar = meshcom_settings.node_ownms;
-    preferences.putString("node_ownms", strVar); 
-
-    strVar = meshcom_settings.node_name;
-    preferences.putString("node_name", strVar); 
-
-    strVar = meshcom_settings.node_webpwd;
-    preferences.putString("node_webpwd", strVar); 
-
-    strVar = meshcom_settings.node_ssid;
-    preferences.putString("node_lssid", strVar); 
-    strVar = meshcom_settings.node_pwd;
-    preferences.putString("node_lpwd", strVar); 
-
-    preferences.putInt("node_apin", meshcom_settings.node_analog_pin);
-    preferences.putFloat("node_afakt", meshcom_settings.node_analog_faktor);
-
-    strVar = meshcom_settings.node_parm;
-    preferences.putString("node_parm", strVar); 
-
-    strVar = meshcom_settings.node_unit;
-    preferences.putString("node_unit", strVar);
-
-    strVar = meshcom_settings.node_format;
-    preferences.putString("node_format", strVar);
-
-    strVar = meshcom_settings.node_eqns;
-    preferences.putString("node_eqns", strVar);
-
-    strVar = meshcom_settings.node_values;
-    preferences.putString("node_values", strVar);
-
-    preferences.putInt("node_ptime", meshcom_settings.node_parm_time);
-
-    preferences.putFloat("node_spstart", meshcom_settings.node_specstart);
-    preferences.putFloat("node_spend", meshcom_settings.node_specend);
-    preferences.putFloat("node_spstep", meshcom_settings.node_specstep);
-    preferences.putInt("node_spsamp", meshcom_settings.node_specsamples);
-
-    preferences.putFloat("node_bfakt", meshcom_settings.node_analog_batt_faktor);
-    
-    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)  || defined(BOARD_T_DECK_PRO)
-    preferences.putInt("node_map", meshcom_settings.node_map);
-    preferences.putString("node_audstart", meshcom_settings.node_audio_start);
-    preferences.putString("node_audmsg", meshcom_settings.node_audio_msg);
-    preferences.putBool("node_kblock", meshcom_settings.node_keyboardlock);
-    preferences.putBool("node_bllock", meshcom_settings.node_backlightlock);
-    preferences.putBool("node_kllock", meshcom_settings.node_kbllightlock);
-    preferences.putInt("node_modus", meshcom_settings.node_modus);
-    preferences.putBool("node_mute", meshcom_settings.node_mute);
-    preferences.putBool("node_perflash", meshcom_settings.node_persist_to_flash);
-    preferences.putBool("node_persd", meshcom_settings.node_persist_to_sd);
-    preferences.putBool("node_immsave", meshcom_settings.node_immediate_save);
-    preferences.putBool("node_kblsync", meshcom_settings.node_kbl_sync);
-    preferences.putBool("node_wifion", meshcom_settings.node_wifion);
-    #endif 
-
-    preferences.putInt("node_wifip", meshcom_settings.node_wifi_power);
-
-    strVar = meshcom_settings.node_lora_call;
-    preferences.putString("node_ucall", strVar);
-    
-    preferences.putFloat("node_aak", meshcom_settings.node_analog_alpha);
-    preferences.putFloat("node_aslo", meshcom_settings.node_analog_slope);
-    preferences.putFloat("node_aoff", meshcom_settings.node_analog_offset);
-    preferences.putFloat("node_atten", meshcom_settings.node_analog_atten);
-
-    strVar = meshcom_settings.node_gwsrv;
-    preferences.putString("node_gwsrv", strVar);
-
-    preferences.putFloat("node_tmpiof", meshcom_settings.node_tempi_off);
-    preferences.putFloat("node_tmpoof", meshcom_settings.node_tempo_off);
-
-    preferences.putFloat("node_shunt", meshcom_settings.node_shunt);
-    preferences.putFloat("node_imax", meshcom_settings.node_imax);
-    preferences.putInt("node_isamp", meshcom_settings.node_isamp);
-
-    strVar = meshcom_settings.node_owndns;
-    preferences.putString("node_owndns", strVar); 
-
-    preferences.putInt("node_contrast", meshcom_settings.node_contrast);
-
-    preferences.putInt("node_fversion", meshcom_settings.node_fversion);
-
-    strVar = meshcom_settings.node_ownntp;
-    preferences.putString("node_ownntp", strVar); 
-
-    preferences.putInt("node_mversion", meshcom_settings.node_mversion);
-
-    strVar = meshcom_settings.node_fwversion;
-    preferences.putString("node_fwversion", strVar); 
-
-    preferences.putULong("node_gpsbaud", meshcom_settings.node_gpsbaud);
-
-    preferences.putULong("node_cflash", meshcom_settings.node_cleanflash);
-
-    // Network Mode wifi/eth
-    preferences.putInt("node_netmode", meshcom_settings.node_netmode);
-
-    // GPSDEBUG 0 ... none, 1...only valid, 2...all info
-    preferences.putInt("node_gpsdebug", meshcom_settings.node_gpsdebug);
-
-    preferences.putInt("node_relay", meshcom_settings.node_relay);
-
-    strVar = meshcom_settings.node_via;
-    preferences.putString("node_via", strVar); 
-
-    preferences.putInt("node_sset4", meshcom_settings.node_sset4);
-
-    strVar = meshcom_settings.node_aprsmc;
-    preferences.putString("node_aprsmc", strVar); 
-
-    preferences.putInt("node_pingtime", meshcom_settings.node_pingtime);
-
-    strVar = meshcom_settings.node_pingcall;
-    preferences.putString("node_pingcall", strVar); 
-
-    preferences.putInt("node_pingmax", meshcom_settings.node_pingmax);
+    for (size_t i = 0; i < settings_schema::fieldCount(); i++)
+    {
+        saveFieldToPreferences(settings_schema::fields()[i], &meshcom_settings);
+    }
 
     //printfdeb("[INIT]...FLASH #entries %i after write\n", (int)preferences.freeEntries());
     preferences.end();

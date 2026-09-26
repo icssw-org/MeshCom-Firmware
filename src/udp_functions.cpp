@@ -6,7 +6,6 @@
 
 #include <udp_functions.h>
 #include <extudp_functions.h>
-#include <kiss_functions.h>
 #include <debugconf.h>
 #include <batt_functions.h>
 #include <command_functions.h>
@@ -17,6 +16,7 @@
 #include <time_functions.h>
 #include <lora_setchip.h>
 #include <configuration.h>
+#include "configuration_global.h"
 #include "ArduinoJson.h"
 #include "web_functions/web_functions.h"
 
@@ -177,7 +177,38 @@ void getMeshComUDP()
       if(timeClient.tryConsume(remote_ip, remote_port, incomingPacket, len))
         return;
 
-      getMeshComUDPpacket(incomingPacket, len);
+      // DR-20 (2026-09-12 decided, implemented 2026-09-17 wave W6): the
+      // handler is a parser, not connectivity policy -- it now only reports
+      // the too-many-zeros verdict (1) instead of resetting the socket
+      // itself. This caller performs the reset, mirroring NrfETH::getUDP()
+      // (nrf52/nrf_eth.cpp:442-453), which resets DHCP on the same verdict
+      // from handleUdpFrame_nrf52(). Losing this call would silently stop
+      // re-arming the UDP socket on every too-many-zeros datagram -- a real
+      // gateway regression, not just a caller-decides refactor. The verdict
+      // no longer always tears WiFi down (see H6-01 below).
+      //
+      // H6-01: a malformed datagram (too many consecutive zero bytes) is
+      // evidence the socket needs re-arming, not that the link is dead. The
+      // full WiFi teardown in resetMeshComUDP() belongs to the heartbeat
+      // paths in gateway_service_esp32.cpp, which only call it once
+      // WiFi.status() != WL_CONNECTED already confirms the link is down,
+      // and to the MAX_ERR_UDP_TX path in udp_drain_esp32.cpp.
+      if(handleUdpFrame_esp32(incomingPacket, len, remote_ip) != 0)
+      {
+        if(WiFi.status() == WL_CONNECTED)
+        {
+          Udp.stop();
+          err_cnt_udp_tx = 0;
+          if(Udp.begin(LOCAL_PORT))
+            printlndeb("[WIFI-DBG] too-many-zeros: UDP socket re-armed, WiFi kept");
+          else
+            resetMeshComUDP();   // bind failed: the old recovery is all that is left
+        }
+        else
+        {
+          resetMeshComUDP();
+        }
+      }
     }
   }
 }
@@ -202,591 +233,38 @@ void ntpHarvestUDP()
   ntpHarvestReply(Udp, timeClient);
 }
 
-// UDP functions
-void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int packetSize)
+
+// C2 carve-out (DRY unification U2): the three socket primitives the datagram
+// write goes through, paired one for one with the _nrf52 set in
+// nrf52/nrf_eth.h, so a native test can replace them with a recording sink.
+//
+// Three and not one, because the caller's error policy runs *between* them: a
+// failed write() that trips MAX_ERR_UDP_TX resets the socket and returns
+// without ever calling endPacket(), while a failed write() that does not trip
+// it still falls through to endPacket(). A single send primitive cannot
+// express that ordering, and begin stays separate because on nRF52 a debug
+// print sits between begin and write.
+//
+// The write result is checked here and nowhere on nRF52: NrfETH::sendUDP()
+// writes byte by byte, ignores every Udp.write() result and reports only
+// endPacket(), so a failed write cannot reset the socket there. That
+// asymmetry is D1 drift-matrix material; preserved here, not fixed.
+bool udpBeginRaw_esp32()
 {
-    char source_call[20] = {0};
-    char destination_call[20] = {0};
-
-    udp_is_busy = true;
-    // if more than n values are 00 we might have received a faulty message
-    uint8_t zerocount = 0;
-
-    for (int i = 0; i + 1 < packetSize; i+=2)
-    {
-      if (inc_udp_buffer[i] == 0x00 && inc_udp_buffer[i + 1] == 0x00)
-      {
-        zerocount += 2;
-      }
-      else
-        zerocount = 0;
-    }
-
-    if (zerocount <= MAX_ZEROS)
-    {
-      /* we now need to distinguish if we got a LoRa packet to send from the server
-      or it is a config message. First 4 Bytes indicate if it is
-      GATE: 0x47 41 54 45
-      CONF: 0x43 4F 4E 46
-      */
-
-      // get the first 4 bytes of the incoming udp message
-      char indicator_b[UDP_MSG_INDICATOR_LEN];
-
-      memcpy(indicator_b, inc_udp_buffer, UDP_MSG_INDICATOR_LEN);
-
-      char gate[] = "GATE";
-      char beat[] = "BEAT";
-      char conf[] = "CONF";
-
-      if (memcmp(indicator_b, gate, UDP_MSG_INDICATOR_LEN) == 0)
-      {
-        DEBUG_MSG("UDP", "Received a LoRa packet to transmit");
-
-        // Buffer filling
-        lora_tx_msg_len = packetSize - UDP_MSG_INDICATOR_LEN;
-        if (lora_tx_msg_len > UDP_TX_BUF_SIZE)
-          lora_tx_msg_len = UDP_TX_BUF_SIZE; // zur Sicherheit
-
-        // printout message type
-        uint8_t msg_type_b = inc_udp_buffer[UDP_MSG_INDICATOR_LEN];
-
-        switch (msg_type_b)
-        {
-          case 0x3A: DEBUG_MSG("UDP", "Received Textmessage"); break; // ':'
-          case 0x21: DEBUG_MSG("UDP", "Received PosInfo"); break;     // '!'
-          case 0x40: DEBUG_MSG("UDP", "Received Hey"); break;     // '@'
-          default: DEBUG_MSG("UDP", "Received unknown"); break;
-        }
-
-        if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
-        {
-          bool bBLELoopOut = true;
-
-          last_upd_timer = millis();
-          hb_warn_logged = false;
-
-          memcpy(convBuffer, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);
-
-          // send JSON to Extern IP
-          if(hasExternIPaddress)
-          {
-            if(bEXTUDP)
-              sendExtern(true, (char*)"udp", convBuffer, lora_tx_msg_len, 0, 0);
-          }
-          
-          struct aprsMessage aprsmsg;
-          
-          // print which message type we got
-          decodeAPRS(convBuffer, lora_tx_msg_len, aprsmsg);
-
-          snprintf(source_call, sizeof(source_call), "%s", aprsmsg.msg_source_call.c_str());
-          snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call.c_str());
-
-          // RX-01 (BACKLOG 3.8k), second door: a GATE frame whose APRS
-          // source call is still the factory default must not be radiated
-          // onto LoRa by this gateway. The primary guard sits on the LoRa
-          // RX side (lora_functions.cpp, OnRxDone), so this frame should
-          // never have reached the server in the first place -- this is
-          // belt-and-braces for an unpatched gateway elsewhere on the mesh.
-          bool bSrcUnconfigured = isUnconfiguredCall(source_call);
-          if(bSrcUnconfigured)
-              logRxDropUnconfigured(source_call);
-
-          // TM-31: read the dedup gate BEFORE the position branch below inserts
-          // this msg_id into the ring. It used to be evaluated after that insert,
-          // so every UDP position frame deduplicated against the entry it had
-          // just written itself (RX_DEDUP_ADD slot N, 17 ms later RX_DEDUP_DUP
-          // slot N) and an ESP32 gateway never relayed it to LoRa: 0 of 30
-          // injected frames radiated, at every inter-arrival from 8 s down to
-          // 0.5 s. is_new_packet() has no side effects, only this early read
-          // moves. The nRF52 gateway path never had the early insert.
-          uint8_t udp_mid[4] = {
-              (uint8_t)(aprsmsg.msg_id),
-              (uint8_t)(aprsmsg.msg_id >> 8),
-              (uint8_t)(aprsmsg.msg_id >> 16),
-              (uint8_t)(aprsmsg.msg_id >> 24)
-          };
-          bool bUdpMsgIsNew = is_new_packet(udp_mid);
-
-          // KISS/TCP interface: a message that reaches this node only via the
-          // MeshCom server (another gateway heard it over RF, not this node)
-          // never runs through lora_functions.cpp's RX path, so it would
-          // otherwise never reach a locally connected KISS client. Tap it
-          // here instead -- convBuffer/lora_tx_msg_len at this point is the
-          // same decodeAPRS()-compatible buffer the LoRa RX path passes to
-          // queueKiss(), the dedup gate is the same ring LoRa RX uses (no
-          // double delivery if this node also hears the frame directly), and
-          // rssi=99/snr=0 is the existing "no real RF measurement, this came
-          // from the server" sentinel already used by sendDisplayPosition()/
-          // sendDisplayText() below. HEY (0x40) excluded -- buildAx25()
-          // cannot represent it either way, same as the LoRa path (F14).
-          #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
-          if (bKISS && bUdpMsgIsNew && !bSrcUnconfigured &&
-              (msg_type_b == 0x3A || msg_type_b == 0x21))
-              queueKiss(convBuffer, lora_tx_msg_len, 99, 0);
-          #endif
-
-          bool bUDPtoLoraSend = !bSrcUnconfigured;
-
-          // TM-39: raw & unconditional (printfdeb needs --debug and strips ';'
-          // outside csv) -- classify by the same {SET}/{CET} prefixes the
-          // dispatch below matches; everything else in a GATE frame is a
-          // relayed mesh frame (position/text/hey) going back down to LoRa.
-          {
-            const char *gwRxType = "DATA";
-            if(msg_type_b == 0x3A)
-            {
-              if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
-                gwRxType = "SET";
-              else if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
-                gwRxType = "CET";
-            }
-            // DATA (a relayed mesh frame) is high-rate on a busy gateway: only with --udplog
-            if(gwRxType[0] != 'D' || bUDPLOG)
-              Serial.printf("[GW];rx;type;%s;len;%d;ms;%lu\n", gwRxType, packetSize, (unsigned long)millis());
-          }
-
-          if(msg_type_b == 0x21)
-          {
-            sendDisplayPosition(aprsmsg, 99, 0);
-
-            // add rcvMsg to forward to LoRa TX
-            addLoraRxBuffer(aprsmsg.msg_id, true);
-            stat_newid.fetch_add(1); // S2: server-injected ids occupy dedup-ring slots too
-
-            if(bGATEWAY_NOPOS)
-              bUDPtoLoraSend=false;
-          }
-          
-          // print aprs message
-          if(bDisplayInfo)
-          {
-            printBuffer_aprs((char*)"RX-UDP ", aprsmsg);
-            printlndeb("");
-          }
-
-          bLED_ORANGE = true;
-
-          aprsmsg.msg_source_path.concat(',');
-          aprsmsg.msg_source_path.concat(meshcom_settings.node_call);
-
-          aprsmsg.msg_server = true;
-
-          aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node
-          aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
-
-          memset(convBuffer, 0x00, UDP_TX_BUF_SIZE);
-
-          checkVia(aprsmsg);
-
-          uint16_t size = encodeAPRS(convBuffer, aprsmsg);
-
-          if(size > UDP_TX_BUF_SIZE)
-              size = UDP_TX_BUF_SIZE;
-
-          if(msg_type_b == 0x3A)
-          {
-            if(memcmp(aprsmsg.msg_payload.c_str(), "{SET}", 5) == 0)
-            {
-                sendDisplayText(aprsmsg, 99, 0);
-            }
-            else
-            if(memcmp(aprsmsg.msg_payload.c_str(), "{CET}", 5) == 0)
-            {
-                sendDisplayText(aprsmsg, 99, 0);
-            }
-            else
-            if((strcmp(destination_call, "*") == 0 && !bNoMSGtoALL) || strcmp(destination_call, meshcom_settings.node_call) == 0 || CheckGroup(destination_call) > 0)
-            {
-                // wenn eine Meldung via UDP kommt und den eigene Node betrifft dann keine weiterleitung an LoRa TX
-                if(strcmp(destination_call, meshcom_settings.node_call) == 0)
-                    bUDPtoLoraSend=false;
-
-                unsigned int iAckId = 0;
-
-                int iAckPos=aprsmsg.msg_payload.indexOf(":ack");
-                int iRefPos=aprsmsg.msg_payload.indexOf(":rej");
-                int iEnqPos=aprsmsg.msg_payload.indexOf("{", 1);
-
-                if(strcmp(destination_call, "*") == 0)
-                {
-                  iAckPos=0;
-                  iRefPos=0;
-                  iEnqPos=0;
-                }
-                
-                if(iAckPos > 0 || iRefPos > 0)
-                {
-                    unsigned int iAckId = (aprsmsg.msg_payload.substring(iAckPos+4)).toInt();
-                    msg_counter = ((_GW_ID & 0x3FFFFF) << 10) | (iAckId & 0x3FF);
-
-                    uint8_t print_buff[30];
-
-                    uint8_t ack_status = 0x01;  // ACK
-
-                    int iackcheck = checkOwnTx(msg_counter);
-                    if(iackcheck >= 0)
-                    {
-                        own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
-                        ack_status = 0x02;  // 02...ACK
-                      }
-
-                    uint16_t plen = buildAckPhoneFrame(print_buff, msg_counter, ack_status, aprsmsg.msg_source_call.c_str());
-
-                    if(bDisplayInfo)
-                      printfdeb("[UDP-MSGID] ack_msg_id:%02X%02X%02X%02X ACK...%02X\n", print_buff[4], print_buff[3], print_buff[2], print_buff[1], print_buff[5]);
-
-                    addBLEOutBuffer(print_buff, plen);
-
-                    if(strcmp(source_call, meshcom_settings.node_call) == 0)
-                        bUDPtoLoraSend=false;
-
-                    bBLELoopOut=false;
-                }
-                if(iEnqPos > 0)
-                {
-                  iAckId = (aprsmsg.msg_payload.substring(iEnqPos+1)).toInt();
-                  aprsmsg.msg_payload = aprsmsg.msg_payload.substring(0, iEnqPos);
-                }
-
-                if(iAckPos <= 0)
-                {
-                  sendDisplayText(aprsmsg, 99, 0);
-                }
-
-                aprsmsg.max_hop = aprsmsg.max_hop | 0x20;   // msg_app_offline true
-
-                uint8_t tempRcvBuffer[UDP_TX_BUF_SIZE];
-
-                aprsmsg.msg_last_hw = BOARD_HARDWARE | 0x80; // hardware  last sending node
-                aprsmsg.msg_source_mod = (getMOD() & 0xF) | (meshcom_settings.node_country << 4); // modulation & country
-
-                checkVia(aprsmsg);
-
-                uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
-
-                addBLEOutBuffer(tempRcvBuffer, tempsize);
-
-                bBLELoopOut=false;
-
-                // DM message for lokal Node 
-                if(iAckId > 0)
-                {
-                  strSource_call = source_call;
-                  SendAckMessage(strSource_call, iAckId);
-                }
-            }
-          }
-
-          // Dedup ring (same check the LoRa RX path uses), read above
-          if(bUdpMsgIsNew)
-          {
-            int icheck = checkOwnTx(aprsmsg.msg_id);
-            if(icheck < 0)
-            {
-              if(bUDPtoLoraSend)
-              {
-                // first byte is always the len of the msg
-                // UDP messages send to LoRa TX
-                // resend only Packet to all
-
-                // store last message to compare later on
-                insertOwnTx(aprsmsg.msg_id);
-
-                addTxRingEntry(convBuffer, (uint16_t)size, 0xFF, "udp_rx", 0); // 0xFF no retransmission for UDP relay messages
-
-                if(bDisplayLog)
-                {
-                    char buf[96];
-                    setlogFormatGwi(buf, sizeof(buf), aprsmsg.msg_id, aprsmsg.payload_type,
-                                     aprsmsg.max_hop & 0x0F, aprsmsg.msg_source_call.c_str(), (uint32_t)millis());
-                    setlogPrint(buf);
-                }
-
-                // TM-31: position frames were already entered into the dedup ring
-                // in the 0x21 branch above -- adding them again here would spend
-                // two ring slots per frame and halve the dedup window.
-                if(msg_type_b != 0x21)
-                {
-                    addLoraRxBuffer(aprsmsg.msg_id, true);
-                    stat_newid.fetch_add(1); // S2: server-injected ids occupy dedup-ring slots too
-                }
-
-                // add rcvMsg to BLE out Buff
-                // size message is int -> uint16_t buffer size
-                if(isPhoneReady == 1 && bBLELoopOut) // wird schon vorher abgehandelt
-                {
-                    addBLEOutBuffer(convBuffer, size);
-                }
-              }
-            }
-          }
-        }
-
-        // zero out the inc buffer  
-        memset(inc_udp_buffer, 0, UDP_TX_BUF_SIZE);
-
-        udp_is_busy = false;   //setting the busy flag
-
-        return;
-      }
-      // TM-39: server-pushed CONF (callsign/longname/shortname, and
-      // lat/lon/alt which we parse but do not yet apply). Mirrors the
-      // nRF52 handler's wire format (src/nrf52/nrf_eth.cpp:660-768) via the
-      // shared parser in src/conf_frame.cpp -- this indicator used to fall
-      // into the OTHER bucket below on ESP32/RAK-WiFi.
-      else if (memcmp(indicator_b, conf, UDP_MSG_INDICATOR_LEN) == 0)
-      {
-        if(bDisplayInfo)
-          printlndeb("[CONF]...received from server");
-
-        // TM-39: raw & unconditional, so rx-by-type sums match total RX
-        Serial.printf("[GW];rx;type;CONF;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
-
-        last_upd_timer = millis();
-        hb_warn_logged = false;
-        had_initial_udp_conn = true;
-
-        // Guard: apply only when this datagram actually came from the
-        // gateway server this node resolved and sends GATE traffic to
-        // (node_hostip, see sendMeshComUDP()). s_udpRxLastIp is set for
-        // this exact packet just above in getMeshComUDP() -- the two never
-        // interleave (udp_is_busy, single-threaded loop, one socket read
-        // per pass). A spoofed LAN datagram must not be able to rename the
-        // node. This call path also only ever runs while bGATEWAY is on
-        // (esp32_main.cpp only calls getMeshComUDP() from the bGATEWAY-on
-        // branch; the bGATEWAY-off branch calls ntpHarvestUDP() instead,
-        // which never reaches getMeshComUDPpacket()), so the guard below is
-        // a second, independent check on top of that.
-        if((uint32_t)node_hostip == 0 || s_udpRxLastIp != node_hostip)
-        {
-          printfdeb("[CONF] ignored: source %s does not match gateway server %s\n",
-                     s_udpRxLastIp.toString().c_str(), node_hostip.toString().c_str());
-        }
-        else if(packetSize < UDP_MSG_INDICATOR_LEN || packetSize > UDP_CONF_BUFF_SIZE)
-        {
-          printfdeb("[CONF] ignored: size %d out of bounds\n", packetSize);
-        }
-        else
-        {
-          ConfFrame cf;
-
-          if(!parseConfFrame(inc_udp_buffer + UDP_MSG_INDICATOR_LEN, packetSize - UDP_MSG_INDICATOR_LEN, cf))
-          {
-            printfdeb("[CONF] ignored: malformed frame\n");
-          }
-          else
-          {
-            // lat/lon/alt: parsed for visibility, not applied -- out of
-            // scope for TM-39's callsign/shortname provisioning.
-            if(cf.hasLat)
-              printfdeb("[CONF] lat received (not applied): %ld\n", (long)cf.lat);
-            if(cf.hasLon)
-              printfdeb("[CONF] lon received (not applied): %ld\n", (long)cf.lon);
-            if(cf.hasAlt)
-              printfdeb("[CONF] alt received (not applied): %ld\n", (long)cf.alt);
-
-            String sCall = String(cf.call);
-            sCall.trim();
-            sCall.toUpperCase();
-
-            if(!checkRegexCall(sCall))
-            {
-              printfdeb("[CONF] ignored: callsign <%s> from server not valid\n", sCall.c_str());
-            }
-            else
-            {
-              snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sCall.c_str());
-
-              if(cf.hasShort)
-                snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", cf.shortname);
-              else
-                snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", convertCallToShort(meshcom_settings.node_call).c_str());
-
-              printfdeb("[CONF] Call:%s Short:%s set from server\n", meshcom_settings.node_call, meshcom_settings.node_short);
-
-              save_settings();
-
-              // same auto-reboot (and T-Deck exception) as --setcall, see
-              // src/command_functions.cpp:3451
-              #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS)
-              rebootAuto = millis() + 15 * 1000; // 15 Sekunden
-              #endif
-            }
-          }
-        }
-      }
-      // Heartbeat from Server
-      else if (memcmp(indicator_b, beat, UDP_MSG_INDICATOR_LEN) == 0)
-      {
-
-        // we got an heartbeat from server which we use to check connection (saving time we got it)
-        if(bDisplayInfo)
-          printlndeb("[BEAT]...Heartbeat from server received");
-
-        // TM-39: raw & unconditional
-        Serial.printf("[GW];rx;type;BEAT;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
-
-        /**
-         * TODO check HB accordingly to format not only BEAT at beginning
-         * 15:16:08  <UDP_ETH> UDP Packet received with length: 22
-          42 45 41 54 00 09 4F 45 31 4B 46 52 2D 47 57 01 05 4B 46 52 36 35
-        */
-        last_upd_timer = millis();
-        hb_warn_logged = false;
-      }
-      else
-      {
-        DEBUG_MSG("ERROR", "Received udp message without indicator");
-        // TM-39: raw & unconditional
-        Serial.printf("[GW];rx;type;OTHER;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
-        last_upd_timer = millis();
-        hb_warn_logged = false;
-      }
-    } 
-    else
-    {
-      DEBUG_MSG("ERROR", "UDP Message has too much Zeros");
-      resetMeshComUDP();
-    }
-
-    udp_is_busy = false;   //setting the busy flag
+    return Udp.beginPacket(node_hostip , UDP_PORT) != 0;
 }
 
-/**@brief UDP tx Routine
- */
-void sendMeshComUDP()
+bool udpWriteRaw_esp32(const uint8_t *buf, uint16_t len)
 {
-    if(bWIFIAP)
-      return;
-
-    if(!hasIPaddress)
-      return;
-
-    if((uint32_t)node_hostip == 0)   // F6: Serveradresse noch nicht aufgeloest
-      return;
-
-    if(!bf_empty(&udpOutRing))
-    {
-        if(!udp_is_busy)
-        {
-            // CONC-16: snapshot the frame before the (comparatively slow) UDP
-            // send touches it. addUdpOutBuffer() (CONC-16) can evict the very
-            // frame we are about to send from OnRxDone (nRF52 timer-service
-            // task, see C-01) while Udp.write()/endPacket() below are still
-            // running; everything from here on reads udpSnapshot, never the
-            // live ring again.
-            //
-            // Sized past a full frame (UDP_TX_BUF_SIZE+64, a frame is at most
-            // UDP_TX_BUF_SIZE per bf_push()'s 1..255 contract): the convBuffer
-            // copy below reads up to msg_len bytes starting at offset 36,
-            // which stays inside what bf_peek() actually copied -- the extra
-            // headroom just keeps this a well-defined, zero-filled buffer
-            // instead of reading adjacent stack memory should that invariant
-            // ever slip.
-            static uint8_t udpSnapshot[UDP_TX_BUF_SIZE+64] = {0};
-            uint16_t msg_len = bf_peek(&udpOutRing, udpSnapshot, (uint16_t)sizeof(udpSnapshot));
-            // bf_peek() returns the FULL frame length even if it copied less
-            // than that into outmax bytes; clamp before using it to index
-            // udpSnapshot; bf_push()'s 1..255 contract keeps this a no-op in
-            // practice (255 < sizeof(udpSnapshot)).
-            if (msg_len > sizeof(udpSnapshot))
-                msg_len = sizeof(udpSnapshot);
-
-            // Generation right after the peek: a writer that evicts this
-            // exact frame before we get to bf_pop() below bumps tail_gen, see
-            // bf_tail_gen()'s contract in byte_fifo.h. If that happens we
-            // must NOT pop -- tail would then point at a different frame and
-            // popping it here would silently drop it.
-            uint16_t myGen = bf_tail_gen(&udpOutRing);
-
-            // send it over UDP
-
-            Udp.beginPacket(node_hostip , UDP_PORT);
-
-            if (!Udp.write(udpSnapshot, msg_len))
-            {
-                if(bDisplayCont)
-                  printlndeb("[ERROR]...Sending UDP Packet failed");
-
-                err_cnt_udp_tx++;
-                // if we have too much errors sending, reset UDP
-                if (err_cnt_udp_tx >= MAX_ERR_UDP_TX)
-                {
-                    printfdeb("[WIFI-DBG] UDP TX error limit (%d) reached, calling resetMeshComUDP\n", MAX_ERR_UDP_TX);
-
-                    // avoid TX and UDP
-                    hasIPaddress = false;
-                    meshcom_settings.node_hasIPaddress = hasIPaddress;
-                    //cmd_counter = 50;
-
-                    err_cnt_udp_tx = 0;
-                    
-                    resetMeshComUDP();
-                    return;  // socket reset, don't call endPacket
-                }
-            }
-
-            {
-              bool tx_ok = Udp.endPacket() != 0;
-              udpCountTx(tx_ok);            // TM-31 instrument
-              if(bUDPLOG)
-                Serial.printf("[UDP];tx;ip;%s;port;%u;len;%u;ok;%d\n",
-                              node_hostip.toString().c_str(), (unsigned)UDP_PORT,
-                              (unsigned)msg_len, tx_ok ? 1 : 0);
-            }
-
-            // udpSnapshot enthaelt msg_len Bytes ab Offset 0: 36 Byte
-            // UDP-Header, danach der APRS-Frame (die alte Ring-Variante hatte
-            // hier noch ein Laengen-Byte an Offset 0 und begann die Nutzlast
-            // erst bei 1; der Byte-Ring liefert bf_peek() schon ohne dieses
-            // Byte). Die wahre APRS-Laenge ist msg_len-36.
-            uint16_t aprs_len = (msg_len > 36) ? (uint16_t)(msg_len - 36) : 0;
-            memcpy(convBuffer, udpSnapshot + 36, aprs_len);
-
-            if(aprs_len > 0 && (convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40))
-            {
-              struct aprsMessage aprsmsg;
-
-              // print which message type we got
-              decodeAPRS(convBuffer, aprs_len, aprsmsg);
-
-              // RX-01 (BACKLOG 3.8k), second door: this frame's UDP bytes
-              // were already handed to Udp.write()/endPacket() above -- by
-              // this point in the function the send has already happened,
-              // so this check cannot prevent it. It still counts/marks the
-              // leak (the primary guard in lora_functions.cpp's OnRxDone
-              // should have kept an unconfigured source out of the UDP out
-              // ring in the first place) and skips the debug print for it.
-              if(isUnconfiguredCall(aprsmsg.msg_source_call.c_str()))
-              {
-                logRxDropUnconfigured(aprsmsg.msg_source_call.c_str());
-              }
-              // print aprs message
-              else if(bDisplayInfo)
-              {
-                printBuffer_aprs((char*)"TX-UDP ", aprsmsg);
-              }
-            }
-
-            // Consume the frame we just sent -- but only if it is still the
-            // one bf_peek() gave us. Guard against a writer having evicted it
-            // via bf_push()'s ring-full eviction path while we were sending
-            // — extremely narrow (needs the ring to fill up completely during
-            // one synchronous Udp.write()/endPacket()), but popping in that
-            // case would drop whatever frame tail now actually points at.
-            // bf_pop() locks internally, same as bf_peek() above (CONC-16).
-            if (bf_tail_gen(&udpOutRing) == myGen)
-                bf_pop(&udpOutRing);
-
-        }
-        else
-        {
-            DEBUG_MSG("UDP", "UDP busy. Sending asap");
-        }
-    }
+    return Udp.write(buf, len) != 0;
 }
+
+bool udpEndRaw_esp32()
+{
+    return Udp.endPacket() != 0;
+}
+
+// C2/U2 carve: sendMeshComUDP() lives in esp32/udp_drain_esp32.cpp
 
 
 // (innerhalb #ifdef ESP32 seit Zeile 37)
@@ -1756,18 +1234,14 @@ void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
     // CONC-16: addUdpOutBuffer() is reachable from OnRxDone via addNodeData()
     // (lora_functions.cpp) — the FreeRTOS timer-service task on nRF52,
     // priority 2, see C-01 — while sendMeshComUDP() drains the same ring
-    // from the Main Loop task. That used to need a taskENTER/EXIT_CRITICAL
-    // pair around the slot write here (the old write/read indices were plain
-    // ints, same class as CONC-15). The byte FIFO now locks itself (BF_LOCK in
-    // byte_fifo.cpp) for every operation, nRF52 included, so a critical
-    // section at the call site would just nest around bf_push()'s own.
-    //
-    // bf_push() also takes over the length-prefix byte the ring used to
-    // carry in slot[0] (WF-01: exactly len bytes, no off-by-one read past
-    // the caller's payload) and reports eviction of unread frames, which
-    // the old ring never did on this path.
+    // from the Main Loop task. Der Byte-Ring sperrt sich selbst.
+    // WF-01: genau len Bytes, kein Byte hinter der Nutzlast des Aufrufers.
     int lost = bf_push(&udpOutRing, buffer, (uint8_t)len);
-    if (lost > 0 && bLORADEBUG)
+
+    // DR-21 (Sichtbarkeitsklausel, 2026-09-12 entschieden): der Ausgangsring
+    // war der EINZIGE, dessen Ueberlauf stumm blieb. Der Byte-Ring meldet,
+    // wie viele UNGELESENE Frames die Verdraengung getroffen hat.
+    if(lost > 0 && bLORADEBUG)
         printfdeb("[MC-DBG] RING_OVERFLOW buf=udp lost=%i\n", lost);
 }
 

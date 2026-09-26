@@ -1324,9 +1324,9 @@ void ui_mheard_disp()
             snprintf(buf, 10, "%s", mheardCalls[iset]);
             lv_table_set_cell_value(mheard_ta, row, 0, buf);
             
-            decodeMHeard(mheardBuffer[iset], mheardLine);
+            mheardLineFromRecord(mheardRecords[iset], mheardLine);
 
-            snprintf(buf, 6, "%s", mheardLine.mh_time.substring(0, 5).c_str());
+            snprintf(buf, 6, "%.5s", mheardLine.mh_time);
             lv_table_set_cell_value(mheard_ta, row, 1, buf);
 
             if(mheardLine.mh_payload_type == ':')

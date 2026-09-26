@@ -5,7 +5,10 @@
 #include "peripheral.h"
 
 #include "lora_functions.h"
-#include "esp32\esp32_main.h"
+// Rueckwaerts-Schraegstrich war ein Windows-Pfad und loest auf macOS/Linux
+// nicht auf; die einzige andere Stelle im Baum schreibt <esp32/esp32_main.h>
+// (src/main.cpp:12). Faellt erst auf, seit diese Umgebung ueberhaupt baut.
+#include "esp32/esp32_main.h"
 
 TaskHandle_t lora_handle;
 

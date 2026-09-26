@@ -1,3 +1,4 @@
+#include "mc_text.h"
 #include <aprs_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
@@ -8,6 +9,7 @@
 #include <ble_json_frame.h>
 #include <time_functions.h>
 #include <mheard_functions.h>
+#include <mheard_record.h>
 
 #include "printfdeb_functions.h"
 
@@ -29,15 +31,53 @@
 
 #if defined(BOARD_T_DECK_PRO)
 #include <t-deck-pro/tdeck_pro.h>
+
+// R2-04/F4: mheardFormatDate()/mheardFormatTime() (mheard_record.h) scheitern
+// LEISE, wenn ihr Ziel zu klein ist -- sie schreiben dann "" und kehren
+// zurueck. mheardLine.mh_date/mh_time (aprs_structures.h) sind ihre einzigen
+// Ziele. Ein zu kurzes MC_DATE_LEN gaebe also keinen Compile-Fehler, sondern
+// jeden MHeard-Eintrag mit leerem Datum -- und updateMheard()/updateHeyPath()
+// pruefen mcSliceToLong(mh_date, 0, 4) < 2025 und wuerfen dann JEDEN Eintrag
+// weg. Beide Header sind in dieser Uebersetzungseinheit sichtbar, also wird
+// die Kopplung hier geprueft, genau wie aprs_functions.cpp:18-20 es fuer
+// MC_CALL_LEN_Z/MC_PAYLOAD_LEN tut.
+static_assert(MC_DATE_LEN >= 11,
+              "MC_DATE_LEN zu klein fuer mheardFormatDate() -- mh_date bliebe "
+              "leer, ohne Compile-Fehler, und jeder MHeard-Eintrag fiele weg");
+static_assert(MC_TIME_LEN >= 9,
+              "MC_TIME_LEN zu klein fuer mheardFormatTime() -- mh_time bliebe "
+              "leer, ohne Compile-Fehler");
+
 #endif
 #endif // NATIVE_BUILD
 
 extern bool bDEBUG;
 
-unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
+// R2-01: war `unsigned char mheardBuffer[MAX_MHEARD][60]` -- jeder Eintrag
+// eine pipe-getrennte Zeichenkette, die bei jedem Lesen zeichenweise
+// zurueckzerlegt wurde. Jetzt der Datensatz selbst, 20 statt 60 Byte.
+// Begruendung und Rundungsfrage in src/mheard_record.h.
+MheardRecord mheardRecords[MAX_MHEARD];
 char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
-double mheardLat[MAX_MHEARD];
-double mheardLon[MAX_MHEARD];
+// R3-12: float statt double. Ein float haelt ~7 signifikante Dezimalstellen;
+// gebraucht werden 4 Nachkommastellen bei zweistelligem Grad (48.1234 ->
+// 6 Stellen), also bleibt eine Stelle Reserve. Das entspricht rund 1 m,
+// und die MHeard-Liste ist eine Nachbarschaftsanzeige, keine Navigation.
+//
+// ACHTUNG: diese beiden Felder werden auf dem T-Deck ROH in /mheard.dat
+// geschrieben (saveMHeardPersistence, file.write((uint8_t*)..., sizeof)).
+// Die Typaenderung aendert die Dateigroesse. Das ist abgefangen: der
+// Ladeweg vergleicht file.size() gegen die Summe der sizeof() und
+// loescht die Datei bei Abweichung (siehe readMHeardPersistence). Eine
+// vorhandene Datei geht also einmalig verloren und wird neu aufgebaut --
+// kein Fehlverhalten, aber es passiert und gehoert hierher geschrieben.
+//
+// Drei Dateien deklarieren diese Felder von Hand als extern
+// (lora_functions.cpp, web_functions.cpp). Ein vergessenes davon linkt
+// STILL und liest in der falschen Breite; seit 2026-09-16 deckt
+// test/golden/carve_extern_lint.py auch diese Dateien ab.
+float mheardLat[MAX_MHEARD];
+float mheardLon[MAX_MHEARD];
 int mheardAlt[MAX_MHEARD];
 unsigned long mheardEpoch[MAX_MHEARD];
 
@@ -82,10 +122,15 @@ uint8_t mheardPathWrite = 0;   // counter for ringbuffer
 
 #define max_hardware 36
 
+// R2-07 (DRY audit): pure constant lookup table, converted from String[] to
+// const char*[] -- was 36 heap-backed String objects, now 36 pointers into
+// .rodata plus zero allocations. getHardwareLong() below still returns
+// String (unchanged call contract); the const char* -> String conversion
+// happens once, at that single return, not once per table entry at startup.
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    String HardWare[max_hardware] = {"no info", "TLO_V2", "TLO_V1", "TLV2_1p6", "TBEAM", "TB_1268", "TB_0p7", "TECHO", "TDECK", "RAK4631", "HELTV21", "HELTV1", "TB_2101", "EB_E22", "HELTV3", "HELT_E290", "TB_1262", "TDECK+", "TB_SUPR", "ES3_E22", "TRACKER_V3", "STICK_V3", "T5_EPAPER", "TPAGER", "TDECKpro", "TBEAM_1W", "HETLV4", "T_ETH_EL", "HETL_T114", "T3S3V13", "TCONPRO", "WLPAPER", "HELT_E213", "ESP32_LORAPRS_E22", "ESP32_LORAPRS_RA01", "T_WATCH_S3"};
+    static const char* const HardWare[max_hardware] = {"no info", "TLO_V2", "TLO_V1", "TLV2_1p6", "TBEAM", "TB_1268", "TB_0p7", "TECHO", "TDECK", "RAK4631", "HELTV21", "HELTV1", "TB_2101", "EB_E22", "HELTV3", "HELT_E290", "TB_1262", "TDECK+", "TB_SUPR", "ES3_E22", "TRACKER_V3", "STICK_V3", "T5_EPAPER", "TPAGER", "TDECKpro", "TBEAM_1W", "HETLV4", "T_ETH_EL", "HETL_T114", "T3S3V13", "TCONPRO", "WLPAPER", "HELT_E213", "ESP32_LORAPRS_E22", "ESP32_LORAPRS_RA01", "T_WATCH_S3"};
 #else
-    String HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "TDECK", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "TBEAM_AXP2101", "EBYTE_E22", "HELTEC_V3", "HELTEC_E290", "TBEAM_1262", "TDECK_PLUS", "TBEAM_SUPREME", "ESP_S3_E22", "TRACK_V3", "STICK_V3", "T5_EPAPER", "TPAGER", "TDECKpro", "TBEAM_1W", "HELTEC_V4", "T_ETH_ELITE", "HELTEC_T114", "T3_S3_V13", "T_CON_PRO", "WIRELESS_PAPER", "HELTEC_E213", "ESP32_LORAPRS_E22", "ESP32_LORAPRS_RA01", "T_WATCH_S3"};
+    static const char* const HardWare[max_hardware] = {"no info", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1p6", "TBEAM", "TBEAM_1268", "TBEAM_0p7", "T_ECHO", "TDECK", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "TBEAM_AXP2101", "EBYTE_E22", "HELTEC_V3", "HELTEC_E290", "TBEAM_1262", "TDECK_PLUS", "TBEAM_SUPREME", "ESP_S3_E22", "TRACK_V3", "STICK_V3", "T5_EPAPER", "TPAGER", "TDECKpro", "TBEAM_1W", "HELTEC_V4", "T_ETH_ELITE", "HELTEC_T114", "T3_S3_V13", "T_CON_PRO", "WIRELESS_PAPER", "HELTEC_E213", "ESP32_LORAPRS_E22", "ESP32_LORAPRS_RA01", "T_WATCH_S3"};
 #endif
 
 void initMheard()
@@ -94,7 +139,7 @@ void initMheard()
 
     for(int iset=0; iset<MAX_MHEARD; iset++)
     {
-        memset(mheardBuffer[iset], 0x00, sizeof(mheardBuffer[iset]));
+        memset(&mheardRecords[iset], 0x00, sizeof(mheardRecords[iset]));
         memset(mheardCalls[iset], 0x00, sizeof(mheardCalls[iset]));
         mheardLat[iset]=0;
         mheardLon[iset]=0;
@@ -120,12 +165,13 @@ void initMheard()
 
 void initMheardLine(struct mheardLine &mheardLine)
 {
-    mheardLine.mh_callsign = "";
-    mheardLine.mh_sourcecallsign = "";
-    mheardLine.mh_sourcepath = "";
-    mheardLine.mh_destinationpath = "";
-    mheardLine.mh_date = "";
-    mheardLine.mh_time = "";
+    mheardLine.mh_callsign[0] = 0;
+    mheardLine.mh_sourcecallsign[0] = 0;
+    mheardLine.mh_sourcepath[0] = 0;
+    mheardLine.mh_destinationpath[0] = 0;
+    mheardLine.mh_date[0] = 0;
+    mheardLine.mh_time[0] = 0;
+    mheardLine.mh_path_payload[0] = 0;
     mheardLine.mh_payload_type = 0x00;
     mheardLine.mh_hw = 0;
     mheardLine.mh_mod = 0;
@@ -137,71 +183,50 @@ void initMheardLine(struct mheardLine &mheardLine)
     mheardLine.mh_ncount = 0;
 }
 
-void decodeMHeard(unsigned char u_mh_buffer[sizeof(mheardBuffer[0])], struct mheardLine &mheardLine)
+// R2-01: hiess frueher decodeMHeard() und zerlegte eine pipe-getrennte
+// Zeichenkette zeichenweise mit Arduino-String-Anhaengen -- rund 55 Durchlaeufe
+// und mehrere Heap-Anforderungen je gelesenem Eintrag, auf den Pfaden von
+// `--mheard`, des JSON-Registers und der Web-Oberflaeche. Jetzt Feldkopien.
+void mheardLineFromRecord(const MheardRecord &rec, struct mheardLine &mheardLine)
 {
-    char mh_buffer[sizeof(mheardBuffer[0])];
-    memcpy(mh_buffer, u_mh_buffer, sizeof(mheardBuffer[0]));
-    
     initMheardLine(mheardLine);
 
-    int itype=1;
-    String strdec = "";
-    for(int iset=0; iset<55; iset++)
-    {
-        if(mh_buffer[iset] == '|')
-        {
-            switch (itype)
-            {
-                case 1: break;
-                case 2: break;
-                case 3: break;
-                case 4: mheardLine.mh_hw = strdec.toInt(); break;
-                case 5: mheardLine.mh_mod = strdec.toInt(); break;
-                case 6: mheardLine.mh_rssi = strdec.toInt(); break;
-                case 7: mheardLine.mh_snr = strdec.toInt(); break;
-                case 8: mheardLine.mh_dist = strdec.toFloat(); break;
-                case 9: mheardLine.mh_path_len = strdec.toInt(); break;
-                case 10: mheardLine.mh_mesh = strdec.toInt(); break;
-                case 11: mheardLine.mh_ncount = strdec.toInt(); break;
-                default: break;
-            }
+    // mh_date/mh_time sind exakt MC_DATE_LEN/MC_TIME_LEN breit (siehe
+    // aprs_structures.h) -- derselbe Vertrag, den mheardFormatDate()/
+    // mheardFormatTime() verlangen, also kein Zwischenpuffer mehr noetig.
+    mheardFormatDate(rec, mheardLine.mh_date, sizeof(mheardLine.mh_date));
+    mheardFormatTime(rec, mheardLine.mh_time, sizeof(mheardLine.mh_time));
 
-            strdec="";
+    mheardLine.mh_payload_type = rec.mr_type;
+    mheardLine.mh_hw           = rec.mr_hw;
+    mheardLine.mh_mod          = rec.mr_mod;
+    mheardLine.mh_rssi         = rec.mr_rssi;
+    mheardLine.mh_snr          = rec.mr_snr;
+    mheardLine.mh_dist         = rec.mr_dist;
+    mheardLine.mh_path_len     = rec.mr_path_len;
+    mheardLine.mh_mesh         = rec.mr_mesh;
+    mheardLine.mh_ncount       = rec.mr_ncount;
+}
 
-            itype++;
-        }
-        else
-        {
-            switch (itype)
-            {
-                // mh_date/mh_time are fixed-width ("YYYY-MM-DD" / "HH:MM:SS",
-                // see getDateString()/getTimeString() in loop_functions.cpp,
-                // the only writer via updateMheard()'s snprintf format) --
-                // stop at that width instead of absorbing the rest of the
-                // 55-byte scan window (incl. NUL padding) when a truncated
-                // record has no closing '|'.
-                case 1: if(mheardLine.mh_date.length() < 10) mheardLine.mh_date.concat(mh_buffer[iset]); break;
-                case 2: if(mheardLine.mh_time.length() < 8) mheardLine.mh_time.concat(mh_buffer[iset]); break;
-                // Take only the first byte of the type field -- without a
-                // closing '|' the loop kept overwriting mh_payload_type with
-                // every subsequent byte (typically the zero padding that
-                // follows in a real ring-buffer slot), losing the type byte
-                // that was actually sent.
-                case 3: if(mheardLine.mh_payload_type == 0x00) mheardLine.mh_payload_type = mh_buffer[iset]; break;
-                case 4:
-                case 5:
-                case 6:
-                case 7:
-                case 8:
-                case 9:
-                case 10:
-                case 11:
-                    strdec.concat(mh_buffer[iset]);
-                    break;
-                default: break;
-            }
-        }
-    }
+// Gegenstueck zum Obigen. Datum und Uhrzeit kommen als feste Breite aus
+// getDateString()/getTimeString(); schlaegt das Format fehl, bleiben die
+// Felder auf ihrem Nullwert stehen, statt halb gefuellt zu werden.
+void mheardRecordFromLine(const struct mheardLine &mheardLine, MheardRecord &rec)
+{
+    memset(&rec, 0x00, sizeof(rec));
+
+    mheardSetDate(rec, mheardLine.mh_date);
+    mheardSetTime(rec, mheardLine.mh_time);
+
+    rec.mr_type     = mheardLine.mh_payload_type;
+    rec.mr_hw       = mheardLine.mh_hw;
+    rec.mr_mod      = mheardLine.mh_mod;
+    rec.mr_rssi     = mheardLine.mh_rssi;
+    rec.mr_snr      = mheardLine.mh_snr;
+    rec.mr_dist     = mheardRoundDist(mheardLine.mh_dist);
+    rec.mr_path_len = mheardLine.mh_path_len;
+    rec.mr_mesh     = mheardLine.mh_mesh;
+    rec.mr_ncount   = mheardLine.mh_ncount;
 }
 
 void saveMHeardPersistence()
@@ -227,7 +252,7 @@ void saveMHeardPersistence()
         File file = SD.open("/mheard.dat", FILE_WRITE);
         if(!file) return;
         file.write((uint8_t*)mheardCalls, sizeof(mheardCalls));
-        file.write((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
+        file.write((uint8_t*)mheardRecords, sizeof(mheardRecords));
         file.write((uint8_t*)mheardLat, sizeof(mheardLat));
         file.write((uint8_t*)mheardLon, sizeof(mheardLon));
         file.write((uint8_t*)mheardEpoch, sizeof(mheardEpoch));
@@ -277,14 +302,10 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 {
     struct mheardLine mheardLine_save;
 
-    String strYear = mheardLine.mh_date.substring(0, 4);
-    
-    //printfdeb("strYear:%s int:%i\n", strYear.c_str(), strYear.toInt());
-
-    if(strYear.toInt() < 2025)
+    if(mcSliceToLong(mheardLine.mh_date, 0, 4) < 2025)
         return;
 
-    //printfdeb("mh_callsign:%s\n", mheardLine.mh_callsign.c_str());
+    //printfdeb("mh_callsign:%s\n", mheardLine.mh_callsign);
 
     int ipos=-1;
     int inext=-1;
@@ -313,7 +334,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
             }
             else
             {
-                if(is_equ(mheardCalls[iset], mheardLine.mh_callsign.c_str()))
+                if(is_equ(mheardCalls[iset], mheardLine.mh_callsign))
                 {
                     ipos=iset;
 
@@ -368,10 +389,10 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     }
 
     memset(mheardCalls[ipos], 0x00, sizeof(mheardCalls[ipos]));
-    int icsize=mheardLine.mh_callsign.length();
+    int icsize=(int)strlen(mheardLine.mh_callsign);
     if(icsize > (int)sizeof(mheardCalls[ipos])-1)
         icsize=sizeof(mheardCalls[ipos])-1;
-    memcpy(mheardCalls[ipos], mheardLine.mh_callsign.c_str(), icsize);
+    memcpy(mheardCalls[ipos], mheardLine.mh_callsign, icsize);
     
     mheardEpoch[ipos] = getUnixClock();
     mheardMillis[ipos] = (uint32_t)millis();   // NC-01: monotonic heard-time
@@ -379,7 +400,7 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
     if(bOld)
     {
         // REP action
-        decodeMHeard(mheardBuffer[ipos], mheardLine_save);
+        mheardLineFromRecord(mheardRecords[ipos], mheardLine_save);
 
         // da bei dem eintreffen von updateMHeard kein NCOUNT dabei ist
         // wird dieser aus dem bestehenden Tabellen-Wert  mheardNCount[]; ergänzt
@@ -394,18 +415,15 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
 
     mheardNCount[ipos] = mheardLine.mh_ncount;
 
-    char cBuffer[sizeof(mheardBuffer[ipos])];
-    snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine.mh_hw,
-     mheardLine.mh_mod, mheardLine.mh_rssi, mheardLine.mh_snr, mheardLine.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount); 
-    memcpy(mheardBuffer[ipos], cBuffer, sizeof(cBuffer));
+    mheardRecordFromLine(mheardLine, mheardRecords[ipos]);
 
     // generate JSON
     JsonDocument mhdoc;
 
     mhdoc["TYP"] = "MH";
-    mhdoc["CALL"] = mheardLine.mh_callsign.c_str();
-    mhdoc["DATE"] = mheardLine.mh_date.c_str();
-    mhdoc["TIME"] = mheardLine.mh_time.c_str();
+    mhdoc["CALL"] = mheardLine.mh_callsign;
+    mhdoc["DATE"] = mheardLine.mh_date;
+    mhdoc["TIME"] = mheardLine.mh_time;
     mhdoc["PLT"] = (uint8_t)mheardLine.mh_payload_type;
     mhdoc["HW"] = mheardLine.mh_hw;
     mhdoc["MOD"] = mheardLine.mh_mod;
@@ -439,7 +457,12 @@ void updateMheard(struct mheardLine &mheardLine, uint8_t isPhoneReady)
         json += "\"mod\":" + String(mheardLine.mh_mod) + ",";
         json += "\"rssi\":" + String(mheardLine.mh_rssi) + ",";
         json += "\"snr\":" + String(mheardLine.mh_snr) + ",";
-        json += "\"dist\":" + String(mheardLine.mh_dist + ",", 1);
+        // Stand hier als `String(mheardLine.mh_dist + ",", 1)`. Das ist
+        // `double + const char*` und laesst sich GAR NICHT uebersetzen -- die
+        // Zeile steht seit jeher in `#ifdef HEAP_TEST`, und HEAP_TEST ist im
+        // ganzen Baum nirgends definiert, also hat sie nie ein Compiler
+        // gesehen. Gemeint war die Klammer eine Stelle weiter rechts.
+        json += "\"dist\":" + String(mheardLine.mh_dist, 1) + ",";
         json += "\"ncount\":" + String(mheardLine.mh_ncount);
         json += "}";
         log_json_to_sd("/mheard.json", json);
@@ -458,19 +481,18 @@ void updateHeyPath(struct mheardLine &mheardLine)
 {
     struct mheardLine mheardLine_save;
 
-    String strYear = mheardLine.mh_date.substring(0, 4);
-    if(strYear.toInt() < 2025)
+    if(mcSliceToLong(mheardLine.mh_date, 0, 4) < 2025)
         return;
 
     // exclude the owncall
-    if(mheardLine.mh_sourcecallsign == meshcom_settings.node_call)
+    if(is_equ(mheardLine.mh_sourcecallsign, meshcom_settings.node_call))
         return;
 
     for(int imh=0; imh<MAX_MHEARD; imh++)
     {
         if(mheardCalls[imh][0] != 0x00)
         {
-            if(is_equ(mheardCalls[imh], mheardLine.mh_sourcecallsign.c_str()))
+            if(is_equ(mheardCalls[imh], mheardLine.mh_sourcecallsign))
             {
                 if(bDisplayCont)
                 {
@@ -488,17 +510,17 @@ void updateHeyPath(struct mheardLine &mheardLine)
                 // old R99,99;.... kein NCount
 
                 // correct old format
-                mheardLine.mh_path_payload.concat(";");
+                mcAppend(mheardLine.mh_path_payload, sizeof(mheardLine.mh_path_payload), ";");
 
-                int ipos=mheardLine.mh_path_payload.indexOf(";");
+                int ipos=mcIndexOf(mheardLine.mh_path_payload, ';');
 
-                if(ipos > 0 && mheardLine.mh_path_payload.startsWith("R"))
+                if(ipos > 0 && mcStartsWith(mheardLine.mh_path_payload, "R"))
                 {
                     // count comma
                     int icomma = 0;
                     for(int i=1; i<ipos; i++)
                     {
-                        if(mheardLine.mh_path_payload.charAt(i) == ',')
+                        if(mheardLine.mh_path_payload[i] == ',')
                             icomma++;
                     }
 
@@ -513,20 +535,36 @@ void updateHeyPath(struct mheardLine &mheardLine)
                     {
                         if(bDisplayCont)
                         {
-                            printdeb(mheardLine.mh_path_payload.substring(1, ipos));
+                            // Debug-Ausschnitt mh_path_payload[1..ipos) -- reine
+                            // Anzeige, deshalb ein lokaler Puffer statt eines
+                            // neuen mc_text.h-Helfers nur dafuer.
+                            char dbgbuf[16];
+                            size_t dbglen = (ipos > 1) ? (size_t)(ipos - 1) : 0;
+                            if(dbglen >= sizeof(dbgbuf))
+                                dbglen = sizeof(dbgbuf) - 1;
+                            memcpy(dbgbuf, mheardLine.mh_path_payload + 1, dbglen);
+                            dbgbuf[dbglen] = 0;
+                            printdeb(dbgbuf);
                             printdeb(" count:");
                         }
 
-                        mheardLine.mh_ncount = mheardLine.mh_path_payload.substring(1, ipos).toInt();
+                        mheardLine.mh_ncount = (uint8_t)mcSliceToLong(mheardLine.mh_path_payload, 1, (size_t)ipos);
                         mheardNCount[imh] = mheardLine.mh_ncount;
 
                         // REP action
-                        decodeMHeard(mheardBuffer[imh], mheardLine_save);
+                        mheardLineFromRecord(mheardRecords[imh], mheardLine_save);
 
-                        char cBuffer[sizeof(mheardBuffer[imh])];
-                        snprintf(cBuffer, sizeof(cBuffer), "%s|%s|%c|%i|%u|%i|%i|%.1lf|%i|%i|%i|", mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str(), mheardLine.mh_payload_type, mheardLine_save.mh_hw,
-                        mheardLine_save.mh_mod, mheardLine_save.mh_rssi, mheardLine_save.mh_snr, mheardLine_save.mh_dist, mheardLine.mh_path_len, mheardLine.mh_mesh, mheardLine.mh_ncount);
-                        memcpy(mheardBuffer[imh], cBuffer, sizeof(cBuffer));
+                        // ACHTUNG, gemischte Herkunft: das alte snprintf nahm
+                        // Datum/Zeit/Typ/Pfad/Mesh/NCount aus mheardLine, aber
+                        // hw/mod/rssi/snr/dist aus mheardLine_save -- also die
+                        // Funkwerte des BESTEHENDEN Eintrags, nicht die des
+                        // neuen. Das bleibt Feld fuer Feld so.
+                        mheardRecordFromLine(mheardLine, mheardRecords[imh]);
+                        mheardRecords[imh].mr_hw   = mheardLine_save.mh_hw;
+                        mheardRecords[imh].mr_mod  = mheardLine_save.mh_mod;
+                        mheardRecords[imh].mr_rssi = mheardLine_save.mh_rssi;
+                        mheardRecords[imh].mr_snr  = mheardLine_save.mh_snr;
+                        mheardRecords[imh].mr_dist = mheardRoundDist(mheardLine_save.mh_dist);
                     }
                 }
 
@@ -551,7 +589,7 @@ void updateHeyPath(struct mheardLine &mheardLine)
             }
             else
             {
-                if(is_equ(mheardPathCalls[iset], mheardLine.mh_sourcecallsign.c_str()))
+                if(is_equ(mheardPathCalls[iset], mheardLine.mh_sourcecallsign))
                 {
                     ipos=iset;
                     if(inext >= 0)
@@ -590,8 +628,8 @@ void updateHeyPath(struct mheardLine &mheardLine)
     }
 
     // OE3YCB-15,OE3XOC-12,OE3SPR-1>
-    int ips = mheardLine.mh_sourcepath.indexOf(',') + 1;
-    int ipc = mheardLine.mh_sourcepath.length() - ips;
+    int ips = mcIndexOf(mheardLine.mh_sourcepath, ',') + 1;
+    int ipc = (int)strlen(mheardLine.mh_sourcepath) - ips;
     if(ipc > 51)
         ipc = 51;
     if(ipc < 0)
@@ -603,20 +641,20 @@ void updateHeyPath(struct mheardLine &mheardLine)
         return;
 
     memset(mheardPathCalls[ipos], 0x00, sizeof(mheardPathCalls[ipos]));
-    int icallsize = mheardLine.mh_sourcecallsign.length();
+    int icallsize = (int)strlen(mheardLine.mh_sourcecallsign);
     if(icallsize > (int)sizeof(mheardPathCalls[ipos])-1)
         icallsize = (int)sizeof(mheardPathCalls[ipos])-1;
-    memcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign.c_str(), icallsize);
+    memcpy(mheardPathCalls[ipos], mheardLine.mh_sourcecallsign, icallsize);
 
-    //printfdeb("PATH:%i <%s> <%s> %i %i\n", ipos,  mheardLine.mh_sourcepath.c_str(), mheardLine.mh_sourcepath.substring(ips).c_str(), ips, ipc);
+    //printfdeb("PATH:%i <%s> <%s> %i %i\n", ipos, mheardLine.mh_sourcepath, mheardLine.mh_sourcepath + ips, ips, ipc);
 
     memset(mheardPathBuffer1[ipos], 0x00, sizeof(mheardPathBuffer1[ipos]));
-    memcpy(mheardPathBuffer1[ipos], mheardLine.mh_sourcepath.substring(ips).c_str(), ipc);
+    memcpy(mheardPathBuffer1[ipos], mheardLine.mh_sourcepath + ips, ipc);
     mheardPathBuffer1[ipos][51] = 0x00;
     // TODO second 30 chars
 
     // check HEY! comming from gateway
-    if(mheardLine.mh_destinationpath == "HG")
+    if(is_equ(mheardLine.mh_destinationpath, "HG"))
         mheardPathLen[ipos] = mheardLine.mh_path_len | 0x80;
     else
         mheardPathLen[ipos] = mheardLine.mh_path_len;
@@ -673,6 +711,48 @@ int getMheardCount()
     return imhcount;
 }
 
+// DR-28 (BACKLOG OPT-D16, decided 2026-09-12): the mHeard renderers must
+// list entries most-recent-first. The slot-parallel storage arrays
+// (mheardRecords, mheardCalls, mheardLat/Lon/Alt, mheardEpoch, mheardMillis,
+// mheardNCount) are written by updateMheard() from the LORA task and are
+// NEVER permuted -- this fills a caller-owned idx[] with the occupied slots
+// in most-recently-heard-first order instead, so every renderer iterates
+// idx[0..n) rather than the physical slot range 0..MAX_MHEARD.
+//
+// Age = (uint32_t)(now - mheardMillis[i]), same rollover-safe subtraction
+// as the existing aging filters throughout this file (NC-01). Stable
+// insertion sort ascending by age: MAX_MHEARD is <=80, so O(n^2) is cheap,
+// and a stable sort keeps ties (equal age, e.g. two entries heard in the
+// same millis() tick) in ascending slot order -- the scan below already
+// visits slots ascending, and an element is only shifted past entries with
+// a STRICTLY greater age, so equal-age entries never swap past each other.
+uint8_t mheardSortedIndex(uint8_t *idx, uint32_t now)
+{
+    uint8_t n = 0;
+
+    for(uint8_t i = 0; i < MAX_MHEARD; i++)
+    {
+        if(mheardCalls[i][0] == 0x00)
+            continue;
+
+        uint32_t age = (uint32_t)(now - mheardMillis[i]);
+
+        uint8_t pos = n;
+        while(pos > 0)
+        {
+            uint32_t prevAge = (uint32_t)(now - mheardMillis[idx[pos - 1]]);
+            if(prevAge <= age)
+                break;
+            idx[pos] = idx[pos - 1];
+            pos--;
+        }
+        idx[pos] = i;
+        n++;
+    }
+
+    return n;
+}
+
 String getValue(String data, char separator, int index)
 {
     int found = 0;
@@ -701,10 +781,33 @@ String getValue(String data, char separator, int index)
 // Jetzt setzt der Connect nur den Cursor; die Main-Loop ruft sendMheard()
 // erst, wenn der Kommando-Ring leer ist, und jeder Aufruf legt nur so viele
 // Eintraege nach, wie der Ring frei hat. Cursor -1 = nichts anstehend.
+//
+// Abweichung von upstream/dev: dort laeuft der Cursor ueber die physischen
+// Slots 0..MAX_MHEARD, hier ueber die nach DR-28 sortierte Sicht. Diese
+// Reihenfolge wird deshalb EINMAL beim Connect eingefroren. mheardSortedIndex()
+// liefert bei jedem Aufruf eine frische Sortierung, und updateMheard() schreibt
+// zwischen zwei Loop-Durchlaeufen aus dem LORA-Task weiter; ein Cursor gegen
+// eine jedes Mal neu sortierte Liste wuerde Stationen doppelt senden oder
+// ueberspringen, sobald sich waehrend der Uebertragung die Reihenfolge
+// verschiebt. Der Schnappschuss kostet MAX_MHEARD Byte BSS und nimmt sie
+// zugleich dem Loop-Stack ab -- auf nRF52 ist das die Richtung, in die dieses
+// Modul ohnehin schon ausweicht (siehe N-22 in sendMheard()).
+//
+// Eingefroren wird ausschliesslich die REIHENFOLGE. Der Sortierzeitpunkt wird
+// bewusst NICHT mit eingefroren: DR-28 verlangt denselben Augenblick nur fuer
+// Renderer, die eine Altersspalte ausgeben, und sendMheard() gibt DATE/TIME
+// aus dem Datensatz aus, kein gerechnetes Alter. Wuerde hier gegen den
+// eingefrorenen Augenblick gealtert, verschwaende eine Station, die WAEHREND
+// der Uebertragung neu gehoert wird: mheardMillis[] waere dann groesser als
+// der Augenblick, die vorzeichenlose Differenz liefe unter und der Eintrag
+// fiele aus dem 12-h-Fenster heraus. Deshalb millis() in der Schleife.
+static uint8_t mheard_send_idx[MAX_MHEARD];
+static uint8_t mheard_send_n = 0;
 static int mheard_send_cursor = -1;
 
 void startMheardToPhone()
 {
+    mheard_send_n = mheardSortedIndex(mheard_send_idx, (uint32_t)millis());
     mheard_send_cursor = 0;
 }
 
@@ -713,96 +816,118 @@ bool mheardToPhonePending()
     return mheard_send_cursor >= 0;
 }
 
+static bool comRingWouldEvictUnread()
+{
+    // Byte-Ring statt Schlitzfeld: der Kommando-Ring ist nie "voll" --
+    // bf_push() verdraengt notfalls die aeltesten Frames. Zu vermeiden ist
+    // nur, dass dabei ein UNGELESENER weggeworfen wird, denn das sind genau
+    // die, die dieser sendMheard()-Aufruf gerade selbst geschrieben hat: die
+    // Liste verloere still Eintraege.
+    //
+    // bf_unread() zaehlt FRAMES, nicht Bytes -- byte_fifo.cpp erhoeht es je
+    // push und senkt es je pop. Es direkt gegen cap zu stellen waere still
+    // wirkungslos, die Drossel griffe nie.
+    //
+    // Die Bytes der ungelesenen Frames fuehrt der Ring nicht einzeln, nach
+    // oben sind sie aber durch unread * 256 beschraenkt (bf_push2() laesst
+    // hoechstens 255 Byte Nutzlast plus Laengenbyte zu). Dazu der groesste
+    // Frame, der hier hineinkommt: addBLEComToOutBuffer() klemmt auf 245,
+    // plus Laengenbyte.
+    //
+    // Bewusst NICHT bf_used(): das enthaelt den gelesenen Verlauf, faellt nie
+    // (bf_pop() ruehrt es nicht an, nur die Verdraengung tut es) und stuende
+    // nach dem ersten vollen Ringumlauf dauerhaft dicht an cap -- die Drossel
+    // bliebe dann fuer immer haengen und die MHeard-Liste erreichte das
+    // Telefon nie wieder.
+    const uint32_t worst_unread_bytes = (uint32_t)bf_unread(&phoneComRing) * 256u;
+    return worst_unread_bytes + 1u + 245u > (uint32_t)phoneComRing.cap;
+}
+
 void sendMheard()
 {
+    // N-22 (BACKLOG SS3.8m, Fix 9ce62aa0): der Loop-Task auf nRF52 hat 4 KB
+    // Stack -- LOOP_STACK_SZ = 256*4 Woerter, hart im Adafruit-Core, nicht per
+    // Build-Flag zu erhoehen. Seit R2-04 ist struct mheardLine 584 Byte statt
+    // ~112 (sieben String-Handles a 12 B wurden feste char[]), und sendMheard() liegt
+    // damit 1976 B tief auf einem Stack, auf dem N-22 schon einmal
+    // uxTaskGetStackHighWaterMark(NULL) == 0 gemessen hat.
+    // Gemessen mit -fstack-usage auf wiscore_rak4631: nrf52loop 792 + sendMheard 1184.
+    // Auf dem Loop-Task und nur dort aufgerufen (nrf52_main.cpp:1839, im Loop), nicht reentrant --
+    // also nach BSS statt auf den Stack. ESP32 behaelt den Stack-Puffer:
+    // 8 KB Loop-Task, und dort ist der Frame kein Thema.
+    // Bewusst DREI getrennte Statics statt eines gemeinsamen: ein gemeinsamer
+    // muesste ueber zwei Uebersetzungseinheiten hinweg extern sein und
+    // koppelte mheard_functions.cpp und web_functions.cpp an die Annahme,
+    // dass keine der drei Funktionen je auf einen anderen Task wandert.
+#if defined(NRF52_SERIES)
+    static struct mheardLine mheardLine;
+#else
     struct mheardLine mheardLine;
+#endif
 
+    // DR-28: most-recent-first, via mheardSortedIndex() -- die Speicher-
+    // arrays selbst bleiben in physischer Slot-Reihenfolge, siehe den
+    // Kommentar dieser Funktion und mheard_functions.h. Die Sortierung
+    // stammt aus startMheardToPhone(); hier wird sie nur abgelaufen.
     if(mheard_send_cursor < 0)
         return;
 
-    for(; mheard_send_cursor < MAX_MHEARD; mheard_send_cursor++)
+    for(; mheard_send_cursor < mheard_send_n; mheard_send_cursor++)
     {
-        int iset = mheard_send_cursor;
+        uint8_t iset = mheard_send_idx[mheard_send_cursor];
 
-        if(mheardCalls[iset][0] != 0x00)
+        // Der Schnappschuss ist aelter als der Augenblick, in dem er
+        // abgelaufen wird: updateMheard() (LORA-Task) kann einen Slot
+        // zwischendurch geraeumt haben -- es setzt nur mheardCalls[x][0]
+        // auf 0x00 und laesst mheardMillis[] stehen. Ohne diese Pruefung
+        // ginge ein MH-Frame mit leerem CALL zum Telefon.
+        if(mheardCalls[iset][0] == 0x00)
+            continue;
+
+        if((uint32_t)(millis() - mheardMillis[iset]) < MHEARD_PRUNE_WINDOW_MS)  // mheard last 12 hours (NC-01: millis(), not wall clock)
         {
-            if((uint32_t)(millis() - mheardMillis[iset]) < MHEARD_PRUNE_WINDOW_MS)  // mheard last 12 hours (NC-01: millis(), not wall clock)
-            {
-                initMheardLine(mheardLine);
+            // Kein Platz mehr, ohne etwas Ungelesenes zu verdraengen: ohne
+            // den Cursor weiterzuschalten zurueck, der naechste Aufruf nimmt
+            // genau diesen Eintrag noch einmal.
+            if(comRingWouldEvictUnread())
+                return;
 
-                mheardLine.mh_callsign = (char *)mheardCalls[iset];
-                String mhstringdec = (char *)mheardBuffer[iset];
+            // R2-01: hier stand die DRITTE Kopie derselben Zerlegung --
+            // elf getValue()-Aufrufe, jeder mit einer eigenen String-
+            // Anforderung, und jeder scannte die Zeichenkette erneut. Der
+            // Datensatz braucht keine davon.
+            //
+            // Reihenfolge: mheardLineFromRecord() ruft initMheardLine()
+            // auf und wuerde ein vorher gesetztes Rufzeichen wieder
+            // loeschen. Deshalb erst der Datensatz, dann das Rufzeichen.
+            mheardLineFromRecord(mheardRecords[iset], mheardLine);
+            mcSet(mheardLine.mh_callsign, sizeof(mheardLine.mh_callsign), mheardCalls[iset]);
 
-                mheardLine.mh_date = getValue(mhstringdec, '|', 0);
-                mheardLine.mh_time = getValue(mhstringdec, '|', 1);
+            // generate JSON
+            JsonDocument mhdoc;
 
-                String xval = getValue(mhstringdec, '|', 2);
-                mheardLine.mh_payload_type = xval.charAt(0);
+            mhdoc["TYP"] = "MH";
+            mhdoc["CALL"] = mheardLine.mh_callsign;
+            mhdoc["DATE"] = mheardLine.mh_date;
+            mhdoc["TIME"] = mheardLine.mh_time;
+            mhdoc["PLT"] = (uint8_t)mheardLine.mh_payload_type;
+            mhdoc["HW"] = mheardLine.mh_hw;
+            mhdoc["MOD"] = mheardLine.mh_mod;
+            mhdoc["RSSI"] = mheardLine.mh_rssi;
+            mhdoc["SNR"] = mheardLine.mh_snr;
+            mhdoc["DIST"] = mheardLine.mh_dist;
+            mhdoc["PL"] = mheardLine.mh_path_len;
+            mhdoc["MESH"] = mheardLine.mh_mesh;
+            mheardLine.mh_ncount = mheardNCount[iset];
+            mhdoc["NCNT"] = mheardNCount[iset]; // 8immer aus array nehmen
 
-                xval = getValue(mhstringdec, '|', 3);
-                mheardLine.mh_hw = xval.toInt();
+            // send to Phone
+            uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
+            bleBuffer[0] = 0x44;
+            // Schranke ist der Puffer, nicht die JSON-Laenge (UP-01, BND-03)
+            uint16_t frame_len = bleJsonFrame(mhdoc, bleBuffer, sizeof(bleBuffer));
 
-                xval = getValue(mhstringdec, '|', 4);
-                mheardLine.mh_mod = xval.toInt();
-
-                xval = getValue(mhstringdec, '|', 5);
-                mheardLine.mh_rssi = xval.toInt();
-
-                xval = getValue(mhstringdec, '|', 6);
-                mheardLine.mh_snr = xval.toInt();
-
-                xval = getValue(mhstringdec, '|', 7);
-                mheardLine.mh_dist = xval.toFloat();
-
-                xval = getValue(mhstringdec, '|', 8);
-                mheardLine.mh_path_len = xval.toInt();
-
-                xval = getValue(mhstringdec, '|', 9);
-                mheardLine.mh_mesh = xval.toInt();
-
-                xval = getValue(mhstringdec, '|', 10);
-                mheardLine.mh_ncount = xval.toInt();
-
-                // generate JSON
-                JsonDocument mhdoc;
-
-                mhdoc["TYP"] = "MH";
-                mhdoc["CALL"] = mheardLine.mh_callsign.c_str();
-                mhdoc["DATE"] = mheardLine.mh_date.c_str();
-                mhdoc["TIME"] = mheardLine.mh_time.c_str();
-                mhdoc["PLT"] = (uint8_t)mheardLine.mh_payload_type;
-                mhdoc["HW"] = mheardLine.mh_hw;
-                mhdoc["MOD"] = mheardLine.mh_mod;
-                mhdoc["RSSI"] = mheardLine.mh_rssi;
-                mhdoc["SNR"] = mheardLine.mh_snr;
-                mhdoc["DIST"] = mheardLine.mh_dist;
-                mhdoc["PL"] = mheardLine.mh_path_len;
-                mhdoc["MESH"] = mheardLine.mh_mesh;
-                mheardLine.mh_ncount = mheardNCount[iset];
-                mhdoc["NCNT"] = mheardNCount[iset]; // 8immer aus array nehmen
-
-                // send to Phone
-                uint8_t bleBuffer[MAX_MSG_LEN_PHONE] = {0};
-                bleBuffer[0] = 0x44;
-                // Schranke ist der Puffer, nicht die JSON-Laenge (UP-01, BND-03)
-                uint16_t frame_len = bleJsonFrame(mhdoc, bleBuffer, sizeof(bleBuffer));
-
-                // Erst pruefen, wenn die Framelaenge feststeht: passt sie
-                // nicht, bleibt der Cursor stehen und der naechste Aufruf
-                // macht an derselben Stelle weiter, nachdem der Drain Platz
-                // geschaffen hat. Ohne diese Drossel verdraengt bf_push2()
-                // beim Platzmangel die aeltesten Frames -- und das sind die,
-                // die dieser selbe sendMheard()-Aufruf gerade erst
-                // geschrieben hat. Die Liste verlor dann still Eintraege.
-                //
-                // Geschrankt wird gegen die UNGELESENEN Frames, nicht gegen
-                // bf_used() -- Begruendung und Einheiten stehen in
-                // src/mheard_throttle.h.
-                if(!mheardFrameFits(bf_unread(&phoneComRing), frame_len, phoneComRing.cap))
-                    return;
-
-                addBLEComToOutBuffer(bleBuffer, frame_len);
-            }
+            addBLEComToOutBuffer(bleBuffer, frame_len);
         }
     }
 
@@ -814,35 +939,59 @@ void showMHeard()
     printlndeb("\n/-----------------------------------------------------------------------------------------------------\\");
     printlndeb("|MHeard call |    date    |   time   | typ | source hardware | mod | rssi |  snr | dist | pl | m | nc |");
 
+    // N-22 (BACKLOG SS3.8m, Fix 9ce62aa0): der Loop-Task auf nRF52 hat 4 KB
+    // Stack -- LOOP_STACK_SZ = 256*4 Woerter, hart im Adafruit-Core, nicht per
+    // Build-Flag zu erhoehen. Seit R2-04 ist struct mheardLine 584 Byte statt
+    // ~112 (sieben String-Handles a 12 B wurden feste char[]), und dieser Pfad
+    // liegt damit 2568 B tief auf einem Stack, auf dem N-22 schon einmal
+    // uxTaskGetStackHighWaterMark(NULL) == 0 gemessen hat.
+    // Gemessen mit -fstack-usage auf wiscore_rak4631: nrf52loop 792 + commandAction 1120 + showMHeard 656.
+    // Nur auf dem Loop-Task aufgerufen (command_functions.cpp:4798 ueber commandAction; BLE-Eingaben laufen ueber bleQueue in den Loop, siehe nrf52_ble.cpp:44), nicht reentrant --
+    // also nach BSS statt auf den Stack. ESP32 behaelt den Stack-Puffer:
+    // 8 KB Loop-Task, dort ist der Frame kein Thema.
+    // Bewusst DREI getrennte Statics statt eines gemeinsamen: ein gemeinsamer
+    // muesste ueber zwei Uebersetzungseinheiten hinweg extern sein und koppelte
+    // mheard_functions.cpp an web_functions.cpp ueber die Annahme, dass keine
+    // der drei Funktionen je auf einen anderen Task wandert.
+#if defined(NRF52_SERIES)
+    static mheardLine mheardLine;
+#else
     mheardLine mheardLine;
+#endif
 
-    for(int iset=0; iset<MAX_MHEARD; iset++)
+    // DR-28: most-recent-first, via mheardSortedIndex() -- the storage
+    // arrays themselves stay in physical slot order, see that function's
+    // comment and mheard_functions.h.
+    uint8_t idx[MAX_MHEARD];
+    uint32_t now = (uint32_t)millis();
+    uint8_t n = mheardSortedIndex(idx, now);
+
+    for(uint8_t k=0; k<n; k++)
     {
-        if(mheardCalls[iset][0] != 0x00)
+        uint8_t iset = idx[k];
+
+        if((uint32_t)(now - mheardMillis[iset]) < MHEARD_PRUNE_WINDOW_MS)  // mheard last 12 hours (NC-01: millis(), not wall clock)
         {
-            if((uint32_t)(millis() - mheardMillis[iset]) < MHEARD_PRUNE_WINDOW_MS)  // mheard last 12 hours (NC-01: millis(), not wall clock)
-            {
-                printlndeb("|------------|------------|----------|-----|-----------------|-----|------|------|------|----|---|----|");
+            printlndeb("|------------|------------|----------|-----|-----------------|-----|------|------|------|----|---|----|");
 
-                printfdeb("| %-10.10s | ", mheardCalls[iset]);
-                
-                decodeMHeard(mheardBuffer[iset], mheardLine);
+            printfdeb("| %-10.10s | ", mheardCalls[iset]);
 
-                printfdeb("%-10.10s | ", mheardLine.mh_date.c_str());
-                printfdeb("%-8.8s | ", mheardLine.mh_time.c_str());
+            mheardLineFromRecord(mheardRecords[iset], mheardLine);
 
-                printfdeb("%-3.3s | ", getPayloadType(mheardLine.mh_payload_type));
+            printfdeb("%-10.10s | ", mheardLine.mh_date);
+            printfdeb("%-8.8s | ", mheardLine.mh_time);
 
-                printfdeb("%-11.11s/%03i | ", getHardwareLong(mheardLine.mh_hw).c_str(), mheardLine.mh_hw);
+            printfdeb("%-3.3s | ", getPayloadType(mheardLine.mh_payload_type));
 
-                printfdeb("%01X/%01i | ", (mheardLine.mh_mod>>4), (mheardLine.mh_mod & 0xf));
-                printfdeb("%4i | ", mheardLine.mh_rssi);
-                printfdeb("%4i |", mheardLine.mh_snr);
-                printfdeb("%5.1lf |", mheardLine.mh_dist);
-                printfdeb("%3i |", mheardLine.mh_path_len);
-                printfdeb("%2i |", mheardLine.mh_mesh);
-                printfdeb("%3i |\n", mheardNCount[iset]); // 8immer aus array nehmen
-            }
+            printfdeb("%-11.11s/%03i | ", getHardwareLong(mheardLine.mh_hw).c_str(), mheardLine.mh_hw);
+
+            printfdeb("%01X/%01i | ", (mheardLine.mh_mod>>4), (mheardLine.mh_mod & 0xf));
+            printfdeb("%4i | ", mheardLine.mh_rssi);
+            printfdeb("%4i |", mheardLine.mh_snr);
+            printfdeb("%5.1lf |", mheardLine.mh_dist);
+            printfdeb("%3i |", mheardLine.mh_path_len);
+            printfdeb("%2i |", mheardLine.mh_mesh);
+            printfdeb("%3i |\n", mheardNCount[iset]); // 8immer aus array nehmen
         }
     }
 
@@ -973,68 +1122,71 @@ void showMHeardTDECK()
 
     row++;
 
-    int anzrow=1;
+    // DR-28: most-recent-first, via mheardSortedIndex() -- the storage
+    // arrays themselves stay in physical slot order, see that function's
+    // comment and mheard_functions.h.
+    uint8_t idx[MAX_MHEARD];
+    uint32_t now = (uint32_t)millis();
+    uint8_t n = mheardSortedIndex(idx, now);
 
-    for(int iset=0; iset<MAX_MHEARD; iset++)
-    {
-        if(mheardCalls[iset][0] != 0x00)
-            anzrow++;
-    }
+    // n (from mheardSortedIndex() above) is already the occupied-slot count
+    // that the old "for(iset=0..MAX_MHEARD) if(occupied) anzrow++" loop
+    // computed by hand -- no separate counting pass needed.
+    int anzrow = 1 + n;
 
     lv_table_set_row_cnt(mheard_ta, anzrow);
 
-    for(int iset=0; iset<MAX_MHEARD; iset++)
+    for(uint8_t k=0; k<n; k++)
     {
-        if(mheardCalls[iset][0] != 0x00)
+        uint8_t iset = idx[k];
+
+        snprintf(buf, 10, "%s", mheardCalls[iset]);
+        lv_table_set_cell_value(mheard_ta, row, 0, buf);
+
+        mheardLineFromRecord(mheardRecords[iset], mheardLine);
+
+        snprintf(buf, 6, "%.5s", mheardLine.mh_time);
+        lv_table_set_cell_value(mheard_ta, row, 1, buf);
+
+        if(mheardLine.mh_payload_type == ':')
         {
-            snprintf(buf, 10, "%s", mheardCalls[iset]);
-            lv_table_set_cell_value(mheard_ta, row, 0, buf);
-            
-            decodeMHeard(mheardBuffer[iset], mheardLine);
-
-            snprintf(buf, 6, "%s", mheardLine.mh_time.substring(0, 5).c_str());
-            lv_table_set_cell_value(mheard_ta, row, 1, buf);
-
-            if(mheardLine.mh_payload_type == ':')
-            {
-                snprintf(buf, 4, "TXT");
-                lv_table_set_cell_value(mheard_ta, row, 2, buf);
-            }
-            else
-            if(mheardLine.mh_payload_type == '!')
-            {
-                snprintf(buf, 4, "POS");
-                lv_table_set_cell_value(mheard_ta, row, 2, buf);
-            }
-            else
-            if(mheardLine.mh_payload_type == '@')
-            {
-                snprintf(buf, 4, "HY");
-                lv_table_set_cell_value(mheard_ta, row, 2, buf);
-            }
-            else
-            {
-                snprintf(buf, 4, "???");
-                lv_table_set_cell_value(mheard_ta, row, 2, buf);
-            }
-
-            snprintf(buf, 8, "%s", getHardwareLong(mheardLine.mh_hw).c_str());
-            lv_table_set_cell_value(mheard_ta, row, 3, buf);
-
-            //snprintf(buf, 200, "%3i | ", mheardLine.mh_mod);
-            //strRet.concat(buf);
-
-            snprintf(buf, 7, "%4i", mheardLine.mh_rssi);
-            lv_table_set_cell_value(mheard_ta, row, 4, buf);
-
-            snprintf(buf, 7, "%4i", mheardLine.mh_snr);
-            lv_table_set_cell_value(mheard_ta, row, 5, buf);
-
-            snprintf(buf, 7, "%4i", mheardNCount[iset]); // 8immer aus array nehmen
-            lv_table_set_cell_value(mheard_ta, row, 6, buf);
-
-            row++;
+            snprintf(buf, 4, "TXT");
+            lv_table_set_cell_value(mheard_ta, row, 2, buf);
         }
+        else
+        if(mheardLine.mh_payload_type == '!')
+        {
+            snprintf(buf, 4, "POS");
+            lv_table_set_cell_value(mheard_ta, row, 2, buf);
+        }
+        else
+        if(mheardLine.mh_payload_type == '@')
+        {
+            snprintf(buf, 4, "HY");
+            lv_table_set_cell_value(mheard_ta, row, 2, buf);
+        }
+        else
+        {
+            snprintf(buf, 4, "???");
+            lv_table_set_cell_value(mheard_ta, row, 2, buf);
+        }
+
+        snprintf(buf, 8, "%s", getHardwareLong(mheardLine.mh_hw).c_str());
+        lv_table_set_cell_value(mheard_ta, row, 3, buf);
+
+        //snprintf(buf, 200, "%3i | ", mheardLine.mh_mod);
+        //strRet.concat(buf);
+
+        snprintf(buf, 7, "%4i", mheardLine.mh_rssi);
+        lv_table_set_cell_value(mheard_ta, row, 4, buf);
+
+        snprintf(buf, 7, "%4i", mheardLine.mh_snr);
+        lv_table_set_cell_value(mheard_ta, row, 5, buf);
+
+        snprintf(buf, 7, "%4i", mheardNCount[iset]); // 8immer aus array nehmen
+        lv_table_set_cell_value(mheard_ta, row, 6, buf);
+
+        row++;
     }
 }
 
@@ -1114,7 +1266,7 @@ void loadMHeardPersistence()
         if(!file) return;
 
 // FIX — vor den file.read() Aufrufen einfuegen:
-        size_t expected_mh = sizeof(mheardCalls) + sizeof(mheardBuffer) + sizeof(mheardLat)
+        size_t expected_mh = sizeof(mheardCalls) + sizeof(mheardRecords) + sizeof(mheardLat)
                            + sizeof(mheardLon) + sizeof(mheardEpoch) + sizeof(mheardNCount);
         if(file.size() != expected_mh) {
             printfdeb("[TDECK]...mheard.dat size mismatch (%u != %u), deleting\n", file.size(), expected_mh);
@@ -1124,7 +1276,7 @@ void loadMHeardPersistence()
         }
 
         file.read((uint8_t*)mheardCalls, sizeof(mheardCalls));
-        file.read((uint8_t*)mheardBuffer, sizeof(mheardBuffer));
+        file.read((uint8_t*)mheardRecords, sizeof(mheardRecords));
         file.read((uint8_t*)mheardLat, sizeof(mheardLat));
         file.read((uint8_t*)mheardLon, sizeof(mheardLon));
         file.read((uint8_t*)mheardEpoch, sizeof(mheardEpoch));

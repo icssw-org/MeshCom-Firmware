@@ -54,6 +54,17 @@ void init_onewire_dht()
     else
     {
         #ifdef OneWire_GPIO
+            // R3-03: Der Makro-Rueckfall lief UNGEPRUEFT. Acht Varianten
+            // trugen `OneWire_GPIO 99` -- auf keinem dieser Boards ein
+            // gueltiger GPIO -- und der Wert ging trotzdem bis hierher.
+            // Der Laufzeitweg prueft laengst: --owgpio weist <= 2 zurueck
+            // (command_functions.cpp:1984). Dieselbe Pruefung fehlte auf
+            // dem Makro-Weg, und im DS18-Zweig setzte er zusaetzlich
+            // one_found = true -- der Knoten meldete also einen Sensor an
+            // einem Pin, den es nicht gibt.
+            if(OneWire_GPIO <= 0)
+                return;
+
             meshcom_settings.node_owgpio = OneWire_GPIO;
             DHT_Unified dht(meshcom_settings.node_owgpio, DHTTYPE);
         #else
@@ -202,6 +213,17 @@ void init_onewire_ds18(void)
     else
     {
         #ifdef OneWire_GPIO
+            // R3-03: Der Makro-Rueckfall lief UNGEPRUEFT. Acht Varianten
+            // trugen `OneWire_GPIO 99` -- auf keinem dieser Boards ein
+            // gueltiger GPIO -- und der Wert ging trotzdem bis hierher.
+            // Der Laufzeitweg prueft laengst: --owgpio weist <= 2 zurueck
+            // (command_functions.cpp:1984). Dieselbe Pruefung fehlte auf
+            // dem Makro-Weg, und im DS18-Zweig setzte er zusaetzlich
+            // one_found = true -- der Knoten meldete also einen Sensor an
+            // einem Pin, den es nicht gibt.
+            if(OneWire_GPIO <= 0)
+                return;
+
             meshcom_settings.node_owgpio = OneWire_GPIO;
             ds.begin(meshcom_settings.node_owgpio);
             one_found=true;

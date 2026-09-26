@@ -2,6 +2,7 @@
  *  @author      Ralph Weich (DD5RW)
  *  @date        2025-12-03
  */
+#include "mc_text.h"
 #include <Arduino.h>
 
 #include <configuration.h>
@@ -46,8 +47,8 @@ bool bweb_server_running = false;
 char web_ip[10][20] = {0};
 long web_ip_passwd_time[10] = {0};
 
-extern double mheardLat[MAX_MHEARD];
-extern double mheardLon[MAX_MHEARD];
+extern float mheardLat[MAX_MHEARD];   // R3-12: war double
+extern float mheardLon[MAX_MHEARD];   // R3-12: war double
 extern int mheardAlt[MAX_MHEARD];
 
 double dlat;
@@ -1351,13 +1352,25 @@ void sub_page_rxlog()
     web_client.println("</div>");
 
     web_client.println("<div style=\"overflow:scroll;\">");
-    do
+
+    // R1-04: DIES ist die Stelle, die den Puffer ueberhaupt erst anlegt -- er
+    // hat keinen anderen Leser. Der erste Aufruf dieser Seite kostet die
+    // Zuteilung, ab dann fuellt der RX-Pfad ihn. Schlaegt sie fehl, bleibt die
+    // Seite bedienbar und sagt warum, statt auf einem NULL-Zeiger zu landen.
+    if(!rawLogEnsure())
     {
-        // WQ-01: normal text size (was font-small) -- the page uses three sizes only:
-        // title, normal (log lines, panel text), small (legend, notes, tick labels).
-        web_client.printf("<p class=\"no-wrap\"><%i>%s</p>\n", iRead, ringbufferRAWLoraRX[iRead]);
-        iRead = increment_mod(iRead, MAX_LOG);
-    } while (RAWLoRaRead != iRead);
+        web_client.println("<p class=\"no-wrap\">RX log buffer not available (out of memory)</p>");
+    }
+    else
+    {
+        do
+        {
+            // WQ-01: normal text size (was font-small) -- the page uses three sizes only:
+            // title, normal (log lines, panel text), small (legend, notes, tick labels).
+            web_client.printf("<p class=\"no-wrap\"><%i>%s</p>\n", iRead, ringbufferRAWLoraRX[iRead]);
+            iRead = increment_mod(iRead, MAX_LOG);
+        } while (RAWLoRaRead != iRead);
+    }
     web_client.println("</div></div>");
     web_client.println(); // The HTTP response ends with another blank line
 }
@@ -1443,49 +1456,73 @@ void sub_page_position()
  */
 void sub_page_mheard()
 {
+    // N-22 (BACKLOG SS3.8m, Fix 9ce62aa0): der Loop-Task auf nRF52 hat 4 KB
+    // Stack -- LOOP_STACK_SZ = 256*4 Woerter, hart im Adafruit-Core, nicht per
+    // Build-Flag zu erhoehen. Seit R2-04 ist struct mheardLine 584 Byte statt
+    // ~112 (sieben String-Handles a 12 B wurden feste char[]), und dieser Pfad
+    // liegt damit 1904 B tief auf einem Stack, auf dem N-22 schon einmal
+    // uxTaskGetStackHighWaterMark(NULL) == 0 gemessen hat.
+    // Gemessen mit -fstack-usage auf wiscore_rak4631: nrf52loop 792 + loopWebserver 32 + web_client_html 120 + work_webpage 264 + sub_page_mheard 696.
+    // Nur auf dem Loop-Task aufgerufen (web_functions.cpp:685 ueber loopWebserver aus nrf52_main.cpp:2476), nicht reentrant --
+    // also nach BSS statt auf den Stack. ESP32 behaelt den Stack-Puffer:
+    // 8 KB Loop-Task, dort ist der Frame kein Thema.
+    // Bewusst DREI getrennte Statics statt eines gemeinsamen: ein gemeinsamer
+    // muesste ueber zwei Uebersetzungseinheiten hinweg extern sein und koppelte
+    // mheard_functions.cpp an web_functions.cpp ueber die Annahme, dass keine
+    // der drei Funktionen je auf einen anderen Task wandert.
+#if defined(NRF52_SERIES)
+    static mheardLine mheardLine;
+#else
     mheardLine mheardLine;
+#endif
     bool isShowing = false;
     _create_meshcom_subheader("MHeard Information");
     web_client.println("<div id=\"content_inner\">");
 
-    for (int iset = 0; iset < MAX_MHEARD; iset++)
+    // DR-28 (BACKLOG OPT-D16): most-recent-first, via mheardSortedIndex() --
+    // the storage arrays themselves stay in physical slot order, see that
+    // function's comment in mheard_functions.cpp/.h.
+    uint8_t idx[MAX_MHEARD];
+    uint32_t now = (uint32_t)millis();
+    uint8_t n = mheardSortedIndex(idx, now);
+
+    for (uint8_t k = 0; k < n; k++)
     {
-        if (mheardCalls[iset][0] != 0x00)
+        uint8_t iset = idx[k];
+
+        if (mheardFreshMs(iset, 3UL * 60UL * 60UL * 1000UL)) // 3h (NC-02: monoton, nicht Wanduhr)
+            isShowing = true;
+        mheardLineFromRecord(mheardRecords[iset], mheardLine);
+        web_client.printf("<div class=\"cardlayout\">\n");
+        web_client.printf("<label class=\"cardlabel\"><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a> <span class=\"font-small\">(%s %s)</span></label>", mheardCalls[iset], mheardCalls[iset], mheardLine.mh_date, mheardLine.mh_time);
+        web_client.printf("<div class=\"flex-auto-wrap\">");
+        web_client.printf("<div><span class=\"font-bold\">Type:</span><br><span>%s</span></div>", getPayloadType(mheardLine.mh_payload_type));
+        web_client.printf("<div><span class=\"font-bold\">Hardware:</span><br><span>%s</span></div>", getHardwareLong(mheardLine.mh_hw).c_str());
+        web_client.printf("<div><span class=\"font-bold\">Mod:</span><br><span>%01X/%01X</span></div>", (mheardLine.mh_mod >> 4), (mheardLine.mh_mod & 0x0f));
+        web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span>%4idBm</span></div>", mheardLine.mh_rssi);
+        web_client.printf("<div><span class=\"font-bold\">SNR:</span><br><span>%4idB</span></div>", mheardLine.mh_snr);
+        web_client.printf("<div><span class=\"font-bold\">Dist:</span><br><span>%5.1lf</span></div>", mheardLine.mh_dist);
+        web_client.printf("<div><span class=\"font-bold\">NCNT:</span><br><span>%2i</span></div>", mheardLine.mh_ncount);
+
+        dlat = mheardLat[iset];
+        clat = 'N';
+        if(dlat < 0)
         {
-            if (mheardFreshMs(iset, 3UL * 60UL * 60UL * 1000UL)) // 3h (NC-02: monoton, nicht Wanduhr)
-                isShowing = true;
-            decodeMHeard(mheardBuffer[iset], mheardLine);
-            web_client.printf("<div class=\"cardlayout\">\n");
-            web_client.printf("<label class=\"cardlabel\"><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a> <span class=\"font-small\">(%s %s)</span></label>", mheardCalls[iset], mheardCalls[iset], mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str());
-            web_client.printf("<div class=\"flex-auto-wrap\">");
-            web_client.printf("<div><span class=\"font-bold\">Type:</span><br><span>%s</span></div>", getPayloadType(mheardLine.mh_payload_type));
-            web_client.printf("<div><span class=\"font-bold\">Hardware:</span><br><span>%s</span></div>", getHardwareLong(mheardLine.mh_hw).c_str());
-            web_client.printf("<div><span class=\"font-bold\">Mod:</span><br><span>%01X/%01X</span></div>", (mheardLine.mh_mod >> 4), (mheardLine.mh_mod & 0x0f));
-            web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span>%4idBm</span></div>", mheardLine.mh_rssi);
-            web_client.printf("<div><span class=\"font-bold\">SNR:</span><br><span>%4idB</span></div>", mheardLine.mh_snr);
-            web_client.printf("<div><span class=\"font-bold\">Dist:</span><br><span>%5.1lf</span></div>", mheardLine.mh_dist);
-            web_client.printf("<div><span class=\"font-bold\">NCNT:</span><br><span>%2i</span></div>", mheardLine.mh_ncount);            
-
-            dlat = mheardLat[iset];
-            clat = 'N';
-            if(dlat < 0)
-            {
-                dlat = dlat * (-1);
-                clat = 'S';
-            }
-            dlon = mheardLon[iset];
-            clon = 'E';
-            if(dlon < 0)
-            {
-                dlon = dlon * (-1);
-                clon = 'W';
-            }
-
-            web_client.printf("<div><span class=\"font-bold\">Lat:</span><br><span>%c%06.3lf</span></div>", clat, dlat);
-            web_client.printf("<div><span class=\"font-bold\">Lon:</span><br><span>%c%07.3lf</span></div>", clon, dlon);
-            web_client.printf("<div><span class=\"font-bold\">Alt:</span><br><span>%4i</span></div>", mheardAlt[iset]);
-            web_client.printf("</div></div>");
+            dlat = dlat * (-1);
+            clat = 'S';
         }
+        dlon = mheardLon[iset];
+        clon = 'E';
+        if(dlon < 0)
+        {
+            dlon = dlon * (-1);
+            clon = 'W';
+        }
+
+        web_client.printf("<div><span class=\"font-bold\">Lat:</span><br><span>%c%06.3lf</span></div>", clat, dlat);
+        web_client.printf("<div><span class=\"font-bold\">Lon:</span><br><span>%c%07.3lf</span></div>", clon, dlon);
+        web_client.printf("<div><span class=\"font-bold\">Alt:</span><br><span>%4i</span></div>", mheardAlt[iset]);
+        web_client.printf("</div></div>");
     }
     if (!isShowing)
         web_client.println("<p>No Nodes heard so far.</p>"); // no nodes available? Tell the user
@@ -1500,7 +1537,6 @@ void sub_page_mheard()
 void sub_page_path()
 {
     bool isShowing = false;
-    mheardLine mheardLine;
     _create_meshcom_subheader("Path Information");
     web_client.println("<div id=\"content_inner\">");
     for (int iset = 0; iset < MAX_MHPATH; iset++)
@@ -1679,7 +1715,7 @@ void sub_page_setup()
     _create_setup_switch_element("netmode", "Ethernet Mode", "switch between WiFi and Ethernet", meshcom_settings.node_netmode == 1);
     #endif
     _create_setup_switch_element("extudp", "ext UDP", "enable ext. UDP", bEXTUDP); // create Switch-Element inclucing Label and Description
-    #ifndef BOARD_RAK4630
+    #if !defined(BOARD_RAK4630) && !defined(DISABLE_NET_CONSOLE)
     _create_setup_switch_element("netconsole", "net console", "enable net console (port 2323, HMAC auth)", bNETCONSOLE); // create Switch-Element inclucing Label and Description
     #endif
     #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
@@ -1705,7 +1741,9 @@ void sub_page_setup()
 
     web_client.println("</div><div class=\"grid grid2\">");
 
+    #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
     _create_setup_switch_element("gps", "GPS", "enable GPS", bGPSON);                                  // create Switch-Element inclucing Label and Description
+    #endif
     _create_setup_switch_element("track", "Track", "enable display of SmartBeaconing", bDisplayTrack, TRACK_WARNING_TEXT, bDisplayTrack); // create Switch-Element inclucing Label and Description; TRK-01: Warnhinweis neben dem Switch
 
     web_client.println("</div></div>");
@@ -1731,15 +1769,20 @@ void sub_page_setup()
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid grid3\">");
 
+    #ifdef OneWire_GPIO
     _create_setup_textinput_element("owgpio", "1-Wire GPIO", String(meshcom_settings.node_owgpio), "36", "onewiregpio", 3, false, false); // create Textinput-Element including Label and Button
+    #endif
 
     web_client.println("</div><div class=\"grid grid2\">");
 
+    #ifdef OneWire_GPIO
     _create_setup_switch_element("onewire", "1-Wire", "enable 1-Wire capability", bONEWIRE); // create Switch-Element inclucing Label and Description
+    #endif
 
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid3\">");
 
+    #ifndef BOARD_T_DECK_PRO
     int iButtonPin = 0;
     #ifdef BUTTON_PIN
         iButtonPin = BUTTON_PIN;
@@ -1751,6 +1794,7 @@ void sub_page_setup()
         iButtonPin = meshcom_settings.node_button_pin;
 
     _create_setup_textinput_element("ubgpio", "Userbutton GPIO", String(iButtonPin), "0", "buttongpio", 3, false, false); // create Textinput-Element including Label and Button
+    #endif
 
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid2\">");
@@ -1774,11 +1818,15 @@ void sub_page_setup()
     #if defined(ANALOG_PIN)
     _create_setup_switch_element("analogcheck", "Analog", "enable analog GPIO measurement", bAnalogCheck); // create Switch-Element inclucing Label and Description
     #endif
+    #if defined(ENABLE_BMX280)
     _create_setup_switch_element("bmp", "BMP280", "enable BMP280 sensor", bBMPON);                         // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("bme", "BME280", "enable BME280 sensor", bBMEON);                         // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("680", "BME680", "enable BME680 sensor", bBME680ON);                      // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("811", "MCU811", "enable MCU811 sensor", bMCU811ON);                      // create Switch-Element inclucing Label and Description
+    #endif
+    #if defined (ENABLE_INA226)
     _create_setup_switch_element("ina226", "INA226", "enable INA226 sensor", bINA226ON);                   // create Switch-Element inclucing Label and Description
+    #endif
     #if defined(ENABLE_AHT20)
     _create_setup_switch_element("aht20", "AHT20", "enable AHT20 sensor", bAHT20ON);                       // create Switch-Element inclucing Label and Description
     #endif
@@ -1843,44 +1891,38 @@ void sub_page_setup()
  * ###########################################################################################################################
  * This will only deliver the preformatted messages to be loaded asyncronous into the WebUI scaffold
  */
-// bf_iter_begin()/bf_iter_next() (src/byte_fifo.h) walk the phone ring from
-// the oldest surviving frame to the newest, including frames sendToPhone()
-// has already popped -- exactly the "history" the old index scan from the
-// write cursor relied on (Upstream origin 87c6c200). If a writer evicts
-// frames mid-walk, the iterator stops there (byte_fifo.h): the page shows
-// what it still has instead of reading stale or re-wrapped memory.
+// Die Seite liest den VERLAUF des Telefon-Rings, nicht die ungelesenen
+// Frames: ein Frame bleibt nach dem Senden ans Telefon liegen, bis sein Platz
+// gebraucht wird (byte_fifo.h, "oldest"). Vorher lief die Schleife ueber alle
+// MAX_RING Schlitze ab toPhoneWrite -- dasselbe, nur dass der Verlauf jetzt
+// so viele Frames haelt, wie in RING_BYTES_PHONE passen. Upstream origin
+// 87c6c200.
 void sub_content_messages()
 {
     int rendered = 0;
-
     bf_iter_t it;
     bf_iter_begin(&phoneRing, &it);
 
-    uint8_t frameBuf[MAX_MSG_LEN_PHONE];
-    uint8_t blelen;
+    if (bDEBUG)
+        Serial.printf("phoneRing frames:%u unread:%u\n", (unsigned)bf_frames(&phoneRing), (unsigned)bf_unread(&phoneRing));
 
-    while ((blelen = bf_iter_next(&phoneRing, &it, frameBuf, sizeof(frameBuf))) != 0)
+    for (;;)
     {
-        // bf_iter_next() liefert wie bf_peek() die volle Frame-Laenge, auch
-        // wenn sizeof(frameBuf) weniger kopiert hat. bf_push() laesst
-        // hoechstens 255 Byte zu (byte_fifo.cpp:59), frameBuf ist groesser --
-        // eine Laufzeitklemme kann also nie greifen; die Zusicherung haelt
-        // die Annahme fest.
-        static_assert(sizeof(frameBuf) >= 255,
-                      "frameBuf muss jeden bf_push()-Frame (max 255 B) fassen");
+        uint8_t frame[256];
+        uint8_t blelen = bf_iter_next(&phoneRing, &it, frame, sizeof(frame));
+        if (blelen == 0)
+            break;
 
         if (bDEBUG)
-            Serial.printf("frame type:%02X\n", frameBuf[0]);
+            Serial.printf("frame len:%u [0]:%02X\n", blelen, frame[0]);
 
         uint8_t toPhoneBuff[MAX_MSG_LEN_PHONE] = {0}; // we need to insert the first byte text msg flag
 
-        if (frameBuf[0] == 0x91)
+        if (frame[0] == 0x91)
         { // Mheard
-          // memcpy(toPhoneBuff, frameBuf, blelen-1);
         }
-        else if (frameBuf[0] == 0x44)
+        else if (frame[0] == 0x44)
         { // Data Message (JSON)
-          // memcpy(toPhoneBuff, frameBuf, blelen);
         }
         else if (blelen >= 4 && (size_t)(blelen - 4) <= sizeof(toPhoneBuff))
         { // Text Message and Position
@@ -1889,8 +1931,8 @@ void sub_content_messages()
             char timestamp[21];
             String ccheck = "";
 
-            memcpy(toPhoneBuff, frameBuf, blelen - 4);
-            memcpy(tbuffer, frameBuf + (blelen - 4), 4);
+            memcpy(toPhoneBuff, frame, blelen - 4);
+            memcpy(tbuffer, frame + (blelen - 4), 4);
             unix_time = (tbuffer[0] << 24) | (tbuffer[1] << 16) | (tbuffer[2] << 8) | tbuffer[3];
             time_t unix_t = (time_t)(unix_time + (long)(meshcom_settings.node_utcoff * 60 * 60));
             struct tm *oldt = gmtime(&unix_t);
@@ -1918,14 +1960,14 @@ void sub_content_messages()
                 // {CET} time beacons sit in the ring for the phone app's clock
                 // sync; they are not operator traffic and would light the tab
                 // badges on every beacon, so the web list skips them
-                if (aprsmsg.msg_payload.indexOf(":ack") < 1 && !aprsmsg.msg_payload.startsWith("{CET}"))
+                if (mcIndexOfStr(aprsmsg.msg_payload, ":ack") < 1 && !mcStartsWith(aprsmsg.msg_payload, "{CET}"))
                 {
                     String msgtxt = aprsmsg.msg_payload;
                     if (bDEBUG)
-                        Serial.printf("aprsmsg.msg_source_call.c_str():%s, aprsmsg.msg_gateway_call.c_str():%s, aprsmsg.msg_destination_call.c_str():%s, aprsmsg.msg_payload.c_str():%s\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_payload.c_str());
+                        Serial.printf("aprsmsg.msg_source_call:%s, aprsmsg.msg_gateway_call:%s, aprsmsg.msg_destination_call:%s, aprsmsg.msg_payload:%s\n", aprsmsg.msg_source_call, aprsmsg.msg_source_last, aprsmsg.msg_destination_call, aprsmsg.msg_payload);
 
                     if (msgtxt.indexOf('{') > 0)
-                        msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{'));
+                        msgtxt = String(aprsmsg.msg_payload).substring(0, msgtxt.indexOf('{'));
 
                     // WEB-03a: mesh-derived strings (payload, path, callsigns) are attacker-controlled -- escape before HTML output
                     String msgtxt_esc = htmlEscape(msgtxt);
@@ -1933,7 +1975,7 @@ void sub_content_messages()
                     String msg_destination_path_esc = htmlEscape(aprsmsg.msg_destination_path);
 
                     // own messages (source == us): the browser's DM tab keys on the destination call
-                    if (is_equ(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()))
+                    if (is_equ(meshcom_settings.node_call, aprsmsg.msg_source_call))
                     {
                         String dst_esc = htmlEscape(aprsmsg.msg_destination_call);
 
@@ -1951,13 +1993,13 @@ void sub_content_messages()
                     // a DM to us keys on the source call so the DM tab shows both directions
                     else
                     {
-                        bool isGroupDst = is_equ(aprsmsg.msg_destination_call.c_str(), "*");
-                        if (!isGroupDst && aprsmsg.msg_destination_call.length() > 0)
+                        bool isGroupDst = is_equ(aprsmsg.msg_destination_call, "*");
+                        if (!isGroupDst && strlen(aprsmsg.msg_destination_call) > 0)
                         {
                             isGroupDst = true;
-                            for (unsigned int ci = 0; ci < aprsmsg.msg_destination_call.length(); ci++)
+                            for (unsigned int ci = 0; ci < strlen(aprsmsg.msg_destination_call); ci++)
                             {
-                                if (!isDigit(aprsmsg.msg_destination_call.charAt(ci)))
+                                if (!isDigit(aprsmsg.msg_destination_call[ci]))
                                 {
                                     isGroupDst = false;
                                     break;

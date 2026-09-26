@@ -428,7 +428,13 @@ void txRingAgeBackground(uint32_t now_ms)
  *
  * @param frame          Fertig kodierter Frame (ohne Laenge-/Status-Byte)
  * @param len            Frame-Laenge in Byte
- * @param ring_status    Status-Byte fuer den Slot (RING_STATUS_*)
+ * @param classify_status Status-Byte, MIT DEM getMessagePriority() den Slot
+ *                        einstuft (siehe P15-Hinweis unten) -- fuer
+ *                        addTxRingEntry() identisch zu store_status, fuer
+ *                        addTxRingEntryOnce() READY (kein DONE, sonst stuft
+ *                        eine eigene TEXT-Nachricht als Relay ein).
+ * @param store_status   Status-Byte, das tatsaechlich im Slot landet und in
+ *                        der RING_WRITE-Zeile erscheint.
  * @param source         Kurzes Label fuer Debug-Ausgabe (z.B. "rx_relay")
  * @param retryCountIn   retryCount[Slot] setzen; -1 (Default) = unangetastet
  *                        lassen (manche Aufrufstellen haben retryCount nie
@@ -438,9 +444,21 @@ void txRingAgeBackground(uint32_t now_ms)
  * @return Slot-Index (>=0) oder -1, wenn die Overflow-Logik den neuen
  *         Eintrag verworfen hat (Ring voll, keine niedrigere Prio zum
  *         Verdraengen vorhanden)
+ *
+ * P15: gemeinsamer Kern fuer addTxRingEntry() und addTxRingEntryOnce()
+ * (beide unten, duenne Wrapper). Vorher schrieb SendAckMessage() mit
+ * Status READY (0x00) ein und setzte den Slot NACH addTxRingEntry() per
+ * Hand auf DONE (0xFF) -- ausserhalb des Locks. Auf nRF52 laeuft OnRxDone
+ * (und mit ihm SendPong()/SendAckMessage()) im LORA-Task, doTX() im
+ * Loop-Task; ein Schreiben zwischen den beiden Anweisungen konnte von
+ * doTX()s save/restore des gelesenen Status rueckgaengig gemacht werden.
+ * classify_status/store_status trennen jetzt "womit klassifiziert" von
+ * "was gespeichert wird" -- beides passiert hier, innerhalb DERSELBEN
+ * kritischen Sektion, kein Nachtrag mehr noetig.
  */
-int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
-                    const char* source, int retryCountIn, bool clearSlotFirst)
+static int addTxRingEntryCore(const uint8_t* frame, uint16_t len,
+                               uint8_t classify_status, uint8_t store_status,
+                               const char* source, int retryCountIn, bool clearSlotFirst)
 {
     // TX-01 (BACKLOG 3.8k): an unconfigured node (factory callsign) must not
     // transmit at all -- refuse here so its ring never even fills, on top
@@ -497,7 +515,7 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
         memset(ringBuffer[w], 0x00, sizeof(ringBuffer[0]));
 
     ringBuffer[w][0] = (uint8_t)len;
-    ringBuffer[w][1] = ring_status;
+    ringBuffer[w][1] = classify_status;
     memcpy(ringBuffer[w]+2, frame, len);
 
     if(retryCountIn >= 0)
@@ -527,6 +545,13 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
 
     // Assign priority and enqueue timestamp
     ringPriority[w] = getMessagePriority(w);
+
+    // P15: erst NACH der Klassifizierung, noch innerhalb des Locks, auf den
+    // tatsaechlich zu speichernden Status umschreiben (addTxRingEntry():
+    // store_status == classify_status, dieser Zweig ist dann ein No-Op).
+    if(store_status != classify_status)
+        ringBuffer[w][1] = store_status;
+
     ringEnqueueTime[w] = millis();
     // SL-03/SL-06: Herkunft aus dem `source`-Label festhalten, solange es im
     // Scope ist -- die TX-Zeile in doTX() sieht spaeter nur noch den Slot.
@@ -658,7 +683,7 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
     {
         printfdeb("[MC-DBG] RING_WRITE slot=%d type=%02X status=%02X "
                   "len=%d msg_id=%08X queued=%d/%d src=%s\n",
-                  w, msgType, ring_status, (int)len, mid, queued, MAX_RING, source);
+                  w, msgType, store_status, (int)len, mid, queued, MAX_RING, source);
         printfdeb("[MC-DBG] RING_PRIO slot=%d prio=%d\n", w, prio);
 
         if(droppedOld)
@@ -674,4 +699,32 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
     }
 
     return resultSlot;
+}
+
+int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
+                    const char* source, int retryCountIn, bool clearSlotFirst)
+{
+    return addTxRingEntryCore(frame, len, ring_status, ring_status,
+                               source, retryCountIn, clearSlotFirst);
+}
+
+/**
+ * P15: eigene Nachricht (DM/Gruppe/Broadcast), die nie wiederholt werden
+ * soll -- SendAckMessage()/sendPing()/SendPong()/dm_outbox_glue.cpp und der
+ * {ping}-Zweig von sendMessage() wollten bisher alle dasselbe: mit Status
+ * DONE (0xFF, "keine Wiederholung") einreihen, aber trotzdem als eigene
+ * DM/Gruppen-/Broadcast-Nachricht eingestuft werden, nicht als Relay (siehe
+ * getMessagePriority(): eine TEXT-Nachricht mit Status DONE gilt dort als
+ * Relay -- RING_STATUS_DONE wird sonst nur von OnRxDone fuer weitergeleitete
+ * Pakete gesetzt). addTxRingEntryCore() klassifiziert deshalb mit READY und
+ * legt DONE erst danach fest, beides unter demselben Lock (siehe Doku dort).
+ *
+ * Gleiche Parameter/Rueckgabe/Fehlverhalten wie addTxRingEntry(), nur ohne
+ * ring_status -- der ist hier immer implizit DONE.
+ */
+int addTxRingEntryOnce(const uint8_t* frame, uint16_t len, const char* source,
+                        int retryCountIn, bool clearSlotFirst)
+{
+    return addTxRingEntryCore(frame, len, RING_STATUS_READY, RING_STATUS_DONE,
+                               source, retryCountIn, clearSlotFirst);
 }

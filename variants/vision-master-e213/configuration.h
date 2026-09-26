@@ -22,19 +22,24 @@ Pinbelegung verifiziert aus offiziellem Heltec-Schaltplan HT-VME213_V1.0:
 // Vision Master E213 specific config
 #define MODUL_HARDWARE HELTEC_E213
 
-#define RF_FREQUENCY 433.175000          // Hz  (AT 70cm, wie E290)
-#define LORA_APRS_FREQUENCY 433.775000   // Hz
 
 // --- Keine Onboard-Sensoren auf dem E213 -> bewusst NICHT aktiviert ---
 // (BMX280 / BMP390 / AHT20 / SHT21 / BMX680 / MCP23017 / INA226 / MCU811 / RTC / SOFTSER)
-#define ENABLE_GPS
+#define ENABLE_BMX280_DISABLED
+#define ENABLE_BMX680_DISABLED
+#define ENABLE_RTC_DISABLED
+#define ENABLE_BMP390_DISABLED
+#define ENABLE_AHT20_DISABLED
+#define ENABLE_MCP23017_DISABLED
+#define ENABLE_SHT21_DISABLED
+#define ENABLE_MC811_DISABLED
+#define ENABLE_INA226_DISABLED
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
 #define GPS_MODULE_REFRESH_INTERVAL 20 // sec
 
 #define GPS_SWITCH 42
 
-#define TX_POWER_MAX 22  // max 22 dBm
 #define TX_POWER_MIN 2
 
 // SX1262 mit identischer Pinbelegung wie E290 -> bewaehrten E290-Funkpfad mitnutzen
@@ -44,17 +49,12 @@ Pinbelegung verifiziert aus offiziellem Heltec-Schaltplan HT-VME213_V1.0:
 // generischer E-Paper-Pfad (Display-Init, sendDisplay*, Update) wie E290/WP
 #define HAS_EPAPER
 
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
-#define TX_OUTPUT_POWER 22  // SX1262 up to +22dBm
 #define CURRENT_LIMIT 140   // mA
 
 // RadioLib Modem-Parameter (wie E290)
-#define LORA_CR 6
-#define LORA_BANDWIDTH 250
-#define LORA_SF 11
 
 // =============================================
 // GPIOs
@@ -75,7 +75,18 @@ Pinbelegung verifiziert aus offiziellem Heltec-Schaltplan HT-VME213_V1.0:
 #define I2C_SDA 39
 #define I2C_SCL 38
 
-#define OneWire_GPIO  99 // ungenutzt
+// R3-03 (2026-09-16): stand hier als 99. 99 ist auf diesem Board kein
+// gueltiger GPIO -- OneWire hat hier also nie funktioniert. -1 ist die
+// Schreibweise fuer "dieses Board hat keinen OneWire-Pin", wie sie
+// T-ETH-ELITE_1262 schon benutzt: sie faellt durch den `> 0`-Test in
+// onewire_functions.cpp, der Treiber startet nicht.
+//
+// Das Makro bleibt DEFINIERT und wird nicht geloescht: die gesamte
+// OneWire-Implementierung steht in `#ifdef OneWire_GPIO`
+// (onewire_functions.cpp:13-379). Ohne das Makro koennte man den Sensor
+// auch mit `--owgpio <pin>` nicht mehr einschalten -- das waere eine
+// Funktionsentfernung, keine Bereinigung.
+#define OneWire_GPIO -1
 
 // Batteriemessung Heltec Vision Master E213 (laut offiziellem Schaltplan):
 //  - VBAT_Read auf GPIO7, interner Teiler 100k/100k (Faktor 2)
@@ -114,3 +125,8 @@ Pinbelegung verifiziert aus offiziellem Heltec-Schaltplan HT-VME213_V1.0:
 #define PIN_LORA_SCK            9
 #define PIN_LORA_MISO           11
 #define PIN_LORA_MOSI           10
+
+// W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
+// Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
+// dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.
+#include <configuration_default.h>   // W7: Flottenvorgaben, #ifndef -- was oben steht, gewinnt

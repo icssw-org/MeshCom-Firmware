@@ -12,7 +12,7 @@
 
 #include <nrf52_functions.h>
 
-#if !defined(BOARD_E290) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined (BOARD_T_DECK) && !defined (BOARD_T_DECK_PLUS) && !defined (BOARD_T5_EPAPER) && !defined (BOARD_T_DECK_PRO)
+#if MC_HAS_U8G2   // GRD-01: war dieselbe Aussage ohne die ESP32-Boards
 
 #include <U8g2lib.h>
 
@@ -26,21 +26,23 @@ void initDisplay()
         
     int idtype = esp32_isSSD1306(0x3C);
 
-    u8g2 = NULL;
+    // DISP-01, 2026-09-17: HIER lag der Fehler. Diese Kopie bildete idtype 1
+    // auf u8g2_2 (SH1106) ab, die ESP32-Kopie auf u8g2_1 (SSD1306) -- bei
+    // derselben Sonde. Auf der Bench ist ESP32 belegt (Heltec V3 und ein
+    // T-Beam stellen beide sauber dar), also war diese Seite verdreht: ein
+    // 0,9"-SSD1306-Panel bekam den SH1106-Treiber und damit zwei Spalten
+    // Versatz. Betroffen ist allein ein RAK4631 MIT RAK1921-OLED; der
+    // Bench-RAK hat keins ("Display not found"), der Fehler war hier also
+    // latent und ist NICHT auf Hardware nachgewiesen.
+    //
+    // Beide Plattformen benutzen jetzt dieselbe Zuordnung.
 
-    if(idtype < 0)
+    u8g2 = mcSelectU8g2(idtype);
+
+    if(u8g2 == NULL)
     {
         bDisplayOff = true;
         return;
-    }
-
-    if (idtype == 1)
-    { //Address of the display to be checked
-        u8g2 = &u8g2_2;
-    }
-    else
-    {
-        u8g2 = &u8g2_1;
     }
 
     u8g2->begin();
