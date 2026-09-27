@@ -608,8 +608,8 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
               save_settings();
 
-              // same auto-reboot (and T-Deck exception) as --setcall, see
-              // src/command_functions.cpp:3451
+              // same auto-reboot (and T-Deck exception) as a changed --setcall
+              // (commandAction(), src/command_functions.cpp)
               #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS)
               rebootAuto = millis() + 15 * 1000; // 15 Sekunden
               #endif
