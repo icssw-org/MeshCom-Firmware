@@ -4,14 +4,14 @@ Branch `dk5en-xor`, Basis `upstream/dev` @ `cf215b5d`. Konzept: `docs/pn-zustell
 
 ## Wellenstatus
 
-| Welle | Inhalt                                               | Status                                                                             |
-| ----- | ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| W0    | Worktree, Baseline-Sweep (eigener Worktree)          | erledigt: 33/35 grün, `t5_epaper` + `esp32-external-radio` schon am Basisstand rot |
-| W1    | Firmware: Helfer + Tests, lora_functions, Server-ACK | erledigt: 14/14 Host-Tests, 4 Referenz-Envs grün, Marker im ELF                    |
-| W2    | /fable-review auf W1-Diff, Nacharbeit                | läuft: Review fertig (5 Finder, 1 Verifizierer), Nacharbeit C2/C3/C5/C6/C7/C10     |
-| W3    | Docs: Server (C), App, mcapp, Konzeptpapier          | erledigt: 3 Docs + Konzeptpapier in docs/                                          |
-| W4    | Voll-Compile aller Envs, Host-Tests, Prettier        | offen                                                                              |
-| W5    | Commits, `git push upstream dk5en-xor`               | offen                                                                              |
+| Welle | Inhalt                                               | Status                                                                                   |
+| ----- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| W0    | Worktree, Baseline-Sweep (eigener Worktree)          | erledigt: 33/35 grün, `t5_epaper` + `esp32-external-radio` schon am Basisstand rot       |
+| W1    | Firmware: Helfer + Tests, lora_functions, Server-ACK | erledigt: 14/14 Host-Tests, 4 Referenz-Envs grün, Marker im ELF                          |
+| W2    | /fable-review auf W1-Diff, Nacharbeit                | erledigt: Nacharbeit C2/C3/C5/C6/C7/C10, Advisor R1/R2, 24/24 Host-Tests (`d507e822`)    |
+| W3    | Docs: Server (C), App, mcapp, Konzeptpapier          | erledigt: 3 Docs + Konzeptpapier in docs/ (`dce39e5b`)                                   |
+| W4    | Voll-Compile aller Envs, Host-Tests, Prettier        | erledigt: Voll-Compile 33/35 grün, identisch zur Baseline; Marker in 31/31 Firmware-ELFs |
+| W5    | Commits, `git push upstream dk5en-xor`               | erledigt: `git push upstream dk5en-xor`                                                  |
 
 ## Entscheidungen (Operator, 27.09.2026)
 
@@ -45,6 +45,9 @@ Builds und Host-Tests laufen am Gate.
 
 ## Review W2 (fable-review) — Ergebnis
 
+Advisor (vor Commit): R1 Echo-Neustart nur für eigene PN, R2 PN-Form einmal berechnet und auch
+für "gehört" verwendet. Beide umgesetzt.
+
 Behoben: C2 stille Variantenprüfung (`checkOwnRx`), C3 Tests (Golden-Frame, Grenzen) und
 `static_assert(MAX_RETRANSMIT <= 3)`, C5 `static`-Puffer auf nRF52, C6 Ring-Snapshot unter Sperre
 (nRF52), C7 nur persönliche Ziele gelten als PN, C10 "gehört" auch für Wiederholungs-Echos.
@@ -64,3 +67,13 @@ Bekannte Grenzen (dokumentiert, nicht geändert):
 - C9: Jedes Echo derselben Kopie startet die 40-s-Wartezeit neu; begrenzt durch die Zahl der
   Relais, Abbruch nach `MAX_RETRANSMIT` bleibt. Eine unquittierte PN kostet bis zu 4 Flutungen.
 - Server-`:ackNNN` stoppt jetzt die LoRa-Wiederholung (P4) — gehört zu V, im PR ausdrücklich nennen.
+
+## Hinweise für die PR-Beschreibung
+
+- Server-`:ackNNN` stoppt die LoRa-Wiederholung (neu, Teil von V).
+- Ein Gateway, das das Original gehört hat, lädt die Wiederholung nicht erneut hoch; ein nur über den
+  Server erreichbares Ziel bekommt eine Wiederholung nur über ein anderes Gateway.
+- Ein spätes `:ack` während eine Wiederholungskopie noch READY ist, wird wie bisher übersprungen
+  und kostet jetzt eine zusätzliche Flutung (Folgethema).
+- `pnDestIsPersonal` behandelt jede 1..6-stellige Ziffernfolge als Gruppe (CheckGroup: 1..99999 und
+  100001); Abweichung nur bei 000000/999999, praktisch unerreichbar.
