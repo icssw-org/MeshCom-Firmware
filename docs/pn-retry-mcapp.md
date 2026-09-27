@@ -6,12 +6,12 @@ Stand: 27.09.2026, DK5EN. Bezug: Konzeptpapier "Verlässliche Zustellung persön
 was dort zu ändern wäre).
 
 Firmware-Verhalten auf Branch `dk5en-xor` (Voraussetzung für alles Folgende): die Erstsendung einer
-PN ist byte-gleich zu heute. Wiederholung k hat in der msg_id die Bits 30–31 = Original-Bits XOR k;
-die unteren 30 Bit (20 Bit Knotenkennung + 10 Bit laufende Nummer) und das `{NNN`-Suffix im Text
-bleiben unverändert. Ein Knoten mit der neuen Firmware
+PN ist byte-gleich zu heute. Wiederholung k hat in der msg_id die Bits 10–11 = Original-Bits XOR k;
+der restliche 30-Bit-Kern (20 Bit Knotenkennung in Bit 12–31 + 10 Bit laufende Nummer in Bit 0–9)
+und das `{NNN`-Suffix im Text bleiben unverändert. Ein Knoten mit der neuen Firmware
 filtert Wiederholungen selbst: er gibt nur die erste Kopie einer PN an UDP-JSON/BLE weiter und
 meldet jede Quittung mit der **Original**-msg_id. Ein Knoten mit alter Firmware kennt die Bits
-30–31 nicht und gibt jede Kopie mit ihrer eigenen, unterschiedlichen msg_id weiter. **mcapp selbst
+10–11 nicht und gibt jede Kopie mit ihrer eigenen, unterschiedlichen msg_id weiter. **mcapp selbst
 sendet nie eine PN erneut** — es ist in jedem Fall nur Empfänger dieser Kopien.
 
 ## 1. Kurzfassung
@@ -39,7 +39,7 @@ Zwei Fälle bleiben, in denen mcapp **defensiv** nachziehen sollte:
 Die Empfehlung in Abschnitt 3 ist ein einziger Normalisierungs-Helfer (`msg_core()`), der an den
 Stellen eingesetzt wird, die heute auf der vollen 32-Bit-msg_id schlüsseln. Alle Änderungen sind
 additiv und rückwärtskompatibel: an einem Knoten mit neuer Firmware ändert sich nichts sichtbar,
-weil `msg_core()` auf der Erstsendung ein No-op ist (Bits 30–31 sind dort bereits 0 relativ zum
+weil `msg_core()` auf der Erstsendung ein No-op ist (Bits 10–11 sind dort bereits 0 relativ zum
 Original) und nie eine zweite Kopie ankommt, die genormt werden müsste.
 
 ## 2. Ist-Zustand pro Schicht
@@ -90,14 +90,14 @@ der folgenden Stellen dieselbe Maske verwendet und nicht fünf Kopien der Bit-Ar
 
 ```python
 # src/mcapp/util.py (neu)
-_MSG_ID_CORE_MASK = 0x3FFFFFFF  # löscht Bit 30-31 (dk5en-xor Wiederholungszähler)
+_MSG_ID_CORE_MASK = 0xFFFFF3FF  # löscht Bit 10-11 (dk5en-xor Wiederholungszähler)
 
 
 def msg_core(msg_id_hex: str | None) -> str | None:
     """Der wiederholungsinvariante Kern einer Firmware-msg_id (dk5en-xor,
-    docs/pn-retry-mcapp.md §3.1). Bit 30-31 tragen bei einer Wiederholung
-    das XOR des Wiederholungszählers; Bit 0-29 sind für jede Kopie derselben
-    PN gleich. Auf einer Erstsendung oder an einem Knoten ohne die
+    docs/pn-retry-mcapp.md §3.1). Bit 10-11 tragen bei einer Wiederholung
+    das XOR des Wiederholungszählers; alle anderen Bit sind für jede Kopie
+    derselben PN gleich. Auf einer Erstsendung oder an einem Knoten ohne die
     Wiederholungsfunktion ist das Maskieren ein No-op.
 
     None/unparsbare Eingabe -> None, wie die vorhandene falsy-msg_id-Regel
@@ -125,7 +125,7 @@ key = (callsign.strip().upper(), msg_core(msg_id) or msg_id)
 
 Die SQL-Abfrage vergleicht eine TEXT-Spalte gegen den vollen Hex-String
 (`storage/ingest.py:320-325`); SQLite kennt keine eingebaute Hex-zu-Int-Funktion, mit der sich
-`msg_id & 0x3FFFFFFF` in der WHERE-Klausel ausdrücken ließe. Statt einer Schema-Änderung (neue
+`msg_id & 0xFFFFF3FF` in der WHERE-Klausel ausdrücken ließe. Statt einer Schema-Änderung (neue
 Spalte, Migration) genügt eine deterministische Python-Funktion, einmal pro Connection registriert
 (`sqlite3.Connection.create_function`), und deren Aufruf in der WHERE-Klausel:
 
@@ -195,7 +195,7 @@ Helfern in derselben Datei:
 
 ```ts
 // src/stores/messages/dedup.ts (neu, neben getDedupKey)
-const MSG_ID_CORE_MASK = 0x3fffffff; // löscht Bit 30-31 (dk5en-xor Wiederholungszähler)
+const MSG_ID_CORE_MASK = 0xfffff3ff; // löscht Bit 10-11 (dk5en-xor Wiederholungszähler)
 
 export function msgCore(msgIdHex: string | undefined): string | null {
   if (!msgIdHex) return null;
@@ -215,8 +215,8 @@ if (el.msg_id) return `id:${msgCore(el.msg_id) ?? el.msg_id}`;
 Der Vertrag pinnt heute nur "msg_id-primary … unabhängig von src/dst/text"
 (`contract/dedup_contract.json:6`, `key_semantics.precedence`) — keine Aussage über eine
 Normalisierung der msg_id selbst. Eine Ergänzung um ein optionales
-`id_normalization`-Feld (Maske `0x3FFFFFFF`, mit `id_vectors`, die zwei Ids belegen, die sich nur in
-Bit 30-31 unterscheiden und denselben Schlüssel ergeben müssen) hält alle drei Implementierungen
+`id_normalization`-Feld (Maske `0xFFFFF3FF`, mit `id_vectors`, die zwei Ids belegen, die sich nur in
+Bit 10-11 unterscheiden und denselben Schlüssel ergeben müssen) hält alle drei Implementierungen
 synchron. Laut der Datei selbst liegt die kanonische Fassung aber **in `mc-chat`**
 (`contract/dedup_contract.json:3`, "SYNC RULE … canonical source lives upstream in mc-chat's
 contract/dedup_contract.json"): eine Änderung hier ist erst vollständig, wenn sie dort ebenfalls
@@ -257,15 +257,15 @@ Knotenkennungs-Bits aus einer nie wiederholten Kennung wegschneiden.
 
 ## 5. Testfälle
 
-Alle Vektoren unten verwenden ein Paar, das sich nur in Bit 30-31 unterscheidet, z. B.
-`40E1E057` (Original, Knotenbits 01) und `00E1E057` (Retry 1, `01 XOR 01 = 00`) — beide mit
-identischen unteren 30 Bit und identischem `{NNN`-Suffix im Text.
+Alle Vektoren unten verwenden ein Paar, das sich nur in Bit 10-11 unterscheidet, z. B.
+`E1E05457` (Original, Bit 10-11 = 01) und `E1E05057` (Retry 1, `01 XOR 01 = 00`) — beide mit
+identischem 30-Bit-Kern und identischem `{NNN`-Suffix im Text.
 
-1. **`msg_core()` (Python + TS)**: `msg_core("40E1E057") == msg_core("00E1E057") == "00E1E057"`;
+1. **`msg_core()` (Python + TS)**: `msg_core("E1E05457") == msg_core("E1E05057") == "E1E05057"`;
    `msg_core(None) is None`; ein unveränderter Erstsende-Wert ist ein No-op
-   (`msg_core(x) == x`, wenn Bit 30-31 von `x` bereits 0 sind).
-2. **Storage-Ingest-Tor**: `store_message` mit `msg_id="40E1E057"`, danach ein zweiter Aufruf mit
-   `msg_id="00E1E057"`, gleicher Absender, innerhalb `DEDUP_WINDOW_MS` — erwartet: genau eine Zeile
+   (`msg_core(x) == x`, wenn Bit 10-11 von `x` bereits 0 sind).
+2. **Storage-Ingest-Tor**: `store_message` mit `msg_id="E1E05457"`, danach ein zweiter Aufruf mit
+   `msg_id="E1E05057"`, gleicher Absender, innerhalb `DEDUP_WINDOW_MS` — erwartet: genau eine Zeile
    in `messages`, der zweite Aufruf nimmt den Enrichment-Pfad (`_enrich_duplicate_row`), keine neue
    `INSERT`. Regressionstest für den heutigen Zustand: derselbe Vektor ohne `msg_core()` erzeugt
    zwei Zeilen.
@@ -277,11 +277,11 @@ identischen unteren 30 Bit und identischem `{NNN`-Suffix im Text.
    wird nur einmal aufgerufen, nie mit dem Text "Command throttled". Regressionstest: derselbe
    Vektor ohne die Änderung aus 3.4 ruft `send_response` zweimal auf, das zweite Mal mit dem
    Throttle-Text.
-5. **Webapp-Dedup**: `isDuplicateByKey(getDedupKey({msg_id: "00E1E057", ...}), ts)` liefert `true`,
-   nachdem zuvor `recordDedupKey(getDedupKey({msg_id: "40E1E057", ...}), ts0)` mit
+5. **Webapp-Dedup**: `isDuplicateByKey(getDedupKey({msg_id: "E1E05057", ...}), ts)` liefert `true`,
+   nachdem zuvor `recordDedupKey(getDedupKey({msg_id: "E1E05457", ...}), ts0)` mit
    `ts - ts0 <= TIME_WINDOW_MS` aufgerufen wurde.
-6. **Binäre-ACK-Auflösung**: eine Zeile mit `msg_id="40E1E057"` liegt in `messages`; ein ACK-Frame
-   mit `ack_for_msg_id="00E1E057"` (simuliert einen alten Empfänger-Knoten, der auf Retry 1
+6. **Binäre-ACK-Auflösung**: eine Zeile mit `msg_id="E1E05457"` liegt in `messages`; ein ACK-Frame
+   mit `ack_for_msg_id="E1E05057"` (simuliert einen alten Empfänger-Knoten, der auf Retry 1
    antwortet) trifft ein — erwartet: `_resolve_ack_target` findet dieselbe Zeile und
    `send_success`/`acked` werden auf ihr gesetzt, nicht auf einer neuen. Regressionstest: derselbe
    Vektor ohne die Änderung aus 3.7 liefert `None` (kein Treffer, ACK verpufft ungenutzt,

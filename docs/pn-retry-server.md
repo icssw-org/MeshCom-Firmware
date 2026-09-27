@@ -18,9 +18,9 @@ sonst strahlt jedes Gateway jede Wiederholung in sein LoRa-Netz aus (Kap. 4). Di
 in drei Aufgaben:
 
 1. **Dedup-Schlüssel**: einer PN und all ihren Wiederholungen als eine PN erkennen, über
-   `msg_id & 0x3FFFFFFFu` statt über die volle 32-Bit-msg_id. Die unteren 30 Bit sind stabil: 20 Bit
-   Knotenkennung + 10 Bit laufende Nummer. Nur die Bits 30–31 ändern sich zwischen Erstsendung und
-   Wiederholung (Kap. 3).
+   `msg_id & 0xFFFFF3FFu` statt über die volle 32-Bit-msg_id. 30 Bit sind stabil: 20 Bit
+   Knotenkennung in Bit 12–31 + 10 Bit laufende Nummer in Bit 0–9. Nur die Bits 10–11 ändern sich
+   zwischen Erstsendung und Wiederholung (Kap. 3).
 2. **Weiterreichen an Gateways entscheiden**: nicht jede Wiederholung ungefiltert an jedes Gateway
    geben, sonst wird jede Region neu geflutet (Kap. 4).
 3. **APRS-IS-Gate**: jede PN höchstens einmal ausgeben, Text unverändert, ohne Wiederholungsmarke
@@ -29,8 +29,8 @@ in drei Aufgaben:
 **Was sich dafür am Funk ändert** (Firmware `dk5en-xor`, zur Einordnung des Eingabeformats):
 
 - Die Erstsendung einer PN ist byte-identisch zu heute.
-- Wiederholung k (1, 2, 3) trägt in Bit 30–31 der msg_id die Original-Bits XOR k; die unteren 30 Bit,
-  `{NNN` im Text und der restliche Text bleiben gleich. Die FCS wird für jede Wiederholung neu
+- Wiederholung k (1, 2, 3) trägt in Bit 10–11 der msg_id die Original-Bits XOR k; die restlichen
+  30 Bit, `{NNN` im Text und der restliche Text bleiben gleich. Die FCS wird für jede Wiederholung neu
   berechnet.
 - Das gilt **nur für PN** (Text an ein einzelnes Rufzeichen, das mit `{` gefolgt von 1–5 Ziffern ohne
   schließende Klammer endet). Gruppen und `*` senden wie heute mit unveränderter msg_id.
@@ -89,9 +89,9 @@ prüfen (das hat das sendende Gateway bereits getan, sonst wäre der Frame verwo
 
 ## 3. Dedup: Schlüssel, Fenster, "wer zuerst kam"
 
-**Schlüssel**: `msg_id & 0x3FFFFFFFu`. Das löscht nur die Bits 30–31, in denen sich Erstsendung und
-Wiederholungen unterscheiden; die 20 Bit Knotenkennung und die 10 Bit laufende Nummer in den unteren
-30 Bit bleiben unverändert (Konzeptpapier 2.1, 4.3).
+**Schlüssel**: `msg_id & 0xFFFFF3FFu`. Das löscht nur die Bits 10–11, in denen sich Erstsendung und
+Wiederholungen unterscheiden; die 20 Bit Knotenkennung (Bit 12–31) und die 10 Bit laufende Nummer
+(Bit 0–9) bleiben unverändert (Konzeptpapier 2.1, 4.3).
 
 **Fenster**: mindestens 10 Minuten. Die Wiederholungsleiter braucht rund 120 s (4 Aussendungen im
 40-s-Abstand), dazu kommt Zustellzeit durchs Mesh — auf einem belebten Knoten wurde für Text ein
@@ -107,14 +107,14 @@ Fenster muss kurz genug sein, um diesen Wraparound sicher zu vermeiden, aber lä
 
 **Wer zuerst kam, gewinnt** — die erste gesehene msg_id (in der Regel die Erstsendung) bleibt die
 nach außen sichtbare, stabile msg_id für Anzeige, meshmap und Feeds, auch wenn spätere Kopien mit
-anderen Bits 30–31 eintreffen:
+anderen Bits 10–11 eintreffen:
 
 ```c
 #define PN_DEDUP_CAPACITY   512
 #define PN_DEDUP_WINDOW_SEC 600    /* >= 10 min, siehe oben */
 
 typedef struct {
-    uint32_t core_id;         /* msg_id & 0x3FFFFFFFu -- der stabile Teil */
+    uint32_t core_id;         /* msg_id & 0xFFFFF3FFu -- der stabile Teil */
     uint32_t first_msg_id;    /* ORIGINAL-msg_id der zuerst gesehenen Kopie,
                                 * unverändert -- das ist die Kennung, die
                                 * downstream (Anzeige, meshmap, Feeds) zu
@@ -153,7 +153,7 @@ static pn_dedup_entry_t *pn_dedup_find(uint32_t core_id, time_t now)
 pn_dedup_entry_t *pn_dedup_register(uint32_t msg_id, const char *dest_call,
                                      time_t now, bool *is_first_copy)
 {
-    uint32_t core_id = msg_id & 0x3FFFFFFFu;
+    uint32_t core_id = msg_id & 0xFFFFF3FFu;
 
     pn_dedup_entry_t *e = pn_dedup_find(core_id, now);
     if (e != NULL)
@@ -343,14 +343,14 @@ vom Textende keine PN.
 - **Server zuerst, vor jeder Absender-Firmware** (Konzeptpapier 4.1, 7.5). Ohne die Server-Änderung
   würde jede Wiederholung ungefiltert an alle Gateways gehen (Kap. 4).
 - Die Server-Änderung selbst ist **rückwärtskompatibel**: alte Gateways und alte Absender-Firmware
-  erzeugen nie Wiederholungen mit veränderten Bits 30–31, ihre Erstsendung hat unverändert Bits
-  30–31 = 0 relativ zur Maske — die Maskierung wirkt für sie wie keine Maskierung, weil nie eine
-  zweite Kopie mit denselben unteren 30 Bit eintrifft.
+  erzeugen nie Wiederholungen mit veränderten Bits 10–11, ihre Erstsendung hat unverändert Bits
+  10–11 = 0 relativ zur Maske — die Maskierung wirkt für sie wie keine Maskierung, weil nie eine
+  zweite Kopie mit demselben 30-Bit-Kern eintrifft.
 - **Gemischte Flotte über Monate**: 69 % der Knoten liefen zum Erhebungszeitpunkt auf Firmware älter
   als 4.35t (Konzeptpapier 2.6). Alte Gateways laden jede Wiederholung roh hoch, sobald es sie gibt
-  (sie haben so oder so kein eigenes Wissen über Bit 30–31); der Server sieht sie wie jede andere
+  (sie haben so oder so kein eigenes Wissen über Bit 10–11); der Server sieht sie wie jede andere
   Kopie und behandelt sie nach den Regeln aus Kap. 3–5, unabhängig von der Gateway-Firmware.
-- Erst wenn der Server produktiv auf `msg_id & 0x3FFFFFFFu` dedupliziert und eine Weiterreiche-Regel
+- Erst wenn der Server produktiv auf `msg_id & 0xFFFFF3FFu` dedupliziert und eine Weiterreiche-Regel
   aus Kap. 4 aktiv ist, sollte die erste Absender-Firmware mit der XOR-Wiederholung ausrollen.
 
 ## 8. Offene Fragen (an den Server-Betrieb)
@@ -368,7 +368,7 @@ nicht ersetzt; das Weiterreichen bekommt eine zusätzliche Filterstufe, keine ne
 
 ## 9. Testvorschlag
 
-1. Vier Frames derselben PN erzeugen: gleiche unteren 30 Bit der msg_id, Bits 30–31 = `X`,
+1. Vier Frames derselben PN erzeugen: gleicher 30-Bit-Kern der msg_id, Bits 10–11 = `X`,
    `X⊕1`, `X⊕2`, `X⊕3` (Original-XOR, nicht schrittweise, Konzeptpapier 4.3), FCS je neu berechnet,
    `{NNN` und Text identisch.
 2. Die vier Frames über **zwei unterschiedliche** simulierte Gateways einspielen (z. B. zwei Kopien
@@ -382,4 +382,4 @@ nicht ersetzt; das Weiterreichen bekommt eine zusätzliche Filterstufe, keine ne
      kürzlich gehört haben.
    - Eine fünfte, künstlich verspätete Kopie (nach Ablauf des 10-Minuten-Fensters) wird als **neue**
      PN behandelt — das Fenster muss endlich sein, nicht als Regressionsfreibrief für eine echte neue
-     PN mit zufällig gleichen unteren 30 Bit (Wraparound, Kap. 3).
+     PN mit zufällig gleichem 30-Bit-Kern (Wraparound, Kap. 3).

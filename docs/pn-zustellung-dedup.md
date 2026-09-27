@@ -36,7 +36,7 @@ Wiederholungen, Dedup und Rückwärtskompatibilität — eine Auslegeordnung
    Server-Anpassung jede Wiederholung in allen Regionen ausgestrahlt. Die Server-Änderung muss
    deshalb **vor** der ersten Absender-Firmware kommen.
 5. **a) und b) sind derselbe Mechanismus**: beide geben der Wiederholung für die Relais eine neue
-   msg_id und lassen sie woanders als dieselbe PN wiedererkennen — a) an den unteren 30 Bit der msg_id,
+   msg_id und lassen sie woanders als dieselbe PN wiedererkennen — a) am 30-Bit-Kern der msg_id,
    b) an Absender und NNN. Sie lassen sich nahtlos kombinieren.
 6. **Empfehlung:** Server zuerst, dann Voraussetzung V (Abbruch nur durch echte Quittung) plus a) in
    einer XOR-Form, nur für PN. Die Erstsendung bleibt dabei byte-gleich zu heute. Für eine längere
@@ -275,7 +275,8 @@ Relais — alte wie neue — sie weiterleiten. Beide lassen alle anderen Abnehme
 einen zweiten Schlüssel als dieselbe PN wiedererkennen. **Der einzige echte Unterschied ist, woran
 wiedererkannt wird:**
 
-- **a)**: an den unteren 30 Bit der msg_id — binär im Kopf des Frames, ohne den Text zu lesen.
+- **a)**: am 30-Bit-Kern der msg_id (Bit 10–11 ausgeblendet) — binär im Kopf des Frames, ohne den
+  Text zu lesen.
 - **b)**: an (Absender, NNN) — die `{NNN` steht am Ende des Textes.
 
 Die NNN ist in a) übrigens für alle Aussendungen ebenfalls gleich. Ein Empfänger mit neuer Firmware
@@ -292,7 +293,7 @@ identisch, und der Unterschied bliebe auf den Server und auf die Zahl möglicher
 | Knoten normalisiert für App, mcapp, Web-GUI       | gleich                   | gleich                             |
 | Alte Empfänger zeigen Kopien                      | gleich (je Aussendung 1) | gleich (je Aussendung 1)           |
 | Server-Weiterleitung an Gateways klären           | gleich                   | gleich                             |
-| **Wiedererkennen im Server**                      | Bit-Maske `& 0x3FFFFFFF` | `{NNN` aus dem Text lesen          |
+| **Wiedererkennen im Server**                      | Bit-Maske `& 0xFFFFF3FF` | `{NNN` aus dem Text lesen          |
 | **Max. Aussendungen**                             | 4 (3 Codes)              | beliebig                           |
 | **Knotenkennung in der msg_id**                   | 20 Bit für Dedup         | volle 22 Bit                       |
 | **meshmap**                                       | Maske                    | NNN aus dem Feed oder Inhaltsdedup |
@@ -304,18 +305,26 @@ frische msg_id nach b). Ähnlich macht es MeshCore: 2-Bit-Zähler für die erste
 Relais (sie prüfen nur die msg_id), bricht die APRS-IS-Dedup und zeigt die Marke bei alten Empfängern
 und auf aprs.fi.
 
-### 4.3 a) Wiederholungszähler in den Bits 30–31 (OE1KBC), in XOR-Form
+### 4.3 a) Wiederholungszähler in Bit 10–11, in XOR-Form
 
-**Kurts Entwurf**: Erstsendung `00`, Wiederholungen `01`/`10`/`11` in Bit 30–31. Weil diese Bits heute
-die obersten zwei Bits der Knotenkennung sind (2.1), würde schon die Erstsendung für drei von vier
-Knoten ihre msg_id ändern.
+**Kurts Grundidee** (OE1KBC, `docs/wiederholungen.md`): zwei Bit im Kopf der msg_id zeigen die
+Wiederholungsnummer, `00`/`01`/`10`/`11`. Variante a) verfeinert das zur XOR-Form und legt die zwei
+Bit auf Position 10–11 der msg_id — Bit 0–1 von `_GW_ID`, das niedrigste Byte der MAC-Adresse —
+statt auf die obersten zwei Bit der 22-Bit-Knotenkennung.
 
-**XOR-Form (Vorschlag)**: Wiederholung k (1..3) bekommt in Bit 30–31 die Original-Bits aus `_GW_ID`
-XOR k. Schreibweise im Folgenden: X⊕k.
+**XOR-Form**: Wiederholung k (1..3) bekommt in Bit 10–11 die Original-Bits aus `_GW_ID` XOR k.
+Schreibweise im Folgenden: X⊕k.
 
 - Die Erstsendung bleibt byte-gleich zu heute; `msg_id >> 10` kennzeichnet bei ihr weiterhin den Knoten.
-- Wiederholungen unterscheiden sich nur in Bit 30–31, die unteren 30 Bit bleiben gleich. Für jeden
-  Vergleich genügt `id & 0x3FFFFFFF`.
+- Wiederholungen unterscheiden sich nur in Bit 10–11, alle anderen Bit bleiben gleich. Für jeden
+  Vergleich genügt `id & 0xFFFFF3FF`.
+- **Warum Bit 10–11 und nicht die obersten zwei Bit**: Espressif vergibt jedem ESP32-Chip vier
+  fortlaufende MAC-Adressen (STA, AP, BT, ETH) ab einer durch 4 teilbaren Basisadresse, sodass Bit 0–1
+  des letzten MAC-Byte — und damit Bit 10–11 der msg_id — bei praktisch jedem ESP32 `00` sind (97 % der
+  Flotte, Stichprobe meshmap 27.09.2026), während die obersten zwei Bit der Knotenkennung effektiv zufällig sind; auf
+  Bit 10–11 liest die Wiederholungsnummer k bei fast der gesamten Flotte schon direkt als k, Kurts
+  Tabelle 00/01/10/11 gilt dort unverändert, und die XOR-Form hält auch die übrigen Knoten (überwiegend
+  nRF52/RAK mit effektiv zufälligen Bits) korrekt.
 - **k immer auf die Original-Bits anwenden, nie auf die vorige Kopie.** Die Wiederholung kopiert heute
   den vorigen Ringeintrag (`src/lora_functions.cpp:2170`); schrittweises XOR auf die Kopie ergäbe 01,
   11, 00, und die dritte Wiederholung wäre wieder das Original.
@@ -331,17 +340,19 @@ XOR k. Schreibweise im Folgenden: X⊕k.
   - Bits in der Ringkopie setzen **und FCS neu berechnen** (2.1).
   - Jede Wiederholungs-msg_id in den eigenen Dedup-Ring eintragen, damit das eigene Echo nicht als
     fremde Meldung gilt.
-  - Echo-Abgleich (`src/lora_functions.cpp:590-637`) und `findAndStopRingSlot` auf 30 Bit. Das genügt,
-    weil beide nur die eigenen aktiven Ringeinträge durchsuchen (`:267`). Die ACK-Rekonstruktion
-    (`:1041`, `src/udp_functions.cpp:422`, `src/nrf52/nrf_eth.cpp:561`) liefert ohnehin die
-    Original-msg_id und bleibt unverändert.
+  - `findAndStopRingSlot` vergleicht auf dem 30-Bit-Kern (`src/lora_functions.cpp:268`). Das genügt,
+    weil nur eigene Texte mit Wiederholungsstatus im Ring altern; weitergeleitete und fremde Einträge
+    stehen auf 0xFF. Der Echo-Abgleich (`:594-612`) bleibt ein exakter 4-Byte-Vergleich gegen die
+    msg_id der gerade wartenden Kopie: Ein Echo einer älteren Kopie startet die Wartezeit nicht neu,
+    das ist harmlos. Die ACK-Rekonstruktion (`:1109`, `src/udp_functions.cpp:422`,
+    `src/nrf52/nrf_eth.cpp:561`) liefert ohnehin die Original-msg_id und bleibt unverändert.
   - Die eigenen Wiederholungen **nicht** in `own_msg_id` eintragen und `checkOwnTx` nicht generell
     maskieren. Gateways führen dort auch fremde, vom Server eingespeiste msg_ids (2.4), und
     `own_msg_id[..][4]` ist nur ein Statusbyte, kein Herkunftsmerkmal (`src/loop_functions.cpp:736`).
     Ein maskierter Vergleich würde eine fremde Wiederholung X⊕1 als eigenes Echo behandeln und sie
     weder weiterleiten noch hochladen (`src/lora_functions.cpp:870`, `:897`). Eigene Wiederholungen
-    erkennt der Knoten stattdessen am Knotentest in 30-Bit-Form:
-    `((id & 0x3FFFFFFF) >> 10) == (_GW_ID & 0xFFFFF)`. Das spart außerdem 3 der 20 Plätze in
+    erkennt der Knoten stattdessen am Knotentest, der Bit 10–11 durch die Verschiebung ausblendet:
+    `(id >> 12) == ((_GW_ID >> 2) & 0xFFFFF)`. Das spart außerdem 3 der 20 Plätze in
     `own_msg_id` pro PN (`MAX_RING` 20).
   - Status "gehört" ans Telefon mit der Original-msg_id melden. Nur `src/lora_functions.cpp:880` kann
     eine Wiederholungs-msg_id tragen; die übrigen Statuspfade betreffen binäre ACKs oder Gruppen.
@@ -353,7 +364,7 @@ XOR k. Schreibweise im Folgenden: X⊕k.
   38 min). Das Risiko einer Fehlerkennung ist dieselbe Klasse wie beim heutigen Dedup, nur auf 30 statt
   32 Bit, und die Folge ist milder (die Meldung wird weiter weitergeleitet und quittiert). Der
   Server-Pfad bleibt unverändert (2.2); dort muss der Server die Wiederholungen abfangen.
-- **Server** (Annahme zu seinem heutigen Verhalten): Dedup-Schlüssel `id & 0x3FFFFFFF` — eine
+- **Server** (Annahme zu seinem heutigen Verhalten): Dedup-Schlüssel `id & 0xFFFFF3FF` — eine
   UND-Operation, sofern er heute über die msg_id dedupliziert.
 
 **Wo normalisiert wird — Server oder Gateway:**
@@ -591,17 +602,18 @@ In Worten, vom Absender bis zum Server:
 2. **Der Absender wartet auf `:ackNNN`, nicht auf ein Echo.** Hört er nur ein Echo, weiß er: unterwegs,
    aber noch nicht angekommen. Er markiert "gehört" und wartet etwas länger bis zur nächsten
    Aussendung. Kommt `:ackNNN` — über Funk oder über den Server —, hört er auf.
-3. **Jede Wiederholung bekommt eine leicht veränderte msg_id**: die obersten zwei Bits werden mit der
-   Wiederholungsnummer (1, 2, 3) XOR-verknüpft, immer ausgehend vom Original. Die unteren 30 Bit —
-   20 Bit Knotenkennung plus laufende Nummer — bleiben gleich. Die FCS wird neu berechnet.
+3. **Jede Wiederholung bekommt eine leicht veränderte msg_id**: Bit 10–11 werden mit der
+   Wiederholungsnummer (1, 2, 3) XOR-verknüpft, immer ausgehend vom Original. Der restliche
+   30-Bit-Kern — 20 Bit Knotenkennung plus 10 Bit laufende Nummer — bleibt gleich. Die FCS wird neu
+   berechnet.
 4. **Jedes Relais, alt oder neu, sieht eine neue msg_id und leitet weiter.** An den Relais ändert sich
    nichts.
-5. **Der Empfänger mit neuer Firmware erkennt die Wiederholung** an den unteren 30 Bit (oder an Absender
+5. **Der Empfänger mit neuer Firmware erkennt die Wiederholung** am 30-Bit-Kern (oder an Absender
    und NNN), zeigt die PN nur einmal an, gibt sie nur einmal an Telefon, Web-GUI und Server weiter —
    und **quittiert trotzdem jede Kopie**, damit eine verlorene Quittung ersetzt wird.
 6. **Ein Empfänger mit alter Firmware** zeigt jede Wiederholung als eigene Nachricht (bis zu 4-mal) und
    quittiert jede. Die PN kommt also an; der Schönheitsfehler verschwindet mit dem Update.
-7. **Der Server** erkennt alle Kopien einer PN mit einer UND-Maske (`id & 0x3FFFFFFF`) als eine, zeigt
+7. **Der Server** erkennt alle Kopien einer PN mit einer UND-Maske (`id & 0xFFFFF3FF`) als eine, zeigt
    sie einmal an und gibt sie einmal an APRS-IS und meshmap weiter. Er entscheidet außerdem, ob und an
    welche Gateways er eine Wiederholung weiterreicht.
 8. **App, mcapp und Web-GUI** bleiben unverändert, weil ihr Knoten die Kopien schon herausfiltert.
@@ -609,24 +621,24 @@ In Worten, vom Absender bis zum Server:
 9. **Gruppen und `*`** bleiben, wie sie sind.
 
 **a) und b) liegen dabei eng beieinander** (4.2). Beide geben der Wiederholung für die Relais eine neue
-Kennung und lassen sie woanders wiedererkennen. a) erkennt an den unteren 30 Bit der msg_id, b) an
+Kennung und lassen sie woanders wiedererkennen. a) erkennt am 30-Bit-Kern der msg_id, b) an
 Absender und NNN. Den Ausschlag für a) als ersten Schritt gibt der Server: eine Bit-Maske im Kopf des
 Frames ist einfacher als das Lesen der NNN aus dem Text. Wo mehr als 4 Aussendungen gebraucht werden,
 schließt b) nahtlos an.
 
 ### 7.2 Wirkung im Vergleich
 
-| Aspekt                             | V + a) XOR            | V + b)                 | V + c)                        |
-| ---------------------------------- | --------------------- | ---------------------- | ----------------------------- |
-| Wirkt ab dem ersten neuen Absender | ja, flottenweit       | ja, flottenweit        | nur auf rein neuen Wegen      |
-| Löst P1 (Abbruch zu früh)          | ja (durch V)          | ja (durch V)           | ja (durch V)                  |
-| Löst P2 (Dedup)                    | ja                    | ja                     | selten                        |
-| Löst P3 (kein Re-ACK)              | ja                    | ja                     | nur bei neuen Empfängern      |
-| Wiedererkennen über                | untere 30 Bit msg_id  | Absender + NNN         | gleiche msg_id                |
-| Server-Aufwand (Annahme)           | Maske + Weiterreichen | Parser + Weiterreichen | keiner                        |
-| Anzeige bei alten Empfängern       | bis 4×                | bis 4× bzw. 9×         | 1×                            |
-| Längere Leitern (9er, Verwahrung)  | nein, nur mit b)      | ja                     | ja                            |
-| Vorbild                            | MeshCore              | MeshCore (Ausbau)      | Meshtastic (mit Relais-Hilfe) |
+| Aspekt                             | V + a) XOR             | V + b)                 | V + c)                        |
+| ---------------------------------- | ---------------------- | ---------------------- | ----------------------------- |
+| Wirkt ab dem ersten neuen Absender | ja, flottenweit        | ja, flottenweit        | nur auf rein neuen Wegen      |
+| Löst P1 (Abbruch zu früh)          | ja (durch V)           | ja (durch V)           | ja (durch V)                  |
+| Löst P2 (Dedup)                    | ja                     | ja                     | selten                        |
+| Löst P3 (kein Re-ACK)              | ja                     | ja                     | nur bei neuen Empfängern      |
+| Wiedererkennen über                | 30-Bit-Kern der msg_id | Absender + NNN         | gleiche msg_id                |
+| Server-Aufwand (Annahme)           | Maske + Weiterreichen  | Parser + Weiterreichen | keiner                        |
+| Anzeige bei alten Empfängern       | bis 4×                 | bis 4× bzw. 9×         | 1×                            |
+| Längere Leitern (9er, Verwahrung)  | nein, nur mit b)       | ja                     | ja                            |
+| Vorbild                            | MeshCore               | MeshCore (Ausbau)      | Meshtastic (mit Relais-Hilfe) |
 
 ### 7.3 Was wir gewinnen
 
@@ -665,7 +677,7 @@ schließt b) nahtlos an.
 ### 7.5 Empfehlung und Reihenfolge
 
 1. **Server zuerst** (vor jeder Absender-Firmware):
-   - Dedup für Anzeige, APRS-IS und meshmap auf `id & 0x3FFFFFFF`.
+   - Dedup für Anzeige, APRS-IS und meshmap auf `id & 0xFFFFF3FF`.
    - Weiterreichen an Gateways festlegen: eine Wiederholung nur an Gateways, die das Ziel gehört haben,
      oder gar nicht.
 2. **Firmware Stufe 1: V + a) in XOR-Form, nur für PN.** Prüfliste aus 4.3:

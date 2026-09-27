@@ -6,7 +6,7 @@ Stand: 27.09.2026, DK5EN. Bezug: Konzeptpapier "Verlässliche Zustellung persön
 
 ## 1. Kurzfassung
 
-**An einem Knoten mit der neuen Firmware (Variante a, XOR-Zähler in Bit 30–31) muss die App nicht
+**An einem Knoten mit der neuen Firmware (Variante a, XOR-Zähler in Bit 10–11) muss die App nicht
 geändert werden.** Der Knoten filtert die Wiederholungen schon vor der Übergabe ans Telefon: nur
 die erste Kopie einer PN geht als Text-Frame über BLE/Seriell hinaus, und die binäre Quittung
 (0x41) trägt immer die aus `:ackNNN` rekonstruierte **Original**-msg_id
@@ -237,26 +237,26 @@ von diesem Konzept unberührt (siehe Abschnitt 4).
 
 ## 3. Empfohlene Änderungen
 
-### a) Dedup beim Schreiben: auf die unteren 30 Bit + Zeitfenster prüfen
+### a) Dedup beim Schreiben: auf den 30-Bit-Kern + Zeitfenster prüfen
 
-**Warum ein Fenster nötig ist:** die unteren 30 Bit der msg_id enthalten 20 Bit Knotenkennung plus
-den 10-Bit-Zähler `node_msgid` (0–999, Konzeptpapier §2.1, §4.3). Dieser Zähler wird von allen
-Meldungsarten geteilt und läuft laut Konzeptpapier "in weniger als einer Stunde" durch alle 1000
-Werte. Ein reiner Vergleich auf `fromCall` + maskierte `msgNr` ohne Zeitgrenze würde nach einem
-Wrap zwei völlig unabhängige, spätere Nachrichten fälschlich als Duplikat behandeln. Ein Fenster
-von z. B. 10 Minuten deckt die komplette XOR-Leiter (bis zu 3 Wiederholungen im 40-s-Abstand, siehe
-Konzeptpapier §2.3/§4.3, also ≤ 120 s plus Funklaufzeit) mit deutlichem Spielraum ab, bleibt aber
-weit unter der Zeit, die der Zähler zum Umlauf braucht.
+**Warum ein Fenster nötig ist:** der 30-Bit-Kern der msg_id (Bit 10–11 ausgeblendet) enthält 20 Bit
+Knotenkennung (Bit 12–31) plus den 10-Bit-Zähler `node_msgid` (0–999, Bit 0–9, Konzeptpapier §2.1,
+§4.3). Dieser Zähler wird von allen Meldungsarten geteilt und läuft laut Konzeptpapier "in weniger
+als einer Stunde" durch alle 1000 Werte. Ein reiner Vergleich auf `fromCall` + maskierte `msgNr`
+ohne Zeitgrenze würde nach einem Wrap zwei völlig unabhängige, spätere Nachrichten fälschlich als
+Duplikat behandeln. Ein Fenster von z. B. 10 Minuten deckt die komplette XOR-Leiter (bis zu 3
+Wiederholungen im 40-s-Abstand, siehe Konzeptpapier §2.3/§4.3, also ≤ 120 s plus Funklaufzeit) mit
+deutlichem Spielraum ab, bleibt aber weit unter der Zeit, die der Zähler zum Umlauf braucht.
 
 ```ts
 // Vorschlag für DataBaseService.writeTxtMsg (ersetzt den Block ab :283)
-const maskedNr = (msg.msgNr & 0x3fffffff) >>> 0; // untere 30 Bit, siehe Konzeptpapier §4.3
+const maskedNr = (msg.msgNr & 0xfffff3ff) >>> 0; // 30-Bit-Kern, Bit 10-11 ausgeblendet, siehe Konzeptpapier §4.3
 const DEDUP_WINDOW_MS = 10 * 60 * 1000;
 const windowStart = msg.timestamp - DEDUP_WINDOW_MS;
 
-// SQLite beherrscht bitweises UND direkt; 1073741823 = 0x3FFFFFFF
+// SQLite beherrscht bitweises UND direkt; 4294964223 = 0xFFFFF3FF
 const res = await DatabaseService.db.query(
-  `SELECT * FROM TextMessages WHERE (msgNr & 1073741823) = ${maskedNr} AND fromCall = '${msg.fromCall}' AND timestamp > ${windowStart}`,
+  `SELECT * FROM TextMessages WHERE (msgNr & 4294964223) = ${maskedNr} AND fromCall = '${msg.fromCall}' AND timestamp > ${windowStart}`,
 );
 if (res.values && res.values.length > 0) {
   console.log(
@@ -278,15 +278,15 @@ Zwei unabhängige Lücken in `ackTxtMsg` (Abschnitt 2.2):
    eigene Nachricht (Text, Position, HEY, Telemetrie; sie teilen sich denselben Zähler,
    Konzeptpapier §2.1) mit zufällig derselben msg_id würde mitaktualisiert.
 2. Mit Variante a) kommt eine binäre ACK mit der Original-msg_id, muss aber auch dann noch die
-   _richtige_ Zeile treffen, wenn zwei eigene DMs an unterschiedliche Ziele zufällig dieselben
-   unteren 30 Bit tragen (nach einem Zähler-Wrap, siehe a).
+   _richtige_ Zeile treffen, wenn zwei eigene DMs an unterschiedliche Ziele zufällig denselben
+   30-Bit-Kern tragen (nach einem Zähler-Wrap, siehe a).
 
 ```ts
 // Vorschlag für DataBaseService.ackTxtMsg (ersetzt den Query ab :345)
-const maskedNr = (msgNr & 0x3fffffff) >>> 0;
+const maskedNr = (msgNr & 0xfffff3ff) >>> 0;
 const currentCallsign = ConfigObject.getConf().CALL;
 const res = await DatabaseService.db.query(
-  `SELECT * FROM TextMessages WHERE (msgNr & 1073741823) = ${maskedNr} AND fromCall = '${currentCallsign}' AND isDM = 1`,
+  `SELECT * FROM TextMessages WHERE (msgNr & 4294964223) = ${maskedNr} AND fromCall = '${currentCallsign}' AND isDM = 1`,
 );
 ```
 
@@ -294,7 +294,7 @@ Die Einschränkung auf `isDM = 1` ist bewusst: Gruppen-/`*`-Meldungen laufen wei
 msg_id über alle Aussendungen (Konzeptpapier §4.3 "Nur für PN"), ihr ACK-Pfad ändert sich nicht und
 soll von der maskierten PN-Logik nicht mitgetroffen werden. Bleibt nach dieser Einschränkung mehr
 als eine Zeile übrig, ist zusätzlich ein enges Zeitfenster (wie in a) sinnvoll, um zwei eigene DMs
-mit kollidierenden unteren 30 Bit zu trennen.
+mit kollidierendem 30-Bit-Kern zu trennen.
 
 ### c) Statusanzeige: "gesendet" / "gehört" / "quittiert" / neu "unbestätigt"
 
@@ -360,17 +360,17 @@ if (msg_text_.includes("{") && isDM_ === 1) {
 
 ## 5. Testfälle
 
-| #   | Szenario                                                                                                               | Erwartung                                                                                                                                                   |
-| --- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T1  | Knoten mit neuer FW, PN kommt ohne Wiederholung an                                                                     | Ein Chateintrag, `ack` durchläuft 0 → 1 → 2 wie heute                                                                                                       |
-| T2  | Knoten mit neuer FW, 2. Aussendung nötig (Echo, kein ACK)                                                              | Weiterhin ein Chateintrag; Status zeigt "gehört", nach Timeout ggf. "unbestätigt", falls das ACK ausbleibt                                                  |
-| T3  | Knoten mit neuer FW, ACK trifft erst nach der 3. Aussendung ein                                                        | `ackTxtMsg` trifft trotz mehrerer Aussendungen genau die eine Zeile (maskierter Vergleich, 3b); Status springt auf "quittiert"                              |
-| T4  | Knoten mit alter FW, 3 Wiederholungen kommen mit je eigener msg_id an                                                  | Ohne Änderung 3a: bis zu 3 zusätzliche Chateinträge. Mit 3a: maskierter Dedup erkennt sie als dieselbe PN innerhalb des 10-min-Fensters, ein Eintrag bleibt |
-| T5  | Zwei verschiedene PN (fromCall gleich) mit kollidierenden unteren 30 Bit, aber Zeitabstand > 10 min (nach Zähler-Wrap) | Beide erscheinen als getrennte Chateinträge — das Zeitfenster verhindert Fehl-Dedup                                                                         |
-| T6  | Eigene DM an Ziel A und eigene DM an Ziel B kurz hintereinander, zufällig kollidierende untere 30 Bit                  | ACK für A trifft nicht die Zeile von B (3b, `isDM=1` + Zeitfenster)                                                                                         |
-| T7  | Empfangene PN von fremdem Rufzeichen                                                                                   | `{NNN` bleibt im Text (heutiges Verhalten, 2.3) — bzw. wird entfernt, falls 3d umgesetzt wird                                                               |
-| T8  | Manuelles "Resend" nach ausbleibendem ACK                                                                              | Text und Zielrufzeichen erscheinen im Eingabefeld, kein automatischer Versand (Abschnitt 4)                                                                 |
-| T9  | Gruppen-/`*`-Nachricht mit Wiederholung                                                                                | Läuft weiter über den heutigen, unveränderten Pfad (msgNr exakt, kein `isDM`-Filter greift)                                                                 |
+| #   | Szenario                                                                                                            | Erwartung                                                                                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T1  | Knoten mit neuer FW, PN kommt ohne Wiederholung an                                                                  | Ein Chateintrag, `ack` durchläuft 0 → 1 → 2 wie heute                                                                                                       |
+| T2  | Knoten mit neuer FW, 2. Aussendung nötig (Echo, kein ACK)                                                           | Weiterhin ein Chateintrag; Status zeigt "gehört", nach Timeout ggf. "unbestätigt", falls das ACK ausbleibt                                                  |
+| T3  | Knoten mit neuer FW, ACK trifft erst nach der 3. Aussendung ein                                                     | `ackTxtMsg` trifft trotz mehrerer Aussendungen genau die eine Zeile (maskierter Vergleich, 3b); Status springt auf "quittiert"                              |
+| T4  | Knoten mit alter FW, 3 Wiederholungen kommen mit je eigener msg_id an                                               | Ohne Änderung 3a: bis zu 3 zusätzliche Chateinträge. Mit 3a: maskierter Dedup erkennt sie als dieselbe PN innerhalb des 10-min-Fensters, ein Eintrag bleibt |
+| T5  | Zwei verschiedene PN (fromCall gleich) mit kollidierendem 30-Bit-Kern, aber Zeitabstand > 10 min (nach Zähler-Wrap) | Beide erscheinen als getrennte Chateinträge — das Zeitfenster verhindert Fehl-Dedup                                                                         |
+| T6  | Eigene DM an Ziel A und eigene DM an Ziel B kurz hintereinander, zufällig kollidierender 30-Bit-Kern                | ACK für A trifft nicht die Zeile von B (3b, `isDM=1` + Zeitfenster)                                                                                         |
+| T7  | Empfangene PN von fremdem Rufzeichen                                                                                | `{NNN` bleibt im Text (heutiges Verhalten, 2.3) — bzw. wird entfernt, falls 3d umgesetzt wird                                                               |
+| T8  | Manuelles "Resend" nach ausbleibendem ACK                                                                           | Text und Zielrufzeichen erscheinen im Eingabefeld, kein automatischer Versand (Abschnitt 4)                                                                 |
+| T9  | Gruppen-/`*`-Nachricht mit Wiederholung                                                                             | Läuft weiter über den heutigen, unveränderten Pfad (msgNr exakt, kein `isDM`-Filter greift)                                                                 |
 
 ## 6. Aufwand
 

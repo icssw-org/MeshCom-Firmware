@@ -13,15 +13,15 @@ APRS2SOTA. Gruppen, `*` und alle anderen Meldungen verhalten sich wie bisher.
 **Absender**
 
 - Die Erstsendung ist unverändert.
-- Wiederholung k (1–3) einer eigenen PN bekommt in Bit 30–31 der msg_id die Original-Bits (Bit 20–21
-  von `_GW_ID`) XOR k — immer vom Original aus gerechnet, nie von der vorigen Kopie. Die unteren 30 Bit,
-  Text und `{NNN` bleiben gleich; die FCS wird neu berechnet.
+- Wiederholung k (1–3) einer eigenen PN bekommt in Bit 10–11 der msg_id die Original-Bits (Bit 0–1
+  von `_GW_ID`) XOR k — immer vom Original aus gerechnet, nie von der vorigen Kopie. Die restlichen
+  30 Bit, Text und `{NNN` bleiben gleich; die FCS wird neu berechnet.
 - Die Wiederholungskopie wird unter der Ring-Sperre aus dem Ring gelesen (nRF52) und in einem lokalen
   Puffer umgeschrieben (auf nRF52 `static`, wegen des 4-KB-Loop-Tasks). Ihre msg_id kommt in den eigenen
   Dedup-Ring, damit das eigene Echo nicht als fremde Meldung gilt.
 - Ein Echo der eigenen PN bricht die Wiederholung nicht mehr ab, sondern startet die 40-s-Wartezeit neu.
 - Ein `:ackNNN` stoppt die Wiederholung — über LoRa und jetzt auch über den Server-Pfad (ESP32 und
-  nRF52). `findAndStopRingSlot` vergleicht dafür die unteren 30 Bit und ist exportiert.
+  nRF52). `findAndStopRingSlot` vergleicht dafür den 30-Bit-Kern und ist exportiert.
 - "Gehört" (Status 0x00 ans Telefon) wird auch für das Echo einer Wiederholung gemeldet, immer mit der
   Original-msg_id.
 - Höchstens 4 Aussendungen (`MAX_RETRANSMIT` 3, per `static_assert` auf ≤ 3 festgehalten, weil k = 4
@@ -61,7 +61,7 @@ APRS2SOTA. Gruppen, `*` und alle anderen Meldungen verhalten sich wie bisher.
 
 ## Bekannte Grenzen
 
-- **Server zuerst**: Wiederholungen tragen neue msg_ids. Bis der Server auf die unteren 30 Bit
+- **Server zuerst**: Wiederholungen tragen neue msg_ids. Bis der Server auf den 30-Bit-Kern
   dedupliziert und die Weiterleitung an Gateways regelt, zeigt er Wiederholungen mehrfach und reicht
   sie womöglich an alle Gateways weiter (`docs/pn-retry-server.md`).
 - **Server-Pfad im Knoten**: Auf dem UDP/ETH-Pfad laufen Anzeige, BLE und ACK wie bisher vor dem
