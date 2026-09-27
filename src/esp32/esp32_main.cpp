@@ -1056,7 +1056,9 @@ void esp32setup()
     #endif
 
     // Initialize battery reading
-    #if not defined (BOARD_T_DECK_PRO)
+    #if defined(DISABLE_BATTERY)   // opt-out -D DISABLE_BATTERY: board without a battery divider
+    battProbeState = BATT_PROBE_NONE;   // no battery measurement on this board
+    #elif not defined (BOARD_T_DECK_PRO)
 	init_batt();
     #endif
 
@@ -1775,6 +1777,7 @@ void esp32setup()
 
     bleQueue = xQueueCreate(5, sizeof(BleQueueItem));
 
+    #if !defined(DISABLE_BLE)   // opt-out -D DISABLE_BLE: board without a usable BLE controller
     NimBLEDevice::init(strBLEName);
 
     printfdeb("[BLE ]...Device-Address <%s>\n", NimBLEDevice::toString().c_str());
@@ -1866,6 +1869,9 @@ void esp32setup()
     #endif
  
     printfdeb("[BLE ]...Waiting a client connection to notify...\n");
+    #else
+    printfdeb("[BLE ]...disabled (DISABLE_BLE)\n");
+    #endif
     
     // reset GPS-Time parameter
     meshcom_settings.node_date_hour = 0;
@@ -1944,11 +1950,15 @@ void esp32setup()
 // BLE TX Function -> Node to Client
 void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
 {
+    #if defined(DISABLE_BLE)
+    (void)confBuff; (void)conf_len;     // no BLE stack: pTxCharacteristic was never created
+    #else
     if(bBLEDEBUG)
         printfdeb("[LOOP] <%lu> WRITE BLE\n", millis());
 
     pTxCharacteristic->setValue(confBuff, conf_len);
     pTxCharacteristic->notify();
+    #endif
 }
 
 
@@ -1999,7 +2009,7 @@ void esp32loop()
             // von --debug csv entfernen und der Harness faende die Marke nicht.
             Serial.printf("[BOOT];ready;ms;%lu;ip;%d\n", (unsigned long)millis(),
                           (hasIPaddress || meshcom_settings.node_hasIPaddress) ? 1 : 0);
-            #if defined(BENCH_BLE_ADV_LATE)
+            #if defined(BENCH_BLE_ADV_LATE) && !defined(DISABLE_BLE)
             NimBLEDevice::getAdvertising()->start();
             Serial.printf("[BLE ];advertising;started;ms;%lu\n", (unsigned long)millis());
             #endif
@@ -3585,7 +3595,15 @@ void esp32loop()
 
         if (tx_is_active == false && is_receiving == false)
         {
-            #if defined(MODUL_FW_TBEAM)
+            #if defined(DISABLE_BATTERY)
+
+                // Board without battery measurement: report "not measurable", as the
+                // MODUL_FW_TBEAM branch below does without a PMU.
+                global_batt = 0;
+                global_proz = 0;
+                battProbeState = BATT_PROBE_NONE;
+
+            #elif defined(MODUL_FW_TBEAM)
                 int pmu_proz=0;
                 if(PMU != NULL)
                 {
