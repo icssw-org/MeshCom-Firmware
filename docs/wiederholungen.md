@@ -7,6 +7,7 @@
 4. Ausnahmen welche nicht wiederholt werden
 5. Was ist weiters zu beachten
 6. Wie nehmen wir alte FW mit
+
 - [DK5EN] Hinweis zur Gliederung: Die Nummerierung im Text weicht vom Inhaltsverzeichnis ab (Ausnahmen = Kapitel 3, Methoden = Kapitel 4, zweimal Kapitel 5; Variante b) und c) stehen unter Kapitel 5 statt 4). Inhaltlich unverändert gelassen.
 
 ## 1. Textmeldungen an DM
@@ -41,6 +42,7 @@ Die Textmeldungen an DM werden aktuell
     - Zuerst muss das GW-ACK für Gruppen zuverlässig kommen. Gruppen- und *-Texte werden schon heute bis zu dreimal wiederholt, aber byte-gleich: Relais verwerfen die Wiederholung als Duplikat, und das erste Echo bricht ab. Bekämen sie eine eigene Wiederholungs-id, liefe ohne ACK jede Wiederholung über jedes Relais – das vervielfacht die Kanalbelegung.
     - Kein GW in Reichweite (Rainers Frage): dann nicht wiederholen, statt blind dreimal zu senden. Kurts Idee "eigene Pfade prüfen" passt; im Fork kennt die Nachbarschaftsmatrix gehörte Gateways bereits.
     - Der Server-Dedup (siehe Kapitel 4a, 30 Bit) muss dann auch Gruppen abdecken.
+
 ## 3. Ausnahmen welche nicht wiederholt werden
 
 - Alle POS-Meldungen ohne MSB
@@ -56,6 +58,7 @@ Die Textmeldungen an DM werden aktuell
     - `*` (ALL), `100001` (reine Ziffern = Gruppe), `WLNK-1`, `APRS2SOTA`: Ziel ist nicht persönlich.
     - Host-Tests decken `{ping}`, `{pong}{NNN}` und `100001` ab (`test/test_pn_retry`).
 - [DK5EN] **Mit der XOR-Form bekommt keine Meldung "keine MSB" – es wird bei der Erstsendung überhaupt nichts gelöscht.** Im Branch `dk5en-xor` stehen neben den Kommentaren "keine MSB für repeat markieren" in `src/loop_functions.cpp` (7 Stellen) und neben der auskommentierten Zeile `aprsmsg.msg_id = aprsmsg.msg_id & 0x3FFFFFFF;` (in `sendMessage()` und `SendAckMessage()`) jeweils `[DK5EN]`-Hinweise, wie es mit der XOR-Form richtig ist. Die Maske darf nie aktiviert werden: Sie würde die Erstsendung bei rund drei Viertel aller Knoten verändern und `msg_id >> 10` als Knotenkennung zerstören.
+
 ## 4. Welche Methoden sind möglich
 
 ### Variante a) MSG-ID trägt die Info
@@ -70,7 +73,6 @@ Die Textmeldungen an DM werden aktuell
     - @Martin: XOR Verknüpfung der 2 MSB mit dem Widerholungsstatus
         - So bleibt die Erstsendung byte-gleich zu heute, und msg_id >> 10 zeigt weiterhin den Knoten an. Damit geht der Ursprungs Knoten bei der ersten Aussendung nicht verloren
 
-## 5. Was ist weiters zu beachten
 - [DK5EN] **Neuer Vorschlag: statt der 2 MSB die 2 LSB der Knotenkennung nehmen (MSG-ID Bit 10-11), weiterhin per XOR.**
     - Die 2 MSB der MSG-ID (Bit 30-31) sind heute keine freien Bits, sondern Bit 20-21 der Knotenkennung – bei jedem Knoten anders. Deshalb braucht es dort XOR, und die Tabelle oben (00 = Erstmeldung) stimmt dort für keinen festen Wert.
     - Bit 10-11 sind bei 97 % der Knoten (alle ESP32) schon heute 00. **Damit gilt die Tabelle oben wörtlich: 00 = Erstmeldung, 01/10/11 = 1./2./3. Wiederholung.** XOR mit der Wiederholungsnummer k ist nur für die restlichen ~3 % (nRF52) nötig und ergibt für ESP32 genau diese Tabelle.
@@ -80,12 +82,16 @@ Die Textmeldungen an DM werden aktuell
     - Wiedererkennung einer Wiederholung (Relais, Empfänger, Server): MSG-ID mit Maske `0xFFFFF3FF` vergleichen (statt `0x3FFFFFFF` bei der MSB-Variante).
     - Der Branch `dk5en-xor` ist auf die LSB-Variante umgestellt (`src/pn_retry.h`, Host-Tests, Doku). Die übrigen Stellen im Firmware-Code blieben gleich.
 - [DK5EN] Zu "ACK-Meldungen nehmen diese Bits ebenfalls mit": nicht nötig und im Code auch nicht so. Das ACK hat eine eigene, frische MSG-ID (siehe Kapitel 1). Der Absender bildet aus NNN die Original-MSG-ID neu und stoppt die Wiederholung, wenn diese nach der Maske zu einer seiner wartenden Aussendungen passt.
+
+## 5. Was ist weiters zu beachten
 - Zeitabläufe bis eine ACK vom Gateway oder Destination-Call zurück kommt
     - Idee @Kurt: stufenweises ACK-System == wurde überhaupt gehört. Dazu müssen die MESH-Knoten selbst nch mthelfen.
 - Bevor Nachricht aus dem Buffer fällt kontrollieren ob diese wieder eingereiht wurde?
+
 - [DK5EN] Zeitabläufe: Heute wird fest alle 40 s wiederholt. Ein gehörtes Echo startet die Wartezeit neu. Bei gemessenen ~30 s Median-Wartezeit in der Sendewarteschlange pro Hop (DG0OPK-Mitschnitt) dauert ein Mehrhop-Umlauf leicht länger als 40 s – dann geht eine Wiederholung raus, bevor das ACK überhaupt ankommen kann. Vorschlag: steigende Abstände (z. B. 40 / 80 / 160 s), Werte aus Felddaten festlegen. Offen.
 - [DK5EN] Stufenweises ACK: gibt es im Prinzip schon, ohne zusätzliche Aussendung. Das Echo eines Mesh-Knotens setzt den Status "gehört" (0x01), das `:ackNNN` "zugestellt" (0x02). Neu ist nur, dass das Echo die Wiederholung nicht mehr abbricht (Variante V, siehe unten). Ein eigenes ACK pro Mesh-Knoten würde Sendezeit kosten für eine Information, die das Echo gratis liefert.
 - [DK5EN] "Bevor die Nachricht aus dem Buffer fällt": berechtigte Frage. Eine wartende PN könnte im Ring von einer Meldung mit höherer Priorität verdrängt werden. Im Branch noch nicht geprüft – offen.
+
 ### Variante b) @Martin
 - für mich ist im Konzept beantwortet (Kapitel 4.2):
     - Sie ist im Grunde derselbe Mechanismus wie deine Variante a).
@@ -113,6 +119,7 @@ Die Textmeldungen an DM werden aktuell
 
 - [DK5EN] SF/CR/BW ändern heißt harte Netztrennung: alte und neue Knoten hören sich nicht mehr. Das gehört in das MeshCom-5-Konzept (Topologie), nicht in die Wiederholungsfrage – die Wiederholung nach Variante a) funktioniert ohne Trennung.
 - [DK5EN] "FCS über alles": Der eigentliche Gewinn wäre ein CRC16 statt der heutigen Bytesumme. Die Bytesumme erkennt z. B. vertauschte Bytes nicht.
+
 ## 5. Wie nehmen wir alte FW mit
 
 ### Variante a)
