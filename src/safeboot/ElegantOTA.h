@@ -113,7 +113,16 @@ class ElegantOTAClass{
     void onStart(std::function<void()> callable);
     void onProgress(std::function<void(size_t current, size_t final)> callable);
     void onEnd(std::function<void(bool success)> callable);
-    
+
+    // TM-46: fired whenever an in-progress Update session is aborted (stale
+    // session on a new /ota/start, a write failure, a dropped connection, or
+    // a stalled upload) so the caller can clear its own "update in progress"
+    // bookkeeping and re-arm any fallback timeout.
+    void onAbort(std::function<void(const char* reason)> callable);
+    // Aborts the active Update session, if any (no-op otherwise), and fires
+    // the onAbort callback. Safe to call unconditionally.
+    void abortActiveUpdate(const char* reason);
+
   private:
     ELEGANTOTA_WEBSERVER *_server;
 
@@ -125,12 +134,34 @@ class ElegantOTAClass{
     bool _reboot = false;
     unsigned long _reboot_request_millis = 0;
 
+    // Debug-only text from Update.printError(); no longer the source of the
+    // HTTP response body -- the completion handler now answers with
+    // safeboot::OtaSession::reasonName() (see docs/safeboot-ota-contract.md
+    // and src/safeboot/ota_state.h). Still populated so the failure reason
+    // is visible on the serial console.
     String _update_error_str = "";
     unsigned long _current_progress_size;
+
+    // Session bookkeeping (generation, verified-image gate) moved to the
+    // shared safeboot::OtaSession g_ota (src/safeboot/ota_state.h), owned by
+    // main.cpp and driven from the handlers below -- see
+    // docs/safeboot-ota-contract.md. The generation for a disconnect
+    // closure is now read from g_ota.state().generation at upload start,
+    // and the verified-image gate from g_ota.state().image_valid, so this
+    // class no longer keeps its own copies.
+    //
+    // NOTE: the #else (non-AsyncWebServer) branches below this class'
+    // corresponding .cpp still reference the old `_updateGeneration` /
+    // `_ota_image_valid` members and will not compile if
+    // ELEGANTOTA_USE_ASYNC_WEBSERVER is ever set to 0 for a safeboot build.
+    // That branch is dead code today (src/safeboot/* is only pulled into
+    // esp32-safeboot / esp32-S3-safeboot, both ASYNC=1) and was left
+    // otherwise untouched per the wave brief.
 
     std::function<void()> preUpdateCallback = NULL;
     std::function<void(size_t current, size_t final)> progressUpdateCallback = NULL;
     std::function<void(bool success)> postUpdateCallback = NULL;
+    std::function<void(const char* reason)> abortUpdateCallback = NULL;
 };
 
 extern ElegantOTAClass ElegantOTA;

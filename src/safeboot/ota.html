@@ -11,9 +11,15 @@
             color: white;
             display: flex;
             justify-content: center;
-            align-items: center;
-            height: 100vh;
+            align-items: flex-start;
+            min-height: 100vh;
             margin: 0;
+            padding: 20px 0 40px 0;
+        }
+
+        .page {
+            width: 90%;
+            max-width: 640px;
         }
 
         .container {
@@ -22,8 +28,101 @@
             padding: 30px 20px;
             border-radius: 12px;
             box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
-            width: 90%;
+            width: 100%;
             max-width: 450px;
+            margin: 0 auto 20px auto;
+            box-sizing: border-box;
+        }
+
+        .panel {
+            text-align: left;
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto 20px auto;
+            box-sizing: border-box;
+        }
+
+        .panel h2 {
+            font-size: 18px;
+            color: #007BFF;
+            margin: 0 0 15px 0;
+        }
+
+        .panel h3 {
+            font-size: 13px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin: 18px 0 6px 0;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 8px 16px;
+            font-size: 13px;
+        }
+
+        .info-grid label {
+            display: block;
+            color: #888;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .scan-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        #scanAge {
+            font-size: 12px;
+            color: #888;
+        }
+
+        #rescanButton {
+            width: auto;
+            padding: 6px 14px;
+            font-size: 13px;
+        }
+
+        .table-scroll {
+            overflow-x: auto;
+            margin-top: 8px;
+        }
+
+        table.scan-table {
+            width: 100%;
+            min-width: 420px;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        table.scan-table th, table.scan-table td {
+            text-align: left;
+            padding: 4px 8px;
+            border-bottom: 1px solid #2a2a2a;
+            white-space: nowrap;
+        }
+
+        table.scan-table th {
+            color: #888;
+            font-weight: normal;
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+
+        tr.connected td {
+            background-color: rgba(0, 123, 255, 0.22);
+            color: #cfe6ff;
         }
 
         .header {
@@ -87,6 +186,11 @@
             background-color: #0056b3;
         }
 
+        button:disabled {
+            background-color: #444 !important;
+            cursor: not-allowed;
+        }
+
         progress {
             width: 100%;
             height: 20px;
@@ -113,13 +217,47 @@
             font-size: 14px;
             color: #aaa;
             margin-top: 15px;
-						margin-bottom: 15px;
+					margin-bottom: 15px;
+        }
+
+        .state-view {
+            text-align: left;
+            font-size: 13px;
+            color: #bbb;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #2a2a2a;
+        }
+
+        .state-view #stateText {
+            font-size: 14px;
+            color: white;
+            margin-bottom: 4px;
+        }
+
+        .state-view #stateReason {
+            color: #ff8a8a;
+            margin-bottom: 4px;
+        }
+
+        .state-view #fallbackLine {
+            color: #ffcf7a;
+        }
+
+        .state-view #appInvalidNotice {
+            margin-top: 8px;
+            padding: 10px 12px;
+            border: 1px solid #7a2020;
+            border-radius: 8px;
+            background: rgba(255, 80, 80, 0.12);
+            color: #ffb3b3;
         }
 
         path { fill: rgb(175,40,51);}
     </style>
 </head>
 <body>
+    <div class="page">
     <div class="container">
         <svg version="1.0" xmlns="http://www.w3.org/2000/svg"
         width="90.000000pt" height="90.000000pt" viewBox="0 0 128.000000 128.000000"
@@ -188,6 +326,57 @@
         <div class="status" id="status"></div>
 		<button onclick="cancelUpdate()" id="cancelButton">Cancel - Boot into App</button>
 
+        <div class="state-view">
+            <div id="stateText">Idle</div>
+            <div id="stateReason" hidden></div>
+            <div><span id="stateBytes"></span> <span id="statePercent"></span></div>
+            <div id="fallbackLine" hidden></div>
+            <div id="appInvalidNotice" hidden>The firmware image on this node is incomplete (an upload was aborted after it had started writing). There is no previous firmware to fall back to: the node stays in the bootloader until a complete firmware upload succeeds. Select the firmware file and upload again.</div>
+        </div>
+    </div>
+    <div class="panel" id="networkPanel">
+        <h2>Network</h2>
+        <div class="info-grid">
+            <div><label>Node call</label><span id="netCall">-</span></div>
+            <div><label>mDNS name</label><span id="netMdns">-</span></div>
+            <div><label>Mode</label><span id="netMode">-</span></div>
+        </div>
+
+        <h3>Wifi-Client</h3>
+        <div class="info-grid">
+            <div><label>SSID</label><span id="staSsid">-</span></div>
+            <div><label>Connected</label><span id="staConnected">-</span></div>
+            <div><label>BSSID</label><span id="staBssid">-</span></div>
+            <div><label>IP</label><span id="staIp">-</span></div>
+            <div><label>RSSI</label><span id="staRssi">-</span></div>
+            <div><label>Channel</label><span id="staChannel">-</span></div>
+            <div><label>Auth</label><span id="staAuth">-</span></div>
+            <div id="staDisconnectRow" hidden><label>Last disconnect</label><span>reason <span id="staDisconnectReason">0</span>, <span id="staJoinAttempts">0</span> join attempts</span></div>
+        </div>
+
+        <div id="apRow" hidden>
+            <h3>Auto-AP</h3>
+            <div class="info-grid">
+                <div><label>SSID</label><span id="apSsid">-</span></div>
+                <div><label>IP</label><span id="apIp">-</span></div>
+            </div>
+        </div>
+
+        <h3>Scanned access points</h3>
+        <div class="scan-header">
+            <span id="scanAge">scan age 0s</span>
+            <button id="rescanButton" type="button" disabled>Rescan</button>
+        </div>
+        <div class="table-scroll">
+            <table class="scan-table">
+                <thead>
+                    <tr><th>SSID</th><th>RSSI</th><th>Ch</th><th>Auth</th><th>BSSID</th></tr>
+                </thead>
+                <tbody id="scanBody"></tbody>
+            </table>
+        </div>
+    </div>
+
     </div>
 
     <script>
@@ -202,6 +391,311 @@
         const uploadUrl = `http://${hostIP}/ota/upload`;
 		status.textContent = "Please select a file to upload";
         let finishedWithErr = false;
+
+        // ---- network panel + state view -----------------------------------
+        // See docs/safeboot-ota-contract.md for the /ota/info, /ota/state and
+        // /ota/scan JSON shapes this section renders.
+
+        const rescanButton = document.getElementById('rescanButton');
+        const netCall = document.getElementById('netCall');
+        const netMdns = document.getElementById('netMdns');
+        const netMode = document.getElementById('netMode');
+        const staSsid = document.getElementById('staSsid');
+        const staConnected = document.getElementById('staConnected');
+        const staBssid = document.getElementById('staBssid');
+        const staIp = document.getElementById('staIp');
+        const staRssi = document.getElementById('staRssi');
+        const staChannel = document.getElementById('staChannel');
+        const staAuth = document.getElementById('staAuth');
+        const staDisconnectRow = document.getElementById('staDisconnectRow');
+        const staDisconnectReason = document.getElementById('staDisconnectReason');
+        const staJoinAttempts = document.getElementById('staJoinAttempts');
+        const apRow = document.getElementById('apRow');
+        const apSsid = document.getElementById('apSsid');
+        const apIp = document.getElementById('apIp');
+        const scanBody = document.getElementById('scanBody');
+        const scanAge = document.getElementById('scanAge');
+
+        const stateText = document.getElementById('stateText');
+        const stateReason = document.getElementById('stateReason');
+        const stateBytes = document.getElementById('stateBytes');
+        const statePercent = document.getElementById('statePercent');
+        const fallbackLine = document.getElementById('fallbackLine');
+        const appInvalidNotice = document.getElementById('appInvalidNotice');
+
+        const MODE_LABEL = { sta: 'Wifi-Client', ap_sta: 'Auto-AP + Wifi-Client', ap: 'Auto-AP' };
+
+        const STATE_LABEL = {
+            idle: 'Idle',
+            receiving: 'Receiving update...',
+            verifying: 'Verifying...',
+            done: 'Rebooting into the app...',
+            aborted: 'Aborted',
+        };
+
+        // Short English sentence per contract abort reason, the raw reason
+        // kept in parentheses so it still matches the serial log / contract.
+        const REASON_TEXT = {
+            stale_session: 'The previous update session had already expired.',
+            write_failed: 'Writing the firmware image to flash failed.',
+            client_disconnected: 'The browser disconnected during the upload.',
+            stalled: 'No data arrived for 30 seconds; the upload stalled.',
+            incomplete_upload: 'The upload ended before all bytes had arrived.',
+            md5_mismatch: 'The uploaded image failed the checksum check.',
+            begin_failed: 'The device could not start the update.',
+        };
+
+        function reasonSentence(reason) {
+            if (!reason) return '';
+            return (REASON_TEXT[reason] || 'Update aborted.') + ' (' + reason + ')';
+        }
+
+        let uploadInProgress = false;
+        let scanInProgress = false;
+        let staConfigured = false;
+        // Assumed valid until /ota/state says otherwise; also stays true for
+        // older nodes whose /ota/state JSON has no app_valid field at all
+        // (today's behaviour, per the contract's "when missing" case).
+        let appValid = true;
+
+        function updateRescanButton() {
+            rescanButton.disabled = uploadInProgress || scanInProgress || !staConfigured;
+        }
+
+        function updateCancelButton() {
+            const invalid = (appValid === false);
+            cancelBtn.disabled = uploadInProgress || invalid;
+            cancelBtn.style.backgroundColor = cancelBtn.disabled ? '#444' : '#007BFF';
+            cancelBtn.title = invalid ? 'No valid firmware to boot into' : '';
+        }
+
+        function renderInfo(info) {
+            info = info || {};
+            const sta = info.sta || {};
+            const ap = info.ap || {};
+            const scan = info.scan || {};
+
+            netCall.textContent = info.call || '';
+            netMdns.textContent = info.mdns || '';
+            netMode.textContent = MODE_LABEL[info.mode] || info.mode || '';
+
+            staSsid.textContent = sta.ssid || '';
+            staConnected.textContent = sta.connected ? 'yes' : 'no';
+            staBssid.textContent = sta.bssid || '';
+            staIp.textContent = sta.ip || '';
+            staRssi.textContent = (sta.rssi !== undefined && sta.rssi !== null && sta.rssi !== 0)
+                ? sta.rssi + ' dBm' : (sta.connected ? sta.rssi + ' dBm' : '');
+            staChannel.textContent = (sta.channel !== undefined && sta.channel !== null) ? sta.channel : '';
+            staAuth.textContent = sta.auth || '';
+
+            if (!sta.connected) {
+                staDisconnectRow.hidden = false;
+                staDisconnectReason.textContent = (sta.last_disconnect_reason != null) ? sta.last_disconnect_reason : 0;
+                staJoinAttempts.textContent = (sta.join_attempts != null) ? sta.join_attempts : 0;
+            } else {
+                staDisconnectRow.hidden = true;
+            }
+
+            if (ap.active) {
+                apRow.hidden = false;
+                apSsid.textContent = ap.ssid || '';
+                apIp.textContent = ap.ip || '';
+            } else {
+                apRow.hidden = true;
+            }
+
+            const aps = Array.isArray(scan.aps) ? scan.aps.slice() : [];
+            const configuredSsid = sta.ssid || '';
+            const isConfigured = (a) => !!configuredSsid && a.ssid === configuredSsid;
+            const byRssiDesc = (a, b) => (b.rssi || -999) - (a.rssi || -999);
+            const ordered = aps.filter(isConfigured).sort(byRssiDesc)
+                .concat(aps.filter((a) => !isConfigured(a)).sort(byRssiDesc));
+
+            scanBody.innerHTML = '';
+            ordered.forEach((a) => {
+                const tr = document.createElement('tr');
+                if (a.connected) tr.className = 'connected';
+                [a.ssid, (a.rssi != null ? a.rssi : ''), (a.channel != null ? a.channel : ''), a.auth, a.bssid].forEach((val) => {
+                    const td = document.createElement('td');
+                    td.textContent = (val === undefined || val === null) ? '' : val;
+                    tr.appendChild(td);
+                });
+                scanBody.appendChild(tr);
+            });
+
+            scanAge.textContent = 'scan age ' + Math.round((scan.age_ms || 0) / 1000) + 's';
+
+            scanInProgress = !!scan.in_progress;
+            staConfigured = !!sta.configured;
+            updateRescanButton();
+        }
+
+        function renderState(st) {
+            st = st || {};
+            stateText.textContent = STATE_LABEL[st.state] || st.state || '';
+
+            if (st.state === 'aborted' && st.reason) {
+                stateReason.textContent = reasonSentence(st.reason);
+                stateReason.hidden = false;
+            } else {
+                stateReason.textContent = '';
+                stateReason.hidden = true;
+            }
+
+            const received = st.received || 0;
+            const total = st.total || 0;
+            if (total > 0) {
+                stateBytes.textContent = Math.round(received / 1024) + ' kB / ' + Math.round(total / 1024) + ' kB';
+                statePercent.textContent = Math.round((received / total) * 100) + '%';
+            } else {
+                stateBytes.textContent = received ? Math.round(received / 1024) + ' kB' : '';
+                statePercent.textContent = '';
+            }
+
+            // Missing app_valid (older node) keeps today's behaviour: treated
+            // as valid, no notice, fallback line follows fallback_in_ms alone.
+            appValid = (st.app_valid === false) ? false : true;
+            appInvalidNotice.hidden = appValid;
+            updateCancelButton();
+
+            if (appValid && typeof st.fallback_in_ms === 'number' && st.fallback_in_ms >= 0) {
+                fallbackLine.textContent = 'Fallback to app in ' + Math.round(st.fallback_in_ms / 1000) + ' s';
+                fallbackLine.hidden = false;
+            } else {
+                fallbackLine.textContent = '';
+                fallbackLine.hidden = true;
+            }
+
+            // The upload's own XHR only ever sees a transport-level failure
+            // (onerror / non-200); /ota/state carries the real reason once the
+            // firmware has recorded the abort. Prefer it over the generic text
+            // the XHR handler already wrote.
+            if (st.state === 'aborted' && finishedWithErr) {
+                status.textContent = reasonSentence(st.reason);
+            }
+
+            if (st.state === 'done') {
+                armAppReturn('update');
+            } else if (appValid && typeof st.fallback_in_ms === 'number' && st.fallback_in_ms >= 0 && st.fallback_in_ms < 1500
+                       && (st.state === 'idle' || st.state === 'aborted')) {
+                armAppReturn('fallback');
+            }
+        }
+
+        // ---- follow the node back into the app ---------------------------
+        // After a successful update, a cancel, or the fallback timeout the
+        // node reboots into the app on the same address. Stop the OTA polls,
+        // watch GET / until it no longer serves this OTA page, then navigate
+        // there. Give up after 180 s and tell the user to reload by hand.
+        let appReturnTimer = null;
+        let appReturnStarted = 0;
+        function navigateToApp() {
+            window.location.replace(`http://${hostIP}/`);
+        }
+        function armAppReturn(why) {
+            if (appReturnTimer) return;
+            stopStatePolling();
+            stopInfoPolling();
+            appReturnStarted = Date.now();
+            const label = why === 'update' ? 'Update installed, the node is rebooting into the app'
+                        : why === 'cancel' ? 'Cancelled, the node is rebooting into the app'
+                        : 'Fallback: the node is rebooting into the app';
+            status.textContent = label + ' - this page follows automatically...';
+            fallbackLine.hidden = true;
+            const tick = async () => {
+                if (Date.now() - appReturnStarted > 180000) {
+                    clearInterval(appReturnTimer);
+                    appReturnTimer = null;
+                    pollIntervals.appReturn = null;
+                    status.textContent = 'The node did not come back on this address within 3 minutes. Reload the page by hand.';
+                    return;
+                }
+                try {
+                    const res = await fetchWithTimeout(`http://${hostIP}/`);
+                    if (res && res.status === 200) {
+                        const body = await res.text();
+                        if (body.indexOf('<title>MeshCom OTA</title>') < 0) {
+                            clearInterval(appReturnTimer);
+                            appReturnTimer = null;
+                            pollIntervals.appReturn = null;
+                            window.__safeboot.navigate();
+                        }
+                    }
+                } catch (e) {
+                    // node still rebooting
+                }
+            };
+            appReturnTimer = setInterval(tick, 3000);
+            pollIntervals.appReturn = appReturnTimer;
+            setTimeout(tick, 5000);
+            if (window.__safeboot && window.__safeboot._test) window.__safeboot._test.appReturnTick = tick;
+        }
+
+        const supportsAbort = typeof AbortController === 'function';
+
+        function fetchWithTimeout(url) {
+            if (!supportsAbort) return fetch(url);
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 3000);
+            return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+        }
+
+        let infoTimer = null;
+        let stateTimer = null;
+        const pollIntervals = { info: null, state: null, doneTimeout: null };
+
+        async function pollInfoOnce() {
+            try {
+                const res = await fetchWithTimeout(`http://${hostIP}/ota/info`);
+                if (res && res.status === 200) renderInfo(await res.json());
+            } catch (e) {
+                // network hiccup: keep showing the last known info
+            }
+        }
+
+        async function pollStateOnce() {
+            try {
+                const res = await fetchWithTimeout(`http://${hostIP}/ota/state`);
+                if (res && res.status === 200) renderState(await res.json());
+                // non-200: keep the last rendered state visible, per contract
+            } catch (e) {
+                // network hiccup: keep showing the last known state
+            }
+        }
+
+        function startInfoPolling() {
+            if (infoTimer) return;
+            pollInfoOnce();
+            infoTimer = setInterval(pollInfoOnce, 5000);
+            pollIntervals.info = infoTimer;
+        }
+
+        function stopInfoPolling() {
+            if (infoTimer) {
+                clearInterval(infoTimer);
+                infoTimer = null;
+                pollIntervals.info = null;
+            }
+        }
+
+        function startStatePolling() {
+            if (stateTimer) return;
+            pollStateOnce();
+            stateTimer = setInterval(pollStateOnce, 1000);
+            pollIntervals.state = stateTimer;
+        }
+
+        function stopStatePolling() {
+            if (stateTimer) {
+                clearInterval(stateTimer);
+                stateTimer = null;
+                pollIntervals.state = null;
+            }
+        }
+
+        rescanButton.addEventListener('click', () => {
+            fetch(`http://${hostIP}/ota/scan`).catch(() => {});
+        });
 
         // Drag-and-drop functionality
         dropZone.addEventListener('click', () => fileInput.click());
@@ -238,6 +732,12 @@
             }
         });
 
+        function endUpload() {
+            uploadInProgress = false;
+            updateRescanButton();
+            startInfoPolling();
+        }
+
         async function uploadFirmware() {
             const typeSelect = document.getElementById('type');
 
@@ -245,17 +745,21 @@
                 status.textContent = "No firmware file provided!";
                 return;
             }
-						
+
+            uploadInProgress = true;
+            updateRescanButton();
+            stopInfoPolling();
+
             cancelBtn.disabled = true;
             cancelBtn.style.backgroundColor = '#444';
-						
+
 			// Generate MD5 hash of the selected file
             status.textContent = "Genersting MD5 hash...";
             const hash = await calculateMD5(selectedFile);
             //console.log("MD5 hash:", hash);
             status.textContent = "Uploading Firmware...";
 
-			
+
             try {
                 // Start OTA with GET request
                 const startResponse = await fetch(`http://${hostIP}/ota/start?mode=${typeSelect.value}&hash=${hash}`, {
@@ -269,6 +773,7 @@
                 if (startResponse.status !== 200) {
                     status.textContent = `Error Start: ${await startResponse.text()}`;
                     console.log("Error Start:", startResponse);
+                    endUpload();
                     return;
                 } else {
                     status.textContent = "Start successful!";
@@ -299,26 +804,29 @@
                     } else {
                         status.textContent = `Error: ${xhr.status} - ${xhr.responseText}`;
                         finishedWithErr = true;
-                        cancelBtn.style.backgroundColor = '#007BFF';
-                        cancelBtn.disabled = false;
+                        endUpload();
+                        updateCancelButton();
+                        return;
                     }
+                    endUpload();
                 };
 
                 xhr.onerror = () => {
                     status.textContent = 'An error occurred during the upload.';
-                    cancelBtn.style.backgroundColor = '#007BFF';
-                    cancelBtn.disabled = false;
                     finishedWithErr = true;
+                    endUpload();
+                    updateCancelButton();
                 };
 
                 xhr.send(formData);
 
             } catch (error) {
                 status.textContent = `Error: ${error}`;
+                endUpload();
                 //console.error("Error:", error);
             }
         }
-				
+
         async function cancelUpdate(){
             if(!finishedWithErr){
                 status.textContent = "Cancelling Update...";
@@ -330,15 +838,20 @@
                     }
                 });
                 if (cancelResponse.status !== 200) {
-                    status.textContent = `Error Cancel: ${await cancelResponse.text()}`;
+                    const cancelBody = await cancelResponse.text();
+                    if (cancelResponse.status === 409 && cancelBody.trim() === 'app_invalid') {
+                        status.textContent = 'Cancel not possible: no valid firmware to boot into. Upload a complete firmware.';
+                    } else {
+                        status.textContent = `Error Cancel: ${cancelBody}`;
+                    }
                 } else {
-                    status.textContent = "Cancel successful! Rebooting...";
+                    armAppReturn('cancel');
                 }
             } else {
                 status.textContent = "Cancel not possible, upload error!";
             }
         }
-				
+
         function calculateMD5(file) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -352,7 +865,31 @@
         }
 
         /*! Inline SparkMD5 code */
-        (function(factory){if(typeof exports==="object"){module.exports=factory()}else if(typeof define==="function"&&define.amd){define(factory)}else{var glob;try{glob=window}catch(e){glob=self}glob.SparkMD5=factory()}})(function(undefined){"use strict";var add32=function(a,b){return a+b&4294967295},hex_chr=["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f"];function cmn(q,a,b,x,s,t){a=add32(add32(a,q),add32(x,t));return add32(a<<s|a>>>32-s,b)}function md5cycle(x,k){var a=x[0],b=x[1],c=x[2],d=x[3];a+=(b&c|~b&d)+k[0]-680876936|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[1]-389564586|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[2]+606105819|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[3]-1044525330|0;b=(b<<22|b>>>10)+c|0;a+=(b&c|~b&d)+k[4]-176418897|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[5]+1200080426|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[6]-1473231341|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[7]-45705983|0;b=(b<<22|b>>>10)+c|0;a+=(b&c|~b&d)+k[8]+1770035416|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[9]-1958414417|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[10]-42063|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[11]-1990404162|0;b=(b<<22|b>>>10)+c|0;a+=(b&c|~b&d)+k[12]+1804603682|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[13]-40341101|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[14]-1502002290|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[15]+1236535329|0;b=(b<<22|b>>>10)+c|0;a+=(b&d|c&~d)+k[1]-165796510|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[6]-1069501632|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[11]+643717713|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[0]-373897302|0;b=(b<<20|b>>>12)+c|0;a+=(b&d|c&~d)+k[5]-701558691|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[10]+38016083|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[15]-660478335|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[4]-405537848|0;b=(b<<20|b>>>12)+c|0;a+=(b&d|c&~d)+k[9]+568446438|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[14]-1019803690|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[3]-187363961|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[8]+1163531501|0;b=(b<<20|b>>>12)+c|0;a+=(b&d|c&~d)+k[13]-1444681467|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[2]-51403784|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[7]+1735328473|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[12]-1926607734|0;b=(b<<20|b>>>12)+c|0;a+=(b^c^d)+k[5]-378558|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[8]-2022574463|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[11]+1839030562|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[14]-35309556|0;b=(b<<23|b>>>9)+c|0;a+=(b^c^d)+k[1]-1530992060|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[4]+1272893353|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[7]-155497632|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[10]-1094730640|0;b=(b<<23|b>>>9)+c|0;a+=(b^c^d)+k[13]+681279174|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[0]-358537222|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[3]-722521979|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[6]+76029189|0;b=(b<<23|b>>>9)+c|0;a+=(b^c^d)+k[9]-640364487|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[12]-421815835|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[15]+530742520|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[2]-995338651|0;b=(b<<23|b>>>9)+c|0;a+=(c^(b|~d))+k[0]-198630844|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[7]+1126891415|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[14]-1416354905|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[5]-57434055|0;b=(b<<21|b>>>11)+c|0;a+=(c^(b|~d))+k[12]+1700485571|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[3]-1894986606|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[10]-1051523|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[1]-2054922799|0;b=(b<<21|b>>>11)+c|0;a+=(c^(b|~d))+k[8]+1873313359|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[15]-30611744|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[6]-1560198380|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[13]+1309151649|0;b=(b<<21|b>>>11)+c|0;a+=(c^(b|~d))+k[4]-145523070|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[11]-1120210379|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[2]+718787259|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[9]-343485551|0;b=(b<<21|b>>>11)+c|0;x[0]=a+x[0]|0;x[1]=b+x[1]|0;x[2]=c+x[2]|0;x[3]=d+x[3]|0}function md5blk(s){var md5blks=[],i;for(i=0;i<64;i+=4){md5blks[i>>2]=s.charCodeAt(i)+(s.charCodeAt(i+1)<<8)+(s.charCodeAt(i+2)<<16)+(s.charCodeAt(i+3)<<24)}return md5blks}function md5blk_array(a){var md5blks=[],i;for(i=0;i<64;i+=4){md5blks[i>>2]=a[i]+(a[i+1]<<8)+(a[i+2]<<16)+(a[i+3]<<24)}return md5blks}function md51(s){var n=s.length,state=[1732584193,-271733879,-1732584194,271733878],i,length,tail,tmp,lo,hi;for(i=64;i<=n;i+=64){md5cycle(state,md5blk(s.substring(i-64,i)))}s=s.substring(i-64);length=s.length;tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(i=0;i<length;i+=1){tail[i>>2]|=s.charCodeAt(i)<<(i%4<<3)}tail[i>>2]|=128<<(i%4<<3);if(i>55){md5cycle(state,tail);for(i=0;i<16;i+=1){tail[i]=0}}tmp=n*8;tmp=tmp.toString(16).match(/(.*?)(.{0,8})$/);lo=parseInt(tmp[2],16);hi=parseInt(tmp[1],16)||0;tail[14]=lo;tail[15]=hi;md5cycle(state,tail);return state}function md51_array(a){var n=a.length,state=[1732584193,-271733879,-1732584194,271733878],i,length,tail,tmp,lo,hi;for(i=64;i<=n;i+=64){md5cycle(state,md5blk_array(a.subarray(i-64,i)))}a=i-64<n?a.subarray(i-64):new Uint8Array(0);length=a.length;tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(i=0;i<length;i+=1){tail[i>>2]|=a[i]<<(i%4<<3)}tail[i>>2]|=128<<(i%4<<3);if(i>55){md5cycle(state,tail);for(i=0;i<16;i+=1){tail[i]=0}}tmp=n*8;tmp=tmp.toString(16).match(/(.*?)(.{0,8})$/);lo=parseInt(tmp[2],16);hi=parseInt(tmp[1],16)||0;tail[14]=lo;tail[15]=hi;md5cycle(state,tail);return state}function rhex(n){var s="",j;for(j=0;j<4;j+=1){s+=hex_chr[n>>j*8+4&15]+hex_chr[n>>j*8&15]}return s}function hex(x){var i;for(i=0;i<x.length;i+=1){x[i]=rhex(x[i])}return x.join("")}if(hex(md51("hello"))!=="5d41402abc4b2a76b9719d911017c592"){add32=function(x,y){var lsw=(x&65535)+(y&65535),msw=(x>>16)+(y>>16)+(lsw>>16);return msw<<16|lsw&65535}}if(typeof ArrayBuffer!=="undefined"&&!ArrayBuffer.prototype.slice){(function(){function clamp(val,length){val=val|0||0;if(val<0){return Math.max(val+length,0)}return Math.min(val,length)}ArrayBuffer.prototype.slice=function(from,to){var length=this.byteLength,begin=clamp(from,length),end=length,num,target,targetArray,sourceArray;if(to!==undefined){end=clamp(to,length)}if(begin>end){return new ArrayBuffer(0)}num=end-begin;target=new ArrayBuffer(num);targetArray=new Uint8Array(target);sourceArray=new Uint8Array(this,begin,num);targetArray.set(sourceArray);return target}})()}function toUtf8(str){if(/[\u0080-\uFFFF]/.test(str)){str=unescape(encodeURIComponent(str))}return str}function utf8Str2ArrayBuffer(str,returnUInt8Array){var length=str.length,buff=new ArrayBuffer(length),arr=new Uint8Array(buff),i;for(i=0;i<length;i+=1){arr[i]=str.charCodeAt(i)}return returnUInt8Array?arr:buff}function arrayBuffer2Utf8Str(buff){return String.fromCharCode.apply(null,new Uint8Array(buff))}function concatenateArrayBuffers(first,second,returnUInt8Array){var result=new Uint8Array(first.byteLength+second.byteLength);result.set(new Uint8Array(first));result.set(new Uint8Array(second),first.byteLength);return returnUInt8Array?result:result.buffer}function hexToBinaryString(hex){var bytes=[],length=hex.length,x;for(x=0;x<length-1;x+=2){bytes.push(parseInt(hex.substr(x,2),16))}return String.fromCharCode.apply(String,bytes)}function SparkMD5(){this.reset()}SparkMD5.prototype.append=function(str){this.appendBinary(toUtf8(str));return this};SparkMD5.prototype.appendBinary=function(contents){this._buff+=contents;this._length+=contents.length;var length=this._buff.length,i;for(i=64;i<=length;i+=64){md5cycle(this._hash,md5blk(this._buff.substring(i-64,i)))}this._buff=this._buff.substring(i-64);return this};SparkMD5.prototype.end=function(raw){var buff=this._buff,length=buff.length,i,tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],ret;for(i=0;i<length;i+=1){tail[i>>2]|=buff.charCodeAt(i)<<(i%4<<3)}this._finish(tail,length);ret=hex(this._hash);if(raw){ret=hexToBinaryString(ret)}this.reset();return ret};SparkMD5.prototype.reset=function(){this._buff="";this._length=0;this._hash=[1732584193,-271733879,-1732584194,271733878];return this};SparkMD5.prototype.getState=function(){return{buff:this._buff,length:this._length,hash:this._hash.slice()}};SparkMD5.prototype.setState=function(state){this._buff=state.buff;this._length=state.length;this._hash=state.hash;return this};SparkMD5.prototype.destroy=function(){delete this._hash;delete this._buff;delete this._length};SparkMD5.prototype._finish=function(tail,length){var i=length,tmp,lo,hi;tail[i>>2]|=128<<(i%4<<3);if(i>55){md5cycle(this._hash,tail);for(i=0;i<16;i+=1){tail[i]=0}}tmp=this._length*8;tmp=tmp.toString(16).match(/(.*?)(.{0,8})$/);lo=parseInt(tmp[2],16);hi=parseInt(tmp[1],16)||0;tail[14]=lo;tail[15]=hi;md5cycle(this._hash,tail)};SparkMD5.hash=function(str,raw){return SparkMD5.hashBinary(toUtf8(str),raw)};SparkMD5.hashBinary=function(content,raw){var hash=md51(content),ret=hex(hash);return raw?hexToBinaryString(ret):ret};SparkMD5.ArrayBuffer=function(){this.reset()};SparkMD5.ArrayBuffer.prototype.append=function(arr){var buff=concatenateArrayBuffers(this._buff.buffer,arr,true),length=buff.length,i;this._length+=arr.byteLength;for(i=64;i<=length;i+=64){md5cycle(this._hash,md5blk_array(buff.subarray(i-64,i)))}this._buff=i-64<length?new Uint8Array(buff.buffer.slice(i-64)):new Uint8Array(0);return this};SparkMD5.ArrayBuffer.prototype.end=function(raw){var buff=this._buff,length=buff.length,tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],i,ret;for(i=0;i<length;i+=1){tail[i>>2]|=buff[i]<<(i%4<<3)}this._finish(tail,length);ret=hex(this._hash);if(raw){ret=hexToBinaryString(ret)}this.reset();return ret};SparkMD5.ArrayBuffer.prototype.reset=function(){this._buff=new Uint8Array(0);this._length=0;this._hash=[1732584193,-271733879,-1732584194,271733878];return this};SparkMD5.ArrayBuffer.prototype.getState=function(){var state=SparkMD5.prototype.getState.call(this);state.buff=arrayBuffer2Utf8Str(state.buff);return state};SparkMD5.ArrayBuffer.prototype.setState=function(state){state.buff=utf8Str2ArrayBuffer(state.buff,true);return SparkMD5.prototype.setState.call(this,state)};SparkMD5.ArrayBuffer.prototype.destroy=SparkMD5.prototype.destroy;SparkMD5.ArrayBuffer.prototype._finish=SparkMD5.prototype._finish;SparkMD5.ArrayBuffer.hash=function(arr,raw){var hash=md51_array(new Uint8Array(arr)),ret=hex(hash);return raw?hexToBinaryString(ret):ret};return SparkMD5});
+        (function(factory){if(typeof exports==="object"){module.exports=factory()}else if(typeof define==="function"&&define.amd){define(factory)}else{var glob;try{glob=window}catch(e){glob=self}glob.SparkMD5=factory()}})(function(undefined){"use strict";var add32=function(a,b){return a+b&4294967295},hex_chr=["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f"];function cmn(q,a,b,x,s,t){a=add32(add32(a,q),add32(x,t));return add32(a<<s|a>>>32-s,b)}function md5cycle(x,k){var a=x[0],b=x[1],c=x[2],d=x[3];a+=(b&c|~b&d)+k[0]-680876936|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[1]-389564586|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[2]+606105819|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[3]-1044525330|0;b=(b<<22|b>>>10)+c|0;a+=(b&c|~b&d)+k[4]-176418897|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[5]+1200080426|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[6]-1473231341|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[7]-45705983|0;b=(b<<22|b>>>10)+c|0;a+=(b&c|~b&d)+k[8]+1770035416|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[9]-1958414417|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[10]-42063|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[11]-1990404162|0;b=(b<<22|b>>>10)+c|0;a+=(b&c|~b&d)+k[12]+1804603682|0;a=(a<<7|a>>>25)+b|0;d+=(a&b|~a&c)+k[13]-40341101|0;d=(d<<12|d>>>20)+a|0;c+=(d&a|~d&b)+k[14]-1502002290|0;c=(c<<17|c>>>15)+d|0;b+=(c&d|~c&a)+k[15]+1236535329|0;b=(b<<22|b>>>10)+c|0;a+=(b&d|c&~d)+k[1]-165796510|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[6]-1069501632|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[11]+643717713|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[0]-373897302|0;b=(b<<20|b>>>12)+c|0;a+=(b&d|c&~d)+k[5]-701558691|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[10]+38016083|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[15]-660478335|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[4]-405537848|0;b=(b<<20|b>>>12)+c|0;a+=(b&d|c&~d)+k[9]+568446438|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[14]-1019803690|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[3]-187363961|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[8]+1163531501|0;b=(b<<20|b>>>12)+c|0;a+=(b&d|c&~d)+k[13]-1444681467|0;a=(a<<5|a>>>27)+b|0;d+=(a&c|b&~c)+k[2]-51403784|0;d=(d<<9|d>>>23)+a|0;c+=(d&b|a&~b)+k[7]+1735328473|0;c=(c<<14|c>>>18)+d|0;b+=(c&a|d&~a)+k[12]-1926607734|0;b=(b<<20|b>>>12)+c|0;a+=(b^c^d)+k[5]-378558|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[8]-2022574463|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[11]+1839030562|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[14]-35309556|0;b=(b<<23|b>>>9)+c|0;a+=(b^c^d)+k[1]-1530992060|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[4]+1272893353|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[7]-155497632|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[10]-1094730640|0;b=(b<<23|b>>>9)+c|0;a+=(b^c^d)+k[13]+681279174|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[0]-358537222|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[3]-722521979|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[6]+76029189|0;b=(b<<23|b>>>9)+c|0;a+=(b^c^d)+k[9]-640364487|0;a=(a<<4|a>>>28)+b|0;d+=(a^b^c)+k[12]-421815835|0;d=(d<<11|d>>>21)+a|0;c+=(d^a^b)+k[15]+530742520|0;c=(c<<16|c>>>16)+d|0;b+=(c^d^a)+k[2]-995338651|0;b=(b<<23|b>>>9)+c|0;a+=(c^(b|~d))+k[0]-198630844|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[7]+1126891415|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[14]-1416354905|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[5]-57434055|0;b=(b<<21|b>>>11)+c|0;a+=(c^(b|~d))+k[12]+1700485571|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[3]-1894986606|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[10]-1051523|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[1]-2054922799|0;b=(b<<21|b>>>11)+c|0;a+=(c^(b|~d))+k[8]+1873313359|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[15]-30611744|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[6]-1560198380|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[13]+1309151649|0;b=(b<<21|b>>>11)+c|0;a+=(c^(b|~d))+k[4]-145523070|0;a=(a<<6|a>>>26)+b|0;d+=(b^(a|~c))+k[11]-1120210379|0;d=(d<<10|d>>>22)+a|0;c+=(a^(d|~b))+k[2]+718787259|0;c=(c<<15|c>>>17)+d|0;b+=(d^(c|~a))+k[9]-343485551|0;b=(b<<21|b>>>11)+c|0;x[0]=a+x[0]|0;x[1]=b+x[1]|0;x[2]=c+x[2]|0;x[3]=d+x[3]|0}function md5blk(s){var md5blks=[],i;for(i=0;i<64;i+=4){md5blks[i>>2]=s.charCodeAt(i)+(s.charCodeAt(i+1)<<8)+(s.charCodeAt(i+2)<<16)+(s.charCodeAt(i+3)<<24)}return md5blks}function md5blk_array(a){var md5blks=[],i;for(i=0;i<64;i+=4){md5blks[i>>2]=a[i]+(a[i+1]<<8)+(a[i+2]<<16)+(a[i+3]<<24)}return md5blks}function md51(s){var n=s.length,state=[1732584193,-271733879,-1732584194,271733878],i,length,tail,tmp,lo,hi;for(i=64;i<=n;i+=64){md5cycle(state,md5blk(s.substring(i-64,i)))}s=s.substring(i-64);length=s.length;tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(i=0;i<length;i+=1){tail[i>>2]|=s.charCodeAt(i)<<(i%4<<3)}tail[i>>2]|=128<<(i%4<<3);if(i>55){md5cycle(state,tail);for(i=0;i<16;i+=1){tail[i]=0}}tmp=n*8;tmp=tmp.toString(16).match(/(.*?)(.{0,8})$/);lo=parseInt(tmp[2],16);hi=parseInt(tmp[1],16)||0;tail[14]=lo;tail[15]=hi;md5cycle(state,tail);return state}function md51_array(a){var n=a.length,state=[1732584193,-271733879,-1732584194,271733878],i,length,tail,tmp,lo,hi;for(i=64;i<=n;i+=64){md5cycle(state,md5blk_array(a.subarray(i-64,i)))}a=i-64<n?a.subarray(i-64):new Uint8Array(0);length=a.length;tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];for(i=0;i<length;i+=1){tail[i>>2]|=a[i]<<(i%4<<3)}tail[i>>2]|=128<<(i%4<<3);if(i>55){md5cycle(state,tail);for(i=0;i<16;i+=1){tail[i]=0}}tmp=n*8;tmp=tmp.toString(16).match(/(.*?)(.{0,8})$/);lo=parseInt(tmp[2],16);hi=parseInt(tmp[1],16)||0;tail[14]=lo;tail[15]=hi;md5cycle(state,tail);return state}function rhex(n){var s="",j;for(j=0;j<4;j+=1){s+=hex_chr[n>>j*8+4&15]+hex_chr[n>>j*8&15]}return s}function hex(x){var i;for(i=0;i<x.length;i+=1){x[i]=rhex(x[i])}return x.join("")}if(hex(md51("hello"))!=="5d41402abc4b2a76b9719d911017c592"){add32=function(x,y){var lsw=(x&65535)+(y&65535),msw=(x>>16)+(y>>16)+(lsw>>16);return msw<<16|lsw&65535}}if(typeof ArrayBuffer!=="undefined"&&!ArrayBuffer.prototype.slice){(function(){function clamp(val,length){val=val|0||0;if(val<0){return Math.max(val+length,0)}return Math.min(val,length)}ArrayBuffer.prototype.slice=function(from,to){var length=this.byteLength,begin=clamp(from,length),end=length,num,target,targetArray,sourceArray;if(to!==undefined){end=clamp(to,length)}if(begin>end){return new ArrayBuffer(0)}num=end-begin;target=new ArrayBuffer(num);targetArray=new Uint8Array(target);sourceArray=new Uint8Array(this,begin,num);targetArray.set(sourceArray);return target}})()}function toUtf8(str){if(/[-￿]/.test(str)){str=unescape(encodeURIComponent(str))}return str}function utf8Str2ArrayBuffer(str,returnUInt8Array){var length=str.length,buff=new ArrayBuffer(length),arr=new Uint8Array(buff),i;for(i=0;i<length;i+=1){arr[i]=str.charCodeAt(i)}return returnUInt8Array?arr:buff}function arrayBuffer2Utf8Str(buff){return String.fromCharCode.apply(null,new Uint8Array(buff))}function concatenateArrayBuffers(first,second,returnUInt8Array){var result=new Uint8Array(first.byteLength+second.byteLength);result.set(new Uint8Array(first));result.set(new Uint8Array(second),first.byteLength);return returnUInt8Array?result:result.buffer}function hexToBinaryString(hex){var bytes=[],length=hex.length,x;for(x=0;x<length-1;x+=2){bytes.push(parseInt(hex.substr(x,2),16))}return String.fromCharCode.apply(String,bytes)}function SparkMD5(){this.reset()}SparkMD5.prototype.append=function(str){this.appendBinary(toUtf8(str));return this};SparkMD5.prototype.appendBinary=function(contents){this._buff+=contents;this._length+=contents.length;var length=this._buff.length,i;for(i=64;i<=length;i+=64){md5cycle(this._hash,md5blk(this._buff.substring(i-64,i)))}this._buff=this._buff.substring(i-64);return this};SparkMD5.prototype.end=function(raw){var buff=this._buff,length=buff.length,i,tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],ret;for(i=0;i<length;i+=1){tail[i>>2]|=buff.charCodeAt(i)<<(i%4<<3)}this._finish(tail,length);ret=hex(this._hash);if(raw){ret=hexToBinaryString(ret)}this.reset();return ret};SparkMD5.prototype.reset=function(){this._buff="";this._length=0;this._hash=[1732584193,-271733879,-1732584194,271733878];return this};SparkMD5.prototype.getState=function(){return{buff:this._buff,length:this._length,hash:this._hash.slice()}};SparkMD5.prototype.setState=function(state){this._buff=state.buff;this._length=state.length;this._hash=state.hash;return this};SparkMD5.prototype.destroy=function(){delete this._hash;delete this._buff;delete this._length};SparkMD5.prototype._finish=function(tail,length){var i=length,tmp,lo,hi;tail[i>>2]|=128<<(i%4<<3);if(i>55){md5cycle(this._hash,tail);for(i=0;i<16;i+=1){tail[i]=0}}tmp=this._length*8;tmp=tmp.toString(16).match(/(.*?)(.{0,8})$/);lo=parseInt(tmp[2],16);hi=parseInt(tmp[1],16)||0;tail[14]=lo;tail[15]=hi;md5cycle(this._hash,tail)};SparkMD5.hash=function(str,raw){return SparkMD5.hashBinary(toUtf8(str),raw)};SparkMD5.hashBinary=function(content,raw){var hash=md51(content),ret=hex(hash);return raw?hexToBinaryString(ret):ret};SparkMD5.ArrayBuffer=function(){this.reset()};SparkMD5.ArrayBuffer.prototype.append=function(arr){var buff=concatenateArrayBuffers(this._buff.buffer,arr,true),length=buff.length,i;this._length+=arr.byteLength;for(i=64;i<=length;i+=64){md5cycle(this._hash,md5blk_array(buff.subarray(i-64,i)))}this._buff=i-64<length?new Uint8Array(buff.buffer.slice(i-64)):new Uint8Array(0);return this};SparkMD5.ArrayBuffer.prototype.end=function(raw){var buff=this._buff,length=buff.length,tail=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],i,ret;for(i=0;i<length;i+=1){tail[i>>2]|=buff[i]<<(i%4<<3)}this._finish(tail,length);ret=hex(this._hash);if(raw){ret=hexToBinaryString(ret)}this.reset();return ret};SparkMD5.ArrayBuffer.prototype.reset=function(){this._buff=new Uint8Array(0);this._length=0;this._hash=[1732584193,-271733879,-1732584194,271733878];return this};SparkMD5.ArrayBuffer.prototype.getState=function(){var state=SparkMD5.prototype.getState.call(this);state.buff=arrayBuffer2Utf8Str(state.buff);return state};SparkMD5.ArrayBuffer.prototype.setState=function(state){state.buff=utf8Str2ArrayBuffer(state.buff,true);return SparkMD5.prototype.setState.call(this,state)};SparkMD5.ArrayBuffer.prototype.destroy=SparkMD5.prototype.destroy;SparkMD5.ArrayBuffer.prototype._finish=SparkMD5.prototype._finish;SparkMD5.ArrayBuffer.hash=function(arr,raw){var hash=md51_array(new Uint8Array(arr)),ret=hex(hash);return raw?hexToBinaryString(ret):ret};return SparkMD5});
+
+        // Test hooks: a host-side page harness (jsdom) drives rendering
+        // directly instead of waiting on real timers/network, and needs a way
+        // to set the file-picker + xhr-error state that the DOM APIs alone
+        // can't reach from outside the closure.
+        window.__safeboot = {
+            renderInfo,
+            renderState,
+            pollIntervals,
+            startInfoPolling,
+            stopInfoPolling,
+            startStatePolling,
+            stopStatePolling,
+            armAppReturn,
+            navigate: navigateToApp,
+            _test: {
+                setSelectedFile(file) { selectedFile = file; },
+                get finishedWithErr() { return finishedWithErr; },
+                get uploadInProgress() { return uploadInProgress; },
+            },
+        };
+
+        startInfoPolling();
+        startStatePolling();
     </script>
 </body>
 </html>
