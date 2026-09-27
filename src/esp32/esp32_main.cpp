@@ -277,6 +277,7 @@ int iTxtLen = 0;
 */
 
 #include <NimBLEDevice.h>
+#include "nimble/porting/nimble/include/os/os_mbuf.h"   // os_msys_num_free() for BLE diagnostics
 
 // Textmessage buffer from phone, hasMsgFromPhone flag indicates new message
 extern char textbuff_phone [MAX_MSG_LEN_PHONE];
@@ -318,6 +319,28 @@ uint8_t iPhoneState=0;
 // Nordic UUID DB is here: https://github.com/NordicSemiconductor/bluetooth-numbers-database
 
 
+// BLE connection diagnostics (bBLEDEBUG): start of the current link, for the link duration on disconnect
+static uint32_t g_ble_conn_start_ms = 0;
+
+// HCI disconnect reasons (0x200 + HCI error code), see nimble/include/nimble/ble.h
+static const char* bleReasonStr(int reason)
+{
+    switch(reason)
+    {
+        case 0x208: return "Supervision Timeout";
+        case 0x213: return "Remote User Terminated";
+        case 0x216: return "Local Host Terminated";
+        case 0x222: return "LL Response Timeout";
+        case 0x23B: return "Unacceptable Conn Params";
+        case 0x23E: return "Failed to Establish";
+        default:    return "other";
+    }
+}
+
+// Connection interval in units of 1.25 ms, printed as ms with two decimals
+#define BLE_ITVL_MS_FMT "%u.%02u"
+#define BLE_ITVL_MS_ARGS(itvl) (unsigned)((itvl) * 125U / 100U), (unsigned)((itvl) * 125U % 100U)
+
 class MyServerCallbacks: public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override 
     {
@@ -325,9 +348,27 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
         config_to_phone_prepare = false;    // set only after app-layer auth via hello
         conffin_sent = false;
         g_ble_conn_handle = connInfo.getConnHandle();
+        g_ble_conn_start_ms = millis();
 
         printfdeb("BLE Connected with: %s\n", connInfo.getAddress().toString().c_str());
-        pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 180);
+
+        // parameters the phone uses for connection setup, before our update request below
+        if(bBLEDEBUG)
+        {
+            Serial.printf("[BLE ];connect;ms;%lu;addr;%s;itvl;" BLE_ITVL_MS_FMT ";lat;%u;tmo;%u;req;30-60/0/4000;wifi;%d;msys;%d\n",
+                (unsigned long)g_ble_conn_start_ms, connInfo.getAddress().toString().c_str(),
+                BLE_ITVL_MS_ARGS(connInfo.getConnInterval()), connInfo.getConnLatency(),
+                (unsigned)connInfo.getConnTimeout() * 10U, (int)WiFi.status(), os_msys_num_free());
+        }
+        /**
+         *  We can use the connection handle here to ask for different connection parameters.
+         *  Args: connection handle, min connection interval, max connection interval
+         *  latency, supervision timeout.
+         *  Units; Min/Max Intervals: 1.25 millisecond increments.
+         *  Latency: number of intervals allowed to skip.
+         *  Timeout: 10 millisecond increments.
+         */
+        pServer->updateConnParams(connInfo.getConnHandle(), 24, 48, 0, 400);
     };
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
@@ -336,7 +377,34 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
         // print the reason for the disconnection in hex
         // https://github.com/apache/mynewt-nimble/blob/master/docs/ble_hs/ble_hs_return_codes.rst
         Serial.printf("BLE disconnected. Reason: 0x%04x\n", reason);
+
+        if(bBLEDEBUG)
+        {
+            unsigned long now = millis();
+            Serial.printf("[BLE ];disconnect;ms;%lu;reason;0x%04x;text;%s;dur;%lu;wifi;%d;msys;%d\n",
+                now, reason, bleReasonStr(reason), now - (unsigned long)g_ble_conn_start_ms,
+                (int)WiFi.status(), os_msys_num_free());
+        }
         //NimBLEDevice::startAdvertising();
+    }
+
+    // negotiated connection parameters after an update (shows whether the phone accepted the 4 s timeout)
+    void onConnParamsUpdate(NimBLEConnInfo& connInfo) override
+    {
+        if(bBLEDEBUG)
+        {
+            Serial.printf("[BLE ];connparams;ms;%lu;itvl;" BLE_ITVL_MS_FMT ";lat;%u;tmo;%u\n",
+                (unsigned long)millis(), BLE_ITVL_MS_ARGS(connInfo.getConnInterval()),
+                connInfo.getConnLatency(), (unsigned)connInfo.getConnTimeout() * 10U);
+        }
+    }
+
+    void onMTUChange(uint16_t MTU, NimBLEConnInfo& connInfo) override
+    {
+        if(bBLEDEBUG)
+        {
+            Serial.printf("[BLE ];mtu;ms;%lu;mtu;%u\n", (unsigned long)millis(), MTU);
+        }
     }
 
 	/********************* Security handled here *********************/
