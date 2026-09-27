@@ -4,13 +4,29 @@
 // "{NNN" (an open brace followed by 1-5 ASCII digits, no closing brace).
 // msg_id is 32 bit, little endian in frame bytes 1..4:
 //   msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (counter & 0x3FF)
-// so msg_id bits 30-31 carry gw_id bits 20-21.
+// so msg_id bits 10-11 carry gw_id bits 0-1; the 10-bit counter sits
+// below, in bits 0-9.
 //
-// Retry k (1..3) flips those two top bits by XOR-ing them with k, always
-// computed from the ORIGINAL id, never step-wise from the previous retry
-// copy. Step-wise XOR on copies cycles 01,11,00 and makes the third retry
-// byte-identical to the original -- that is the regression this header
-// guards against (see pnRetryId and the "no cycle" test).
+// Retry k (1..3) flips those two bits (bits 10-11 of msg_id, bits 0-1 of
+// gw_id) by XOR-ing them with k, always computed from the ORIGINAL id,
+// never step-wise from the previous retry copy. Step-wise XOR on copies
+// cycles 01,11,00 and makes the third retry byte-identical to the
+// original -- that is the regression this header guards against (see
+// pnRetryId and the "no cycle" test).
+//
+// Why bits 10-11 and not the top bits: on ESP32, getMacAddr()
+// (src/esp32/esp32_main.cpp:565) puts the LAST byte of the station MAC
+// into gw_id bits 0-7. Espressif hands each chip four consecutive MAC
+// addresses (STA, AP, BT, ETH), so the base MAC is divisible by 4 and
+// gw_id bits 0-1 read 00 on every ESP32 -- 97% of the fleet in a meshmap sample
+// (2026-09-27).
+// So for ESP32 the first send already carries 00 in msg_id bits 10-11,
+// and retry k reads back literally as k; the XOR keeps it correct for
+// nRF52 boards, where those bits are effectively random. Flipping bits
+// 10-11 lands on a sibling MAC of the SAME chip, which no other node can
+// own, so the relaxed "same PN" match (pnIsOwnNodeId, ignoring bits
+// 10-11) adds no new cross-node id collisions among ESP32 nodes.
+// msg_id >> 12 is stable across all retry attempts.
 //
 // Header-only, no Arduino: usable from host unit tests (native/unity) and
 // from firmware translation units alike.
@@ -23,8 +39,8 @@
 #include <string.h>
 
 // Mask for the 30 non-variant bits of msg_id (everything except the two
-// top "retry variant" bits 30-31).
-#define PN_RETRY_CORE_MASK 0x3FFFFFFFUL
+// "retry variant" bits 10-11).
+#define PN_RETRY_CORE_MASK 0xFFFFF3FFUL
 
 // Strip the retry-variant bits, leaving the stable core of a msg_id
 // (same value for the original and for every retry copy).
@@ -35,38 +51,38 @@ static inline uint32_t pnRetryCore(uint32_t id)
 
 // Compute the msg_id for retry k (0..3) of a PN, given ANY copy of that
 // PN's id (the original or an earlier retry) and the sender's gw_id.
-// k = 0 returns the original id (bits 30-31 taken straight from gw_id).
-// k = 1..3 flips those two bits by XOR against the ORIGINAL bits, so
-// applying this again to a retry copy still lands on the same target --
-// no cycling through intermediate variants.
+// k = 0 returns the original id (bits 10-11 taken straight from gw_id's
+// bits 0-1). k = 1..3 flips those two bits by XOR against the ORIGINAL
+// bits, so applying this again to a retry copy still lands on the same
+// target -- no cycling through intermediate variants.
 static inline uint32_t pnRetryId(uint32_t any_copy_id, uint32_t gw_id, uint8_t k)
 {
-    uint32_t orig_top = (gw_id >> 20) & 0x3u;
-    uint32_t variant = (orig_top ^ (uint32_t)(k & 0x3u)) & 0x3u;
-    return pnRetryCore(any_copy_id) | (variant << 30);
+    uint32_t orig_bits = gw_id & 0x3u;
+    uint32_t variant = (orig_bits ^ (uint32_t)(k & 0x3u)) & 0x3u;
+    return pnRetryCore(any_copy_id) | (variant << 10);
 }
 
 // True if this msg_id (any retry variant included) originates from our
-// own node's gw_id, i.e. bits 10-29 (gw_id's low 20 bits, not the
-// counter -- that lives in bits 0-9) match gw_id's low 20 bits. The
-// retry-variant bits 30-31 are stripped by pnRetryCore() before the
-// compare, so this is true for the original and every retry copy alike.
-// Two different gw_id values that happen to share the same low 20 bits
-// are treated as the same node by design: those 20 bits are all that is
-// visible on the wire.
+// own node's gw_id, i.e. bits 12-31 of id (gw_id's bits 2-21 -- the
+// counter lives in bits 0-9 of id, the retry-variant bits in 10-11)
+// match gw_id's bits 2-21. Both the counter and the retry-variant bits
+// are discarded by the ">> 12" before the compare, so this is true for
+// the original and every retry copy alike. Two different gw_id values
+// that happen to share bits 2-21 are treated as the same node by
+// design: those 20 bits are all that is visible on the wire.
 static inline bool pnIsOwnNodeId(uint32_t id, uint32_t gw_id)
 {
-    return ((pnRetryCore(id)) >> 10) == (gw_id & 0xFFFFFu);
+    return (id >> 12) == ((gw_id >> 2) & 0xFFFFFu);
 }
 
 // Fill out[0..2] with the three retry variants (m = 1,2,3) obtained by
-// flipping id's own top two bits with XOR. When id is the original
+// flipping id's own bits 10-11 with XOR. When id is the original
 // msg_id, out[] holds the three retry copies of it.
 static inline void pnVariantIds(uint32_t id, uint32_t out[3])
 {
     for (uint32_t m = 1; m <= 3; m++)
     {
-        out[m - 1] = id ^ (m << 30);
+        out[m - 1] = id ^ (m << 10);
     }
 }
 

@@ -37,7 +37,8 @@ void OnHeaderDetect(void);
 bool updateRetransmissionStatus(void);
 
 // PN-Wiederholung (Variante a, XOR-Form): stoppt die Wiederholung einer eigenen
-// Meldung. Vergleicht die unteren 30 Bit der msg_id, damit auch eine bereits
+// Meldung. Vergleicht die msg_id mit den beiden Wiederholungsbits 10-11
+// ausmaskiert (PN_RETRY_CORE_MASK, pn_retry.h), damit auch eine bereits
 // mit Wiederholungsbits versehene Ringkopie getroffen wird. Auch vom
 // Server-Pfad (udp_functions.cpp, nrf_eth.cpp) fuer ein :ackNNN aufgerufen.
 // Liefert den Slot oder -1.
