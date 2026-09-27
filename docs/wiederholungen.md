@@ -8,8 +8,6 @@
 5. Was ist weiters zu beachten
 6. Wie nehmen wir alte FW mit
 
-- [DK5EN] Hinweis zur Gliederung: Die Nummerierung im Text weicht vom Inhaltsverzeichnis ab (Ausnahmen = Kapitel 3, Methoden = Kapitel 4, zweimal Kapitel 5; Variante b) und c) stehen unter Kapitel 5 statt 4). Inhaltlich unverändert gelassen.
-
 ## 1. Textmeldungen an DM
 Die Textmeldungen an DM werden aktuell
 #### mit einer MSG-ID belegt welche aus
@@ -62,7 +60,7 @@ Die Textmeldungen an DM werden aktuell
 ## 4. Welche Methoden sind möglich
 
 ### Variante a) MSG-ID trägt die Info
-- Wir nehmen 2 MSB Bits der MSG-IDfür die Wiederholungskennung
+- Wir nehmen 2 LSB Bits der MSG-IDfür die Wiederholungskennung
     - '00 ... Erstmeldung
     - '01 ... 1. Wiederholung
     - '10 ... 2. Wiederholung
@@ -70,7 +68,7 @@ Die Textmeldungen an DM werden aktuell
 - ACK-Medlungen nehmen diese Bits-ebenfalls mit
 
 - Hinweise dazu:
-    - @Martin: XOR Verknüpfung der 2 MSB mit dem Widerholungsstatus
+    - @Martin: XOR Verknüpfung der 2 LSB mit dem Widerholungsstatus
         - So bleibt die Erstsendung byte-gleich zu heute, und msg_id >> 10 zeigt weiterhin den Knoten an. Damit geht der Ursprungs Knoten bei der ersten Aussendung nicht verloren
 
 - [DK5EN] **Neuer Vorschlag: statt der 2 MSB die 2 LSB der Knotenkennung nehmen (MSG-ID Bit 10-11), weiterhin per XOR.**
@@ -120,7 +118,7 @@ Die Textmeldungen an DM werden aktuell
 - [DK5EN] SF/CR/BW ändern heißt harte Netztrennung: alte und neue Knoten hören sich nicht mehr. Das gehört in das MeshCom-5-Konzept (Topologie), nicht in die Wiederholungsfrage – die Wiederholung nach Variante a) funktioniert ohne Trennung.
 - [DK5EN] "FCS über alles": Der eigentliche Gewinn wäre ein CRC16 statt der heutigen Bytesumme. Die Bytesumme erkennt z. B. vertauschte Bytes nicht.
 
-## 5. Wie nehmen wir alte FW mit
+## 6. Wie nehmen wir alte FW mit
 
 ### Variante a)
 
