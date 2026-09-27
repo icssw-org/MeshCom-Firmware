@@ -267,6 +267,12 @@ static bool extTxqAckInvalidateIfOwned(int slot)
  */
 int findAndStopRingSlot(uint32_t msgId)
 {
+    // Also called from the server-ACK path (udp_functions.cpp, nrf_eth.cpp);
+    // on nRF52 that runs in the loop task while OnRxDone() runs in the LORA
+    // task, so scan and state writes take the ring lock there.
+#if defined(BOARD_RAK4630)
+    taskENTER_CRITICAL();
+#endif
     for(int i = 0; i < MAX_RING; i++)
     {
         if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY)
@@ -287,10 +293,16 @@ int findAndStopRingSlot(uint32_t msgId)
                 ringBuffer[i][1] = RING_STATUS_DONE;
                 ringBuffer[i][0] = 0;  // clear len so getNextTxSlot skips this slot
                 retryCount[i] = 0;
+#if defined(BOARD_RAK4630)
+                taskEXIT_CRITICAL();
+#endif
                 return i;
             }
         }
     }
+#if defined(BOARD_RAK4630)
+    taskEXIT_CRITICAL();
+#endif
     return -1;
 }
 
