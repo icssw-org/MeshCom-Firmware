@@ -3321,6 +3321,9 @@ PingResult sendPing(char msg_call[10])
 
     // MSG ID zusammen setzen
     // bei Text beginnend mit {ping} und {pong} keine MSB für repeat markieren
+    // [DK5EN] Passt so: diese Meldung wird gar nicht wiederholt (Ring-Status 0xFF beim
+    // [DK5EN] Einreihen), die msg_id bleibt unveraendert. Eine Wiederholungs-id bekommt nur eine
+    // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
     aprsmsg.msg_source_path = meshcom_settings.node_call;
@@ -4068,11 +4071,17 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
 
     // MSG ID zusammen setzen
     // bei Text beginnend mit {ping} und {pong} keine MSB für repeat markiereb 
+    // [DK5EN] Passt so: die msg_id bleibt hier unveraendert. Ob wiederholt wird, entscheidet
+    // [DK5EN] erst updateRetransmissionStatus() -- nur eine eigene PN (Text an Rufzeichen, endet auf {NNN)
+    // [DK5EN] bekommt eine Wiederholungs-id (src/pn_retry.h), alles andere geht 1:1 wie heute raus.
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max in real only 0-999
 
     // MSG-ID für repeat Bits frei machen
     // NSB start with 00 .. repeater 1 = 01 .. repeater 2 = 10 .. repeater 3 = 11
     //discussion ongoing aprsmsg.msg_id  = aprsmsg.msg_id & 0x3FFFFFFF;
+    // [DK5EN] Die Erstsendung bleibt byte-gleich, es muss nichts frei gemacht werden: die Wiederholung k
+    // [DK5EN] kippt msg_id Bit 10-11 (= Knotenkennung Bit 0-1) per XOR mit k (src/pn_retry.h). Bei ESP32
+    // [DK5EN] sind diese Bits schon 00, dort gilt 00/01/10/11 woertlich; XOR deckt nRF52 mit ab.
     
     aprsmsg.msg_source_path = (src_override && src_override[0]) ? String(src_override) : String(meshcom_settings.node_call);
     aprsmsg.msg_destination_path = strDestinationCall;  //Later FW insert PATH from HEY! collecting
@@ -4267,6 +4276,9 @@ unsigned int sendInjectedPosition(const char *srcCall, const char *posData)
     aprsmsg.msg_len = 0;
 
     // bei Positionen keine MSB für repeat markiereb 
+    // [DK5EN] Passt so: diese Meldung wird gar nicht wiederholt (Ring-Status 0xFF beim
+    // [DK5EN] Einreihen), die msg_id bleibt unveraendert. Eine Wiederholungs-id bekommt nur eine
+    // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
 
     aprsmsg.msg_source_path      = srcCall;
@@ -4835,6 +4847,9 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
 
         // MSG ID zusammen setzen
         // bei Postionen keine MSB für repeat markiereb 
+        // [DK5EN] Passt so: diese Meldung wird gar nicht wiederholt (Ring-Status 0xFF beim
+        // [DK5EN] Einreihen), die msg_id bleibt unveraendert. Eine Wiederholungs-id bekommt nur eine
+        // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
         aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
 
         if(intervall != POSINFO_INTERVAL)
@@ -4925,6 +4940,9 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
 
     // MSG ID zusammen setzen
     // bei Postionen keine MSB für repeat markiereb 
+    // [DK5EN] Passt so: diese Meldung wird gar nicht wiederholt (Ring-Status 0xFF beim
+    // [DK5EN] Einreihen), die msg_id bleibt unveraendert. Eine Wiederholungs-id bekommt nur eine
+    // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
 
     aprsmsg.msg_source_path = meshcom_settings.node_call;
@@ -4990,6 +5008,9 @@ unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *s
     // MSG-ID für repeat Bits frei machen
     // NSB start with 00 .. repeater 1 = 01 .. repeater 2 = 10 .. repeater 3 = 11
     // discussion ongoing aprsmsg.msg_id  = aprsmsg.msg_id & 0x3FFFFFFF;
+    // [DK5EN] Gilt hier nicht: ein :ackNNN ist keine PN und wird nie wiederholt (Slot direkt
+    // [DK5EN] nach dem Einreihen 0xFF). Die Maske ist auch hier ueberfluessig, die msg_id
+    // [DK5EN] bleibt unveraendert.
 
     // own Call, or a foreign source when relaying a KISS client's APRS ack
     aprsmsg.msg_source_path = (src_override && src_override[0])
@@ -5084,6 +5105,9 @@ void sendHey()
 
     // MSG ID zusammen setzen
     // bei Hey keine MSB für repeat markiereb 
+    // [DK5EN] Passt so: diese Meldung wird gar nicht wiederholt (Ring-Status 0xFF beim
+    // [DK5EN] Einreihen), die msg_id bleibt unveraendert. Eine Wiederholungs-id bekommt nur eine
+    // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
     aprsmsg.msg_source_path = meshcom_settings.node_call;
@@ -5209,6 +5233,9 @@ void sendTelemetry(int ID)
 
     // MSG ID zusammen setzen
     // bei Text mit msg_destination_call 100001 keine MSB für repeat markiereb 
+    // [DK5EN] Passt so: diese Meldung wird gar nicht wiederholt (Ring-Status 0xFF beim
+    // [DK5EN] Einreihen), die msg_id bleibt unveraendert. Eine Wiederholungs-id bekommt nur eine
+    // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
     aprsmsg.msg_source_path = meshcom_settings.node_call;
