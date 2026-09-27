@@ -1315,7 +1315,9 @@ static String getEffectiveNtpServer()
  */
 void sub_page_rxlog()
 {
-    int iRead = RAWLoRaRead;
+    // Start at the write slot: once the ring has wrapped it holds the oldest
+    // line (addRingPointer() keeps the read pointer one slot ahead of it).
+    int iRead = RAWLoRaWrite;
     _create_meshcom_subheader("RX Log");
 
     // WQ-01: LoRa Queue panel. This fragment only carries data-* attributes;
@@ -1355,9 +1357,10 @@ void sub_page_rxlog()
     {
         // WQ-01: normal text size (was font-small) -- the page uses three sizes only:
         // title, normal (log lines, panel text), small (legend, notes, tick labels).
-        web_client.printf("<p class=\"no-wrap\"><%i>%s</p>\n", iRead, ringbufferRAWLoraRX[iRead]);
+        if (ringbufferRAWLoraRX[iRead][0] != 0x00)
+            web_client.printf("<p class=\"no-wrap\"><%i>%s</p>\n", iRead, ringbufferRAWLoraRX[iRead]);
         iRead = increment_mod(iRead, MAX_LOG);
-    } while (RAWLoRaRead != iRead);
+    } while (RAWLoRaWrite != iRead);
     web_client.println("</div></div>");
     web_client.println(); // The HTTP response ends with another blank line
 }

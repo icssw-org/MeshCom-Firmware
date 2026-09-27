@@ -430,6 +430,12 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                     {
                         own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
                         ack_status = 0x02;  // 02...ACK
+
+                        // BUG #8 fix: server ACK for our own message, stop retransmission
+                        int ackSlot = findAndStopRingSlot(msg_counter);
+                        if(ackSlot >= 0 && bDisplayRetx)
+                            printfdeb("\n[RETX] server ACK for retid:%i stop retransmit msg-id:%08X\n",
+                                        ackSlot, msg_counter);
                       }
 
                     uint16_t plen = buildAckPhoneFrame(print_buff, msg_counter, ack_status, aprsmsg.msg_source_call.c_str());

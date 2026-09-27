@@ -36,6 +36,14 @@ void OnHeaderDetect(void);
 
 bool updateRetransmissionStatus(void);
 
+// PN-Wiederholung (Variante a, XOR-Form): stoppt die Wiederholung einer eigenen
+// Meldung. Vergleicht die msg_id mit den beiden Wiederholungsbits 10-11
+// ausmaskiert (PN_RETRY_CORE_MASK, pn_retry.h), damit auch eine bereits
+// mit Wiederholungsbits versehene Ringkopie getroffen wird. Auch vom
+// Server-Pfad (udp_functions.cpp, nrf_eth.cpp) fuer ein :ackNNN aufgerufen.
+// Liefert den Slot oder -1.
+int findAndStopRingSlot(uint32_t msgId);
+
 unsigned long csma_compute_timeout(int attempt);
 unsigned long csma_compute_timeout_prio(int attempt, uint8_t priority);
 void csma_reset(void);
