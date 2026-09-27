@@ -1,7 +1,7 @@
 # PN-Wiederholung Variante a) (XOR): Änderungen am zentralen MeshCom-Server
 
 - Bezug: `docs/pn-zustellung-dedup.md` (Konzeptpapier, Kap. 2.4, 3, 4.2, 4.3, 7.1, 7.5, 7.6),
-  `docs/pn-retry-xor-impl-plan.md` (Welle W3).
+  `docs/pn-retry-xor-impl-plan.md` (Umsetzung in der Firmware).
 - Firmware-Stand: `dk5en-xor`, Verweise ohne Zusatz beziehen sich auf diesen Zweig.
 - **Der Quelltext des zentralen MeshCom-Servers liegt nicht vor.** Jede Aussage über sein heutiges
   Verhalten in diesem Dokument ist deshalb ausdrücklich als **Annahme** gekennzeichnet. Die

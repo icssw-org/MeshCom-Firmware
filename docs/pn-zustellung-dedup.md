@@ -5,6 +5,8 @@ Wiederholungen, Dedup und Rückwärtskompatibilität — eine Auslegeordnung
 - Stand: 27.09.2026, DK5EN
 - Bezug: `docs/wiederholungen.md` (OE1KBC, Commit `b7cc126f`); dort offen: "Variante b) Martin bitte
   definieren"
+- Umsetzung: Variante a) in XOR-Form im Branch `dk5en-xor`, beschrieben in
+  `docs/pn-retry-xor-impl-plan.md`.
 - Code-Stand: Verweise ohne Zusatz beziehen sich auf `upstream/dev` @ `cf215b5d`. `fork-main:` meint
   den Firmware-Zweig von DK5EN.
 - Schreibweise: die PN-Nummer steht APRS-konform als `Text{NNN` am Ende des Textes (keine
@@ -317,7 +319,8 @@ XOR k. Schreibweise im Folgenden: X⊕k.
 - **k immer auf die Original-Bits anwenden, nie auf die vorige Kopie.** Die Wiederholung kopiert heute
   den vorigen Ringeintrag (`src/lora_functions.cpp:2170`); schrittweises XOR auf die Kopie ergäbe 01,
   11, 00, und die dritte Wiederholung wäre wieder das Original.
-- **Nur für PN.** Gruppen und `*` behalten die heutige Wiederholung. Sonst zeigen alte Knoten im
+- **Nur für PN**: Text, der auf `{NNN` endet und an ein persönliches Ziel geht (nicht `*`, keine
+  Gruppennummer, nicht WLNK-1 oder APRS2SOTA). Gruppen und `*` behalten die heutige Wiederholung. Sonst zeigen alte Knoten im
   ganzen Netz Gruppenmeldungen bis zu 4-mal, und Gateways senden pro Kopie zwei binäre ACKs
   (`src/lora_functions.cpp:1274`, `:1298`).
 
@@ -343,11 +346,13 @@ XOR k. Schreibweise im Folgenden: X⊕k.
   - Status "gehört" ans Telefon mit der Original-msg_id melden. Nur `src/lora_functions.cpp:880` kann
     eine Wiederholungs-msg_id tragen; die übrigen Statuspfade betreffen binäre ACKs oder Gruppen.
 - **Empfänger** (neue Firmware): das Relais-Urteil bleibt auf der vollen msg_id. Für Anzeige, BLE, Web
-  und Upload kommt ein zweites Urteil auf `id & 0x3FFFFFFF` (oder gleichwertig auf (Absender, NNN), 4.2)
-  dazu, auch auf dem Server-Pfad (2.2). Jede Kopie wird trotzdem quittiert (P3). Das Zeitfenster dieses
-  Urteils muss kurz bleiben (einige Minuten, länger als die Leiter), weil der Zähler `node_msgid` von
-  allen Meldungsarten geteilt wird und ein aktiver Knoten die 1000 Werte in weniger als einer Stunde
-  durchläuft.
+  und Upload kommt ein zweites Urteil dazu: steht eine der drei anderen Bitvarianten derselben msg_id
+  schon im vorhandenen Dedup-Ring, ist die Meldung eine Wiederholung einer bekannten PN. Sie wird
+  weitergeleitet und quittiert (P3), aber nicht noch einmal angezeigt, ans Telefon gegeben oder
+  hochgeladen. Eine eigene Tabelle braucht es dafür nicht; das Fenster ist das des Dedup-Rings (rund
+  38 min). Das Risiko einer Fehlerkennung ist dieselbe Klasse wie beim heutigen Dedup, nur auf 30 statt
+  32 Bit, und die Folge ist milder (die Meldung wird weiter weitergeleitet und quittiert). Der
+  Server-Pfad bleibt unverändert (2.2); dort muss der Server die Wiederholungen abfangen.
 - **Server** (Annahme zu seinem heutigen Verhalten): Dedup-Schlüssel `id & 0x3FFFFFFF` — eine
   UND-Operation, sofern er heute über die msg_id dedupliziert.
 
@@ -668,7 +673,7 @@ schließt b) nahtlos an.
    - Bits = Original XOR k, FCS neu, Wiederholungs-msg_id in den eigenen Dedup-Ring.
    - 30-Bit-Vergleich im Ring, eigene Wiederholungen per Knotentest statt maskiertem `checkOwnTx`.
    - Status "gehört" ans Telefon mit Original-msg_id.
-   - Empfänger: zweites Urteil mit kurzem Fenster, Re-ACK jeder Kopie.
+   - Empfänger: Wiederholung am Dedup-Ring erkennen (drei andere Bitvarianten), Re-ACK jeder Kopie.
    - App und mcapp bleiben unverändert; meshmap bekommt die Maske, falls der Server roh weitergibt.
 3. **Stufe 2, bei Bedarf: b) für die 9er-Leiter und Verwahrung.** Aussendungen 1–4 wie in a), ab
    Aussendung 5 frische msg_id aus dem normalen Zähler. Zusätzlich zu a): Server liest die NNN,
