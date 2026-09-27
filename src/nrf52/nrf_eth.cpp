@@ -579,6 +579,12 @@ int NrfETH::getUDP()
                           // 0x02 ("eigene Nachricht bestaetigt"); hier blieb es bei 0x01,
                           // die App zeigte auf nRF52-Gateways nie den vollen ACK-Status.
                           print_buff[5]=0x02;  // 02...ACK
+
+                          // BUG #8 fix: server ACK for our own message, stop retransmission
+                          int ackSlot = findAndStopRingSlot(msg_counter);
+                          if(ackSlot >= 0 && bDisplayRetx)
+                              printfdeb("\n[RETX] server ACK for retid:%i stop retransmit msg-id:%08X\n",
+                                          ackSlot, msg_counter);
                       }
 
                       // DRY-21: Debug-Ausgabe wie in der ESP32-Kopie — nach dem
