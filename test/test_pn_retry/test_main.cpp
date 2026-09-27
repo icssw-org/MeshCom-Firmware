@@ -422,6 +422,48 @@ void test_frame_is_pn_false_group_dest_100001(void)
     TEST_ASSERT_FALSE(pnFrameIsPn(frame, len));
 }
 
+// A PN that sendMessage() sends for a KISS client carries our msg_id but
+// the client's callsign as source. It must not count as our own PN: its
+// :ackNNN goes to the client and would never stop our retries.
+void test_frame_source_is_own_call_only(void)
+{
+    uint8_t frame[128];
+    uint16_t len = buildFrame(frame, 0x12345678u, "DK5EN-1", "OE1KBC-12",
+                                "Hallo{123", 0x04, 0x03);
+    TEST_ASSERT_TRUE(pnFrameSourceIs(frame, len, "DK5EN-1"));
+    TEST_ASSERT_FALSE(pnFrameSourceIs(frame, len, "DK5EN-12")); // longer call
+    TEST_ASSERT_FALSE(pnFrameSourceIs(frame, len, "DK5EN"));    // prefix only
+    TEST_ASSERT_FALSE(pnFrameSourceIs(frame, len, ""));
+    TEST_ASSERT_FALSE(pnFrameSourceIs(frame, len, NULL));
+
+    // first token of a source path with via entries
+    uint16_t len2 = buildFrame(frame, 0x12345678u, "DK5EN-1,OE1XAR-13", "OE1KBC-12",
+                                 "Hallo{123", 0x04, 0x03);
+    TEST_ASSERT_TRUE(pnFrameSourceIs(frame, len2, "DK5EN-1"));
+}
+
+void test_frame_is_own_pn_rejects_kiss_client_source(void)
+{
+    uint32_t gw_id = 0x00155120u;
+    uint32_t id = ((gw_id & 0x3FFFFFu) << 10) | 0x07Bu;
+    uint8_t frame[128];
+
+    uint16_t own = buildFrame(frame, id, "DK5EN-1", "OE1KBC-12",
+                                "Hallo{123", 0x04, 0x03);
+    TEST_ASSERT_TRUE(pnFrameIsOwnPn(frame, own, gw_id, "DK5EN-1"));
+
+    // same msg_id (ours), source = KISS client -> not our own PN
+    uint16_t kiss = buildFrame(frame, id, "DK5EN-7", "OE1KBC-12",
+                                 "Hallo{123", 0x04, 0x03);
+    TEST_ASSERT_TRUE(pnFrameIsPn(frame, kiss));
+    TEST_ASSERT_FALSE(pnFrameIsOwnPn(frame, kiss, gw_id, "DK5EN-1"));
+
+    // our call but a foreign node id -> not ours either
+    uint16_t foreign = buildFrame(frame, id ^ (1u << 12), "DK5EN-1", "OE1KBC-12",
+                                    "Hallo{123", 0x04, 0x03);
+    TEST_ASSERT_FALSE(pnFrameIsOwnPn(frame, foreign, gw_id, "DK5EN-1"));
+}
+
 // ===========================================================================
 // pnFrameMsgId / pnFrameFcsOffset / pnFrameSetMsgId
 // ===========================================================================
@@ -571,6 +613,8 @@ int main(int, char **)
     RUN_TEST(test_frame_is_pn_false_group_no_suffix);
     RUN_TEST(test_frame_is_pn_false_group_dest_even_with_pn_looking_payload);
     RUN_TEST(test_frame_is_pn_false_group_dest_100001);
+    RUN_TEST(test_frame_source_is_own_call_only);
+    RUN_TEST(test_frame_is_own_pn_rejects_kiss_client_source);
 
     RUN_TEST(test_frame_msg_id_le);
     RUN_TEST(test_frame_set_msg_id_updates_bytes_and_fcs);

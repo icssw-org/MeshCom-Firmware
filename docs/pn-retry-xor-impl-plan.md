@@ -20,6 +20,11 @@ APRS2SOTA. Gruppen, `*` und alle anderen Meldungen verhalten sich wie bisher.
   Puffer umgeschrieben (auf nRF52 `static`, wegen des 4-KB-Loop-Tasks). Ihre msg_id kommt in den eigenen
   Dedup-Ring, damit das eigene Echo nicht als fremde Meldung gilt.
 - Ein Echo der eigenen PN bricht die Wiederholung nicht mehr ab, sondern startet die 40-s-Wartezeit neu.
+- "Eigene PN" heißt: eigene Knotenkennung in der msg_id **und** eigenes Rufzeichen als Quelle
+  (`pnFrameIsOwnPn`). Eine PN, die `sendMessage()` für einen KISS-Client sendet, trägt zwar unsere
+  msg_id, aber das Rufzeichen des Clients; ihr `:ackNNN` geht an den Client und stoppt unseren Slot nie.
+  Sie bleibt deshalb beim alten Verhalten: byte-gleiche Wiederholung, Abbruch beim ersten Echo. Der
+  Client wiederholt selbst.
 - Ein `:ackNNN` stoppt die Wiederholung — über LoRa und jetzt auch über den Server-Pfad (ESP32 und
   nRF52). `findAndStopRingSlot` vergleicht dafür den 30-Bit-Kern und ist exportiert.
 - "Gehört" (Status 0x00 ans Telefon) wird auch für das Echo einer Wiederholung gemeldet, immer mit der

@@ -257,6 +257,47 @@ static inline bool pnFrameIsPn(const uint8_t *frame, uint16_t len)
                           (size_t)(payload_end - payload_start));
 }
 
+// True iff the frame's originating callsign -- the first token of the
+// source path, from index 6 up to the first ',' or '>' -- equals call.
+// A PN that sendMessage() sends on behalf of a KISS client carries our
+// msg_id but the client's callsign as source; its :ackNNN goes to the
+// client, never stops our ring slot, and the client retries on its own.
+// Such a frame must not get PN retry ids.
+static inline bool pnFrameSourceIs(const uint8_t *frame, uint16_t len, const char *call)
+{
+    if (frame == NULL || call == NULL || len < 7)
+        return false;
+
+    uint16_t end = 0;
+    bool found = false;
+    for (uint16_t i = 6; i < len; i++)
+    {
+        if (frame[i] == ',' || frame[i] == '>')
+        {
+            end = i;
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        return false;
+
+    size_t call_len = strlen(call);
+    return call_len > 0 && (size_t)(end - 6) == call_len &&
+           memcmp(frame + 6, call, call_len) == 0;
+}
+
+// A PN this node itself originated: PN-shaped, our node id in msg_id, and
+// our own callsign as source (see pnFrameSourceIs). Only these get retry
+// ids and keep waiting for the :ackNNN past the first echo.
+static inline bool pnFrameIsOwnPn(const uint8_t *frame, uint16_t len,
+                                  uint32_t gw_id, const char *own_call)
+{
+    return pnFrameIsPn(frame, len) &&
+           pnIsOwnNodeId(pnFrameMsgId(frame), gw_id) &&
+           pnFrameSourceIs(frame, len, own_call);
+}
+
 // Offset of the FCS field: the first 0x00 at index >= 6, plus 3 (skips
 // the terminator, the HW byte and the MOD byte). Returns -1 if there is
 // no such 0x00, or if the 2-byte FCS field would not fully fit in len.

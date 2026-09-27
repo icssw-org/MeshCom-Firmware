@@ -632,8 +632,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             // reason to abort the wait for the real destination's ACK --
             // restart the wait instead of releasing the slot (mirrors the
             // RING_STATUS_SENT that doTX() sets right after transmit).
-            if(dbg_type == MSG_TYPE_TEXT && pnIsOwnNodeId(dbg_msg_id, _GW_ID) &&
-               pnFrameIsPn(ringBuffer[rxSlot] + 2, dbg_lng))
+            // Only for a PN we originated: a KISS client's PN (foreign
+            // source) is released on the first echo as before.
+            if(dbg_type == MSG_TYPE_TEXT &&
+               pnFrameIsOwnPn(ringBuffer[rxSlot] + 2, dbg_lng, _GW_ID, meshcom_settings.node_call))
             {
                 ringBuffer[rxSlot][1] = RING_STATUS_SENT;
 
@@ -2280,8 +2282,10 @@ bool updateRetransmissionStatus()
                 taskEXIT_CRITICAL();
 #endif
 
-                if(pnEligible && pnFrameIsPn(pnLocalFrame, (uint16_t)size) &&
-                   pnIsOwnNodeId(pnFrameMsgId(pnLocalFrame), _GW_ID))
+                // Nur eigene PN (eigenes Rufzeichen als Quelle): eine PN, die
+                // sendMessage() fuer einen KISS-Client sendet, bleibt 1:1.
+                if(pnEligible &&
+                   pnFrameIsOwnPn(pnLocalFrame, (uint16_t)size, _GW_ID, meshcom_settings.node_call))
                 {
                     pnNewId = pnRetryId(pnFrameMsgId(pnLocalFrame), _GW_ID,
                                         (uint8_t)(retryCount[ircheck] + 1));
