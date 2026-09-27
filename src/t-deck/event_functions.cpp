@@ -195,6 +195,7 @@ void btn_event_handler_dropdown_mapselect(lv_event_t * e)
         }
 
         set_map(meshcom_settings.node_map);
+        save_settings();
 
         lv_dropdown_close(dropdown_mapselect);
     }
