@@ -634,8 +634,20 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             // RING_STATUS_SENT that doTX() sets right after transmit).
             // Only for a PN we originated: a KISS client's PN (foreign
             // source) is released on the first echo as before.
-            if(dbg_type == MSG_TYPE_TEXT &&
-               pnFrameIsOwnPn(ringBuffer[rxSlot] + 2, dbg_lng, _GW_ID, meshcom_settings.node_call))
+            // Exception: the destination already acked this PN (own_msg_id
+            // 0x02 under the original id) -- then release as before, e.g.
+            // when the :ackNNN came while this copy was still READY, which
+            // findAndStopRingSlot() deliberately leaves alone.
+            bool pnEcho = dbg_type == MSG_TYPE_TEXT &&
+               pnFrameIsOwnPn(ringBuffer[rxSlot] + 2, dbg_lng, _GW_ID, meshcom_settings.node_call);
+            bool pnEchoAcked = false;
+            if(pnEcho)
+            {
+                int pnEchoIdx = checkOwnTx(pnRetryId(pnFrameMsgId(ringBuffer[rxSlot] + 2), _GW_ID, 0));
+                pnEchoAcked = (pnEchoIdx >= 0 && own_msg_id[pnEchoIdx][4] == 0x02);
+            }
+
+            if(pnEcho && !pnEchoAcked)
             {
                 ringBuffer[rxSlot][1] = RING_STATUS_SENT;
 
@@ -2205,6 +2217,29 @@ bool updateRetransmissionStatus()
 
             if(ringBuffer[ircheck][1] == threshold)
             {
+                // PN retry (XOR form): the destination already acked this PN
+                // (own_msg_id 0x02 under the original id), but the slot is
+                // still due -- the :ackNNN came while a copy was READY and
+                // findAndStopRingSlot() leaves READY slots alone (doTX() may
+                // be taking one). Release instead of sending another copy.
+                if(pnFrameIsOwnPn(&ringBuffer[ircheck][2], (uint16_t)size, _GW_ID, meshcom_settings.node_call))
+                {
+                    uint32_t pnSlotOrigId = pnRetryId(pnFrameMsgId(&ringBuffer[ircheck][2]), _GW_ID, 0);
+                    int pnAckedIdx = checkOwnTx(pnSlotOrigId);
+                    if(pnAckedIdx >= 0 && own_msg_id[pnAckedIdx][4] == 0x02)
+                    {
+                        ringBuffer[ircheck][1] = RING_STATUS_DONE;
+                        ringBuffer[ircheck][0] = 0;
+                        retryCount[ircheck] = 0;
+
+                        if(bDisplayRetx)
+                            printfdeb("\n[RETX] PN already acked, stop retid:%i msg-id:%08X\n",
+                                          ircheck, pnSlotOrigId);
+
+                        continue;
+                    }
+                }
+
                 // Check retry cap
                 if(retryCount[ircheck] >= MAX_RETRANSMIT)
                 {
