@@ -1251,6 +1251,17 @@ int WZ_GPS_Loop() {
 
             posinfo_age = gpsData.age_ms;
 
+            #ifdef ESP32
+            // Without a fix the node sends the stored position, so the fix is saved
+            // (at most every 15 minutes) and survives a reboot.
+            static unsigned long lastPosSave = 0;
+            if(lastPosSave == 0 || (millis() - lastPosSave) >= 15 * 60 * 1000UL)
+            {
+                save_position();
+                lastPosSave = millis();
+            }
+            #endif
+
             igps = setSMartBeaconing(dlat, dlon);
         }
         else

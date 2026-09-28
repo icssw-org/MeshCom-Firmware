@@ -306,7 +306,11 @@ bool decodeTinyXML(String document)
         if(strTELE_UTCOFF.charAt(0) == '-')
           offset = -offset;
 
-        meshcom_settings.node_utcoff = offset;
+        if(meshcom_settings.node_utcoff != offset)
+        {
+          meshcom_settings.node_utcoff = offset;
+          save_settings();
+        }
       }
     }
   }

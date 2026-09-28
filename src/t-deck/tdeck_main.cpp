@@ -1077,6 +1077,8 @@ static void keypad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data)
                 else
                     tft_on();
 
+                save_settings();
+
                 bSPEC=true;
             }
 
