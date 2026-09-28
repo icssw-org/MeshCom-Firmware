@@ -1555,7 +1555,9 @@ uint16_t encodeLoRaAPRScompressed(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSou
     iatxt = charset_utf8_safe_truncate(catxt, iatxt, 16);
     catxt[iatxt] = 0x00;
 
-    snprintf(msg_start, sizeof(msg_start), "%s>%s:!%c%c%c%c%c%c%c%c%c%c P[%s", cSourceCall, meshcom_settings.node_aprsmc, meshcom_settings.node_symid, clat[0], clat[1], clat[2], clat[3], clon[0], clon[1], clon[2], clon[3], meshcom_settings.node_symcd, catxt);
+    // WIDE1-1 wie in encodeLoRaAPRS()/encodeLoRaAPRSText(): LoRa-APRS-Digipeater
+    // wiederholen nur Frames mit diesem Alias (#1174).
+    snprintf(msg_start, sizeof(msg_start), "%s>%s,WIDE1-1:!%c%c%c%c%c%c%c%c%c%c P[%s", cSourceCall, meshcom_settings.node_aprsmc, meshcom_settings.node_symid, clat[0], clat[1], clat[2], clat[3], clon[0], clon[1], clon[2], clon[3], meshcom_settings.node_symcd, catxt);
 
     ilng = strlen(msg_start) + 3;
 
