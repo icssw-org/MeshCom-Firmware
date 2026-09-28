@@ -75,6 +75,19 @@ static inline bool pnIsOwnNodeId(uint32_t id, uint32_t gw_id)
     return (id >> 12) == ((gw_id >> 2) & 0xFFFFFu);
 }
 
+// The id under which our own TX table (own_msg_id[], checkOwnTx()) knows
+// a message, given the id an ACK or echo carries. A relay or gateway that
+// acknowledges retry copy k sends copy k's id (bits 10-11 XORed); the table
+// only holds the original. For our own node's ids fold back to the original
+// (k = 0); a non-PN own message already has the original bits, so this is
+// the identity there. Foreign ids pass through unchanged.
+static inline uint32_t pnOwnTxLookupId(uint32_t acked_id, uint32_t gw_id)
+{
+    if (!pnIsOwnNodeId(acked_id, gw_id))
+        return acked_id;
+    return pnRetryId(acked_id, gw_id, 0);
+}
+
 // Fill out[0..2] with the three retry variants (m = 1,2,3) obtained by
 // flipping id's own bits 10-11 with XOR. When id is the original
 // msg_id, out[] holds the three retry copies of it.

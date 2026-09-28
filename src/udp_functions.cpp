@@ -13,6 +13,7 @@
 #include <loop_functions_extern.h>
 #include <dedup_functions.h>
 #include "ack_attribution.h"
+#include "pn_retry.h"
 #include <lora_functions.h>
 #include <time_functions.h>
 #include <lora_setchip.h>
@@ -488,7 +489,10 @@ void getMeshComUDPpacket(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // Dedup ring (same check the LoRa RX path uses), read above
           if(bUdpMsgIsNew)
           {
-            int icheck = checkOwnTx(aprsmsg.msg_id);
+            // Our own PN retry copy (bits 10-11 flipped, pn_retry.h) echoed by the
+            // server: own_msg_id[] only knows the original id -- fold back, or the
+            // node transmits its own copy again once it has left the dedup ring.
+            int icheck = checkOwnTx(pnOwnTxLookupId(aprsmsg.msg_id, _GW_ID));
             if(icheck < 0)
             {
               if(bUDPtoLoraSend)
