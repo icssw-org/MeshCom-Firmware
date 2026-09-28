@@ -12,6 +12,7 @@
 #include <loop_functions_extern.h>
 #include <byte_fifo.h>
 #include <time.h>
+#include <vector>
 #include <lora_setchip.h>
 #include <rtc_functions.h>
 #include <time_functions.h>
@@ -22,6 +23,8 @@
 #include <txring_functions.h> // WQ-01: LoRa queue panel -- txRingPrioCounts()
 #include <setlog_lines.h>      // WQ-01: LoRa queue panel -- setlogDedupWindowMin()
 #include "track_warning.h"    // TRK-01: Warnhinweis-Text neben dem Track-Switch
+#include <url_decode.h>         // #1173: decodeURLPercentCoding() -- full percent-decoding of WebUI parameters
+#include <charset_filter.h>     // #1173: UTF-8-safe cut of the 150-byte web message
 
 #include "web_UIComponents.h"
 #include "web_setup.h"
@@ -780,68 +783,10 @@ String work_webpage(bool bget_password, int webid)
  */
 String decodeURLPercentCoding(String input)
 {
-    input.replace("+", " ");
-
-    input.replace("%C2%A3", "£");
-    input.replace("%C2%B0", "°");
-
-    input.replace("%C3%A4", "ä");
-    input.replace("%C3%B6", "ö");
-    input.replace("%C3%BC", "ü");
-
-    input.replace("%C3%84", "Ä");
-    input.replace("%C3%96", "Ö");
-    input.replace("%C3%9C", "Ü");
-
-    input.replace("%C3%B2", "ò");
-    input.replace("%C3%A0", "à");
-    input.replace("%C3%B9", "ù");
-    input.replace("%C3%A8", "è");
-    input.replace("%C3%A9", "é");
-
-    input.replace("%C3%9F", "ß");
-
-    input.replace("%0D%0A", "-");
-
-    input.replace("%21", "!");
-    input.replace("%23", "#");
-    input.replace("%24", "$");
-    input.replace("%25", "%");
-    input.replace("%26", "&");
-    input.replace("%27", "'");
-    input.replace("%28", "(");
-    input.replace("%29", ")");
-    input.replace("%2A", "*");
-    input.replace("%2B", "+");
-    input.replace("%2C", ",");
-    input.replace("%2F", "/");
-    input.replace("%3A", ":");
-    input.replace("%3B", ";");
-    input.replace("%3D", "=");
-    input.replace("%3F", "?");
-    input.replace("%40", "@");
-    input.replace("%5B", "[");
-    input.replace("%5D", "]");
-
-    input.replace("%20", " ");
-    input.replace("%22", ""
-                         "");
-    input.replace("%2D", "-");
-    input.replace("%2E", ".");
-    input.replace("%3C", "<");
-    input.replace("%3E", ">");
-    input.replace("%5C", "\\");
-    input.replace("%5E", "^");
-    input.replace("%5F", "_");
-    input.replace("%60", "`");
-    input.replace("%7B", "{");
-    input.replace("%7C", "|");
-    input.replace("%7D", "}");
-    input.replace("%7E", "~");
-
-    input.replace("%09", "");
-
-    return input;
+    // #1173: full UTF-8 decode instead of a fixed list of escapes -- see url_decode.h
+    std::vector<char> buf(input.c_str(), input.c_str() + input.length() + 1);
+    url_percent_decode(buf.data(), input.length()); // NUL-terminates, drops %00
+    return String(buf.data());
 }
 
 /**
@@ -947,7 +892,7 @@ void deliver_scaffold(bool bget_password)
     // this function is an ayncronous loader that is used to update the received messages without re-loading the whole page, it will re-call itself after a timeout as long as the message-page is displayed
     // it merges the response into mcHistory/mcSeen instead of overwriting the panel outright, so a message already on screen keeps its DOM position when only its ack mark changed
     web_client.println("function mcProcessMessages(text,panel){var tmpl=document.createElement('template');tmpl.innerHTML=text;var els=tmpl.content.querySelectorAll('.message[data-id]');for(var i=0;i<els.length;i++){var el=els[i];var id=el.getAttribute('data-id');var existed=mcSeen.hasOwnProperty(id);mcMergeEntry(el);if(existed){var old=panel.querySelector('.message[data-id=\"'+id+'\"]');if(old)old.replaceWith(el);}else{panel.appendChild(el);}}mcRemovePlaceholder(panel);if(mcHistory.length==0)panel.innerHTML='<p>No messages available.</p>';if(typeof mcApplyTab==='function')mcApplyTab();}");
-    web_client.println("function updateMessages() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){var panel=document.getElementById('messages_panel');if(panel!=null)mcProcessMessages(decodeURIComponent(this.responseText),panel);}};setTimeout(function(){xhttp.open('GET','/?getmessages',true);xhttp.send();},1000);}\n");
+    web_client.println("function updateMessages() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){var panel=document.getElementById('messages_panel');if(panel!=null)mcProcessMessages(this.responseText,panel);}};setTimeout(function(){xhttp.open('GET','/?getmessages',true);xhttp.send();},1000);}\n");
     // rebuilds #messages_panel from mcHistory when the messages page is (re-)injected by loadPage(); first merges the server-rendered entries already sitting in the panel into mcHistory (same dedupe as mcProcessMessages) so nothing the server just sent is lost, then renders the full remembered history in order
     web_client.println("function mcRenderHistory(){var panel=document.getElementById('messages_panel');if(!panel)return;var els=panel.querySelectorAll('.message[data-id]');for(var i=0;i<els.length;i++){mcMergeEntry(els[i]);}var html='';for(var j=0;j<mcHistory.length;j++){html+=mcHistory[j].html;}panel.innerHTML=html.length>0?html:'<p>No messages available.</p>';if(typeof mcApplyTab==='function')mcApplyTab();}");
     //  this function sends a parameter:value request to the backend
@@ -2376,7 +2321,7 @@ void send_http_header(uint16_t http_status_code, uint8_t content_type)
     if (content_type == RESPONSE_TYPE_JSON)
         web_client.println("Content-type:application/json");
     else
-        web_client.println("Content-type:text/html");
+        web_client.println("Content-type:text/html; charset=utf-8");
     web_client.println("Access-Control-Allow-Origin: *"); // tell modern browsers that CORS is okay for us
     web_client.println("Access-Control-Allow-Methods: GET, POST, OPTIONS");
     web_client.println("Access-Control-Allow-Headers: access-control-allow-headers,access-control-allow-methods,access-control-allow-origin, Origin, Content-Type, Accept");
@@ -2492,8 +2437,9 @@ void send_message(String web_header)
                 message = ":" + message;
             // snprintf(message_text, sizeof(message_text), ":%s", message.c_str());
             // force whole Message to have a maximum length of 150 chars including a destination callsign
+            // #1173: cut on a UTF-8 character boundary, never inside a multi-byte sequence
             if (message.length() > 150)
-                message = message.substring(0, 150);
+                message = message.substring(0, charset_utf8_safe_truncate(message.c_str(), message.length(), 150));
 
             // We expect a char array instead of a String, so we need to convert the string to char array
             // ToDo: We might think about changing everything to String instead of Char Array later.
