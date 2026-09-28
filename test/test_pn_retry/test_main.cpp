@@ -248,6 +248,38 @@ void test_is_own_node_id_true_for_all_variants(void)
     }
 }
 
+// ===========================================================================
+// pnOwnTxLookupId -- the id handleACK() looks up in own_msg_id[]
+// ===========================================================================
+
+// A relay/gateway 0x41 ACK for retry copy k carries copy k's id. The own TX
+// table holds only the original, so the lookup must fold back -- the raw id
+// never matched, the app got no 0x01 and the retries were not stopped.
+void test_own_tx_lookup_folds_retry_copy_to_original(void)
+{
+    uint32_t gw_id = 0x00155123u;
+    uint32_t orig = ((gw_id & 0x3FFFFFu) << 10) | 0x2AAu; // as sendMessage() builds it
+    uint32_t table[1] = { orig };                         // own_msg_id[] stand-in
+
+    for (uint8_t k = 1; k <= 3; k++)
+    {
+        uint32_t acked = pnRetryId(orig, gw_id, k);
+        TEST_ASSERT_NOT_EQUAL_UINT32(table[0], acked);     // the bug: raw id misses
+        TEST_ASSERT_EQUAL_HEX32(table[0], pnOwnTxLookupId(acked, gw_id));
+    }
+    TEST_ASSERT_EQUAL_HEX32(orig, pnOwnTxLookupId(orig, gw_id)); // original: identity
+}
+
+void test_own_tx_lookup_leaves_foreign_id_alone(void)
+{
+    uint32_t gw_id = 0x00155123u;
+    uint32_t other_gw = 0x00099001u;
+    uint32_t foreign = ((other_gw & 0x3FFFFFu) << 10) | 0x123u;
+
+    TEST_ASSERT_EQUAL_HEX32(foreign, pnOwnTxLookupId(foreign, gw_id));
+    TEST_ASSERT_EQUAL_HEX32(foreign ^ (2u << 10), pnOwnTxLookupId(foreign ^ (2u << 10), gw_id));
+}
+
 void test_is_own_node_id_false_for_other_node(void)
 {
     uint32_t gw_id = 0x00155123u;
@@ -621,6 +653,8 @@ int main(int, char **)
     RUN_TEST(test_frame_set_msg_id_no_terminator_leaves_frame_unchanged);
     RUN_TEST(test_id_to_le);
     RUN_TEST(test_frame_golden_fcs_offset_and_set_msg_id);
+    RUN_TEST(test_own_tx_lookup_folds_retry_copy_to_original);
+    RUN_TEST(test_own_tx_lookup_leaves_foreign_id_alone);
 
     return UNITY_END();
 }

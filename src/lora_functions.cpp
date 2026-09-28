@@ -391,6 +391,13 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
         bServerFlag=true;
 
     unsigned msg_id = print_buff[6] | (print_buff[7] << 8) | (print_buff[8] << 16) | (print_buff[9] << 24);
+
+    // PN-Wiederholung (XOR, pn_retry.h): quittiert ein Relay oder Gateway eine
+    // Retry-Kopie, traegt das ACK deren id (Bits 10-11 gekippt). own_msg_id[]
+    // kennt nur die Original-id -- ohne Zurueckfalten fand checkOwnTx() nichts:
+    // kein 0x01-Frame ans Telefon, kein Stopp der Wiederholung, und das ACK
+    // wurde als fremdes weitergesendet. Ab hier gilt die Original-id.
+    msg_id = pnOwnTxLookupId(msg_id, _GW_ID);
     int itxcheck = checkOwnTx(msg_id);
 
     if(bIsNew || itxcheck >= 0)

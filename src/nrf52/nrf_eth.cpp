@@ -10,6 +10,7 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include "dedup_functions.h"
+#include "pn_retry.h"
 #include <command_functions.h>
 #include <time_functions.h>
 #include <lora_setchip.h>
@@ -647,7 +648,10 @@ int NrfETH::getUDP()
 
             if(is_new_packet(udp_mid))
             {
-              int icheck = checkOwnTx(aprsmsg.msg_id);
+              // Our own PN retry copy (bits 10-11 flipped, pn_retry.h) echoed by the
+              // server: own_msg_id[] only knows the original id -- fold back, or the
+              // node transmits its own copy again once it has left the dedup ring.
+              int icheck = checkOwnTx(pnOwnTxLookupId(aprsmsg.msg_id, _GW_ID));
 
               if(bDisplayInfo)
                 printfdeb("OWN-TX-CHECK-UDP msg_id:%08X check:%i\n", aprsmsg.msg_id, icheck);
