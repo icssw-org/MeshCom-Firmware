@@ -16,6 +16,17 @@ namespace
 
     inline bool is_format_char(uint32_t cp)
     {
+        // U+200D ZERO WIDTH JOINER falls in the 0x200B-0x200F block below but
+        // is excluded here: unlike its neighbours it carries no glyph of its
+        // own AND binds the codepoints either side of it into ONE grapheme
+        // (e.g. shrug + ZWJ + male sign = "person shrugging"). Dropping it
+        // does not remove an invisible character, it SPLITS a sequence the
+        // sender composed -- the compound emoji renders as two separate
+        // glyphs instead of one (observed on-air 2026-09-28, RAK4631 bench).
+        // Mirrors MCProxy's text_decode.py, which carries the identical
+        // exception for the identical reason (observed there 2026-08-30).
+        if (cp == 0x200D)
+            return false;
         if (cp >= 0x200B && cp <= 0x200F)
             return true;
         if (cp >= 0x202A && cp <= 0x202E)
