@@ -3478,7 +3478,8 @@ void esp32loop()
 
             bPosFirst = false;
 
-            if(posinfo_shot)
+            // posinfo_prev is SmartBeaconing's TRACK point; with TRACK off (or none yet) send the node position
+            if(posinfo_shot && bDisplayTrack && (posinfo_prev_lat != 0.0 || posinfo_prev_lon != 0.0))
             {
                 double slat = 0.0;
                 double slon = 0.0;
