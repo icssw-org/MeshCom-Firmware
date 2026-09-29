@@ -1,6 +1,6 @@
 #define SOURCE_VERSION "4.35"
-#define SOURCE_VERSION_SUB "u"
-#define SOURCE_VERSION_WEB_SUB "u"
+#define SOURCE_VERSION_SUB "v"
+#define SOURCE_VERSION_WEB_SUB "v"
 
 // Werkseinstellung des Rufzeichens und der zugehoerige "Node ist noch nicht
 // konfiguriert"-Test. Beides stand bisher als Literal an fuenf Stellen in drei
