@@ -1668,6 +1668,13 @@ void startMeshComUDP()
           srv_path = "inet";
         }
         else
+        if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
+        {
+          printlndeb("[WIFI]...Internet UDP-DEST meshcom.hamnet.network");
+          srv_host = "meshcom.hamnet.network";
+          srv_path = "inet";
+        }
+        else
         {
           printlndeb("[WIFI]...Internet UDP-DEST meshcom.oevsv.at");
           srv_host = "meshcom.oevsv.at";
