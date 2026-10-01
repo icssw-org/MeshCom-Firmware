@@ -9,7 +9,6 @@
  *  @date        2025-12-03
  */
 
-#include "byte_fifo.h"
 #include <atomic>
 
 // WQ-01 (2026-09-05): queue panel on the rxlog web page -- pulls in
@@ -46,6 +45,13 @@ extern bool bDEBUGCSV;
 extern bool bDEBUGEN;
 extern bool bDEBUGLNG;
 extern bool bLORADEBUG;
+extern bool bNBRDEBUG;
+extern bool bNBRRELAY;                  // --nbrrelay count|on (Stufe 2), siehe loop_functions.cpp
+extern bool bNBRCANCEL;                 // --nbrrelay on
+extern bool bNBRSYM;                    // --nbrsym on|off (Stufe 2, Symmetrie-Annahme), default on
+extern bool bNBRRPTOFF;                 // --nbrreport off (Stufe 3, HN-Bericht), node_sset4 0x0100
+extern bool bNBRRPTON;                  // --nbrreport on  (Stufe 3, HN-Bericht), node_sset4 0x0200 -- weder/noch = auto
+extern uint32_t stat_nbr_relay_a, stat_nbr_relay_b, stat_nbr_cancel, stat_nbr_cancel_possible, stat_nbr_refuse_alone;
 extern bool bBLEDEBUG;
 extern bool bWXDEBUG;
 extern bool bIODEBUG;
@@ -70,6 +76,11 @@ extern char LogCallsign[10];
 extern bool bDisplayRetx;
 extern unsigned long DisplayOffWait;
 extern int DisplayTimeWait;
+// retransmit_timer/mcp_refresh_timer: each platform main defines its OWN
+// `unsigned long`, same name, no prior shared extern (D1-10 loop scheduler
+// needs one to build the shared table in loop_scheduler.cpp).
+extern unsigned long retransmit_timer;
+extern unsigned long mcp_refresh_timer;
 extern unsigned long BattTimeWait;
 extern unsigned long BattTimeAPP;
 extern unsigned long BMXTimeWait;
@@ -181,9 +192,6 @@ extern unsigned long analog_oversample_timer;
 extern uint16_t ADCraw;
 extern float ADCalpha;
 extern float ADCexp1;
-extern float ADCexp1pre;
-extern float ADCexp12;
-extern float ADCexp12pre;
 extern float ADCexp2;
 
 // same set of variables for BATT
@@ -207,11 +215,23 @@ extern uint8_t retryCount[MAX_RING];
 extern uint8_t ringPriority[MAX_RING];         // Prio 1-5 pro Slot
 extern uint32_t ringEnqueueTime[MAX_RING];     // millis() timestamp when enqueued
 
+// Welle 2 (edge pool, nbr_mask.h): wie in loop_functions.h nur vorwaerts
+// deklariert, nicht per Include gezogen -- gleiche Begruendung dort.
+struct NbrMask;
+
 // N-14: kanonische Deklaration mit Default-Argumenten steht in loop_functions.h
 // (ein Default darf pro Parameter nur einmal je Uebersetzungseinheit stehen);
 // diese Zeile deckt nur TUs ab, die ausschliesslich dieses Extern-Header ziehen.
+// Stufe-2-Parameter (kind/need/alone): siehe loop_functions.h.
 int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
-                    const char* source, int retryCountIn, bool clearSlotFirst);
+                    const char* source, int retryCountIn, bool clearSlotFirst,
+                    uint8_t kind, const NbrMask *need, const NbrMask *alone);
+
+// P15: kanonische Deklaration mit Default-Argumenten steht in loop_functions.h
+// (siehe Kommentar bei addTxRingEntry() oben) -- gleiche Begruendung.
+int addTxRingEntryOnce(const uint8_t* frame, uint16_t len, const char* source,
+                        int retryCountIn, bool clearSlotFirst,
+                        uint8_t kind, const NbrMask *need, const NbrMask *alone);
 
 // BP-01 (BACKLOG) / TM-37: back-pressure to the sender, in Q-codes.
 //
@@ -257,21 +277,20 @@ void bpPollDrain(void);
 // or "*"), not a hardcoded broadcast.
 void sendExternNotice(const char *text, const char *dst);
 
-extern unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5];
+// R1-04: erst beim ersten Blick auf die rxlog-Seite angelegt, siehe
+// loop_functions.cpp. NULL heisst "noch nicht angesehen", nicht "Fehler".
+typedef unsigned char rawLogLine_t[UDP_TX_BUF_SIZE+5];
+extern rawLogLine_t *ringbufferRAWLoraRX;
+bool rawLogEnsure(void);
 extern int RAWLoRaWrite;
 extern int RAWLoRaRead;
 
-// Die drei Ausgangsringe -- UDP-Ausgang, Telefon-Daten, Telefon-Kommandos --
-// sind Byte-Ringe (src/byte_fifo.h) statt Schlitzfelder: die Frames liegen
-// dicht hintereinander, nicht in Schlitzen zu je 246 bis 280 Byte, die im
-// Mittel zu 70 % leer standen. Die Lese- und Schreibzeiger sind jetzt
-// Interna des Rings; Aufrufer nehmen bf_push/bf_peek/bf_pop, und der Verlauf
-// fuer die Web-Nachrichtenseite laeuft ueber bf_iter_begin/bf_iter_next.
-// Jede Operation sperrt sich auf nRF52 selbst (BF_LOCK), die frueheren
-// kritischen Abschnitte an den Aufrufstellen sind deshalb entfallen.
-extern byte_fifo_t udpOutRing;
-extern byte_fifo_t phoneRing;
-extern byte_fifo_t phoneComRing;
+// Die drei Ausgangsringe als Byte-Ringe (src/byte_fifo.h); Groessen in
+// configuration_global.h (RING_BYTES_*), Definition in loop_functions.cpp.
+#include "byte_fifo.h"
+extern byte_fifo_t udpOutRing;    // UDP-Ausgang (LoRa -> Gateway)
+extern byte_fifo_t phoneRing;     // BLE-Daten zum Telefon (+4 Byte Zeit je Frame ausser 'D')
+extern byte_fifo_t phoneComRing;  // BLE-Kommandos zum Telefon
 
 extern bool hasMsgFromPhone;
 
@@ -302,11 +321,6 @@ extern std::atomic<bool> cad_in_progress;
 extern std::atomic<bool> cad_done_flag;
 extern std::atomic<bool> cad_double_check;
 
-
-// RACE-01 fix: spinlock for deferred display update (ISR → main loop)
-#if defined(ESP32)
-extern portMUX_TYPE displayMux;
-#endif
 
 // Channel utilization tracking (10s window)
 #if defined(ESP32)
@@ -359,7 +373,7 @@ extern std::atomic<uint8_t>  stat_ring_max;    // Hochwasser von txRingDepth()
 // (definition in loop_functions.cpp next to getTimeString()).
 void setlogPrint(const char *body);
 // SL-05: fills the STAT fields from the interval counters (drains them), the
-// mheard/trickle/version globals and uptime; heap is platform-specific and passed in.
+// neighbour-count/trickle/version globals and uptime; heap is platform-specific and passed in.
 // stat_drop_count[] is read, not cleared -- the platform tick clears it.
 void setlogFillStat(struct setlogStatFields *f, uint32_t heap);
 
@@ -401,8 +415,6 @@ extern unsigned long previousWiFiMillis;
 
 // Timer variables for persitence to SD
 extern unsigned long lastsavePOSPersistence;
-extern unsigned long lastsaveMHEARDPersistence;
-extern unsigned long lastsavePATHPersistence;
 
 extern double posinfo_distance;
 extern double posinfo_direction;
@@ -427,6 +439,9 @@ extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long posinfo_timer_min;
 extern unsigned long heyinfo_timer;      // we check periodically to send HEY
 extern int ncnt_hold;
+extern unsigned long nbrsnap_timer;      // --nbrdebug: 15-min-Takt fuer nbrLogSnapshot()
+
+void nbrDebugApply(void);                // nbrLog an bNBRDEBUG angleichen (lora_functions.cpp)
 
 extern unsigned long telemetry_timer;    // we check periodically to send TELEMETRY
 extern unsigned long temphum_timer;      // we check periodically get TEMP/HUM
@@ -437,16 +452,6 @@ extern unsigned long web_timer;          // Refreshtime WEbServer
 // batt
 extern float global_batt;
 extern int global_proz;
-
-extern unsigned char mheardBuffer[MAX_MHEARD][60]; //Ringbuffer for MHeard Lines
-extern char mheardCalls[MAX_MHEARD][10]; //Ringbuffer for MHeard Key = Call
-extern unsigned long mheardEpoch[MAX_MHEARD];  //Ringbuffer for MHeard EPoch Update Time
-extern int mheardNCount[MAX_MHEARD];
-
-extern char mheardPathCalls[MAX_MHPATH][10]; //Ringbuffer for MHeard Key = Call
-extern unsigned long mheardPathEpoch[MAX_MHPATH];  //Ringbuffer for MHeard EPoch Update Time
-extern unsigned char mheardPathBuffer1[MAX_MHPATH][52]; //Ringbuffer for MHeard Sourcepath
-extern uint8_t mheardPathLen[MAX_MHPATH];
 
 extern char cTimeSource[10];
 
@@ -485,9 +490,10 @@ extern int iDisplayType;
 #define PAGE_MAX 6
 #endif
 
-// RAM-Rueckgewinn: Zeilenkoordinaten als int16_t statt int. Werte sind
-// Pixelkoordinaten (x, y, hoechstens 320) und eine Textlaenge (20); y kann
-// -1 sein, daher vorzeichenbehaftet. Halbiert pageLine und pageLastLine.
+// RAM-Rueckgewinn (2026-09-20): Zeilenkoordinaten als int16_t statt int.
+// Werte sind Pixelkoordinaten (x, y, hoechstens 320) und eine Textlaenge
+// (20); y kann -1 sein, daher vorzeichenbehaftet. Halbiert pageLine und
+// pageLastLine.
 extern int16_t pageLine[maxdisplines][3];
 extern char pageText[maxdisplines][25];
 extern char pageTextLong1[25];

@@ -14,7 +14,7 @@
 
 bool bTXCAPTURE = false;
 
-#if MC_CAPTURE   // bTXCAPTURE oben bleibt immer definiert (siehe Header)
+#if MC_DIAG   // bTXCAPTURE oben bleibt immer definiert (siehe Header)
 
 // Der RX-Mitschnitt haengt an bLORADEBUG (lora_functions.cpp). Hier nur
 // deklariert statt ueber loop_functions_extern.h gezogen: dieses Modul soll
@@ -225,4 +225,4 @@ void captureDrain(void)
         printfdeb("%s\n", line);
 }
 
-#endif // MC_CAPTURE
+#endif // MC_DIAG

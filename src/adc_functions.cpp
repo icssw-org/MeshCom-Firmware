@@ -17,6 +17,7 @@
 
 #include <adc_functions.h>
 #include <esp_adc_cal.h>
+#include "batt_pipeline.h"
 
 // ANALOG values
 unsigned long analog_oversample_timer = 0;
@@ -26,10 +27,11 @@ uint16_t ADCraw = 0;
 uint32_t ADCmV = 0;
 float raw = 0;
 float ADCalpha = 0.1;
+// Filter state lives in the shared Brown block (batt_pipeline.h). ADCexp1 and
+// ADCexp2 stay as globals: --analogset reports them (command_functions.cpp).
+static batt_brown_t ADCbrown;
+static bool ADCbrownInit = false;
 float ADCexp1 = 0.0;
-float ADCexp1pre = 0.0;
-float ADCexp12 = 0.0;
-float ADCexp12pre = 0.0;
 float ADCexp2 = 0.0;
 
 
@@ -87,16 +89,12 @@ void loop_ADCFunctions()
                 SampleCount++;
                 // 12bit value [0 .. 4095] als default angenommen, muss ggf angepasst werden
                 raw = ADCslope * (float)ADCmV * meshcom_settings.node_analog_faktor + ADCoffset; // Faktor & Offset & Slope
-                if (ADCexp1pre==0) {ADCexp1pre = raw;}  //langsamen Start beschleunigen
-                if (ADCexp12pre==0) {ADCexp12pre = raw;}
 
-                // Glättung berechnen
-                ADCexp1 = ADCalpha * raw + (1.0-ADCalpha) * ADCexp1pre;
-                ADCexp12 = ADCalpha * ADCexp1 + (1.0-ADCalpha) * ADCexp12pre;
-                ADCexp2 = ((2.0-ADCalpha) * ADCexp1 - ADCexp12) / (1.0-ADCalpha);
-
-                ADCexp1pre = ADCexp1;
-                ADCexp12pre = ADCexp12;
+                // Glättung (Brown, 2. Ordnung) im gemeinsamen Block; Alpha bleibt Sache des Aufrufers (s.o.)
+                if (!ADCbrownInit) { battBrownReset(&ADCbrown); ADCbrownInit = true; }
+                battBrownUpdate(&ADCbrown, raw, ADCalpha);
+                ADCexp1 = ADCbrown.exp1;
+                ADCexp2 = ADCbrown.exp2;
                 analog_oversample_timer = millis();
 
                 //digitalWrite(BOARD_LED, HIGH);  // OE3WAS für TEST

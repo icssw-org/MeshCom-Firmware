@@ -79,6 +79,17 @@ uint8_t bf_peek(byte_fifo_t *f, uint8_t *out, uint16_t outmax);
 // Aeltesten ungelesenen Frame entnehmen (er bleibt als Verlauf liegen).
 void bf_pop(byte_fifo_t *f);
 
+// BLE-N1 (Advisor): peek() und tail_gen in EINER Sperre. Getrennt gelesen kann
+// ein Schreiber (nRF52: OnRxDone im LORA-Task) zwischen beiden den Frame
+// verdraengen -- der Leser haelt dann Frame A mit der Generation von B und
+// pop()t spaeter B, der nie gesendet wurde.
+uint8_t bf_peek_gen(byte_fifo_t *f, uint8_t *out, uint16_t outmax, uint16_t *gen);
+
+// pop() nur, wenn der aelteste Frame noch der mit Generation gen ist -- Vergleich
+// und Entnahme unter einer Sperre. false: er wurde inzwischen verdraengt oder
+// entnommen, es wurde nichts entnommen.
+bool bf_pop_if(byte_fifo_t *f, uint16_t gen);
+
 static inline bool bf_empty(const byte_fifo_t *f) { return f->unread == 0; }
 static inline uint16_t bf_unread(const byte_fifo_t *f) { return f->unread; }
 static inline uint16_t bf_frames(const byte_fifo_t *f) { return f->frames; }

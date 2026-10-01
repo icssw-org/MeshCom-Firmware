@@ -43,9 +43,13 @@
 
 
 #include <Arduino.h>
+#include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "clock.h"
 
 #include <time.h>
+
+#include "configuration.h"
+#include "nbr_matrix.h"   // nbrMatrix, nbrSetClock() -- Clock::SetClock(time_t, bool) below
 
 //----------------------------------------------------------------------------
 // constructor
@@ -338,6 +342,15 @@ bool Clock::SetClock(/*const*/ time_t tsNow, /*const*/ bool boUseUTC /*= true*/)
 	tsClock_m = tsNow;
 	(boUseUTC) ? gmtime_r(&tsClock_m, &suClock_m)
 	           : localtime_r(&tsClock_m, &suClock_m);
+
+	// W3b (docs/meshcom5-campaign.md Welle 3): Wanduhr bekannt geworden --
+	// EIN Funnel statt zwoelf verstreuter Aufrufstellen (Advisor-Fund
+	// 2026-09-26): jede setCurrentTime()/SetClock()-Aufrufstelle im Baum
+	// (NTP, GPS, Telefon, --settime, RTC, {CET}-Server-Frames, ...) landet
+	// hier. tsNow traegt bereits den UTC-Offset (jeder Aufrufer rechnet ihn
+	// VOR diesem Aufruf ein, siehe z. B. setCurrentTime() oben), also exakt
+	// dieselbe Epochen-Konvention wie ueberall sonst in der Matrix.
+	nbrSetClock(nbrMatrix, (uint32_t)tsNow, uptimeMin16());
 #if defined(SETTEST)
 	Serial.printf("[clock] new date/time: %04u/%02u/%02u %2u:%02u:%02u\n",
                       1900 + suClock_m.tm_year, 1 + suClock_m.tm_mon,

@@ -8,7 +8,10 @@
 #include <debugconf.h>
 
 #define max_country 17
-extern String strCountry[max_country];
+// R3-06 (DRY audit): const char* const table, not String[] -- see
+// lora_setchip.cpp. Direct indexing (strCountry[i]) yields a const char*;
+// callers needing a String get one from getCountry(i) instead.
+extern const char* const strCountry[max_country];
 
 float getFreq();
 int8_t getPower();

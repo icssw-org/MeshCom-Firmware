@@ -97,7 +97,7 @@ struct setlogStatFields
     uint8_t  ringmax;         // Hochwasser von txRingDepth() im Fenster
     uint8_t  ring_size;       // MAX_RING des Boards
     uint16_t drop[5];         // stat_drop_count[1..5], Prio 1..5
-    uint16_t mh;              // getMheardCount()
+    uint16_t mh;              // Nachbarzahl aus nbr_views (bis Welle 4 MHeard-Zaehlung)
     uint32_t heap;            // freier Heap in Byte
     uint32_t trk_interval_s;  // Trickle-Intervall in Sekunden
     uint16_t trk_consistent;  // konsistente HEYs seit letztem Reset

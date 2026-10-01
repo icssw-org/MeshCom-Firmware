@@ -2,15 +2,15 @@
  *  @author      Ralph Weich (DD5RW)
  *  @date        2025-12-03
  */
+#include "mc_text.h"
+#include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include <Arduino.h>
 
 #include <configuration.h>
 #include <debugconf.h>
 #include "web_functions.h"
-#include <mheard_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
-#include <byte_fifo.h>
 #include <time.h>
 #include <vector>
 #include <lora_setchip.h>
@@ -19,23 +19,41 @@
 #include <spectral_scan.h>
 #include <maxhop.h>         // CS-02: drop-down values for the text hop limit
 #include <config_json.h>   // CS-03: config download/upload as one JSON object
+#include <loop_breadcrumb.h> // INS-05: loopCrumbClear() before a deliberate reboot
 #include <ArduinoJson.h>    // JSN-01: call_function()/setparam()/getparam() JSON escaping
 #include <txring_functions.h> // WQ-01: LoRa queue panel -- txRingPrioCounts()
 #include <setlog_lines.h>      // WQ-01: LoRa queue panel -- setlogDedupWindowMin()
 #include "track_warning.h"    // TRK-01: Warnhinweis-Text neben dem Track-Switch
+#include "nbr_matrix.h"        // NBR-W2: Nachbarschaftsmatrix -- Datenquelle fuer die neue Neighbours-Seite
+#include "nbr_views.h"         // W4b: MHeard/Pfad-Seiten lesen nur noch ueber die Abfrageschicht
+#include <TinyGPSPlus.h>       // DIST auf der MHeard-Seite -- reine distanceBetween()-Rechnung, kein GPS-Modul noetig
+#include "sto_notice.h"        // stage 4: stoHolder() for the messages-page held mark, all boards
 #include <url_decode.h>         // #1173: decodeURLPercentCoding() -- full percent-decoding of WebUI parameters
 #include <charset_filter.h>     // #1173: UTF-8-safe cut of the 150-byte web message
+#if defined(ENABLE_MSGSTORE)
+#include <msgstore_api.h> // stage 3 store node: /?page=mailbox, mboxpurge/mboxdeliver, the setup card
+#endif
 
 #include "web_UIComponents.h"
 #include "web_setup.h"
 #include "web_nodefunctioncalls.h"
 #include "web_commonServer.h"
+#if defined(BOARD_RAK4630)
+#include "w5100.h"          // #1183: W5100.readSn*/writeSnMSSR for the web socket's MSS
+#endif
 
 
 CommonWebServer web_server(80);
 CommonWebClient web_client;
 
 void web_client_html(CommonWebClient web_client);
+
+// NBR-W2: lokale Vorwaertsdeklaration, damit der Dispatcher weiter oben in
+// dieser Datei sub_page_neighbours() aufrufen kann, ohne web_functions.h
+// anzufassen (das liegt ausserhalb dieses Datei-Sets). Gehoert dort neben
+// die anderen sub_page_*()-Deklarationen -- das ist ein Punkt fuer den
+// naechsten, der web_functions.h anfassen darf.
+void sub_page_neighbours();
 
 
 String web_header;
@@ -45,13 +63,92 @@ unsigned long web_previousTime = 0;       // Previous time
 #define WEB_TIMEOUT_TIME 2000             // Define timeout time in milliseconds (example: 2000ms = 2s)
 bool bweb_server_running = false;
 
+#if defined(BOARD_RAK4630)
+/**
+ * Issue #1183: the W5100S has no path-MTU discovery and sends full 1460-byte MSS
+ * segments with DF set. Behind a tunnel with a path MTU below 1500 (HAMNET) the
+ * first large web page chunk is blackholed and the socket times out. The user-set
+ * Ethernet MTU therefore caps the MSS (MTU - 40) the web server advertises.
+ *
+ * Sn_MSSR is latched by the chip at Sock_OPEN (datasheet 3.2.9); writing it on a
+ * socket that is already LISTENing changes nothing. So the target is pre-written
+ * to every CLOSED socket (the register survives CLOSE, and whichever index
+ * socketBegin() picks next latches it; a UDP socket inheriting it is harmless,
+ * its datagrams stay far below 548 B), and a port-80 LISTEN socket that latched
+ * an older value is closed and re-opened through web_server.begin().
+ *
+ * Called after every available() (which re-listens on a fresh socket) and once
+ * after begin(). Steady state: SR (+MSSR) reads only, no writes. The clamp keeps
+ * a corrupt stored value away from MSS 0 or above 1460.
+ */
+static void webApplyEthMss()
+{
+    int mtu = meshcom_settings.node_ethmtu;
+
+    if (mtu < 1280) mtu = 1280;
+    if (mtu > 1500) mtu = 1500;
+
+    const uint16_t mss = (uint16_t)(mtu - 40);
+
+    // same cap as EthernetServer::available(): W5100S/W5100 have 4 sockets, and
+    // chip 0 means no Ethernet hardware (no SPI traffic then)
+    const uint8_t chip = W5100.getChip();
+    if (!chip)
+        return;
+
+    uint8_t nsock = MAX_SOCK_NUM;
+    if (nsock > 4 && (chip == 50 || chip == 51))
+        nsock = 4;
+
+    bool closedStale = false;
+
+    // pass A: pre-write CLOSED sockets, close a stale port-80 LISTEN socket
+    for (uint8_t i = 0; i < nsock; i++)
+    {
+        SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+
+        const uint8_t sr = W5100.readSnSR(i);
+
+        if (sr == SnSR::CLOSED)
+        {
+            if (W5100.readSnMSSR(i) != mss)
+                W5100.writeSnMSSR(i, mss);
+        }
+        else if (sr == SnSR::LISTEN && EthernetServer::server_port[i] == 80 && W5100.readSnMSSR(i) != mss)
+        {
+            W5100.execCmdSn(i, Sock_CLOSE);
+            EthernetServer::server_port[i] = 0;
+            closedStale = true;
+        }
+
+        SPI.endTransaction();
+    }
+
+    if (!closedStale)
+        return;
+
+    // pass B: the socket just closed must hold the target before it is re-opened
+    for (uint8_t i = 0; i < nsock; i++)
+    {
+        SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
+
+        if (W5100.readSnSR(i) == SnSR::CLOSED && W5100.readSnMSSR(i) != mss)
+            W5100.writeSnMSSR(i, mss);
+
+        SPI.endTransaction();
+    }
+
+    web_server.begin();   // socketBegin() takes the first CLOSED index and latches its MSSR
+}
+#endif
+
 // password check
 char web_ip[10][20] = {0};
 long web_ip_passwd_time[10] = {0};
 
-extern double mheardLat[MAX_MHEARD];
-extern double mheardLon[MAX_MHEARD];
-extern int mheardAlt[MAX_MHEARD];
+// gps_functions.cpp instanziiert das TinyGPSPlus-Objekt unbedingt (auch ohne
+// ENABLE_GPS); hier nur fuer distanceBetween() auf der MHeard-Seite genutzt.
+extern TinyGPSPlus gps;
 
 double dlat;
 double dlon;
@@ -162,6 +259,9 @@ void startWebserver()
     {
         web_server.begin();
     }
+    #if defined(BOARD_RAK4630)
+    webApplyEthMss();
+    #endif
 #endif
     bweb_server_running = true;
 
@@ -216,6 +316,10 @@ void loopWebserver()
     #endif
 
     web_client = web_server.available(); // Create a client connection.
+
+    #if defined(BOARD_RAK4630)
+    webApplyEthMss();   // #1183: available() may just have re-listened on a fresh socket
+    #endif
 
     // HTML Page formating
     if (web_client)
@@ -523,6 +627,7 @@ static void sub_config_upload(long content_length)
     delay(2000);
 
     #ifdef ESP32
+        loopCrumbClear();   // INS-05: deliberate reboot, no LAST_LOOP_SECTION at the next boot
         ESP.restart();
     #endif
 
@@ -537,23 +642,15 @@ static void sub_config_upload(long content_length)
  */
 String work_webpage(bool bget_password, int webid)
 {
-    // RAM-Rueckgewinn (2026-09-21): der 1-kB-Sammelpuffer web_header_collect
+    // RAM-Rueckgewinn (2026-09-20): der 1-kB-Sammelpuffer web_header_collect
     // lag als statisches Feld im DRAM und wurde am Ende ohnehin in den String
-    // kopiert. Jetzt sammelt der String selbst, mit einmaligem reserve() je
-    // Aufruf. Dieselbe Obergrenze wie vorher (WEB_HEADER_MAX: hoechstens
-    // 1023 Zeichen, exakt wie die alte Schranke sizeof(puffer)-1), nur dass
-    // sie nicht mehr im Linkerbild steht.
-    //
+    // kopiert. Jetzt sammelt der String selbst; reserve() holt die 1 kB EINMAL
+    // beim ersten Aufruf vom Heap und behaelt sie (der String ist global),
+    // also kein Wachsen und kein Freigeben je Anfrage -- dieselbe Obergrenze
+    // wie vorher (WEB_HEADER_MAX), nur dass sie nicht mehr im Linkerbild steht.
     // Das ist eine Verschiebung aus dem statischen Bild in den Heap, kein
     // Byte weniger zur Laufzeit; sie entlastet die Linkregion, die auf den
     // klassischen ESP32 knapp ist.
-    //
-    // Nicht behaupten, die 1 kB wuerden einmalig geholt und dann behalten:
-    // der /?nodepassword-Zweig weiter unten weist web_header das Ergebnis
-    // von substring() zu. Das ist eine Move-Zuweisung von einem Temporary,
-    // der globale String uebernimmt also dessen kleinen Puffer und gibt die
-    // 1 kB frei -- die naechste Anfrage holt sie erneut. Ein malloc/free je
-    // Login, mehr nicht; der Rest der Funktion arbeitet ohnehin mit Strings.
     static const uint16_t WEB_HEADER_MAX = 1023;
     web_header.reserve(WEB_HEADER_MAX + 1);
     web_header = "";
@@ -697,11 +794,23 @@ String work_webpage(bool bget_password, int webid)
                             send_http_header(200, RESPONSE_TYPE_TEXT);
                             sub_page_mheard();
                         }
+                        else if (web_header.indexOf("/?page=neighbours") >= 0)
+                        { // NBR-W2: user requested the neighbour-matrix page
+                            send_http_header(200, RESPONSE_TYPE_TEXT);
+                            sub_page_neighbours();
+                        }
                         else if (web_header.indexOf("/?page=messages") >= 0)
                         { // user requested the messages page
                             send_http_header(200, RESPONSE_TYPE_TEXT);
                             sub_page_messages();
                         }
+#if defined(ENABLE_MSGSTORE)
+                        else if (web_header.indexOf("/?page=mailbox") >= 0)
+                        { // user requested the mailbox (store node) page, stage 3
+                            send_http_header(200, RESPONSE_TYPE_TEXT);
+                            sub_page_mailbox();
+                        }
+#endif
                         else if (web_header.indexOf("/?page=rxlog") >= 0)
                         { // user requested the rx log page
                             send_http_header(200, RESPONSE_TYPE_TEXT);
@@ -806,9 +915,12 @@ void deliver_scaffold(bool bget_password)
     // ECMA-Script/Javascript
     web_client.println("<script type=\"text/javascript\">\n");
     // these variables will hold the last loaded page name and sender in order to force a refresh
-    web_client.println("cpage=\"info\";csender=undefined;\nsetInterval(autorefresh,10000);");
+    web_client.println("cpage=\"info\";csender=undefined;\nsetInterval(autorefresh,30000);");
     // This function will be called in intervalls - can be used to auto-refresh content depending on what page is loaded
     web_client.println("function autorefresh() {if(cpage=='messages')updateMessages();if(cpage=='wx')loadPage('wx',csender,false);if(cpage=='position')loadPage('position',csender,false);if(cpage=='mheard')loadPage('mheard',csender,false);if(cpage=='path')loadPage('path',csender,false);if(cpage=='rxlog')loadPage('rxlog',csender,false);};");
+#if defined(ENABLE_MSGSTORE)
+    web_client.println("function autorefreshMbox(){if(cpage=='mailbox')loadPage('mailbox',csender,false);}setInterval(autorefreshMbox,10000);");
+#endif
     // this function is used for login and logout
     web_client.println("function login(pwd){var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){window.location.reload(true);}};xhttp.open(\"GET\",\"?nodepassword=\"+pwd,true);xhttp.send();}\n");
     // this function is used to load content depending on the navigation button pressed
@@ -830,11 +942,13 @@ void deliver_scaffold(bool bget_password)
     // send silently turned the next quick message into a broadcast to '*'
     // (DJ8MEH, 2026-09-11). A DM call sign is still cleared as before.
     web_client.println("function sendMessage() {var xhttp=new XMLHttpRequest();xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200 && this.responseText.indexOf(\"sendmessage ok\")>=0){var sc=document.getElementById(\"sendcall\");if(!/^[0-9]+$/.test(sc.value))sc.value=\"\"; document.getElementById(\"messagetext\").value=\"\"; updateCharsLeft();}};xhttp.open(\"GET\",\"/?sendmessage&tocall=\"+encodeURIComponent(document.getElementById(\"sendcall\").value)+\"&message=\"+encodeURIComponent(document.getElementById(\"messagetext\").value),true);xhttp.send();}\n");
-    // this functions is counting and displaying the amount of chars left that the user can use to write a message
-    web_client.println("function updateCharsLeft() {let maxlength=149;if(document.getElementById(\"sendcall\").value.length>0) {maxlength-=(document.getElementById(\"sendcall\").value.length)+2;}let msglength=document.getElementById(\"messagetext\").value.length;if(msglength>maxlength){document.getElementById(\"messagetext\").value=document.getElementById(\"messagetext\").value.substring(0,maxlength);msglength=maxlength;}document.getElementById(\"indicator_charsleft\").innerHTML=maxlength-msglength;}\n");
-    // MC-msg-history: the phone ring (phoneRing, RING_BYTES_PHONE bytes) is
-    // shared with positions and acks, so a handful of new messages can push
-    // an old message out of the node's own ring within minutes. The browser tab
+    // counts what is left of the node's 150-byte message limit (send_message() adds ":" or ":{call}").
+    // #1173: count UTF-8 bytes, not characters -- "ą" costs 2, an emoji 4 -- and cut an over-long
+    // text between characters (for..of walks code points, so no surrogate pair is split).
+    web_client.println("var mcEnc=new TextEncoder();function updateCharsLeft() {let maxlength=149;let call=document.getElementById(\"sendcall\").value;if(call.length>0) {maxlength-=mcEnc.encode(call).length+2;}let t=document.getElementById(\"messagetext\");let msglength=mcEnc.encode(t.value).length;if(msglength>maxlength){let out=\"\";msglength=0;for(const ch of t.value){let b=mcEnc.encode(ch).length;if(msglength+b>maxlength)break;out+=ch;msglength+=b;}t.value=out;}document.getElementById(\"indicator_charsleft\").innerHTML=maxlength-msglength;}\n");
+    // MC-msg-history: BLEtoPhoneBuff/MAX_RING is only 20 slots and is shared
+    // with positions and acks, so a handful of new messages can push an old
+    // message out of the node's own ring within minutes. The browser tab
     // keeps every message it has seen for the life of the page in
     // mcHistory/mcSeen (capped at MC_HIST_MAX, oldest dropped first) so
     // switching Info -> Messages -> Info -> Messages does not lose messages
@@ -912,7 +1026,7 @@ void deliver_scaffold(bool bget_password)
     // and injected with innerHTML, which never runs a <script> tag it carries,
     // so the rendering logic has to live here in the scaffold instead and be
     // invoked from loadPage() after each fragment swap (that covers both the
-    // initial page load and the 10s autorefresh). The fragment itself only
+    // initial page load and the 30s autorefresh). The fragment itself only
     // emits an empty #mcq div carrying data-* attributes; all markup below is
     // built from those. JS strings use single quotes and HTML attribute
     // values are written unquoted (none of them ever contain a space) so
@@ -1105,6 +1219,28 @@ void deliver_scaffold(bool bget_password)
     web_client.println("#content_inner .mctab-on {background-color:var(--mclightblue);}\n");
     web_client.println(".mcbadge {font-size:x-small;font-weight:bold;margin-left:4px;}\n");
 
+    // stage 3 mailbox card below: "before you switch this on" warning box.
+    web_client.println(".mbx-warn {background:var(--mclightred);border:solid 1px var(--mcred);border-radius:5px;padding:6px 8px;margin:7px;}\n");
+
+    // content definitions -> mailbox page (stage 3, docs/design/mailbox-page-mockup.html).
+    // Kept unconditional (not #if ENABLE_MSGSTORE) because this is a string literal inside
+    // one big <style> block: the rules never match anything on a board without the page.
+    web_client.println("#content_inner > table td.num {white-space:nowrap;font-variant-numeric:tabular-nums;}\n");
+    web_client.println(".mbx-actions button {padding:3px 7px;}\n");
+    web_client.println(".mbx-counters {display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px 10px;margin:7px;font-variant-numeric:tabular-nums;}\n");
+    web_client.println(".mbx-counters>div {display:flex;justify-content:space-between;gap:6px;border-bottom:1px dotted #c8c8c8;padding:2px 0;}\n");
+    web_client.println(".mbx-counters b {font-weight:bold;}\n");
+    web_client.println(".mbx-state {display:inline-block;border:solid 1px var(--mcgray);border-radius:5px;padding:0 6px;font-size:x-small;font-weight:bold;white-space:nowrap;}\n");
+    web_client.println(".mbx-held {background:var(--mclightblue);}\n");
+    web_client.println(".mbx-armed, .mbx-ladder {background:var(--mclightgreen);}\n");
+    web_client.println(".mbx-cooldown {background:#F6E7B8;}\n");
+    web_client.println(".mbx-stale {color:var(--mcred);}\n");
+    web_client.println(".mbx-actions {display:flex;gap:6px;white-space:nowrap;}\n");
+    web_client.println(".mbx-toolbar {display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 10px 0;}\n");
+    web_client.println(".mbx-toolbar .spacer {flex:1;}\n");
+    web_client.println(".mbx-legend {font-size:x-small;margin:8px 0 0 0;color:#555;}\n");
+    web_client.println(".mbx-legend .mbx-state {margin-right:8px;}\n");
+
     web_client.println("</style>\n\n");
 
     // scaffold body
@@ -1128,10 +1264,18 @@ void deliver_scaffold(bool bget_password)
 
     web_client.println("<Button class=\"nav_button nbactive\" onclick=\"loadPage('info',this,true)\"><svg viewBox=\"-0.5 0 25 25\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <path d=\"M12 21.5C17.1086 21.5 21.25 17.3586 21.25 12.25C21.25 7.14137 17.1086 3 12 3C6.89137 3 2.75 7.14137 2.75 12.25C2.75 17.3586 6.89137 21.5 12 21.5Z\" stroke=\"#ffffff\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path> <path d=\"M12.9309 8.15005C12.9256 8.39231 12.825 8.62272 12.6509 8.79123C12.4767 8.95974 12.2431 9.05271 12.0008 9.05002C11.8242 9.04413 11.6533 8.98641 11.5093 8.884C11.3652 8.7816 11.2546 8.63903 11.1911 8.47415C11.1275 8.30927 11.1139 8.12932 11.152 7.95675C11.19 7.78419 11.278 7.6267 11.405 7.50381C11.532 7.38093 11.6923 7.29814 11.866 7.26578C12.0397 7.23341 12.2192 7.25289 12.3819 7.32181C12.5446 7.39072 12.6834 7.506 12.781 7.65329C12.8787 7.80057 12.9308 7.97335 12.9309 8.15005ZM11.2909 16.5301V11.1501C11.2882 11.0556 11.3046 10.9615 11.3392 10.8736C11.3738 10.7857 11.4258 10.7057 11.4922 10.6385C11.5585 10.5712 11.6378 10.518 11.7252 10.4822C11.8126 10.4464 11.9064 10.4286 12.0008 10.43C12.094 10.4299 12.1863 10.4487 12.272 10.4853C12.3577 10.5218 12.4352 10.5753 12.4997 10.6426C12.5642 10.7099 12.6143 10.7895 12.6472 10.8767C12.6801 10.9639 12.6949 11.0569 12.6908 11.1501V16.5301C12.6908 16.622 12.6727 16.713 12.6376 16.7979C12.6024 16.8828 12.5508 16.96 12.4858 17.025C12.4208 17.09 12.3437 17.1415 12.2588 17.1767C12.1738 17.2119 12.0828 17.23 11.9909 17.23C11.899 17.23 11.8079 17.2119 11.723 17.1767C11.6381 17.1415 11.5609 17.09 11.4959 17.025C11.4309 16.96 11.3793 16.8828 11.3442 16.7979C11.309 16.713 11.2909 16.622 11.2909 16.5301Z\" fill=\"#ffffff\"></path> </g></svg></Button>\n");
     web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('messages',this,true)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <path d=\"M7 9H17M7 13H17M21 20L17.6757 18.3378C17.4237 18.2118 17.2977 18.1488 17.1656 18.1044C17.0484 18.065 16.9277 18.0365 16.8052 18.0193C16.6672 18 16.5263 18 16.2446 18H6.2C5.07989 18 4.51984 18 4.09202 17.782C3.71569 17.5903 3.40973 17.2843 3.21799 16.908C3 16.4802 3 15.9201 3 14.8V7.2C3 6.07989 3 5.51984 3.21799 5.09202C3.40973 4.71569 3.71569 4.40973 4.09202 4.21799C4.51984 4 5.0799 4 6.2 4H17.8C18.9201 4 19.4802 4 19.908 4.21799C20.2843 4.40973 20.5903 4.71569 20.782 5.09202C21 5.51984 21 6.0799 21 7.2V20Z\" stroke=\"#ffffff\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path> </g></svg></Button>\n");
+#if defined(ENABLE_MSGSTORE)
+    // Stage 3 store node: envelope icon from docs/design/mailbox-page-mockup.html, placed
+    // right after Messages. Non-eligible boards never emit this button, so a stray click
+    // would 404 anyway, but there is no click to have.
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('mailbox',this,true)\"><svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <path d=\"M3 8l9 6 9-6\" stroke=\"#ffffff\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"></path> <rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\" stroke=\"#ffffff\" stroke-width=\"1.6\"></rect> </g></svg></Button>\n");
+#endif
     web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('wx',this,true)\"><svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 512 512\" xml:space=\"preserve\" fill=\"#000000\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g > <style type=\"text/css\"> .st0{fill:#ffffff;} </style> <g> <path class=\"st0\" d=\"M115.958,269.922c16.999-10.12,36.842-15.916,58.04-15.916c2.556,0,5.127,0.078,7.682,0.234 c7.199-24.681,20.957-46.355,39.203-63.12c-3.49-39.437-36.562-70.32-76.879-70.32c-42.647,0-77.207,34.56-77.207,77.199 C66.798,230.766,87.194,258.719,115.958,269.922z\"></path> <rect x=\"135.652\" y=\"54.002\" class=\"st0\" width=\"16.696\" height=\"45.911\"></rect> <polygon class=\"st0\" points=\"102.184,108.88 79.232,69.116 64.772,77.467 87.724,117.232 \"></polygon> <polygon class=\"st0\" points=\"15.114,133.233 54.878,156.185 63.23,141.726 23.466,118.774 \"></polygon> <polygon class=\"st0\" points=\"45.919,189.654 0,189.654 0,206.35 45.919,206.342 \"></polygon> <polygon class=\"st0\" points=\"15.114,262.77 23.466,277.23 63.23,254.27 54.878,239.811 \"></polygon> <rect x=\"240.478\" y=\"114.523\" transform=\"matrix(0.4998 0.8661 -0.8661 0.4998 243.5358 -146.7501)\" class=\"st0\" width=\"16.694\" height=\"45.913\"></rect> <polygon class=\"st0\" points=\"223.228,77.467 208.776,69.116 185.817,108.88 200.269,117.232 \"></polygon> <path class=\"st0\" d=\"M431.997,298c-0.031,0-0.062,0.008-0.101,0.008c0.054-1.332,0.101-2.665,0.101-4.004 C431.997,229.932,380.064,178,316,178c-60.012,0-109.382,45.575-115.388,104.006c-8.414-2.602-17.342-4.005-26.614-4.005 C124.294,278.001,84,318.295,84,368c0,49.704,40.294,89.998,89.998,89.998h257.999c44.182,0,80.003-35.814,80.003-79.995 C512,333.814,476.178,298,431.997,298z\"></path> </g> </g></svg></Button>\n");
     web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('position',this,true)\"><svg viewBox=\"0 0 512 512\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"#ffffff\" stroke=\"#ffffff\"><g stroke-width=\"0\"></g><g istroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path fill=\"#ffffff\" d=\"M256 17.108c-75.73 0-137.122 61.392-137.122 137.122.055 23.25 6.022 46.107 11.58 56.262L256 494.892l119.982-274.244h-.063c11.27-20.324 17.188-43.18 17.202-66.418C393.122 78.5 331.73 17.108 256 17.108zm0 68.56a68.56 68.56 0 0 1 68.56 68.562A68.56 68.56 0 0 1 256 222.79a68.56 68.56 0 0 1-68.56-68.56A68.56 68.56 0 0 1 256 85.67z\"></path></g></svg></Button>\n");
     web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('mheard',this,true)\"><svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 32 32\" xml:space=\"preserve\" fill=\"#000000\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <style type=\"text/css\"> .linesandangles_een{fill:#ffffff;} </style> <path class=\"linesandangles_een\" d=\"M25,13c0,3.348-2.208,7.455-4.286,9.618c-0.527,0.549-0.902,1.188-1.299,1.863 C18.447,26.131,17.35,28,14,28c-3.616,0-5.077-2.068-6.043-3.437c-0.238-0.337-0.464-0.657-0.664-0.856l1.414-1.414 C9.028,22.614,9.301,23,9.59,23.41C10.49,24.683,11.42,26,14,26c2.205,0,2.796-1.007,3.69-2.531 c0.417-0.711,0.891-1.517,1.581-2.236C21.064,19.366,23,15.687,23,13c0-3.86-3.14-7-7-7s-7,3.14-7,7H7c0-4.962,4.038-9,9-9 S25,8.038,25,13z M12,17h-1v2h1c1.206,0,3-0.799,3-3c0-1.639-0.994-2.5-2-2.833v-0.161C13.006,12.503,13.177,10,16,10 s2.994,2.503,3,3.005L20,13h1c0-1.729-1.045-5-5-5s-5,3.271-5,5l0.014,1.975L11.988,15C12.45,15.012,13,15.195,13,16 S12.45,16.988,12,17z\"></path> </g></svg></Button>\n");
     web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('path',this,true)\"><svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path fill=\"#ffffff\" fill-rule=\"evenodd\" d=\"M13 0a3 3 0 00-1.65 5.506 7.338 7.338 0 01-.78 1.493c-.22.32-.472.635-.8 1.025a1.509 1.509 0 00-.832.085 12.722 12.722 0 00-1.773-1.124c-.66-.34-1.366-.616-2.215-.871a1.5 1.5 0 10-2.708 1.204c-.9 1.935-1.236 3.607-1.409 5.838a1.5 1.5 0 101.497.095c.162-2.07.464-3.55 1.25-5.253.381-.02.725-.183.979-.435.763.23 1.367.471 1.919.756a11.13 11.13 0 011.536.973 1.5 1.5 0 102.899-.296c.348-.415.64-.779.894-1.148.375-.548.665-1.103.964-1.857A3 3 0 1013 0zm-1.5 3a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0z\" clip-rule=\"evenodd\"></path></g></svg></Button>\n");
+    // NBR-W2: Menueknopf fuer die Nachbarschaftsmatrix -- 3x3-Raster als Icon, Konzept 4.5.
+    web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('neighbours',this,true)\"><svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\"><g stroke=\"#ffffff\" stroke-width=\"2\"><rect x=\"3\" y=\"3\" width=\"5\" height=\"5\"></rect><rect x=\"9.5\" y=\"3\" width=\"5\" height=\"5\"></rect><rect x=\"16\" y=\"3\" width=\"5\" height=\"5\"></rect><rect x=\"3\" y=\"9.5\" width=\"5\" height=\"5\"></rect><rect x=\"9.5\" y=\"9.5\" width=\"5\" height=\"5\"></rect><rect x=\"16\" y=\"9.5\" width=\"5\" height=\"5\"></rect><rect x=\"3\" y=\"16\" width=\"5\" height=\"5\"></rect><rect x=\"9.5\" y=\"16\" width=\"5\" height=\"5\"></rect><rect x=\"16\" y=\"16\" width=\"5\" height=\"5\"></rect></g></svg></Button>\n");
     web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('rxlog',this,true)\"><svg viewBox=\"0 0 32 32\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:sketch=\"http://www.bohemiancoding.com/sketch/ns\" fill=\"#ffffff\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g> <title>book-album</title> <desc>Created with Sketch Beta.</desc><defs></defs><g stroke=\"none\" stroke-width=\"1\" fill=\"none\" fill-rule=\"evenodd\" sketch:type=\"MSPage\"> <g sketch:type=\"MSLayerGroup\" transform=\"translate(-412.000000, -99.000000)\" fill=\"#ffffff\"> <path d=\"M442,124 C442,125.104 441.073,125.656 440,126 C440,126 434.557,127.515 429,128.977 L429,104 L440,101 C441.104,101 442,101.896 442,103 L442,124 L442,124 Z M427,128.998 C421.538,127.53 416,126 416,126 C414.864,125.688 414,125.104 414,124 L414,103 C414,101.896 414.896,101 416,101 L427,104 L427,128.998 L427,128.998 Z M440,99 C440,99 434.211,100.594 428.95,102 C428.291,102.025 427.627,102 426.967,102 C421.955,100.656 416,99 416,99 C413.791,99 412,100.791 412,103 L412,124 C412,126.209 413.885,127.313 416,128 C416,128 421.393,129.5 426.967,131 L428.992,131 C434.612,129.5 440,128 440,128 C442.053,127.469 444,126.209 444,124 L444,103 C444,100.791 442.209,99 440,99 L440,99 Z\" sketch:type=\"MSShapeGroup\"> </path> </g> </g> </g></svg></Button>\n");
     web_client.println("<Button class=\"nav_button\" onclick=\"loadPage('spectrum',this,true)\"><svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><g><path d=\"M13,11v4M9,7v8m8-6v6\" style=\"fill:none;stroke:#ffffff;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;\"></path><path d=\"M3,19H21M5,3V21\" style=\"fill:none;stroke:#ffffff;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;\"></path></g></svg></Button>\n");
     if(bMCP23017) {
@@ -1298,14 +1442,27 @@ void sub_page_rxlog()
     web_client.println("</div>");
 
     web_client.println("<div style=\"overflow:scroll;\">");
-    do
+
+    // R1-04: DIES ist die Stelle, die den Puffer ueberhaupt erst anlegt -- er
+    // hat keinen anderen Leser. Der erste Aufruf dieser Seite kostet die
+    // Zuteilung, ab dann fuellt der RX-Pfad ihn. Schlaegt sie fehl, bleibt die
+    // Seite bedienbar und sagt warum, statt auf einem NULL-Zeiger zu landen.
+    if(!rawLogEnsure())
     {
-        // WQ-01: normal text size (was font-small) -- the page uses three sizes only:
-        // title, normal (log lines, panel text), small (legend, notes, tick labels).
-        if (ringbufferRAWLoraRX[iRead][0] != 0x00)
-            web_client.printf("<p class=\"no-wrap\"><%i>%s</p>\n", iRead, ringbufferRAWLoraRX[iRead]);
-        iRead = increment_mod(iRead, MAX_LOG);
-    } while (RAWLoRaWrite != iRead);
+        web_client.println("<p class=\"no-wrap\">RX log buffer not available (out of memory)</p>");
+    }
+    else
+    {
+        do
+        {
+            // WQ-01: normal text size (was font-small) -- the page uses three sizes only:
+            // title, normal (log lines, panel text), small (legend, notes, tick labels).
+            // Empty slots (calloc'd, never written) are skipped.
+            if (ringbufferRAWLoraRX[iRead][0] != 0x00)
+                web_client.printf("<p class=\"no-wrap\"><%i>%s</p>\n", iRead, ringbufferRAWLoraRX[iRead]);
+            iRead = increment_mod(iRead, MAX_LOG);
+        } while (RAWLoRaWrite != iRead);
+    }
     web_client.println("</div></div>");
     web_client.println(); // The HTTP response ends with another blank line
 }
@@ -1388,89 +1545,996 @@ void sub_page_position()
 /**
  * ###########################################################################################################################
  * delivers the mheard-page to be injected into the scaffold
+ *
+ * W4b (docs/meshcom5-campaign.md Welle 4, Konzept 4.6/4.9 in
+ * docs/meshcom5-topologie/body/04-ansichten.html): liest nur noch ueber
+ * src/nbr_views.h -- mheard_functions.* ist mit dieser Welle weg. Die
+ * Zeilenauswahl kommt aus nbrMhRows() (schon neueste zuerst, 3h-Fenster wie
+ * bisher), Detailwerte je Zeile aus nbrMhGet(). Ein Heap-Block fuer die
+ * Zeilenindizes statt eines Stack-Arrays, dieselbe Begruendung wie
+ * sub_page_neighbours() unten (Seite wird selten geoeffnet).
  */
 void sub_page_mheard()
 {
-    mheardLine mheardLine;
-    bool isShowing = false;
+    // Konzept 4.6: dieselbe Minuten-seit-Boot-Uhr wie der OnRxDone-Haken und
+    // die Neighbours-Seite (nbrFresh() etc.) -- alle Leser rechnen gegen
+    // dieselbe Uhr.
+    uint16_t now_min = uptimeMin16();
+
+    // Konzept 4.6, Regel 2: ohne gueltige Uhr (Jahr < 2025, wie bisher
+    // isWallClockValid() in mheard_functions.cpp) bleibt die Topologie
+    // gueltig -- DATE/TIME zeigt dann nur das Alter in Minuten.
+    bool bClockValid = (meshcom_settings.node_date_year >= 2025);
+    unsigned long nowEpoch = bClockValid ? getUnixClock() : 0;
+
     _create_meshcom_subheader("MHeard Information");
     web_client.println("<div id=\"content_inner\">");
+    // W4d: Legende fuer die zweite Kaertchenzeile (title= wirkt auf dem
+    // Telefon nicht, deshalb als Text).
+    web_client.print("<p style=\"font-size:0.85em;color:#555;max-width:900px;\">"
+                     "Stations I heard directly in the last 3 h, newest first. "
+                     "Last heard: minutes since I last received it directly. "
+                     "Hears me: its own reports say it hears me, at this SNR. "
+                     "It hears: stations it hears, as far as my table knows. "
+                     "Only it hears: of those, how many no other direct neighbour of mine hears -- its value as a relay for me. "
+                     "Relay role: Super node = by far the most exclusive stations; Needed = at least one exclusive station; Redundant = everything it hears is heard by others too. "
+                     "It reports: the neighbour count the station announces itself (NCNT).</p>");
 
-    for (int iset = 0; iset < MAX_MHEARD; iset++)
+    uint8_t *idx = (uint8_t *)malloc((size_t)NBR_MAX_ROWS);
+    if (idx == NULL)
     {
-        if (mheardCalls[iset][0] != 0x00)
-        {
-            if (mheardFreshMs(iset, 3UL * 60UL * 60UL * 1000UL)) // 3h (NC-02: monoton, nicht Wanduhr)
-                isShowing = true;
-            decodeMHeard(mheardBuffer[iset], mheardLine);
-            web_client.printf("<div class=\"cardlayout\">\n");
-            web_client.printf("<label class=\"cardlabel\"><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a> <span class=\"font-small\">(%s %s)</span></label>", mheardCalls[iset], mheardCalls[iset], mheardLine.mh_date.c_str(), mheardLine.mh_time.c_str());
-            web_client.printf("<div class=\"flex-auto-wrap\">");
-            web_client.printf("<div><span class=\"font-bold\">Type:</span><br><span>%s</span></div>", getPayloadType(mheardLine.mh_payload_type));
-            web_client.printf("<div><span class=\"font-bold\">Hardware:</span><br><span>%s</span></div>", getHardwareLong(mheardLine.mh_hw).c_str());
-            web_client.printf("<div><span class=\"font-bold\">Mod:</span><br><span>%01X/%01X</span></div>", (mheardLine.mh_mod >> 4), (mheardLine.mh_mod & 0x0f));
-            web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span>%4idBm</span></div>", mheardLine.mh_rssi);
-            web_client.printf("<div><span class=\"font-bold\">SNR:</span><br><span>%4idB</span></div>", mheardLine.mh_snr);
-            web_client.printf("<div><span class=\"font-bold\">Dist:</span><br><span>%5.1lf</span></div>", mheardLine.mh_dist);
-            web_client.printf("<div><span class=\"font-bold\">NCNT:</span><br><span>%2i</span></div>", mheardLine.mh_ncount);            
+        web_client.println("<p>Not enough memory to render MHeard.</p>");
+        web_client.println("</div>");
+        web_client.println(); // The HTTP response ends with another blank line
+        return;
+    }
 
-            dlat = mheardLat[iset];
+    int total = nbrMhRows(nbrMatrix, now_min, 180, idx, NBR_MAX_ROWS); // 3h Fenster wie bisher
+    int shown = (total < NBR_MAX_ROWS) ? total : NBR_MAX_ROWS;
+
+    for (int k = 0; k < shown; k++)
+    {
+        NbrMhView v;
+        if (!nbrMhGet(nbrMatrix, idx[k], now_min, &v))
+            continue;
+
+        web_client.printf("<div class=\"cardlayout\" style=\"max-width:900px;\">\n");
+        web_client.printf("<label class=\"cardlabel\"><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a> <span class=\"font-small\">(", v.call, v.call);
+        if (bClockValid)
+        {
+            // Sekunde aus dem Slot statt der Zeilenminute (Konzept 4.6);
+            // dieselbe utcoff-Umrechnung wie frueher fuer die Pfadseite.
+            unsigned long base = nowEpoch - (nowEpoch % 60UL) - (unsigned long)v.age_min * 60UL;
+            if (v.sec < 60)
+                base += v.sec;
+            base += (unsigned long)(long)(meshcom_settings.node_utcoff * 3600.0);
+            web_client.print(convertUNIXtoString(base));
+        }
+        else
+        {
+            web_client.printf("%u min ago", (unsigned)v.age_min);
+        }
+        web_client.printf(")</span></label>");
+        web_client.printf("<div class=\"flex-auto-wrap\">");
+        {
+            const char *ptype = nbrPayloadTypeName(v.plt);
+            if (v.plt == ':')
+                ptype = "Text message";
+            else if (v.plt == '!')
+                ptype = "Position";
+            else if (v.plt == '@')
+                ptype = "Heartbeat (HEY)";
+            web_client.printf("<div><span class=\"font-bold\">Last frame:</span><br><span>%s</span></div>", ptype);
+        }
+        web_client.printf("<div><span class=\"font-bold\">Hardware:</span><br><span>%s</span></div>", nbrHardwareName(v.hw));
+        web_client.printf("<div><span class=\"font-bold\">Country / mode:</span><br><span title=\"high nibble: country index, low nibble: LoRa modulation\">%01X / %01X</span></div>", (v.mod >> 4), (v.mod & 0x0f));
+        if (v.rssi == NBR_MH_RSSI_UNKNOWN)
+            web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span></span></div>");
+        else
+            web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span>%d dBm</span></div>", (int)v.rssi);
+        if (v.snr == NBR_SNR_UNKNOWN)
+            web_client.printf("<div><span class=\"font-bold\">SNR (avg):</span><br><span>-</span></div>");
+        else
+            web_client.printf("<div><span class=\"font-bold\">SNR (avg):</span><br><span>%d dB</span></div>", (int)v.snr);
+
+        // DIST weiterhin aus der eigenen Position gerechnet, 0/0 = unbekannt
+        // (dieselbe Regel wie src/mh_phone.h fuer den App-Rahmen).
+        double dist = -1.0;
+        if (nbrPosKnown(v.lat, v.lon) && !(meshcom_settings.node_lat == 0.0 && meshcom_settings.node_lon == 0.0))
+            dist = gps.distanceBetween(v.lat, v.lon, meshcom_settings.node_lat, meshcom_settings.node_lon) / 1000.0;
+        if (dist >= 0.0)
+            web_client.printf("<div><span class=\"font-bold\">Distance:</span><br><span>%.1lf km</span></div>", dist);
+        else
+            web_client.printf("<div><span class=\"font-bold\">Distance:</span><br><span>-</span></div>");
+
+        // NCNT (Konzept 4.8) steht jetzt in der zweiten Zeile, bei den Nachbarschaftswerten.
+
+        if (nbrPosKnown(v.lat, v.lon))
+        {
+            dlat = v.lat;
             clat = 'N';
-            if(dlat < 0)
+            if (dlat < 0)
             {
                 dlat = dlat * (-1);
                 clat = 'S';
             }
-            dlon = mheardLon[iset];
+            dlon = v.lon;
             clon = 'E';
-            if(dlon < 0)
+            if (dlon < 0)
             {
                 dlon = dlon * (-1);
                 clon = 'W';
             }
-
             web_client.printf("<div><span class=\"font-bold\">Lat:</span><br><span>%c%06.3lf</span></div>", clat, dlat);
             web_client.printf("<div><span class=\"font-bold\">Lon:</span><br><span>%c%07.3lf</span></div>", clon, dlon);
-            web_client.printf("<div><span class=\"font-bold\">Alt:</span><br><span>%4i</span></div>", mheardAlt[iset]);
-            web_client.printf("</div></div>");
         }
+        else
+        {
+            web_client.printf("<div><span class=\"font-bold\">Lat:</span><br><span></span></div>");
+            web_client.printf("<div><span class=\"font-bold\">Lon:</span><br><span></span></div>");
+        }
+        if (v.alt != NBR_MH_ALT_UNKNOWN)
+            web_client.printf("<div><span class=\"font-bold\">Altitude:</span><br><span>%d m</span></div>", (int)v.alt);
+        else
+            web_client.printf("<div><span class=\"font-bold\">Altitude:</span><br><span>-</span></div>");
+
+        // W4b, Konzept 4.9: die Nachbarschaftswerte -- W4d: eigene zweite
+        // Zeile im Kaertchen, ausgeschriebene Namen statt AGE/HM/#X/#N/R,
+        // Legende oben auf der Seite.
+        web_client.printf("</div><div class=\"flex-auto-wrap\" style=\"margin-top:8px;\">");
+        web_client.printf("<div><span class=\"font-bold\">Last heard:</span><br><span>%u min ago</span></div>", (unsigned)v.age_min);
+        if (v.hm_snr == NBR_SNR_UNKNOWN)
+            web_client.printf("<div><span class=\"font-bold\">Hears me:</span><br><span>not reported</span></div>");
+        else
+            web_client.printf("<div><span class=\"font-bold\">Hears me:</span><br><span>yes, %d dB</span></div>", (int)v.hm_snr);
+        const char *role = "-";
+        if (v.role == 'S')
+            role = "Super node";
+        else if (v.role == 'N')
+            role = "Needed";
+        else if (v.role == 'R')
+            role = "Redundant";
+        web_client.printf("<div><span class=\"font-bold\">Relay role:</span><br><span>%s</span></div>", role);
+        web_client.printf("<div><span class=\"font-bold\">Only it hears:</span><br><span>%u station%s</span></div>", (unsigned)v.ex, v.ex == 1 ? "" : "s");
+        web_client.printf("<div><span class=\"font-bold\">It hears:</span><br><span>%u station%s</span></div>", (unsigned)v.nb, v.nb == 1 ? "" : "s");
+        web_client.printf("<div><span class=\"font-bold\">It reports:</span><br><span>%u neighbour%s</span></div>", (unsigned)v.ncnt, v.ncnt == 1 ? "" : "s");
+        web_client.printf("<div><span class=\"font-bold\">Gateway:</span><br><span>%s</span></div>", v.gw ? "yes" : "no");
+        web_client.printf("</div></div>");
     }
-    if (!isShowing)
+    free(idx);
+
+    if (shown == 0)
         web_client.println("<p>No Nodes heard so far.</p>"); // no nodes available? Tell the user
+    web_client.println("</div>");
+    web_client.println(); // The HTTP response ends with another blank line
+}
+
+// W2c CONTRACT: jede Zeile ausserhalb von nbr_matrix.cpp liest nur ueber die
+// oeffentliche API (nbrRowGet()/nbrEdgeGet()/die Maskenfunktionen aus
+// nbr_matrix.h) -- die Zeilen- und Kantenfelder von NbrMatrix sind seit dem
+// Kantenpool-Umbau (Welle 2) nicht mehr oeffentlich, und NBR_MAX_ROWS ist
+// jetzt 64 (klassischer ESP32) bzw. 128 (S3, nRF52) statt vormals <= 21.
+// nbrRowGet() ist ein O(1)-Zeilenzugriff (NbrMatrix.row[] ist ein Array, kein
+// Pool) -- es GIBT bewusst kein Zeilen-Array als Zwischenspeicher mehr
+// (Orchestrator-Review 2026-09-25: eine NbrRowView[NBR_MAX_ROWS]-Kopie kostet
+// ~3.6 kB BSS auf S3/nRF52, fast die ganze Kampagnen-Ersparnis). Ein
+// Rufzeichen wird deshalb hier geholt, jedes Mal wenn es gebraucht wird --
+// nbrRowGet() nimmt die Scheduler-Klammer auf nRF52 selbst.
+static void nbrPrintCall(uint8_t row)
+{
+    NbrRowView v;
+    if (nbrRowGet(nbrMatrix, row, &v))
+        web_client.print(v.call);
+    else
+        web_client.print("?");
+}
+
+/**
+ * ###########################################################################################################################
+ * delivers the path-page to be injected into the scaffold
+ *
+ * W4c (docs/meshcom5-topologie/, Zusammenlegung der alten Zeilentabelle der
+ * Neighbours-Seite in diese Seite): EINE Tabelle, eine Zeile je bekannter
+ * Station, sortiert nach Hops aufsteigend, dann Alter aufsteigend -- Hops 0
+ * ist die eigene Zeile (immer gezeigt, solange die Topologie bereit ist),
+ * Hops 1 die frischen Direktnachbarn (nbrDirectMask()), Hops 2 und mehr jeder
+ * nbrRouteCount()/nbrRouteGet()-Eintrag (2-Hop-Zeile ODER Horizont). Die
+ * Spalten Hears me/Covered by (Hops 1) und GW/Mesh/Hears me/Reach (2-Hop-
+ * Zeile, ueber das neue NbrRouteView::row) sind aus der alten Zeilentabelle
+ * von sub_page_neighbours() uebernommen -- Via/Covered by bei Hops >= 2 ist
+ * die unveraenderte Via-Logik der alten Pfadseite (entry-Maske, Horizont
+ * A&gt;B-Form).
+ *
+ * Sortierung: ein einziger transienter Heap-Block (dieselbe Begruendung wie
+ * `scratch` in sub_page_neighbours() oben) haelt nur Art+Index je Zeile, nie
+ * eine Kopie von NbrRowView/NbrRouteView (W2c CONTRACT oben). nbrRouteGet()
+ * ist O(i) -- darum genau ein Aufruf je Weg-Eintrag im Sammeldurchlauf (fuer
+ * Hops/Alter) und genau einer im Renderdurchlauf, keiner davon in der
+ * Sortierschleife selbst (einfaches Einfuegesortieren).
+ */
+void sub_page_path()
+{
+    uint16_t now_min = uptimeMin16();
+
+    _create_meshcom_subheader("Path Information");
+    web_client.println("<div id=\"content_inner\">");
+
+    NbrRowView r0;
+    if (!nbrRowGet(nbrMatrix, 0, &r0) || r0.call[0] == 0)
+    { // noch kein Frame ausgewertet -- Zeile 0 ist unbelegt (wie sub_page_neighbours())
+        web_client.println("<p>No frames received yet.</p>");
+        web_client.println("</div>");
+        web_client.println(); // The HTTP response ends with another blank line
+        return;
+    }
+
+    NbrMask directMask = nbrDirectMask(nbrMatrix, now_min);
+    int route_total = nbrRouteCount(nbrMatrix, now_min);
+
+    // Datensatz fuer die Sortierung: nur Art (0 eigene Zeile, 1 direkt, 2 Weg)
+    // und Index (Matrixzeile bei 0/1, laufender Weg-Index bei 2), dazu die
+    // beiden Sortierschluessel. Obergrenze: jede Matrixzeile hoechstens
+    // einmal (eigene Zeile ODER direkt ODER 2-Hop-Zeile, nie mehrfach) plus
+    // der Horizont -- NBR_MAX_ROWS + NBR_HZ_ENTRIES + 1 deckt das mit Reserve.
+    struct PathRec
+    {
+        uint8_t  kind; // 0 eigene Zeile, 1 direkt, 2 Weg (2-Hop-Zeile oder Horizont)
+        uint8_t  hops;
+        uint16_t age;
+        uint16_t idx;
+    };
+    size_t maxrec = (size_t)NBR_MAX_ROWS + (size_t)NBR_HZ_ENTRIES + 1;
+    PathRec *rec = (PathRec *)malloc(maxrec * sizeof(PathRec));
+    if (rec == NULL)
+    {
+        web_client.println("<p>Not enough memory to render the path table.</p>");
+        web_client.println("</div>");
+        web_client.println(); // The HTTP response ends with another blank line
+        return;
+    }
+    size_t nrec = 0;
+
+    rec[nrec].kind = 0;
+    rec[nrec].hops = 0;
+    rec[nrec].age = nbrRowAgeMin(nbrMatrix, 0, now_min);
+    rec[nrec].idx = 0;
+    nrec++;
+
+    for (int X = nbrMaskNext(directMask, -1); X >= 0 && nrec < maxrec; X = nbrMaskNext(directMask, X))
+    {
+        rec[nrec].kind = 1;
+        rec[nrec].hops = 1;
+        rec[nrec].age = nbrRowAgeMin(nbrMatrix, (uint8_t)X, now_min);
+        rec[nrec].idx = (uint16_t)X;
+        nrec++;
+    }
+
+    for (int i = 0; i < route_total && nrec < maxrec; i++)
+    {
+        NbrRouteView r;
+        if (!nbrRouteGet(nbrMatrix, i, now_min, &r))
+            continue;
+        rec[nrec].kind = 2;
+        rec[nrec].hops = r.hops;
+        rec[nrec].age = r.age_min;
+        rec[nrec].idx = (uint16_t)i;
+        nrec++;
+    }
+
+    // Einfuegesortieren nach Hops, dann Alter (beide aufsteigend) -- rec[0]
+    // (eigene Zeile, Hops 0) bleibt dabei an erster Stelle.
+    for (size_t a = 1; a < nrec; a++)
+    {
+        PathRec key = rec[a];
+        long b = (long)a - 1;
+        while (b >= 0 && (rec[b].hops > key.hops || (rec[b].hops == key.hops && rec[b].age > key.age)))
+        {
+            rec[b + 1] = rec[b];
+            b--;
+        }
+        rec[b + 1] = key;
+    }
+
+    // Tabelle DIREKT unter #content_inner, keine Wrapper-div: das Tabellen-
+    // CSS des Scaffolds greift nur auf "#content_inner > table" (siehe
+    // sub_page_neighbours() unten, Bench 2026-09-20).
+    web_client.println("<table class=\"table\">");
+    web_client.println("<thead><tr class=\"font-bold\"><td>Call</td><td>Hops</td><td>GW</td><td>Mesh</td>"
+                        "<td>Hears me</td><td>Via / Covered by</td><td>Reach</td><td>Age (min)</td></tr></thead>");
+
+    for (size_t k = 0; k < nrec; k++)
+    {
+        PathRec &pr = rec[k];
+
+        if (pr.kind == 0)
+        { // eigene Zeile: dieselben Spaltenregeln wie eine direkte Zeile, ohne Hears me/Via
+            web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", r0.call, r0.call);
+            web_client.print("<td>0</td>");
+            web_client.printf("<td>%s</td>", (r0.flags & NBR_FLAG_GW) ? "Y" : "N");
+            if (!(r0.flags & NBR_FLAG_POS))
+                web_client.print("<td>-</td>");
+            else
+                web_client.printf("<td>%s</td>", (r0.flags & NBR_FLAG_MESH) ? "Y" : "N");
+            web_client.print("<td>-</td>"); // Hears me: keine Kante nach mir selbst
+            web_client.print("<td>-</td>"); // Via / Covered by: nicht anwendbar auf die eigene Zeile
+
+            int partner = -1;
+            float reach = nbrReach(nbrMatrix, 0, now_min, &partner);
+            if (reach >= 0 && partner >= 0)
+            {
+                web_client.printf("<td>%.1f km @ ", (double)reach);
+                nbrPrintCall((uint8_t)partner);
+                web_client.print("</td>");
+            }
+            else
+                web_client.print("<td>-</td>");
+
+            web_client.printf("<td>%u</td></tr>\n", (unsigned)pr.age);
+            continue;
+        }
+
+        if (pr.kind == 1)
+        { // direkte Zeile
+            uint8_t X = (uint8_t)pr.idx;
+            NbrRowView v;
+            if (!nbrRowGet(nbrMatrix, X, &v))
+                continue; // Zeile ist zwischen Sammel- und Renderdurchlauf verschwunden (EVICT)
+
+            web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", v.call, v.call);
+            web_client.print("<td>1</td>");
+            web_client.printf("<td>%s</td>", (v.flags & NBR_FLAG_GW) ? "Y" : "N");
+            if (!(v.flags & NBR_FLAG_POS))
+                web_client.print("<td>-</td>");
+            else
+                web_client.printf("<td>%s</td>", (v.flags & NBR_FLAG_MESH) ? "Y" : "N");
+
+            NbrEdgeView hm;
+            if (nbrEdgeGet(nbrMatrix, 0, X, &hm) && hm.snr != NBR_SNR_UNKNOWN && nbrFresh(hm.last_min, now_min))
+                web_client.printf("<td>%d</td>", (int)hm.snr);
+            else
+                web_client.print("<td>-</td>");
+
+            // Covered by (wie 6.2, Regel 3 der alten Zeilentabelle): direkte
+            // Nachbarn, die X ebenfalls frisch hoeren -- leer ist E_self,
+            // "nur ich erreiche diesen Knoten".
+            web_client.print("<td style=\"max-width:220px;overflow-wrap:anywhere;\">");
+            {
+                NbrMask covered = nbrMaskAnd(nbrHearersMask(nbrMatrix, X, now_min), directMask);
+                bool first = true;
+                for (int m = nbrMaskNext(covered, -1); m >= 0; m = nbrMaskNext(covered, m))
+                {
+                    if (!first)
+                        web_client.print(", ");
+                    nbrPrintCall((uint8_t)m);
+                    first = false;
+                }
+                if (first)
+                    web_client.print("only me");
+            }
+            web_client.print("</td>");
+
+            int partner = -1;
+            float reach = nbrReach(nbrMatrix, X, now_min, &partner);
+            if (reach >= 0 && partner >= 0)
+            {
+                web_client.printf("<td>%.1f km @ ", (double)reach);
+                nbrPrintCall((uint8_t)partner);
+                web_client.print("</td>");
+            }
+            else
+                web_client.print("<td>-</td>");
+
+            web_client.printf("<td>%u</td></tr>\n", (unsigned)pr.age);
+            continue;
+        }
+
+        // pr.kind == 2: Weg-Eintrag (2-Hop-Zeile oder Horizont).
+        NbrRouteView r;
+        if (!nbrRouteGet(nbrMatrix, (int)pr.idx, now_min, &r) || r.hops != pr.hops)
+            continue; // Momentaufnahme hat sich zwischen den Durchlaeufen verschoben
+                      // (Index zeigt auf einen anderen Eintrag -- nicht falsch einsortieren)
+
+        bool hasRow = (r.row != 0xFF);
+        NbrRowView rv;
+        uint8_t rowFlags = hasRow && nbrRowGet(nbrMatrix, r.row, &rv) ? rv.flags : 0;
+
+        web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", r.call, r.call);
+        web_client.printf("<td>%u</td>", (unsigned)r.hops);
+        web_client.printf("<td>%s</td>", hasRow ? ((rowFlags & NBR_FLAG_GW) ? "Y" : "N") : (r.gw ? "Y" : "N"));
+
+        if (!hasRow || !(rowFlags & NBR_FLAG_POS))
+            web_client.print("<td>-</td>"); // Horizont hat keine Zeile, oder keine Positions-Info
+        else
+            web_client.printf("<td>%s</td>", (rowFlags & NBR_FLAG_MESH) ? "Y" : "N");
+
+        if (hasRow)
+        {
+            NbrEdgeView hm;
+            if (nbrEdgeGet(nbrMatrix, 0, r.row, &hm) && hm.snr != NBR_SNR_UNKNOWN && nbrFresh(hm.last_min, now_min))
+                web_client.printf("<td>%d</td>", (int)hm.snr);
+            else
+                web_client.print("<td>-</td>");
+        }
+        else
+            web_client.print("<td>-</td>");
+
+        // Via / Covered by: unveraenderte Via-Logik der alten Pfadseite.
+        web_client.print("<td style=\"max-width:220px;overflow-wrap:anywhere;\">");
+        {
+            bool first = true;
+            for (int a = nbrMaskNext(r.entry, -1); a >= 0; a = nbrMaskNext(r.entry, a))
+            {
+                NbrRowView av;
+                const char *acall = nbrRowGet(nbrMatrix, a, &av) ? av.call : "?";
+
+                if (r.is_row)
+                { // 2-Hop-Zeile: entry IST schon die B-Menge (die direkten Nachbarn)
+                    web_client.printf("%s%s", first ? "" : ", ", acall);
+                    first = false;
+                    continue;
+                }
+
+                // Horizont: entry sind die Eintrittszeilen A; wo billig, dazu
+                // die B's, ueber die jedes A hereinkommt.
+                NbrMask viaB = nbrMaskAnd(nbrHearersMask(nbrMatrix, a, now_min), directMask);
+                if (nbrMaskEmpty(viaB))
+                {
+                    web_client.printf("%s%s", first ? "" : ", ", acall);
+                    first = false;
+                    continue;
+                }
+                for (int b = nbrMaskNext(viaB, -1); b >= 0; b = nbrMaskNext(viaB, b))
+                {
+                    NbrRowView bv;
+                    const char *bcall = nbrRowGet(nbrMatrix, b, &bv) ? bv.call : "?";
+                    web_client.printf("%s%s&gt;%s", first ? "" : ", ", acall, bcall);
+                    first = false;
+                }
+            }
+        }
+        web_client.print("</td>");
+
+        if (hasRow)
+        {
+            int partner = -1;
+            float reach = nbrReach(nbrMatrix, r.row, now_min, &partner);
+            if (reach >= 0 && partner >= 0)
+            {
+                web_client.printf("<td>%.1f km @ ", (double)reach);
+                nbrPrintCall((uint8_t)partner);
+                web_client.print("</td>");
+            }
+            else
+                web_client.print("<td>-</td>");
+        }
+        else
+            web_client.print("<td>-</td>");
+
+        web_client.printf("<td>%u</td></tr>\n", (unsigned)r.age_min);
+    }
+    free(rec);
+    web_client.println("</table>");
+
+    // Legende, wie bei sub_page_neighbours() unten: title= wirkt auf dem
+    // Telefon nicht, deshalb stehen dieselben Erklaerungen hier als Text.
+    web_client.print("<p style=\"font-size:0.85em;color:#555;\">"
+                      "Hops: 0 = me, 1 = direct neighbour, 2+ = reached via other nodes."
+                      " | Hears me: SNR at which that neighbour last reported hearing me, '-' if unknown or not a direct/2-hop row."
+                      " | Via: the entry path this station was heard on (2-hop: the direct neighbour it is via; horizon: the entry row, and beyond it if cheap to show)."
+                      " Covered by (direct neighbours only): other direct neighbours that also hear this one -- 'only me' means I am its only link."
+                      " | Reach: the farthest station with a known position that is linked to this one (heard by it or hearing it).");
+    web_client.println("</p>");
+
     web_client.println("</div>");
     web_client.println(); // The HTTP response ends with another blank line
 }
 
 /**
  * ###########################################################################################################################
- * delivers the path-page to be injected into the scaffold
+ * delivers the neighbour-matrix page to be injected into the scaffold (NBR-W2, Konzept 4.5;
+ * Stufe 2a, docs/nbr-wichtigkeit-konzept.md Abschnitt 6: Rollenspalten, Legende, Sortierung,
+ * "Covered by" und der Block "My relay decision")
+ *
+ * W2c (Kantenpool, docs/meshcom5-campaign.md Welle 2, Konzept 4.5 in
+ * docs/meshcom5-topologie/body/03-kern.html): NBR_MAX_ROWS kann jetzt 128
+ * erreichen (S3/nRF52). Zwei Kostenpunkte, die die alte, dichte Matrix nicht
+ * hatte, und die diese Fassung beide vermeidet:
+ *  - RAM: vier zeilengrosse uint8_t-Felder teilen sich EINEN malloc()-Block
+ *    (`scratch`, 4 * NBR_MAX_ROWS Byte, mit free() vor jedem Rueckkehrpunkt)
+ *    statt permanent im BSS zu liegen (Orchestrator-Review 2026-09-25, zweite
+ *    Runde: 1580 B `static` fuer eine selten geoeffnete Seite war noch immer
+ *    zu viel gegen eine geplante Kampagnen-Ersparnis von ~300 B). malloc()
+ *    schlaegt hier nicht wie printf() je Logzeile zu (siehe
+ *    printf-malloc-starves-nimble.md), sondern hoechstens einmal pro
+ *    Seitenaufruf -- ein Fehlschlag bricht mit einer Meldung ab, nie mit
+ *    einem Crash. Kein Array eines struct-Typs (NbrRowView, NbrMask) liegt
+ *    ueberhaupt im Speicher; ein einzelnes Exemplar auf dem Stack, direkt am
+ *    Ort seiner Benutzung, kostet nichts, solange es keine Zeile im Array
+ *    ist.
+ *  - CPU: nbrEdgeGet() sucht in einem Kantenpool (bis zu NBR_MAX_EDGES = 4 *
+ *    NBR_MAX_ROWS Eintraege) -- O(1) ist es NICHT. Jede Schleife hier fragt
+ *    deshalb zuerst eine Maske (nbrDirectMask()/nbrHearersMask(), beide auf
+ *    den mitgefuehrten Bitmasken der Matrix und damit billig) und ruft
+ *    nbrEdgeGet() nur noch fuer ein Bit, das die Maske schon als gesetzt
+ *    gemeldet hat -- dort, wo tatsaechlich ein cnt/snr-Wert fuer die Anzeige
+ *    gebraucht wird.
+ * Die Kreuztabelle "wer hoert wen" zeigt bei mehr als 64 sichtbaren Zeilen
+ * nur einen 64-Spalten-Ausschnitt, ueber &x=<Spalte> weitergeblaettert --
+ * alle ANDEREN Spalten der Kopfzeile (D/I, G, M, #N, #X, Cov, Role) bleiben
+ * dabei fuer alle n Zeilen vollstaendig, nur das n*n-Gitter selbst wird
+ * seitenweise gerendert.
+ * W4c: die zweite Tabelle dieser Seite (Call/GW/Mesh/Hears me/Hearers/
+ * Covered by/Reach/Age, eine Zeile je sichtbarer Nachbarschaftszeile) ist mit
+ * der Path-Seite zusammengelegt -- dort steht jetzt jede Station in einer
+ * einzigen, nach Hops sortierten Tabelle. Was diese Seite noch je Zeile
+ * zeigt, ist auf die neue Cov-Spalte der Kreuztabelle geschrumpft (Covered by,
+ * nur als Zahl+title); Details (Hears me/Reach/Via) gibt es nur noch auf der
+ * Path-Seite.
  */
-void sub_page_path()
+void sub_page_neighbours()
 {
-    bool isShowing = false;
-    mheardLine mheardLine;
-    _create_meshcom_subheader("Path Information");
+    // Vertragspunkt mit dem OnRxDone-Haken (lora_functions.cpp): dieselbe
+    // Minuten-seit-Boot-Umrechnung, sonst laufen Web-Seite und Schreiber
+    // gegen unterschiedliche Uhren.
+    uint16_t now_min = uptimeMin16();
+
+    _create_meshcom_subheader("Neighbours");
     web_client.println("<div id=\"content_inner\">");
-    for (int iset = 0; iset < MAX_MHPATH; iset++)
+
+    NbrRowView r0;
+    if (!nbrRowGet(nbrMatrix, 0, &r0) || r0.call[0] == 0)
+    { // noch kein Frame ausgewertet -- Zeile 0 ist unbelegt
+        web_client.println("<p>No frames received yet.</p>");
+        web_client.println("</div>");
+        web_client.println(); // The HTTP response ends with another blank line
+        return;
+    }
+
+    // W2c CONTRACT: ein einziger transienter Heap-Block statt vier einzelner
+    // static uint8_t[NBR_MAX_ROWS]-Arrays (Orchestrator-Review 2026-09-25,
+    // zweite Runde): die Seite wird selten geoeffnet, ~0.5 kB fuer die Dauer
+    // EINES Renderaufrufs ist unproblematisch -- anders als der printf-Heap-
+    // Churn je Logzeile (siehe printf-malloc-starves-nimble.md), der einmal
+    // pro RX/TX zuschlaegt, nicht einmal pro Seitenaufruf. free() steht direkt
+    // vor jedem Rueckkehrpunkt; die Funktion hat ab hier nur noch das
+    // natuerliche Ende (kein weiteres return), das free() steht dort.
+    // W4c: order[]/directList[]/indirectList[]/hearers[] sind mit der
+    // Zeilentabelle weg (in die Path-Seite zusammengelegt) -- der Block ist
+    // von acht auf vier Zeilenfelder geschrumpft.
+    uint8_t *scratch = (uint8_t *)malloc(4 * (size_t)NBR_MAX_ROWS);
+    if (scratch == NULL)
     {
-        if (mheardPathCalls[iset][0] != 0x00)
+        web_client.println("<p>Not enough memory to render the neighbour matrix.</p>");
+        web_client.println("</div>");
+        web_client.println(); // The HTTP response ends with another blank line
+        return;
+    }
+    uint8_t *idx = scratch + 0 * NBR_MAX_ROWS;
+    uint8_t *eself = scratch + 1 * NBR_MAX_ROWS;
+    uint8_t *xCount = scratch + 2 * NBR_MAX_ROWS;
+    uint8_t *nCount = scratch + 3 * NBR_MAX_ROWS;
+
+    // Sichtbare Zeilen: Zeile 0 immer dabei, sonst USED (nbrRowGet() liefert
+    // false fuer eine unbelegte Zeile != 0) und frisch (Konzept 4.5, Fenster
+    // 12h). idx[i] ist die Matrix-Zeilennummer -- nur diese Nummer wird
+    // gespeichert, keine Kopie der Zeile selbst (siehe Funktionskopf).
+    uint8_t n = 0;
+    idx[n++] = 0;
+    for (uint8_t r = 1; r < NBR_MAX_ROWS; r++)
+    {
+        NbrRowView v;
+        if (nbrRowGet(nbrMatrix, r, &v) && nbrFresh(v.last_min, now_min))
+            idx[n++] = r;
+    }
+
+    // E_self (Konzept 4, 6.1 Zeilenfarbe / 6.2 "Covered by"): direkt gehoerte
+    // Zeilen, die kein ANDERER direkter Nachbar frisch hoert -- ersetzt die
+    // alte <verdict>-Faerbung (frueher ueber die 2-Hop-Funktion) vollstaendig.
+    int neself = nbrExclusiveDirect(nbrMatrix, now_min, eself, NBR_MAX_ROWS);
+    uint8_t neself_shown = (neself > 0) ? ((neself < (int)NBR_MAX_ROWS) ? (uint8_t)neself : (uint8_t)NBR_MAX_ROWS) : 0;
+
+    web_client.printf("<p>Window: %u h, %u row(s) fresh. ", (unsigned)(NBR_WINDOW_MIN / 60), (unsigned)n);
+    if (neself < 0)
+    {
+        web_client.println("Nothing heard directly yet.</p>");
+    }
+    else if (neself == 0)
+    {
+        web_client.println("No exclusive nodes. Mesh is redundant here.</p>");
+    }
+    else
+    {
+        web_client.print("Exclusive to me (only I hear them directly): ");
+        for (uint8_t i = 0; i < neself_shown; i++)
         {
-            if (mheardPathFreshMs(iset, 3UL * 60UL * 60UL * 1000UL)) // 3h (NC-02: monoton, nicht Wanduhr)
-            { // 3h
-                isShowing = true;
-                unsigned long lt = mheardPathEpoch[iset] + (long)(meshcom_settings.node_utcoff * 3600.0);
-                web_client.printf("<div class=\"cardlayout\">\n");
-                web_client.printf("<label class=\"cardlabel\"><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a> <span class=\"font-small\">(%s)</span></label>", mheardPathCalls[iset], mheardPathCalls[iset], convertUNIXtoString(lt).substring(5).c_str());
-                web_client.printf("<div class=\"flex-auto-wrap\">");
-                web_client.printf("<div><span class=\"font-bold\">Source Path: </span><span>%01u%s/%s</span></div>", (mheardPathLen[iset] & 0x7F), ((mheardPathLen[iset] & 0x80) ? "G" : " "), mheardPathBuffer1[iset]);
-                web_client.printf("</div></div>");
-            }
+            if (i)
+                web_client.print(", ");
+            nbrPrintCall(eself[i]);
+        }
+        web_client.println(". Mesh needed.</p>");
+    }
+
+    // Direkt(X) (Konzept 4.3) EIN Mal geholt -- eine Bitmaske ueber
+    // Zeilenindizes, nicht 128 einzelne Kantenabfragen. Bit 0 ist darin per
+    // Vertrag nie gesetzt (nbrDirectMask() liefert nur X != 0), ein Test auf
+    // Zeile 0 gibt also ohnehin "nicht direkt" zurueck -- die expliziten
+    // "X == 0"-Zweige unten bleiben trotzdem, weil Zeile 0 andere Zellen
+    // zeigt (";-" statt "Indirect").
+    NbrMask directMaskGlobal = nbrDirectMask(nbrMatrix, now_min);
+
+    // Vorpass fuer 6.1/6.2: xCount[i] (#X, nur wenn direkt -- die
+    // Anteilsregel aus Konzept 4.3 steckt in nbrRowMeshNeedCount() selbst,
+    // wird hier nicht nachgebaut) je sichtbarer Zeile.
+    for (uint8_t i = 0; i < n; i++)
+    {
+        uint8_t X = idx[i];
+        // -1 ("NA") ist moeglich, wenn der LORA-Task (nRF52) die Kante (X, 0)
+        // zwischen nbrDirectMask() oben und diesem Aufruf freigibt -- als 0
+        // zaehlen, nicht als 255 (Advisor Welle 2, Befund B).
+        int xc = nbrMaskTest(directMaskGlobal, X) ? nbrRowMeshNeedCount(nbrMatrix, X, now_min) : 0;
+        xCount[i] = (xc < 0) ? 0 : (uint8_t)xc;
+    }
+
+    // #N je ZEILENNUMMER (nicht Position -- siehe Render-Schleife unten, die
+    // per idx[i] direkt hineinindiziert): "wie viele Zeilen hat X gehoert".
+    // Das ist die SPALTE X der alten dichten Matrix (cell[frm][X] fuer alle
+    // frm), keine der vorhandenen Masken liefert diese Richtung direkt (nur
+    // nbrDirectMask()/nbrHeardMeMask() fuer Zeile 0 fest verdrahtet). Billig
+    // trotzdem: fuer jede Zeile frm liefert nbrHearersMask(frm) die (kleine,
+    // bitmaskenbasierte) Menge der Y, die frm gehoert haben -- steht X darin,
+    // hat X frm gehoert, zaehlt also fuer nCount[X]. Zeile 0 bekommt ihren
+    // Wert separat: nbrHearersMask() liefert nie Y == 0 (Vertrag), aber
+    // nbrDirectMask() IST "die Menge der von mir gehoerten Zeilen" = #N(0).
+    for (uint8_t r = 0; r < NBR_MAX_ROWS; r++)
+        nCount[r] = 0;
+    nCount[0] = (uint8_t)((nbrMaskCount(directMaskGlobal) > 255) ? 255 : nbrMaskCount(directMaskGlobal));
+    for (uint8_t frm = 0; frm < NBR_MAX_ROWS; frm++)
+    {
+        NbrMask hm = nbrHearersMask(nbrMatrix, frm, now_min);
+        for (int y = nbrMaskNext(hm, -1); y >= 0; y = nbrMaskNext(hm, y))
+        {
+            if (nCount[y] < 255)
+                nCount[y]++;
         }
     }
-    if (!isShowing)
-        web_client.println("No Paths available so far.");
-    web_client.println("</div></div>");
+
+    // Super-Node (Konzept 5.3/6.1): der direkte Nachbar mit dem groessten #X,
+    // wenn #X >= 2 UND mindestens doppelt so gross wie der naechstbeste --
+    // sonst kein Super-Node in Reichweite.
+    int superI = -1;
+    int superTop2 = 0;
+    {
+        int topVal = -1, top2Val = -1, topI = -1;
+        for (uint8_t i = 0; i < n; i++)
+        {
+            if (!nbrMaskTest(directMaskGlobal, idx[i]))
+                continue;
+            int v = (int)xCount[i];
+            if (v > topVal)
+            {
+                top2Val = topVal;
+                topVal = v;
+                topI = i;
+            }
+            else if (v > top2Val)
+            {
+                top2Val = v;
+            }
+        }
+        int top2 = (top2Val < 0) ? 0 : top2Val;
+        if (topI >= 0 && topVal >= 2 && topVal >= 2 * top2)
+        {
+            superI = topI;
+            superTop2 = top2;
+        }
+    }
+
+    // W2c: bei mehr als 64 sichtbaren Zeilen wird das n*n-Gitter (die
+    // "wer hoert wen"-Spalten) seitenweise zu 64 Spalten gerendert, ueber
+    // &x=<Startspalte> (0-basiert, auf 64 gerundet) weitergeblaettert --
+    // ALLE anderen Spalten (Kopf D/I..Role) und Tabelle 2 unten bleiben
+    // fuer alle n Zeilen vollstaendig, siehe Funktionskopf-Kommentar.
+    // web_header traegt weiterhin die rohe Request-Zeile ("GET /?page=
+    // neighbours&x=64 HTTP/1.1"); dieselbe indexOf()/substring()-Technik wie
+    // send_message() (Zeile ~2973) fuer &tocall=/&message=.
+    uint16_t colStart = 0;
+    if (n > 64)
+    {
+        int xp = web_header.indexOf("&x=");
+        if (xp >= 0)
+        {
+            long xv = web_header.substring(xp + 3).toInt();
+            if (xv > 0)
+                colStart = (uint16_t)(((unsigned long)xv / 64) * 64);
+        }
+        if (colStart >= n)
+            colStart = (uint16_t)(((n - 1) / 64) * 64);
+    }
+    uint16_t colEnd = (n > 64) ? ((colStart + 64 < n) ? (uint16_t)(colStart + 64) : n) : n;
+
+    if (n > 64)
+    {
+        web_client.printf("<p>Cross table columns %u-%u of %u. ", (unsigned)(colStart + 1), (unsigned)colEnd, (unsigned)n);
+        if (colStart > 0)
+            web_client.printf("<a href=\"?page=neighbours&x=%u\">&laquo; prev</a> ", (unsigned)((colStart >= 64) ? colStart - 64 : 0));
+        if (colEnd < n)
+            web_client.printf("<a href=\"?page=neighbours&x=%u\">next &raquo;</a>", (unsigned)(colStart + 64));
+        web_client.println("</p>");
+    }
+
+    // Kreuztabelle: Spaltenkoepfe sind Anzeige-Nummern (1..n) mit dem
+    // Rufzeichen darunter, senkrecht gesetzt (6.1, Regel 1) -- die Tabelle
+    // waechst dadurch in der Hoehe, nicht in der Breite. Das Tabellen-CSS
+    // des Scaffolds greift nur auf "#content_inner > table" (Zeile ~1096);
+    // ein Wrapper-div fuer das seitliche Scrollen wuerde die Matrix aus dem
+    // Selektor werfen (Bench 2026-09-20: Matrix ohne Rahmen). Deshalb
+    // scrollt die Tabelle selbst als Block.
+    web_client.println("<table class=\"table\" style=\"display:inline-block;overflow-x:auto;width:auto;max-width:100%;\">");
+    web_client.print("<thead><tr class=\"font-bold\">");
+    web_client.print("<td></td>");
+    web_client.print("<td title=\"Direct: heard by me over the air. Indirect: only via a neighbour.\">D/I</td>");
+    web_client.print("<td title=\"Gateway: a HEY addressed to HG was seen from this node. 'no' means not observed.\">G</td>");
+    web_client.print("<td title=\"Mesh: relays foreign frames, from its last position frame.\">M</td>");
+    web_client.print("<td title=\"Neighbours: nodes this node hears, as far as this table can hold them.\">#N</td>");
+    web_client.print("<td title=\"Exclusive: nodes that ONLY this neighbour hears. This is the value of a relay.\">#X</td>");
+    web_client.print("<td title=\"Covered by: other direct neighbours that also hear it. 0 = only I reach it. Details on the Path page.\">Cov</td>");
+    web_client.print("<td title=\"Super: largest exclusive share. Needed: has exclusive nodes. Redundant: everything it hears is heard by others.\">Role</td>");
+    for (uint8_t j = colStart; j < colEnd; j++)
+    {
+        web_client.printf("<td>%u<br><span style=\"writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;\">", (unsigned)(j + 1));
+        nbrPrintCall(idx[j]);
+        web_client.print("</span></td>");
+    }
+    web_client.println("</tr></thead>");
+
+    for (uint8_t i = 0; i < n; i++)
+    {
+        uint8_t X = idx[i];
+        bool rowESelf = false;
+        for (uint8_t e = 0; e < neself_shown; e++)
+        {
+            if (eself[e] == X)
+            {
+                rowESelf = true;
+                break;
+            }
+        }
+        bool isDirect = nbrMaskTest(directMaskGlobal, X);
+
+        // Hoerer von X (Konzept 4.3): EIN Mal je Zeile geholt (Bitmaske, kein
+        // Kantenpool-Scan), zweifach genutzt -- fuer die D/I-Spalte (die erste
+        // gesetzte Spalte ist "via") UND fuer jede Gitterzelle dieser Zeile
+        // unten (nbrMaskTest statt eines eigenen nbrEdgeGet() je Zelle).
+        NbrMask hm = nbrHearersMask(nbrMatrix, X, now_min);
+
+        // Zeilenfarbe nach Rolle, nicht mehr nach <verdict> (6.1, Regel 2):
+        // Zeile 0 blau, der Super-Node gruen, E_self weiterhin rot.
+        if (X == 0)
+            web_client.print("<tr style=\"background-color:#d9ecff;\">");
+        else if ((int)i == superI)
+            web_client.print("<tr style=\"background-color:#d9f5d9;\">");
+        else if (rowESelf)
+            web_client.print("<tr style=\"background-color:#ffd9d9;\">");
+        else
+            web_client.print("<tr>");
+        web_client.printf("<td class=\"font-bold\">%u ", (unsigned)(i + 1));
+        nbrPrintCall(X);
+        web_client.print("</td>");
+
+        // D/I. Bei X==0 gibt es keine Kante nach 0 -- direkt "-". Sonst nur
+        // fuer direkte Zeilen ein nbrEdgeGet() (fuer die SNR, die einzige
+        // Kanteneigenschaft, die hier angezeigt wird); "via" oben aus hm.
+        if (X == 0)
+        {
+            web_client.print("<td>-</td>");
+        }
+        else if (isDirect)
+        {
+            NbrEdgeView e0;
+            if (nbrEdgeGet(nbrMatrix, X, 0, &e0) && e0.snr != NBR_SNR_UNKNOWN)
+                web_client.printf("<td title=\"Heard directly, SNR %d dB\">D</td>", (int)e0.snr);
+            else
+                web_client.print("<td title=\"Heard directly, SNR unknown\">D</td>");
+        }
+        else
+        {
+            int via = nbrMaskNext(hm, -1);
+            if (via >= 0)
+            {
+                web_client.print("<td title=\"Indirect, via ");
+                nbrPrintCall((uint8_t)via);
+                web_client.print("\">I</td>");
+            }
+            else
+                web_client.print("<td title=\"Indirect\">I</td>");
+        }
+
+        // G/M brauchen die Flags dieser einen Zeile -- ein lokales
+        // NbrRowView, kein Array (siehe Funktionskopf-Kommentar).
+        NbrRowView rowV;
+        uint8_t flags = nbrRowGet(nbrMatrix, X, &rowV) ? rowV.flags : 0;
+
+        // G
+        if (flags & NBR_FLAG_GW)
+            web_client.print("<td title=\"Gateway HEY seen\">Y</td>");
+        else
+            web_client.print("<td title=\"No gateway HEY observed\">N</td>");
+
+        // M
+        if (!(flags & NBR_FLAG_POS))
+            web_client.print("<td title=\"No position frame in window\">-</td>");
+        else if (flags & NBR_FLAG_MESH)
+            web_client.print("<td title=\"Mesh enabled\">Y</td>");
+        else
+            web_client.print("<td title=\"Mesh disabled\">N</td>");
+
+        // #N -- ueber die Zeilennummer X indiziert (siehe Vorpass oben), nicht
+        // ueber die Position i.
+        web_client.printf("<td title=\"Hears %u node(s) (table holds %u rows)\">%u</td>",
+                           (unsigned)nCount[X], (unsigned)NBR_MAX_ROWS, (unsigned)nCount[X]);
+
+        // #X -- die title= nennt zugleich die beiden Zaehler, die #X
+        // entschieden haben: wie viele Knoten X ueberhaupt hoert (nCount, das
+        // Divisor der Anteilsregel) und wie viele davon niemand sonst deckt
+        // (xCount, der Zaehler); ein Aufschluesseln je Kandidaten-Kante
+        // braeuchte einen weiteren nbrEdgeGet()-Aufruf je Hoerer und ist das
+        // hier nicht wert (Konzept 4.3 wird nicht nachgebaut, nur angezeigt).
+        if (isDirect)
+            web_client.printf("<td title=\"%u of %u heard by nobody else in my range\">%u</td>",
+                               (unsigned)xCount[i], (unsigned)nCount[X], (unsigned)xCount[i]);
+        else
+            web_client.print("<td>-</td>");
+
+        // Cov (W4c, ersetzt die "Covered by"-Spalte der geloeschten
+        // Zeilentabelle): fuer eine direkte Zeile die anderen direkten
+        // Nachbarn, die X ebenfalls frisch hoeren -- hm ist oben schon
+        // geholt, also nur noch mit directMaskGlobal verunden, keine neue
+        // Maskenberechnung.
+        if (isDirect)
+        {
+            NbrMask covered = nbrMaskAnd(hm, directMaskGlobal);
+            int covCount = nbrMaskCount(covered);
+            web_client.print("<td title=\"Covered by: ");
+            if (covCount == 0)
+                web_client.print("nobody");
+            else
+            {
+                bool firstCov = true;
+                for (int m = nbrMaskNext(covered, -1); m >= 0; m = nbrMaskNext(covered, m))
+                {
+                    if (!firstCov)
+                        web_client.print(", ");
+                    nbrPrintCall((uint8_t)m);
+                    firstCov = false;
+                }
+            }
+            web_client.printf("\">%u</td>", (unsigned)covCount);
+        }
+        else
+            web_client.print("<td>-</td>");
+
+        // Role
+        if (X == 0 || !isDirect)
+        {
+            web_client.print("<td>-</td>");
+        }
+        else if ((int)i == superI)
+        {
+            web_client.printf("<td title=\"Super node: %u exclusive, next best %u\">Super</td>", (unsigned)xCount[i], (unsigned)superTop2);
+        }
+        else if (xCount[i] >= 1)
+        {
+            web_client.printf("<td title=\"Needed: %u exclusive\">Needed</td>", (unsigned)xCount[i]);
+        }
+        else
+        {
+            web_client.print("<td title=\"Redundant: 0 exclusive, heard by others\">Redundant</td>");
+        }
+
+        // Gitterzeile: hm (oben, EIN Aufruf je Zeile) sagt per nbrMaskTest,
+        // ob die Zelle ueberhaupt etwas zeigt -- nbrEdgeGet() (der teure
+        // Kantenpool-Scan) laeuft nur noch fuer eine Zelle, die die Maske
+        // schon als gesetzt gemeldet hat, und nur fuer cnt/snr zur Anzeige.
+        for (uint8_t j = colStart; j < colEnd; j++)
+        {
+            uint8_t Y = idx[j];
+            if (X == Y || !nbrMaskTest(hm, Y))
+            {
+                web_client.print((X == Y) ? "<td>-</td>" : "<td></td>");
+                continue;
+            }
+            NbrEdgeView c;
+            if (!nbrEdgeGet(nbrMatrix, X, Y, &c))
+                web_client.print("<td></td>"); // Maske war gesetzt, Kante ist inzwischen weg (Sweep/EVICT lief dazwischen)
+            else if (c.snr != NBR_SNR_UNKNOWN)
+                web_client.printf("<td title=\"cnt:%u snr:%d\">%u</td>", (unsigned)c.cnt, (int)c.snr, (unsigned)c.cnt);
+            else
+                web_client.printf("<td title=\"cnt:%u snr:NA\">%u</td>", (unsigned)c.cnt, (unsigned)c.cnt);
+        }
+        web_client.println("</tr>");
+    }
+    web_client.println("</table>");
+
+    if (n > 64)
+    {
+        web_client.printf("<p>Cross table columns %u-%u of %u. ", (unsigned)(colStart + 1), (unsigned)colEnd, (unsigned)n);
+        if (colStart > 0)
+            web_client.printf("<a href=\"?page=neighbours&x=%u\">&laquo; prev</a> ", (unsigned)((colStart >= 64) ? colStart - 64 : 0));
+        if (colEnd < n)
+            web_client.printf("<a href=\"?page=neighbours&x=%u\">next &raquo;</a>", (unsigned)(colStart + 64));
+        web_client.println("</p>");
+    }
+
+    // Legende (6.1, Kopf): title= wirkt auf dem Telefon nicht, deshalb
+    // stehen dieselben Erklaerungen hier zusaetzlich als Text (W4c: Cov dazu,
+    // die "Covered by"-Spalte der geloeschten Zeilentabelle).
+    web_client.print("<p style=\"font-size:0.85em;color:#555;\">"
+                      "D/I: Direct: heard by me over the air. Indirect: only via a neighbour."
+                      " | G: Gateway: a HEY addressed to HG was seen from this node. 'no' means not observed."
+                      " | M: Mesh: relays foreign frames, from its last position frame."
+                      " | #N: Neighbours: nodes this node hears, as far as this table can hold them."
+                      " | #X: Exclusive: nodes that ONLY this neighbour hears. This is the value of a relay."
+                      " | Cov: other direct neighbours that also hear it; 0 = only I reach it. Details on the Path page."
+                      " | Role: Super: largest exclusive share. Needed: has exclusive nodes."
+                      " Redundant: everything it hears is heard by others.");
+    web_client.println("</p>");
+
+    // 6.3: "My relay decision" -- drei Zeilen Text, keine Tabelle. Die
+    // Zaehler kommen aus loop_functions.cpp (5.8 Punkt 3); solange
+    // --nbrrelay off ist (Default), bleiben sie 0.
+    web_client.println("<h4>My relay decision</h4>");
+    web_client.print("<p>Exclusive to me: ");
+    if (neself_shown == 0)
+    {
+        web_client.print("none");
+    }
+    else
+    {
+        for (uint8_t e = 0; e < neself_shown; e++)
+        {
+            if (e)
+                web_client.print(", ");
+            nbrPrintCall(eself[e]);
+        }
+    }
+    web_client.println("</p>");
+
+    web_client.print("<p>Super node in range: ");
+    if (superI >= 0)
+    {
+        nbrPrintCall(idx[superI]);
+        web_client.printf(" (%u exclusive)", (unsigned)xCount[superI]);
+    }
+    else
+        web_client.print("none");
+    web_client.println("</p>");
+
+    web_client.printf("<p>Relay mode: %s -- relays A: %lu, B: %lu, cancelled: %lu, could have cancelled: %lu, refused (sole provider): %lu</p>",
+                       (bNBRCANCEL ? "on" : (bNBRRELAY ? "count" : "off")),
+                       (unsigned long)stat_nbr_relay_a, (unsigned long)stat_nbr_relay_b, (unsigned long)stat_nbr_cancel,
+                       (unsigned long)stat_nbr_cancel_possible, (unsigned long)stat_nbr_refuse_alone);
+
+    // Stufe 2 (--nbrsym): mirrors bNBRSYM, the flag the live relay decision
+    // in lora_functions.cpp actually reads per frame -- this page never
+    // calls nbrRelayNeed()/nbrCoverMask() itself, so there is no sym-aware
+    // call to thread the flag through, only this status line.
+    web_client.printf("<p>Symmetry: %s (SNR &gt;= %d dB)</p>", (bNBRSYM ? "on" : "off"), (int)NBR_SYM_MIN_SNR);
+
+    // Stufe 3 (--nbrreport): eigener HN-Bericht, unabhaengig vom Trickle-HEY
+    // oben. "auto" sendet nur, wenn weder Mesh-Relay noch Gateway-Betrieb an
+    // sind (nbrReportTick() in loop_functions.cpp) -- die dritte Zeile sagt
+    // fuer den aktuell konfigurierten Modus dazu, ob das gerade zutrifft.
+    {
+        const char *nbrreport_mode = bNBRRPTOFF ? "off" : (bNBRRPTON ? "on" : "auto");
+        bool nbrreport_sends_now = bNBRRPTON || (!bNBRRPTOFF && !bMESH && !bGATEWAY);
+        web_client.printf("<p>HN report: %s (every %d min, SNR &gt;= %d dB)%s</p>",
+                           nbrreport_mode, (int)(NBR_REPORT_INTERVAL_S / 60), (int)LORA_SNR_STABLE_MIN_DB,
+                           (bNBRRPTOFF ? "" : (nbrreport_sends_now ? " -- sending" : " -- not sending (mesh/gateway on)")));
+    }
+
+    web_client.println("</div>");
     web_client.println(); // The HTTP response ends with another blank line
+    free(scratch);
 }
 
 /**
@@ -1509,7 +2573,7 @@ void sub_page_messages()
     web_client.println("<td><label for=\"sendcall\" class=\"font-small font-bold\">DM Call (or empty):</label></td>");
     web_client.println("<td><input type=\"text\" id=\"sendcall\" name=\"sendcall\" maxlength=\"9\" size=\"9\" oninput=\"updateCharsLeft()\";></td>");
     web_client.println("</tr><tr>");
-    web_client.println("<td><label for=\"messagetext\" class=\"font-small font-bold\">Message:</label><p class=\"font-small\"><span id=\"indicator_charsleft\">149</span> chars left</p></td>");
+    web_client.println("<td><label for=\"messagetext\" class=\"font-small font-bold\">Message:</label><p class=\"font-small\"><span id=\"indicator_charsleft\">149</span> bytes left</p></td>");
     web_client.println("<td><textarea id=\"messagetext\" name=\"messagetext\" maxlength=\"149\" rows=\"5\" cols=\"40\" oninput=\"updateCharsLeft()\";></textarea></td>");
     web_client.println("</tr><tr>");
     web_client.println("<td><button onclick=\"updateMessages()\"><i class=\"btnrefresh\"></i>Update</button></td></td><td><button id=\"sendmessage\" onclick=\"sendMessage(); updateCharsLeft(); updateMessages();\"><i class=\"btncheckmark\"></i>Send</button></td>");
@@ -1519,6 +2583,199 @@ void sub_page_messages()
     web_client.println("</div>");
     web_client.println(); // The HTTP response ends with another blank line
 }
+
+#if defined(ENABLE_MSGSTORE)
+/**
+ * ###########################################################################################################################
+ * Formats a millisecond duration as "Ns" / "N min" / "Nh NNmin" into a caller-supplied stack
+ * buffer -- stage 3 mailbox page helper, kept out of sub_page_mailbox() only so every one of
+ * its six call sites (age, hold left, jitter/next) stays a single line. No heap, no String
+ * concatenation, matching the rest of this file's per-row discipline.
+ */
+static void mbxFormatDuration(char *buf, size_t n, uint32_t ms)
+{
+    uint32_t secs = ms / 1000UL;
+    if (secs < 60UL)
+        snprintf(buf, n, "%lus", (unsigned long)secs);
+    else if (secs < 3600UL)
+        snprintf(buf, n, "%lu min", (unsigned long)(secs / 60UL));
+    else
+        snprintf(buf, n, "%lu h %02lu min", (unsigned long)(secs / 3600UL), (unsigned long)((secs % 3600UL) / 60UL));
+}
+
+/**
+ * ###########################################################################################################################
+ * delivers the mailbox (store node) page to be injected into the scaffold. Stage 3,
+ * docs/dm-stage3-wave-plan-20260914.md -- read-only list of what this node is holding for
+ * other stations plus operator actions (deliver now / purge); the stored message TEXT is
+ * never rendered, only its stripped length (plen). Owner-gated like every other page: the
+ * password check already ran in work_webpage() before this is ever called.
+ */
+void sub_page_mailbox()
+{
+    _create_meshcom_subheader("Mailbox");
+    web_client.println("<div id=\"content_inner\">");
+
+    char buf_next[24];
+    uint32_t next_in_ms = msgstoreNextActionInMs();
+    if (next_in_ms == 0) // msgstore_api.h: 0 == nothing due, not "due now"
+        snprintf(buf_next, sizeof(buf_next), "none due");
+    else
+        mbxFormatDuration(buf_next, sizeof(buf_next), next_in_ms);
+
+    enum MsgStoreMode mode = msgstoreMode();
+    int used = msgstoreUsed();
+
+    web_client.println("<div class=\"mbx-toolbar\">");
+    web_client.printf("<span class=\"mctab mctab-on\">store node: %s<span class=\"mcbadge\">%s</span></span>\n",
+                       msgstoreModeName(mode), mode == MSGSTORE_OFF ? "OFF" : "ON");
+    web_client.printf("<span class=\"mctab\">notice %s</span>\n", msgstoreNotice() ? "on" : "off");
+    web_client.printf("<span class=\"mctab\">slots %d / %u</span>\n", used, (unsigned)msgstoreSlots());
+    web_client.printf("<span class=\"mctab\">actions this hour %u / %u</span>\n", (unsigned)msgstoreActionsLastHour(), (unsigned)MSGSTORE_ACTIONS_PER_HOUR);
+    web_client.printf("<span class=\"mctab\">next action in %s</span>\n", buf_next);
+    web_client.println("<span class=\"spacer\"></span>");
+    web_client.println("<button type=\"button\" onclick=\"loadPage('mailbox',csender,false)\" title=\"Reload the list\">Refresh</button>\n");
+    web_client.printf("<button type=\"button\" title=\"Drop every stored message\" onclick=\"if(confirm('Purge all %d stored messages? The senders are not told.')){callfunction('mboxpurge','all');}\">Purge all</button>\n", used);
+    web_client.println("</div>");
+
+    // No wrapper div: the scaffold table rules match `#content_inner > table` only.
+    web_client.println("<table><thead><tr>");
+    web_client.println("<th>Destination</th><th>Last heard</th><th>Source</th><th>NNN</th><th>Size</th><th>Age</th><th>Hold left</th><th>State</th><th>Attempts</th><th>Notified</th><th>Actions</th>");
+    web_client.println("</tr></thead><tbody>");
+
+    uint32_t now_ms = millis();
+    uint32_t hold_total_ms = (uint32_t)msgstoreHoldHours() * 3600000UL;
+    int nslots = (int)msgstoreSlots();
+
+    for (int slot = 0; slot < nslots; slot++)
+    {
+        const struct MsgStoreEntry *e = msgstoreEntry(slot);
+        if (e == NULL)
+            continue;
+
+        char buf_heard[24], buf_age[24], buf_hold[24], buf_attempt[48];
+
+        // feature-snf port: fork-main reads mheardAgeMs(), which does not exist on this
+        // branch (mheard_functions.* removed by ccb3ec23) -- same replacement as
+        // msgstore_glue.cpp's glueHeardAgeMs(), the neighbour-matrix topology directly.
+        int32_t heard_ms;
+        {
+            uint16_t now_min = uptimeMin16();
+            int row = nbrFind(nbrMatrix, e->dst);
+            NbrMhView v;
+            heard_ms = nbrMhGet(nbrMatrix, row, now_min, &v) ? (int32_t)v.age_min * 60000L : -1;
+        }
+        bool stale = false;
+        if (heard_ms < 0)
+        {
+            snprintf(buf_heard, sizeof(buf_heard), "never");
+        }
+        else
+        {
+            mbxFormatDuration(buf_heard, sizeof(buf_heard), (uint32_t)heard_ms);
+            stale = ((uint32_t)heard_ms >= MSGSTORE_HEARD_WINDOW_MS);
+        }
+
+        uint32_t age_ms = now_ms - e->stored_ms; // monotonic, wraps the same way millis() does
+        mbxFormatDuration(buf_age, sizeof(buf_age), age_ms);
+
+        uint32_t held_ms = (age_ms >= hold_total_ms) ? hold_total_ms : age_ms;
+        mbxFormatDuration(buf_hold, sizeof(buf_hold), hold_total_ms - held_ms);
+
+        // advisor F3 (docs/review/fable-dm-stage3-verdict-20260914.md): millis-wrap
+        // safe "time left" -- plain > misreports across the 49.7-day wrap.
+        int32_t remain_signed = (int32_t)(e->next_ms - now_ms);
+        uint32_t remain_ms = (remain_signed > 0) ? (uint32_t)remain_signed : 0;
+        if (e->state == MSGSTORE_ARMED)
+        {
+            char buf_remain[16];
+            mbxFormatDuration(buf_remain, sizeof(buf_remain), remain_ms);
+            snprintf(buf_attempt, sizeof(buf_attempt), "%u.%u of %u &middot; jitter %s", e->cycles, e->attempt, MSGSTORE_LADDER_STEPS, buf_remain);
+        }
+        else if (e->state == MSGSTORE_LADDER || e->state == MSGSTORE_COOLDOWN)
+        {
+            char buf_remain[16];
+            mbxFormatDuration(buf_remain, sizeof(buf_remain), remain_ms);
+            snprintf(buf_attempt, sizeof(buf_attempt), "%u.%u of %u &middot; next %s", e->cycles, e->attempt, MSGSTORE_LADDER_STEPS, buf_remain);
+        }
+        else
+        {
+            snprintf(buf_attempt, sizeof(buf_attempt), "%u.%u of %u", e->cycles, e->attempt, MSGSTORE_LADDER_STEPS);
+        }
+
+        const char *state_class;
+        switch (e->state)
+        {
+        case MSGSTORE_HELD: state_class = "mbx-held"; break;
+        case MSGSTORE_ARMED: state_class = "mbx-armed"; break;
+        case MSGSTORE_LADDER: state_class = "mbx-ladder"; break;
+        case MSGSTORE_COOLDOWN: state_class = "mbx-cooldown"; break;
+        default: state_class = ""; break;
+        }
+
+        web_client.printf("<tr><td class=\"font-bold no-wrap\">%s</td>", e->dst);
+        if (stale)
+            web_client.printf("<td class=\"no-wrap mbx-stale\" title=\"Older than the store set window\">%s</td>", buf_heard);
+        else
+            web_client.printf("<td class=\"no-wrap\">%s</td>", buf_heard);
+        web_client.printf("<td class=\"no-wrap\">%s</td>", e->src);
+        web_client.printf("<td class=\"num\">%03u</td>", (unsigned)e->nnn);
+        web_client.printf("<td class=\"num\">%u B</td>", (unsigned)e->plen);
+        web_client.printf("<td class=\"no-wrap\">%s</td>", buf_age);
+        web_client.printf("<td class=\"no-wrap\">%s</td>", buf_hold);
+        web_client.printf("<td><span class=\"mbx-state %s\">%s</span></td>", state_class, msgstoreStateName(e->state));
+        web_client.printf("<td>%s</td>", buf_attempt);
+        web_client.printf("<td>%s</td>", (e->notice == 2) ? "sent" : (e->notice == 1) ? "pending" : "-");
+
+        web_client.println("<td class=\"mbx-actions\">");
+        if (e->state == MSGSTORE_ARMED || e->state == MSGSTORE_LADDER)
+        {
+            web_client.printf("<button type=\"button\" disabled title=\"%s\">Deliver</button>",
+                               (e->state == MSGSTORE_ARMED) ? "Delivery is already scheduled" : "A ladder is already running");
+        }
+        else
+        {
+            web_client.printf("<button type=\"button\" onclick=\"if(confirm('Start a delivery ladder now for %s to %s (NNN %03u)? Ignores the cooldown, still subject to the node caps.')){callfunction('mboxdeliver','%d');}\">Deliver</button>",
+                               e->src, e->dst, (unsigned)e->nnn, slot);
+        }
+        web_client.printf("<button type=\"button\" onclick=\"if(confirm('Purge the message for %s from %s (NNN %03u)?')){callfunction('mboxpurge','%d');}\">Purge</button>",
+                           e->dst, e->src, (unsigned)e->nnn, slot);
+        web_client.println("</td></tr>");
+    }
+
+    web_client.println("</tbody></table>");
+
+    web_client.println("<p class=\"mbx-legend\">");
+    web_client.println("<span class=\"mbx-state mbx-held\">HELD</span>waiting for the destination to be heard directly");
+    web_client.println("<span class=\"mbx-state mbx-armed\">ARMED</span>heard, random 5-60 s wait, cancelled if another store node delivers first");
+    web_client.println("<span class=\"mbx-state mbx-ladder\">LADDER</span>9 sends over 9 min at hop 0");
+    web_client.println("<span class=\"mbx-state mbx-cooldown\">COOLDOWN</span>ladder done without ack, 1 h before the next");
+    web_client.println("<br>Attempts read cycle.attempt. Last heard in red is older than the 12 h store-set window: the entry is kept until hold runs out, but delivery needs a fresh direct sighting. Message text is never shown here.");
+    web_client.println("</p>");
+
+    const struct MsgStoreCounters *cnt = msgstoreCounters();
+    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<span class=\"cardlabel\">Counters since boot</span>");
+    web_client.println("<div class=\"mbx-counters\">");
+    web_client.printf("<div><span>stored</span><b>%u</b></div>", (unsigned)cnt->stored);
+    web_client.printf("<div><span>refreshed</span><b>%u</b></div>", (unsigned)cnt->refreshed);
+    web_client.printf("<div><span>delivered</span><b>%u</b></div>", (unsigned)cnt->delivered);
+    web_client.printf("<div><span>purged by ack</span><b>%u</b></div>", (unsigned)cnt->purged_ack);
+    web_client.printf("<div><span>dropped storetime</span><b>%u</b></div>", (unsigned)cnt->dropped_storetime);
+    web_client.printf("<div><span>dropped by cap</span><b>%u</b></div>", (unsigned)cnt->dropped_cap);
+    web_client.printf("<div><span>dropped no slot</span><b>%u</b></div>", (unsigned)cnt->dropped_slots);
+    web_client.printf("<div><span>cancelled by peer</span><b>%u</b></div>", (unsigned)cnt->cancelled_peer);
+    web_client.printf("<div><span>blocked by caps</span><b>%u</b></div>", (unsigned)cnt->blocked_bp);
+    web_client.printf("<div><span>notices sent</span><b>%u</b></div>", (unsigned)cnt->notified);
+    web_client.printf("<div><span>notices blocked</span><b>%u</b></div>", (unsigned)cnt->notice_blocked);
+    web_client.println("</div>");
+    web_client.println("<p class=\"font-small\" style=\"margin:7px;\">Same numbers as the <code>MBOX</code> setlog line. Dropped by cap and dropped no slot are two counters on purpose: the first means the 20-per-hour ceiling ate a hold time, the second means the mailbox was full.</p>");
+    web_client.println("</div>");
+
+    web_client.println("</div>");
+    web_client.println(); // The HTTP response ends with another blank line
+}
+#endif // ENABLE_MSGSTORE
 
 /**
  * ###########################################################################################################################
@@ -1619,6 +2876,9 @@ void sub_page_setup()
     _create_setup_textinput_element("owngw", "Gateway", String(meshcom_settings.node_gw), "192.168.2.1", "setowngw", 50, false, true);           // create Textinput-Element including Label and Button
     _create_setup_textinput_element("owndns", "DNS", String(meshcom_settings.node_dns), "192.168.2.1", "setowndns", 50, false, true);             // create Textinput-Element including Label and Button
     _create_setup_textinput_element("ownntp", "NTP", String(meshcom_settings.node_ownntp), "192.168.2.1", "setownntp", 50, false, true);          // create Textinput-Element including Label and Button
+    #if defined(BOARD_RAK4630)
+    _create_setup_textinput_element("ethmtu", "ETH MTU", String(meshcom_settings.node_ethmtu), "1500", "ethmtu", 4, false, false);                 // #1183: 1280..1500, applies to the next web connection, no reboot
+    #endif
 
     _create_setup_textinput_element("extudp", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
 
@@ -1627,7 +2887,7 @@ void sub_page_setup()
     _create_setup_switch_element("netmode", "Ethernet Mode", "switch between WiFi and Ethernet", meshcom_settings.node_netmode == 1);
     #endif
     _create_setup_switch_element("extudp", "ext UDP", "enable ext. UDP", bEXTUDP); // create Switch-Element inclucing Label and Description
-    #ifndef BOARD_RAK4630
+    #if !defined(BOARD_RAK4630) && !defined(DISABLE_NET_CONSOLE)
     _create_setup_switch_element("netconsole", "net console", "enable net console (port 2323, HMAC auth)", bNETCONSOLE); // create Switch-Element inclucing Label and Description
     #endif
     #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
@@ -1653,7 +2913,9 @@ void sub_page_setup()
 
     web_client.println("</div><div class=\"grid grid2\">");
 
+    #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
     _create_setup_switch_element("gps", "GPS", "enable GPS", bGPSON);                                  // create Switch-Element inclucing Label and Description
+    #endif
     _create_setup_switch_element("track", "Track", "enable display of SmartBeaconing", bDisplayTrack, TRACK_WARNING_TEXT, bDisplayTrack); // create Switch-Element inclucing Label and Description; TRK-01: Warnhinweis neben dem Switch
 
     web_client.println("</div></div>");
@@ -1679,15 +2941,20 @@ void sub_page_setup()
     web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid grid3\">");
 
+    #ifdef OneWire_GPIO
     _create_setup_textinput_element("owgpio", "1-Wire GPIO", String(meshcom_settings.node_owgpio), "36", "onewiregpio", 3, false, false); // create Textinput-Element including Label and Button
+    #endif
 
     web_client.println("</div><div class=\"grid grid2\">");
 
+    #ifdef OneWire_GPIO
     _create_setup_switch_element("onewire", "1-Wire", "enable 1-Wire capability", bONEWIRE); // create Switch-Element inclucing Label and Description
+    #endif
 
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid3\">");
 
+    #ifndef BOARD_T_DECK_PRO
     int iButtonPin = 0;
     #ifdef BUTTON_PIN
         iButtonPin = BUTTON_PIN;
@@ -1699,6 +2966,7 @@ void sub_page_setup()
         iButtonPin = meshcom_settings.node_button_pin;
 
     _create_setup_textinput_element("ubgpio", "Userbutton GPIO", String(iButtonPin), "0", "buttongpio", 3, false, false); // create Textinput-Element including Label and Button
+    #endif
 
     web_client.println("</div>");
     web_client.println("<div class=\"grid grid2\">");
@@ -1722,11 +2990,15 @@ void sub_page_setup()
     #if defined(ANALOG_PIN)
     _create_setup_switch_element("analogcheck", "Analog", "enable analog GPIO measurement", bAnalogCheck); // create Switch-Element inclucing Label and Description
     #endif
+    #if defined(ENABLE_BMX280)
     _create_setup_switch_element("bmp", "BMP280", "enable BMP280 sensor", bBMPON);                         // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("bme", "BME280", "enable BME280 sensor", bBMEON);                         // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("680", "BME680", "enable BME680 sensor", bBME680ON);                      // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("811", "MCU811", "enable MCU811 sensor", bMCU811ON);                      // create Switch-Element inclucing Label and Description
+    #endif
+    #if defined (ENABLE_INA226)
     _create_setup_switch_element("ina226", "INA226", "enable INA226 sensor", bINA226ON);                   // create Switch-Element inclucing Label and Description
+    #endif
     #if defined(ENABLE_AHT20)
     _create_setup_switch_element("aht20", "AHT20", "enable AHT20 sensor", bAHT20ON);                       // create Switch-Element inclucing Label and Description
     #endif
@@ -1763,7 +3035,43 @@ void sub_page_setup()
 
     _create_setup_switch_element("nomsgall", "No MSG All", "do not show messages send to all", bNoMSGtoALL); // create Switch-Element inclucing Label and Description
 
-    web_client.println("</div></div>");
+    web_client.println("</div>");
+    web_client.println("</div>");
+
+#if defined(ENABLE_MSGSTORE)
+    // Store node card (stage 3, docs/dm-stage3-wave-plan-20260914.md / M7). The mode select is
+    // hand-built like --maxhop above rather than _create_setup_switch_element, because it has
+    // four states and switching away from "off" must confirm() first and revert the select on
+    // cancel -- a plain on/off switch can't carry that. storecall/storetime/storeslots are
+    // ordinary text settings and do fit _create_setup_textinput_element.
+    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<label class=\"cardlabel\">Store node</label>");
+    web_client.println("<div class=\"grid grid2\">");
+    {
+        static const char *s_storemode_val[4] = {"off", "own", "list", "heard"};
+        static const char *s_storemode_lbl[4] = {"off", "own callsign, all SSIDs", "callsign list", "every station heard directly (12 h)"};
+        const char *cur_mode = msgstoreModeName(msgstoreMode());
+
+        web_client.println("<label for=\"storemode\">Store messages for</label>");
+        web_client.printf("<select id=\"storemode\" name=\"storemode\" data-prev=\"%s\" onchange=\"var s=this;if(s.value!='off' && !confirm('This node must run 24/7 on continuous power. Stored messages live in RAM only; a reboot discards all of them without notice.')){s.value=s.getAttribute('data-prev');return;}s.setAttribute('data-prev',s.value);setvalue('store',s.value,true);\">\n", cur_mode);
+        for (int im = 0; im < 4; im++)
+        {
+            web_client.printf("\t<option value=\"%s\" %s>%s</option>\n", s_storemode_val[im], (strcmp(s_storemode_val[im], cur_mode) == 0) ? "selected" : "", s_storemode_lbl[im]);
+        }
+        web_client.println("</select>");
+    }
+    // Textfelder liefern Label + Feld + Knopf, brauchen also grid3 (wie die Node-Karte oben).
+    web_client.println("</div><div class=\"grid grid3\">");
+    _create_setup_textinput_element("storecall", "Callsign list (list mode, up to 16)", msgstoreListCsv(), "OE1KBC-4,DK5EN-14", "storecall", MSGSTORE_LIST_MAX * MSGSTORE_CALL_MAX, false, false);
+    _create_setup_textinput_element("storetime", "Hold time in hours (1 to 168)", String(msgstoreHoldHours()), "24", "storetime", 3, false, false);
+    _create_setup_textinput_element("storeslots", "Slots (1 to 50)", String(msgstoreSlots()), "50", "storeslots", 3, false, false);
+    web_client.println("</div><div class=\"grid grid2\">");
+    _create_setup_switch_element("storenotice", "Notify sender", "tell the sender when a message is held", msgstoreNotice()); // stage 4: --storenotice on|off
+    web_client.println("</div>");
+    web_client.printf("<div class=\"mbx-warn\"><b>Before you switch this on.</b> This node must run 24/7 on continuous power. Stored messages live in RAM only; a reboot discards all of them without notice, and nobody is told. About %.1f kB of RAM is reserved for %u slots.</div>\n",
+                       (float)(msgstoreSlots() * sizeof(struct MsgStoreEntry)) / 1024.0f, (unsigned)msgstoreSlots());
+    web_client.println("</div>");
+#endif
 
     // Config Backup / Restore Section (CS-03)
     // The download is a plain navigation to /config.json -- the response
@@ -1791,44 +3099,38 @@ void sub_page_setup()
  * ###########################################################################################################################
  * This will only deliver the preformatted messages to be loaded asyncronous into the WebUI scaffold
  */
-// bf_iter_begin()/bf_iter_next() (src/byte_fifo.h) walk the phone ring from
-// the oldest surviving frame to the newest, including frames sendToPhone()
-// has already popped -- exactly the "history" the old index scan from the
-// write cursor relied on (Upstream origin 87c6c200). If a writer evicts
-// frames mid-walk, the iterator stops there (byte_fifo.h): the page shows
-// what it still has instead of reading stale or re-wrapped memory.
+// Die Seite liest den VERLAUF des Telefon-Rings, nicht die ungelesenen
+// Frames: ein Frame bleibt nach dem Senden ans Telefon liegen, bis sein Platz
+// gebraucht wird (byte_fifo.h, "oldest"). Vorher lief die Schleife ueber alle
+// MAX_RING Schlitze ab toPhoneWrite -- dasselbe, nur dass der Verlauf jetzt
+// so viele Frames haelt, wie in RING_BYTES_PHONE passen. Upstream origin
+// 87c6c200.
 void sub_content_messages()
 {
     int rendered = 0;
-
     bf_iter_t it;
     bf_iter_begin(&phoneRing, &it);
 
-    uint8_t frameBuf[MAX_MSG_LEN_PHONE];
-    uint8_t blelen;
+    if (bDEBUG)
+        Serial.printf("phoneRing frames:%u unread:%u\n", (unsigned)bf_frames(&phoneRing), (unsigned)bf_unread(&phoneRing));
 
-    while ((blelen = bf_iter_next(&phoneRing, &it, frameBuf, sizeof(frameBuf))) != 0)
+    for (;;)
     {
-        // bf_iter_next() liefert wie bf_peek() die volle Frame-Laenge, auch
-        // wenn sizeof(frameBuf) weniger kopiert hat. bf_push() laesst
-        // hoechstens 255 Byte zu (byte_fifo.cpp:59), frameBuf ist groesser --
-        // eine Laufzeitklemme kann also nie greifen; die Zusicherung haelt
-        // die Annahme fest.
-        static_assert(sizeof(frameBuf) >= 255,
-                      "frameBuf muss jeden bf_push()-Frame (max 255 B) fassen");
+        uint8_t frame[256];
+        uint8_t blelen = bf_iter_next(&phoneRing, &it, frame, sizeof(frame));
+        if (blelen == 0)
+            break;
 
         if (bDEBUG)
-            Serial.printf("frame type:%02X\n", frameBuf[0]);
+            Serial.printf("frame len:%u [0]:%02X\n", blelen, frame[0]);
 
         uint8_t toPhoneBuff[MAX_MSG_LEN_PHONE] = {0}; // we need to insert the first byte text msg flag
 
-        if (frameBuf[0] == 0x91)
+        if (frame[0] == 0x91)
         { // Mheard
-          // memcpy(toPhoneBuff, frameBuf, blelen-1);
         }
-        else if (frameBuf[0] == 0x44)
+        else if (frame[0] == 0x44)
         { // Data Message (JSON)
-          // memcpy(toPhoneBuff, frameBuf, blelen);
         }
         else if (blelen >= 4 && (size_t)(blelen - 4) <= sizeof(toPhoneBuff))
         { // Text Message and Position
@@ -1837,8 +3139,8 @@ void sub_content_messages()
             char timestamp[21];
             String ccheck = "";
 
-            memcpy(toPhoneBuff, frameBuf, blelen - 4);
-            memcpy(tbuffer, frameBuf + (blelen - 4), 4);
+            memcpy(toPhoneBuff, frame, blelen - 4);
+            memcpy(tbuffer, frame + (blelen - 4), 4);
             unix_time = (tbuffer[0] << 24) | (tbuffer[1] << 16) | (tbuffer[2] << 8) | tbuffer[3];
             time_t unix_t = (time_t)(unix_time + (long)(meshcom_settings.node_utcoff * 60 * 60));
             struct tm *oldt = gmtime(&unix_t);
@@ -1850,13 +3152,25 @@ void sub_content_messages()
             if (icheck >= 0)
             {
                 if (own_msg_id[icheck][4] == 1)
-                { // 00...not heard, 01...heard, 02...ACK
+                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held
                     ccheck = "&#x2713&nbsp;";
                 }
 
                 if (own_msg_id[icheck][4] == 2)
-                { // 00...not heard, 01...heard, 02...ACK
+                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held
                     ccheck = "&#x2611;&nbsp;";
+                }
+
+                if (own_msg_id[icheck][4] == 3)
+                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held (retransmit gave up on a user-originated DM)
+                    ccheck = "<span title=\"delivery failed\">&#x2717;</span>&nbsp;";
+                }
+
+                if (own_msg_id[icheck][4] == 4)
+                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held (a store node holds this DM for an absent destination)
+                    String holder = stoHolder(aprsmsg.msg_id);
+                    String holdtitle = holder.length() > 0 ? ("held by " + htmlEscape(holder)) : "held by a store node";
+                    ccheck = "<span title=\"" + holdtitle + "\">&#x2709;</span>&nbsp;";
                 }
             }
 
@@ -1866,14 +3180,14 @@ void sub_content_messages()
                 // {CET} time beacons sit in the ring for the phone app's clock
                 // sync; they are not operator traffic and would light the tab
                 // badges on every beacon, so the web list skips them
-                if (aprsmsg.msg_payload.indexOf(":ack") < 1 && !aprsmsg.msg_payload.startsWith("{CET}"))
+                if (mcIndexOfStr(aprsmsg.msg_payload, ":ack") < 1 && !mcStartsWith(aprsmsg.msg_payload, "{CET}"))
                 {
                     String msgtxt = aprsmsg.msg_payload;
                     if (bDEBUG)
-                        Serial.printf("aprsmsg.msg_source_call.c_str():%s, aprsmsg.msg_gateway_call.c_str():%s, aprsmsg.msg_destination_call.c_str():%s, aprsmsg.msg_payload.c_str():%s\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_payload.c_str());
+                        Serial.printf("aprsmsg.msg_source_call:%s, aprsmsg.msg_gateway_call:%s, aprsmsg.msg_destination_call:%s, aprsmsg.msg_payload:%s\n", aprsmsg.msg_source_call, aprsmsg.msg_source_last, aprsmsg.msg_destination_call, aprsmsg.msg_payload);
 
                     if (msgtxt.indexOf('{') > 0)
-                        msgtxt = aprsmsg.msg_payload.substring(0, msgtxt.indexOf('{'));
+                        msgtxt = String(aprsmsg.msg_payload).substring(0, msgtxt.indexOf('{'));
 
                     // WEB-03a: mesh-derived strings (payload, path, callsigns) are attacker-controlled -- escape before HTML output
                     String msgtxt_esc = htmlEscape(msgtxt);
@@ -1881,7 +3195,7 @@ void sub_content_messages()
                     String msg_destination_path_esc = htmlEscape(aprsmsg.msg_destination_path);
 
                     // own messages (source == us): the browser's DM tab keys on the destination call
-                    if (is_equ(meshcom_settings.node_call, aprsmsg.msg_source_call.c_str()))
+                    if (is_equ(meshcom_settings.node_call, aprsmsg.msg_source_call))
                     {
                         String dst_esc = htmlEscape(aprsmsg.msg_destination_call);
 
@@ -1899,13 +3213,13 @@ void sub_content_messages()
                     // a DM to us keys on the source call so the DM tab shows both directions
                     else
                     {
-                        bool isGroupDst = is_equ(aprsmsg.msg_destination_call.c_str(), "*");
-                        if (!isGroupDst && aprsmsg.msg_destination_call.length() > 0)
+                        bool isGroupDst = is_equ(aprsmsg.msg_destination_call, "*");
+                        if (!isGroupDst && strlen(aprsmsg.msg_destination_call) > 0)
                         {
                             isGroupDst = true;
-                            for (unsigned int ci = 0; ci < aprsmsg.msg_destination_call.length(); ci++)
+                            for (unsigned int ci = 0; ci < strlen(aprsmsg.msg_destination_call); ci++)
                             {
-                                if (!isDigit(aprsmsg.msg_destination_call.charAt(ci)))
+                                if (!isDigit(aprsmsg.msg_destination_call[ci]))
                                 {
                                     isGroupDst = false;
                                     break;
@@ -2068,7 +3382,7 @@ void sub_page_info()
     web_client.printf("<tr><td>Firmware</td><td>Meshcom %-4.4s%s<br>(build: %s / %s)<br>(flash-version %i)</td></tr>\n", SOURCE_VERSION, SOURCE_VERSION_WEB_SUB, __DATE__, __TIME__, meshcom_settings.node_fversion);
     web_client.printf("<tr><td>Start Date</td><td>%s</td></tr>\n", meshcom_settings.node_update);
     web_client.printf("<tr><td>Call</td><td>%s</td></tr>\n", meshcom_settings.node_call);
-    web_client.printf("<tr><td>Hardware</td><td>%s</td></tr>\n", getHardwareLong(BOARD_HARDWARE).c_str());
+    web_client.printf("<tr><td>Hardware</td><td>%s</td></tr>\n", nbrHardwareName(BOARD_HARDWARE));
     web_client.printf("<tr><td>UTC offset</td><td>%.1f [%s]</td></tr>\n", meshcom_settings.node_utcoff, cTimeSource);
     // BAT-01: global_batt==0.0 is the established "no reading" convention (grounded pin, or
     // the ADC-path no-battery detection in batt_functions.cpp) -- same check the on-device
@@ -2077,17 +3391,103 @@ void sub_page_info()
         web_client.printf("<tr><td>Battery</td><td>USB (no battery)</td></tr>\n");
     else
         web_client.printf("<tr><td>Battery</td><td>%.3fV (%d%%) max %.3fV</td></tr>\n", global_batt / 1000.0, global_proz, meshcom_settings.node_maxv);
+    // WEB-SW: grouped switch overview, one <tr> per group, labels matching
+    // sub_page_setup()'s _create_setup_switch_element() calls verbatim, same
+    // #if guards as there. test/golden/info_switch_lint.py checks every
+    // setup-page switch label appears somewhere on this page.
     web_client.printf("<tr><td>Settings</td><td>");
     web_client.printf("Gateway: %s<br>", (bGATEWAY ? "on" : "off"));
+    web_client.printf("Mesh: %s<br>", (bMESH ? "on" : "off"));
+    web_client.printf("Via: %s<br>", (bVIA ? "on" : "off"));
+    web_client.printf("Userbutton: %s<br>", (bButtonCheck ? "on" : "off"));
+    #if defined(ANALOG_PIN)
     if (!bAnalogCheck)
         web_client.printf("Analog: off<br>");
     else if (meshcom_settings.node_analog_pin <= 0 || meshcom_settings.node_analog_pin >= 99)
         web_client.printf("Analog: on (GPIO not set, measurement paused)<br>");
     else
         web_client.printf("Analog: on (GPIO %i)<br>", meshcom_settings.node_analog_pin);
-    web_client.printf("Mesh: %s<br>", (bMESH ? "on" : "off"));
-    web_client.printf("Routing: %s<br>", (bVIA ? "on" : "off"));
-    web_client.printf("Button: %s<br>", (bButtonCheck ? "on" : "off"));
+    #endif
+    web_client.printf("</td></tr>\n");
+
+    web_client.printf("<tr><td>Display</td><td>");
+    web_client.printf("Display: %s<br>", (!bDisplayOff ? "on" : "off"));
+    web_client.printf("Voltage: %s<br>", (bDisplayVolt ? "on" : "off"));
+    web_client.printf("</td></tr>\n");
+
+    web_client.printf("<tr><td>Network</td><td>");
+    #if defined(HAS_ETHERNET)
+    web_client.printf("Ethernet Mode: %s<br>", (meshcom_settings.node_netmode == 1 ? "on" : "off"));
+    #endif
+    web_client.printf("ext UDP: %s<br>", (bEXTUDP ? "on" : "off"));
+    #if !defined(BOARD_RAK4630) && !defined(DISABLE_NET_CONSOLE)
+    web_client.printf("net console: %s<br>", (bNETCONSOLE ? "on" : "off"));
+    #endif
+    #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+    web_client.printf("KISS/TCP: %s<br>", (bKISS ? "on" : "off"));
+    // security: flag transmit-enabled KISS clients with no HMAC auth gate
+    web_client.printf("KISS TX: %s%s<br>", (bKISSTX ? "on" : "off"), (bKISSTX && bKISS && !bKISSAUTH) ? " (!)" : "");
+    web_client.printf("KISS RxMeta: %s<br>", (bKISSMETA ? "on" : "off"));
+    web_client.printf("KISS Auth: %s<br>", (bKISSAUTH ? "on" : "off"));
+    #endif
+    web_client.printf("</td></tr>\n");
+
+    web_client.printf("<tr><td>Position</td><td>");
+    #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
+    web_client.printf("GPS: %s<br>", (bGPSON ? "on" : "off"));
+    #endif
+    web_client.printf("Track: %s<br>", (bDisplayTrack ? "on" : "off"));
+    web_client.printf("</td></tr>\n");
+
+    web_client.printf("<tr><td>Sensors</td><td>");
+    #ifdef OneWire_GPIO
+    web_client.printf("1-Wire: %s<br>", (bONEWIRE ? "on" : "off"));
+    #endif
+    #if defined(ENABLE_BMX280)
+    web_client.printf("BMP280: %s<br>", (bBMPON ? "on" : "off"));
+    web_client.printf("BME280: %s<br>", (bBMEON ? "on" : "off"));
+    web_client.printf("BME680: %s<br>", (bBME680ON ? "on" : "off"));
+    web_client.printf("MCU811: %s<br>", (bMCU811ON ? "on" : "off"));
+    #endif
+    #if defined (ENABLE_INA226)
+    web_client.printf("INA226: %s<br>", (bINA226ON ? "on" : "off"));
+    #endif
+    #if defined(ENABLE_AHT20)
+    web_client.printf("AHT20: %s<br>", (bAHT20ON ? "on" : "off"));
+    #endif
+    #if defined(ENABLE_SHT21)
+    web_client.printf("SHT21: %s<br>", (bSHT21ON ? "on" : "off"));
+    #endif
+    #if defined(ENABLE_SOFTSER)
+    web_client.printf("SoftSer: %s<br>", (bSOFTSERON ? "on" : "off"));
+    #endif
+    web_client.printf("</td></tr>\n");
+
+    web_client.printf("<tr><td>Messaging</td><td>");
+    web_client.printf("No MSG All: %s<br>", (bNoMSGtoALL ? "on" : "off"));
+    #if defined(ENABLE_MSGSTORE)
+    web_client.printf("Notify sender: %s<br>", msgstoreNotice() ? "on" : "off"); // info_switch_lint: matches sub_page_setup()'s "storenotice" label
+    #endif
+    web_client.printf("</td></tr>\n");
+
+    // Neighbourhood: not on the setup page (no _create_setup_switch_element there --
+    // these are console-only --nbr* flags), so info_switch_lint.py does not require
+    // them, but they are the security/behaviour-relevant state for mesh relay decisions.
+    web_client.printf("<tr><td>Neighbourhood</td><td>");
+    web_client.printf("NBR debug: %s<br>", (bNBRDEBUG ? "on" : "off"));
+    web_client.printf("NBR relay: %s<br>", (bNBRCANCEL ? "on" : (bNBRRELAY ? "count" : "off")));
+    web_client.printf("NBR sym: %s<br>", (bNBRSYM ? "on" : "off"));
+    web_client.printf("NBR report: %s<br>", (bNBRRPTOFF ? "off" : (bNBRRPTON ? "on" : "auto")));
+    web_client.printf("</td></tr>\n");
+
+    #if defined(ESP32) && (defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO))
+    web_client.printf("<tr><td>Persistence</td><td>");
+    web_client.printf("SD: %s<br>", (meshcom_settings.node_persist_to_sd ? "on" : "off"));
+    web_client.printf("Flash: %s<br>", (meshcom_settings.node_persist_to_flash ? "on" : "off"));
+    web_client.printf("</td></tr>\n");
+    #endif
+
+    web_client.printf("<tr><td>Debug</td><td>");
     web_client.printf("Debug: %s<br>", (bDEBUG ? "on" : "off"));
     web_client.printf("Debug LoRa: %s<br>", (bLORADEBUG ? "on" : "off"));
     web_client.printf("Debug GPS: %s<br>", (iGPSDEBUG ? "on" : "off"));
@@ -2500,7 +3900,32 @@ void call_function(String web_header)
         functionData.functionParameter = "";
     }
 
-    webFunctionCall(&functionData); // try to execute that command
+#if defined(ENABLE_MSGSTORE)
+    // Stage 3 store node operator actions (docs/dm-stage3-wave-plan-20260914.md). Handled here
+    // rather than in webFunctionCall() (web_nodefunctioncalls.cpp, out of this file's exclusive
+    // set) -- both keep the same WF_RETURNCODE_OKAY/FAIL convention call_function() already
+    // serialises below, so the mailbox page's callfunction() calls need no special handling.
+    if (functionData.functionName.equals("mboxpurge"))
+    {
+        if (functionData.functionParameter.equals("all"))
+        {
+            msgstorePurgeAll();
+            functionData.returnCode = WF_RETURNCODE_OKAY;
+        }
+        else
+        {
+            functionData.returnCode = msgstorePurge(functionData.functionParameter.toInt()) ? WF_RETURNCODE_OKAY : WF_RETURNCODE_FAIL;
+        }
+    }
+    else if (functionData.functionName.equals("mboxdeliver"))
+    {
+        functionData.returnCode = msgstoreDeliverNow(functionData.functionParameter.toInt()) ? WF_RETURNCODE_OKAY : WF_RETURNCODE_FAIL;
+    }
+    else
+#endif
+    {
+        webFunctionCall(&functionData); // try to execute that command
+    }
 
     send_http_header(functionData.returnCode == WF_RETURNCODE_OKAY ? 200 : 422, RESPONSE_TYPE_JSON); // send header, either 200 if command was executed or 422 if not
 

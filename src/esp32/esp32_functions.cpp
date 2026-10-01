@@ -180,30 +180,24 @@ void initDisplay()
     printfdeb("[INIT]...2.13\" E-Ink Panel -> %s\n", g_wp_panel_name);
 #endif
 
-#if ! (defined(BOARD_E290) || defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E213)) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+#if MC_HAS_U8G2   // GRD-01: war dieselbe Aussage ohne die nRF52-Boards
 
     printlndeb("[INIT]...Auto detecting display:");
         
     int idtype = esp32_isSSD1306(0x3C);
 
-    // SSD1306 .... idtype 2   u8g2_1
-    // SH1106 ..... idtype 1   u8g2_2
+    // DISP-01: der Kommentar, der hier stand, war verkehrt herum
+    // ("SSD1306 .... idtype 2") und passte zur ebenso verkehrten Beschriftung
+    // in der Sonde. Richtig ist: 1 = 0,9" = SSD1306 = u8g2_1,
+    // 2 = 1,3" = SH1106 = u8g2_2. Die Zuordnung selbst lag doppelt im Baum und
+    // lief auseinander; sie steht jetzt einmal in mcSelectU8g2().
 
-    u8g2 = NULL;
+    u8g2 = mcSelectU8g2(idtype);
 
-    if(idtype < 0)
+    if(u8g2 == NULL)
     {
         bDisplayOff = true;
         return;
-    }
-
-    if (idtype == 1)
-    {
-        u8g2 = &u8g2_1;
-    }
-    else
-    {
-        u8g2 = &u8g2_2;
     }
 
     #if defined(BOARD_HELTEC_V3) || defined(BOARD_HELTEC_V4) || defined(BOARD_STICK_V3)

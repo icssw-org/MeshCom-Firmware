@@ -16,13 +16,20 @@ Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
 // Wireless Paper specific config
 #define MODUL_HARDWARE HELTEC_WIRELESS_PAPER
 
-#define RF_FREQUENCY 433.175000          // Hz  (AT 70cm, wie E290)
-#define LORA_APRS_FREQUENCY 433.775000   // Hz
 
 // --- Keine Onboard-Sensoren auf der Wireless Paper -> bewusst NICHT aktiviert ---
 // (kein ENABLE_GPS / BMX280 / BMP390 / AHT20 / SHT21 / BMX680 / MCP23017 / INA226 / MCU811 / RTC / SOFTSER)
+#define ENABLE_GPS_DISABLED
+#define ENABLE_BMX280_DISABLED
+#define ENABLE_BMX680_DISABLED
+#define ENABLE_RTC_DISABLED
+#define ENABLE_BMP390_DISABLED
+#define ENABLE_AHT20_DISABLED
+#define ENABLE_MCP23017_DISABLED
+#define ENABLE_SHT21_DISABLED
+#define ENABLE_MC811_DISABLED
+#define ENABLE_INA226_DISABLED
 
-#define TX_POWER_MAX 22  // max 22 dBm
 #define TX_POWER_MIN 2
 
 // SX1262 mit identischer Pinbelegung wie E290 -> eigener Schalter, additiv in lora_setchip.cpp
@@ -41,17 +48,12 @@ Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
 // muss HAS_EPAPER hier gesetzt sein - genau wie in der vision-master-e290 configuration.h.
 #define HAS_EPAPER
 
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
-#define TX_OUTPUT_POWER 22  // SX1262 up to +22dBm
 #define CURRENT_LIMIT 140   // mA
 
 // RadioLib Modem-Parameter (wie E290)
-#define LORA_CR 6
-#define LORA_BANDWIDTH 250
-#define LORA_SF 11
 
 // =============================================
 // GPIOs
@@ -81,7 +83,18 @@ Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
 #define GPS_RX_PIN 47  // ungenutzt (kein GPS)
 #define GPS_TX_PIN 48  // ungenutzt (kein GPS)
 
-#define OneWire_GPIO  99 // ungenutzt
+// R3-03 (2026-09-16): stand hier als 99. 99 ist auf diesem Board kein
+// gueltiger GPIO -- OneWire hat hier also nie funktioniert. -1 ist die
+// Schreibweise fuer "dieses Board hat keinen OneWire-Pin", wie sie
+// T-ETH-ELITE_1262 schon benutzt: sie faellt durch den `> 0`-Test in
+// onewire_functions.cpp, der Treiber startet nicht.
+//
+// Das Makro bleibt DEFINIERT und wird nicht geloescht: die gesamte
+// OneWire-Implementierung steht in `#ifdef OneWire_GPIO`
+// (onewire_functions.cpp:13-379). Ohne das Makro koennte man den Sensor
+// auch mit `--owgpio <pin>` nicht mehr einschalten -- das waere eine
+// Funktionsentfernung, keine Bereinigung.
+#define OneWire_GPIO -1
 
 // Batteriemessung Heltec Wireless Paper (laut offizieller Heltec/Meshtastic-Pinbelegung):
 //  - Die Messung wird ueber den Control-Pin GPIO19 freigegeben (ACTIVE LOW:
@@ -124,3 +137,8 @@ Chip-ID erkannt (detectEinkChipId() in esp32_functions.cpp):
 #define PIN_LORA_SCK            9
 #define PIN_LORA_MISO           11
 #define PIN_LORA_MOSI           10
+
+// W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
+// Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
+// dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.
+#include <configuration_default.h>   // W7: Flottenvorgaben, #ifndef -- was oben steht, gewinnt

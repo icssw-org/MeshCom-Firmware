@@ -15,7 +15,6 @@
 #include "tdeck_helpers.h"
 #include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
 #include <esp32/esp32_flash.h>
-#include <mheard_functions.h>
 #include <time_functions.h>
 
 #include <Arduino.h>
@@ -260,8 +259,10 @@ void initTDeck()
 
     if(bSDDected)
     {
-        loadMHeardPersistence();
-        loadPathPersistence();
+        // MeshCom-5-Topologie Welle 4 (docs/meshcom5-topologie/ 4.12): das alte
+        // loadMHeardPersistence()/loadPathPersistence() (mheard_functions.cpp,
+        // entfallen) ist topoUiBoot() (src/topo_ui.cpp) gewichen -- die ruft
+        // W4c einmal fuer alle Boards nach dem jeweiligen SD-Init auf.
         loadTimePersistence();
     }
 
@@ -310,8 +311,8 @@ void startAudio()
 {
     // Nur einreihen; ob die Datei existiert, entscheidet der Audio-Task
     // (Ersatz: CW-Startkennung). Die Startsequenz wartet nicht auf den Ton.
-    Serial.printf("[BOOT];audio;queued;%s\n", meshcom_settings.node_audio_start.c_str());
-    audio_play_file_or_cw(meshcom_settings.node_audio_start.c_str(), 12, AUDIO_CW_START);
+    Serial.printf("[BOOT];audio;queued;%s\n", meshcom_settings.node_audio_start);
+    audio_play_file_or_cw(meshcom_settings.node_audio_start, 12, AUDIO_CW_START);
 }
 
 /**

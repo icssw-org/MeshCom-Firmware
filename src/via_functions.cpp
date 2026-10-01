@@ -1,4 +1,6 @@
 #include <string.h>
+#include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "mc_text.h"
 #include "Arduino.h"
 #include "configuration.h"
 
@@ -6,7 +8,6 @@
 
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
-#include "mheard_functions.h"
 
 #include "printfdeb_functions.h"
 
@@ -55,8 +56,8 @@ checkMesh   = false if bMESH == false
 // enthalten, ein abschliessendes Komma ist moeglich (checkVia() erzeugt es
 // selbst, siehe test_checkvia.cpp), und "*" steht als eigenes Token da.
 //
-// Warum nicht indexOf(): das ist eine Teilstringsuche ohne Trennzeichen und
-// trifft auf jedes Rufzeichen, dessen Praefix das eigene ist. Ein Knoten
+// Warum nicht mcIndexOfStr(): das ist eine Teilstringsuche ohne Trennzeichen
+// und trifft auf jedes Rufzeichen, dessen Praefix das eigene ist. Ein Knoten
 // DK5EN-9 hielte sich fuer den benannten Hop, sobald DK5EN-90, DK5EN-92 oder
 // DK5EN-98 im Pfad steht -- und ein Basisrufzeichen fuer jede seiner eigenen
 // SSIDs. Deshalb Token fuer Token auf volle Laenge vergleichen.
@@ -87,10 +88,10 @@ static bool pathNamesCall(const char *path, const char *call)
 bool checkMesh(struct aprsMessage &aprsmsg)
 {
     if(bDisplayCont)
-        printfdeb("[MESH]...<%s>...Payload<%s>\n", bMESH?"true":"false", aprsmsg.msg_payload.c_str());
+        printfdeb("[MESH]...<%s>...Payload<%s>\n", bMESH?"true":"false", aprsmsg.msg_payload);
 
     // check ping
-    if(aprsmsg.msg_payload.startsWith("ping"))
+    if(mcStartsWith(aprsmsg.msg_payload, "ping"))
     {
         if(bDisplayCont)
             printlndeb("[MESH]...ping received, return MESH=false");
@@ -98,7 +99,7 @@ bool checkMesh(struct aprsMessage &aprsmsg)
     }
 
     // check source_call
-    if(aprsmsg.msg_source_call == meshcom_settings.node_call)
+    if(strcmp(aprsmsg.msg_source_call, meshcom_settings.node_call) == 0)
     {
         if(bDisplayCont)
             printlndeb("[MESH]...own call detected, return MESH=false");
@@ -107,7 +108,7 @@ bool checkMesh(struct aprsMessage &aprsmsg)
 
     //printfdeb("aprsmsg.msg_destination_last:<%s>  aprsmsg.msg_destination_call:<%s> aprsmsg.msg_destination_path:<%s>\n", aprsmsg.msg_destination_last.c_str(), aprsmsg.msg_destination_call.c_str(), aprsmsg.msg_destination_path.c_str());
 
-    if(is_equ(aprsmsg.msg_destination_path.c_str(), aprsmsg.msg_destination_call.c_str()) != 0)
+    if(is_equ(aprsmsg.msg_destination_path, aprsmsg.msg_destination_call) != 0)
     {
         if((bDisplayInfo && bMESH) || bDisplayCont)
             printfdeb("%s MESH    : <no via info>return MESH=%s\n", getTimeString().c_str(), bMESH?"true":"false");
@@ -116,7 +117,7 @@ bool checkMesh(struct aprsMessage &aprsmsg)
 
     //printfdeb("[MESH]...MESH:%s ...VIA:%s [%s]\n", bMESH?"true":"false", bVIA?"true":"false", meshcom_settings.node_via);
     
-    if(!pathNamesCall(aprsmsg.msg_destination_path.c_str(), meshcom_settings.node_call))
+    if(!pathNamesCall(aprsmsg.msg_destination_path, meshcom_settings.node_call))
     {
         if(bDisplayCont)
             printlndeb("[MESH]...<with via info no match>...return MESH=false");
@@ -146,47 +147,50 @@ void checkVia(struct aprsMessage &aprsmsg)
         // include routing information within destination_path
         if(strlen(meshcom_settings.node_via) > 0)
         {
-            aprsmsg.msg_destination_path = meshcom_settings.node_via;
-            aprsmsg.msg_destination_path.concat(",");
-            aprsmsg.msg_destination_path.concat(aprsmsg.msg_destination_call);
+            mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), meshcom_settings.node_via);
+            mcAppend(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), ",");
+            mcAppend(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), aprsmsg.msg_destination_call);
         }
         else
         {
             if(bGATEWAY)
             {
                 /* 22.07.2026 - zum Test entfernt
-                aprsmsg.msg_destination_path = "HG,";
-                aprsmsg.msg_destination_path.concat(aprsmsg.msg_destination_call);
+                mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "HG,");
+                mcAppend(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), aprsmsg.msg_destination_call);
                 */
             }
             else
             {
                 /* 22.07.2026 - zum Test entfernt
-                char cMH[10];
+                // MeshCom 5 Welle 4: dieselbe Frage an die Topologie statt an
+                // das entfallene MHeard -- direkte Nachbarn mit Kante (x, 0)
+                // juenger als 60 min (nbrMhRows(), nbr_views.h, Minuten seit
+                // Boot, ohne Uhr gueltig), davon der mit dem groessten
+                // gemeldeten NCNT > 1. Die echte Via-Wahl kommt in Stufe 4 aus
+                // der Via-Menge (Konzept 4.11).
+                char cMH[NBR_CALL_LEN];
                 int inct=0;
-                // insert mheard-calls to routing informnation
-                for(int iset=0; iset<MAX_MHEARD; iset++)
+                uint16_t now_min = uptimeMin16();
+                uint8_t rows[NBR_MAX_ROWS];
+                int nrows = nbrMhRows(nbrMatrix, now_min, 60, rows, NBR_MAX_ROWS);
+                if(nrows > NBR_MAX_ROWS)
+                    nrows = NBR_MAX_ROWS;
+                for(int i=0; i<nrows; i++)
                 {
-                    if(mheardCalls[iset][0] != 0x00)
+                    NbrMhView v;
+                    if(nbrMhGet(nbrMatrix, rows[i], now_min, &v) && v.ncnt > 1 && v.ncnt > inct)
                     {
-                        if(mheardFreshMs(iset, 60UL*60UL*1000UL))   // mheard only last hour (NC-02: millis(), not wall clock)
-                        {
-                            if(mheardNCount[iset] > 1 && mheardNCount[iset] > inct)
-                            {
-                                memset(cMH, 0x00, sizeof(cMH));
-                                strncpy(cMH, mheardCalls[iset], sizeof(cMH));
-
-                                inct = mheardNCount[iset];
-                            }
-                        }
+                        mcSet(cMH, sizeof(cMH), v.call);
+                        inct = v.ncnt;
                     }
                 }
 
                 if(inct > 0)
                 {
-                    aprsmsg.msg_destination_path = cMH;
-                    aprsmsg.msg_destination_path.concat(",");
-                    aprsmsg.msg_destination_path.concat(aprsmsg.msg_destination_call);
+                    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), cMH);
+                    mcAppend(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), ",");
+                    mcAppend(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), aprsmsg.msg_destination_call);
                 }
                 */
             }

@@ -1,6 +1,7 @@
+#include "ble_phone_frame.h"
+#include "ble_phone_drain.h"
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
-#include <byte_fifo.h>
 #include <phone_commands.h>
 #include <regex_functions.h>
 #include <debugconf.h>
@@ -12,6 +13,7 @@
 #include <time_functions.h>
 #if defined(ESP32) || defined(ESP8266)
 #include "mbedtls/sha256.h"
+#include "loop_breadcrumb.h"   // INS-05: loopCrumbClear() before the deliberate reboot
 #else
 #include "Adafruit_nRFCrypto.h"
 #endif
@@ -35,7 +37,15 @@ double d_lon = 0.0;
 
 bool ble_busy_flag = false;
 
-void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len);
+// Platform sinks for the BLE drain (src/ble_phone_drain.h): one notify per
+// call, result SENT / BUSY / DOWN. Defined in esp32_main.cpp / nrf52_ble.cpp.
+#if defined(ESP8266) || defined(ESP32)
+BlePhoneSend esp32_write_ble(const uint8_t *buf, uint16_t len);
+uint16_t esp32_ble_mtu();
+#else
+BlePhoneSend nrf52_write_ble(const uint8_t *buf, uint16_t len);
+uint16_t nrf52_ble_mtu();
+#endif
 
 extern bool g_ble_uart_is_connected;
 extern bool config_to_phone_prepare;
@@ -44,6 +54,59 @@ extern bool conffin_sent;
 extern uint8_t shortVERSION();
 
 
+
+// BLE-N1/N2: retry state per ring, the counters are the global
+// g_blePhoneStats (loop_functions.cpp, shown by --info).
+static BlePhoneDrainState s_phoneDrain = {0, 0, 0};
+static BlePhoneDrainState s_phoneComDrain = {0, 0, 0};
+
+static BlePhoneSend blePhoneSink(void *ctx, const uint8_t *buf, uint16_t len)
+{
+	(void)ctx;
+#if defined(ESP8266) || defined(ESP32)
+	return esp32_write_ble(buf, len);
+#else
+	return nrf52_write_ble(buf, len);
+#endif
+}
+
+static uint16_t blePhoneMtu()
+{
+#if defined(ESP8266) || defined(ESP32)
+	return esp32_ble_mtu();
+#else
+	return nrf52_ble_mtu();
+#endif
+}
+
+// bBLEDEBUG lines for the drain outcomes. Kept under 64 bytes on purpose:
+// Print::printf mallocs above that, and a retry happens exactly when the BLE
+// stack is short of memory (printf-malloc-starves-nimble). The counters in
+// g_blePhoneStats are always on; these lines only tell WHEN.
+static void blePhoneDrainReport(const char *ring, BlePhoneDrain r, const BlePhoneDrainInfo &info)
+{
+	if(!bBLEDEBUG)
+		return;
+
+	switch(r)
+	{
+		case BLE_DRAIN_RETRY:
+			Serial.printf("[BLE ];tx_retry;%lu;%s;try%u;len%u\n", (unsigned long)millis(), ring, (unsigned)info.fails, (unsigned)info.sendlen);
+			break;
+		case BLE_DRAIN_DROPPED:
+			Serial.printf("[BLE ];tx_drop;%lu;%s;len%u;mtu%u\n", (unsigned long)millis(), ring, (unsigned)info.sendlen, (unsigned)info.mtu);
+			break;
+		case BLE_DRAIN_BAD:
+			Serial.printf("[BLE ];tx_bad;%lu;%s\n", (unsigned long)millis(), ring);
+			break;
+		case BLE_DRAIN_SENT:
+			if(info.oversize)
+				Serial.printf("[BLE ];tx_trunc;%lu;len%u;mtu%u\n", (unsigned long)millis(), (unsigned)info.sendlen, (unsigned)info.mtu);
+			break;
+		default:
+			break;
+	}
+}
 
 /**
  * @brief Method to send incoming LoRa messages to BLE connected device
@@ -63,76 +126,32 @@ void sendToPhone()
 
     if(g_ble_uart_is_connected && isPhoneReady == 1)
     {
-		// we need to insert the first byte text msg flag
-		uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
-		// MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
-		uint8_t blelen;
-		uint8_t statusByte;
-		// CONC-18: bf_peek() takes its own lock (BF_LOCK, byte_fifo.cpp) and
-		// copies the oldest unread frame out whole before returning, so
-		// addBLEOutBuffer() (CONC-15), which can run concurrently from
-		// OnRxDone (nRF52 timer-service task, see C-01), cannot tear or
-		// overwrite what ringSnapshot already holds. bf_pop() then advances
-		// the ring under its own lock -- no call-site critical section needed
-		// any more.
-		uint8_t ringSnapshot[MAX_MSG_LEN_PHONE];
-		blelen = bf_peek(&phoneRing, ringSnapshot, sizeof(ringSnapshot));
-		// bf_peek() liefert die VOLLE Framelaenge, auch wenn es weniger nach
-		// ringSnapshot kopiert hat -- als Laenge ist der Rueckgabewert also
-		// nur brauchbar, solange der Puffer jeden moeglichen Frame fasst.
-		// bf_push() laesst hoechstens 255 Byte zu (byte_fifo.cpp:59), der
-		// Puffer ist groesser: eine Laufzeitklemme kann hier nie greifen,
-		// die Zusicherung haelt die Annahme fest, falls jemand MAX_MSG_LEN_PHONE
-		// unter 255 setzt.
-		static_assert(sizeof(ringSnapshot) >= 255,
-		              "ringSnapshot muss jeden bf_push()-Frame (max 255 B) fassen");
-		statusByte = (blelen > 0) ? ringSnapshot[0] : 0;
-		bf_pop(&phoneRing);
+		// The drain (src/ble_phone_drain.h) peeks the ring cell, frames it
+		// (blePhoneFrame(): text gets the 0x40 tag, 0x44 JSON and 0x91 MH go
+		// through), sends blelen+2 bytes and pops ONLY when the stack took it.
+		// On a busy stack the frame stays and is offered again at the next
+		// window (BLE-N1). MAXIMUM PACKET length over BLE is 244 at MTU 247;
+		// longer frames are counted, not split (BLE-N2).
+		uint8_t toPhoneBuff [MAX_MSG_LEN_PHONE];
+		BlePhoneDrainInfo info;
 
-		// N-04 residual: the producer clamp only closed the RF-reachable path;
-		// blelen==0 here would underflow to 255 below and memcpy past the
-		// actual payload.
-		if(blelen == 0)
-		{
-			ble_busy_flag = false;
-			return;
-		}
+		BlePhoneDrain r = blePhoneDrainOne(&phoneRing, &s_phoneDrain, &g_blePhoneStats,
+		                                   blePhoneSink, NULL, blePhoneMtu(),
+		                                   toPhoneBuff, sizeof(toPhoneBuff), &info);
 
-		//Mheard
-		if(statusByte == 0x91)
-		{
-			memcpy(toPhoneBuff, ringSnapshot, blelen-1);
-		}
-		else
-		// Data Message (JSON)
-		if(statusByte == 0x44)
-		{
-			memcpy(toPhoneBuff, ringSnapshot, blelen);
-		}
-		else
-		// Text Message and Position
-		{
-			toPhoneBuff[0] = 0x40;
-			memcpy(toPhoneBuff+1, ringSnapshot, blelen);
-		}
+		blePhoneDrainReport("msg", r, info);
 
-		// send to phone
-		// why do we need to add 2 bytes??
-		bLED_BLUE = true;
-
-		#if defined(ESP8266) || defined(ESP32)
-			blelen=blelen + 2;
-			esp32_write_ble(toPhoneBuff, blelen);
-		#else
-			g_ble_uart.write(toPhoneBuff, blelen + 2);
-		#endif
-
-		if(bBLEDEBUG)
+		if(r == BLE_DRAIN_SENT)
 		{
-			if(toPhoneBuff[0] == ':' || toPhoneBuff[0] == '!' || toPhoneBuff[0] == '@')
-				Serial.printf("phoneRing frames:%u buff:%s lng:%i\n", (unsigned)bf_frames(&phoneRing), toPhoneBuff+7, blelen);
-			else
-				Serial.printf("phoneRing frames:%u buff:%s lng:%i\n", (unsigned)bf_frames(&phoneRing), toPhoneBuff, blelen);
+			bLED_BLUE = true;
+
+			if(bBLEDEBUG)
+			{
+				if(toPhoneBuff[0] == ':' || toPhoneBuff[0] == '!' || toPhoneBuff[0] == '@')
+					Serial.printf("toPhone unread:%u buff:%s lng:%i\n", (unsigned)bf_unread(&phoneRing), toPhoneBuff+7, (int)info.sendlen);
+				else
+					Serial.printf("toPhone unread:%u buff:%s lng:%i\n", (unsigned)bf_unread(&phoneRing), toPhoneBuff, (int)info.sendlen);
+			}
 		}
     }
     
@@ -157,75 +176,28 @@ void sendComToPhone()
 
     if(g_ble_uart_is_connected && isPhoneReady == 1)
     {
-		// we need to insert the first byte text msg flag
-		uint8_t ComToPhoneBuff [MAX_MSG_LEN_PHONE] = {0};
-		// MAXIMUM PACKET Length over BLE is 245 (MTU=247 bytes), two get lost, otherwise we need to split it up!
-		// No critical section here -- there never was one (pre-existing gap,
-		// not this conversion's doing). bf_peek() still locks internally
-		// (BF_LOCK, byte_fifo.cpp), so the copy below is now safe against a
-		// concurrent addBLEComToOutBuffer() eviction, which the old direct
-		// ring read was not.
-		uint8_t ringSnapshot[MAX_MSG_LEN_PHONE];
-		uint8_t blelen = bf_peek(&phoneComRing, ringSnapshot, sizeof(ringSnapshot));
-		// bf_peek() liefert die VOLLE Framelaenge, auch wenn es weniger nach
-		// ringSnapshot kopiert hat -- als Laenge ist der Rueckgabewert also
-		// nur brauchbar, solange der Puffer jeden moeglichen Frame fasst.
-		// bf_push() laesst hoechstens 255 Byte zu (byte_fifo.cpp:59), der
-		// Puffer ist groesser: eine Laufzeitklemme kann hier nie greifen,
-		// die Zusicherung haelt die Annahme fest, falls jemand MAX_MSG_LEN_PHONE
-		// unter 255 setzt.
-		static_assert(sizeof(ringSnapshot) >= 255,
-		              "ringSnapshot muss jeden bf_push()-Frame (max 255 B) fassen");
+		// Same drain as sendToPhone(), own retry state. The producer clamps
+		// to 245, the ring takes up to 255.
+		uint8_t ComToPhoneBuff [MAX_MSG_LEN_PHONE];
+		BlePhoneDrainInfo info;
 
-		// N-04 residual: see sendToPhone() above. Nothing queued: bf_pop() on
-		// an empty ring is a safe no-op anyway, but there is no frame to
-		// consume, so we don't call it here -- only the delivering path below
-		// does.
-		if(blelen == 0)
+		BlePhoneDrain r = blePhoneDrainOne(&phoneComRing, &s_phoneComDrain, &g_blePhoneStats,
+		                                   blePhoneSink, NULL, blePhoneMtu(),
+		                                   ComToPhoneBuff, sizeof(ComToPhoneBuff), &info);
+
+		blePhoneDrainReport("com", r, info);
+
+		if(r == BLE_DRAIN_SENT)
 		{
-			ble_busy_flag = false;
-			return;
-		}
+			bLED_BLUE = true;
 
-		//Mheard
-		if(ringSnapshot[0] == 0x91)
-		{
-			memcpy(ComToPhoneBuff, ringSnapshot, blelen-1);
-		} else
-		// Data Message (JSON)
-		if(ringSnapshot[0] == 0x44)
-		{
-			memcpy(ComToPhoneBuff, ringSnapshot, blelen);
-		}
-		else
-		// Text Message
-		{
-			ComToPhoneBuff[0] = 0x40;
-			memcpy(ComToPhoneBuff+1, ringSnapshot, blelen-1);
-
-		}
-
-		// send to phone
-		// why do we need to add 2 bytes??
-		bLED_BLUE = true;
-
-		#if defined(ESP8266) || defined(ESP32)
-			blelen=blelen + 2;
-			esp32_write_ble(ComToPhoneBuff, blelen);
-		#else
-			g_ble_uart.write(ComToPhoneBuff, blelen + 2);
-		#endif
-
-		// Frame delivered: only now consume it from the ring, exactly as the
-		// old code only advanced its read pointer on this path.
-		bf_pop(&phoneComRing);
-
-		if(bBLEDEBUG)
-		{
-			if(ComToPhoneBuff[0] == ':' || ComToPhoneBuff[0] == '!' || ComToPhoneBuff[0] == '@')
-				Serial.printf("[BLE] <%lu> %s lng:%i\n", millis(), ComToPhoneBuff+7, blelen);
-			else
-				Serial.printf("[BLE] <%lu> %s lng:%i\n", millis(), ComToPhoneBuff, blelen);
+			if(bBLEDEBUG)
+			{
+				if(ComToPhoneBuff[0] == ':' || ComToPhoneBuff[0] == '!' || ComToPhoneBuff[0] == '@')
+					Serial.printf("[BLE] <%lu> %s lng:%i\n", millis(), ComToPhoneBuff+7, (int)info.sendlen);
+				else
+					Serial.printf("[BLE] <%lu> %s lng:%i\n", millis(), ComToPhoneBuff, (int)info.sendlen);
+			}
 		}
     }
     
@@ -684,6 +656,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			#if defined NRF52_SERIES
 				NVIC_SystemReset();
 			#else
+				loopCrumbClear();   // INS-05: deliberate reboot, no LAST_LOOP_SECTION at the next boot
 				ESP.restart();
 			#endif
 		}

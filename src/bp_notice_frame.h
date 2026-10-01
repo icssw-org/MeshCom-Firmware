@@ -1,6 +1,7 @@
 #ifndef _BP_NOTICE_FRAME_H_
 #define _BP_NOTICE_FRAME_H_
 
+#include "mc_text.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,7 +22,7 @@
 // sent to (a group, a DM call, or "*"), not a hardcoded broadcast -- a
 // notice for a message the operator typed into group 20 should show up in
 // the 20 chat, not vanish into "*". What actually keeps the frame off the
-// air is that it is only ever written to the phone ring / the EXTUDP
+// air is that it is only ever written to BLEtoPhoneBuff / the EXTUDP
 // socket, never to the TX ring, plus BP-11 (bpIsOwnWording(),
 // backpressure.h), which refuses the frame if a client feeds it back into
 // sendMessage().
@@ -36,10 +37,10 @@ static inline void bpNoticeFillFrame(struct aprsMessage &aprsmsg,
     aprsmsg.msg_len = 0;
     aprsmsg.payload_type = ':';
     aprsmsg.msg_id = msg_id;
-    aprsmsg.msg_destination_path = dst;
-    aprsmsg.msg_destination_call = dst;
-    aprsmsg.msg_source_path = node_call;
-    aprsmsg.msg_payload = text;
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), dst);
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), dst);
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), node_call);
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), text);
 
     // Bit 0x20 in byte 5: "app was offline, catch-up frame" marker read by
     // the phone app (set on RX when no phone is connected, see

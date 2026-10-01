@@ -52,19 +52,45 @@ void addBLEOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len);
 void addBLECommandBack(char *text);
 // addLoraRxBuffer() wird jetzt in dedup_functions.h deklariert.
+// Welle 2 (edge pool, nbr_mask.h): NbrMask nur vorwaerts deklariert, nicht
+// per Include gezogen -- dieser Header wird sehr breit eingebunden, und
+// nbr_mask.h braucht NBR_MAX_ROWS bereits definiert (siehe dessen
+// Kopfkommentar). Ein Zeiger auf einen unvollstaendigen Typ ist als
+// Funktionsparameter gueltig; die volle Definition holt sich jede TU, die
+// need/alone tatsaechlich dereferenziert (txring_functions.h/.cpp), selbst.
+struct NbrMask;
 // N-14: kompletter TX-Ring-Enqueue (Slot-Wahl, Payload-Kopie, Prio/Overflow,
 // iWrite/iRead) in einer Funktion unter einem Lock (nRF52) -- siehe
 // lora_functions.cpp fuer Details/Locking-Begruendung. Rueckgabe: Slot-Index
 // oder -1 wenn die Overflow-Logik den Eintrag verworfen hat.
 // retryCountIn: -1 (Default) laesst retryCount[Slot] unangetastet.
+// kind/need/alone: Nachbarschaftsmatrix Stufe 2 (docs/nbr-wichtigkeit-konzept.md
+// 5.1, txring_functions.h) -- kind=0 ist RING_KIND_OTHER, need/alone=nullptr
+// die leere Maske; der Default gilt fuer jeden Aufrufer, der die Matrix nicht
+// kennt. Literale statt RING_KIND_OTHER, weil dieser Header txring_functions.h
+// nicht einbindet.
 int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
-                    const char* source, int retryCountIn = -1, bool clearSlotFirst = false);
+                    const char* source, int retryCountIn = -1, bool clearSlotFirst = false,
+                    uint8_t kind = 0, const NbrMask *need = nullptr, const NbrMask *alone = nullptr);
+
+// P15: wie addTxRingEntry(), aber fuer eine eigene Nachricht, die nie
+// wiederholt werden soll (DM/Gruppe/Broadcast mit Status DONE) UND trotzdem
+// als eigene Nachricht klassifiziert wird, nicht als Relay -- siehe den
+// P15-Doc-Kommentar in txring_functions.cpp fuer den Hintergrund (die
+// SendAckMessage()-Falle: ein Status-Nachtrag nach addTxRingEntry() liegt
+// ausserhalb des Locks und kann sich mit doTX() auf nRF52 ueberschneiden).
+// kind/need/alone: siehe addTxRingEntry() oben, gleiche Defaults.
+int addTxRingEntryOnce(const uint8_t* frame, uint16_t len, const char* source,
+                        int retryCountIn = -1, bool clearSlotFirst = false,
+                        uint8_t kind = 0, const NbrMask *need = nullptr, const NbrMask *alone = nullptr);
 
 // checkOwnRx()/checkServerRx() werden jetzt in dedup_functions.h deklariert.
 int checkOwnTx(unsigned int msg_id);
 void insertOwnTx(unsigned int id);
 
-int esp32_isSSD1306(int address);
+int esp32_isSSD1306(int address);   // liefert 1 = 0,9"/SSD1306, 2 = 1,3"/SH1106, <0 = keins
+class U8G2;
+U8G2 *mcSelectU8g2(int idtype);     // DISP-01: die EINE Zuordnung, siehe loop_functions.cpp
 
 void DisplayPong(char line1[20], char line2[20], char line3[20], char line4[20]);
 // sendPing() kann eine Ping-Anfrage aus zwei ganz verschiedenen Gruenden nicht
@@ -109,6 +135,24 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
 unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *src_override = nullptr);
 void sendHey();
 bool sendHeyShot();
+// F6 (hey_policy.h): true = skip this trickle HEY. Non-gateways: consistent >= k
+// as before; a gateway is never suppressed once its last own HEY is >= Imax old.
+bool heyTrickleSuppress(int consistent);
+// F6: --gateway on/off -- reset the trickle to Imin and announce the new state
+// with a HEY at once (sendHeyShot(), 30 s floor).
+void heyGatewayChanged();
+// HN-Bericht (Nachbarschaftsmatrix Stufe 3, --nbrreport): periodischer, von
+// sendHey() unabhaengiger Bericht "wen ich direkt hoere" an Ziel "HN",
+// max_hop 0. Der Aufrufer (esp32_main.cpp/nrf52_main.cpp) entscheidet Takt
+// und Modus (off/auto/on); diese Funktion sendet immer, wenn gerufen.
+void sendNbrReport();
+// Eigener Takt fuer sendNbrReport(), UNABHAENGIG vom Trickle-Intervall und nie
+// unterdrueckt: erster Bericht NBR_REPORT_FIRST_S nach dem Start, danach alle
+// NBR_REPORT_INTERVAL_S + 0..NBR_REPORT_JITTER_S s Zufallsversatz. Wertet
+// --nbrreport (bNBRRPTOFF/bNBRRPTON) und im Modus auto zusaetzlich bMESH/
+// bGATEWAY aus. Von esp32loop()/nrf52loop() je einmal pro Durchlauf gerufen,
+// gleiche Stelle wie der Trickle-HEY-Block.
+void nbrReportTick();
 void sendTelemetry(int ID);
 
 unsigned int setSMartBeaconing(double flat, double flon);

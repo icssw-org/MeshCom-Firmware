@@ -11,9 +11,12 @@
 #ifdef NRF52_SERIES
 
 #include "WisBlock-API.h"
+#include "ble_settings_v1.h"
+#include "ble_settings_stage.h"
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <phone_commands.h>
+#include "ble_phone_drain.h"   // BLE-N1/N2: BlePhoneSend, g_blePhoneStats
 #include <debugconf.h>
 #include <configuration.h>
 #include <command_functions.h>
@@ -26,7 +29,12 @@ extern void commandAction(char *msg_text, int len, bool ble);
 extern bool hasMsgFromPhone;
 extern char textbuff_phone [MAX_MSG_LEN_PHONE];
 extern uint8_t txt_msg_len_phone;
-extern bool bInitDisplay;
+// `extern bool bInitDisplay;` stand hier und band an NICHTS: den Namen gibt
+// es nirgendwo sonst im Baum, weder als Definition noch als zweite
+// Verwendung. Uebersetzt und linkt nur, weil ihn niemand liest -- ein
+// Symbol, das aussieht, als gaebe es irgendwo einen Display-Init-Zustand.
+// Gefunden 2026-09-16, als carve_extern_lint.py auf diese Datei erweitert
+// wurde.
 extern uint8_t dmac[6];
 extern bool config_to_phone_prepare;
 extern bool conffin_sent;
@@ -178,12 +186,6 @@ void init_ble(void)
 	Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
 	Bluefruit.Advertising.setFastTimeout(15);	// number of seconds in fast mode
 	// Bluefruit.Advertising.start(60);			// 0 = Don't stop advertising
-	// we do not need
-	// if (meshcom_settings.auto_join)
-	//{
-	//	restart_advertising(60);
-	//}
-	//else
 	{
 		restart_advertising(0);
 	}
@@ -222,7 +224,14 @@ void stop_advertising()
  */
 void connect_callback(uint16_t conn_handle)
 {
-	(void)conn_handle;
+	// BLE-N2: the MTU right after connect is the default (23) -- the phone
+	// negotiates it later. nrf52_ble_mtu() reads the live value on every send
+	// and the drain keeps g_blePhoneStats.last_mtu current; this is the start
+	// value of the connection.
+	{
+		BLEConnection *conn = Bluefruit.Connection(conn_handle);
+		g_blePhoneStats.last_mtu = conn ? conn->getMtu() : 0;
+	}
 	Bluefruit.setTxPower(4);
 	DEBUG_MSG("BLE", "Connected");
 
@@ -256,6 +265,45 @@ void disconnect_callback(uint16_t conn_handle, uint8_t reason)
 }
 
 /**
+ * @brief BLE TX sink for the phone drain (src/ble_phone_drain.h): one notify.
+ *
+ * BLE-N1: what BLEUart::write() returns (Bluefruit52Lib BLEUart.cpp, with
+ * bufferTXD() off -- this firmware never enables it -- write() is
+ * `_txd.notify(conn, content, len) ? len : 0`):
+ *   - 0 when notifications are not enabled (CCCD off)  -> checked first: DOWN
+ *   - len when BLECharacteristic::notify() got every chunk to the SoftDevice
+ *   - 0 when notify() failed: no free HVN packet (conn->getHvnPacket(), the
+ *     SoftDevice TX queue is full) or sd_ble_gatts_hvx() refused -> BUSY
+ * So 0 with notifications on means "queue full, try again" and the drain keeps
+ * the frame.
+ *
+ * Known limit: notify() splits a payload longer than MTU-3 into several
+ * notifies. If the FIRST chunk was queued and a later one is refused, the
+ * frame is reported BUSY although part of it went out, and the retry sends
+ * the head chunk again. Only frames longer than MTU-3 (the ones counted as
+ * "truncated") can hit this.
+ */
+BlePhoneSend nrf52_write_ble(const uint8_t *buf, uint16_t len)
+{
+	if(!g_ble_uart_is_connected || !g_ble_uart.notifyEnabled())
+		return BLE_SEND_DOWN;
+
+	return (g_ble_uart.write(buf, (size_t)len) == (size_t)len) ? BLE_SEND_SENT : BLE_SEND_BUSY;
+}
+
+/**
+ * @brief BLE-N2: the live ATT MTU of the current connection, 0 if none.
+ */
+uint16_t nrf52_ble_mtu()
+{
+	if(!g_ble_uart_is_connected)
+		return 0;
+
+	BLEConnection *conn = Bluefruit.Connection(Bluefruit.connHandle());
+	return conn ? conn->getMtu() : 0;
+}
+
+/**
  * Callback if data has been sent from the connected client
  * @param conn_handle
  * 		The connection handle
@@ -284,6 +332,41 @@ void bleuart_rx_callback(uint16_t conn_handle)
 }
 
 /**
+ * @brief Act on an app-layer auth failure (wrong or missing PIN hash).
+ *
+ * readPhoneCommand() sets ble_disconnect_requested, but since CONC-14 it runs
+ * in the Main Loop from bleQueue -- after bleuart_rx_callback() has already
+ * returned. The check there therefore only fired on the phone's NEXT write: a
+ * phone that sent a wrong PIN hash and then waited stayed connected (no burst,
+ * but an open link). The Main Loop calls this right after draining bleQueue.
+ */
+void nrf52BleServiceDisconnect(void)
+{
+	if(ble_disconnect_requested)
+	{
+		ble_disconnect_requested = false;
+		Bluefruit.disconnect(Bluefruit.connHandle());
+	}
+}
+
+// CONC-17: settings_rx_callback() runs in the Bluefruit Ada callback task,
+// which can be preempted mid-write by a higher-priority task or, on a tick
+// wake-up, an equal-priority one — a torn image could put a beacon on the air
+// with a spliced callsign or frequency once applied.
+// The callback stages the wire bytes with the seqlock writer in
+// ble_settings_stage.h (counter odd, memcpy, counter even) and wakes the loop
+// task. applyPendingBleSettings(), called once per Main Loop iteration,
+// converts the staged image straight onto meshcom_settings inside a short
+// critical section. No snapshot and no converted copy are needed: inside the
+// section the callback task cannot run, and an odd counter (a write paused
+// mid-copy) makes the apply back off and retry. Converting in place also
+// keeps node_msgid, which bleSettingsFromV1() deliberately never writes; a
+// whole-struct copy from a scratch struct would reset it and replay message
+// ids into the neighbours' dedup rings.
+static BleSettingsV1Stage s_bleSettingsStage;
+static uint32_t s_appliedBleSettingsSeq = 0;
+
+/**
  * @brief Initialize the settings characteristic
  *
  */
@@ -293,26 +376,20 @@ BLEService init_settings_characteristic(void)
 	lora_service.begin();
 	g_lora_data.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ | CHR_PROPS_WRITE);
 	g_lora_data.setPermission(SECMODE_OPEN, SECMODE_OPEN);
-	g_lora_data.setFixedLen(sizeof(s_meshcom_settings) + 1);
+	g_lora_data.setFixedLen(sizeof(s_ble_settings_v1) + 1);
 	g_lora_data.setWriteCallback(settings_rx_callback);
 
 	g_lora_data.begin();
 
-	g_lora_data.write((void *)&meshcom_settings, sizeof(s_meshcom_settings));
+	// The characteristic ships the frozen v1 wire image, never
+	// s_meshcom_settings directly (see ble_settings_v1.h). write() copies
+	// synchronously, so the shared scratch is free again when it returns.
+	s_ble_settings_v1 &outImage = bleSettingsV1Scratch();
+	bleSettingsToV1(meshcom_settings, outImage);
+	g_lora_data.write((void *)&outImage, sizeof(outImage));
 
 	return lora_service;
 }
-
-// CONC-17: settings_rx_callback() runs in the BLE stack's task context, which
-// can be preempted mid-memcpy by the FreeRTOS timer-service task that drives
-// OnRxDone (priority 2, see C-01/09-concurrency-map.md) — a torn copy of
-// meshcom_settings could put a beacon on the air with a spliced callsign or
-// frequency. The callback stages the incoming struct into this private
-// buffer (no shared state touched) and only sets a flag; applyPendingBleSettings(),
-// called once per Main Loop iteration, does the actual copy into
-// meshcom_settings under a short critical section.
-static s_meshcom_settings s_pendingBleSettings;
-static volatile bool s_bBleSettingsPending = false;
 
 /**
  * Callback if data has been sent from the connected client
@@ -335,23 +412,22 @@ void settings_rx_callback(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *da
 	// Check the characteristic
 	if (chr->uuid == g_lora_data.uuid)
 	{
-		if (len != sizeof(s_meshcom_settings))
+		if (!bleSettingsV1LengthOk(len))
 		{
 			API_LOG("SETT", "Received settings have wrong size %d", len);
 			return;
 		}
 
-		s_meshcom_settings *rcvdSettings = (s_meshcom_settings *)data;
-		if ((rcvdSettings->valid_mark_1 != 0xAA) || (rcvdSettings->valid_mark_2 != MESHCOM_DATA_MARKER))
+		const s_ble_settings_v1 *rcvdSettings = (const s_ble_settings_v1 *)data;
+		if (!bleSettingsV1MarkersOk(*rcvdSettings))
 		{
 			API_LOG("SETT", "Received settings data do not have required markers");
 			return;
 		}
 
-		// CONC-17: stage only, apply from the Main Loop (see comment above
-		// s_pendingBleSettings)
-		memcpy((void *)&s_pendingBleSettings, data, sizeof(s_meshcom_settings));
-		s_bBleSettingsPending = true;
+		// CONC-17: stage only, apply from the Main Loop (see the comment
+		// above s_bleSettingsStage).
+		stageBleSettingsV1(s_bleSettingsStage, *rcvdSettings);
 
 		// Notify task about the event
 		if (g_task_sem != NULL)
@@ -369,24 +445,41 @@ void settings_rx_callback(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *da
  */
 void applyPendingBleSettings(void)
 {
-	if (!s_bBleSettingsPending)
-		return;
-	s_bBleSettingsPending = false;
+	BleSettingsV1ApplyResult result;
+	int tries = 0;
+	for (;;)
+	{
+		// The critical section keeps the callback task out while the staged
+		// image is read and converted (see the comment above s_bleSettingsStage).
+		taskENTER_CRITICAL();
+		result = tryApplyBleSettingsV1Stage(s_bleSettingsStage, &s_appliedBleSettingsSeq, meshcom_settings);
+		taskEXIT_CRITICAL();
 
-	// Short, non-blocking copy — safe to run with interrupts masked, unlike
-	// the delay()-based patterns fixed under N-16.
-	taskENTER_CRITICAL();
-	memcpy((void *)&meshcom_settings, &s_pendingBleSettings, sizeof(s_meshcom_settings));
-	taskEXIT_CRITICAL();
+		if (result != BleSettingsV1ApplyResult::Busy)
+			break;
+
+		// Busy: a write was paused mid-copy. Yield so the callback task can
+		// finish; bounded, and the next Main Loop iteration retries anyway
+		// because the staged sequence still differs from the applied one.
+		if (++tries >= 20)
+			return;
+		delay(1);
+	}
+
+	if (result != BleSettingsV1ApplyResult::Applied)
+		return; // None: nothing staged since the last apply
 
 	// Save new settings
 	save_settings();
 
-	// Update settings
-	g_lora_data.write((void *)&meshcom_settings, sizeof(s_meshcom_settings));
+	// Update settings. write() and notify() both copy before returning
+	// (notify() per MTU chunk), so the shared scratch is free afterwards.
+	s_ble_settings_v1 &outImage = bleSettingsV1Scratch();
+	bleSettingsToV1(meshcom_settings, outImage);
+	g_lora_data.write((void *)&outImage, sizeof(outImage));
 
 	// Inform connected device about new settings
-	g_lora_data.notify((void *)&meshcom_settings, sizeof(s_meshcom_settings));
+	g_lora_data.notify((void *)&outImage, sizeof(outImage));
 
 	/*KBC
 	if (meshcom_settings.resetRequest)

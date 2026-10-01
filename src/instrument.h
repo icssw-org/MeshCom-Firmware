@@ -42,6 +42,12 @@
 
 #include <Arduino.h>
 
+/** --airgap on|off (plan stage 0.5): RAM-only, never persisted. While set,
+ *  OnRxDone() drops every frame at the radio boundary before dedup/mheard and
+ *  doTX() refuses to transmit. Defined in instrument.cpp, set from
+ *  command_functions.cpp, read in lora_functions.cpp. */
+extern bool bAirgap;
+
 /** Record one completed display flush, in microseconds. */
 void instrument_note_flush(uint32_t us);
 
