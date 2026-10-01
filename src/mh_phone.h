@@ -13,7 +13,10 @@
 // die 7 neuen: AGE HM ROLE EX NB GW VIA. DIST auf 0,1 km gerundet (-1 wenn
 // unbekannt, wie heute). Gebaut mit bleJsonFrameFailSoft() und
 // BLE_JSON_PAYLOAD_MAX -- bei Ueberlaenge fallen die hintersten, also die neuen
-// Felder (Betreiber: keine MTU-Arbeit). HM fehlt, wenn unbekannt.
+// Felder (Betreiber: keine MTU-Arbeit). HM fehlt, wenn unbekannt. Ebenso fehlen
+// PLT, MOD, RSSI, PL und MESH bei einer Direktstation ohne Detail-Platz (rssi ==
+// NBR_MH_RSSI_UNKNOWN) und SNR bei NBR_SNR_UNKNOWN; DIST bleibt immer drin und
+// numerisch (die App ruft DIST.toFixed()).
 // Ohne gueltige Uhr (Jahr < 2025) geht kein MH-Rahmen an die App, wie heute.
 
 #include <stdint.h>
