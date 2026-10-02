@@ -1,16 +1,27 @@
 //2025-09-16 23:036
 #include "command_functions.h"
+#include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "capture_functions.h"
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
+#if defined(HAS_TFT)
+#include "tft_display_functions.h"   // #1182: tftBacklight()
+#endif
 #include "printfdeb_functions.h"
+#include "command_match.h" // D2-10: commandMatches(), the ladder's matching rule
+#include "command_toggles.h" // D2-06: the table-driven on/off toggles
+#include "command_setters.h" // D2-07: numeric argument parse/range/store
 #include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
 #include "batt_functions.h"
-#include "mheard_functions.h"
+#include "nbr_matrix.h"
+#include "nbr_views.h"      // W4b: --mheard/--path lesen nur noch ueber die Abfrageschicht
+#include <TinyGPSPlus.h>    // DIST fuer --mheard -- reine distanceBetween()-Rechnung, kein GPS-Modul noetig
 #include "udp_functions.h"
+#include "radio_units.h"   // RF-01..RF-03 unit conversions
 #include "extudp_functions.h"
 #include "ntp_async.h"
 #include "ble_json_frame.h"
+#include "ble_phone_drain.h"   // BLE-N1/N2: blePhoneStatsFormat(), g_blePhoneStats
 #include "i2c_scanner.h"
 #include "ArduinoJson.h"
 #include "configuration.h"
@@ -18,8 +29,13 @@
 #include "lora_setchip.h"
 #include "spectral_scan.h"
 #include "rtc_functions.h"
+#include "time_functions.h" // W4b: convertUNIXtoString() fuer --mheard
 #include "maxhop.h"
 #include "settings_sanitize.h" // #1132: resolve_tx_power sentinel normalization
+#include "msgstore_settings.h" // store node settings persistence (stage 3, owner C)
+#if defined(ENABLE_MSGSTORE)
+#include "msgstore_api.h"      // store node core -- link stub off ENABLE_MSGSTORE boards (owner A)
+#endif
 #include "track_warning.h" // TRK-01: Warnhinweis bei aktivem Track
 #ifdef ESP32
 #include "net_console.h"
@@ -31,6 +47,10 @@
 #ifdef ESP32
 #include "esp32/esp32_functions.h"
 #include "esp32/esp32_sleep.h"
+#endif
+
+#if defined(NRF52_SERIES)
+#include "nrf52/settings_store_nrf52.h" // settingsStoreDump() -- --dumpsettings
 #endif
 
 // Sensors
@@ -70,6 +90,10 @@ namespace Platform { void prepareToSleep(); void loraToSleep(); }
 
 unsigned long rebootAuto = 0;
 
+// gps_functions.cpp instanziiert das TinyGPSPlus-Objekt unbedingt (auch ohne
+// ENABLE_GPS); --mheard nutzt nur distanceBetween(), kein GPS-Modul noetig.
+extern TinyGPSPlus gps;
+
 // OTA Libs for ESP32 Partition Switching
 #ifdef ESP32
 #include <esp_ota_ops.h>
@@ -87,6 +111,7 @@ unsigned long rebootAuto = 0;
 #endif
 #endif
 #include "test_inject.h"
+#include "loop_breadcrumb.h"   // F3: --info ...BOOT line
 
 #if defined(BOARD_T5_EPAPER)
 #include <t5-epaper/t5epaper_extern.h>
@@ -132,6 +157,11 @@ static void sendBleJsonRegister(JsonDocument &doc)
         addBLEComToOutBuffer(msg_buffer, len);
 }
 
+// Both the case-insensitive compare and the matching rule now live in
+// src/command_match.h so that native_command_match can test them; this file
+// is not compiled by any native env. See that header for the rule and why it
+// changed.
+
 // build date/time of this firmware as "YYYYMMDD-HHMMSS"
 // __DATE__ = "Sep 25 2026" (day with leading space if < 10), __TIME__ = "11:06:03"
 static void getBuildDate(char *buf, size_t len)
@@ -155,22 +185,6 @@ static void getBuildDate(char *buf, size_t len)
         build_time[0], build_time[1], build_time[3], build_time[4], build_time[6], build_time[7]);
 }
 
-int casecmp(const char *s1, const char *s2)
-{
-	while (*s1 != 0 && tolower(*s1) == tolower(*s2))
-    {
-		++s1;
-		++s2;
-	}
-
-	return
-	(*s2 == 0)
-	? (*s1 != 0)
-	: (*s1 == 0)
-		? -1
-		: (tolower(*s1) - tolower(*s2));
-}
-
 // CS-01: maxhop.h is Arduino-free (native test), configuration_global.h is not --
 // so the default is written down twice. It must not drift.
 static_assert(MAXHOP_TEXT_FALLBACK == MAX_HOP_TEXT_DEFAULT,
@@ -180,16 +194,307 @@ static_assert(MAXHOP_TEXT_MAX < MAX_HOP_LIMIT,
 
 int commandCheck(char *msg, char *command)
 {
-    char vmsg[100];
-    strncpy(vmsg, msg, sizeof(vmsg) - 1);
-    vmsg[sizeof(vmsg) - 1] = '\0';
-    vmsg[strlen(command)] = 0x00;
-
-    if(casecmp(vmsg, command) == 0)
-        return 0;
-
-    return -1;
+    return commandMatches(msg, command) ? 0 : -1;
 }
+
+#if defined(ENABLE_MSGSTORE)
+// --storecall entry validator: A-Z0-9, optional "-SSID" (1..99), <= 9 chars
+// before the SSID part (MSGSTORE_CALL_MAX - 1, msgstore_api.h). Mutates the
+// token in place to its uppercase form on success.
+static bool storeCallEntryValid(char *call)
+{
+    for(char *p = call; *p; p++)
+        *p = (char)toupper((unsigned char)*p);
+
+    size_t len = strlen(call);
+    if(len == 0 || len > MSGSTORE_CALL_MAX - 1)
+        return false;
+
+    char *dash = strchr(call, '-');
+    char *base_end = dash ? dash : call + len;
+
+    if(base_end == call)
+        return false;
+
+    for(char *p = call; p < base_end; p++)
+    {
+        if(!isalnum((unsigned char)*p))
+            return false;
+    }
+
+    if(dash != NULL)
+    {
+        char *ssid = dash + 1;
+        size_t ssid_len = strlen(ssid);
+        if(ssid_len == 0 || ssid_len > 2)
+            return false;
+
+        for(char *p = ssid; *p; p++)
+        {
+            if(!isdigit((unsigned char)*p))
+                return false;
+        }
+
+        int ssidVal = atoi(ssid);
+        if(ssidVal < 1 || ssidVal > 99)
+            return false;
+    }
+
+    return true;
+}
+
+// Prints the current mode/slots/time/notice line, bench-parseable (raw
+// Serial.printf, like --maxhop's [MAXHOP] line -- printfdeb() strips ';'
+// outside CSV mode).
+static void storePrintState(void)
+{
+    Serial.printf("[STORE];mode;%s;slots;%u;time;%u;notice;%s\n",
+        msgstoreModeName(msgstoreMode()), (unsigned)msgstoreSlots(), (unsigned)msgstoreHoldHours(),
+        msgstoreNotice() ? "on" : "off");
+}
+
+// Applies a new store mode, persists it, and -- when arming the store for
+// the first time (off -> anything else) -- prints the RAM/24-7 warning and
+// the current free heap first, verbatim per the stage 3 brief.
+static void storeApplyMode(enum MsgStoreMode newMode)
+{
+    enum MsgStoreMode prevMode = msgstoreMode();
+
+    msgstoreConfigure(newMode, msgstoreSlots(), msgstoreHoldHours());
+    msgstoreSettingsSave();
+
+    if(prevMode == MSGSTORE_OFF && newMode != MSGSTORE_OFF)
+    {
+        Serial.printf("[STORE];warning;this node must run 24/7 on continuous power; "
+                       "stored messages live in RAM only and a reboot discards all of "
+                       "them without notice\n");
+
+#if defined(ESP32)
+        Serial.printf("[STORE];heap;%u\n", (unsigned)ESP.getFreeHeap());
+#else
+        extern int dbgHeapTotal(void);   // src/instrument.cpp:19 precedent
+        extern int dbgHeapUsed(void);
+        Serial.printf("[STORE];heap;%u\n", (unsigned)(dbgHeapTotal() - dbgHeapUsed()));
+#endif
+    }
+
+    storePrintState();
+}
+#endif // ENABLE_MSGSTORE
+
+// ---------------------------------------------------------------------------
+// D2-06: the 70 table-driven on/off toggles. See src/command_toggles.h for the
+// column meanings and for why the mask is stored as an and/or pair.
+// ---------------------------------------------------------------------------
+
+static void tg_post_setlog_off() { memset(LogCallsign, 0x00, sizeof(LogCallsign)); }
+static void tg_post_button_on() { init_onebutton(); }
+static void tg_post_680_off() { bme680_found = false; }
+static void tg_post_811_off() { mcu811_found = false; }
+// EXT-02 (second half): --extudp off used to leave hasExternIPaddress (and
+// the UdpExtern socket itself) untouched, so the flag that gates both
+// startExternUDP()'s early return and getExternUDP()'s receive path stayed
+// stale. resetExternUDP() is exactly the right routine -- it stops the
+// socket and only reopens if bEXTUDP is (still) true. toggleApply() writes
+// *row.flag (bEXTUDP here) unconditionally before running post(), whether or
+// not TG_POST_FIRST is set (see command_toggles.h), so by the time this runs
+// bEXTUDP is already false and resetExternUDP() will not reopen the socket.
+// TG_POST_FIRST is therefore not needed on this row: it only reorders post()
+// against the *sset mask write / save_settings(), neither of which
+// resetExternUDP() depends on.
+static void tg_post_extudp_off() { resetExternUDP(); }
+// F6: the HEY destination ("HG" vs "H") is how neighbours learn the gateway
+// flag. Web ("--gateway %s") and BLE reach this row through commandAction()
+// too, so this one hook covers serial, BLE and web.
+static void tg_post_gateway() { heyGatewayChanged(); }
+#if defined BOARD_T5_EPAPER
+static void tg_post_t5_on() { disp_next_power(true); }
+static void tg_post_t5_off() { disp_next_power(false); }
+#endif
+#if defined(ANALOG_PIN)
+static void tg_post_analog_check_on() { initAnalogPin(); }
+#endif
+#if defined (ENABLE_INA226)
+static void tg_post_ina226_on() { setupINA226(); }
+static void tg_post_ina226_off() { ina226_found = false; }
+#endif
+#ifdef BOARD_LED
+static void tg_post_board_led_off() { digitalWrite(BOARD_LED, LOW); }
+#endif
+#if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
+static void tg_post_gps_on() { gpsInitDone = false; init_loop_function(); }
+#endif
+#if defined(ENABLE_AHT20)
+static void tg_post_aht20_on() { aht20_found = false; setupAHT20(false); }
+static void tg_post_aht20_off() { aht20_found = false; }
+#endif
+#if defined(ENABLE_SHT21)
+static void tg_post_sht21_on() { sht21_found = false; setupSHT21(false); }
+static void tg_post_sht21_off() { sht21_found = false; }
+#endif
+#if defined(ENABLE_SOFTSER)
+static void tg_post_softser_on() { setupSOFTSER(); }
+#endif
+#if INSTRUMENT_ENABLED
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+static void tg_post_spitrace_on() { tdeck_dbg_spitrace(true); }
+static void tg_post_spitrace_off() { tdeck_dbg_spitrace(false); }
+static void tg_post_redrawlog_on() { tdeck_dbg_redrawlog(true); }
+static void tg_post_redrawlog_off() { tdeck_dbg_redrawlog(false); }
+static void tg_post_drawer_on() { tdeck_dbg_drawer(true); }
+static void tg_post_drawer_off() { tdeck_dbg_drawer(false); }
+static void tg_post_balledge_on() { tdeck_dbg_balledge(true); }
+static void tg_post_balledge_off() { tdeck_dbg_balledge(false); }
+static void tg_post_flushfix_on() { tdeck_dbg_flushfix(true); }
+static void tg_post_flushfix_off() { tdeck_dbg_flushfix(false); }
+static void tg_post_tft_on() { tdeck_dbg_tft(1); }
+static void tg_post_tft_off() { tdeck_dbg_tft(0); }
+#endif
+#endif
+
+// --nbrrelay off|count|on (Nachbarschaftsmatrix Stufe 2, docs/nbr-wichtigkeit-konzept.md
+// Abschnitt 5 und 5.8 Punkt 4): zwei Bits in node_sset4 -- 0x0800 "rechnen und zaehlen"
+// (bNBRRELAY), 0x1000 "Abbruch und Backoff nach Fall anwenden" (bNBRCANCEL). on setzt beide,
+// count nur das erste, off keines. Die Nachlaeufer halten die beiden Laufzeitflags konsistent,
+// weil eine Tabellenzeile nur EIN Flag schreibt.
+// Bits seit 2026-09-25 verschoben (docs/nbr-stage2-campaign.md "Bit layout since
+// 2026-09-25"): 0x0020/0x0040 kollidierten mit upstream KISS/TCP auf demselben
+// Feld. Die Boot-Migration der Altbits entfiel mit dem KISS-Merge (fork-neo-test
+// 5180eef4): Bestandsknoten setzen ihre NBR-Schalter einmal neu.
+static void tg_post_nbrrelay_off()   { bNBRCANCEL = false; }
+static void tg_post_nbrrelay_count() { bNBRCANCEL = false; }
+static void tg_post_nbrrelay_on()    { bNBRRELAY = true; }
+
+// --nbrreport off|auto|on (Nachbarschaftsmatrix Stufe 3, HN-Bericht): zwei Bits in
+// node_sset4 -- 0x0100 "off" (bNBRRPTOFF), 0x0200 "on" (bNBRRPTON), keines von
+// beiden "auto" (Default, kein bestehender Knoten braucht Migration). Jede Zeile
+// schreibt ihr eigenes Flag per row.flag/TG_FLAG_TRUE und raeumt das jeweils
+// andere per Nachlaeufer weg, damit hoechstens eines der beiden je gesetzt ist --
+// gleiches Muster wie bei --nbrrelay oben.
+static void tg_post_nbrreport_off()  { bNBRRPTON = false; }
+static void tg_post_nbrreport_auto() { bNBRRPTOFF = false; bNBRRPTON = false; }
+static void tg_post_nbrreport_on()   { bNBRRPTOFF = false; }
+
+static const ToggleRow COMMAND_TOGGLES[] =
+{
+    { "--setinfo off",        &bDisplayInfo,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_ECHO_LN },
+    { "--setinfo on",         &bDisplayInfo,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_ECHO_LN },
+    { "--setcont off",        &bDisplayCont,         &meshcom_settings.node_sset,     0x00003FFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_F },
+    { "--setcont on",         &bDisplayCont,         &meshcom_settings.node_sset,     0xFFFFFFFF,   0x4000,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_LN },
+    { "--setlog off",         &bDisplayLog,          &meshcom_settings.node_sset4,    0x00007FFB,   0x00000000,   tg_post_setlog_off,            TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_F | TG_POST_FIRST },
+    { "--setlog on",          &bDisplayLog,          &meshcom_settings.node_sset4,    0xFFFFFFFF,   0x0004,       tg_post_setlog_off,            TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_LN | TG_POST_FIRST },
+    { "--setretx off",        &bDisplayRetx,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_ECHO_LN },
+    { "--setretx on",         &bDisplayRetx,         nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_ECHO_LN },
+    { "--shortpath off",      &bSHORTPATH,           &meshcom_settings.node_sset,     0x00007BFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_ECHO_LN },
+    { "--shortpath on",       &bSHORTPATH,           &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0400,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_ECHO_F },
+    { "--button on",          &bButtonCheck,         &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0010,       tg_post_button_on,             TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--button off",         &bButtonCheck,         &meshcom_settings.node_sset,     0x00007FEF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--nomsgall on",        &bNoMSGtoALL,          &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0002,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--390 off",            &bBMP3ON,              &meshcom_settings.node_sset3,    0xFFFFFFEF,   0x00000000,   nullptr,                       TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+    { "--680 off",            &bBME680ON,            &meshcom_settings.node_sset2,    0xFFFFFFFB,   0x00000000,   tg_post_680_off,               TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+    { "--811 off",            &bMCU811ON,            &meshcom_settings.node_sset2,    0xFFFFFFF7,   0x00000000,   tg_post_811_off,               TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+    { "--nomsgall off",       &bNoMSGtoALL,          &meshcom_settings.node_sset3,    0xFFFFFFFD,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--nopmother on",       nullptr,               &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x8000,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--nopmother off",      nullptr,               &meshcom_settings.node_sset3,    0xFFFF7FFF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--gateway on",         &bGATEWAY,             &meshcom_settings.node_sset,     0xFFFFFFFF,   0x1000,       tg_post_gateway,               TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--gateway off",        &bGATEWAY,             &meshcom_settings.node_sset,     0xFFFFEFFF,   0x00000000,   tg_post_gateway,               TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--ackinfo on",         &bAckInfo,             nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--ackinfo off",        &bAckInfo,             nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_BLE_ECHO },
+    { "--webserver off",      &bWEBSERVER,           &meshcom_settings.node_sset2,    0xFFFFFFBF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--mesh on",            &bMESH,                &meshcom_settings.node_sset2,    0xFFFFFFDF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--mesh off",           &bMESH,                &meshcom_settings.node_sset2,    0xFFFFFFFF,   0x0020,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
+    { "--extudp off",         &bEXTUDP,              &meshcom_settings.node_sset,     0xFFFFDFFF,   0x00000000,   tg_post_extudp_off,            TG_DIRTY_WIFI,   TG_SAVE | TG_BRETURN },
+    { "--debug on",           &bDEBUG,               &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0008,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--debug off",          &bDEBUG,               &meshcom_settings.node_sset,     0xFFFFFFF7,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
+    { "--txcapture on",       &bTXCAPTURE,           &meshcom_settings.node_sset4,    0xFFFFFFFF,   0x0008,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--txcapture off",      &bTXCAPTURE,           &meshcom_settings.node_sset4,    0xFFFFFFF7,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
+    { "--nbrdebug on",        &bNBRDEBUG,            &meshcom_settings.node_sset4,    0xFFFFFFFF,   0x0400,       nbrDebugApply,                 TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--nbrdebug off",       &bNBRDEBUG,            &meshcom_settings.node_sset4,    0xFFFFFBFF,   0x00000000,   nbrDebugApply,                 TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
+    { "--nbrrelay off",       &bNBRRELAY,            &meshcom_settings.node_sset4,    0xFFFFE7FF,   0x00000000,   tg_post_nbrrelay_off,          TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
+    { "--nbrrelay count",     &bNBRRELAY,            &meshcom_settings.node_sset4,    0xFFFFEFFF,   0x0800,       tg_post_nbrrelay_count,        TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--nbrrelay on",        &bNBRCANCEL,           &meshcom_settings.node_sset4,    0xFFFFFFFF,   0x1800,       tg_post_nbrrelay_on,           TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    // --nbrsym on|off (Stufe 2, Symmetrie-Annahme): 0x2000 in node_sset4, invertiert
+    // gespeichert ("aus" setzt das Bit) -- jeder bestehende Knoten startet damit ohne
+    // Migration mit sym an, derselbe Trick wie bei --mesh (Zeilen oben). Keine
+    // Neuberechnung noetig: die Relay-Entscheidung liest bNBRSYM je Frame neu.
+    { "--nbrsym on",          &bNBRSYM,              &meshcom_settings.node_sset4,    0xFFFFDFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--nbrsym off",         &bNBRSYM,              &meshcom_settings.node_sset4,    0xFFFFFFFF,   0x2000,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
+    // --nbrreport off|auto|on (Stufe 3, HN-Bericht): 0x0100/0x0200 in node_sset4,
+    // siehe tg_post_nbrreport_*() oben. Jede Zeile loescht zuerst BEIDE Bits
+    // (and_mask 0xFFFFFCFF), dann setzt or_mask hoechstens eines davon.
+    { "--nbrreport off",      &bNBRRPTOFF,           &meshcom_settings.node_sset4,    0xFFFFFCFF,   0x0100,       tg_post_nbrreport_off,         TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--nbrreport auto",     nullptr,               &meshcom_settings.node_sset4,    0xFFFFFCFF,   0x00000000,   tg_post_nbrreport_auto,        TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
+    { "--nbrreport on",       &bNBRRPTON,            &meshcom_settings.node_sset4,    0xFFFFFCFF,   0x0200,       tg_post_nbrreport_on,          TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--viadebug on",        &bDisplayVia,          nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--viadebug off",       &bDisplayVia,          nullptr,                         0xFFFFFFFF,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_BLE_ECHO },
+    // Upstream d93c05a0/31ef8648: the phone gets SN + SN1, not a text echo the
+    // app shows as chat. TG_DIRTY_NODE WITHOUT TG_BRETURN: the caller sends
+    // sendNodeSetting() at once and returns. With TG_BRETURN the input would
+    // run on into the later if-chains of the ladder, where the argument rung
+    // "via " also matches "via on" and stores "ON" as the via call (bench
+    // DK5EN-1 2026-09-25; toggle_table_lint.py check 9).
+    { "--via on",             &bVIA,                 &meshcom_settings.node_sset2,    0xFFFFFFFF,   0x4000,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_FLAG_TRUE },
+    { "--via off",            &bVIA,                 &meshcom_settings.node_sset2,    0xFFFFBFFF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE },
+    { "--bledebug on",        &bBLEDEBUG,            &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0004,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--bledebug off",       &bBLEDEBUG,            &meshcom_settings.node_sset3,    0xFFFFFFFB,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
+#if defined BOARD_T5_EPAPER
+    { "--t5 on",              nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_t5_on,                 TG_DIRTY_NONE,   0 },
+    { "--t5 off",             nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_t5_off,                TG_DIRTY_NONE,   0 },
+#endif
+#if defined(ANALOG_PIN)
+    { "--analog filter on",   &bAnalogFilter,        &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0040,       nullptr,                       TG_DIRTY_ANALOG, TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--analog filter off",  &bAnalogFilter,        &meshcom_settings.node_sset3,    0xFFFFFFBF,   0x00000000,   nullptr,                       TG_DIRTY_ANALOG, TG_SAVE | TG_BRETURN },
+    { "--analog check on",    &bAnalogCheck,         &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0008,       tg_post_analog_check_on,       TG_DIRTY_ANALOG, TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--analog check off",   &bAnalogCheck,         &meshcom_settings.node_sset3,    0xFFFFFFF7,   0x00000000,   nullptr,                       TG_DIRTY_ANALOG, TG_SAVE | TG_BRETURN },
+#endif
+#if defined (ENABLE_INA226)
+    { "--ina226 on",          &bINA226ON,            &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0800,       tg_post_ina226_on,             TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--ina226 off",         &bINA226ON,            &meshcom_settings.node_sset3,    0xFFFFF7FF,   0x00000000,   tg_post_ina226_off,            TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+#endif
+#ifdef BOARD_LED
+    { "--board led on",       &bUSER_BOARD_LED,      &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0080,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--board led off",      &bUSER_BOARD_LED,      &meshcom_settings.node_sset3,    0xFFFFFF7F,   0x00000000,   tg_post_board_led_off,         TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_POST_FIRST },
+#endif
+#if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
+    { "--gps on",             &bGPSON,               &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0040,       tg_post_gps_on,                TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE | TG_POST_FIRST },
+#endif
+#if defined(ENABLE_AHT20)
+    { "--aht20 on",           &bAHT20ON,             &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0020,       tg_post_aht20_on,              TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--aht20 off",          &bAHT20ON,             &meshcom_settings.node_sset3,    0xFFFFFFDF,   0x00000000,   tg_post_aht20_off,             TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+#endif
+#if defined(ENABLE_SHT21)
+    { "--sht21 on",           &bSHT21ON,             &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0400,       tg_post_sht21_on,              TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--sht21 off",          &bSHT21ON,             &meshcom_settings.node_sset3,    0xFFFFFBFF,   0x00000000,   tg_post_sht21_off,             TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+#endif
+#if defined(LPS33)
+    { "--lps33 on",           &bLPS33,               &meshcom_settings.node_sset2,    0xFFFFFFFF,   0x0002,       nullptr,                       TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--lps33 off",          &bLPS33,               &meshcom_settings.node_sset2,    0xFFFFFFFD,   0x00000000,   nullptr,                       TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+#endif
+#if defined(ENABLE_SOFTSER)
+    { "--softserdebug on",    &bSOFTSERDEBUG,        &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0100,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--softserread on",     &bSOFTSERREAD,         &meshcom_settings.node_sset2,    0xFFFFFFFF,   0x0200,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
+    { "--softser on",         &bSOFTSERON,           &meshcom_settings.node_sset2,    0xFFFFFFFF,   0x0400,       tg_post_softser_on,            TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--softser off",        &bSOFTSERON,           &meshcom_settings.node_sset2,    0xFFFFFBFF,   0x00000000,   nullptr,                       TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+#endif
+#if INSTRUMENT_ENABLED
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    { "--spitrace on",        nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_spitrace_on,           TG_DIRTY_NONE,   0 },
+    { "--spitrace off",       nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_spitrace_off,          TG_DIRTY_NONE,   0 },
+    { "--redrawlog on",       nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_redrawlog_on,          TG_DIRTY_NONE,   0 },
+    { "--redrawlog off",      nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_redrawlog_off,         TG_DIRTY_NONE,   0 },
+    { "--drawer on",          nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_drawer_on,             TG_DIRTY_NONE,   0 },
+    { "--drawer off",         nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_drawer_off,            TG_DIRTY_NONE,   0 },
+    { "--balledge on",        nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_balledge_on,           TG_DIRTY_NONE,   0 },
+    { "--balledge off",       nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_balledge_off,          TG_DIRTY_NONE,   0 },
+    { "--flushfix on",        nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_flushfix_on,           TG_DIRTY_NONE,   0 },
+    { "--flushfix off",       nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_flushfix_off,          TG_DIRTY_NONE,   0 },
+    { "--tft on",             nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_tft_on,                TG_DIRTY_NONE,   0 },
+    { "--tft off",            nullptr,               nullptr,                         0xFFFFFFFF,   0x00000000,   tg_post_tft_off,               TG_DIRTY_NONE,   0 },
+#endif
+#endif
+};
+
+static const size_t COMMAND_TOGGLES_N = sizeof(COMMAND_TOGGLES) / sizeof(COMMAND_TOGGLES[0]);
 
 void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 {
@@ -259,6 +564,19 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
     bRxFromPhone = false;
 }
 
+/**
+ * D2-07: one wording for "that argument was not a number", used by every setter.
+ *
+ * It has to be separate from each rung's range message. Folding the parse
+ * failure into the range test looked tidier and lies: a rejected "--txpower abc"
+ * then answers "txpower 0 dBm not between -9 and max 22", and 0 IS between -9
+ * and 22. The user is told the wrong thing about their input.
+ */
+static void cmdArgNotNumber(const char *label, const char *arg)
+{
+    printfdeb("%s: <%s> is not a number\n", label, arg);
+}
+
 void commandAction(char *umsg_text, bool ble)
 {
     // -info
@@ -267,7 +585,11 @@ void commandAction(char *umsg_text, bool ble)
     char msg_text[300];
     char _owner_c[300];
     double dVar=0.0;
-    int iVar;
+    int iVar = 0;
+    bool bArgOk = false;   // D2-07: did the numeric argument parse at all? Folded
+                           // into each setter's reject path, because a bad argument
+                           // must never reach a persisted setting -- see
+                           // src/command_setters.h.
     float fVar=0.0;
 
     String sVar = umsg_text;
@@ -308,20 +630,62 @@ void commandAction(char *umsg_text, bool ble)
         snprintf(msg_text, sizeof(msg_text), "%s", sVar.c_str());
     }
 
-    /* TEST
-    if(commandCheck(msg_text+2, (char*)"compress ") == 0)
+    // D2-06: the table-driven on/off toggles are consulted before the rest of
+    // the ladder. Hoisting them is only safe because D2-10 made matching
+    // exact-token; it was then checked mechanically in both directions (no row
+    // is intercepted by an earlier rung, no row steals a later rung's input).
+    ToggleAction tgact = toggleApply(COMMAND_TOGGLES, COMMAND_TOGGLES_N, msg_text+2);
+
+    if(tgact.matched)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+11);
-        _owner_c[49] = 0x00;
+        if(tgact.echo)
+        {
+            // The rungs echoed one literal beginning with '\n'; rebuild it from
+            // the row name so the table needs no second string.
+            char tgecho[48];
+            snprintf(tgecho, sizeof(tgecho), "\n%s", tgact.name + 2);
 
-        String text=_owner_c;
+            if(tgact.echo & TG_ECHO_LN)
+                printlndeb(tgecho);
+            else
+                printfdeb("%s", tgecho);
+        }
 
-        text_compress(text);
-        
-        return;
+        if(tgact.save)
+            save_settings();
+
+        if(ble)
+        {
+            switch(tgact.dirty)
+            {
+                case TG_DIRTY_NODE:   bNodeSetting = true;   break;
+                case TG_DIRTY_SENS:   bSensSetting = true;   break;
+                case TG_DIRTY_ANALOG: bAnalogSetting = true; break;
+                case TG_DIRTY_WIFI:   bWifiSetting = true;   break;
+                default: break;
+            }
+
+            if(tgact.ble_echo)
+                addBLECommandBack((char*)tgact.name);
+        }
+
+        // After the save, exactly as the rungs had it -- see command_toggles.h.
+        if(tgact.post_after)
+            tgact.post_after();
+
+        if(!tgact.breturn)
+        {
+            // A node-settings row that must not fall through (see "--via on"):
+            // answer the phone here, as the tail's bNodeSetting branch would.
+            if(ble && tgact.dirty == TG_DIRTY_NODE)
+                sendNodeSetting();
+
+            return;
+        }
+
+        bReturn = true;
     }
     else
-    */
     if(commandCheck(msg_text+2, (char*)"utcoff") == 0)
     {
         sscanf(msg_text+9, "%f", &meshcom_settings.node_utcoff);
@@ -463,6 +827,11 @@ void commandAction(char *umsg_text, bool ble)
         if(meshcom_settings.node_postime < (5 * 60))
             meshcom_settings.node_postime = (5 * 60);
 
+        // one day at most: the settings schema row (config_json.h) ends there, a
+        // larger value would be clamped to it silently on the next boot
+        if(meshcom_settings.node_postime > (24 * 60 * 60))
+            meshcom_settings.node_postime = (24 * 60 * 60);
+
         if(meshcom_settings.node_postime > 0)
             posinfo_interval = meshcom_settings.node_postime;
         else
@@ -510,78 +879,6 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setinfo off") == 0)
-    {
-        printlndeb("\nsetinfo off");
-
-        bDisplayInfo=false;
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setinfo on") == 0)
-    {
-        printlndeb("\nsetinfo on");
-
-        bDisplayInfo=true;
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setcont off") == 0)
-    {
-        printfdeb("\nsetcont off");
-
-        bDisplayCont=false;
-
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x3FFF;
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setcont on") == 0)
-    {
-        printlndeb("\nsetcont on");
-
-        bDisplayCont=true;
-
-        meshcom_settings.node_sset |= 0x4000;
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setlog off") == 0)
-    {
-        printfdeb("\nsetlog off");
-
-        bDisplayLog=false;
-        memset(LogCallsign, 0x00, sizeof(LogCallsign));
-
-        meshcom_settings.node_sset4 = meshcom_settings.node_sset4 & 0x7FFB;
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setlog on") == 0)
-    {
-        printlndeb("\nsetlog on");
-        memset(LogCallsign, 0x00, sizeof(LogCallsign));
-
-        bDisplayLog=true;
-
-        meshcom_settings.node_sset4 |= 0x0004;
-
-        save_settings();
-
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"setlog ") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
@@ -609,50 +906,6 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setretx off") == 0)
-    {
-        printlndeb("\nsetretx off");
-
-        bDisplayRetx=false;
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setretx on") == 0)
-    {
-        printlndeb("\nsetretx on");
-
-        bDisplayRetx=true;
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"shortpath off") == 0)
-    {
-        printlndeb("\nshortpath off");
-
-        bSHORTPATH=false;
-
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7BFF;
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"shortpath on") == 0)
-    {
-        printfdeb("\nshortpath on");
-
-        bSHORTPATH=true;
-
-        meshcom_settings.node_sset |= 0x0400;
-
-        save_settings();
-
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"cleanflash") == 0)
     {
         meshcom_settings.node_cleanflash = 1;
@@ -667,6 +920,7 @@ void commandAction(char *umsg_text, bool ble)
         delay(2000);
         
         #ifdef ESP32
+            loopCrumbClear();   // INS-05: deliberate reboot, no LAST_LOOP_SECTION at the next boot
             ESP.restart();
         #endif
         
@@ -704,6 +958,27 @@ void commandAction(char *umsg_text, bool ble)
     }
     else
     #endif
+    #if defined(NRF52_SERIES)
+    // --dumpsettings: print the raw contents of the nRF52 keyed settings
+    // store file to the console. Bench diagnostic for the boot-2 settings
+    // loss investigated in docs/w3-settings-verdict.md -- DO_DEBUG 0
+    // compiles out every DEBUG_MSG on the migration/save/load path, so this
+    // is currently the only way to see what actually reached flash, as
+    // opposed to --info, which only ever shows the in-RAM struct.
+    if(commandCheck(msg_text+2, (char*)"dumpsettings") == 0)
+    {
+        bool ok = settingsStoreDump();
+
+        if(ble)
+        {
+            snprintf(print_buff, sizeof(print_buff), "--dumpsettings %s\n", ok ? "ok" : "failed");
+            addBLECommandBack(print_buff);
+        }
+
+        return;
+    }
+    else
+    #endif
     if(commandCheck(msg_text+2, (char*)"reboot") == 0)
     {
         if(ble)
@@ -721,6 +996,7 @@ void commandAction(char *umsg_text, bool ble)
         delay(3000);
 
         #ifdef ESP32
+            loopCrumbClear();   // INS-05: deliberate reboot, no LAST_LOOP_SECTION at the next boot
             ESP.restart();
         #endif
         
@@ -763,6 +1039,7 @@ void commandAction(char *umsg_text, bool ble)
         if (partition)
         {
             esp_ota_set_boot_partition(partition);
+            loopCrumbClear();   // INS-05: deliberate reboot into safeboot
             esp_restart();
             return;
         }
@@ -785,195 +1062,189 @@ void commandAction(char *umsg_text, bool ble)
         }
 //        else
         {
-            printfdeb("MeshCom %-4.4s%-1.1s commands\n--setcall  set callsign (OE0XXX-1)\n--operatorname set first name/none\n--setctry 0-99 set RX/RX-LoRa-Parameter\n--reboot   Node reboot\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
+            // Every line below sits under the same preprocessor guard as its
+            // handler in commandAction() -- copied verbatim, not re-derived --
+            // so --help never advertises a command this image does not build
+            // (INS-01/INS-04/DOC-02). tools/help_parity_lint.py checks that.
+            printfdeb("MeshCom %-4.4s%-1.1s commands   (a/b = pick one, <x> = value)\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
+            delay(100);
+
+            printdeb("\n== Show ==\n--info                  node info\n--pos                   lat/lon/alt/time\n--weather               temp/hum/press (alias --wx)\n--lora                  LoRa settings\n--mheard                heard stations, 12 h (alias --mh)\n--path                  routes per sender (alias --hey)\n--neighbours            neighbour matrix (alias --nbr)\n--msgid                 message-id counter\n--io                    IO config\n--showI2C               scan I2C bus\n--seset                 show sensor settings\n--wifiset               show WiFi settings\n--nodeset               show node settings\n--analogset             show analog settings\n--tel                   show telemetry settings\n--aprsset               show APRS settings\n--regex <call>          test callsign against the validator\n");
+            #ifndef DISABLE_NET_CONSOLE
+            printdeb("--netconsole            net console status\n");
+            #endif
+            #if defined(ESP32)
+            printdeb("--wifistat              WiFi link/counters\n--udpstat               MeshCom UDP RX/TX counters\n");
+            #endif
             #if defined(NRF52_SERIES)
-            printfdeb("--dfu      reboot into UF2 bootloader (node appears as USB drive)\n");
+            printdeb("--ethstat               Ethernet link/counters\n--dumpsettings          dump raw settings store\n");
             #endif
             delay(100);
 
-            printlndeb("--setssid  WLAN SSID/none\n--setpwd   WLAN PASSWORD/none\n--setownip 255.255.255.255\n--setowngw 255.255.255.255\n--setownms mask:255.255.255.255\n--setowndns 255.255.255.255\n--setownntp 255.255.255.255\n--wifiap on/off WLAN AP\n--extudp  on/off\n--extudpip 255.255.255.255/none\n");
-            delay(100);
-
-            printlndeb("--sethamnet on/off\n--setinet   on/off\n");
-            delay(100);
-
-            printlndeb("--btcode 999999 BT-Code\n--button gpio 99 User-Button PIN\n--analog gpio 99 Analog PIN\n--analog factor 9.9 Analog factor\n--analog check on/off\n");
-            delay(100);
-            printfdeb("--pos      show lat/lon/alt/time info\n--weather  show temp/hum/press\n--sendpos  send pos info now\n--setlat   set latitude 44.12345\n--setlon   set logitude 016.12345\n--setalt   set altidude 9999m, with GPS: seeds the altitude filter, GPS keeps refining\n");
-            delay(100);
-            printlndeb("--symid  set prim/sec Sym-Table\n--symcd  set table column\n--aprscomment  set APRS Comment/none\n--showI2C\n");
-            delay(100);
-            printlndeb("--debug    on/off\n--bledebug on/off\n--loradebug on/off\n--txcapture on/off\n--gpsdebug  on/off\n--softserdebug  on/off\n--wxdebug   on/off\n--display   on/off\n--setinfo   on/off\n--volt on/off   show battery voltage\n--proz on/off    show battery proz.\n");
-            delay(100);
-#if defined(WP_DISP)
-            printlndeb("--rotate 0/90/180/270  E-Ink Display drehen (persistent, board-uebergreifend)\n");
-            delay(100);
-#endif
-            printfdeb("--setgrc 9;..9;  set groups\n--nomsgall on/off  '*'-msg on display\n");
-            delay(100);
-            printlndeb("--maxv    100%% battery voltage\n--track   on/off SmartBeaconing\n--gps on/off use GPS-CHIP\n--utcoff +/-99.9 set UTC-Offset\n--settime yyyy.mm.dd hh:mm:ss\n");
-            delay(100);
-            printlndeb("--gps reset Factory reset\n--txpower 99 LoRa TX-power dBm\n--txfreq  999.999 LoRa TX-freqency MHz\n--txbw    999 LoRa TX-bandwith kHz\n--lora    Show LoRa setting\n");
-            delay(100);
-            printfdeb("--maxhop  %i-%i hop limit for text messages (no value: show)\n", MAXHOP_TEXT_MIN, MAXHOP_TEXT_MAX);
-            delay(100);
-            printlndeb("--bmp on  use BMP280-CHIP\n--bme on  use BME280-CHIP\n--680 on  use BME680-CHIP\n--811 on  use CMCU811-CHIP\n--bmx BME/BMP/680 off\n");
-            delay(100);
-            printlndeb("--onewire on/off  use DSxxxx\n--onewire gpio 99\n");
-            delay(100);
-            // HL-03/HL-04: bis 2026-08-30 nur ueber die T-Deck-GUI erreichbar.
-            // DOC-02: these five commands are gated BOARD_T_DECK/BOARD_T_DECK_PLUS
-            // in commandAction() (own field block ahead of INSTRUMENT_ENABLED,
-            // so they exist in every T-Deck image) -- this line used to
-            // advertise them on every board unconditionally.
-            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-            printlndeb("--mute on/off  Ton stumm\n--persistflash on/off  Positionen ins Flash\n--persistsd on/off  Positionen auf SD\n--immediatesave on/off  sofort speichern\n--persiststat  Zustand der vier Schalter\n");
-            delay(100);
+            printdeb("\n== Node ==\n--setcall <call>        callsign (OE0XXX-1)\n--setname <name>/none   operator first name (alias --operatorname)\n--setctry 0-99          country -> LoRa preset\n--setgrc 9;..9;         groups\n--utcoff +/-99.9        UTC offset h\n--settime yyyy.mm.dd hh:mm:ss  set clock\n");
+            #if defined(ENABLE_RTC)
+            printdeb("--setrtc yyyy.mm.dd hh:mm:ss  set RTC chip\n");
             #endif
-            
-            #ifdef BOARD_RAK4630
-                printfdeb("--lps33 on/off (RAK only)\n");
-                delay(100);
+            printdeb("--btcode 999999         BLE pairing code\n--bleshort              BLE advertising short, reboots\n--blelong               BLE advertising long, reboots\n--all                   display: all frames\n--msg                   display: messages only\n--save                  write settings to flash\n--reboot                reboot\n--deepsleep             enter deep sleep\n--cleanflash            wipe settings flash (recovery)\n");
+            #if defined(NRF52_SERIES)
+            printdeb("--dfu                   reboot into UF2 bootloader\n");
             #endif
-
-            printfdeb("--info      show info\n--mheard    show MHeard\n--gateway   on/off/pos/nopos\n--webserver on/off\n--webpwd    xxxx/none\n--mesh      on/off\n");
-            delay(100);
             #ifdef ESP32
-                printlndeb("--netconsole on/off  (net console port 2323)\n");
-                printfdeb("--passwd xxxx/none   (net console password, none=clear)\n");
-                delay(100);
-                #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
-                    printlndeb("--kiss on/off | tx on/off | meta on/off | auth on/off  (KISS/TCP port 8001)\n");
-                    delay(100);
-                #endif
+            printdeb("--ota-update            reboot into safeboot OTA\n");
             #endif
+            printdeb("--conffin               send config-finished to app\n");
             delay(100);
-            printlndeb("--softser   on/off/send/app/baud/fixpegel/fixpegel2/fixtemp");
-            delay(100);
-            printlndeb("--softserread   on/off (show rx msg)");
-            delay(100);
-            printlndeb("--spectrum  run spectral scan  --specstart MHz --specend MHz  --specstep MHz  --specsamples 500-2048");
-            delay(100);
-            //own-call-ssid:PARM.VOLT,AMPERE,BATT,,,track,-,-,-,-,-,-,-
-            printlndeb("--parm tm1,tm2,tm3,tm4,tm5 (measured value name ... not used leave blank)");
-            delay(100);
-            //own-call-ssid:%-9.9s:UNIT.V,A,V,,,Y/N,O/N,O/N,O/N,O/N,O/N,O/N,O/N
-            printlndeb("--unit tm1,tm2,tm3,tm4,tm5 (unit like V,A,mV, ... not used leave blank)");
-            delay(100);
-            //#%03i,%.1f,%.1f,0,0,0,%01i0000000
-            printlndeb("--format 1,1,1,1,1 (decimal places ... not used leave 0)");
-            delay(100);
-            //own-call-ssid:EQNS.0,1,0,0,1,0,0,1,0,0,1,0,0,1,0
-            printlndeb("--eqns 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0 (default is set)");
-            delay(100);
-            //internal value names
-            printlndeb("--values press,hum,temp,onewire,co2 (see project pages)");
-            delay(100);
-            //value timer
-            printlndeb("--ptime 99 messuring interval minutes");
 
+            printdeb("\n== LoRa / mesh ==\n--txpower 99            TX power dBm\n--txfreq 999.999        TX frequency MHz\n--txbw 999              bandwidth kHz\n--txsf 6-12             spreading factor\n--txcr 5-8              coding rate 4/x\n");
+            // --maxhop: printfdeb needed here for the %i/%i substitution.
+            printfdeb("--maxhop %d-%-13dtext hop limit (no value: show)\n", MAXHOP_TEXT_MIN, MAXHOP_TEXT_MAX);
+            // "--store" alone (no value: show) is the one rung that compiles
+            // on every board (command_ladder_lint.py does not know
+            // ENABLE_MSGSTORE is mutually exclusive with anything, so the
+            // handler is one unconditional rung with a guarded body -- see
+            // commandAction()); its own mention must stay unguarded too, or
+            // help_parity_lint.py's guard-parity check (D) fires on the
+            // boards where the modal --store lines below do not compile.
+            printdeb("--store                 mailbox status (no value: show)\n");
+            #if defined(ENABLE_MSGSTORE)
+            printdeb("--store off/own/list/heard store-node mode\n--storecall <list>/none store-node call list (list mode)\n--storetime 1-168       store-node hold hours (no value: show)\n--storeslots 1-50       store-node mailbox slots (no value: show)\n--storenotice on/off    sender-visible custody notice\n--mbox                  store-node mailbox contents\n");
+            #endif
+            printdeb("--mesh on/off           relay foreign frames\n");
+            #ifndef BOARD_RAK4630
+            #if defined(RELAY_SWITCH)
+            printdeb("--relay on/off          board relay output (GPIO)\n");
+            #endif
+            #endif
+            printdeb("--shortpath on/off      short path\n--via on/off/<call>     via callsign\n");
             #if defined(SX126X_V3) || defined(SX1262_E290) || defined(SX1262X) || defined(SX126X) || \
                 defined(SX1262_V3) || defined(USING_SX1262) || defined(BOARD_RAK4630)
-                delay(100);
-                printlndeb("--setboostedgain    on/off  enable/disable boosted rx gain");
+            printdeb("--setboostedgain on/off boosted RX gain\n");
             #endif
+            printdeb("--sendpos               send position now\n--sendtrack             send track/APRS beacon now\n--sendhey               send HEY beacon now\n--sendtele              send telemetry now\n--posshot               one-shot position now\n--postime 99            position interval s\n");
             delay(100);
-            // INS-01: these live inside the INSTRUMENT_ENABLED block in
-            // commandAction() and do not exist in a normal board build, so
-            // --help must not advertise them there.
-            #if INSTRUMENT_ENABLED
-            printlndeb("--injectmsg <grp|call> <text>  queue a text as if received via LoRa");
-            delay(100);
-            printlndeb("--injectraw <hex>  feed a raw frame through the real RX path (decodeAPRS/dedup/relay)");
-            printlndeb("--loratx <n> <ms>  queue n test TX frames (max 20) at ms intervals (min 100)");
-            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-            delay(100);
-            printlndeb("--redrawlog on/off, --uistat, --tab list/<n>, --drawer on/off, --playtone start/msg/<file>, --tft on/off/state, --screencrc");
-            delay(100);
-            printlndeb("--spitrace on/off, --touch tap <x> <y> [ms] / down <x> <y> / up");
-            #endif
-            #endif
 
-            // DOC-02: everything above predates this pass and is kept as it
-            // was. Below closes the parity gap against the real command set
-            // in commandAction() -- grouped by topic, not by when it was
-            // added.
+            printdeb("\n== Neighbour matrix ==\n--nbrreset              clear matrix\n--nbrcheck              consistency check\n--nbrrelay off/count/on relay decision: off / log only / active\n--nbrsym on/off         assume symmetric links\n--nbrreport off/auto/on HN neighbour report\n");
             delay(100);
-            printlndeb("--txsf 6-12  LoRa spreading factor\n--txcr 5-8  LoRa coding rate 4/x\n--cleanflash  wipe settings flash (recovery)\n");
+
+            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--track on/off          SmartBeaconing\n");
+            #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
+            printdeb("--gps on/off            GPS chip\n");
+            #ifndef BOARD_T_DECK_PRO
+            printdeb("--gps reset             GPS factory reset\n");
+            #endif
+            printdeb("--gps autosymbol/fixsymbol  symbol source\n");
+            #endif
+            printdeb("--setlat 44.12345       latitude\n--setlon 016.12345      longitude\n--setalt 999            altitude m (with GPS: seeds the filter)\n--setublox <cmd>        u-blox GPS passthrough\n--setl76k <cmd>         L76K GPS passthrough\n");
             delay(100);
-            printlndeb("--sendhey  send HEY beacon now\n--sendtele  send telemetry now\n--sendtrack  send track/APRS beacon now\n");
-            delay(100);
-            printlndeb("--pingcall <call>  set ping target\n--pingtime 99  ping interval (s)\n--pingmax 99/max  ping count limit\n--ping start/stop  start/stop pinging\n");
-            delay(100);
+
+            printdeb("\n== Network ==\n");
+            #ifndef BOARD_RAK4630
+            printdeb("--setssid <ssid>/none   WLAN SSID\n--setpwd <pwd>/none     WLAN password\n--wifiap on/off         WLAN access point\n");
+            #endif
+            #if defined(BOARD_RAK4630)
+            printdeb("--ethmtu 1280-1500      Ethernet MTU (web GUI, HAMNET tunnels)\n");
+            #endif
+            printdeb("--wifitxpower 2-20      WiFi TX power dBm\n--setownip a.b.c.d      static IP\n--setowngw a.b.c.d      gateway\n--setownms a.b.c.d      netmask\n--setowndns a.b.c.d     DNS server\n--setownntp a.b.c.d     NTP server\n");
+            #ifndef BOARD_RAK4630
             #if defined(HAS_ETHERNET)
-            printlndeb("--netmode wifi/eth  select network interface\n");
-            delay(100);
+            printdeb("--netmode wifi/eth      network interface\n");
             #endif
-            #if defined(RELAY_SWITCH)
-            printlndeb("--relay on/off  mesh relay\n");
-            delay(100);
             #endif
-            printlndeb("--gps autosymbol/fixsymbol  APRS symbol source\n--via on/off/<call>  set via callsign\n--viadebug on/off\n--ackinfo on/off  show who ACKed, not saved to flash\n");
-            delay(100);
-            printlndeb("--debug csv/man/en/de  debug output format/language\n");
-            delay(100);
-            printlndeb("--setcont on/off\n--setlog on/off/<val>\n--setretx on/off\n--shortpath on/off\n");
-            delay(100);
-            printlndeb("--softser app0/baud/rxpin/txpin  softser wiring\n");
-            delay(100);
-            printlndeb("--aht20 on/off\n--sht21 on/off\n--390 on/off  use BMP390-CHIP\n--ina226 on/off\n--shunt 9.999  INA226 shunt ohms\n--imax 9.9  INA226 max current A\n--isamp 9  INA226 sample count\n");
-            delay(100);
-            printlndeb("--batt factor 9.9  battery ADC factor\n--tempoff in/out 9.9  temperature offset\n");
-            delay(100);
-            #if defined(ENABLE_RTC)
-            printlndeb("--setrtc yyyy.mm.dd hh:mm:ss  set RTC chip\n");
-            delay(100);
+            printdeb("--gateway on/off/pos/nopos  MeshCom gateway\n--gateway srv OE/DL/IT  gateway server, reboots\n--setudpcall <call>     UDP callsign\n--sethamnet on/off      HAMNET server\n--setinet on/off        internet server\n--extudp on/off         external UDP\n--extudpip a.b.c.d/none external UDP peer\n--nopmother on/off      no foreign DMs to EXTUDP peer\n--webserver on/off      web server\n--webpwd <pwd>/none     web password\n--webtimer 0            reset web session timer\n");
+            #ifndef DISABLE_NET_CONSOLE
+            printdeb("--netconsole on/off     console on TCP 2323\n");
             #endif
-            printlndeb("--setpress  latch QNH reference at current altitude\n--setublox <cmd>  u-blox GPS passthrough\n--setl76k <cmd>  L76K GPS passthrough\n");
-            delay(100);
-            #ifdef BOARD_LED
-            printlndeb("--board led on/off  board LED\n");
-            delay(100);
+            printdeb("--passwd <pwd>/none     net console password\n");
+            #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+            printdeb("--kiss on/off           KISS/TCP port 8001\n--kiss tx on/off        KISS may transmit\n--kiss meta on/off      KISS metadata frames\n--kiss auth on/off      KISS authentication\n");
             #endif
-            printlndeb("--wifitxpower 2-20  WiFi TX power dBm\n--webtimer 0  reset web session timer\n--contrast 1-255  OLED contrast\n--button on/off  enable user-button check\n");
-            delay(100);
-            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-            printlndeb("--spiffs reset  format SPIFFS\n");
-            delay(100);
-            #endif
-            printlndeb("--io  show IO config\n--setio 99 in/out/pullup  MCP17 IO pin\n--setio clear\n--setout 99 on/off  MCP17 output\n");
-            delay(100);
-            printlndeb("--seset/--wifiset/--nodeset/--analogset/--tel/--aprsset  show that settings group\n--aprsmc <call>  set APRS MYCALL/none\n");
-            delay(100);
-            printlndeb("--posshot  one-shot position now\n--postime 99  position interval (s)\n--regex <call>  test callsign against the validator\n");
-            delay(100);
-            #if defined BOARD_T5_EPAPER
-            printlndeb("--t5 on/off  E-paper power\n");
-            delay(100);
-            #endif
-            #if INSTRUMENT_ENABLED
-            printlndeb("--nopmother on/off  suppress foreign DMs to the EXTUDP peer\n--ntpsync  request an immediate NTP refresh now\n");
-            #else
-            printlndeb("--nopmother on/off  suppress foreign DMs to the EXTUDP peer\n");
+            #if defined(ESP32) || defined(NRF52_SERIES)
+            printdeb("--udplog on/off         one [UDP] line per datagram\n");
             #endif
             delay(100);
-            #if defined(ESP32)
-            printlndeb("--wifistat  WiFi link/counters\n--udpstat  MeshCom UDP RX/TX counters\n--udplog on/off  one [UDP] line per datagram\n");
-            delay(100);
-            #endif
-            #if defined(NRF52_SERIES)
-            printlndeb("--ethstat  Ethernet link/counters\n--udplog on/off  one [UDP] line per datagram\n");
-            delay(100);
-            #endif
 
-            // DOC-02: the ~50-command bench/instrument surface (--heap,
-            // --instr, --injectmsg, --tft, --srvip, --flashpoke, --disptest,
-            // --ntpsync, ... see src/instrument.h) is compiled out of a normal
-            // board build and only present in a measurement firmware built
-            // with -D INSTRUMENT_ENABLED=1. Announce it only where it exists,
-            // and do not enumerate the block command by command.
+            printdeb("\n== Sensors / battery ==\n");
+            #if defined(ENABLE_BMX280)
+            printdeb("--bmp on                use BMP280\n--bme on                use BME280\n--680 on                use BME680\n--811 on                use CCS811\n");
+            #endif
+            #if defined(ENABLE_BMP390)
+            printdeb("--390 on                use BMP390\n");
+            #endif
+            printdeb("--bmx off               BMx280/390/680 off\n--bmp off               BMx280/390 off\n--bme off               BMx280/390 off\n--680 off               BME680 off\n--390 off               BMP390 off\n--811 off               CCS811 off\n");
+            #if defined (ENABLE_BMX280)
+            printdeb("--setpress              latch QNH at current altitude\n");
+            #endif
+            #if defined(ENABLE_AHT20)
+            printdeb("--aht20 on/off          AHT20\n");
+            #endif
+            #if defined(ENABLE_SHT21)
+            printdeb("--sht21 on/off          SHT21\n");
+            #endif
+            #if defined(LPS33)
+            printdeb("--lps33 on/off          LPS33\n");
+            #endif
+            #ifdef OneWire_GPIO
+            printdeb("--onewire on/off        1-Wire DSxxxx\n--onewire gpio 99       1-Wire pin\n");
+            #endif
+            #if defined (ENABLE_INA226)
+            printdeb("--ina226 on/off         INA226\n--shunt 9.999           INA226 shunt ohms\n--imax 9.9              INA226 max current A\n--isamp 9               INA226 sample count\n");
+            #endif
+            #if defined(ANALOG_PIN)
+            printdeb("--analog gpio 99        analog pin\n--analog factor 9.9     analog factor\n--analog alpha 9.9      analog filter alpha\n--analog slope 9.999    analog slope 0-9.999\n--analog offset 999     analog offset mV\n--analog atten 0-3      ADC attenuation\n--analog filter on/off  analog filter\n--analog check on/off   analog check\n");
+            #endif
+            printdeb("--batt factor 9.9       battery ADC factor\n--maxv 9.99             100% battery voltage\n--volt on/off           show battery voltage\n--proz on/off           show battery percent\n--tempoff in/out 9.9    temperature offset\n--button on/off         user button check\n");
+            #ifndef BOARD_T_DECK_PRO
+            printdeb("--button gpio 99        user button pin\n");
+            #endif
+            printdeb("--setio a0-b7 in/out    MCP IO pin mode\n--setio clear           clear MCP IO config\n--setout a0-b7 on/off   MCP output\n");
+            delay(100);
+
+            printdeb("\n== Telemetry ==\n--parm tm1,..,tm5       value names (unused: blank)\n--unit tm1,..,tm5       units (unused: blank)\n--format 1,1,1,1,1      decimals (unused: 0)\n--eqns 0,1,0,...        equations, 15 values\n--values press,hum,temp,onewire,co2  value sources\n--ptime 99              interval min\n");
+            delay(100);
+
+            printdeb("\n== Display ==\n--display on/off        display\n--nomsgall on/off       hide '*' messages\n--contrast 1-255        OLED contrast\n");
+            #if defined(WP_DISP) or defined(BOARD_E290)
+            printdeb("--rotate 0/90/180/270   e-ink rotation\n");
+            #endif
+            #if defined BOARD_T5_EPAPER
+            printdeb("--t5 on/off             e-paper power\n");
+            #endif
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            printdeb("--mute on/off           sound off\n--persistflash on/off   positions to flash\n--persistsd on/off      positions to SD\n--immediatesave on/off  save at once\n");
+            #endif
+            printdeb("--persiststat           NVS-only values\n");
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            printdeb("--keylock on/off        SYM+K lock\n");
+            #endif
+            #ifdef BOARD_LED
+            printdeb("--board led on/off      board LED\n");
+            #endif
+            delay(100);
+
+            printdeb("\n== Debug ==\n--debug on/off          debug output\n--debug csv/man         output format\n--debug en/de           output language\n--bledebug on/off       BLE debug\n--loradebug on/off      LoRa debug\n--txcapture on/off      TX capture\n--nbrdebug on/off       neighbour debug\n--viadebug on/off       via debug\n--wxdebug on/off        weather debug\n--gpsdebug on/off       GPS debug (also 2/0)\n--ackinfo on/off        show who ACKed (not saved)\n--setinfo on/off        LoRa info lines on serial\n--setcont on/off        verbose serial output\n--setretx on/off        retransmit info on serial\n--setlog on/off/<call>  log one callsign\n");
+            #if defined(ENABLE_SOFTSER)
+            printdeb("--softser on/off        soft serial\n--softser send          soft serial send\n--softser app/app0      soft serial app\n--softser baud 9600     soft serial baud\n--softser rxpin 99      soft serial RX pin\n--softser txpin 99      soft serial TX pin\n--softser fixpegel 9.9  fixed level\n--softser fixpegel2 9.9 fixed level 2\n--softser fixtemp 9.9   fixed temperature\n--softserdebug on/off   soft serial debug\n--softserread on/off    show soft serial RX\n");
+            #endif
+            printdeb("--pingcall <call>       ping target\n--pingtime 99           ping interval s\n--pingmax 99/max        ping count limit\n--ping start/stop       start/stop pinging\n--spectrum              spectral scan\n");
+            #ifdef HEAP_TEST
+            printdeb("--spiffs reset          format SPIFFS\n");
+            #endif
+            #if MC_DIAG
+            printdeb("--specstart 999.9       scan start MHz\n--specend 999.9         scan end MHz\n--specstep 9.9          scan step MHz\n--specsamples 500-2048  scan samples\n");
+            #endif
+            delay(100);
+
+            // INS-01/INS-04: these bench/instrument commands live only inside
+            // the INSTRUMENT_ENABLED block in commandAction() and do not exist
+            // in a normal board build, so --help must not advertise them there.
             #if INSTRUMENT_ENABLED
-            printlndeb("(bench/instrument commands -- this is an INSTRUMENT_ENABLED=1 measurement build, see src/instrument.h -- not listed individually here)\n");
+            printdeb("\n== Bench (instrument build) ==\n--injectmsg <grp|call> <text>  queue a text as if received via LoRa\n--injectraw <hex>  feed a raw frame through the real RX path (decodeAPRS/dedup/relay)\n--loratx <n> <ms>  queue n test TX frames (max 20) at ms intervals (min 100)\n");
+            #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+            printdeb("--redrawlog on/off, --uistat, --tab list/<n>, --drawer on/off, --playtone start/msg/<file>, --tft on/off/state, --screencrc\n--spitrace on/off, --touch tap <x> <y> [ms] / down <x> <y> / up\n");
+            #endif
+            printdeb("--ntpsync  request an immediate NTP refresh now\n--battprobe [n]  raw battery divider ADC capture, n cycles 1-10 (~7.5 s each)\n");
+            printdeb("(bench/instrument commands -- this is an INSTRUMENT_ENABLED=1 measurement build, see src/instrument.h -- not listed individually here)\n");
+            delay(100);
             #endif
         }
 
@@ -1003,6 +1274,33 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    // Read-only probe for the W3 counter migration (counters_store.h). node_msgid
+    // is deliberately neither a settings_schema row nor a config_json export
+    // (src/settings_schema.h, src/config_json.h both say why), so until this
+    // command existed the only way to observe the counter was to originate a
+    // frame and read the id back off the air -- which means transmitting just to
+    // run a bench check. Field diagnostic, NOT part of the INSTRUMENT_ENABLED
+    // surface below: the upgrade it exists to verify happens on shipped images.
+    //
+    // MUST stay ahead of the "msg" case directly below: commandCheck() truncates
+    // the input to the length of the command word (it is a prefix match), so
+    // "--msgid" reaches "msg" first and would silently be executed as "--msg on".
+    //
+    // Raw Serial.printf, not DEBUG_MSG: DO_DEBUG 0 compiles every DEBUG_MSG away,
+    // and this has to answer on a normal build.
+    if(commandCheck(msg_text+2, (char*)"msgid") == 0)
+    {
+        Serial.printf("[SETST];counters;msgid;%d\n", meshcom_settings.node_msgid);
+
+        if(ble)
+        {
+            snprintf(print_buff, sizeof(print_buff), "--msgid %d\n", meshcom_settings.node_msgid);
+            addBLECommandBack(print_buff);
+        }
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"msg") == 0)
     {
         printlndeb("msg on");
@@ -1021,20 +1319,6 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     
-    #if defined BOARD_T5_EPAPER
-    else
-    if(commandCheck(msg_text+2, (char*)"t5 on") == 0)
-    {
-        disp_next_power(true);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"t5 off") == 0)
-    {
-        disp_next_power(false);
-        return;
-    }
-    #endif
 
     else
     if(commandCheck(msg_text+2, (char*)"display on") == 0)
@@ -1084,6 +1368,12 @@ void commandAction(char *umsg_text, bool ble)
 
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         tft_off();      // TM-33 (b): backlight off + panel sleep, like the 30 s timeout
+        #endif
+
+        #if defined(HAS_TFT)
+        // #1182: sendDisplayHead() returns early while pageHold > 0 or bSetDisplay is set
+        // and never reaches the "#C" path -- darken the backlight here as well.
+        tftBacklight();
         #endif
     }
     else
@@ -1145,6 +1435,8 @@ void commandAction(char *umsg_text, bool ble)
             Platform::prepareToSleep();
             #endif
             #if defined(WP_DISP)
+            loopCrumbClear();   // INS-05: deliberate sleep, RTC memory survives it -- cleared last,
+                                // after the button wait and e-ink refresh that could still trip the WDT
             esp_deep_sleep_start();
             #else
             // Issue 962 / Option A: every other ESP32 board -- radio to
@@ -1218,40 +1510,6 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
     }
     #endif
-    else
-    if(commandCheck(msg_text+2, (char*)"button on") == 0)
-    {
-        bButtonCheck=true;
-
-        meshcom_settings.node_sset |= 0x0010;
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-
-        init_onebutton();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"button off") == 0)
-    {
-        bButtonCheck=false;
-        
-        meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7FEF;
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
     #ifndef BOARD_T_DECK_PRO
     else
     if(commandCheck(msg_text+2, (char*)"button gpio ") == 0)
@@ -1314,8 +1572,10 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"analog factor ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+16);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+16, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("analog factor", msg_text+16); return; }
+
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
@@ -1333,8 +1593,10 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"analog alpha ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+15);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+15, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("analog alpha", msg_text+15); return; }
+
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
@@ -1352,8 +1614,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"analog slope ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+15);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+15, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("analog slope", msg_text+15); return; }
 
         if(dVar < 0 || dVar >= 10.)
         {
@@ -1375,8 +1638,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"analog offset ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+16);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+16, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("analog offset", msg_text+16); return; }
 
         if(dVar < 0 || dVar >= 1000.0)
         {
@@ -1398,8 +1662,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"analog atten ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+15);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+15, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("analog atten", msg_text+15); return; }
 
         if(dVar < 0 || dVar > 3)
         {
@@ -1420,79 +1685,14 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"analog filter on") == 0)
-    {
-        bAnalogFilter = true;
-
-        meshcom_settings.node_sset3 |= 0x0040;
-
-        save_settings();
-
-        if(ble)
-        {
-            bAnalogSetting=true;
-        }
-
-        bReturn = true;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"analog filter off") == 0)
-    {
-        bAnalogFilter = false;
-
-        meshcom_settings.node_sset3 &= ~0x0040;
-
-        save_settings();
-
-        if(ble)
-        {
-            bAnalogSetting=true;
-        }
-
-        bReturn = true;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"analog check on") == 0)
-    {
-        bAnalogCheck=true;
-        
-        meshcom_settings.node_sset3 |= 0x0008;
-
-        save_settings();
-
-        if(ble)
-        {
-            bAnalogSetting=true;
-        }
-
-        bReturn = true;
-
-        initAnalogPin();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"analog check off") == 0)
-    {
-        bAnalogCheck=false;
-        
-        meshcom_settings.node_sset3 &= ~0x0008;
-
-        if(ble)
-        {
-            bAnalogSetting=true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
     #endif
 
     #if defined (ENABLE_INA226)
     if(commandCheck(msg_text+2, (char*)"shunt ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+8);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+8, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("shunt", msg_text+8); return; }
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
@@ -1516,8 +1716,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"imax ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+7);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+7, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("imax", msg_text+7); return; }
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
@@ -1541,8 +1742,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"isamp ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+8);
-        sscanf(_owner_c, "%i", &iVar);
+        bArgOk = cmdArgIntBase(msg_text+8, 0, &iVar);   // "%i" is auto-base
+
+        if(!bArgOk) { cmdArgNotNumber("isamp", msg_text+8); return; }
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
@@ -1564,46 +1766,13 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"ina226 on") == 0)
-    {
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        bINA226ON = true;
-
-        meshcom_settings.node_sset3 |= 0x0800;
-
-        save_settings();
-
-        setupINA226();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"ina226 off") == 0)
-    {
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        bINA226ON = false;
-        ina226_found = false;
-
-        meshcom_settings.node_sset3 &= ~0x0800;
-
-        save_settings();
-    }
-    else
     #endif
     if(commandCheck(msg_text+2, (char*)"batt factor ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+14, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("batt factor", msg_text+14); return; }
+
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
@@ -1621,42 +1790,6 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
     }
     else
-    #ifdef BOARD_LED
-    if(commandCheck(msg_text+2, (char*)"board led on") == 0)
-    {
-        bUSER_BOARD_LED = true;
-
-        meshcom_settings.node_sset3 |= 0x0080;
-
-        save_settings();
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"board led off") == 0)
-    {
-        bUSER_BOARD_LED = false;
-
-        digitalWrite(BOARD_LED, LOW);
-
-        meshcom_settings.node_sset3 &= ~0x0080;
-
-        save_settings();
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-    }
-    else
-    #endif
     if(commandCheck(msg_text+2, (char*)"track on") == 0)
     {
         bDisplayTrack=true;
@@ -1704,26 +1837,6 @@ void commandAction(char *umsg_text, bool ble)
     }
     else
     #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
-    if(commandCheck(msg_text+2, (char*)"gps on") == 0)
-    {
-        gpsInitDone = false;
-
-        bGPSON=true;
-        
-        init_loop_function();
-
-        meshcom_settings.node_sset |= 0x0040;
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"gps off") == 0)
     {
         gpsDetected = false;
@@ -1997,100 +2110,8 @@ void commandAction(char *umsg_text, bool ble)
     else
     #endif
 
-    #if defined(ENABLE_AHT20)
-    if(commandCheck(msg_text+2, (char*)"aht20 on") == 0)
-    {
-        if(ble)
-        {
-            bSensSetting = true;
-        }
 
-        bReturn = true;
 
-        bAHT20ON = true;
-        aht20_found = false;
-        
-        meshcom_settings.node_sset3 |= 0x0020;
-
-        save_settings();
-
-        setupAHT20(false);
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"aht20 off") == 0)
-    {
-        bAHT20ON=false;
-        aht20_found = false;
-        
-        meshcom_settings.node_sset3 &= ~0x0020; // AHT20 off
-
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    #endif
-
-    #if defined(ENABLE_SHT21)
-    if(commandCheck(msg_text+2, (char*)"sht21 on") == 0)
-    {
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        bSHT21ON = true;
-        sht21_found = false;
-        
-        meshcom_settings.node_sset3 |= 0x0400;
-
-        save_settings();
-
-        setupSHT21(false);
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"sht21 off") == 0)
-    {
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        bSHT21ON = false;
-        sht21_found = false;
-        
-        meshcom_settings.node_sset3 &= ~0x0400;
-
-        save_settings();
-    }
-    else
-    #endif
-
-    if(commandCheck(msg_text+2, (char*)"nomsgall on") == 0)
-    {
-        bNoMSGtoALL=true;
-        
-        meshcom_settings.node_sset3 |= 0x0002;
-
-        if(ble)
-        {
-            bNodeSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"bmx off") == 0 || commandCheck(msg_text+2, (char*)"bme off") == 0 || commandCheck(msg_text+2, (char*)"bmp off") == 0)
     {
         bBMPON=false;
@@ -2126,140 +2147,6 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
     }
-    else
-    if(commandCheck(msg_text+2, (char*)"390 off") == 0)
-    {
-        bBMP3ON=false;
-        
-        meshcom_settings.node_sset3 &= ~0x0010; // BMP390 off
-
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"680 off") == 0)
-    {
-        bBME680ON=false;
-        bme680_found=false;
-        
-        meshcom_settings.node_sset2 &= ~0x0004; // BME680 off
-
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"811 off") == 0)
-    {
-        bMCU811ON=false;
-        mcu811_found=false;
-        
-        meshcom_settings.node_sset2 &= ~0x0008; // MCU811 off
-
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"nomsgall off") == 0)
-    {
-        bNoMSGtoALL=false;
-        
-        meshcom_settings.node_sset3 &= ~0x0002;
-        
-        if(ble)
-        {
-            bNodeSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"nopmother on") == 0)
-    {
-        // PM-01 (BACKLOG.md "NoPMOther"): EXTUDP-only. Suppresses direct
-        // messages that are neither addressed to nor sent by this node from
-        // reaching the --extudp peer (filter site: extudp_functions.cpp
-        // sendExtern()). Free bit 0x8000 in node_sset3, no struct bump, no
-        // fleet wipe -- checked directly off node_sset3 at the filter site,
-        // so there is no separate cached global to keep in sync here.
-        meshcom_settings.node_sset3 |= 0x8000;
-
-        if(ble)
-        {
-            bNodeSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"nopmother off") == 0)
-    {
-        meshcom_settings.node_sset3 &= ~0x8000;
-
-        if(ble)
-        {
-            bNodeSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-#if defined(LPS33)
-    else
-    if(commandCheck(msg_text+2, (char*)"lps33 on") == 0)
-    {
-        bLPS33=true;
-        
-        meshcom_settings.node_sset2 |= 0x0002;
-
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"lps33 off") == 0)
-    {
-        bLPS33=false;
-        
-        meshcom_settings.node_sset2 &= ~0x0002;
-
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-#endif
 #ifdef OneWire_GPIO
     else
     if(commandCheck(msg_text+2, (char*)"onewire on") == 0)
@@ -2306,7 +2193,15 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"onewire gpio ") == 0)
     {
-        sscanf(msg_text+15, "%d", &meshcom_settings.node_owgpio);
+        CmdSetResult setres = cmdStoreInt(msg_text+15, &meshcom_settings.node_owgpio, 0.0, 99.0, &iVar);
+
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("onewire gpio", msg_text+15); return; }
+
+        if(setres == CMD_SET_RANGE)
+        {
+            printfdeb("onewire gpio %i out of range (0..99), ignored\n", iVar);
+            return;
+        }
 
         // Pin 2 is used for powering peripherals on RAK4630
         #ifdef BOARD_RAK4630
@@ -2354,66 +2249,35 @@ void commandAction(char *umsg_text, bool ble)
 
         return;
     }
+    #endif
+    else
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    // TD-19: the keyboard lock (SYM+K on the T-Deck keyboard) gates touch and
+    // keyboard delivery to LVGL and stops both from waking the panel, while
+    // the trackball keeps working -- from the outside that looks like dead
+    // touch plus a "crashed" dark screen. The flag persists in flash and was
+    // only clearable on the keyboard itself; this gives a serial/BLE/2323
+    // recovery path. tft_on()/tft_off() mirror the keyboard toggle
+    // (tdeck_main.cpp keypad_read, SYM+K).
+    if(commandCheck(msg_text+2, (char*)"keylock on") == 0)
+    {
+        meshcom_settings.node_keyboardlock = true;
+        tft_off();
+        save_settings();
+        printlndeb("...KEYLOCK on");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"keylock off") == 0)
+    {
+        meshcom_settings.node_keyboardlock = false;
+        tft_on();
+        save_settings();
+        printlndeb("...KEYLOCK off");
+        return;
+    }
     else
     #endif
-    if(commandCheck(msg_text+2, (char*)"gateway on") == 0)
-    {
-        bGATEWAY=true;
-        
-        meshcom_settings.node_sset |= 0x1000;
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"gateway off") == 0)
-    {
-        bGATEWAY=false;
-        
-        meshcom_settings.node_sset &= ~0x1000;   // mask 0x1000
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"ackinfo on") == 0)
-    {
-        // fluechtig: nie in meshcom_settings, nie ins Flash, siehe
-        // docs/ack-implementierungsplan.md 3.5
-        bAckInfo=true;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--ackinfo on");
-        }
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"ackinfo off") == 0)
-    {
-        bAckInfo=false;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--ackinfo off");
-        }
-
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"gateway pos") == 0)
     {
         bGATEWAY_NOPOS=false;
@@ -2624,21 +2488,6 @@ void commandAction(char *umsg_text, bool ble)
         bReturn = true;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"webserver off") == 0)
-    {
-        bWEBSERVER=false;
-        meshcom_settings.node_sset2 &= ~0x0040;   // mask 0x0040
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"webpwd ") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
@@ -2717,38 +2566,6 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"mesh on") == 0)
-    {
-        bMESH=true;
-        
-        meshcom_settings.node_sset2 &= ~0x0020;   // mask 0x0020
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"mesh off") == 0)
-    {
-        bMESH=false;
-        
-        meshcom_settings.node_sset2 |= 0x0020;
-
-        if(ble)
-        {
-            bNodeSetting=true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"extudp on") == 0)
     {
         if((int)strlen(meshcom_settings.node_extern) < 7)
@@ -2768,22 +2585,6 @@ void commandAction(char *umsg_text, bool ble)
 
             save_settings();
         }
-
-        bReturn = true;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"extudp off") == 0)
-    {
-        bEXTUDP=false;
-
-        meshcom_settings.node_sset &= ~0x02000;
-
-        if(ble)
-        {
-            bWifiSetting=true;
-        }
-
-        save_settings();
 
         bReturn = true;
     }
@@ -2817,38 +2618,6 @@ void commandAction(char *umsg_text, bool ble)
         save_settings();
 
         bReturn = true;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"debug on") == 0)
-    {
-        bDEBUG=true;
-
-        meshcom_settings.node_sset = meshcom_settings.node_sset | 0x0008;   // both off + set bDisplyOff
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--debug on");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"debug off") == 0)
-    {
-        bDEBUG=false;
-
-        meshcom_settings.node_sset &= ~0x0008;   // both off + set bDisplyOff
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--debug off");
-        }
-
-        save_settings();
-
-        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"debug csv") == 0)
@@ -2933,43 +2702,6 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"txcapture on") == 0)
-    {
-        // Rohframe-Mitschnitt der SENDESEITE (siehe capture_functions.h).
-        // Eigener Schalter statt an bLORADEBUG gehaengt: die Empfangsseite
-        // will man oft dauerhaft mitlaufen lassen, die Sendeseite nur fuer
-        // gezielte Interop-Messungen -- und sie kostet je Frame eine weitere
-        // ~550 Zeichen lange Logzeile.
-        bTXCAPTURE=true;
-
-        meshcom_settings.node_sset4 = meshcom_settings.node_sset4 | 0x0008;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--txcapture on");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"txcapture off") == 0)
-    {
-        bTXCAPTURE=false;
-
-        meshcom_settings.node_sset4 &= ~0x0008;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--txcapture off");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"loradebug off") == 0)
     {
         bLORADEBUG=false;
@@ -2985,62 +2717,6 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
 
-        
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"viadebug on") == 0)
-    {
-        bDisplayVia=true;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--viadebug on");
-        }
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"viadebug off") == 0)
-    {
-        bDisplayVia=false;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--viadebug off");
-        }
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"via on") == 0)
-    {
-        bVIA=true;
-
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 | 0x4000;   //
-
-        if(ble)
-        {
-            sendNodeSetting();
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"via off") == 0)
-    {
-        bVIA=false;
-
-        meshcom_settings.node_sset2 &= ~0x4000;   //
-
-        if(ble)
-        {
-            sendNodeSetting();
-        }
-
-        save_settings();
         
         return;
     }
@@ -3116,38 +2792,6 @@ void commandAction(char *umsg_text, bool ble)
         #endif
     }
     #endif
-    else
-    if(commandCheck(msg_text+2, (char*)"bledebug on") == 0)
-    {
-        bBLEDEBUG=true;
-
-        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 | 0x0004;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--bledebug on");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"bledebug off") == 0)
-    {
-        bBLEDEBUG=false;
-
-        meshcom_settings.node_sset3 &= ~0x0004;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--bledebug off");
-        }
-
-        save_settings();
-
-        return;
-    }
     else
     if(commandCheck(msg_text+2, (char*)"wxdebug on") == 0)
     {
@@ -3270,22 +2914,6 @@ void commandAction(char *umsg_text, bool ble)
 
 #if defined(ENABLE_SOFTSER)
     else
-    if(commandCheck(msg_text+2, (char*)"softserdebug on") == 0)
-    {
-        bSOFTSERDEBUG=true;
-
-        meshcom_settings.node_sset3 |= 0x0100;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--softserdebug on");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"softserdebug off") == 0)
     {
         bSOFTSERDEBUG=false;
@@ -3295,22 +2923,6 @@ void commandAction(char *umsg_text, bool ble)
         if(ble)
         {
             addBLECommandBack((char*)"-softserdebug off");
-        }
-
-        save_settings();
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"softserread on") == 0)
-    {
-        bSOFTSERREAD=true;
-
-        meshcom_settings.node_sset2 |= 0x0200;
-
-        if(ble)
-        {
-            addBLECommandBack((char*)"--softserread on");
         }
 
         save_settings();
@@ -3334,40 +2946,6 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"softser on") == 0)
-    {
-        bSOFTSERON=true;
-
-        meshcom_settings.node_sset2 |= 0x0400;
-
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-
-        setupSOFTSER();
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"softser off") == 0)
-    {
-        bSOFTSERON=false;
-
-        meshcom_settings.node_sset2 &= ~0x0400;
-
-        if(ble)
-        {
-            bSensSetting = true;
-        }
-
-        bReturn = true;
-
-        save_settings();
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"softser send") == 0)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+15);
@@ -3379,15 +2957,11 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"softser app") == 0)
-    {
-        strSOFTSER_BUF="";
-
-        bSOFTSER_APP = true;
-        
-        return;
-    }
-    else
+    // Order here is no longer load-bearing (OPT-D3, closed by D2-10). It used to
+    // be: commandCheck() was a prefix match, so "softser app" swallowed every
+    // "softser app0" and iNextTelemetry=0 below never ran. Matching is exact-token
+    // now -- the character after the name must end the token -- so "softser app"
+    // does not match "softser app0" whatever the order. Left adjacent for reading.
     if(commandCheck(msg_text+2, (char*)"softser app0") == 0)
     {
         iNextTelemetry = 0;
@@ -3395,36 +2969,19 @@ void commandAction(char *umsg_text, bool ble)
         strSOFTSER_BUF="";
 
         bSOFTSER_APP = true;
-        
-        return;
-    }
-    else
-#if defined(ENABLE_XML)
-    /* only for testing
-    if(commandCheck(msg_text+2, (char*)"softser test0") == 0)
-    {
-        iNextTelemetry = 0;
-        
-        // TEST
-        testTinyXML();
-        
-        sendTelemetry(SOFTSER_APP_ID);
 
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"softser test") == 0)
+    if(commandCheck(msg_text+2, (char*)"softser app") == 0)
     {
-        // TEST
-        testTinyXML();
-        
-        sendTelemetry(SOFTSER_APP_ID);
+        strSOFTSER_BUF="";
+
+        bSOFTSER_APP = true;
 
         return;
     }
     else
-    */
-#endif
     if(commandCheck(msg_text+2, (char*)"softser baud ") == 0)
     {
         sscanf(msg_text+15, "%d", &meshcom_settings.node_ss_baud);
@@ -3482,17 +3039,6 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
 #endif
-
-/* for testing only
-#if defined(ENABLE_XML)
-    if(commandCheck(msg_text+2, (char*)"softser xml") == 0)
-    {
-        testTinyXML();
-        
-        return;
-    }
-#endif
-*/
 
     else
     if(commandCheck(msg_text+2, (char*)"passwd ") == 0)
@@ -3575,10 +3121,15 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"tempoff in ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+13);
-        sscanf(_owner_c, "%f", &fVar);
+        CmdSetResult setres = cmdStoreFloat(msg_text+13, &meshcom_settings.node_tempi_off, -50.0, 50.0, &fVar);
 
-        meshcom_settings.node_tempi_off=fVar;
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("tempoff in", msg_text+13); return; }
+
+        if(setres == CMD_SET_RANGE)
+        {
+            printfdeb("tempoff in %.1f out of range (-50..50 °C), ignored\n", fVar);
+            return;
+        }
 
         save_settings();
 
@@ -3592,10 +3143,15 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"tempoff out ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
-        sscanf(_owner_c, "%f", &fVar);
+        CmdSetResult setres = cmdStoreFloat(msg_text+14, &meshcom_settings.node_tempo_off, -50.0, 50.0, &fVar);
 
-        meshcom_settings.node_tempo_off=fVar;
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("tempoff out", msg_text+14); return; }
+
+        if(setres == CMD_SET_RANGE)
+        {
+            printfdeb("tempoff out %.1f out of range (-50..50 °C), ignored\n", fVar);
+            return;
+        }
 
         save_settings();
 
@@ -3845,7 +3401,6 @@ void commandAction(char *umsg_text, bool ble)
             }
         }
 
-        // Ziel ist node_pingcall, nicht node_call -- eigene sizeof verwenden, sonst bricht es sobald eines der beiden Arrays vergroessert wird
         snprintf(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_pingcall), "%s", sVar.c_str());
 
          if(meshcom_settings.node_pingcall[0] == 0x00)
@@ -3929,6 +3484,37 @@ void commandAction(char *umsg_text, bool ble)
         save_settings();
     }
     else
+    // Issue #1183: Ethernet MTU for the RAK W5100S web server (applied as MSS = MTU - 40
+    // on the next listening socket, see web_functions.cpp). Unlike --pingmax a bad value
+    // is rejected, not reset: a typo must not silently change the path MTU. RAK only, like
+    // its --help line: the MSS is applied by the W5100S path alone.
+    #if defined(BOARD_RAK4630)
+    if(commandCheck(msg_text+2, (char*)"ethmtu ") == 0)
+    {
+        const CmdSetResult res = cmdStoreInt(msg_text+9, &meshcom_settings.node_ethmtu, 1280, 1500, &iVar);
+
+        if(res == CMD_SET_NAN) { cmdArgNotNumber("ethmtu", msg_text+9); return; }
+
+        if(res == CMD_SET_RANGE)
+        {
+            printfdeb("ethmtu %i not between 1280 and 1500, ignored\n", iVar);
+
+            if(ble)
+            {
+                addBLECommandBack((char*)msg_text);
+            }
+
+            return;
+        }
+
+        printfdeb("set ethmtu to %i (MSS %i)\n", meshcom_settings.node_ethmtu, meshcom_settings.node_ethmtu - 40);
+
+        bReturn = true;
+
+        save_settings();
+    }
+    else
+    #endif
 
 #ifndef BOARD_RAK4630
     if(commandCheck(msg_text+2, (char*)"setssid ") == 0)
@@ -4065,6 +3651,7 @@ void commandAction(char *umsg_text, bool ble)
 
         bGATEWAY=false;
         meshcom_settings.node_sset &= ~0x1000;   // mask 0x1000
+        heyGatewayChanged();                     // GW-02: neighbours learn HG->H now, same hook as tg_post_gateway
 
         if(ble)
         {
@@ -4141,6 +3728,24 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
 
+        // Audit-Defekt 2 (Welle 1, Betreiberentscheidung 2026-09-12): --setowndns war das
+        // EINZIGE der fuenf setown*-Kommandos ohne diesen Auto-Reboot -- setownip (:3975),
+        // setowngw, setownms und setownntp haben ihn alle. Die Pruefung stand nur in einem
+        // zweiten, unerreichbaren setowndns-Block weiter unten (commandCheck() ist ein
+        // Praefix-Vergleich und kehrt beim ersten Treffer zurueck, der zweite Block lief
+        // also nie). Dieser tote Block ist geloescht und die Pruefung hierher geholt, statt
+        // die Asymmetrie mit ihm zu entsorgen. Der tote Block trug ausserdem msg_text+11
+        // statt +12 -- das haette dem Wert ein Leerzeichen vorangestellt, "setowndns " belegt
+        // die Indizes 2..11.
+        if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
+           (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
+        {
+            #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS)
+            printfdeb("Auto. Reboot after 15 sec.");
+            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
+            #endif
+        }
+
         return;
     }
     else
@@ -4175,32 +3780,6 @@ void commandAction(char *umsg_text, bool ble)
         msg_text[50]=0x00;
 
         snprintf(meshcom_settings.node_ownms, sizeof(meshcom_settings.node_ownms), "%s", msg_text+11);
-
-        if(ble)
-        {
-            bWifiSetting = true;
-        }
-
-        save_settings();
-
-        if((strlen(meshcom_settings.node_ownip) >= 7 && strlen(meshcom_settings.node_owngw) >= 7 && strlen(meshcom_settings.node_ownms) >= 7) ||
-           (strlen(meshcom_settings.node_ownip) < 7 && strlen(meshcom_settings.node_owngw) < 7 && strlen(meshcom_settings.node_ownms) < 7))
-        {
-            #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS)
-            printfdeb("Auto. Reboot after 15 sec.");
-            rebootAuto = millis() + 15 * 1000; // 10 Sekunden
-            #endif
-        }
-
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"setowndns ") == 0)
-    {
-        // max. 40 char
-        msg_text[50]=0x00;
-
-        snprintf(meshcom_settings.node_owndns, sizeof(meshcom_settings.node_owndns), "%s", msg_text+11);
 
         if(ble)
         {
@@ -4289,8 +3868,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setlat ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+9, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("setlat", msg_text+9); return; }
 
         //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
 
@@ -4310,8 +3890,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setlon ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
-        sscanf(_owner_c, "%lf", &dVar);
+        bArgOk = cmdArgDbl(msg_text+9, &dVar);
+
+        if(!bArgOk) { cmdArgNotNumber("setlon", msg_text+9); return; }
 
         meshcom_settings.node_lon=dVar;
 
@@ -4331,8 +3912,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setalt ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
-        sscanf(_owner_c, "%d", &iVar);
+        bArgOk = cmdArgInt(msg_text+9, &iVar);
+
+        if(!bArgOk) { cmdArgNotNumber("setalt", msg_text+9); return; }
 
         // GPS-03/F7: Ein Tippfehler darf die Hoehe nicht auf 0 klemmen -- das
         // hat frueher den Schaetzer auf 0 m geseedet UND die barometrische
@@ -4595,8 +4177,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"wifitxpower ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
-        sscanf(_owner_c, "%d", &iVar);
+        bArgOk = cmdArgInt(msg_text+14, &iVar);
+
+        if(!bArgOk) { cmdArgNotNumber("wifitxpower", msg_text+14); return; }
 
         if(iVar < 2 || iVar > 20)
         {
@@ -4662,10 +4245,248 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    // Store node (mailbox) settings, stage 3 (docs/dm-stage3-wave-plan-20260914.md)
+    // + stage 4 sender-visible custody notice (docs/dm-stage4-plan-20260914.md).
+    // T13: persisted through msgstore_settings.cpp's own keys/file, never
+    // through struct s_meshcom_settings. commandCheck is a prefix match for
+    // the trailing-space (argument) forms, so storecall/storetime/storeslots/
+    // storenotice must be tested before the bare "store"/"storenotice" below --
+    // "store" (5 chars) alone would otherwise not reach them, but "storenotice"
+    // (11 chars) as an exact token would shadow "storenotice " if reordered.
+#if defined(ENABLE_MSGSTORE)
+    if(commandCheck(msg_text+2, (char*)"storecall ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+12);
+
+        if(casecmp(_owner_c, (char*)"none") == 0)
+        {
+            msgstoreSetList("");
+            msgstoreSettingsSave();
+            Serial.printf("[STORE];list;\n");
+
+            return;
+        }
+
+        char normalized[MSGSTORE_LIST_MAX * MSGSTORE_CALL_MAX] = {0};
+        int count = 0;
+        bool bad = false;
+
+        char *tok = strtok(_owner_c, ",");
+        while(tok != NULL)
+        {
+            while(*tok == ' ')
+                tok++;
+
+            size_t tl = strlen(tok);
+            while(tl > 0 && tok[tl-1] == ' ')
+                tok[--tl] = 0;
+
+            count++;
+
+            if(count > MSGSTORE_LIST_MAX || !storeCallEntryValid(tok))
+            {
+                bad = true;
+                break;
+            }
+
+            if(normalized[0] != 0)
+                strncat(normalized, ",", sizeof(normalized) - strlen(normalized) - 1);
+            strncat(normalized, tok, sizeof(normalized) - strlen(normalized) - 1);
+
+            tok = strtok(NULL, ",");
+        }
+
+        if(bad || count == 0)
+        {
+            Serial.printf("[ERR];storecall;invalid entry or more than %d entries\n", MSGSTORE_LIST_MAX);
+
+            return;
+        }
+
+        msgstoreSetList(normalized);
+        msgstoreSettingsSave();
+        Serial.printf("[STORE];list;%s\n", msgstoreListCsv());
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"storecall") == 0)
+    {
+        Serial.printf("[STORE];list;%s\n", msgstoreListCsv());
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"storetime ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+12);
+        iVar = 0;
+        sscanf(_owner_c, "%d", &iVar);
+
+        if(iVar < 1 || iVar > MSGSTORE_HOLD_MAX_H)
+        {
+            Serial.printf("[ERR];storetime;%d not between 1 and %d\n", iVar, MSGSTORE_HOLD_MAX_H);
+
+            return;
+        }
+
+        msgstoreConfigure(msgstoreMode(), msgstoreSlots(), (uint16_t)iVar);
+        msgstoreSettingsSave();
+        storePrintState();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"storetime") == 0)
+    {
+        storePrintState();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"storeslots ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+13);
+        iVar = 0;
+        sscanf(_owner_c, "%d", &iVar);
+
+        if(iVar < 1 || iVar > MSGSTORE_SLOTS_MAX)
+        {
+            Serial.printf("[ERR];storeslots;%d not between 1 and %d\n", iVar, MSGSTORE_SLOTS_MAX);
+
+            return;
+        }
+
+        // Allowed while entries are held: the core caps its use at the new
+        // value (docs/commands-store-node.md).
+        msgstoreConfigure(msgstoreMode(), (uint8_t)iVar, msgstoreHoldHours());
+        msgstoreSettingsSave();
+        storePrintState();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"storeslots") == 0)
+    {
+        storePrintState();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"store off") == 0)
+    {
+        storeApplyMode(MSGSTORE_OFF);
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"store own") == 0)
+    {
+        storeApplyMode(MSGSTORE_OWN);
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"store list") == 0)
+    {
+        storeApplyMode(MSGSTORE_LIST);
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"store heard") == 0)
+    {
+        storeApplyMode(MSGSTORE_HEARD);
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"storenotice ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
+
+        if(casecmp(_owner_c, (char*)"on") == 0)
+        {
+            msgstoreSetNotice(true);
+        }
+        else if(casecmp(_owner_c, (char*)"off") == 0)
+        {
+            msgstoreSetNotice(false);
+        }
+        else
+        {
+            Serial.printf("[ERR];storenotice;must be on or off\n");
+
+            return;
+        }
+
+        msgstoreSettingsSave();
+        Serial.printf("[STORE];notice;%s\n", msgstoreNotice() ? "on" : "off");
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"storenotice") == 0)
+    {
+        Serial.printf("[STORE];notice;%s\n", msgstoreNotice() ? "on" : "off");
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"mbox") == 0)
+    {
+        // F3 (fable-dm-stage4-verdict-20260914.md): matches the STAT path's
+        // dmbuf[200] (loop_functions.cpp) -- msgstoreFormatLine() now carries
+        // 15 numbers behind 94 bytes of literals, and 128 clamps the trailing
+        // sto= field first on a store node that has been up for weeks.
+        char line[200];
+        msgstoreFormatLine(line, sizeof(line));
+        Serial.printf("%s\n", line);
+
+        int slots = msgstoreSlots();
+        for(int islot=0; islot<slots; islot++)
+        {
+            const struct MsgStoreEntry *e = msgstoreEntry(islot);
+            if(e == NULL)
+                continue;
+
+            unsigned long age_s = (unsigned long)((millis() - e->stored_ms) / 1000);
+
+            // Never the payload text -- slot, dst, src, nnn, state, cycles.attempt, age.
+            Serial.printf("[MBOX];%d;%s;%s;%u;%s;%u.%u;age;%lu\n",
+                islot, e->dst, e->src, (unsigned)e->nnn, msgstoreStateName(e->state),
+                (unsigned)e->cycles, (unsigned)e->attempt, age_s);
+        }
+
+        return;
+    }
+    else
+#endif // ENABLE_MSGSTORE
+    // Bare "store" is a single, unconditional rung on both build shapes --
+    // command_ladder_lint.py's exact-duplicate check only recognises
+    // NRF52_SERIES/ESP32 as mutually exclusive #if guards, not
+    // ENABLE_MSGSTORE, so two separate "store" rungs (one per #if/#else
+    // arm, as fork-main has it) would read as dead code. One rung, two
+    // bodies instead.
+    if(commandCheck(msg_text+2, (char*)"store") == 0)
+    {
+#if defined(ENABLE_MSGSTORE)
+        storePrintState();
+#else
+        // Ineligible board (T-Beam and other classic-ESP32 boards): the
+        // setters above do not exist here, so a web setparam must not fall
+        // into "unknown command" for the bare form either.
+        Serial.printf("[STORE];unavailable\n");
+#endif
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"txpower ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
-        sscanf(_owner_c, "%d", &iVar);
+        bArgOk = cmdArgInt(msg_text+10, &iVar);
+
+        if(!bArgOk) { cmdArgNotNumber("txpower", msg_text+10); return; }
 
         printdeb(iVar);
 
@@ -4694,10 +4515,18 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"txfreq ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
-        sscanf(_owner_c, "%f", &fVar);
+        bArgOk = cmdArgFloat(msg_text+9, &fVar);
 
-        float dec_bandwith = (LORA_BANDWIDTH/2.0)/100.0;
+        if(!bArgOk) { cmdArgNotNumber("txfreq", msg_text+9); return; }
+
+        // RF-04: LORA_BANDWIDTH is kHz on ESP32 but a bandwidth INDEX (0/1/2)
+        // on nRF52 (OPT-D14) -- feeding it straight into this arithmetic
+        // computed a different quantity per platform, on top of the /100.0
+        // vs /1000.0 (kHz->MHz) factor-of-ten error shared with
+        // lora_setchip.cpp's guard band. radioBwStoredToKhz() normalizes
+        // first, same as that site.
+        float bw_khz = radioBwStoredToKhz(LORA_BANDWIDTH, radioUnitsIndexed());
+        float dec_bandwith = (bw_khz/2.0)/1000.0;
         if(!((fVar >= (430.0 + dec_bandwith) && fVar <= (439.000 - dec_bandwith)) || (fVar >= (869.4 + dec_bandwith) && fVar <= (869.65 - dec_bandwith))))
         {
             printfdeb("txfrequency %.3f MHz not within Band\n", fVar);
@@ -4706,11 +4535,11 @@ void commandAction(char *umsg_text, bool ble)
         {
             printfdeb("set txfrequency to %.4f MHz\n", fVar);
 
-            meshcom_settings.node_freq=fVar;
-
-            #ifdef BOARD_RAK4630
-                 meshcom_settings.node_freq= meshcom_settings.node_freq*1000000;
-            #endif
+            // RF-05: the MHz -> Hz conversion was #ifdef BOARD_RAK4630, but
+            // node_freq holds Hz on BOARD_RAK4630 || USE_HELTEC_T114 ||
+            // BOARD_T_ECHO -- so T114 and T-Echo stored MHz where the rest of
+            // the firmware reads Hz. Same mistake as RF-02, different field.
+            meshcom_settings.node_freq = radioFreqMhzToStored(fVar, radioUnitsIndexed());
 
             if(ble)
             {
@@ -4727,18 +4556,25 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"txbw ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+7);
-        sscanf(_owner_c, "%f", &fVar);
+        bArgOk = cmdArgFloat(msg_text+7, &fVar);
 
-        if(fVar != 125 && fVar != 250)
+        if(!bArgOk) { cmdArgNotNumber("txbw", msg_text+7); return; }
+
+        if((fVar != 125 && fVar != 250))
         {
             printfdeb("txbw %.0f MHz not 125 or 250 kHz\n", fVar);
         }
         else
         {
-            meshcom_settings.node_bw=fVar;
+            // RF-01: node_bw holds kHz on the SX127x path and a bandwidth
+            // index on the SX126x path (RAK4630/T114/T-Echo), where
+            // lora_setchip_meshcom() hands it to Radio.SetRxConfig() raw.
+            // Storing 125/250 there configured the radio with enum value
+            // 125/250. lora_setcountry() always wrote the index, so the unit
+            // of this field depended on which command last wrote it.
+            meshcom_settings.node_bw = radioBwKhzToStored(fVar, radioUnitsIndexed());
 
-            printfdeb("set txbw to %f kHz\n", meshcom_settings.node_bw);
+            printfdeb("set txbw to %.0f kHz\n", radioBwStoredToKhz(meshcom_settings.node_bw, radioUnitsIndexed()));
 
             if(ble)
             {
@@ -4755,8 +4591,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"txsf ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+7);
-        sscanf(_owner_c, "%d", &iVar);
+        bArgOk = cmdArgInt(msg_text+7, &iVar);
+
+        if(!bArgOk) { cmdArgNotNumber("txsf", msg_text+7); return; }
 
         if(iVar < 6 || iVar > 12)
         {
@@ -4784,8 +4621,9 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"txcr ") == 0)
     {
         // 4/txcr --> 4/5 ... 4/8
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+7);
-        sscanf(_owner_c, "%d", &iVar);
+        bArgOk = cmdArgInt(msg_text+7, &iVar);
+
+        if(!bArgOk) { cmdArgNotNumber("txcr", msg_text+7); return; }
 
         if(iVar < 5 || iVar > 8)
         {
@@ -4800,11 +4638,11 @@ void commandAction(char *umsg_text, bool ble)
                 addBLECommandBack((char*)msg_text);
             }
 
-            meshcom_settings.node_cr = iVar;
-
-            #ifdef BOARD_RAK4630
-                meshcom_settings.node_cr = iVar - 4;
-            #endif
+            // RF-02: this conversion was #ifdef BOARD_RAK4630, but the
+            // index-unit radio path is BOARD_RAK4630 || USE_HELTEC_T114 ||
+            // BOARD_T_ECHO -- so T114 and T-Echo stored 5..8 where the driver
+            // reads a 1..4 coding-rate index.
+            meshcom_settings.node_cr = radioCrDenomToStored(iVar, radioUnitsIndexed());
 
             save_settings();
 
@@ -4821,11 +4659,23 @@ void commandAction(char *umsg_text, bool ble)
 	//  float node_specstep = 0.025;
 	//  int node_specsamples = 2048;
     //
+    // R3-11/D2-09: die vier Spektrum-Parameterkommandos haengen am selben
+    // Schalter wie der Mitschnittring -- EIN Schalter fuer die Feld-Diagnose
+    // statt zweier. MC_DIAG ist Vorgabe 1; nur E22_XML (die RAM-knappste
+    // Variante) baut mit -D MC_DIAG=0 und verliert sie zusammen mit
+    // --txcapture. Begruendung in configuration_global.h.
+    //
+    // Das einleitende `else` steht MIT im Block: faellt er weg, liefert die
+    // naechste Gruppe ihr eigenes `else` (#if NRF52_SERIES bzw. #if ESP32,
+    // beide direkt darunter, danach ein unbedingtes `else`). Genau die
+    // Kollision, die in D2-06 fuenf Boards zerlegt hat.
+    #if MC_DIAG
     else
     if(commandCheck(msg_text+2, (char*)"specstart ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+12);
-        sscanf(_owner_c, "%f", &fVar);
+        bArgOk = cmdArgFloat(msg_text+12, &fVar);
+
+        if(!bArgOk) { cmdArgNotNumber("specstart", msg_text+12); return; }
 
         if(!((fVar >= 430.0 && fVar <= (439.000)) || (fVar >= 869.4 && fVar <= 869.65)))
         {
@@ -4845,8 +4695,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"specend ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
-        sscanf(_owner_c, "%f", &fVar);
+        bArgOk = cmdArgFloat(msg_text+10, &fVar);
+
+        if(!bArgOk) { cmdArgNotNumber("specend", msg_text+10); return; }
 
         if(!((fVar >= 430.0 && fVar <= 439.000) || (fVar >= 869.4 && fVar <= 869.65)))
         {
@@ -4866,8 +4717,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"specstep ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+11);
-        sscanf(_owner_c, "%f", &fVar);
+        bArgOk = cmdArgFloat(msg_text+11, &fVar);
+
+        if(!bArgOk) { cmdArgNotNumber("specstep", msg_text+11); return; }
 
         if(!(fVar >= 0.1 && fVar <= 2.0))
         {
@@ -4877,7 +4729,13 @@ void commandAction(char *umsg_text, bool ble)
         {
             printfdeb("set Step-Frequency to %.3f MHz\n", fVar);
 
-            meshcom_settings.node_specsamples=fVar;
+            // OPT-D4: this wrote node_specsamples. The two spectrum setters had
+            // their destinations swapped. Checked that the bug is not
+            // self-cancelling before touching it: the consumers read both fields
+            // correctly -- web_functions.cpp:2002 uses node_specstep as an MHz
+            // divisor, :2048 passes node_specsamples as the sample count -- so
+            // the defect was in the setters alone.
+            meshcom_settings.node_specstep=fVar;
 
             save_settings();
         }
@@ -4887,8 +4745,9 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"specsamples ") == 0)
     {
-        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+14);
-        sscanf(_owner_c, "%i", &iVar);
+        bArgOk = cmdArgIntBase(msg_text+14, 0, &iVar);   // "%i" is auto-base
+
+        if(!bArgOk) { cmdArgNotNumber("specsamples", msg_text+14); return; }
 
         if(!(iVar >= 500 && iVar <= 2048))
         {
@@ -4898,13 +4757,14 @@ void commandAction(char *umsg_text, bool ble)
         {
             printfdeb("set Samples to %i MHz\n", iVar);
 
-            meshcom_settings.node_specstep=iVar;
+            meshcom_settings.node_specsamples=iVar;   // OPT-D4, was node_specstep
 
             save_settings();
         }
 
         return;
     }
+    #endif // MC_DIAG
     //
     ///////////////////////////////////////////////////////////////////////////
     // Field diagnostics for gateway operators. Deliberately NOT part of the
@@ -4952,6 +4812,60 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     #endif
+    else
+    // --persiststat: every setting that is persisted but NEVER exported.
+    //
+    // settings_schema.h's SETTINGS_PERSIST_ONLY_LIST(_PLATFORM) rows are
+    // deliberately absent from GET /config.json (config_json.h says why), so
+    // the W3 upgrade check -- which diffs exactly that export -- is blind to
+    // all 17 of them. That is the TD-19 trap in general form: a node can come
+    // through a migration "byte-identical" on every exported field and still
+    // have lost its keyboard lock. This command is the read-back that closes
+    // it, so the set printed here must track those schema rows exactly.
+    //
+    // Field diagnostic, NOT part of the INSTRUMENT_ENABLED surface below: the
+    // migration it exists to check happens on shipped images.
+    //
+    // The four common rows print on every board. The 13 T-Deck rows are
+    // guarded with the SAME condition as their struct members
+    // (meshcom_settings.h MESHCOM_SETTINGS_MEMBERS_TDECK) and their schema
+    // rows -- including BOARD_T_DECK_PRO, which the old T-Deck-only copy of
+    // this command left out even though the members exist there.
+    //
+    // The `stat` line keeps its exact HL-03/HL-04 wording and field order:
+    // tools/bench and docs/bench captures grep for it verbatim.
+    if(commandCheck(msg_text+2, (char*)"persiststat") == 0)
+    {
+        Serial.printf("[PERSIST];meta;fversion;%d;mversion;%d;cflash;%d;fwversion;%s\n",
+                      meshcom_settings.node_fversion,
+                      meshcom_settings.node_mversion,
+                      meshcom_settings.node_cleanflash,
+                      meshcom_settings.node_fwversion);
+
+        #if defined(ESP32) && (defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO))
+        Serial.printf("[PERSIST];stat;flash;%d;sd;%d;immediate;%d;mute;%d\n",
+                      meshcom_settings.node_persist_to_flash ? 1 : 0,
+                      meshcom_settings.node_persist_to_sd ? 1 : 0,
+                      meshcom_settings.node_immediate_save ? 1 : 0,
+                      meshcom_settings.node_mute ? 1 : 0);
+
+        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d\n",
+                      meshcom_settings.node_keyboardlock ? 1 : 0,
+                      meshcom_settings.node_backlightlock ? 1 : 0,
+                      meshcom_settings.node_kbllightlock ? 1 : 0,
+                      meshcom_settings.node_kbl_sync ? 1 : 0,
+                      meshcom_settings.node_map,
+                      meshcom_settings.node_modus,
+                      meshcom_settings.node_wifion ? 1 : 0);
+
+        // One path per line: these are free-text char[128] and a ';' inside a
+        // path would otherwise split a field of the line above.
+        Serial.printf("[PERSIST];audio;start;%s\n", meshcom_settings.node_audio_start);
+        Serial.printf("[PERSIST];audio;msg;%s\n", meshcom_settings.node_audio_msg);
+        #endif
+
+        return;
+    }
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     // T-Deck field switches: mute and the three position-persistence flags.
     // Until 2026-09-13 they sat in the INSTRUMENT_ENABLED block below and were
@@ -5014,19 +4928,6 @@ void commandAction(char *umsg_text, bool ble)
         Serial.printf("[PERSIST];immediate;%d\n", meshcom_settings.node_immediate_save ? 1 : 0);
         return;
     }
-    else
-    if(commandCheck(msg_text+2, (char*)"persiststat") == 0)
-    {
-        // HL-03/HL-04: den Zustand aller vier Schalter in einer Zeile lesbar
-        // machen -- ohne das war ueber die serielle Schnittstelle nicht einmal
-        // pruefbar, was der GUI-Schalter gerade gesetzt hat.
-        Serial.printf("[PERSIST];stat;flash;%d;sd;%d;immediate;%d;mute;%d\n",
-                      meshcom_settings.node_persist_to_flash ? 1 : 0,
-                      meshcom_settings.node_persist_to_sd ? 1 : 0,
-                      meshcom_settings.node_immediate_save ? 1 : 0,
-                      meshcom_settings.node_mute ? 1 : 0);
-        return;
-    }
     #endif
     //
     ///////////////////////////////////////////////////////////////////////////
@@ -5047,6 +4948,44 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"heap") == 0)
     {
         instrument_report_heap("-");
+        return;
+    }
+    else
+    // --battprobe [n]: raw ADC capture of the switched Heltec battery divider (n cycles, 1..10),
+    // see battProbeRun() in batt_function_old.cpp. Runs synchronously (~7.5 s per cycle).
+    if(commandCheck(msg_text+2, (char*)"battprobe") == 0)
+    {
+        #if defined(USE_NEW_BATT)
+        printfdeb("[BATTPROBE]|unsupported\n");
+        #else
+        int bpCycles = atoi(msg_text + 11);   // "--battprobe" is 11 chars; atoi skips the blank, 0/garbage -> clamped to 1
+        battProbeRun(bpCycles);
+        #endif
+        return;
+    }
+    else
+    // --airgap on|off: RAM-only bench instrument (plan 0.5). While set,
+    // OnRxDone() drops every frame at the radio boundary and doTX() refuses
+    // to transmit -- see src/instrument.h. Never persisted, so a reboot
+    // always clears it. Order matters: "airgap on"/"airgap off" must be
+    // tested before the bare "airgap" (commandCheck() is a prefix match).
+    if(commandCheck(msg_text+2, (char*)"airgap on") == 0)
+    {
+        bAirgap = true;
+        Serial.printf("[AIRGAP];on\n");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"airgap off") == 0)
+    {
+        bAirgap = false;
+        Serial.printf("[AIRGAP];off\n");
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"airgap") == 0)
+    {
+        Serial.printf("[AIRGAP];%s\n", bAirgap ? "on" : "off");
         return;
     }
     else
@@ -5190,18 +5129,6 @@ void commandAction(char *umsg_text, bool ble)
     }
     else
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    if(commandCheck(msg_text+2, (char*)"spitrace on") == 0)
-    {
-        tdeck_dbg_spitrace(true);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"spitrace off") == 0)
-    {
-        tdeck_dbg_spitrace(false);
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"touch ") == 0)
     {
         // --touch tap <x> <y> [ms] | --touch down <x> <y> | --touch up
@@ -5211,18 +5138,6 @@ void commandAction(char *umsg_text, bool ble)
             tdeck_touch_inject(subcmd, x, y, ms);
         else
             Serial.println("[TOUCH];err;usage");
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"redrawlog on") == 0)
-    {
-        tdeck_dbg_redrawlog(true);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"redrawlog off") == 0)
-    {
-        tdeck_dbg_redrawlog(false);
         return;
     }
     else
@@ -5246,34 +5161,10 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"drawer on") == 0)
-    {
-        tdeck_dbg_drawer(true);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"drawer off") == 0)
-    {
-        tdeck_dbg_drawer(false);
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"key ") == 0)
     {
         // --key <text>   inject keyboard characters (\n = Enter, \b = Backspace)
         tdeck_dbg_key(msg_text+6);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"balledge on") == 0)
-    {
-        tdeck_dbg_balledge(true);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"balledge off") == 0)
-    {
-        tdeck_dbg_balledge(false);
         return;
     }
     else
@@ -5303,18 +5194,6 @@ void commandAction(char *umsg_text, bool ble)
             tdeck_dbg_scroll(tab, dy);
         else
             Serial.println("[SCROLL];err;usage");
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"flushfix on") == 0)
-    {
-        tdeck_dbg_flushfix(true);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"flushfix off") == 0)
-    {
-        tdeck_dbg_flushfix(false);
         return;
     }
     else
@@ -5382,18 +5261,6 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"tft on") == 0)
-    {
-        tdeck_dbg_tft(1);
-        return;
-    }
-    else
-    if(commandCheck(msg_text+2, (char*)"tft off") == 0)
-    {
-        tdeck_dbg_tft(0);
-        return;
-    }
-    else
     if(commandCheck(msg_text+2, (char*)"tft state") == 0)
     {
         tdeck_dbg_tft(2);
@@ -5422,26 +5289,42 @@ void commandAction(char *umsg_text, bool ble)
         instrument_reset();
         return;
     }
-    #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
+    #if (defined(ESP32) && !defined(DISABLE_NET_CONSOLE)) || defined(NRF52_SERIES)
     // DISABLE_NET_CONSOLE (E22_XML): kein WiFi-Include-Pfad und kein RAM-Budget
     // fuer den Bench-Hook -- der Block entfaellt dort komplett.
+    //
+    // nRF52 was added 2026-09-11: `bench_srvip` already linked there
+    // (udp_functions.cpp is in the nRF52 build filter) but nothing read it, so
+    // the board could only ever talk to a real MeshCom server -- it has no DNS
+    // resolver on the Ethernet path and every branch of NrfETH::startUDP()
+    // assigns a hardcoded literal. Without this the UDP-1990 golden captures
+    // of the test plan's steps H6/H7 cannot be driven on RAK4631 at all.
+    // The override is RAM-only on both platforms and must therefore be applied
+    // in place, never across a reboot.
     else
     if(commandCheck(msg_text+2, (char*)"srvip ") == 0)
     {
         // TM-31 bench hook: MeshCom server override (0.0.0.0 clears), RAM only,
         // takes effect at the next startMeshComUDP() (--reboot or WiFi restart).
         extern IPAddress bench_srvip;
+        #if defined(NRF52_SERIES)
+        extern void nrfEthRestartUDP();
+        #endif
         IPAddress ip;
         if(ip.fromString(msg_text+8))
         {
             bench_srvip = ip;
-            Serial.printf("[SRVIP];%s;set\n", ip.toString().c_str());
+            // Octets, not ip.toString(): the nRF52 IPAddress (RAK13800_W5100S)
+            // has no toString(). The rendered text is identical on both
+            // platforms, so the console line stays byte-for-byte what it was.
+            Serial.printf("[SRVIP];%i.%i.%i.%i;set\n", ip[0], ip[1], ip[2], ip[3]);
             // Re-run the UDP bring-up now so the override takes effect without a
             // reboot (the override lives in RAM only). Keyed on the driver state,
             // not on hasIPaddress: after the boot retry gave up, a driver-side
             // reconnect is never harvested (TM-34 F3 blind window, seen live
             // 2026-08-29: got_ip at 53 s, no startMeshComUDP() until the 5-min
             // restart) -- this hook doubles as the manual harvest for the bench.
+            #if defined(ESP32)
             if(WiFi.status() == WL_CONNECTED)
             {
                 extern WiFiUDP Udp;
@@ -5450,6 +5333,16 @@ void commandAction(char *umsg_text, bool ble)
             }
             else
                 Serial.println("[SRVIP];note;WiFi not connected, applies at the next bring-up");
+            #else
+            // nRF52: apply now, exactly as the ESP32 branch does. The override
+            // lives in RAM only, so "use --reboot" -- the first shape of this
+            // hook -- destroyed the value before startUDP() could read it, and
+            // the node went on talking to the hardcoded server. Re-entering
+            // startUDP() from here is safe: it is public, and its normal
+            // caller initethDHCP() runs in the same loop task that dispatches
+            // this command.
+            nrfEthRestartUDP();
+            #endif
         }
         else
             Serial.println("[SRVIP];err;usage --srvip a.b.c.d");
@@ -5557,14 +5450,259 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"mheard") == 0 || commandCheck(msg_text+2, (char*)"mh") == 0)
     {
-        showMHeard();
+        // W4b (docs/meshcom5-campaign.md Welle 4, Konzept 4.6/4.9): showMHeard()
+        // ist mit mheard_functions.* weg -- Quelle ist nur noch die Topologie
+        // (src/nbr_views.h), 12h-Fenster, neueste zuerst, dieselben Felder wie
+        // die Web-MHeard-Seite (web_functions.cpp: sub_page_mheard()).
+        uint16_t now_min = uptimeMin16();
+        bool bClockValid = (meshcom_settings.node_date_year >= 2025);
+        unsigned long nowEpoch = bClockValid ? getUnixClock() : 0;
+
+        uint8_t *mh_idx = (uint8_t *)malloc((size_t)NBR_MAX_ROWS);
+        if(mh_idx == NULL)
+        {
+            printfdeb("[MH] not enough memory\n");
+            return;
+        }
+
+        int mh_total = nbrMhRows(nbrMatrix, now_min, 12 * 60, mh_idx, NBR_MAX_ROWS);
+        printfdeb("[MH] window=720min rows=%d\n", mh_total);
+
+        int mh_shown = (mh_total < NBR_MAX_ROWS) ? mh_total : NBR_MAX_ROWS;
+        for(int k = 0; k < mh_shown; k++)
+        {
+            NbrMhView v;
+            if(!nbrMhGet(nbrMatrix, mh_idx[k], now_min, &v))
+                continue;
+
+            char ts[24];
+            if(bClockValid)
+            {
+                // Sekunde aus dem Slot statt der Zeilenminute (Konzept 4.6).
+                unsigned long base = nowEpoch - (nowEpoch % 60UL) - (unsigned long)v.age_min * 60UL;
+                if(v.sec < 60)
+                    base += v.sec;
+                base += (unsigned long)(long)(meshcom_settings.node_utcoff * 3600.0);
+                snprintf(ts, sizeof(ts), "%s", convertUNIXtoString(base).c_str());
+            }
+            else
+            {
+                snprintf(ts, sizeof(ts), "age %umin", (unsigned)v.age_min);
+            }
+
+            char rssiTxt[8];
+            if(v.rssi == NBR_MH_RSSI_UNKNOWN)
+                snprintf(rssiTxt, sizeof(rssiTxt), "NA");
+            else
+                snprintf(rssiTxt, sizeof(rssiTxt), "%d", (int)v.rssi);
+
+            char snrTxt[8];
+            if(v.snr == NBR_SNR_UNKNOWN)
+                snprintf(snrTxt, sizeof(snrTxt), "NA");
+            else
+                snprintf(snrTxt, sizeof(snrTxt), "%d", (int)v.snr);
+
+            char hmTxt[8];
+            if(v.hm_snr == NBR_SNR_UNKNOWN)
+                snprintf(hmTxt, sizeof(hmTxt), "NA");
+            else
+                snprintf(hmTxt, sizeof(hmTxt), "%d", (int)v.hm_snr);
+
+            // DIST wie auf der Web-Seite aus der eigenen Position gerechnet,
+            // 0/0 = unbekannt (dieselbe Regel wie src/mh_phone.h).
+            char distTxt[12];
+            bool haveOwnPos = !(meshcom_settings.node_lat == 0.0 && meshcom_settings.node_lon == 0.0);
+            if(nbrPosKnown(v.lat, v.lon) && haveOwnPos)
+                snprintf(distTxt, sizeof(distTxt), "%.1f", gps.distanceBetween(v.lat, v.lon, meshcom_settings.node_lat, meshcom_settings.node_lon) / 1000.0);
+            else
+                snprintf(distTxt, sizeof(distTxt), "NA");
+
+            char latTxt[12], lonTxt[12];
+            if(nbrPosKnown(v.lat, v.lon))
+            {
+                double a = v.lat, o = v.lon;
+                snprintf(latTxt, sizeof(latTxt), "%c%06.3f", (a < 0) ? 'S' : 'N', fabs(a));
+                snprintf(lonTxt, sizeof(lonTxt), "%c%07.3f", (o < 0) ? 'W' : 'E', fabs(o));
+            }
+            else
+            {
+                snprintf(latTxt, sizeof(latTxt), "NA");
+                snprintf(lonTxt, sizeof(lonTxt), "NA");
+            }
+
+            char altTxt[8];
+            if(v.alt == NBR_MH_ALT_UNKNOWN)
+                snprintf(altTxt, sizeof(altTxt), "NA");
+            else
+                snprintf(altTxt, sizeof(altTxt), "%d", (int)v.alt);
+
+            printfdeb("[MH] call=%s %s typ=%s hw=%s mod=%01X/%01X rssi=%sdBm snr=%sdB dist=%skm ncnt=%u age=%umin hm=%sdB role=%c ex=%u nb=%u gw=%c lat=%s lon=%s alt=%sm\n",
+                       v.call, ts, nbrPayloadTypeName(v.plt), nbrHardwareName(v.hw),
+                       (v.mod >> 4), (v.mod & 0x0f), rssiTxt, snrTxt, distTxt, (unsigned)v.ncnt,
+                       (unsigned)v.age_min, hmTxt, v.role ? v.role : '-', (unsigned)v.ex, (unsigned)v.nb,
+                       v.gw ? 'Y' : 'N', latTxt, lonTxt, altTxt);
+        }
+        free(mh_idx);
 
         return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"path") == 0 || commandCheck(msg_text+2, (char*)"hey") == 0)
     {
-        showPath();
+        // W4b (Konzept 4.7, Abb. 11): eine Zeile je Absender aus
+        // nbrRouteCount()/nbrRouteGet() -- kein Index-Array noetig, der
+        // laufende Index geht direkt hinein. "via": bei einer 2-Hop-Zeile die
+        // direkten Nachbarn B (schon in entry), bei einem Horizont-Eintrag die
+        // Eintrittszeilen A, ergaenzt -- wo billig -- um die B's, ueber die
+        // jedes A hereinkommt (dieselbe Logik wie sub_page_path() in
+        // web_functions.cpp).
+        uint16_t now_min = uptimeMin16();
+
+        int path_total = nbrRouteCount(nbrMatrix, now_min);
+        printfdeb("[PATH] rows=%d\n", path_total);
+
+        for(int i = 0; i < path_total; i++)
+        {
+            NbrRouteView r;
+            if(!nbrRouteGet(nbrMatrix, i, now_min, &r))
+                continue;
+
+            char via_buf[200] = {0}; // Weg-Text dieser Zeile, kein Zeilen-Array; Stack ist fuer 200 B gut
+            int vpos = 0;
+            for(int a = nbrMaskNext(r.entry, -1); a >= 0 && vpos >= 0 && vpos < (int)sizeof(via_buf); a = nbrMaskNext(r.entry, a))
+            {
+                NbrRowView av;
+                const char *acall = nbrRowGet(nbrMatrix, a, &av) ? av.call : "?";
+
+                if(r.is_row)
+                { // 2-Hop-Zeile: entry IST schon die B-Menge (die direkten Nachbarn)
+                    vpos += snprintf(via_buf + vpos, sizeof(via_buf) - vpos, "%s%s", (vpos > 0) ? "," : "", acall);
+                    continue;
+                }
+
+                NbrMask viaB = nbrMaskAnd(nbrHearersMask(nbrMatrix, a, now_min), nbrDirectMask(nbrMatrix, now_min));
+                if(nbrMaskEmpty(viaB))
+                {
+                    vpos += snprintf(via_buf + vpos, sizeof(via_buf) - vpos, "%s%s", (vpos > 0) ? "," : "", acall);
+                    continue;
+                }
+                for(int b = nbrMaskNext(viaB, -1); b >= 0 && vpos >= 0 && vpos < (int)sizeof(via_buf); b = nbrMaskNext(viaB, b))
+                {
+                    NbrRowView bv;
+                    const char *bcall = nbrRowGet(nbrMatrix, b, &bv) ? bv.call : "?";
+                    vpos += snprintf(via_buf + vpos, sizeof(via_buf) - vpos, "%s%s>%s", (vpos > 0) ? "," : "", acall, bcall);
+                }
+            }
+
+            printfdeb("[PATH] call=%s hops=%u g=%c age=%umin via=%s\n", r.call, (unsigned)r.hops, r.gw ? 'Y' : 'N', (unsigned)r.age_min, via_buf);
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"neighbours") == 0 || commandCheck(msg_text+2, (char*)"nbr") == 0)
+    {
+        uint16_t now_min = uptimeMin16();
+
+        // Konzept 4.2/4.5: "leer" heisst wirklich noch nichts gehoert, nicht
+        // nur ausserhalb des 720-min-Fensters -- Zeile 0 traegt vor der
+        // ersten OnRxDone-Ausfuehrung (Lazy Init dort) noch kein Rufzeichen.
+        // W2c CONTRACT: Zeile 0 nur noch ueber nbrRowGet() lesen -- das rows-
+        // Feld der Matrix ist seit dem Kantenpool-Umbau nicht mehr oeffentlich.
+        NbrRowView r0v;
+        if(!nbrRowGet(nbrMatrix, 0, &r0v) || r0v.call[0] == 0x00)
+        {
+            printfdeb("[NBR] empty\n");
+            return;
+        }
+
+        // N-22: eigener Static statt Stack -- der Loop-Task hat auf nRF52 nur
+        // 4 KB, das Kommando laeuft ausschliesslich dort (Fix 9ce62aa0, frueher
+        // an showMHeard() aus mheard_functions.cpp festgemacht, das mit W4b weg ist).
+        // 300 statt 200: Zeile 0 mit 20 Hoerern plus Reichweite und Alter
+        // liegt ueber 200 Zeichen, snprintf kappte dann stumm (Advisor L1).
+        // nbr_buf bleibt static (fest 300 B, skaliert nicht mit NBR_MAX_ROWS).
+        // W2c (Orchestrator-Review 2026-09-25, zweite Runde): nbr_rows[]/
+        // ex_idx[] sind jetzt bis zu NBR_MAX_ROWS==128 (S3/nRF52) statt
+        // vormals <= 21 -- zusammen 256 B, die NICHT permanent im BSS liegen
+        // sollen (selten benutztes Kommando). Ein malloc()-Block statt zweier
+        // static-Arrays, free() vor jedem Rueckkehrpunkt danach.
+        static char nbr_buf[300];
+        uint8_t *nbr_scratch = (uint8_t *)malloc(2 * (size_t)NBR_MAX_ROWS);
+        if(nbr_scratch == NULL)
+        {
+            printfdeb("[NBR] not enough memory\n");
+            return;
+        }
+        uint8_t *nbr_rows = nbr_scratch + 0 * NBR_MAX_ROWS;
+        uint8_t *ex_idx = nbr_scratch + 1 * NBR_MAX_ROWS;
+
+        uint8_t nbr_n = 0;
+        nbr_rows[nbr_n++] = 0;
+
+        for(int i = 1; i < NBR_MAX_ROWS; i++)
+        {
+            NbrRowView v;
+            if(nbrRowGet(nbrMatrix, i, &v) && nbrFresh(v.last_min, now_min))
+                nbr_rows[nbr_n++] = (uint8_t)i;
+        }
+
+        int ex_n = nbrExclusive(nbrMatrix, now_min, ex_idx, NBR_MAX_ROWS);
+
+        if(ex_n == -1)
+        {
+            printfdeb("[NBR] window=%dmin rows=%d now=%d verdict=nothing-heard\n", NBR_WINDOW_MIN, nbr_n, now_min);
+        }
+        else if(ex_n > 0)
+        {
+            int vpos = snprintf(nbr_buf, sizeof(nbr_buf), "[NBR] window=%dmin rows=%d now=%d verdict=exclusive:",
+                                 NBR_WINDOW_MIN, nbr_n, now_min);
+
+            for(int i = 0; i < ex_n && i < NBR_MAX_ROWS && vpos > 0 && vpos < (int)sizeof(nbr_buf); i++)
+            {
+                NbrRowView ev;
+                const char *ecall = nbrRowGet(nbrMatrix, ex_idx[i], &ev) ? ev.call : "?";
+                vpos += snprintf(nbr_buf+vpos, sizeof(nbr_buf)-vpos, "%s%s", (i > 0) ? "," : "", ecall);
+            }
+
+            printfdeb("%s\n", nbr_buf);
+        }
+        else
+        {
+            printfdeb("[NBR] window=%dmin rows=%d now=%d verdict=redundant\n", NBR_WINDOW_MIN, nbr_n, now_min);
+        }
+
+        for(int k = 0; k < nbr_n; k++)
+        {
+            int flen = nbrFormatRow(nbrMatrix, nbr_rows[k], now_min, nbr_buf, sizeof(nbr_buf));
+            if(flen > 0)
+                printfdeb("[NBR] %s%s\n", nbr_buf, (flen >= (int)sizeof(nbr_buf)) ? " ..." : "");
+        }
+
+        free(nbr_scratch);
+        return;
+    }
+    else
+    // --nbrcheck: Konsistenz Masken <-> Kantenpool (nbrCheck(), nbr_matrix.h),
+    // unabhaengig von --nbrdebug. 0/0/0/0 heisst konsistent.
+    if(commandCheck(msg_text+2, (char*)"nbrcheck") == 0)
+    {
+        NbrCheck c;
+        nbrCheck(nbrMatrix, &c);
+        printfdeb("[NBR] check rows=%u edges=%u mask_extra=%u mask_missing=%u edge_bad=%u edge_dup=%u -> %s\n",
+                  (unsigned)c.rows, (unsigned)c.edges, (unsigned)c.mask_extra, (unsigned)c.mask_missing,
+                  (unsigned)c.edge_bad, (unsigned)c.edge_dup,
+                  (c.mask_extra || c.mask_missing || c.edge_bad || c.edge_dup) ? "INCONSISTENT" : "ok");
+        return;
+    }
+
+    if(commandCheck(msg_text+2, (char*)"nbrreset") == 0)
+    {
+        uint16_t now_min = uptimeMin16();
+
+        nbrReset(nbrMatrix, now_min);
+
+        printfdeb("[NBR] reset\n");
 
         return;
     }
@@ -6040,7 +6178,7 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("");
             printfdeb("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i <%s> ...UTC-OFF %f [%s]\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n", 
                     SOURCE_VERSION, SOURCE_VERSION_SUB , __DATE__ , __TIME__ , meshcom_settings.node_update,
-                    meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, getHardwareLong(BOARD_HARDWARE).c_str(), meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv, millis());
+                    meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, nbrHardwareName(BOARD_HARDWARE), meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv, millis());
 
             printfdeb("...Flash-Version %i\n", meshcom_settings.node_fversion);
 
@@ -6049,8 +6187,26 @@ void commandAction(char *umsg_text, bool ble)
 
             printfdeb("...DEBUG %s ...DEBUG %s\n", (bDEBUGCSV?"csv":"man"), (bDEBUGEN?"en":"de"));
 
-            printfdeb("...DEBUG %s ...LORADEBUG %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
-                (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
+            // TXCAPTURE steht hier, seit tools/meshlogger.py den Vorzustand jedes
+            // Flags aus dieser Antwort liest und ein Flag, das er nicht findet,
+            // beim Beenden unangetastet laesst. Vorher schaltete er --txcapture
+            // blind aus; ohne diese Spalte bliebe es nach einem Lauf an.
+            printfdeb("...DEBUG %s ...LORADEBUG %s ...NBRDEBUG %s ...TXCAPTURE %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
+                (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bNBRDEBUG?"on":"off"), (bTXCAPTURE?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
+
+            // Stufe 2 (docs/nbr-wichtigkeit-konzept.md 5.8 Punkt 4): Modus und die
+            // fuenf Zaehler, damit ein Feldlauf ohne Web-Seite ablesbar bleibt.
+            printfdeb("...NBRRELAY %s ...relays A %lu B %lu ...cancelled %lu ...possible %lu ...refused %lu ...NBRSYM %s ...NBRREPORT %s\n",
+                (bNBRCANCEL?"on":(bNBRRELAY?"count":"off")),
+                (unsigned long)stat_nbr_relay_a, (unsigned long)stat_nbr_relay_b, (unsigned long)stat_nbr_cancel,
+                (unsigned long)stat_nbr_cancel_possible, (unsigned long)stat_nbr_refuse_alone,
+                (bNBRSYM?"on":"off"),
+                (bNBRRPTOFF?"off":(bNBRRPTON?"on":"auto")));
+
+            #if defined(ESP32)
+            // F3: why the node last booted, readable over the net console too.
+            printfdeb("...BOOT %s\n", loopCrumbBootSummary());
+            #endif
             
             printfdeb("...DisplayInfo %s ...DisplayCont %s ...DisplyLog %s ...contrast %i ...ackinfo %s\n",
                 (bDisplayInfo?"on":"off"), (bDisplayCont?"on":"off"), (bDisplayLog?"on":"off"), meshcom_settings.node_contrast, (bAckInfo?"on":"off"));
@@ -6067,13 +6223,27 @@ void commandAction(char *umsg_text, bool ble)
                     ((meshcom_settings.node_sset3 & 0x8000)?"on":"off"));
 
             printfdeb("...BTCODE %06i\n", meshcom_settings.bt_code);
-            printfdeb("...APRSMC: %s\n...ATXT: %s\n...NAME: %s\n...BLE : %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
-                    meshcom_settings.node_aprsmc, meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"),  (bDisplayOff?"off":"on"),
+            // BLE-N1/N2: phone TX counters appended to the BLE line -- s sent, r retried
+            // (kept for the next window), d dropped after the retry cap, t frames longer
+            // than MTU-3, e unread frames evicted from a phone ring, mtu = last MTU seen.
+            char bleTxStats[72];
+            blePhoneStatsFormat(&g_blePhoneStats, bleTxStats, sizeof(bleTxStats));
+
+            printfdeb("...APRSMC: %s\n...ATXT: %s\n...NAME: %s\n...BLE : %s %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
+                    meshcom_settings.node_aprsmc, meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"), bleTxStats, (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
 
             // CS-01: max_hop_text ist persistent und ueber --maxhop setzbar,
             // max_hop_pos bleibt der Compile-Default.
             printfdeb("...MAXHOP text %i / pos %i\n", meshcom_settings.max_hop_text, meshcom_settings.max_hop_pos);
+
+#if defined(ENABLE_MSGSTORE)
+            // Store node (mailbox), stage 3 + stage 4 notice --
+            // docs/dm-stage3-wave-plan-20260914.md / dm-stage4-plan-20260914.md.
+            printfdeb("...STORE mode=%s used=%d/%u time=%uh notice=%s\n",
+                msgstoreModeName(msgstoreMode()), msgstoreUsed(), (unsigned)msgstoreSlots(), (unsigned)msgstoreHoldHours(),
+                (msgstoreNotice()?"on":"off"));
+#endif
 
             for(int ig=0;ig<6;ig++)
             {
@@ -6211,6 +6381,9 @@ void commandAction(char *umsg_text, bool ble)
                     {
                         printfdeb("...GW address   : %s\n", meshcom_settings.node_gw);
                         printfdeb("...DNS address  : %s\n", meshcom_settings.node_dns);
+                        #if defined(BOARD_RAK4630)
+                        printfdeb("...ETH MTU      : %i (MSS %i)\n", meshcom_settings.node_ethmtu, meshcom_settings.node_ethmtu - 40);
+                        #endif
                     }
                 }
     
@@ -6436,9 +6609,10 @@ void sendNodeSetting()
     meshcom_settings.node_power = resolve_tx_power(meshcom_settings.node_power, TX_OUTPUT_POWER); // #1132: also normalize the -20 "unset" sentinel, not just 0
 
     // if we are on nrf52 we need to change frequency reading to MHz
-    #ifdef BOARD_RAK4630
-        node_qrg = node_qrg / 1000000.0;
-    #endif
+    // RF-06: this was #ifdef BOARD_RAK4630 while node_freq holds Hz on all
+    // three SX126x boards, so T114 and T-Echo printed the raw Hz value here.
+    // Display only -- it never reached the radio.
+    node_qrg = radioFreqStoredToMhz(node_qrg, radioUnitsIndexed());
 
     JsonDocument nsetdoc;
 

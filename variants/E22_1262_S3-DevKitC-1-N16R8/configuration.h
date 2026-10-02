@@ -11,21 +11,10 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define MODUL_HARDWARE ESP32_S3_EBYTE_E22
 
 // bleibt auch bei E22-900 --> BOARD_COUNTRY schaltet um
-#define RF_FREQUENCY 433.175000 // 432.900000   // Hz
-#define LORA_APRS_FREQUENCY 433.775000 // 432.900000   // Hz
 //
 
 #define BOARD_COUNTRY 5   // E22-900 -> 868
 
-#define ENABLE_BMX280
-#define ENABLE_BMP390
-#define ENABLE_AHT20
-#define ENABLE_SHT21
-#define ENABLE_BMX680
-#define ENABLE_MCP23017
-#define ENABLE_INA226
-#define ENABLE_MC811
-#define ENABLE_RTC
 
 //#define ENABLE_SOFTSER
 
@@ -34,13 +23,9 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 
 #define CURRENT_LIMIT 140 // in mA +20dBm are about 120mA -> check if enough headroom 
 
-#define TX_POWER_MAX 22  // max 22 dBm
-#define TX_POWER_MIN -9
-#define LORA_PREAMBLE_LENGTH DEFAULT_PREAMPLE_LENGTH  // Same for Tx and Rx
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 
-#define TX_OUTPUT_POWER 22
 
 /**
  * RadioLib Coding Rate: Allowed values range from 5 to 8.
@@ -49,10 +34,8 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
     case 7: CR_4_7;
     case 8: CR_4_8;
 */
-#define LORA_CR 6
 
 // RadioLib LoRa Bandwidth Setting in kHz
-#define LORA_BANDWIDTH 250
 
 /** RadioLib Spreading Factor
  * case 6: SF_6;
@@ -63,7 +46,6 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
     case 11: SF_11;
     case 12: SF_12;
 */
-#define LORA_SF 11
 
 // =============================================
 // Custom Board homemade E22-Ebyte Module + ESP32-S3 DevKitC-1-N16R8V
@@ -123,10 +105,14 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define SX126x_RST E22_NRST
 #define SX126x_GPIO E22_BUSY
 
-#define ENABLE_GPS
 #define GPS_TX_PIN  15
 #define GPS_RX_PIN  16
 
 //#define GPS_BAUDRATE_SOFTCHECK        // GPS Baudratenermittlung wird mit Software Loop geprüft
 //#define ENABLE_GPS_UBLOX_FIX          // UBLOX wird fix festgelegt und kein setup gemacht
 //#define GPS_BAUDRATE_SETFIX 38400     // Die Baudrate für GPS wird auf FIXWERT gesetzt
+
+// W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
+// Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
+// dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.
+#include <configuration_default.h>   // W7: Flottenvorgaben, #ifndef -- was oben steht, gewinnt

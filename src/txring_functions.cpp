@@ -18,6 +18,11 @@
 // setlog_lines.cpp (env:native_aprs baut diese TU, aber nicht setlog_lines.cpp).
 #include <setlog_lines.h>
 
+// M0-1 (0.4): ring enqueues per window and parked-slot overwrites, counted
+// in addTxRingEntryCore() below for every caller (addTxRingEntry() and
+// addTxRingEntryOnce() alike).
+#include <dm_stats.h>
+
 #if defined(NATIVE_BUILD)
 // Native Testbuild: loop_functions.cpp (die kanonische Definitionsstelle
 // dieser Globals, siehe loop_functions_extern.h) wird hier NICHT mitgebaut
@@ -39,6 +44,13 @@ uint8_t stat_queue_hwm;
 // SL-05: im Hardware-Build steht stat_ring_max in loop_functions.cpp neben
 // ch_util_*_accum; nativ gilt dieselbe Begruendung wie fuer die Arrays oben.
 std::atomic<uint8_t> stat_ring_max;
+// Nachbarschaftsmatrix Stufe 2 (Feldlauf 23.09., siehe txring_functions.h):
+// wie die Arrays oben kanonisch in loop_functions.cpp definiert (dort auch
+// von den Toggle-Kommandos gesetzt), das native_aprs/native_udp_frame_twin-
+// build_src_filter baut diese TU aber nicht mit -- txringInCaseBHold()/
+// txringCaseBackoffSlot() unten lesen bNBRCANCEL, darum hier derselbe
+// NATIVE_BUILD-Definitionszweig wie fuer ringBuffer/iWrite/iRead usw.
+bool bNBRCANCEL;
 #endif
 
 // SL-03/SL-06 (siehe txring_functions.h): Herkunft je Ring-Slot. Anders als
@@ -46,6 +58,15 @@ std::atomic<uint8_t> stat_ring_max;
 // loop_functions.cpp -- geschrieben wird das Array ausschliesslich in dieser
 // Datei, und so braucht der native Testbuild keinen zweiten Definitionszweig.
 uint8_t ringSource[MAX_RING] = {0};
+
+// Nachbarschaftsmatrix Stufe 2 (docs/nbr-wichtigkeit-konzept.md 5.1/5.2):
+// wie ringSource[] oben unbedingt definiert (kein NATIVE_BUILD-Zweig
+// noetig), geschrieben ausschliesslich in addTxRingEntry() unten.
+// Welle 2 (edge pool): NbrMask (nbr_mask.h) statt uint32_t; Aggregat-Init
+// nullt jedes Element (alle w[] Woerter 0), wie das alte {0} fuer uint32_t.
+NbrMask  ringNeed[MAX_RING]  = {};
+NbrMask  ringAlone[MAX_RING] = {};
+uint8_t  ringKind[MAX_RING]  = {0};
 
 //////////////////////////////////////////////////////////////////////////
 // LoRa TX functions
@@ -160,14 +181,31 @@ uint8_t getMessagePriority(int slot)
  * Scans all occupied slots between iRead and iWrite.
  * Returns slot index, or -1 if empty.
  * Within same priority, oldest entry (closest to iRead) wins (FIFO).
+ *
+ * Nachbarschaftsmatrix Stufe 2, Feldlauf 23.09. (siehe txringInCaseBHold() in
+ * txring_functions.h fuer den vollen Befund): ein Fall-B-Relay-Slot, der noch
+ * in seiner einmaligen Sperre steckt, darf ab hier keinen anderen Slot mehr
+ * blockieren. Der Scan fuehrt daher zwei Kandidaten mit: den besten NICHT
+ * gehaltenen Slot (Prio dann FIFO, wie bisher) und den besten GEHALTENEN
+ * Slot. Gibt es einen nicht gehaltenen Kandidaten, gewinnt der -- ein Fall-A-
+ * Relay, eine eigene Sendung, ein ACK oder eine HN-Meldung (Prio 5) ueberholt
+ * so einen gehaltenen Fall-B-Relay. Nur wenn ALLE Kandidaten gehalten sind
+ * (Ring voll mit wartenden Fall-B-Relays), faellt die Auswahl auf den besten
+ * gehaltenen zurueck -- exakt das heutige Verhalten, und der von
+ * csma_compute_timeout_slot() dafuer berechnete Backoff ist dann der
+ * Rest-Hold (txringCaseBackoffSlot()).
  */
 int getNextTxSlot(void)
 {
     if(iWrite == iRead)
         return -1;
 
+    uint32_t now_ms = (uint32_t)millis();
+
     int best_slot = -1;
     uint8_t best_prio = 255;
+    int best_held_slot = -1;
+    uint8_t best_held_prio = 255;
 
     int pos = iRead;
     while(pos != iWrite)
@@ -190,12 +228,23 @@ int getNextTxSlot(void)
            (ringBuffer[pos][1] == RING_STATUS_READY || ringBuffer[pos][1] == RING_STATUS_DONE))
         {
             uint8_t prio = ringPriority[pos];
-            if(prio < best_prio)
+            if(txringInCaseBHold(pos, now_ms))
             {
-                best_prio = prio;
-                best_slot = pos;
+                if(prio < best_held_prio)
+                {
+                    best_held_prio = prio;
+                    best_held_slot = pos;
+                }
             }
-            // Same prio: keep first found (= oldest = FIFO)
+            else
+            {
+                if(prio < best_prio)
+                {
+                    best_prio = prio;
+                    best_slot = pos;
+                }
+            }
+            // Same prio, same Gehalten-Status: keep first found (= oldest = FIFO)
         }
 
         pos++;
@@ -203,7 +252,7 @@ int getNextTxSlot(void)
             pos = 0;
     }
 
-    return best_slot;
+    return (best_slot >= 0) ? best_slot : best_held_slot;
 }
 
 /**
@@ -227,6 +276,110 @@ void advanceIReadPastEmpty(void)
             localRead = 0;
     }
     iRead = localRead;
+}
+
+/**
+ * Nachbarschaftsmatrix Stufe 2, Feldlauf 23.09. -- siehe die Kommentare bei
+ * den Deklarationen in txring_functions.h fuer den vollen Befund/die
+ * Motivation. Beide Funktionen zusammen ersetzen den frueheren, bei JEDEM
+ * CSMA-Re-Arm neu addierten Fall-B-Nachrang durch eine einmalige Deadline ab
+ * Einreihen und lassen andere Slots waehrend dieser Sperre nicht mehr
+ * mitwarten.
+ */
+
+// Gemeinsame Vorbedingung von txringInCaseBHold() und dem Fall-B-Zweig von
+// txringCaseBackoffSlot(): bNBRCANCEL, Slot ist ein Relay (RING_KIND_RELAY,
+// Zaehl-Kennbit RING_KIND_COUNTED maskiert), Fall B (ringAlone[slot]==0,
+// nicht Fall A) und kein Text (Konzept 5.1 -- Text bleibt bei der normalen
+// Prio-Basis, unveraendert; der Aufrufer in lora_functions.cpp filtert
+// diesen Fall VOR dem Aufruf von txringCaseBackoffSlot() bereits aus,
+// txringInCaseBHold() prueft ihn hier trotzdem selbst -- sie wird auch
+// unabhaengig davon aus getNextTxSlot() aufgerufen).
+static bool txring_is_case_b_relay(int slot)
+{
+    if(!bNBRCANCEL || slot < 0 || slot >= MAX_RING)
+        return false;
+    if((ringKind[slot] & 0x7F) != RING_KIND_RELAY)
+        return false;
+    if(!nbrMaskEmpty(ringAlone[slot]))
+        return false;
+    if(ringBuffer[slot][2] == MSG_TYPE_TEXT)
+        return false;
+    return true;
+}
+
+bool txringInCaseBHold(int slot, uint32_t now_ms)
+{
+    if(!txring_is_case_b_relay(slot))
+        return false;
+
+    // F8-Stil (siehe txRingAgeBackground()): rollover-sicherer Cast, damit
+    // ein Wrap von now_ms/ringEnqueueTime[slot] ueber UINT32_MAX kein
+    // negatives/riesiges "waited" liefert.
+    uint32_t waited = (uint32_t)(now_ms - ringEnqueueTime[slot]);
+    return waited < NBR_RELAY_CASE_B_EXTRA_MS;
+}
+
+unsigned long txringCaseBackoffSlot(int slot, int attempt, uint32_t now_ms)
+{
+    if(slot < 0 || slot >= MAX_RING)
+        return 0; // defensiv; der Aufrufer garantiert einen gueltigen Relay-Slot
+
+    if(!nbrMaskEmpty(ringAlone[slot]))
+    {
+        // Fall A: Vorrang, unveraendert -- nur Fall B litt unter dem
+        // re-armten Hold (Feldlauf 23.09.), Fall A war nie betroffen.
+        if((uint32_t)(now_ms - ringEnqueueTime[slot]) >= NBR_RELAY_CASE_A_MAX_WAIT_MS)
+            return NBR_RELAY_CASE_A_SHORT_MS +
+                   (unsigned long)random(0, NBR_RELAY_CASE_A_SLOTS) * CSMA_SLOT_SIZE;
+
+        unsigned long base_a = NBR_RELAY_CASE_A_BASE_MS;
+        if(attempt >= 2) base_a = base_a * 2 / 3;
+        else if(attempt >= 1) base_a = base_a * 5 / 6;
+
+        return base_a + (unsigned long)random(0, NBR_RELAY_CASE_A_SLOTS) * CSMA_SLOT_SIZE;
+    }
+
+    // Fall B (ringAlone[slot]==0). Text ist bereits vom Aufrufer
+    // ausgefiltert (siehe Kopfkommentar) -- hier immer die Prio-Basis+Slots.
+    uint32_t waited = (uint32_t)(now_ms - ringEnqueueTime[slot]); // F8-Stil, rollover-sicher
+
+    unsigned long base_b;
+    switch(ringPriority[slot]) {
+        case MSG_PRIO_CRITICAL:   base_b = CSMA_PRIO_BASE_1; break;
+        case MSG_PRIO_HIGH:       base_b = CSMA_PRIO_BASE_2; break;
+        case MSG_PRIO_NORMAL:     base_b = CSMA_PRIO_BASE_3; break;
+        case MSG_PRIO_LOW:        base_b = CSMA_PRIO_BASE_4; break;
+        case MSG_PRIO_BACKGROUND: base_b = CSMA_PRIO_BASE_5; break;
+        default:                  base_b = CSMA_PRIO_BASE_3; break;
+    }
+    if(attempt >= 2) base_b = base_b * 2 / 3;
+    else if(attempt >= 1) base_b = base_b * 5 / 6;
+
+    // Normale Fall-B-Basis: heutiger Wert OHNE NBR_RELAY_CASE_B_EXTRA_MS --
+    // die frueher bei JEDEM Re-Arm neu addierte Sperre entfaellt hier, sie
+    // wirkt nur noch unten als einmalige Deadline.
+    unsigned long normal_b = base_b +
+        (unsigned long)(NBR_RELAY_CASE_B_SLOT_START + random(0, 3)) * CSMA_SLOT_SIZE;
+
+    if(waited < NBR_RELAY_CASE_B_EXTRA_MS)
+    {
+        // Noch innerhalb der einmaligen Sperre: der laengere der beiden
+        // Werte gewinnt -- eine hohe Prio (kleine normale Basis) darf die
+        // Sperre nicht per niedrigerer Basis umgehen, eine niedrige Prio
+        // (grosse normale Basis) darf laenger warten als die reine Sperre.
+        unsigned long remaining = NBR_RELAY_CASE_B_EXTRA_MS - waited;
+        return (remaining > normal_b) ? remaining : normal_b;
+    }
+
+    if(waited < NBR_RELAY_CASE_B_MAX_WAIT_MS)
+        return normal_b; // Sperre abgelaufen, weiterhin Nachrang -- ohne EXTRA
+
+    // 60s-Deckel (NBR_RELAY_CASE_B_MAX_WAIT_MS, Feldlauf 23.09.: 82% der
+    // Abbrueche fielen in die ersten 60s): danach wie Fall A nur noch die
+    // Kurzsuche -- Schutzabstand nach Empfangsende, dann CAD.
+    return NBR_RELAY_CASE_A_SHORT_MS +
+           (unsigned long)random(0, NBR_RELAY_CASE_A_SLOTS) * CSMA_SLOT_SIZE;
 }
 
 /**
@@ -428,19 +581,48 @@ void txRingAgeBackground(uint32_t now_ms)
  *
  * @param frame          Fertig kodierter Frame (ohne Laenge-/Status-Byte)
  * @param len            Frame-Laenge in Byte
- * @param ring_status    Status-Byte fuer den Slot (RING_STATUS_*)
+ * @param classify_status Status-Byte, MIT DEM getMessagePriority() den Slot
+ *                        einstuft (siehe P15-Hinweis unten) -- fuer
+ *                        addTxRingEntry() identisch zu store_status, fuer
+ *                        addTxRingEntryOnce() READY (kein DONE, sonst stuft
+ *                        eine eigene TEXT-Nachricht als Relay ein).
+ * @param store_status   Status-Byte, das tatsaechlich im Slot landet und in
+ *                        der RING_WRITE-Zeile erscheint.
  * @param source         Kurzes Label fuer Debug-Ausgabe (z.B. "rx_relay")
  * @param retryCountIn   retryCount[Slot] setzen; -1 (Default) = unangetastet
  *                        lassen (manche Aufrufstellen haben retryCount nie
  *                        zurueckgesetzt — Alt-Verhalten bewusst beibehalten)
  * @param clearSlotFirst true = Slot vor dem Schreiben komplett nullen (nur
  *                        der rx_relay-Aufruf tat das bisher selbst)
+ * @param kind           Nachbarschaftsmatrix Stufe 2 (Konzept 5.1): RING_KIND_*
+ *                        (txring_functions.h), Default RING_KIND_OTHER. Nur
+ *                        der rx_relay-Aufruf setzt RING_KIND_RELAY.
+ * @param need           Stufe 2 (Welle 2: NbrMask*, nbr_mask.h): Bedarfsmaske
+ *                        aus nbrRelayNeed(), Default nullptr = leere Maske.
+ *                        Wird JEDEM Slot zugewiesen, auch wenn leer -- so
+ *                        behaelt ein wiederverwendeter Slot nie die Maske
+ *                        seines Vorbesitzers.
+ * @param alone          Stufe 2 (Welle 2: NbrMask*): Allein-Maske aus
+ *                        nbrRelayNeed(), Default nullptr = leere Maske.
  * @return Slot-Index (>=0) oder -1, wenn die Overflow-Logik den neuen
  *         Eintrag verworfen hat (Ring voll, keine niedrigere Prio zum
  *         Verdraengen vorhanden)
+ *
+ * P15: gemeinsamer Kern fuer addTxRingEntry() und addTxRingEntryOnce()
+ * (beide unten, duenne Wrapper). Vorher schrieb SendAckMessage() mit Status
+ * READY (0x00) ein und setzte den Slot NACH addTxRingEntry() per Hand auf
+ * DONE (0xFF) -- ausserhalb des Locks. Auf nRF52 laeuft OnRxDone (und mit
+ * ihm SendPong()/SendAckMessage()) im LORA-Task, doTX() im Loop-Task; ein
+ * Schreiben zwischen den beiden Anweisungen konnte von doTX()s save/restore
+ * des gelesenen Status rueckgaengig gemacht werden. classify_status/
+ * store_status trennen jetzt "womit klassifiziert" von "was gespeichert
+ * wird" -- beides passiert hier, innerhalb DERSELBEN kritischen Sektion,
+ * kein Nachtrag mehr noetig.
  */
-int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
-                    const char* source, int retryCountIn, bool clearSlotFirst)
+static int addTxRingEntryCore(const uint8_t* frame, uint16_t len,
+                               uint8_t classify_status, uint8_t store_status,
+                               const char* source, int retryCountIn, bool clearSlotFirst,
+                               uint8_t kind, const NbrMask *need, const NbrMask *alone)
 {
     // TX-01 (BACKLOG 3.8k): an unconfigured node (factory callsign) must not
     // transmit at all -- refuse here so its ring never even fills, on top
@@ -479,6 +661,7 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
     uint8_t msgType, prio;
     uint32_t mid;
     bool droppedNew = false, droppedOld = false, ringOverflowAdvance = false;
+    bool parkedOverwrite = false;
     int dropSlot = -1;
     uint8_t dropPrio = 0, dropType = 0;
     uint32_t dropId = 0, newLostId = 0;
@@ -488,6 +671,13 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
 #endif
 
     w = iWrite;
+
+    // M0-1 instrumentation (0.4, docs/dm-transport-impl-plan-20260913.md):
+    // snapshot slot w's occupancy before the write below overwrites it.
+    parkedOverwrite = ringBuffer[w][0] != 0 &&
+                       ringBuffer[w][1] != RING_STATUS_READY &&
+                       ringBuffer[w][1] != RING_STATUS_DONE &&
+                       ringBuffer[w][1] != RING_STATUS_EXT_PENDING;
     r = iRead;
 
     if(clearSlotFirst)
@@ -497,7 +687,7 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
         memset(ringBuffer[w], 0x00, sizeof(ringBuffer[0]));
 
     ringBuffer[w][0] = (uint8_t)len;
-    ringBuffer[w][1] = ring_status;
+    ringBuffer[w][1] = classify_status;
     memcpy(ringBuffer[w]+2, frame, len);
 
     if(retryCountIn >= 0)
@@ -527,10 +717,25 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
 
     // Assign priority and enqueue timestamp
     ringPriority[w] = getMessagePriority(w);
+
+    // P15: erst NACH der Klassifizierung, noch innerhalb des Locks, auf den
+    // tatsaechlich zu speichernden Status umschreiben (addTxRingEntry():
+    // store_status == classify_status, dieser Zweig ist dann ein No-Op).
+    if(store_status != classify_status)
+        ringBuffer[w][1] = store_status;
+
     ringEnqueueTime[w] = millis();
     // SL-03/SL-06: Herkunft aus dem `source`-Label festhalten, solange es im
     // Scope ist -- die TX-Zeile in doTX() sieht spaeter nur noch den Slot.
     ringSource[w] = setlogRingSourceCode(source);
+    // Nachbarschaftsmatrix Stufe 2 (Konzept 5.1): JEDER Enqueue setzt alle
+    // drei Seitenfelder, auch auf ihre Defaults -- sonst wuerde ein Slot, der
+    // vorher ein Relay mit alter Bedarfsmaske trug, diese Maske fuer den
+    // neuen Eintrag stillschweigend behalten (Regression: der Mithoer-Scan
+    // in lora_functions.cpp bricht dann gegen die FALSCHE Nachricht ab).
+    ringKind[w]  = kind;
+    ringNeed[w]  = need  ? *need  : nbrMaskNone();
+    ringAlone[w] = alone ? *alone : nbrMaskNone();
     prio = ringPriority[w];
 
     // Track queue depth for high-water mark
@@ -596,6 +801,9 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
                 ringPriority[worst_slot]    = ringPriority[r];
                 ringEnqueueTime[worst_slot] = ringEnqueueTime[r];
                 ringSource[worst_slot]      = ringSource[r];   // SL-03/SL-06
+                ringKind[worst_slot]        = ringKind[r];     // Stufe 2, Konzept 5.1
+                ringNeed[worst_slot]        = ringNeed[r];
+                ringAlone[worst_slot]       = ringAlone[r];
                 retryCount[worst_slot]      = retryCount[r];
                 ringBuffer[r][0] = 0;
             }
@@ -637,6 +845,11 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
 
     // ---- Ab hier ausserhalb des Locks ----
 
+    // M0-1 (0.4): ring enqueues per window and parked-slot overwrites.
+    ringstat_enqueue.fetch_add(1);
+    if(parkedOverwrite)
+        ringstat_parked_overwrite.fetch_add(1);
+
     // SL-05: Hochwasser des Ringfuellstands im 5-Minuten-Fenster. Bewusst
     // ausserhalb des Locks und ueber txRingDepth() (selbst lock-frei, siehe
     // dessen Doku): iWrite ist hier bereits weitergeschaltet, die Tiefe
@@ -658,7 +871,7 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
     {
         printfdeb("[MC-DBG] RING_WRITE slot=%d type=%02X status=%02X "
                   "len=%d msg_id=%08X queued=%d/%d src=%s\n",
-                  w, msgType, ring_status, (int)len, mid, queued, MAX_RING, source);
+                  w, msgType, store_status, (int)len, mid, queued, MAX_RING, source);
         printfdeb("[MC-DBG] RING_PRIO slot=%d prio=%d\n", w, prio);
 
         if(droppedOld)
@@ -674,4 +887,38 @@ int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
     }
 
     return resultSlot;
+}
+
+int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
+                    const char* source, int retryCountIn, bool clearSlotFirst,
+                    uint8_t kind, const NbrMask *need, const NbrMask *alone)
+{
+    return addTxRingEntryCore(frame, len, ring_status, ring_status,
+                               source, retryCountIn, clearSlotFirst,
+                               kind, need, alone);
+}
+
+/**
+ * P15: eigene Nachricht (DM/Gruppe/Broadcast), die nie wiederholt werden
+ * soll -- SendAckMessage()/sendPing()/SendPong() und der
+ * {ping}-Zweig von sendMessage() wollten bisher alle dasselbe: mit Status
+ * DONE (0xFF, "keine Wiederholung") einreihen, aber trotzdem als eigene
+ * DM/Gruppen-/Broadcast-Nachricht eingestuft werden, nicht als Relay (siehe
+ * getMessagePriority(): eine TEXT-Nachricht mit Status DONE gilt dort als
+ * Relay -- RING_STATUS_DONE wird sonst nur von OnRxDone fuer weitergeleitete
+ * Pakete gesetzt). addTxRingEntryCore() klassifiziert deshalb mit READY und
+ * legt DONE erst danach fest, beides unter demselben Lock (siehe Doku dort).
+ *
+ * Gleiche Parameter/Rueckgabe/Fehlverhalten wie addTxRingEntry(), nur ohne
+ * ring_status -- der ist hier immer implizit DONE. kind/need/alone
+ * (Nachbarschaftsmatrix Stufe 2) bleiben auf ihren Defaults: keiner der
+ * heutigen Aufrufer ist ein Relay-Slot.
+ */
+int addTxRingEntryOnce(const uint8_t* frame, uint16_t len, const char* source,
+                        int retryCountIn, bool clearSlotFirst,
+                        uint8_t kind, const NbrMask *need, const NbrMask *alone)
+{
+    return addTxRingEntryCore(frame, len, RING_STATUS_READY, RING_STATUS_DONE,
+                               source, retryCountIn, clearSlotFirst,
+                               kind, need, alone);
 }

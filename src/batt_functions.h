@@ -33,65 +33,42 @@ typedef enum {
 } batt_probe_t;
 
 extern batt_probe_t battProbeState;
-bool battHardwarePresent(void);   // false NUR bei BATT_PROBE_NONE
+bool battHardwarePresent(void);   // false bei BATT_PROBE_NONE, erkanntem "kein Akku" (BAT-01) oder gemeldetem "no reading" (0 mV, USB)
+
+// Per-READ sample counter of this battery path (incremented once per real ADC sample, not per
+// scheduler tick). The caller prints its debug line once per sample instead of every 100 ms tick.
+// Both battery files (batt_functions.cpp, batt_function_old.cpp) export it.
+uint32_t battSampleCount(void);
 
 #if defined(USE_NEW_BATT)
 
-// ----- BAT-01: no-battery detection on the plain-ADC path -----
-// On boards whose VBAT divider has no working enable switch (or has none at all -- Heltec
-// V3, no ADC_CTRL_PIN), the divider node floats with no cell attached and the ADC samples
-// noise. Measured on Heltec V3 (TM-38, 844 samples over 16 min): raw readings 3716-4886 mV,
-// i.e. sample-to-sample swings up to 1.17 V at the 500 ms read_batt() cadence. A real
-// Li-Ion cell is a large capacitor -- even under a load transient it does not move by
-// hundreds of mV between two reads half a second apart. Detection therefore runs on the
-// *raw* per-sample mV (not the alpha=0.05 EMA-filtered value read_batt() also computes,
-// which would smooth exactly this signature away) and combines two implausibility tests:
-//   - too large a jump since the previous raw sample (BATT_DETECT_MAX_DELTA_MV)
-//   - a raw voltage outside the plausible band for the configured pack (min/maxPlausibleMv,
-//     supplied by the caller as a fraction of fBattMax -- see BATT_DETECT_*_BAND_FACTOR --
-//     rather than a hardcoded absolute, because the 2S packs on this same ADC path
-//     (TBEAM_1W, E22-2S) run to ~8.2 V and a single-cell absolute band would misfire on them)
-// with hysteresis (BATT_DETECT_*_STREAK) so one noise spike while present, or one quiet
-// sample mid-swing while absent, does not flicker the verdict.
-//
-// battDetectReset()/battDetectUpdate() are pure (no Arduino calls, no globals) so they are
-// unit testable natively -- see test/test_batt_detect/. battDetectFeed() is the production
-// entry point read_batt() calls; it owns the single persistent state instance.
+// Shared battery pipeline (EMA tau 30 s, settle rule, BAT-01 detector incl. battDetect*/
+// BATT_DETECT_* names, percent curve, sampling scheduler): src/batt_pipeline.h. The detector
+// copy that used to live here (BAT-01, see the design note in that header) was deleted; the
+// pipeline carries the identical logic under the same names, so existing includers and
+// test/test_batt_detect keep compiling.
+#include "batt_pipeline.h"
 
-// Max plausible sample-to-sample delta at the 500 ms read_batt() cadence. Comfortably below
-// the 1.17 V swings measured on the floating Heltec V3 pin, comfortably above any real-cell
-// movement (load transients, ADC/EMA noise included) between two reads half a second apart.
-#define BATT_DETECT_MAX_DELTA_MV        250.0f
-
-// Plausible-band width as a fraction of the configured max cell voltage (fBattMax), not an
-// absolute mV constant -- BAT_MAX_VOLTAGE differs by pack (4.2 V single-cell Li-Ion vs.
-// ~8.1-8.4 V on the 2S TBEAM_1W/E22 packs also on this ADC path), and a hardcoded absolute
-// band would either miss the single-cell noise band or misfire "no battery" on the 2S packs'
-// legitimate high readings.
-#define BATT_DETECT_MIN_BAND_FACTOR     0.55f   // below this: below any plausible discharge floor
-#define BATT_DETECT_MAX_BAND_FACTOR     1.15f   // above this: above any legitimate charge state
-
-// Consecutive implausible/plausible raw samples needed to flip the verdict -- hysteresis
-// against a single noise spike (while present) or a single quiet sample mid-swing (while
-// absent). At the 500 ms cadence: ~3 s to declare absent, ~5 s to declare present/restored.
-#define BATT_DETECT_ABSENT_STREAK       6
-#define BATT_DETECT_PRESENT_STREAK      10
-
-typedef struct {
-    bool  haveLast;            // false until the first sample has been seen
-    float lastMv;               // previous raw sample, for the delta test
-    int   implausibleStreak;
-    int   plausibleStreak;
-    bool  present;              // current verdict (fail-safe default: true, see battDetectReset)
-} batt_detect_state_t;
-
-// Resets to the fail-safe assumption (battery present) so a fresh boot never blanks a real
-// reading before the first BATT_DETECT_ABSENT_STREAK samples come in.
-void battDetectReset(batt_detect_state_t *state);
-
-// Feeds one raw (unfiltered) mV sample against a plausible band [minPlausibleMv,
-// maxPlausibleMv]; returns the updated presence verdict. Pure function, no Arduino calls.
-bool battDetectUpdate(batt_detect_state_t *state, float rawMv, float minPlausibleMv, float maxPlausibleMv);
+// ----- sample core (pure, no Arduino calls; host testable, see test/test_batt_detect) -----
+// read_batt() feeds every raw ADC sample here. Order: BAT-01 detector on the RAW sample (an
+// EMA would smooth the floating-divider signature away), then the dt based EMA, then the
+// "no reading" rules. Returns the value read_batt() reports, in mV:
+//   0 = "no reading" (battery absent per detector, filtered value < 1000 mV, or a board rule:
+//       E22 < 3.0 V, T-Beam 1W < 5.0 V = USB only). Everything downstream treats 0 as USB.
+// maxMv = pack maximum in mV (node_maxv * 1000), scales the detector's plausible band.
+// A battery that comes back after the detector said "absent" re-seeds the EMA with the first
+// plausible sample (and restarts the settle rule) instead of averaging the floating-pin noise in.
+float battFeedSample(float rawMv, float maxMv, uint32_t nowMs);
+// Same, plus the spread (max - min, mV) of the multi-read window the raw sample came from (BAT-03,
+// switched dividers: the charger-output sawtooth without a cell). battFeedSample() is this with
+// BATT_DETECT_SPREAD_NONE.
+float battFeedSampleSpread(float rawMv, float spreadMv, float maxMv, uint32_t nowMs);
+void  battPipelineReset(void);        // EMA, detector, cached value (init_batt(), tests)
+float battFilteredMv(void);           // EMA value, mV (0 before the first sample)
+bool  battSettled(void);              // EMA settle rule (3 tau and 8 samples) reached
+// Low-voltage decision: true only when the battery is present (detector), the EMA is settled and
+// 1000 mV < EMA <= thresholdMv (1 V floor = "no battery / USB" excluded, as before).
+bool  battLowVoltage(float thresholdMv);
 
 // Battery
 void init_batt(void);
@@ -134,6 +111,11 @@ void init_batt(void);
 float read_batt(void);
 uint8_t mv_to_percent(float mvolts);
 void setMaxBatt(float u_max_batt);
+
+#include "instrument.h"   // TEMPORARY -- INSTRUMENT_ENABLED, see src/instrument.h
+#if INSTRUMENT_ENABLED
+void battProbeRun(int cycles);   // TEMPORARY bench command --battprobe [n] (batt_function_old.cpp)
+#endif
 
 
 void check_efuse(void);

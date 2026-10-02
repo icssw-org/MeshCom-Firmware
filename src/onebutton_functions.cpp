@@ -161,9 +161,6 @@ void singleClick()
     #if defined(HAS_TFT) || defined(HAS_TFT_114)
       displayTFT(pageLastTextLong1[pagePointer], pageLastTextLong2[pagePointer]);
     #else
-      // Langtext-Seiten nur auf Boards mit HAS_LONG_PAGE_TEXT (siehe
-      // display_pages_cfg.h) -- auf OLED-Boards gibt es pageLastTextLong1/2
-      // nicht mehr, hier also nichts zu lesen.
       #if defined(HAS_LONG_PAGE_TEXT)
       strncpy(pageTextLong1, pageLastTextLong1[pagePointer], sizeof(pageTextLong1));
       if(bDisplayCont && strlen(pageTextLong1) > 0)
@@ -227,12 +224,16 @@ void tripleClick()
 
   if(bDisplayTrack)
   {
+      #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
       commandAction((char*)"--gps on", false);
+      #endif
       commandAction((char*)"--track on", false);
   }
   else
   {
+      #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
       commandAction((char*)"--gps off", false);
+      #endif
       commandAction((char*)"--track off", false);
   }
 

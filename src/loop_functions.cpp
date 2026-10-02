@@ -1,3 +1,5 @@
+#include "mc_text.h"
+#include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "Arduino.h"
 
 #include <atomic>
@@ -7,14 +9,15 @@
 #endif
 
 #include "loop_functions.h"
-#include "byte_fifo.h"
 #include "ack_attribution.h"
 #include "txring_functions.h"
 #include "bp_notice_frame.h"
 #include "dedup_functions.h"
 #include "beacon_rate.h"
-#include "mheard_functions.h"
+#include "hey_policy.h"     // F6: gateway keeps its HG alive through trickle suppression
+#include "nbr_views.h"
 #include "command_functions.h"
+#include "ble_phone_drain.h"   // BLE-N1/N2: blePhonePush(), g_blePhoneStats
 
 #include "clock.h"
 
@@ -30,9 +33,17 @@
 
 #include "via_functions.h"
 #include "charset_filter.h"
+#include "msgid_counter.h"
+#include <counters_store.h>
 #include "setlog_lines.h"
+#include "dm_stats.h"
+#if defined(ENABLE_MSGSTORE)
+#include "msgstore_api.h"    // S3: store node (last-hop mailbox)
+#endif
 #include "mcp17_bits.h"
 #include "pos_tag_nan.h"
+#include "dm_text_escape.h"   // P14/P15: {ping}/{SET}-Ausnahme vom Klammer-Escape
+#include "nbr_matrix.h"   // nbrMatrix, nbrBuildReport(), nbrLog -- sendNbrReport() unten
 
 bool gpsDetected = false;
 bool gpsInitDone = false;
@@ -104,6 +115,31 @@ bool bDEBUGCSV = false;
 bool bDEBUGEN = false;
 bool bDEBUGLNG = false;
 bool bLORADEBUG = false;
+bool bNBRDEBUG = false;   // --nbrdebug: [NBR]-Zeilen der Nachbarschaftsmatrix, getrennt von bLORADEBUG
+// --nbrrelay off|count|on (Stufe 2, docs/nbr-wichtigkeit-konzept.md Abschnitt 5): count rechnet
+// Bedarfs- und Allein-Maske je Relay und zaehlt, was abgebrochen werden koennte, ohne Wirkung;
+// on bricht Fall-B-Relays gegen gehoerte fremde Wiederholungen ab und staffelt den Backoff nach Fall.
+bool bNBRRELAY = false;   // count oder on: Masken rechnen, NEED/CANCEL?-Zeilen, Zaehler
+bool bNBRCANCEL = false;  // on: Abbruch und Backoff nach Fall wirklich anwenden
+// --nbrsym on|off (Stufe 2, Symmetrie-Annahme): default an, gespeichert invertiert
+// (node_sset4 0x2000 gesetzt heisst "aus") -- jeder bestehende Knoten startet damit
+// nach einem Firmware-Update ohne Migration mit sym an. Siehe nbr_matrix.h
+// NBR_SYM_MIN_SNR fuer die Schwelle. Bit seit 2026-09-25 auf 0x2000 (vorher
+// 0x0080, kollidierte mit upstream KISS/TCP), siehe settings_sanitize.h.
+bool bNBRSYM = true;
+// --nbrreport off|auto|on (Stufe 3, HN-Bericht): zwei Bits in node_sset4 --
+// 0x0100 "off" (nie senden), 0x0200 "on" (immer senden), keines von beiden
+// "auto" (Default fuer jeden bestehenden Knoten, keine Migration noetig):
+// Bericht nur, wenn weder bMESH noch bGATEWAY (siehe sendNbrReport()-Aufrufer
+// in esp32_main.cpp/nrf52_main.cpp). Modell wie --nbrrelay oben: EIN Bool je
+// Bit, jede Kommandozeile schreibt nur ihr eigenes.
+bool bNBRRPTOFF = false;   // 0x0100 gesetzt
+bool bNBRRPTON = false;    // 0x0200 gesetzt
+uint32_t stat_nbr_relay_a = 0;          // eingereihte Relays Fall A (Allein-Maske != 0)
+uint32_t stat_nbr_relay_b = 0;          // eingereihte Relays Fall B
+uint32_t stat_nbr_cancel = 0;           // abgebrochene Relays (nur on)
+uint32_t stat_nbr_cancel_possible = 0;  // Relays, deren Bedarf durch fremde Wiederholungen gedeckt war (count: je Slot einmal)
+uint32_t stat_nbr_refuse_alone = 0;     // gehoerte fremde Wiederholung, Abbruch wegen Allein-Maske verweigert (je Slot einmal)
 bool bBLEDEBUG = false;
 bool bWXDEBUG = false;
 bool bIODEBUG = false;
@@ -210,8 +246,6 @@ unsigned long previousWiFiMillis = 0;
 
 // Timer variables for persitence to SD
 unsigned long lastsavePOSPersistence = 0;
-unsigned long lastsaveMHEARDPersistence = 0;
-unsigned long lastsavePATHPersistence = 0;
 
 char cTimeSource[10];
 
@@ -365,7 +399,7 @@ int dzeile[maxdisplines] = {42, 52, 62, 0, 0, 0, 0};
 int dzeile[maxdisplines] = {8, 21, 31, 41, 51, 61, 0};
 #endif
 
-#if !defined(BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+#if MC_HAS_U8G2   // GRD-01: war die wortgleiche 11-Term-Liste
 
 #include <U8g2lib.h>
 #include "instrument.h"
@@ -442,23 +476,87 @@ uint8_t retryCount[MAX_RING] = {0};
 // ringBufferLoraRX/loraWrite liegen jetzt in dedup_functions.cpp.
 
 // RINGBUFFER RAW LoRa RX
-unsigned char ringbufferRAWLoraRX[MAX_LOG][UDP_TX_BUF_SIZE+5] = {0};
+// R1-04: der RAW-RX-Ringpuffer wird erst angelegt, wenn ihn jemand ANSIEHT.
+//
+// Er hat genau EINEN Leser -- die rxlog-Seite der Web-Oberflaeche
+// (web_functions.cpp) -- und kostete bisher MAX_LOG * (UDP_TX_BUF_SIZE+5)
+// Byte statisch auf JEDEM Knoten, auch auf denen ohne Webserver und auf denen,
+// die die Seite nie oeffnen. Das sind 5 200 B bei MAX_LOG 20 und 2 600 B bei
+// MAX_LOG 10.
+//
+// WARUM DAS OHNE SPERRE SICHER IST, und das ist hier die eigentliche Frage:
+// der Schreiber laeuft auf einem ANDEREN Task als der Anleger. charBuffer_aprs()
+// haengt an OnRxDone(), also am LORA-Task (16 kB, nicht am 1-kB-Timer-Task --
+// die Audit-Zeile sagt "timer task" und liegt damit falsch, siehe die Notiz in
+// docs/BACKLOG.md). Angelegt wird aus dem Web-Pfad.
+//
+// Die Regeln, die den Wettlauf ausschliessen:
+//   1. Der Zeiger geht GENAU EINMAL von NULL auf gueltig und wird NIE wieder
+//      NULL. Es gibt kein free(), also auch kein use-after-free.
+//   2. Der Puffer ist VOLLSTAENDIG genullt, BEVOR der Zeiger veroeffentlicht
+//      wird. Ein Schreiber sieht darum entweder NULL -- dann schreibt er nicht --
+//      oder einen fertigen Puffer. Einen halb initialisierten sieht er nie.
+//   3. Der Schreiber liest den Zeiger EINMAL in eine lokale Variable und
+//      benutzt nur diese. Ein zweites Lesen koennte sonst zwischen Pruefung
+//      und Benutzung einen anderen Wert sehen.
+// Ein einzelner ausgerichteter Zeigerschreibzugriff ist auf ARM und Xtensa
+// atomar; mehr Synchronisation braucht es fuer dieses Muster nicht.
+typedef unsigned char rawLogLine_t[UDP_TX_BUF_SIZE+5];
+rawLogLine_t *ringbufferRAWLoraRX = NULL;
+
+// Legt den Puffer beim ersten Aufruf an. Gibt false zurueck, wenn kein Speicher
+// da ist -- die rxlog-Seite zeigt dann eine Notiz statt Zeilen, der Knoten
+// funkt unveraendert weiter.
+bool rawLogEnsure(void)
+{
+    if(ringbufferRAWLoraRX != NULL)
+        return true;
+
+    rawLogLine_t *p = (rawLogLine_t *)calloc(MAX_LOG, sizeof(rawLogLine_t));
+    if(p == NULL)
+    {
+        Serial.printf("[RXLOG];alloc;failed;bytes;%u\n",
+                      (unsigned)(MAX_LOG * sizeof(rawLogLine_t)));
+        return false;
+    }
+
+    ringbufferRAWLoraRX = p;   // Veroeffentlichung, nachdem calloc() genullt hat
+    return true;
+}
 int RAWLoRaWrite=0;
 int RAWLoRaRead=0;
 
 // Flag set by app-layer auth failure to request BLE disconnection
 bool ble_disconnect_requested = false;
 
-// RINGBUFFER for outgoing UDP lora packets for lora TX -- jetzt Byte-Ring
-// (byte_fifo.h) statt MAX_RING_UDP Schlitzen zu je UDP_TX_BUF_SIZE+20.
+// Die drei Ausgangsringe -- UDP-Ausgang, BLE-Daten zum Telefon, BLE-Kommandos
+// zum Telefon -- sind Byte-Ringe (src/byte_fifo.h), keine Schlitzfelder mehr.
+// Vorher lagen sie als [MAX_RING][260], [MAX_RING][260] und [MAX_RING_UDP][256]
+// im statischen RAM, 15,2 kB auf der 20er-Klasse, davon im Dauerlauf 70 %
+// Luft. Die Erzeuger klemmen die Laenge wie bisher (UDP: UDP_TX_BUF_SIZE,
+// Telefon: UDP_TX_BUF_SIZE-4 bzw. 255 fuer 'D'-Frames, Kommandos: 245); der
+// Ring selbst nimmt jeden Frame bis 255 Byte.
 static uint8_t udpOutStore[RING_BYTES_UDP];
 byte_fifo_t udpOutRing = BYTE_FIFO_INIT(udpOutStore);
 
-// RINGBUFFER BLE to phone -- jetzt Byte-Ringe (byte_fifo.h) statt Schlitzfelder.
 static uint8_t phoneStore[RING_BYTES_PHONE];
+byte_fifo_t phoneRing = BYTE_FIFO_INIT(phoneStore);
+
 static uint8_t phoneComStore[RING_BYTES_PHONECOM];
-byte_fifo_t phoneRing    = BYTE_FIFO_INIT(phoneStore);
+// Der BLE-Config-Burst nach dem Verbinden (config_cmds[] in esp32_main.cpp /
+// nrf52_main.cpp, --nodeset liefert SN und SN1) geht in EINEM
+// Schleifendurchlauf in diesen Ring und wird mit einem Frame je 300 ms
+// geleert. Passt er nicht ganz hinein, verdraengt bf_push() die ersten
+// ungelesenen Frames -- darunter das I-Register, und die App zeigt leere
+// Node-Settings. Obergrenze: 12 Frames zu je 245 Byte plus Laengenbyte.
+static_assert(RING_BYTES_PHONECOM >= 12 * (245 + 1),
+              "phoneComRing must hold the whole BLE config burst (12 x 246 B)");
 byte_fifo_t phoneComRing = BYTE_FIFO_INIT(phoneComStore);
+
+// BLE-N1/N2: counters of the node->phone path (sent, retried, dropped,
+// truncated, evicted, last MTU). Written by the producers below and by the
+// drain in phone_commands.cpp, shown by --info. See src/ble_phone_drain.h.
+BlePhoneStats g_blePhoneStats = {0, 0, 0, 0, 0, 0};
 
 bool hasMsgFromPhone = false;
 
@@ -539,6 +637,7 @@ static bool bHaveOwnHeyTx = false;
 static unsigned long iHeyShotSuppressed = 0;
 unsigned long heyinfo_timer = 0;        // we check periodically to send HEY
 int ncnt_hold = 0;
+unsigned long nbrsnap_timer = 0;        // --nbrdebug: 15-min-Takt fuer nbrLogSnapshot()
 
 // Priority Queue arrays
 uint8_t ringPriority[MAX_RING];                 // Prio 1-5 pro Slot
@@ -594,51 +693,35 @@ unsigned long getUnixClock()
  */
 void addBLEOutBuffer(uint8_t *buffer, uint16_t len)
 {
-    // Das Laengenbyte unten ist ein uint8_t. Im Nicht-'D'-Zweig kommen noch 4 Byte
+    // Das Laengenbyte im Ring ist ein uint8_t. Im Nicht-'D'-Zweig kommen noch 4 Byte
     // Zeitstempel dazu, dort muss also len+4 hineinpassen; im 'D'-Zweig (JSON) wird
-    // len unveraendert abgelegt und darf die vollen 255 nutzen.
-    uint16_t maxlen = (buffer[0] != 'D') ? (UDP_TX_BUF_SIZE - 4) : UDP_TX_BUF_SIZE;
-    if (len > maxlen)
-        len = maxlen;
-
+    // len unveraendert abgelegt und darf die vollen 255 nutzen. Die Klemmung und
+    // der Push stehen in blePhonePush() (src/ble_phone_drain.h, host-getestet).
+    //
     // CONC-15: addBLEOutBuffer() is reachable from OnRxDone (the FreeRTOS
     // timer-service task on nRF52, priority 2, see C-01) while sendToPhone()
-    // drains the same ring from the Main Loop task. bf_push2() takes its own
-    // lock (BF_LOCK, byte_fifo.cpp) around the whole append -- nesting a
-    // taskENTER_CRITICAL() here around a lock that already exists inside
-    // bf_push2() would only gain a second, redundant critical section.
-    uint8_t statusByte = buffer[0];
+    // drains the same ring from the Main Loop task. Der Byte-Ring sperrt
+    // jede Operation selbst (byte_fifo.cpp, BF_LOCK), ein eigener kritischer
+    // Abschnitt ist hier nicht mehr noetig.
+    //
+    // Frames ausser 'D' (JSON) bekommen 4 Byte Unix-Zeit angehaengt; der Ring
+    // nimmt beide Teile in einem Zug, ohne Zwischenpuffer. Verdraengte
+    // ungelesene Frames zaehlt g_blePhoneStats.evicted (BLE-N1).
     int lost;
-
-    if (statusByte != 'D')
+    if(buffer[0] != 'D')
     {
-        unsigned long unix_time = getUnixClock();
-
-        //printfdeb("UNIX TME:%lu\n", unix_time);
-
         uint8_t tbuffer[4];
-        tbuffer[0] = (unix_time >> 24) & 0xFF;
-        tbuffer[1] = (unix_time >> 16) & 0xFF;
-        tbuffer[2] = (unix_time >> 8) & 0xFF;
-        tbuffer[3] = (unix_time) & 0xFF;
-
-        lost = bf_push2(&phoneRing, buffer, (uint8_t)len, tbuffer, 4);
+        blePhoneTimeTag((uint32_t)getUnixClock(), tbuffer);
+        lost = blePhonePush(&phoneRing, &g_blePhoneStats, buffer, &len, UDP_TX_BUF_SIZE - 4, tbuffer);
     }
     else
-        lost = bf_push(&phoneRing, buffer, (uint8_t)len);
+        lost = blePhonePush(&phoneRing, &g_blePhoneStats, buffer, &len, UDP_TX_BUF_SIZE, NULL);
 
     if(bBLEDEBUG)
     {
-        printfdeb("<%02X>BLEtoPhone RingBuff added len=%i frames=%u\n", statusByte, len, (unsigned)bf_frames(&phoneRing));
+        printfdeb("<%02X>BLEtoPhone RingBuff added len=%i unread=%u lost=%i\n", buffer[0], len, (unsigned)bf_unread(&phoneRing), lost);
         printBuffer(buffer, len);
     }
-
-    // Anders als beim alten Schlitzring (addRingPointer() liess "phone"
-    // bewusst aus, um das Log nicht mit der haeufigsten Ring-Sorte
-    // zuzuschuetten) liefert bf_push2() jetzt eine echte Verdraengungszahl --
-    // die melden wir, statt sie wie zuvor stillschweigend zu verwerfen.
-    if(bLORADEBUG && lost > 0)
-        printfdeb("[MC-DBG] RING_OVERFLOW buf=phone lost=%d\n", lost);
 }
 
 /** @brief Function adding config messages into outgoing BLE ringbuffer
@@ -650,25 +733,17 @@ void addBLEComToOutBuffer(uint8_t *buffer, uint16_t len)
         return;
 
     if (len > 245)
-    {
         printfdeb("[ERR]...BLE out-buffer to long <%i> <%-245.245s>\n", len, buffer);
-        len = 245; // clamp - length byte and destination buffer both size to this
-    }
 
-    // Anders als sein Geschwister addBLEOutBuffer() hatte dieser Schreiber nie
-    // einen eigenen kritischen Abschnitt -- eine Bestandsluecke, keine Absicht.
-    // bf_push() sperrt jetzt intern (BF_LOCK, byte_fifo.cpp) und schliesst sie
-    // als Nebeneffekt dieser Umstellung: Verhalten aendert sich, aber nur zum
-    // Besseren (gleichzeitiger Zugriff war vorher ungesichert).
-    int lost = bf_push(&phoneComRing, buffer, (uint8_t)len);
+    // clamp to 245 - length byte and destination buffer both size to this
+    int lost = blePhonePush(&phoneComRing, &g_blePhoneStats, buffer, &len, 245, NULL);
 
     if(bBLEDEBUG)
     {
-        printfdeb("<%s> BLEComToPhone RingBuff added len=%i frames=%u\n", buffer, len, (unsigned)bf_frames(&phoneComRing));
+        printfdeb("<%s> BLEComToPhone RingBuff added len=%i unread=%u\n", buffer, len, (unsigned)bf_unread(&phoneComRing));
+        if(lost > 0)
+            printfdeb("[ERR]...BLEComToPhoneRingBuff overflow! %i unread frame(s) evicted\n", lost);
     }
-
-    if(bBLEDEBUG && lost > 0)
-        printfdeb("[ERR]...BLEComToPhoneRingBuff overflow! oldest element dropped (lost=%d)\n", lost);
 }
 
 void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
@@ -682,10 +757,10 @@ void addBLECommandBack(char text[UDP_TX_BUF_SIZE])
     aprsmsg.msg_len = 0;
     aprsmsg.payload_type = ':';
     aprsmsg.msg_id = millis();
-    aprsmsg.msg_destination_path="*";
-    aprsmsg.msg_destination_call="*";
-    aprsmsg.msg_source_path="response";
-    aprsmsg.msg_payload=text;
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "*");
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "*");
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), "response");
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), text);
 
     aprsmsg.msg_app_offline = true; // Rückmeldungen niemals annoucen
 
@@ -782,7 +857,7 @@ uint32_t oled_skipped = 0;          // TM-10: Bilder, die unveraendert waren und
 uint32_t oled_last_crc = 0;         // TM-27: CRC32 des zuletzt gezeichneten Bildpuffers
 static bool oled_last_crc_valid = false;
 
-#if !defined(BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined(BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+#if MC_HAS_U8G2   // GRD-01: war die wortgleiche 11-Term-Liste
 // CRC32 (IEEE, bitweise) ueber den U8g2-Bildpuffer: 1 KB fuer 128x64, ~50 us.
 static uint32_t oledBufferCrc(void)
 {
@@ -862,7 +937,14 @@ int esp32_isSSD1306(int address)
     #endif
 
     #if defined(BOARD_TBEAM_1W)
-        return 1;  //SH1106 aber stimmt 1 wirklich?
+        // DISP-01: der Zweifel im alten Kommentar ("SH1106 aber stimmt 1
+        // wirklich?") ist BERECHTIGT und bleibt offen. Unter dem jetzt
+        // geklaerten Vertrag heisst 1 = 0,9"/SSD1306. Ist das Panel dieses
+        // Boards tatsaechlich ein 1,3"/SH1106, muesste hier 2 stehen. Nicht
+        // blind geaendert: kein T-Beam 1W auf dieser Bench, und ein falscher
+        // Wert tauscht nur einen ungeprueften Zustand gegen einen anderen.
+        // Zu pruefen ist genau eins -- Panelgroesse des Boards.
+        return 1;
     #endif
 
     #if defined(BOARD_T3S3_V13)
@@ -915,14 +997,55 @@ int esp32_isSSD1306(int address)
     byte checkByte = buffer[0] & 0x03f;
     if(checkByte == 0x28 || checkByte == 0x16 || checkByte == 0x00)
     {
-        printlndeb("[INIT]...OLED Display is SSD1306");
+        // DISP-01, 2026-09-17: diese Zeile sagte "SSD1306" und war damit GENAU
+        // VERKEHRT. Der Test hier klassifiziert nach PANEL-GROESSE, nicht nach
+        // Controller: die Kommentare darueber ordnen 0x28/0x16/0x00 alle einem
+        // 1,3"-Panel zu, und 1,3"-OLEDs sind SH1106 (0,96" sind SSD1306). Der
+        // Kommentar "0x00 == T-BEAM 1.3\" 1106 !! sonst kommen artefakte" sagt
+        // es sogar ausdruecklich. Die falsche Beschriftung hat die Pruefzeile
+        // DISP-01 und einen spaeteren Leser in die entgegengesetzte Richtung
+        // geschickt -- beide hielten den ESP32-Zweig fuer verdreht, obwohl er
+        // richtig ist. Bench-belegt 2026-09-17 auf DK5EN-93 (Heltec V3,
+        // fest verdrahtet 1) und einem T-Beam (Sonde: 0x04 -> 1): beide
+        // bekommen u8g2_1 (SSD1306) und stellen sauber dar.
+        printlndeb("[INIT]...OLED panel is 1.3 inch -> SH1106");
         return 2;
     }
 
-    // cheched 0.9"
-    printlndeb("[INIT]...OLED Display is SH1106");
+    // 0,9"-Panel: SSD1306. Auch diese Zeile war verkehrt beschriftet.
+    printlndeb("[INIT]...OLED panel is 0.9 inch -> SSD1306");
     return 1;
 }
+
+// DISP-01: die Zuordnung "Sondenwert -> U8g2-Objekt" lag ZWEIMAL im Baum,
+// einmal in esp32_functions.cpp und einmal in nrf52_functions.cpp -- und die
+// beiden Kopien waren GEGENLAEUFIG. ESP32 bildete 1 auf u8g2_1 ab, nRF52 auf
+// u8g2_2, obwohl beide dieselbe Sonde aufrufen. Eine der beiden musste falsch
+// sein; auf der Bench ist ESP32 als richtig belegt (siehe esp32_isSSD1306()).
+//
+// Statt die nRF52-Kopie zu korrigieren und zwei Kopien zu behalten, gibt es
+// jetzt EINE Zuordnung. Ein kuenftiges Auseinanderlaufen ist damit nicht mehr
+// moeglich, und das war der eigentliche Defekt -- nicht der Zahlendreher.
+//
+//   1 = 0,9"-Panel = SSD1306 = u8g2_1
+//   2 = 1,3"-Panel = SH1106  = u8g2_2
+//   < 0 = kein Panel gefunden
+#if MC_HAS_U8G2   // GRD-01: u8g2_1/u8g2_2 gibt es nur auf Boards mit Panel
+U8G2 *mcSelectU8g2(int idtype)
+{
+    if(idtype < 0)
+        return NULL;
+
+    // Beide Objekte sind verschiedene U8g2-Unterklassen; der ternaere
+    // Ausdruck braucht daher den gemeinsamen Basistyp ausdruecklich.
+    return (idtype == 1) ? (U8G2 *)&u8g2_1 : (U8G2 *)&u8g2_2;
+}
+#else
+// Board ohne U8g2-Panel: die beiden Treiberobjekte existieren nicht, und
+// initDisplay() wird auf diesen Boards gar nicht erst aufgerufen. Die
+// Fassung hier haelt nur die Verlinkung zusammen.
+U8G2 *mcSelectU8g2(int idtype) { (void)idtype; return NULL; }
+#endif
 
 void E290DisplayUpdate()
 {
@@ -935,7 +1058,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
 
-    #if !defined (BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+    #if MC_HAS_U8G2   // GRD-01: war die wortgleiche 11-Term-Liste
         if(u8g2 == NULL)
             return;
     #endif
@@ -1091,6 +1214,10 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
         #if defined(BOARD_T_CONNECT_PRO)
         if(!bDisplayIsOff)
             ledcAttachPin(SCREEN_BL, 1);
+        #endif
+
+        #if defined(HAS_TFT)
+        tftBacklight();   // #1182: dark on "#C" while bDisplayIsOff, even with no lines drawn
         #endif
 
         if(pageLineAnz > 0)
@@ -1307,7 +1434,7 @@ void oledStat()
                   iDisplayType, (unsigned long)oled_frames, (unsigned long)oled_last_frame_us,
                   bPosDisplay ? 1 : 0,
                   DisplayOffWait > 0 ? (long)((int32_t)(DisplayOffWait - millis())) : 0L,
-    #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined(BOARD_TRACKER) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO)
+    #if MC_HAS_U8G2   // GRD-01: war die wortgleiche 11-Term-Liste
                   u8g2 != NULL ? 1 : 0
     #else
                   -1
@@ -1594,7 +1721,7 @@ void sendDisplayTime()
             pagePointer=PAGE_MAX-1;
     }
 
-    #if !defined (BOARD_E290) && !defined(WP_DISP) && !defined(BOARD_E213) && !defined (BOARD_TRACKER) && !defined(BOARD_HELTEC_T114) && !defined(BOARD_T_ECHO) && !defined(BOARD_T_DECK)  && !defined(BOARD_T_DECK_PLUS) && !defined(BOARD_T5_EPAPER) && !defined(BOARD_T_DECK_PRO) && !defined(BOARD_T_CONNECT_PRO)
+    #if MC_HAS_U8G2   // GRD-01: war die wortgleiche 11-Term-Liste
         if(u8g2 == NULL)
             return;
     #endif
@@ -2210,16 +2337,24 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     char cdur[30];
     char cmsg[30];
 
-    if(aprsmsg.msg_payload.startsWith("{ping}") > 0)
+    if(mcStartsWith(aprsmsg.msg_payload, "{ping}") > 0)
     {
         return;
     }
     else
-    if(aprsmsg.msg_payload.startsWith("{pong}") > 0)
+    if(mcStartsWith(aprsmsg.msg_payload, "{pong}") > 0)
     {
-        printfdeb("[PONG] from:%s <%s> rssi:%i snr:%i\n", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_payload.substring(14,17).c_str(), rssi, snr);
+        // R2-04: war msg_payload.substring(14,17). substring() KLEMMT, wenn die
+        // Zeichenkette kuerzer als 14 ist, und liefert "". Ein blankes
+        // `msg_payload + 14` tut das nicht -- die Wache oben prueft nur das
+        // Praefix "{pong}" (6 Zeichen), eine genau so lange Nutzlast wuerde also
+        // hinter dem Terminator weiterlesen. Innerhalb des Feldes, aber
+        // uninitialisiert: statt nichts stuende dort Muell. Die Klemmung bleibt.
+        const char *cPongId = (strlen(aprsmsg.msg_payload) > 14) ? aprsmsg.msg_payload + 14 : "";
 
-        snprintf(cmsg, sizeof(cmsg), "PONG %s", aprsmsg.msg_payload.substring(14,17).c_str());
+        printfdeb("[PONG] from:%s <%.3s> rssi:%i snr:%i\n", aprsmsg.msg_source_call, cPongId, rssi, snr);
+
+        snprintf(cmsg, sizeof(cmsg), "PONG %.3s", cPongId);
         snprintf(cset, sizeof(cset), "R:%i S:%i", rssi, snr);
 
         meshcom_settings.node_pingduration = millis() - meshcom_settings.node_pingduration;
@@ -2227,7 +2362,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         fdur=fdur/1000;
         snprintf(cdur, sizeof(cdur), "D:%.3f s", fdur);
 
-        DisplayPong((char*)cmsg, (char*)aprsmsg.msg_source_call.c_str(), (char*)cset, (char*)cdur);
+        DisplayPong((char*)cmsg, (char*)aprsmsg.msg_source_call, (char*)cset, (char*)cdur);
 
         // text immer meshcom_settings.node_pingtime stehenlassen und Display immer ON
         DisplayOffWait = millis() + (meshcom_settings.node_pingtime * 1000);
@@ -2236,11 +2371,15 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
     }
     else
-    if(aprsmsg.msg_payload.startsWith("{MCP}") || aprsmsg.msg_payload.startsWith("{mcp}"))
+    if(mcStartsWith(aprsmsg.msg_payload, "{MCP}") || mcStartsWith(aprsmsg.msg_payload, "{mcp}"))
     {
         memset(cset, 0x00, sizeof(cset));
 
-        snprintf(cset, sizeof(cset), "%s", aprsmsg.msg_payload.c_str());
+        // R2-04: Praezision statt blankem %s. Gekuerzt wurde hier immer schon
+        // (snprintf ist auf sizeof(cset) begrenzt); mit fester Feldbreite
+        // sieht GCC es nun und verlangt, dass es dasteht. Gelesen werden
+        // ohnehin nur die Bytes 12..16 (cpasswd unten).
+        snprintf(cset, sizeof(cset), "%.*s", (int)sizeof(cset) - 1, aprsmsg.msg_payload);
         char cpasswd[6];
         memcpy(cpasswd, cset+5+2+2+3, 5);
 
@@ -2314,10 +2453,14 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
     }
     else
-    if(aprsmsg.msg_payload.startsWith("{SET}") > 0)
+    if(mcStartsWith(aprsmsg.msg_payload, "{SET}") > 0)
     {
         char cset[30];
-        snprintf(cset, sizeof(cset), "%s", aprsmsg.msg_payload.c_str());
+        // R2-04: Praezision statt blankem %s. Gekuerzt wurde hier immer schon
+        // (snprintf ist auf sizeof(cset) begrenzt); mit fester Feldbreite
+        // sieht GCC es nun und verlangt, dass es dasteht. Gelesen werden
+        // ohnehin nur die Bytes 12..16 (cpasswd unten).
+        snprintf(cset, sizeof(cset), "%.*s", (int)sizeof(cset) - 1, aprsmsg.msg_payload);
 
         // Ohne Bereichspruefung landete ein Tippfehler wie {SET}44;2; direkt im
         // Hop-Feld der ausgesendeten Pakete. Byte 5 einer ACK fuehrt max_hop in
@@ -2346,7 +2489,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
     }
     else
-    if(aprsmsg.msg_payload.startsWith("{CET}") > 0)
+    if(mcStartsWith(aprsmsg.msg_payload, "{CET}") > 0)
     {
         // CET Meldungen nur annehmen wenn nichr GPS, RTC oder Handyverbindung vorhanden ist
         if(!bRTCON && !posinfo_fix && !bNTPDateTimeValid) // !!!! erst aktivieren wenn PHone regelmässig zeit liefert  && !bPhoneTimeValid)
@@ -2359,13 +2502,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             uint16_t Second=0;
 
             // {CET}2025-01-31 07:47:40
-            Year = (uint16_t)aprsmsg.msg_payload.substring(5, 9).toInt();
-            Month = (uint16_t)aprsmsg.msg_payload.substring(10, 12).toInt();
-            Day = (uint16_t)aprsmsg.msg_payload.substring(13, 15).toInt();
+            Year = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 5, 9);
+            Month = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 10, 12);
+            Day = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 13, 15);
 
-            Hour = (uint16_t)aprsmsg.msg_payload.substring(16, 18).toInt();
-            Minute = (uint16_t)aprsmsg.msg_payload.substring(19, 21).toInt();
-            Second = (uint16_t)aprsmsg.msg_payload.substring(22, 24).toInt();
+            Hour = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 16, 18);
+            Minute = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 19, 21);
+            Second = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 22, 24);
 
             if(Year > 2023)
             {
@@ -2377,7 +2520,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         return;
     }
     else
-    if(aprsmsg.msg_destination_call.compareTo("100001") == 0 && !bSOFTSERREAD)
+    if(strcmp(aprsmsg.msg_destination_call, "100001") == 0 && !bSOFTSERREAD)
     {
         return;
     }
@@ -2444,20 +2587,20 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #elif defined (BOARD_T_DECK_PRO)
 
-        String strPath = "M * <" + aprsmsg.msg_source_call + ">";
+        String strPath = String("M * <") + aprsmsg.msg_source_call + ">";
         
         // DM
         if(CheckGroup(aprsmsg.msg_destination_call))
         {
-            strPath = "GM " + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
+            strPath = String("GM ") + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
         }
         else
-            if(aprsmsg.msg_destination_call != "*")
+            if(strcmp(aprsmsg.msg_destination_call, "*") != 0)
             {
-                strPath = "DM <" + aprsmsg.msg_source_call + ">";
+                strPath = String("DM <") + aprsmsg.msg_source_call + ">";
             }
 
-        String strAscii = utf8ascii(aprsmsg.msg_payload);
+        String strAscii = utf8ascii(String(aprsmsg.msg_payload));
 
         TDeck_pro_lora_disp(strPath, strAscii);
 
@@ -2479,16 +2622,16 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     epaper_display.setCursor(0, dzeile[1]);
     epaper_display.setFont(WP_FONT9);
 
-    String strPath = "M* <" + aprsmsg.msg_source_call + ">";
+    String strPath = String("M* <") + aprsmsg.msg_source_call + ">";
     // DM
     if(CheckGroup(aprsmsg.msg_destination_call))
     {
-        strPath = "GM" + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
+        strPath = String("GM") + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
     }
     else
-        if(aprsmsg.msg_destination_call != "*")
+        if(strcmp(aprsmsg.msg_destination_call, "*") != 0)
         {
-            strPath = "DM <" + aprsmsg.msg_source_call + ">";
+            strPath = String("DM <") + aprsmsg.msg_source_call + ">";
         }
 
     #ifdef BOARD_T_ECHO
@@ -2507,7 +2650,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     String strAscii = "";//aprsmsg.msg_payload;
 
-    strAscii = utf8ascii(aprsmsg.msg_payload);
+    strAscii = utf8ascii(String(aprsmsg.msg_payload));
 
     #if defined(WP_DISP)
     // Nachrichtentext mit kompakter Schrift (enger Zeilenabstand 15 statt 22) -> bis zu 160
@@ -2536,16 +2679,16 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     sendDisplayMainline();
     sendDisplay1306(false, true, 0, dzeile[0], (char*)"#F");    // not fastmode for CET display
 
-    String strPath = "M* <" + aprsmsg.msg_source_call + ">";
+    String strPath = String("M* <") + aprsmsg.msg_source_call + ">";
     // DM
     if(CheckGroup(aprsmsg.msg_destination_call))
     {
-        strPath = "GM" + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
+        strPath = String("GM") + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
     }
     else
-        if(aprsmsg.msg_destination_call != "*")
+        if(strcmp(aprsmsg.msg_destination_call, "*") != 0)
         {
-            strPath = "DM <" + aprsmsg.msg_source_call + ">";
+            strPath = String("DM <") + aprsmsg.msg_source_call + ">";
         }
 
     #if defined(BOARD_T_CONNECT_PRO)
@@ -2561,7 +2704,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     String strAscii = "";//aprsmsg.msg_payload;
 
-    strAscii = utf8ascii(aprsmsg.msg_payload);
+    strAscii = utf8ascii(String(aprsmsg.msg_payload));
 
     strncpy(pageLastTextLong1[pagePointer], strPath.c_str(), sizeof(pageLastTextLong1[pagePointer]) - 1);
     pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
@@ -2592,15 +2735,15 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // DM
     if(CheckGroup(aprsmsg.msg_destination_call))
     {
-        strPath = "GM" + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
+        strPath = String("GM") + aprsmsg.msg_destination_call + " <" + aprsmsg.msg_source_call + ">";
     }
     else
-        if(aprsmsg.msg_destination_call != "*")
+        if(strcmp(aprsmsg.msg_destination_call, "*") != 0)
         {
-            strPath = "DM <" + aprsmsg.msg_source_call + ">";
+            strPath = String("DM <") + aprsmsg.msg_source_call + ">";
         }
 
-    if(aprsmsg.msg_source_path.length() < (20-5))
+    if(strlen(aprsmsg.msg_source_path) < (20-5))
         snprintf(msg_text, sizeof(msg_text), "%s <%i>", strPath.c_str(), rssi);
     else
         snprintf(msg_text, sizeof(msg_text), "%s", strPath.c_str());
@@ -2611,9 +2754,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     izeile++;
     bClear=false;
 
-    for(itxt=0; itxt<aprsmsg.msg_payload.length(); itxt++)
+    for(itxt=0; itxt<strlen(aprsmsg.msg_payload); itxt++)
     {
-        words[iwords][ipos]=aprsmsg.msg_payload.charAt(itxt);
+        words[iwords][ipos]=aprsmsg.msg_payload[itxt];
 
         if(words[iwords][ipos] == ' ')
         {
@@ -2636,7 +2779,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             iwords++;
             if(iwords >= 100)
                 iwords=99;
-            words[iwords][0]=aprsmsg.msg_payload.charAt(itxt);
+            words[iwords][0]=aprsmsg.msg_payload[itxt];
             ipos=1;
         }
         else
@@ -2844,17 +2987,17 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #endif
 
     #if defined(BOARD_T_ECHO)
-    snprintf(msg_text, sizeof(msg_text), "%s", aprsmsg.msg_source_call.c_str());
+    snprintf(msg_text, sizeof(msg_text), "%s", aprsmsg.msg_source_call);
     msg_text[20]=0x00;
     sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
     izeile=izeile+1;
 
-    snprintf(msg_text, sizeof(msg_text), " <>%s", aprsmsg.msg_source_last.c_str());
+    snprintf(msg_text, sizeof(msg_text), " <>%s", aprsmsg.msg_source_last);
     msg_text[20]=0x00;
     sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
     izeile=izeile+1;
     #else
-    snprintf(msg_text, sizeof(msg_text), "%s<>%s", aprsmsg.msg_source_call.c_str(), aprsmsg.msg_source_last.c_str());
+    snprintf(msg_text, sizeof(msg_text), "%s<>%s", aprsmsg.msg_source_call, aprsmsg.msg_source_last);
     msg_text[20]=0x00;
     sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
     izeile=izeile+1;
@@ -2865,16 +3008,16 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     memset(scan_text, 0x00, sizeof(scan_text));
     ipt=0;
 
-    for(itxt=0; itxt<aprsmsg.msg_payload.length(); itxt++)
+    for(itxt=0; itxt<strlen(aprsmsg.msg_payload); itxt++)
     {
-        if((aprsmsg.msg_payload.charAt(itxt) == 'N' || aprsmsg.msg_payload.charAt(itxt) == 'S'))
+        if((aprsmsg.msg_payload[itxt] == 'N' || aprsmsg.msg_payload[itxt] == 'S'))
         {
             sscanf(scan_text, "%lf", &lat);
 
             #if defined(BOARD_T_ECHO)
-            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c", scan_text, aprsmsg.msg_payload.charAt(itxt));
+            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c", scan_text, aprsmsg.msg_payload[itxt]);
             #else
-            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%5ikm", scan_text, aprsmsg.msg_payload.charAt(itxt), dist_to);
+            snprintf(msg_text, sizeof(msg_text), "LAT: %s%c%5ikm", scan_text, aprsmsg.msg_payload[itxt], dist_to);
             #endif
             msg_text[20]=0x00;
             sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
@@ -2887,7 +3030,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         {
             if(ipt < sizeof(scan_text)-1)
             {
-                scan_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
+                scan_text[ipt]=aprsmsg.msg_payload[itxt];
                 ipt++;
             }
         }
@@ -2896,9 +3039,9 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     memset(scan_text, 0x00, sizeof(scan_text));
     ipt=0;
 
-    for(itxt=istarttext; itxt<aprsmsg.msg_payload.length(); itxt++)
+    for(itxt=istarttext; itxt<strlen(aprsmsg.msg_payload); itxt++)
     {
-        if((aprsmsg.msg_payload.charAt(itxt) == 'W' || aprsmsg.msg_payload.charAt(itxt) == 'E'))
+        if((aprsmsg.msg_payload[itxt] == 'W' || aprsmsg.msg_payload[itxt] == 'E'))
         {
             sscanf(scan_text, "%lf", &lon);
 
@@ -2912,9 +3055,9 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             }
 
             #if defined(BOARD_T_ECHO)
-            snprintf(msg_text, sizeof(msg_text), "LON:%s%c", scan_text, aprsmsg.msg_payload.charAt(itxt));
+            snprintf(msg_text, sizeof(msg_text), "LON:%s%c", scan_text, aprsmsg.msg_payload[itxt]);
             #else
-            snprintf(msg_text, sizeof(msg_text), "LON:%s%c%5i%s", scan_text, aprsmsg.msg_payload.charAt(itxt), dir_to, cdir_to);
+            snprintf(msg_text, sizeof(msg_text), "LON:%s%c%5i%s", scan_text, aprsmsg.msg_payload[itxt], dir_to, cdir_to);
             #endif
             msg_text[20]=0x00;
             sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
@@ -2927,7 +3070,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
         {
             if(ipt < sizeof(scan_text)-1)
             {
-                scan_text[ipt]=aprsmsg.msg_payload.charAt(itxt);
+                scan_text[ipt]=aprsmsg.msg_payload[itxt];
                 ipt++;
             }
         }
@@ -2940,14 +3083,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     ipt=0;
 
     // check Batt
-    for(itxt=istarttext; itxt<aprsmsg.msg_payload.length(); itxt++)
+    for(itxt=istarttext; itxt<strlen(aprsmsg.msg_payload); itxt++)
     {
-        if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == 'B' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
+        if(aprsmsg.msg_payload[itxt] == '/' && aprsmsg.msg_payload[itxt+1] == 'B' && aprsmsg.msg_payload[itxt+2] == '=')
         {
-            for(unsigned int id=itxt+3;id<aprsmsg.msg_payload.length();id++)
+            for(unsigned int id=itxt+3;id<strlen(aprsmsg.msg_payload);id++)
             {
                 // ENDE
-                if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
+                if(aprsmsg.msg_payload[id] == '/' || aprsmsg.msg_payload[id] == ' ' || id == strlen(aprsmsg.msg_payload))
                 {
                     sscanf(scan_text, "%d", &bat);
                     break;
@@ -2955,7 +3098,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
                 if(ipt < sizeof(scan_text)-1)
                 {
-                    scan_text[ipt]=aprsmsg.msg_payload.charAt(id);
+                    scan_text[ipt]=aprsmsg.msg_payload[id];
                     ipt++;
                 }
             }
@@ -2987,14 +3130,14 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     #endif
 
-    for(itxt=istarttext; itxt<aprsmsg.msg_payload.length(); itxt++)
+    for(itxt=istarttext; itxt<strlen(aprsmsg.msg_payload); itxt++)
     {
-        if(aprsmsg.msg_payload.charAt(itxt) == '/' && aprsmsg.msg_payload.charAt(itxt+1) == 'A' && aprsmsg.msg_payload.charAt(itxt+2) == '=')
+        if(aprsmsg.msg_payload[itxt] == '/' && aprsmsg.msg_payload[itxt+1] == 'A' && aprsmsg.msg_payload[itxt+2] == '=')
         {
-            for(unsigned int id=itxt+3;id<aprsmsg.msg_payload.length();id++)
+            for(unsigned int id=itxt+3;id<strlen(aprsmsg.msg_payload);id++)
             {
                 // ENDE
-                if(aprsmsg.msg_payload.charAt(id) == '/' || aprsmsg.msg_payload.charAt(id) == ' ' || id == aprsmsg.msg_payload.length())
+                if(aprsmsg.msg_payload[id] == '/' || aprsmsg.msg_payload[id] == ' ' || id == strlen(aprsmsg.msg_payload))
                 {
                     sscanf(scan_text, "%d", &alt);
 
@@ -3032,7 +3175,7 @@ void sendDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
                 if(ipt < sizeof(scan_text)-1)
                 {
-                    scan_text[ipt]=aprsmsg.msg_payload.charAt(id);
+                    scan_text[ipt]=aprsmsg.msg_payload[id];
                     ipt++;
                 }
             }
@@ -3193,7 +3336,10 @@ void setlogFillStat(struct setlogStatFields *f, uint32_t heap)
     f->drop[2]        = stat_drop_count[3];
     f->drop[3]        = stat_drop_count[4];
     f->drop[4]        = stat_drop_count[5];
-    f->mh             = (uint16_t)getMheardCount();
+    // MeshCom 5 (docs/meshcom5-campaign.md Welle 4): STAT-Zeile ist ein
+    // Monitor-Feld (Konsole 2323), kein Funk -- nbrNcnt(), nicht die auf
+    // NBR_NCNT_AIR_MAX gekappte Sendefassung.
+    f->mh             = (uint16_t)nbrNcnt(nbrMatrix, uptimeMin16());
     f->heap           = heap;
     f->trk_interval_s = trickle_interval_ms / 1000UL;
     f->trk_consistent = trickle_consistent_count;
@@ -3207,28 +3353,58 @@ void setlogFillStat(struct setlogStatFields *f, uint32_t heap)
     // fertigen Fensters fuer Leser, die nicht selbst drucken (Web-GUI).
     stat_last_window = *f;
     stat_last_window_ms = f->t_ms;
+
+    // 0.4: DM counters/RTT histogram as a second setlog line, same channel
+    // (setlogPrint -> printfdeb) and the same bDisplayLog gate as STAT.
+    if(bDisplayLog)
+    {
+        char dmbuf[200];
+        dmStatFormat(dmbuf, sizeof(dmbuf));
+        setlogPrint(dmbuf);
+
+#if defined(ENABLE_MSGSTORE)
+        if(msgstoreMode() != MSGSTORE_OFF)
+        {
+            msgstoreFormatLine(dmbuf, sizeof(dmbuf));   // S3: MBOX line, same gate
+            setlogPrint(dmbuf);
+        }
+#endif
+    }
 }
 
 void charBuffer_aprs(struct aprsMessage &aprsmsg)
 {
-    char internal_message[UDP_TX_BUF_SIZE];
+    // R2-04: war UDP_TX_BUF_SIZE (255). Quell- und Zielpfad sind je bis zu
+    // MC_PATH_LEN lang, dazu Zeitstempel, Kopfdaten und 60 Byte Nutzlast --
+    // zusammen mehr als 255. snprintf() hat das immer sauber gekuerzt, aber
+    // die Zeile ist eine DIAGNOSEausgabe: sie soll den Pfad zeigen, nicht ihn
+    // abschneiden. Der Puffer waechst auf den tatsaechlichen Groesstfall.
+    char internal_message[2 * MC_PATH_LEN + 128];
     
-    memset(internal_message, 0x00, UDP_TX_BUF_SIZE);
+    memset(internal_message, 0x00, sizeof(internal_message));
 
-    int ilpayload=aprsmsg.msg_payload.length();
+    int ilpayload=strlen(aprsmsg.msg_payload);
     if(ilpayload > 60)
         ilpayload=60;
 
-    snprintf(internal_message, sizeof(internal_message), "%s :%08X %1u %i%i%i %01X/%1u LH:%02X %s>%s %c%s",  getTimeString().c_str(),
+    snprintf(internal_message, sizeof(internal_message), "%s :%08X %1u %i%i%i %01X/%1u LH:%02X %s>%s %c%.*s",  getTimeString().c_str(),
         aprsmsg.msg_id, aprsmsg.max_hop,aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_last_hw,
         //aprsmsg.msg_source_hw, aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw,
-        aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(),
-        aprsmsg.payload_type, aprsmsg.msg_payload.substring(0, ilpayload).c_str());
+        aprsmsg.msg_source_path, aprsmsg.msg_destination_path,
+        aprsmsg.payload_type, (int)ilpayload, aprsmsg.msg_payload);
 
     
     internal_message[UDP_TX_BUF_SIZE-1]=0x00;
 
-    memcpy(ringbufferRAWLoraRX[RAWLoRaWrite], internal_message, UDP_TX_BUF_SIZE-1);
+    // R1-04: Zeiger EINMAL lesen, dann nur die lokale Kopie benutzen. Ist der
+    // Puffer nicht angelegt (niemand hat die rxlog-Seite geoeffnet), passiert
+    // hier nichts -- der Ringzeiger laeuft trotzdem weiter, damit die Seite
+    // nach dem Anlegen dieselbe Reihenfolge zeigt wie vorher.
+    rawLogLine_t *raw = ringbufferRAWLoraRX;
+    if(raw == NULL)
+        return;
+
+    memcpy(raw[RAWLoRaWrite], internal_message, UDP_TX_BUF_SIZE-1);
 }
 
 // SL-01: `tail` haengt VOR dem `\n` an die bestehende Zeile an -- leer bei
@@ -3236,7 +3412,7 @@ void charBuffer_aprs(struct aprsMessage &aprsmsg)
 void printBuffer_aprs(char *msgSource, struct aprsMessage &aprsmsg, const char *tail)
 {
     printfdeb("%s %s %03i %c x%08X H%02X S%i T%i M%02X %s>%s%c%s HW:%02i MOD:%01X/%01i FCS:%04X FW:%02i:%c LH:%02X%s\n", getTimeString().c_str(), msgSource, aprsmsg.msg_len, aprsmsg.payload_type, aprsmsg.msg_id, aprsmsg.max_hop,
-        aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path.c_str(), aprsmsg.msg_destination_path.c_str(), aprsmsg.payload_type, aprsmsg.msg_payload.c_str(),
+        aprsmsg.msg_server, aprsmsg.msg_track, aprsmsg.msg_mesh, aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.payload_type, aprsmsg.msg_payload,
         aprsmsg.msg_source_hw, (aprsmsg.msg_source_mod>>4), (aprsmsg.msg_source_mod & 0xf), aprsmsg.msg_fcs, aprsmsg.msg_source_fw_version, aprsmsg.msg_source_fw_sub_version, aprsmsg.msg_last_hw, tail);
 }
 
@@ -3292,6 +3468,30 @@ void DisplayPong(char line1[20], char line2[20], char line3[20], char line4[20])
     #endif
 }
 
+// D3-02: shared epilogue for locally originated APRS frames -- advance the
+// message-id counter, persist it only at the high-water mark (see
+// msgid_counter.h; DO NOT reorder these three calls, the persist-on-step
+// scheme depends on this exact order), pick the via-path, then encode into
+// msg_buffer. `msg_buffer` must be at least MAX_MSG_LEN_PHONE bytes, and
+// `aprsmsg.msg_id` must already be set by the caller before this runs.
+//
+// Not every call site fits this shape: SendAckMessage() interleaves
+// insertOwnTx()/addLoraRxBuffer() between the persist step and checkVia(),
+// so it keeps its own inline epilogue rather than being forced through here
+// (docs/optimization-audit-20260910.md D3-02).
+static void finalizeAndSendAPRS(struct aprsMessage &aprsmsg, uint8_t *msg_buffer)
+{
+    meshcom_settings.node_msgid = msgIdAdvance(meshcom_settings.node_msgid);
+
+    // Flash rewrite, but only at a high-water mark -- msgid_counter.h
+    if(msgIdNeedsPersist(meshcom_settings.node_msgid))
+        countersSave();
+
+    checkVia(aprsmsg);
+
+    encodeAPRS(msg_buffer, aprsmsg);
+}
+
 PingResult sendPing(char msg_call[10])
 {
     // no ping within track mode
@@ -3329,26 +3529,17 @@ PingResult sendPing(char msg_call[10])
     // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
     
-    aprsmsg.msg_destination_call = msg_call;
-    aprsmsg.msg_destination_path = msg_call;
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), msg_call);
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), msg_call);
 
     memset(msg_text, 0x00, sizeof(msg_text));
     snprintf(msg_text, sizeof(msg_text), "{ping}");
 
-    aprsmsg.msg_payload = msg_text;
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), msg_text);
     
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 999)
-        meshcom_settings.node_msgid=0;
-
-    // Flash rewrite
-    save_msgid();
-
-    checkVia(aprsmsg);
-
-    encodeAPRS(msg_buffer, aprsmsg);
+    finalizeAndSendAPRS(aprsmsg, msg_buffer);
 
     if(bDisplayInfo)
     {
@@ -3368,7 +3559,10 @@ PingResult sendPing(char msg_call[10])
     // spaeter kam dann ein irrefuehrendes "[PONG]...fail". Sofort raus, noch
     // vor DisplayPong/bPingSend, damit kein Zaehler fuer einen nie
     // eingereihten Frame scharf gestellt wird.
-    if(addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "phone_msg") < 0) // 0xFF no retransmission
+    // P15: addTxRingEntryOnce() statt addTxRingEntry(..., RING_STATUS_DONE,
+    // ...) -- ein Ping ist eine persoenliche DM und soll als solche
+    // (MSG_PRIO_CRITICAL) eingestuft werden, nicht als Relay (siehe dort).
+    if(addTxRingEntryOnce(msg_buffer, (uint16_t)aprsmsg.msg_len, "phone_msg") < 0)
     {
         printfdeb("[PING]...not queued: TX ring refused the frame\n");
         return PING_RING_REFUSED;
@@ -3431,26 +3625,17 @@ void SendPong(String msg_call, unsigned int msg_id)
     // MSG ID zusammen setzen    
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
     
-    aprsmsg.msg_destination_call = msg_call;
-    aprsmsg.msg_destination_path = msg_call;
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), msg_call.c_str());
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), msg_call.c_str());
 
     memset(msg_text, 0x00, sizeof(msg_text));
     snprintf(msg_text, sizeof(msg_text), "{pong}{%03i}", msg_id);
 
-    aprsmsg.msg_payload = msg_text;
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), msg_text);
     
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 999)
-        meshcom_settings.node_msgid=0;
-
-    // Flash rewrite
-    save_msgid();
-
-    checkVia(aprsmsg);
-
-    encodeAPRS(msg_buffer, aprsmsg);
+    finalizeAndSendAPRS(aprsmsg, msg_buffer);
 
     if(bDisplayInfo)
     {
@@ -3463,7 +3648,8 @@ void SendPong(String msg_call, unsigned int msg_id)
 
     // Master RingBuffer for transmission
     // local messages send to LoRa TX
-    addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "phone_msg"); // 0xFF no retransmission
+    // P15: siehe sendPing() oben -- ein Pong ist ebenfalls eine persoenliche DM.
+    addTxRingEntryOnce(msg_buffer, (uint16_t)aprsmsg.msg_len, "phone_msg");
 }
 
 // ===========================================================================
@@ -3647,7 +3833,7 @@ static void bpDeliver(const char *text, MsgOrigin origin, const char *dst)
 
         case ORIGIN_BLE:
         case ORIGIN_WEB:
-            // Both land in phoneRing via bpNoticeToPhone(): the phone
+            // Both land in BLEtoPhoneBuff via bpNoticeToPhone(): the phone
             // app drains it in sendToPhone(), the web GUI reads the same ring
             // for its message list (web_functions.cpp ~1293). Framed under
             // the node's own callsign (msg_id via bpNextMsgId(), E5;
@@ -3990,7 +4176,7 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
         // check no message to own-call
         if(strDestinationCall.compareTo(meshcom_settings.node_call) == 0)
         {
-            printfdeb("[ERROR]...DM to own-all not allowed");
+            printfdeb("[ERROR]...DM to own-all not allowed\n");
             return BP_SEND_INVALID;
         }
     }
@@ -4058,6 +4244,12 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
         return BP_SEND_REFUSED;
     }
 
+    // P15: ein {ping} wird nie wiederholt -- die Gegenstelle antwortet mit
+    // {pong}, nie mit ACK, also stoppte nichts die Wiederholung. Hier benannt
+    // (strMsg ist schon ohne {ZIEL}-Teil) und an jeder Stelle wiederverwendet,
+    // die ein {ping} anders behandelt: dmstat_sent, bUseOnce.
+    const bool bPingMsg = strMsg.startsWith("{ping}");
+
     // N-22: siehe Kommentar bei msg_text_check oben — auf nRF52 in BSS,
     // encodeAPRS() beschreibt den Puffer bei jedem Aufruf vollstaendig.
 #if defined(NRF52_SERIES)
@@ -4086,30 +4278,51 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
     // [DK5EN] kippt msg_id Bit 10-11 (= Knotenkennung Bit 0-1) per XOR mit k (src/pn_retry.h). Bei ESP32
     // [DK5EN] sind diese Bits schon 00, dort gilt 00/01/10/11 woertlich; XOR deckt nRF52 mit ab.
     
-    aprsmsg.msg_source_path = (src_override && src_override[0]) ? String(src_override) : String(meshcom_settings.node_call);
-    aprsmsg.msg_destination_path = strDestinationCall;  //Later FW insert PATH from HEY! collecting
-    aprsmsg.msg_destination_call = strDestinationCall;  //Later FW insert PATH from HEY! collecting
+    // src_override: a KISS client's own source call (handleInboundAx25()), else our own
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path),
+          (src_override && src_override[0]) ? src_override : meshcom_settings.node_call);
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), strDestinationCall.c_str());  //Later FW insert PATH from HEY! collecting
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), strDestinationCall.c_str());  //Later FW insert PATH from HEY! collecting
 
-    aprsmsg.msg_payload = strMsg;
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), strMsg.c_str());
 
     // ACK add request only DM Calls
     if(bDM)
     {
+        // A '{' inside the user text breaks the receiver's NNN parse
+        // (indexOf("{", 1) finds the first brace, not the ack tag); escape it
+        // at the sender (plan risk list, advisor m4).
+        //
+        // P14/P15: ausser bei einem fuehrenden {ping}/{SET}-Tag -- das ist
+        // kein Fliesstext, sondern das Tag selbst (siehe dm_text_escape.h).
+        // Ein '{' NACH dem Tag bricht weiterhin den NNN-Parse und wird
+        // escaped.
+        size_t escFrom = dmTextEscapeFrom(strMsg.c_str());
+        for(size_t i = escFrom; i < (size_t)strMsg.length(); i++)
+        {
+            if(strMsg[i] == '{')
+                strMsg.setCharAt(i, '(');
+        }
+
         char cAckId[4] = {0};
         snprintf(cAckId, sizeof(cAckId), "%03i", meshcom_settings.node_msgid);
-        aprsmsg.msg_payload = strMsg + "{" + String(cAckId);
+        snprintf(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), "%s{%s", strMsg.c_str(), cAckId);
+
+        // 0.4: DM outcome counters (docs/dm-transport-impl-plan-20260913.md).
+        // nnn is the same node_msgid value just written into cAckId, before
+        // the increment below.
+        //
+        // P14/P15: nicht fuer ein {ping} -- die Gegenstelle antwortet mit
+        // {pong}, nie mit einem ACK, also stuende es fuer immer als
+        // sent-nie-acked in der DM-Statistik.
+        if(!bPingMsg)
+        {
+            dmstat_sent.fetch_add(1);
+            dmStatNoteSent((uint16_t)meshcom_settings.node_msgid, millis());
+        }
     }
 
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 999)
-        meshcom_settings.node_msgid=0;
-
-    // Flash rewrite
-    save_msgid();
-
-    checkVia(aprsmsg);
-
-    encodeAPRS(msg_buffer, aprsmsg);
+    finalizeAndSendAPRS(aprsmsg, msg_buffer);
 
     if(bDisplayInfo)
     {
@@ -4119,16 +4332,38 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
 
     // Master RingBuffer for transmission
     // local messages send to LoRa TX
-    if (iWrite == iRead) {   // ring full: about to overwrite an unread slot
-        Serial.printf("[RING] overflow, slot %d dropped\n", (int)iWrite);
+    // ETH-03 (docs/BACKLOG.md 3.8at): this used to test `iWrite == iRead`,
+    // which is ALSO the empty ring -- so a node with nothing queued printed
+    // "[RING] overflow" on every user message and sent a whole investigation
+    // after a full ring that was not there. Occupancy is txRingDepth(), and
+    // the ring holds at most MAX_RING-1 entries (addTxRingEntry() keeps iRead
+    // one ahead of iWrite on overflow), so MAX_RING-1 is "full". The eviction
+    // itself (which slot, why) is decided and logged inside addTxRingEntry()
+    // below; this line is only a heads-up.
+    if (txRingDepth() >= MAX_RING - 1) {   // ring full: addTxRingEntry() will evict or refuse
+        Serial.printf("[RING] full, depth %d of %d\n", txRingDepth(), (int)MAX_RING - 1);
     }
     // Status vorab aus msg_buffer bestimmen (statt aus dem Ring zu lesen): der
     // Slot wird erst in addTxRingEntry() unter Lock gewaehlt/beschrieben.
-    uint8_t user_msg_status;
+    uint8_t user_msg_status = 0xFF;
+    // P14/P15: {ping} wird nie wiederholt -- die Gegenstelle antwortet mit
+    // {pong}, nie mit ACK, also stoppte nichts die Wiederholung (ein Ping aus
+    // App/McApp ging dreimal in die Luft). Frueher wurde dafuer NACH dem
+    // Einreihen der Slot per Hand auf DONE nachgetragen (wie einst in
+    // SendAckMessage()): getMessagePriority() liest den Status IN
+    // addTxRingEntry() und stufte eine vorab auf DONE gesetzte DM als Relay
+    // (NORMAL) statt als persoenliche DM (CRITICAL) ein -- ein Nachtrag nach
+    // dem Aufruf war der einzige Ausweg, aber ausserhalb des Locks (siehe
+    // addTxRingEntryOnce()-Doku in txring_functions.cpp). bUseOnce waehlt
+    // stattdessen addTxRingEntryOnce() weiter unten: klassifiziert READY,
+    // speichert DONE, beides atomar.
+    bool bUseOnce = false;
     if (msg_buffer[0] == 0x3A) // only Messages
     {
-        if(aprsmsg.msg_payload.startsWith("{CET}") || aprsmsg.msg_payload.startsWith("{MCP}") || aprsmsg.msg_payload.startsWith("{SET}"))
+        if(mcStartsWith(aprsmsg.msg_payload, "{CET}") || mcStartsWith(aprsmsg.msg_payload, "{MCP}") || mcStartsWith(aprsmsg.msg_payload, "{SET}"))
             user_msg_status = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
+        else if(bPingMsg)
+            bUseOnce = true; // P14/P15: siehe oben
         else
             user_msg_status = 0x00; // retransmission Status ...0xFF no retransmission
     }
@@ -4137,7 +4372,8 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
         user_msg_status = 0xFF; // retransmission Status ...0xFF no retransmission
     }
 
-    int w = addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, user_msg_status, "user_msg", 0);
+    int w = bUseOnce ? addTxRingEntryOnce(msg_buffer, (uint16_t)aprsmsg.msg_len, "user_msg", 0)
+                      : addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, user_msg_status, "user_msg", 0);
 
     if(bDisplayRetx && w >= 0)
     {
@@ -4192,7 +4428,7 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
         if(bGATEWAY && meshcom_settings.node_hasIPaddress)
         {
             // set Info message send and Server reached, not on DM
-            if(!bDM && (aprsmsg.msg_destination_call == "*" || CheckGroup(strDestinationCall)))
+            if(!bDM && (strcmp(aprsmsg.msg_destination_call, "*") == 0 || CheckGroup(strDestinationCall)))
             {
                 uint8_t ack_buff[ACK_PHONE_MAX_LEN];
                 uint16_t plen = buildAckPhoneFrame(ack_buff, aprsmsg.msg_id, 0x01, meshcom_settings.node_call);
@@ -4208,7 +4444,7 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
     #endif
 
     #if defined(BOARD_T_DECK_PRO)
-    String strCall="<"+aprsmsg.msg_source_call+"> "+aprsmsg.msg_destination_call;
+    String strCall=String("<")+aprsmsg.msg_source_call+"> "+aprsmsg.msg_destination_call;
     TDeck_pro_lora_disp(strCall, aprsmsg.msg_payload);
     #endif
 
@@ -4284,16 +4520,20 @@ unsigned int sendInjectedPosition(const char *srcCall, const char *posData)
     // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
 
-    aprsmsg.msg_source_path      = srcCall;
-    aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_destination_call = "*";
-    aprsmsg.msg_payload          = posData;
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), srcCall);
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "*");
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "*");
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), posData);
 
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 999)
-        meshcom_settings.node_msgid = 0;
+    // Same inline epilogue as SendAckMessage() (insertOwnTx()/addLoraRxBuffer()
+    // sit between the persist step and checkVia(), so finalizeAndSendAPRS()
+    // does not fit). Upstream advanced by hand and ran save_settings() on every
+    // injected position; msgid_counter.h persists only at the high-water mark.
+    meshcom_settings.node_msgid = msgIdAdvance(meshcom_settings.node_msgid);
 
-    save_msgid();
+    // Flash rewrite, but only at a high-water mark -- msgid_counter.h
+    if(msgIdNeedsPersist(meshcom_settings.node_msgid))
+        countersSave();
 
     insertOwnTx(aprsmsg.msg_id);
     if(bGATEWAY && meshcom_settings.node_hasIPaddress)
@@ -4330,7 +4570,7 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
 
     if(lat >= 0.0 && lat <= 2.0 && lon >= 0.0 && lon <= 2.0)
     {
-        printfdeb("[APRS] Error PositionToAPRS");
+        printfdeb("[APRS] Error PositionToAPRS\n");
         return "";
     }
 
@@ -4534,12 +4774,18 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
                 return "";
         }
 
-        int incnt = getMheardCount();
+        // MeshCom 5 (docs/meshcom5-campaign.md Welle 4, Konzept 4.8): /N geht
+        // auf die Luft -- nbrNcntAir() kappt schon auf NBR_NCNT_AIR_MAX; der
+        // Deckel hier bleibt trotzdem stehen (belt-and-suspenders, benannt
+        // statt der alten 99 als Literal) -- ohne ihn kann GCC cncnt's feste
+        // Breite nicht aus dem Rueckgabewert einer Funktion herleiten
+        // (-Werror=format-truncation).
+        int incnt = nbrNcntAir(nbrMatrix, uptimeMin16());
         if(incnt > 0)
         {
-            if(incnt > 99)
-                incnt=99;
-                
+            if(incnt > NBR_NCNT_AIR_MAX)
+                incnt = NBR_NCNT_AIR_MAX;
+
             snprintf(cncnt, sizeof(cncnt), "/N%i", incnt);
         }
     }
@@ -4747,23 +4993,37 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         // local LoRa-APRS position-messages send to LoRa TX
         addTxRingEntry(msg_buffer, (uint16_t)ilng, 0xFF, "user_pos"); // 0xFF no retransmission
 
+        // BOARD_T5_EPAPER gehoert in diese Kaskade, weil ihr #else-Zweig u8g2
+        // benutzt und u8g2 auf diesem Board gar nicht existiert (:364 schliesst
+        // es aus). Es fehlte hier -- das ist die VIERTE, abweichend
+        // geschriebene Kopie derselben Aussage "dieses Board treibt ein
+        // U8g2-OLED", und die einzige, die nicht mitgepflegt wurde. Gemerkt hat
+        // das niemand, weil env:t5_epaper mangels configuration.h noch nie
+        // uebersetzt hat; der erste Build ueberhaupt starb hier mit
+        // "'u8g2' was not declared in this scope". Zusammenfuehrung der
+        // Kopien: BACKLOG GRD-01, faellig mit R4-02/03.
+        // GRD-01: hier stand eine neunarmige Kaskade, die jedes Board ohne
+        // U8g2 einzeln aufzaehlte, damit der letzte #else-Zweig u8g2 benutzen
+        // durfte. Eine Aufzaehlung garantiert das nicht, sie behauptet es nur
+        // -- und diese hier lief auseinander: BOARD_T5_EPAPER fehlte, der
+        // erste Build jener Umgebung starb an "'u8g2' was not declared".
+        //
+        // Jetzt entscheidet MC_HAS_U8G2 (configuration_global.h), und der
+        // u8g2-Zweig ist STRUKTURELL unerreichbar, wo es kein u8g2 gibt. Die
+        // sieben Boards, die hier einzeln standen (HAS_TFT -> tracker,
+        // HAS_EPAPER -> t_echo/e213/e290/wireless-paper, T_ECHO, TRACKER,
+        // HELTEC_T114, T_CONNECT_PRO, T5_EPAPER), schliesst MC_HAS_U8G2 alle
+        // schon aus; ihre Zweige waren reine Wiederholung.
+        //
+        // BOARD_STICK_V3 bleibt als eigener Zweig stehen: das Board HAT ein
+        // U8g2-Display, bekommt auf seinem 0,49"-Panel aber keine Track-Seite.
+        // Das ist eine andere Aussage als "kein OLED" und darf nicht mit ihr
+        // zusammenfallen.
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
             tdeck_send_track_view();
-        #elif defined(HAS_TFT)
-        // none
-        #elif defined(BOARD_T_ECHO)
-        // none
-        #elif defined(HAS_EPAPER)
-        // none
-        #elif defined(BOARD_TRACKER)
-        // none
-        #elif defined(BOARD_HELTEC_T114)
-        // none
-        #elif defined(BOARD_T_CONNECT_PRO)
-        // none
         #elif defined(BOARD_STICK_V3)
-        // none
-        #else
+        // none -- hat u8g2, aber keine Track-Seite
+        #elif MC_HAS_U8G2
             if(u8g2 != NULL)
             {
                 char cvers[20];
@@ -4800,18 +5060,18 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
             if(intervall != POSINFO_INTERVAL)
                 aprsmsg.msg_track=true;
 
-            aprsmsg.msg_source_path = meshcom_settings.node_call;
+            mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
             
             if(strlen(meshcom_settings.node_lora_call) != 0 && strcmp(meshcom_settings.node_lora_call, "none") != 0)
             {
-                aprsmsg.msg_source_path = meshcom_settings.node_lora_call;
+                mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_lora_call);
             }
 
-            aprsmsg.msg_destination_path = "*";
-            aprsmsg.msg_destination_call = "*";
-            aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, co2, qfe, qnh);
+            mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "*");
+            mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "*");
+            mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, co2, qfe, qnh).c_str());
             
-            if(aprsmsg.msg_payload == "")
+            if(aprsmsg.msg_payload[0] == 0)
                 return;
 
             checkVia(aprsmsg);
@@ -4858,24 +5118,15 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         if(intervall != POSINFO_INTERVAL)
             aprsmsg.msg_track=true;
 
-        aprsmsg.msg_source_path = meshcom_settings.node_call;
-        aprsmsg.msg_destination_path = "*";
-        aprsmsg.msg_destination_call = "*";
-        aprsmsg.msg_payload = PositionToAPRS(true, bsendTele, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, co2, qfe, qnh);
+        mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
+        mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "*");
+        mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "*");
+        mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), PositionToAPRS(true, bsendTele, true, lat, lat_c, lon, lon_c, alt, press, hum, temp, temp2, gasres, co2, qfe, qnh).c_str());
         
-        if(aprsmsg.msg_payload == "")
+        if(aprsmsg.msg_payload[0] == 0)
             return;
 
-        meshcom_settings.node_msgid++;
-        if(meshcom_settings.node_msgid > 999)
-            meshcom_settings.node_msgid=0;
-            
-        // Flash rewrite
-        save_msgid();
-
-        checkVia(aprsmsg);
-
-        encodeAPRS(msg_buffer, aprsmsg);
+        finalizeAndSendAPRS(aprsmsg, msg_buffer);
 
         if(bDisplayInfo)
         {
@@ -4908,6 +5159,12 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         iWriteOwn++;
         if(iWriteOwn >= MAX_RING)
             iWriteOwn=0;
+
+        // W3b (docs/meshcom5-campaign.md Welle 3, Konzept 4.11): eigener '!'-
+        // Positionsrahmen -- fuer die Echo-Tabelle, nicht fuer Relays/Text/
+        // den HN-Bericht (die haben eigene Aufrufstellen bzw. gar keine).
+        nbrNoteOwnTx(nbrMatrix, (uint32_t)aprsmsg.msg_id, aprsmsg.payload_type,
+                     uptimeMin16());
 
         // An APP als Anzeige retour senden
         if(isPhoneReady == 1)
@@ -4948,24 +5205,15 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
     // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
 
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
-    aprsmsg.msg_destination_path = "*";
-    aprsmsg.msg_destination_call = "*";
-    aprsmsg.msg_payload = PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, 0, 0, 0, 0, temp2, 0, 0, 0, 0);
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "*");
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "*");
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), PositionToAPRS(true, false, true, lat, lat_c, lon, lon_c, 0, 0, 0, 0, temp2, 0, 0, 0, 0).c_str());
     
-    if(aprsmsg.msg_payload == "")
+    if(aprsmsg.msg_payload[0] == 0)
         return;
 
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 999)
-        meshcom_settings.node_msgid=0;
-        
-    // Flash rewrite
-    save_msgid();
-
-    checkVia(aprsmsg);
-
-    encodeAPRS(msg_buffer, aprsmsg);
+    finalizeAndSendAPRS(aprsmsg, msg_buffer);
 
     if(bDisplayInfo)
     {
@@ -4995,6 +5243,11 @@ void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2
     if(iWriteOwn >= MAX_RING)
         iWriteOwn=0;
 
+    // W3b (docs/meshcom5-campaign.md Welle 3, Konzept 4.11): eigener '!'-
+    // Positionsrahmen (vom Telefon ausgeloest), gleiche Aufrufstelle wie
+    // sendPosition()'s Mesh-Zweig oben.
+    nbrNoteOwnTx(nbrMatrix, (uint32_t)aprsmsg.msg_id, aprsmsg.payload_type,
+                 uptimeMin16());
 }
 
 unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *src_override)
@@ -5016,25 +5269,23 @@ unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *s
     // [DK5EN] bleibt unveraendert.
 
     // own Call, or a foreign source when relaying a KISS client's APRS ack
-    aprsmsg.msg_source_path = (src_override && src_override[0])
-                                  ? String(src_override)
-                                  : String(meshcom_settings.node_call);
-    aprsmsg.msg_destination_path = dest_call;
-    aprsmsg.msg_destination_call = dest_call;
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path),
+          (src_override && src_override[0]) ? src_override : meshcom_settings.node_call);
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), dest_call.c_str());
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), dest_call.c_str());
 
     char cackmsg[20];
     if(strcmp(dest_call.c_str(), "WLNK-1") == 0)
         snprintf(cackmsg, sizeof(cackmsg), "ack%04i", iAckId);
     else
         snprintf(cackmsg, sizeof(cackmsg), "%-9.9s:ack%03i", dest_call.c_str(), iAckId);
-    aprsmsg.msg_payload = cackmsg;
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), cackmsg);
 
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 999)
-        meshcom_settings.node_msgid=0;
+    meshcom_settings.node_msgid = msgIdAdvance(meshcom_settings.node_msgid);
 
-    // Flash rewrite
-    save_msgid();
+    // Flash rewrite, but only at a high-water mark -- msgid_counter.h
+    if(msgIdNeedsPersist(meshcom_settings.node_msgid))
+        countersSave();
 
     uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
     
@@ -5057,22 +5308,13 @@ unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *s
         printfdeb("");
     }
 
-    // Status kann nicht vorab auf 0xFF (DONE) gesetzt werden: getMessagePriority()
-    // liest innerhalb von addTxRingEntry() das Status-Byte und stuft eine TEXT-
-    // Nachricht mit Status DONE als "Relay" (MSG_PRIO_NORMAL) statt als echte
-    // Ziel-Message (MSG_PRIO_CRITICAL) ein. Also mit temp-READY (0x00) einreihen,
-    // damit die Prio-Klassifizierung den Zielrufzeichen-Pfad parst, und danach
-    // per zurueckgegebenem Slot auf DONE setzen. Restrisiko des Nachtrags:
-    // preemptet der Timer-Service-Task GENAU zwischen den beiden Statements UND
-    // ist der Ring voll UND waehlt dessen Eviction ausgerechnet diesen frisch
-    // als HIGH/CRITICAL eingestuften Slot als niedrigste Prio, traefe das 0xFF
-    // einen fremden Eintrag. Akzeptiert: alle drei Bedingungen zusammen sind
-    // praktisch ausgeschlossen, und das Fenster ist strikt kleiner als das der
-    // alten Vorab-iWrite-Schreibsequenz (N-14).
-    int savedAckSlot = addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0x00, "beacon");
-
-    if(savedAckSlot >= 0)
-        ringBuffer[savedAckSlot][1]=0xFF;   // no retransmission (set after priority is recorded)
+    // P15: klassifiziert als eigene Ziel-Message (MSG_PRIO_CRITICAL), aber
+    // mit Status DONE gespeichert (keine Wiederholung) -- beides atomar unter
+    // einem Lock, siehe addTxRingEntryOnce()/addTxRingEntryCore() in
+    // txring_functions.cpp fuer den Hintergrund (frueher hier ein
+    // Status-Nachtrag ausserhalb des Locks, siehe dort). Rueckgabewert
+    // ungenutzt, wie schon bisher (kein Nachtrag mehr noetig).
+    addTxRingEntryOnce(msg_buffer, (uint16_t)aprsmsg.msg_len, "beacon");
 
     /*
     iWrite++;
@@ -5083,13 +5325,37 @@ unsigned int SendAckMessage(String dest_call, unsigned int iAckId, const char *s
     if(bGATEWAY && meshcom_settings.node_hasIPaddress)
     {
 		// UDP out
-        if(aprsmsg.msg_destination_call != meshcom_settings.node_call)
+        if(strcmp(aprsmsg.msg_destination_call, meshcom_settings.node_call) != 0)
         {
             addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
         }
     }
 
     return aprsmsg.msg_id;
+}
+
+// F6: last own HEY sent by sendHey() -- see heyTrickleSuppress().
+static uint32_t hey_own_last_ms = 0;
+static bool hey_own_have = false;
+
+// F6: trickle suppression decision for esp32_main.cpp / nrf52_main.cpp. A gateway
+// is not suppressed once its own last HEY is >= TRICKLE_IMAX_S old (hey_policy.h).
+bool heyTrickleSuppress(int consistent)
+{
+    return heyShouldSuppress(consistent, TRICKLE_K, bGATEWAY,
+                             heySinceLastOwn((uint32_t)millis(), hey_own_last_ms, hey_own_have),
+                             (uint32_t)TRICKLE_IMAX_S * 1000UL);
+}
+
+// F6: --gateway on/off changed the HG/H flag other nodes learn from our HEY.
+// Restart the trickle at Imin and announce the new state now; sendHeyShot()
+// applies the 30 s floor of the FL-02 path.
+void heyGatewayChanged()
+{
+    trickle_interval_ms = TRICKLE_IMIN_S * 1000UL;
+    trickle_consistent_count = 0;
+    heyinfo_timer = millis();
+    sendHeyShot();
 }
 
 // Send Hey-Message
@@ -5113,27 +5379,21 @@ void sendHey()
     // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
     
     if(bGATEWAY)
-        aprsmsg.msg_destination_path = "HG";
+        mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "HG");
     else
-        aprsmsg.msg_destination_path = "H";
+        mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "H");
 
-    aprsmsg.msg_destination_call = aprsmsg.msg_destination_path;
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), aprsmsg.msg_destination_path);
 
-    aprsmsg.msg_payload = "R" + String(getMheardCount()) + ";";
+    // MeshCom 5 (docs/meshcom5-campaign.md Welle 4, Konzept 4.8): R<n> im HEY
+    // geht auf die Luft -- nbrNcntAir(), auf NBR_NCNT_AIR_MAX gekappt.
+    snprintf(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), "R%d;",
+             nbrNcntAir(nbrMatrix, uptimeMin16()));
    
-    meshcom_settings.node_msgid++;
-    if(meshcom_settings.node_msgid > 999)
-        meshcom_settings.node_msgid=0;
-
-    // Flash rewrite
-    save_msgid();
-
-    checkVia(aprsmsg);
-
-    encodeAPRS(msg_buffer, aprsmsg);
+    finalizeAndSendAPRS(aprsmsg, msg_buffer);
 
     if(bDisplayInfo)
     {
@@ -5141,8 +5401,21 @@ void sendHey()
         printfdeb("");
     }
 
+    // F6: time of the last own HEY (trickle path AND shot path), for
+    // heyTrickleSuppress(). Separate from lastOwnHeyTx, which only gates the
+    // --sendhey shot and must keep that meaning.
+    hey_own_last_ms = millis();
+    hey_own_have = true;
+
     // store last message to compare later on
     insertOwnTx(aprsmsg.msg_id);
+
+    // W3b (docs/meshcom5-campaign.md Welle 3, Konzept 4.11): eigener '@'-HEY-
+    // Rahmen -- fuer die Echo-Tabelle, nicht fuer sendNbrReport()'s HN-Bericht
+    // (eigene, ausgeschlossene Aufrufstelle: der HN-Bericht wird nie relayt
+    // und ist keine im 2-Hop-Fenster sichtbare Echo-Kette).
+    nbrNoteOwnTx(nbrMatrix, (uint32_t)aprsmsg.msg_id, aprsmsg.payload_type,
+                 uptimeMin16());
 
     // GW-01: no gateway self-upload of the own '@' HEY. The bare copy
     // (rssi/snr 0, no signal report) always reached the server seconds before
@@ -5162,6 +5435,117 @@ void sendHey()
             iWrite=0;
         */
     }
+}
+
+// HN-Bericht (Nachbarschaftsmatrix Stufe 3, --nbrreport off|auto|on): periodischer
+// HEY-artiger Bericht "wen ich direkt mit welchem SNR hoere" (Nachbau von
+// sendHey() oben) an das eigene Ziel "HN", max_hop 0 explizit gesetzt --
+// dieser Bericht wird NIE weiterrelayt (siehe OnRxDone-Abfangpunkt in
+// lora_functions.cpp, der ihn ausschliesslich in die eigene Matrix fuettert
+// und aus jedem anderen Pfad heraushaelt). Der Aufrufer (Timer in
+// esp32_main.cpp/nrf52_main.cpp) entscheidet Takt und ob der --nbrreport-Modus
+// ueberhaupt senden soll; diese Funktion prueft den Modus nicht noch einmal.
+//
+// Wie sendHey() (GW-01) geht der Bericht NUR ueber addTxRingEntry() auf die
+// LoRa-TX-Seite: finalizeAndSendAPRS() ruft weder addNodeData() (Server-
+// Upload) noch sendExternNotice()/queueExtern() (EXTUDP) noch addBLE*Buffer()
+// (Telefon) auf, und diese Funktion selbst auch nicht -- der eigene HN-
+// Bericht bleibt reines LoRa.
+void sendNbrReport()
+{
+    // Wie sendHey(): im Ping-Testbetrieb (node_pingtime > 0) bleibt der
+    // Knoten auch fuer die HN-Meldung still (Advisor R4).
+    if(meshcom_settings.node_call[0] != 0x00 && meshcom_settings.node_pingtime > 0)
+        return;
+
+    uint16_t now_min = uptimeMin16();
+
+    char nbr_payload[128];
+    // MeshCom 5 (docs/meshcom5-campaign.md Welle 4, Konzept 4.8): R<heard> im
+    // HN-Bericht geht auf die Luft -- nbrNcntAir(), auf NBR_NCNT_AIR_MAX gekappt.
+    int nbr_plen = nbrBuildReport(nbrMatrix, now_min, nbrNcntAir(nbrMatrix, now_min), nbr_payload, sizeof(nbr_payload));
+
+    if(nbr_plen < 0)
+    {
+        // Kein Bericht baubar (leere Matrix o.ae.) -- nichts senden. Feldzahl
+        // wie eine normale RPTTX-Zeile (docs/nbr-logformat.md), nur mit
+        // leerem Payload-Feld, damit ein Auswerter, der immer vier Felder
+        // hinter "RPTTX" erwartet, nicht auf einer fehlenden Spalte stolpert.
+        if(bNBRDEBUG && nbrLog != NULL)
+        {
+            char nbr_line[32];
+            snprintf(nbr_line, sizeof(nbr_line), "[NBR]|RPTTX|%u|-1|", (unsigned)now_min);
+            nbrLog(nbr_line);
+        }
+        return;
+    }
+
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+
+    struct aprsMessage aprsmsg;
+
+    initAPRS(aprsmsg, '@');
+
+    aprsmsg.msg_len = 0;
+    aprsmsg.max_hop = 0;   // HN-Bericht wird nie weiterrelayt
+
+    // MSG ID zusammen setzen (gleiches Muster wie sendHey())
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
+
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
+
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "HN");
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "HN");
+
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), nbr_payload);
+
+    finalizeAndSendAPRS(aprsmsg, msg_buffer);
+
+    if(bNBRDEBUG && nbrLog != NULL)
+    {
+        char nbr_line[160];
+        snprintf(nbr_line, sizeof(nbr_line), "[NBR]|RPTTX|%u|%d|%s", (unsigned)now_min, nbr_plen, nbr_payload);
+        nbrLog(nbr_line);
+    }
+
+    // store last message to compare later on
+    insertOwnTx(aprsmsg.msg_id);
+
+    // to LoRa
+    addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "nbr_report"); // 0xFF no retransmission
+}
+
+// Takt fuer sendNbrReport() (Stufe 3): laeuft UNABHAENGIG vom Trickle-
+// Intervall und wird NIE unterdrueckt -- der Zeitpunkt der naechsten Pruefung
+// ruckt immer weiter, auch bei --nbrreport off, damit ein spaeteres Umschalten
+// auf auto/on nicht sofort einen aufgestauten Bericht nachholt. Nur der
+// SEND-Entscheid haengt am Modus (siehe unten).
+static unsigned long nbrreport_timer = 0;
+static unsigned long nbrreport_due_ms = (unsigned long)NBR_REPORT_FIRST_S * 1000UL;
+
+void nbrReportTick()
+{
+    if((uint32_t)(millis() - nbrreport_timer) < nbrreport_due_ms)
+        return;
+
+    // off (bNBRRPTOFF) nie, on (bNBRRPTON) immer, sonst auto: nur wenn weder
+    // Mesh-Relay noch Gateway-Betrieb an sind -- ein Gateway hoert die
+    // eigentliche Information laengst aus dem Server, ein Mesh-Relay flutet
+    // ohnehin schon.
+    bool bSend;
+    if(bNBRRPTON)
+        bSend = true;
+    else if(bNBRRPTOFF)
+        bSend = false;
+    else
+        bSend = (!bMESH && !bGATEWAY);
+
+    if(bSend)
+        sendNbrReport();
+
+    nbrreport_due_ms = (unsigned long)NBR_REPORT_INTERVAL_S * 1000UL
+                        + (unsigned long)random(0, (long)(NBR_REPORT_JITTER_S * 1000L) + 1);
+    nbrreport_timer = millis();
 }
 
 // Sofort-Pfad fuer sendHey() (FL-02): --sendhey ruft diese Funktion statt
@@ -5241,10 +5625,10 @@ void sendTelemetry(int ID)
     // [DK5EN] eigene PN (Text an Rufzeichen, endet auf {NNN), in updateRetransmissionStatus().
     aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);   // MAC-address + 3FF = 1023 max rela only 0-999
     
-    aprsmsg.msg_source_path = meshcom_settings.node_call;
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
     
-    aprsmsg.msg_destination_call = "100001";
-    aprsmsg.msg_destination_path = "100001";
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "100001");
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "100001");
 
     if(iNextTelemetry == 0)
     {
@@ -5464,18 +5848,9 @@ void sendTelemetry(int ID)
 
     if(strlen(msg_text) > 0)
     {
-        aprsmsg.msg_payload = msg_text;
+        mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), msg_text);
         
-        meshcom_settings.node_msgid++;
-        if(meshcom_settings.node_msgid > 999)
-            meshcom_settings.node_msgid=0;
-
-        // Flash rewrite
-        save_msgid();
-
-        checkVia(aprsmsg);
-
-        encodeAPRS(msg_buffer, aprsmsg);
+        finalizeAndSendAPRS(aprsmsg, msg_buffer);
 
         if(bDisplayInfo)
         {
@@ -5931,7 +6306,13 @@ void addRingPointer(volatile int &pWrite, volatile int &pRead, int iMAX, const c
             if (pRead >= iMAX) // if the buffer is full we start at index 0 -> take care of overwriting!
                 pRead = 0;
 
-            if(bLORADEBUG && strcmp(bufName, "raw_rx") != 0 && strcmp(bufName, "phone") != 0 && strcmp(bufName, "udp") != 0)
+            // DR-21 (Sichtbarkeitsklausel, 2026-09-12 entschieden): "udp" faellt
+            // aus der Ausnahmeliste. Der Ausgangsring war der EINZIGE, dessen
+            // Ueberlauf stumm blieb -- und genau er laeuft jetzt voll, wenn die
+            // neue Fruehruecknahme bei udp_dest_addr == 0 den Drain gar nicht
+            // mehr laufen laesst. Ohne diese Zeile waere die Verdraengung
+            // unbeobachtbar.
+            if(bLORADEBUG && strcmp(bufName, "raw_rx") != 0 && strcmp(bufName, "phone") != 0)
             {
                 printfdeb("[MC-DBG] RING_OVERFLOW buf=%s\n", bufName);
             }

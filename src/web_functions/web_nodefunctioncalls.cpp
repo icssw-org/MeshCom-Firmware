@@ -28,9 +28,11 @@ void webFunctionCall(funCallStruct* functionData) {
     if(functionData->functionName.compareTo("reboot")==0) {
                 commandAction((char*)"--reboot", bPhoneReady);
     }
+    #ifdef ESP32
     if(functionData->functionName.compareTo("otaupdate")==0) {
                 commandAction((char*)"--ota-update", bPhoneReady);
     }
+    #endif
 
 
     //if nothiung matched, then the function is not known.

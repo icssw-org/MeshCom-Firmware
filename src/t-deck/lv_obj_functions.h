@@ -42,6 +42,13 @@ int getMapDropboxID(String strMap);
 void tdeck_refresh_SET_view();
 void tdeck_refresh_track_view();
 void tdeck_send_track_view();
+
+// MeshCom-5-Topologie Welle 4 (docs/meshcom5-topologie/ 4.6/4.7/4.12): rebuilds
+// mh_ta/path_ta from nbr_views if that tab is the one currently shown, called
+// from topoUiChanged() (src/topo_ui.cpp). Cheap no-op otherwise -- neither
+// table exists until setDisplayLayout() has run.
+void tdeck_refresh_mh_view();
+void tdeck_refresh_path_view();
 void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio);
 void tdeck_add_MSG(String callsign, String path, String message, bool bWithAudio);
 void tdeck_reset_msg_tabs();

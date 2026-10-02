@@ -37,8 +37,8 @@ static inline uint16_t bleJsonFrame(const JsonDocument &doc, uint8_t *buf, size_
 // and re-measures until the document fits payload_max, then hands the now
 // smaller-or-equal document to bleJsonFrame(). What comes out is always a
 // complete, parseable JSON object -- possibly missing optional fields, never
-// missing a closing quote or brace. Same pattern as updateMHeard()'s
-// PP/DIST fallback (mheard_functions.cpp).
+// missing a closing quote or brace. Used by the MH frames to the phone
+// (src/mh_phone.h, MeshCom 5 wave 4).
 static inline uint16_t bleJsonFrameFailSoft(JsonDocument &doc, uint8_t *buf, size_t bufsize, size_t payload_max)
 {
     JsonObject obj = doc.as<JsonObject>();

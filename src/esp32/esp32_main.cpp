@@ -10,12 +10,14 @@
  *  @date        2025-12-03
  */
 #include <Arduino.h>
+#include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include <atomic>
 #include <configuration.h>
 #include "capture_functions.h"
 #include "dedup_functions.h"
 #include "ntp_async.h"      // NTP-01: isPending() haelt das GPS-Gate fuer --ntpsync offen
 #include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
+#include "loop_breadcrumb.h" // F3: always-on LAST_LOOP_SECTION breadcrumb for TASK_WDT forensics
 #include "track_warning.h" // TRK-01: Warnhinweis bei aktivem Track
 #include <maxhop.h>         // CS-01: plausibility of the persisted text hop limit
 #include <RadioLib.h>
@@ -40,10 +42,6 @@ SPIClass ethSPI(FSPI);
 //====== Timer for periodical events u.a.
 #include "Timeout.h"
 Timeout timerSerial;
-#endif
-
-#ifdef HAS_SDCARD
-#include <SD.h>
 #endif
 
 #if defined(ARDUINO_ARCH_ESP32)
@@ -127,10 +125,17 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include "loop_scheduler.h" // D1-10: shared loop scheduler (see there)
+#if defined(ENABLE_MSGSTORE)
+#include "msgstore_api.h"
+#include "msgstore_settings.h"
+#endif
 #include <regex_functions.h>
 #include <test_inject.h>
 #include <command_functions.h>
+#include "nbr_matrix.h"    // --nbrdebug: nbrLogSnapshot()/nbrMatrix fuer den 15-Minuten-Takt
 #include <phone_commands.h>
+#include "ble_phone_drain.h"   // BLE-N1/N2: BlePhoneSend, g_blePhoneStats
 #include <aprs_functions.h>
 #include <batt_functions.h>
 #include <lora_functions.h>
@@ -139,7 +144,8 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include <extudp_functions.h>
 #include <kiss_functions.h>
 #include <web_functions/web_functions.h>
-#include <mheard_functions.h>
+#include <mh_phone.h>
+#include <topo_ui.h>
 #include <time_functions.h>
 #include <clock.h>
 #include <setlog_lines.h> // SL-04/SL-05: --setlog on line formatters (Welle 0)
@@ -243,7 +249,6 @@ bool bTeleFirst = true;
 
 bool bAllStarted = true;
 
-int BattWaitCounter = 0;
 
 #if defined(BOARD_T_ETH_ELITE) || defined(BOARD_T_CONNECT_PRO)
 EspETH neth;
@@ -254,11 +259,6 @@ String strTime;
 String strDate;
 String str;
 
-// CheckSerialConsole
-String strTextWork;
-char strText[600] = {0};
-int iTxtPos = 0;
-int iTxtLen = 0;
 /*
     Video: https://www.youtube.com/watch?v=oCMOYS71NIU
     Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
@@ -401,6 +401,9 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
 
     void onMTUChange(uint16_t MTU, NimBLEConnInfo& connInfo) override
     {
+        // BLE-N2: remember the negotiated MTU. The drain reads the live value
+        // on every send (esp32_ble_mtu()) and counts frames longer than MTU-3.
+        g_blePhoneStats.last_mtu = MTU;
         if(bBLEDEBUG)
         {
             Serial.printf("[BLE ];mtu;ms;%lu;mtu;%u\n", (unsigned long)millis(), MTU);
@@ -625,7 +628,10 @@ unsigned long ble_wait = 0;
 unsigned long wifi_active_timer = 0;
 
 bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet received we never saw before RcvBuffer[12] changes, rest is same
-void checkSerialCommand(void);
+// checkSerialCommand() now lives in its own TU (C3 carve-out)
+#include "serial_command.h"
+// gatewayService_*() likewise (C4 carve-out)
+#include "gateway_service.h"
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
@@ -852,6 +858,22 @@ void esp32setup()
             Serial.printf("[BOOT] WAKE_CAUSE=%d %s\n", (int)wc, wakeCauseName(wc));
         }
     }
+    // F3: where was the loop task when the previous boot ended? Unconditional
+    // (raw Serial, not behind --debug), printed once, record cleared by the read.
+    {
+        char crumb[64];
+        char summary[LOOPCRUMB_SUMMARY_LEN];
+        esp_reset_reason_t rr = esp_reset_reason();
+        int n = snprintf(summary, sizeof(summary), "RESET_REASON=%d %s", (int)rr, resetReasonName(rr));
+        if (loopCrumbTakeReport(crumb, sizeof(crumb)))
+        {
+            Serial.println(crumb);
+            const char *c = (strncmp(crumb, "[BOOT] ", 7) == 0) ? crumb + 7 : crumb;
+            if (n > 0 && (size_t)n < sizeof(summary))
+                snprintf(summary + n, sizeof(summary) - (size_t)n, " %s", c);
+        }
+        loopCrumbSetBootSummary(summary);   // shown by --info (net console readers)
+    }
 #if INSTRUMENT_ENABLED
     instrument_report_prev_boot();   // CDC-01: loop gaps of the previous boot, from RTC memory
 #endif
@@ -870,9 +892,6 @@ void esp32setup()
 
     // init nach Reboot
     init_loop_function();
-
-    // Initialize mheard list
-    initMheard();
 
 	// Get LoRa parameter
 	init_flash();
@@ -907,6 +926,13 @@ void esp32setup()
     meshcom_settings.node_mversion = MODUL_HARDWARE;
     meshcom_settings.node_cleanflash = 0;
     snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%-4.4s%-1.1s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+
+#if defined(ENABLE_MSGSTORE)
+    // S3: store node -- glue first (installs the MsgStoreEnv), then the persisted
+    // --store/--storecall/--storetime/--storeslots/--storenotice settings.
+    msgstoreGlueInit();
+    msgstoreSettingsLoad();
+#endif
 
     // "-0" und "-01" sind nicht die kanonische Schreibweise der SSID. Was aus
     // dem Flash kommt, wird deshalb einmal beim Start geradegezogen -- das
@@ -1005,6 +1031,16 @@ void esp32setup()
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
     bDisplayLog = meshcom_settings.node_sset4 & 0x0004;
     bTXCAPTURE = meshcom_settings.node_sset4 & 0x0008;
+    bNBRDEBUG = meshcom_settings.node_sset4 & 0x0400;
+    nbrDebugApply();
+    // --nbrrelay off|count|on (Stufe 2): 0x0800 rechnen/zaehlen, 0x1000 anwenden.
+    bNBRRELAY  = (meshcom_settings.node_sset4 & 0x1800) != 0;
+    bNBRCANCEL = (meshcom_settings.node_sset4 & 0x1000) != 0;
+    // --nbrsym on|off (Stufe 2): 0x2000 invertiert gespeichert, siehe command_functions.cpp.
+    bNBRSYM = (meshcom_settings.node_sset4 & 0x2000) == 0;
+    // --nbrreport off|auto|on (Stufe 3, HN-Bericht): 0x0100 off, 0x0200 on, keines von beiden auto.
+    bNBRRPTOFF = (meshcom_settings.node_sset4 & 0x0100) != 0;
+    bNBRRPTON  = (meshcom_settings.node_sset4 & 0x0200) != 0;
     #ifndef DISABLE_KISS_TCP
     bKISS = meshcom_settings.node_sset4 & 0x0010;
     bKISSTX = meshcom_settings.node_sset4 & 0x0020;
@@ -1048,6 +1084,12 @@ void esp32setup()
     #if defined(BOARD_T_DECK_PRO)
         initTDeck_pro();
     #endif
+
+    // MeshCom 5 (docs/meshcom5-campaign.md Welle 4): /topo.dat laden. Erst hier,
+    // nach init_flash() (Rufzeichen, node_persist_to_sd) und nach initTDeck()/
+    // initTDeck_pro(), die die SD-Karte einhaengen; auf allen anderen Boards ein
+    // No-Op (src/topo_ui.h).
+    topoUiBoot();
 
     #if defined(BOARD_T5_EPAPER)
         idf_setup();
@@ -2015,24 +2057,68 @@ void esp32setup()
     esp_task_wdt_add(NULL);
 }
 
-// BLE TX Function -> Node to Client
-void esp32_write_ble(uint8_t confBuff[300], uint8_t conf_len)
+// BLE TX Function -> Node to Client.
+//
+// BLE-N1: report what the stack did, so the drain can keep the frame when it
+// was refused. The old code did pTxCharacteristic->setValue() + notify();
+// notify() without arguments is NimBLE-Arduino's ble_gatts_chr_updated(), a
+// void call that queues the value for every subscribed peer and swallows a
+// failing send (out of mbufs) -- the result was always "true". The value
+// overload notify(data, len, handle) is not better: it returns only rc == 0.
+// So the frame goes out through ble_gatts_notify_custom() directly, which
+// returns the NimBLE rc:
+//   0                 the ATT PDU is queued for the controller      -> SENT
+//   BLE_HS_ENOTCONN   the connection is gone                        -> DOWN
+//   BLE_HS_ENOMEM ... no mbuf / out of resources (also our own
+//                     ble_hs_mbuf_from_flat() failing)              -> BUSY
+// One difference to the old path: notify_custom does not look at the CCCD, it
+// sends to the connection handle regardless. The drain only runs after the
+// app-layer hello (isPhoneReady), i.e. with a subscribed phone.
+BlePhoneSend esp32_write_ble(const uint8_t *buf, uint16_t len)
 {
     #if defined(DISABLE_BLE)
-    (void)confBuff; (void)conf_len;     // no BLE stack: pTxCharacteristic was never created
+    (void)buf; (void)len;     // no BLE stack: pTxCharacteristic was never created
+    return BLE_SEND_DOWN;
     #else
     if(bBLEDEBUG)
         printfdeb("[LOOP] <%lu> WRITE BLE\n", millis());
 
-    pTxCharacteristic->setValue(confBuff, conf_len);
-    pTxCharacteristic->notify();
+    if(!deviceConnected || g_ble_conn_handle == 0xFFFF || pTxCharacteristic == nullptr)
+        return BLE_SEND_DOWN;
+
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(buf, len);
+    int rc = BLE_HS_ENOMEM;
+    if(om != nullptr)
+        rc = ble_gatts_notify_custom(g_ble_conn_handle, pTxCharacteristic->getHandle(), om);   // frees om
+
+    if(rc == 0)
+        return BLE_SEND_SENT;
+
+    if(bBLEDEBUG)
+        Serial.printf("[BLE ];tx_rc;%lu;rc%d;msys%d\n", (unsigned long)millis(), rc, (int)os_msys_num_free());
+
+    return (rc == BLE_HS_ENOTCONN) ? BLE_SEND_DOWN : BLE_SEND_BUSY;
+    #endif
+}
+
+// BLE-N2: the live ATT MTU of the current connection, 0 if there is none.
+uint16_t esp32_ble_mtu()
+{
+    #if defined(DISABLE_BLE)
+    return 0;
+    #else
+    if(!deviceConnected || g_ble_conn_handle == 0xFFFF)
+        return 0;
+    return (uint16_t)ble_att_mtu(g_ble_conn_handle);
     #endif
 }
 
 
 
 // Deferred display update from OnRxDone (avoid I2C inside the radio callback).
-// RACE-01 fix: snapshot under spinlock, display call outside. Factored so both
+// RACE-01: snapshot first, display call outside. There is no lock here and none
+// is needed -- OnRxDone runs inside esp32loop() on ESP32, so producer and
+// consumer are one task. Factored so both
 // the local-radio loop and the external-radio path flush pending RX displays.
 static void flushDeferredDisplayUpdates()
 {
@@ -2217,6 +2303,23 @@ void esp32loop()
         }
     #endif
 
+    // D1-10: the shared scheduler runs at function scope, BEFORE the
+    // BOARD_T5_EPAPER / if(bRadio) block below. Six of its seven jobs (battery,
+    // heap monitor, MCP23017, BMP390, MCU811, INA226) never depended on the
+    // radio; only retransmit did, and loopEnabled_retransmit() keeps that gate
+    // (bRadio) per entry. Inside the block they would stop on a node whose
+    // radio failed to init, on env:esp32-external-radio (bRadio is false by
+    // design there) and on the T5 e-paper build, which compiles the #else arm
+    // away. BattTimeWait's zero-init is unconditional in the original (unlike
+    // heapMonTimer's/INA226TimeWait's, which are nested inside their own
+    // runtime guard and so live inside loopEnabled_heapMon()/
+    // loopEnabled_ina226() instead -- see loop_actions_esp32.cpp), so it stays
+    // a top-level statement here, right before the scheduler call.
+    if (BattTimeWait == 0)
+        BattTimeWait = millis() - 30000;
+
+    loopSchedulerRun(millis());
+
     // LoRa-Chip found
     #if defined(BOARD_T5_EPAPER)
         idf_loop();
@@ -2248,19 +2351,6 @@ void esp32loop()
             }
         }
 
-        // Retransmission status must tick on ALL nodes (including gateways).
-        // Without this, gateway text messages stay stuck at RING_STATUS_SENT
-        // forever if no echo is received via LoRa (RING_ZOMBIE).
-        if ((uint32_t)(millis() - retransmit_timer) >= (1000 * 2))
-        {
-            updateRetransmissionStatus();
-            // BP-03 (DJ8MEH-RCA): age out stale BACKGROUND (HEY) ring
-            // entries here, in the main-loop tick -- NOT in getNextTxSlot(),
-            // which also runs on the nRF52 timer task (Advisor F1).
-            txRingAgeBackground(millis());
-
-            retransmit_timer = millis();
-        }
 
         // FIX: Periodic ring buffer utilization report (every 30s)
         {
@@ -2594,7 +2684,7 @@ void esp32loop()
                 // DIO triggered while reception is ongoing
                 // that means we got a packet
 
-                { INSTR_SECTION("lora_rx"); checkRX(bRadio); }
+                { INSTR_SECTION("lora_rx"); LOOP_SECTION(LSEC_LORA_RX); checkRX(bRadio); }
 
                 // FIX BUG #2: checkRX() now restarts RX internally.
                 // Remove redundant interrupt rewiring that would double-reconfigure.
@@ -2751,13 +2841,13 @@ void esp32loop()
                 radio.clearPacketReceivedAction();
 
                 if(bLORADEBUG)
-                    printfdeb("[CHECK] radio.scanChannel() / 1");
+                    printfdeb("[CHECK] radio.scanChannel() / 1\n");
 
                 // CAD Scan 1
                 #if defined(BOARD_T_ETH_ELITE)
                 int cad_result = RADIOLIB_CHANNEL_FREE; //!!!!!!!!!!!!!! ACHTUNG !!!!!!!!!!!!!!!! muss raus
                 if(bLORADEBUG)
-                    printfdeb("[CHECK] T_ETH_ELITE BUG please fixit");
+                    printfdeb("[CHECK] T_ETH_ELITE BUG please fixit\n");
                 #else
                 int cad_result = radio.scanChannel();
                 #endif
@@ -2776,7 +2866,7 @@ void esp32loop()
                         printfdeb("[MC-DBG] CAD_BUSY_1 attempt=%d, double-check...\n", cad_attempt);
 
                     if(bLORADEBUG)
-                        printfdeb("[CHECK] radio.scanChannel() / 2");
+                        printfdeb("[CHECK] radio.scanChannel() / 2\n");
 
                     cad_result = radio.scanChannel();
                     if(bLORADEBUG)
@@ -3006,7 +3096,22 @@ void esp32loop()
             snprintf(ctemp, sizeof(ctemp), "%04i-%02i-%02i %02i:%02i:%02i",
              meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
 
-            memcpy(meshcom_settings.node_update, ctemp, 21);
+            // This was `memcpy(..., ctemp, 21)` against a char[21] field, but
+            // the snprintf above fills exactly 20 bytes (19-char timestamp +
+            // NUL) -- so the 21st byte copied was UNINITIALISED STACK, and it
+            // landed in a settings field. The field is char[20] now and the
+            // copy is bounded by its own size with the terminator written
+            // explicitly, so neither the length nor the NUL depends on what
+            // snprintf happened to leave behind.
+            //
+            // Not formatted straight into node_update the way nrf52_main.cpp
+            // does it: the date fields are plain `int`, so xtensa-gcc cannot
+            // bound "%02i" to two characters and -Werror=format-truncation
+            // rejects a 20-byte target. Formatting into the wide scratch and
+            // copying a provable number of bytes keeps both the bound and the
+            // warning honest.
+            memcpy(meshcom_settings.node_update, ctemp, sizeof(meshcom_settings.node_update) - 1);
+            meshcom_settings.node_update[sizeof(meshcom_settings.node_update) - 1] = 0x00;
 
             #if defined(ENABLE_RTC)
             if(bRTCON && bNTPDateTimeValid) // NTP hat Vorang zur RTC und setzt RTC
@@ -3049,6 +3154,7 @@ void esp32loop()
     if(meshcom_settings.node_netmode == 0 && (uint32_t)(millis() - wifi_active_timer) >= 30000)
     {
         INSTR_SECTION("wifi_ping");
+        LOOP_SECTION(LSEC_WIFI_PING);
         if(!checkWifiPing())
         {
             if(ifalseping > 0)
@@ -3194,7 +3300,7 @@ void esp32loop()
     {
         BleQueueItem bleItem;
         while (xQueueReceive(bleQueue, &bleItem, 0) == pdTRUE) {
-            { INSTR_SECTION("ble_cmd"); readPhoneCommand(bleItem.data); }
+            { INSTR_SECTION("ble_cmd"); LOOP_SECTION(LSEC_BLE_CMD); readPhoneCommand(bleItem.data); }
         }
     }
 
@@ -3229,7 +3335,7 @@ void esp32loop()
                 //sendMessage((char*)config_cmds[config_cmds_index], strlen(config_cmds[config_cmds_index]));
             }
 
-            startMheardToPhone(); // MHeard erst, wenn der Kommando-Ring leer ist (siehe unten)
+            mhPhoneListStart(); // MHeard-Liste erst, wenn der Kommando-Ring leer ist (siehe unten)
 
             config_to_phone_prepare_timer = millis();
 
@@ -3256,10 +3362,10 @@ void esp32loop()
                         ble_wait = millis();
                     }
                 }
-                else if (mheardToPhonePending())
+                else if (mhPhoneListPending())
                 {
                     // Kommando-Ring leer: naechste Portion der MHeard-Liste nachlegen
-                    sendMheard();
+                    mhPhoneListStep();
                 }
                 else if (!bf_empty(&phoneRing))
                 {
@@ -3294,18 +3400,7 @@ void esp32loop()
     }
 
 
-    #if defined(ENABLE_MCP23017)
-    // 5 sec
-    if ((uint32_t)(millis() - mcp_refresh_timer) >= 5000)
-    {
-        // get i/o state
-        if(loopMCP23017())
-        {
-        }
-
-        mcp_refresh_timer = millis();
-    }
-    #endif
+    // D1-10 loop scheduler: mcp_refresh_timer moved to the scheduler call above.
 
     // gps display refresh every 5 sec
     gps_refresh_intervall = GPS_REFRESH_INTERVAL;
@@ -3321,7 +3416,7 @@ void esp32loop()
     }
 
     #ifdef ENABLE_GPS
-    if (bGPSON && gpsDetected) { INSTR_SECTION("gps_feed"); WZ_GPS_Feed(); }
+    if (bGPSON && gpsDetected) { INSTR_SECTION("gps_feed"); LOOP_SECTION(LSEC_GPS); WZ_GPS_Feed(); }
     #endif
 
     if ((uint32_t)(millis() - gps_refresh_timer) >= ((unsigned long)gps_refresh_intervall * 1000))
@@ -3354,7 +3449,7 @@ void esp32loop()
             #if defined (ENABLE_GPS)
                 if(gpsDetected)
                 {
-                    { INSTR_SECTION("gps"); igps = WZ_GPS_Loop(); }
+                    { INSTR_SECTION("gps"); LOOP_SECTION(LSEC_GPS); igps = WZ_GPS_Loop(); }
                     
                     if(iGPSDEBUG > 0)
                     {
@@ -3452,8 +3547,9 @@ void esp32loop()
         gps_refresh_timer = millis();
     }
 
-    // check NCNT modified
-    int incnt = getMheardCount();
+    // check NCNT modified -- MeshCom 5 (Welle 4, Konzept 4.8): lokaler
+    // Vergleich, nicht die Sendefassung -- nbrNcnt(), nicht nbrNcntAir().
+    int incnt = nbrNcnt(nbrMatrix, uptimeMin16());
     if(ncnt_hold != incnt)
     {
         // minimal alle 60 sec
@@ -3551,8 +3647,9 @@ void esp32loop()
     {
         bHeyFirst = false;
 
-        // Check for topology change (neighbor count changed)
-        int current_neighbors = getMheardCount();
+        // Check for topology change (neighbor count changed) -- lokaler
+        // Vergleich (Konzept 4.8: die Trickle-Ruecksetzung ist kein Sender).
+        int current_neighbors = nbrNcnt(nbrMatrix, uptimeMin16());
         if(trickle_last_neighbor_count >= 0 && current_neighbors != trickle_last_neighbor_count)
         {
             // Topology changed — reset to fastest interval
@@ -3565,7 +3662,8 @@ void esp32loop()
         trickle_last_neighbor_count = current_neighbors;
 
         // Trickle suppression: skip HEY if enough consistent HEYs heard
-        if(trickle_consistent_count >= TRICKLE_K)
+        // F6: a gateway keeps sending at least one HG per Imax (hey_policy.h).
+        if(heyTrickleSuppress(trickle_consistent_count))
         {
             if(bLORADEBUG)
                 printfdeb("[MC-TRICKLE] SUPPRESS consistent=%d>=k=%d interval=%lums neighbors=%d\n",
@@ -3584,6 +3682,43 @@ void esp32loop()
         trickle_consistent_count = 0;
 
         heyinfo_timer = millis();
+    }
+
+    // HN-Bericht (Nachbarschaftsmatrix Stufe 3, --nbrreport): eigener Takt,
+    // unabhaengig vom Trickle-Intervall oben und nie unterdrueckt -- siehe
+    // nbrReportTick() in loop_functions.cpp fuer Zeitplan und Modus-Auswertung.
+    nbrReportTick();
+
+    // --nbrdebug (24-h-Dauertest der Nachbarschaftsmatrix): 15-Minuten-Takt fuer
+    // nbrLogSnapshot(). Nur im Loop, NICHT im Timer-Task -- laesst sich hier nicht
+    // verletzen, esp32loop() ist der Loop-Task. Laeuft nur, wenn das Flag gesetzt
+    // ist; nbrDebugApply() setzt nbrsnap_timer beim Einschalten zurueck, damit der
+    // erste Schnappschuss nicht erst 15 Minuten nach dem Einschalten kommt.
+    if(bNBRDEBUG && (uint32_t)(millis() - nbrsnap_timer) >= 900000UL)
+    {
+        nbrsnap_timer = millis();
+        nbrLogSnapshot(nbrMatrix, uptimeMin16());
+    }
+
+    // Nachbarschaftsmatrix (Welle 2, edge pool): Minuten-Sweep (nbrSweep(),
+    // CONTRACT in nbr_matrix.h) -- IMMER, unabhaengig von --nbrdebug (das
+    // steuert nur den 15-Minuten-Schnappschuss oben). Loop-Task, nicht
+    // Timer-Task, wie nbrLogSnapshot() oben. nbrSweep() selbst ist ein No-Op
+    // bei einem zweiten Aufruf in derselben Minute; die Minuten-Waechter hier
+    // spart trotzdem den Funktionsaufruf bei jedem Loop-Durchlauf.
+    {
+        static uint16_t s_nbr_sweep_min = 0xFFFF;
+        uint16_t now_min_sweep = uptimeMin16();
+        if(now_min_sweep != s_nbr_sweep_min)
+        {
+            s_nbr_sweep_min = now_min_sweep;
+            nbrSweep(nbrMatrix, now_min_sweep);
+            // Konsistenzpruefung Masken <-> Kantenpool (nbrLogCheck(), [NBR]|CHECK),
+            // einmal je Minute, nur bei --nbrdebug: auf nRF52 das Instrument fuer
+            // Task-Wechsel mitten in einer Aenderung (Konzept 5).
+            if(bNBRDEBUG)
+                nbrLogCheck(nbrMatrix, now_min_sweep);
+        }
     }
 
     // TELEMETRY_INTERVAL in Minutes == 15 minutes default
@@ -3611,7 +3746,7 @@ void esp32loop()
     }
 
     if(meshcom_settings.node_pingcall[0] == 0x00 || meshcom_settings.node_pingtime == 0 || meshcom_settings.node_pingcount == 0)
-        { INSTR_SECTION("display_tick"); mainStartTimeLoop(); }
+        { INSTR_SECTION("display_tick"); LOOP_SECTION(LSEC_DISPLAY); mainStartTimeLoop(); }
 
     #if not defined(BOARD_T_DECK_PRO)
     if(DisplayOffWait > 0)
@@ -3655,85 +3790,33 @@ void esp32loop()
     if(tx_is_active == false && is_receiving == false)
         test_inject_service();
 
-    if(BattTimeWait == 0)
-        BattTimeWait = millis() - 500;
+    // D1-10 loop scheduler: BattTimeWait (the battery sampler tick, 100 ms since the
+    // battery consolidation; the sampler itself decides when to read) moved to
+    // the scheduler call above; its zero-init stays here (see the comment
+    // there).
 
-    if ((uint32_t)(millis() - BattTimeWait) >= 500)  // 0.5 sec OE3WAS
+    // [OE3WAS] Lüftersteuerung -- split off from the battery-read block above into its own
+    // 0.5 sec timer (DRY unification, operator decision 2026-09-11): BattTimeWait was then
+    // 30 sec (it is the 100 ms sampler tick since the battery consolidation), and this 1W T-Beam
+    // fan/NTC control must not depend on the battery cadence to react to overtemp -- that would be a thermal regression. Only
+    // LilyGo_T-Beam-1W defines NTC_PIN/FAN_CTRL, so this whole block compiles away elsewhere.
+    #if defined(NTC_PIN) && defined(FAN_CTRL) // BOARD_TBEAM_1W
+    static unsigned long FanTimeWait = 0;
+    static int FanWaitCounter = 0;
+
+    if(FanTimeWait == 0)
+        FanTimeWait = millis() - 500;
+
+    if ((uint32_t)(millis() - FanTimeWait) >= 500)  // 0.5 sec OE3WAS -- kept fast on purpose, see comment above
     {
-        BattWaitCounter++;
-
         if (tx_is_active == false && is_receiving == false)
         {
-            #if defined(DISABLE_BATTERY)
+            FanWaitCounter++;
 
-                // Board without battery measurement: report "not measurable", as the
-                // MODUL_FW_TBEAM branch below does without a PMU.
-                global_batt = 0;
-                global_proz = 0;
-                battProbeState = BATT_PROBE_NONE;
-
-            #elif defined(MODUL_FW_TBEAM)
-                int pmu_proz=0;
-                if(PMU != NULL)
-                {
-                    global_batt = (float)PMU->getBattVoltage();
-                    global_proz = (int)PMU->getBatteryPercent();
-
-                    // no BATT
-                    if(global_proz < 0)
-                    {
-                        if(bDisplayCont && BattWaitCounter > 20)
-                            printfdeb("[readBatteryVoltage]...no battery is connected");
-                            
-                        global_batt = (float)PMU->getVbusVoltage();
-                        global_proz=100.0;
-                    }
-                    else
-                    {
-                        if(global_proz < 1.0 && global_batt < 3200.0)
-                            global_proz = 2;
-                    }
-                }
-                else
-                {
-                    global_batt = 0;
-                    global_proz = 0;
-
-                    // Ohne PMU gibt es keine Messung. Ohne diese Zeile wuerde
-                    // PositionToAPRS() jetzt dauerhaft "/B=000" senden und damit
-                    // "Akku leer" behaupten, wo in Wahrheit "nicht messbar" gilt --
-                    // genau die Falschmeldung, die der /B=000-Fix beseitigen soll.
-                    battProbeState = BATT_PROBE_NONE;
-                }
-
-                if(bDisplayCont && BattWaitCounter > 20)
-                    printfdeb("[readBatteryVoltage]...PMU.volt %.1f PMU.proz %i %i\n", global_batt, global_proz, pmu_proz);
-            #else
-            
-                global_batt = read_batt();
-                global_proz = mv_to_percent(global_batt);
-                
-                #ifndef USE_BATT
-                if(bDisplayCont && BattWaitCounter > 20)  // neue Ausgabe erfolgt in batt_functions
-                {
-                    #if not defined(BOARD_T_DECK_PRO) and not defined(BOARD_TBEAM_1W)
-                    printfdeb("[readBatteryVoltage] %s ... %.2f V %i %% max_batt %.3f V\n", getTimeString().c_str(), global_batt/1000., global_proz, meshcom_settings.node_maxv);
-                    #endif
-                }
-                #endif
-
-                #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-                tdeck_update_batt_label(global_batt/1000., global_proz);
-                #endif 
-            
-            #endif
-
-            // [OE3WAS] Lüftersteuerung
-            #if defined(NTC_PIN) && defined(FAN_CTRL) // BOARD_TBEAM_1W
             float NTCtemp = getTempForNTC();
             if (NTCtemp > 40.0)
             {
-                 digitalWrite(FAN_CTRL, HIGH); 
+                 digitalWrite(FAN_CTRL, HIGH);
             }
             else
             {
@@ -3741,9 +3824,9 @@ void esp32loop()
                     digitalWrite(FAN_CTRL, LOW);
             }
 
-            if(bWXDEBUG && BattWaitCounter > 20)
+            if(bWXDEBUG && FanWaitCounter > 20)
                 printfdeb("%s;[TEMP];%.2f;%s\n", getTimeString().c_str(), NTCtemp, digitalRead(FAN_CTRL) ? "on" : "off");
-                
+
             meshcom_settings.node_ntctemp = NTCtemp;
 
             if(digitalRead(FAN_CTRL) == HIGH)
@@ -3751,48 +3834,19 @@ void esp32loop()
             else
                 meshcom_settings.node_fanon = false;
 
-            #endif
+            FanTimeWait = millis();
 
-            BattTimeWait = millis();
-
-            if(BattWaitCounter > 20)
+            if(FanWaitCounter > 20)
             {
-                BattWaitCounter = 0;
+                FanWaitCounter = 0;
             }
         }
     }
+    #endif
 
-    // Heap Monitor — always active, 60s interval
-    {
-        static unsigned long heapMonTimer = 0;
-        if (heapMonTimer == 0)
-            heapMonTimer = millis();
-
-        if ((uint32_t)(millis() - heapMonTimer) >= 60000)
-        {
-            if(ESP.getFreeHeap() != lFreeHeap || ESP.getFreePsram() != lFreePsram)
-            {
-                lFreeHeap = ESP.getFreeHeap();
-                lFreePsram = ESP.getFreePsram();
-
-                if(!bDisplayLog)
-                {
-                    printfdeb("[HEAP];%s;%lu;%d;%d;(mon)\n",
-                        getTimeString().c_str(),
-                        lFreeHeap,
-                        ESP.getMinFreeHeap(),
-                        ESP.getMaxAllocHeap());
-                    #if defined(BOARD_HAS_PSRAM)
-                    printfdeb("[PSRM];%s;%lu;(mon)\n",
-                        getTimeString().c_str(),
-                        lFreePsram);
-                    #endif
-                }
-            }
-
-            heapMonTimer = millis();
-        }
-    }
+    // D1-10 loop scheduler: heapMonTimer (always-active 60 s heap monitor)
+    // moved to the scheduler call above; its zero-init now lives inside
+    // loopEnabled_heapMon() (loop_actions_esp32.cpp).
 
     #ifdef OneWire_GPIO
     if(bONEWIRE)
@@ -3896,71 +3950,9 @@ void esp32loop()
     }
     #endif
 
-    // read BMP390 Sensor
-    #if defined(ENABLE_BMP390)
-    if((bBMP3ON && bmp3_found))
-    {
-        if ((uint32_t)(millis() - BMP3TimeWait) >= 60000)   // 60 sec
-        {
-            if(loopBMP390())
-            {
-                meshcom_settings.node_press = getPress3();
-                if(!aht20_found)
-                {
-                    meshcom_settings.node_temp = getTemp3();
-                }
-                meshcom_settings.node_press_asl = getPressASL3();
-                meshcom_settings.node_press_alt = getAltitude3();
-            }
-
-            BMP3TimeWait = millis(); // wait for next messurement
-        }
-    }
-    #endif
-
-    #if defined(ENABLE_MC811)
-    if(bMCU811ON && mcu811_found)
-    {
-        if ((uint32_t)(millis() - MCU811TimeWait) >= 60000)   // 60 sec
-        {
-            // read MCU-811 Sensor
-            if(loopMCU811())
-            {
-                meshcom_settings.node_co2 = geteCO2();
-                
-                if(wx_shot)
-                {
-                    commandAction((char*)"--wx", isPhoneReady, false);
-                    wx_shot = false;
-                }
-            }
-
-            MCU811TimeWait = millis(); // wait for next messurement
-        }
-    }
-    #endif
-
-    #if defined(ENABLE_INA226)
-    if(bINA226ON && ina226_found)
-    {
-        if(INA226TimeWait == 0)
-            INA226TimeWait = millis() - 10000;
-
-        if ((uint32_t)(millis() - INA226TimeWait) >= 15000)   // 15 sec
-        {
-            // read INA226 Sensor
-            if(loopINA226())
-            {
-                meshcom_settings.node_vbus = getvBUS();
-                meshcom_settings.node_vshunt = getvSHUNT();
-                meshcom_settings.node_vcurrent = getvCURRENT();
-                meshcom_settings.node_vpower = getvPOWER();
-            }
-
-            INA226TimeWait = millis(); // wait for next messurement
-        }
-    }
-    #endif
+    // D1-10 loop scheduler: BMP3TimeWait, MCU811TimeWait and INA226TimeWait
+    // moved to the scheduler call above (bodies/guards in
+    // loop_actions_esp32.cpp).
 
     // read every n seconds the bme680 sensor calculated from millis()
     #if defined(ENABLE_BMX680)
@@ -3991,75 +3983,8 @@ void esp32loop()
     }
     #endif
     
-    ////////////////////////////////////////////////
-    // WIFI Gateway functions
-    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
-    {
-        { INSTR_SECTION("udp"); getMeshComUDP(); sendMeshComUDP(); }
-
-        // heartbeat
-        if ((uint32_t)(millis() - hb_timer) >= (HEARTBEAT_INTERVAL * 1000))
-        {
-            sendMeshComHeartbeat();
-            hb_timer = millis();
-
-            if (last_upd_timer > 0)
-            {
-                unsigned long hb_age = millis() - last_upd_timer;
-
-
-                // Stage 1: diagnostic warning at 35s
-                if (hb_age > (HB_WARN_TIME * 1000) && !hb_warn_logged)
-                {
-                    bool wifi_ok = (WiFi.status() == WL_CONNECTED);
-                    printfdeb("[UDP] Server not responding for %lus — WiFi %s\n",
-                                  hb_age / 1000, wifi_ok ? "CONNECTED" : "NOT_CONNECTED");
-                    hb_warn_logged = true;
-
-                    // WiFi actually down → reset immediately, don't wait
-                    if (!wifi_ok)
-                    {
-                        printfdeb("[UDP] WiFi down — resetting");
-                        resetMeshComUDP();
-                        last_upd_timer = millis();
-                        hb_warn_logged = false;
-                    }
-                }
-
-                // Stage 2: timeout at 65s
-                if (hb_age > (MAX_HB_RX_TIME * 1000))
-                {
-                    bool wifi_ok = (WiFi.status() == WL_CONNECTED);
-
-                    if (!wifi_ok)
-                    {
-                        printfdeb("[UDP] Heartbeat timeout %lus — WiFi NOT_CONNECTED, resetting\n",
-                                      hb_age / 1000);
-                        resetMeshComUDP();
-                    }
-                    else
-                    {
-                        printfdeb("[UDP] Heartbeat timeout %lus — WiFi CONNECTED, server unresponsive, waiting\n",
-                                      hb_age / 1000);
-                    }
-
-                    last_upd_timer = millis();
-                    hb_warn_logged = false;
-                }
-            }
-        }
-
-        meshcom_settings.node_last_upd_timer = hb_timer;
-
-    }
-    else if(meshcom_settings.node_hasIPaddress)
-    {
-        // TM-45: bGATEWAY is off, so the block above never runs and never
-        // reads the socket -- do only the NTP-reply harvest instead, not
-        // the full gateway receive path (no double read: exactly one of
-        // the two branches runs per loop pass).
-        INSTR_SECTION("udp"); ntpHarvestUDP();
-    }
+    // C4 carve-out: the gateway service block lives in gateway_service_esp32.cpp
+    { LOOP_SECTION(LSEC_GATEWAY); gatewayService_esp32(); }
 
     if(bEXTUDP)
     {
@@ -4109,7 +4034,7 @@ void esp32loop()
                     }
                     else
                     {
-                        { INSTR_SECTION("wifi_connect"); doWiFiConnect(); }
+                        { INSTR_SECTION("wifi_connect"); LOOP_SECTION(LSEC_WIFI_CONNECT); doWiFiConnect(); }
 
                         if(iWlanWait > 20)
                         {
@@ -4117,7 +4042,7 @@ void esp32loop()
                             // retrying (auto-reconnect) and got_ip is harvested
                             // from the loop. No radio reset at boot (TM-34 §8).
                             iWlanWait = 0;
-                            printfdeb("[WIFI]...no join within 20 s, driver keeps retrying");
+                            printfdeb("[WIFI]...no join within 20 s, driver keeps retrying\n");
                             bAllStarted=true;
                         }
                     }
@@ -4140,6 +4065,8 @@ void esp32loop()
 
         if(bWEBSERVER && iWlanWait == 0)
         {
+            LOOP_SECTION(LSEC_WEB);   // F3: a blocked WiFiClient::write() lands here
+
             startWebserver();
 
             loopWebserver();
@@ -4211,7 +4138,7 @@ void esp32loop()
         tft_off();
     }
 
-    { INSTR_SECTION("lvgl"); lv_task_handler(); }
+    { INSTR_SECTION("lvgl"); LOOP_SECTION(LSEC_LVGL); lv_task_handler(); }
 
     #endif
 
@@ -4228,6 +4155,9 @@ void esp32loop()
     if((int32_t)(millis() - (retransmit_timer + (1000 * 2))) > 0)
     {
         updateRetransmissionStatus();
+#if defined(ENABLE_MSGSTORE)
+        msgstoreLoop();   // S3: all mailbox work runs here, in the loop task
+#endif
         retransmit_timer = millis();
     }
 
@@ -4425,7 +4355,7 @@ int checkRX(bool bRadio)
             printfdeb("[MC-DBG] CRC_PAYLOAD[%d]: ", dump_len);
             for(int i = 0; i < dump_len; i++)
                 printfdeb("%02X ", payload[i]);
-            printfdeb("");
+            printfdeb("\n");   // F2: printfdeb appends no line end
         }
     }
     else
@@ -4464,7 +4394,7 @@ int checkRX(bool bRadio)
             printfdeb("[MC-DBG] ERR_PAYLOAD[%d]: ", dump_len);
             for(int i = 0; i < dump_len; i++)
                 printfdeb("%02X ", payload[i]);
-            printfdeb("");
+            printfdeb("\n");   // F2: printfdeb appends no line end
         }
     }
 
@@ -4476,131 +4406,3 @@ int checkRX(bool bRadio)
 }
 
 
-void checkSerialCommand(void)
-{
-    // Serial available
-    if(Serial)
-    {
-        // Check USB Serial input (Serial == MSerial after telnet_functions.h include)
-        if(Serial.available() > 0)
-        {
-            char rd = (char)Serial.read();
-            // Drop NUL bytes: UART RX noise (e.g. unpowered USB-UART bridge on battery
-            // supply) delivers 0x00 which strlen() cannot see and wedges the parser.
-            if(rd != 0x00)
-            {
-                printdeb(rd);   // echo to USB + net console via MSerial
-                strText[iTxtPos] = rd;
-                if(iTxtPos < (int)sizeof(strText) - 1)
-                {
-                    iTxtPos++;
-                }
-            }
-        }
-    }
-    // Check net console input
-    #ifndef DISABLE_NET_CONSOLE
-    if(netConsoleAvailable())
-    {
-        char rd = (char)netConsoleRead();
-        // Skip Telnet IAC negotiation bytes (0xFF and following 2 bytes)
-        if((uint8_t)rd == 0xFF)
-        {
-            // Consume the 2 option bytes that follow IAC
-            if(netConsoleAvailable()) netConsoleRead();
-            if(netConsoleAvailable()) netConsoleRead();
-        }
-        else if(rd != '\r' && rd != 0x00)   // strip CR, keep LF; drop NUL (see above)
-        {
-            printdeb(rd);       // echo back via MSerial (server-side echo)
-            strText[iTxtPos] = rd;
-            if(iTxtPos < sizeof(strText) - 1)
-            {
-                iTxtPos++;
-            }
-        }
-    }
-    #endif
-
-    iTxtLen = strlen(strText);
-
-    // Self-healing: normally every stored byte is non-NUL, so strlen == iTxtPos.
-    // A stray NUL in the buffer breaks that invariant and would block command
-    // processing forever (early return below never reaches the memset). Discard.
-    if(iTxtLen != iTxtPos)
-    {
-        memset(strText, 0x00, sizeof(strText));
-        iTxtPos = 0;
-        return;
-    }
-
-    if(iTxtLen == 0)
-        return;
-
-    if(strText[0] == ':' || strText[0] == '-' || strText[0] == '{')
-    {
-        if(strText[iTxtLen-1] == '\n' || strText[iTxtLen-1] == '\r')
-        {
-            strTextWork = strText;
-            strTextWork.trim();
-            snprintf(strText, sizeof(strText), "%s", strTextWork.c_str());
-
-            strncpy(msg_text, strText, sizeof(msg_text) - 1);
-            msg_text[sizeof(msg_text) - 1] = '\0';
-
-            int inext=0;
-            char msg_buffer[600];
-            iTxtLen = strlen(strText);
-            for(int itx=0; itx<iTxtLen; itx++)
-            {
-                if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
-                {
-                    inext--;
-                    if(inext < 0)
-                        inext=0;
-                        
-                    msg_buffer[inext+1]=0x00;
-                }
-                else
-                {
-                    msg_buffer[inext]=msg_text[itx];
-                    msg_buffer[inext+1]=0x00;
-                    inext++;
-
-                    // buffer size reached
-                    if(inext > sizeof(msg_buffer)-2)
-                        break;
-                }
-            }
-
-            if(strText[0] == ':' && strText[1] == ':')
-            {
-                // BP-01: origin serial -- the notice comes back on the console.
-                setMsgOrigin(ORIGIN_SERIAL);
-                (void)sendMessage(msg_buffer, inext);
-                setMsgOrigin(ORIGIN_NONE);
-            }
-            else
-                if(strText[0] == '-' && strText[1] == '-')
-                    commandAction(msg_buffer, isPhoneReady, false);
-                else
-                    printfdeb("\n...wrong command %s\n", strText);
-
-            memset(strText, 0x00, sizeof(strText));
-            iTxtPos = 0;
-        }
-    }
-    else
-    {
-        if(bDEBUG)
-        {
-            if(strText[0] != '\n' && strText[0] != '\r')
-            {
-                printfdeb("MSG:%02X..not sent\n", (unsigned char)strText[0]);
-            }
-        }
-
-        memset(strText, 0x00, sizeof(strText));
-        iTxtPos = 0;
-    }
-}

@@ -36,6 +36,9 @@ void sub_page_rxlog();          // RX Log page
 void sub_page_path();           // path page
 void sub_page_mheard();         // mheard page
 void sub_page_spectrum();       // spectrum scan page
+#if defined(ENABLE_MSGSTORE)
+void sub_page_mailbox();        // mailbox (store node) page, stage 3
+#endif
 void sub_page_unknown();        // a 404 - page
 void sub_content_messages();    // only the formatted messages, not the complete message page
 void sub_page_login();          // login page

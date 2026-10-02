@@ -10,7 +10,6 @@
 #include <time_functions.h>
 #include <loop_functions.h>
 #include <clock.h>
-#include <mheard_functions.h>
 
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions_extern.h>
@@ -126,21 +125,18 @@ void loadTimePersistence() {
     unsigned long saved_time = timePrefs.getULong("last_time", 0);
     timePrefs.end();
 
-    unsigned long mheard_time = 0;
-    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
-    mheard_time = getLatestMHeardTimestamp();
-    #endif
-
+    // MeshCom 5 Welle 4: die Uhr aus der juengsten MHeard-Zeit entfiel mit
+    // MHeard; den T-Deck-Start stellt jetzt topoUiBoot() aus der Epoche von
+    // /topo.dat (src/topo_ui.h), wenn noch keine andere Quelle da ist.
     unsigned long msg_time = 0;
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
     msg_time = getLatestMessageTimestamp();
     #endif
 
     unsigned long max_time = saved_time;
-    if(mheard_time > max_time) max_time = mheard_time;
     if(msg_time > max_time) max_time = msg_time;
 
-    Serial.printf("[TIME]...Loaded time persistence: saved_time=%lu, mheard_time=%lu, msg_time=%lu\n", saved_time, mheard_time, msg_time);
+    Serial.printf("[TIME]...Loaded time persistence: saved_time=%lu, msg_time=%lu\n", saved_time, msg_time);
 
     if(max_time > 1000000000)
     {

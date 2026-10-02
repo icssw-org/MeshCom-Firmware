@@ -9,6 +9,13 @@
 #include <task.h>
 #define BF_LOCK()   taskENTER_CRITICAL()
 #define BF_UNLOCK() taskEXIT_CRITICAL()
+#elif defined(BF_TEST_LOCK_HOOK)
+// Nur im Host-Test (env:native_byte_fifo): die Suite zaehlt mit, welche
+// Funktion die Sperre nimmt.
+void bf_test_lock(void);
+void bf_test_unlock(void);
+#define BF_LOCK()   bf_test_lock()
+#define BF_UNLOCK() bf_test_unlock()
 #else
 #define BF_LOCK()   ((void)0)
 #define BF_UNLOCK() ((void)0)
@@ -115,6 +122,38 @@ uint8_t bf_peek(byte_fifo_t *f, uint8_t *out, uint16_t outmax)
     return l;
 }
 
+uint8_t bf_peek_gen(byte_fifo_t *f, uint8_t *out, uint16_t outmax, uint16_t *gen)
+{
+    uint8_t l = 0;
+    BF_LOCK();
+    if (f->unread)
+    {
+        l = f->buf[f->tail];
+        uint16_t n = (l < outmax) ? l : outmax;
+        if (n)
+            bf_read_at(f, bf_adv(f, f->tail, 1), out, n);
+    }
+    *gen = f->tail_gen;
+    BF_UNLOCK();
+    return l;
+}
+
+bool bf_pop_if(byte_fifo_t *f, uint16_t gen)
+{
+    bool popped = false;
+    BF_LOCK();
+    if (f->unread && f->tail_gen == gen)
+    {
+        uint8_t l = f->buf[f->tail];
+        f->tail = bf_adv(f, f->tail, (uint16_t)(1 + l));
+        f->unread--;
+        f->tail_gen++;
+        popped = true;
+    }
+    BF_UNLOCK();
+    return popped;
+}
+
 void bf_pop(byte_fifo_t *f)
 {
     BF_LOCK();
@@ -135,7 +174,7 @@ void bf_iter_begin(const byte_fifo_t *f, bf_iter_t *it)
     // und einem gen von NACH der Verdraengung. bf_iter_next() haelt das
     // fuer gueltig, liest ein beliebiges Byte als Laenge und liefert Muell,
     // bis left aufgebraucht ist (in-bounds, aber sichtbar auf der
-    // Web-Nachrichtenseite).
+    // Web-Nachrichtenseite). Aus #1157 (f1c5b14f) nachgezogen.
     BF_LOCK();
     it->pos = f->oldest;
     it->left = f->frames;

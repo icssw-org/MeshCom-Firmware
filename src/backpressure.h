@@ -75,9 +75,9 @@ enum BpNotice
 /// dropped message gets its own, unlike the episode notice above it.
 enum BpNack
 {
-    BP_NACK_NONE = 0,
-    BP_NACK_QRT  = 1,   ///< refused before enqueue, ring sits in the QRT band
-    BP_NACK_QTA  = 2    ///< enqueue attempted, the ring threw the frame away
+    BP_NACK_NONE        = 0,
+    BP_NACK_QRT         = 1,   ///< refused before enqueue, ring sits in the QRT band
+    BP_NACK_QTA         = 2    ///< enqueue attempted, the ring threw the frame away
 };
 
 /// Q-code of a nack ("QRT", "QTA"), "" for BP_NACK_NONE.
@@ -85,9 +85,9 @@ inline const char *bpNackCode(BpNack n)
 {
     switch(n)
     {
-        case BP_NACK_QRT: return "QRT";
-        case BP_NACK_QTA: return "QTA";
-        default:          return "";
+        case BP_NACK_QRT:         return "QRT";
+        case BP_NACK_QTA:         return "QTA";
+        default:                  return "";
     }
 }
 
@@ -99,9 +99,9 @@ inline const char *bpNackPrefix(BpNack n)
 {
     switch(n)
     {
-        case BP_NACK_QRT: return "QRT NOT SENT - ";
-        case BP_NACK_QTA: return "QTA NOT SENT - ";
-        default:          return "";
+        case BP_NACK_QRT:         return "QRT NOT SENT - ";
+        case BP_NACK_QTA:         return "QTA NOT SENT - ";
+        default:                  return "";
     }
 }
 
@@ -189,6 +189,13 @@ inline bool bpIsOwnWording(const char *text)
         if(prefix_len > 0 && strncmp(text, prefix, prefix_len) == 0)
             return true;
     }
+
+    // The DM outbox (S1) that used to emit this prefix is gone (PN-xx), so
+    // this node never produces it any more -- but an older node still on the
+    // air can, and its wording must not be echoed back onto the mesh either.
+    static const char kOutboxFullPrefix[] = "OUTBOX FULL NOT SENT - ";
+    if(strncmp(text, kOutboxFullPrefix, sizeof(kOutboxFullPrefix) - 1) == 0)
+        return true;
 
     for(int n = BP_NOTICE_QRS; n <= BP_NOTICE_QRV; n++)
     {

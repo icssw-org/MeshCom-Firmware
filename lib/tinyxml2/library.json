@@ -1,0 +1,12 @@
+{
+  "name": "tinyxml2",
+  "version": "11.0.0",
+  "description": "Vendored copy of leethomason/tinyxml2, restricted to the library sources. Upstream ships contrib/html5-printer.cpp with its own main(), which the Arduino core does not define; the linker resolves crt0's main from it and pulls in libstdc++ iostream/locale with it (~5.7 kB DRAM on classic ESP32). srcFilter excludes contrib/ and test/ so only tinyxml2.cpp is built.",
+  "keywords": "xml, tinyxml2, parser",
+  "license": "Zlib",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcFilter": ["+<tinyxml2.cpp>"]
+  }
+}

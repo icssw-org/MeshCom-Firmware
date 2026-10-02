@@ -50,7 +50,7 @@ bool inject_position(const char *call, double lat, double lon, int16_t rssi, int
 // TM-06(a): raw-frame RX injection. Unlike inject_text_message() above (which
 // only queues an already-decoded message for display, bypassing decodeAPRS()
 // and everything downstream of it), this feeds `hex` through the REAL
-// receive path -- OnRxDone() -> decodeAPRS() -> dedup/mheard/relay
+// receive path -- OnRxDone() -> decodeAPRS() -> dedup/topology/relay
 // decision/display queueing -- exactly as an off-air frame would get,
 // with synthetic rssi=-50/snr=10.
 //

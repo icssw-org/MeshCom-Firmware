@@ -1,9 +1,15 @@
 /**
  * @file batt_functions.cpp
  * @author W.Zelinka (OE3WAS, https://github.com/karamo)
- * @brief
- * @version 0.6
- * @date 2026-06-09
+ * @brief Battery path of the USE_NEW_BATT boards (E22 family, loraprs-e22, T-Beam 1W, T3-S3,
+ *        T-Deck, T-Deck Plus, lora32-v21, E213, Wireless Paper) on the shared pipeline.
+ * @version 0.7
+ * @date 2026-09-29
+ *
+ * Wave 3 of the battery consolidation (docs/archive/concept-battery-consolidation-20260923.md,
+ * contract in docs/ble-batt-campaign-20260929.md): EMA, settle rule, BAT-01 detector, percent
+ * curve and the sampling scheduler come from src/batt_pipeline.h. Only the board specific part
+ * stays here: reading one raw value, the ADC_CTRL polarity probe and the divider switch.
  *
  * @copyright Copyright (c) 2026
  *
@@ -12,22 +18,19 @@
 
 #if defined(USE_NEW_BATT)
 
+#if defined(BAT_MAX_VOLTAGE)
+	#define BATT_MAX_DEFAULT_V  ((float)(BAT_MAX_VOLTAGE))
+#else
+	#define BATT_MAX_DEFAULT_V  4.1f   // native host build (no variant configuration.h)
+#endif
+
+float max_batt = BATT_MAX_DEFAULT_V;  //alt
+float fBattMax = BATT_MAX_DEFAULT_V;  //später extern [V]
+
 #ifdef USE_BATT
 
-float max_batt = BAT_MAX_VOLTAGE;  //alt
-float fBattMax = BAT_MAX_VOLTAGE;  //später extern
-
-static bool firstReading = true;
-float rawVoltage;
-float BatVoltage;
-static float filteredVoltage = 0.0f;
-const float alpha = 0.05f;  // Glaettungsfaktor (0.05 = träger, 0.2 = schneller)
 unsigned long batt_show_timer = 0;
 int BATTshowtime;
-
-//#define CDcount 6
-//static int CountDown = CDcount;
-
 
 // wird hier nicht verwendet, aber definiert, aber nicht freigegeben
 float global_batt = 0;  // in mV
@@ -55,81 +58,113 @@ batt_probe_t battProbeState = BATT_PROBE_ACTIVE_LOW;
 batt_probe_t battProbeState = BATT_PROBE_ACTIVE_HIGH;
 #endif
 
-// ----- BAT-01: no-battery detection state (siehe batt_functions.h) -----
-// Pure Zustandsmaschine: keine Arduino-Aufrufe, daher nativ testbar (test/test_batt_detect/).
-void battDetectReset(batt_detect_state_t *state)
+
+// ----- sample core: everything after "one raw value" (host testable) -----
+// State of the one VBAT channel of this node. EMA/detector/percent logic is batt_pipeline.h;
+// this block only wires it together. No Arduino calls, see battFeedSample() in batt_functions.h.
+static batt_ema_t battEma;
+static bool       battPipelineReady = false;
+static bool       battWasAbsent     = false;   // detector said "absent" since the last EMA seed
+static bool       battHaveSample    = false;   // at least one sample went through battFeedSample()
+static float      battReportedMv    = 0.0f;    // last value read_batt() reported (0 = no reading)
+static uint32_t   battSamples       = 0;       // real ADC samples, see battSampleCount()
+
+void battPipelineReset(void)
 {
-	state->haveLast = false;
-	state->lastMv = 0.0f;
-	state->implausibleStreak = 0;
-	state->plausibleStreak = 0;
-	state->present = true;   // fail-safe: erst nach BATT_DETECT_ABSENT_STREAK unplausiblen Samples "false"
+	battEmaInit(&battEma, BATT_EMA_TAU_MS_DEFAULT);
+	battDetectGlobalReset();
+	battWasAbsent  = false;
+	battHaveSample = false;
+	battReportedMv = 0.0f;
+	battPipelineReady = true;
 }
 
-bool battDetectUpdate(batt_detect_state_t *state, float rawMv, float minPlausibleMv, float maxPlausibleMv)
+uint32_t battSampleCount(void)
 {
-	bool implausible = (rawMv < minPlausibleMv) || (rawMv > maxPlausibleMv);
-
-	if (state->haveLast)
-	{
-		float delta = state->lastMv - rawMv;
-		if (delta < 0) { delta = -delta; }
-		if (delta > BATT_DETECT_MAX_DELTA_MV) { implausible = true; }
-	}
-
-	state->lastMv = rawMv;
-	state->haveLast = true;
-
-	if (implausible)
-	{
-		state->implausibleStreak++;
-		state->plausibleStreak = 0;
-	}
-	else
-	{
-		state->plausibleStreak++;
-		state->implausibleStreak = 0;
-	}
-
-	if (state->present && state->implausibleStreak >= BATT_DETECT_ABSENT_STREAK)
-		state->present = false;
-	else if (!state->present && state->plausibleStreak >= BATT_DETECT_PRESENT_STREAK)
-		state->present = true;
-
-	return state->present;
+	return battSamples;
 }
 
-// Produktions-Instanz (ein Zustand pro Node -- es gibt nur einen VBAT-Kanal). read_batt()
-// speist sie mit dem rohen (ungefilterten) Sample, battHardwarePresent() liest das Urteil.
-static batt_detect_state_t battDetectState;
-static bool battDetectStateInit = false;
-
-static bool battDetectFeed(float rawMv, float minPlausibleMv, float maxPlausibleMv)
+float battFeedSample(float rawMv, float maxMv, uint32_t nowMs)
 {
-	if (!battDetectStateInit)
-	{
-		battDetectReset(&battDetectState);
-		battDetectStateInit = true;
-	}
-	return battDetectUpdate(&battDetectState, rawMv, minPlausibleMv, maxPlausibleMv);
+	return battFeedSampleSpread(rawMv, BATT_DETECT_SPREAD_NONE, maxMv, nowMs);
 }
 
-static bool battDetected(void)
+float battFeedSampleSpread(float rawMv, float spreadMv, float maxMv, uint32_t nowMs)
 {
-	if (!battDetectStateInit) { return true; }   // fail-safe vor dem ersten read_batt()
-	return battDetectState.present;
+	if (!battPipelineReady) { battPipelineReset(); }
+
+	battSamples++;
+	battHaveSample = true;
+
+	// BAT-01: presence on the RAW sample. Plausible band relative to the pack maximum, so the
+	// 2S packs (TBEAM_1W, E22) on this path are covered too (see batt_pipeline.h, section 3).
+	// BAT-03: spreadMv (window spread, switched dividers) above the limit counts as implausible.
+	const bool present = battDetectFeedSpread(rawMv, spreadMv,
+		maxMv*BATT_DETECT_MIN_BAND_FACTOR, maxMv*BATT_DETECT_MAX_BAND_FACTOR);
+
+	if (!present)
+	{
+		// Floating divider: samples are noise, keep them out of the EMA. The value comes back
+		// as a fresh seed (with a restarted settle rule) once the detector sees a cell again.
+		battWasAbsent  = true;
+		battReportedMv = 0.0f;
+		return 0.0f;
+	}
+
+	if (battWasAbsent)
+	{
+		battEmaInit(&battEma, BATT_EMA_TAU_MS_DEFAULT);
+		battWasAbsent = false;
+	}
+
+	float mv = battEmaUpdate(&battEma, rawMv, nowMs);
+
+	// "no reading" = 0 mV (USB / no cell): T-Deck header, "USB" on the displays, /B= suppression.
+	if (mv < 1000.0f) { mv = 0.0f; }   // ADC input not connected to the supply
+
+	// Board specific modifications
+	#if defined(BOARD_E22)       // TODO: und auch die anderen E22 !!!
+		if (mv < 3000.0f) { mv = 0.0f; }	// ADC-Eingang nicht mit Versorgungsspannung verbunden
+	#endif
+
+	#if defined(BOARD_TBEAM_1W)
+		// T-Beam 1W uses 7.4V 2S-battery (max. 8.1V)
+		// USB-Spannung kann nicht gemessen werden, nur die AKKU-Spannung
+		if (mv < 5000.0f) { mv = 0.0f; }  // USB
+	#endif
+
+	battReportedMv = mv;
+	return mv;
+}
+
+float battFilteredMv(void)
+{
+	return battEma.seeded ? battEma.value : 0.0f;
+}
+
+bool battSettled(void)
+{
+	return battPipelineReady && battEmaSettled(&battEma);
+}
+
+bool battLowVoltage(float thresholdMv)
+{
+	// Only through battEmaLowVoltage(): false until the EMA is settled (bad first sample, boot on
+	// a sagging cell), 1 V floor keeps "no battery / USB only" out. Never while the detector says
+	// "no battery" (floating pin, issue #1053).
+	return battPipelineReady && battDetected() && battEmaLowVoltage(&battEma, thresholdMv, 1000.0f);
 }
 
 
 bool battHardwarePresent(void)
 {
-	// fail-safe: nur bei positiv erkanntem "kein Teiler" (Probe) ODER positiv erkannter
-	// Abwesenheit (Laufzeit-Detektion, BAT-01) false. battDetected() bleibt auf boards ohne
-	// USE_BATT (kein read_batt()-Aufruf, s.o.) dauerhaft auf dem fail-safe "true" stehen,
-	// aendert dort also nichts -- betrifft nur den ADC-Pfad, fuer den es gebaut wurde.
-	return battProbeState != BATT_PROBE_NONE && battDetected();
+	// fail-safe: nur bei positiv erkanntem "kein Teiler" (Probe), positiv erkannter Abwesenheit
+	// (Laufzeit-Detektion, BAT-01) oder einem gemeldeten "no reading" (0 mV = USB, kein Akku)
+	// false. Vor dem ersten Sample bleibt es beim fail-safe "true". "no reading" muss hier
+	// mitzaehlen: mv_to_percent(0) ist 0, und "/B=000" hiesse sonst "Akku leer" statt "kein Akku".
+	return battProbeState != BATT_PROBE_NONE && battDetected()
+		&& !(battHaveSample && battReportedMv <= 0.0f);
 }
-
 
 #if defined(ADC_CTRL_PIN)
 // battProbeState startet bewusst NICHT auf BATT_PROBE_UNKNOWN (siehe oben), daher braucht das
@@ -186,7 +221,6 @@ static void battProbeADCPolarity(void)
 }
 #endif
 
-
 void VextON(void)
 {
 	#if defined(BOARD_WIRELESS_PAPER)
@@ -216,38 +250,44 @@ void VextOFF(void)  // Vext default OFF
 }
 
 #if defined(ADC_CTRL_PIN)
-// BAT-01 Nebenbefund: verhindert ein woertliches delay() bei jedem 500ms-read_batt()-Zyklus
-// (siehe ADC_BATT_ON() unten) -- nur der tatsaechliche AUS->AN-Wechsel muss einschwingen.
+// BAT-01 Nebenbefund: verhindert ein woertliches delay() bei jedem read_batt()-Zyklus
+// (siehe battDividerOn() unten) -- nur der tatsaechliche AUS->AN-Wechsel muss einschwingen.
 static bool battDividerSettled = false;
+
+// Teiler durchschalten. settle=true (ADC_BATT_ON(), Boot/Deepsleep-Aufwachen): blockiert
+// beim AUS->AN-Wechsel kurz, damit der erste ADC-Read nicht waehrend des Einschwingens
+// passiert. settle=false (Scheduler-ARM): der Scheduler wartet selbst BATT_SCHED_SETTLE_MS
+// bis zum READ, kein delay() im Hot Path.
+static void battDividerOn(bool settle)
+{
+	pinMode(ADC_CTRL_PIN, OUTPUT);
+
+	if (!battProbeDone)
+	{
+		battProbeADCPolarity();   // einmalig: Polaritaet des Teiler-Schalters ermitteln
+		battProbeDone = true;
+	}
+
+	if (battProbeState == BATT_PROBE_ACTIVE_LOW)
+		digitalWrite(ADC_CTRL_PIN, LOW);    // active LOW: LOW = Teiler durchgeschaltet/messen (z.B. Wireless Paper)
+	else
+		digitalWrite(ADC_CTRL_PIN, HIGH);   // active HIGH (Default/Fallback): E213/E290 am Geraet verifiziert
+
+	if (!battDividerSettled)
+	{
+		if (settle) { delay(20); }
+		battDividerSettled = true;
+	}
+}
 #endif
 
 void ADC_BATT_ON(void)
 {
 	#if defined(ADC_CTRL_PIN)
-		pinMode(ADC_CTRL_PIN, OUTPUT);
-
-		if (!battProbeDone)
-		{
-			battProbeADCPolarity();   // einmalig: Polaritaet des Teiler-Schalters ermitteln
-			battProbeDone = true;
-		}
-
-		if (battProbeState == BATT_PROBE_ACTIVE_LOW)
-			digitalWrite(ADC_CTRL_PIN, LOW);    // active LOW: LOW = Teiler durchgeschaltet/messen (z.B. Wireless Paper)
-		else
-			digitalWrite(ADC_CTRL_PIN, HIGH);   // active HIGH (Default/Fallback): E213/E290 am Geraet verifiziert
-
-		// Settle-Zeit nur beim AUS->AN-Wechsel (Boot/Deepsleep-Aufwachen); danach bleibt der
-		// Teiler zwischen den 500ms-Zyklen an -- kein delay() im Hot Path. Kuerzer als
-		// battProbeADCPolarity()'s 100ms: dort muss der Messwert selbst stabil sein, hier
-		// reicht es, den allerersten ADC-Read nicht noch waehrend des Einschwingens abzugreifen.
-		if (!battDividerSettled)
-		{
-			delay(20);
-			battDividerSettled = true;
-		}
+		battDividerOn(true);
 	#endif
 }
+
 
 void ADC_BATT_OFF(void)
 {
@@ -263,6 +303,151 @@ void ADC_BATT_OFF(void)
 	#endif
 }
 
+#if defined(BOARD_WIRELESS_PAPER)
+// ----- "AKKU LOW"-Beobachtung (WP) -----
+// Ringpuffer der letzten Spannungs-Rohwerte, einer pro echtem Sample (READ des geschalteten
+// Teilers, alle 30 s) -> 12 Werte = 6 min.
+// bWpAkkuLow wird vor dem Low-Voltage-Deepsleep gesetzt; das WP-Display zeigt dann statt blank
+// "AKKU LOW" + diese Werte (E-Ink haelt das Bild auch im Schlaf -> ablesbar). Die Hysterese
+// (erst nach mehreren Low-Messungen schlafen) macht 0.6 selbst via CountDown.
+// WP_VHIST_MAX ist zentral in batt_functions.h definiert (auch vom Anzeige-Aufrufer genutzt).
+static float wpVHist[WP_VHIST_MAX];
+static int   wpVHistCount = 0;
+static int   wpVHistHead  = 0;
+bool bWpAkkuLow = false;
+static void wpPushVolt(float v)
+{
+    wpVHist[wpVHistHead] = v;
+    wpVHistHead = (wpVHistHead + 1) % WP_VHIST_MAX;
+    if(wpVHistCount < WP_VHIST_MAX) wpVHistCount++;
+}
+// Kopiert die letzten Werte NEUESTE ZUERST nach out[], liefert die Anzahl.
+int wpBattHistory(float* out, int maxn)
+{
+    int n = (wpVHistCount < maxn) ? wpVHistCount : maxn;
+    for(int i = 0; i < n; i++)
+        out[i] = wpVHist[(wpVHistHead - 1 - i + 2 * WP_VHIST_MAX) % WP_VHIST_MAX];
+    return n;
+}
+#endif
+
+// ----- USE_BATT: acquisition (one raw value) and scheduling -----
+#ifdef USE_BATT
+
+// Divider with an enable pin (E213, Wireless Paper, ADC_CTRL_PIN): SWITCHED profile, the scheduler
+// arms the divider, waits for it to settle, reads once and releases it (ARM every 30 s). Every other
+// board has the divider permanently connected: FIXED profile, one READ per second.
+#if defined(ADC_CTRL_PIN)
+	#define BATT_SCHED_PROFILE_BOARD  BATT_SCHED_PROFILE_SWITCHED
+#else
+	#define BATT_SCHED_PROFILE_BOARD  BATT_SCHED_PROFILE_FIXED
+#endif
+
+static batt_sched_t battSched;
+static bool battSchedReady = false;
+
+static void battSchedSetup(void)
+{
+	battSchedInit(&battSched, BATT_SCHED_PROFILE_BOARD);
+	battSchedReady = true;
+}
+
+// Messparameter aufbereiten (nach Aenderung per Befehl in command_functions.cpp wirksam)
+// fBattFaktor = Parameter aus Flash [--batt factor 99xxx.xxx]
+// fBattMax    = Parameter aus Flash [--maxv x.xxx]
+static void battLoadParams(void)
+{
+	BATTshowtime = (int)meshcom_settings.node_analog_batt_faktor / 1000;  // [--batt factor 99xxx.xxx]
+	fBattFaktor = meshcom_settings.node_analog_batt_faktor - BATTshowtime*1000;  // [--batt factor x.xxx]
+	if (fBattFaktor == 0.0) { fBattFaktor = 1.0; }
+	if (BATTshowtime == 0) { BATTshowtime = 10; }  // default 10s
+	fBattMax = meshcom_settings.node_maxv;  // [--maxv x.xxx]
+}
+
+#if defined(BATT_LOW_VOLTAGE_DEEPSLEEP)
+// Low-voltage deep sleep, DISABLED since issue #1053 (had to remove the battery, boot on USB, change
+// max. voltage from 4.2 to 8.2 -> floating pin read low -> deep sleep). Define
+// BATT_LOW_VOLTAGE_DEEPSLEEP to re-enable. It now decides on the settled EMA only (battLowVoltage():
+// battery present per BAT-01, settled = 3 tau and 8 samples, 1 V floor), not on a single sample.
+// BAT_MIN_VOLTAGE: 6.5 V for T-Beam 1W, 3.3 V for the others. E213: Voll ~4.14 V, Leer-Cutoff ~3.26 V
+// (unter Last), BAT_MIN_VOLTAGE = 3.3 V loest knapp davor aus (am Geraet verifiziert 2026-06-23).
+static void battLowVoltageCheck(void)
+{
+	if (!battLowVoltage(BAT_MIN_VOLTAGE*1000.0f)) { return; }
+
+	// Abschaltmeldung ausgeben
+	printlndeb("[ERR]...low Voltage Accu > goto deepsleep");
+
+	delay(1000); // für Ausgabe ermöglichen !!!
+
+	ADC_BATT_OFF();
+	// Display regulaer ausschalten (persistiert node_sset).
+	commandAction((char*)"--display off", isPhoneReady, false);
+	#if defined(BOARD_WIRELESS_PAPER)
+	bWpAkkuLow = true;   // WP-Display zeigt "AKKU LOW" + letzte Werte statt blank
+	#endif
+	commandAction((char*)"--deepsleep", isPhoneReady, false);
+	// Node stopped
+}
+#endif
+
+// One real ADC sample: raw value incl. --batt factor and multiplier -> pipeline (detector on the
+// raw value, EMA) -> cached value. Debug output only here, i.e. once per sample.
+static void battTakeSample(uint32_t now)
+{
+	battLoadParams();
+
+	const float rawVoltage = (float)analogReadMilliVolts(BAT_VOLT_PIN)*BAT_MULTIPLIER/1000.0 * fBattFaktor + BAT_VOLT_OFFSET;
+
+	#if defined(ADC_CTRL_PIN)
+		// BAT-03: without a cell the divider sits on the charger-output sawtooth, one read lands at a
+		// random phase. Read a short window (first read = rawVoltage above), spread over all reads
+		// goes to the detector. Window is taken BEFORE the divider is released.
+		float windowMv[BATT_DETECT_WINDOW_READS];
+		windowMv[0] = rawVoltage*1000.0f;
+		for (int i = 1; i < BATT_DETECT_WINDOW_READS; i++)
+		{
+			delay(BATT_DETECT_WINDOW_STEP_MS);
+			const float v = (float)analogReadMilliVolts(BAT_VOLT_PIN)*BAT_MULTIPLIER/1000.0 * fBattFaktor + BAT_VOLT_OFFSET;
+			windowMv[i] = v*1000.0f;
+		}
+		const float windowSpreadMv = battWindowSpread(windowMv, BATT_DETECT_WINDOW_READS);
+
+		ADC_BATT_OFF();   // SWITCHED: release the divider right after the reads (no drain through it)
+
+		battFeedSampleSpread(rawVoltage*1000.0f, windowSpreadMv, fBattMax*1000.0f, now);
+	#else
+		battFeedSample(rawVoltage*1000.0f, fBattMax*1000.0f, now);
+	#endif
+
+	#if defined(BOARD_WIRELESS_PAPER)
+	wpPushVolt(rawVoltage);   // letzte Rohwerte fuer die "AKKU LOW"-Anzeige
+	#endif
+
+	if ((uint32_t)(millis() - batt_show_timer) >= (uint32_t)(1000 * std::max(1,BATTshowtime)))  // 1 .. 99s
+	{
+		batt_show_timer = millis();
+
+		if(bDisplayCont)
+		{
+			bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
+			#if defined(ADC_CTRL_PIN)
+			printfdeb("[BATT];%s;raw:;%.3f;V;max:;%.2f;V;fact:;%.4f;filt:;%.3f;V;%.0f;%%;spread:;%.0f;mV\n",
+				getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, battFilteredMv()/1000.0f, mv_to_percent(battFilteredMv()), windowSpreadMv);
+			#else
+			printfdeb("[BATT];%s;raw:;%.3f;V;max:;%.2f;V;fact:;%.4f;filt:;%.3f;V;%.0f;%%\n",
+				getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, battFilteredMv()/1000.0f, mv_to_percent(battFilteredMv()));
+			#endif
+		}
+	}
+
+	#if defined(BATT_LOW_VOLTAGE_DEEPSLEEP)
+	battLowVoltageCheck();
+	#endif
+}
+
+#endif  // USE_BATT
+
 
 /**
  * @brief Initialize the battery analog input
@@ -272,21 +457,26 @@ void init_batt(void)
 {
 	#ifdef USE_BATT
 		printlndeb("[INIT]...init_batt");
-		firstReading = true;
 
 		// nach Änderung durch Befehl in command_functions.cpp muss init_batt() aufgerufen werden!
-		BATTshowtime = (int)meshcom_settings.node_analog_batt_faktor / 1000;  // [--batt factor 99xxx.xxx]
-		fBattFaktor = meshcom_settings.node_analog_batt_faktor - BATTshowtime*1000;  // [--batt factor x.xxx]
-		if (fBattFaktor == 0.0) { fBattFaktor = 1.0; }
-		if (BATTshowtime == 0) { BATTshowtime = 10; }
-		fBattMax = meshcom_settings.node_maxv;  // [--maxv x.xxx]
+		battLoadParams();
+		battPipelineReset();   // EMA reseeds with the first sample, detector back to fail-safe "present"
+		battSchedSetup();
 		// -----
 
 		//analogSetPinAttenuation(BAT_VOLT_PIN, ADC_11db);  // alternative Variante
 		analogSetAttenuation(BAT_ATTEN);
 		analogReadResolution(BAT_WIDTH);
 
-		ADC_BATT_ON();
+		ADC_BATT_ON();   // runs the ADC_CTRL polarity probe once
+
+		#if defined(ADC_CTRL_PIN)
+		// SWITCHED divider: first sample now, so read_batt() has a value from the start and does not
+		// report "no reading" between the first ARM and its READ (~100 ms). ADC_BATT_ON() above only
+		// waits 20 ms; the scheduler's settle time is used here as well.
+		delay(BATT_SCHED_SETTLE_MS);
+		battTakeSample(millis());   // releases the divider again
+		#endif
 
 		#if defined(BOARD_TBEAM) || defined(BOARD_SX1262) || defined(BOARD_SX1268)
 		// XPOWERS_CHIP_AXP192 via I2C
@@ -314,183 +504,42 @@ void init_batt(void)
 
 
 
-/**
- * @brief Read the analog value from the battery analog pin
- * and convert it to milli volt
- *
- * @return float Battery level in milli volts 0 ... 4200
- */
-#if defined(BOARD_WIRELESS_PAPER)
-// ----- "AKKU LOW"-Beobachtung (WP) -----
-// Ringpuffer der letzten Spannungs-Rohwerte. read_batt() laeuft hier mit 2x/Sekunde -> 12 Werte = 6 s.
-// bWpAkkuLow wird vor dem Low-Voltage-Deepsleep gesetzt; das WP-Display zeigt dann statt blank
-// "AKKU LOW" + diese Werte (E-Ink haelt das Bild auch im Schlaf -> ablesbar). Die Hysterese
-// (erst nach mehreren Low-Messungen schlafen) macht 0.6 selbst via CountDown.
-// WP_VHIST_MAX ist zentral in batt_functions.h definiert (auch vom Anzeige-Aufrufer genutzt).
-static float wpVHist[WP_VHIST_MAX];
-static int   wpVHistCount = 0;
-static int   wpVHistHead  = 0;
-bool bWpAkkuLow = false;
-static void wpPushVolt(float v)
-{
-    wpVHist[wpVHistHead] = v;
-    wpVHistHead = (wpVHistHead + 1) % WP_VHIST_MAX;
-    if(wpVHistCount < WP_VHIST_MAX) wpVHistCount++;
-}
-// Kopiert die letzten Werte NEUESTE ZUERST nach out[], liefert die Anzahl.
-int wpBattHistory(float* out, int maxn)
-{
-    int n = (wpVHistCount < maxn) ? wpVHistCount : maxn;
-    for(int i = 0; i < n; i++)
-        out[i] = wpVHist[(wpVHistHead - 1 - i + 2 * WP_VHIST_MAX) % WP_VHIST_MAX];
-    return n;
-}
-#endif
 
+
+/**
+ * @brief Battery level, filtered, in milli volts. Called from the main loop about every 100 ms
+ * (loopAction_battCheck); the scheduler decides when a real sample is taken (FIXED: every 1 s,
+ * SWITCHED: ARM every 30 s, READ ~100 ms later), all other calls return the cached value.
+ *
+ * @return float filtered battery level in mV (0 ... 4200 / 8400); 0 = no reading (USB / no cell)
+ */
 float read_batt(void)
 {
 	#ifdef USE_BATT
 
-		// ist hier nicht redundant, da nach deepsleep ein sicherer Platz zum reaktivieren
-		ADC_BATT_ON();
+		if (!battSchedReady) { battSchedSetup(); }
 
-		// Messparameter aufbereiten
-		// fBattFaktor = Parameter aus Flash
-		// fBattMax = Parameter aus Flash
-		BATTshowtime = (int)meshcom_settings.node_analog_batt_faktor / 1000;  // [--batt factor 99xxx.xxx]
-		fBattFaktor = meshcom_settings.node_analog_batt_faktor - BATTshowtime*1000;  // [--batt factor x.xxx]
-		if (fBattFaktor == 0.0) { fBattFaktor = 1.0; }
-		if (BATTshowtime == 0) { BATTshowtime = 10; }  // default 10s
-		fBattMax = meshcom_settings.node_maxv;  // [--maxv x.xxx]
+		const uint32_t now = millis();
 
-		// Spezialbehandlung ungetestet
-		#if defined(BOARD_HELTEC_T114) || defined(BOARD_T_ECHO) || defined(NRF52_SERIES)
-			analogReference(AR_INTERNAL_3_0); // Set the analog reference to 3.0V (default = 3.6V)
-			delay(5);
-			analogSampleTime(10);	// Set the sampling time to 10us
-		#endif
-
-		// einfache Filterfunktion: exponentielle Glättung 1. Ordnung
-		rawVoltage = (float)analogReadMilliVolts(BAT_VOLT_PIN)*BAT_MULTIPLIER/1000.0 * fBattFaktor + BAT_VOLT_OFFSET;
-
-		// BAT-01: Laufzeit-Erkennung "kein Akku" auf dem rohen (ungefilterten) Sample --
-		// die EMA-Glaettung unten wuerde genau das Sample-zu-Sample-Springen wegbuegeln, das
-		// den floatenden Teiler verraet. Plausibles Band relativ zu fBattMax (siehe
-		// batt_functions.h), nicht absolut: deckt die 2S-Packs (TBEAM_1W/E22) auf demselben
-		// Pfad mit ab.
-		bool battPresentNow = battDetectFeed(rawVoltage*1000.0,
-			fBattMax*1000.0*BATT_DETECT_MIN_BAND_FACTOR, fBattMax*1000.0*BATT_DETECT_MAX_BAND_FACTOR);
-
-		if (firstReading) { filteredVoltage = fBattMax; } // verhindert deepsleep nach REBOOT
-		else { filteredVoltage = alpha * rawVoltage + (1.0f - alpha) * filteredVoltage; }
-
-
-		firstReading = false;
-
-		#if defined(BOARD_WIRELESS_PAPER)
-		wpPushVolt(rawVoltage);   // 2x/s -> letzte 10 Rohwerte fuer die "AKKU LOW"-Anzeige
-		#endif
-
-		if ((uint32_t)(millis() - batt_show_timer) >= (uint32_t)(1000 * std::max(1,BATTshowtime)))  // 1 .. 99s
+		switch (battSchedTick(&battSched, now))
 		{
-			batt_show_timer = millis();
-
-			if(bDisplayCont)
-			{
-				bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
-				printfdeb("[BATT];%s;raw:;%.3f;V;max:;%.2f;V;fact:;%.4f;filt:;%.3f;V;%.0f;%%\n",
-					getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
-			}
-		}
-
-		BatVoltage = filteredVoltage;
-
-		// Board spezifische Modifikation
-		#if defined(BOARD_E22)       // TODO: und auch die anderen E22 !!!
-			if (BatVoltage < 3.0) { BatVoltage = 0; }	// ADC-Eingang nicht mit Versorgungsspannung verbunden
-		#endif
-
-		#if defined(BOARD_TBEAM_1W)
-			// T-Beam 1W uses 7.4V 2S-battery (max. 8.1V)
-			// USB-Spannung kann nicht gemessen werden, nur die AKKU-Spannung
-			if(BatVoltage < 5.0) { BatVoltage = 0; }  // USB
-		#endif
-
-		// falls die Akku-Spannung BAT_MIN_VOLTAGE erreicht wird, soll ein --deepsleep erfolgen.
-		// Dieses erlaubt es, nach einem händischen RESET zum Aufwecken noch kurz nachzusehen,
-		// da sich der Akku auch etwas erholt.
-		// E213: Akku-Messung am Geraet verifiziert 2026-06-23 (Faktor 4.9245, ADC_CTRL active HIGH):
-		// Voll ~4.14 V, Leer-Cutoff ~3.26 V (unter Last; im Boot ~3.5 V = Last-Sag bei leerem LiPo).
-		// Low-voltage-Deepsleep wieder scharf wie bei allen anderen Boards. BAT_MIN_VOLTAGE = 3.3 V
-		// loest knapp vor dem 3.26-V-Cutoff aus; der firstReading-Seed (filteredVoltage = fBattMax)
-		// verhindert den Boot-Deepsleep beim Laden.
-
-		/* issue #1053 Had to remove battery, boot with USB, change max. Voltage from 4.2 to 8.2 
-		if ((BatVoltage <= (BAT_MIN_VOLTAGE)) && (BatVoltage > 1.0))  // 6.5V für T-Beam 1W, 3.3V für andere Boards
-		{
-			CountDown--;
-			if (CountDown == 0) {
-				if(bDisplayCont)
-				{
-					bDEBUGLNG = true; // für den nächsten printfdeb language en/de aktivieren
-					printfdeb("[BATT];%s;raw:;%.3f;V;max:;%.2f;V;fact:;%.4f;filt:;%.3f;V;%.0f;%%\n",
-						getTimeString().c_str(), rawVoltage, fBattMax, fBattFaktor, filteredVoltage, mv_to_percent(filteredVoltage*1000.0));
-				}
-
-				// Abschaltmeldung ausgeben
-				printlndeb("[ERR]...low Voltage Accu > goto deepsleep");
-
-				delay(1000); // für Ausgabe ermöglichen !!!
-
-				#if defined(BOARD_T_ECHO)   // = NRF52 --- ungetestet
-					digitalWrite(Power_On_Pin, LOW);
-					//boardPWROff();  // nrf52_functions
-				#else
-					ADC_BATT_OFF();
-					// Andere Boards / Original: Display regulaer ausschalten (persistiert node_sset).
-					commandAction((char*)"--display off", isPhoneReady, false);
-					#if defined(BOARD_WIRELESS_PAPER)
-					bWpAkkuLow = true;   // WP-Display zeigt "AKKU LOW" + letzte Werte statt blank
-					#endif
-					commandAction((char*)"--deepsleep", isPhoneReady, false);
+			case BATT_SCHED_ARM:
+				#if defined(ADC_CTRL_PIN)
+					battDividerOn(false);   // scheduler waits for the divider to settle
 				#endif
-				// Node stopped
-			}
+				break;
 
-		} else {
-			CountDown = CDcount; // retrigger
+			case BATT_SCHED_READ:
+				battTakeSample(now);
+				break;
+
+			default:   // BATT_SCHED_NONE: cached value
+				break;
 		}
-		*/
 
-		// wenn keine AKKU am BATT PIN ist immmer 0V aber 100% ausgeben
-		// BAT-01: dasselbe gilt, wenn die Laufzeit-Erkennung "kein Akku" meldet (floatender
-		// Teiler) -- reused die bestehende global_batt==0.0 -> "USB"-Konvention (loop_functions.cpp),
-		// statt eine zweite Anzeige-Fallunterscheidung einzufuehren.
-		if(BatVoltage < 1.0 || !battPresentNow) { BatVoltage = 0; }
+		return battReportedMv;   // [mV], 0 = no reading
 
-		return BatVoltage*1000.0;  // [mV]
-
-	//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-	//=====================================================================================
 	#else
-		//---------------------------------------------------------------------------
-		#if defined(BOARD_HELTEC_T114)
-		//TODO: da das KEINE ESP32 ist, ist eine Spezialbehandlung erforderlich !!!
-			// ... analogReadMilliVolts(BAT_VOLT_PIN) ...
-			BatVoltage = rawVoltage * 3.589;
-		#endif
-
-		//---------------------------------------------------------------------------
-		#if defined(BOARD_T_ECHO)
-		//TODO: da das KEINE ESP32 ist, ist eine Spezialbehandlung erforderlich !!!
-			#define VBAT_MV_PER_LSB   (0.73242188F)   // 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
-			#define VBAT_DIVIDER      (0.71275837F)   // 2M + 0.806M voltage divider on VBAT = (2M / (0.806M + 2M))
-			#define VBAT_DIVIDER_COMP (1.403F)        // Compensation factor for the VBAT divider
-			// Convert the raw value to compensated mv, taking the resistor-divider into account (providing the actual LIPO voltage)
-			// ADC range is 0..3000mV and resolution is 12-bit (0..4095)
-			BatVoltage =  rawVoltage * VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB;
-		#endif
-		//---------------------------------------------------------------------------
 
 		return 0.0;
 
@@ -511,35 +560,24 @@ void setMaxBatt(float u_max_batt)
 #ifdef USE_BATT
 	max_batt = u_max_batt/1000.0;
 	fBattMax = u_max_batt/1000.0; // ev. nach main auslagern
+#else
+	(void)u_max_batt;
 #endif
 }
 
 
 /**
- * @brief Volt => Prozent Umrechnung über lineare Näherung
- * @note max_batt = Parameter aus Flash
+ * @brief Volt => Prozent, one curve for 1S and 2S (batt_pipeline.h battPercent())
+ * @note fBattMax = Parameter aus Flash [V]. 0 mV = "no reading" (USB / no cell) -> 0.
+ *       Callers show "USB" for global_batt == 0, the percent is not shown then.
  *
  * @param mvolts [mV]
- * @return rproz
+ * @return percent 0 ... 100
  */
 float mv_to_percent(float mvolts)
 {
-#ifdef USE_BATT
-
-	// USB - Versorgung
-	if(mvolts < 1000.0) { return 100.0; }
-
-	// fBattMax = Parameter aus Flash
-  float rproz = (mvolts/1000.0 - BAT_MIN_VOLTAGE)/(fBattMax - BAT_MIN_VOLTAGE) *100.0;
-  if (rproz > 100.0) { rproz = 100.0; }
-  if (rproz < 0.0) { rproz = 0.0; }
-	return round(rproz);
-
-#else
-
-	return 0.0;
-
-#endif
+	if (mvolts < 1000.0f) { return 0.0f; }   // no reading
+	return (float)battPercent(mvolts, fBattMax*1000.0f);
 }
 
 #endif  // USE_NEW_BATT

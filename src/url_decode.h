@@ -22,7 +22,7 @@
  *   - every other decoded C0 control byte (0x00-0x1F, incl. a lone CR or LF
  *     and TAB) and DEL are dropped, so a %00 cannot cut the C string short.
  *
- * Pure C++, no Arduino dependency.
+ * Pure C++, no Arduino dependency -- unit-tested natively (test_url_decode).
  */
 
 #include <stddef.h>

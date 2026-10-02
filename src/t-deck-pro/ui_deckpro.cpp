@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "src/assets.h"
 #include "stdio.h"
 #include "ui_deckpro.h"
@@ -8,7 +9,8 @@
 
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
-#include "mheard_functions.h"
+#include "nbr_views.h"       // MeshCom-5-Topologie Welle 4: Quelle fuer ui_mheard_disp()
+#include "time_functions.h"  // convertUNIXtoString()
 #include <command_functions.h>
 #include "regex_functions.h"
 
@@ -1266,110 +1268,102 @@ static scr_lifecycle_t screen4_2 = {
 #endif
 //************************************[ screen 5 ]****************************************** Test
 #if 1
-static lv_obj_t *mheard_ta;
-static bool bmheard = false;
+static lv_obj_t *mh_ta;
+static bool bMhShown = false;
+
+static bool tdeckProClockValid()
+{
+    return meshcom_settings.node_date_year >= 2025;
+}
+
+// HH:MM Ortszeit aus einem Alter in Minuten, oder "<age>m" ohne gueltige Uhr
+// -- wie tdeckFormatTimeOrAge() in src/t-deck/lv_obj_functions.cpp, hier
+// dupliziert statt geteilt: eigene Uebersetzungseinheit, kein gemeinsamer
+// Header dafuer bisher.
+static void tdeckProFormatTimeOrAge(uint16_t age_min, char *out, size_t outlen)
+{
+    if (!tdeckProClockValid())
+    {
+        snprintf(out, outlen, "%um", (unsigned)age_min);
+        return;
+    }
+
+    // getUnixClock() liefert die rohe UTC-Epoche (Advisor R7, docs/meshcom5-campaign.md
+    // Welle 4); die Anzeige braucht wie eh und je Ortszeit.
+    // L2 (Advisor): float->uint32_t bei negativem utcoff ist UB, darum der
+    // Umweg ueber int32_t.
+    uint32_t local_now = getUnixClock() + (uint32_t)(int32_t)(meshcom_settings.node_utcoff * 3600.0);
+    uint32_t age_s = (uint32_t)age_min * 60u;
+    uint32_t local_epoch = (local_now > age_s) ? (local_now - age_s) : 0;
+
+    String s = convertUNIXtoString(local_epoch);
+    snprintf(out, outlen, "%s", s.substring(11, 16).c_str());
+}
 
 /**
- * displays MHeard on T-Deck
+ * displays MHeard on T-Deck Pro (MeshCom-5-Topologie Welle 4: Quelle ist
+ * nbr_views statt des entfallenen mheard_functions.cpp)
  */
 void ui_mheard_disp()
 {
-    if(mheard_ta == NULL || !bmheard)
+    if(mh_ta == NULL || !bMhShown)
         return;
 
-    char buf[200];
-
-    //snprintf(buf, 200, "|   MHeard  | time  | typ |    HW   | rssi | snr |\n");
-
-    mheardLine mheardLine;
+    char buf[24];
 
     uint16_t row=0;
 
-    lv_table_set_row_cnt(mheard_ta, 1);
-    lv_table_set_col_cnt(mheard_ta, 4);
+    lv_table_set_row_cnt(mh_ta, 1);
+    lv_table_set_col_cnt(mh_ta, 4);
 
-    lv_table_set_col_width(mheard_ta, 0, 95);
-    lv_table_set_col_width(mheard_ta, 1, 48);
-    lv_table_set_col_width(mheard_ta, 2, 45);
-    lv_table_set_col_width(mheard_ta, 3, 80);
+    lv_table_set_col_width(mh_ta, 0, 95);
+    lv_table_set_col_width(mh_ta, 1, 48);
+    lv_table_set_col_width(mh_ta, 2, 45);
+    lv_table_set_col_width(mh_ta, 3, 38);
 
-    //lv_table_set_col_width(mheard_ta, 3, 68);
-    lv_table_set_col_width(mheard_ta, 3, 38);
-    // lv_table_set_col_width(mheard_ta, 5, 38);
-
-    lv_table_set_cell_value(mheard_ta, row, 0, (char*)"Call");
-    lv_table_set_cell_value(mheard_ta, row, 1, (char*)"Time");
-    lv_table_set_cell_value(mheard_ta, row, 2, (char*)"Type");
-    
-    //lv_table_set_cell_value(mheard_ta, row, 3, (char*)"HW");
-    lv_table_set_cell_value(mheard_ta, row, 3, (char*)"rssi");
-    //lv_table_set_cell_value(mheard_ta, row, 5, (char*)"SNR");
+    lv_table_set_cell_value(mh_ta, row, 0, (char*)"Call");
+    lv_table_set_cell_value(mh_ta, row, 1, (char*)"Time");
+    lv_table_set_cell_value(mh_ta, row, 2, (char*)"Type");
+    lv_table_set_cell_value(mh_ta, row, 3, (char*)"rssi");
 
     row++;
 
-    int anzrow=1;
+    uint16_t now_min = uptimeMin16();
 
-    for(int iset=0; iset<MAX_MHEARD; iset++)
+    uint8_t idx[NBR_MAX_ROWS];
+    int n = nbrMhRows(nbrMatrix, now_min, NBR_WINDOW_MIN, idx, NBR_MAX_ROWS);
+    if (n > NBR_MAX_ROWS)
+        n = NBR_MAX_ROWS;
+
+    for(int k = 0; k < n; k++)
     {
-        if(mheardCalls[iset][0] != 0x00)
-            anzrow++;
+        NbrMhView v;
+        if (!nbrMhGet(nbrMatrix, idx[k], now_min, &v))
+            continue;
+
+        snprintf(buf, sizeof(buf), "%s", v.call);
+        lv_table_set_cell_value(mh_ta, row, 0, buf);
+
+        tdeckProFormatTimeOrAge(v.age_min, buf, sizeof(buf));
+        lv_table_set_cell_value(mh_ta, row, 1, buf);
+
+        snprintf(buf, sizeof(buf), "%s", nbrPayloadTypeName(v.plt));
+        lv_table_set_cell_value(mh_ta, row, 2, buf);
+
+        if (v.rssi == NBR_MH_RSSI_UNKNOWN)
+            snprintf(buf, sizeof(buf), "   -");
+        else
+            snprintf(buf, sizeof(buf), "%4d", (int)v.rssi);
+        lv_table_set_cell_value(mh_ta, row, 3, buf);
+
+        row++;
     }
 
-    lv_table_set_row_cnt(mheard_ta, anzrow);
-
-    for(int iset=0; iset<MAX_MHEARD; iset++)
-    {
-        if(mheardCalls[iset][0] != 0x00)
-        {
-            snprintf(buf, 10, "%s", mheardCalls[iset]);
-            lv_table_set_cell_value(mheard_ta, row, 0, buf);
-            
-            decodeMHeard(mheardBuffer[iset], mheardLine);
-
-            snprintf(buf, 6, "%s", mheardLine.mh_time.substring(0, 5).c_str());
-            lv_table_set_cell_value(mheard_ta, row, 1, buf);
-
-            if(mheardLine.mh_payload_type == ':')
-            {
-                snprintf(buf, 4, "TXT");
-                lv_table_set_cell_value(mheard_ta, row, 2, buf);
-            }
-            else
-            if(mheardLine.mh_payload_type == '!')
-            {
-                snprintf(buf, 4, "POS");
-                lv_table_set_cell_value(mheard_ta, row, 2, buf);
-            }
-            else
-            if(mheardLine.mh_payload_type == '@')
-            {
-                snprintf(buf, 4, "HY");
-                lv_table_set_cell_value(mheard_ta, row, 2, buf);
-            }
-            else
-            {
-                snprintf(buf, 4, "???");
-                lv_table_set_cell_value(mheard_ta, row, 2, buf);
-            }
-            /*
-            snprintf(buf, 8, "%s", getHardwareLong(mheardLine.mh_hw).c_str());
-            lv_table_set_cell_value(mheard_ta, row, 3, buf);
-
-            //snprintf(buf, 200, "%3i | ", mheardLine.mh_mod);
-            //strRet.concat(buf);
-            */
-
-            snprintf(buf, 7, "%4i", mheardLine.mh_rssi);
-            lv_table_set_cell_value(mheard_ta, row, 3, buf);
-
-            /*
-            snprintf(buf, 7, "%4i", mheardLine.mh_snr);
-            lv_table_set_cell_value(mheard_ta, row, 5, buf);
-            */
-
-            row++;
-        }
-    }
+    // L1 (Advisor): erst jetzt kappen -- lv_table_set_cell_value() erweitert
+    // die Tabelle selbst automatisch (lv_table.c), ein vorab auf 1+n
+    // gesetzter row_cnt liesse bei uebersprungenen Zeilen (nbrMhGet()==false)
+    // stehengebliebene alte Zeilen unten haengen.
+    lv_table_set_row_cnt(mh_ta, row);
 }
 
 static void scr5_btn_event_cb(lv_event_t * e)
@@ -1380,18 +1374,18 @@ static void scr5_btn_event_cb(lv_event_t * e)
     }
 }
 
-static void create5(lv_obj_t *parent) 
+static void create5(lv_obj_t *parent)
 {
-    mheard_ta = lv_table_create(parent);
-    lv_obj_set_size(mheard_ta, LV_HOR_RES, lv_pct(88));
-    lv_obj_align(mheard_ta, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_pos(mheard_ta, 5, 0);
+    mh_ta = lv_table_create(parent);
+    lv_obj_set_size(mh_ta, LV_HOR_RES, lv_pct(88));
+    lv_obj_align(mh_ta, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_pos(mh_ta, 5, 0);
 
     lv_obj_t *back5_label = scr_back_btn_create(parent, ("MHeard"), scr5_btn_event_cb);
 }
-static void entry5(void) 
+static void entry5(void)
 {
-    bmheard = true;
+    bMhShown = true;
 
     ui_mheard_disp();
 
@@ -1399,7 +1393,7 @@ static void entry5(void)
 }
 static void exit5(void)
 {
-    bmheard = false;
+    bMhShown = false;
 
     ui_disp_full_refr();
 }

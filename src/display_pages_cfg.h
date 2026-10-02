@@ -10,17 +10,8 @@
 // geschrieben oder gelesen wird. Ein neues Board mit Langtext ergaenzt DIESE
 // Zeile. Die Board-Makros (HAS_TFT, HAS_EPAPER, WP_DISP) kommen aus
 // configuration.h, das vor diesem Header eingezogen sein muss -- fehlt es,
-// gibt es die Felder nicht, und der Compiler sagt es beim Board, das sie
-// braucht ("... was not declared in this scope").
-//
-// Dieser Header zieht configuration.h bewusst NICHT selbst ein. Geprueft am
-// 21.09.2026: nur loop_functions.cpp und onebutton_functions.cpp fassen die
-// Langtext-Felder an, beide haben configuration.h vorher. Ein eigener
-// Include hier landete ueber loop_functions_extern.h in rund zwanzig
-// Uebersetzungseinheiten, die configuration.h heute nicht sehen -- das ist
-// mehr Risiko als der Fall, den es abfangen soll, und dieser Fall bricht
-// beim Uebersetzen, nicht still zur Laufzeit. Wer kuenftig eine dritte
-// Datei an die Felder laesst, zieht dort configuration.h zuerst ein.
+// gibt es die Felder nicht, und der Linker sagt es beim Board, das sie
+// braucht.
 #pragma once
 
 #if defined(WP_DISP) || defined(HAS_EPAPER) || defined(HAS_TFT) || defined(HAS_TFT_114) || \

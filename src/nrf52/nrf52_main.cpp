@@ -3,6 +3,7 @@
 // 20230326: Version 4.00: START
 
 #include "configuration.h"
+#include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "capture_functions.h"
 
 #include <Arduino.h>
@@ -75,13 +76,17 @@ OneButton btn;
 extern int dbgHeapTotal(void);
 extern int dbgHeapUsed(void);
 
-static uint32_t nrf52_getFreeHeap(void)
+// D1-10 loop scheduler: no longer `static` -- loop_actions_nrf52.cpp's
+// loopAction_heapMon() (the old heapMonTimer body, moved verbatim) needs to
+// reach these from another translation unit now. Internal-linkage-only
+// helpers otherwise; this does not change what they compute.
+uint32_t nrf52_getFreeHeap(void)
 {
     return (uint32_t)(dbgHeapTotal() - dbgHeapUsed());
 }
 
 // Largest contiguous free block — binary search probe (fragmentation indicator)
-static uint32_t nrf52_getMaxFreeBlock(void)
+uint32_t nrf52_getMaxFreeBlock(void)
 {
     uint32_t lo = 0, hi = nrf52_getFreeHeap();
     while (lo + 64 < hi) {
@@ -94,8 +99,8 @@ static uint32_t nrf52_getMaxFreeBlock(void)
 }
 
 // Min-free watermark since boot
-static uint32_t nrf52_heapMinFree = UINT32_MAX;
-static uint32_t nrf52_heapFree = UINT32_MAX;
+uint32_t nrf52_heapMinFree = UINT32_MAX;
+uint32_t nrf52_heapFree = UINT32_MAX;
 
 // Ethernet Object
 NrfETH neth;
@@ -112,7 +117,7 @@ unsigned long resendPing = 0;
 // timers
 uint32_t dhcp_timer = 0;         // dhcp refresh timer
 
-static uint8_t convBuffer[UDP_TX_BUF_SIZE+50]; // we need an extra buffer for udp tx, as we add other stuff (ID, RSSI, SNR, MODE)
+// convBuffer moved to nrf52/udp_drain_nrf52.cpp with its only user (U2 carve)
 
 // ETH Prototypes
 void sendUDP();                                      // UDP tx routine
@@ -123,9 +128,15 @@ void sendHeartbeat();
 #include <lora_setchip.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include "loop_scheduler.h" // D1-10: shared loop scheduler (see there)
+#if defined(ENABLE_MSGSTORE)
+#include "msgstore_api.h"
+#include "msgstore_settings.h"
+#endif
 #include <regex_functions.h>
 #include "setlog_lines.h"
 #include "dedup_functions.h"
+#include "nbr_matrix.h"    // --nbrdebug: nbrLogSnapshot()/nbrMatrix fuer den 15-Minuten-Takt
 #include <command_functions.h>
 #include <aprs_functions.h>
 #include <batt_functions.h>
@@ -134,7 +145,8 @@ void sendHeartbeat();
 #include <udp_functions.h>
 #include <web_functions/web_functions.h>
 #include <phone_commands.h>
-#include <mheard_functions.h>
+#include <mh_phone.h>
+#include <topo_ui.h>
 #include <clock.h>
 
 #include <bmx280.h>
@@ -266,6 +278,18 @@ extern QueueHandle_t bleQueue;
 
 bool bPosFirst = true;
 bool bHeyFirst = true;
+// DR-16: own first-flag for the telemetry gate below, scoped to that gate
+// only. Previously shared bHeyFirst with the trickle-HEY gate a few lines
+// above; the hey gate always runs first each pass and clears bHeyFirst, so
+// by the time the telemetry gate below checked it, it was already false --
+// the first telemetry frame missed its own "first pass" condition and had
+// to wait out the full akt_timer instead (~15s at boot, since iNextTelemetry
+// < 5 shortens akt_timer to 15s). ESP32 never had this bug: it already uses
+// a separate bTeleFirst (esp32_main.cpp:236, 3500). bAllStarted and
+// extra_hey_time are ESP32-only concepts (network-readiness state machine /
+// softser grace) and are deliberately NOT ported here -- see docs/BACKLOG.md
+// DR-16.
+bool bTeleFirst = true;
 
 // Queue for sending config jsons to phone
 uint8_t iPhoneState = 0;
@@ -302,11 +326,6 @@ extern bool ble_busy_flag;    // flag to signal bluetooth uart is active
 //variables and helper functions
 uint8_t err_cnt_udp_tx = 0;    // counter on errors sending message via UDP
 
-// CheckSerialConsole
-String strTextWork;
-char strText[600] = {0};
-int iTxtPos = 0;
-int iTxtLen = 0;
 
 // TinyGPS
 TinyGPSPlus tinyGPSPlus;
@@ -385,7 +404,10 @@ void blinkLED();                                     // blink GREEN
 void blinkLED2();                                    // blink BLUE
 void blinkLED2();                                    // blink RED
 
-void checkSerialCommand(void);
+// checkSerialCommand() now lives in its own TU (C3 carve-out)
+#include "serial_command.h"
+// gatewayService_*() likewise (C4 carve-out)
+#include "gateway_service.h"
 
 
 unsigned long gps_refresh_timer = 0;
@@ -507,8 +529,10 @@ void nrf52setup()
         memset(ringBufferLoraRX[i], 0, 4);
     }
 
-    // Initialize mheard list
-    initMheard();
+    // MeshCom 5 (docs/meshcom5-campaign.md Welle 4): Topologie ersetzt die
+    // alte MHeard-Init; topoUiBoot() ist ein No-Op ausser auf T-Deck/T-Deck
+    // Pro (SD-Sicherung dort passt in tdeck_main.cpp).
+    topoUiBoot();
 
 	// Initialize battery reading
 	init_batt();
@@ -542,6 +566,13 @@ void nrf52setup()
     meshcom_settings.node_mversion = MODUL_HARDWARE;
     meshcom_settings.node_cleanflash = 0;
     snprintf(meshcom_settings.node_fwversion, sizeof(meshcom_settings.node_fwversion), "%-4.4s%-1.1s", SOURCE_VERSION, SOURCE_VERSION_SUB);
+
+#if defined(ENABLE_MSGSTORE)
+    // S3: store node -- glue first (installs the MsgStoreEnv), then the persisted
+    // --store/--storecall/--storetime/--storeslots/--storenotice settings.
+    msgstoreGlueInit();
+    msgstoreSettingsLoad();
+#endif
 
     // "-0" und "-01" sind nicht die kanonische Schreibweise der SSID. Was aus
     // dem Flash kommt, wird deshalb einmal beim Start geradegezogen -- das
@@ -619,6 +650,16 @@ void nrf52setup()
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
     bDisplayLog = meshcom_settings.node_sset4 & 0x0004;
     bTXCAPTURE = meshcom_settings.node_sset4 & 0x0008;
+    bNBRDEBUG = meshcom_settings.node_sset4 & 0x0400;
+    nbrDebugApply();
+    // --nbrrelay off|count|on (Stufe 2): 0x0800 rechnen/zaehlen, 0x1000 anwenden.
+    bNBRRELAY  = (meshcom_settings.node_sset4 & 0x1800) != 0;
+    bNBRCANCEL = (meshcom_settings.node_sset4 & 0x1000) != 0;
+    // --nbrsym on|off (Stufe 2): 0x2000 invertiert gespeichert, siehe command_functions.cpp.
+    bNBRSYM = (meshcom_settings.node_sset4 & 0x2000) == 0;
+    // --nbrreport off|auto|on (Stufe 3, HN-Bericht): 0x0100 off, 0x0200 on, keines von beiden auto.
+    bNBRRPTOFF = (meshcom_settings.node_sset4 & 0x0100) != 0;
+    bNBRRPTON  = (meshcom_settings.node_sset4 & 0x0200) != 0;
 
     bDisplayInfo = bLORADEBUG;
 
@@ -1307,20 +1348,22 @@ void nrf52loop()
         }
     }
 
-    // Retransmission status must tick on ALL nodes (including gateways).
-    // Without this, gateway text messages stay stuck at RING_STATUS_SENT
-    // forever if no echo is received via LoRa (RING_ZOMBIE).
-    if ((uint32_t)(millis() - retransmit_timer) >= (1000 * 2))
-    {
-        updateRetransmissionStatus();
-        // BP-03 (DJ8MEH-RCA): age out stale BACKGROUND (HEY) ring entries
-        // here, in the main-loop tick -- NOT in getNextTxSlot(), which also
-        // runs on the nRF52 timer task itself (Advisor F1, the critical
-        // finding this fix is named after).
-        txRingAgeBackground(millis());
+    // D1-10 loop scheduler: retransmit_timer, mcp_refresh_timer,
+    // BattTimeWait, heapMonTimer, BMP3TimeWait, MCU811TimeWait and
+    // INA226TimeWait now fire from here (table in loop_scheduler.cpp,
+    // bodies in loop_actions_nrf52.cpp) instead of their old, much later
+    // positions further down nrf52loop() -- see src/loop_scheduler.h for
+    // the full audit trail of what moved and the in-pass reordering check.
+    // BattTimeWait's zero-init is unconditional in the original (unlike
+    // heapMonTimer's/MCU811TimeWait's/INA226TimeWait's, which are nested
+    // inside their own runtime guard and so live inside
+    // loopEnabled_heapMon()/loopEnabled_mcu811()/loopEnabled_ina226()
+    // instead -- see loop_actions_nrf52.cpp), so it stays a top-level
+    // statement here, right before the scheduler call.
+    if (BattTimeWait == 0)
+        BattTimeWait = millis() - 31000;
 
-        retransmit_timer = millis();
-    }
+    loopSchedulerRun(millis());
 
     // Periodischer Ringpuffer-Auslastungsbericht (alle 30s)
     {
@@ -1678,6 +1721,9 @@ void nrf52loop()
         while (xQueueReceive(bleQueue, &bleItem, 0) == pdTRUE) {
             { INSTR_SECTION("ble_cmd"); readPhoneCommand(bleItem.data); }
         }
+        // Auth failure: disconnect now, not on the phone's next write.
+        extern void nrf52BleServiceDisconnect(void);
+        nrf52BleServiceDisconnect();
     }
 
     // Apply a settings write staged by settings_rx_callback(), if any (CONC-17)
@@ -1702,18 +1748,7 @@ void nrf52loop()
         hasMsgFromPhone = false;
     }
 
-    #if defined(ENABLE_MCP23017)
-    // 5 sec
-    if ((uint32_t)(millis() - mcp_refresh_timer) >= 5000)
-    {
-        // get i/o state
-        if(loopMCP23017())
-        {
-        }
-
-        mcp_refresh_timer = millis();
-    }
-    #endif
+    // D1-10 loop scheduler: mcp_refresh_timer moved to the scheduler call above.
 
     #if defined(ENABLE_GPS)
         gKeyNum = 2;
@@ -1859,7 +1894,7 @@ void nrf52loop()
                 commandAction((char*)config_cmds[config_cmds_index], isPhoneReady, true);
             }
 
-            startMheardToPhone(); // MHeard erst, wenn der Kommando-Ring leer ist (siehe unten)
+            mhPhoneListStart(); // MHeard-Liste erst, wenn der Kommando-Ring leer ist (siehe unten)
 
             config_to_phone_prepare_timer=millis();
 
@@ -1879,10 +1914,10 @@ void nrf52loop()
                 {
                     sendComToPhone();
                 }
-                else if (mheardToPhonePending())
+                else if (mhPhoneListPending())
                 {
                     // Kommando-Ring leer: naechste Portion der MHeard-Liste nachlegen
-                    sendMheard();
+                    mhPhoneListStep();
                 }
                 else if (!bf_empty(&phoneRing))
                 {
@@ -1912,8 +1947,9 @@ void nrf52loop()
         }
     }
 
-    // check NCNT modified
-    int incnt = getMheardCount();
+    // check NCNT modified -- MeshCom 5 (Welle 4, Konzept 4.8): lokaler
+    // Vergleich, nicht die Sendefassung -- nbrNcnt(), nicht nbrNcntAir().
+    int incnt = nbrNcnt(nbrMatrix, uptimeMin16());
     if(ncnt_hold != incnt)
     {
         INSTR_SECTION("pos_timer");
@@ -2014,8 +2050,9 @@ void nrf52loop()
     {
         bHeyFirst = false;
 
-        // Check for topology change
-        int current_neighbors = getMheardCount();
+        // Check for topology change -- lokaler Vergleich (Konzept 4.8: die
+        // Trickle-Ruecksetzung ist kein Sender).
+        int current_neighbors = nbrNcnt(nbrMatrix, uptimeMin16());
         if(trickle_last_neighbor_count >= 0 && current_neighbors != trickle_last_neighbor_count)
         {
             trickle_interval_ms = TRICKLE_IMIN_S * 1000UL;
@@ -2023,8 +2060,8 @@ void nrf52loop()
         }
         trickle_last_neighbor_count = current_neighbors;
 
-        // Trickle suppression
-        if(trickle_consistent_count >= TRICKLE_K)
+        // Trickle suppression; F6: a gateway keeps sending at least one HG per Imax.
+        if(heyTrickleSuppress(trickle_consistent_count))
         {
             if(bDisplayInfo)
                 Serial.printf("[MC-TRICKLE] SUPPRESS consistent=%d interval=%lums\n",
@@ -2041,6 +2078,45 @@ void nrf52loop()
         heyinfo_timer = millis();
     }
 
+    // HN-Bericht (Nachbarschaftsmatrix Stufe 3, --nbrreport): eigener Takt,
+    // unabhaengig vom Trickle-Intervall oben und nie unterdrueckt -- siehe
+    // nbrReportTick() in loop_functions.cpp fuer Zeitplan und Modus-Auswertung.
+    nbrReportTick();
+
+    // --nbrdebug (24-h-Dauertest der Nachbarschaftsmatrix): 15-Minuten-Takt fuer
+    // nbrLogSnapshot(). Nur im Loop, NICHT im Timer-Task -- der hat auf nRF52 nur
+    // 1 kB Stack, nbrLogSnapshot() formatiert in einen 160-Byte-Puffer und laeuft
+    // ueber alle Zeilen. Laeuft nur, wenn das Flag gesetzt ist; nbrDebugApply()
+    // setzt nbrsnap_timer beim Einschalten zurueck, damit der erste Schnappschuss
+    // nicht erst 15 Minuten nach dem Einschalten kommt.
+    if(bNBRDEBUG && (uint32_t)(millis() - nbrsnap_timer) >= 900000UL)
+    {
+        nbrsnap_timer = millis();
+        nbrLogSnapshot(nbrMatrix, uptimeMin16());
+    }
+
+    // Nachbarschaftsmatrix (Welle 2, edge pool): Minuten-Sweep (nbrSweep(),
+    // CONTRACT in nbr_matrix.h) -- IMMER, unabhaengig von --nbrdebug (das
+    // steuert nur den 15-Minuten-Schnappschuss oben). Loop-Task, NICHT
+    // Timer-Task (der hat auf nRF52 nur 1 kB Stack, gleiche Begruendung wie
+    // bei nbrLogSnapshot() oben). nbrSweep() selbst ist ein No-Op bei einem
+    // zweiten Aufruf in derselben Minute; die Minuten-Waechter hier spart
+    // trotzdem den Funktionsaufruf bei jedem Loop-Durchlauf.
+    {
+        static uint16_t s_nbr_sweep_min = 0xFFFF;
+        uint16_t now_min_sweep = uptimeMin16();
+        if(now_min_sweep != s_nbr_sweep_min)
+        {
+            s_nbr_sweep_min = now_min_sweep;
+            nbrSweep(nbrMatrix, now_min_sweep);
+            // Konsistenzpruefung Masken <-> Kantenpool (nbrLogCheck(), [NBR]|CHECK),
+            // einmal je Minute, nur bei --nbrdebug: auf nRF52 das Instrument fuer
+            // Task-Wechsel mitten in einer Aenderung (Konzept 5).
+            if(bNBRDEBUG)
+                nbrLogCheck(nbrMatrix, now_min_sweep);
+        }
+    }
+
     // TELEMETRY_INTERVAL in Minutes == 15 minutes default
     unsigned long akt_timer = meshcom_settings.node_parm_time;
     if(akt_timer < 5 || akt_timer > 120)
@@ -2054,10 +2130,10 @@ void nrf52loop()
     if(iNextTelemetry < 5)
         akt_timer= 15 * 1000; // 15 Seconds PARM, UNIT, EQNS and 1st T-Message
 
-    if (((uint32_t)(millis() - telemetry_timer) >= (uint32_t)akt_timer) || bHeyFirst)
+    if (((uint32_t)(millis() - telemetry_timer) >= (uint32_t)akt_timer) || bTeleFirst)
     {
-        bHeyFirst = false;
-        
+        bTeleFirst = false;
+
         { INSTR_SECTION("telemetry"); sendTelemetry(SOFTSER_APP_ID); }
 
         telemetry_timer = millis();
@@ -2095,97 +2171,71 @@ void nrf52loop()
         dhcp_timer = millis();
     }
 
-    // get UDP & send UDP message from ringBufferOut if there is one to tx
-    if(bGATEWAY)
+    // ETH-02: DHCP ACQUISITION retry -- the renewal above cannot do this job.
+    //
+    // checkDHCP() is Ethernet.maintain() (nrf_eth.cpp:709), which renews or
+    // rebinds an EXISTING lease. A node that never got one has nothing to
+    // maintain, and maintain() returns 0 forever. The only path that actually
+    // re-acquires is resetDHCP()/initethfixIP(), and that path lives inside
+    // gatewayService_nrf52()'s `if(bGATEWAY)` block -- so until now a node with
+    // the gateway OFF (webserver-only, or an EXTUDP peer) had exactly ONE
+    // attempt, in setup, and no second chance ever.
+    //
+    // Measured on DK5EN-90, 2026-09-17, with the cable physically seated:
+    //   [ETH];link;down;link;1;...;ip;0.0.0.0;...;got_ip_n;0;downs;0;resets;0
+    // Read that line carefully -- `link;1` is the PHY reporting the cable UP,
+    // while the node sits at 0.0.0.0, has never once obtained a lease
+    // (got_ip_n;0) and has never once retried (resets;0). It stayed that way
+    // across a physical replug, because nothing was ever going to try again.
+    //
+    // resetDHCP(), not initethDHCP(): that is the N-20 distinction and it
+    // matters here for the same reason it matters in the gateway path --
+    // initethDHCP() hardware-resets the W5100S on every retry, after which PHY
+    // negotiation needs seconds and startETH() sees a permanent LinkOFF.
+    // resetDHCP() re-runs DHCP without the PHY reset.
+    //
+    // Gated on hasETHlink() so we do not hammer DHCP on a node with no cable
+    // in it, and on a 30 s interval so a genuinely absent DHCP server costs
+    // one attempt per half minute rather than one per loop pass.
+    if(neth.hasETHHardware && !neth.hasIPaddress
+       && !(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6))
     {
-        INSTR_SECTION("gateway");
-        int bUDPReceived = false;
-
-        // check if we received a UDP packet
-        if (neth.hasIPaddress)
+        static uint32_t eth_acquire_timer = 0;
+        if(eth_acquire_timer == 0 || (uint32_t)(millis() - eth_acquire_timer) >= 30000)
         {
-            bSPI_ETH_Active = true;   // SPI guard: Ethernet owns bus
-            INSTR_SECTION("eth_udp");
-            if(neth.getUDP() == 1)  // 1...no udp-paket received
+            eth_acquire_timer = millis();
+
+            bSPI_ETH_Active = true;   // SPI guard: Ethernet owns the shared bus
+            bool link = neth.hasETHlink();
+            if(link)
             {
-                { INSTR_SECTION("eth_udp_tx"); sendUDP(); }
-            }
-            else
-            {
-                bUDPReceived=true;
-
-                if(bDEBUG)
-                    Serial.println("LOOP GATEWAY actions UDP received");
-            }
-            bSPI_ETH_Active = false;  // SPI guard: release bus
-            if(bPendingRadioRx) { bPendingRadioRx = false; startRadioReceive(); }
-        }
-        else
-        {
-            //neth.last_upd_timer = 0; // ETH new
-        }
-
-        // UDP Action for next loop
-        if(!bUDPReceived)
-        {
-            meshcom_settings.node_hasIPaddress = neth.hasIPaddress;
-            meshcom_settings.node_last_upd_timer = neth.last_upd_timer;
-            
-            // check HB response (we also check successful sending KEEP. check if they work together!)
-            if((uint32_t)(millis() - neth.last_upd_timer) >= (uint32_t)(MAX_HB_RX_TIME * 1000))
-            {
-                if(bDEBUG)
-                    Serial.println("LOOP GATEWAY last_upd_timer actions");
-
-                neth.last_upd_timer = millis();
-
-                // avoid TX and UDP
-                if(!neth.hasIPaddress)
+                Serial.printf("[ETH];event;dhcp_acquire_retry;link;1;ms;%lu\n",
+                              (unsigned long)millis());
+                neth.resetDHCP();
+                // ETH-02b (bench 2026-09-18, DK5EN-90): when this retry is what
+                // finally gets the lease, nothing re-starts the services --
+                // setup() had started the webserver at boot without an IP, and
+                // the block below only re-runs on its 15-minute web_timer, so
+                // the node sat pingable on .66 with EXTUDP answering (the UDP
+                // socket binds without an IP) and the webserver dead for a
+                // quarter of an hour, --info still saying "hasIpAddress: no"
+                // (that flag is only copied there). Zeroing web_timer makes
+                // the next pass re-run that block: flag copy, webserver and
+                // extern socket start, exactly what a first-try lease gets.
+                if(neth.hasIPaddress)
                 {
-                    neth.hasIPaddress = false;
-                    iReceiveTimeOutTime = millis();
-
-                    if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
-                    {
-                        if(bDEBUG)
-                        {
-                            Serial.print(getTimeString());
-                            Serial.println(" [MAIN] initethETH fix-IP");
-                        }
-
-                        neth.initethfixIP();
-                    }
-                    else
-                    {
-                        Serial.print(getTimeString());
-                        Serial.println(" [MAIN] resetDHCP (retry)");
-
-                        // N-20: initethDHCP() wuerde den W5100S bei jedem
-                        // Retry per initETH_HW() hardware-resetten — danach
-                        // braucht die PHY-Aushandlung mehrere Sekunden und der
-                        // Link-Check in startETH() sieht dauerhaft LinkOFF:
-                        // ein einmal gezogenes Kabel verbindet nie wieder (auf
-                        // Hardware beobachtet). Das volle HW-Init ist nur beim
-                        // Boot noetig (Setup); hier reicht resetDHCP() ohne
-                        // PHY-Reset — der Link-Zustand ist dann echt, und bei
-                        // LinkOFF bricht startETH() sofort ab statt 10 s zu
-                        // blocken.
-                        neth.resetDHCP();
-                    }
+                    Serial.printf("[ETH];event;dhcp_acquired_late;ms;%lu\n",
+                                  (unsigned long)millis());
+                    web_timer = 0;
                 }
             }
-            // ETH-01: DHCP refresh moved above, ahead of this if(bGATEWAY)
-            // block, so it also runs when bGATEWAY is off.
+            bSPI_ETH_Active = false;
+            if(bPendingRadioRx) { bPendingRadioRx = false; startRadioReceive(); }
         }
     }
-    else if(neth.hasIPaddress)
-    {
-        // TM-45: the block above never runs while bGATEWAY is off, so it
-        // never reads the socket -- do only the NTP-reply harvest instead
-        // of the full gateway receive path (no double read: exactly one of
-        // the two branches runs per loop pass).
-        INSTR_SECTION("udp"); neth.harvestNTP();
-    }
+
+    // C4 carve-out: the gateway service block lives in gateway_service_nrf52.cpp
+    gatewayService_nrf52();
 
     #if defined(SHTC3)
 
@@ -2298,47 +2348,10 @@ void nrf52loop()
 
     { INSTR_SECTION("serial_cmd"); checkSerialCommand(); }
 
-    if(BattTimeWait == 0)
-        BattTimeWait = millis() - 31000;
-
-    if ((uint32_t)(millis() - BattTimeWait) >= 30000)
-    {
-        if (tx_is_active == false && is_receiving == false)
-        {
-            global_batt = read_batt();
-            global_proz = mv_to_percent(global_batt);
-
-            BattTimeWait = millis();
-        }
-    }
-
-    // Heap Monitor — always active, 60s interval
-    if(!bDisplayLog)
-    {
-        static unsigned long heapMonTimer = 0;
-        if (heapMonTimer == 0)
-            heapMonTimer = millis();
-
-        if ((uint32_t)(millis() - heapMonTimer) >= 60000)
-        {
-            uint32_t freeHeap = nrf52_getFreeHeap();
-
-            if(nrf52_heapFree != freeHeap)
-            {
-                nrf52_heapFree = freeHeap;
-                
-                if (freeHeap < nrf52_heapMinFree) nrf52_heapMinFree = freeHeap;
-
-                Serial.printf("%s;[HEAP];%lu;%lu;%lu;(mon)\n",
-                    getTimeString().c_str(),
-                    (unsigned long)freeHeap,
-                    (unsigned long)nrf52_heapMinFree,
-                    (unsigned long)nrf52_getMaxFreeBlock());
-            }
-
-            heapMonTimer = millis();
-        }
-    }
+    // D1-10 loop scheduler: BattTimeWait and heapMonTimer moved to the
+    // scheduler call (BattTimeWait's zero-init stays at the top of the
+    // loop -- see the comment there; heapMonTimer's zero-init lives inside
+    // loopEnabled_heapMon(), loop_actions_nrf52.cpp).
 
     #ifdef OneWire_GPIO
     if(bONEWIRE)
@@ -2426,74 +2439,9 @@ void nrf52loop()
     }
     #endif
 
-    // read BMP390 Sensor
-    #if defined(ENABLE_BMP390)
-    if((bBMP3ON && bmp3_found))
-    {
-        if ((uint32_t)(millis() - BMP3TimeWait) >= 60000)   // 60 sec
-        {
-            if(loopBMP390())
-            {
-                meshcom_settings.node_press = getPress3();
-                if(!aht20_found)
-                {
-                    meshcom_settings.node_temp = getTemp3();
-                }
-                meshcom_settings.node_press_asl = getPressASL3();
-                meshcom_settings.node_press_alt = getAltitude3();
-            }
-
-            BMP3TimeWait = millis(); // wait for next messurement
-        }
-    }
-    #endif
-
-    #if defined(ENABLE_MC811)
-    if(bMCU811ON && mcu811_found)
-    {
-        if(MCU811TimeWait == 0)
-            MCU811TimeWait = millis() - 10000;
-
-        if ((uint32_t)(millis() - MCU811TimeWait) >= 60000)   // 60 sec
-        {
-            // read MCU-811 Sensor
-            if(loopMCU811())
-            {
-                meshcom_settings.node_co2 = geteCO2();
-                
-                if(wx_shot)
-                {
-                    commandAction((char*)"--wx", isPhoneReady, true);
-                    wx_shot = false;
-                }
-            }
-
-            MCU811TimeWait = millis(); // wait for next messurement
-        }
-    }
-    #endif
-
-    #if defined(ENABLE_INA226)
-    if(bINA226ON)
-    {
-        if(INA226TimeWait == 0)
-            INA226TimeWait = millis() - 10000;
-
-        if ((uint32_t)(millis() - INA226TimeWait) >= 60000)   // 60 sec
-        {
-            // read INA Sensor
-            if(loopINA226())
-            {
-                meshcom_settings.node_vbus = getvBUS();
-                meshcom_settings.node_vshunt = getvSHUNT();
-                meshcom_settings.node_vcurrent = getvCURRENT();
-                meshcom_settings.node_vpower = getvPOWER();
-            }
-
-            INA226TimeWait = millis(); // wait for next messurement
-        }
-    }
-    #endif
+    // D1-10 loop scheduler: BMP3TimeWait, MCU811TimeWait and INA226TimeWait
+    // moved to the scheduler call (bodies/guards/seeds in
+    // loop_actions_nrf52.cpp).
 
     // read every n seconds the bme680 sensor calculated from millis()
     #if defined(ENABLE_BMX680)
@@ -2540,6 +2488,9 @@ void nrf52loop()
 
     if(bEXTUDP)
     {
+        // ETH-03: one number for the whole guard-hold -- how long the SPI
+        // bus is unavailable to the radio/webserver for this pass.
+        INSTR_SECTION("extudp_guard");
         bSPI_ETH_Active = true;   // SPI guard: Ethernet owns bus
         getExternUDP();
         flushExternQueue();
@@ -2590,8 +2541,11 @@ void nrf52loop()
 
         if(bWEBSERVER)
         {
+            // ETH-03: the starvation victim -- compare against extudp_guard
+            // to tell "webserver stalled because EXTUDP held the bus" from
+            // "webserver stalled on its own".
             bSPI_ETH_Active = true;   // SPI guard: Ethernet owns bus (web page delivery)
-            loopWebserver();
+            { INSTR_SECTION("webserver_loop"); loopWebserver(); }
             bSPI_ETH_Active = false;  // SPI guard: release bus
             if(bPendingRadioRx) { bPendingRadioRx = false; startRadioReceive(); }
         }
@@ -2938,224 +2892,8 @@ unsigned int getGPS(void)
 }
 #endif
 
-void checkSerialCommand(void)
-{
-    // Serial available
-    if(Serial)
-    {
-        // Check USB Serial input (Serial == MSerial after telnet_functions.h include)
-        if(Serial.available() > 0)
-        {
-            char rd = (char)Serial.read();
-            // Drop NUL bytes: UART RX noise (e.g. unpowered USB-UART bridge on battery
-            // supply) delivers 0x00 which strlen() cannot see and wedges the parser
-            // (DRY-22 — ported from the ESP32 copy of this function).
-            if(rd != 0x00)
-            {
-                printdeb(rd);   // echo to USB + net console via MSerial
-                strText[iTxtPos] = rd;
-                if(iTxtPos < (int)sizeof(strText) - 1)
-                {
-                    iTxtPos++;
-                }
-            }
-        }
-    }
 
-    iTxtLen = strlen(strText);
-
-    // Self-healing: normally every stored byte is non-NUL, so strlen == iTxtPos.
-    // A stray NUL in the buffer breaks that invariant and would block command
-    // processing forever (early return below never reaches the memset). Discard.
-    // (DRY-22 — ported from the ESP32 copy of this function.)
-    if(iTxtLen != iTxtPos)
-    {
-        memset(strText, 0x00, sizeof(strText));
-        iTxtPos = 0;
-        return;
-    }
-
-    if(iTxtLen == 0)
-        return;
-
-    if(strText[0] == ':' || strText[0] == '-' || strText[0] == '{')
-    {
-        if(strText[iTxtLen-1] == '\n' || strText[iTxtLen-1] == '\r')
-        {
-            strTextWork = strText;
-            strTextWork.trim();
-            snprintf(strText, sizeof(strText), "%s", strTextWork.c_str());
-
-            strncpy(msg_text, strText, sizeof(msg_text) - 1);
-            msg_text[sizeof(msg_text) - 1] = '\0';
-
-            int inext=0;
-            // N-22: 600 B vom knappen 4-KB-Loop-Task-Stack in BSS verlagert —
-            // checkSerialCommand() laeuft nur im Loop-Task, und der Pfad
-            // ueber sendMessage() -> sendExtern() lief mit Watermark 0
-            // (Details: STATUS-Box N-22 im Defektkatalog).
-            static char msg_buffer[600];
-            iTxtLen = strlen(strText);
-            for(int itx=0; itx<iTxtLen; itx++)
-            {
-                if(msg_text[itx] == 0x08 || msg_text[itx] == 0x7F)
-                {
-                    inext--;
-                    if(inext < 0)
-                        inext=0;
-                        
-                    msg_buffer[inext+1]=0x00;
-                }
-                else
-                {
-                    msg_buffer[inext]=msg_text[itx];
-                    msg_buffer[inext+1]=0x00;
-                    inext++;
-
-                    // buffer size reached
-                    if(inext > (int)sizeof(msg_buffer)-2)
-                        break;
-                }
-            }
-
-            if(strText[0] == ':' && strText[1] == ':')
-            {
-                // BP-01: origin serial -- the notice comes back on the console.
-                setMsgOrigin(ORIGIN_SERIAL);
-                (void)sendMessage(msg_buffer, inext);
-                setMsgOrigin(ORIGIN_NONE);
-            }
-            else
-                if(strText[0] == '-' && strText[1] == '-')
-                    commandAction(msg_buffer, isPhoneReady, false);
-                else
-                    printfdeb("\n...wrong command %s\n", strText);
-
-            memset(strText, 0x00, sizeof(strText));
-            iTxtPos = 0;
-        }
-    }
-    else
-    {
-        if(bDEBUG)
-        {
-            if(strText[0] != '\n' && strText[0] != '\r')
-            {
-                printfdeb("MSG:%02X..not sent\n", (unsigned char)strText[0]);
-            }
-        }
-
-        memset(strText, 0x00, sizeof(strText));
-        iTxtPos = 0;
-    }
-}
-
-/**@brief UDP tx Routine
- */
-void sendUDP()
-{
-    if(!bf_empty(&udpOutRing))
-    {
-        if(bDisplayCont)
-            Serial.printf("udpOutRing unread:%u used:%u neth.udp_is_busy:%i\n", bf_unread(&udpOutRing), bf_used(&udpOutRing), neth.udp_is_busy);
-
-        if(!neth.udp_is_busy)
-        {
-            // CONC-16 (nRF52-Leser): der Schreiber addUdpOutBuffer() laeuft
-            // ueber addNodeData() im dedizierten 16 kB _lora_task (OnRxDone,
-            // siehe C-01, board.cpp:498) und kann den aeltesten Frame per
-            // Ring-voll-Eviction unter uns wegziehen, waehrend hier gesendet
-            // wird. Deshalb: bf_peek() kopiert den Frame in einen Snapshot,
-            // bf_tail_gen() wird direkt danach gemerkt, und erst nach dem
-            // Senden wird gegen den gemerkten Stand geprueft, ob tail noch
-            // auf denselben Frame zeigt, bevor bf_pop() ihn entnimmt --
-            // gleiche Behandlung wie sendMeshComUDP() in udp_functions.cpp
-            // (ESP32).
-            static uint8_t udpSnapshot[UDP_TX_BUF_SIZE+64] = {0};
-            uint16_t msg_len = bf_peek(&udpOutRing, udpSnapshot, (uint16_t)sizeof(udpSnapshot));
-            // bf_peek() liefert die VOLLE Frame-Laenge, auch wenn weniger
-            // als das in outmax kopiert wurde; vor der Verwendung als Index
-            // in udpSnapshot kappen. Der 1..255-Vertrag von bf_push() macht
-            // das in der Praxis zum No-op (255 < sizeof(udpSnapshot)).
-            if (msg_len > sizeof(udpSnapshot))
-                msg_len = (uint16_t)sizeof(udpSnapshot);
-
-            // Generation direkt nach dem peek: verdraengt ein Schreiber
-            // genau diesen Frame, bevor wir unten bf_pop()en, zaehlt
-            // tail_gen() weiter (siehe bf_tail_gen() in byte_fifo.h). Dann
-            // darf NICHT gepopt werden, sonst traefe es den falschen
-            // (naechsten) Frame.
-            uint16_t myGen = bf_tail_gen(&udpOutRing);
-
-            // send it over UDP
-            if (!neth.sendUDP(udpSnapshot, msg_len))
-            {
-                Serial.printf("Sending UDP Packet failed <%i>!\n", msg_len);
-
-                DEBUG_MSG("ERROR", "Sending UDP Packet failed!");
-
-                err_cnt_udp_tx++;
-                // if we have too much errors sending, reset UDP
-                if (err_cnt_udp_tx >= MAX_ERR_UDP_TX)
-                {
-                    // avoid TX and UDP
-                    neth.hasIPaddress = false;
-
-                    Serial.print(getTimeString());
-                    Serial.printf(" [MAIN] resetDHCP\n");
-
-                    err_cnt_udp_tx = 0;
-                    neth.resetDHCP();
-                }
-            }
-            else
-            {
-                // UDP DATA Header 36 Byte. udpSnapshot enthaelt msg_len Bytes
-                // ab Offset 0 (Header + APRS-Frame) -- der alte Schlitzring
-                // hatte hier noch ein Laengen-Byte an Offset 0 und die
-                // Nutzlast begann erst bei 1; bf_peek() liefert sie schon
-                // ohne dieses Byte. Wahre APRS-Laenge ist msg_len-36.
-                uint16_t aprs_len = (msg_len > 36) ? (uint16_t)(msg_len - 36) : 0;
-                memcpy(convBuffer, udpSnapshot + 36, aprs_len);
-
-                if(aprs_len > 0 && (convBuffer[0] == 0x3A || convBuffer[0] == 0x21 || convBuffer[0] == 0x40))
-                {
-                    struct aprsMessage aprsmsg;
-
-                    // print which message type we got
-                    decodeAPRS(convBuffer, aprs_len, aprsmsg);
-
-                    // print aprs message
-                    if(bDisplayVia)
-                    {
-                        printBuffer_aprs((char*)"[MESHu]...TX-UDP  ", aprsmsg);
-                    }
-                    else
-                    {
-                        if(bDisplayInfo)
-                        {
-                            printBuffer_aprs((char*)"TX-UDP  ", aprsmsg);
-                        }
-                    }
-                }
-            }
-
-            // Frame erst nach dem Senden entnehmen (bf_pop() sperrt intern,
-            // gleiches Schema wie der Writer, CONC-16) -- aber nur, wenn er
-            // noch der ist, den bf_peek() geliefert hat. Guard gegen einen
-            // Schreiber, der ihn waehrend des Sendens per Ring-voll-Eviction
-            // schon verdraengt hat: dann zeigt tail auf einen anderen Frame,
-            // und ein bf_pop() hier wuerde den falschen treffen.
-            if (bf_tail_gen(&udpOutRing) == myGen)
-                bf_pop(&udpOutRing);
-
-        }
-        else
-        {
-            DEBUG_MSG("UDP", "UDP busy. Sending asap");
-        }
-    }
-}
+// C2/U2 carve: sendUDP() lives in nrf52/udp_drain_nrf52.cpp
 
 /**@brief Function to send our heartbeat
  * longanme0x000xAABBCCDDKEEPGW0110x00

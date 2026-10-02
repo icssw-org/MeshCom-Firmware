@@ -10,6 +10,7 @@
  */
 
 #include "lv_obj_functions.h"
+#include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include <configuration.h>
 #include <aprs_structures.h>
 #include <debugconf.h>
@@ -33,6 +34,8 @@
 #include <Preferences.h>
 #include <TFT_eSPI.h>
 #include <gps_functions.h>
+#include "nbr_views.h"       // MeshCom-5-Topologie Welle 4: Quelle fuer tdeck_refresh_mh_view()/_path_view()
+#include "time_functions.h"  // convertUNIXtoString()
 
 
 extern TFT_eSPI tft;
@@ -105,7 +108,7 @@ lv_obj_t    *text_input;
 lv_obj_t    *position_ta;
 lv_obj_t    *map_ta; 
 lv_obj_t    * map_no_data_label = NULL;
-lv_obj_t    *mheard_ta;
+lv_obj_t    *mh_ta;
 lv_obj_t    *path_ta;
 lv_obj_t    *tv;
 lv_obj_t    *dm_callsign;
@@ -114,7 +117,7 @@ lv_obj_t    *dropdown_aprs;
 lv_obj_t    *dropdown_country;
 lv_obj_t    *dropdown_mapselect;
 lv_obj_t    *btn_clear_messages;
-lv_obj_t    *btn_clear_mheards;
+lv_obj_t    *btn_clear_mh;
 lv_obj_t    *btn_clear_nodes;
 lv_obj_t    *btn_gps;
 lv_obj_t    *btn_mesh;
@@ -1540,38 +1543,38 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_center(btnlabelsendpos);
 
     ////////////////////////////////////////////////////////////////////////////
-    // TEXT MHEARD
-    mheard_ta = lv_table_create(t4);
-    lv_obj_add_style(mheard_ta, &cell_style, LV_PART_MAIN|LV_STATE_DEFAULT);
-    lv_obj_add_style(mheard_ta, &cell_style1, LV_PART_ITEMS|LV_STATE_DEFAULT);
-    lv_obj_set_pos(mheard_ta, 0, 0);
-    lv_obj_set_width(mheard_ta, 302);
-    lv_obj_set_height(mheard_ta, LV_SIZE_CONTENT); // Allow height to grow with content
-    lv_obj_set_style_radius(mheard_ta, 10, 0);
-    lv_obj_set_style_clip_corner(mheard_ta, true, 0);
+    // TEXT MHEARD (Quelle seit Welle 4: nbr_views, siehe tdeck_refresh_mh_view())
+    mh_ta = lv_table_create(t4);
+    lv_obj_add_style(mh_ta, &cell_style, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_add_style(mh_ta, &cell_style1, LV_PART_ITEMS|LV_STATE_DEFAULT);
+    lv_obj_set_pos(mh_ta, 0, 0);
+    lv_obj_set_width(mh_ta, 302);
+    lv_obj_set_height(mh_ta, LV_SIZE_CONTENT); // Allow height to grow with content
+    lv_obj_set_style_radius(mh_ta, 10, 0);
+    lv_obj_set_style_clip_corner(mh_ta, true, 0);
 
-    lv_table_set_row_cnt(mheard_ta, 1);
-    lv_table_set_col_cnt(mheard_ta, 7);
+    lv_table_set_row_cnt(mh_ta, 1);
+    lv_table_set_col_cnt(mh_ta, 7);
 
-    lv_table_set_col_width(mheard_ta, 0, 76);
-    lv_table_set_col_width(mheard_ta, 1, 40);
-    lv_table_set_col_width(mheard_ta, 2, 35);
-    lv_table_set_col_width(mheard_ta, 3, 62);
-    lv_table_set_col_width(mheard_ta, 4, 30);
-    lv_table_set_col_width(mheard_ta, 5, 30);
-    lv_table_set_col_width(mheard_ta, 6, 25);
+    lv_table_set_col_width(mh_ta, 0, 76);
+    lv_table_set_col_width(mh_ta, 1, 40);
+    lv_table_set_col_width(mh_ta, 2, 35);
+    lv_table_set_col_width(mh_ta, 3, 62);
+    lv_table_set_col_width(mh_ta, 4, 30);
+    lv_table_set_col_width(mh_ta, 5, 30);
+    lv_table_set_col_width(mh_ta, 6, 25);
 
-    lv_table_set_cell_value(mheard_ta, 0, 0, "Call");
-    lv_table_set_cell_value(mheard_ta, 0, 1, "Time");
-    lv_table_set_cell_value(mheard_ta, 0, 2, "Typ");
-    lv_table_set_cell_value(mheard_ta, 0, 3, "HW");
-    lv_table_set_cell_value(mheard_ta, 0, 4, "SSI");
-    lv_table_set_cell_value(mheard_ta, 0, 5, "SNR");
-    lv_table_set_cell_value(mheard_ta, 0, 6, "NC");
+    lv_table_set_cell_value(mh_ta, 0, 0, "Call");
+    lv_table_set_cell_value(mh_ta, 0, 1, "Time");
+    lv_table_set_cell_value(mh_ta, 0, 2, "Typ");
+    lv_table_set_cell_value(mh_ta, 0, 3, "HW");
+    lv_table_set_cell_value(mh_ta, 0, 4, "SSI");
+    lv_table_set_cell_value(mh_ta, 0, 5, "SNR");
+    lv_table_set_cell_value(mh_ta, 0, 6, "NC");
 
-    // lv_obj_set_height(mheard_ta, LV_VER_RES * 0.6);
+    // lv_obj_set_height(mh_ta, LV_VER_RES * 0.6);
 
-    lv_obj_add_event_cb(mheard_ta, mheard_ta_draw_event, LV_EVENT_DRAW_PART_BEGIN, NULL);
+    lv_obj_add_event_cb(mh_ta, mh_ta_draw_event, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
     ////////////////////////////////////////////////////////////////////////////
     // TEXT PATH
@@ -1729,7 +1732,9 @@ String getCountryDropbox()
 
     for(int ic = 0; ic < max_country; ic++)
     {
-        int icc = strCountry[ic].compareTo("none");
+        // R3-06: strCountry ist jetzt const char* const[] statt String[]
+        // (RAM-Zeile der Welle 2), deshalb strcmp statt String::compareTo.
+        int icc = strcmp(strCountry[ic], "none");
 
         if(icc != 0)
         {
@@ -2242,7 +2247,8 @@ static void update_header_batt_indicator(float batt, int proz)
     // BAT-01: batt==0.0f is the established "no reading" convention (grounded pin, or the
     // ADC-path no-battery detection in batt_functions.cpp) -- without this, a genuinely
     // absent battery fell through to the percent branch below and showed a misleading
-    // "100%"/full-battery icon (mv_to_percent() returns 100 for <1000 mV).
+    // "100%"/full-battery icon (before the battery consolidation mv_to_percent() returned 100
+    // for <1000 mV; it returns 0 for "no reading" now, this branch still decides first).
     const bool usb_powered = (batt <= 0.0f) || (batt > usb_voltage_threshold);
 
     if(usb_powered)
@@ -4063,8 +4069,8 @@ void tdeck_refresh_SET_view()
     snprintf(vChar, sizeof(vChar), "%i", meshcom_settings.node_power);
     lv_textarea_set_text(setup_txpower, vChar);
 
-    lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start.c_str());
-    lv_textarea_set_text(setup_mtone, meshcom_settings.node_audio_msg.c_str());
+    lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start);
+    lv_textarea_set_text(setup_mtone, meshcom_settings.node_audio_msg);
     lv_textarea_set_text(setup_name, meshcom_settings.node_name);
     lv_textarea_set_text(setup_comment, meshcom_settings.node_atxt);
     lv_textarea_set_text(setup_wifissid, meshcom_settings.node_ssid);
@@ -4207,7 +4213,7 @@ static void msg_focus_and_alert(bool bWithAudio)
 
         // Einreihen, nicht abspielen: die SD-Suche und der Ton laufen im
         // Audio-Task, loopTask (LVGL) steht dafuer nicht mehr 1.1 s still.
-        audio_play_file_or_cw(meshcom_settings.node_audio_msg.c_str(), 12, 'r');
+        audio_play_file_or_cw(meshcom_settings.node_audio_msg, 12, 'r');
     }
 }
 
@@ -4390,8 +4396,8 @@ void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
     payload = utf8ascii(payload);
 
     String local_call = String(meshcom_settings.node_call);
-    bool is_outgoing = aprsmsg.msg_source_path.equalsIgnoreCase(local_call)
-        || aprsmsg.msg_source_call.equalsIgnoreCase(local_call);
+    bool is_outgoing = strcasecmp(aprsmsg.msg_source_path, local_call.c_str()) == 0
+        || strcasecmp(aprsmsg.msg_source_call, local_call.c_str()) == 0;
 
     String conversation = is_outgoing ? aprsmsg.msg_destination_call : aprsmsg.msg_source_call;
     if(conversation.length() == 0)
@@ -4404,8 +4410,8 @@ void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
     bubble.type = is_outgoing ? MsgBubbleType::Outgoing : MsgBubbleType::Incoming;
     bubble.timestamp = build_timestamp_string();
 
-    String source_descriptor = aprsmsg.msg_source_path.length() > 0 ? aprsmsg.msg_source_path : aprsmsg.msg_source_call;
-    String dest_descriptor = aprsmsg.msg_destination_call; // routing nicht berücksichtigt aprsmsg.msg_destination_path.length() > 0 ? aprsmsg.msg_destination_path : aprsmsg.msg_destination_call;
+    String source_descriptor = strlen(aprsmsg.msg_source_path) > 0 ? aprsmsg.msg_source_path : aprsmsg.msg_source_call;
+    String dest_descriptor = aprsmsg.msg_destination_call; // routing nicht berücksichtigt strlen(aprsmsg.msg_destination_path) > 0 ? aprsmsg.msg_destination_path : aprsmsg.msg_destination_call;
 
     if(source_descriptor.length() == 0)
         source_descriptor = local_call.length() > 0 ? local_call : String("You");
@@ -4535,4 +4541,172 @@ unsigned long getLatestMessageTimestamp()
         if(ts > max_ts) max_ts = ts;
     }
     return max_ts;
+}
+
+// MeshCom-5-Topologie Welle 4 (docs/meshcom5-topologie/ 4.6/4.7/4.12): rebaut
+// mh_ta/path_ta aus nbr_views, ersetzt showMHeardTDECK()/showPathTDECK() aus
+// dem entfallenen mheard_functions.cpp. Aufgerufen aus topoUiChanged()
+// (src/topo_ui.cpp), das schon Takt und -- ueber diese Tab-Pruefung hier --
+// Sichtbarkeit filtert, bevor es ueberhaupt bis hierher kommt; die Pruefung
+// bleibt trotzdem zweite, billige Sicherung fuer jeden anderen Aufrufer.
+//
+// Reihenfolge aus den lv_tabview_add_tab()-Aufrufen oben in setDisplayLayout():
+// t2=0 t5=1 t3=2 t7=3 t6=4 t4=5(MHeard) t8=6(Path) t1=7.
+#define TDECK_TAB_MHEARD 5
+#define TDECK_TAB_PATH   6
+
+static bool tdeckClockValid()
+{
+    return meshcom_settings.node_date_year >= 2025;
+}
+
+// HH:MM Ortszeit aus einem Alter in Minuten, oder "<age>m" ohne gueltige Uhr.
+static void tdeckFormatTimeOrAge(uint16_t age_min, char *out, size_t outlen)
+{
+    if (!tdeckClockValid())
+    {
+        snprintf(out, outlen, "%um", (unsigned)age_min);
+        return;
+    }
+
+    // getUnixClock() liefert die rohe UTC-Epoche (Advisor R7, docs/meshcom5-campaign.md
+    // Welle 4); die Anzeige braucht Ortszeit wie eh und je -- showPathTDECK()
+    // rechnete denselben utcoff vor convertUNIXtoString() dazu.
+    // L2 (Advisor): float->uint32_t bei negativem utcoff ist UB, darum der
+    // Umweg ueber int32_t.
+    uint32_t local_now = getUnixClock() + (uint32_t)(int32_t)(meshcom_settings.node_utcoff * 3600.0);
+    uint32_t age_s = (uint32_t)age_min * 60u;
+    uint32_t local_epoch = (local_now > age_s) ? (local_now - age_s) : 0;
+
+    String s = convertUNIXtoString(local_epoch);
+    snprintf(out, outlen, "%s", s.substring(11, 16).c_str());
+}
+
+// Haengt mit "/" getrennt die Rufzeichen der Eintrittszeilen einer
+// NbrRouteView an (frueher mheardPathBuffer1[], eine vorformatierte
+// Via-Kette).
+static void tdeckAppendVia(const NbrMask &entry, char *out, size_t outlen)
+{
+    if (outlen == 0)
+        return;
+    out[0] = 0;
+    size_t used = 0;
+    for (int i = nbrMaskNext(entry, -1); i >= 0; i = nbrMaskNext(entry, i))
+    {
+        NbrRowView rv;
+        if (!nbrRowGet(nbrMatrix, i, &rv))
+            continue;
+        int n = snprintf(out + used, outlen - used, used ? "/%s" : "%s", rv.call);
+        if (n < 0 || (size_t)n >= outlen - used)
+            break;
+        used += (size_t)n;
+    }
+}
+
+void tdeck_refresh_mh_view()
+{
+    if (mh_ta == NULL || tv == NULL || lv_tabview_get_tab_act(tv) != TDECK_TAB_MHEARD)
+        return;
+
+    uint16_t now_min = uptimeMin16();
+
+    uint8_t idx[NBR_MAX_ROWS];
+    int n = nbrMhRows(nbrMatrix, now_min, NBR_WINDOW_MIN, idx, NBR_MAX_ROWS);
+    if (n > NBR_MAX_ROWS)
+        n = NBR_MAX_ROWS;
+
+    char buf[24];
+    uint16_t row = 0;
+
+    lv_table_set_cell_value(mh_ta, row, 0, (char*)"Call");
+    lv_table_set_cell_value(mh_ta, row, 1, (char*)"Time");
+    lv_table_set_cell_value(mh_ta, row, 2, (char*)"Typ");
+    lv_table_set_cell_value(mh_ta, row, 3, (char*)"HW");
+    lv_table_set_cell_value(mh_ta, row, 4, (char*)"SSI");
+    lv_table_set_cell_value(mh_ta, row, 5, (char*)"SNR");
+    lv_table_set_cell_value(mh_ta, row, 6, (char*)"NC");
+    row++;
+
+    for (int k = 0; k < n; k++)
+    {
+        NbrMhView v;
+        if (!nbrMhGet(nbrMatrix, idx[k], now_min, &v))
+            continue;
+
+        snprintf(buf, sizeof(buf), "%s", v.call);
+        lv_table_set_cell_value(mh_ta, row, 0, buf);
+
+        tdeckFormatTimeOrAge(v.age_min, buf, sizeof(buf));
+        lv_table_set_cell_value(mh_ta, row, 1, buf);
+
+        snprintf(buf, sizeof(buf), "%s", nbrPayloadTypeName(v.plt));
+        lv_table_set_cell_value(mh_ta, row, 2, buf);
+
+        snprintf(buf, sizeof(buf), "%s", nbrHardwareName(v.hw));
+        lv_table_set_cell_value(mh_ta, row, 3, buf);
+
+        if (v.rssi == NBR_MH_RSSI_UNKNOWN)
+            snprintf(buf, sizeof(buf), "   -");
+        else
+            snprintf(buf, sizeof(buf), "%4d", (int)v.rssi);
+        lv_table_set_cell_value(mh_ta, row, 4, buf);
+
+        if (v.snr == NBR_SNR_UNKNOWN)
+            snprintf(buf, sizeof(buf), "   -");
+        else
+            snprintf(buf, sizeof(buf), "%4d", (int)v.snr);
+        lv_table_set_cell_value(mh_ta, row, 5, buf);
+
+        snprintf(buf, sizeof(buf), "%4u", (unsigned)v.ncnt);
+        lv_table_set_cell_value(mh_ta, row, 6, buf);
+
+        row++;
+    }
+
+    // L1 (Advisor): erst jetzt kappen -- lv_table_set_cell_value() erweitert
+    // die Tabelle selbst automatisch (lv_table.c), ein vorab auf 1+n
+    // gesetzter row_cnt liesse bei uebersprungenen Zeilen (nbrMhGet()==false)
+    // stehengebliebene alte Zeilen unten haengen.
+    lv_table_set_row_cnt(mh_ta, row);
+}
+
+void tdeck_refresh_path_view()
+{
+    if (path_ta == NULL || tv == NULL || lv_tabview_get_tab_act(tv) != TDECK_TAB_PATH)
+        return;
+
+    uint16_t now_min = uptimeMin16();
+
+    char buf[64];
+    char via[48];
+    uint16_t row = 0;
+
+    lv_table_set_cell_value(path_ta, row, 0, (char*)"Call");
+    lv_table_set_cell_value(path_ta, row, 1, (char*)"Time");
+    lv_table_set_cell_value(path_ta, row, 2, (char*)"Path");
+    row++;
+
+    int count = nbrRouteCount(nbrMatrix, now_min);
+
+    for (int i = 0; i < count; i++)
+    {
+        NbrRouteView v;
+        if (!nbrRouteGet(nbrMatrix, i, now_min, &v))
+            continue;
+
+        snprintf(buf, sizeof(buf), "%s", v.call);
+        lv_table_set_cell_value(path_ta, row, 0, buf);
+
+        tdeckFormatTimeOrAge(v.age_min, buf, sizeof(buf));
+        lv_table_set_cell_value(path_ta, row, 1, buf);
+
+        tdeckAppendVia(v.entry, via, sizeof(via));
+        snprintf(buf, sizeof(buf), "%u%s/%s", (unsigned)v.hops, v.gw ? "G" : "", via);
+        lv_table_set_cell_value(path_ta, row, 2, buf);
+
+        row++;
+    }
+
+    // L1 (Advisor): siehe tdeck_refresh_mh_view().
+    lv_table_set_row_cnt(path_ta, row);
 }

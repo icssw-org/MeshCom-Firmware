@@ -67,7 +67,7 @@ extern lv_obj_t    *map_ta;
 extern lv_obj_t    *map_no_data_label;
 extern double       sdmap_lastKnownLat;
 extern double       sdmap_lastKnownLon;
-extern lv_obj_t    *mheard_ta;
+extern lv_obj_t    *mh_ta;      // MeshCom-5-Topologie Welle 4: MHeard-Tabelle (T-Deck), Quelle nbr_views
 extern lv_obj_t    *path_ta;
 extern lv_obj_t    *tv;
 extern lv_obj_t    *dm_callsign;
@@ -76,7 +76,7 @@ extern lv_obj_t    *dropdown_aprs;
 extern lv_obj_t    *dropdown_country;
 extern lv_obj_t    *dropdown_mapselect;
 extern lv_obj_t    *btn_clear_messages;
-extern lv_obj_t    *btn_clear_mheards;
+extern lv_obj_t    *btn_clear_mh;
 extern lv_obj_t    *btn_clear_nodes;
 extern lv_obj_t     *btn_gps;
 extern lv_obj_t     *btn_mesh;
