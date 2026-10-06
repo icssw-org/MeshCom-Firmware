@@ -45,6 +45,7 @@ definitions for T-Beam
 
 // OnBoard LED
 #define BOARD_LED 4    // LED_BUILTIN
+#define BOARD_LED_ACTIVE_LOW 1  // common anode i.e. LOW means LED is ON
 
 // OnBoard Button
 #define BUTTON_PIN      38

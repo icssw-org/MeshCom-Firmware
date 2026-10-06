@@ -23,6 +23,7 @@ definitions for TBEAM 1262
 #define XPOWERS_CHIP_AXP192
 
 #define BOARD_LED 4    // LED_BUILTIN
+#define BOARD_LED_ACTIVE_LOW 1  // common anode i.e. LOW means LED is ON
 
 #define WAIT_TX 5         // ticks waiting after Lora TX in doTX()
 

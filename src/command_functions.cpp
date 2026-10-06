@@ -319,7 +319,13 @@ static void tg_post_ina226_on() { setupINA226(); }
 static void tg_post_ina226_off() { ina226_found = false; }
 #endif
 #ifdef BOARD_LED
-static void tg_post_board_led_off() { digitalWrite(BOARD_LED, LOW); }
+    #ifndef BOARD_LED_ACTIVE_LOW
+        #define BOARD_LED_ACTIVE_LOW 0
+    #endif
+    static void tg_post_board_led_off()
+    {
+        digitalWrite(BOARD_LED, BOARD_LED_ACTIVE_LOW);
+    }
 #endif
 #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
 static void tg_post_gps_on() { gpsInitDone = false; init_loop_function(); }

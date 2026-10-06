@@ -191,7 +191,10 @@ int iCount_weiss=0;
 bool bDEEP_SLEEP = false;
 
 #ifdef BOARD_LED
-bool bLED = true;
+    #ifndef BOARD_LED_ACTIVE_LOW
+        #define BOARD_LED_ACTIVE_LOW 0
+    #endif
+    bool bLED = BOARD_LED_ACTIVE_LOW;
 #endif
 
 #if defined(ENABLE_AUDIO)
@@ -2281,25 +2284,25 @@ void esp32loop()
     #ifdef BOARD_LED
         if(bUSER_BOARD_LED)
         {
-            if ((uint32_t)(millis() - led_timer) >= 1000)   // repeat 1 seconds
+            const uint32_t now = millis(); // millis() only once per cicle, the call to function millis() is expensive,
+
+            if (now - led_timer >= 1000UL) // repeats every 1 second, no cast needed for millis() as it is already uint32_t
             {
+                led_timer = now;
+
                 #ifdef LED_PIN
                     if(pixels_delay == 0 && !bLED_CLEAR)
                     {
                         if(!bLED_RED && !bLED_GREEN && !bLED_ORANGE && !bLED_BLUE)
+                        {
                             bLED_WEISS = true;
+                        }
                     }
                 #endif
 
-                if(bLED)
-                    digitalWrite(BOARD_LED, HIGH);
-                else
-                    digitalWrite(BOARD_LED, LOW);
                 bLED = !bLED;
-
-                led_timer = millis();
+                digitalWrite(BOARD_LED, bLED); // reminder: several boards have BOARD_LED_ACTIVE_LOW == 1;
             }
-
         }
     #endif
 
