@@ -3387,10 +3387,15 @@ void sub_page_info()
     // BAT-01: global_batt==0.0 is the established "no reading" convention (grounded pin, or
     // the ADC-path no-battery detection in batt_functions.cpp) -- same check the on-device
     // displays already use, see loop_functions.cpp.
-    if(global_batt == 0.0)
-        web_client.printf("<tr><td>Battery</td><td>USB (no battery)</td></tr>\n");
-    else
-        web_client.printf("<tr><td>Battery</td><td>%.3fV (%d%%) max %.3fV</td></tr>\n", global_batt / 1000.0, global_proz, meshcom_settings.node_maxv);
+    if (global_batt == 0.0) {
+        web_client.print("<tr><td>Battery</td><td>USB (no battery)</td></tr>\n");
+    } else {
+        web_client.printf("<tr><td>Battery</td><td>%.3fV (%d%%) max %.3fV", global_batt / 1000.0, global_proz, meshcom_settings.node_maxv);
+        #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+            web_client.printf("<br>Charge Indicator LED: %s", bCHARGE_LED ? "on" : "off");
+        #endif
+        web_client.print("</td></tr>\n");
+    }
     // WEB-SW: grouped switch overview, one <tr> per group, labels matching
     // sub_page_setup()'s _create_setup_switch_element() calls verbatim, same
     // #if guards as there. test/golden/info_switch_lint.py checks every

@@ -1,10 +1,9 @@
 #include "configuration.h"
 
-#include "esp32_pmu.h"
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <clock.h>
-#include <Wire.h>               
+#include <Wire.h>
 #include "esp32_flash.h"
 #include <math.h>
 
@@ -22,6 +21,10 @@
 XPowersLibInterface *PMU = NULL;
 
 #endif
+
+#include "esp32_pmu.h"
+
+#define SUCCESS   0
 
 void setupPMU()
 {
@@ -211,7 +214,7 @@ void setupPMU()
 
         // Set charge cut-off voltage
         PMU->setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V2);
-        
+
         #else
 
         printfdeb("[INIT]...AXP2101 chip\n");
@@ -377,4 +380,24 @@ void pmuSleepRails()
     }
 
     #endif
+}
+
+int setChargeLedOn(int on)
+{
+    if (!PMU) {
+        return EINVAL;
+    }
+
+    // =======================================================================
+    // --- UNIVERSAL CHARGE LED CONFIGURATION FOR ALL BOARDS ---
+    // Configure the charging LED mode for both AXP192 and AXP2101 chips.
+    // Available modes:
+    // - XPOWERS_CHG_LED_OFF       : Turn LED off permanently
+    // - XPOWERS_CHG_LED_ON        : Turn LED on permanently
+    // - XPOWERS_CHG_LED_BLINK_1HZ : Blink LED slowly at 1Hz
+    // - XPOWERS_CHG_LED_BLINK_4HZ : Blink LED quickly at 4Hz
+    // - XPOWERS_CHG_LED_CTRL_CHG  : Automatic mode based on charging status (default)
+    // =======================================================================
+    PMU->setChargingLedMode(on?XPOWERS_CHG_LED_CTRL_CHG:XPOWERS_CHG_LED_OFF);
+    return SUCCESS;
 }

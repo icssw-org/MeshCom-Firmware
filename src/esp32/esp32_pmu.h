@@ -12,4 +12,7 @@ void setupPMU();
 // documents as LoRa/GPS are touched here.
 void pmuSleepRails();
 
+// Function to enable and disable (0) the Charging Led (e.g. T-BEAM AXP2101 v1.2)
+int setChargeLedOn(int on);
+
 #endif
