@@ -1,0 +1,4 @@
+C:/GitHub/MeshCom-Firmware/build/CMakeFiles/RadioLib.dir
+C:/GitHub/MeshCom-Firmware/build/CMakeFiles/INSTALL.dir
+C:/GitHub/MeshCom-Firmware/build/CMakeFiles/ALL_BUILD.dir
+C:/GitHub/MeshCom-Firmware/build/CMakeFiles/ZERO_CHECK.dir

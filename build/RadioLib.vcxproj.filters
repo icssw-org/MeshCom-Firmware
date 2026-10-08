@@ -1,0 +1,232 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\Hal.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\Module.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\CC1101\CC1101.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LLCC68\LLCC68.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR1110.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR1120.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR1121.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0_commands.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0_crypto.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0_gnss.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0_wifi.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR_common.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_chip_control.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_flrc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_gfsk.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_lora.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_misc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_ook.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_oqpsk.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_radio.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_ranging.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_config.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\RF69\RF69.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX123x\SX1231.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX123x\SX1233.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\STM32WLx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\STM32WLx_Module.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX1261.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX1262.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX1268.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX126x.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX126x_LR_FHSS.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX126x_commands.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX126x_config.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1272.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1273.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1276.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1277.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1278.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1279.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX127x.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX128x\SX1280.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX128x\SX1281.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX128x\SX1282.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX128x\SX128x.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\Si443x\Si4430.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\Si443x\Si4431.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\Si443x\Si4432.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\Si443x\Si443x.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\nRF24\nRF24.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\ADSB\ADSB.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\AFSK\AFSK.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\APRS\APRS.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\AX25\AX25.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\BellModem\BellModem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\ExternalRadio\ExternalRadio.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\FSK4\FSK4.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Hellschreiber\Hellschreiber.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\LoRaWAN\LoRaWAN.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\LoRaWAN\LoRaWANBands.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Morse\Morse.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Pager\Pager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\PhysicalLayer\PhysicalLayer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Print\ITA2String.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Print\Print.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\RTTY\RTTY.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\SSTV\SSTV.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\utils\CRC.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\utils\Cryptography.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\utils\FEC.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\utils\Utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4A0DBE34-D20B-38F2-9A6F-1A34299A0AFE}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

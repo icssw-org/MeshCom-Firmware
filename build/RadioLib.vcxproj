@@ -1,0 +1,376 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x86</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|win32">
+      <Configuration>Debug</Configuration>
+      <Platform>win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|win32">
+      <Configuration>Release</Configuration>
+      <Platform>win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|win32">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|win32">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{5200CFC1-6522-3350-A44C-6A156F15D9CF}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
+    <Platform>win32</Platform>
+    <ProjectName>RadioLib</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">C:\GitHub\MeshCom-Firmware\build\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">RadioLib.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">RadioLib</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|win32'">C:\GitHub\MeshCom-Firmware\build\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|win32'">RadioLib.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|win32'">RadioLib</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|win32'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">C:\GitHub\MeshCom-Firmware\build\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">RadioLib.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">RadioLib</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">C:\GitHub\MeshCom-Firmware\build\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">RadioLib.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">RadioLib</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) -Wextra -Wpedantic -Wdouble-promotion</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <SupportJustMyCode></SupportJustMyCode>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:X86</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) -Wextra -Wpedantic -Wdouble-promotion</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <SupportJustMyCode></SupportJustMyCode>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:X86</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) -Wextra -Wpedantic -Wdouble-promotion</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MinSpace</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <SupportJustMyCode></SupportJustMyCode>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:X86</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) -Wextra -Wpedantic -Wdouble-promotion</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <SupportJustMyCode></SupportJustMyCode>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:X86</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">Building Custom Rule C:/GitHub/MeshCom-Firmware/.pio/libdeps/E22_1262_S3-DevKitC-1-N16R8/RadioLib/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/GitHub/MeshCom-Firmware/.pio/libdeps/E22_1262_S3-DevKitC-1-N16R8/RadioLib -BC:/GitHub/MeshCom-Firmware/build --check-stamp-file C:/GitHub/MeshCom-Firmware/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeCCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeCXXCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeRCCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeSystem.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCXXInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCommonLanguageInclude.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeGenericSystem.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeLanguageInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeRCInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\CMakeCommonCompilerMacros.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC-C.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC-CXX.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\GNUInstallDirs.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-C.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-CXX.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\WindowsPaths.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">C:\GitHub\MeshCom-Firmware\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|win32'">Building Custom Rule C:/GitHub/MeshCom-Firmware/.pio/libdeps/E22_1262_S3-DevKitC-1-N16R8/RadioLib/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|win32'">setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/GitHub/MeshCom-Firmware/.pio/libdeps/E22_1262_S3-DevKitC-1-N16R8/RadioLib -BC:/GitHub/MeshCom-Firmware/build --check-stamp-file C:/GitHub/MeshCom-Firmware/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|win32'">C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeCCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeCXXCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeRCCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeSystem.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCXXInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCommonLanguageInclude.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeGenericSystem.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeLanguageInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeRCInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\CMakeCommonCompilerMacros.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC-C.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC-CXX.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\GNUInstallDirs.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-C.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-CXX.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\WindowsPaths.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|win32'">C:\GitHub\MeshCom-Firmware\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">Building Custom Rule C:/GitHub/MeshCom-Firmware/.pio/libdeps/E22_1262_S3-DevKitC-1-N16R8/RadioLib/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/GitHub/MeshCom-Firmware/.pio/libdeps/E22_1262_S3-DevKitC-1-N16R8/RadioLib -BC:/GitHub/MeshCom-Firmware/build --check-stamp-file C:/GitHub/MeshCom-Firmware/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeCCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeCXXCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeRCCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeSystem.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCXXInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCommonLanguageInclude.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeGenericSystem.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeLanguageInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeRCInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\CMakeCommonCompilerMacros.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC-C.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC-CXX.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\GNUInstallDirs.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-C.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-CXX.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\WindowsPaths.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">C:\GitHub\MeshCom-Firmware\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">Building Custom Rule C:/GitHub/MeshCom-Firmware/.pio/libdeps/E22_1262_S3-DevKitC-1-N16R8/RadioLib/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/GitHub/MeshCom-Firmware/.pio/libdeps/E22_1262_S3-DevKitC-1-N16R8/RadioLib -BC:/GitHub/MeshCom-Firmware/build --check-stamp-file C:/GitHub/MeshCom-Firmware/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeCCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeCXXCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeRCCompiler.cmake;C:\GitHub\MeshCom-Firmware\build\CMakeFiles\3.30.5-msvc23\CMakeSystem.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCXXInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeCommonLanguageInclude.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeGenericSystem.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeInitializeConfigs.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeLanguageInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeRCInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInformation.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\CMakeSystemSpecificInitialize.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\CMakeCommonCompilerMacros.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC-C.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC-CXX.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Compiler\MSVC.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\GNUInstallDirs.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-Initialize.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-C.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC-CXX.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows-MSVC.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\Windows.cmake;C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\share\cmake-3.30\Modules\Platform\WindowsPaths.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">C:\GitHub\MeshCom-Firmware\build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|win32'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\Hal.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\Module.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\CC1101\CC1101.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LLCC68\LLCC68.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR1110.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR1120.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR1121.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0_commands.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0_crypto.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0_gnss.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR11x0_wifi.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR11x0\LR_common.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_chip_control.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_flrc.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_gfsk.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_lora.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_misc.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_ook.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_oqpsk.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_radio.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_cmds_ranging.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\LR2021\LR2021_config.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\RF69\RF69.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX123x\SX1231.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX123x\SX1233.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\STM32WLx.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\STM32WLx_Module.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX1261.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX1262.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX1268.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX126x.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX126x_LR_FHSS.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX126x_commands.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX126x\SX126x_config.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1272.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1273.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1276.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1277.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1278.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX1279.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX127x\SX127x.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX128x\SX1280.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX128x\SX1281.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX128x\SX1282.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\SX128x\SX128x.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\Si443x\Si4430.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\Si443x\Si4431.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\Si443x\Si4432.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\Si443x\Si443x.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\modules\nRF24\nRF24.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\ADSB\ADSB.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\AFSK\AFSK.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\APRS\APRS.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\AX25\AX25.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\BellModem\BellModem.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\ExternalRadio\ExternalRadio.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\FSK4\FSK4.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Hellschreiber\Hellschreiber.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\LoRaWAN\LoRaWAN.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\LoRaWAN\LoRaWANBands.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Morse\Morse.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Pager\Pager.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\PhysicalLayer\PhysicalLayer.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Print\ITA2String.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\Print\Print.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\RTTY\RTTY.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\protocols\SSTV\SSTV.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\utils\CRC.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\utils\Cryptography.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\utils\FEC.cpp" />
+    <ClCompile Include="C:\GitHub\MeshCom-Firmware\.pio\libdeps\E22_1262_S3-DevKitC-1-N16R8\RadioLib\src\utils\Utils.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="C:\GitHub\MeshCom-Firmware\build\ZERO_CHECK.vcxproj">
+      <Project>{CCFA4E8C-B636-3388-9AFB-73E3707EFC7A}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
