@@ -7,6 +7,7 @@ This file contains all web-based setup functions
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #if defined(ENABLE_MSGSTORE)
+#include <command_setters.h> // cmdDecimalComma
 #include <msgstore_api.h> // stage 3 store node: store/storecall/storetime/storeslots/storenotice setparam mapping
 #endif
 #include <string>
@@ -719,10 +720,13 @@ void webSetup_setParam(setupStruct *setupData){
     /// ###################################### Indoor Temperature Offset ######################################
     if(setupData->paramName.equals("tempoffsetindoor")) {
         float offset = 0.0;
-        bool bOneFloat = (sscanf(setupData->paramValue.c_str(), "%f", &offset) == 1);   //was there exactly ONE float value in this string?
+        char value[16];
+        snprintf(value, sizeof(value), "%s", setupData->paramValue.c_str());
+        cmdDecimalComma(value);   // "-0,5" -> "-0.5"
+        bool bOneFloat = (sscanf(value, "%f", &offset) == 1);   //was there exactly ONE float value in this string?
         if(bOneFloat) {
             // same rung as the console: the -50..50 range check and save_settings() live there
-            snprintf(message_text, sizeof(message_text), "--tempoff in %s", setupData->paramValue.c_str());
+            snprintf(message_text, sizeof(message_text), "--tempoff in %s", value);
             commandAction(message_text, bPhoneReady);
         }
         setupData->returnCode = (bOneFloat && fabs(meshcom_settings.node_tempi_off - offset) < 0.001f) ? WS_RETURNCODE_OKAY : WS_RETURNCODE_FAIL;
@@ -732,10 +736,13 @@ void webSetup_setParam(setupStruct *setupData){
     /// ###################################### Outdoor Temperature Offset ######################################
     if(setupData->paramName.equals("tempoffsetoutdoor")) {
         float offset = 0.0;
-        bool bOneFloat = (sscanf(setupData->paramValue.c_str(), "%f", &offset) == 1);   //was there exactly ONE float value in this string?
+        char value[16];
+        snprintf(value, sizeof(value), "%s", setupData->paramValue.c_str());
+        cmdDecimalComma(value);   // "-0,5" -> "-0.5"
+        bool bOneFloat = (sscanf(value, "%f", &offset) == 1);   //was there exactly ONE float value in this string?
         if(bOneFloat) {
             // same rung as the console: the -50..50 range check and save_settings() live there
-            snprintf(message_text, sizeof(message_text), "--tempoff out %s", setupData->paramValue.c_str());
+            snprintf(message_text, sizeof(message_text), "--tempoff out %s", value);
             commandAction(message_text, bPhoneReady);
         }
         setupData->returnCode = (bOneFloat && fabs(meshcom_settings.node_tempo_off - offset) < 0.001f) ? WS_RETURNCODE_OKAY : WS_RETURNCODE_FAIL;

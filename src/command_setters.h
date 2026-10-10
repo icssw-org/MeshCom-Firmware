@@ -136,6 +136,17 @@ inline double cmdArgDouble(const char *arg, bool *ok = nullptr)
     return v;
 }
 
+/**
+ * Web form decimals: "-0,5" as typed with a German locale becomes "-0.5". strtod and sscanf stop at the
+ * comma, so "-0,5" used to be stored as 0 and reported as set.
+ */
+inline void cmdDecimalComma(char *s)
+{
+    for (; s && *s; ++s)
+        if (*s == ',')
+            *s = '.';
+}
+
 inline bool cmdArgInt(const char *arg, int *out)
 {
     bool ok = false;
