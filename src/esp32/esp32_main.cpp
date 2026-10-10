@@ -1289,6 +1289,7 @@ void esp32setup()
         // TBEAM variants
         #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
             setupPMU();
+            setChargeLedOn(!!bCHARGE_LED); // Initialize the charge indicator LED after boot
         #endif
 
     #else
