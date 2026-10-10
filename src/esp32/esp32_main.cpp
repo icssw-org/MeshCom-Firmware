@@ -2037,7 +2037,6 @@ void esp32setup()
 
     #ifdef BOARD_LED
         pinMode(BOARD_LED, OUTPUT);
-        digitalWrite(BOARD_LED, BOARD_LED_ACTIVE_LOW); // Set the Board LED off after boot
     #endif
 
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -2287,37 +2286,23 @@ void esp32loop()
         if(bUSER_BOARD_LED)
         {
             const uint32_t now = millis(); // millis() only once per cicle, the call to function millis() is expensive,
-            const uint32_t flashDuration = 30;
-            const uint32_t interval =2000;  // Delay between flashes 2 sec.
-            if (!bLED)
-            {
-                if (now - led_timer >= interval) // repeats every 2 second, no cast needed for millis() as it is already uint32_t
-                {
-                    led_timer = now;
-                    bLED = true; // LED on 
 
-                    #ifdef LED_PIN
-                        if(pixels_delay == 0 && !bLED_CLEAR)
+            if (now - led_timer >= 1000UL) // repeats every 1 second, no cast needed for millis() as it is already uint32_t
+            {
+                led_timer = now;
+
+                #ifdef LED_PIN
+                    if(pixels_delay == 0 && !bLED_CLEAR)
+                    {
+                        if(!bLED_RED && !bLED_GREEN && !bLED_ORANGE && !bLED_BLUE)
                         {
-                            if(!bLED_RED && !bLED_GREEN && !bLED_ORANGE && !bLED_BLUE)
-                            {
-                                bLED_WEISS = true;
-                            }
+                            bLED_WEISS = true;
                         }
-                    #endif
+                    }
+                #endif
 
-                        digitalWrite(BOARD_LED, HIGH ^ BOARD_LED_ACTIVE_LOW);
-                }
-            }
-            else
-            {
-                // if the LED is ON, we check the short Flash period of time (30ms)
-                if (now - led_timer >= flashDuration)
-                {
-                    bLED = false;
-                    // switch the board LED OFF
-                    digitalWrite(BOARD_LED, LOW ^ BOARD_LED_ACTIVE_LOW);
-                }
+                bLED = !bLED;
+                digitalWrite(BOARD_LED, bLED); // reminder: several boards have BOARD_LED_ACTIVE_LOW == 1;
             }
         }
     #endif
