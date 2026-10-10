@@ -153,7 +153,7 @@ void getBME680()
     return;
   }
 
-  meshcom_settings.node_temp = bme.temperature + meshcom_settings.node_tempi_off; // Temp Offset currently not implemented
+  meshcom_settings.node_temp = bme.temperature + meshcom_settings.node_tempi_off;
   meshcom_settings.node_hum = bme.humidity;
   meshcom_settings.node_press = fBasePress = bme.pressure / 100.0;
   int bme_alt = bme.readAltitude(SEALEVELPRESSURE_HPA + COMPENSATE_ALTITUDE);

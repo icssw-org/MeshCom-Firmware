@@ -2622,7 +2622,7 @@ void getTEMP(void)
         Serial.print("Humidity: "); Serial.print(humidity.relative_humidity); Serial.println("% rH");
     }
 
-    meshcom_settings.node_temp2 = temp.temperature;
+    meshcom_settings.node_temp2 = temp.temperature + meshcom_settings.node_tempo_off;
     meshcom_settings.node_hum = humidity.relative_humidity;
 }
 
