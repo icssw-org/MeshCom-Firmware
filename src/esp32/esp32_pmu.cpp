@@ -4,7 +4,7 @@
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <clock.h>
-#include <Wire.h>               
+#include <Wire.h>
 #include "esp32_flash.h"
 #include <math.h>
 
@@ -211,7 +211,7 @@ void setupPMU()
 
         // Set charge cut-off voltage
         PMU->setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V2);
-        
+
         #else
 
         printfdeb("[INIT]...AXP2101 chip\n");
@@ -378,3 +378,17 @@ void pmuSleepRails()
 
     #endif
 }
+
+#if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+
+void setChargeLedOn(bool enableAutoMode)
+{
+    if (!PMU)
+    {
+        return;
+    }
+    // Set charging LED to automatic status mode or turn it permanently off
+    PMU->setChargingLedMode(enableAutoMode ? XPOWERS_CHG_LED_CTRL_CHG : XPOWERS_CHG_LED_OFF);
+}
+
+#endif

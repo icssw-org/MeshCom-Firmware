@@ -1014,6 +1014,7 @@ void esp32setup()
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
+    bCHARGE_LED = meshcom_settings.node_sset3 & 0x0001;
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
@@ -1021,7 +1022,7 @@ void esp32setup()
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
     bAnalogFilter = meshcom_settings.node_sset3 & 0x0040;
     bUSER_BOARD_LED = meshcom_settings.node_sset3 & 0x0080;
-    
+
     bSOFTSERDEBUG = meshcom_settings.node_sset3 & 0x0100;
     bWXDEBUG = meshcom_settings.node_sset3 & 0x0200;
     bSHT21ON = meshcom_settings.node_sset3 & 0x0400;
@@ -1296,6 +1297,10 @@ void esp32setup()
             setupPMU();
         #endif
 
+    #endif
+
+    #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHOP_AXP2101)
+       setChargeLedOn(!!bCHARGE_LED); // Initialize the charge indicator LED after boot and setupPMU()
     #endif
 
     #if defined(ENABLE_BMX280)

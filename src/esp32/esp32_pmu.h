@@ -12,4 +12,11 @@ void setupPMU();
 // documents as LoRa/GPS are touched here.
 void pmuSleepRails();
 
+#if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+
+// Function to enable and disable (0) Charging Led Auto Mode (e.g. T-BEAM AXP2101 v1.2)
+void setChargeLedOn(bool enableAutoMode);
+
+#endif // defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+
 #endif

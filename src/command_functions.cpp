@@ -52,7 +52,9 @@
 #if defined(NRF52_SERIES)
 #include "nrf52/settings_store_nrf52.h" // settingsStoreDump() -- --dumpsettings
 #endif
-
+#if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+#include "esp32/esp32_pmu.h"
+#endif
 // Sensors
 #include "bmx280.h"
 #include "bmp390.h"
@@ -318,6 +320,10 @@ static void tg_post_analog_check_on() { initAnalogPin(); }
 static void tg_post_ina226_on() { setupINA226(); }
 static void tg_post_ina226_off() { ina226_found = false; }
 #endif
+#if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+static void tg_post_charge_led_on() { setChargeLedOn(true); }
+static void tg_post_charge_led_off() { setChargeLedOn(false); }
+#endif
 #ifdef BOARD_LED
     #ifndef BOARD_LED_ACTIVE_LOW
         #define BOARD_LED_ACTIVE_LOW 0
@@ -456,6 +462,10 @@ static const ToggleRow COMMAND_TOGGLES[] =
 #if defined (ENABLE_INA226)
     { "--ina226 on",          &bINA226ON,            &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0800,       tg_post_ina226_on,             TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
     { "--ina226 off",         &bINA226ON,            &meshcom_settings.node_sset3,    0xFFFFF7FF,   0x00000000,   tg_post_ina226_off,            TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+#endif
+#if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+    { "--charge led on",      &bCHARGE_LED,          &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0001,       tg_post_charge_led_on,         TG_DIRTY_NONE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--charge led off",     &bCHARGE_LED,          &meshcom_settings.node_sset3,    0xFFFFFFFE,   0x00000000,   tg_post_charge_led_off,        TG_DIRTY_NONE,   TG_SAVE | TG_BRETURN },
 #endif
 #ifdef BOARD_LED
     { "--board led on",       &bUSER_BOARD_LED,      &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0080,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
@@ -1224,6 +1234,9 @@ void commandAction(char *umsg_text, bool ble)
             #endif
             #ifdef BOARD_LED
             printdeb("--board led on/off      board LED\n");
+            #endif
+            #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+            printdeb("--charge led on/off     charge indicator LED\n");
             #endif
             delay(100);
 
