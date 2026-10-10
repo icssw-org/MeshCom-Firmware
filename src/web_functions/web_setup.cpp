@@ -6,8 +6,8 @@ This file contains all web-based setup functions
 #include <regex_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
-#if defined(ENABLE_MSGSTORE)
 #include <command_setters.h> // cmdDecimalComma
+#if defined(ENABLE_MSGSTORE)
 #include <msgstore_api.h> // stage 3 store node: store/storecall/storetime/storeslots/storenotice setparam mapping
 #endif
 #include <string>
