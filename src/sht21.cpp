@@ -3,6 +3,7 @@
  **************************************************************************/
 #include "configuration.h"
 #include "loop_functions_extern.h"
+#include "meshcom_settings.h"
 
 #ifdef ENABLE_SHT21
 
@@ -76,7 +77,7 @@ bool loopSHT21()
     }
     else
     {
-        fSHT21Temp = sht.getTemperature();
+        fSHT21Temp = sht.getTemperature() + meshcom_settings.node_tempo_off;
         fSHT21Hum = sht.getHumidity();
 
         if(bWXDEBUG)

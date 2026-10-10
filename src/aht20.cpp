@@ -3,6 +3,7 @@
  **************************************************************************/
 #include "configuration.h"
 #include "loop_functions_extern.h"
+#include "meshcom_settings.h"
 
 #ifdef ENABLE_AHT20
 
@@ -77,7 +78,7 @@ bool loopAHT20()
     
     aht.getEvent(&humidity, &temp);// populate temp and humidity objects with fresh data
 
-    fAHT20Temp = temp.temperature;
+    fAHT20Temp = temp.temperature + meshcom_settings.node_tempi_off;
     fAHT20Hum = humidity.relative_humidity;
 
     if(bWXDEBUG)
