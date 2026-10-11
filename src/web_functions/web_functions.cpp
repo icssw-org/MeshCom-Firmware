@@ -1119,14 +1119,15 @@ void deliver_scaffold(bool bget_password)
     web_client.println("<style>\n");
 
     // basic definitions
-    web_client.println(":root {--mcbg:#FFFFFF;--mcgray:#252323;--mcred:#A2182F;--mclightred:#FCEDF0;--mcmidred:#FFA5B4;--mclightblue:#CADFEA;--mclightgreen:#CBFBD4;--widthfactor:1.0;}\n");
-    web_client.println("@media screen and (max-width:600px) {* {font-size:12px;} :root{--widthfactor:0.7;}}\n");
-    web_client.println("@media screen and (min-width:601px) {* {font-size:14px;} :root{--widthfactor:0.7;}}\n");
-    web_client.println("@media screen and (min-width:801px) {* {font-size:14px;} :root{--widthfactor:1.0;}}\n");
-    web_client.println("body {background:var(--mcbg);padding:0px;margin:0px 0px;height:100%;width:100%;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;color:var(--mcgray);font-family:sans-serif;}\n");
-    web_client.println(".font-small {font-size:x-small;}\n");
-    web_client.println(".font-large {font-size:large;}\n");
-    web_client.println(".font-xlarge {font-size:x-large;}\n");
+    web_client.println(":root {--fs-s:.85rem;--fs-m:1rem;--fs-l:1.25rem;--fs-xl:1.6rem;--mcbg:#FFFFFF;--mcgray:#252323;--mcred:#A2182F;--mclightred:#FCEDF0;--mcmidred:#FFA5B4;--mclightblue:#CADFEA;--mclightgreen:#CBFBD4;--widthfactor:1.0;}\n");
+    web_client.println("@media screen and (max-width:600px) {html {font-size:12px;} :root{--widthfactor:0.7;}}\n");
+    web_client.println("@media screen and (min-width:601px) {html {font-size:14px;} :root{--widthfactor:0.7;}}\n");
+    web_client.println("@media screen and (min-width:801px) {html {font-size:14px;} :root{--widthfactor:1.0;}}\n");
+    web_client.println("h1,h2,h3,h4,h5,h6,small,code,pre,kbd,samp,button,input,select,textarea {font-size:inherit;}\n");
+    web_client.println("body {font-size:var(--fs-m);background:var(--mcbg);padding:0px;margin:0px 0px;height:100%;width:100%;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;color:var(--mcgray);font-family:sans-serif;}\n");
+    web_client.println(".font-small {font-size:var(--fs-s);}\n");
+    web_client.println(".font-large {font-size:var(--fs-l);}\n");
+    web_client.println(".font-xlarge {font-size:var(--fs-xl);}\n");
     web_client.println(".font-bold {font-weight:bold;}\n");
     web_client.println(".no-wrap {white-space:nowrap;}\n");
     web_client.println(".mw-600 {max-width:600px;}");
@@ -1201,7 +1202,7 @@ void deliver_scaffold(bool bget_password)
     web_client.println(".collapsablecard>.cardtoggle>i {padding:4px;margin:auto;border:solid black;border-width:2px 0 0 2px;display:block;-webkit-transform:rotate(-135deg);transform:rotate(-135deg);-webkit-transition:0.5s;transition:0.5s;}\n");
     web_client.println(".cardopen>.cardtoggle>i {-webkit-transform: rotate(45deg);transform: rotate(45deg);}\n");
     web_client.println(".collapsablecard>div {max-height:0px;-webkit-transition:opacity .15s .0s,max-height .25s .10s;transition:opacity .15s .0s,max-height .25s .10s,margin .0s .50s;	opacity:0.0;overflow:hidden;margin:0px;}\n");
-    web_client.println(".cardopen>div {-webkit-transition:opacity .15s .10s,max-height .25s .0s;transition:opacity .15s .10s,max-height .25s .0s;max-height:1000px;opacity:1;margin:7px;}\n");
+    web_client.println(".cardopen>div {-webkit-transition:opacity .15s .10s,max-height .25s .0s;transition:opacity .15s .10s,max-height .25s .0s;max-height:none;opacity:1;margin:7px;}\n");
     web_client.println(".cardopen>span:first-of-type {display:none;}\n");
 
     // content definitions -> WQ-01 LoRa Queue panel (rxlog page)
@@ -1212,8 +1213,8 @@ void deliver_scaffold(bool bget_password)
     web_client.println(".mcq-cell-empty {flex:1;height:14px;background:#ECECEC;border:1px solid #d0d0d0;box-sizing:border-box;}\n");
     web_client.println(".mcq-tick {position:absolute;top:0;bottom:0;width:1px;background:#000;opacity:0.5;}\n");
     web_client.println(".mcq-tick-faint {position:absolute;top:0;bottom:0;width:1px;background:#000;opacity:0.15;}\n");
-    web_client.println(".mcq-ticklabels {position:relative;height:12px;font-size:x-small;margin:0 0 8px 0;}\n");
-    web_client.println(".mcq-legend {font-size:x-small;margin:0 0 8px 0;}\n");
+    web_client.println(".mcq-ticklabels {position:relative;height:12px;font-size:var(--fs-s);margin:0 0 8px 0;}\n");
+    web_client.println(".mcq-legend {font-size:var(--fs-s);margin:0 0 8px 0;}\n");
     web_client.println(".mcq-swatch {display:inline-block;width:8px;height:8px;margin:0 3px 0 6px;border-radius:2px;vertical-align:middle;}\n");
     web_client.println(".mcq-util-row {display:flex;align-items:center;gap:6px;margin:2px 0;}\n");
     web_client.println(".mcq-util-label {display:inline-block;min-width:60px;}\n");
@@ -1224,9 +1225,10 @@ void deliver_scaffold(bool bget_password)
     web_client.println("#content_inner .mctab {display:inline-flex;align-items:center;border:solid 1px var(--mcgray);background-color:var(--mcbg);border-radius:5px;padding:2px 8px;margin-right:4px;cursor:pointer;}\n");
     web_client.println("#content_inner .mctab-new {background-color:var(--mclightgreen);}\n");
     web_client.println("#content_inner .mctab-on {background-color:var(--mclightblue);}\n");
-    web_client.println(".mcbadge {font-size:x-small;font-weight:bold;margin-left:4px;}\n");
+    web_client.println(".mcbadge {font-size:var(--fs-s);font-weight:bold;margin-left:4px;}\n");
 
     // stage 3 mailbox card below: "before you switch this on" warning box.
+    web_client.println(".cardbody>.grid,.cardbody>.mbx-warn {margin:0 0 7px 0;}\n"); // Store node card: sub-grids inside the single collapsible body
     web_client.println(".mbx-warn {background:var(--mclightred);border:solid 1px var(--mcred);border-radius:5px;padding:6px 8px;margin:7px;}\n");
 
     // content definitions -> mailbox page (stage 3, docs/design/mailbox-page-mockup.html).
@@ -1237,7 +1239,7 @@ void deliver_scaffold(bool bget_password)
     web_client.println(".mbx-counters {display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px 10px;margin:7px;font-variant-numeric:tabular-nums;}\n");
     web_client.println(".mbx-counters>div {display:flex;justify-content:space-between;gap:6px;border-bottom:1px dotted #c8c8c8;padding:2px 0;}\n");
     web_client.println(".mbx-counters b {font-weight:bold;}\n");
-    web_client.println(".mbx-state {display:inline-block;border:solid 1px var(--mcgray);border-radius:5px;padding:0 6px;font-size:x-small;font-weight:bold;white-space:nowrap;}\n");
+    web_client.println(".mbx-state {display:inline-block;border:solid 1px var(--mcgray);border-radius:5px;padding:0 6px;font-size:var(--fs-s);font-weight:bold;white-space:nowrap;}\n");
     web_client.println(".mbx-held {background:var(--mclightblue);}\n");
     web_client.println(".mbx-armed, .mbx-ladder {background:var(--mclightgreen);}\n");
     web_client.println(".mbx-cooldown {background:#F6E7B8;}\n");
@@ -1245,7 +1247,7 @@ void deliver_scaffold(bool bget_password)
     web_client.println(".mbx-actions {display:flex;gap:6px;white-space:nowrap;}\n");
     web_client.println(".mbx-toolbar {display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 10px 0;}\n");
     web_client.println(".mbx-toolbar .spacer {flex:1;}\n");
-    web_client.println(".mbx-legend {font-size:x-small;margin:8px 0 0 0;color:#555;}\n");
+    web_client.println(".mbx-legend {font-size:var(--fs-s);margin:8px 0 0 0;color:#555;}\n");
     web_client.println(".mbx-legend .mbx-state {margin-right:8px;}\n");
 
     web_client.println("</style>\n\n");
@@ -1603,7 +1605,7 @@ void sub_page_mheard()
     web_client.println("<div id=\"content_inner\">");
     // W4d: Legende fuer die zweite Kaertchenzeile (title= wirkt auf dem
     // Telefon nicht, deshalb als Text).
-    web_client.print("<p style=\"font-size:0.85em;color:#555;max-width:900px;\">"
+    web_client.print("<p style=\"font-size:var(--fs-s);color:#555;max-width:900px;\">"
                      "Stations I heard directly in the last 3 h, newest first. "
                      "Last heard: minutes since I last received it directly. "
                      "Hears me: its own reports say it hears me, at this SNR. "
@@ -2049,7 +2051,7 @@ void sub_page_path()
 
     // Legende, wie bei sub_page_neighbours() unten: title= wirkt auf dem
     // Telefon nicht, deshalb stehen dieselben Erklaerungen hier als Text.
-    web_client.print("<p style=\"font-size:0.85em;color:#555;\">"
+    web_client.print("<p style=\"font-size:var(--fs-s);color:#555;\">"
                       "Hops: 0 = me, 1 = direct neighbour, 2+ = reached via other nodes."
                       " | Hears me: SNR at which that neighbour last reported hearing me, '-' if unknown or not a direct/2-hop row."
                       " | Via: the entry path this station was heard on (2-hop: the direct neighbour it is via; horizon: the entry row, and beyond it if cheap to show)."
@@ -2500,7 +2502,7 @@ void sub_page_neighbours()
     // Legende (6.1, Kopf): title= wirkt auf dem Telefon nicht, deshalb
     // stehen dieselben Erklaerungen hier zusaetzlich als Text (W4c: Cov dazu,
     // die "Covered by"-Spalte der geloeschten Zeilentabelle).
-    web_client.print("<p style=\"font-size:0.85em;color:#555;\">"
+    web_client.print("<p style=\"font-size:var(--fs-s);color:#555;\">"
                       "D/I: Direct: heard by me over the air. Indirect: only via a neighbour."
                       " | G: Gateway: a HEY addressed to HG was seen from this node. 'no' means not observed."
                       " | M: Mesh: relays foreign frames, from its last position frame."
@@ -2821,8 +2823,10 @@ void sub_page_setup()
     web_client.println("<div id=\"content_inner\">");
 
     // Manual Command Section
-    web_client.println("<div class=\"cardlayout\">\n");
+    web_client.println("<div class=\"cardlayout collapsablecard\">\n");
     web_client.println("<label class=\"cardlabel\">Manual Command</label>\n");
+    web_client.println("<span>Open this to send a manual command.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
     web_client.println("<div class=\"grid\">");
     web_client.println("<span>Enter manual command:</span>");
     web_client.println("<input type=\"text\" id=\"manualcommand\" maxlength=\"40\" size=\"20\" style=\"width:100%\">");
@@ -2897,14 +2901,16 @@ void sub_page_setup()
 
     web_client.println("</div></div>");
 
-    // NMTU-01 / #1190: MTU, always visible (not collapsible), all boards. Applies on change through
+    // NMTU-01 / #1190: MTU card, collapsible like every other card (UI-04 / D5), all boards. Applies on change through
     // setparam mtu (--mtu, read-back node_ethmtu); the MSS shown is MTU - 40. A stored value outside the
     // three presets (console --mtu 1350) gets its own selected "custom" option so the page never lies.
     {
         const int mtu_cur = meshcom_settings.node_ethmtu;
         const bool mtu_preset = (mtu_cur == 1280 || mtu_cur == 1400 || mtu_cur == 1500);
-        web_client.println("<div class=\"cardlayout\">");
+        web_client.println("<div class=\"cardlayout collapsablecard\">");
         web_client.println("<label class=\"cardlabel\">MTU</label>");
+        web_client.println("<span>Open this for the Ethernet MTU.</span>\n");
+        web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
         web_client.println("<div class=\"grid grid3\">");
         web_client.println("<label for=\"mtu\">MTU</label>");
         web_client.println("<select id=\"mtu\" name=\"mtu\" onchange=\"document.getElementById('mtu_mss').textContent='MSS '+(parseInt(this.value)-40);setvalue('mtu',this.value,true);\">");
@@ -3101,8 +3107,11 @@ void sub_page_setup()
     // four states and switching away from "off" must confirm() first and revert the select on
     // cancel -- a plain on/off switch can't carry that. storecall/storetime/storeslots are
     // ordinary text settings and do fit _create_setup_textinput_element.
-    web_client.println("<div class=\"cardlayout\">");
+    web_client.println("<div class=\"cardlayout collapsablecard\">");
     web_client.println("<label class=\"cardlabel\">Store node</label>");
+    web_client.println("<span>Open this for the message store node settings.</span>\n");
+    web_client.println("<button class=\"cardtoggle\" onclick=\"togglecard(this);\"><i></i></button>\n");
+    web_client.println("<div class=\"cardbody\">"); // one body div: the sub-grids below live inside it
     web_client.println("<div class=\"grid grid2\">");
     {
         static const char *s_storemode_val[4] = {"off", "own", "list", "heard"};
@@ -3127,6 +3136,7 @@ void sub_page_setup()
     web_client.println("</div>");
     web_client.printf("<div class=\"mbx-warn\"><b>Before you switch this on.</b> This node must run 24/7 on continuous power. Stored messages live in RAM only; a reboot discards all of them without notice, and nobody is told. About %.1f kB of RAM is reserved for %u slots.</div>\n",
                        (float)(msgstoreSlots() * sizeof(struct MsgStoreEntry)) / 1024.0f, (unsigned)msgstoreSlots());
+    web_client.println("</div>"); // cardbody
     web_client.println("</div>");
 #endif
 
@@ -3364,12 +3374,12 @@ void sub_page_spectrum()
     else
     #endif
     {
-        web_client.printf("<svg viewbox=\"0, 0, %d, %d\" id=\"spectrum_display\">", end_x + 40, end_y + 60);
+        web_client.printf("<svg viewbox=\"0, 0, %d, %d\" id=\"spectrum_display\" style=\"font-size:var(--fs-s);\">", end_x + 40, end_y + 60);
 
         web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:black;stroke-width:1\"/>\n", start_x, end_y, end_x, end_y);                    // X-Line at bottom
         web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:black;stroke-width:1\"/>\n", start_x, start_y, start_x, end_y);                // Y-Line at left
-        web_client.printf("<text x=\"%d\" y=\"%d\" style=\"font-size: 12px; color: black;\">Freq [MHz]</text>\n", start_x, end_y + 40);                                // caption for X-Line (frequency)
-        web_client.printf("<text x=\"0\" y=\"0\" f style=\"font-size: 12px; color: black;\" transform=\"translate(10, %d) rotate(-90)\")>RSSI [dBm]</text>\n", end_y); // caption for Y-Line (power bins)
+        web_client.printf("<text x=\"%d\" y=\"%d\" style=\"color: black;\">Freq [MHz]</text>\n", start_x, end_y + 40);                                // caption for X-Line (frequency)
+        web_client.printf("<text x=\"0\" y=\"0\" f style=\"color: black;\" transform=\"translate(10, %d) rotate(-90)\")>RSSI [dBm]</text>\n", end_y); // caption for Y-Line (power bins)
 
         web_client.printf("<rect width=\"%d\" height=\"%d\" x=\"%d\" y=\"%d\" fill=\"rgba(0, 110, 129, 0.2)\" />", own_freq_marker_width, end_y - start_y, own_freq_marker_start, start_y); // mark the frequency we are on
         web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:rgba(114, 0, 129, 0.2); stroke-width:1\"/>\n", own_freq_marker_center, start_y, own_freq_marker_center, end_y);
@@ -3380,7 +3390,7 @@ void sub_page_spectrum()
             if (i % 3 == 0)
             {                                                                                                                                                                                                            // print frequency value every 3 steps
                 web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:grey; stroke-width:1\"/>\n", start_x - 10, start_y + (i * step_pixel_height), end_x, start_y + (i * step_pixel_height)); // axis lines for Y axis
-                web_client.printf("<text x=\"%d\" y=\"%d\" style=\"font-size: 12px; color: black;\">-%d</text>\n", start_x - 40, start_y + (i * step_pixel_height) + 6, 11 + (i * 4));                                   // axis title for Y-axis (power)
+                web_client.printf("<text x=\"%d\" y=\"%d\" style=\"color: black;\">-%d</text>\n", start_x - 40, start_y + (i * step_pixel_height) + 6, 11 + (i * 4));                                   // axis title for Y-axis (power)
             }
         }
 
@@ -3403,7 +3413,7 @@ void sub_page_spectrum()
             if (current_fStep % 5 == 0)                                                                                                                                                                                                      // draw axis line every 5 steps
                 web_client.printf("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" style=\"stroke:grey; stroke-width:1\"/>\n", start_x + (current_fStep * step_pixel_width), end_y, start_x + (current_fStep * step_pixel_width), end_y + 10); // axis lines for X-axis
             if (current_fStep % 10 == 0)                                                                                                                                                                                                     // draw axis title every 10 steps
-                web_client.printf("<text x=\"%d\" y=\"%d\" style=\"font-size: 12px; color: black;\">%.3f</text>\n", start_x + (current_fStep * step_pixel_width) - 10, end_y + 25, spec_curr_freq);                                          // axis title for X-axis (frequency)
+                web_client.printf("<text x=\"%d\" y=\"%d\" style=\"color: black;\">%.3f</text>\n", start_x + (current_fStep * step_pixel_width) - 10, end_y + 25, spec_curr_freq);                                          // axis title for X-axis (frequency)
 
             delay(50); // lets wait for a moment (the example code used 100ms but 50ms seems to work, too)
             yield();   // this loop runs for a long time, pet the watchdog and give other tasks a chance to operate
