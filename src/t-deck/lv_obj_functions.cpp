@@ -2294,7 +2294,7 @@ static void update_header_batt_indicator(float batt, int proz)
  * - Bluetooth: green when a device is connected, red when advertising but no connection,
  *   white + cross when BLE is disabled.
  */
-extern bool deviceConnected; // from esp32_main.cpp
+extern volatile bool deviceConnected; // from esp32_main.cpp (volatile since BLC-01)
 
 static void update_header_wifi_indicator(void)
 {

@@ -23,6 +23,7 @@
 #include "ntp_async.h"
 #include "ble_json_frame.h"
 #include "ble_phone_drain.h"   // BLE-N1/N2: blePhoneStatsFormat(), g_blePhoneStats
+#include "ble_session.h"       // BLC-03: BleStats, g_bleStats, bleStatsFormat()
 #include "charge_led_mode.h"  // CHG-01/02: SSET2_CHGLED_CFG marker for the charge LED rows
 #include "i2c_scanner.h"
 #include "ArduinoJson.h"
@@ -6326,6 +6327,11 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("...APRSMC: %s\n...ATXT: %s\n...NAME: %s\n...BLE : %s %s\n...DISPLAY %s\n...CTRY %s\n...FREQ %.4f MHz TXPWR %i dBm RXBOOST %s\n",
                     meshcom_settings.node_aprsmc, meshcom_settings.node_atxt, meshcom_settings.node_name, (bBLElong?"long":"short"), bleTxStats, (bDisplayOff?"off":"on"),
                     getCountry(meshcom_settings.node_country).c_str() , getFreq(), getPower(), (bBOOSTEDGAIN?"on":"off"));
+
+            // BLC-03: BLE link counters (connects, disconnects by class, failed connects, advertising restarts).
+            char bleLinkStats[128];
+            bleStatsFormat(g_bleStats, bleLinkStats, sizeof bleLinkStats);
+            printfdeb("...%s\n", bleLinkStats);
 
             // CS-01: max_hop_text ist persistent und ueber --maxhop setzbar,
             // max_hop_pos bleibt der Compile-Default.

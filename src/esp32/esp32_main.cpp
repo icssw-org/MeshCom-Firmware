@@ -138,6 +138,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include "nbr_matrix.h"    // --nbrdebug: nbrLogSnapshot()/nbrMatrix fuer den 15-Minuten-Takt
 #include <phone_commands.h>
 #include "ble_phone_drain.h"   // BLE-N1/N2: BlePhoneSend, g_blePhoneStats
+#include "ble_session.h"       // BLC-01: per-session reset, disconnect classes, counters
 #include <aprs_functions.h>
 #include <batt_functions.h>
 #include <lora_functions.h>
@@ -304,8 +305,11 @@ static QueueHandle_t bleQueue = NULL;
 NimBLEServer *pServer = NULL;
 NimBLECharacteristic* pTxCharacteristic;
 NimBLEService *pService;
-bool deviceConnected = false;
+// BLC-01: written by the NimBLE host task (callbacks), read by the loop task
+volatile bool deviceConnected = false;
 bool oldDeviceConnected = false;
+BleStats g_bleStats;               // BLC-01: link counters since boot (src/ble_session.h)
+extern bool g_ble_uart_is_connected;   // defined below; the callbacks reset it
 uint16_t g_ble_conn_handle = 0xFFFF;  // current BLE connection handle
 
 uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Kennwort
@@ -327,19 +331,14 @@ uint8_t iPhoneState=0;
 // BLE connection diagnostics (bBLEDEBUG): start of the current link, for the link duration on disconnect
 static uint32_t g_ble_conn_start_ms = 0;
 
-// HCI disconnect reasons (0x200 + HCI error code), see nimble/include/nimble/ble.h
-static const char* bleReasonStr(int reason)
+// BLC-01: the whole per-session reset runs inside the NimBLE callbacks, not on
+// the loop-observed edge: a disconnect and reconnect between two loop passes
+// shows the loop no edge, and the new central would inherit isPhoneReady == 1.
+static inline void bleSessionResetAll()
 {
-    switch(reason)
-    {
-        case 0x208: return "Supervision Timeout";
-        case 0x213: return "Remote User Terminated";
-        case 0x216: return "Local Host Terminated";
-        case 0x222: return "LL Response Timeout";
-        case 0x23B: return "Unacceptable Conn Params";
-        case 0x23E: return "Failed to Establish";
-        default:    return "other";
-    }
+    BleSessionFlags f = { &isPhoneReady, &g_ble_uart_is_connected, &bAckInfo,
+                          &config_to_phone_prepare, &conffin_sent, &ble_disconnect_requested };
+    bleSessionReset(f);
 }
 
 // Connection interval in units of 1.25 ms, printed as ms with two decimals
@@ -349,9 +348,11 @@ static const char* bleReasonStr(int reason)
 class MyServerCallbacks: public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override 
     {
+        // fresh session: isPhoneReady/prepare flags are set only after the
+        // app-layer auth via hello of THIS central (BLC-01)
+        bleSessionResetAll();
+        bleStatsOnConnect(g_bleStats);
         deviceConnected = true;
-        config_to_phone_prepare = false;    // set only after app-layer auth via hello
-        conffin_sent = false;
         g_ble_conn_handle = connInfo.getConnHandle();
         g_ble_conn_start_ms = millis();
 
@@ -379,6 +380,8 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
     {
         deviceConnected = false;
+        bleSessionResetAll();
+        bleStatsOnDisconnect(g_bleStats, reason);
         // print the reason for the disconnection in hex
         // https://github.com/apache/mynewt-nimble/blob/master/docs/ble_hs/ble_hs_return_codes.rst
         Serial.printf("BLE disconnected. Reason: 0x%04x\n", reason);
@@ -387,7 +390,7 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
         {
             unsigned long now = millis();
             Serial.printf("[BLE ];disconnect;ms;%lu;reason;0x%04x;text;%s;dur;%lu;wifi;%d;msys;%d\n",
-                now, reason, bleReasonStr(reason), now - (unsigned long)g_ble_conn_start_ms,
+                now, reason, bleReasonText(reason), now - (unsigned long)g_ble_conn_start_ms,
                 (int)WiFi.status(), os_msys_num_free());
         }
         //NimBLEDevice::startAdvertising();
@@ -3316,11 +3319,13 @@ void esp32loop()
 
         oldDeviceConnected = deviceConnected;
 
-        g_ble_uart_is_connected = false;
-        isPhoneReady = 0;
-        bAckInfo = false;
-        config_to_phone_prepare = false;
-        conffin_sent = false;
+        // BLC-01: the session reset itself runs in onConnect/onDisconnect. Only the
+        // loop-owned flag is cleared here (the loop sets it while connected), and
+        // only if no new central connected in the meantime.
+        if(!deviceConnected)
+            g_ble_uart_is_connected = false;
+        if(bBLEDEBUG)
+            Serial.printf("[BLE ];edge;down;ms;%lu\n", (unsigned long)millis());
 
         // Update T-Deck header so BT icon reflects disconnected state
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -3337,7 +3342,48 @@ void esp32loop()
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         tdeck_update_header_bt();
         #endif
-    }    // check if message from phone to send
+    }
+
+    #if !defined(DISABLE_BLE)
+    // BLC-01: advertising self-check. The library restarts advertising on
+    // disconnect and on a failed connect; if that ever fails the node would stay
+    // unconnectable until reboot. Every 5 s while no central is connected, make
+    // sure advertising runs, else start it and count. Not before the late start
+    // of BENCH_BLE_ADV_LATE builds.
+    {
+        static uint32_t s_bleAdvChk = 0;
+        if((uint32_t)(millis() - s_bleAdvChk) >= 5000UL)
+        {
+            s_bleAdvChk = millis();
+            if(!deviceConnected && pServer != NULL && pService != NULL
+               #if defined(BENCH_BLE_ADV_LATE)
+               && s_bootReadyLogged
+               #endif
+              )
+            {
+                NimBLEAdvertising *pAdv = NimBLEDevice::getAdvertising();
+                if(pAdv != NULL && !pAdv->isAdvertising())
+                {
+                    bool ok = pAdv->start();
+                    bleStatsOnAdvRestart(g_bleStats);
+                    if(bBLEDEBUG)
+                        Serial.printf("[BLE ];adv_restart;ms;%lu;ok;%d\n", (unsigned long)millis(), (int)ok);
+                }
+            }
+        }
+
+        // --bledebug on: counters every 15 min (short line, see Print::printf malloc note)
+        static uint32_t s_bleStatTimer = 0;
+        if(bBLEDEBUG && (uint32_t)(millis() - s_bleStatTimer) >= 900000UL)
+        {
+            s_bleStatTimer = millis();
+            char sb[128];
+            bleStatsFormat(g_bleStats, sb, sizeof(sb));
+            Serial.print("[BLE ];stat;");
+            Serial.println(sb);
+        }
+    }
+    #endif    // check if message from phone to send
 
     // BLE Queue: process data from NimBLE task in Main Loop context
     {

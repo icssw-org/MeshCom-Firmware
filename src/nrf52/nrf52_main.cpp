@@ -1818,6 +1818,12 @@ void nrf52loop()
         nrf52BleServiceDisconnect();
     }
 
+    // BLC-02: deferred disconnect reason, advertising self-check, --bledebug stats
+    {
+        extern void nrf52BleTick(void);
+        nrf52BleTick();
+    }
+
     // Apply a settings write staged by settings_rx_callback(), if any (CONC-17)
     { INSTR_SECTION("ble_settings"); applyPendingBleSettings(); }
 
