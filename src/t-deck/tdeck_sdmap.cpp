@@ -5,6 +5,7 @@
 #include <loop_functions_extern.h>   // fuer bDEBUG
 #include "tdeck_debug.h"             // TM-07: tdeck_dbg_spitrace_note_sd()
 #include "lv_obj_functions_extern.h" // fuer map_no_data_label
+#include "tile_cache.h"
 
 // lodepng-Funktionen direkt deklarieren statt lodepng.h einzubinden
 extern "C" {
@@ -27,6 +28,18 @@ static uint8_t *sdmap_buf    = nullptr;
 static size_t   sdmap_bufLen = 0;
 
 static lv_img_dsc_t sdmap_dsc;
+
+// TD-09: decoded-tile cache. SDMAP_CACHE_SLOTS RGBA32 tiles (256 KB each) in
+// PSRAM, least-recently-used eviction. The 294x182 viewport spans up to 3x2
+// tiles, so 12 slots (3 MB of the 8 MB) keep two zoom levels resident for a
+// zoom-in/zoom-out pair. The set index is part of the key, so switching sets
+// needs no invalidation (tiles on the SD card do not change at runtime). If any
+// slot buffer cannot be allocated the whole cache is dropped and every load
+// behaves as before (read + decode + free per tile).
+#define SDMAP_CACHE_SLOTS     12
+#define SDMAP_CACHE_TILE_BYTES ((size_t)SDMAP_TILE_PX * SDMAP_TILE_PX * 4)
+static TileCache<SDMAP_CACHE_SLOTS> sdmap_cache;
+static bool sdmap_cacheOn = false;
 
 static double sdmap_lastLat = 0.0;
 static double sdmap_lastLon = 0.0;
@@ -122,6 +135,32 @@ void sdmap_init()
         return;
     }
 
+    // TD-09: allocate the tile cache once (sdmap_init() may be called again);
+    // forget every tile on each rescan, the set indices may have changed.
+    sdmap_cache.invalidate_all();
+    if (!sdmap_cacheOn)
+    {
+        int got = 0;
+        for (; got < SDMAP_CACHE_SLOTS; got++)
+        {
+            sdmap_cache.slot[got].buf = ps_malloc(SDMAP_CACHE_TILE_BYTES);
+            if (sdmap_cache.slot[got].buf == nullptr) break;
+        }
+        if (got == SDMAP_CACHE_SLOTS)
+        {
+            sdmap_cacheOn = true;
+        }
+        else
+        {
+            for (int i = 0; i < got; i++)
+            {
+                free(sdmap_cache.slot[i].buf);
+                sdmap_cache.slot[i].buf = nullptr;
+            }
+            Serial.println("[ SDMAP ]...ps_malloc fuer Kachel-Cache fehlgeschlagen, laufe ohne Cache");
+        }
+    }
+
     File entry = root.openNextFile();
     while (entry && sdmap_setCount < SDMAP_SET_COUNT)
     {
@@ -207,11 +246,26 @@ int sdmap_view_w() { return sdmap_viewW; }
 int sdmap_view_h() { return sdmap_viewH; }
 
 // Load one tile PNG from the active set and decode it to RGBA32. Returns NULL if the
-// tile does not exist or cannot be decoded; the caller frees the buffer.
+// tile does not exist or cannot be decoded. Buffer ownership (TD-09): *cached true =
+// the buffer belongs to the tile cache, the caller must NOT free it and must not
+// use it after the next sdmap_load_tile_rgba() call; *cached false = the caller frees it.
 static uint32_t sdmap_tReadMs = 0, sdmap_tDecodeMs = 0, sdmap_bytesRead = 0;   // per compose, for the log line
 
-static unsigned char * sdmap_load_tile_rgba(int zoom, int tx, int ty, unsigned * w, unsigned * h)
+static unsigned char * sdmap_load_tile_rgba(int zoom, int tx, int ty, unsigned * w, unsigned * h, bool * cached)
 {
+    *cached = false;
+    const TileKey key = { sdmap_activeSet, zoom, tx, ty };
+    if (sdmap_cacheOn)
+    {
+        int hit = sdmap_cache.find(key);
+        if (hit >= 0)
+        {
+            *w = sdmap_cache.slot[hit].w;
+            *h = sdmap_cache.slot[hit].h;
+            *cached = true;
+            return (unsigned char *)sdmap_cache.slot[hit].buf;
+        }
+    }
     char path[64];
     snprintf(path, sizeof(path), "%s/%d/%d/%d.png", sdmap_dirs[sdmap_activeSet], zoom, tx, ty);
     // TM-07: direct S count -- SD.exists() below already touches the shared
@@ -255,6 +309,18 @@ static unsigned char * sdmap_load_tile_rgba(int zoom, int tx, int ty, unsigned *
         if (rgba32 != nullptr)
             free(rgba32);
         return nullptr;
+    }
+    // TD-09: park the decoded tile in a cache slot (only a full-size tile fits);
+    // lodepng's own buffer is freed, the slot buffer stays owned by the cache.
+    if (sdmap_cacheOn && (size_t)(*w) * (*h) * 4 <= SDMAP_CACHE_TILE_BYTES)
+    {
+        int s = sdmap_cache.claim(key);
+        memcpy(sdmap_cache.slot[s].buf, rgba32, (size_t)(*w) * (*h) * 4);
+        sdmap_cache.slot[s].w = *w;
+        sdmap_cache.slot[s].h = *h;
+        free(rgba32);
+        *cached = true;
+        return (unsigned char *)sdmap_cache.slot[s].buf;
     }
     return rgba32;
 }
@@ -369,7 +435,8 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon, const char * why)
         {
             nTiles++;
             unsigned pngW = 0, pngH = 0;
-            unsigned char * rgba = sdmap_load_tile_rgba(sdmap_zoom, tx, ty, &pngW, &pngH);
+            bool tileCached = false;
+            unsigned char * rgba = sdmap_load_tile_rgba(sdmap_zoom, tx, ty, &pngW, &pngH, &tileCached);
             if (rgba == nullptr) { nMissing++; continue; }
             // Blit the intersecting region.
             int tileLeft = (int)(tx * SDMAP_TILE_PX - sdmap_originX);   // tile origin in viewport px
@@ -386,7 +453,8 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon, const char * why)
                     dst[(size_t)vy * vw + vx] = lv_color_make(s[0], s[1], s[2]);
                 }
             }
-            free(rgba);
+            if (!tileCached)   // TD-09: a cached tile belongs to the tile cache
+                free(rgba);
         }
     }
 
@@ -410,9 +478,10 @@ bool sdmap_refresh(lv_obj_t * img, double lat, double lon, const char * why)
         if (nMissing == nTiles) lv_obj_clear_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
         else                    lv_obj_add_flag(map_no_data_label, LV_OBJ_FLAG_HIDDEN);
     }
-    Serial.printf("[ SDMAP ]...Karte zusammengesetzt: zoom %d, Kacheln %d (fehlend %d), %dx%d px, %lu ms (read %lu ms / %lu KB, decode %lu ms) from=%s\n",
+    Serial.printf("[ SDMAP ]...Karte zusammengesetzt: zoom %d, Kacheln %d (fehlend %d), %dx%d px, %lu ms (read %lu ms / %lu KB, decode %lu ms, cache %lu/%lu) from=%s\n",
                   sdmap_zoom, nTiles, nMissing, vw, vh, (unsigned long)(millis() - t0),
-                  (unsigned long)sdmap_tReadMs, (unsigned long)(sdmap_bytesRead / 1024), (unsigned long)sdmap_tDecodeMs, why);
+                  (unsigned long)sdmap_tReadMs, (unsigned long)(sdmap_bytesRead / 1024), (unsigned long)sdmap_tDecodeMs,
+                  (unsigned long)sdmap_cache.hits(), (unsigned long)sdmap_cache.misses(), why);
 
     // TD-14: remember the key of the view just composed for the guard above.
     sdmap_lastComposedSet  = sdmap_activeSet;
