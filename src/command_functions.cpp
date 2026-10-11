@@ -2616,7 +2616,10 @@ void commandAction(char *umsg_text, bool ble)
         // max. 40 char
         msg_text[50]=0x00;
 
-        snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", msg_text+11);
+        // EXT-01: "--extudpip" with no argument used to read past the terminator
+        // into stale buffer content ("EXT IP 5 t=219029" seen on the bench);
+        // an argument-less call clears the field like "none".
+        snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", (strlen(msg_text) > 11) ? msg_text+11 : "none");
 
         if(is_equ(meshcom_settings.node_extern, "none"))
         {
