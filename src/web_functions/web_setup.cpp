@@ -168,6 +168,33 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    // TZ-01: POSIX TZ rule (e.g. CET-1CEST,M3.5.0,M10.5.0/3). Validation lives in
+    // --settz (tzParse); the web path only routes the value, like utcoffset above.
+    // Empty value or "none" clears the rule and falls back to the fixed UTC offset.
+    // The 39-char guard matches node_tz (char[40]); an over-long value never reaches
+    // commandAction. A literal '+' in a raw URL decodes to a space (form encoding);
+    // the page's setvalue() uses encodeURIComponent, which sends it as %2B.
+    if(setupData->paramName.equals("tz")) {
+        String sTz = setupData->paramValue;
+        sTz.trim();
+        if(sTz.length() == 0)
+            sTz = "none";
+
+        if(sTz.length() > 39) {
+            setupData->returnCode = WS_RETURNCODE_FAIL;
+            setupData->returnValue = String(meshcom_settings.node_tz);
+            return;
+        }
+
+        snprintf(message_text, sizeof(message_text), "--settz %s", sTz.c_str());
+        commandAction(message_text, bPhoneReady);
+
+        bool bTzOk = sTz.equalsIgnoreCase("none") ? (meshcom_settings.node_tz[0] == 0) : sTz.equals(meshcom_settings.node_tz);
+        setupData->returnCode = bTzOk?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_tz);
+        return;
+    } else
+
     if(setupData->paramName.equals("maxv")) {
         snprintf(message_text, sizeof(message_text), "--maxv %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
@@ -824,6 +851,11 @@ void webSetup_getParam(setupStruct *setupData){
 
     if(setupData->paramName.equals("utcoffset")) {
         setupData->returnValue = String(meshcom_settings.node_utcoff, 1);
+        return;
+    } else
+
+    if(setupData->paramName.equals("tz")) {     // TZ-01
+        setupData->returnValue = String(meshcom_settings.node_tz);
         return;
     } else
 

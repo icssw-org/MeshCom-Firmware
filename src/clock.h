@@ -195,4 +195,16 @@ public:
 
 extern Clock MyClock;
 
+// TZ-01 (docs/ntp-tz-rtc-wave-plan.md W3): POSIX-TZ-Regel aus
+// meshcom_settings.node_tz. Leer oder ungueltig = fester node_utcoff wie bisher.
+// Ist eine Regel gesetzt, ist node_utcoff ein abgeleiteter Laufzeitwert: jeder
+// Clock::SetClock(time_t, bool) und der Minuten-Tick in CheckEvent() leiten ihn
+// neu ab und verankern MyClock neu (Knotenzeit = UTC + Offset).
+//
+// Offset aus node_tz sofort neu ableiten und MyClock neu verankern
+// (z. B. nach --settz). @return true, wenn sich node_utcoff geaendert hat.
+bool tzApplyNow();
+// "CET" / "CEST" / "+0530" bei gueltiger Regel, sonst NULL.
+const char *tzActiveAbbrev();
+
 //===| eof - end of file |====================================================

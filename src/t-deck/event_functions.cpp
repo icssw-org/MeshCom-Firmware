@@ -561,7 +561,18 @@ void btn_event_handler_setup(lv_event_t * e)
         // UTC
         String strNewUtc = lv_textarea_get_text(setup_utc);
         snprintf(cNew, sizeof(cNew), "%s", strNewUtc.c_str());
-        sscanf(cNew, "%f", &meshcom_settings.node_utcoff);
+        {
+            float fNewUtc = meshcom_settings.node_utcoff;
+            sscanf(cNew, "%f", &fNewUtc);
+
+            // TZ-01 D1: a manually changed offset wins over a TZ rule. Only a real
+            // change clears node_tz: with a rule set, node_utcoff is the derived
+            // value the field was filled with, so saving the page unchanged keeps it.
+            if (meshcom_settings.node_tz[0] != '\0' && (fNewUtc > meshcom_settings.node_utcoff + 0.001f || fNewUtc < meshcom_settings.node_utcoff - 0.001f))
+                meshcom_settings.node_tz[0] = '\0';
+
+            meshcom_settings.node_utcoff = fNewUtc;
+        }
 
         // START TONE
         strVar = lv_textarea_get_text(setup_stone);

@@ -6278,6 +6278,11 @@ void utf8ascii(char* s)
 
 String getTimeZone()
 {
+    // TZ-01: with a TZ rule, the current abbreviation (CET/CEST/...)
+    const char *abbrev = tzActiveAbbrev();
+    if(abbrev != NULL)
+        return String(abbrev);
+
     if(meshcom_settings.node_utcoff == 0)
         return "UTC";
 

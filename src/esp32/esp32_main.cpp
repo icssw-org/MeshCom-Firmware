@@ -927,6 +927,12 @@ void esp32setup()
         initTimePersistence();
 
         clear_flash();
+
+        // TZ-01 (D2): nur ein frischer oder geloeschter ESP32-Knoten bekommt die
+        // MEZ/MESZ-Regel. Nicht in init_flash(): dessen Vorbelegung laeuft bei
+        // jedem Boot, ein aktualisierter Knoten ohne NVS-Key "node_tz" bekaeme
+        // sie sonst auch. Der save_settings() weiter unten schreibt sie.
+        snprintf(meshcom_settings.node_tz, sizeof(meshcom_settings.node_tz), "%s", "CET-1CEST,M3.5.0,M10.5.0/3");
     }
     else
     {

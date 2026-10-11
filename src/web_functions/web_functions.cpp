@@ -30,6 +30,7 @@
 #include "sto_notice.h"        // stage 4: stoHolder() for the messages-page held mark, all boards
 #include <url_decode.h>         // #1173: decodeURLPercentCoding() -- full percent-decoding of WebUI parameters
 #include <charset_filter.h>     // #1173: UTF-8-safe cut of the 150-byte web message
+#include "clock.h"              // TZ-01: tzActiveAbbrev() -- flags an unparsable node_tz on the info page
 #if defined(ENABLE_MSGSTORE)
 #include <msgstore_api.h> // stage 3 store node: /?page=mailbox, mboxpurge/mboxdeliver, the setup card
 #endif
@@ -2838,6 +2839,11 @@ void sub_page_setup()
     }
 
     _create_setup_textinput_element("utcoffset", "UTC Offset", String(meshcom_settings.node_utcoff, 1).c_str(), "1.0", "utcoffset", 4, false, false); // create Textinput-Element including Label and Button
+    // TZ-01: a set POSIX TZ rule overrides the fixed offset above; the offset then shows the derived value
+    // node_tz is HTML-escaped: tzParse() accepts any alnum name inside <...>
+    // (e.g. "<plaintext>-1"), and a config import does not run tzParse() at all.
+    _create_setup_textinput_element("tz", "Timezone (POSIX TZ)", htmlEscape(String(meshcom_settings.node_tz)), "CET-1CEST,M3.5.0,M10.5.0/3", "tz", 39, false, false);
+    web_client.println("<p class=\"font-small\" style=\"grid-column:1/-1\">A set POSIX TZ rule overrides the fixed UTC offset (DST handled automatically); the UTC offset field then shows the derived value. Empty or &quot;none&quot; = fixed offset only.</p>");
     _create_setup_textinput_element("maxv", "max. Voltage", String(meshcom_settings.node_maxv, 3), "4.125", "maxv", 5, false, false);                 // create Textinput-Element including Label and Button
 
     web_client.println("</div><div class=\"grid grid2\">");
@@ -3384,6 +3390,10 @@ void sub_page_info()
     web_client.printf("<tr><td>Call</td><td>%s</td></tr>\n", meshcom_settings.node_call);
     web_client.printf("<tr><td>Hardware</td><td>%s</td></tr>\n", nbrHardwareName(BOARD_HARDWARE));
     web_client.printf("<tr><td>UTC offset</td><td>%.1f [%s]</td></tr>\n", meshcom_settings.node_utcoff, cTimeSource);
+    // TZ-01: escaped, see sub_page_setup(); an unparsable value (config import) is flagged
+    web_client.printf("<tr><td>Timezone</td><td>%s%s</td></tr>\n",
+        meshcom_settings.node_tz[0] ? htmlEscape(String(meshcom_settings.node_tz)).c_str() : "none",
+        (meshcom_settings.node_tz[0] && !tzActiveAbbrev()) ? " (invalid, ignored)" : "");
     // BAT-01: global_batt==0.0 is the established "no reading" convention (grounded pin, or
     // the ADC-path no-battery detection in batt_functions.cpp) -- same check the on-device
     // displays already use, see loop_functions.cpp.

@@ -194,7 +194,9 @@
     M(float, node_ntctemp, 0.0)                                                                          \
     M(bool, node_fanon, false)                                                                           \
     M(int, node_pingcount, 0)                                                                            \
-    M(unsigned long, node_pingduration, 0)
+    M(unsigned long, node_pingduration, 0)                                                               \
+    /* POSIX TZ string; empty = fixed node_utcoff (TZ-01). Persisted + exported as "node_tz". */          \
+    A(char, node_tz, [40], {0})
 
 /* ESP32-only members (every ESP32 board). */
 #ifdef ESP32

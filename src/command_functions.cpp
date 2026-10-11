@@ -45,6 +45,7 @@
 #endif
 #include "tinyxml_functions.h"
 #include "clock.h"
+#include "tz_rule.h" // TZ-01: tzParse(), tzRejectReason() for --settz
 
 #ifdef ESP32
 #include "esp32/esp32_functions.h"
@@ -707,11 +708,66 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"utcoff") == 0)
     {
-        sscanf(msg_text+9, "%f", &meshcom_settings.node_utcoff);
+        const bool bUtcParsed = (sscanf(msg_text+9, "%f", &meshcom_settings.node_utcoff) == 1);
         // TODO: adapt node_time accordingly!
+
+        // TZ-01 D1: a manual offset wins over a TZ rule -- the rule would
+        // otherwise overwrite this value again within a minute. Only a value
+        // that actually parsed clears the rule.
+        if(bUtcParsed && meshcom_settings.node_tz[0] != '\0')
+        {
+            meshcom_settings.node_tz[0] = '\0';
+            printfdeb("utcoff: TZ rule cleared, fixed offset %.1f h\n", meshcom_settings.node_utcoff);
+        }
 
         if(bBLEDEBUG)
             printfdeb("[COMMAND]utcoff:%f\n", meshcom_settings.node_utcoff);
+
+        if(ble)
+        {
+            sendNodeSetting();
+            sendGpsJson();
+        }
+
+        save_settings();
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"settz") == 0)
+    {
+        // TZ-01: --settz <POSIX rule>  e.g. CET-1CEST,M3.5.0,M10.5.0/3
+        //        --settz none (or no argument): back to the fixed --utcoff
+        // The rule is validated first; a refused rule changes nothing.
+        const char *tzArg = msg_text+7;
+        while(*tzArg == ' ')
+            tzArg++;
+
+        if(*tzArg == '\0' || casecmp((char*)tzArg, (char*)"none") == 0)
+        {
+            // node_utcoff keeps its current (last derived) value
+            meshcom_settings.node_tz[0] = '\0';
+
+            printfdeb("TZ none, fixed UTC%+.1f\n", meshcom_settings.node_utcoff);
+        }
+        else
+        {
+            TzRule tzCheck;
+
+            if(!tzParse(tzArg, &tzCheck))
+            {
+                printfdeb("settz: rejected <%s>: %s\n", tzArg, tzRejectReason(tzArg));
+
+                return;
+            }
+
+            snprintf(meshcom_settings.node_tz, sizeof(meshcom_settings.node_tz), "%s", tzArg);
+
+            tzApplyNow();
+
+            const char *tzAbbr = tzActiveAbbrev();
+            printfdeb("TZ %s, now %s UTC%+.1f\n", meshcom_settings.node_tz, tzAbbr ? tzAbbr : "?", meshcom_settings.node_utcoff);
+        }
 
         if(ble)
         {
@@ -1100,7 +1156,7 @@ void commandAction(char *umsg_text, bool ble)
             #endif
             delay(100);
 
-            printdeb("\n== Node ==\n--setcall <call>        callsign (OE0XXX-1)\n--setname <name>/none   operator first name (alias --operatorname)\n--setctry 0-99          country -> LoRa preset\n--setgrc 9;..9;         groups\n--utcoff +/-99.9        UTC offset h\n--settime yyyy.mm.dd hh:mm:ss  set clock\n");
+            printdeb("\n== Node ==\n--setcall <call>        callsign (OE0XXX-1)\n--setname <name>/none   operator first name (alias --operatorname)\n--setctry 0-99          country -> LoRa preset\n--setgrc 9;..9;         groups\n--utcoff +/-99.9        UTC offset h (clears --settz)\n--settz <rule>|none    POSIX TZ rule, e.g. CET-1CEST,M3.5.0,M10.5.0/3\n--settime yyyy.mm.dd hh:mm:ss  set clock\n");
             #if defined(ENABLE_RTC)
             printdeb("--setrtc yyyy.mm.dd hh:mm:ss  set RTC chip\n");
             #endif
@@ -6210,6 +6266,11 @@ void commandAction(char *umsg_text, bool ble)
 
             printfdeb("...Flash-Version %i\n", meshcom_settings.node_fversion);
 
+            {
+                const char *tzAbbr = tzActiveAbbrev();
+                printfdeb("...TZ %s ...TZOFF %+.1f h [%s]\n", (meshcom_settings.node_tz[0] ? meshcom_settings.node_tz : "none"), meshcom_settings.node_utcoff, (tzAbbr ? tzAbbr : "-"));
+            }
+
             printfdeb("...NOMSGALL %s ...MESH %s ...BUTTON (%i) %s ...SOFTSER %s ... SOFTSERREAD %s\n...PASSWD <%s>\n",
                 (bNoMSGtoALL?"on":"off"), (bMESH?"on":"off"), ibt, (bButtonCheck?"on":"off"), (bSOFTSERON?"on":"off"), (bSOFTSERREAD?"on":"off"), maskSecret(meshcom_settings.node_passwd));
 
@@ -6670,7 +6731,10 @@ void sendNodeSetting()
     sendBleJsonRegister(nsetdoc); // JSN-01
 
     // second node settings json
-    // {"TYP":"SN1","VIA":true,"VIACALL":"OE1KFR-12","WSPWD":"","ASYM":false}
+    // {"TYP":"SN1","VIA":true,"VIACALL":"OE1KFR-12","WSPWD":"","ASYM":false,"TZ":"CET-1CEST,M3.5.0,M10.5.0/3"}
+    // TZ (TZ-01, up to 39 chars) lives here, not in SN: SN is at 228 of
+    // BLE_JSON_PAYLOAD_MAX 244. Worst case SN1: VIACALL 39 + WSPWD 19 + TZ 39 = 167
+    // JSON bytes. TZ is last, so bleJsonFrameFailSoft() would drop it first.
     JsonDocument nsetdoc1;
 
     nsetdoc1["TYP"] = "SN1";
@@ -6678,6 +6742,7 @@ void sendNodeSetting()
     nsetdoc1["VIACALL"] = meshcom_settings.node_via;
     nsetdoc1["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc1["ASYM"] = bGPSAutosymbol;
+    nsetdoc1["TZ"] = meshcom_settings.node_tz;
 
     sendBleJsonRegister(nsetdoc1); // JSN-01
 }
