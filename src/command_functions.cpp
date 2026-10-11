@@ -120,6 +120,7 @@ extern TinyGPSPlus gps;
 #endif
 #include "test_inject.h"
 #include "loop_breadcrumb.h"   // F3: --info ...BOOT line
+#include "gw_link_status.h"   // --info ...Server line
 
 #if defined(BOARD_T5_EPAPER)
 #include <t5-epaper/t5epaper_extern.h>
@@ -6512,6 +6513,12 @@ void commandAction(char *umsg_text, bool ble)
     
                 if(!bWIFIAP)
                     printfdeb("...UDP-HBeat : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
+            }
+
+            { // GW-LINK: server path (Internet/Hamnet) and whether it still answers; UDP-HBeat above is the last HB sent
+                char gwl[96];
+                gwLinkFormat(gwl, sizeof(gwl), bGATEWAY, meshcom_settings.node_hasIPaddress, millis());
+                printfdeb("...Server       : %s\n", gwl);
             }
             #endif
     

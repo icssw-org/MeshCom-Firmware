@@ -24,6 +24,7 @@
 #include "regex_functions.h"
 #include "conf_frame.h"
 #include "setlog_lines.h"
+#include "gw_link_status.h"
 #include "udp_frame.h"
 #include "ack_attribution.h"   // DR-09: buildAckPhoneFrame()
 #include "own_msg_status.h"   // late ACK -> durable web GUI status (ring slot may be gone)
@@ -104,6 +105,7 @@ int handleUdpFrame_nrf52(unsigned char *inc_udp_buffer, int packetSize, IPAddres
         printfdeb("[GATE] Received a LoRa packet to transmit\n");
 
       neth.last_upd_timer = millis();
+      gwLinkNoteRx(millis());   // real server frame (not the OTHER branch)
       hb_warn_logged = false;   // DR-03: Latch nur zusammen mit der Alterung zuruecksetzen
 
       neth.lora_tx_msg_len = packetSize - UDP_MSG_INDICATOR_LEN;
@@ -539,6 +541,7 @@ int handleUdpFrame_nrf52(unsigned char *inc_udp_buffer, int packetSize, IPAddres
       Serial.printf("[GW];rx;type;CONF;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
 
       neth.last_upd_timer = millis();
+      gwLinkNoteRx(millis());   // real server frame (not the OTHER branch)
       hb_warn_logged = false;   // DR-03: Latch nur zusammen mit der Alterung zuruecksetzen
 
       neth.had_initial_udp_conn = true;
@@ -631,6 +634,7 @@ int handleUdpFrame_nrf52(unsigned char *inc_udp_buffer, int packetSize, IPAddres
       Serial.printf("[GW];rx;type;BEAT;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
 
       neth.last_upd_timer = millis();
+      gwLinkNoteRx(millis());   // real server frame (not the OTHER branch)
       hb_warn_logged = false;   // DR-03: Latch nur zusammen mit der Alterung zuruecksetzen
       
       /**

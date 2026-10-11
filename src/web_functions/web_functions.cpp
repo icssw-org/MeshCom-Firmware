@@ -41,6 +41,7 @@
 #include "web_setup.h"
 #include "web_nodefunctioncalls.h"
 #include "web_commonServer.h"
+#include "gw_link_status.h"
 #if defined(BOARD_RAK4630)
 #include "w5100.h"          // #1183: W5100.readSn*/writeSnMSSR for the web socket's MSS
 #endif
@@ -3484,6 +3485,11 @@ void sub_page_info()
     web_client.printf("</td></tr>\n");
 
     web_client.printf("<tr><td>Network</td><td>");
+    { // GW-LINK: MeshCom server path (Internet/Hamnet) and whether it still answers
+        char gwl[96];
+        gwLinkFormat(gwl, sizeof(gwl), bGATEWAY, meshcom_settings.node_hasIPaddress, millis());
+        web_client.printf("Server: %s<br>", htmlEscape(String(gwl)).c_str());
+    }
     #if defined(HAS_ETHERNET)
     web_client.printf("Ethernet Mode: %s<br>", (meshcom_settings.node_netmode == 1 ? "on" : "off"));
     #endif
