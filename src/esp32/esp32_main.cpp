@@ -120,6 +120,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include "ina226_functions.h"
 #ifdef ENABLE_RTC
     #include "rtc_functions.h"
+    #include "rtc_offset.h"    // RTC-1..3: UTC<->Knotenzeit, Refresh-Gate (test_rtc_offset)
 #endif
 #include "softser_functions.h"
 
@@ -3064,18 +3065,21 @@ void esp32loop()
 
         if(posinfo_fix) // GPS hat Vorang zur RTC und setzt RTC
         {
-            if((uint32_t)(millis() - rtc_refresh_timer) < 60000)
+            if(meshcom_settings.node_date_year > 2023 && rtcRefreshDue(millis(), rtc_refresh_timer))
             {
                 //only every minute
-                setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
-                rtc_refresh_timer = millis();
+                // RTC haelt UTC, node_date_* sind Knotenzeit (RTC-1)
+                DateTime wutc((uint32_t)rtcUtcFromLocalFields(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, meshcom_settings.node_utcoff));
+                setRTCNow(wutc.year(), wutc.month(), wutc.day(), wutc.hour(), wutc.minute(), wutc.second());
+                rtc_refresh_timer = millis() | 1;   // 0 = noch nie geschrieben
             }
         }
         else
         {
             DateTime utc = getRTCNow();
 
-            DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
+            // RTC-UTC + Offset genau einmal, setCurrentTime() mit fUTC = 0
+            DateTime now ((uint32_t)rtcNodeEpochFromUtc(utc.unixtime(), meshcom_settings.node_utcoff));
 
             uint16_t Year = now.year();
             uint16_t Month = now.month();
@@ -3142,20 +3146,23 @@ void esp32loop()
             // warning honest.
             memcpy(meshcom_settings.node_update, ctemp, sizeof(meshcom_settings.node_update) - 1);
             meshcom_settings.node_update[sizeof(meshcom_settings.node_update) - 1] = 0x00;
-
-            #if defined(ENABLE_RTC)
-            if(bRTCON && bNTPDateTimeValid) // NTP hat Vorang zur RTC und setzt RTC
-            {
-                if((uint32_t)(millis() - rtc_refresh_timer) < 60000)
-                {
-                    //only every minute
-                    setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
-
-                    rtc_refresh_timer = millis();
-                }
-            }
-            #endif
         }
+
+        #if defined(ENABLE_RTC)
+        // Ausserhalb des Einmal-pro-Boot-Blocks: gueltige NTP-Zeit frischt den RTC
+        // einmal pro Minute auf (RTC-3), und zwar in UTC (RTC-1).
+        if(bRTCON && bNTPDateTimeValid && meshcom_settings.node_date_year > 2023) // NTP hat Vorang zur RTC und setzt RTC
+        {
+            if(rtcRefreshDue(millis(), rtc_refresh_timer))
+            {
+                //only every minute
+                DateTime wutc((uint32_t)rtcUtcFromLocalFields(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, meshcom_settings.node_utcoff));
+                setRTCNow(wutc.year(), wutc.month(), wutc.day(), wutc.hour(), wutc.minute(), wutc.second());
+
+                rtc_refresh_timer = millis() | 1;   // 0 = noch nie geschrieben
+            }
+        }
+        #endif
     }
 
     #if defined(ENABLE_GPS)

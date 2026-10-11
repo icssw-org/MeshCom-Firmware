@@ -2504,6 +2504,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             uint16_t Second=0;
 
             // {CET}2025-01-31 07:47:40
+            // Trotz des Namens traegt die Nutzlast UTC, keine MEZ/MESZ (Feldbeleg:
+            // "{CET}2026-09-26 18:15:14" kam um 20:15:50 MESZ an). Deshalb passt
+            // setCurrentTime(node_utcoff, ...) unten.
             Year = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 5, 9);
             Month = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 10, 12);
             Day = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 13, 15);

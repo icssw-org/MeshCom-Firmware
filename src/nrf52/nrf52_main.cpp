@@ -157,6 +157,7 @@ void sendHeartbeat();
 #include "io_functions.h"
 #include "ina226_functions.h"
 #include "rtc_functions.h"
+#include "rtc_offset.h"    // RTC-1..3: UTC<->Knotenzeit, Refresh-Gate (test_rtc_offset)
 #include "softser_functions.h"
 
 #include <onewire_functions.h>
@@ -410,6 +411,9 @@ void blinkLED2();                                    // blink RED
 #include "gateway_service.h"
 
 
+#if defined(ENABLE_RTC)
+static uint32_t rtc_refresh_timer = 0;   // letzter RTC-Schreibzugriff (0 = nie), rtcRefreshDue()
+#endif
 unsigned long gps_refresh_timer = 0;
 unsigned long mcp_refresh_timer = 0;
 unsigned long softser_refresh_timer = 0;
@@ -1250,11 +1254,26 @@ void nrf52loop()
 
         { INSTR_SECTION("rtc"); loopRTC(); }
 
-        if(!posinfo_fix) // GPS hat Vorang zur RTC
+        if(posinfo_fix) // GPS hat Vorang zur RTC und setzt RTC
+        {
+            if(MyClock.Year() > 2023 && rtcRefreshDue(millis(), rtc_refresh_timer))
+            {
+                //only every minute
+                // RTC haelt UTC, MyClock haelt Knotenzeit (RTC-1). Nicht node_date_*:
+                // mit RTC und GPS-Fix bleibt bMyClock hier false, die Felder werden
+                // dann nicht nachgezogen. getGPS() setzt MyClock alle ~3 s neu,
+                // ohne isValid()-Pruefung -- daher die Jahres-Schranke.
+                DateTime wutc((uint32_t)rtcUtcFromLocalFields(MyClock.Year(), MyClock.Month(), MyClock.Day(), MyClock.Hour(), MyClock.Minute(), MyClock.Second(), meshcom_settings.node_utcoff));
+                setRTCNow(wutc.year(), wutc.month(), wutc.day(), wutc.hour(), wutc.minute(), wutc.second());
+                rtc_refresh_timer = millis() | 1;   // 0 = noch nie geschrieben
+            }
+        }
+        else
         {
             DateTime utc = getRTCNow();
 
-            DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
+            // RTC-UTC + Offset genau einmal (RTC-2), setCurrentTime() mit fUTC = 0
+            DateTime now ((uint32_t)rtcNodeEpochFromUtc(utc.unixtime(), meshcom_settings.node_utcoff));
 
             uint16_t Year = now.year();
             uint16_t Month = now.month();
@@ -1268,7 +1287,7 @@ void nrf52loop()
             // check valid Date & Time
             if(Year > 2023)
             {
-                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+                MyClock.setCurrentTime(0.0, Year, Month, Day, Hour, Minute, Second);
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"RTC");
                 bMyClock = true;
             }
@@ -1312,6 +1331,18 @@ void nrf52loop()
                 bNTPDateTimeValid = true;
 
                 snprintf(cTimeSource, sizeof(cTimeSource), (char*)"NTP");
+
+                #if defined(ENABLE_RTC)
+                // gueltige NTP-Zeit frischt den RTC einmal pro Minute auf, in UTC.
+                // Direkt aus MyClock (Knotenzeit), node_date_* wird erst weiter
+                // unten nachgezogen.
+                if(bRTCON && rtcRefreshDue(millis(), rtc_refresh_timer))
+                {
+                    DateTime wutc((uint32_t)rtcUtcFromLocalFields(MyClock.Year(), MyClock.Month(), MyClock.Day(), MyClock.Hour(), MyClock.Minute(), MyClock.Second(), meshcom_settings.node_utcoff));
+                    setRTCNow(wutc.year(), wutc.month(), wutc.day(), wutc.hour(), wutc.minute(), wutc.second());
+                    rtc_refresh_timer = millis() | 1;   // 0 = noch nie geschrieben
+                }
+                #endif
             }
             else
                 bNTPDateTimeValid = false;
