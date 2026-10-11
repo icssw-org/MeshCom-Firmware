@@ -147,6 +147,16 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
+    // #1190: MTU preset dropdown of the setup page; same --mtu command and range check as "ethmtu",
+    // read-back is the stored value (a refused value leaves it unchanged -> FAIL).
+    if(setupData->paramName.equals("mtu")) {
+        snprintf(message_text, sizeof(message_text), "--mtu %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (meshcom_settings.node_ethmtu == setupData->paramValue.toInt())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_ethmtu);
+        return;
+    } else
+
     // CS-02: Hop-Limit fuer Textnachrichten. Wie jeder andere Parameter hier
     // ueber commandAction(), damit GUI und serielle Konsole nicht auseinander
     // laufen (HL-01/HL-03).
@@ -838,6 +848,11 @@ void webSetup_getParam(setupStruct *setupData){
     } else
 
     if(setupData->paramName.equals("ethmtu")) {
+        setupData->returnValue = String(meshcom_settings.node_ethmtu);
+        return;
+    } else
+
+    if(setupData->paramName.equals("mtu")) {         // #1190
         setupData->returnValue = String(meshcom_settings.node_ethmtu);
         return;
     } else

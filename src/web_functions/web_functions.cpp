@@ -2867,6 +2867,28 @@ void sub_page_setup()
 
     web_client.println("</div></div>");
 
+    // NMTU-01 / #1190: MTU, always visible (not collapsible), all boards. Applies on change through
+    // setparam mtu (--mtu, read-back node_ethmtu); the MSS shown is MTU - 40. A stored value outside the
+    // three presets (console --mtu 1350) gets its own selected "custom" option so the page never lies.
+    {
+        const int mtu_cur = meshcom_settings.node_ethmtu;
+        const bool mtu_preset = (mtu_cur == 1280 || mtu_cur == 1400 || mtu_cur == 1500);
+        web_client.println("<div class=\"cardlayout\">");
+        web_client.println("<label class=\"cardlabel\">MTU</label>");
+        web_client.println("<div class=\"grid grid3\">");
+        web_client.println("<label for=\"mtu\">MTU</label>");
+        web_client.println("<select id=\"mtu\" name=\"mtu\" onchange=\"document.getElementById('mtu_mss').textContent='MSS '+(parseInt(this.value)-40);setvalue('mtu',this.value,true);\">");
+        web_client.printf("\t<option value=\"1280\" %s>1280 (HAMNET / VPN, default)</option>\n", (mtu_cur == 1280) ? "selected" : "");
+        web_client.printf("\t<option value=\"1400\" %s>1400</option>\n", (mtu_cur == 1400) ? "selected" : "");
+        web_client.printf("\t<option value=\"1500\" %s>1500 (plain LAN)</option>\n", (mtu_cur == 1500) ? "selected" : "");
+        if (!mtu_preset)
+            web_client.printf("\t<option value=\"%i\" selected>custom (%i)</option>\n", mtu_cur, mtu_cur);
+        web_client.println("</select>");
+        web_client.printf("<span id=\"mtu_mss\">MSS %i</span>\n", mtu_cur - 40);
+        web_client.println("</div>");
+        web_client.println("</div>");
+    }
+
     // IP Network Settings Section
     web_client.println("<div class=\"cardlayout collapsablecard\">");
     web_client.println("<label class=\"cardlabel\">IP Network Settings</label>");
@@ -2884,7 +2906,6 @@ void sub_page_setup()
     _create_setup_textinput_element("owngw", "Gateway", String(meshcom_settings.node_gw), "192.168.2.1", "setowngw", 50, false, true);           // create Textinput-Element including Label and Button
     _create_setup_textinput_element("owndns", "DNS", String(meshcom_settings.node_dns), "192.168.2.1", "setowndns", 50, false, true);             // create Textinput-Element including Label and Button
     _create_setup_textinput_element("ownntp", "NTP", String(meshcom_settings.node_ownntp), "192.168.2.1", "setownntp", 50, false, true);          // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("ethmtu", "MTU", String(meshcom_settings.node_ethmtu), "1280", "ethmtu", 4, false, false);                     // #1183/#1190: 1280..1500, all boards; RAK applies it to the next web connection, no reboot
 
     _create_setup_textinput_element("extudp", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
 
@@ -3549,6 +3570,9 @@ void sub_page_info()
     //    web_client.printf("<tr><td><b>hasIpAddress</b></td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
     
     web_client.printf("<tr><td>hasIpAddress</td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress ? "yes" : "no"));
+
+    // NMTU-01 / #1190: configured MTU and the MSS derived from it (all boards)
+    web_client.printf("<tr><td>MTU</td><td>MTU %i (MSS %i)</td></tr>\n", (int)meshcom_settings.node_ethmtu, (int)meshcom_settings.node_ethmtu - 40);
 
     if (meshcom_settings.node_hasIPaddress)
     {
