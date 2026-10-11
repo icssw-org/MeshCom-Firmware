@@ -1382,6 +1382,25 @@ static String htmlEscape(const String &input)
     return out;
 }
 
+// percent-encode a value for use inside a URL query string (RFC 3986 unreserved set stays as is)
+static String urlEncode(const char *input)
+{
+    String out;
+    for (; input && *input; input++)
+    {
+        unsigned char c = (unsigned char)*input;
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '-' || c == '.' || c == '_' || c == '~')
+            out += (char)c;
+        else
+        {
+            char pct[4];
+            snprintf(pct, sizeof(pct), "%%%02X", c);
+            out += pct;
+        }
+    }
+    return out;
+}
+
 /**
  * ###########################################################################################################################
  * resolves the NTP server the node actually uses (WEB-01): own override if set, else the same
@@ -1465,7 +1484,13 @@ void sub_page_rxlog()
             // title, normal (log lines, panel text), small (legend, notes, tick labels).
             // Empty slots (calloc'd, never written) are skipped.
             if (ringbufferRAWLoraRX[iRead][0] != 0x00)
-                web_client.printf("<p class=\"no-wrap\"><%i>%s</p>\n", iRead, ringbufferRAWLoraRX[iRead]);
+            {
+                // over-the-air text: escape. print() pieces, not printf: the escaped line can
+                // reach several hundred bytes and Print::printf mallocs above 64 B.
+                web_client.printf("<p class=\"no-wrap\"><%i>", iRead);
+                web_client.print(htmlEscape(String((const char *)ringbufferRAWLoraRX[iRead])));
+                web_client.print("</p>\n");
+            }
             iRead = increment_mod(iRead, MAX_LOG);
         } while (RAWLoRaWrite != iRead);
     }
@@ -1605,7 +1630,7 @@ void sub_page_mheard()
             continue;
 
         web_client.printf("<div class=\"cardlayout\" style=\"max-width:900px;\">\n");
-        web_client.printf("<label class=\"cardlabel\"><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a> <span class=\"font-small\">(", v.call, v.call);
+        web_client.printf("<label class=\"cardlabel\"><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a> <span class=\"font-small\">(", urlEncode(v.call).c_str(), htmlEscape(String(v.call)).c_str());
         if (bClockValid)
         {
             // Sekunde aus dem Slot statt der Zeilenminute (Konzept 4.6);
@@ -1730,7 +1755,7 @@ static void nbrPrintCall(uint8_t row)
 {
     NbrRowView v;
     if (nbrRowGet(nbrMatrix, row, &v))
-        web_client.print(v.call);
+        web_client.print(htmlEscape(String(v.call)));
     else
         web_client.print("?");
 }
@@ -1854,7 +1879,7 @@ void sub_page_path()
 
         if (pr.kind == 0)
         { // eigene Zeile: dieselben Spaltenregeln wie eine direkte Zeile, ohne Hears me/Via
-            web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", r0.call, r0.call);
+            web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", urlEncode(r0.call).c_str(), htmlEscape(String(r0.call)).c_str());
             web_client.print("<td>0</td>");
             web_client.printf("<td>%s</td>", (r0.flags & NBR_FLAG_GW) ? "Y" : "N");
             if (!(r0.flags & NBR_FLAG_POS))
@@ -1886,7 +1911,7 @@ void sub_page_path()
             if (!nbrRowGet(nbrMatrix, X, &v))
                 continue; // Zeile ist zwischen Sammel- und Renderdurchlauf verschwunden (EVICT)
 
-            web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", v.call, v.call);
+            web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", urlEncode(v.call).c_str(), htmlEscape(String(v.call)).c_str());
             web_client.print("<td>1</td>");
             web_client.printf("<td>%s</td>", (v.flags & NBR_FLAG_GW) ? "Y" : "N");
             if (!(v.flags & NBR_FLAG_POS))
@@ -1944,7 +1969,7 @@ void sub_page_path()
         NbrRowView rv;
         uint8_t rowFlags = hasRow && nbrRowGet(nbrMatrix, r.row, &rv) ? rv.flags : 0;
 
-        web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", r.call, r.call);
+        web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", urlEncode(r.call).c_str(), htmlEscape(String(r.call)).c_str());
         web_client.printf("<td>%u</td>", (unsigned)r.hops);
         web_client.printf("<td>%s</td>", hasRow ? ((rowFlags & NBR_FLAG_GW) ? "Y" : "N") : (r.gw ? "Y" : "N"));
 
@@ -1975,7 +2000,7 @@ void sub_page_path()
 
                 if (r.is_row)
                 { // 2-Hop-Zeile: entry IST schon die B-Menge (die direkten Nachbarn)
-                    web_client.printf("%s%s", first ? "" : ", ", acall);
+                    web_client.printf("%s%s", first ? "" : ", ", htmlEscape(String(acall)).c_str());
                     first = false;
                     continue;
                 }
@@ -1985,7 +2010,7 @@ void sub_page_path()
                 NbrMask viaB = nbrMaskAnd(nbrHearersMask(nbrMatrix, a, now_min), directMask);
                 if (nbrMaskEmpty(viaB))
                 {
-                    web_client.printf("%s%s", first ? "" : ", ", acall);
+                    web_client.printf("%s%s", first ? "" : ", ", htmlEscape(String(acall)).c_str());
                     first = false;
                     continue;
                 }
@@ -1993,7 +2018,7 @@ void sub_page_path()
                 {
                     NbrRowView bv;
                     const char *bcall = nbrRowGet(nbrMatrix, b, &bv) ? bv.call : "?";
-                    web_client.printf("%s%s&gt;%s", first ? "" : ", ", acall, bcall);
+                    web_client.printf("%s%s&gt;%s", first ? "" : ", ", htmlEscape(String(acall)).c_str(), htmlEscape(String(bcall)).c_str());
                     first = false;
                 }
             }
@@ -2719,12 +2744,12 @@ void sub_page_mailbox()
         default: state_class = ""; break;
         }
 
-        web_client.printf("<tr><td class=\"font-bold no-wrap\">%s</td>", e->dst);
+        web_client.printf("<tr><td class=\"font-bold no-wrap\">%s</td>", htmlEscape(String(e->dst)).c_str());
         if (stale)
             web_client.printf("<td class=\"no-wrap mbx-stale\" title=\"Older than the store set window\">%s</td>", buf_heard);
         else
             web_client.printf("<td class=\"no-wrap\">%s</td>", buf_heard);
-        web_client.printf("<td class=\"no-wrap\">%s</td>", e->src);
+        web_client.printf("<td class=\"no-wrap\">%s</td>", htmlEscape(String(e->src)).c_str());
         web_client.printf("<td class=\"num\">%03u</td>", (unsigned)e->nnn);
         web_client.printf("<td class=\"num\">%u B</td>", (unsigned)e->plen);
         web_client.printf("<td class=\"no-wrap\">%s</td>", buf_age);
@@ -2741,11 +2766,12 @@ void sub_page_mailbox()
         }
         else
         {
-            web_client.printf("<button type=\"button\" onclick=\"if(confirm('Start a delivery ladder now for %s to %s (NNN %03u)? Ignores the cooldown, still subject to the node caps.')){callfunction('mboxdeliver','%d');}\">Deliver</button>",
-                               e->src, e->dst, (unsigned)e->nnn, slot);
+            // callsigns travel in HTML-escaped data attributes and are read back via the DOM, never spliced into a JS string
+            web_client.printf("<button type=\"button\" data-src=\"%s\" data-dst=\"%s\" onclick=\"if(confirm('Start a delivery ladder now for '+this.dataset.src+' to '+this.dataset.dst+' (NNN %03u)? Ignores the cooldown, still subject to the node caps.')){callfunction('mboxdeliver','%d');}\">Deliver</button>",
+                               htmlEscape(String(e->src)).c_str(), htmlEscape(String(e->dst)).c_str(), (unsigned)e->nnn, slot);
         }
-        web_client.printf("<button type=\"button\" onclick=\"if(confirm('Purge the message for %s from %s (NNN %03u)?')){callfunction('mboxpurge','%d');}\">Purge</button>",
-                           e->dst, e->src, (unsigned)e->nnn, slot);
+        web_client.printf("<button type=\"button\" data-src=\"%s\" data-dst=\"%s\" onclick=\"if(confirm('Purge the message for '+this.dataset.dst+' from '+this.dataset.src+' (NNN %03u)?')){callfunction('mboxpurge','%d');}\">Purge</button>",
+                           htmlEscape(String(e->src)).c_str(), htmlEscape(String(e->dst)).c_str(), (unsigned)e->nnn, slot);
         web_client.println("</td></tr>");
     }
 
@@ -2847,7 +2873,7 @@ void sub_page_setup()
     // TZ-01: a set POSIX TZ rule overrides the fixed offset above; the offset then shows the derived value
     // node_tz is HTML-escaped: tzParse() accepts any alnum name inside <...>
     // (e.g. "<plaintext>-1"), and a config import does not run tzParse() at all.
-    _create_setup_textinput_element("tz", "Timezone (POSIX TZ)", htmlEscape(String(meshcom_settings.node_tz)), "CET-1CEST,M3.5.0,M10.5.0/3", "tz", 39, false, false);
+    _create_setup_textinput_element("tz", "Timezone (POSIX TZ)", String(meshcom_settings.node_tz), "CET-1CEST,M3.5.0,M10.5.0/3", "tz", 39, false, false);
     web_client.println("<p class=\"font-small\" style=\"grid-column:1/-1\">A set POSIX TZ rule overrides the fixed UTC offset (DST handled automatically); the UTC offset field then shows the derived value. Empty or &quot;none&quot; = fixed offset only.</p>");
     _create_setup_textinput_element("maxv", "max. Voltage", String(meshcom_settings.node_maxv, 3), "4.125", "maxv", 5, false, false);                 // create Textinput-Element including Label and Button
 
@@ -3536,7 +3562,7 @@ void sub_page_info()
     web_client.printf("Debug WX: %s<br>", (bWXDEBUG ? "on" : "off"));
     web_client.printf("Debug BLE: %s<br>", (bBLEDEBUG ? "on" : "off"));
     web_client.printf("</td></tr>\n");
-    web_client.printf("<tr><td>APRS text</td><td>%s</td></tr>\n", meshcom_settings.node_atxt);
+    web_client.printf("<tr><td>APRS text</td><td>%s</td></tr>\n", htmlEscape(String(meshcom_settings.node_atxt)).c_str());
     web_client.printf("<tr><td>Mesh settings</td><td>");
     web_client.printf("max_hop_text: %i<br>", meshcom_settings.max_hop_text);
     web_client.printf("max_hop_pos: %i<br>", meshcom_settings.max_hop_pos);
@@ -3556,10 +3582,10 @@ void sub_page_info()
     if(meshcom_settings.node_netmode == 0)
     {
         if (bWIFIAP)
-            web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", cBLEName);
+            web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", htmlEscape(String(cBLEName)).c_str());
         else
         {
-            web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", meshcom_settings.node_ssid);
+            web_client.printf("<tr><td>WiFi SSID</td><td>%s</td></tr>\n", htmlEscape(String(meshcom_settings.node_ssid)).c_str());
             // WEB-02: shows which AP the node associated with when several APs share the same SSID (mesh sets)
             web_client.printf("<tr><td>WiFi BSSID</td><td>%s</td></tr>\n", WiFi.BSSIDstr().c_str());
         }
@@ -3805,7 +3831,7 @@ void _create_setup_textinput_element(const char id[], const char labelText[], St
     snprintf(caption, 100, "<i class=\"btncheckmark\"></i>");
 
     web_client.printf("<label for=\"%s\">%s :</label>\n", id, labelText);
-    web_client.printf("<input type=\"%s\" name=\"%s\" id=\"%s\" value=\"%s\" maxlength=\"%i\" size=\"10\" placeholder=\"%s\">\n", isPassword ? "password" : "text", id, id, inputValue.c_str(), maxlength, placeHolder);
+    web_client.printf("<input type=\"%s\" name=\"%s\" id=\"%s\" value=\"%s\" maxlength=\"%i\" size=\"10\" placeholder=\"%s\">\n", isPassword ? "password" : "text", id, id, htmlEscape(inputValue).c_str(), maxlength, placeHolder); // RM W1b: escape at output (value= attribute)
 
     if(needConfirm) {
         char confirm[200];
