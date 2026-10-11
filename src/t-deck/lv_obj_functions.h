@@ -53,6 +53,9 @@ void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio);
 void tdeck_add_MSG(String callsign, String path, String message, bool bWithAudio);
 void tdeck_reset_msg_tabs();
 void tdeck_add_system_message(const char *text);
+// TD-11: send/delivery status of an own message (own_msg_id[][4]: 1 heard, 2 ACK,
+// 3 failed, 4 held) -> glyph on the bubble footer; prints [MSGSTAT];<id>;<status>;<found>
+void tdeck_set_msg_status(uint32_t msg_id, uint8_t status);
 
 void tdeck_hide_tab_menu();
 void tdeck_show_tab_menu();

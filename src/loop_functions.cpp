@@ -803,20 +803,31 @@ int checkOwnTx(unsigned int msg_id)
 // The ONE write path for the delivery state of an own message
 // (own_msg_id[idx][4]: 0x00 sent, 0x01 heard, 0x02 ACK, 0x03 failed, 0x04 held).
 // The ring slot is recycled on the next own TX, so the web GUI reads the durable
-// status table (own_msg_status.h) instead. Every state change goes through this
-// function so the two views cannot drift apart. insertOwnTx() stays a direct write: it stores a
+// status table (own_msg_status.h) instead; the T-Deck bubble glyph (TD-11) is
+// driven from here as well. Every state change goes through this function so the
+// three views cannot drift apart. insertOwnTx() stays a direct write: it stores a
 // NEW id, that is not a state change.
 void setOwnMsgStatus(int idx, uint8_t state)
 {
     if(idx < 0 || idx >= MAX_RING)
         return;
 
+    uint8_t old = own_msg_id[idx][4];
     own_msg_id[idx][4] = state;
 
     // msg_id of the slot, bytes 0-3 little-endian (as insertOwnTx() stores it)
     uint32_t id = (uint32_t)own_msg_id[idx][0] | ((uint32_t)own_msg_id[idx][1] << 8) | ((uint32_t)own_msg_id[idx][2] << 16) | ((uint32_t)own_msg_id[idx][3] << 24);
 
     ownMsgStatusSet(id, state);
+
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    // TD-11: every call site runs in esp32loop(), the LVGL task, no lock needed;
+    // report the transition only (every relay echo reaches the 0x01 site)
+    if(old != state)
+        tdeck_set_msg_status(id, state);
+    #else
+    (void)old;
+    #endif
 }
 
 void insertOwnTx(unsigned int msg_id)
