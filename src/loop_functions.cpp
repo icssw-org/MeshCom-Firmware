@@ -4385,9 +4385,15 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
     bool bUseOnce = false;
     if (msg_buffer[0] == 0x3A) // only Messages
     {
-        if(mcStartsWith(aprsmsg.msg_payload, "{CET}") || mcStartsWith(aprsmsg.msg_payload, "{MCP}") || mcStartsWith(aprsmsg.msg_payload, "{SET}"))
-            user_msg_status = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
-        else if(bPingMsg)
+        // {CET}/{MCP}/{SET} gehen ebenfalls genau einmal in die Luft. Mit Status
+        // 0xFF in addTxRingEntry() stufte getMessagePriority() sie als Relay ein
+        // (NORMAL, 4500 ms Backoff) und sie teilten das CSMA-Fenster der Relays
+        // der Nachbarn; daher ebenfalls ueber addTxRingEntryOnce(). {mcp} ist die
+        // Form, in die sendMessage() ein {MCP} nach {ZIEL} oben umschreibt -- sie
+        // lief bisher mit der vollen Wiederholungsleiter.
+        if(bPingMsg ||
+           mcStartsWith(aprsmsg.msg_payload, "{CET}") || mcStartsWith(aprsmsg.msg_payload, "{MCP}") ||
+           mcStartsWith(aprsmsg.msg_payload, "{mcp}") || mcStartsWith(aprsmsg.msg_payload, "{SET}"))
             bUseOnce = true; // P14/P15: siehe oben
         else
             user_msg_status = 0x00; // retransmission Status ...0xFF no retransmission
