@@ -2850,7 +2850,7 @@ void sub_page_setup()
     web_client.println("</select>");
     web_client.println("<button onclick=\"setvalue('setctry', document.getElementById('country').value,false)\"><i class=\"btncheckmark\"></i></button>");
 
-    _create_setup_textinput_element("txpower", "TX Power", String(meshcom_settings.node_power), "15", "txpower", 2, false, false);                    // create Textinput-Element including Label and Button
+    _create_setup_numberinput_element("txpower", "TX Power", meshcom_settings.node_power, (int)TX_POWER_MIN, (int)TX_POWER_MAX, "txpower"); // D10: number input with the board range
 
     // CS-02: Max-Hop als Drop-down. Angeboten werden 4/3/2; hat --maxhop einen
     // Wert ausserhalb dieser Liste gesetzt (1, 5, 6), steht er zusaetzlich drin,
@@ -3846,6 +3846,23 @@ void _create_setup_textinput_element(const char id[], const char labelText[], St
     } else {
          uic_button(&web_client, onclick, caption);
     }
+}
+
+
+/**
+ * Number input including label, range hint and button (D10). Same setvalue() button as the text variant;
+ * the JS reads the element by id, so type=number works unchanged. Placeholder is the board default power.
+ */
+void _create_setup_numberinput_element(const char id[], const char labelText[], int inputValue, int minValue, int maxValue, const char parameterName[]){
+    char onclick[100];
+    char caption[100];
+    snprintf(onclick, 100, "setvalue('%s', document.getElementById('%s').value,false)", parameterName, id);
+    snprintf(caption, 100, "<i class=\"btncheckmark\"></i>");
+
+    web_client.printf("<label for=\"%s\">%s :</label>\n", id, labelText);
+    web_client.printf("<input type=\"number\" name=\"%s\" id=\"%s\" value=\"%i\" min=\"%i\" max=\"%i\" step=\"1\" size=\"10\" placeholder=\"%i\">\n", id, id, inputValue, minValue, maxValue, (int)TX_OUTPUT_POWER);
+    uic_button(&web_client, onclick, caption);
+    web_client.printf("<div class=\"font-small\" style=\"grid-column:1/-1\">Allowed on this board: %i to %i dBm</div>\n", minValue, maxValue);
 }
 
 
