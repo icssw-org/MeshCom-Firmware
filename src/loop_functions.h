@@ -87,6 +87,7 @@ int addTxRingEntryOnce(const uint8_t* frame, uint16_t len, const char* source,
 // checkOwnRx()/checkServerRx() werden jetzt in dedup_functions.h deklariert.
 int checkOwnTx(unsigned int msg_id);
 void insertOwnTx(unsigned int id);
+void setOwnMsgStatus(int idx, uint8_t state);   // the one write path of own_msg_id[idx][4]
 
 int esp32_isSSD1306(int address);   // liefert 1 = 0,9"/SSD1306, 2 = 1,3"/SH1106, <0 = keins
 class U8G2;

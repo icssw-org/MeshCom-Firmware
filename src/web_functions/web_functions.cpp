@@ -29,6 +29,7 @@
 #include "nbr_views.h"         // W4b: MHeard/Pfad-Seiten lesen nur noch ueber die Abfrageschicht
 #include <TinyGPSPlus.h>       // DIST auf der MHeard-Seite -- reine distanceBetween()-Rechnung, kein GPS-Modul noetig
 #include "sto_notice.h"        // stage 4: stoHolder() for the messages-page held mark, all boards
+#include "own_msg_status.h" // durable per-message delivery state for the messages-page tick
 #include <url_decode.h>         // #1173: decodeURLPercentCoding() -- full percent-decoding of WebUI parameters
 #include <charset_filter.h>     // #1173: UTF-8-safe cut of the 150-byte web message
 #include "clock.h"              // TZ-01: tzActiveAbbrev() -- flags an unparsable node_tz on the info page
@@ -1004,7 +1005,9 @@ void deliver_scaffold(bool bget_password)
     // until the operator actually comes back to look at them
     web_client.println("document.addEventListener('visibilitychange',function(){if(cpage=='messages')mcApplyTab();});");
     web_client.println("function mcHistIndex(id){for(var i=0;i<mcHistory.length;i++){if(mcHistory[i].id==id)return i;}return -1;}");
-    web_client.println("function mcMergeEntry(el){var id=el.getAttribute('data-id');var html=el.outerHTML;var dst=el.getAttribute('data-dst')||'';var ts=parseInt(el.getAttribute('data-ts'))||0;var rx=el.classList.contains('message-received');var idx=mcHistIndex(id);if(idx<0){mcHistory.push({id:id,html:html,dst:dst,ts:ts,rx:rx});mcSeen[id]=true;if(mcHistory.length>MC_HIST_MAX){var dropped=mcHistory.shift();delete mcSeen[dropped.id];}}else{mcHistory[idx].html=html;mcHistory[idx].dst=dst;mcHistory[idx].ts=ts;mcHistory[idx].rx=rx;}}");
+    // a tick is rank-monotone: the server's status ring is shared and churned and drops the tick of an old message, so a ranked-higher tick of the remembered entry survives (rank = index 0,1,4,3,2: heard < held < failed < ACK)
+    web_client.println("function mcTickKeep(h,el){if(!el.classList.contains('message-send'))return;var t=document.createElement('template');t.innerHTML=h;var o=t.content.querySelector('.mctick');if(!o)return;var n=el.querySelector('.mctick');var R=[0,1,4,3,2];if(n&&R[n.getAttribute('data-st')]>=R[o.getAttribute('data-st')])return;if(n)n.replaceWith(o);else{var p=el.querySelector('p');if(p)p.insertBefore(o,p.firstChild);}}");
+    web_client.println("function mcMergeEntry(el){var id=el.getAttribute('data-id');var idx=mcHistIndex(id);if(idx>=0)mcTickKeep(mcHistory[idx].html,el);var html=el.outerHTML;var dst=el.getAttribute('data-dst')||'';var ts=parseInt(el.getAttribute('data-ts'))||0;var rx=el.classList.contains('message-received');if(idx<0){mcHistory.push({id:id,html:html,dst:dst,ts:ts,rx:rx});mcSeen[id]=true;if(mcHistory.length>MC_HIST_MAX){var dropped=mcHistory.shift();delete mcSeen[dropped.id];}}else{mcHistory[idx].html=html;mcHistory[idx].dst=dst;mcHistory[idx].ts=ts;mcHistory[idx].rx=rx;}}");
     web_client.println("function mcRemovePlaceholder(panel){var kids=panel.children;for(var i=kids.length-1;i>=0;i--){if(kids[i].tagName=='P')panel.removeChild(kids[i]);}}");
     // this function is an ayncronous loader that is used to update the received messages without re-loading the whole page, it will re-call itself after a timeout as long as the message-page is displayed
     // it merges the response into mcHistory/mcSeen instead of overwriting the panel outright, so a message already on screen keeps its DOM position when only its ack mark changed
@@ -3174,32 +3177,6 @@ void sub_content_messages()
             strftime(timestamp, 20, "%Y-%m-%d %H:%M:%S", oldt);
             struct aprsMessage aprsmsg;
             uint8_t msg_type_b_lora = decodeAPRS(toPhoneBuff, blelen, aprsmsg); // print which message type we got
-            int icheck = checkOwnTx(aprsmsg.msg_id);
-
-            if (icheck >= 0)
-            {
-                if (own_msg_id[icheck][4] == 1)
-                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held
-                    ccheck = "&#x2713&nbsp;";
-                }
-
-                if (own_msg_id[icheck][4] == 2)
-                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held
-                    ccheck = "&#x2611;&nbsp;";
-                }
-
-                if (own_msg_id[icheck][4] == 3)
-                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held (retransmit gave up on a user-originated DM)
-                    ccheck = "<span title=\"delivery failed\">&#x2717;</span>&nbsp;";
-                }
-
-                if (own_msg_id[icheck][4] == 4)
-                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held (a store node holds this DM for an absent destination)
-                    String holder = stoHolder(aprsmsg.msg_id);
-                    String holdtitle = holder.length() > 0 ? ("held by " + htmlEscape(holder)) : "held by a store node";
-                    ccheck = "<span title=\"" + holdtitle + "\">&#x2709;</span>&nbsp;";
-                }
-            }
 
             // Textmessage
             if (msg_type_b_lora == 0x3A)
@@ -3225,6 +3202,34 @@ void sub_content_messages()
                     if (is_equ(meshcom_settings.node_call, aprsmsg.msg_source_call))
                     {
                         String dst_esc = htmlEscape(aprsmsg.msg_destination_call);
+
+                        // The tick comes from the durable own-text status table first: own_msg_id is a
+                        // 20-slot ring shared with every own frame (positions, acks, gateway forwards)
+                        // and loses the status within the hour. checkOwnTx stays as the fallback for
+                        // ids the table does not know (sent before boot of this image / not registered).
+                        // docs/webgui-ack-ticks-verdict-20261004.md, Finding 1.
+                        int tickst = ownMsgStatusGet(aprsmsg.msg_id);
+                        if (tickst < 0)
+                        {
+                            int icheck = checkOwnTx(aprsmsg.msg_id);
+                            if (icheck >= 0)
+                                tickst = own_msg_id[icheck][4];
+                        }
+
+                        // 00...not heard, 01...heard, 02...ACK, 03...failed (retransmit gave up on a user-originated DM), 04...held (a store node holds this DM)
+                        // The span is machine-readable (data-st) so the browser can keep a tick the server no longer knows (mcTickKeep).
+                        if (tickst == 1)
+                            ccheck = "<span class=\"mctick\" data-st=\"1\">&#x2713;&nbsp;</span>";
+                        else if (tickst == 2)
+                            ccheck = "<span class=\"mctick\" data-st=\"2\">&#x2611;&nbsp;</span>";
+                        else if (tickst == 3)
+                            ccheck = "<span class=\"mctick\" data-st=\"3\" title=\"delivery failed\">&#x2717;&nbsp;</span>";
+                        else if (tickst == 4)
+                        {
+                            String holder = stoHolder(aprsmsg.msg_id);
+                            String holdtitle = holder.length() > 0 ? ("held by " + htmlEscape(holder)) : "held by a store node";
+                            ccheck = "<span class=\"mctick\" data-st=\"4\" title=\"" + holdtitle + "\">&#x2709;&nbsp;</span>";
+                        }
 
                         web_client.printf("<div class=\"message message-send\" data-id=\"%u\" data-dst=\"%s\" data-ts=\"%lu\"><div>", aprsmsg.msg_id, dst_esc.c_str(), unix_time);
 
@@ -3257,7 +3262,8 @@ void sub_content_messages()
 
                         web_client.printf("<div class=\"message message-received\" data-id=\"%u\" data-dst=\"%s\" data-ts=\"%lu\"><div>", aprsmsg.msg_id, dst_esc.c_str(), unix_time);
 
-                        web_client.printf("<p class=\"font-small font-bold\">%s", ccheck.c_str());
+                        // no delivery tick on received frames: a gateway keeps server-forwarded foreign frames in own_msg_id and they showed a false tick (Finding 2)
+                        web_client.printf("<p class=\"font-small font-bold\">");
                         web_client.printf("<a target=\"_blank\" href=\"https://aprs.fi/?call=%s\">%s</a>", msg_source_path_esc.c_str(), msg_source_path_esc.c_str());
                         web_client.printf("%s%s</p>", (char *)">", msg_destination_path_esc.c_str());
 
