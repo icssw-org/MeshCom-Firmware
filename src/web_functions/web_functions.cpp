@@ -3012,8 +3012,8 @@ void sub_page_setup()
     web_client.println("</div>");
     
     web_client.println("<div class=\"grid grid3\">");
-    _create_setup_textinput_element("tempoffi", "Indoor Temp Offset", String(meshcom_settings.node_tempi_off), "0.0", "tempoffsetindoor", 3, false, false);                // create Textinput-Element including Label and Button
-    _create_setup_textinput_element("tempoffa", "Outdoor Temp Offset", String(meshcom_settings.node_tempo_off), "0.0", "tempoffsetoutdoor", 3, false, false); // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("tempoffi", "Indoor Temp Offset", String(meshcom_settings.node_tempi_off), "0.0", "tempoffsetindoor", 6, false, false);                // create Textinput-Element including Label and Button
+    _create_setup_textinput_element("tempoffa", "Outdoor Temp Offset", String(meshcom_settings.node_tempo_off), "0.0", "tempoffsetoutdoor", 6, false, false); // create Textinput-Element including Label and Button
     web_client.println("</div>");
 
     web_client.println("</div>");
