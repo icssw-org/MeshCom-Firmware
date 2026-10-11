@@ -26,6 +26,7 @@
 #include "regex_functions.h"
 #include "conf_frame.h"
 #include "setlog_lines.h"
+#include "wifi_start_gate.h"
 
 #if defined(ESP32)
 #include "esp_task_wdt.h"
@@ -622,7 +623,7 @@ void wifiDnsPoll()
     return false;
   }
 
-  if(meshcom_settings.node_ssid[0] == 0x00 || is_equ(meshcom_settings.node_ssid, "none"))
+  if(wifiSsidMissingBlocksStart(bWIFIAP, meshcom_settings.node_ssid))
   {
     return false;
   }
