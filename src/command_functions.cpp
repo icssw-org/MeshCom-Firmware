@@ -15,6 +15,7 @@
 #include "batt_functions.h"
 #include "nbr_matrix.h"
 #include "nbr_views.h"      // W4b: --mheard/--path lesen nur noch ueber die Abfrageschicht
+#include <extudp_target.h>
 #include <TinyGPSPlus.h>    // DIST fuer --mheard -- reine distanceBetween()-Rechnung, kein GPS-Modul noetig
 #include "udp_functions.h"
 #include "radio_units.h"   // RF-01..RF-03 unit conversions
@@ -2623,10 +2624,13 @@ void commandAction(char *umsg_text, bool ble)
         }
         else
         {
-            if(strcmp(meshcom_settings.node_extern, meshcom_settings.node_ip) == 0)
+            // EXT-03: no broadcast/multicast target (a 255.255.255.255 was seen in
+            // the field: every heard frame went to the whole LAN); own IP as before
+            ExtudpTargetVerdict tv = extudp_target_check(meshcom_settings.node_extern, meshcom_settings.node_ip, meshcom_settings.node_subnet);
+            if(tv != EXTUDP_TARGET_OK)
             {
+                printfdeb("\nEXTERNAL-IP:%s refused - %s\n", meshcom_settings.node_extern, extudp_target_reason(tv));
                 snprintf(meshcom_settings.node_extern, sizeof(meshcom_settings.node_extern), "%s", "");
-                printfdeb("\nEXTERNAL-IP:%s is same as Own-IP - please set another IP\n", meshcom_settings.node_extern);
                 return;
             }
         }
