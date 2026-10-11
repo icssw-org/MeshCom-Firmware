@@ -1851,6 +1851,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 }
                                 else
                                 if(strcmp(destination_call, "*") != 0 &&
+                                   // Winlink/SOTA gateway calls: never hold a DM to or from them. A held
+                                   // WLNK-1 reply (Login [NNN] challenge) was replayed about once an hour
+                                   // and broke the login (field report HB9VQQ-3, v4.40a); WLNK-1 acks in
+                                   // the bare "ack<digits>" form, so the purge hook never fired either.
+                                   strcmp(aprsmsg.msg_source_call, "WLNK-1") != 0 && strcmp(aprsmsg.msg_source_call, "APRS2SOTA") != 0 &&
+                                   strcmp(destination_call, "WLNK-1") != 0 && strcmp(destination_call, "APRS2SOTA") != 0 &&
                                    CheckGroup(destination_call) == 0 &&
                                    mcIndexOfStr(aprsmsg.msg_payload, ":rej") <= 0 &&
                                    !mcStartsWith(aprsmsg.msg_payload, "{") &&   // {ping}/{pong}/{MCP}/{SET}/{CET}: control frames, never a DM
