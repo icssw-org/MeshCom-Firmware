@@ -35,6 +35,7 @@
 #include <Preferences.h>
 #include <TFT_eSPI.h>
 #include <gps_functions.h>
+#include "node_position.h"   // DRY-01: nodeSignedLat/Lon
 #include "nbr_views.h"       // MeshCom-5-Topologie Welle 4: Quelle fuer tdeck_refresh_mh_view()/_path_view()
 #include "time_functions.h"  // convertUNIXtoString()
 
@@ -2503,14 +2504,8 @@ static bool compute_locator_from_settings(char *buffer, size_t len)
     if(!lat_valid || !lon_valid)
         return false;
 
-    double lat = meshcom_settings.node_lat;
-    double lon = meshcom_settings.node_lon;
-
-    if(meshcom_settings.node_lat_c == 'S')
-        lat *= -1.0;
-
-    if(meshcom_settings.node_lon_c == 'W')
-        lon *= -1.0;
+    const double lat = nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c);
+    const double lon = nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c);
 
     if(lat == 0.0 && lon == 0.0)
         return false;
