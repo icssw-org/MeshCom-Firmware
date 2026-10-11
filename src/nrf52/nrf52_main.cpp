@@ -26,6 +26,8 @@
 #include <WisBlock-API.h>
 
 #include <nrf_eth.h>
+#include <nrf_soc.h>   // ETH-04 F3: sd_rand_application_*
+#include <nrf_sdm.h>   // sd_softdevice_is_enabled
 
 #include "onebutton_functions.h"
 
@@ -447,6 +449,63 @@ void OnCadDone(bool channelActivityDetected)
 void RadioInit()
 {
     Radio.Init(&RadioEvents);
+}
+
+// ETH-04 F3: Arduino random() is unseeded on nRF52, so the DHCP xid (and every
+// other random() user) repeated after each reboot. Seed once from the hardware RNG:
+// via the SoftDevice when it is enabled (NRF_RNG is owned by it then), else direct.
+static void seedRandomFromHw()
+{
+    uint8_t buf[4] = {0, 0, 0, 0};
+    const char *src = "fallback";
+    bool ok = false;
+
+    uint8_t sd_en = 0;
+    sd_softdevice_is_enabled(&sd_en);
+    if (sd_en)
+    {
+        for (int i = 0; i < 20 && !ok; i++)
+        {
+            uint8_t avail = 0;
+            sd_rand_application_bytes_available_get(&avail);
+            if (avail >= sizeof(buf) &&
+                sd_rand_application_vector_get(buf, sizeof(buf)) == NRF_SUCCESS)
+                ok = true;
+            else
+                delay(1);
+        }
+        if (ok)
+            src = "sd";
+    }
+    else
+    {
+        NRF_RNG->EVENTS_VALRDY = 0;
+        NRF_RNG->TASKS_START = 1;
+        for (size_t i = 0; i < sizeof(buf); i++)
+        {
+            uint32_t t0 = millis();
+            while (!NRF_RNG->EVENTS_VALRDY && (uint32_t)(millis() - t0) < 50)
+                ;
+            if (!NRF_RNG->EVENTS_VALRDY)
+                break;
+            buf[i] = (uint8_t)NRF_RNG->VALUE;
+            NRF_RNG->EVENTS_VALRDY = 0;
+            if (i == sizeof(buf) - 1)
+                ok = true;
+        }
+        NRF_RNG->TASKS_STOP = 1;
+        if (ok)
+            src = "hw";
+    }
+
+    uint32_t seed;
+    if (ok)
+        memcpy(&seed, buf, sizeof(seed));
+    else
+        seed = millis() ^ (micros() << 7) ^ NRF_FICR->DEVICEADDR[0];   // last resort
+
+    randomSeed(seed);
+    Serial.printf("[ETH];event;rng_seed;src;%s\n", src);
 }
 
 ///////////////////////////////////////////
@@ -1155,6 +1214,8 @@ void nrf52setup()
     Serial.println("=====================================");
 
     delay(100);
+
+    seedRandomFromHw();   // ETH-04 F3: after init_ble() (SoftDevice up), before the DHCP xid
 
     if (bGATEWAY || bWEBSERVER)
     {
