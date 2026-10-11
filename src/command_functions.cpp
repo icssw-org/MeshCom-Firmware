@@ -22,6 +22,7 @@
 #include "ntp_async.h"
 #include "ble_json_frame.h"
 #include "ble_phone_drain.h"   // BLE-N1/N2: blePhoneStatsFormat(), g_blePhoneStats
+#include "charge_led_mode.h"  // CHG-01/02: SSET2_CHGLED_CFG marker for the charge LED rows
 #include "i2c_scanner.h"
 #include "ArduinoJson.h"
 #include "configuration.h"
@@ -321,8 +322,9 @@ static void tg_post_ina226_on() { setupINA226(); }
 static void tg_post_ina226_off() { ina226_found = false; }
 #endif
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
-static void tg_post_charge_led_on() { setChargeLedOn(true); }
-static void tg_post_charge_led_off() { setChargeLedOn(false); }
+// both rows are TG_POST_FIRST: the CFG marker must be in node_sset2 before save_settings() (CHG-01/02)
+static void tg_post_charge_led_on() { meshcom_settings.node_sset2 |= SSET2_CHGLED_CFG; setChargeLedOn(true); }
+static void tg_post_charge_led_off() { meshcom_settings.node_sset2 |= SSET2_CHGLED_CFG; setChargeLedOn(false); }
 #endif
 #ifdef BOARD_LED
     #ifndef BOARD_LED_ACTIVE_LOW
@@ -464,8 +466,8 @@ static const ToggleRow COMMAND_TOGGLES[] =
     { "--ina226 off",         &bINA226ON,            &meshcom_settings.node_sset3,    0xFFFFF7FF,   0x00000000,   tg_post_ina226_off,            TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
 #endif
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
-    { "--charge led on",      &bCHARGE_LED,          &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0001,       tg_post_charge_led_on,         TG_DIRTY_NONE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
-    { "--charge led off",     &bCHARGE_LED,          &meshcom_settings.node_sset3,    0xFFFFFFFE,   0x00000000,   tg_post_charge_led_off,        TG_DIRTY_NONE,   TG_SAVE | TG_BRETURN },
+    { "--charge led on",      &bCHARGE_LED,          &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0001,       tg_post_charge_led_on,         TG_DIRTY_NONE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE | TG_POST_FIRST },
+    { "--charge led off",     &bCHARGE_LED,          &meshcom_settings.node_sset3,    0xFFFFFFFE,   0x00000000,   tg_post_charge_led_off,        TG_DIRTY_NONE,   TG_SAVE | TG_BRETURN | TG_POST_FIRST },
 #endif
 #ifdef BOARD_LED
     { "--board led on",       &bUSER_BOARD_LED,      &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0080,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
@@ -2301,7 +2303,7 @@ void commandAction(char *umsg_text, bool ble)
     {
         bGATEWAY_NOPOS=false;
         
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x7EFF;
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0xFFFFFEFF;
 
         if(ble)
         {
@@ -2378,7 +2380,7 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"netconsole off") == 0)
     {
         bNETCONSOLE=false;
-        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0x6FFF;
+        meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0xFFFFEFFF;
 
         save_settings();
 
@@ -6655,6 +6657,7 @@ void sendNodeSetting()
     nsetdoc["NOALL"] = bNoMSGtoALL;
     nsetdoc["NOPMOTHER"] = (bool)(meshcom_settings.node_sset3 & 0x8000);
     nsetdoc["BLED"] = bUSER_BOARD_LED;
+    nsetdoc["CHGLED"] = bCHARGE_LED;   // CHG-04: true = follows charging, false = dark
     nsetdoc["GWS"] = meshcom_settings.node_gwsrv;
 
     sendBleJsonRegister(nsetdoc); // JSN-01

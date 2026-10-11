@@ -3392,7 +3392,7 @@ void sub_page_info()
     } else {
         web_client.printf("<tr><td>Battery</td><td>%.3fV (%d%%) max %.3fV", global_batt / 1000.0, global_proz, meshcom_settings.node_maxv);
         #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
-            web_client.printf("<br>Charge Indicator LED: %s", bCHARGE_LED ? "on" : "off");
+            web_client.printf("<br>Charge Indicator LED: %s", bCHARGE_LED ? "auto (follows charging)" : "off");
         #endif
         web_client.print("</td></tr>\n");
     }

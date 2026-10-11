@@ -32,6 +32,7 @@ SPIClass ethSPI(FSPI);
 #endif
 
 #include "esp32_pmu.h"
+#include "charge_led_mode.h"
 #include "esp32_flash.h"
 #include <esp_adc_cal.h>
 #include "esp_system.h"
@@ -1024,7 +1025,7 @@ void esp32setup()
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
-    bCHARGE_LED = meshcom_settings.node_sset3 & 0x0001;
+    bCHARGE_LED = chargeLedAutoFromSettings(meshcom_settings.node_sset2, meshcom_settings.node_sset3);   // CHG-01/02: sset3 0x0001 counts only with the sset2 0x8000 marker
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
@@ -1309,7 +1310,7 @@ void esp32setup()
 
     #endif
 
-    #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHOP_AXP2101)
+    #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
        setChargeLedOn(!!bCHARGE_LED); // Initialize the charge indicator LED after boot and setupPMU()
     #endif
 
