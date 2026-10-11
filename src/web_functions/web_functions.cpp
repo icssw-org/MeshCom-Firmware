@@ -9,6 +9,7 @@
 #include <configuration.h>
 #include <debugconf.h>
 #include "web_functions.h"
+#include "esp32/netif_mtu.h" // NMTU-01 (lwIP part ESP32 only)
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <time.h>
@@ -252,6 +253,7 @@ void startWebserver()
         }
     }
 
+    netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu); // NMTU-01: before the first accept
     web_server.begin();
 
 
@@ -2882,9 +2884,7 @@ void sub_page_setup()
     _create_setup_textinput_element("owngw", "Gateway", String(meshcom_settings.node_gw), "192.168.2.1", "setowngw", 50, false, true);           // create Textinput-Element including Label and Button
     _create_setup_textinput_element("owndns", "DNS", String(meshcom_settings.node_dns), "192.168.2.1", "setowndns", 50, false, true);             // create Textinput-Element including Label and Button
     _create_setup_textinput_element("ownntp", "NTP", String(meshcom_settings.node_ownntp), "192.168.2.1", "setownntp", 50, false, true);          // create Textinput-Element including Label and Button
-    #if defined(BOARD_RAK4630)
-    _create_setup_textinput_element("ethmtu", "ETH MTU", String(meshcom_settings.node_ethmtu), "1500", "ethmtu", 4, false, false);                 // #1183: 1280..1500, applies to the next web connection, no reboot
-    #endif
+    _create_setup_textinput_element("ethmtu", "MTU", String(meshcom_settings.node_ethmtu), "1280", "ethmtu", 4, false, false);                     // #1183/#1190: 1280..1500, all boards; RAK applies it to the next web connection, no reboot
 
     _create_setup_textinput_element("extudp", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
 

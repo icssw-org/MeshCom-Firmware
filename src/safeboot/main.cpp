@@ -22,6 +22,7 @@
 #include <Preferences.h>
 #include "../configuration_global.h"
 #include "../esp32/esp32_flash.h"
+#include "../esp32/netif_mtu.h"
 #include "safeboot_log.h" // keep last: renames Serial on the S3
 
 #if SAFEBOOT_LOG_TEE
@@ -204,7 +205,12 @@ static void safebootWifiEventLog(WiFiEvent_t event, WiFiEventInfo_t info) {
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
       g_safeboot_wifi.got_ip = true;
       g_safeboot_wifi.got_ip_pending = true;
+      netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu); // NMTU-01
       Serial.println("[SAFEBOOT];wifi;event;got_ip;reason;0");
+      break;
+    case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
+      // NMTU-01: AP netif is certainly up once a client associated (AP_START is too early)
+      netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu);
       break;
     default:
       break;
@@ -633,6 +639,7 @@ void wifiConnect() {
      request->send(200, "text/plain", "OK");
    });
 
+   netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu); // NMTU-01: before the first accept
    webServer.begin();
 
    portENTER_CRITICAL(&g_ota_mux);

@@ -6,6 +6,7 @@
 
 #include "esp32_eth.h"
 #include "esp32_flash.h"
+#include "netif_mtu.h"
 
 void EspETH::initethDHCP()
 {
@@ -112,6 +113,8 @@ void EspETH::initethDHCP()
         }
     }
 
+    netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu);
+
     Udp.begin(EXTERN_PORT);
 }
 
@@ -136,6 +139,8 @@ void EspETH::initethfixIP()
         printlndeb("[ETH] IP error");
         meshcom_settings.node_hasIPaddress = true;
     }
+
+    netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu);
 
     Udp.begin(EXTERN_PORT);
 }

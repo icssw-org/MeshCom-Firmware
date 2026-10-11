@@ -46,6 +46,7 @@
 #include "tinyxml_functions.h"
 #include "clock.h"
 #include "tz_rule.h" // TZ-01: tzParse(), tzRejectReason() for --settz
+#include "esp32/netif_mtu.h" // NMTU-01: --mtu applies to live netifs (ESP32 part compiled out elsewhere)
 
 #ifdef ESP32
 #include "esp32/esp32_functions.h"
@@ -1216,9 +1217,7 @@ void commandAction(char *umsg_text, bool ble)
             #ifndef BOARD_RAK4630
             printdeb("--setssid <ssid>/none   WLAN SSID\n--setpwd <pwd>/none     WLAN password\n--wifiap on/off         WLAN access point\n");
             #endif
-            #if defined(BOARD_RAK4630)
-            printdeb("--ethmtu 1280-1500      Ethernet MTU (web GUI, HAMNET tunnels)\n");
-            #endif
+            printdeb("--mtu 1280-1500         MTU, default 1280 (alias --ethmtu)\n");
             printdeb("--wifitxpower 2-20      WiFi TX power dBm\n--setownip a.b.c.d      static IP\n--setowngw a.b.c.d      gateway\n--setownms a.b.c.d      netmask\n--setowndns a.b.c.d     DNS server\n--setownntp a.b.c.d     NTP server\n");
             #ifndef BOARD_RAK4630
             #if defined(HAS_ETHERNET)
@@ -3568,20 +3567,21 @@ void commandAction(char *umsg_text, bool ble)
         save_settings();
     }
     else
-    // Issue #1183: Ethernet MTU for the RAK W5100S web server (applied as MSS = MTU - 40
-    // on the next listening socket, see web_functions.cpp). Unlike --pingmax a bad value
-    // is rejected, not reset: a typo must not silently change the path MTU. RAK only, like
-    // its --help line: the MSS is applied by the W5100S path alone.
-    #if defined(BOARD_RAK4630)
-    if(commandCheck(msg_text+2, (char*)"ethmtu ") == 0)
+    // Issues #1183/#1190: user MTU on every board (key node_ethmtu). On RAK it is applied as
+    // MSS = MTU - 40 on the next listening socket (web_functions.cpp); elsewhere via the netif
+    // MTU. Unlike --pingmax a bad value is rejected, not reset: a typo must not silently
+    // change the path MTU. --ethmtu is the old name, kept as an alias with its own offset.
+    if(commandCheck(msg_text+2, (char*)"mtu ") == 0 || commandCheck(msg_text+2, (char*)"ethmtu ") == 0)
     {
-        const CmdSetResult res = cmdStoreInt(msg_text+9, &meshcom_settings.node_ethmtu, 1280, 1500, &iVar);
+        const bool bMtuShort = (commandCheck(msg_text+2, (char*)"mtu ") == 0);
+        const char *mtuArg = bMtuShort ? msg_text+6 : msg_text+9;
+        const CmdSetResult res = cmdStoreInt(mtuArg, &meshcom_settings.node_ethmtu, 1280, 1500, &iVar);
 
-        if(res == CMD_SET_NAN) { cmdArgNotNumber("ethmtu", msg_text+9); return; }
+        if(res == CMD_SET_NAN) { cmdArgNotNumber(bMtuShort ? "mtu" : "ethmtu", mtuArg); return; }
 
         if(res == CMD_SET_RANGE)
         {
-            printfdeb("ethmtu %i not between 1280 and 1500, ignored\n", iVar);
+            printfdeb("mtu %i not between 1280 and 1500, ignored\n", iVar);
 
             if(ble)
             {
@@ -3591,14 +3591,19 @@ void commandAction(char *umsg_text, bool ble)
             return;
         }
 
-        printfdeb("set ethmtu to %i (MSS %i)\n", meshcom_settings.node_ethmtu, meshcom_settings.node_ethmtu - 40);
+        printfdeb("set mtu to %i (MSS %i)\n", meshcom_settings.node_ethmtu, meshcom_settings.node_ethmtu - 40);
+
+        #if defined(ESP32)
+        // NMTU-01: live netifs take it now (new TCP connections); the event hooks
+        // re-apply it on the next link-up.
+        netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu);
+        #endif
 
         bReturn = true;
 
         save_settings();
     }
     else
-    #endif
 
 #ifndef BOARD_RAK4630
     if(commandCheck(msg_text+2, (char*)"setssid ") == 0)
@@ -6450,6 +6455,7 @@ void commandAction(char *umsg_text, bool ble)
                 printlndeb("ETH");
 
             printfdeb("...hasIpAddress: %s\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
+            printfdeb("...MTU          : %i (MSS %i)\n", meshcom_settings.node_ethmtu, meshcom_settings.node_ethmtu - 40);
             if(meshcom_settings.node_hasIPaddress || meshcom_settings.node_netmode == 1)
             {
                 printfdeb("...IP address   : %s\n", meshcom_settings.node_ip);
@@ -6470,9 +6476,6 @@ void commandAction(char *umsg_text, bool ble)
                     {
                         printfdeb("...GW address   : %s\n", meshcom_settings.node_gw);
                         printfdeb("...DNS address  : %s\n", meshcom_settings.node_dns);
-                        #if defined(BOARD_RAK4630)
-                        printfdeb("...ETH MTU      : %i (MSS %i)\n", meshcom_settings.node_ethmtu, meshcom_settings.node_ethmtu - 40);
-                        #endif
                     }
                 }
     

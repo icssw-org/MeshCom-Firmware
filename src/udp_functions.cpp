@@ -53,6 +53,7 @@ String grc_ids;
 #include "esp_wifi.h"
 #include <ESP32Ping.h>
 #include <Preferences.h>
+#include "esp32/netif_mtu.h"
 
 IPAddress node_ip = IPAddress(0,0,0,0);
 IPAddress node_gw = IPAddress(0,0,0,0);
@@ -381,6 +382,7 @@ static void wifiEventLog(WiFiEvent_t event, WiFiEventInfo_t info)
       s_wifiLastGotIpMs = millis();
       s_wifiGotIpCount++;
       s_wifiGotIpPending = true;
+      netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu); // NMTU-01: TCP-MSS = mtu-40
       Serial.printf("[WIFI];event;got_ip;ms;%lu\n", (unsigned long)millis());
       wifiAssocLog("got_ip", 0);
       break;
@@ -392,6 +394,10 @@ static void wifiEventLog(WiFiEvent_t event, WiFiEventInfo_t info)
       break;
     case ARDUINO_EVENT_WIFI_STA_STOP:
       s_wifiStaUp = false;
+      break;
+    case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
+      // NMTU-01: ein Client ist assoziiert, das AP-Netif steht sicher (AP_START waere zu frueh)
+      netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu);
       break;
     default:
       break;
