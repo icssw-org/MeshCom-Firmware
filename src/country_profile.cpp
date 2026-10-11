@@ -42,32 +42,24 @@
 // touching this value, do not just trust the comment.
 #define TRACK_FREQ_NONE_SENTINEL 999 // no APRS/track frequency defined for this region
 
-// PRE-EXISTING DEFECT, carried over unchanged from the switch this table
-// replaced -- recorded here 2026-09-16 rather than fixed, because changing an
-// emitted RF value is a behaviour change that needs its own row and a bench
-// proof, not a drive-by edit inside a DRY refactor.
-//
-// `track_freq` is ONE column shared by both platforms, while `freq` has
-// separate esp32/nrf52 columns -- and the two platforms do not use the same
-// unit. ESP32 stores MHz (test/golden/native/country-profile-esp32.txt:
-// `track=433.774994`), the nRF52 stores Hz (country-profile-nrf52.txt:
-// `track=433775008`). Every row gets that right because it uses the
-// LORA_APRS_FREQUENCY macro, which is per-platform.
-//
-// Poland (code 15) does not: it is the one row with a bare literal,
-// `434.855f`. On ESP32 that is correct. On the nRF52 it lands in a Hz column
-// as 434.855 Hz -- below every RadioLib floor, so a Polish nRF52 node with
-// --track on gets RADIOLIB_ERR_INVALID_FREQUENCY, exactly like the 999
-// sentinel above. Fixing it means 434855000.0f on the nRF52 side, which needs
-// track_freq split into two columns like freq already is.
+// RF-09 (OPT-D14), fixed 2026-10-03: `track_freq` is split into esp32/nrf52
+// columns like `freq`, because the platforms store different units (ESP32 MHz,
+// nRF52 Hz). Poland (code 15) was the one row with a bare MHz literal, which
+// landed as 434.855 Hz in node_track_freq on the nRF52; it is now 434.855f /
+// 434855000.f. On air nothing changed for the nRF52 today: its track path
+// (lora_setchip_aprs(), RadioInit()) hardcodes LORA_APRS_FREQUENCY and never
+// reads node_track_freq, so the wrong value only showed in --info and the
+// config export. The ESP32 reads node_track_freq and was always correct.
+// Every other row keeps the per-platform LORA_APRS_FREQUENCY macro in both
+// columns.
 
 // D3-05: the 14-case switch collapsed into a const lookup table. Every case
 // assigned the same six fields (freq, bw, sf, cr, track_freq, preamble) and
 // differed only in the numbers -- and, for freq/bw/cr, by platform, because
 // those three are stored in different units on the two sides (OPT-D14, see
-// country_profile.h). sf/track_freq/preamble are the same value on both
-// platforms for every row here, so those get one column each; freq/bw/cr get
-// an _esp32 and an _nrf52 column instead of a per-row `#if`.
+// country_profile.h). sf/preamble are the same value on both
+// platforms for every row here, so those get one column each; freq/bw/cr/track_freq
+// get an _esp32 and an _nrf52 column instead of a per-row `#if`.
 //
 // Case 7 (MAN) never reaches this table: countryProfile() returns false for
 // it before the lookup, exactly as the switch's `case 7: return false;` did.
@@ -83,25 +75,26 @@ struct CountryRfProfile
     int8_t cr_esp32;
     int8_t cr_nrf52;
     int8_t sf;
-    float  track_freq;
+    float  track_freq_esp32;
+    float  track_freq_nrf52;
     int8_t preamble;
 };
 
 static const CountryRfProfile kCountryRfProfiles[] = {
-    // code  freq_esp32     freq_nrf52     bw_esp32  bw_nrf52  cr_esp32  cr_nrf52  sf        track_freq                 preamble
-    {   1,   439.9125f,     439912500.f,   125.0f,   0.0f,     6,        1,        10,       (float)LORA_APRS_FREQUENCY,      8 }, // UK
-    {   2,   (float)RF_FREQUENCY,  (float)RF_FREQUENCY,  125.0f,   0.0f,     6,        2,        10,       (float)LORA_APRS_FREQUENCY,      8 }, // ON
-    {   4,   433.9250f,     433925000.f,   125.0f,   0.0f,     6,        2,        10,       (float)LORA_APRS_FREQUENCY,      8 }, // LA
-    {   5,   869.525f,      869525000.f,   250.0f,   1.0f,     6,        2,        LORA_SF,  TRACK_FREQ_NONE_SENTINEL, 8 }, // 868
-    {   6,   906.875f,      906875000.f,   250.0f,   1.0f,     6,        2,        LORA_SF,  (float)LORA_APRS_FREQUENCY,      8 }, // 915
-    {   8,   (float)RF_FREQUENCY,  (float)RF_FREQUENCY,  250.0f,   1.0f,     6,        2,        LORA_SF,  (float)LORA_APRS_FREQUENCY,      8 }, // EU8 (preamble 8)
-    {   9,   439.9125f,     439912500.f,   125.0f,   0.0f,     6,        1,        10,       (float)LORA_APRS_FREQUENCY,      8 }, // UK8
-    {  10,   433.175f,      433175000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY,      8 }, // US
-    {  11,   435.775f,      435775000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY,      8 }, // VR2
-    {  12,   435.750f,      435750000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY,      8 }, // 435
-    {  13,   436.250f,      436250000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY,      8 }, // 436
-    {  14,   442.000f,      442000000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY,      8 }, // 442
-    {  15,   (float)RF_FREQUENCY,  (float)RF_FREQUENCY,  250.0f,   1.0f,     6,        2,        LORA_SF,  434.855f,                 8 }, // PL
+    // code  freq_esp32     freq_nrf52     bw_esp32  bw_nrf52  cr_esp32  cr_nrf52  sf        track_freq_esp32  track_freq_nrf52  preamble
+    {   1,   439.9125f,     439912500.f,   125.0f,   0.0f,     6,        1,        10,       (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // UK
+    {   2,   (float)RF_FREQUENCY,  (float)RF_FREQUENCY,  125.0f,   0.0f,     6,        2,        10,       (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // ON
+    {   4,   433.9250f,     433925000.f,   125.0f,   0.0f,     6,        2,        10,       (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // LA
+    {   5,   869.525f,      869525000.f,   250.0f,   1.0f,     6,        2,        LORA_SF,  TRACK_FREQ_NONE_SENTINEL, TRACK_FREQ_NONE_SENTINEL, 8 }, // 868
+    {   6,   906.875f,      906875000.f,   250.0f,   1.0f,     6,        2,        LORA_SF,  (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // 915
+    {   8,   (float)RF_FREQUENCY,  (float)RF_FREQUENCY,  250.0f,   1.0f,     6,        2,        LORA_SF,  (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // EU8 (preamble 8)
+    {   9,   439.9125f,     439912500.f,   125.0f,   0.0f,     6,        1,        10,       (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // UK8
+    {  10,   433.175f,      433175000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // US
+    {  11,   435.775f,      435775000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // VR2
+    {  12,   435.750f,      435750000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // 435
+    {  13,   436.250f,      436250000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // 436
+    {  14,   442.000f,      442000000.f,   250.0f,   1.0f,     6,        2,        11,       (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, 8 }, // 442
+    {  15,   (float)RF_FREQUENCY,  (float)RF_FREQUENCY,  250.0f,   1.0f,     6,        2,        LORA_SF,  434.855f, 434855000.f, 8 }, // PL
 };
 
 // The switch's `default` (EU): whatever code has no row above -- 0, 3, 16,
@@ -111,7 +104,7 @@ static const CountryRfProfile kCountryRfProfiles[] = {
 // print preamble=32 in the stub configs, every table row prints 8).
 static const CountryRfProfile kCountryRfProfileDefault = {
     0, (float)RF_FREQUENCY, (float)RF_FREQUENCY, 250.0f, 1.0f, 6, 2,
-    LORA_SF, (float)LORA_APRS_FREQUENCY, LORA_PREAMBLE_LENGTH
+    LORA_SF, (float)LORA_APRS_FREQUENCY, (float)LORA_APRS_FREQUENCY, LORA_PREAMBLE_LENGTH
 };
 
 bool countryProfile(int iCtry, CountryProfile &out)
@@ -141,14 +134,15 @@ bool countryProfile(int iCtry, CountryProfile &out)
         out.freq = row->freq_nrf52;
         out.bw = row->bw_nrf52;
         out.cr = row->cr_nrf52;
+        out.track_freq = row->track_freq_nrf52;
     #else
         out.freq = row->freq_esp32;
         out.bw = row->bw_esp32;
         out.cr = row->cr_esp32;
+        out.track_freq = row->track_freq_esp32;
     #endif
 
     out.sf = row->sf;
-    out.track_freq = row->track_freq;
     out.preamble = row->preamble;
 
     return true;
