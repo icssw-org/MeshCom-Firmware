@@ -2291,7 +2291,7 @@ void esp32loop()
     #ifdef BOARD_LED
         if(bUSER_BOARD_LED)
         {
-            const uint32_t now = millis(); // millis() only once per cicle, the call to function millis() is expensive,
+            const uint32_t now = millis(); // millis() only once per cycle
             const uint32_t flashDuration = 30;
             const uint32_t interval =2000;  // Delay between flashes 2 sec.
             if (!bLED)
