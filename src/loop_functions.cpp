@@ -98,6 +98,8 @@ bool bLED_ORANGE=false;
 bool bLED_CLEAR=false;
 bool bLED_DELAY=false;
 
+bool bCHARGE_LED=false;
+
 bool bPingSend=false;
 
 extern unsigned long rebootAuto;
