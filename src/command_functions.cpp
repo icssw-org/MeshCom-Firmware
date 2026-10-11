@@ -2140,7 +2140,7 @@ void commandAction(char *umsg_text, bool ble)
         bmp3_found=false;
         
         meshcom_settings.node_sset = meshcom_settings.node_sset & 0x7E7F;   // BME280/BMP280 off
-        meshcom_settings.node_sset3 = meshcom_settings.node_sset3 & 0x7FEF;   // BMP390 off
+        meshcom_settings.node_sset3 &= ~0x0010;   // BMP390 off (only bit 0x0010; 0x8000 NOPMOTHER and the upper bits stay)
 
         // N-28: "--bmx" ist das Sammelkommando, und die Hilfe sagt seit jeher
         // "--bmx BME/BMP/680 off". Der BME680 wurde davon aber nie erfasst.
