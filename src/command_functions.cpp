@@ -2395,9 +2395,9 @@ void commandAction(char *umsg_text, bool ble)
         String strCtry = _owner_c;
         strCtry.toUpperCase();
 
-        if(strCtry != "OE" && strCtry != "DL" && strCtry != "IT")
+        if(strCtry != "OE" && strCtry != "DL" && strCtry != "IT" && strCtry != "HC" && strCtry != "HB")
         {
-            printfdeb("\nGateway-Server fault <%s> please only OE or DL or IT\n", strCtry.c_str());
+            printfdeb("\nGateway-Server fault <%s> please only OE,HC,DL, IT or HB\n", strCtry.c_str());
             return;
         }
 
@@ -3936,7 +3936,7 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
-    if(commandCheck(msg_text+2, (char*)"setinet") == 0 || commandCheck(msg_text+2, (char*)"sethamnet off") == 0)
+    if(commandCheck(msg_text+2, (char*)"setinet on") == 0 || commandCheck(msg_text+2, (char*)"sethamnet off") == 0)
     {
         meshcom_settings.node_hamnet_only = 0;
         
