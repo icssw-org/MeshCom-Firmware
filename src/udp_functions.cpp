@@ -1124,8 +1124,8 @@ void startMeshComUDP()
         else
         if(memcmp(meshcom_settings.node_gwsrv, "HB", 2) == 0)
         {
-          printlndeb("[WIFI]...Hamnet UDP-DEST meshcom.emcomm.ch");
-          srv_host = "meshcom.emcomm.ch";
+          printlndeb("[WIFI]...Hamnet UDP-DEST 44.142.42.59");
+          srv_host = "44.142.42.59";
           srv_path = "hamnet";
         }
         else
@@ -1174,12 +1174,18 @@ void startMeshComUDP()
         else
         if(memcmp(meshcom_settings.node_gwsrv, "HC", 2) == 0)
         {
-          printlndeb("[WIFI]...Hamnet UDP-DEST 44.148.230.197");
-          srv_host = "44.148.230.197";
+          printlndeb("[WIFI]...Internet UDP-DEST meshcom.hamnet.network");
+          srv_host = "meshcom.hamnet.network";
           srv_path = "inet";
         }
         else
         if(memcmp(meshcom_settings.node_gwsrv, "HB", 2) == 0)
+        {
+          printlndeb("[WIFI]...Internet UDP-DEST meshcom.emcomm.ch");
+          srv_host = "meshcom.emcomm.ch";
+          srv_path = "inet";
+        }
+        else
         {
           printlndeb("[WIFI]...Internet UDP-DEST meshcom.oevsv.at");
           srv_host = "meshcom.oevsv.at";
