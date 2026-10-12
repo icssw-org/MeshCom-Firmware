@@ -473,14 +473,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			
 			d_lat = (double)lat_phone;
 			
-			meshcom_settings.node_lat_c='N';
-			meshcom_settings.node_lat=d_lat;
-
-			if(d_lat < 0)
-			{
-				meshcom_settings.node_lat_c='S';
-				meshcom_settings.node_lat=fabs(d_lat);
-			}
+			nodeSetLat(d_lat); // DRY-01: range-checked, an out-of-range value from the phone is ignored
 
 			break;
 		}
@@ -493,14 +486,7 @@ void readPhoneCommand(uint8_t conf_data[MAX_MSG_LEN_PHONE])
 			memcpy(&long_phone, conf_data + 2, sizeof(long_phone));
 			d_lon = (double)long_phone;
 		
-			meshcom_settings.node_lon_c='E';
-			meshcom_settings.node_lon=d_lon;
-
-			if(d_lon < 0)
-			{
-				meshcom_settings.node_lon_c='W';
-				meshcom_settings.node_lon=fabs(d_lon);
-			}
+			nodeSetLon(d_lon); // DRY-01: range-checked, an out-of-range value from the phone is ignored
 
 			break;
 		}

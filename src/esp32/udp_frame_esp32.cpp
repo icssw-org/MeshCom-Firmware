@@ -25,6 +25,7 @@
 #include "conf_frame.h"
 #include "setlog_lines.h"
 #include "udp_frame.h"
+#include "gw_link_status.h"
 
 // C1/U1 carve of handleUdpFrame_esp32() out of udp_functions.cpp; see
 // udp_frame.h for why it moved and why the two platform copies are not
@@ -150,6 +151,7 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           bool bBLELoopOut = true;
 
           last_upd_timer = millis();
+          gwLinkNoteRx(millis());
           hb_warn_logged = false;
 
           struct aprsMessage aprsmsg;
@@ -554,6 +556,7 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
         Serial.printf("[GW];rx;type;CONF;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
 
         last_upd_timer = millis();
+        gwLinkNoteRx(millis());
         hb_warn_logged = false;
         had_initial_udp_conn = true;
 
@@ -644,6 +647,7 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           42 45 41 54 00 09 4F 45 31 4B 46 52 2D 47 57 01 05 4B 46 52 36 35
         */
         last_upd_timer = millis();
+        gwLinkNoteRx(millis());
         hb_warn_logged = false;
       }
       else

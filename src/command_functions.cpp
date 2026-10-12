@@ -11,6 +11,7 @@
 #include "command_match.h" // D2-10: commandMatches(), the ladder's matching rule
 #include "command_toggles.h" // D2-06: the table-driven on/off toggles
 #include "command_setters.h" // D2-07: numeric argument parse/range/store
+#include "node_position.h"    // DRY-01: hemisphere split / signed decode of the own position
 #include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
 #include "batt_functions.h"
 #include "nbr_matrix.h"
@@ -119,6 +120,7 @@ extern TinyGPSPlus gps;
 #endif
 #include "test_inject.h"
 #include "loop_breadcrumb.h"   // F3: --info ...BOOT line
+#include "gw_link_status.h"   // --info ...Server line
 
 #if defined(BOARD_T5_EPAPER)
 #include <t5-epaper/t5epaper_extern.h>
@@ -597,6 +599,54 @@ void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 static void cmdArgNotNumber(const char *label, const char *arg)
 {
     printfdeb("%s: <%s> is not a number\n", label, arg);
+}
+
+// DRY-01: the one own-position setter behind --setlat/--setlon/--setalt and the BLE phone frames.
+// Lat/lon are range-checked (-90..90, -180..180) and stored as magnitude + hemisphere
+// letter; on reject nothing is touched. Saving is the caller's job.
+bool nodeSetLat(double lat)
+{
+    double mag;
+    char hem;
+    if(!nodeLatSplit(lat, mag, hem))
+        return false;
+    meshcom_settings.node_lat = mag;
+    meshcom_settings.node_lat_c = hem;
+    return true;
+}
+
+bool nodeSetLon(double lon)
+{
+    double mag;
+    char hem;
+    if(!nodeLonSplit(lon, mag, hem))
+        return false;
+    meshcom_settings.node_lon = mag;
+    meshcom_settings.node_lon_c = hem;
+    return true;
+}
+
+// The altitude filter / barometer reference follow the new value (GPS-03/F7). The caller range-checks.
+void nodeSetAlt(int alt)
+{
+    meshcom_settings.node_alt = alt;
+
+#ifdef ENABLE_GPS
+    WZ_GPS_AltSeed((float)alt);
+#else
+    baroBaseRelatch((float)alt);
+#endif
+}
+
+// Serial/console report of a rejected --setlat/--setlon (same style as the --setalt range reject).
+static void cmdPosRange(const char *label, const char *range, const char *msg_text, bool ble)
+{
+    printfdeb("%s out of range (%s), ignored\n", label, range);
+
+    if(ble)
+    {
+        addBLECommandBack((char*)msg_text);
+    }
 }
 
 void commandAction(char *umsg_text, bool ble)
@@ -3962,16 +4012,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!bArgOk) { cmdArgNotNumber("setlat", msg_text+9); return; }
 
-        //printf("_owner_c:%s fVar:%f\n", _owner_c, dVar);
-
-        meshcom_settings.node_lat_c='N';
-        meshcom_settings.node_lat=dVar;
-
-        if(dVar < 0)
-        {
-            meshcom_settings.node_lat_c='S';
-            meshcom_settings.node_lat=fabs(dVar);
-        }
+        if(!nodeSetLat(dVar)) { cmdPosRange("setlat", "-90..90", msg_text, ble); return; }
 
         save_settings();
         
@@ -3984,16 +4025,7 @@ void commandAction(char *umsg_text, bool ble)
 
         if(!bArgOk) { cmdArgNotNumber("setlon", msg_text+9); return; }
 
-        meshcom_settings.node_lon=dVar;
-
-        meshcom_settings.node_lon_c='E';
-        meshcom_settings.node_lon=dVar;
-
-        if(dVar < 0)
-        {
-            meshcom_settings.node_lon_c='W';
-            meshcom_settings.node_lon=fabs(dVar);
-        }
+        if(!nodeSetLon(dVar)) { cmdPosRange("setlon", "-180..180", msg_text, ble); return; }
 
         save_settings();
         
@@ -4021,13 +4053,7 @@ void commandAction(char *umsg_text, bool ble)
             return;
         }
 
-        meshcom_settings.node_alt=iVar;
-
-        #ifdef ENABLE_GPS
-        WZ_GPS_AltSeed((float)iVar);
-        #else
-        baroBaseRelatch((float)iVar);
-        #endif
+        nodeSetAlt(iVar);
 
         printfdeb("set alt to %i m\n", meshcom_settings.node_alt);
 
@@ -6488,6 +6514,12 @@ void commandAction(char *umsg_text, bool ble)
                 if(!bWIFIAP)
                     printfdeb("...UDP-HBeat : %ld\n", millis() - meshcom_settings.node_last_upd_timer);
             }
+
+            { // GW-LINK: server path (Internet/Hamnet) and whether it still answers; UDP-HBeat above is the last HB sent
+                char gwl[96];
+                gwLinkFormat(gwl, sizeof(gwl), bGATEWAY, meshcom_settings.node_hasIPaddress, millis());
+                printfdeb("...Server       : %s\n", gwl);
+            }
             #endif
     
             sendDisplayHead(true);
@@ -6643,13 +6675,8 @@ void commandAction(char *umsg_text, bool ble)
 // sends back gps data to the phone
 void sendGpsJson()
 {
-    double d_lat = meshcom_settings.node_lat;
-    if (meshcom_settings.node_lat_c == 'S')
-        d_lat = meshcom_settings.node_lat * -1.0;
-
-    double d_lon = meshcom_settings.node_lon;
-    if (meshcom_settings.node_lon_c == 'W')
-        d_lon = meshcom_settings.node_lon * -1.0;
+    const double d_lat = nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c);
+    const double d_lon = nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c);
 
     JsonDocument pdoc;
 

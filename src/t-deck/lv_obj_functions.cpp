@@ -35,6 +35,7 @@
 #include <Preferences.h>
 #include <TFT_eSPI.h>
 #include <gps_functions.h>
+#include "node_position.h"   // DRY-01: nodeSignedLat/Lon
 #include "nbr_views.h"       // MeshCom-5-Topologie Welle 4: Quelle fuer tdeck_refresh_mh_view()/_path_view()
 #include "time_functions.h"  // convertUNIXtoString()
 
@@ -170,6 +171,10 @@ struct MsgBubble
     String gps;
     bool sd;
     bool wlan;
+    // TD-11: send/delivery status of an own message. RAM only, never written to
+    // messages.json (after a reboot both are 0 = unknown, no glyph).
+    uint32_t msg_id = 0;   // 0 = unknown / not an own message
+    uint8_t status = 0;    // own_msg_id[][4]: 0 pending, 1 heard, 2 ACK, 3 failed, 4 held
 };
 
 struct MsgTabEntry
@@ -2503,14 +2508,8 @@ static bool compute_locator_from_settings(char *buffer, size_t len)
     if(!lat_valid || !lon_valid)
         return false;
 
-    double lat = meshcom_settings.node_lat;
-    double lon = meshcom_settings.node_lon;
-
-    if(meshcom_settings.node_lat_c == 'S')
-        lat *= -1.0;
-
-    if(meshcom_settings.node_lon_c == 'W')
-        lon *= -1.0;
+    const double lat = nodeSignedLat(meshcom_settings.node_lat, meshcom_settings.node_lat_c);
+    const double lon = nodeSignedLon(meshcom_settings.node_lon, meshcom_settings.node_lon_c);
 
     if(lat == 0.0 && lon == 0.0)
         return false;
@@ -3045,6 +3044,36 @@ static void msg_render_active_tab(void)
         lv_obj_scroll_to_view(last, LV_ANIM_OFF);
 }
 
+// TD-11: own_msg_id[][4] status -> glyph appended to the footer (timestamp) label.
+// All four are built-in Montserrat symbols (lv_symbol_def.h) and present in
+// Montserrat 12, the LV_FONT_DEFAULT of t_deck and t_deck_plus.
+static const char *msg_status_glyph(uint8_t status)
+{
+    switch(status)
+    {
+        case 0x01: return LV_SYMBOL_OK;                   // heard (echoed by a neighbour)
+        case 0x02: return LV_SYMBOL_OK LV_SYMBOL_OK;      // ACK from the destination
+        case 0x03: return LV_SYMBOL_CLOSE;                // failed (retransmit gave up)
+        case 0x04: return LV_SYMBOL_ENVELOPE;             // held by a store node
+        default:   return "";                             // pending / unknown
+    }
+}
+
+static String msg_footer_text(const MsgBubble &bubble)
+{
+    String text = bubble.timestamp;
+    if(bubble.type == MsgBubbleType::Outgoing && bubble.msg_id != 0)
+    {
+        const char *glyph = msg_status_glyph(bubble.status);
+        if(glyph[0] != '\0')
+        {
+            text += " ";
+            text += glyph;
+        }
+    }
+    return text;
+}
+
 static void msg_list_append_bubble(const MsgBubble &bubble)
 {
     if(msg_list == NULL)
@@ -3053,6 +3082,10 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     ensure_msg_styles();
 
     lv_obj_t *wrapper = lv_obj_create(msg_list);
+    // TD-11: tag the live object with the msg_id so tdeck_set_msg_status() can find
+    // it by walking msg_list instead of keeping object pointers in MsgBubble.
+    if(bubble.type == MsgBubbleType::Outgoing && bubble.msg_id != 0)
+        lv_obj_set_user_data(wrapper, (void *)(uintptr_t)bubble.msg_id);
     lv_obj_set_width(wrapper, lv_pct(100));
     lv_obj_set_height(wrapper, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(wrapper, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -3210,7 +3243,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
         lv_obj_set_flex_align(footer_row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
         lv_obj_t *time_label = lv_label_create(footer_row);
-        lv_label_set_text(time_label, bubble.timestamp.c_str());
+        lv_label_set_text(time_label, msg_footer_text(bubble).c_str());
         lv_obj_set_style_text_color(time_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
         lv_label_set_long_mode(time_label, LV_LABEL_LONG_CLIP);
         lv_obj_set_width(time_label, LV_SIZE_CONTENT);
@@ -4478,6 +4511,16 @@ void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
     bubble.header = source_descriptor + " -> " + dest_descriptor;
     bubble.body = payload;
 
+    // TD-11: the send path (sendMessage() in loop_functions.cpp) fills aprsmsg.msg_id
+    // before it calls us and books insertOwnTx() right after, so the id is known here.
+    // The receive path calls this overload with bWithAudio = true; a received frame
+    // carrying our own source call (late relay after a reboot) must not take its id.
+    if(is_outgoing && !bWithAudio && aprsmsg.msg_id != 0)
+    {
+        bubble.msg_id = aprsmsg.msg_id;
+        Serial.printf("[MSGSTAT];%08X;new\n", (unsigned)bubble.msg_id);
+    }
+
     msg_tabs_add_message(conversation, bubble);
     
     // Only focus and alert if NOT loading from file
@@ -4525,6 +4568,75 @@ void tdeck_add_MSG(String callsign, String path, String message, bool bWithAudio
     if (!loading_messages_from_file) {
         msg_focus_and_alert(bWithAudio);
     }
+}
+
+/**
+ * TD-11: record the send/delivery status of an own message (own_msg_id[][4]) and
+ * refresh the glyph on its bubble.
+ *
+ * MsgBubble holds no LVGL object pointers: the model (msg_tab_entries and the
+ * persisted_msgs copy that tdeck_reset_msg_tabs() rebuilds from) is updated by
+ * msg_id, the live footer label is looked up in msg_list at call time. A bubble
+ * of an inactive tab, or one trimmed out of the view, has no live object and is
+ * only updated in the model, so no stale pointer can exist.
+ *
+ * Caller context: the four status transitions in lora_functions.cpp run inside
+ * esp32loop() (OnRxDone() and updateRetransmissionStatus()), the same task that
+ * runs lv_task_handler(), so no lock is needed.
+ */
+void tdeck_set_msg_status(uint32_t msg_id, uint8_t status)
+{
+    bool found = false;
+
+    if(msg_id != 0)
+    {
+        MsgBubble match;   // copy of the updated model bubble, source of the footer text
+
+        for(MsgTabEntry &entry : msg_tab_entries)
+        {
+            for(MsgBubble &b : entry.bubbles)
+            {
+                if(b.type == MsgBubbleType::Outgoing && b.msg_id == msg_id)
+                {
+                    b.status = status;
+                    match = b;
+                    found = true;
+                }
+            }
+        }
+
+        for(auto &p : persisted_msgs)
+        {
+            if(p.second.type == MsgBubbleType::Outgoing && p.second.msg_id == msg_id)
+                p.second.status = status;
+        }
+
+        if(found && msg_list != NULL)
+        {
+            String footer = msg_footer_text(match);
+
+            uint32_t cnt = lv_obj_get_child_cnt(msg_list);
+            for(uint32_t i = 0; i < cnt; ++i)
+            {
+                lv_obj_t *wrapper = lv_obj_get_child(msg_list, i);
+                if(wrapper == NULL || (uintptr_t)lv_obj_get_user_data(wrapper) != (uintptr_t)msg_id)
+                    continue;
+
+                lv_obj_t *bubble_obj = lv_obj_get_child(wrapper, 0);
+                lv_obj_t *footer_row = (bubble_obj != NULL) ? lv_obj_get_child(bubble_obj, -1) : NULL;
+                // the footer row exists only for bubbles with a timestamp; without
+                // it the last child of bubble_obj is the body label
+                if(footer_row == NULL || lv_obj_check_type(footer_row, &lv_label_class))
+                    continue;
+
+                lv_obj_t *time_label = lv_obj_get_child(footer_row, 0);
+                if(time_label != NULL && lv_obj_check_type(time_label, &lv_label_class))
+                    lv_label_set_text(time_label, footer.c_str());
+            }
+        }
+    }
+
+    Serial.printf("[MSGSTAT];%08X;%u;%d\n", (unsigned)msg_id, (unsigned)status, found ? 1 : 0);
 }
 
 void tdeck_reset_msg_tabs(void)

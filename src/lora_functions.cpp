@@ -21,6 +21,7 @@
 #include "pn_retry.h"       // PN retry (XOR form): pnRetryCore/pnRetryId/pnFrameIsOwnPn etc.
 #include "own_msg_status.h"  // late ACK -> durable web GUI status (ring slot may be gone)
 #include "sto_notice.h"     // stage 4: :sto custody notice, sender side -- every board
+#include "hey_echo_upload.h"  // gateway upload of own HEY echoes
 #if defined(ENABLE_MSGSTORE)
 #include "msgstore_api.h"   // stage 3: store node (last-hop mailbox) receive-path hooks
 #endif
@@ -1491,6 +1492,24 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // every relay echo lands here; setOwnMsgStatus() reports the transition only
                         setOwnMsgStatus(heardIcheck, 0x01); // 0x01 HEARD
                     }
+                }
+
+                // Own HEY came back relayed (docs/hey-echo-upload-concept.md): a gateway
+                // uploads that echo as received. Same msg_id, no relay, no dedup/HEARD
+                // change. No own signal report appended: the neighbour's group already
+                // gives the edge G->N, and the feed does not name the uploader.
+                if(heyEchoShouldUpload(bGATEWAY, msg_type_b_lora, MSG_TYPE_HEY, aprsmsg.payload_type,
+                                       rx_pn_repeat, aprsmsg.msg_source_last,
+                                       aprsmsg.msg_source_call, meshcom_settings.node_call))
+                {
+                    if(bDisplayLog)
+                    {
+                        setlogFormatGwu(setlog_buf, sizeof(setlog_buf), aprsmsg.msg_id,
+                                        aprsmsg.payload_type, aprsmsg.max_hop & 0x0F, (uint32_t)millis());
+                        setlogPrint(setlog_buf);
+                    }
+
+                    addNodeData(RcvBuffer, size, rssi, snr);
                 }
             }
             else
