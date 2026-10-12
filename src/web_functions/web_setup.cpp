@@ -136,18 +136,26 @@ void webSetup_setParam(setupStruct *setupData){
         return;
     } else
 
-    // Issue #1183: Ethernet MTU of the RAK W5100S web server; --ethmtu rejects
-    // out-of-range input, so returnCode FAIL tells the page the value was refused.
-    // RAK only, like the --ethmtu rung it calls.
-    #if defined(BOARD_RAK4630)
+    // Issues #1183/#1190: MTU on every board; --mtu rejects out-of-range input, so
+    // returnCode FAIL tells the page the value was refused. Param name stays "ethmtu"
+    // (Web API stability).
     if(setupData->paramName.equals("ethmtu")) {
-        snprintf(message_text, sizeof(message_text), "--ethmtu %s", setupData->paramValue.c_str());
+        snprintf(message_text, sizeof(message_text), "--mtu %s", setupData->paramValue.c_str());
         commandAction(message_text, bPhoneReady);
         setupData->returnCode = (meshcom_settings.node_ethmtu == setupData->paramValue.toInt())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = String(meshcom_settings.node_ethmtu);
         return;
     } else
-    #endif
+
+    // #1190: MTU preset dropdown of the setup page; same --mtu command and range check as "ethmtu",
+    // read-back is the stored value (a refused value leaves it unchanged -> FAIL).
+    if(setupData->paramName.equals("mtu")) {
+        snprintf(message_text, sizeof(message_text), "--mtu %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (meshcom_settings.node_ethmtu == setupData->paramValue.toInt())?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_ethmtu);
+        return;
+    } else
 
     // CS-02: Hop-Limit fuer Textnachrichten. Wie jeder andere Parameter hier
     // ueber commandAction(), damit GUI und serielle Konsole nicht auseinander
@@ -165,6 +173,33 @@ void webSetup_setParam(setupStruct *setupData){
         commandAction(message_text, bPhoneReady);
         setupData->returnCode = (fabs(meshcom_settings.node_utcoff)  == fabs(setupData->paramValue.toFloat()))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
         setupData->returnValue = String(meshcom_settings.node_utcoff, 1);
+        return;
+    } else
+
+    // TZ-01: POSIX TZ rule (e.g. CET-1CEST,M3.5.0,M10.5.0/3). Validation lives in
+    // --settz (tzParse); the web path only routes the value, like utcoffset above.
+    // Empty value or "none" clears the rule and falls back to the fixed UTC offset.
+    // The 39-char guard matches node_tz (char[40]); an over-long value never reaches
+    // commandAction. A literal '+' in a raw URL decodes to a space (form encoding);
+    // the page's setvalue() uses encodeURIComponent, which sends it as %2B.
+    if(setupData->paramName.equals("tz")) {
+        String sTz = setupData->paramValue;
+        sTz.trim();
+        if(sTz.length() == 0)
+            sTz = "none";
+
+        if(sTz.length() > 39) {
+            setupData->returnCode = WS_RETURNCODE_FAIL;
+            setupData->returnValue = String(meshcom_settings.node_tz);
+            return;
+        }
+
+        snprintf(message_text, sizeof(message_text), "--settz %s", sTz.c_str());
+        commandAction(message_text, bPhoneReady);
+
+        bool bTzOk = sTz.equalsIgnoreCase("none") ? (meshcom_settings.node_tz[0] == 0) : sTz.equals(meshcom_settings.node_tz);
+        setupData->returnCode = bTzOk?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_tz);
         return;
     } else
 
@@ -817,6 +852,11 @@ void webSetup_getParam(setupStruct *setupData){
         return;
     } else
 
+    if(setupData->paramName.equals("mtu")) {         // #1190
+        setupData->returnValue = String(meshcom_settings.node_ethmtu);
+        return;
+    } else
+
     if(setupData->paramName.equals("maxhop")) {     // CS-02
         setupData->returnValue = String(meshcom_settings.max_hop_text);
         return;
@@ -824,6 +864,11 @@ void webSetup_getParam(setupStruct *setupData){
 
     if(setupData->paramName.equals("utcoffset")) {
         setupData->returnValue = String(meshcom_settings.node_utcoff, 1);
+        return;
+    } else
+
+    if(setupData->paramName.equals("tz")) {     // TZ-01
+        setupData->returnValue = String(meshcom_settings.node_tz);
         return;
     } else
 

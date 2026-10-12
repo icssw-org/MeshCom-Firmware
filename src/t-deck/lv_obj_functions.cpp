@@ -28,6 +28,7 @@
 #include <SD.h>
 #include <SPI.h>
 #include "tdeck_sdmap.h"
+#include "pos_persist.h"
 #include "event_functions.h"
 #include <lora_setchip.h>
 #include <WiFi.h>
@@ -2294,7 +2295,7 @@ static void update_header_batt_indicator(float batt, int proz)
  * - Bluetooth: green when a device is connected, red when advertising but no connection,
  *   white + cross when BLE is disabled.
  */
-extern bool deviceConnected; // from esp32_main.cpp
+extern volatile bool deviceConnected; // from esp32_main.cpp (volatile since BLC-01)
 
 static void update_header_wifi_indicator(void)
 {
@@ -3797,12 +3798,14 @@ void tdeck_add_pos_point(String callsign, double u_dlat, char lat_c, double u_dl
     if (bDEBUG)
         Serial.printf("[ MAP ]...add position point call:%s\n", callsign.c_str());
 
+    // TD-15: hemisphere letters were swapped (lat tested 'W', lon tested 'S'),
+    // so southern/western stations were drawn mirrored into N/E.
     double dlat = u_dlat;
-    if(lat_c == 'W')
+    if(lat_c == 'S')
         dlat = u_dlat * -1.0;
 
     double dlon = u_dlon;
-    if(lon_c == 'S')
+    if(lon_c == 'W')
         dlon = u_dlon * -1.0;
 
     for(int ip = 0; ip < MAX_POINTS; ip++)
@@ -3909,6 +3912,53 @@ void savePosPersistence()
     #endif
 }
 
+#if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+/**
+ * TD-15: puts a restored /pos.dat row into the map marker arrays only. No LVGL
+ * call: the markers are drawn by refresh_map() when the MAP tab is opened or
+ * the map is (re)set, which walks map_pos_call/lat/lon. lat/lon are magnitudes,
+ * the sign comes from the hemisphere letter.
+ */
+static void tdeck_restore_pos_point(const String &callsign, double lat, char lat_c, double lon, char lon_c)
+{
+    if(callsign.length() == 0)
+        return;
+
+    double dlat = (lat_c == 'S') ? -fabs(lat) : fabs(lat);
+    double dlon = (lon_c == 'W') ? -fabs(lon) : fabs(lon);
+
+    int islot = -1;
+
+    for(int ip = 0; ip < MAX_POINTS; ip++)
+    {
+        if(map_pos_call[ip] == callsign)
+        {
+            // already known (a live beacon or an earlier restore): keep it
+            return;
+        }
+
+        if(islot < 0 && map_pos_call[ip].length() == 0)
+            islot = ip;
+    }
+
+    // all slots taken: rows are newest first, the older ones are dropped
+    if(islot < 0)
+        return;
+
+    map_pos_call[islot] = callsign;
+    map_pos_lat[islot] = dlat;
+    map_pos_lon[islot] = dlon;
+
+    // live adds write at map_pos_count: keep it behind the restored slots
+    if(islot >= map_pos_count)
+    {
+        map_pos_count = islot + 1;
+        if(map_pos_count >= MAX_POINTS)
+            map_pos_count = 1;
+    }
+}
+#endif
+
 void loadPosPersistence()
 {
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -3933,9 +3983,9 @@ void loadPosPersistence()
                 break;
 
             pos[10]=0x00;
-            snprintf(u_pos, sizeof(u_pos),"%s", pos);
+            tdeck_pos_trim((const char*)pos, 10, u_pos, sizeof(u_pos));
             String s_pos = u_pos;
-            s_pos.trim();
+            String s_call = s_pos;
 
             if(s_pos.isEmpty())
                 break;
@@ -3961,6 +4011,14 @@ void loadPosPersistence()
             s_pos = u_pos;
             s_pos.trim();
             lv_table_set_cell_value(position_ta, posrow, 2, s_pos.c_str());
+
+            // TD-15: the map markers live in their own arrays, restore them too
+            double r_lat = 0.0, r_lon = 0.0;
+            char r_lat_c = 'N', r_lon_c = 'E';
+            int r_alt = 0;
+
+            if(tdeck_parse_pos_field(s_pos.c_str(), r_lat, r_lat_c, r_lon, r_lon_c, r_alt))
+                tdeck_restore_pos_point(s_call, r_lat, r_lat_c, r_lon, r_lon_c);
         }
 
         file.close();
@@ -3980,14 +4038,8 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     if (bDEBUG)
         Serial.printf("[POSVIEW]...add %s act posrow:%i\n", callsign.c_str(), posrow);
 
-    double dlat = u_dlat;
-    if(lat_c == 'W')
-        dlat = u_dlat * -1.0;
-
-    double dlon = u_dlon;
-    if(lon_c == 'S')
-        dlon = u_dlon * -1.0;
-
+    // The row prints the unsigned value plus its hemisphere letter, so no sign flip here
+    // (the old flip tested the swapped letters and never fired).
     bool bnotfound=true;
 
     snprintf(buf, 10, "%s", callsign.c_str());
@@ -4034,7 +4086,7 @@ void tdeck_add_to_pos_view(String callsign, double u_dlat, char lat_c, double u_
     snprintf(buf, 6, "%02i:%02i", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute);
     lv_table_set_cell_value(position_ta, 1, 1, buf);
 
-    snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", dlat, lat_c, dlon, lon_c, alt);
+    snprintf(buf, 24, "%.2lf%c/%.2lf%c/%i", u_dlat, lat_c, u_dlon, lon_c, alt);
     lv_table_set_cell_value(position_ta, 1, 2, buf);
 
     if(bnotfound && posrow < MAX_POSROW)

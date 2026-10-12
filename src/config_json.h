@@ -347,6 +347,7 @@ struct CfgField
     X("node_pingcall", CFG_STR,  node_pingcall,         CFG_NORANGE,        CFG_NOESC)        \
     X("node_pingmax",  CFG_INT,  node_pingmax,          0.0, 100.0,         CFG_NOESC)        \
     X("node_ethmtu",   CFG_INT,  node_ethmtu,           1280.0, 1500.0,     CFG_NOESC)        \
+    X("node_tz",       CFG_STR,  node_tz,               CFG_NORANGE,        CFG_NOESC)        \
     CFG_FIELD_LIST_PLATFORM(X)
 
 /* Platform-only persisted fields.

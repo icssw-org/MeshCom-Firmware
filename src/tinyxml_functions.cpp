@@ -280,7 +280,12 @@ bool decodeTinyXML(String document)
   // station's reported offset instead of always reading 0.0, which changes
   // the displayed local time (MyClock.setCurrentTime, the web UI); that is
   // the intended effect of fixing this defect, not a side effect.
-  if(strTELE_UTCOFF.length() >= 4 &&
+  //
+  // TZ-01: with a POSIX TZ rule set (node_tz non-empty), the rule owns
+  // node_utcoff (derived at runtime, DST included); the station attribute must
+  // not overwrite it, or every XML poll would undo the rule's offset.
+  if(meshcom_settings.node_tz[0] == '\0' &&
+     strTELE_UTCOFF.length() >= 4 &&
      (strTELE_UTCOFF.charAt(0) == '+' || strTELE_UTCOFF.charAt(0) == '-'))
   {
     int colonPos = strTELE_UTCOFF.indexOf(':');

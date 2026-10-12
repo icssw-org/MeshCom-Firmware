@@ -19,6 +19,7 @@
 #include "dm_dedup.h"       // stage 2.1: second dedup layer, keyed on (source call, NNN)
 #include "instrument.h"     // stage 0.5: --airgap (bAirgap), INSTRUMENT_ENABLED
 #include "pn_retry.h"       // PN retry (XOR form): pnRetryCore/pnRetryId/pnFrameIsOwnPn etc.
+#include "own_msg_status.h"  // late ACK -> durable web GUI status (ring slot may be gone)
 #include "sto_notice.h"     // stage 4: :sto custody notice, sender side -- every board
 #if defined(ENABLE_MSGSTORE)
 #include "msgstore_api.h"   // stage 3: store node (last-hop mailbox) receive-path hooks
@@ -461,6 +462,8 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
     // wurde als fremdes weitergesendet. Ab hier gilt die Original-id.
     msg_id = pnOwnTxLookupId(msg_id, _GW_ID);
     int itxcheck = checkOwnTx(msg_id);
+    if(itxcheck < 0)
+        ownMsgStatusSet(msg_id, 0x02);   // late ACK (a held DM is acked hours later): the ring slot is gone, the durable status row is not
 
     if(bIsNew || itxcheck >= 0)
     {
@@ -493,7 +496,7 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
                     }
                 }
 
-                own_msg_id[itxcheck][4] = 0x02;   // 02...ACK
+                setOwnMsgStatus(itxcheck, 0x02);   // 02...ACK
             }
 
             // stop retransmission in ring buffer for this msg_id
@@ -1484,7 +1487,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                     // otherwise be downgraded by the very echo that proves
                     // the mesh still relays it.
                     if(own_msg_id[heardIcheck][4] != 0x02 && own_msg_id[heardIcheck][4] != 0x03 && own_msg_id[heardIcheck][4] != 0x04)
-                        own_msg_id[heardIcheck][4]=0x01; // 0x01 HEARD
+                    {
+                        // every relay echo lands here; setOwnMsgStatus() reports the transition only
+                        setOwnMsgStatus(heardIcheck, 0x01); // 0x01 HEARD
+                    }
                 }
             }
             else
@@ -1663,9 +1669,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         }
                                 
                                         int iackcheck = checkOwnTx(msg_counter);
+                                        if(iackcheck < 0)
+                                            ownMsgStatusSet(msg_counter, 0x02);   // late ACK (a held DM is acked hours later): the ring slot is gone, the durable status row is not
                                         if(iackcheck >= 0)
                                         {
-                                            own_msg_id[iackcheck][4] = 0x02;   // 02...ACK
+                                            setOwnMsgStatus(iackcheck, 0x02);   // 02...ACK
 
                                             // S4: the destination's own ack is the final word --
                                             // forget any store node(s) that were holding this DM.
@@ -1705,7 +1713,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                            (own_msg_id[iStoCheck][4] == 0x00 || own_msg_id[iStoCheck][4] == 0x01 || own_msg_id[iStoCheck][4] == 0x04) &&
                                            stoHolderNote(msg_counter, aprsmsg.msg_source_call, stoNnn, millis()))
                                         {
-                                            own_msg_id[iStoCheck][4] = 0x04;   // 04...HELD
+                                            setOwnMsgStatus(iStoCheck, 0x04);   // 04...HELD
 
                                             uint16_t stoPlen = buildAckPhoneFrame(print_buff, msg_counter, ACK_STATUS_HELD, aprsmsg.msg_source_call);
                                             addBLEOutBuffer(print_buff, stoPlen);
@@ -1843,6 +1851,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 }
                                 else
                                 if(strcmp(destination_call, "*") != 0 &&
+                                   // Winlink/SOTA gateway calls: never hold a DM to or from them. A held
+                                   // WLNK-1 reply (Login [NNN] challenge) was replayed about once an hour
+                                   // and broke the login (field report HB9VQQ-3, v4.40a); WLNK-1 acks in
+                                   // the bare "ack<digits>" form, so the purge hook never fired either.
+                                   strcmp(aprsmsg.msg_source_call, "WLNK-1") != 0 && strcmp(aprsmsg.msg_source_call, "APRS2SOTA") != 0 &&
+                                   strcmp(destination_call, "WLNK-1") != 0 && strcmp(destination_call, "APRS2SOTA") != 0 &&
                                    CheckGroup(destination_call) == 0 &&
                                    mcIndexOfStr(aprsmsg.msg_payload, ":rej") <= 0 &&
                                    !mcStartsWith(aprsmsg.msg_payload, "{") &&   // {ping}/{pong}/{MCP}/{SET}/{CET}: control frames, never a DM
@@ -3103,7 +3117,9 @@ bool updateRetransmissionStatus()
                                 else
                                 {
                                     if(idx >= 0 && own_msg_id[idx][4] != 0x02)
-                                        own_msg_id[idx][4] = 0x03;
+                                    {
+                                        setOwnMsgStatus(idx, 0x03);
+                                    }
 
                                     // M1: das Ziel hat schon geackt (0x02) --
                                     // kein FAILED an die App, obwohl diese

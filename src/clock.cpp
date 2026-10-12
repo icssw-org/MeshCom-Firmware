@@ -50,6 +50,30 @@
 
 #include "configuration.h"
 #include "nbr_matrix.h"   // nbrMatrix, nbrSetClock() -- Clock::SetClock(time_t, bool) below
+#include "loop_functions.h"   // meshcom_settings (node_tz, node_utcoff, node_date_*)
+#include "tz_rule.h"      // TZ-01: POSIX TZ rule from node_tz
+#include "tz_anchor.h"    // TZ-01: tzReanchor() (test_tz_anchor)
+#include "rtc_offset.h"   // rtcOffsetSec(), rtcEpochFromFields()
+
+//----------------------------------------------------------------------------
+// TZ-01: parse cache. node_tz is re-parsed only when it differs from the copy
+// the cache was built from (nRF52 NTP calls setCurrentTime() on every loop pass).
+// Empty or unparsable node_tz = no rule = fixed node_utcoff, as before.
+//----------------------------------------------------------------------------
+static TzRule g_tzRule;
+static char   g_tzSrc[sizeof(meshcom_settings.node_tz)] = {0};
+static bool   g_tzValid = false;
+
+static const TzRule *tzRuleGet()
+{
+	if (strncmp(meshcom_settings.node_tz, g_tzSrc, sizeof(g_tzSrc)) != 0)
+	{
+		strncpy(g_tzSrc, meshcom_settings.node_tz, sizeof(g_tzSrc) - 1);
+		g_tzSrc[sizeof(g_tzSrc) - 1] = '\0';
+		g_tzValid = (g_tzSrc[0] != '\0') && tzParse(g_tzSrc, &g_tzRule);
+	}
+	return g_tzValid ? &g_tzRule : NULL;
+}
 
 //----------------------------------------------------------------------------
 // constructor
@@ -124,6 +148,20 @@ Clock::EEvent Clock::CheckEvent()
 #if defined(TEST)
 		Serial.printf("[clock] now %lu -> then %lu\n", u32Start_m, u32Next_m);
 #endif
+
+		// TZ-01: once per wall-clock minute re-derive the offset from node_tz,
+		// so a DST switch is caught without a new time source. This block runs
+		// once per SECOND (eEventMinute is "no hour/day change"), so the minute
+		// is tracked here. Done after the update cycle above: if the offset
+		// changed, tzApplyNow() -> SetClock() restarts the cycle itself, and the
+		// tick above has already been accounted, so no second is double-counted
+		// or skipped.
+		static time_t tsTzMinute = 0;
+		if (tsClock_m / 60 != tsTzMinute)
+		{
+			tsTzMinute = tsClock_m / 60;
+			tzApplyNow();
+		}
 	}
 
 	// return event
@@ -339,6 +377,35 @@ bool Clock::SetClock(/*const*/ struct tm suNow)
 //----------------------------------------------------------------------------
 bool Clock::SetClock(/*const*/ time_t tsNow, /*const*/ bool boUseUTC /*= true*/)
 {
+	// TZ-01: with a TZ rule, node_utcoff is derived. tsNow = UTC + the current
+	// node_utcoff; move it to the offset the rule gives at that instant.
+	// boUseUTC callers hand over plain UTC (no node offset), not this convention.
+	// No save_settings() here (decision D6): the stored value is corrected by
+	// the first clock set after boot.
+	const TzRule *tzRule = boUseUTC ? NULL : tzRuleGet();
+	if (tzRule != NULL)
+	{
+		const int32_t curOff = rtcOffsetSec(meshcom_settings.node_utcoff);
+		int32_t newOff;
+		tsNow = (time_t)tzReanchor((int64_t)tsNow, curOff, tzRule, &newOff);
+		if (newOff != curOff)
+		{
+			meshcom_settings.node_utcoff = newOff / 3600.0f;
+			// platform loops refresh node_date_* from MyClock, except nRF52 with
+			// RTC + GPS fix: copy the new clock fields here
+			struct tm suNew;
+			time_t    tsTmp = tsNow;
+			localtime_r(&tsTmp, &suNew);
+			if (suNew.tm_year + 1900 > 2023)
+				meshcom_settings.node_date_year = suNew.tm_year + 1900;
+			meshcom_settings.node_date_month  = suNew.tm_mon + 1;
+			meshcom_settings.node_date_day    = suNew.tm_mday;
+			meshcom_settings.node_date_hour   = suNew.tm_hour;
+			meshcom_settings.node_date_minute = suNew.tm_min;
+			meshcom_settings.node_date_second = suNew.tm_sec;
+		}
+	}
+
 	tsClock_m = tsNow;
 	(boUseUTC) ? gmtime_r(&tsClock_m, &suClock_m)
 	           : localtime_r(&tsClock_m, &suClock_m);
@@ -485,5 +552,48 @@ void Clock::setCurrentTime(float fUTC, uint16_t Year, uint16_t Month, uint16_t D
 // global variable for access
 //----------------------------------------------------------------------------
 Clock MyClock;
+
+//----------------------------------------------------------------------------
+// TZ-01: see the contract in clock.h
+//----------------------------------------------------------------------------
+bool tzApplyNow()
+{
+	if (tzRuleGet() == NULL)
+		return false;
+
+	// clock never set (still at the 2023 default): nothing to anchor, the
+	// first real time source goes through the SetClock() funnel anyway
+	if (MyClock.Year() <= 2023)
+		return false;
+
+	// current node epoch from the public clock fields (tsClock_m is protected;
+	// libc TZ is unset, so the fields are the plain gmtime of the epoch)
+	const time_t  tsNow  = (time_t)rtcEpochFromFields(MyClock.Year(), MyClock.Month(), MyClock.Day(),
+	                                                  MyClock.Hour(), MyClock.Minute(), MyClock.Second());
+	const int32_t oldOff = rtcOffsetSec(meshcom_settings.node_utcoff);
+
+	// Unchanged offset: leave the clock alone. A SetClock() here would restart
+	// the second cycle (u32Start_m/u32Next_m) and feed nbrSetClock for nothing.
+	int32_t newOff;
+	tzReanchor((int64_t)tsNow, oldOff, tzRuleGet(), &newOff);
+	if (newOff == oldOff)
+		return false;
+
+	MyClock.SetClock(tsNow, false);   // funnel re-anchors and updates node_utcoff
+	return rtcOffsetSec(meshcom_settings.node_utcoff) != oldOff;
+}
+
+const char *tzActiveAbbrev()
+{
+	const TzRule *rule = tzRuleGet();
+	if (rule == NULL)
+		return NULL;
+
+	// node epoch -> UTC; before the clock is set, fall back to the default date
+	const int64_t utc = (int64_t)rtcEpochFromFields(MyClock.Year(), MyClock.Month(), MyClock.Day(),
+	                                                MyClock.Hour(), MyClock.Minute(), MyClock.Second())
+	                    - rtcOffsetSec(meshcom_settings.node_utcoff);
+	return tzAbbrev(rule, (uint32_t)(utc < 0 ? 0 : utc));
+}
 
 //===| eof - end of file |====================================================

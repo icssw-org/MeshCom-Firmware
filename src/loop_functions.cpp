@@ -44,6 +44,7 @@
 #include "pos_tag_nan.h"
 #include "dm_text_escape.h"   // P14/P15: {ping}/{SET}-Ausnahme vom Klammer-Escape
 #include "nbr_matrix.h"   // nbrMatrix, nbrBuildReport(), nbrLog -- sendNbrReport() unten
+#include "own_msg_status.h"   // durable delivery state of own text messages (web GUI ticks)
 
 bool gpsDetected = false;
 bool gpsInitDone = false;
@@ -797,6 +798,25 @@ int checkOwnTx(unsigned int msg_id)
     }
 
     return -1;
+}
+
+// The ONE write path for the delivery state of an own message
+// (own_msg_id[idx][4]: 0x00 sent, 0x01 heard, 0x02 ACK, 0x03 failed, 0x04 held).
+// The ring slot is recycled on the next own TX, so the web GUI reads the durable
+// status table (own_msg_status.h) instead. Every state change goes through this
+// function so the two views cannot drift apart. insertOwnTx() stays a direct write: it stores a
+// NEW id, that is not a state change.
+void setOwnMsgStatus(int idx, uint8_t state)
+{
+    if(idx < 0 || idx >= MAX_RING)
+        return;
+
+    own_msg_id[idx][4] = state;
+
+    // msg_id of the slot, bytes 0-3 little-endian (as insertOwnTx() stores it)
+    uint32_t id = (uint32_t)own_msg_id[idx][0] | ((uint32_t)own_msg_id[idx][1] << 8) | ((uint32_t)own_msg_id[idx][2] << 16) | ((uint32_t)own_msg_id[idx][3] << 24);
+
+    ownMsgStatusSet(id, state);
 }
 
 void insertOwnTx(unsigned int msg_id)
@@ -2504,6 +2524,9 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             uint16_t Second=0;
 
             // {CET}2025-01-31 07:47:40
+            // Trotz des Namens traegt die Nutzlast UTC, keine MEZ/MESZ (Feldbeleg:
+            // "{CET}2026-09-26 18:15:14" kam um 20:15:50 MESZ an). Deshalb passt
+            // setCurrentTime(node_utcoff, ...) unten.
             Year = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 5, 9);
             Month = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 10, 12);
             Day = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, 13, 15);
@@ -4362,9 +4385,15 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
     bool bUseOnce = false;
     if (msg_buffer[0] == 0x3A) // only Messages
     {
-        if(mcStartsWith(aprsmsg.msg_payload, "{CET}") || mcStartsWith(aprsmsg.msg_payload, "{MCP}") || mcStartsWith(aprsmsg.msg_payload, "{SET}"))
-            user_msg_status = 0xFF; // retransmission Status ...0xFF no retransmission on {CET} & Co.
-        else if(bPingMsg)
+        // {CET}/{MCP}/{SET} gehen ebenfalls genau einmal in die Luft. Mit Status
+        // 0xFF in addTxRingEntry() stufte getMessagePriority() sie als Relay ein
+        // (NORMAL, 4500 ms Backoff) und sie teilten das CSMA-Fenster der Relays
+        // der Nachbarn; daher ebenfalls ueber addTxRingEntryOnce(). {mcp} ist die
+        // Form, in die sendMessage() ein {MCP} nach {ZIEL} oben umschreibt -- sie
+        // lief bisher mit der vollen Wiederholungsleiter.
+        if(bPingMsg ||
+           mcStartsWith(aprsmsg.msg_payload, "{CET}") || mcStartsWith(aprsmsg.msg_payload, "{MCP}") ||
+           mcStartsWith(aprsmsg.msg_payload, "{mcp}") || mcStartsWith(aprsmsg.msg_payload, "{SET}"))
             bUseOnce = true; // P14/P15: siehe oben
         else
             user_msg_status = 0x00; // retransmission Status ...0xFF no retransmission
@@ -4452,6 +4481,7 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
 
     // store last message to compare later on
     insertOwnTx(aprsmsg.msg_id);
+    ownMsgStatusRegister(aprsmsg.msg_id);   // durable status row for the web GUI ticks
 
     if(bGATEWAY && meshcom_settings.node_hasIPaddress)
         addLoraRxBuffer(aprsmsg.msg_id, true);
@@ -6275,6 +6305,11 @@ void utf8ascii(char* s)
 
 String getTimeZone()
 {
+    // TZ-01: with a TZ rule, the current abbreviation (CET/CEST/...)
+    const char *abbrev = tzActiveAbbrev();
+    if(abbrev != NULL)
+        return String(abbrev);
+
     if(meshcom_settings.node_utcoff == 0)
         return "UTC";
 

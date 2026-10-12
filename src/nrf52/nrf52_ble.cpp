@@ -17,6 +17,7 @@
 #include <loop_functions_extern.h>
 #include <phone_commands.h>
 #include "ble_phone_drain.h"   // BLE-N1/N2: BlePhoneSend, g_blePhoneStats
+#include "ble_session.h"       // BLC-02: BleStats, bleStatsOn*, bleReasonText
 #include <debugconf.h>
 #include <configuration.h>
 #include <command_functions.h>
@@ -79,6 +80,16 @@ void bleuart_rx_callback(uint16_t conn_handle);
 
 /** Flag if BLE UART is connected */
 bool g_ble_uart_is_connected = false;
+
+/** BLC-02: connect/disconnect/advertising counters (src/ble_session.h) */
+BleStats g_bleStats;
+
+// BLC-02: disconnect_callback() runs in the Bluefruit callback task, where
+// Serial.printf (malloc above 64 B) and logging are unsafe. It only records
+// the HCI reason here; nrf52BleTick() prints it from the Main Loop task. Two
+// disconnects before one tick: the later reason wins, the counters count both.
+static volatile uint8_t s_discReason = 0;
+static volatile bool s_discPending = false;
 
 /**
  * @brief Initialize BLE and start advertising
@@ -232,6 +243,7 @@ void connect_callback(uint16_t conn_handle)
 		BLEConnection *conn = Bluefruit.Connection(conn_handle);
 		g_blePhoneStats.last_mtu = conn ? conn->getMtu() : 0;
 	}
+	bleStatsOnConnect(g_bleStats);
 	Bluefruit.setTxPower(4);
 	DEBUG_MSG("BLE", "Connected");
 
@@ -242,6 +254,7 @@ void connect_callback(uint16_t conn_handle)
 	bAckInfo = false;
 	config_to_phone_prepare = false;
 	conffin_sent = false;
+	ble_disconnect_requested = false;	// BLC-01: a wrong-PIN request of the previous central
 	g_ble_uart_is_connected = true;
 
 }
@@ -254,14 +267,77 @@ void connect_callback(uint16_t conn_handle)
 void disconnect_callback(uint16_t conn_handle, uint8_t reason)
 {
 	(void)conn_handle;
-	(void)reason;
+	bleStatsOnDisconnect(g_bleStats, (int)reason);
+	s_discReason = reason;
+	s_discPending = true;	// printed by nrf52BleTick() in the Main Loop task
 	g_ble_uart_is_connected = false;
 	isPhoneReady = 0;
 	bAckInfo = false;
 	config_to_phone_prepare = false;
 	conffin_sent = false;
+	ble_disconnect_requested = false;
 	Bluefruit.setTxPower(0);
 	DEBUG_MSG("BLE", "Disconnected");
+}
+
+/**
+ * @brief BLC-02: Main Loop housekeeping for the BLE link, called every pass
+ * from nrf52loop() (src/nrf52/nrf52_main.cpp).
+ *
+ * 1. Prints the disconnect reason that disconnect_callback() recorded.
+ * 2. Advertising self-check: every 5 s while no central is connected, if the
+ *    stack is not advertising (restartOnDisconnect() missed it, or a failed
+ *    connect left it stopped), start it again and count it.
+ * 3. With --bledebug on, a [BLE ];stat line every 15 min.
+ * Lines are built in a stack buffer and printed with Serial.print: no
+ * Print::printf malloc next to the BLE stack.
+ */
+void nrf52BleTick(void)
+{
+	static uint32_t lastAdvCheck = 0;
+	static uint32_t lastStat = 0;
+	static bool started = false;
+	const uint32_t now = millis();
+
+	if(!started)
+	{
+		started = true;
+		lastAdvCheck = now;
+		lastStat = now;
+	}
+
+	if(s_discPending)
+	{
+		const uint8_t reason = s_discReason;
+		s_discPending = false;
+		if(bBLEDEBUG)
+		{
+			char line[64];
+			snprintf(line, sizeof(line), "[BLE ];disconnect;reason;0x%02x;text;%s", (unsigned)reason, bleReasonText((int)reason));
+			Serial.println(line);
+		}
+	}
+
+	if((uint32_t)(now - lastAdvCheck) >= 5000UL)
+	{
+		lastAdvCheck = now;
+		if(!g_ble_uart_is_connected && Bluefruit.connected() == 0 && !Bluefruit.Advertising.isRunning())
+		{
+			Bluefruit.Advertising.start(0);
+			bleStatsOnAdvRestart(g_bleStats);
+			if(bBLEDEBUG)
+				Serial.println("[BLE ];adv_restart");
+		}
+	}
+
+	if(bBLEDEBUG && (uint32_t)(now - lastStat) >= 900000UL)
+	{
+		lastStat = now;
+		char buf[128];
+		bleStatsFormat(g_bleStats, buf, sizeof(buf));
+		Serial.print("[BLE ];stat;");
+		Serial.println(buf);
+	}
 }
 
 /**

@@ -171,7 +171,7 @@
     M(int, node_pingtime, 0)                                                                             \
     A(char, node_pingcall, [10], {0})                                                                    \
     M(int, node_pingmax, 0)                                                                              \
-    M(int, node_ethmtu, 1500) /* RAK W5100S web MTU 1280..1500, issue #1183 */                           \
+    M(int, node_ethmtu, 1280) /* user MTU 1280..1500, default 1280, --mtu (alias --ethmtu), issues #1183/#1190 */          \
     /* ---- runtime state, never persisted ("nicht im Flash" in the old headers) ---- */                 \
     M(int, node_press_alt, 0)                                                                            \
     M(float, node_press_asl, 0)                                                                          \
@@ -194,7 +194,9 @@
     M(float, node_ntctemp, 0.0)                                                                          \
     M(bool, node_fanon, false)                                                                           \
     M(int, node_pingcount, 0)                                                                            \
-    M(unsigned long, node_pingduration, 0)
+    M(unsigned long, node_pingduration, 0)                                                               \
+    /* POSIX TZ string; empty = fixed node_utcoff (TZ-01). Persisted + exported as "node_tz". */          \
+    A(char, node_tz, [40], {0})
 
 /* ESP32-only members (every ESP32 board). */
 #ifdef ESP32

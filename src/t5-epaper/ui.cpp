@@ -69,16 +69,26 @@ static const char *line_full_format(int max_c, const char *str1, const char *str
     int len1 = 0, len2 = 0;
     int j;
 
-    len1 = strlen(str1);
-
+    // T5-01: same layout as the t-deck-pro twin (str1, blanks up to max_c, str2),
+    // bounded to global_buf; the padding loop that sets j was missing here, so j
+    // was read uninitialised.
     int buf_size = sizeof(global_buf);  // 256
+
+    len1 = (int)strlen(str1);
     if (len1 >= buf_size) len1 = buf_size - 1;
-    strncpy(global_buf, str1, len1);
-    // ... Padding mit max_c Begrenzung ...
+    memcpy(global_buf, str1, len1);
+
+    len2 = (int)strlen(str2);
+
+    for (j = len1; j < max_c - 1 - len2 && j < buf_size - 1; j++)
+    {
+        global_buf[j] = ' ';
+    }
+
     int remaining = buf_size - j - 1;
     if (len2 > remaining) len2 = remaining;
-    strncpy(global_buf + j, str2, len2);
-    global_buf[buf_size - 1] = '\0';
+    memcpy(global_buf + j, str2, len2);
+    global_buf[j + len2] = '\0';
 
     printf("[%d] buf: %s\n", __LINE__, global_buf);
 
@@ -1215,7 +1225,7 @@ static void read_img_btn_event(lv_event_t * e)
 {
     char *file_name = lv_label_get_text((lv_obj_t *)e->user_data);
 
-    if(e->code = LV_EVENT_CLICKED) {
+    if(e->code == LV_EVENT_CLICKED) {   // T5-01: was an assignment
         
         static char path[32];
         lv_snprintf(path, 32, "S:/%s", file_name);
@@ -1375,7 +1385,7 @@ static void create4_1(lv_obj_t *parent)
     str += line_full_format(32, "TF Card Cap:", (const char *)buf);
     str += "\n                           \n";
 
-    lv_label_set_text_fmt(info, str.c_str());
+    lv_label_set_text(info, str.c_str());   // T5-01: the text is data, not a format
     
     lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 50);
     
@@ -1816,7 +1826,7 @@ static void wifi_info_label_create(lv_obj_t *parent)
     ip_lab = lv_label_create(parent);
     // lv_obj_set_style_text_color(ip_lab, lv_color_hex(COLOR_TEXT), LV_PART_MAIN);
     lv_obj_set_style_text_font(ip_lab, &Font_Mono_Bold_25, LV_PART_MAIN);
-    lv_label_set_text_fmt(ip_lab, "ip: %s", ui_wifi_get_ip());
+    lv_label_set_text_fmt(ip_lab, "ip: %s", ui_wifi_get_ip().c_str());   // T5-01: String is not a char*
     lv_obj_align_to(ip_lab, wifi_st_lab, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 10);
 
     ssid_lab = lv_label_create(parent);

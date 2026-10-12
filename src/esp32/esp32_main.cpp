@@ -32,6 +32,7 @@ SPIClass ethSPI(FSPI);
 #endif
 
 #include "esp32_pmu.h"
+#include "charge_led_mode.h"
 #include "esp32_flash.h"
 #include <esp_adc_cal.h>
 #include "esp_system.h"
@@ -119,6 +120,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include "ina226_functions.h"
 #ifdef ENABLE_RTC
     #include "rtc_functions.h"
+    #include "rtc_offset.h"    // RTC-1..3: UTC<->Knotenzeit, Refresh-Gate (test_rtc_offset)
 #endif
 #include "softser_functions.h"
 
@@ -136,6 +138,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include "nbr_matrix.h"    // --nbrdebug: nbrLogSnapshot()/nbrMatrix fuer den 15-Minuten-Takt
 #include <phone_commands.h>
 #include "ble_phone_drain.h"   // BLE-N1/N2: BlePhoneSend, g_blePhoneStats
+#include "ble_session.h"       // BLC-01: per-session reset, disconnect classes, counters
 #include <aprs_functions.h>
 #include <batt_functions.h>
 #include <lora_functions.h>
@@ -302,8 +305,11 @@ static QueueHandle_t bleQueue = NULL;
 NimBLEServer *pServer = NULL;
 NimBLECharacteristic* pTxCharacteristic;
 NimBLEService *pService;
-bool deviceConnected = false;
+// BLC-01: written by the NimBLE host task (callbacks), read by the loop task
+volatile bool deviceConnected = false;
 bool oldDeviceConnected = false;
+BleStats g_bleStats;               // BLC-01: link counters since boot (src/ble_session.h)
+extern bool g_ble_uart_is_connected;   // defined below; the callbacks reset it
 uint16_t g_ble_conn_handle = 0xFFFF;  // current BLE connection handle
 
 uint32_t PIN = 000000;             // pairing password PIN Passwort PIN-Code Kennwort
@@ -325,19 +331,14 @@ uint8_t iPhoneState=0;
 // BLE connection diagnostics (bBLEDEBUG): start of the current link, for the link duration on disconnect
 static uint32_t g_ble_conn_start_ms = 0;
 
-// HCI disconnect reasons (0x200 + HCI error code), see nimble/include/nimble/ble.h
-static const char* bleReasonStr(int reason)
+// BLC-01: the whole per-session reset runs inside the NimBLE callbacks, not on
+// the loop-observed edge: a disconnect and reconnect between two loop passes
+// shows the loop no edge, and the new central would inherit isPhoneReady == 1.
+static inline void bleSessionResetAll()
 {
-    switch(reason)
-    {
-        case 0x208: return "Supervision Timeout";
-        case 0x213: return "Remote User Terminated";
-        case 0x216: return "Local Host Terminated";
-        case 0x222: return "LL Response Timeout";
-        case 0x23B: return "Unacceptable Conn Params";
-        case 0x23E: return "Failed to Establish";
-        default:    return "other";
-    }
+    BleSessionFlags f = { &isPhoneReady, &g_ble_uart_is_connected, &bAckInfo,
+                          &config_to_phone_prepare, &conffin_sent, &ble_disconnect_requested };
+    bleSessionReset(f);
 }
 
 // Connection interval in units of 1.25 ms, printed as ms with two decimals
@@ -347,9 +348,11 @@ static const char* bleReasonStr(int reason)
 class MyServerCallbacks: public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override 
     {
+        // fresh session: isPhoneReady/prepare flags are set only after the
+        // app-layer auth via hello of THIS central (BLC-01)
+        bleSessionResetAll();
+        bleStatsOnConnect(g_bleStats);
         deviceConnected = true;
-        config_to_phone_prepare = false;    // set only after app-layer auth via hello
-        conffin_sent = false;
         g_ble_conn_handle = connInfo.getConnHandle();
         g_ble_conn_start_ms = millis();
 
@@ -377,6 +380,8 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override 
     {
         deviceConnected = false;
+        bleSessionResetAll();
+        bleStatsOnDisconnect(g_bleStats, reason);
         // print the reason for the disconnection in hex
         // https://github.com/apache/mynewt-nimble/blob/master/docs/ble_hs/ble_hs_return_codes.rst
         Serial.printf("BLE disconnected. Reason: 0x%04x\n", reason);
@@ -385,7 +390,7 @@ class MyServerCallbacks: public NimBLEServerCallbacks {
         {
             unsigned long now = millis();
             Serial.printf("[BLE ];disconnect;ms;%lu;reason;0x%04x;text;%s;dur;%lu;wifi;%d;msys;%d\n",
-                now, reason, bleReasonStr(reason), now - (unsigned long)g_ble_conn_start_ms,
+                now, reason, bleReasonText(reason), now - (unsigned long)g_ble_conn_start_ms,
                 (int)WiFi.status(), os_msys_num_free());
         }
         //NimBLEDevice::startAdvertising();
@@ -925,6 +930,12 @@ void esp32setup()
         initTimePersistence();
 
         clear_flash();
+
+        // TZ-01 (D2): nur ein frischer oder geloeschter ESP32-Knoten bekommt die
+        // MEZ/MESZ-Regel. Nicht in init_flash(): dessen Vorbelegung laeuft bei
+        // jedem Boot, ein aktualisierter Knoten ohne NVS-Key "node_tz" bekaeme
+        // sie sonst auch. Der save_settings() weiter unten schreibt sie.
+        snprintf(meshcom_settings.node_tz, sizeof(meshcom_settings.node_tz), "%s", "CET-1CEST,M3.5.0,M10.5.0/3");
     }
     else
     {
@@ -1024,7 +1035,7 @@ void esp32setup()
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
-    bCHARGE_LED = meshcom_settings.node_sset3 & 0x0001;
+    bCHARGE_LED = chargeLedAutoFromSettings(meshcom_settings.node_sset2, meshcom_settings.node_sset3);   // CHG-01/02: sset3 0x0001 counts only with the sset2 0x8000 marker
     bNoMSGtoALL =  meshcom_settings.node_sset3 & 0x0002;
     bBLEDEBUG = meshcom_settings.node_sset3 & 0x0004;
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
@@ -1309,7 +1320,7 @@ void esp32setup()
 
     #endif
 
-    #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHOP_AXP2101)
+    #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
        setChargeLedOn(!!bCHARGE_LED); // Initialize the charge indicator LED after boot and setupPMU()
     #endif
 
@@ -3063,18 +3074,21 @@ void esp32loop()
 
         if(posinfo_fix) // GPS hat Vorang zur RTC und setzt RTC
         {
-            if((uint32_t)(millis() - rtc_refresh_timer) < 60000)
+            if(meshcom_settings.node_date_year > 2023 && rtcRefreshDue(millis(), rtc_refresh_timer))
             {
                 //only every minute
-                setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
-                rtc_refresh_timer = millis();
+                // RTC haelt UTC, node_date_* sind Knotenzeit (RTC-1)
+                DateTime wutc((uint32_t)rtcUtcFromLocalFields(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, meshcom_settings.node_utcoff));
+                setRTCNow(wutc.year(), wutc.month(), wutc.day(), wutc.hour(), wutc.minute(), wutc.second());
+                rtc_refresh_timer = millis() | 1;   // 0 = noch nie geschrieben
             }
         }
         else
         {
             DateTime utc = getRTCNow();
 
-            DateTime now (utc + TimeSpan(meshcom_settings.node_utcoff * 60 * 60));
+            // RTC-UTC + Offset genau einmal, setCurrentTime() mit fUTC = 0
+            DateTime now ((uint32_t)rtcNodeEpochFromUtc(utc.unixtime(), meshcom_settings.node_utcoff));
 
             uint16_t Year = now.year();
             uint16_t Month = now.month();
@@ -3141,20 +3155,23 @@ void esp32loop()
             // warning honest.
             memcpy(meshcom_settings.node_update, ctemp, sizeof(meshcom_settings.node_update) - 1);
             meshcom_settings.node_update[sizeof(meshcom_settings.node_update) - 1] = 0x00;
-
-            #if defined(ENABLE_RTC)
-            if(bRTCON && bNTPDateTimeValid) // NTP hat Vorang zur RTC und setzt RTC
-            {
-                if((uint32_t)(millis() - rtc_refresh_timer) < 60000)
-                {
-                    //only every minute
-                    setRTCNow(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second);
-
-                    rtc_refresh_timer = millis();
-                }
-            }
-            #endif
         }
+
+        #if defined(ENABLE_RTC)
+        // Ausserhalb des Einmal-pro-Boot-Blocks: gueltige NTP-Zeit frischt den RTC
+        // einmal pro Minute auf (RTC-3), und zwar in UTC (RTC-1).
+        if(bRTCON && bNTPDateTimeValid && meshcom_settings.node_date_year > 2023) // NTP hat Vorang zur RTC und setzt RTC
+        {
+            if(rtcRefreshDue(millis(), rtc_refresh_timer))
+            {
+                //only every minute
+                DateTime wutc((uint32_t)rtcUtcFromLocalFields(meshcom_settings.node_date_year, meshcom_settings.node_date_month, meshcom_settings.node_date_day, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, meshcom_settings.node_utcoff));
+                setRTCNow(wutc.year(), wutc.month(), wutc.day(), wutc.hour(), wutc.minute(), wutc.second());
+
+                rtc_refresh_timer = millis() | 1;   // 0 = noch nie geschrieben
+            }
+        }
+        #endif
     }
 
     #if defined(ENABLE_GPS)
@@ -3302,11 +3319,13 @@ void esp32loop()
 
         oldDeviceConnected = deviceConnected;
 
-        g_ble_uart_is_connected = false;
-        isPhoneReady = 0;
-        bAckInfo = false;
-        config_to_phone_prepare = false;
-        conffin_sent = false;
+        // BLC-01: the session reset itself runs in onConnect/onDisconnect. Only the
+        // loop-owned flag is cleared here (the loop sets it while connected), and
+        // only if no new central connected in the meantime.
+        if(!deviceConnected)
+            g_ble_uart_is_connected = false;
+        if(bBLEDEBUG)
+            Serial.printf("[BLE ];edge;down;ms;%lu\n", (unsigned long)millis());
 
         // Update T-Deck header so BT icon reflects disconnected state
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
@@ -3323,7 +3342,48 @@ void esp32loop()
         #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
         tdeck_update_header_bt();
         #endif
-    }    // check if message from phone to send
+    }
+
+    #if !defined(DISABLE_BLE)
+    // BLC-01: advertising self-check. The library restarts advertising on
+    // disconnect and on a failed connect; if that ever fails the node would stay
+    // unconnectable until reboot. Every 5 s while no central is connected, make
+    // sure advertising runs, else start it and count. Not before the late start
+    // of BENCH_BLE_ADV_LATE builds.
+    {
+        static uint32_t s_bleAdvChk = 0;
+        if((uint32_t)(millis() - s_bleAdvChk) >= 5000UL)
+        {
+            s_bleAdvChk = millis();
+            if(!deviceConnected && pServer != NULL && pService != NULL
+               #if defined(BENCH_BLE_ADV_LATE)
+               && s_bootReadyLogged
+               #endif
+              )
+            {
+                NimBLEAdvertising *pAdv = NimBLEDevice::getAdvertising();
+                if(pAdv != NULL && !pAdv->isAdvertising())
+                {
+                    bool ok = pAdv->start();
+                    bleStatsOnAdvRestart(g_bleStats);
+                    if(bBLEDEBUG)
+                        Serial.printf("[BLE ];adv_restart;ms;%lu;ok;%d\n", (unsigned long)millis(), (int)ok);
+                }
+            }
+        }
+
+        // --bledebug on: counters every 15 min (short line, see Print::printf malloc note)
+        static uint32_t s_bleStatTimer = 0;
+        if(bBLEDEBUG && (uint32_t)(millis() - s_bleStatTimer) >= 900000UL)
+        {
+            s_bleStatTimer = millis();
+            char sb[128];
+            bleStatsFormat(g_bleStats, sb, sizeof(sb));
+            Serial.print("[BLE ];stat;");
+            Serial.println(sb);
+        }
+    }
+    #endif    // check if message from phone to send
 
     // BLE Queue: process data from NimBLE task in Main Loop context
     {

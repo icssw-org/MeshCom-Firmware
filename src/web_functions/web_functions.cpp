@@ -9,6 +9,7 @@
 #include <configuration.h>
 #include <debugconf.h>
 #include "web_functions.h"
+#include "esp32/netif_mtu.h" // NMTU-01 (lwIP part ESP32 only)
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
 #include <time.h>
@@ -28,8 +29,10 @@
 #include "nbr_views.h"         // W4b: MHeard/Pfad-Seiten lesen nur noch ueber die Abfrageschicht
 #include <TinyGPSPlus.h>       // DIST auf der MHeard-Seite -- reine distanceBetween()-Rechnung, kein GPS-Modul noetig
 #include "sto_notice.h"        // stage 4: stoHolder() for the messages-page held mark, all boards
+#include "own_msg_status.h" // durable per-message delivery state for the messages-page tick
 #include <url_decode.h>         // #1173: decodeURLPercentCoding() -- full percent-decoding of WebUI parameters
 #include <charset_filter.h>     // #1173: UTF-8-safe cut of the 150-byte web message
+#include "clock.h"              // TZ-01: tzActiveAbbrev() -- flags an unparsable node_tz on the info page
 #if defined(ENABLE_MSGSTORE)
 #include <msgstore_api.h> // stage 3 store node: /?page=mailbox, mboxpurge/mboxdeliver, the setup card
 #endif
@@ -251,6 +254,7 @@ void startWebserver()
         }
     }
 
+    netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu); // NMTU-01: before the first accept
     web_server.begin();
 
 
@@ -1001,7 +1005,9 @@ void deliver_scaffold(bool bget_password)
     // until the operator actually comes back to look at them
     web_client.println("document.addEventListener('visibilitychange',function(){if(cpage=='messages')mcApplyTab();});");
     web_client.println("function mcHistIndex(id){for(var i=0;i<mcHistory.length;i++){if(mcHistory[i].id==id)return i;}return -1;}");
-    web_client.println("function mcMergeEntry(el){var id=el.getAttribute('data-id');var html=el.outerHTML;var dst=el.getAttribute('data-dst')||'';var ts=parseInt(el.getAttribute('data-ts'))||0;var rx=el.classList.contains('message-received');var idx=mcHistIndex(id);if(idx<0){mcHistory.push({id:id,html:html,dst:dst,ts:ts,rx:rx});mcSeen[id]=true;if(mcHistory.length>MC_HIST_MAX){var dropped=mcHistory.shift();delete mcSeen[dropped.id];}}else{mcHistory[idx].html=html;mcHistory[idx].dst=dst;mcHistory[idx].ts=ts;mcHistory[idx].rx=rx;}}");
+    // a tick is rank-monotone: the server's status ring is shared and churned and drops the tick of an old message, so a ranked-higher tick of the remembered entry survives (rank = index 0,1,4,3,2: heard < held < failed < ACK)
+    web_client.println("function mcTickKeep(h,el){if(!el.classList.contains('message-send'))return;var t=document.createElement('template');t.innerHTML=h;var o=t.content.querySelector('.mctick');if(!o)return;var n=el.querySelector('.mctick');var R=[0,1,4,3,2];if(n&&R[n.getAttribute('data-st')]>=R[o.getAttribute('data-st')])return;if(n)n.replaceWith(o);else{var p=el.querySelector('p');if(p)p.insertBefore(o,p.firstChild);}}");
+    web_client.println("function mcMergeEntry(el){var id=el.getAttribute('data-id');var idx=mcHistIndex(id);if(idx>=0)mcTickKeep(mcHistory[idx].html,el);var html=el.outerHTML;var dst=el.getAttribute('data-dst')||'';var ts=parseInt(el.getAttribute('data-ts'))||0;var rx=el.classList.contains('message-received');if(idx<0){mcHistory.push({id:id,html:html,dst:dst,ts:ts,rx:rx});mcSeen[id]=true;if(mcHistory.length>MC_HIST_MAX){var dropped=mcHistory.shift();delete mcSeen[dropped.id];}}else{mcHistory[idx].html=html;mcHistory[idx].dst=dst;mcHistory[idx].ts=ts;mcHistory[idx].rx=rx;}}");
     web_client.println("function mcRemovePlaceholder(panel){var kids=panel.children;for(var i=kids.length-1;i>=0;i--){if(kids[i].tagName=='P')panel.removeChild(kids[i]);}}");
     // this function is an ayncronous loader that is used to update the received messages without re-loading the whole page, it will re-call itself after a timeout as long as the message-page is displayed
     // it merges the response into mcHistory/mcSeen instead of overwriting the panel outright, so a message already on screen keeps its DOM position when only its ack mark changed
@@ -2838,6 +2844,11 @@ void sub_page_setup()
     }
 
     _create_setup_textinput_element("utcoffset", "UTC Offset", String(meshcom_settings.node_utcoff, 1).c_str(), "1.0", "utcoffset", 4, false, false); // create Textinput-Element including Label and Button
+    // TZ-01: a set POSIX TZ rule overrides the fixed offset above; the offset then shows the derived value
+    // node_tz is HTML-escaped: tzParse() accepts any alnum name inside <...>
+    // (e.g. "<plaintext>-1"), and a config import does not run tzParse() at all.
+    _create_setup_textinput_element("tz", "Timezone (POSIX TZ)", htmlEscape(String(meshcom_settings.node_tz)), "CET-1CEST,M3.5.0,M10.5.0/3", "tz", 39, false, false);
+    web_client.println("<p class=\"font-small\" style=\"grid-column:1/-1\">A set POSIX TZ rule overrides the fixed UTC offset (DST handled automatically); the UTC offset field then shows the derived value. Empty or &quot;none&quot; = fixed offset only.</p>");
     _create_setup_textinput_element("maxv", "max. Voltage", String(meshcom_settings.node_maxv, 3), "4.125", "maxv", 5, false, false);                 // create Textinput-Element including Label and Button
 
     web_client.println("</div><div class=\"grid grid2\">");
@@ -2859,6 +2870,28 @@ void sub_page_setup()
 
     web_client.println("</div></div>");
 
+    // NMTU-01 / #1190: MTU, always visible (not collapsible), all boards. Applies on change through
+    // setparam mtu (--mtu, read-back node_ethmtu); the MSS shown is MTU - 40. A stored value outside the
+    // three presets (console --mtu 1350) gets its own selected "custom" option so the page never lies.
+    {
+        const int mtu_cur = meshcom_settings.node_ethmtu;
+        const bool mtu_preset = (mtu_cur == 1280 || mtu_cur == 1400 || mtu_cur == 1500);
+        web_client.println("<div class=\"cardlayout\">");
+        web_client.println("<label class=\"cardlabel\">MTU</label>");
+        web_client.println("<div class=\"grid grid3\">");
+        web_client.println("<label for=\"mtu\">MTU</label>");
+        web_client.println("<select id=\"mtu\" name=\"mtu\" onchange=\"document.getElementById('mtu_mss').textContent='MSS '+(parseInt(this.value)-40);setvalue('mtu',this.value,true);\">");
+        web_client.printf("\t<option value=\"1280\" %s>1280 (HAMNET / VPN, default)</option>\n", (mtu_cur == 1280) ? "selected" : "");
+        web_client.printf("\t<option value=\"1400\" %s>1400</option>\n", (mtu_cur == 1400) ? "selected" : "");
+        web_client.printf("\t<option value=\"1500\" %s>1500 (plain LAN)</option>\n", (mtu_cur == 1500) ? "selected" : "");
+        if (!mtu_preset)
+            web_client.printf("\t<option value=\"%i\" selected>custom (%i)</option>\n", mtu_cur, mtu_cur);
+        web_client.println("</select>");
+        web_client.printf("<span id=\"mtu_mss\">MSS %i</span>\n", mtu_cur - 40);
+        web_client.println("</div>");
+        web_client.println("</div>");
+    }
+
     // IP Network Settings Section
     web_client.println("<div class=\"cardlayout collapsablecard\">");
     web_client.println("<label class=\"cardlabel\">IP Network Settings</label>");
@@ -2876,9 +2909,6 @@ void sub_page_setup()
     _create_setup_textinput_element("owngw", "Gateway", String(meshcom_settings.node_gw), "192.168.2.1", "setowngw", 50, false, true);           // create Textinput-Element including Label and Button
     _create_setup_textinput_element("owndns", "DNS", String(meshcom_settings.node_dns), "192.168.2.1", "setowndns", 50, false, true);             // create Textinput-Element including Label and Button
     _create_setup_textinput_element("ownntp", "NTP", String(meshcom_settings.node_ownntp), "192.168.2.1", "setownntp", 50, false, true);          // create Textinput-Element including Label and Button
-    #if defined(BOARD_RAK4630)
-    _create_setup_textinput_element("ethmtu", "ETH MTU", String(meshcom_settings.node_ethmtu), "1500", "ethmtu", 4, false, false);                 // #1183: 1280..1500, applies to the next web connection, no reboot
-    #endif
 
     _create_setup_textinput_element("extudp", "ext. UDP IP", String(meshcom_settings.node_extern), "192.168.100.100", "extudpip", 50, false, false); // create Textinput-Element including Label and Button
 
@@ -3147,32 +3177,6 @@ void sub_content_messages()
             strftime(timestamp, 20, "%Y-%m-%d %H:%M:%S", oldt);
             struct aprsMessage aprsmsg;
             uint8_t msg_type_b_lora = decodeAPRS(toPhoneBuff, blelen, aprsmsg); // print which message type we got
-            int icheck = checkOwnTx(aprsmsg.msg_id);
-
-            if (icheck >= 0)
-            {
-                if (own_msg_id[icheck][4] == 1)
-                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held
-                    ccheck = "&#x2713&nbsp;";
-                }
-
-                if (own_msg_id[icheck][4] == 2)
-                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held
-                    ccheck = "&#x2611;&nbsp;";
-                }
-
-                if (own_msg_id[icheck][4] == 3)
-                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held (retransmit gave up on a user-originated DM)
-                    ccheck = "<span title=\"delivery failed\">&#x2717;</span>&nbsp;";
-                }
-
-                if (own_msg_id[icheck][4] == 4)
-                { // 00...not heard, 01...heard, 02...ACK, 03...failed, 04...held (a store node holds this DM for an absent destination)
-                    String holder = stoHolder(aprsmsg.msg_id);
-                    String holdtitle = holder.length() > 0 ? ("held by " + htmlEscape(holder)) : "held by a store node";
-                    ccheck = "<span title=\"" + holdtitle + "\">&#x2709;</span>&nbsp;";
-                }
-            }
 
             // Textmessage
             if (msg_type_b_lora == 0x3A)
@@ -3198,6 +3202,34 @@ void sub_content_messages()
                     if (is_equ(meshcom_settings.node_call, aprsmsg.msg_source_call))
                     {
                         String dst_esc = htmlEscape(aprsmsg.msg_destination_call);
+
+                        // The tick comes from the durable own-text status table first: own_msg_id is a
+                        // 20-slot ring shared with every own frame (positions, acks, gateway forwards)
+                        // and loses the status within the hour. checkOwnTx stays as the fallback for
+                        // ids the table does not know (sent before boot of this image / not registered).
+                        // docs/webgui-ack-ticks-verdict-20261004.md, Finding 1.
+                        int tickst = ownMsgStatusGet(aprsmsg.msg_id);
+                        if (tickst < 0)
+                        {
+                            int icheck = checkOwnTx(aprsmsg.msg_id);
+                            if (icheck >= 0)
+                                tickst = own_msg_id[icheck][4];
+                        }
+
+                        // 00...not heard, 01...heard, 02...ACK, 03...failed (retransmit gave up on a user-originated DM), 04...held (a store node holds this DM)
+                        // The span is machine-readable (data-st) so the browser can keep a tick the server no longer knows (mcTickKeep).
+                        if (tickst == 1)
+                            ccheck = "<span class=\"mctick\" data-st=\"1\">&#x2713;&nbsp;</span>";
+                        else if (tickst == 2)
+                            ccheck = "<span class=\"mctick\" data-st=\"2\">&#x2611;&nbsp;</span>";
+                        else if (tickst == 3)
+                            ccheck = "<span class=\"mctick\" data-st=\"3\" title=\"delivery failed\">&#x2717;&nbsp;</span>";
+                        else if (tickst == 4)
+                        {
+                            String holder = stoHolder(aprsmsg.msg_id);
+                            String holdtitle = holder.length() > 0 ? ("held by " + htmlEscape(holder)) : "held by a store node";
+                            ccheck = "<span class=\"mctick\" data-st=\"4\" title=\"" + holdtitle + "\">&#x2709;&nbsp;</span>";
+                        }
 
                         web_client.printf("<div class=\"message message-send\" data-id=\"%u\" data-dst=\"%s\" data-ts=\"%lu\"><div>", aprsmsg.msg_id, dst_esc.c_str(), unix_time);
 
@@ -3230,7 +3262,8 @@ void sub_content_messages()
 
                         web_client.printf("<div class=\"message message-received\" data-id=\"%u\" data-dst=\"%s\" data-ts=\"%lu\"><div>", aprsmsg.msg_id, dst_esc.c_str(), unix_time);
 
-                        web_client.printf("<p class=\"font-small font-bold\">%s", ccheck.c_str());
+                        // no delivery tick on received frames: a gateway keeps server-forwarded foreign frames in own_msg_id and they showed a false tick (Finding 2)
+                        web_client.printf("<p class=\"font-small font-bold\">");
                         web_client.printf("<a target=\"_blank\" href=\"https://aprs.fi/?call=%s\">%s</a>", msg_source_path_esc.c_str(), msg_source_path_esc.c_str());
                         web_client.printf("%s%s</p>", (char *)">", msg_destination_path_esc.c_str());
 
@@ -3384,6 +3417,10 @@ void sub_page_info()
     web_client.printf("<tr><td>Call</td><td>%s</td></tr>\n", meshcom_settings.node_call);
     web_client.printf("<tr><td>Hardware</td><td>%s</td></tr>\n", nbrHardwareName(BOARD_HARDWARE));
     web_client.printf("<tr><td>UTC offset</td><td>%.1f [%s]</td></tr>\n", meshcom_settings.node_utcoff, cTimeSource);
+    // TZ-01: escaped, see sub_page_setup(); an unparsable value (config import) is flagged
+    web_client.printf("<tr><td>Timezone</td><td>%s%s</td></tr>\n",
+        meshcom_settings.node_tz[0] ? htmlEscape(String(meshcom_settings.node_tz)).c_str() : "none",
+        (meshcom_settings.node_tz[0] && !tzActiveAbbrev()) ? " (invalid, ignored)" : "");
     // BAT-01: global_batt==0.0 is the established "no reading" convention (grounded pin, or
     // the ADC-path no-battery detection in batt_functions.cpp) -- same check the on-device
     // displays already use, see loop_functions.cpp.
@@ -3392,7 +3429,7 @@ void sub_page_info()
     } else {
         web_client.printf("<tr><td>Battery</td><td>%.3fV (%d%%) max %.3fV", global_batt / 1000.0, global_proz, meshcom_settings.node_maxv);
         #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
-            web_client.printf("<br>Charge Indicator LED: %s", bCHARGE_LED ? "on" : "off");
+            web_client.printf("<br>Charge Indicator LED: %s", bCHARGE_LED ? "auto (follows charging)" : "off");
         #endif
         web_client.print("</td></tr>\n");
     }
@@ -3539,6 +3576,9 @@ void sub_page_info()
     //    web_client.printf("<tr><td><b>hasIpAddress</b></td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress?"yes":"no"));
     
     web_client.printf("<tr><td>hasIpAddress</td><td>%s</td></tr>\n", (meshcom_settings.node_hasIPaddress ? "yes" : "no"));
+
+    // NMTU-01 / #1190: configured MTU and the MSS derived from it (all boards)
+    web_client.printf("<tr><td>MTU</td><td>MTU %i (MSS %i)</td></tr>\n", (int)meshcom_settings.node_ethmtu, (int)meshcom_settings.node_ethmtu - 40);
 
     if (meshcom_settings.node_hasIPaddress)
     {

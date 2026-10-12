@@ -1,3 +1,4 @@
+#include <extudp_target.h>
 #include "mc_text.h"
 #include <Arduino.h>
 #include <atomic>
@@ -207,6 +208,20 @@ void startExternUDP()
     Serial.printf("[EXT] to IP:%s\n", str_ip.c_str());
   }
 
+
+  // EXT-03: a stored or DNS-resolved broadcast/multicast target never gets the
+  // socket (every heard frame would go to the whole LAN); said once per target.
+  ExtudpTargetVerdict tv = extudp_target_check(str_ip.c_str(), s_extern_node_ip.c_str(), meshcom_settings.node_subnet);
+  if(tv != EXTUDP_TARGET_OK)
+  {
+    static String s_refused;
+    if(s_refused != str_ip)
+    {
+      s_refused = str_ip;
+      Serial.printf("[EXT] target %s refused: %s -- set --extudpip to a host\n", str_ip.c_str(), extudp_target_reason(tv));
+    }
+    return;   // hasExternIPaddress stays false
+  }
 
   Serial.printf("[EXT]...now listening at IP %s, UDP port %d\n",  s_extern_node_ip.c_str(), EXTERN_PORT);
   Serial.printf("[EXT]...now sending   to IP %s, UDP port %d\n",  str_ip.c_str(), EXTERN_PORT);
