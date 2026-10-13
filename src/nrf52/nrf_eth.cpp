@@ -877,6 +877,7 @@ void NrfETH::startUDP()
   {
     const char *srv_path = NULL;   // TM-39: "hamnet" or "inet", matches the printlndeb text below
 
+    // lokale 44er soll nur zum HAMNET gerouet werden wenn auch hamnet_only gesetzt ist.
     if ((local_addr[0] == 44 && meshcom_settings.node_hamnet_only == 1) || meshcom_settings.node_hamnet_only == 1)
     {
       if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
@@ -896,20 +897,18 @@ void NrfETH::startUDP()
         udp_dest_addr = IPAddress(44, 148, 230, 197);
         srv_path = "hamnet";
 
-        // upstream f860e934: the DL HAMNET server pairs with the DL HAMNET NTP
         printlndeb("[UDP-DEST]...Hamnet NTP-DEST 44.148.224.123");
         timeClient.setPoolServerIP(IPAddress(44, 148, 224, 123));
       }
       else
       if(memcmp(meshcom_settings.node_gwsrv, "HB", 2) == 0)
       {
-        printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 157.143.4.44");
-        udp_dest_addr = IPAddress(157, 143, 4, 44);
+        printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.142.42.59");
+        udp_dest_addr = IPAddress(44, 142, 42, 59);
         srv_path = "hamnet";
 
-        // upstream f860e934: the DL HAMNET server pairs with the DL HAMNET NTP
-        printlndeb("[UDP-DEST]...Hamnet NTP-DEST 162.159.200.1");
-        timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
+        printlndeb("[UDP-DEST]...Hamnet NTP-DEST 44.142.163.2");
+        timeClient.setPoolServerIP(IPAddress(44, 142, 163, 2));
       }
       else
       {
@@ -950,21 +949,17 @@ void NrfETH::startUDP()
       else
       if(memcmp(meshcom_settings.node_gwsrv, "HC", 2) == 0)
       {
-        // v4.35v: MeshCom-DL internet server meshcom.hamnet.network (the ESP32
-        // path resolves the name; nRF52 keeps fixed IPs like OE/IT above).
+        // HC Server ist immer nur aus dem HAMNET erreichbar
         printlndeb("[UDP-DEST] Internet UDP-DEST HC 44.148.230.197");
         udp_dest_addr = IPAddress(44, 148, 230, 197);
         srv_path = "inet";
 
-        // upstream f860e934: the DL HAMNET server pairs with the DL HAMNET NTP
         printlndeb("[UDP-DEST]...Hamnet NTP-DEST 44.148.224.123");
         timeClient.setPoolServerIP(IPAddress(44, 148, 224, 123));
       }
       else
       if(memcmp(meshcom_settings.node_gwsrv, "HB", 2) == 0)
       {
-        // v4.35v: MeshCom-DL internet server meshcom.hamnet.network (the ESP32
-        // path resolves the name; nRF52 keeps fixed IPs like OE/IT above).
         printlndeb("[UDP-DEST] Internet UDP-DEST HB 157.143.4.44");
         udp_dest_addr = IPAddress(157, 143, 4, 44);
         srv_path = "inet";
