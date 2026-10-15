@@ -29,7 +29,8 @@ namespace eth_recovery {
 enum class Action : uint8_t {
     ReopenUdp,        // F1: keep chip IP + lease, Udp.stop()+startUDP(), no Ethernet.begin()
     FullDhcp,         // legacy path: startETH() -> Ethernet.begin() DISCOVER
-    HwResetThenDhcp   // F2: initETH_HW() then startETH()
+    HwResetThenDhcp,  // F2: initETH_HW() then startETH()
+    ReapplyStatic     // ETH-05: static node, re-apply the configured address, never DHCP
 };
 
 struct Inputs {
@@ -49,12 +50,19 @@ struct State {
 constexpr uint8_t  kHwResetAfterFails = 2;
 constexpr uint32_t kHwResetMinGapMs   = 300000UL;  // 5 min
 
+// Same 5 min gap as F2 for the hardware reset of both paths (state shared: State::last_hw_reset_ms).
+// Unsigned subtraction survives millis() wraparound.
+inline bool hwResetAllowed(const State& st, uint32_t now_ms)
+{
+    return !st.hw_reset_done || (uint32_t)(now_ms - st.last_hw_reset_ms) >= kHwResetMinGapMs;
+}
+
 inline Action decide(const Inputs& in, const State& st, uint32_t now_ms)
 {
-    // Rule 1: fixed IP has no lease; the caller keeps its unchanged static path
-    // ("FullDhcp" only means "legacy path" here).
+    // Rule 1 (ETH-05): fixed IP has no lease and must never see a DHCP exchange;
+    // the caller re-applies the configured static address.
     if (in.fixed_ip)
-        return Action::FullDhcp;
+        return Action::ReapplyStatic;
 
     // Rule 2 (F1): a held lease is normally still valid on the router, so
     // re-DISCOVERing only loses it. A failed renew/rebind means the lease may be
@@ -67,12 +75,42 @@ inline Action decide(const Inputs& in, const State& st, uint32_t now_ms)
     // Rule 3 (F2): hardware reset only with link up (N-20: a replugged cable must
     // reconnect, never reset the chip while the link is down) and at most once
     // per kHwResetMinGapMs. Unsigned subtraction survives millis() wraparound.
-    if (in.link_up && st.dhcp_fail_streak >= kHwResetAfterFails &&
-        (!st.hw_reset_done ||
-         (uint32_t)(now_ms - st.last_hw_reset_ms) >= kHwResetMinGapMs))
+    if (in.link_up && st.dhcp_fail_streak >= kHwResetAfterFails && hwResetAllowed(st, now_ms))
         return Action::HwResetThenDhcp;
 
     return Action::FullDhcp;
+}
+
+// ETH-05 follow-up: how a static node recovers. The legacy behaviour was a cheap
+// Udp.stop + startUDP; a hardware reset (initethfixIP -> initETH_HW) costs seconds of
+// PHY bring-up and is reserved for a dead link or a failed re-apply.
+//   Reopen:  link up and the chip already holds the configured address -> only reopen UDP.
+//   Reapply: link up, address lost/different -> Ethernet.begin(static), no hardware reset.
+//   HwReset: link down -> full initethfixIP() (also the fallback when Reapply fails).
+// Stall guard (static analogue of F1 -> F2): if an earlier Reopen got no UDP RX before
+// the next trigger (reopen_stalled), reopening again does not help (wedged sockets with
+// a correct SIPR) -> HwReset when the address still matches, Reapply when it does not.
+enum class StaticAction : uint8_t { Reopen, Reapply, HwReset };
+
+struct StaticInputs {
+    bool link_up;     // Ethernet.linkStatus() == LinkON right now
+    bool ip_matches;  // Ethernet.localIP() equals the configured node_ownip
+    bool reopen_stalled;  // a previous static Reopen got no UDP RX since
+    bool hw_reset_allowed;  // hwResetAllowed(): no reset yet, or kHwResetMinGapMs elapsed
+};
+
+// A hardware reset is chosen only when hw_reset_allowed; otherwise every case that would reset
+// falls back to Reapply (Ethernet.begin(static), no hardware reset).
+inline StaticAction decideStatic(const StaticInputs& in)
+{
+    if (!in.link_up)
+        return in.hw_reset_allowed ? StaticAction::HwReset : StaticAction::Reapply;
+    if (in.reopen_stalled) {
+        if (!in.ip_matches || !in.hw_reset_allowed)
+            return StaticAction::Reapply;
+        return StaticAction::HwReset;
+    }
+    return in.ip_matches ? StaticAction::Reopen : StaticAction::Reapply;
 }
 
 // Success clears the streak. A failure counts only with link up: without link

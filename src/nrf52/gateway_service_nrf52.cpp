@@ -139,7 +139,7 @@ if(bGATEWAY)
                 neth.hasIPaddress = false;
                 iReceiveTimeOutTime = millis();
 
-                if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+                if(ethIsStaticConfigured())
                 {
                     if(bDEBUG)
                     {
