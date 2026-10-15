@@ -256,7 +256,7 @@ struct CfgField
     X("node_lon_c",    CFG_CHR,  node_lon_c,            CFG_NORANGE,        CFG_NOESC)        \
     X("node_ssid",     CFG_STR,  node_ossid,            CFG_NORANGE,        CFG_NOESC)        \
     X("node_pwd",      CFG_STR,  node_opwd,             CFG_NORANGE,        CFG_NOESC)        \
-    X("node_honly",    CFG_INT,  node_hamnet_only,      0.0, 1.0,           CFG_NOESC)        \
+    X("node_honly",    CFG_INT,  node_hamnet_only,      0.0, 3.0,           CFG_NOESC)        \
     X("node_sset",     CFG_INT,  node_sset,             0.0, 65535.0,       CFG_NOESC)        \
     X("node_maxv",     CFG_FLT,  node_maxv,             0.0, 20.0,          CFG_NOESC)        \
     X("node_extern",   CFG_STR,  node_extern,           CFG_NORANGE,        CFG_NOESC)        \

@@ -368,6 +368,14 @@ void init_flash(void)
     snprintf(meshcom_settings.node_values, sizeof(meshcom_settings.node_values), "none");
     snprintf(meshcom_settings.node_lora_call, sizeof(meshcom_settings.node_lora_call), "none");
     snprintf(meshcom_settings.node_gwsrv, sizeof(meshcom_settings.node_gwsrv), "OE");
+    // Network mode (node_honly = node_hamnet_only): the factory default is 2 = auto (own 44.x
+    // address -> Hamnet, else Internet), but ONLY for a node with no stored settings at all
+    // (fresh flash, or after clear_flash()). An installed node that lacks the key (older firmware,
+    // never saved) has node_call stored and keeps the struct value 0 = unset/legacy, so an OTA
+    // never changes its behaviour. Not a struct initialiser on purpose: the initialiser also
+    // applies to every node that loads without the key.
+    if (!preferences.isKey("node_honly") && !preferences.isKey("node_call"))
+        meshcom_settings.node_hamnet_only = 2;
     meshcom_settings.node_fversion = 0;
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
     meshcom_settings.node_kbl_sync = false;

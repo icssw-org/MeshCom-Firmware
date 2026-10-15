@@ -19,6 +19,7 @@
 #include <extudp_target.h>
 #include <TinyGPSPlus.h>    // DIST fuer --mheard -- reine distanceBetween()-Rechnung, kein GPS-Modul noetig
 #include "udp_functions.h"
+#include "gw_servers.h"   // GWU: gwCodes(), gwSelectNet() for --setnet / --gateway srv
 #include "radio_units.h"   // RF-01..RF-03 unit conversions
 #include "extudp_functions.h"
 #include "ntp_async.h"
@@ -57,6 +58,8 @@
 
 #if defined(NRF52_SERIES)
 #include "nrf52/settings_store_nrf52.h" // settingsStoreDump() -- --dumpsettings
+#include <RAK13800_W5100S.h>            // IPAddress for nrf_eth.h
+#include <nrf_eth.h>                    // ethIsStaticConfigured() for the GWU status helpers
 #endif
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
 #include "esp32/esp32_pmu.h"
@@ -204,6 +207,74 @@ static_assert(MAXHOP_TEXT_MAX < MAX_HOP_LIMIT,
 int commandCheck(char *msg, char *command)
 {
     return commandMatches(msg, command) ? 0 : -1;
+}
+
+// GWU: codes of the enabled gateway server rows as "OE/DL/IT/HC/HB".
+static void gwCodesList(char *out, size_t outlen, char sep)
+{
+    char codes[8][3];
+    int n = gwCodes(codes, 8);
+    out[0] = 0;
+    for(int i = 0; i < n; i++)
+    {
+        if(i > 0 && strlen(out) + 1 < outlen)
+        {
+            size_t l = strlen(out);
+            out[l] = sep;
+            out[l + 1] = 0;
+        }
+        strncat(out, codes[i], outlen - strlen(out) - 1);
+    }
+}
+
+// GWU: own address and effective mode for the status output. nRF52 STATIC-IP node: the address is
+// the configured node_ownip and the stored 0 follows it (44er -> Hamnet), exactly as startFIXUDP
+// does (gwEffectiveMode). Everything else: the node's current address, mode as stored.
+static uint8_t gwStatusMode(uint8_t ip[4])
+{
+    unsigned int a[4] = {0, 0, 0, 0};
+    bool staticLegacy = false;
+    const char *ipText = meshcom_settings.node_ip;
+#if defined(NRF52_SERIES)
+    if(ethIsStaticConfigured())
+    {
+        staticLegacy = true;
+        ipText = meshcom_settings.node_ownip;
+    }
+#endif
+    for(int i = 0; i < 4; i++)
+        ip[i] = 0;
+    if(sscanf(ipText, "%u.%u.%u.%u", &a[0], &a[1], &a[2], &a[3]) == 4)
+    {
+        for(int i = 0; i < 4; i++)
+            ip[i] = (uint8_t)a[i];
+    }
+    return gwEffectiveMode((uint8_t)meshcom_settings.node_hamnet_only, ip, staticLegacy);
+}
+
+// GWU: network actually used for the stored mode and the own address.
+static const char *gwNetInUse(void)
+{
+    uint8_t ip[4];
+    const uint8_t mode = gwStatusMode(ip);
+    return (gwSelectNet(mode, ip) == GW_NET_HAMNET) ? "hamnet" : "inet";
+}
+
+// GWU: stored network mode as text (0 unset/legacy, 1 Hamnet, 3 Internet, else auto).
+static const char *gwModeText(void)
+{
+    switch(meshcom_settings.node_hamnet_only)
+    {
+        case 0:
+        {
+            // static 44er nRF52 node: the legacy rule really selects the Hamnet
+            uint8_t ip[4];
+            return (gwStatusMode(ip) == 1) ? "Hamnet (not set, legacy: static 44er)" : "Internet (not set, legacy)";
+        }
+        case 1: return "Hamnet";
+        case 3: return "Internet";
+        default: return "auto";
+    }
 }
 
 #if defined(ENABLE_MSGSTORE)
@@ -1275,7 +1346,13 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--netmode wifi/eth      network interface\n");
             #endif
             #endif
-            printdeb("--gateway on/off/pos/nopos  MeshCom gateway\n--gateway srv OE/DL/IT  gateway server, reboots\n--setudpcall <call>     UDP callsign\n--sethamnet on/off      HAMNET server\n--setinet on/off        internet server\n--extudp on/off         external UDP\n--extudpip a.b.c.d/none external UDP peer\n--nopmother on/off      no foreign DMs to EXTUDP peer\n--webserver on/off      web server\n--webpwd <pwd>/none     web password\n--webtimer 0            reset web session timer\n");
+            printdeb("--gateway on/off/pos/nopos  MeshCom gateway\n");
+            {
+                char _gwl[24];
+                gwCodesList(_gwl, sizeof(_gwl), '/');
+                printfdeb("--gateway srv %s  gateway server, reboots\n", _gwl);
+            }
+            printdeb("--setudpcall <call>     UDP callsign\n--setnet auto/inet/hamnet  gateway network (auto: Hamnet if own IP is 44.x)\n--setnet                show network mode\n--sethamnet on/off      deprecated alias of --setnet hamnet/inet\n--setinet on/off        deprecated alias of --setnet inet/hamnet\n--extudp on/off         external UDP\n--extudpip a.b.c.d/none external UDP peer\n--nopmother on/off      no foreign DMs to EXTUDP peer\n--webserver on/off      web server\n--webpwd <pwd>/none     web password\n--webtimer 0            reset web session timer\n");
             #ifndef DISABLE_NET_CONSOLE
             printdeb("--netconsole on/off     console on TCP 2323\n");
             #endif
@@ -2445,9 +2522,20 @@ void commandAction(char *umsg_text, bool ble)
         String strCtry = _owner_c;
         strCtry.toUpperCase();
 
-        if(strCtry != "OE" && strCtry != "DL" && strCtry != "IT" && strCtry != "HC" && strCtry != "HB")
+        char _gwcodes[8][3];
+        int _gwn = gwCodes(_gwcodes, 8);
+        bool _gwok = false;
+        for(int _gi = 0; _gi < _gwn; _gi++)
         {
-            printfdeb("\nGateway-Server fault <%s> please only OE,HC,DL, IT or HB\n", strCtry.c_str());
+            if(strCtry == _gwcodes[_gi])
+                _gwok = true;
+        }
+
+        if(!_gwok)
+        {
+            char _gwl[24];
+            gwCodesList(_gwl, sizeof(_gwl), ',');
+            printfdeb("\nGateway-Server fault <%s> please only %s\n", strCtry.c_str(), _gwl);
             return;
         }
 
@@ -3988,7 +4076,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"setinet on") == 0 || commandCheck(msg_text+2, (char*)"sethamnet off") == 0)
     {
-        meshcom_settings.node_hamnet_only = 0;
+        meshcom_settings.node_hamnet_only = 3;
         
         if(ble)
         {
@@ -4002,6 +4090,80 @@ void commandAction(char *umsg_text, bool ble)
         #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS)
         rebootAuto = millis() + 5 * 1000; // 5 Sekunden
         #endif
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setnet auto") == 0 || commandCheck(msg_text+2, (char*)"setinet auto") == 0)
+    {
+        meshcom_settings.node_hamnet_only = 2;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        save_settings();
+
+        bInfo=true;
+
+        #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS)
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+        #endif
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setnet inet") == 0)
+    {
+        meshcom_settings.node_hamnet_only = 3;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        save_settings();
+
+        bInfo=true;
+
+        #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS)
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+        #endif
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setnet hamnet") == 0)
+    {
+        meshcom_settings.node_hamnet_only = 1;
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        save_settings();
+
+        bInfo=true;
+
+        #if !defined(BOARD_T_DECK) && !defined(BOARD_T_DECK_PLUS)
+        rebootAuto = millis() + 5 * 1000; // 5 Sekunden
+        #endif
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"setnet") == 0)
+    {
+        const char *_nsa = msg_text + 8;
+        while(*_nsa == ' ')
+            _nsa++;
+
+        if(*_nsa != 0)
+            printfdeb("\n--setnet auto/inet/hamnet\n");
+        else
+            printfdeb("\nNetwork mode: %s (in use: %s)\n", gwModeText(), gwNetInUse());
 
         return;
     }
@@ -6496,10 +6658,7 @@ void commandAction(char *umsg_text, bool ble)
                 {
                     if(bGATEWAY)
                     {
-                        if(meshcom_settings.node_hamnet_only > 0)
-                        printfdeb("...HAMNET ONLY  : true\n");
-                        else
-                        printfdeb("...I-NET ONLY   : true\n");
+                        printfdeb("...NET MODE      : %s (in use: %s)\n", gwModeText(), gwNetInUse());
 
                         printfdeb("...GW server    : %s\n", meshcom_settings.node_gwsrv);
                     }
