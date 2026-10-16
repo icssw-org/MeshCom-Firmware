@@ -1576,6 +1576,22 @@ void sub_page_position()
     web_client.println(); // The HTTP response ends with another blank line
 }
 
+// Firmware-Stand als "v4.40a", "-" wenn unbekannt. Auf der Luft stehen nur
+// die Stellen hinter "4." (msg_source_fw_version, 40 = 4.40) und der
+// Buchstabe (msg_source_fw_sub_version). ver/sub kommen aus DERSELBEN
+// Momentaufnahme wie das Rufzeichen der Zeile (NbrRowView/NbrMhView): ein
+// zweites nbrRowGet() koennte auf nRF52 (OnRxDone im LORA-Task) schon eine
+// neu vergebene Zeile lesen. Eigene Zeile: shortVERSION()/shortSUBVERSION().
+static void webPrintFw(uint8_t ver, char sub)
+{
+    if (ver == 0)
+        web_client.print("-");
+    else if (sub >= 'a' && sub <= 'z')
+        web_client.printf("v4.%02u%c", (unsigned)ver, sub);
+    else
+        web_client.printf("v4.%02u", (unsigned)ver);
+}
+
 /**
  * ###########################################################################################################################
  * delivers the mheard-page to be injected into the scaffold
@@ -1612,7 +1628,8 @@ void sub_page_mheard()
                      "It hears: stations it hears, as far as my table knows. "
                      "Only it hears: of those, how many no other direct neighbour of mine hears -- its value as a relay for me. "
                      "Relay role: Super node = by far the most exclusive stations; Needed = at least one exclusive station; Redundant = everything it hears is heard by others too. "
-                     "It reports: the neighbour count the station announces itself (NCNT).</p>");
+                     "It reports: the neighbour count the station announces itself (NCNT). "
+                     "Firmware: the version the station puts into its own frames, '-' until one arrives.</p>");
 
     uint8_t *idx = (uint8_t *)malloc((size_t)NBR_MAX_ROWS);
     if (idx == NULL)
@@ -1661,6 +1678,9 @@ void sub_page_mheard()
             web_client.printf("<div><span class=\"font-bold\">Last frame:</span><br><span>%s</span></div>", ptype);
         }
         web_client.printf("<div><span class=\"font-bold\">Hardware:</span><br><span>%s</span></div>", nbrHardwareName(v.hw));
+        web_client.print("<div><span class=\"font-bold\">Firmware:</span><br><span>");
+        webPrintFw(v.fw_ver, v.fw_sub);
+        web_client.print("</span></div>");
         web_client.printf("<div><span class=\"font-bold\">Country / mode:</span><br><span title=\"high nibble: country index, low nibble: LoRa modulation\">%01X / %01X</span></div>", (v.mod >> 4), (v.mod & 0x0f));
         if (v.rssi == NBR_MH_RSSI_UNKNOWN)
             web_client.printf("<div><span class=\"font-bold\">RSSI:</span><br><span></span></div>");
@@ -1874,7 +1894,7 @@ void sub_page_path()
     // sub_page_neighbours() unten, Bench 2026-09-20).
     web_client.println("<table class=\"table\">");
     web_client.println("<thead><tr class=\"font-bold\"><td>Call</td><td>Hops</td><td>GW</td><td>Mesh</td>"
-                        "<td>Hears me</td><td>Via / Covered by</td><td>Reach</td><td>Age (min)</td></tr></thead>");
+                        "<td>Firmware</td><td>Hears me</td><td>Via / Covered by</td><td>Reach</td><td>Age (min)</td></tr></thead>");
 
     for (size_t k = 0; k < nrec; k++)
     {
@@ -1889,6 +1909,9 @@ void sub_page_path()
                 web_client.print("<td>-</td>");
             else
                 web_client.printf("<td>%s</td>", (r0.flags & NBR_FLAG_MESH) ? "Y" : "N");
+            web_client.print("<td>");
+            webPrintFw(shortVERSION(), shortSUBVERSION());
+            web_client.print("</td>");
             web_client.print("<td>-</td>"); // Hears me: keine Kante nach mir selbst
             web_client.print("<td>-</td>"); // Via / Covered by: nicht anwendbar auf die eigene Zeile
 
@@ -1921,6 +1944,9 @@ void sub_page_path()
                 web_client.print("<td>-</td>");
             else
                 web_client.printf("<td>%s</td>", (v.flags & NBR_FLAG_MESH) ? "Y" : "N");
+            web_client.print("<td>");
+            webPrintFw(v.fw_ver, v.fw_sub);
+            web_client.print("</td>");
 
             NbrEdgeView hm;
             if (nbrEdgeGet(nbrMatrix, 0, X, &hm) && hm.snr != NBR_SNR_UNKNOWN && nbrFresh(hm.last_min, now_min))
@@ -1970,7 +1996,8 @@ void sub_page_path()
 
         bool hasRow = (r.row != 0xFF);
         NbrRowView rv;
-        uint8_t rowFlags = hasRow && nbrRowGet(nbrMatrix, r.row, &rv) ? rv.flags : 0;
+        bool rowOk = hasRow && nbrRowGet(nbrMatrix, r.row, &rv);
+        uint8_t rowFlags = rowOk ? rv.flags : 0;
 
         web_client.printf("<tr><td><a href=\"https://aprs.fi/?call=%s\" target=\"_blank\">%s</a></td>", urlEncode(r.call).c_str(), htmlEscape(String(r.call)).c_str());
         web_client.printf("<td>%u</td>", (unsigned)r.hops);
@@ -1980,6 +2007,13 @@ void sub_page_path()
             web_client.print("<td>-</td>"); // Horizont hat keine Zeile, oder keine Positions-Info
         else
             web_client.printf("<td>%s</td>", (rowFlags & NBR_FLAG_MESH) ? "Y" : "N");
+
+        web_client.print("<td>");
+        if (rowOk)
+            webPrintFw(rv.fw_ver, rv.fw_sub);
+        else
+            web_client.print("-"); // Horizont (keine Zeile) oder Zeile zwischendurch verschwunden
+        web_client.print("</td>");
 
         if (hasRow)
         {
@@ -2053,6 +2087,7 @@ void sub_page_path()
     // Telefon nicht, deshalb stehen dieselben Erklaerungen hier als Text.
     web_client.print("<p style=\"font-size:var(--fs-s);color:#555;\">"
                       "Hops: 0 = me, 1 = direct neighbour, 2+ = reached via other nodes."
+                      " | Firmware: the version the station puts into its own frames, '-' until one arrives or beyond 2 hops."
                       " | Hears me: SNR at which that neighbour last reported hearing me, '-' if unknown or not a direct/2-hop row."
                       " | Via: the entry path this station was heard on (2-hop: the direct neighbour it is via; horizon: the entry row, and beyond it if cheap to show)."
                       " Covered by (direct neighbours only): other direct neighbours that also hear this one -- 'only me' means I am its only link."

@@ -80,7 +80,8 @@ static_assert(sizeof(NbrMatrix::echo_id) + sizeof(NbrMatrix::echo_first) +
               "Echo-Tabelle: 4 x (msg_id, zwei Masken, Minute)");
 static_assert(sizeof(NbrMatrix) <=
                   8u * NBR_MAX_ROWS + 12u * NBR_MAX_ROWS + 16u * NBR_MASK_WORDS * NBR_MAX_ROWS + 6u * NBR_MAX_EDGES +
-                      13u * NBR_EXT_SLOTS + NBR_MAX_ROWS + (12u + 8u * NBR_MASK_WORDS) * NBR_HZ_ENTRIES + 10u +
+                      13u * NBR_EXT_SLOTS + NBR_MAX_ROWS + 2u * NBR_MAX_ROWS +
+                      (12u + 8u * NBR_MASK_WORDS) * NBR_HZ_ENTRIES + 10u +
                       4u * (4u + 16u * NBR_MASK_WORDS + 2u) + 4u + 16u,
               "NbrMatrix: Fuellung ueber 16 Byte (Feldreihenfolge pruefen)");
 
@@ -570,6 +571,7 @@ static void nbrIRowBlank(NbrMatrix &m, int idx)
     m.row[idx].lon16 = (int16_t)NBR_POS_UNKNOWN;
     m.row[idx].ext = 0xFF;
     m.gw_min[idx] = 0;
+    m.fw[idx] = 0;
 }
 
 // Zeile idx vollstaendig leeren: ihre Kanten frei (je zwei Maskenbits), ihr
@@ -2074,6 +2076,7 @@ bool nbrRowGet(const NbrMatrix &m, int row, NbrRowView *out)
     bool ok = nbrIReady(m) && (row == 0 || nbrIUsed(m, row)); // vor nbrInit(): keine Zeile
     w = m.call[row];
     r = m.row[row];
+    uint16_t fw = m.fw[row];
     NBR_UNLOCK();
     if (!ok)
         return false;
@@ -2086,6 +2089,9 @@ bool nbrRowGet(const NbrMatrix &m, int row, NbrRowView *out)
     out->flags = r.flags;
     out->hw = r.hw;
     out->ncnt = r.ncnt;
+    out->fw_ver = (uint8_t)(fw & 0xFF);
+    uint16_t sub = (uint16_t)(fw >> 8);
+    out->fw_sub = (sub >= 1 && sub <= 26) ? (char)('a' + sub - 1) : 0;
     return true;
 }
 
@@ -2426,6 +2432,21 @@ void nbrNoteNcnt(NbrMatrix &m, const char *call, int ncnt, uint16_t now_min)
     int x = nbrIReady(m) ? nbrIFindWord(m, w) : -1;
     if (x >= 0)
         m.row[x].ncnt = (uint8_t)(ncnt > 255 ? 255 : ncnt);
+    NBR_UNLOCK();
+}
+
+void nbrNoteFw(NbrMatrix &m, const char *call, uint8_t ver, char sub)
+{
+    if (ver == 0)
+        return;
+    uint16_t v = (uint16_t)ver;
+    if (sub >= 'a' && sub <= 'z')
+        v |= (uint16_t)((sub - 'a' + 1) << 8);
+    uint64_t w = nbrIEncode(call);
+    NBR_LOCK();
+    int x = nbrIReady(m) ? nbrIFindWord(m, w) : -1;
+    if (x > 0)
+        m.fw[x] = v;
     NBR_UNLOCK();
 }
 

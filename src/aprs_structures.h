@@ -81,6 +81,10 @@ struct aprsMessage
     char msg_source_fw_sub_version;
     uint8_t msg_last_hw;
     uint8_t msg_last_path_cnt;
+    // decodeAPRS(): das FW-Byte stand im Rahmen. Ohne es behaelt
+    // msg_source_fw_version den eigenen Stand aus initAPRS() -- der gehoert
+    // dann nicht dem Absender (nbrNoteFw() in lora_functions.cpp).
+    bool msg_source_fw_on_air;
 };
 
 struct aprsPosition

@@ -46,7 +46,9 @@ struct NbrMhView
     uint8_t  nb;          // #N = popcount(hears(x))
     uint8_t  gw;          // NBR_FLAG_GW
     uint8_t  via;         // in meiner Via-Menge (ab Stufe 4, bis dahin 0)
-    char     fw;          // Firmware-Buchstabe aus selbst gesendeten Rahmen, 0 unbekannt
+    char     fw;          // Firmware-Buchstabe aus selbst gesendeten Rahmen, 0 unbekannt (Direkt-Slot, App-Rahmen)
+    uint8_t  fw_ver;      // Firmware-Stand der Zeile (nbrNoteFw(), auch relayt), 0 unbekannt; Web-Seite
+    char     fw_sub;      // Buchstabe dazu, 0 unbekannt
 };
 
 // Direkte Zeilen mit Kante (x, 0) juenger als window_min, NEUESTE ZUERST (nach
