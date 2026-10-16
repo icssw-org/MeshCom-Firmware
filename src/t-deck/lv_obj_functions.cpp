@@ -30,6 +30,7 @@
 #include "tdeck_sdmap.h"
 #include "pos_persist.h"
 #include "event_functions.h"
+#include "dm_prefill.h"
 #include <lora_setchip.h>
 #include <WiFi.h>
 #include <Preferences.h>
@@ -279,7 +280,43 @@ struct DeleteEventData
     String body;
 };
 
+struct ReplyEventData
+{
+    String header;
+};
+
+// Value the compose prefill wrote last; "" once an explicit writer (header
+// tap, reply button, clear) has set the field, so the prefill leaves it alone.
+static String s_dm_last_auto = "";
+
+void tdeck_dm_callsign_set_explicit(const char *text)
+{
+    if(dm_callsign == NULL)
+        return;
+    lv_textarea_set_text(dm_callsign, text != NULL ? text : "");
+    s_dm_last_auto = "";
+}
+
+// Called when the compose tab (1) becomes active: prefill "To" from the
+// active conversation tab unless the user or an explicit writer set it.
+void tdeck_dm_callsign_prefill(void)
+{
+    if(dm_callsign == NULL)
+        return;
+    String group = "";
+    if(msg_active_tab_index >= 0 && msg_active_tab_index < (int)msg_tab_entries.size())
+        group = msg_tab_entries[msg_active_tab_index].group;
+
+    DmPrefill d = dmPrefillDecide(lv_textarea_get_text(dm_callsign), s_dm_last_auto.c_str(),
+                                  group.c_str(), meshcom_settings.node_call);
+    if(!d.write)
+        return;
+    lv_textarea_set_text(dm_callsign, d.value.c_str());
+    s_dm_last_auto = d.value.c_str();
+}
+
 static void header_label_event_cb(lv_event_t * e);
+static void bubble_reply_event_cb(lv_event_t * e);
 static void bubble_delete_event_cb(lv_event_t * e);
 static void ensure_msg_styles(void);
 static String build_timestamp_string(void);
@@ -3181,6 +3218,25 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     if(msg_active_tab_index >= 0 && msg_active_tab_index < (int)msg_tab_entries.size())
         current_group = msg_tab_entries[msg_active_tab_index].group;
 
+    // reply button (incoming only): sender -> "To" field, jump to compose
+    if(bubble.type == MsgBubbleType::Incoming)
+    {
+        lv_obj_t *reply_btn = lv_btn_create(header_row);
+        lv_obj_set_size(reply_btn, 28, 24);
+        lv_obj_clear_flag(reply_btn, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t *reply_label = lv_label_create(reply_btn);
+        lv_label_set_text(reply_label, LV_SYMBOL_NEW_LINE);
+        lv_obj_center(reply_label);
+
+        ReplyEventData *red = new ReplyEventData();
+        if (!red) return;  // Graceful bail-out
+
+        red->header = bubble.header;
+        lv_obj_add_event_cb(reply_btn, bubble_reply_event_cb, LV_EVENT_DELETE, red);
+        lv_obj_add_event_cb(reply_btn, bubble_reply_event_cb, LV_EVENT_CLICKED, red);
+    }
+
     if(bubble.type != MsgBubbleType::System)
     {
         lv_obj_t *del_btn = lv_btn_create(header_row);
@@ -3284,25 +3340,14 @@ static void header_label_event_cb(lv_event_t * e)
 
     String hdr = data->header;
     int arrow = hdr.indexOf("->");
-    String left = hdr;
     String right = "";
     if(arrow != -1)
-    {
-        left = hdr.substring(0, arrow);
         right = hdr.substring(arrow + 2);
-    }
-    left.trim();
     right.trim();
 
     if(clicked_left)
     {
-        int comma = left.indexOf(',');
-        String sender = left;
-        if(comma != -1)
-            sender = left.substring(0, comma);
-        sender.trim();
-        if(dm_callsign != NULL)
-            lv_textarea_set_text(dm_callsign, sender.c_str());
+        tdeck_dm_callsign_set_explicit(dmSenderFromHeader(hdr.c_str()).c_str());
         if(tv != NULL)
             lv_tabview_set_act(tv, 1, LV_ANIM_OFF);
     }
@@ -3314,25 +3359,35 @@ static void header_label_event_cb(lv_event_t * e)
             token = right.substring(0, comma);
         token.trim();
 
-        if(token.equals("*"))
-        {
-            if(dm_callsign != NULL)
-                lv_textarea_set_text(dm_callsign, "");
-        }
-        else if(token.length() == 0)
-        {
-            if(dm_callsign != NULL)
-                lv_textarea_set_text(dm_callsign, "");
-        }
+        if(token.equals("*") || token.length() == 0)
+            tdeck_dm_callsign_set_explicit("");
         else
-        {
-            if(dm_callsign != NULL)
-                lv_textarea_set_text(dm_callsign, token.c_str());
-        }
+            tdeck_dm_callsign_set_explicit(token.c_str());
 
         if(tv != NULL)
             lv_tabview_set_act(tv, 1, LV_ANIM_OFF);
     }
+}
+
+static void bubble_reply_event_cb(lv_event_t * e)
+{
+    ReplyEventData *data = (ReplyEventData *)lv_event_get_user_data(e);
+    if(data == NULL)
+        return;
+
+    lv_event_code_t code = lv_event_get_code(e);
+    if(code == LV_EVENT_DELETE)
+    {
+        delete data;
+        return;
+    }
+
+    if(code != LV_EVENT_CLICKED)
+        return;
+
+    tdeck_dm_callsign_set_explicit(dmSenderFromHeader(data->header.c_str()).c_str());
+    if(tv != NULL)
+        lv_tabview_set_act(tv, 1, LV_ANIM_OFF);
 }
 
 static void bubble_delete_event_cb(lv_event_t * e)

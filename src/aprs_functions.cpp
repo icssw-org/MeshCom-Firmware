@@ -126,6 +126,7 @@ void initAPRS(struct aprsMessage &aprsmsg, char msgType)
 
     aprsmsg.msg_source_fw_version = shortVERSION();
     aprsmsg.msg_source_fw_sub_version = shortSUBVERSION();
+    aprsmsg.msg_source_fw_on_air = false;
     aprsmsg.msg_last_hw = 0x80 | BOARD_HARDWARE;    // mit lastHeard Bit
     aprsmsg.msg_source_last[0] = 0;
     // R2-04: msg_source_call FEHLTE hier. Solange die Felder Arduino-String
@@ -491,6 +492,7 @@ uint16_t decodeAPRS(uint8_t RcvBuffer[UDP_TX_BUF_SIZE], uint16_t rsize, struct a
         if(inext < rsize)
         {
             aprsmsg.msg_source_fw_version = RcvBuffer[inext];
+            aprsmsg.msg_source_fw_on_air = true;
             inext++;
         }
 

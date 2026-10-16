@@ -162,6 +162,7 @@ bool nbrMhGet(const NbrMatrix &m, int row, uint16_t now_min, NbrMhView *out)
     uint8_t xcnt[NBR_MAX_ROWS];
     NbrRow r;
     uint16_t age = 0;
+    uint16_t fwr = 0;
     int8_t snr = NBR_SNR_UNKNOWN, hm = NBR_SNR_UNKNOWN;
     uint8_t nb = 0;
     bool ok = false;
@@ -175,6 +176,7 @@ bool nbrMhGet(const NbrMatrix &m, int row, uint16_t now_min, NbrMhView *out)
             ok = true;
             call = m.call[row];
             r = m.row[row];
+            fwr = m.fw[row];
             age = (uint16_t)(now_min - m.edge[e].last_min);
             snr = m.edge[e].snr;
             int s = vSlot(m, row);
@@ -211,6 +213,8 @@ bool nbrMhGet(const NbrMatrix &m, int row, uint16_t now_min, NbrMhView *out)
     out->nb = nb;
     out->gw = (r.flags & NBR_FLAG_GW) ? 1 : 0;
     out->via = 0;
+    out->fw_ver = (uint8_t)(fwr & 0xFF);
+    out->fw_sub = ((fwr >> 8) >= 1 && (fwr >> 8) <= 26) ? (char)('a' + (fwr >> 8) - 1) : 0;
     if (!has_slot)
     {
         out->sec = 0xFF;
@@ -649,6 +653,10 @@ bool nbrLoad(NbrMatrix &m, const uint8_t *buf, size_t len, uint32_t now_epoch, u
             memcpy(dst + p[i].off, buf + pos, p[i].len);
             pos += p[i].len;
         }
+        // Firmware-Stand (fw) ist nicht im Abbild: die geladenen Zeilen gehoeren
+        // anderen Rufzeichen als die bisherigen, also alles unbekannt, bis der
+        // naechste Rahmen der Station ihn neu setzt.
+        memset(m.fw, 0, sizeof(m.fw));
         // Zeilen: zu alte fallen weg (Zeile 0 nie); Berichtsminute ebenso.
         m.row[0].flags |= NBR_FLAG_USED;
         for (int i = 0; i < NBR_MAX_ROWS; i++)
