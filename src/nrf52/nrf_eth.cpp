@@ -27,8 +27,9 @@
 #include "regex_functions.h"
 #include "conf_frame.h"
 #include "setlog_lines.h"
-#include "eth_recovery.h"   // ETH-04: F1 reopen-UDP / F2 W5100S hw reset decision
 #include "gw_link_status.h"
+#include "gw_servers.h"      // central gateway server table
+#include "eth_recovery.h"   // ETH-04: F1 reopen-UDP / F2 W5100S hw reset decision
 
 EthernetUDP Udp;
 
@@ -109,6 +110,10 @@ static bool s_leaseHeld = false;
 static int  s_lastMaintainRc = 0;
 static bool s_reopenArmed = false;
 static uint32_t s_rxAtReopen = 0;
+// ETH-05: welcher Reopen hat s_reopenArmed gesetzt (true = statischer Reopen). Ein
+// Stall zaehlt nur fuer dieselbe Variante, damit ein static<->DHCP-Wechsel kein
+// fremdes, veraltetes Armed-Flag erbt.
+static bool s_reopenArmedStatic = false;
 
 // Link-Zustand aus dem W5100S-Register (ein SPI-Lesen). Kante -> Ereignis.
 void ethLinkPoll()
@@ -619,6 +624,46 @@ void NrfETH::getMyMac()
   DEBUG_MSG("Radio", "GW-ID: 0x%04X", _GW_ID);
 }
 
+// ETH-05: link wait of the static re-apply. 3 s like startETH() when the PHY was not
+// touched; after an initETH_HW() hardware reset the PHY needs ~4 s to report LinkON
+// (bench DK5EN-90: link up 4.1 s after the reset), so that caller waits up to 8 s.
+static constexpr uint32_t kStaticLinkWaitMs        = 3000UL;
+static constexpr uint32_t kStaticLinkWaitAfterHwMs = 8000UL;
+
+/**@brief Static re-apply WITHOUT a W5100S hardware reset of its own (same parameters as
+ * initethfixIP()). cfg = configured node_ownip; link_wait_ms = how long to wait for LinkON.
+ * Returns true when the chip is on the link and holds cfg afterwards.
+ */
+static bool nrfStaticReapplyNoReset(const IPAddress &cfg, uint32_t link_wait_ms)
+{
+  snprintf(meshcom_settings.node_ip, sizeof(meshcom_settings.node_ip), "%s", meshcom_settings.node_ownip);
+  snprintf(meshcom_settings.node_gw, sizeof(meshcom_settings.node_gw), "%s", meshcom_settings.node_owngw);
+  if(memcmp(meshcom_settings.node_ownip, "44", 2) == 0)
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"44.143.0.10");
+  else
+    snprintf(meshcom_settings.node_dns, sizeof(meshcom_settings.node_dns), "%s", (char*)"8.8.8.8");
+  snprintf(meshcom_settings.node_subnet, sizeof(meshcom_settings.node_subnet), "%s", meshcom_settings.node_ownms);
+
+  IPAddress dns(8, 8, 8, 8);
+  IPAddress gw(192, 168, 100, 1);
+  IPAddress subnet(255, 255, 255, 0);
+  gw.fromString(meshcom_settings.node_gw);
+  subnet.fromString(meshcom_settings.node_subnet);
+  dns.fromString(meshcom_settings.node_dns);
+
+  neth.getMyMac();
+  Ethernet.begin(macaddr, cfg, dns, gw, subnet);
+
+  EthernetLinkStatus elink = Ethernet.linkStatus();
+  uint32_t linkWait = millis();
+  while (elink == LinkOFF && (uint32_t)(millis() - linkWait) < link_wait_ms)
+  {
+    delay(100);
+    elink = Ethernet.linkStatus();
+  }
+  return elink != LinkOFF && Ethernet.localIP() == cfg;
+}
+
 /**@brief Method to renew/reset DHCP
  */
 int NrfETH::resetDHCP()
@@ -638,12 +683,76 @@ int NrfETH::resetDHCP()
   // Chip-IP und nur der UDP-Socket wird neu geoeffnet; Ethernet.begin() wuerde
   // die IP nullen und ein unicast-OFFER (MikroTik) vom W5100S verwerfen lassen.
   eth_recovery::Inputs in;
-  in.fixed_ip = strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6;
+  in.fixed_ip = ethIsStaticConfigured();
   in.link_up = (Ethernet.linkStatus() == LinkON);
   in.lease_held = s_leaseHeld;
-  in.reopen_stalled = s_reopenArmed && s_ethUdpRx == s_rxAtReopen;
+  in.reopen_stalled = s_reopenArmed && !s_reopenArmedStatic && s_ethUdpRx == s_rxAtReopen;
   in.last_maintain_rc = s_lastMaintainRc;
   eth_recovery::Action act = eth_recovery::decide(in, s_recov, millis());
+
+  if(act == eth_recovery::Action::ReapplyStatic)
+  {
+    // ETH-05: a static node stays static -- no DHCP exchange. Static analogue of ETH-04 F1:
+    // a hardware reset (initETH_HW, ~4 s PHY bring-up) only when the link
+    // is down or a plain re-apply failed; otherwise reopen UDP / re-apply without it.
+    IPAddress cfg(0, 0, 0, 0);
+    cfg.fromString(meshcom_settings.node_ownip);
+    eth_recovery::StaticInputs si;
+    si.link_up = in.link_up;
+    si.ip_matches = (cfg != IPAddress(0, 0, 0, 0)) && (Ethernet.localIP() == cfg);
+    si.reopen_stalled = s_reopenArmed && s_reopenArmedStatic && s_ethUdpRx == s_rxAtReopen;
+    si.hw_reset_allowed = eth_recovery::hwResetAllowed(s_recov, millis());   // same 5 min gap as the DHCP F2 path
+    eth_recovery::StaticAction sa = eth_recovery::decideStatic(si);
+    s_reopenArmed = false;   // jeder Zweig unten setzt die Stall-Pruefung neu (nur Reopen armt)
+
+    if(sa == eth_recovery::StaticAction::Reopen)
+    {
+      startServerLink();
+      hasIPaddress = true;
+      s_reopenArmed = true;          // Eskalation, falls bis zum naechsten Trigger kein UDP-RX kommt
+      s_reopenArmedStatic = true;
+      s_rxAtReopen = s_ethUdpRx;
+      Serial.printf("[ETH];event;reapply_static;mode;reopen;ip;%d;ms;%lu\n", hasIPaddress ? 1 : 0, (unsigned long)millis());
+      return 0;
+    }
+
+    if(sa == eth_recovery::StaticAction::Reapply)
+    {
+      if(nrfStaticReapplyNoReset(cfg, kStaticLinkWaitMs))
+      {
+        hasIPaddress = true;
+        s_leaseHeld = false;
+        last_upd_timer = millis();
+        startServerLink();
+        Serial.printf("[ETH];event;reapply_static;mode;begin;stalled;%d;gap;%d;ip;%d;ms;%lu\n", si.reopen_stalled ? 1 : 0, si.hw_reset_allowed ? 0 : 1, hasIPaddress ? 1 : 0, (unsigned long)millis());
+        return 0;
+      }
+    }
+
+    // link down, a stalled reopen with the right address (wedged sockets), or the
+    // re-apply without reset failed: hardware reset, then the static re-apply -- at most once per
+    // kHwResetMinGapMs (a long stall must not reset the chip on every trigger).
+    // Not initethfixIP(): its link wait (~2.5 s) ends before the PHY is back after the reset
+    // (~4 s, bench DK5EN-90), it then returns with hasIPaddress=false and no static-node path
+    // retried. initethfixIP() stays as is for boot and the gateway watchdog.
+    if(!si.hw_reset_allowed)
+    {
+      Serial.printf("[ETH];event;reapply_static;mode;begin;stalled;%d;gap;1;ip;0;ms;%lu\n", si.reopen_stalled ? 1 : 0, (unsigned long)millis());
+      return 1;   // Reapply failed or the chip does not answer yet; the next trigger retries
+    }
+    eth_recovery::onHwReset(s_recov, millis());
+    hasIPaddress = false;
+    initETH_HW();
+    if(nrfStaticReapplyNoReset(cfg, kStaticLinkWaitAfterHwMs))
+    {
+      hasIPaddress = true;
+      s_leaseHeld = false;
+      last_upd_timer = millis();
+      startServerLink();
+    }
+    Serial.printf("[ETH];event;reapply_static;mode;hw_reset;stalled;%d;ip;%d;ms;%lu\n", si.reopen_stalled ? 1 : 0, hasIPaddress ? 1 : 0, (unsigned long)millis());
+    return hasIPaddress ? 0 : 1;
+  }
 
   if(act == eth_recovery::Action::ReopenUdp)
   {
@@ -653,6 +762,7 @@ int NrfETH::resetDHCP()
       startUDP();
       hasIPaddress = true;
       s_reopenArmed = true;          // Eskalation, falls bis zum naechsten Trigger kein UDP-RX kommt
+      s_reopenArmedStatic = false;
       s_rxAtReopen = s_ethUdpRx;
       Serial.printf("[ETH];event;reopen_udp;ip;%i.%i.%i.%i;ms;%lu\n", cur[0], cur[1], cur[2], cur[3], (unsigned long)millis());
       return 0;
@@ -674,9 +784,8 @@ int NrfETH::resetDHCP()
 
   // startETH() kehrt bei hasIPaddress == true sofort mit 0 zurueck (getUDP-Aufrufer):
   // hier erzwingen, dass das DHCP wirklich laeuft und das Ergebnis zaehlt.
-  // Statische IP: Verhalten wie vor ETH-04 (dort war dieser Aufruf ein No-op).
-  if(!in.fixed_ip)
-    hasIPaddress = false;
+  // Statische IP kommt hier nicht mehr an (ETH-05: ReapplyStatic oben).
+  hasIPaddress = false;
 
   // renew DHCP config
   int retStart = startETH();
@@ -693,7 +802,7 @@ int NrfETH::resetDHCP()
   if(retStart == 0)
   {
     // start UDP Service again
-    startUDP();
+    startServerLink();
     DEBUG_MSG("ETH", "Renew DHCP successful!\n");
   }
   else
@@ -857,6 +966,75 @@ int NrfETH::checkDHCP()
   return rc;
 }
 
+/**@brief Server selection through the central table (src/gw_servers). One
+ * implementation for the DHCP (startUDP) and the static (startFIXUDP) path.
+ * Sets the UDP destination and the NTP server, returns the path ("hamnet"|"inet").
+ * mode: node_hamnet_only semantics (0 and 3 Internet, 1 Hamnet, 2 and other = auto by ownIp).
+ * If the table cannot resolve (table error) the destination stays untouched and
+ * the path is "inet".
+ */
+static const char *nrfApplyServerTarget(const uint8_t ownIp[4], uint8_t mode)
+{
+  GwTarget t;
+  if(!gwResolveNode(meshcom_settings.node_gwsrv, mode, ownIp,
+                    meshcom_settings.node_ownntp, false /* nRF52 has no DNS resolver */, &t))
+  {
+    printlndeb("[UDP-DEST] gwResolveNode failed - destination unchanged");
+    return "inet";
+  }
+
+  neth.udp_dest_addr = IPAddress(t.srv_ip[0], t.srv_ip[1], t.srv_ip[2], t.srv_ip[3]);
+  timeClient.setPoolServerIP(IPAddress(t.ntp_ip[0], t.ntp_ip[1], t.ntp_ip[2], t.ntp_ip[3]));
+
+  char dbg[96];
+  snprintf(dbg, sizeof(dbg), "[UDP-DEST] %s UDP-DEST %u.%u.%u.%u NTP-DEST %u.%u.%u.%u%s", t.path,
+           t.srv_ip[0], t.srv_ip[1], t.srv_ip[2], t.srv_ip[3],
+           t.ntp_ip[0], t.ntp_ip[1], t.ntp_ip[2], t.ntp_ip[3],
+           t.ownntp_ignored ? " (own NTP ignored)" : "");
+  printlndeb(dbg);
+  return t.path;
+}
+
+/**@brief Shared tail of startUDP() and startFIXUDP(): bench `--srvip` hook, the
+ * TM-39 [GW];srv line and the gateway link destination. srv_path comes from
+ * nrfApplyServerTarget().
+ */
+static void nrfPublishServerLink(const char *srv_path)
+{
+  char sn[20];
+
+#if INSTRUMENT_ENABLED
+  // Bench hook, nRF52 half of the ESP32 `--srvip` override
+  // (command_functions.cpp, applied there in wifiDnsPoll()). Unlike the
+  // ESP32 path there is no DNS resolver here at all: every branch above
+  // assigns a hardcoded literal, so without this the node can only ever
+  // talk to a real MeshCom server and the UDP-1990 golden captures cannot
+  // be driven against a local stub. RAM only, cleared by 0.0.0.0, applied
+  // at the next startUDP()/startFIXUDP().
+  {
+      if((uint32_t)bench_srvip != 0)
+      {
+          neth.udp_dest_addr = bench_srvip;
+          srv_path = "bench";
+          Serial.printf("[SRVIP];%i.%i.%i.%i;applied\n",
+                        neth.udp_dest_addr[0], neth.udp_dest_addr[1],
+                        neth.udp_dest_addr[2], neth.udp_dest_addr[3]);
+      }
+  }
+#endif
+
+  snprintf(sn, sizeof(sn), "%i.%i.%i.%i", neth.udp_dest_addr[0], neth.udp_dest_addr[1], neth.udp_dest_addr[2], neth.udp_dest_addr[3]);
+  s_node_hostip = sn;
+
+  // TM-39: raw & unconditional, once per (re)connect. nRF52 has no DNS
+  // resolver on this path -- host is always the literal dotted-quad IP,
+  // never a hostname (unlike the ESP32 [GW];srv, which logs a hostname
+  // for IT/DL and only falls back to a literal for the else-case).
+  Serial.printf("[GW];srv;%.2s;host;%s;path;%s;ms;%lu\n",
+                 meshcom_settings.node_gwsrv, s_node_hostip.c_str(), srv_path, (unsigned long)millis());
+  gwLinkSetDest(srv_path, sn);   // sn = dotted-quad of udp_dest_addr, same host as the line above
+}
+
 /**@brief Start UDP Service
  */
 void NrfETH::startUDP()
@@ -875,139 +1053,10 @@ void NrfETH::startUDP()
   }
   else
   {
-    const char *srv_path = NULL;   // TM-39: "hamnet" or "inet", matches the printlndeb text below
+    const uint8_t ownIp[4] = {local_addr[0], local_addr[1], local_addr[2], local_addr[3]};
+    const char *srv_path = nrfApplyServerTarget(ownIp, (uint8_t)meshcom_settings.node_hamnet_only);   // TM-39: "hamnet" or "inet"
 
-    // lokale 44er soll nur zum HAMNET gerouet werden wenn auch hamnet_only gesetzt ist.
-    if ((local_addr[0] == 44 && meshcom_settings.node_hamnet_only == 1) || meshcom_settings.node_hamnet_only == 1)
-    {
-      if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
-      {
-        printlndeb("[UDP-DEST] Setting I-NET UDP-DEST 145.239.75.155");
-
-        udp_dest_addr = IPAddress(145, 239, 75, 155);
-        srv_path = "inet";
-
-        printlndeb("[UDP-DEST]...NTP-DEST 162.159.200.1");
-        timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
-      }
-      else
-      if(memcmp(meshcom_settings.node_gwsrv, "HC", 2) == 0)
-      {
-        printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.148.230.197");
-        udp_dest_addr = IPAddress(44, 148, 230, 197);
-        srv_path = "hamnet";
-
-        printlndeb("[UDP-DEST]...Hamnet NTP-DEST 44.148.224.123");
-        timeClient.setPoolServerIP(IPAddress(44, 148, 224, 123));
-      }
-      else
-      if(memcmp(meshcom_settings.node_gwsrv, "HB", 2) == 0)
-      {
-        printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.142.42.59");
-        udp_dest_addr = IPAddress(44, 142, 42, 59);
-        srv_path = "hamnet";
-
-        printlndeb("[UDP-DEST]...Hamnet NTP-DEST 44.142.163.2");
-        timeClient.setPoolServerIP(IPAddress(44, 142, 163, 2));
-      }
-      else
-      {
-        printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
-        udp_dest_addr = IPAddress(44, 143, 8, 143);
-        srv_path = "hamnet";
-
-        printlndeb("[UDP-DEST]...Hamnet NTP-DEST 44.143.0.9");
-        timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
-      }
-    }
-    else
-    {
-      // CTY-01: mirrors the country split startFIXUDP() already has on its
-      // non-hamnet branch -- this path (DHCP, no hamnet) had none and always
-      // fell through to the OE default, regardless of node_gwsrv.
-      if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
-      {
-        printlndeb("[UDP-DEST] Internet UDP-DEST IT 145.239.75.155");
-        udp_dest_addr = IPAddress(145, 239, 75, 155);
-        srv_path = "inet";
-
-        printlndeb("[UDP-DEST]...NTP-DEST 162.159.200.1");
-        timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
-      }
-      else
-      if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
-      {
-        // v4.35v: MeshCom-DL internet server meshcom.hamnet.network (the ESP32
-        // path resolves the name; nRF52 keeps fixed IPs like OE/IT above).
-        printlndeb("[UDP-DEST] Internet UDP-DEST DL 192.68.17.26");
-        udp_dest_addr = IPAddress(192, 68, 17, 26);
-        srv_path = "inet";
-
-        printlndeb("[UDP-DEST]...NTP-DEST 162.159.200.1");
-        timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
-      }
-      else
-      if(memcmp(meshcom_settings.node_gwsrv, "HC", 2) == 0)
-      {
-        // HC Server ist immer nur aus dem HAMNET erreichbar
-        printlndeb("[UDP-DEST] Internet UDP-DEST HC 44.148.230.197");
-        udp_dest_addr = IPAddress(44, 148, 230, 197);
-        srv_path = "inet";
-
-        printlndeb("[UDP-DEST]...Hamnet NTP-DEST 44.148.224.123");
-        timeClient.setPoolServerIP(IPAddress(44, 148, 224, 123));
-      }
-      else
-      if(memcmp(meshcom_settings.node_gwsrv, "HB", 2) == 0)
-      {
-        printlndeb("[UDP-DEST] Internet UDP-DEST HB 157.143.4.44");
-        udp_dest_addr = IPAddress(157, 143, 4, 44);
-        srv_path = "inet";
-
-        printlndeb("[UDP-DEST]...NTP-DEST 162.159.200.1");
-        timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
-      }
-      else
-      {
-        printlndeb("[UDP-DEST] Setting I-NET UDP-DEST OE 89.185.97.38");
-        udp_dest_addr = IPAddress(89, 185, 97, 38);
-        srv_path = "inet";
-
-        printlndeb("[UDP-DEST]...NTP-DEST 162.159.200.1");
-        timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
-      }
-    }
-
-#if INSTRUMENT_ENABLED
-    // Bench hook, nRF52 half of the ESP32 `--srvip` override
-    // (command_functions.cpp, applied there in wifiDnsPoll()). Unlike the
-    // ESP32 path there is no DNS resolver here at all: every branch above
-    // assigns a hardcoded literal, so without this the node can only ever
-    // talk to a real MeshCom server and the UDP-1990 golden captures cannot
-    // be driven against a local stub. RAM only, cleared by 0.0.0.0, applied
-    // at the next startUDP().
-    {
-        if((uint32_t)bench_srvip != 0)
-        {
-            udp_dest_addr = bench_srvip;
-            srv_path = "bench";
-            Serial.printf("[SRVIP];%i.%i.%i.%i;applied\n",
-                          udp_dest_addr[0], udp_dest_addr[1],
-                          udp_dest_addr[2], udp_dest_addr[3]);
-        }
-    }
-#endif
-
-    snprintf(sn, sizeof(sn), "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
-    s_node_hostip = sn;
-
-    // TM-39: raw & unconditional, once per (re)connect. nRF52 has no DNS
-    // resolver on this path -- host is always the literal dotted-quad IP,
-    // never a hostname (unlike the ESP32 [GW];srv, which logs a hostname
-    // for IT/DL and only falls back to a literal for the else-case).
-    Serial.printf("[GW];srv;%.2s;host;%s;path;%s;ms;%lu\n",
-                   meshcom_settings.node_gwsrv, s_node_hostip.c_str(), srv_path, (unsigned long)millis());
-    gwLinkSetDest(srv_path, sn);   // sn = dotted-quad of udp_dest_addr, same host as the line above
+    nrfPublishServerLink(srv_path);
 
     Udp.begin(LOCAL_PORT); // Start UDP.
 
@@ -1069,87 +1118,30 @@ String NrfETH::udpGetDateClient()
   return getDateTime(timeClient.getEpochTime());
 }
 
+void NrfETH::startServerLink()
+{
+  if(ethIsStaticConfigured())
+    startFIXUDP();
+  else
+    startUDP();
+}
+
 void NrfETH::startFIXUDP()
 {
   char sn[20];
   snprintf(sn, sizeof(sn), "%s", meshcom_settings.node_ownip);
   s_node_ip=sn;
 
-  const char *srv_path = "inet";   // for gwLinkSetDest(): same values as the TM-39 [GW];srv path
+  // ownIp: the configured static address (node_ip is a copy of node_ownip)
+  IPAddress cfgIp(0, 0, 0, 0);
+  cfgIp.fromString(meshcom_settings.node_ownip);
+  const uint8_t ownIp[4] = {cfgIp[0], cfgIp[1], cfgIp[2], cfgIp[3]};
+  // 0 = unset/legacy keeps the old static rule (44er -> Hamnet); 1 Hamnet, 2 auto, 3 Internet
+  // (an explicit Internet choice now works on a 44er node).
+  const uint8_t staticMode = gwEffectiveMode((uint8_t)meshcom_settings.node_hamnet_only, ownIp, true);
+  const char *srv_path = nrfApplyServerTarget(ownIp, staticMode);
 
-  if (memcmp(meshcom_settings.node_ip, "44", 2) == 0 || meshcom_settings.node_hamnet_only)
-  {
-    if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
-    {
-      if(bDisplayCont)
-        printlndeb("[UDP-DEST] Setting I-NET UDP-DEST 145.239.75.155");
-        
-      udp_dest_addr = IPAddress(145, 239, 75, 155);
-      srv_path = "inet";
-
-      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
-    }
-    else
-    if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
-    {
-      if(bDisplayCont)
-        printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.148.230.197");
-
-      udp_dest_addr = IPAddress(44, 148, 230, 197);
-      srv_path = "hamnet";
-    
-      // same DL HAMNET NTP as startUDP() (upstream f860e934 changed only startUDP())
-      timeClient.setPoolServerIP(IPAddress(44, 148, 224, 123));
-    }
-    else
-    {
-      if(bDisplayCont)
-        printlndeb("[UDP-DEST] Setting Hamnet UDP-DEST 44.143.8.143");
-
-      udp_dest_addr = IPAddress(44, 143, 8, 143);
-      srv_path = "hamnet";
-    
-      //DEBUG_MSG("NTP", "Setting Hamnet NTP");
-      timeClient.setPoolServerIP(IPAddress(44, 143, 0, 9));
-    }
-
-  }
-  else
-  {
-    if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
-    {
-      if(bDisplayCont)
-        printlndeb("[UDP-DEST] Internet UDP-DEST IT 145.239.75.155");
-        
-      udp_dest_addr = IPAddress(145, 239, 75, 155);
-
-      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
-    }
-    else if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
-    {
-      // v4.35v: MeshCom-DL internet server meshcom.hamnet.network (fixed IP, see startUDP()).
-      if(bDisplayCont)
-        printlndeb("[UDP-DEST] Internet UDP-DEST DL 192.68.17.26");
-
-      udp_dest_addr = IPAddress(192, 68, 17, 26);
-
-      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
-    }
-    else
-    {
-      if(bDisplayCont)
-        printlndeb("[UDP-DEST] Setting I-NET UDP-DEST OE 89.185.97.38");
-        
-      udp_dest_addr = IPAddress(89, 185, 97, 38);
-
-      //DEBUG_MSG("NTP", "Setting I-NET 3.at.pool.ntp.org NTP");
-      timeClient.setPoolServerIP(IPAddress(162, 159, 200, 1));
-    }
-  }
-
-  snprintf(sn, sizeof(sn), "%i.%i.%i.%i", udp_dest_addr[0], udp_dest_addr[1], udp_dest_addr[2], udp_dest_addr[3]);
-  s_node_hostip = sn;
-  gwLinkSetDest(srv_path, sn);
+  nrfPublishServerLink(srv_path);
 
   Udp.begin(LOCAL_PORT); // Start UDP.
 
@@ -1168,6 +1160,6 @@ void NrfETH::startFIXUDP()
 void nrfEthRestartUDP()
 {
     extern NrfETH neth;
-    neth.startUDP();
+    neth.startServerLink();
 }
 #endif

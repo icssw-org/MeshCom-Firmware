@@ -1,6 +1,15 @@
 //RAK13800 Ethernet Shield
 #pragma once
 #include <configuration.h>
+#include <string.h>
+#include "meshcom_settings.h"
+
+// ETH-05: the one definition of "static IP configured" (own IP, mask and gateway
+// set). A static node stays static: no recovery path may fall back to DHCP.
+inline bool ethIsStaticConfigured()
+{
+  return strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6;
+}
 
 // TM-35 / N-20 instrumentation (parity with the ESP32 [WIFI] markers, see
 // udp_functions.cpp): every blocking W5100S call reports itself as
@@ -41,6 +50,9 @@ class NrfETH {
     void startUDP();
 
     void startFIXUDP();
+
+    // ETH-05: static node -> startFIXUDP(), else startUDP()
+    void startServerLink();
 
     void initethfixIP();
 

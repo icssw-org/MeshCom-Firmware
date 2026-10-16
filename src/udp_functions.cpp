@@ -55,6 +55,7 @@ String grc_ids;
 #include <ESP32Ping.h>
 #include <Preferences.h>
 #include "esp32/netif_mtu.h"
+#include "gw_servers.h"
 
 IPAddress node_ip = IPAddress(0,0,0,0);
 IPAddress node_gw = IPAddress(0,0,0,0);
@@ -1032,12 +1033,6 @@ void startMeshComUDP()
 
     node_dns.fromString(meshcom_settings.node_dns);
 
-    // Set your NTP IP
-    if(strlen(meshcom_settings.node_ownntp) >= 7)
-      snprintf(meshcom_settings.node_ntp, sizeof(meshcom_settings.node_ntp), "%s", meshcom_settings.node_ownntp);
-    else
-      snprintf(meshcom_settings.node_ntp, sizeof(meshcom_settings.node_ntp), "%s", (char*)"");
-
     // Configures static IP address
     if (!WiFi.config(node_ip, node_gw, node_ms, node_dns))
     {
@@ -1058,6 +1053,12 @@ void startMeshComUDP()
       printf("[localIP] %i.%i.%i.%i", WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], WiFi.localIP()[3]);
     }
   }
+
+  // own NTP (node_ownntp) counts for static and DHCP nodes (decision 2026-10-15)
+  if(strlen(meshcom_settings.node_ownntp) >= 7)
+    snprintf(meshcom_settings.node_ntp, sizeof(meshcom_settings.node_ntp), "%s", meshcom_settings.node_ownntp);
+  else
+    snprintf(meshcom_settings.node_ntp, sizeof(meshcom_settings.node_ntp), "%s", (char*)"");
 
   // update phone status
   if(isPhoneReady == 1)
@@ -1093,119 +1094,30 @@ void startMeshComUDP()
 
       // F6: Zielnamen bestimmen; aufgeloest wird asynchron (wifiDnsPoll),
       // Literal-IPs sofort, ein Name pro Boot nur einmal.
-      const char *srv_host = NULL;
-      const char *srv_path = NULL;   // TM-39: "hamnet" or "inet", matches the printlndeb text below
-      const char *ntp_host = NULL;
-      IPAddress ntp_literal(0,0,0,0);
-
-      if ((node_ip[0] == 44 && meshcom_settings.node_hamnet_only == 1) || meshcom_settings.node_hamnet_only == 1)
+      // Selection comes from the central table (gw_servers.cpp).
+      uint8_t ownIp[4] = {node_ip[0], node_ip[1], node_ip[2], node_ip[3]};
+      GwTarget t;
+      if(!gwResolveNode(meshcom_settings.node_gwsrv, (uint8_t)meshcom_settings.node_hamnet_only, ownIp,
+                        meshcom_settings.node_ownntp, true, &t))
       {
-        // Hamnet only not available for IT-Server, so we use Internet for IT-Server
-        if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
-        {
-          printlndeb("[WIFI]...Internet (no HAMNET) UDP-DEST meshcom.dig-italia.it");
-          srv_host = "meshcom.dig-italia.it";
-          srv_path = "inet";
-        }
-        else
-        if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
-        {
-          printlndeb("[WIFI]...Hamnet UDP-DEST meshcom.hamnet.cloud");
-          srv_host = "meshcom.hamnet.cloud";
-          srv_path = "hamnet";
-        }
-        else
-        if(memcmp(meshcom_settings.node_gwsrv, "HC", 2) == 0)
-        {
-          printlndeb("[WIFI]...Hamnet UDP-DEST 44.148.230.197");
-          srv_host = "44.148.230.197";
-          srv_path = "hamnet";
-        }
-        else
-        if(memcmp(meshcom_settings.node_gwsrv, "HB", 2) == 0)
-        {
-          printlndeb("[WIFI]...Hamnet UDP-DEST 44.142.42.59");
-          srv_host = "44.142.42.59";
-          srv_path = "hamnet";
-        }
-        else
-        {
-          printlndeb("[WIFI]...Hamnet UDP-DEST 44.143.8.143");
-          srv_host = "44.143.8.143";
-          srv_path = "hamnet";
-        }
-
-        if(strlen(meshcom_settings.node_ntp) >= 7)
-        {
-          printfdeb("[WIFI]...Internet NTP-DEST %s\n", meshcom_settings.node_ntp);
-          ntp_host = meshcom_settings.node_ntp;
-        }
-        else if(node_ip[1] == 143)
-        {
-          printlndeb("[WIFI]...Hamnet NTP-DEST 44.143.0.9");
-          ntp_literal = IPAddress(44, 143, 0, 9);
-        }
-        else if(node_ip[1] == 148)
-        {
-          printlndeb("[WIFI]...Hamnet NTP-DEST 44.148.224.123");
-          ntp_literal = IPAddress(44, 148, 224, 123);
-        }
-        else
-        {
-          printlndeb("[WIFI]...Hamnet NTP-DEST 44.143.0.9");
-          ntp_literal = IPAddress(44, 143, 0, 9);
-        }
-      }
-      else
-      {
-        if(memcmp(meshcom_settings.node_gwsrv, "IT", 2) == 0)
-        {
-          printlndeb("[WIFI]...Internet UDP-DEST meshcom.dig-italia.it");
-          srv_host = "meshcom.dig-italia.it";
-          srv_path = "inet";
-        }
-        else
-        if(memcmp(meshcom_settings.node_gwsrv, "DL", 2) == 0)
-        {
-          printlndeb("[WIFI]...Internet UDP-DEST meshcom.hamnet.network");
-          srv_host = "meshcom.hamnet.network";
-          srv_path = "inet";
-        }
-        else
-        if(memcmp(meshcom_settings.node_gwsrv, "HC", 2) == 0)
-        {
-          printlndeb("[WIFI]...Internet UDP-DEST meshcom.hamnet.network");
-          srv_host = "meshcom.hamnet.network";
-          srv_path = "inet";
-        }
-        else
-        if(memcmp(meshcom_settings.node_gwsrv, "HB", 2) == 0)
-        {
-          printlndeb("[WIFI]...Internet UDP-DEST meshcom.emcomm.ch");
-          srv_host = "meshcom.emcomm.ch";
-          srv_path = "inet";
-        }
-        else
-        {
-          printlndeb("[WIFI]...Internet UDP-DEST meshcom.oevsv.at");
-          srv_host = "meshcom.oevsv.at";
-          srv_path = "inet";
-        }
-
-        if(strlen(meshcom_settings.node_ntp) >= 7)
-        {
-          printfdeb("[WIFI]...Internet NTP-DEST %s\n", meshcom_settings.node_ntp);
-          ntp_host = meshcom_settings.node_ntp;
-        }
-        else
-        {
-          printlndeb("[WIFI]...Internet NTP-DEST pool.ntp.org");
-          ntp_host = "pool.ntp.org";
-        }
+        printlndeb("[WIFI]...gw_servers table error, no server lookup");
+        return;
       }
 
+      static char s_srvHostBuf[16];
+      const char *srv_host = t.srv_host;
+      if(srv_host == NULL)
+      {
+        snprintf(s_srvHostBuf, sizeof(s_srvHostBuf), "%u.%u.%u.%u", t.srv_ip[0], t.srv_ip[1], t.srv_ip[2], t.srv_ip[3]);
+        srv_host = s_srvHostBuf;
+      }
+      const char *srv_path = t.path;   // TM-39: "hamnet" or "inet"
+      const char *ntp_host = t.ntp_host;
       if(ntp_host == NULL)
-        timeClient.setPoolServerIP(ntp_literal);
+        timeClient.setPoolServerIP(IPAddress(t.ntp_ip[0], t.ntp_ip[1], t.ntp_ip[2], t.ntp_ip[3]));
+
+      printfdeb("[WIFI]...GW %.2s %s UDP-DEST %s NTP-DEST %s\n", meshcom_settings.node_gwsrv, srv_path, srv_host,
+                ntp_host ? ntp_host : "literal");
 
       // TM-39: raw & unconditional, once per (re)connect -- before this the
       // host is not chosen yet, so there is nothing to log.

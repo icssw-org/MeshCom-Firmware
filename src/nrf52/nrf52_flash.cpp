@@ -621,6 +621,7 @@ void flash_reset(void)
 		// geschriebenen Abbilds wird gleich danach festgehalten, sobald meshcom_settings selbst wieder
 		// gefuellt ist -- siehe init_flash()).
 		s_meshcom_settings default_settings;
+		default_settings.node_hamnet_only = 2; // factory default: auto network (a wipe only; loaded settings keep their value)
 		s_ble_settings_v1 &default_image = bleSettingsV1Scratch(); // shared loop-task scratch, see above
 		bleSettingsToV1(default_settings, default_image);
 		size_t put = lora_file.write((uint8_t *)&default_image, sizeof(s_ble_settings_v1));
@@ -646,6 +647,7 @@ void flash_reset(void)
 		if (lora_file.open(settings_name, FILE_O_WRITE))
 		{
 			s_meshcom_settings default_settings;
+			default_settings.node_hamnet_only = 2; // factory default: auto network (a wipe only; loaded settings keep their value)
 			s_ble_settings_v1 &default_image = bleSettingsV1Scratch(); // shared loop-task scratch, see above
 			bleSettingsToV1(default_settings, default_image);
 			size_t put = lora_file.write((uint8_t *)&default_image, sizeof(s_ble_settings_v1));
