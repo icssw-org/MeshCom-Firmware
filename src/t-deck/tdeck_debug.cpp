@@ -365,6 +365,9 @@ extern "C" void tdeck_dbg_uistat(void)
                   (last != NULL) ? (int)last->coords.y1 : -1,
                   (last != NULL) ? (int)last->coords.y2 : -1,
                   (int)lv_disp_get_ver_res(NULL));
+
+    // separate line: tdeck_harness.py parses [UISTAT] by key/value pairs
+    Serial.printf("[UIDM];%s\n", dm_callsign != NULL ? lv_textarea_get_text(dm_callsign) : "");
 }
 
 extern "C" void tdeck_dbg_tab_list(void)
