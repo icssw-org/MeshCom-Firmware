@@ -826,7 +826,7 @@ void btn_event_handler_clear(lv_event_t * e)
             Serial.println("clear Clicked");
 
         lv_textarea_set_text(text_input, (char*)"");
-        lv_textarea_set_text(dm_callsign, (char*)"");
+        tdeck_dm_callsign_set_explicit("");
 
         lv_group_focus_obj(text_input);
     }
@@ -934,6 +934,7 @@ void tabview_event_cb(lv_event_t * e)
             case 0: // MSG
                 break;
             case 1: // SND
+                tdeck_dm_callsign_prefill();
                 lv_group_focus_obj(text_input);
                 break;
             case 2: // POS

@@ -1040,6 +1040,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                            aprsmsg.msg_payload,
                            nbrGwHintFromDest(aprsmsg.payload_type, aprsmsg.msg_destination_path),
                            rssi, snr, now_min_hn);
+            if(aprsmsg.msg_source_fw_on_air)   // sonst stuende hier mein eigener Stand
+                nbrNoteFw(nbrMatrix, aprsmsg.msg_source_call, aprsmsg.msg_source_fw_version,
+                          aprsmsg.msg_source_fw_sub_version);
 
             // W3b: Direkt-Slot fuer den HN-Bericht selbst (Konzept 4.6) --
             // HN traegt nie eine Position (payload_type ist immer '@'), also
@@ -1306,6 +1309,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                aprsmsg.msg_payload,
                                nbrGwHintFromDest(aprsmsg.payload_type, aprsmsg.msg_destination_path),
                                rssi, snr, now_min);
+                if(aprsmsg.msg_source_fw_on_air)   // sonst stuende hier mein eigener Stand
+                    nbrNoteFw(nbrMatrix, aprsmsg.msg_source_call, aprsmsg.msg_source_fw_version,
+                              aprsmsg.msg_source_fw_sub_version);
 
                 // W3b (docs/meshcom5-campaign.md Welle 3): Direkt-Slot-Grundgeruest
                 // fuer denselben Rahmen. Position/Hoehe kommen erst unten aus dem
