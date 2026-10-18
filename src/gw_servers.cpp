@@ -10,7 +10,7 @@
 
 const GwServer GW_SERVERS[] = {
     // Row 0 is the default for unknown or empty codes.
-    { "OE", "MeshCom OE (Austria)",
+    { "OE", "MeshCom OE (Austria/WW)",
       { /*INET*/   { GWM_DIRECT, "", { "meshcom.oevsv.at", {89, 185, 97, 38} }, GW_NTP_POOL },
         /*HAMNET*/ { GWM_DIRECT, "", { nullptr, {44, 143, 8, 143} }, { nullptr, {44, 143, 0, 9} } } } },
     // DL: Internet server by wish of the German sysadmin. Hamnet users select HC;
