@@ -1222,7 +1222,7 @@ void nrf52setup()
         //////////////////////////////////////////////////////
         // ETHERNET INIT
    
-        if(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6)
+        if(ethIsStaticConfigured())
         {
             if(bDEBUG)
                 Serial.println("[init] ETH FIX-IP init");
@@ -2255,7 +2255,7 @@ void nrf52loop()
     if(neth.hasETHHardware && (uint32_t)(millis() - dhcp_timer) >= (uint32_t)(DHCP_REFRESH * 60000))
     {
         // no need on static IPs
-        if(!(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6))
+        if(!ethIsStaticConfigured())
         {
             if(bDEBUG)
             {
@@ -2295,8 +2295,15 @@ void nrf52loop()
     // Gated on hasETHlink() so we do not hammer DHCP on a node with no cable
     // in it, and on a 30 s interval so a genuinely absent DHCP server costs
     // one attempt per half minute rather than one per loop pass.
-    if(neth.hasETHHardware && !neth.hasIPaddress
-       && !(strlen(meshcom_settings.node_ownip) > 6 && strlen(meshcom_settings.node_ownms) > 6 && strlen(meshcom_settings.node_owngw) > 6))
+    //
+    // ETH-05: static nodes are included. For them resetDHCP() takes the
+    // ReapplyStatic path (no DHCP exchange: reopen UDP / re-apply the static
+    // address / hardware reset), so this is the static retry too. Without it a
+    // static node whose recovery ended with hasIPaddress=false (bench DK5EN-90:
+    // PHY back ~4 s after the W5100S reset) never retried: UDP TX is skipped
+    // without an IP and the gateway watchdog runs on bGATEWAY nodes only.
+    // The checkDHCP() renewal above stays DHCP-only (no lease to renew).
+    if(neth.hasETHHardware && !neth.hasIPaddress)
     {
         static uint32_t eth_acquire_timer = 0;
         if(eth_acquire_timer == 0 || (uint32_t)(millis() - eth_acquire_timer) >= 30000)

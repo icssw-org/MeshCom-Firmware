@@ -42,6 +42,11 @@
 #include "web_nodefunctioncalls.h"
 #include "web_commonServer.h"
 #include "gw_link_status.h"
+#include "gw_servers.h"
+#if defined(NRF52_SERIES)
+#include <RAK13800_W5100S.h> // IPAddress for nrf_eth.h
+#include <nrf_eth.h>          // ethIsStaticConfigured()
+#endif
 #if defined(BOARD_RAK4630)
 #include "w5100.h"          // #1183: W5100.readSn*/writeSnMSSR for the web socket's MSS
 #endif
@@ -1412,18 +1417,58 @@ static String urlEncode(const char *input)
  */
 static String getEffectiveNtpServer()
 {
-    if (strlen(meshcom_settings.node_ownntp) >= 7)
-        return String(meshcom_settings.node_ownntp);
-
+    // nRF52 STATIC-IP node: the path uses the configured node_ownip and the legacy rule for the
+    // stored mode 0 (44er -> Hamnet); gwEffectiveMode keeps this status equal to that path.
+    bool staticLegacy = false;
+    const char *webNtpIpText = meshcom_settings.node_ip;
+#if defined(NRF52_SERIES)
+    if (ethIsStaticConfigured())
+    {
+        staticLegacy = true;
+        webNtpIpText = meshcom_settings.node_ownip;
+    }
+#endif
     IPAddress webNtpIp;
-    webNtpIp.fromString(meshcom_settings.node_ip);
+    webNtpIp.fromString(webNtpIpText);
+    uint8_t ownIp[4] = {webNtpIp[0], webNtpIp[1], webNtpIp[2], webNtpIp[3]};
+    const uint8_t netMode = gwEffectiveMode((uint8_t)meshcom_settings.node_hamnet_only, ownIp, staticLegacy);
 
-    bool bHamnet = (webNtpIp[0] == 44 || meshcom_settings.node_hamnet_only == 1);
+    // nRF52 has no DNS resolver: an own NTP host name is ignored there (gwResolve sets ownntp_ignored)
+#if defined(NRF52_SERIES)
+    const bool hasResolver = false;
+#else
+    const bool hasResolver = true;
+#endif
 
-    if (bHamnet)
-        return (webNtpIp[1] == 143) ? "44.143.0.9 (default)" : "44.148.224.123 (default)";
+    GwTarget t;
+    if (!gwResolveNode(meshcom_settings.node_gwsrv, netMode, ownIp,
+                       meshcom_settings.node_ownntp, hasResolver, &t))
+        return String("n/a");
+
+    // own NTP in effect (IPv4 literal, or host name where a resolver exists)
+    if (strlen(meshcom_settings.node_ownntp) >= 7 && !t.ownntp_ignored)
+    {
+        if (t.ntp_host != NULL)
+            return String(t.ntp_host);
+        char obuf[20];
+        snprintf(obuf, sizeof(obuf), "%u.%u.%u.%u", t.ntp_ip[0], t.ntp_ip[1], t.ntp_ip[2], t.ntp_ip[3]);
+        return String(obuf);
+    }
+
+    String def;
+    if (t.ntp_host != NULL)
+    {
+        def = String(t.ntp_host) + " (default)";
+    }
     else
-        return "pool.ntp.org (default)";
+    {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%u.%u.%u.%u (default)", t.ntp_ip[0], t.ntp_ip[1], t.ntp_ip[2], t.ntp_ip[3]);
+        def = String(buf);
+    }
+    if (t.ownntp_ignored)
+        def += " (own NTP ignored)";
+    return def;
 }
 
 /**
