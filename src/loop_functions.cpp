@@ -3,6 +3,7 @@
 #include "Arduino.h"
 
 #include <atomic>
+#include <math.h>
 
 #if defined(ESP32)
 #include <WiFi.h>
@@ -145,6 +146,9 @@ uint32_t stat_nbr_cancel_possible = 0;  // Relays, deren Bedarf durch fremde Wie
 uint32_t stat_nbr_refuse_alone = 0;     // gehoerte fremde Wiederholung, Abbruch wegen Allein-Maske verweigert (je Slot einmal)
 bool bBLEDEBUG = false;
 bool bWXDEBUG = false;
+// --aprswx on|off: companion standard APRS weather frame with MeshCom position
+// (node_sset2 0x2000). Default off so existing nodes keep one POS beacon only.
+bool bAPRSWX = false;
 bool bIODEBUG = false;
 bool bTDECKDEBUG = false;
 bool bCHECKMESH = false;
@@ -4908,6 +4912,132 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     return String(msg_start);
 }
 
+String PositionToAprsWx(double plat, char lat_c, double plon, char lon_c,
+                       float temp_c, float hum, float press_hpa, float qnh_hpa)
+{
+    double lat = abs(plat);
+    double lon = abs(plon);
+
+    if(lat >= 0.0 && lat <= 2.0 && lon >= 0.0 && lon <= 2.0)
+        return "";
+
+    // Same degrees -> APRS ddmm.mm conversion as PositionToAPRS(bConvPos=true).
+    double slat = (int)lat;
+    slat = (slat * 100.) + ((lat - slat) * 60.0);
+    double slon = (int)lon;
+    slon = (slon * 100.) + ((lon - slon) * 60.0);
+
+    if(lon_c != 'W' && lon_c != 'E')
+        lon_c = 'E';
+    if(lat_c != 'N' && lat_c != 'S')
+        lat_c = 'N';
+
+    const bool have_hum = (hum > 0.0f);
+    float baro = (qnh_hpa > 0.0f) ? qnh_hpa : press_hpa;
+    const bool have_baro = (baro > 0.0f);
+    // Any non-trivial reading arms the frame; temp may legitimately be 0 °C.
+    const bool have_temp = (temp_c > 0.05f) || (temp_c < -0.05f);
+
+    if(!have_temp && !have_hum && !have_baro)
+        return "";
+
+    // APRS weather: unused wind as .../...g... ; rain r...p...P... when absent.
+    // Always emit t when the frame is sent (0 °C -> t032) so aprs.fi gets a temperature.
+    char tw[8] = {0};
+    {
+        int tF = (int)lround((double)temp_c * 9.0 / 5.0 + 32.0);
+        if(tF < -99)
+            tF = -99;
+        if(tF > 999)
+            tF = 999;
+        if(tF < 0)
+            snprintf(tw, sizeof(tw), "t-%02d", -tF);
+        else
+            snprintf(tw, sizeof(tw), "t%03d", tF);
+    }
+
+    char hw[6] = {0};
+    if(have_hum)
+    {
+        int hi = (int)lround((double)hum);
+        if(hi >= 100)
+            hi = 0;   // APRS: h00 means 100%
+        else if(hi < 1)
+            hi = 1;
+        snprintf(hw, sizeof(hw), "h%02d", hi);
+    }
+
+    char bw[8] = {0};
+    if(have_baro)
+    {
+        int bi = (int)lround((double)baro * 10.0);
+        if(bi < 0)
+            bi = 0;
+        if(bi > 99999)
+            bi = 99999;
+        snprintf(bw, sizeof(bw), "b%05d", bi);
+    }
+
+    char msg_start[120] = {0};
+    // Force primary table '/' + weather symbol '_' (aprs.fi weather station).
+    snprintf(msg_start, sizeof(msg_start),
+             "%07.2lf%c/%08.2lf%c_.../...g...%sr...p...P...%s%s",
+             slat, lat_c, slon, lon_c, tw, hw, bw);
+
+    return String(msg_start);
+}
+
+// Companion TX for --aprswx: second '!' frame after the MeshCom position.
+// Same LoRa + gateway UDP paths; not mirrored to EXTUDP (HA already gets tele).
+static void sendAprsWxCompanion(double lat, char lat_c, double lon, char lon_c,
+                                float press, float hum, float temp, float qnh)
+{
+    if(!bAPRSWX)
+        return;
+
+    String wx = PositionToAprsWx(lat, lat_c, lon, lon_c, temp, hum, press, qnh);
+    if(wx.length() == 0)
+        return;
+
+    uint8_t msg_buffer[MAX_MSG_LEN_PHONE];
+    struct aprsMessage aprsmsg;
+
+    initAPRS(aprsmsg, '!');
+    aprsmsg.msg_len = 0;
+    aprsmsg.msg_id = ((_GW_ID & 0x3FFFFF) << 10) | (meshcom_settings.node_msgid & 0x3FF);
+
+    mcSet(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
+    mcSet(aprsmsg.msg_destination_path, sizeof(aprsmsg.msg_destination_path), "*");
+    mcSet(aprsmsg.msg_destination_call, sizeof(aprsmsg.msg_destination_call), "*");
+    mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), wx.c_str());
+
+    finalizeAndSendAPRS(aprsmsg, msg_buffer);
+
+    if(bDisplayInfo)
+    {
+        printBuffer_aprs((char*)"NEW-WX", aprsmsg);
+        printfdeb("");
+    }
+
+    Serial.printf("[POS];aprswx;len;%u\n", (unsigned)strlen(aprsmsg.msg_payload));
+
+    addTxRingEntry(msg_buffer, (uint16_t)aprsmsg.msg_len, 0xFF, "user_aprswx");
+
+    if(bGATEWAY)
+        addNodeData(msg_buffer, aprsmsg.msg_len, 0, 0);
+
+    memcpy(own_msg_id[iWriteOwn], msg_buffer + 1, 4);
+    own_msg_id[iWriteOwn][4] = 0x00;
+    iWriteOwn++;
+    if(iWriteOwn >= MAX_RING)
+        iWriteOwn = 0;
+
+    nbrNoteOwnTx(nbrMatrix, (uint32_t)aprsmsg.msg_id, aprsmsg.payload_type, uptimeMin16());
+
+    if(isPhoneReady == 1)
+        addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
+}
+
 void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
 {
     // position 0.0/0.0 no message sent
@@ -5227,6 +5357,9 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
         if (bKISS)
             queueKiss(msg_buffer, aprsmsg.msg_len, 99, 0);
         #endif
+
+        // Optional standard APRS weather companion (aprs.fi WX station icon).
+        sendAprsWxCompanion(lat, lat_c, lon, lon_c, press, hum, temp, qnh);
     }
 
 }

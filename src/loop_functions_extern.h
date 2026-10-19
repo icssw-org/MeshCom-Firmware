@@ -56,6 +56,7 @@ extern bool bNBRRPTON;                  // --nbrreport on  (Stufe 3, HN-Bericht)
 extern uint32_t stat_nbr_relay_a, stat_nbr_relay_b, stat_nbr_cancel, stat_nbr_cancel_possible, stat_nbr_refuse_alone;
 extern bool bBLEDEBUG;
 extern bool bWXDEBUG;
+extern bool bAPRSWX;                 // --aprswx on|off (standard APRS WX companion frame), node_sset2 0x2000
 extern bool bIODEBUG;
 extern bool bLED_CLEAR;
 extern bool bLED_DELAY;
