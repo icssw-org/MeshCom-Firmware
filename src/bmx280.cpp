@@ -14,6 +14,13 @@
 #define I2C_ADDRESS_BMP 0x77
 #define I2C_ADDRESS_BME 0x76
 
+// Heltec V3: BMx shares the OLED bus (Wire1 / SDA_PIN / SCL_PIN).
+#if defined(MC_BMX_USE_WIRE1)
+#define BMX_WIRE Wire1
+#else
+#define BMX_WIRE Wire
+#endif
+
 uint8_t bmx_i2c_address = 0;
 
 #include "bmx280.h"
@@ -57,12 +64,12 @@ class BMx280Wire : public BMx280MI
 		//@return read data (1 byte).
 		uint8_t readRegister(uint8_t reg)
 		{
-			Wire.beginTransmission(address_);
-			Wire.write(reg);
-			Wire.endTransmission(false);
-			Wire.requestFrom(address_, (size_t)(1));
+			BMX_WIRE.beginTransmission(address_);
+			BMX_WIRE.write(reg);
+			BMX_WIRE.endTransmission(false);
+			BMX_WIRE.requestFrom(address_, (size_t)(1));
 			
-			return Wire.read();
+			return BMX_WIRE.read();
 		}
 		
 		//this function can be implemented by derived classes. implementing this function is optional, but readings may be incorrect if 
@@ -77,15 +84,15 @@ class BMx280Wire : public BMx280MI
 
 			uint32_t data = 0L;
 
-			Wire.beginTransmission(address_);
-			Wire.write(reg);
-			Wire.endTransmission(false);
-			Wire.requestFrom(address_, (size_t)(length));
+			BMX_WIRE.beginTransmission(address_);
+			BMX_WIRE.write(reg);
+			BMX_WIRE.endTransmission(false);
+			BMX_WIRE.requestFrom(address_, (size_t)(length));
 
 			for (uint8_t i = 0; i < length; i++)
 			{
 				data <<= 8;
-				data |= Wire.read();
+				data |= BMX_WIRE.read();
 			}
 
 			return data;
@@ -96,10 +103,10 @@ class BMx280Wire : public BMx280MI
 		//@param data data to write to register.
 		void writeRegister(uint8_t reg, uint8_t data)
 		{
-			Wire.beginTransmission(address_);
-			Wire.write(reg);
-			Wire.write(data);
-			Wire.endTransmission();
+			BMX_WIRE.beginTransmission(address_);
+			BMX_WIRE.write(reg);
+			BMX_WIRE.write(data);
+			BMX_WIRE.endTransmission();
 		}
 	
   public:
@@ -127,13 +134,19 @@ void setupBMX280(bool bNewStart)
 		return;
 	}
 
+	#if defined(MC_BMX_USE_WIRE1)
+		// OLED initDisplay() runs after setupBMX280; bring Wire1 up on
+		// SDA_PIN/SCL_PIN before any endTransmission/probe on that bus.
+		BMX_WIRE.begin(SDA_PIN, SCL_PIN);
+	#endif
+
   	if(bBMPON)
 	{
-		#if MC_I2C_NEEDS_BUS_RESET
-			Wire.end();
-			Wire.begin(I2C_SDA, I2C_SCL);
+		#if MC_I2C_NEEDS_BUS_RESET && !defined(MC_BMX_USE_WIRE1)
+			BMX_WIRE.end();
+			BMX_WIRE.begin(I2C_SDA, I2C_SCL);
 		#else
-			Wire.endTransmission(true);
+			BMX_WIRE.endTransmission(true);
 		#endif
 
 		#ifdef BMP280_I2C_ADDRESS
@@ -145,11 +158,11 @@ void setupBMX280(bool bNewStart)
   	else
     	if(bBMEON)
 		{
-			#if MC_I2C_NEEDS_BUS_RESET
-				Wire.end();
-				Wire.begin(I2C_SDA, I2C_SCL);
+			#if MC_I2C_NEEDS_BUS_RESET && !defined(MC_BMX_USE_WIRE1)
+				BMX_WIRE.end();
+				BMX_WIRE.begin(I2C_SDA, I2C_SCL);
 			#else
-				Wire.endTransmission(true);
+				BMX_WIRE.endTransmission(true);
 			#endif
 
 			#ifdef BME280_I2C_ADDRESS
@@ -162,7 +175,7 @@ void setupBMX280(bool bNewStart)
       		return;
 
 	if(!bNewStart)
-		Wire.endTransmission(true);
+		BMX_WIRE.endTransmission(true);
 
 
 	bmx280.address_ = bmx_i2c_address;	//initialize the BMx280Wire classes private member address_ to the i2c address provided
@@ -175,9 +188,9 @@ void setupBMX280(bool bNewStart)
 	fPress = 0.0;
 	fHum = 0.0;
 
-	#if MC_I2C_NEEDS_BUS_RESET
-		Wire.end();
-		Wire.begin(I2C_SDA, I2C_SCL);
+	#if MC_I2C_NEEDS_BUS_RESET && !defined(MC_BMX_USE_WIRE1)
+		BMX_WIRE.end();
+		BMX_WIRE.begin(I2C_SDA, I2C_SCL);
 	#endif
 
 	//begin() checks the Interface, reads the sensor ID (to differentiate between BMP280 and BME280)
@@ -217,9 +230,9 @@ bool loopBMX280(void)
 	if(!bmx_found)
 		return false;
 
-	#if MC_I2C_NEEDS_BUS_RESET
-		Wire.end();
-		Wire.begin(I2C_SDA, I2C_SCL);
+	#if MC_I2C_NEEDS_BUS_RESET && !defined(MC_BMX_USE_WIRE1)
+		BMX_WIRE.end();
+		BMX_WIRE.begin(I2C_SDA, I2C_SCL);
 	#endif
 
 	//start a measurement

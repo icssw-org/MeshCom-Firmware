@@ -33,6 +33,12 @@ String scanI2C()
         Wire.begin(I2C_SDA, I2C_SCL);
     #endif
 
+    #if defined(MC_BMX_USE_WIRE1)
+        // Heltec V3: BMx on OLED bus (Wire1); scan both controllers.
+        Wire1.begin(SDA_PIN, SCL_PIN);
+        idw=2;
+    #endif
+
     for(int i2=0; i2<idw; i2++)
     {
         if(i2 == 0)
@@ -41,7 +47,7 @@ String scanI2C()
         }
         else
         {
-            #ifdef PMU_USE_WIRE1    // use on ESP S3
+            #if defined(PMU_USE_WIRE1) || defined(MC_BMX_USE_WIRE1)
                 w = &Wire1;
             #else
                 break;
