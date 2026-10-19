@@ -526,6 +526,10 @@ static const ToggleRow COMMAND_TOGGLES[] =
     // DK5EN-1 2026-09-25; toggle_table_lint.py check 9).
     { "--via on",             &bVIA,                 &meshcom_settings.node_sset2,    0xFFFFFFFF,   0x4000,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_FLAG_TRUE },
     { "--via off",            &bVIA,                 &meshcom_settings.node_sset2,    0xFFFFBFFF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE },
+    // --aprswx: optional second frame with APRS 1.0.1 weather block (/_ + t/h/b)
+    // for aprs.fi weather-station display. Bit 0x2000 of node_sset2 was free.
+    { "--aprswx on",          &bAPRSWX,              &meshcom_settings.node_sset2,    0xFFFFFFFF,   0x2000,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--aprswx off",         &bAPRSWX,              &meshcom_settings.node_sset2,    0xFFFFDFFF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
     { "--bledebug on",        &bBLEDEBUG,            &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0004,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
     { "--bledebug off",       &bBLEDEBUG,            &meshcom_settings.node_sset3,    0xFFFFFFFB,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
 #if defined BOARD_T5_EPAPER
@@ -1324,7 +1328,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("\n== Neighbour matrix ==\n--nbrreset              clear matrix\n--nbrcheck              consistency check\n--nbrrelay off/count/on relay decision: off / log only / active\n--nbrsym on/off         assume symmetric links\n--nbrreport off/auto/on HN neighbour report\n");
             delay(100);
 
-            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--track on/off          SmartBeaconing\n");
+            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--aprswx on/off         extra APRS weather frame with POS (aprs.fi WX)\n--track on/off          SmartBeaconing\n");
             #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
             printdeb("--gps on/off            GPS chip\n");
             #ifndef BOARD_T_DECK_PRO
@@ -6502,8 +6506,8 @@ void commandAction(char *umsg_text, bool ble)
                 (meshcom_settings.node_keyboardlock?"on":"off"));
             #endif
 
-            printfdeb("...EXTUDP %s ...EXT IP %s ...NOPMOTHER %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern,
-                    ((meshcom_settings.node_sset3 & 0x8000)?"on":"off"));
+            printfdeb("...EXTUDP %s ...EXT IP %s ...NOPMOTHER %s ...APRSWX %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern,
+                    ((meshcom_settings.node_sset3 & 0x8000)?"on":"off"), (bAPRSWX?"on":"off"));
 
             printfdeb("...BTCODE %06i\n", meshcom_settings.bt_code);
             // BLE-N1/N2: phone TX counters appended to the BLE line -- s sent, r retried
@@ -6938,6 +6942,7 @@ void sendNodeSetting()
     nsetdoc1["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc1["ASYM"] = bGPSAutosymbol;
     nsetdoc1["TZ"] = meshcom_settings.node_tz;
+    nsetdoc1["APRSWX"] = bAPRSWX;
 
     sendBleJsonRegister(nsetdoc1); // JSN-01
 }
