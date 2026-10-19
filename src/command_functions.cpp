@@ -6914,7 +6914,6 @@ void sendNodeSetting()
     nsetdoc["MSH"] = bMESH;
     nsetdoc["GPS"] = bGPSON;
     nsetdoc["TRACK"] = bDisplayTrack;
-    nsetdoc["APRSWX"] = bAPRSWX;
     nsetdoc["UTCOF"] = meshcom_settings.node_utcoff;
     nsetdoc["TXP"] = meshcom_settings.node_power;
     nsetdoc["MQRG"] = node_qrg;
@@ -6943,6 +6942,7 @@ void sendNodeSetting()
     nsetdoc1["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc1["ASYM"] = bGPSAutosymbol;
     nsetdoc1["TZ"] = meshcom_settings.node_tz;
+    nsetdoc1["APRSWX"] = bAPRSWX;
 
     sendBleJsonRegister(nsetdoc1); // JSN-01
 }
