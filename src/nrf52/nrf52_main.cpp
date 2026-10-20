@@ -689,7 +689,7 @@ void nrf52setup()
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
     bBME680ON = meshcom_settings.node_sset2 & 0x0004;
     bMCU811ON =  meshcom_settings.node_sset2 & 0x0008;
-    //bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010;
+    //bGPSDEBUG retired; 0x0010 is --aprswx (avoids old checkmesh 0x2000 conflict).
     iGPSDEBUG = meshcom_settings.node_gpsdebug;
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
     bWEBSERVER = meshcom_settings.node_sset2 & 0x0040;
@@ -699,7 +699,7 @@ void nrf52setup()
     //free !! meshcom_settings.node_sset2 & 0x0200;
     bSOFTSERON =  meshcom_settings.node_sset2 & 0x0400;
     bBOOSTEDGAIN =  meshcom_settings.node_sset2 & 0x0800;
-    //xxxxx = meshcom_settings.node_sset2 & 0x2000;
+    bAPRSWX = meshcom_settings.node_sset2 & 0x0010;
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
@@ -811,6 +811,7 @@ void nrf52setup()
     global_batt = 4125.0;
 
     posinfo_interval = POSINFO_INTERVAL;
+    aprswx_interval = 60 * 60;
 
     if(meshcom_settings.node_postime > 0)
         posinfo_interval = meshcom_settings.node_postime;
@@ -2141,6 +2142,20 @@ void nrf52loop()
     else
     {
         posinfo_timer_min = millis();
+    }
+
+    if(bAPRSWX && (uint32_t)(millis() - aprswx_timer) >= (uint32_t)(aprswx_interval * 1000UL))
+    {
+        sendAprsWxCompanion(meshcom_settings.node_lat, meshcom_settings.node_lat_c,
+                            meshcom_settings.node_lon, meshcom_settings.node_lon_c,
+                            meshcom_settings.node_press, meshcom_settings.node_hum,
+                            meshcom_settings.node_temp, meshcom_settings.node_temp2,
+                            meshcom_settings.node_press_asl);
+        aprswx_timer = millis();
+    }
+    else if(!bAPRSWX)
+    {
+        aprswx_timer = millis();
     }
 
     // Trickle-HEY: adaptive interval (RFC 6206)

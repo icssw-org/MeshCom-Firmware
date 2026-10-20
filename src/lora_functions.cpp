@@ -3,6 +3,8 @@
 #include "Arduino.h"
 #include "configuration.h"
 
+#include <string.h>
+
 #include "printfdeb_functions.h"
 #include "txring_functions.h"
 #include "ack_functions.h"
@@ -2666,6 +2668,23 @@ static inline void logRadioTx(int len, const char *kind)
         printfdeb("[MC-DBG] RADIO_TX len=%d kind=%s\n", len, kind);
 }
 
+static bool loraAprsLooksLikeWx(const uint8_t *buffer, int len)
+{
+    if(buffer == NULL || len < 3 || buffer[0] != '<')
+        return false;
+
+    const char *payload = (const char *)buffer + 3;
+    const char *pos = strstr(payload, ":!");
+    if(pos == NULL)
+        return false;
+
+    const char *p = pos + 1; // APRS data type '!'
+    if((p - (const char *)buffer) + 20 > len)
+        return false;
+
+    return p[9] == '/' && p[19] == '_';
+}
+
 bool doTX()
 {
     //#if not defined(BOARD_T_DECK_PRO)
@@ -2795,14 +2814,16 @@ bool doTX()
             }
 
 #ifndef BOARD_TLORA_OLV216
-            if(lora_tx_buffer[0] == '<' && bDisplayTrack)
+            if(lora_tx_buffer[0] == '<')
             {
                 tx_is_active = true;
 
                 // you can transmit C-string or Arduino string up to
                 // 256 characters long
                 // Position zumindest alle funf Minuten auch zu MeshCom senden
-                if((uint32_t)(millis() - track_to_meshcom_timer) >= 1000 * 60 * 5)
+                if(bDisplayTrack &&
+                   !loraAprsLooksLikeWx(lora_tx_buffer, sendlng) &&
+                   (uint32_t)(millis() - track_to_meshcom_timer) >= 1000 * 60 * 5)
                 {
                     #if defined BOARD_RAK4630
                         // N-16: taskENTER_CRITICAL() masks interrupts, including the

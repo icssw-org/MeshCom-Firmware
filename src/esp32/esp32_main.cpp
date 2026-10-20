@@ -1010,7 +1010,7 @@ void esp32setup()
     bLPS33 =  meshcom_settings.node_sset2 & 0x0002;
     bBME680ON =  meshcom_settings.node_sset2 & 0x0004;
     bMCU811ON =  meshcom_settings.node_sset2 & 0x0008;
-    //bGPSDEBUG = meshcom_settings.node_sset2 & 0x0010; // new variale
+    //bGPSDEBUG retired; 0x0010 is --aprswx (avoids old checkmesh 0x2000 conflict).
     iGPSDEBUG = meshcom_settings.node_gpsdebug;
 
     bMESH = !(meshcom_settings.node_sset2 & 0x0020);
@@ -1031,7 +1031,7 @@ void esp32setup()
     // NOTE: externalRadioSetup() runs later, AFTER lora_setcountry() has applied
     // the effective freq/bw/sf/cr/preamble, so the bridge config snapshot is built
     // from the same effective radio settings the local radio path would use.
-    //xxxxxxx   = meshcom_settings.node_sset2 & 0x2000;
+    bAPRSWX = meshcom_settings.node_sset2 & 0x0010; // avoids old checkmesh 0x2000 conflict
     bVIA = meshcom_settings.node_sset2 & 0x4000;
 
     // nicht mehr notwendig bMHONLY =  bMHONLY =  meshcom_settings.node_sset3 & 0x0001;
@@ -1237,6 +1237,7 @@ void esp32setup()
     global_batt = 4200.0;
 
     posinfo_interval = POSINFO_INTERVAL;
+    aprswx_interval = 60 * 60;
 
     if(meshcom_settings.node_postime > 0)
         posinfo_interval = meshcom_settings.node_postime;
@@ -3726,6 +3727,19 @@ void esp32loop()
         posinfo_timer_min = millis();
     }
 
+    if(bAPRSWX && (uint32_t)(millis() - aprswx_timer) >= (uint32_t)(aprswx_interval * 1000UL))
+    {
+        sendAprsWxCompanion(meshcom_settings.node_lat, meshcom_settings.node_lat_c,
+                            meshcom_settings.node_lon, meshcom_settings.node_lon_c,
+                            meshcom_settings.node_press, meshcom_settings.node_hum,
+                            meshcom_settings.node_temp, meshcom_settings.node_temp2,
+                            meshcom_settings.node_press_asl);
+        aprswx_timer = millis();
+    }
+    else if(!bAPRSWX)
+    {
+        aprswx_timer = millis();
+    }
 
     // Trickle-HEY: adaptive interval (RFC 6206)
     unsigned long extra_hey_time = 0;

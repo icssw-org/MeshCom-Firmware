@@ -37,6 +37,7 @@
 #include <counters_store.h>
 #include "setlog_lines.h"
 #include "dm_stats.h"
+#include "aprs_wx_format.h"
 #if defined(ENABLE_MSGSTORE)
 #include "msgstore_api.h"    // S3: store node (last-hop mailbox)
 #endif
@@ -145,6 +146,9 @@ uint32_t stat_nbr_cancel_possible = 0;  // Relays, deren Bedarf durch fremde Wie
 uint32_t stat_nbr_refuse_alone = 0;     // gehoerte fremde Wiederholung, Abbruch wegen Allein-Maske verweigert (je Slot einmal)
 bool bBLEDEBUG = false;
 bool bWXDEBUG = false;
+// --aprswx on|off: companion standard APRS weather frame over LoRa-APRS only
+// (node_sset2 0x0010). Default off so existing nodes keep one POS beacon only.
+bool bAPRSWX = false;
 bool bIODEBUG = false;
 bool bTDECKDEBUG = false;
 bool bCHECKMESH = false;
@@ -604,6 +608,7 @@ bool bNTPDateTimeValid = false;
 // GPS SmartBeaconing variables
 double gps_refresh_intervall = GPS_REFRESH_INTERVAL;   // sec
 unsigned long posinfo_interval = POSINFO_INTERVAL; // check interval
+unsigned long aprswx_interval = 60 * 60;           // seconds, --aprswxint in minutes
 double posinfo_distance = 0.0;
 double posinfo_direction = 0.0;
 double posinfo_lat = 0.0;
@@ -628,6 +633,7 @@ int gps_refresh_track = 0;
 // Loop timers
 unsigned long posinfo_timer = 0;        // we check periodically to send GPS
 unsigned long posinfo_timer_min = 0;    // we check min. periodically to send GPS
+unsigned long aprswx_timer = 0;         // independent --aprswx cadence
 // Zeitpunkt des letzten selbst erzeugten Positions-Beacons und ob es ihn schon
 // gab -- Schranke fuer den Sofort-Pfad in sendPosition(), siehe beacon_rate.h.
 static unsigned long lastOwnPosTx = 0;
@@ -4908,6 +4914,68 @@ String PositionToAPRS(bool bConvPos, bool bSsendTele, bool bFuss, double plat, c
     return String(msg_start);
 }
 
+String PositionToAprsWx(double plat, char lat_c, double plon, char lon_c,
+                       float temp_c, float temp2_c, float hum, float press_hpa, float qnh_hpa)
+{
+    char msg_start[120] = {0};
+    if(!aprsWxFormatPosition(msg_start, sizeof(msg_start),
+                             plat, lat_c, plon, lon_c,
+                             temp_c, temp2_c, hum, press_hpa, qnh_hpa))
+        return "";
+
+    return String(msg_start);
+}
+
+static uint16_t encodeLoRaAPRSWx(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSourceCall[10],
+                                 double lat, char lat_c, double lon, char lon_c,
+                                 float press, float hum, float temp, float temp2, float qnh)
+{
+    String wx = PositionToAprsWx(lat, lat_c, lon, lon_c, temp, temp2, hum, press, qnh);
+    if(wx.length() == 0)
+        return 0;
+
+    char msg_start[UDP_TX_BUF_SIZE] = {0};
+
+    msg_buffer[0] = '<';
+    msg_buffer[1] = 0xFF;
+    msg_buffer[2] = 0x01;
+
+    snprintf(msg_start, sizeof(msg_start), "%s>APLT00-1,WIDE1-1:!%s", cSourceCall, wx.c_str());
+
+    uint16_t ilng = strlen(msg_start) + 3;
+    if(ilng >= UDP_TX_BUF_SIZE)
+        ilng = UDP_TX_BUF_SIZE - 1;
+
+    memcpy(msg_buffer + 3, msg_start, ilng - 3);
+    msg_buffer[ilng] = 0x00;
+
+    return ilng;
+}
+
+// Companion TX for --aprswx: LoRa-APRS WX frame only. No MeshCom APRS frame,
+// no gateway upload, no EXTUDP echo.
+void sendAprsWxCompanion(double lat, char lat_c, double lon, char lon_c,
+                         float press, float hum, float temp, float temp2, float qnh)
+{
+    if(!bAPRSWX)
+        return;
+
+    uint8_t msg_buffer[UDP_TX_BUF_SIZE];
+    uint16_t ilng = encodeLoRaAPRSWx(msg_buffer, meshcom_settings.node_call,
+                                     lat, lat_c, lon, lon_c, press, hum, temp, temp2, qnh);
+    if(ilng == 0)
+        return;
+
+    if(bDisplayInfo)
+    {
+        printfdeb("%s [LO-APRS-WX]...%c%02X%02X%s\n",
+                  getTimeString().c_str(), msg_buffer[0], msg_buffer[1], msg_buffer[2], msg_buffer + 3);
+    }
+
+    Serial.printf("[POS];aprswx;loraprs;len;%u\n", (unsigned)ilng);
+    addTxRingEntry(msg_buffer, ilng, 0xFF, "user_aprswx");
+}
+
 void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)
 {
     // position 0.0/0.0 no message sent
@@ -4917,7 +4985,7 @@ void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, 
     // Mindestabstand fuer den Sofort-Pfad (0x9999: --sendpos, User-Button,
     // EXTUDP-Telemetrie). Begruendung und Feldbefund: src/beacon_rate.h.
     // Der periodische Pfad (uintervall == posinfo_interval) und die
-    // Track-/WX-Pfade (0xEEEE/0xFFFF) bleiben unberuehrt, sie tragen ihre
+    // Tele-/Track-Pfade (0xEEEE/0xFFFF) bleiben unberuehrt, sie tragen ihre
     // eigene Kadenz.
     if(uintervall == 0x9999 &&
        !beaconShotAllowed(millis(), lastOwnPosTx, bHaveOwnPosTx, BEACON_SHOT_MIN_MS))
