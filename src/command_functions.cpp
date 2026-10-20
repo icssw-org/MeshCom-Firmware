@@ -526,6 +526,10 @@ static const ToggleRow COMMAND_TOGGLES[] =
     // DK5EN-1 2026-09-25; toggle_table_lint.py check 9).
     { "--via on",             &bVIA,                 &meshcom_settings.node_sset2,    0xFFFFFFFF,   0x4000,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_FLAG_TRUE },
     { "--via off",            &bVIA,                 &meshcom_settings.node_sset2,    0xFFFFBFFF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE },
+    // --aprswx: optional APRS 1.0.1 weather block (/_ + t/h/b) as LoRa-APRS only.
+    // Uses node_sset2 0x0010; 0x2000 is avoided because older checkmesh builds used it.
+    { "--aprswx on",          &bAPRSWX,              &meshcom_settings.node_sset2,    0xFFFFFFFF,   0x0010,       nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--aprswx off",         &bAPRSWX,              &meshcom_settings.node_sset2,    0xFFFFFFEF,   0x00000000,   nullptr,                       TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN },
     { "--bledebug on",        &bBLEDEBUG,            &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0004,       nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_FLAG_TRUE | TG_BLE_ECHO },
     { "--bledebug off",       &bBLEDEBUG,            &meshcom_settings.node_sset3,    0xFFFFFFFB,   0x00000000,   nullptr,                       TG_DIRTY_NONE,   TG_SAVE | TG_BLE_ECHO },
 #if defined BOARD_T5_EPAPER
@@ -1045,6 +1049,27 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"aprswxint ") == 0)    // min
+    {
+        int minutes = 60;
+        sscanf(msg_text+12, "%d", &minutes);
+
+        if(minutes < 30)
+            minutes = 30;
+        if(minutes > (24 * 60))
+            minutes = (24 * 60);
+
+        aprswx_interval = (unsigned long)minutes * 60UL;
+        aprswx_timer = millis();
+
+        if(ble)
+        {
+            addBLECommandBack((char*)msg_text);
+        }
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"volt on") == 0 || commandCheck(msg_text+2, (char*)"proz off") == 0)
     {
         bDisplayVolt = true;
@@ -1324,7 +1349,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("\n== Neighbour matrix ==\n--nbrreset              clear matrix\n--nbrcheck              consistency check\n--nbrrelay off/count/on relay decision: off / log only / active\n--nbrsym on/off         assume symmetric links\n--nbrreport off/auto/on HN neighbour report\n");
             delay(100);
 
-            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--track on/off          SmartBeaconing\n");
+            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--aprswx on/off         LoRa-APRS weather frame (aprs.fi WX)\n--aprswxint 60          APRSWX interval min (min 30)\n--track on/off          SmartBeaconing\n");
             #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
             printdeb("--gps on/off            GPS chip\n");
             #ifndef BOARD_T_DECK_PRO
@@ -6502,8 +6527,8 @@ void commandAction(char *umsg_text, bool ble)
                 (meshcom_settings.node_keyboardlock?"on":"off"));
             #endif
 
-            printfdeb("...EXTUDP %s ...EXT IP %s ...NOPMOTHER %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern,
-                    ((meshcom_settings.node_sset3 & 0x8000)?"on":"off"));
+            printfdeb("...EXTUDP %s ...EXT IP %s ...NOPMOTHER %s ...APRSWX %s int %lu min\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern,
+                    ((meshcom_settings.node_sset3 & 0x8000)?"on":"off"), (bAPRSWX?"on":"off"), (unsigned long)(aprswx_interval / 60UL));
 
             printfdeb("...BTCODE %06i\n", meshcom_settings.bt_code);
             // BLE-N1/N2: phone TX counters appended to the BLE line -- s sent, r retried
@@ -6938,6 +6963,8 @@ void sendNodeSetting()
     nsetdoc1["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc1["ASYM"] = bGPSAutosymbol;
     nsetdoc1["TZ"] = meshcom_settings.node_tz;
+    nsetdoc1["APRSWX"] = bAPRSWX;
+    nsetdoc1["APRSWXINT"] = (int)(aprswx_interval / 60UL);
 
     sendBleJsonRegister(nsetdoc1); // JSN-01
 }

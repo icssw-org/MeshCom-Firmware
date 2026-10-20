@@ -128,6 +128,10 @@ int sendMessage(char *msg_text, int len, const char *src_override = nullptr,
 // Returns the assigned msg_id, or 0 on a bad argument.
 unsigned int sendInjectedPosition(const char *srcCall, const char *posData);
 String PositionToAPRS(bool bConvPos, bool bWeather, bool bFuss, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, int qfe, float qnh);
+// APRS 1.0.1 weather position payload (no leading '!'): /_ + t/h/b for aprs.fi.
+// Empty string if lat/lon invalid or no usable WX fields.
+String PositionToAprsWx(double lat, char lat_c, double lon, char lon_c, float temp_c, float temp2_c, float hum, float press_hpa, float qnh_hpa);
+void sendAprsWxCompanion(double lat, char lat_c, double lon, char lon_c, float press, float hum, float temp, float temp2, float qnh);
 void sendPosition(unsigned long intervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh);
 void sendAPPPosition(double lat, char lat_c, double lon, char lon_c, float temp2);
 // Send a MeshCom message ACK to dest_call. src_override (when set) puts the ACK

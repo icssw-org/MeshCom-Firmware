@@ -4,8 +4,7 @@
 //   node_sset3 bit 0x0001  the console value of "--charge led on|off" (on = follows charging). It is the
 //                          upstream bit (was bMHONLY), so it is STALE on old nodes and means nothing alone.
 //   node_sset2 bit 0x8000  CONFIGURED marker: set the first time "--charge led on|off" is typed. Bit 15 is
-//                          unused by every node_sset2 reader and writer in src (0x0010 and 0x2000 are free
-//                          too, but sit in commented-out reader lines, 0x0010 as the retired bGPSDEBUG)
+//                          unused by every node_sset2 reader and writer in src
 //                          and sits inside the 0..65535 settings range of config_json.h, so it survives the
 //                          load clamp and a downgrade to older firmware (which ignores it). A marker in
 //                          node_sset3 above bit 15 would be clamped to 65535 = every sset3 flag on.

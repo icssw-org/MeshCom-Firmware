@@ -56,6 +56,7 @@ extern bool bNBRRPTON;                  // --nbrreport on  (Stufe 3, HN-Bericht)
 extern uint32_t stat_nbr_relay_a, stat_nbr_relay_b, stat_nbr_cancel, stat_nbr_cancel_possible, stat_nbr_refuse_alone;
 extern bool bBLEDEBUG;
 extern bool bWXDEBUG;
+extern bool bAPRSWX;                 // --aprswx on|off (standard APRS WX LoRa-APRS frame), node_sset2 0x0010
 extern bool bIODEBUG;
 extern bool bLED_CLEAR;
 extern bool bLED_DELAY;
@@ -410,6 +411,7 @@ extern bool ble_disconnect_requested; // set on auth failure to trigger platform
 // timers
 extern double gps_refresh_intervall;   // sec
 extern unsigned long posinfo_interval; // check interval
+extern unsigned long aprswx_interval;  // seconds, --aprswxint in minutes
 extern unsigned long posfixinterall;
 
 extern unsigned long currentWiFiMillis;
@@ -439,6 +441,7 @@ extern int gps_refresh_track;
 
 extern unsigned long posinfo_timer;      // we check periodically to send GPS
 extern unsigned long posinfo_timer_min;
+extern unsigned long aprswx_timer;       // independent --aprswx cadence
 extern unsigned long heyinfo_timer;      // we check periodically to send HEY
 extern int ncnt_hold;
 extern unsigned long nbrsnap_timer;      // --nbrdebug: 15-min-Takt fuer nbrLogSnapshot()
