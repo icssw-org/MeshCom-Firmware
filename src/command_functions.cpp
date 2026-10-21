@@ -42,6 +42,7 @@
 #include "msgstore_api.h"      // store node core -- link stub off ENABLE_MSGSTORE boards (owner A)
 #endif
 #include "track_warning.h" // TRK-01: Warnhinweis bei aktivem Track
+#include "aprs_is_format.h"
 #ifdef ESP32
 #include "net_console.h"
 #include "kiss_functions.h"
@@ -1070,6 +1071,80 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    if(commandCheck(msg_text+2, (char*)"aprswxpath ") == 0)
+    {
+        char path_arg[16] = {0};
+        sscanf(msg_text+13, "%15s", path_arg);
+
+        int path = APRSWX_PATH_RADIO;
+        if(strcmp(path_arg, "radio") == 0)
+            path = APRSWX_PATH_RADIO;
+        else if(strcmp(path_arg, "net") == 0)
+            path = APRSWX_PATH_NET;
+        else if(strcmp(path_arg, "both") == 0)
+            path = APRSWX_PATH_BOTH;
+        else
+        {
+            printfdeb("APRSWXPATH radio|net|both\n");
+            return;
+        }
+
+        meshcom_settings.node_aprswxpath = path;
+        save_settings();
+
+        if(ble)
+            addBLECommandBack((char*)msg_text);
+
+        printfdeb("APRSWXPATH %s\n", aprsWxPathName(path));
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"aprsisserver ") == 0)
+    {
+        char host[40] = {0};
+        sscanf(msg_text+15, "%39s", host);
+        if(host[0] == 0x00)
+        {
+            printfdeb("APRSISSERVER <host>\n");
+            return;
+        }
+        snprintf(meshcom_settings.node_aprsisserver, sizeof(meshcom_settings.node_aprsisserver), "%s", host);
+        save_settings();
+        if(ble)
+            addBLECommandBack((char*)msg_text);
+        printfdeb("APRSISSERVER %s\n", meshcom_settings.node_aprsisserver);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"aprsisport ") == 0)
+    {
+        int port = 14580;
+        sscanf(msg_text+13, "%d", &port);
+        if(port < 1 || port > 65535)
+            port = 14580;
+        meshcom_settings.node_aprsisport = port;
+        save_settings();
+        if(ble)
+            addBLECommandBack((char*)msg_text);
+        printfdeb("APRSISPORT %d\n", meshcom_settings.node_aprsisport);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"aprsispass ") == 0)
+    {
+        char pass[16] = {0};
+        sscanf(msg_text+13, "%15s", pass);
+        if(strcmp(pass, "none") == 0 || pass[0] == 0x00)
+            meshcom_settings.node_aprsispass[0] = 0x00;
+        else
+            snprintf(meshcom_settings.node_aprsispass, sizeof(meshcom_settings.node_aprsispass), "%s", pass);
+        save_settings();
+        if(ble)
+            addBLECommandBack((char*)msg_text);
+        printfdeb("APRSISPASS %s\n", maskSecret(meshcom_settings.node_aprsispass));
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"volt on") == 0 || commandCheck(msg_text+2, (char*)"proz off") == 0)
     {
         bDisplayVolt = true;
@@ -1349,7 +1424,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("\n== Neighbour matrix ==\n--nbrreset              clear matrix\n--nbrcheck              consistency check\n--nbrrelay off/count/on relay decision: off / log only / active\n--nbrsym on/off         assume symmetric links\n--nbrreport off/auto/on HN neighbour report\n");
             delay(100);
 
-            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--aprswx on/off         LoRa-APRS weather frame (aprs.fi WX)\n--aprswxint 60          APRSWX interval min (min 30)\n--sendaprswx            send LoRa-APRS weather now\n--track on/off          SmartBeaconing\n");
+            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--aprswx on/off         APRS weather frame (aprs.fi WX)\n--aprswxint 60          APRSWX interval min (min 30)\n--aprswxpath radio|net|both  egress path (default radio)\n--aprsisserver <host>   APRS-IS host (default euro.aprs2.net)\n--aprsisport 14580      APRS-IS TCP port\n--aprsispass <code>|none  APRS-IS passcode\n--sendaprswx            send APRS weather now (respects path)\n--track on/off          SmartBeaconing\n");
             #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
             printdeb("--gps on/off            GPS chip\n");
             #ifndef BOARD_T_DECK_PRO
@@ -6544,8 +6619,13 @@ void commandAction(char *umsg_text, bool ble)
                 (meshcom_settings.node_keyboardlock?"on":"off"));
             #endif
 
-            printfdeb("...EXTUDP %s ...EXT IP %s ...NOPMOTHER %s ...APRSWX %s int %lu min\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern,
-                    ((meshcom_settings.node_sset3 & 0x8000)?"on":"off"), (bAPRSWX?"on":"off"), (unsigned long)(aprswx_interval / 60UL));
+            printfdeb("...EXTUDP %s ...EXT IP %s ...NOPMOTHER %s ...APRSWX %s int %lu min path %s\n", (bEXTUDP?"on":"off"), meshcom_settings.node_extern,
+                    ((meshcom_settings.node_sset3 & 0x8000)?"on":"off"), (bAPRSWX?"on":"off"), (unsigned long)(aprswx_interval / 60UL),
+                    aprsWxPathName(meshcom_settings.node_aprswxpath));
+            printfdeb("...APRS-IS %s:%d pass %s\n",
+                    meshcom_settings.node_aprsisserver[0] ? meshcom_settings.node_aprsisserver : "euro.aprs2.net",
+                    meshcom_settings.node_aprsisport > 0 ? meshcom_settings.node_aprsisport : 14580,
+                    maskSecret(meshcom_settings.node_aprsispass));
 
             printfdeb("...BTCODE %06i\n", meshcom_settings.bt_code);
             // BLE-N1/N2: phone TX counters appended to the BLE line -- s sent, r retried
@@ -6982,6 +7062,10 @@ void sendNodeSetting()
     nsetdoc1["TZ"] = meshcom_settings.node_tz;
     nsetdoc1["APRSWX"] = bAPRSWX;
     nsetdoc1["APRSWXINT"] = (int)(aprswx_interval / 60UL);
+    nsetdoc1["APRSWXPATH"] = aprsWxPathName(meshcom_settings.node_aprswxpath);
+    nsetdoc1["APRSISSERVER"] = meshcom_settings.node_aprsisserver;
+    nsetdoc1["APRSISPORT"] = meshcom_settings.node_aprsisport;
+    /* Passcode not exported in BLE JSON; --info masks it. */
 
     sendBleJsonRegister(nsetdoc1); // JSN-01
 }

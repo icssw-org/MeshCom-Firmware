@@ -38,6 +38,8 @@
 #include "setlog_lines.h"
 #include "dm_stats.h"
 #include "aprs_wx_format.h"
+#include "aprs_is_format.h"
+#include "aprs_is_client.h"
 #if defined(ENABLE_MSGSTORE)
 #include "msgstore_api.h"    // S3: store node (last-hop mailbox)
 #endif
@@ -4952,26 +4954,56 @@ static uint16_t encodeLoRaAPRSWx(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSour
     return ilng;
 }
 
-// Companion TX for --aprswx / --sendaprswx: LoRa-APRS WX frame only.
+// Companion TX for --aprswx / --sendaprswx.
+// Egress via --aprswxpath radio|net|both (default radio). off (bAPRSWX) = zero TX.
 // No MeshCom APRS frame, no gateway upload, no EXTUDP echo.
-// Periodic path gates on bAPRSWX; --sendaprswx always attempts one shot.
 void sendAprsWxCompanion(double lat, char lat_c, double lon, char lon_c,
                          float press, float hum, float temp, float temp2, float qnh)
 {
-    uint8_t msg_buffer[UDP_TX_BUF_SIZE];
-    uint16_t ilng = encodeLoRaAPRSWx(msg_buffer, meshcom_settings.node_call,
-                                     lat, lat_c, lon, lon_c, press, hum, temp, temp2, qnh);
-    if(ilng == 0)
+    if(!bAPRSWX)
         return;
 
-    if(bDisplayInfo)
+    int path = meshcom_settings.node_aprswxpath;
+    if(path < APRSWX_PATH_RADIO || path > APRSWX_PATH_BOTH)
+        path = APRSWX_PATH_RADIO;
+
+    String wx = PositionToAprsWx(lat, lat_c, lon, lon_c, temp, temp2, hum, press, qnh);
+    if(wx.length() == 0)
+        return;
+
+    if(aprsWxPathUsesRadio(path))
     {
-        printfdeb("%s [LO-APRS-WX]...%c%02X%02X%s\n",
-                  getTimeString().c_str(), msg_buffer[0], msg_buffer[1], msg_buffer[2], msg_buffer + 3);
+        uint8_t msg_buffer[UDP_TX_BUF_SIZE];
+        uint16_t ilng = encodeLoRaAPRSWx(msg_buffer, meshcom_settings.node_call,
+                                         lat, lat_c, lon, lon_c, press, hum, temp, temp2, qnh);
+        if(ilng != 0)
+        {
+            if(bDisplayInfo)
+            {
+                printfdeb("%s [LO-APRS-WX]...%c%02X%02X%s\n",
+                          getTimeString().c_str(), msg_buffer[0], msg_buffer[1], msg_buffer[2], msg_buffer + 3);
+            }
+
+            Serial.printf("[POS];aprswx;loraprs;len;%u\n", (unsigned)ilng);
+            addTxRingEntry(msg_buffer, ilng, 0xFF, "user_aprswx");
+        }
     }
 
-    Serial.printf("[POS];aprswx;loraprs;len;%u\n", (unsigned)ilng);
-    addTxRingEntry(msg_buffer, ilng, 0xFF, "user_aprswx");
+    if(aprsWxPathUsesNet(path))
+    {
+        char is_line[220];
+        if(aprsIsFormatWxLine(is_line, sizeof(is_line), meshcom_settings.node_call, wx.c_str()))
+        {
+            if(bDisplayInfo)
+                printfdeb("%s [APRS-IS-WX]...%s\n", getTimeString().c_str(), is_line);
+            /* Non-blocking queue; failure must not block radio/loop. */
+            (void)aprsIsRequestWxTx(is_line);
+        }
+        else
+        {
+            Serial.printf("[APRS-IS];tx;err;format\n");
+        }
+    }
 }
 
 void sendPosition(unsigned long uintervall, double lat, char lat_c, double lon, char lon_c, int alt, float press, float hum, float temp, float temp2, float gasres, float co2, int qfe, float qnh)

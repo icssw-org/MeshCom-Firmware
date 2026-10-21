@@ -343,6 +343,10 @@ struct CfgField
     X("node_via",      CFG_STR,  node_via,              CFG_NORANGE,        CFG_NOESC)        \
     X("node_sset4",    CFG_INT,  node_sset4,            0.0, 65535.0,       CFG_NOESC)        \
     X("node_aprsmc",   CFG_STR,  node_aprsmc,           CFG_NORANGE,        CFG_NOESC)        \
+    X("node_aprswxpath", CFG_INT, node_aprswxpath,      0.0, 2.0,           CFG_NOESC)        \
+    X("node_aprsisrv", CFG_STR, node_aprsisserver,      CFG_NORANGE,        CFG_NOESC)        \
+    X("node_aprsisport", CFG_INT, node_aprsisport,      1.0, 65535.0,       CFG_NOESC)        \
+    X("node_aprsispass", CFG_STR, node_aprsispass,      CFG_NORANGE,        CFG_NOESC)        \
     X("node_pingtime", CFG_INT,  node_pingtime,         0.0, 86400.0,       CFG_NOESC)        \
     X("node_pingcall", CFG_STR,  node_pingcall,         CFG_NORANGE,        CFG_NOESC)        \
     X("node_pingmax",  CFG_INT,  node_pingmax,          0.0, 100.0,         CFG_NOESC)        \

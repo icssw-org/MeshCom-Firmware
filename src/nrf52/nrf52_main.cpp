@@ -130,6 +130,7 @@ void sendHeartbeat();
 #include <lora_setchip.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include "aprs_is_client.h"
 #include "loop_scheduler.h" // D1-10: shared loop scheduler (see there)
 #if defined(ENABLE_MSGSTORE)
 #include "msgstore_api.h"
@@ -2157,6 +2158,7 @@ void nrf52loop()
     {
         aprswx_timer = millis();
     }
+    aprsIsLoop();   /* nRF52: net stub no-op */
 
     // Trickle-HEY: adaptive interval (RFC 6206)
     if (((uint32_t)(millis() - heyinfo_timer) >= trickle_interval_ms) || bHeyFirst)

@@ -127,6 +127,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#include "aprs_is_client.h"
 #include "loop_scheduler.h" // D1-10: shared loop scheduler (see there)
 #if defined(ENABLE_MSGSTORE)
 #include "msgstore_api.h"
@@ -4164,6 +4165,7 @@ void esp32loop()
             bAllStarted=true;
         wifiDnsPoll();
         wifiLinkHeartbeat();
+        aprsIsLoop();
         #endif
 
         if(bWEBSERVER && iWlanWait == 0)

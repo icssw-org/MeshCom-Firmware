@@ -168,6 +168,11 @@
     A(char, node_via, [40], {0})                                                                         \
     M(int, node_sset4, 0x0002) /* DEBUGEN = true */                                                      \
     A(char, node_aprsmc, [10], {0})                                                                      \
+    /* --aprswxpath radio|net|both (0/1/2); not an sset2 bit (0x2000 reserved/legacy). */                 \
+    M(int, node_aprswxpath, 0)                                                                           \
+    A(char, node_aprsisserver, [40], "euro.aprs2.net")                                                    \
+    M(int, node_aprsisport, 14580)                                                                       \
+    A(char, node_aprsispass, [16], {0})                                                                   \
     M(int, node_pingtime, 0)                                                                             \
     A(char, node_pingcall, [10], {0})                                                                    \
     M(int, node_pingmax, 0)                                                                              \
