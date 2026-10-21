@@ -46,6 +46,31 @@ static void test_coordinate_minutes_do_not_round_to_sixty()
     TEST_ASSERT_EQUAL_STRING("4859.99N/01659.99E_.../...g...t050r...p...P...b10000", out);
 }
 
+static void test_negative_temperature_uses_t_minus_form()
+{
+    char out[120];
+    // -5 °C → 23 °F → t023; -20 °C → -4 °F → t-04
+    TEST_ASSERT_TRUE(aprsWxFormatPosition(out, sizeof(out),
+                                          48.0, 'N', 16.0, 'E',
+                                          -5.0f, 0.0f, 0.0f, 0.0f, 1000.0f));
+    TEST_ASSERT_NOT_NULL(strstr(out, "t023"));
+
+    TEST_ASSERT_TRUE(aprsWxFormatPosition(out, sizeof(out),
+                                          48.0, 'N', 16.0, 'E',
+                                          -20.0f, 0.0f, 0.0f, 0.0f, 1000.0f));
+    TEST_ASSERT_NOT_NULL(strstr(out, "t-04"));
+}
+
+static void test_humidity_100_encodes_as_h00()
+{
+    char out[120];
+    TEST_ASSERT_TRUE(aprsWxFormatPosition(out, sizeof(out),
+                                          48.0, 'N', 16.0, 'E',
+                                          10.0f, 0.0f, 100.0f, 0.0f, 1000.0f));
+    TEST_ASSERT_NOT_NULL(strstr(out, "h00"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "t050"));
+}
+
 int main(int, char **)
 {
     UNITY_BEGIN();
@@ -53,5 +78,7 @@ int main(int, char **)
     RUN_TEST(test_missing_primary_temp_uses_temp2);
     RUN_TEST(test_missing_temperature_emits_unknown_temperature);
     RUN_TEST(test_coordinate_minutes_do_not_round_to_sixty);
+    RUN_TEST(test_negative_temperature_uses_t_minus_form);
+    RUN_TEST(test_humidity_100_encodes_as_h00);
     return UNITY_END();
 }
