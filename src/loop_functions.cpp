@@ -4952,14 +4952,12 @@ static uint16_t encodeLoRaAPRSWx(uint8_t msg_buffer[UDP_TX_BUF_SIZE], char cSour
     return ilng;
 }
 
-// Companion TX for --aprswx: LoRa-APRS WX frame only. No MeshCom APRS frame,
-// no gateway upload, no EXTUDP echo.
+// Companion TX for --aprswx / --sendaprswx: LoRa-APRS WX frame only.
+// No MeshCom APRS frame, no gateway upload, no EXTUDP echo.
+// Periodic path gates on bAPRSWX; --sendaprswx always attempts one shot.
 void sendAprsWxCompanion(double lat, char lat_c, double lon, char lon_c,
                          float press, float hum, float temp, float temp2, float qnh)
 {
-    if(!bAPRSWX)
-        return;
-
     uint8_t msg_buffer[UDP_TX_BUF_SIZE];
     uint16_t ilng = encodeLoRaAPRSWx(msg_buffer, meshcom_settings.node_call,
                                      lat, lat_c, lon, lon_c, press, hum, temp, temp2, qnh);

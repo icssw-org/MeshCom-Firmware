@@ -1343,13 +1343,13 @@ void commandAction(char *umsg_text, bool ble)
                 defined(SX1262_V3) || defined(USING_SX1262) || defined(BOARD_RAK4630)
             printdeb("--setboostedgain on/off boosted RX gain\n");
             #endif
-            printdeb("--sendpos               send position now\n--sendtrack             send track/APRS beacon now\n--sendhey               send HEY beacon now\n--sendtele              send telemetry now\n--posshot               one-shot position now\n--postime 99            position interval s\n");
+            printdeb("--sendpos               send position now\n--sendtrack             send track/APRS beacon now\n--sendaprswx            send LoRa-APRS weather now\n--sendhey               send HEY beacon now\n--sendtele              send telemetry now\n--posshot               one-shot position now\n--postime 99            position interval s\n");
             delay(100);
 
             printdeb("\n== Neighbour matrix ==\n--nbrreset              clear matrix\n--nbrcheck              consistency check\n--nbrrelay off/count/on relay decision: off / log only / active\n--nbrsym on/off         assume symmetric links\n--nbrreport off/auto/on HN neighbour report\n");
             delay(100);
 
-            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--aprswx on/off         LoRa-APRS weather frame (aprs.fi WX)\n--aprswxint 60          APRSWX interval min (min 30)\n--track on/off          SmartBeaconing\n");
+            printdeb("\n== APRS ==\n--symid <c>             symbol table\n--symcd <c>             symbol code\n--aprscomment <t>/none  comment (alias --atxt)\n--aprsmc <call>         APRS destination call (default APRSMC)\n--aprswx on/off         LoRa-APRS weather frame (aprs.fi WX)\n--aprswxint 60          APRSWX interval min (min 30)\n--sendaprswx            send LoRa-APRS weather now\n--track on/off          SmartBeaconing\n");
             #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
             printdeb("--gps on/off            GPS chip\n");
             #ifndef BOARD_T_DECK_PRO
@@ -3454,6 +3454,23 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"sendtrack") == 0)
     {
         sendPosition(0xFFFF, meshcom_settings.node_lat, meshcom_settings.node_lat_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c, meshcom_settings.node_alt, meshcom_settings.node_press, meshcom_settings.node_hum, meshcom_settings.node_temp, meshcom_settings.node_temp2, meshcom_settings.node_gas_res, meshcom_settings.node_co2, meshcom_settings.node_press_alt, meshcom_settings.node_press_asl);
+
+        if(ble)
+        {
+            addBLECommandBack((char*)"--posted");
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"sendaprswx") == 0)
+    {
+        sendAprsWxCompanion(meshcom_settings.node_lat, meshcom_settings.node_lat_c,
+                            meshcom_settings.node_lon, meshcom_settings.node_lon_c,
+                            meshcom_settings.node_press, meshcom_settings.node_hum,
+                            meshcom_settings.node_temp, meshcom_settings.node_temp2,
+                            meshcom_settings.node_press_asl);
+        aprswx_timer = millis();
 
         if(ble)
         {
