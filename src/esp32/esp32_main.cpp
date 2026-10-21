@@ -1239,6 +1239,10 @@ void esp32setup()
 
     posinfo_interval = POSINFO_INTERVAL;
     aprswx_interval = 60 * 60;
+    if(meshcom_settings.node_aprswxint >= 30 && meshcom_settings.node_aprswxint <= (24 * 60))
+        aprswx_interval = (unsigned long)meshcom_settings.node_aprswxint * 60UL;
+    else
+        meshcom_settings.node_aprswxint = 60;
 
     if(meshcom_settings.node_postime > 0)
         posinfo_interval = meshcom_settings.node_postime;

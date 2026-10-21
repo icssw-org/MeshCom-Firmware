@@ -344,6 +344,7 @@ struct CfgField
     X("node_sset4",    CFG_INT,  node_sset4,            0.0, 65535.0,       CFG_NOESC)        \
     X("node_aprsmc",   CFG_STR,  node_aprsmc,           CFG_NORANGE,        CFG_NOESC)        \
     X("node_aprswxpath", CFG_INT, node_aprswxpath,      0.0, 2.0,           CFG_NOESC)        \
+    X("node_aprswxint",  CFG_INT, node_aprswxint,       30.0, 1440.0,       CFG_NOESC)        \
     X("node_aprswxcall", CFG_STR, node_aprswxcall,      CFG_NORANGE,        CFG_NOESC)        \
     X("node_aprsisrv", CFG_STR, node_aprsisserver,      CFG_NORANGE,        CFG_NOESC)        \
     X("node_aprsisport", CFG_INT, node_aprsisport,      1.0, 65535.0,       CFG_NOESC)        \

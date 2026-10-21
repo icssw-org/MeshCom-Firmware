@@ -1062,6 +1062,8 @@ void commandAction(char *umsg_text, bool ble)
 
         aprswx_interval = (unsigned long)minutes * 60UL;
         aprswx_timer = millis();
+        meshcom_settings.node_aprswxint = minutes;
+        save_settings();
 
         if(ble)
         {
