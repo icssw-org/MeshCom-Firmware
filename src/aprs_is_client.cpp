@@ -5,6 +5,7 @@
 
 #include <Arduino.h>
 #include "meshcom_settings.h"
+#include "aprs_is_format.h"
 
 #if defined(ESP32)
 
@@ -122,7 +123,8 @@ static void aprsIsBuildLogin(char *buf, size_t buflen)
 {
     char call_trim[16];
     size_t n = 0;
-    const char *call = meshcom_settings.node_call;
+    /* WX TX must log in as the WX call/SSID (may differ from MeshCom --setcall). */
+    const char *call = aprsWxEffectiveCall();
     while(call[n] != 0x00 && call[n] != ' ' && n + 1 < sizeof(call_trim))
     {
         call_trim[n] = call[n];

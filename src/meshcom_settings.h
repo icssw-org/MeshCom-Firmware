@@ -170,6 +170,8 @@
     A(char, node_aprsmc, [10], {0})                                                                      \
     /* --aprswxpath radio|net|both (0/1/2); not an sset2 bit (0x2000 reserved/legacy). */                 \
     M(int, node_aprswxpath, 0)                                                                           \
+    /* --aprswxcall: optional WX source call/SSID for LoRa-APRS + APRS-IS; empty = node_call. */         \
+    A(char, node_aprswxcall, [10], {0})                                                                   \
     A(char, node_aprsisserver, [40], "euro.aprs2.net")                                                    \
     M(int, node_aprsisport, 14580)                                                                       \
     A(char, node_aprsispass, [16], {0})                                                                   \

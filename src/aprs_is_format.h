@@ -19,6 +19,10 @@ static inline bool aprsWxPathUsesNet(int path)
 
 const char *aprsWxPathName(int path);
 
+/* Effective WX source call: node_aprswxcall if set, else node_call.
+ * Pointer into meshcom_settings; valid until that field is overwritten. */
+const char *aprsWxEffectiveCall(void);
+
 /* Build APRS-IS TX line: CALL>APRS,TCPIP*:!{wx_body}
  * wx_body is PositionToAprsWx / aprsWxFormatPosition output (no leading '!').
  * No MeshCom <FF01> header. Returns false if call/wx empty or buffer too small. */

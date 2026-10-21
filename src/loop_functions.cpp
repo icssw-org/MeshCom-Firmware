@@ -4971,10 +4971,14 @@ void sendAprsWxCompanion(double lat, char lat_c, double lon, char lon_c,
     if(wx.length() == 0)
         return;
 
+    const char *wxcall = aprsWxEffectiveCall();
+    char wxcall_buf[10];
+    snprintf(wxcall_buf, sizeof(wxcall_buf), "%s", wxcall);
+
     if(aprsWxPathUsesRadio(path))
     {
         uint8_t msg_buffer[UDP_TX_BUF_SIZE];
-        uint16_t ilng = encodeLoRaAPRSWx(msg_buffer, meshcom_settings.node_call,
+        uint16_t ilng = encodeLoRaAPRSWx(msg_buffer, wxcall_buf,
                                          lat, lat_c, lon, lon_c, press, hum, temp, temp2, qnh);
         if(ilng != 0)
         {
@@ -4992,7 +4996,7 @@ void sendAprsWxCompanion(double lat, char lat_c, double lon, char lon_c,
     if(aprsWxPathUsesNet(path))
     {
         char is_line[220];
-        if(aprsIsFormatWxLine(is_line, sizeof(is_line), meshcom_settings.node_call, wx.c_str()))
+        if(aprsIsFormatWxLine(is_line, sizeof(is_line), wxcall_buf, wx.c_str()))
         {
             if(bDisplayInfo)
                 printfdeb("%s [APRS-IS-WX]...%s\n", getTimeString().c_str(), is_line);

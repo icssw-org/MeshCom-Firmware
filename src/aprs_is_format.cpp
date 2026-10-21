@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "meshcom_settings.h"
+
 const char *aprsWxPathName(int path)
 {
     switch(path)
@@ -12,6 +14,14 @@ const char *aprsWxPathName(int path)
         case APRSWX_PATH_RADIO:
         default:               return "radio";
     }
+}
+
+const char *aprsWxEffectiveCall(void)
+{
+    const char *wx = meshcom_settings.node_aprswxcall;
+    if(wx != NULL && wx[0] != 0x00 && wx[0] != ' ')
+        return wx;
+    return meshcom_settings.node_call;
 }
 
 bool aprsIsFormatWxLine(char *out, size_t out_len, const char *call, const char *wx_body)
