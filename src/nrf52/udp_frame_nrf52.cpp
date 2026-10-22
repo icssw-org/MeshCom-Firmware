@@ -648,8 +648,7 @@ int handleUdpFrame_nrf52(unsigned char *inc_udp_buffer, int packetSize, IPAddres
       printfdeb("[ERROR] Received udp message without indicator\n");
       // TM-39: raw & unconditional
       Serial.printf("[GW];rx;type;OTHER;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
-      neth.last_upd_timer = millis();
-      hb_warn_logged = false;   // DR-03: Latch nur zusammen mit der Alterung zuruecksetzen
+      // UDP-03 (#1231): no server frame -- leave the HB watchdog and its warn latch alone
     }
 
     return 0;   // handled
