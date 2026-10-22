@@ -655,8 +655,7 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
         DEBUG_MSG("ERROR", "Received udp message without indicator");
         // TM-39: raw & unconditional
         Serial.printf("[GW];rx;type;OTHER;len;%d;ms;%lu\n", packetSize, (unsigned long)millis());
-        last_upd_timer = millis();
-        hb_warn_logged = false;
+        // UDP-03 (#1231): no server frame -- leave the HB watchdog and its warn latch alone
       }
     } 
     else
