@@ -2790,9 +2790,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     izeile++;
     bClear=false;
 
-    for(itxt=0; itxt<strlen(aprsmsg.msg_payload); itxt++)
+    // OLED wrap is byte-oriented; fold UTF-8 (PL/DE) to ASCII first (#1221).
+    String strAsciiOled = utf8ascii(String(aprsmsg.msg_payload));
+    const char *disp_payload = strAsciiOled.c_str();
+
+    for(itxt=0; itxt<strlen(disp_payload); itxt++)
     {
-        words[iwords][ipos]=aprsmsg.msg_payload[itxt];
+        words[iwords][ipos]=disp_payload[itxt];
 
         if(words[iwords][ipos] == ' ')
         {
@@ -2815,7 +2819,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             iwords++;
             if(iwords >= 100)
                 iwords=99;
-            words[iwords][0]=aprsmsg.msg_payload[itxt];
+            words[iwords][0]=disp_payload[itxt];
             ipos=1;
         }
         else
@@ -6207,6 +6211,8 @@ int conv_meter(int alt_fuss)
 }
 
 // ****** UTF8-Decoder: convert UTF8-string to extended ASCII *******
+// Display-only fold for fonts that lack Latin Extended glyphs (#1221).
+// Mesh/web payload stays UTF-8; callers apply this just before drawing.
 byte c1;  // Last character buffer
 
 // Convert a single Character from UTF8 to Extended ASCII
@@ -6246,8 +6252,34 @@ byte utf8ascii(byte ascii)
             if(ascii == 0x9F)   // ß
                 return  (0xE1);
             else
+            if(ascii == 0xB3)   // ó (U+00F3) — ASCII fold for GFX/OLED fonts
+                return  ('o');
+            else
+            if(ascii == 0x93)   // Ó (U+00D3)
+                return  ('O');
+            else
                 return (0);
             break;
+        case 0xC4:  // Latin Extended-A lead (Polish ĄĆĘ + aćę)
+            if(ascii == 0x84) return ('A'); // Ą
+            if(ascii == 0x85) return ('a'); // ą
+            if(ascii == 0x86) return ('C'); // Ć
+            if(ascii == 0x87) return ('c'); // ć
+            if(ascii == 0x98) return ('E'); // Ę
+            if(ascii == 0x99) return ('e'); // ę
+            return (0);
+        case 0xC5:  // Latin Extended-A lead (Polish ŁŃŚŹŻ + łńśźż)
+            if(ascii == 0x81) return ('L'); // Ł
+            if(ascii == 0x82) return ('l'); // ł
+            if(ascii == 0x83) return ('N'); // Ń
+            if(ascii == 0x84) return ('n'); // ń
+            if(ascii == 0x9A) return ('S'); // Ś
+            if(ascii == 0x9B) return ('s'); // ś
+            if(ascii == 0xB9) return ('Z'); // Ź
+            if(ascii == 0xBA) return ('z'); // ź
+            if(ascii == 0xBB) return ('Z'); // Ż
+            if(ascii == 0xBC) return ('z'); // ż
+            return (0);
         case 0xC2:
             if(ascii == 0xB0)   // °
                 return  (0xF8);
