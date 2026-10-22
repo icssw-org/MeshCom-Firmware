@@ -27,6 +27,9 @@ const GwServer GW_SERVERS[] = {
     { "HB", "MeshCom HB (Switzerland)",
       { /*INET*/   { GWM_DIRECT, "", { "meshcom.emcomm.ch", {157, 143, 4, 44} }, GW_NTP_POOL },
         /*HAMNET*/ { GWM_DIRECT, "", { nullptr, {44, 142, 42, 59} }, { nullptr, {44, 142, 163, 2} } } } },
+    { "SP", "MeshCom SP (Poland)",
+      { /*INET*/   { GWM_DIRECT, "", { "spmeshcom.dynalias.com", {146, 59, 232, 234} }, GW_NTP_POOL },
+        /*HAMNET*/ { GWM_OTHER_NET, "", { nullptr, {0, 0, 0, 0} }, { nullptr, {0, 0, 0, 0} } } } },
     // FR and US: not enabled, no server addresses are known. To enable a row:
     // operator's server (host and/or IP), a reachable time server, and whether
     // a Hamnet-side server exists (then the Hamnet side becomes DIRECT).
