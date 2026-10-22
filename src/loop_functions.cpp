@@ -6210,10 +6210,20 @@ int conv_meter(int alt_fuss)
     return (int)((float)alt_fuss * 0.3048);
 }
 
-// ****** UTF8-Decoder: convert UTF8-string to extended ASCII *******
-// Display-only fold for fonts that lack Latin Extended glyphs (#1221).
+// ****** UTF8-Decoder: display-only fold to printable ASCII (#1221) *******
 // Mesh/web payload stays UTF-8; callers apply this just before drawing.
+// Markers 0x01..0x07 = German digraphs / ß / € (expanded in String/char* helpers).
+// Polish → single ASCII letters. German → ae/oe/ue/ss (ASCII-safe on GFX/OLED).
 byte c1;  // Last character buffer
+
+#define UTF8ASC_AE   0x01
+#define UTF8ASC_OE   0x02
+#define UTF8ASC_UE   0x03
+#define UTF8ASC_AE_U 0x04
+#define UTF8ASC_OE_U 0x05
+#define UTF8ASC_UE_U 0x06
+#define UTF8ASC_SS   0x07
+#define UTF8ASC_EUR  0x08
 
 // Convert a single Character from UTF8 to Extended ASCII
 // Return "0" if a byte has to be ignored
@@ -6231,35 +6241,17 @@ byte utf8ascii(byte ascii)
     switch (last)     // conversion depending on first UTF8-character
     {
         case 0xC3:
-            if(ascii == 0xA4)   // ä
-                return  (0x94);
-            else
-            if(ascii == 0xB6)   // ö
-                return  (0x92);
-            else
-            if(ascii == 0xBC)   // ü
-                return  (0x81);
-            else
-            if(ascii == 0x84)   // Ä
-                return  (0x8E);
-            else
-            if(ascii == 0x96)   // Ö
-                return  (0x99);
-            else
-            if(ascii == 0x9C)   // Ü
-                return  (0x9A);
-            else
-            if(ascii == 0x9F)   // ß
-                return  (0xE1);
-            else
-            if(ascii == 0xB3)   // ó (U+00F3) — ASCII fold for GFX/OLED fonts
-                return  ('o');
-            else
-            if(ascii == 0x93)   // Ó (U+00D3)
-                return  ('O');
-            else
-                return (0);
-            break;
+            // German umlauts + ß + Polish/Latin ó
+            if(ascii == 0xA4) return UTF8ASC_AE;   // ä
+            if(ascii == 0xB6) return UTF8ASC_OE;   // ö
+            if(ascii == 0xBC) return UTF8ASC_UE;   // ü
+            if(ascii == 0x84) return UTF8ASC_AE_U; // Ä
+            if(ascii == 0x96) return UTF8ASC_OE_U; // Ö
+            if(ascii == 0x9C) return UTF8ASC_UE_U; // Ü
+            if(ascii == 0x9F) return UTF8ASC_SS;   // ß
+            if(ascii == 0xB3) return ('o');        // ó
+            if(ascii == 0x93) return ('O');        // Ó
+            return (0);
         case 0xC4:  // Latin Extended-A lead (Polish ĄĆĘ + aćę)
             if(ascii == 0x84) return ('A'); // Ą
             if(ascii == 0x85) return ('a'); // ą
@@ -6281,69 +6273,57 @@ byte utf8ascii(byte ascii)
             if(ascii == 0xBC) return ('z'); // ż
             return (0);
         case 0xC2:
-            if(ascii == 0xB0)   // °
-                return  (0xF8);
-            break;
+            if(ascii == 0xB0) return ('*'); // ° → printable ASCII
+            return (0);
         case 0x82:
-            if(ascii==0xAC)
-                return(0x80);       // special case Euro-symbol
+            if(ascii == 0xAC) return UTF8ASC_EUR; // € (incomplete 3-byte path, legacy)
+            return (0);
     }
 
     return  (0);                                     // otherwise: return zero, if character has to be ignored
 }
 
-// convert String object from UTF8 String to Extended ASCII
+static void utf8asciiAppendFold(String &r, char c)
+{
+    switch ((uint8_t)c)
+    {
+    case UTF8ASC_AE:   r += "ae"; break;
+    case UTF8ASC_OE:   r += "oe"; break;
+    case UTF8ASC_UE:   r += "ue"; break;
+    case UTF8ASC_AE_U: r += "Ae"; break;
+    case UTF8ASC_OE_U: r += "Oe"; break;
+    case UTF8ASC_UE_U: r += "Ue"; break;
+    case UTF8ASC_SS:   r += "ss"; break;
+    case UTF8ASC_EUR:  r += "*";  break;
+    default:           r += c;    break;
+    }
+}
+
+// convert String object from UTF8 String to printable ASCII
 String utf8ascii(String s)
 {      
         String r="";
-        char c;
+        // reset decoder state (shared with byte helper)
+        c1 = 0;
         for (int i=0; i<(int)s.length(); i++)
         {
-                c = utf8ascii(s.charAt(i));
-                if (c!=0)
-                {
-                    if(c == 0x94)
-                        r+="ae";
-                    else
-                    if(c == 0x92)
-                        r+="oe";
-                    else
-                    if(c == 0x81)
-                        r+="ue";
-                    else
-                    if(c == 0x8E)
-                        r+="Ae";
-                    else
-                    if(c == 0x99)
-                        r+="Oe";
-                    else
-                    if(c == 0x9A)
-                        r+="Ue";
-                    else
-                    if(c == 0xE1)
-                        r+="ss";
-                    else
-                    if(c == 0x80)
-                        r+="*";
-                    else
-                       r+=c;
-                }
+                char c = (char)utf8ascii((byte)s.charAt(i));
+                if (c != 0)
+                    utf8asciiAppendFold(r, c);
         }
+        c1 = 0;
         return r;
 }
 
-// In Place conversion UTF8-string to Extended ASCII (ASCII is shorter!)
+// In Place conversion UTF8-string to ASCII (via String fold so digraphs fit)
 void utf8ascii(char* s)
 {      
-        int k=0;
-        char c;
-        for (int i=0; i<(int)strlen(s); i++)
-        {
-                c = utf8ascii(s[i]);
-                if (c!=0)
-                        s[k++]=c;
-        }
-        s[k]=0;
+        if (s == nullptr)
+            return;
+        String t = utf8ascii(String(s));
+        size_t n = t.length();
+        memcpy(s, t.c_str(), n);
+        s[n] = 0;
 }
 
 String getTimeZone()
