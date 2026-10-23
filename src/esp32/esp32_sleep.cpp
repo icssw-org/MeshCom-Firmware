@@ -14,6 +14,7 @@
 #include "lora_functions.h"
 #include "esp32_pmu.h"
 #include "batt_functions.h"
+#include "loop_functions_extern.h"   // boardLedForceOff()
 #include "loop_breadcrumb.h"   // INS-05: loopCrumbClear() right before the sleep
 
 // Runtime wake-button GPIO (loop_functions.cpp:186). Seeded from the
@@ -231,6 +232,7 @@ void esp32EnterDeepSleep()
 
     // (g) Sleep. BOARD_RAK4630 (nRF52) never reaches this function -- see
     // the call site in command_functions.cpp.
+    boardLedForceOff();   // the --board led heartbeat is dark in sleep (no-op without an LED pin)
     loopCrumbClear();   // INS-05: deliberate sleep, RTC memory survives it -- cleared last, after the
                         // bounded button wait above that could still trip the task WDT
 #if !ARDUINO_USB_CDC_ON_BOOT

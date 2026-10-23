@@ -59,6 +59,9 @@ definitions for HELTEC_V2_1
 #define GPS_RX_PIN 13
 #define GPS_TX_PIN 12
 
+// White user LED, GPIO25, active HIGH
+#define BOARD_LED 25
+
 // W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
 // Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
 // dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.

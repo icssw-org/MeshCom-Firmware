@@ -26,6 +26,11 @@
 #include "extudp_functions.h"
 #include "kiss_functions.h"
 #include "configuration.h"
+#include "loop_functions_extern.h"   // BOARD_LED_ACTIVE_LOW rule for nRF52
+#include "board_led.h"
+#if defined(ESP32)
+#include "esp32/esp32_pmu.h"   // chargeLedFitted()
+#endif
 
 #include "TinyGPSPlus.h"
 
@@ -89,6 +94,147 @@ int ifalseping = 0;
 
 int BOARD_HARDWARE = MODUL_HARDWARE;
 bool bUSER_BOARD_LED = false;
+
+// Which LEDs exist on this build/node, the one source for --info, BLE SN/SN1 and the web GUI. Board LED =
+// BOARD_LED pin or a NeoPixel-only heartbeat (LED_PIN with pixels, no BOARD_LED); charge LED = AXP compiled in
+// AND a PMU answered (chargeLedFitted(): false without AXP). ledFitted() of board_led.h decides.
+LedFitted ledFittedNow(void)
+{
+#if defined(BOARD_LED)
+    const bool boardPin = true;
+#else
+    const bool boardPin = false;
+#endif
+#if defined(LED_PIN) && defined(LED_PIXEL) && (LED_PIXEL > 0) && !defined(BOARD_LED)
+    const bool neo = true;
+#else
+    const bool neo = false;
+#endif
+#if defined(ESP32)
+    return ledFitted(boardPin, neo, true, chargeLedFitted());
+#else
+    return ledFitted(boardPin, neo, false, false);   // nRF52: no PMU charge LED
+#endif
+}
+
+// Board LED heartbeat ("--board led on": 30 ms every 2 s). The decision logic is in board_led.h; this is the
+// pin side. BOARD_LED = plain GPIO LED; LED_PIN without BOARD_LED = NeoPixel only (S3 DevKitC): the pulse goes
+// through the status-colour path of esp32_main.cpp (bLED_WEISS). nRF52 boards (RAK4631, T114, T-Echo) use the
+// same code through BOARD_LED / LED_STATE_ON.
+#if defined(BOARD_LED) || defined(LED_PIN)
+    #ifndef BOARD_LED_ACTIVE_LOW
+        #define BOARD_LED_ACTIVE_LOW 0
+    #endif
+    #if defined(BOARD_LED)
+        #define BOARD_LED_DRIVE_PIN BOARD_LED
+    #else
+        #define BOARD_LED_DRIVE_PIN LED_PIN
+        #include <Adafruit_NeoPixel.h>
+        extern Adafruit_NeoPixel pixels;   // esp32_main.cpp
+    #endif
+    #if defined(LED_PIN)
+        // NeoPixel status path of esp32_main.cpp. No variant defines both BOARD_LED and LED_PIN; the branch is
+        // kept for a board that does, which then pulses the pixel white with every flash
+        extern bool bLED_WEISS;
+        extern unsigned long pixels_delay;
+    #endif
+    #if defined(BOARD_TBEAM)
+        #define BOARD_LED_OW_TBEAM_REMAP true    // onewire_functions.cpp: stored 16 -> 0 -> OneWire_GPIO
+    #else
+        #define BOARD_LED_OW_TBEAM_REMAP false
+    #endif
+    #if defined(OneWire_GPIO)
+        #define BOARD_LED_OW_COMPILE (OneWire_GPIO)
+    #else
+        #define BOARD_LED_OW_COMPILE (-1)
+    #endif
+
+static bool boardLedLit = false;       // logical flasher state (starts dark)
+static uint32_t boardLedTimer = 0;
+
+bool boardLedPinUsable(void)
+{
+    return boardLedPinFree(bONEWIRE, boardLedOwPin(meshcom_settings.node_owgpio, BOARD_LED_OW_COMPILE, BOARD_LED_OW_TBEAM_REMAP),
+                           BOARD_LED_DRIVE_PIN);
+}
+
+#if defined(LED_PIN)
+// Same guards as the former inline flasher in esp32_main.cpp: no status colour running or pending
+static void boardLedWhitePulse(void)
+{
+    if (pixels_delay == 0 && !bLED_CLEAR)
+    {
+        if (!bLED_RED && !bLED_GREEN && !bLED_ORANGE && !bLED_BLUE)
+            bLED_WEISS = true;   // lit edge only; the NeoPixel handler shows it and clears it again
+    }
+}
+#endif
+
+#if defined(BOARD_LED)
+static bool boardLedOutput = false;   // pinMode(OUTPUT) done since the pad was last given up
+#endif
+
+static void boardLedWrite(bool lit)
+{
+    #if defined(BOARD_LED)
+        #if defined(LED_PIN)
+        if (lit)
+            boardLedWhitePulse();
+        #endif
+        if (!boardLedOutput)   // pad may come back from OneWire at run time
+        {
+            pinMode(BOARD_LED, OUTPUT);
+            boardLedOutput = true;
+        }
+        digitalWrite(BOARD_LED, boardLedLevel(lit, BOARD_LED_ACTIVE_LOW));
+    #else
+        if (lit)
+            boardLedWhitePulse();
+    #endif
+}
+
+void boardLedTick(void)
+{
+    if (!bUSER_BOARD_LED || !boardLedPinUsable())
+    {
+        if (boardLedLit)   // switched off (or OneWire took the pin) mid-flash: leave dark
+        {
+            boardLedLit = false;
+            if (boardLedPinUsable())   // OneWire owns the pad: clear the state, never write the pin
+                boardLedWrite(false);
+        }
+        #if defined(BOARD_LED)
+        if (!boardLedPinUsable())
+            boardLedOutput = false;
+        #endif
+        return;
+    }
+    const BoardLedStep st = boardLedPhase(millis(), boardLedTimer, boardLedLit);
+    boardLedTimer = st.timer;
+    boardLedLit = st.lit;
+    if (st.changed)
+        boardLedWrite(st.lit);
+}
+
+void boardLedForceOff(void)   // before deep sleep: LED dark, flasher phase reset
+{
+    boardLedLit = false;
+    if (!boardLedPinUsable())
+        return;   // the pad belongs to OneWire: not ours to drive
+    #if defined(BOARD_LED)
+        pinMode(BOARD_LED, OUTPUT);
+        digitalWrite(BOARD_LED, boardLedLevel(false, BOARD_LED_ACTIVE_LOW));
+    #else
+        bLED_WEISS = false;
+        pixels.clear();
+        pixels.show();
+    #endif
+}
+#else
+bool boardLedPinUsable(void) { return false; }
+void boardLedTick(void) {}
+void boardLedForceOff(void) {}
+#endif
 
 bool bRadio=false;
 

@@ -2978,6 +2978,15 @@ void sub_page_setup()
     _create_setup_switch_element("volt", "Voltage", "show batt. voltage, not percent", bDisplayVolt);           // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("mesh", "Mesh", "enable mesh/forwarding of received LoRa messages", bMESH);    // create Switch-Element inclucing Label and Description
     _create_setup_switch_element("via", "Via", "enable via", bVIA);    // create Switch-Element inclucing Label and Description
+    { // only on a node that has the LED (the info page says "not fitted" otherwise); same console rows as --board led / --charge led
+        const LedFitted ledHw = ledFittedNow();
+#if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)   // same guard as the webSetup_setParam handler and the --board led console row
+        if (ledHw.board)
+            _create_setup_switch_element("boardled", "Board LED", "short heartbeat flash every 2 s", bUSER_BOARD_LED);
+#endif
+        if (ledHw.charge)
+            _create_setup_switch_element("chargeled", "Charge LED", "on = follows charging, off = dark", bCHARGE_LED);
+    }
 
 // We support OTA only for ESP based devices, not RAK
 #ifdef ESP32
@@ -3570,6 +3579,11 @@ void sub_page_info()
     web_client.printf("Mesh: %s<br>", (bMESH ? "on" : "off"));
     web_client.printf("Via: %s<br>", (bVIA ? "on" : "off"));
     web_client.printf("Userbutton: %s<br>", (bButtonCheck ? "on" : "off"));
+    { // outside the battery branch (USB-powered nodes too); labels equal the setup switch labels
+        const LedFitted ledHw = ledFittedNow();
+        web_client.printf("Board LED: %s<br>", !ledHw.board ? "not fitted" : !bUSER_BOARD_LED ? "off" : boardLedPinUsable() ? "on" : "on (pin busy)");   // as --info
+        web_client.printf("Charge LED: %s<br>", ledHw.charge ? (bCHARGE_LED ? "auto" : "off") : "not fitted");
+    }
     #if defined(ANALOG_PIN)
     if (!bAnalogCheck)
         web_client.printf("Analog: off<br>");

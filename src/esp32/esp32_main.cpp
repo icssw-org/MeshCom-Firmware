@@ -204,7 +204,6 @@ bool bDEEP_SLEEP = false;
     #ifndef BOARD_LED_ACTIVE_LOW
         #define BOARD_LED_ACTIVE_LOW 0
     #endif
-    bool bLED = BOARD_LED_ACTIVE_LOW;
 #endif
 
 #if defined(ENABLE_AUDIO)
@@ -821,6 +820,12 @@ void esp32setup()
 // 1.1.1??   pinMode(45,OUTPUT);
 // 1.1.1??    digitalWrite(45, LOW);
 
+    #if defined(BOARD_LED) && BOARD_LED_ACTIVE_LOW
+        // Active-low LED (common anode): a floating pad can glow until the gated init below (after the settings
+        // load). A pull-up holds it dark and does not load a OneWire/DHT bus on a shared pad.
+        pinMode(BOARD_LED, INPUT_PULLUP);
+    #endif
+
     // Wartet maximal 5 Sekunden auf den seriellen Monitor.
     // Achtung: delay() füttert den Task-Watchdog NICHT -- nur
     // esp_task_wdt_reset() tut das. Diese Schleife ist nur deshalb
@@ -830,15 +835,7 @@ void esp32setup()
         delay(10);
     }
 
-    // Safe Hardware Initalization
-    #ifdef BOARD_LED
-        // Pre-load the safe execution state into the output register
-        // This prevents the LED from briefly flashing/glitching
-        // when changing the pin mode
-        digitalWrite(BOARD_LED, BOARD_LED_ACTIVE_LOW);
-        // configure the pin driver as active output:
-        pinMode(BOARD_LED, OUTPUT);
-    #endif
+    // Board LED pin init: after the settings load (needs the OneWire state), see bUSER_BOARD_LED below
 
     #if defined(HAS_TFT_CONNECT)
 
@@ -1100,6 +1097,19 @@ void esp32setup()
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
     bAnalogFilter = meshcom_settings.node_sset3 & 0x0040;
     bUSER_BOARD_LED = meshcom_settings.node_sset3 & 0x0080;
+
+    #ifdef BOARD_LED
+        // Safe Hardware Initalization. Skipped while OneWire/DHT owns the pad (T-Beam: GPIO4)
+        if (boardLedPinUsable())
+        {
+            // Pre-load the safe execution state into the output register
+            // This prevents the LED from briefly flashing/glitching
+            // when changing the pin mode
+            digitalWrite(BOARD_LED, BOARD_LED_ACTIVE_LOW);
+            // configure the pin driver as active output:
+            pinMode(BOARD_LED, OUTPUT);
+        }
+    #endif
 
     bSOFTSERDEBUG = meshcom_settings.node_sset3 & 0x0100;
     bWXDEBUG = meshcom_settings.node_sset3 & 0x0200;
@@ -2365,44 +2375,7 @@ void esp32loop()
         }
     #endif
 
-    #ifdef BOARD_LED
-        if(bUSER_BOARD_LED)
-        {
-            const uint32_t now = millis(); // millis() only once per cycle
-            const uint32_t flashDuration = 30;
-            const uint32_t interval =2000;  // Delay between flashes 2 sec.
-            if (!bLED)
-            {
-                if (now - led_timer >= interval) // repeats every 2 second, no cast needed for millis() as it is already uint32_t
-                {
-                    led_timer = now;
-                    bLED = true; // LED on 
-
-                    #ifdef LED_PIN
-                        if(pixels_delay == 0 && !bLED_CLEAR)
-                        {
-                            if(!bLED_RED && !bLED_GREEN && !bLED_ORANGE && !bLED_BLUE)
-                            {
-                                bLED_WEISS = true;
-                            }
-                        }
-                    #endif
-
-                        digitalWrite(BOARD_LED, HIGH ^ BOARD_LED_ACTIVE_LOW);
-                }
-            }
-            else
-            {
-                // if the LED is ON, we check the short Flash period of time (30ms)
-                if (now - led_timer >= flashDuration)
-                {
-                    bLED = false;
-                    // switch the board LED OFF
-                    digitalWrite(BOARD_LED, LOW ^ BOARD_LED_ACTIVE_LOW);
-                }
-            }
-        }
-    #endif
+    boardLedTick();   // --board led heartbeat (30 ms / 2 s); yields to OneWire, no-op without an LED pin
 
     // D1-10: the shared scheduler runs at function scope, BEFORE the
     // BOARD_T5_EPAPER / if(bRadio) block below. Six of its seven jobs (battery,

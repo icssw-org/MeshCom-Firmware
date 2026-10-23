@@ -98,6 +98,9 @@ definitions for HELTEC_V3
 #define GPS_RX_PIN 47
 #define GPS_TX_PIN 48
 
+// User LED GPIO35 (Wireless Stick Lite V3), active HIGH
+#define BOARD_LED 35
+
 // W7 (D6-01): die Flottenvorgaben stehen in src/configuration_default.h.
 // Der Include gehoert ans ENDE: was diese Datei oben selbst setzt, hat es
 // dann schon gesetzt, und die #ifndef-Waechter dort ueberspringen es.

@@ -27,7 +27,25 @@ extern int ifalseping;
 extern int BOARD_HARDWARE;
 extern bool bUSER_BOARD_LED;
 
+// Which LEDs this build/node has (board LED / charge LED), shared by --info, BLE SN/SN1 and the web GUI.
+#include "board_led.h"
+LedFitted ledFittedNow(void);
+
+// nRF52 variants state the polarity as LED_STATE_ON (1 = active high); BOARD_LED_ACTIVE_LOW follows it.
+#if defined(NRF52_SERIES) && defined(BOARD_LED) && !defined(BOARD_LED_ACTIVE_LOW) && defined(LED_STATE_ON)
+    #if LED_STATE_ON
+        #define BOARD_LED_ACTIVE_LOW 0
+    #else
+        #define BOARD_LED_ACTIVE_LOW 1
+    #endif
+#endif
 extern bool bCHARGE_LED;
+
+// Board LED helpers (loop_functions.cpp, decision logic in board_led.h). No-op bodies on boards without
+// BOARD_LED / LED_PIN, so callers need no guard.
+bool boardLedPinUsable(void);   // false while OneWire owns the LED pin or no LED pin exists
+void boardLedTick(void);        // main loop: the 30 ms / 2 s heartbeat while bUSER_BOARD_LED
+void boardLedForceOff(void);    // LED dark + flasher phase reset; call before deep sleep
 
 extern unsigned long rebootAuto;
 

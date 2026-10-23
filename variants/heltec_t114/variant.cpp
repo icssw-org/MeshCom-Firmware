@@ -42,12 +42,9 @@ extern "C"
 
 	void initVariant()
 	{
-		// LED1 & LED2
+		// LED1
 		pinMode(PIN_LED1, OUTPUT);
 		ledOff(PIN_LED1);
-
-		pinMode(PIN_LED2, OUTPUT);
-		ledOff(PIN_LED2);
 	}
 #ifdef __cplusplus
 }

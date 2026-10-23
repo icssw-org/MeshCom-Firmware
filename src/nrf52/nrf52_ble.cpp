@@ -121,7 +121,7 @@ void init_ble(void)
 
 #if NO_BLE_LED > 0
 	Bluefruit.autoConnLed(false);
-	digitalWrite(LED_BLUE, LOW);
+	digitalWrite(LED_BLUE, !LED_STATE_ON);
 #endif
 
 #ifdef _VARIANT_ISP4520_

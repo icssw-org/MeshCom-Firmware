@@ -12,6 +12,9 @@ void setupPMU();
 // documents as LoRa/GPS are touched here.
 void pmuSleepRails();
 
+// AXP compiled in and a PMU answered at runtime (charge LED fitted). Declared on every board; false without AXP.
+bool chargeLedFitted(void);
+
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
 
 // Function to enable and disable (0) Charging Led Auto Mode (e.g. T-BEAM AXP2101 v1.2)
