@@ -4165,6 +4165,15 @@ void esp32loop()
     }
     #endif
 
+    // Net console stop, same reason as KISS above: with the console as the only
+    // service the block below is skipped after "--netconsole off", and the
+    // listener stayed open (P-0169). Stopping needs no network, so no
+    // iWlanWait gate either.
+    #ifndef DISABLE_NET_CONSOLE
+    if(!bNETCONSOLE)
+        stopNetConsole();   // no-op unless started
+    #endif
+
     if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE || bKISS)
     {
         if (web_timer == 0 || (iWlanWait > 0 && ((uint32_t)(millis() - web_timer) >= 1000)) || ((uint32_t)(millis() - web_timer) >= (HEARTBEAT_INTERVAL * 1000 * 10)))   // repeat 5 minutes
@@ -4230,17 +4239,10 @@ void esp32loop()
         }
 
         #ifndef DISABLE_NET_CONSOLE
-        if(iWlanWait == 0)
+        if(bNETCONSOLE && iWlanWait == 0)
         {
-            if(bNETCONSOLE)
-            {
-                startNetConsole();
-                loopNetConsole();
-            }
-            else
-            {
-                stopNetConsole();
-            }
+            startNetConsole();
+            loopNetConsole();
         }
         #endif
 
