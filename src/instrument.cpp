@@ -9,6 +9,7 @@
  */
 
 #include "instrument.h"
+#include "configuration_global.h"
 
 #if INSTRUMENT_ENABLED
 
@@ -312,8 +313,6 @@ volatile uint32_t instr_irq_us         = 0;
 volatile int32_t  instr_irq_to_read_us = -1;
 volatile bool     instr_onrx_active    = false;
 void             *instr_onrx_task      = NULL;
-uint32_t          instr_uarttx_bytes   = 0;
-int               instr_uarttx_ok      = 0;
 
 static OnrxRec  s_onrx_ring[ONRX_RING];
 static uint32_t s_onrx_head = 0;          /* next pop  */
@@ -430,28 +429,13 @@ void instrument_onrx_drain(void)
                   (unsigned long)r.seq, (unsigned long)r.total_us, (unsigned long)r.print_us,
                   (unsigned long)r.bytes, (unsigned long)r.len, (long)r.irq_to_read_us,
                   ph, (unsigned long)r.uart_us, (unsigned long)r.tcp_us, (unsigned long)lost,
-                  (unsigned long)instr_uarttx_bytes, instr_uarttx_ok);
+                  (unsigned long)console_txbuf_bytes, console_txbuf_ok);
     }
-}
-
-/* Arm F: must run before the first Serial.begin(); HardwareSerial::setTxBufferSize()
- * returns 0 once the UART is running (arduino-esp32 2.0.17). Not for the S3
- * HWCDC console, which already sizes its ring (CDC-02). */
-void instrument_uarttx_set(void)
-{
-#if INSTR_UART_TXBUF > 0 && !(ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE)
-    static bool s_done = false;
-    if (s_done)
-        return;
-    s_done = true;
-    instr_uarttx_bytes = (uint32_t)INSTR_UART_TXBUF;
-    instr_uarttx_ok = (Serial.setTxBufferSize(INSTR_UART_TXBUF) >= (size_t)INSTR_UART_TXBUF) ? 1 : 0;
-#endif
 }
 
 void instrument_onrx_boot(void)
 {
-    Serial.printf("[INS] UARTTXBUF bytes=%lu ok=%d\n", (unsigned long)instr_uarttx_bytes, instr_uarttx_ok);
+    Serial.printf("[INS] UARTTXBUF bytes=%lu ok=%d\n", (unsigned long)console_txbuf_bytes, console_txbuf_ok);
     Serial.printf("[INS] ONRX_READY\n");
 }
 #endif  /* ESP32 */

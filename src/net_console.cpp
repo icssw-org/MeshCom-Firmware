@@ -42,6 +42,7 @@ static auto& s_hwSerial = Serial;
 
 #include "net_console.h"
 #include "instrument.h"
+#include "configuration_global.h"
 #include <configuration.h>        // board defines (HAS_ETHERNET)
 #if defined(HAS_ETHERNET)
 #include <esp32/esp32_flash.h>   // meshcom_settings (Ethernet mode check)
@@ -248,6 +249,10 @@ void MeshSerialClass::begin(unsigned long baud)
         s_hwSerial.setTxBufferSize(4096);
         s_txBufSized = true;
     }
+#endif
+#if !ARDUINO_USB_CDC_ON_BOOT
+    // R2-F: UART console, TX ring before the real begin() (once-flag inside)
+    console_txbuf_apply(s_hwSerial);
 #endif
     s_hwSerial.begin(baud);
 #if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE

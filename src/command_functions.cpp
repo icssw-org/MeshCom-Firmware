@@ -30,6 +30,7 @@
 #include "i2c_scanner.h"
 #include "ArduinoJson.h"
 #include "configuration.h"
+#include "configuration_global.h"
 #include "regex_functions.h"
 #include "lora_setchip.h"
 #include "spectral_scan.h"
@@ -6509,8 +6510,16 @@ void commandAction(char *umsg_text, bool ble)
             // Flags aus dieser Antwort liest und ein Flag, das er nicht findet,
             // beim Beenden unangetastet laesst. Vorher schaltete er --txcapture
             // blind aus; ohne diese Spalte bliebe es nach einem Lauf an.
-            printfdeb("...DEBUG %s ...LORADEBUG %s ...NBRDEBUG %s ...TXCAPTURE %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s\n",
-                (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bNBRDEBUG?"on":"off"), (bTXCAPTURE?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off"));
+            printfdeb("...DEBUG %s ...LORADEBUG %s ...NBRDEBUG %s ...TXCAPTURE %s ...GPSDEBUG %s/%i ...SOFTSERDEBUG %s\n...WXDEBUG %s ...BLEDEBUG %s"
+            #if defined(ESP32)
+                " ...CONSOLE_TXBUF %lu/%d"
+            #endif
+                "\n",
+                (bDEBUG?"on":"off"), (bLORADEBUG?"on":"off"), (bNBRDEBUG?"on":"off"), (bTXCAPTURE?"on":"off"), (iGPSDEBUG?"on":"off"), iGPSDEBUG, (bSOFTSERDEBUG?"on":"off"),(bWXDEBUG?"on":"off"), (bBLEDEBUG?"on":"off")
+            #if defined(ESP32)
+                , (unsigned long)console_txbuf_bytes, console_txbuf_ok
+            #endif
+                );
 
             // Stufe 2 (docs/nbr-wichtigkeit-konzept.md 5.8 Punkt 4): Modus und die
             // fuenf Zaehler, damit ein Feldlauf ohne Web-Seite ablesbar bleibt.

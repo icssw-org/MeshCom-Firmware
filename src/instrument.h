@@ -109,8 +109,6 @@ extern volatile uint32_t instr_irq_us;           /* micros()|1 in the DIO1 ISR, 
 extern volatile int32_t  instr_irq_to_read_us;   /* set at radio.readData, -1 = no IRQ stamp */
 extern volatile bool     instr_onrx_active;
 extern void             *instr_onrx_task;
-extern uint32_t          instr_uarttx_bytes;
-extern int               instr_uarttx_ok;
 
 void instrument_onrx_begin(uint16_t len);
 void instrument_onrx_phase(const char *name);
@@ -120,7 +118,6 @@ void instrument_onrx_drain(void);
 void instrument_onrx_boot(void);
 void instrument_irq_read(void);                  /* consume-once, see INSTR_IRQ_READ */
 void instrument_irq_drop(void);                  /* frame read but OnRxDone not reached */
-void instrument_uarttx_set(void);                /* call before Serial.begin   */
 
 #define INSTR_ONRX_BEGIN(len)  instrument_onrx_begin(len)
 #define INSTR_PH(name)         instrument_onrx_phase(name)

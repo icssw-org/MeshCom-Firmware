@@ -5,6 +5,9 @@
 #include <Arduino.h>
 #include <esp_sleep.h>
 #include <driver/gpio.h>
+#if !ARDUINO_USB_CDC_ON_BOOT
+#include <driver/uart.h>
+#endif
 
 #include "configuration.h"
 #include "printfdeb_functions.h"
@@ -230,5 +233,11 @@ void esp32EnterDeepSleep()
     // the call site in command_functions.cpp.
     loopCrumbClear();   // INS-05: deliberate sleep, RTC memory survives it -- cleared last, after the
                         // bounded button wait above that could still trip the task WDT
+#if !ARDUINO_USB_CDC_ON_BOOT
+    // R2-F2/R1: esp_deep_sleep_start() does not run the shutdown handlers and only waits
+    // for the UART FIFO (flush_uarts, IDF 4.4.7 sleep_modes.c); give the console TX ring
+    // (UART0) up to 100 ms to drain. Without a driver ring this returns at once.
+    uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
+#endif
     esp_deep_sleep_start();
 }

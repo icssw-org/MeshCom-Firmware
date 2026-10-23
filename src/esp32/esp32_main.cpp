@@ -16,6 +16,7 @@
 #include "capture_functions.h"
 #include "dedup_functions.h"
 #include "ntp_async.h"      // NTP-01: isPending() haelt das GPS-Gate fuer --ntpsync offen
+#include "configuration_global.h"
 #include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
 #include "loop_breadcrumb.h" // F3: always-on LAST_LOOP_SECTION breadcrumb for TASK_WDT forensics
 #include "track_warning.h" // TRK-01: Warnhinweis bei aktivem Track
@@ -746,6 +747,45 @@ static const char* wakeCauseName(esp_sleep_source_t c)
     }
 }
 
+uint32_t console_txbuf_bytes = 0;
+int      console_txbuf_ok    = 0;
+
+#if !ARDUINO_USB_CDC_ON_BOOT && (CONSOLE_UART_TXBUF > 0 || (defined(INSTR_UART_TXBUF) && INSTR_UART_TXBUF > 0))
+#include <driver/uart.h>
+static void console_txbuf_shutdown(void)
+{
+    uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
+}
+#endif
+
+void console_txbuf_apply(HardwareSerial &port)
+{
+    (void)port;
+#if !ARDUINO_USB_CDC_ON_BOOT && (CONSOLE_UART_TXBUF > 0 || (defined(INSTR_UART_TXBUF) && INSTR_UART_TXBUF > 0))
+    static bool s_done = false;
+    if (s_done)
+        return;
+    s_done = true;
+  #if defined(INSTR_UART_TXBUF) && INSTR_UART_TXBUF > 0
+    const size_t want = INSTR_UART_TXBUF;   // INSTRUMENT experiment override wins
+  #else
+    const size_t want = CONSOLE_UART_TXBUF;
+  #endif
+    console_txbuf_bytes = (uint32_t)want;
+    // arduino-esp32 2.0.17: must precede begin(); returns 0 once the port runs.
+    // want <= 128 (SOC_UART_FIFO_LEN) returns 128 and installs no ring: ok stays 0.
+    const size_t got = port.setTxBufferSize(want);
+    console_txbuf_ok = (want > 128 && got >= want) ? 1 : 0;
+    if (console_txbuf_ok)
+    {
+        // R2-F2/R1: bytes still queued in the driver ring would be lost on a deliberate
+        // restart. esp_restart() runs the shutdown handlers (IDF 4.4.7 esp_system.c);
+        // console is UART0 (Serial = HardwareSerial(0)). Bounded 100 ms.
+        esp_register_shutdown_handler(console_txbuf_shutdown);
+    }
+#endif
+}
+
 void esp32setup()
 {
     ///< Initialize T5-EPAPER GUI
@@ -761,11 +801,15 @@ void esp32setup()
     // MeshSerialClass::begin() (src/net_console.cpp).
     Serial.setTxBufferSize(4096);
 #endif
-#if INSTRUMENT_ENABLED
-    instrument_uarttx_set();   // R1-F Arm F: UART TX ring, before Serial.begin
+#if defined(DISABLE_NET_CONSOLE) && !ARDUINO_USB_CDC_ON_BOOT
+    // UART console: TX ring before the first begin() (with the net console
+    // compiled in, MeshSerialClass::begin() does this for s_hwSerial).
+    console_txbuf_apply(Serial);
 #endif
     Serial.begin(MONITOR_SPEED);
     Serial.setTimeout(50);
+    if(console_txbuf_bytes > 0)   // silent on boards where no ring applies (CDC)
+        printfdeb("[MC-INFO] CONSOLE_TXBUF bytes=%lu ok=%d\n", (unsigned long)console_txbuf_bytes, console_txbuf_ok);
 
 #if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE && defined(DISABLE_NET_CONSOLE)
     // CDC-01: without the net-console wrapper Serial is the HWCDC object
