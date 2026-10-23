@@ -1,5 +1,6 @@
 #include "mc_text.h"
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "csma_timing.h"   // W0.6: CSMA back-off arithmetic, native-tested
 #include "Arduino.h"
 #include "configuration.h"
 
@@ -3661,27 +3662,13 @@ unsigned long csma_compute_timeout(int attempt) {
     return csma_compute_timeout_slot(attempt, txSlot);
 }
 
+// Arithmetik (Basis/Slots je Prioritaet, 5/6- und 2/3-Skalierung) liegt in
+// csma_timing.h (W0.6, nativ getestet); die Zufallsziehung bleibt hier.
 unsigned long csma_compute_timeout_prio(int attempt, uint8_t priority) {
     if(attempt >= CSMA_MAX_ATTEMPTS)
-        return CSMA_RAPID_RX_MS; // rapid-fire with preamble check
+        return CSMA_RAPID_RX_MS; // rapid-fire with preamble check, keine Ziehung
 
-    // Priority-dependent base timeout and slot range
-    unsigned long base;
-    int slots;
-    switch(priority) {
-        case MSG_PRIO_CRITICAL:   base = CSMA_PRIO_BASE_1; slots = CSMA_PRIO_SLOTS_1; break;
-        case MSG_PRIO_HIGH:       base = CSMA_PRIO_BASE_2; slots = CSMA_PRIO_SLOTS_2; break;
-        case MSG_PRIO_NORMAL:     base = CSMA_PRIO_BASE_3; slots = CSMA_PRIO_SLOTS_3; break;
-        case MSG_PRIO_LOW:        base = CSMA_PRIO_BASE_4; slots = CSMA_PRIO_SLOTS_4; break;
-        case MSG_PRIO_BACKGROUND: base = CSMA_PRIO_BASE_5; slots = CSMA_PRIO_SLOTS_5; break;
-        default:                  base = CSMA_PRIO_BASE_3; slots = CSMA_PRIO_SLOTS_3; break;
-    }
-
-    // Reduce base on retries (keep priority differentiation)
-    if(attempt >= 2) base = base * 2 / 3;      // ~33% reduction on 3rd attempt
-    else if(attempt >= 1) base = base * 5 / 6;  // ~17% reduction on 2nd attempt
-
-    return base + (unsigned long)random(0, slots + 1) * CSMA_SLOT_SIZE;
+    return csmaTimeoutPrio(attempt, priority, random(0, csmaSlotsForPrio(priority) + 1));
 }
 
 void csma_reset(void) {
