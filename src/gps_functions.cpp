@@ -16,6 +16,7 @@
 
 #include "gps_filter.h"
 #include "alt_fusion.h"
+#include "pos_pipeline.h"
 
 #if defined(ENABLE_BMX280)
 #include "bmx280.h"
@@ -49,6 +50,20 @@
 
 // TinyGPS++ Objekt
 TinyGPSPlus gps;
+
+// GPS-11: position filter pipeline. Outside ENABLE_GPS so the setters of every board link;
+// a zeroed struct is "enabled". --gpsfilter on|off flips it at runtime (not saved).
+static struct PosPipeline s_pos;
+
+// old_* = the stored position before the caller overwrote it; the new one is read from the settings.
+void gpsPosFilterManualSet(double old_lat, char old_lat_c, double old_lon, char old_lon_c)
+{
+    posPipelineManualSet(&s_pos, old_lat, old_lat_c, old_lon, old_lon_c,
+                         meshcom_settings.node_lat, meshcom_settings.node_lat_c,
+                         meshcom_settings.node_lon, meshcom_settings.node_lon_c);
+}
+void gpsPosFilterSetEnabled(bool on)    { posPipelineSetEnabled(&s_pos, on); }
+bool gpsPosFilterEnabled(void)          { return posPipelineEnabled(&s_pos); }
 
 #ifdef ENABLE_GPS
 
@@ -905,6 +920,9 @@ void WZ_GPS_Init()
   altFusionReset(&s_altFusion);
   s_altFusionLastMs = 0;
 
+  // GPS-11: new session, new position filter.
+  posPipelineReset(&s_pos);
+
   Serial.printf("[GPS ]...Init GPIO RX=%d TX=%d\n", GPS_RX_PIN, GPS_TX_PIN);
   
   #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
@@ -1035,6 +1053,8 @@ int WZ_GPS_Loop() {
     {
         // GPS-Daten in unsere Struktur uebertragen
         gpsData.valid      = gps.location.isValid();
+        // GPS-11: isUpdated() VOR lat()/lng() lesen (die Zugriffe loeschen das Flag, siehe GPS-03/F6).
+        bool posNew        = gps.location.isUpdated();
         gpsData.latitude   = gps.location.lat();
         gpsData.longitude  = gps.location.lng();
 
@@ -1138,39 +1158,34 @@ int WZ_GPS_Loop() {
 
 
             // position -> variables
-            double dlat, dlon;
+            // GPS-11: Das Filter (und die Gitterhaltung) laeuft einmal je neuem Fix; ohne neuen Fix
+            // bleiben node_lat/node_lon wie sie sind.
+            if(posNew)
+            {
+                double olat, olon;
+                // isValid(), not isUpdated(): sticky over a cycle, speed/course were read above (:1063)
+                bool velValid = gps.speed.isValid() && gps.course.isValid();
+                float spd = gpsData.speed_kmh / 3.6f;
 
-            dlat = cround4abs(gpsData.latitude);
-            dlon = cround4abs(gpsData.longitude);
+                enum PosFilterResult pr = posPipelineFix(&s_pos, millis(), gpsData.latitude, gpsData.longitude,
+                                                         (float)gpsData.hdop, velValid, spd, gpsData.course,
+                                                         bDisplayTrack ? POS_KF_MODE_TRACK : POS_KF_MODE_FIXED,
+                                                         &olat, &olon);
 
-            double slat = 100.0;
-            slat = dlat*slat;
-            double slon = 100.0;
-            slon=dlon*slon;
-            
-            double slatr=60.0;
-            double slonr=60.0;
-            
-            slat = (int)dlat;
-            slatr = (dlat - slat) * slatr;
-            slat = (slat * 100.) + slatr;
-            
-            slon = (int)dlon;
-            slonr = (dlon - slon) * slonr;
-            slon = (slon * 100.) + slonr;
-        
-            meshcom_settings.node_lat = cround4(dlat);
-            meshcom_settings.node_lon = cround4(dlon);
+                posPipelineStore(olat, olon, &meshcom_settings.node_lat, &meshcom_settings.node_lon,
+                                 &meshcom_settings.node_lat_c, &meshcom_settings.node_lon_c);
 
-            if(gps.location.rawLng().negative)
-                meshcom_settings.node_lon_c='W';
-            else
-                meshcom_settings.node_lon_c='E';
-
-            if(gps.location.rawLat().negative)
-                meshcom_settings.node_lat_c='S';
-            else
-                meshcom_settings.node_lat_c='N';
+                if(iGPSDEBUG > 1 && pr != POS_KF_SKIP && gpsPosFilterEnabled())
+                {
+                    double klat, klon;
+                    posFilterGet(&s_pos.filter, &klat, &klon);
+                    printfdeb("[GPS ]pos raw:%.6f,%.6f kf:%.6f,%.6f held:%.6f,%.6f hdop:%.1f sig:%.1f rej:%u spd:%.2f crs:%.1f st:%s nm:%u\n",
+                              gpsData.latitude, gpsData.longitude, klat, klon, olat, olon,
+                              gpsData.hdop, (double)posFilterSigmaM(&s_pos.filter), (unsigned)s_pos.filter.rejects,
+                              (double)spd, (double)gpsData.course,
+                              posFilterIsStill(&s_pos.filter) ? "still" : "moving", (unsigned)s_pos.filter.n_moving);
+                }
+            }
 
             // GPS-03: Die Rohhoehe eines Consumer-Empfaengers streut um
             // mehrere Meter. Im Ruhezustand glaettet ein skalarer
@@ -1262,7 +1277,8 @@ int WZ_GPS_Loop() {
             }
             #endif
 
-            igps = setSMartBeaconing(dlat, dlon);
+            // GPS-11: war cround4abs(roh), jetzt die gespeicherten (gefilterten) Betraege
+            igps = setSMartBeaconing(meshcom_settings.node_lat, meshcom_settings.node_lon);
         }
         else
         {

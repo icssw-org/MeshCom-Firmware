@@ -681,8 +681,12 @@ bool nodeSetLat(double lat)
     char hem;
     if(!nodeLatSplit(lat, mag, hem))
         return false;
+    double old = meshcom_settings.node_lat;
+    char old_c = meshcom_settings.node_lat_c;
     meshcom_settings.node_lat = mag;
     meshcom_settings.node_lat_c = hem;
+    // GPS-11: a changed manual position restarts the filter, a resent unchanged one does not
+    gpsPosFilterManualSet(old, old_c, meshcom_settings.node_lon, meshcom_settings.node_lon_c);
     return true;
 }
 
@@ -692,8 +696,11 @@ bool nodeSetLon(double lon)
     char hem;
     if(!nodeLonSplit(lon, mag, hem))
         return false;
+    double old = meshcom_settings.node_lon;
+    char old_c = meshcom_settings.node_lon_c;
     meshcom_settings.node_lon = mag;
     meshcom_settings.node_lon_c = hem;
+    gpsPosFilterManualSet(meshcom_settings.node_lat, meshcom_settings.node_lat_c, old, old_c);   // GPS-11
     return true;
 }
 
@@ -1426,7 +1433,7 @@ void commandAction(char *umsg_text, bool ble)
             #endif
             delay(100);
 
-            printdeb("\n== Debug ==\n--debug on/off          debug output\n--debug csv/man         output format\n--debug en/de           output language\n--bledebug on/off       BLE debug\n--loradebug on/off      LoRa debug\n--txcapture on/off      TX capture\n--nbrdebug on/off       neighbour debug\n--viadebug on/off       via debug\n--wxdebug on/off        weather debug\n--gpsdebug on/off       GPS debug (also 2/0)\n--ackinfo on/off        show who ACKed (not saved)\n--setinfo on/off        LoRa info lines on serial\n--setcont on/off        verbose serial output\n--setretx on/off        retransmit info on serial\n--setlog on/off/<call>  log one callsign\n");
+            printdeb("\n== Debug ==\n--debug on/off          debug output\n--debug csv/man         output format\n--debug en/de           output language\n--bledebug on/off       BLE debug\n--loradebug on/off      LoRa debug\n--txcapture on/off      TX capture\n--nbrdebug on/off       neighbour debug\n--viadebug on/off       via debug\n--wxdebug on/off        weather debug\n--gpsdebug on/off       GPS debug (also 2/0)\n--gpsfilter on/off      GPS position filter (not saved)\n--ackinfo on/off        show who ACKed (not saved)\n--setinfo on/off        LoRa info lines on serial\n--setcont on/off        verbose serial output\n--setretx on/off        retransmit info on serial\n--setlog on/off/<call>  log one callsign\n");
             #if defined(ENABLE_SOFTSER)
             printdeb("--softser on/off        soft serial\n--softser send          soft serial send\n--softser app/app0      soft serial app\n--softser baud 9600     soft serial baud\n--softser rxpin 99      soft serial RX pin\n--softser txpin 99      soft serial TX pin\n--softser fixpegel 9.9  fixed level\n--softser fixpegel2 9.9 fixed level 2\n--softser fixtemp 9.9   fixed temperature\n--softserdebug on/off   soft serial debug\n--softserread on/off    show soft serial RX\n");
             #endif
@@ -3053,6 +3060,28 @@ void commandAction(char *umsg_text, bool ble)
         }
 
         save_settings();
+
+        return;
+    }
+    else
+    // GPS-11: --gpsfilter on|off, runtime only (not saved); a change resets the filter
+    if(commandCheck(msg_text+2, (char*)"gpsfilter on") == 0 || commandCheck(msg_text+2, (char*)"gpsfilter off") == 0)
+    {
+        bool bOn = (commandCheck(msg_text+2, (char*)"gpsfilter on") == 0);
+
+        gpsPosFilterSetEnabled(bOn);
+
+        #ifdef ENABLE_GPS
+        printfdeb("--gpsfilter %s (not saved)\n", bOn ? "on" : "off");
+        #else
+        // RAK4631 (ENABLE_RAK_GPS) and T-Deck Pro read GPS outside WZ_GPS_Loop(): no position filter yet
+        printfdeb("--gpsfilter: no position filter on this board\n");
+        #endif
+
+        if(ble)
+        {
+            addBLECommandBack(bOn ? (char*)"--gpsfilter on" : (char*)"--gpsfilter off");
+        }
 
         return;
     }

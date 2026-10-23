@@ -8,6 +8,7 @@
 #include "tdeck_pro.h"
 
 #include "loop_functions.h"
+#include "gps_functions.h"
 #include "loop_functions_extern.h"
 #include "nbr_views.h"       // MeshCom-5-Topologie Welle 4: Quelle fuer ui_mheard_disp()
 #include "time_functions.h"  // convertUNIXtoString()
@@ -2320,6 +2321,10 @@ void btn_event_handler_save(lv_event_t * e)
         strgrp=lv_textarea_get_text(group_6);
         meshcom_settings.node_gcb[5] = strgrp.toInt();
 
+        // GPS-11: position before the save, for gpsPosFilterManualSet()
+        double oldLat = meshcom_settings.node_lat, oldLon = meshcom_settings.node_lon;
+        char oldLatC = meshcom_settings.node_lat_c, oldLonC = meshcom_settings.node_lon_c;
+
         String strtmp = lv_textarea_get_text(lat_ta);
         double ltemp = strtmp.toDouble();
         if(ltemp > 0 and ltemp<90.1)
@@ -2333,6 +2338,7 @@ void btn_event_handler_save(lv_event_t * e)
             meshcom_settings.node_lon = ltemp;
 
         meshcom_settings.node_lon_c = lv_textarea_get_text(lon_c_ta)[0];
+        gpsPosFilterManualSet(oldLat, oldLatC, oldLon, oldLonC);   // GPS-11: resets only on a change
 
         save_settings();
     }
