@@ -49,6 +49,13 @@ bool WZ_GPS_AltConverged();
 
 #endif // ENABLE_GPS
 
+// GPS-11: position filter control, independent of ENABLE_GPS (the setters of every board link against it).
+// gpsPosFilterManualSet(): a manual position set (old -> new) resets the filter only when the
+// position changed; --gpsfilter on|off (not saved) flips the switch.
+void gpsPosFilterManualSet(double old_lat, char old_lat_c, double old_lon, char old_lon_c);
+void gpsPosFilterSetEnabled(bool on);
+bool gpsPosFilterEnabled(void);
+
 // GPS-04: barometer reference altitude, independent of ENABLE_GPS.
 // baroBaseRelatch() writes every existing base-altitude latch (BMx280, BME680);
 // baroBaseLatchAllowed() is true when no GPS is active or the altitude filter

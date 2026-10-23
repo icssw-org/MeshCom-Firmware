@@ -67,9 +67,12 @@ definitions for E22 + ESP32-S3_DevKitC-1_N16R8 Board
 #define BUTTON_PIN  0
 #define BUTTON_EXT  21
 
+// Only user LED is the addressable RGB (NeoPixel): GPIO38 on DevKitC-1 v1.1, GPIO48 on v1.0
+// (build with -DLED_PIN=48). No plain BOARD_LED.
 #define LED_PIXEL 1     // NEOPIXEL
-#define LED_PIN 48      // NEOPIXEL
-#define BOARD_LED 38    // LED_BUILTIN
+#ifndef LED_PIN
+#define LED_PIN 38      // NEOPIXEL
+#endif
 
 #define OneWire_GPIO 47
 

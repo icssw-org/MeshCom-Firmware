@@ -381,6 +381,8 @@ void pmuSleepRails()
 
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
 
+bool chargeLedFitted(void) { return PMU != NULL; }
+
 void setChargeLedOn(bool enableAutoMode)
 {
     if (!PMU)
@@ -390,5 +392,9 @@ void setChargeLedOn(bool enableAutoMode)
     // Set charging LED to automatic status mode or turn it permanently off
     PMU->setChargingLedMode(enableAutoMode ? XPOWERS_CHG_LED_CTRL_CHG : XPOWERS_CHG_LED_OFF);
 }
+
+#else
+
+bool chargeLedFitted(void) { return false; }
 
 #endif

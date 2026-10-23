@@ -106,12 +106,20 @@ struct setlogStatFields
     uint32_t flash;           // FLASH_VERSION
     uint32_t up_s;            // Uptime in Sekunden
     uint32_t t_ms;            // millis()
+    // OR-STAT, appended at the end of the line (ms values, see onrx_stats.h)
+    uint32_t onrx_n;          // OnRxDone calls in the window
+    uint32_t onrx_avg_ms;
+    uint32_t onrx_p95_ms;
+    uint32_t onrx_p99_ms;
+    uint32_t onrx_max_ms;
+    uint32_t onrx_warn;       // calls > ONRXDONE_WARN_MS
 };
 
 //     "STAT util=<pct> rx=<ms> tx=<ms> newid=<n> dup=<n> err=<n> txn=<n>
 //      txfail=<n> ringmax=<n>/<MAX_RING> drop=<p1>/<p2>/<p3>/<p4>/<p5>
 //      mh=<n> heap=<bytes> trk=<interval_s>/<consistent>
-//      fw=<major><sub>/<flash> up=<s> t=<ms>"   (eine Zeile)
+//      fw=<major><sub>/<flash> up=<s> t=<ms> onrx_n=<n> onrx_avg=<ms>
+//      onrx_p95=<ms> onrx_p99=<ms> onrx_max=<ms> onrx_warn=<n>"   (eine Zeile)
 int setlogFormatStat(char *buf, size_t n, const struct setlogStatFields *f);
 
 //////////////////////////////////////////////////////////////////////////////

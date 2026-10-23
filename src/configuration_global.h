@@ -589,3 +589,27 @@ static inline bool flashLayoutCompatible(int stored)
 #if defined(WP_DISP)
 extern int g_dispRotOffset;
 #endif
+
+// Console TX ring for UART-console ESP32 boards (R2-F). Without it HardwareSerial
+// uses a 0 B TX buffer and every print blocks at 115200 baud (87 us/B), which
+// stretched OnRxDone to tens of ms. 0 disables; override per env with
+// -DCONSOLE_UART_TXBUF=n. Native-USB / CDC_ON_BOOT boards are not covered.
+#if defined(ESP32) && !ARDUINO_USB_CDC_ON_BOOT
+ #ifndef CONSOLE_UART_TXBUF
+  // 2048 B on every UART console board (bench 2026-10-13: with all debug streams on a
+  // frame prints up to ~1.2 kB; 1024 B still blocked on T-Beam, 2048 B did not;
+  // the ring costs ~2.4 kB of the ~65 kB free heap there)
+  #define CONSOLE_UART_TXBUF 2048
+ #endif
+#else
+ #undef CONSOLE_UART_TXBUF
+ #define CONSOLE_UART_TXBUF 0
+#endif
+#if defined(ESP32)
+#include <stdint.h>
+extern uint32_t console_txbuf_bytes;   // applied size, 0 = core default
+extern int      console_txbuf_ok;      // 1 = setTxBufferSize accepted the size
+// Call before the real UART begin(); once only. Defined in esp32_main.cpp.
+class HardwareSerial;
+void console_txbuf_apply(HardwareSerial &port);
+#endif

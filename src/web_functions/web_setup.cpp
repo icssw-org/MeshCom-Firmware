@@ -79,7 +79,11 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("setvia")) {        
         snprintf(message_text, sizeof(message_text), "--via %s", setupData->paramValue.c_str());                   // set command string
         commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
-        setupData->returnCode = strcmp(meshcom_settings.node_via, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parameter was accepted, return with corresponding code
+        // --via legt die Liste getrimmt, in Grossbuchstaben und "NONE" als leer
+        // ab. Gegen dieselbe Form vergleichen -- sonst meldet die GUI bei
+        // "dk8vw-99" oder "none" FAIL, obwohl der Wert uebernommen wurde.
+        String sWanted = viaCanonical(setupData->paramValue);
+        setupData->returnCode = strcmp(meshcom_settings.node_via, sWanted.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parameter was accepted, return with corresponding code
         setupData->returnValue = meshcom_settings.node_via;                                                           // send back the current used value
         return;
     } else
@@ -226,6 +230,26 @@ void webSetup_setParam(setupStruct *setupData){
         setupData->returnValue = bDisplayVolt?"on":"off";
         return;
     } else
+
+    #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
+    if(setupData->paramName.equals("boardled")) {   // same toggle row as the console
+        snprintf(message_text, sizeof(message_text), "--board led %s", setupData->paramValue.equals("on") ? "on" : "off");
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bUSER_BOARD_LED == setupData->paramValue.equals("on"))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bUSER_BOARD_LED?"on":"off";
+        return;
+    } else
+    #endif
+
+    #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+    if(setupData->paramName.equals("chargeled")) {  // on = auto (follows charging), off = dark
+        snprintf(message_text, sizeof(message_text), "--charge led %s", setupData->paramValue.equals("on") ? "on" : "off");
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bCHARGE_LED == setupData->paramValue.equals("on"))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bCHARGE_LED?"on":"off";
+        return;
+    } else
+    #endif
 
     if(setupData->paramName.equals("via")) {
         snprintf(message_text, sizeof(message_text), "--via %s", setupData->paramValue.c_str());
@@ -893,6 +917,20 @@ void webSetup_getParam(setupStruct *setupData){
         setupData->returnValue = bDisplayVolt?"on":"off";
         return;
     } else
+
+    #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
+    if(setupData->paramName.equals("boardled")) {
+        setupData->returnValue = bUSER_BOARD_LED?"on":"off";
+        return;
+    } else
+    #endif
+
+    #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+    if(setupData->paramName.equals("chargeled")) {
+        setupData->returnValue = bCHARGE_LED?"on":"off";
+        return;
+    } else
+    #endif
 
     if(setupData->paramName.equals("via")) {
         setupData->returnValue = bVIA?"on":"off";

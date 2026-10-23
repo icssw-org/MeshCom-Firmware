@@ -15,7 +15,6 @@ static uint8_t s_ack_buffer[256];
 static int getAck(HardwareSerial &gpsSerial, uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID)
 {
     uint16_t    ubxFrameCounter = 0;
-    bool        ubxFrame = 0;
     uint32_t    startTime = millis();
     uint16_t    needRead;
 

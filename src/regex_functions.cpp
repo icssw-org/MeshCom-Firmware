@@ -56,6 +56,84 @@ bool checkRegexCall(String callsign)
 	return true;
 }
 
+bool checkViaList(const String &list)
+{
+	// node_via ist char[40]: lieber ablehnen als stillschweigend abschneiden
+	if(list.length() < 1 || list.length() > 39)
+		return false;
+
+	unsigned int iStart = 0;
+
+	while(true)
+	{
+		int iComma = -1;
+
+		for(unsigned int ic = iStart; ic < list.length(); ic++)
+		{
+			if(list.charAt(ic) == ',')
+			{
+				iComma = ic;
+				break;
+			}
+		}
+
+		String sToken = (iComma < 0) ? list.substring(iStart) : list.substring(iStart, iComma);
+
+		// leerer Eintrag (fuehrendes, abschliessendes oder doppeltes Komma)
+		if(sToken.length() < 1)
+			return false;
+
+		// Sondermarken, die checkRegexCall() durchlaesst, sind keine Hops
+		if(sToken.compareTo("*") == 0 || sToken.compareTo("H") == 0 || sToken.compareTo("HG") == 0)
+			return false;
+
+		if(!checkRegexCall(sToken))
+			return false;
+
+		// SSID muss 1-2 Ziffern haben (0..99); ein blankes "-" laesst die Regex durch
+		int iDash = sToken.indexOf('-');
+		if(iDash >= 0)
+		{
+			String sSSID = sToken.substring(iDash + 1);
+
+			if(sSSID.length() < 1 || sSSID.length() > 2)
+				return false;
+
+			// "-05"/"-00": das eigene Rufzeichen eines Relais ist kanonisch "-5"
+			// (normalizeOwnCall), checkMesh() vergleicht exakt -- traefe nie
+			if(sSSID.length() == 2 && sSSID.charAt(0) == '0')
+				return false;
+
+			for(unsigned int ic = 0; ic < sSSID.length(); ic++)
+			{
+				char cc = sSSID.charAt(ic);
+
+				if(cc < '0' || cc > '9')
+					return false;
+			}
+		}
+
+		if(iComma < 0)
+			break;
+
+		iStart = iComma + 1;
+	}
+
+	return true;
+}
+
+String viaCanonical(const String &value)
+{
+	String sVia = value;
+	sVia.trim();
+	sVia.toUpperCase();
+
+	if(sVia.compareTo("NONE") == 0)
+		sVia = "";
+
+	return sVia;
+}
+
 bool normalizeOwnCall(String &callsign)
 {
 	int iDash = callsign.indexOf('-');

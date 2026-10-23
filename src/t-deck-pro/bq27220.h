@@ -106,7 +106,7 @@ typedef union GaugingStatus{
 
 class BQ27220{
 public:
-    BQ27220() : addr{BQ27220_I2C_ADDRESS}, wire(&Wire), scl(DEFAULT_SCL), sda(DEFAULT_SDA)
+    BQ27220() : wire(&Wire), addr{BQ27220_I2C_ADDRESS}, scl(DEFAULT_SCL), sda(DEFAULT_SDA)
     {}
 
     bool begin()

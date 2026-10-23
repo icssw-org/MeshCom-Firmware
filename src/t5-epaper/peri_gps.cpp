@@ -24,7 +24,7 @@ extern TinyGPSPlus gps;
 void displayInfo();
 
 static TaskHandle_t gps_handle;
-static double gps_lat=0, gps_lng=0, gps_altitude=0, gps_speed=0;
+static double gps_lat=0, gps_lng=0, gps_speed=0;
 static uint16_t gps_year=0;
 // gps_fix/gps_hdop wurden bei der DRY-Kampagne D4-01/02 aus dem gepflegten
 // Zwilling src/t-deck-pro/peri_gps.cpp:22,25 nachgezogen. Es ist reine

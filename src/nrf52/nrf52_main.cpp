@@ -136,6 +136,7 @@ void sendHeartbeat();
 #include "msgstore_settings.h"
 #endif
 #include <regex_functions.h>
+#include "onrx_stats.h" // OR-STAT
 #include "setlog_lines.h"
 #include "dedup_functions.h"
 #include "nbr_matrix.h"    // --nbrdebug: nbrLogSnapshot()/nbrMatrix fuer den 15-Minuten-Takt
@@ -541,11 +542,20 @@ void nrf52setup()
 
      // LEDs
     #if not defined(BOARD_HELTEC_T114)
+        // pinMode(OUTPUT) latches LOW, which lights an active-low LED: write the off level at once
         pinMode(LED_GREEN, OUTPUT);
+        digitalWrite(LED_GREEN, !LED_STATE_ON);
         #ifndef BOARD_RAK4630
         pinMode(LED_RED, OUTPUT);
+        digitalWrite(LED_RED, !LED_STATE_ON);
         #endif
         pinMode(LED_BLUE, OUTPUT);
+        digitalWrite(LED_BLUE, !LED_STATE_ON);
+    #endif
+    #if defined(BOARD_LED) && defined(BOARD_HELTEC_T114)
+        // T114 skips the block above; its BOARD_LED pad is set up here
+        pinMode(BOARD_LED, OUTPUT);
+        digitalWrite(BOARD_LED, boardLedLevel(false, BOARD_LED_ACTIVE_LOW));
     #endif
 
     //  Initialize the Serial Port for debug output
@@ -708,6 +718,7 @@ void nrf52setup()
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
     bBMP3ON = meshcom_settings.node_sset3 & 0x0010;
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
+    bUSER_BOARD_LED = meshcom_settings.node_sset3 & 0x0080;   // --board led
 
     bDEBUGCSV = meshcom_settings.node_sset4 & 0x0001;
     bDEBUGEN = meshcom_settings.node_sset4 & 0x0002;
@@ -1007,7 +1018,7 @@ void nrf52setup()
 	{
 		// BLE is not activated, switch off blue LED
         #if not defined(BOARD_HELTEC_T114)
-		digitalWrite(LED_BLUE, LOW);
+		digitalWrite(LED_BLUE, !LED_STATE_ON);   // off level, not LOW
         #endif
 	}
 
@@ -1017,7 +1028,7 @@ void nrf52setup()
 
 #ifdef ARDUINO_ARCH_RP2040
 	// RAK11310 does not have BLE, switch off blue LED
-	digitalWrite(LED_BLUE, LOW);
+	digitalWrite(LED_BLUE, !LED_STATE_ON);
 #endif
 
     // I2C init
@@ -1277,6 +1288,8 @@ void nrf52setup()
 void nrf52loop()
 {
     INSTR_LOOPTICK();
+
+    boardLedTick();    // --board led heartbeat; no-op without BOARD_LED
 
     // BP-01/BP-04: close a back-pressure episode with QRV once the TX ring
     // has drained, even when no further user message arrives to observe it.
@@ -1551,6 +1564,14 @@ void nrf52loop()
             struct setlogStatFields f;
             setlogFillStat(&f, nrf52_getFreeHeap());
 
+            // OR-STAT: OnRxDone time distribution (drains the window)
+            {
+                struct onrxStatsOut o;
+                onrxStatsSnapshotReset(&o, ONRXDONE_WARN_MS);
+                f.onrx_n = o.n; f.onrx_avg_ms = o.avg_ms; f.onrx_p95_ms = o.p95_ms;
+                f.onrx_p99_ms = o.p99_ms; f.onrx_max_ms = o.max_ms; f.onrx_warn = o.warn;
+            }
+
             // stat_drop_count[] increments happen under this same lock in
             // txring_functions.cpp -- clear under it too, right after the
             // (uncleared) read inside setlogFillStat().
@@ -1561,7 +1582,7 @@ void nrf52loop()
 
             if(bDisplayLog)
             {
-                char buf[300];
+                char buf[400];
                 setlogFormatStat(buf, sizeof(buf), &f);
                 setlogPrint(buf);
             }
@@ -2697,18 +2718,18 @@ void nrf52loop()
 void blinkLED()
 {
     #if not defined(BOARD_HELTEC_T114)
-    digitalWrite(LED_GREEN, HIGH);
+    digitalWrite(LED_GREEN, LED_STATE_ON);
     delay(20);
-    digitalWrite(LED_GREEN, LOW);
+    digitalWrite(LED_GREEN, !LED_STATE_ON);
     #endif
 }
 
 void blinkLED2()
 {
     #if not defined(BOARD_HELTEC_T114)
-    digitalWrite(LED_BLUE, HIGH);
+    digitalWrite(LED_BLUE, LED_STATE_ON);
     delay(20);
-    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_BLUE, !LED_STATE_ON);
     #endif
 }
 

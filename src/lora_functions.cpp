@@ -1,5 +1,6 @@
 #include "mc_text.h"
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
+#include "csma_timing.h"   // W0.6: CSMA back-off arithmetic, native-tested
 #include "Arduino.h"
 #include "configuration.h"
 
@@ -22,6 +23,7 @@
 #include "own_msg_status.h"  // late ACK -> durable web GUI status (ring slot may be gone)
 #include "sto_notice.h"     // stage 4: :sto custody notice, sender side -- every board
 #include "hey_echo_upload.h"  // gateway upload of own HEY echoes
+#include "onrx_stats.h"     // OR-STAT: OnRxDone time histogram for the STAT line
 #if defined(ENABLE_MSGSTORE)
 #include "msgstore_api.h"   // stage 3: store node (last-hop mailbox) receive-path hooks
 #endif
@@ -139,6 +141,25 @@ bool bNewLine = false;
 // ONRXDONE_TIME monitoring (always active, not behind bLORADEBUG)
 unsigned long onrxdone_max_ms = 0;
 unsigned int  onrxdone_warn_count = 0;
+
+// Called at every processing exit of OnRxDone (ACK, HN report, main; the INSTRUMENT
+// --airgap drop is not a processed frame and is not recorded). Feeds the STAT histogram (unconditional)
+// and the pre-existing max/warn counters (read and reset by the bLORADEBUG
+// ONRXDONE_STATS print, separate from the histogram).
+static void onrxDoneRecord(unsigned long elapsed)
+{
+    onrxStatsAdd((uint32_t)elapsed);
+    if(bLORADEBUG)
+        printfdeb("[MC-DBG] ONRXDONE_TIME ms=%lu\n", elapsed);
+    if(elapsed > onrxdone_max_ms)
+        onrxdone_max_ms = elapsed;
+    if(elapsed > ONRXDONE_WARN_MS)
+    {
+        onrxdone_warn_count++;
+        if(bLORADEBUG)
+            printfdeb("[MC-WARN] ONRXDONE_SLOW ms=%lu threshold=%d\n", elapsed, ONRXDONE_WARN_MS);
+    }
+}
 
 // Deferred display update — avoid I2C transfer inside OnRxDone
 volatile bool bPendingDisplayText = false;
@@ -694,6 +715,9 @@ static NbrGwHint nbrGwHintFromDest(char payload_type, const char *dest)
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
+#if INSTRUMENT_ENABLED
+    INSTR_ONRX_BEGIN(size);     // R1-F: print/total split, see instrument.h
+#endif
     // Testfang-Hook (Katalog doc 08 §4, Mechanismus 2): akzeptierte Frames als
     // Rohbytes — das Gegenstueck zum CRC_PAYLOAD-Dump der VERWORFENEN Frames
     // in checkRX (esp32_main.cpp). OnRxDone ist auf beiden Plattformen der
@@ -825,12 +849,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         is_receiving = false;
         iReceiveTimeOutTime = millis();
         csma_timeout = csma_compute_timeout(cad_attempt);
+        INSTR_ONRX_END();
         return;
     }
 #endif
 
     if(handleACK(payload, size, rssi, snr))
     {
+#if INSTRUMENT_ENABLED
+        INSTR_PH("ack");
+#endif
 #if defined BOARD_RAK4630
         taskENTER_CRITICAL();
         rxBufInUse[rxBufIndex] = false;
@@ -839,18 +867,23 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         is_receiving = false;
 
         // Debug I: ONRXDONE_TIME
-        if(bLORADEBUG)
-            printfdeb("[MC-DBG] ONRXDONE_TIME ms=%lu\n", millis() - _onrxdone_start);
+        onrxDoneRecord(millis() - _onrxdone_start);
 
         iReceiveTimeOutTime = millis();
         csma_timeout = csma_compute_timeout(cad_attempt);
 
+#if INSTRUMENT_ENABLED
+        INSTR_ONRX_END();
+#endif
         // TM-06: state above is fully settled -- safe point for
         // test_inject_service() to recurse into OnRxDone() (see there).
         test_inject_service();
 
         return;
     }
+#if INSTRUMENT_ENABLED
+    INSTR_PH("ack");
+#endif
 
     {
         memcpy(RcvBuffer, payload, size);
@@ -941,6 +974,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         
         // print which message type we got
         uint16_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
+#if INSTRUMENT_ENABLED
+        INSTR_PH("dec");
+#endif
 
         // TM-06(a): no-op unless this call is draining a staged raw-inject
         // frame (test_inject.cpp) -- see test_inject_service() below.
@@ -953,6 +989,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         // SL-01: genau EIN is_new_packet() je Frame (die Suche druckt unter
         // --loradebug); unten von setlogCountDedup() wiederverwendet.
         bool rx_is_new = is_new_packet(RcvBuffer+1);
+#if INSTRUMENT_ENABLED
+        INSTR_PH("ded");
+#endif
         bool rx_dup = !rx_is_new;
         bool rx_own_echo = false;
 
@@ -995,6 +1034,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             else
                 printBuffer_aprs((char*)"[LOG]", aprsmsg, tail);
         }
+#if INSTRUMENT_ENABLED
+        INSTR_PH("log");
+#endif
 
         // Nachbarschaftsmatrix Stufe 3 (HN-Bericht): der periodische HEY-artige
         // Nachbarschaftsbericht (payload_type '@', Ziel "HN", max_hop 0, siehe
@@ -1065,12 +1107,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 #endif
             is_receiving = false;
 
-            if(bLORADEBUG)
-                printfdeb("[MC-DBG] ONRXDONE_TIME ms=%lu\n", millis() - _onrxdone_start);
+            onrxDoneRecord(millis() - _onrxdone_start);
 
             iReceiveTimeOutTime = millis();
             csma_timeout = csma_compute_timeout(cad_attempt);
 
+#if INSTRUMENT_ENABLED
+            INSTR_PH("nbr");
+            INSTR_ONRX_END();
+#endif
             test_inject_service();
 
             return;
@@ -1386,6 +1431,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 // updateMheard()/updateHeyPath() (Anzeige, /topo.dat).
                 topoUiChanged(now_min);
             }
+#if INSTRUMENT_ENABLED
+            INSTR_PH("nbr");
+#endif
 
             // LoRx RX to RAW-Buffer
             //memcpy(ringbufferRAWLoraRX[RAWLoRaWrite], charBuffer_aprs((char*)"", aprsmsg).c_str(), UDP_TX_BUF_SIZE-1);
@@ -2220,6 +2268,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // SL-02: dieselbe Bedingung wie bisher, nur zerlegt, damit
                         // genau ein Grund benannt wird -- Kurzschlussreihenfolge
                         // und damit jeder checkMesh()-Aufruf bleiben erhalten.
+#if INSTRUMENT_ENABLED
+                        INSTR_PH("rly0");
+#endif
                         bool rly_go = false;
 
                         if(strcmp(destination_call, meshcom_settings.node_call) == 0)
@@ -2354,6 +2405,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 rly_slot = addTxRingEntry(RcvBuffer, size, RING_STATUS_DONE, "rx_relay", 0, true,
                                                            (bNBRRELAY && nn_relay.known) ? RING_KIND_RELAY : RING_KIND_OTHER,
                                                            &nn_relay.need, &nn_relay.alone);
+#if INSTRUMENT_ENABLED
+                                INSTR_PH("rly1");
+#endif
 
                                 // SL-02: Rueckgabe ist der belegte Slot bzw. -1,
                                 // wenn der Ring den Eintrag verworfen hat.
@@ -2489,19 +2543,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     // to minimize the RX blind window (BUG #2 fix).
 
     // Debug I: ONRXDONE_TIME — measure processing duration
-    {
-        unsigned long _onrxdone_elapsed = millis() - _onrxdone_start;
-        if(bLORADEBUG)
-            printfdeb("[MC-DBG] ONRXDONE_TIME ms=%lu\n", _onrxdone_elapsed);
-        if(_onrxdone_elapsed > onrxdone_max_ms)
-            onrxdone_max_ms = _onrxdone_elapsed;
-        if(_onrxdone_elapsed > ONRXDONE_WARN_MS)
-        {
-            onrxdone_warn_count++;
-            if(bLORADEBUG)
-                printfdeb("[MC-WARN] ONRXDONE_SLOW ms=%lu threshold=%d\n", _onrxdone_elapsed, ONRXDONE_WARN_MS);
-        }
-    }
+    onrxDoneRecord(millis() - _onrxdone_start);
 
     if(bLORADEBUG)
         printfdeb("OnRxDone\n");
@@ -2521,6 +2563,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         printfdeb("[MC-SM] RX_PROCESS -> RX_LISTEN rc=0\n");
     is_receiving = false;
 
+#if INSTRUMENT_ENABLED
+    INSTR_ONRX_END();
+#endif
     // TM-06: state above is fully settled -- safe point for
     // test_inject_service() to recurse into OnRxDone() (see there).
     test_inject_service();
@@ -3661,27 +3706,13 @@ unsigned long csma_compute_timeout(int attempt) {
     return csma_compute_timeout_slot(attempt, txSlot);
 }
 
+// Arithmetik (Basis/Slots je Prioritaet, 5/6- und 2/3-Skalierung) liegt in
+// csma_timing.h (W0.6, nativ getestet); die Zufallsziehung bleibt hier.
 unsigned long csma_compute_timeout_prio(int attempt, uint8_t priority) {
     if(attempt >= CSMA_MAX_ATTEMPTS)
-        return CSMA_RAPID_RX_MS; // rapid-fire with preamble check
+        return CSMA_RAPID_RX_MS; // rapid-fire with preamble check, keine Ziehung
 
-    // Priority-dependent base timeout and slot range
-    unsigned long base;
-    int slots;
-    switch(priority) {
-        case MSG_PRIO_CRITICAL:   base = CSMA_PRIO_BASE_1; slots = CSMA_PRIO_SLOTS_1; break;
-        case MSG_PRIO_HIGH:       base = CSMA_PRIO_BASE_2; slots = CSMA_PRIO_SLOTS_2; break;
-        case MSG_PRIO_NORMAL:     base = CSMA_PRIO_BASE_3; slots = CSMA_PRIO_SLOTS_3; break;
-        case MSG_PRIO_LOW:        base = CSMA_PRIO_BASE_4; slots = CSMA_PRIO_SLOTS_4; break;
-        case MSG_PRIO_BACKGROUND: base = CSMA_PRIO_BASE_5; slots = CSMA_PRIO_SLOTS_5; break;
-        default:                  base = CSMA_PRIO_BASE_3; slots = CSMA_PRIO_SLOTS_3; break;
-    }
-
-    // Reduce base on retries (keep priority differentiation)
-    if(attempt >= 2) base = base * 2 / 3;      // ~33% reduction on 3rd attempt
-    else if(attempt >= 1) base = base * 5 / 6;  // ~17% reduction on 2nd attempt
-
-    return base + (unsigned long)random(0, slots + 1) * CSMA_SLOT_SIZE;
+    return csmaTimeoutPrio(attempt, priority, random(0, csmaSlotsForPrio(priority) + 1));
 }
 
 void csma_reset(void) {

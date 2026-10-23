@@ -26,6 +26,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>   // TCP_KEEPIDLE/INTVL/CNT (lwIP)
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
@@ -41,6 +42,9 @@
 static auto& s_hwSerial = Serial;
 
 #include "net_console.h"
+#include "net_console_gate.h"
+#include "instrument.h"
+#include "configuration_global.h"
 #include <configuration.h>        // board defines (HAS_ETHERNET)
 #if defined(HAS_ETHERNET)
 #include <esp32/esp32_flash.h>   // meshcom_settings (Ethernet mode check)
@@ -119,6 +123,17 @@ static void teardownClient()
                       (unsigned)esp_get_free_heap_size());
 
     xSemaphoreGive(s_mutex);
+}
+
+// Tear down only if fd is still the session socket: a takeover in authTask
+// may have swapped s_fd since the caller read it (P-0168).
+static void teardownIfCurrent(int fd, TickType_t wait)
+{
+    if (s_mutex && xSemaphoreTake(s_mutex, wait) == pdTRUE)
+    {
+        if (s_fd == fd) teardownClient();
+        else            xSemaphoreGive(s_mutex);
+    }
 }
 
 // ── Auth task — HMAC-SHA256 challenge-response ────────────────────────────────
@@ -209,13 +224,29 @@ static void authTask(void* arg)
     // Switch to non-blocking for main-loop polling
     { int fl = fcntl(fd, F_GETFL, 0); fcntl(fd, F_SETFL, fl | O_NONBLOCK); }
 
+    bool installed = false;
     if (s_mutex && xSemaphoreTake(s_mutex, portMAX_DELAY) == pdTRUE)
     {
-        if (s_fd >= 0) ::close(s_fd);
-        s_fd            = fd;
-        s_peek_valid    = false;
-        s_authenticated = true;
+        // --netconsole off during the auth exchange: do not install a session
+        // on a stopped console, it would block accept() after the next on (P-0168).
+        if (s_started)
+        {
+            // A new authenticated client takes over the old session (P-0168).
+            if (s_fd >= 0) ::close(s_fd);
+            s_fd            = fd;
+            s_peek_valid    = false;
+            s_authenticated = true;
+            installed       = true;
+        }
         xSemaphoreGive(s_mutex);
+    }
+    if (!installed)
+    {
+        ::close(fd);
+        s_hwSerial.println("[CON ]...Console stopped, session dropped.");
+        s_hs_running = false;
+        vTaskDelete(nullptr);
+        return;
     }
     s_hwSerial.printf("[CON ]...Client authenticated on port %d. free heap=%u\n",
                       NET_CONSOLE_PORT, (unsigned)esp_get_free_heap_size());
@@ -248,6 +279,10 @@ void MeshSerialClass::begin(unsigned long baud)
         s_txBufSized = true;
     }
 #endif
+#if !ARDUINO_USB_CDC_ON_BOOT
+    // R2-F: UART console, TX ring before the real begin() (once-flag inside)
+    console_txbuf_apply(s_hwSerial);
+#endif
     s_hwSerial.begin(baud);
 #if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
     // CDC-01 (2026-09-05, DK5EN-14): on the S3 boards s_hwSerial is the
@@ -274,7 +309,13 @@ MeshSerialClass::operator bool()               { return (bool)s_hwSerial; }
 
 size_t MeshSerialClass::write(uint8_t c)
 {
+#if INSTR_ONRX
+    uint32_t _t0 = micros();
+#endif
     s_hwSerial.write(c);
+#if INSTR_ONRX
+    uint32_t _t1 = micros();
+#endif
     if (!isInISR() && s_authenticated)
     {
         if (s_mutex && xSemaphoreTake(s_mutex, 0) == pdTRUE)
@@ -283,12 +324,25 @@ size_t MeshSerialClass::write(uint8_t c)
             xSemaphoreGive(s_mutex);
         }
     }
+#if INSTR_ONRX
+    {
+        uint32_t _t2 = micros();
+        if (!isInISR())     // the += in instrument_onrx_print is non-atomic
+            instrument_onrx_print(_t2 - _t0, _t1 - _t0, _t2 - _t1, 1);
+    }
+#endif
     return 1;
 }
 
 size_t MeshSerialClass::write(const uint8_t* buf, size_t size)
 {
+#if INSTR_ONRX
+    uint32_t _t0 = micros();
+#endif
     s_hwSerial.write(buf, size);
+#if INSTR_ONRX
+    uint32_t _t1 = micros();
+#endif
     if (!isInISR() && s_authenticated)
     {
         if (s_mutex && xSemaphoreTake(s_mutex, 0) == pdTRUE)
@@ -297,6 +351,13 @@ size_t MeshSerialClass::write(const uint8_t* buf, size_t size)
             xSemaphoreGive(s_mutex);
         }
     }
+#if INSTR_ONRX
+    {
+        uint32_t _t2 = micros();
+        if (!isInISR())     // the += in instrument_onrx_print is non-atomic
+            instrument_onrx_print(_t2 - _t0, _t1 - _t0, _t2 - _t1, (uint32_t)size);
+    }
+#endif
     return size;
 }
 
@@ -315,7 +376,7 @@ void startNetConsole()
 {
     if (s_started) return;
     s_started        = true;
-    s_mutex          = xSemaphoreCreateMutex();
+    if (!s_mutex) s_mutex = xSemaphoreCreateMutex();   // once: authTask may still hold it after a stop
     s_server_pending = true;   // open socket on next loopNetConsole() call
     s_hwSerial.println("[CON ]...HMAC console init.");
 }
@@ -349,13 +410,18 @@ void loopNetConsole()
     // und damit einen Panic/Reboot. Daher hier frueh aussteigen, solange kein WiFi verbunden
     // ist. s_server_pending bleibt erhalten, sodass der Listening-Socket geoeffnet wird, sobald
     // die WiFi-Verbindung steht. (Ohne IP kann die Netconsole ohnehin nicht arbeiten.)
-    bool networkReady = (WiFi.status() == WL_CONNECTED);
+    // Im reinen AP-Modus ist WiFi.status() nie WL_CONNECTED; der softAP hat
+    // trotzdem einen laufenden IP-Stack (P-0111).
+    wifi_mode_t mode = WiFi.getMode();
+    bool apActive    = (mode == WIFI_MODE_AP) || (mode == WIFI_MODE_APSTA);
+    bool ethReady    = false;
 
     #if defined(HAS_ETHERNET)
     // Ethernet mode: WiFi never connects, the IP comes from the Ethernet interface.
-    networkReady = networkReady ||
-                   (meshcom_settings.node_netmode == 1 && meshcom_settings.node_hasIPaddress);
+    ethReady = (meshcom_settings.node_netmode == 1 && meshcom_settings.node_hasIPaddress);
     #endif
+
+    bool networkReady = netConsoleNetworkReady(WiFi.status() == WL_CONNECTED, apActive, ethReady);
 
     if (!networkReady)
         return;
@@ -398,15 +464,16 @@ void loopNetConsole()
     if (s_authenticated)
     {
         char dummy;
-        int r = ::recv(s_fd, &dummy, 1, MSG_PEEK | MSG_DONTWAIT);
+        int fd = s_fd;
+        int r = ::recv(fd, &dummy, 1, MSG_PEEK | MSG_DONTWAIT);
         if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
         {
-            if (s_mutex && xSemaphoreTake(s_mutex, portMAX_DELAY) == pdTRUE)
-            {
-                teardownClient();
-            }
+            teardownIfCurrent(fd, portMAX_DELAY);
         }
-        return;
+        // No return here: keep accepting while a session is up. A client that
+        // vanished without FIN (sleep, roaming) left a dead session behind, and
+        // every new connection then sat in the backlog without a NONCE (P-0168).
+        // A successful login replaces the old session in authTask.
     }
 
     // Non-blocking accept
@@ -428,6 +495,13 @@ void loopNetConsole()
         ::close(client_fd);
         return;
     }
+
+    // Detect a peer that vanished without FIN within ~90 s (P-0168).
+    int ka = 1, idle = 60, intvl = 10, cnt = 3;
+    setsockopt(client_fd, SOL_SOCKET,  SO_KEEPALIVE,  &ka,    sizeof(ka));
+    setsockopt(client_fd, IPPROTO_TCP, TCP_KEEPIDLE,  &idle,  sizeof(idle));
+    setsockopt(client_fd, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
+    setsockopt(client_fd, IPPROTO_TCP, TCP_KEEPCNT,   &cnt,   sizeof(cnt));
 
     s_hs_running = true;
     AuthArgs* args = new AuthArgs{ client_fd };
@@ -454,16 +528,19 @@ int netConsoleRead()
         return (int)s_peek_byte;
     }
 
+    // Under the mutex: a takeover in authTask may close s_fd at any time, and
+    // lwIP could hand the number to another socket (P-0168). Busy: retry later.
     uint8_t c;
-    int r = ::recv(s_fd, &c, 1, MSG_DONTWAIT);
+    if (!s_mutex || xSemaphoreTake(s_mutex, 0) != pdTRUE) return -1;
+    int fd = s_fd;
+    int r = ::recv(fd, &c, 1, MSG_DONTWAIT);
+    int e = errno;
+    xSemaphoreGive(s_mutex);
     if (r == 1) return (int)c;
 
-    if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
+    if (r == 0 || (r < 0 && e != EAGAIN && e != EWOULDBLOCK))
     {
-        if (s_mutex && xSemaphoreTake(s_mutex, 0) == pdTRUE)
-        {
-            teardownClient();
-        }
+        teardownIfCurrent(fd, 0);
     }
     return -1;
 }
@@ -473,16 +550,21 @@ bool netConsoleAvailable()
     if (!isNetConsoleConnected()) return false;
     if (s_peek_valid) return true;
 
+    // Under the mutex, see netConsoleRead(); the peek byte is set under it so
+    // a takeover's s_peek_valid reset cannot be overwritten with an old byte.
     uint8_t c;
-    int r = ::recv(s_fd, &c, 1, MSG_DONTWAIT);
-    if (r == 1) { s_peek_valid = true; s_peek_byte = c; return true; }
+    if (!s_mutex || xSemaphoreTake(s_mutex, 0) != pdTRUE) return false;
+    int fd = s_fd;
+    int r = ::recv(fd, &c, 1, MSG_DONTWAIT);
+    int e = errno;
+    bool got = (r == 1);
+    if (got) { s_peek_valid = true; s_peek_byte = c; }
+    xSemaphoreGive(s_mutex);
+    if (got) return true;
 
-    if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
+    if (r == 0 || (r < 0 && e != EAGAIN && e != EWOULDBLOCK))
     {
-        if (s_mutex && xSemaphoreTake(s_mutex, 0) == pdTRUE)
-        {
-            teardownClient();
-        }
+        teardownIfCurrent(fd, 0);
     }
     return false;
 }

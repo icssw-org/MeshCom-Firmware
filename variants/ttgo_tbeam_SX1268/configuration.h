@@ -19,6 +19,10 @@ definitions for TBEAM 1268
 
 #define SX126X
 
+// T-Beam v1.1+ extra LED on GPIO4, common anode (LOW = lit); same PCB as ttgo_tbeam
+#define BOARD_LED 4
+#define BOARD_LED_ACTIVE_LOW 1
+
 // Defined using AXP192
 #define XPOWERS_CHIP_AXP192
 

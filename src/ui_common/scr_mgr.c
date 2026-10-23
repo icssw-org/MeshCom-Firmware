@@ -48,10 +48,9 @@
  *    Stack-Screen). Additiv uebernommen; t-deck-pro ruft sie aktuell
  *    nirgends auf, das ist folgenlos.
  *
- * scr_mgr_get_top() (statische Hilfsfunktion weiter unten) war in BEIDEN
- * Originalen bereits toter Code -- definiert, aber nirgends aufgerufen.
- * Unveraendert uebernommen, da das ausserhalb der oben genannten sechs
- * Abweichungen liegt und keine Verhaltensfrage ist.
+ * scr_mgr_get_top() (static helper) was dead code in BOTH originals --
+ * defined, never called. Removed once -Wunused-function became fatal for
+ * the t-deck-pro and t5-epaper envs.
  */
 
 /* 记录所有的屏幕卡片 */
@@ -95,16 +94,6 @@ static scr_card_t *scr_mgr_find_by_id(int id) // 检查链表中没有没此 id
         p = p->next;
     }
     return NULL;
-}
-
-static scr_card_t *scr_mgr_get_top(scr_card_t *head) // 获取链表最前面的节点
-{
-    scr_card_t *p = head;
-
-    while(p->next != NULL){
-        p = p->next;
-    }
-    return p;
 }
 
 static void scr_mgr_active(scr_card_t *card)  // 设置屏幕卡片为活跃状态

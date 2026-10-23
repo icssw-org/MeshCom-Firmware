@@ -324,7 +324,7 @@ static bool sd_care_init(void)
     return true;
 }
 
-static void a7682_task(void *param)
+__attribute__((unused)) static void a7682_task(void *param)  // only started from the commented-out modem init
 {
     vTaskSuspend(a7682_handle);
     while (1)
@@ -385,7 +385,7 @@ static bool A7682E_init(void)
     return false;
 }
 
-static bool pcm5102a_init(void)
+__attribute__((unused)) static bool pcm5102a_init(void)  // only called from a commented-out block
 {
     bool ret = audio.setPinout(BOARD_I2S_BCLK, BOARD_I2S_LRC, BOARD_I2S_DOUT);
 

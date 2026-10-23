@@ -15,6 +15,7 @@
 #include <settings_schema.h>
 #include <settings_store.h>
 #include <counters_store.h>
+#include <nvs_diag.h>
 
 #include <cstring>
 
@@ -310,6 +311,24 @@ bool countersSave(void)
     counters_preferences.end();
     return ok;
 }
+
+// Default NVS partition usage (nvs_get_stats), for --info.
+#if !defined(NATIVE_BUILD)
+#include <nvs.h>
+bool nvsDiagRead(NvsDiagStats &out)
+{
+    nvs_stats_t st;
+    if (nvs_get_stats(NULL, &st) != ESP_OK)
+        return false;
+    out.used = (uint32_t)st.used_entries;
+    out.free = (uint32_t)st.free_entries;
+    out.total = (uint32_t)st.total_entries;
+    out.ns = (uint32_t)st.namespace_count;
+    return true;
+}
+#else
+bool nvsDiagRead(NvsDiagStats &) { return false; }
+#endif // !NATIVE_BUILD
 #endif // !MC_SAFEBOOT
 
 void init_flash(void)

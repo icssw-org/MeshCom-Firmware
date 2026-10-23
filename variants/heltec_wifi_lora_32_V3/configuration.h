@@ -87,6 +87,9 @@ definitions for HELTEC_V3
 // Funktionsentfernung, keine Bereinigung.
 #define OneWire_GPIO -1
 
+// White user LED, GPIO35, active HIGH: `--board led` heartbeat (off by default).
+#define BOARD_LED 35
+
 #define GPS_RX_PIN 47
 #define GPS_TX_PIN 48
 

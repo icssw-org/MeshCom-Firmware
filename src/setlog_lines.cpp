@@ -85,7 +85,8 @@ int setlogFormatStat(char *buf, size_t n, const struct setlogStatFields *f)
     return setlogClamp(snprintf(buf, n,
                                 "STAT util=%u rx=%lu tx=%lu newid=%lu dup=%lu err=%lu txn=%lu txfail=%lu "
                                 "ringmax=%u/%u drop=%u/%u/%u/%u/%u mh=%u heap=%lu trk=%lu/%u "
-                                "fw=%u%c/%lu up=%lu t=%lu",
+                                "fw=%u%c/%lu up=%lu t=%lu "
+                                "onrx_n=%lu onrx_avg=%lu onrx_p95=%lu onrx_p99=%lu onrx_max=%lu onrx_warn=%lu",
                                 (unsigned)f->util_pct,
                                 (unsigned long)f->rx_ms, (unsigned long)f->tx_ms,
                                 (unsigned long)f->newid, (unsigned long)f->dup,
@@ -101,7 +102,10 @@ int setlogFormatStat(char *buf, size_t n, const struct setlogStatFields *f)
                                 (unsigned)f->fw_major, f->fw_sub,
                                 (unsigned long)f->flash,
                                 (unsigned long)f->up_s,
-                                (unsigned long)f->t_ms), n);
+                                (unsigned long)f->t_ms,
+                                (unsigned long)f->onrx_n, (unsigned long)f->onrx_avg_ms,
+                                (unsigned long)f->onrx_p95_ms, (unsigned long)f->onrx_p99_ms,
+                                (unsigned long)f->onrx_max_ms, (unsigned long)f->onrx_warn), n);
 }
 
 int setlogFormatGwi(char *buf, size_t n, uint32_t msg_id, char typ,

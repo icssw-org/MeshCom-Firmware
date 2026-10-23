@@ -40,9 +40,8 @@ definitions for LILYGO T-ETH-Elite S3 + SX1262 shield
 #define BUTTON_PIN 0
 #define BUTTON_EXT -1
 
-#define LED_PIXEL 0
-#define LED_PIN 38
-#define BOARD_LED 1
+// Plain user LED on IO38 (GPIO1 is MODEM_RI_PIN)
+#define BOARD_LED 38
 
 #define OneWire_GPIO -1
 

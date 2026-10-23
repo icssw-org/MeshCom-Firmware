@@ -67,8 +67,10 @@ extern "C"
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (11)
-#define PIN_LED2 (13)
+// Real LEDs (LilyGO factory sketch): green P1.01, red P1.03, blue P0.14, active low.
+// P0.11 is the touch pad and P0.13 the power enable, not LEDs.
+#define PIN_LED1 (33)
+#define PIN_LED2 (35)
 #define PIN_LED3 (14)
 
 #define LED_BUILTIN PIN_LED1
@@ -79,7 +81,8 @@ extern "C"
 #define LED_RED PIN_LED2
 #define LED_BLUE PIN_LED3
 
-#define LED_STATE_ON 1 // State when LED is litted
+#define LED_STATE_ON 0 // State when LED is litted (active low)
+#define BOARD_LED PIN_LED1   // green: --board led heartbeat
 
 /*
  * Analog pins

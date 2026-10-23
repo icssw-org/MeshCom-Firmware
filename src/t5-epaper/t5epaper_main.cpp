@@ -163,9 +163,10 @@ void disp_refresh_screen(void)
 static void disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
 {
     if(disp_flush_enabled) {
-        uint16_t w = lv_area_get_width(area) / 2;
-        uint16_t h = lv_area_get_height(area);
-        lv_color32_t *t32 = (lv_color32_t *)color_p;
+        // w / h / t32 are only referenced by the disabled (#if 0 / commented-out) blocks below.
+        __attribute__((unused)) uint16_t w = lv_area_get_width(area) / 2;
+        __attribute__((unused)) uint16_t h = lv_area_get_height(area);
+        __attribute__((unused)) lv_color32_t *t32 = (lv_color32_t *)color_p;
 
 #if 0   // Mirror screen or not
         int w2 = w * 2;

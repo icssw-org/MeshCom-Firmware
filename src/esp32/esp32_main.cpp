@@ -16,6 +16,7 @@
 #include "capture_functions.h"
 #include "dedup_functions.h"
 #include "ntp_async.h"      // NTP-01: isPending() haelt das GPS-Gate fuer --ntpsync offen
+#include "configuration_global.h"
 #include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
 #include "loop_breadcrumb.h" // F3: always-on LAST_LOOP_SECTION breadcrumb for TASK_WDT forensics
 #include "track_warning.h" // TRK-01: Warnhinweis bei aktivem Track
@@ -54,6 +55,9 @@ Timeout timerSerial;
 #endif //ARDUINO_ARCH_ESP32
 
 // Kompatibilitaets-Macro: DIO1-Pin hat je nach Board verschiedene Namen
+#if defined(BOARD_T5_EPAPER)
+  #include <t5-epaper/utilities.h>   // BOARD_LORA_IRQ is the SX1262 DIO1 (pin defines only)
+#endif
 #ifndef LORA_DIO1
   #if defined(E22_DIO1)
     #define LORA_DIO1 E22_DIO1
@@ -63,6 +67,8 @@ Timeout timerSerial;
     #define LORA_DIO1 RADIO_IRQ_PIN
   #elif defined(PIN_LORA_DIO_1)
     #define LORA_DIO1 PIN_LORA_DIO_1
+  #elif defined(BOARD_LORA_IRQ)
+    #define LORA_DIO1 BOARD_LORA_IRQ
   #else
     #warning "LORA_DIO1 not defined -- safety net digitalRead() disabled"
   #endif
@@ -151,6 +157,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include <topo_ui.h>
 #include <time_functions.h>
 #include <clock.h>
+#include <onrx_stats.h> // OR-STAT
 #include <setlog_lines.h> // SL-04/SL-05: --setlog on line formatters (Welle 0)
 #include <onewire_functions.h>
 #include <onebutton_functions.h>
@@ -197,7 +204,6 @@ bool bDEEP_SLEEP = false;
     #ifndef BOARD_LED_ACTIVE_LOW
         #define BOARD_LED_ACTIVE_LOW 0
     #endif
-    bool bLED = BOARD_LED_ACTIVE_LOW;
 #endif
 
 #if defined(ENABLE_AUDIO)
@@ -603,6 +609,9 @@ void setFlagSent(void)
     if(bEnableInterruptReceive)
     {
         receiveFlag = true;
+#if INSTRUMENT_ENABLED
+        INSTR_IRQ_STAMP();      // R1-F: DIO1 -> readData latency
+#endif
     }
 
     if(bEnableInterruptTransmit)
@@ -738,6 +747,45 @@ static const char* wakeCauseName(esp_sleep_source_t c)
     }
 }
 
+uint32_t console_txbuf_bytes = 0;
+int      console_txbuf_ok    = 0;
+
+#if !ARDUINO_USB_CDC_ON_BOOT && (CONSOLE_UART_TXBUF > 0 || (defined(INSTR_UART_TXBUF) && INSTR_UART_TXBUF > 0))
+#include <driver/uart.h>
+static void console_txbuf_shutdown(void)
+{
+    uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(100));
+}
+#endif
+
+void console_txbuf_apply(HardwareSerial &port)
+{
+    (void)port;
+#if !ARDUINO_USB_CDC_ON_BOOT && (CONSOLE_UART_TXBUF > 0 || (defined(INSTR_UART_TXBUF) && INSTR_UART_TXBUF > 0))
+    static bool s_done = false;
+    if (s_done)
+        return;
+    s_done = true;
+  #if defined(INSTR_UART_TXBUF) && INSTR_UART_TXBUF > 0
+    const size_t want = INSTR_UART_TXBUF;   // INSTRUMENT experiment override wins
+  #else
+    const size_t want = CONSOLE_UART_TXBUF;
+  #endif
+    console_txbuf_bytes = (uint32_t)want;
+    // arduino-esp32 2.0.17: must precede begin(); returns 0 once the port runs.
+    // want <= 128 (SOC_UART_FIFO_LEN) returns 128 and installs no ring: ok stays 0.
+    const size_t got = port.setTxBufferSize(want);
+    console_txbuf_ok = (want > 128 && got >= want) ? 1 : 0;
+    if (console_txbuf_ok)
+    {
+        // R2-F2/R1: bytes still queued in the driver ring would be lost on a deliberate
+        // restart. esp_restart() runs the shutdown handlers (IDF 4.4.7 esp_system.c);
+        // console is UART0 (Serial = HardwareSerial(0)). Bounded 100 ms.
+        esp_register_shutdown_handler(console_txbuf_shutdown);
+    }
+#endif
+}
+
 void esp32setup()
 {
     ///< Initialize T5-EPAPER GUI
@@ -753,8 +801,15 @@ void esp32setup()
     // MeshSerialClass::begin() (src/net_console.cpp).
     Serial.setTxBufferSize(4096);
 #endif
+#if defined(DISABLE_NET_CONSOLE) && !ARDUINO_USB_CDC_ON_BOOT
+    // UART console: TX ring before the first begin() (with the net console
+    // compiled in, MeshSerialClass::begin() does this for s_hwSerial).
+    console_txbuf_apply(Serial);
+#endif
     Serial.begin(MONITOR_SPEED);
     Serial.setTimeout(50);
+    if(console_txbuf_bytes > 0)   // silent on boards where no ring applies (CDC)
+        printfdeb("[MC-INFO] CONSOLE_TXBUF bytes=%lu ok=%d\n", (unsigned long)console_txbuf_bytes, console_txbuf_ok);
 
 #if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE && defined(DISABLE_NET_CONSOLE)
     // CDC-01: without the net-console wrapper Serial is the HWCDC object
@@ -765,6 +820,12 @@ void esp32setup()
 // 1.1.1??   pinMode(45,OUTPUT);
 // 1.1.1??    digitalWrite(45, LOW);
 
+    #if defined(BOARD_LED) && BOARD_LED_ACTIVE_LOW
+        // Active-low LED (common anode): a floating pad can glow until the gated init below (after the settings
+        // load). A pull-up holds it dark and does not load a OneWire/DHT bus on a shared pad.
+        pinMode(BOARD_LED, INPUT_PULLUP);
+    #endif
+
     // Wartet maximal 5 Sekunden auf den seriellen Monitor.
     // Achtung: delay() füttert den Task-Watchdog NICHT -- nur
     // esp_task_wdt_reset() tut das. Diese Schleife ist nur deshalb
@@ -774,15 +835,7 @@ void esp32setup()
         delay(10);
     }
 
-    // Safe Hardware Initalization
-    #ifdef BOARD_LED
-        // Pre-load the safe execution state into the output register
-        // This prevents the LED from briefly flashing/glitching
-        // when changing the pin mode
-        digitalWrite(BOARD_LED, BOARD_LED_ACTIVE_LOW);
-        // configure the pin driver as active output:
-        pinMode(BOARD_LED, OUTPUT);
-    #endif
+    // Board LED pin init: after the settings load (needs the OneWire state), see bUSER_BOARD_LED below
 
     #if defined(HAS_TFT_CONNECT)
 
@@ -894,6 +947,7 @@ void esp32setup()
     }
 #if INSTRUMENT_ENABLED
     instrument_report_prev_boot();   // CDC-01: loop gaps of the previous boot, from RTC memory
+    instrument_onrx_boot();          // R1-F: [INS] UARTTXBUF / ONRX_READY
 #endif
 
     lFreeHeap =  ESP.getFreeHeap();
@@ -1043,6 +1097,19 @@ void esp32setup()
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
     bAnalogFilter = meshcom_settings.node_sset3 & 0x0040;
     bUSER_BOARD_LED = meshcom_settings.node_sset3 & 0x0080;
+
+    #ifdef BOARD_LED
+        // Safe Hardware Initalization. Skipped while OneWire/DHT owns the pad (T-Beam: GPIO4)
+        if (boardLedPinUsable())
+        {
+            // Pre-load the safe execution state into the output register
+            // This prevents the LED from briefly flashing/glitching
+            // when changing the pin mode
+            digitalWrite(BOARD_LED, BOARD_LED_ACTIVE_LOW);
+            // configure the pin driver as active output:
+            pinMode(BOARD_LED, OUTPUT);
+        }
+    #endif
 
     bSOFTSERDEBUG = meshcom_settings.node_sset3 & 0x0100;
     bWXDEBUG = meshcom_settings.node_sset3 & 0x0200;
@@ -2008,6 +2075,7 @@ void esp32setup()
     #endif
  
     printfdeb("[BLE ]...Waiting a client connection to notify...\n");
+    heapMarkBle();
     #else
     printfdeb("[BLE ]...disabled (DISABLE_BLE)\n");
     #endif
@@ -2198,6 +2266,9 @@ void esp32loop()
     // TEMPORARY -- measures the period between successive loop entries, so a
     // stall is caught regardless of which call site blocked. See src/instrument.h
     INSTR_LOOPTICK();
+#if INSTRUMENT_ENABLED
+    INSTR_ONRX_DRAIN();      // R1-F: emit queued [INS] ONRX records
+#endif
 
     // BP-01/BP-04: close a back-pressure episode with QRV once the TX ring
     // has drained, even when no further user message arrives to observe it.
@@ -2304,44 +2375,7 @@ void esp32loop()
         }
     #endif
 
-    #ifdef BOARD_LED
-        if(bUSER_BOARD_LED)
-        {
-            const uint32_t now = millis(); // millis() only once per cycle
-            const uint32_t flashDuration = 30;
-            const uint32_t interval =2000;  // Delay between flashes 2 sec.
-            if (!bLED)
-            {
-                if (now - led_timer >= interval) // repeats every 2 second, no cast needed for millis() as it is already uint32_t
-                {
-                    led_timer = now;
-                    bLED = true; // LED on 
-
-                    #ifdef LED_PIN
-                        if(pixels_delay == 0 && !bLED_CLEAR)
-                        {
-                            if(!bLED_RED && !bLED_GREEN && !bLED_ORANGE && !bLED_BLUE)
-                            {
-                                bLED_WEISS = true;
-                            }
-                        }
-                    #endif
-
-                        digitalWrite(BOARD_LED, HIGH ^ BOARD_LED_ACTIVE_LOW);
-                }
-            }
-            else
-            {
-                // if the LED is ON, we check the short Flash period of time (30ms)
-                if (now - led_timer >= flashDuration)
-                {
-                    bLED = false;
-                    // switch the board LED OFF
-                    digitalWrite(BOARD_LED, LOW ^ BOARD_LED_ACTIVE_LOW);
-                }
-            }
-        }
-    #endif
+    boardLedTick();   // --board led heartbeat (30 ms / 2 s); yields to OneWire, no-op without an LED pin
 
     // D1-10: the shared scheduler runs at function scope, BEFORE the
     // BOARD_T5_EPAPER / if(bRadio) block below. Six of its seven jobs (battery,
@@ -2480,9 +2514,17 @@ void esp32loop()
                 struct setlogStatFields f;
                 setlogFillStat(&f, (uint32_t)ESP.getFreeHeap());
 
+                // OR-STAT: OnRxDone time distribution (drains the window)
+                {
+                    struct onrxStatsOut o;
+                    onrxStatsSnapshotReset(&o, ONRXDONE_WARN_MS);
+                    f.onrx_n = o.n; f.onrx_avg_ms = o.avg_ms; f.onrx_p95_ms = o.p95_ms;
+                    f.onrx_p99_ms = o.p99_ms; f.onrx_max_ms = o.max_ms; f.onrx_warn = o.warn;
+                }
+
                 if(bDisplayLog)
                 {
-                    char buf[300];
+                    char buf[400];
                     setlogFormatStat(buf, sizeof(buf), &f);
                     setlogPrint(buf);
                 }
@@ -4097,6 +4139,15 @@ void esp32loop()
     }
     #endif
 
+    // Net console stop, same reason as KISS above: with the console as the only
+    // service the block below is skipped after "--netconsole off", and the
+    // listener stayed open (P-0169). Stopping needs no network, so no
+    // iWlanWait gate either.
+    #ifndef DISABLE_NET_CONSOLE
+    if(!bNETCONSOLE)
+        stopNetConsole();   // no-op unless started
+    #endif
+
     if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE || bKISS)
     {
         if (web_timer == 0 || (iWlanWait > 0 && ((uint32_t)(millis() - web_timer) >= 1000)) || ((uint32_t)(millis() - web_timer) >= (HEARTBEAT_INTERVAL * 1000 * 10)))   // repeat 5 minutes
@@ -4162,17 +4213,10 @@ void esp32loop()
         }
 
         #ifndef DISABLE_NET_CONSOLE
-        if(iWlanWait == 0)
+        if(bNETCONSOLE && iWlanWait == 0)
         {
-            if(bNETCONSOLE)
-            {
-                startNetConsole();
-                loopNetConsole();
-            }
-            else
-            {
-                stopNetConsole();
-            }
+            startNetConsole();
+            loopNetConsole();
         }
         #endif
 
@@ -4190,6 +4234,8 @@ void esp32loop()
             startExternUDP();
         }
     }
+
+    heapMarksPoll();   // [HEAP] boot marks, each once per boot
 
     if (resendPing == 0)
         resendPing = millis();
@@ -4316,6 +4362,9 @@ int checkRX(bool bRadio)
         ibytes = UDP_TX_BUF_SIZE;
 
     state = radio.readData(payload, ibytes);
+#if INSTRUMENT_ENABLED
+    INSTR_IRQ_READ();        // R1-F: irq_to_read_us, consumed by OnRxDone
+#endif
 
     if (state == RADIOLIB_ERR_LORA_HEADER_DAMAGED || state == RADIOLIB_ERR_NONE)
     {
@@ -4383,7 +4432,12 @@ int checkRX(bool bRadio)
             OnRxDone(payload, (uint16_t)ibytes, saved_rssi, saved_snr);
         }
         else
-        if(bLORADEBUG)
+        {
+#if INSTRUMENT_ENABLED
+            INSTR_IRQ_DROP();   // R1-F: frame read, OnRxDone not reached
+#endif
+        }
+        if(ibytes == 0 && bLORADEBUG)
         {
             // Laenge 0 heisst: der Chip hat nichts im Puffer. Frueher lief das
             // als 255-Byte-Frame aus uninitialisiertem Stack weiter.
@@ -4393,6 +4447,9 @@ int checkRX(bool bRadio)
     else
     if (state == RADIOLIB_ERR_CRC_MISMATCH)
     {
+#if INSTRUMENT_ENABLED
+        INSTR_IRQ_DROP();       // R1-F: frame read, OnRxDone not reached
+#endif
         if(bLORADEBUG)
             printfdeb("OnRxError\n");
 
@@ -4449,6 +4506,9 @@ int checkRX(bool bRadio)
     }
     else
     {
+#if INSTRUMENT_ENABLED
+        INSTR_IRQ_DROP();       // R1-F: read error, OnRxDone not reached
+#endif
         if(bLORADEBUG)
             printfdeb("OnRxError\n");
 

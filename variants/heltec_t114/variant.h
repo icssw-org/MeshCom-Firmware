@@ -67,16 +67,18 @@ extern "C"
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
+// One user LED: green, P1.03 (35), active low. The former PIN_LED2 (36) was no LED; LED_BLUE/LED_CONN
+// stay only because the Bluefruit library references LED_BLUE (connection blinker on an unused pad).
 #define PIN_LED1 (35)
-#define PIN_LED2 (36)
+#define LED_BLUE (36)
+#define LED_CONN LED_BLUE
 
 #define LED_BUILTIN PIN_LED1
-#define LED_CONN PIN_LED2
 
 #define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
 
-#define LED_STATE_ON 1 // State when LED is litted
+#define LED_STATE_ON 0 // State when LED is litted (active low)
+#define BOARD_LED PIN_LED1   // green: --board led heartbeat
 
 /*
  * Analog pins

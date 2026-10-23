@@ -4,6 +4,7 @@
 // src/nrf52/loop_actions_nrf52.cpp.
 
 #include <Arduino.h>
+#include <WiFi.h>
 #include <configuration.h>
 #include "loop_scheduler.h"
 #include "loop_functions.h"
@@ -99,6 +100,83 @@ bool loopEnabled_heapMon(void)
         heapMonTimer = millis();
 
     return on;
+}
+
+// ---- [HEAP] boot marks ------------------------------------------------------
+// One line per service, once per boot, in the format of the (init) line, so a heap drop is
+// attributable from a single boot log. Unlike (init) they print under --setlog on as well
+// (bench and field nodes run setlog); one short line each. The services come up in different
+// places (setup, loop), so heapMarksPoll() runs once per loop pass after the service block and
+// prints each mark the first time its service is up. Anchors:
+//   wifi  WiFi.status()==WL_CONNECTED          udp  hasIPaddress (set by startMeshComUDP())
+//   web   bweb_server_running                  mdns web up and MDNS.begin() did not fail (bMDNSOK)
+//   kiss  bKISS and the link is up (kissLoop() has opened the listener in this pass)
+//   netconsole  bNETCONSOLE and iWlanWait==0 (startNetConsole()/loopNetConsole() ran this pass)
+//   ble   heapMarkBle(), called right after the boot bleStackStart()
+extern bool bweb_server_running;   // web_functions.cpp
+extern bool bMDNSOK;               // web_functions.cpp
+extern bool hasIPaddress;          // udp_functions.cpp
+
+static uint8_t s_heapMarksDone = 0;
+#define HM_WIFI 0x01
+#define HM_WEB 0x02
+#define HM_MDNS 0x04
+#define HM_UDP 0x08
+#define HM_KISS 0x10
+#define HM_NETCON 0x20
+#define HM_BLE 0x40
+
+#define HEAP_MARK(bit, label)                                                              \
+    do                                                                                     \
+    {                                                                                      \
+        s_heapMarksDone |= (bit);                                                          \
+        printfdeb("[HEAP];%s;%lu;%d;%d;(" label ")\n", getTimeString().c_str(),            \
+                  (unsigned long)ESP.getFreeHeap(), (int)ESP.getMinFreeHeap(),             \
+                  (int)ESP.getMaxAllocHeap());                                             \
+    } while (0)
+
+void heapMarkBle(void)
+{
+    if (!(s_heapMarksDone & HM_BLE))
+        HEAP_MARK(HM_BLE, "ble");
+}
+
+void heapMarksPoll(void)
+{
+    // HM_BLE is set by heapMarkBle() (BLE start), not by this poll.
+    const uint8_t pollBits = HM_WIFI | HM_WEB | HM_MDNS | HM_UDP | HM_KISS | HM_NETCON;
+    if ((s_heapMarksDone & pollBits) == pollBits)
+        return;
+
+    // Boot window over: services that are disabled or absent never reach their mark. Declare
+    // them done (no line printed) so the poll stops instead of running every loop forever.
+    if (millis() >= 120000UL)
+    {
+        s_heapMarksDone |= pollBits;
+        return;
+    }
+
+    const bool wifiUp = (WiFi.status() == WL_CONNECTED);
+    if (wifiUp && !(s_heapMarksDone & HM_WIFI))
+        HEAP_MARK(HM_WIFI, "wifi");
+    if (wifiUp && hasIPaddress && !(s_heapMarksDone & HM_UDP))
+        HEAP_MARK(HM_UDP, "udp");
+    if (bweb_server_running && !(s_heapMarksDone & HM_WEB))
+        HEAP_MARK(HM_WEB, "web");
+    if (bweb_server_running && bMDNSOK && !(s_heapMarksDone & HM_MDNS))
+        HEAP_MARK(HM_MDNS, "mdns");
+#ifndef DISABLE_KISS_TCP
+    if (bKISS && wifiUp && !(s_heapMarksDone & HM_KISS))
+        HEAP_MARK(HM_KISS, "kiss");
+#else
+    s_heapMarksDone |= HM_KISS;
+#endif
+#ifndef DISABLE_NET_CONSOLE
+    if (bNETCONSOLE && iWlanWait == 0 && !(s_heapMarksDone & HM_NETCON))
+        HEAP_MARK(HM_NETCON, "netconsole");
+#else
+    s_heapMarksDone |= HM_NETCON;
+#endif
 }
 
 void loopAction_heapMon(void)
