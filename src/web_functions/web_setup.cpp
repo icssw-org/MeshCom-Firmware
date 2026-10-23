@@ -79,7 +79,11 @@ void webSetup_setParam(setupStruct *setupData){
     if(setupData->paramName.equals("setvia")) {        
         snprintf(message_text, sizeof(message_text), "--via %s", setupData->paramValue.c_str());                   // set command string
         commandAction(message_text, bPhoneReady);                                                                      // try to execute the command
-        setupData->returnCode = strcmp(meshcom_settings.node_via, setupData->paramValue.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parameter was accepted, return with corresponding code
+        // --via legt die Liste getrimmt, in Grossbuchstaben und "NONE" als leer
+        // ab. Gegen dieselbe Form vergleichen -- sonst meldet die GUI bei
+        // "dk8vw-99" oder "none" FAIL, obwohl der Wert uebernommen wurde.
+        String sWanted = viaCanonical(setupData->paramValue);
+        setupData->returnCode = strcmp(meshcom_settings.node_via, sWanted.c_str())==0?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;    //check if new parameter was accepted, return with corresponding code
         setupData->returnValue = meshcom_settings.node_via;                                                           // send back the current used value
         return;
     } else

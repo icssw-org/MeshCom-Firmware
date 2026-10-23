@@ -2945,20 +2945,26 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"via ") == 0)
     {
-        sVar = msg_text+6;
-        sVar.trim();
-        sVar.toUpperCase();
-
-        snprintf(meshcom_settings.node_via, sizeof(meshcom_settings.node_via), "%s", sVar.c_str());
+        sVar = viaCanonical(String(msg_text+6));
 
         // max 39 chars
         // OE1KBC-24,OE1KFR-12
 
-        meshcom_settings.node_via[39] = 0x00;
-
-        if(is_equ(meshcom_settings.node_via, "NONE"))
+        // leer (auch "NONE") loescht (Web-GUI "setvia" mit geleertem Feld)
+        if(sVar.length() == 0)
         {
             memset(meshcom_settings.node_via, 0x00, sizeof(meshcom_settings.node_via));
+        }
+        else
+        {
+            if(!checkViaList(sVar))
+            {
+                printfdeb("\n[ERR]..Via <%s> not valid\n", sVar.c_str());
+                return;
+            }
+
+            snprintf(meshcom_settings.node_via, sizeof(meshcom_settings.node_via), "%s", sVar.c_str());
+            meshcom_settings.node_via[39] = 0x00;
         }
 
         save_settings();
