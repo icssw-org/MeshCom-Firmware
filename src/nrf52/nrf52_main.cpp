@@ -136,6 +136,7 @@ void sendHeartbeat();
 #include "msgstore_settings.h"
 #endif
 #include <regex_functions.h>
+#include "onrx_stats.h" // OR-STAT
 #include "setlog_lines.h"
 #include "dedup_functions.h"
 #include "nbr_matrix.h"    // --nbrdebug: nbrLogSnapshot()/nbrMatrix fuer den 15-Minuten-Takt
@@ -1551,6 +1552,14 @@ void nrf52loop()
             struct setlogStatFields f;
             setlogFillStat(&f, nrf52_getFreeHeap());
 
+            // OR-STAT: OnRxDone time distribution (drains the window)
+            {
+                struct onrxStatsOut o;
+                onrxStatsSnapshotReset(&o, ONRXDONE_WARN_MS);
+                f.onrx_n = o.n; f.onrx_avg_ms = o.avg_ms; f.onrx_p95_ms = o.p95_ms;
+                f.onrx_p99_ms = o.p99_ms; f.onrx_max_ms = o.max_ms; f.onrx_warn = o.warn;
+            }
+
             // stat_drop_count[] increments happen under this same lock in
             // txring_functions.cpp -- clear under it too, right after the
             // (uncleared) read inside setlogFillStat().
@@ -1561,7 +1570,7 @@ void nrf52loop()
 
             if(bDisplayLog)
             {
-                char buf[300];
+                char buf[400];
                 setlogFormatStat(buf, sizeof(buf), &f);
                 setlogPrint(buf);
             }

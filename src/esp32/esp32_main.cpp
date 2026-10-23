@@ -157,6 +157,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
 #include <topo_ui.h>
 #include <time_functions.h>
 #include <clock.h>
+#include <onrx_stats.h> // OR-STAT
 #include <setlog_lines.h> // SL-04/SL-05: --setlog on line formatters (Welle 0)
 #include <onewire_functions.h>
 #include <onebutton_functions.h>
@@ -2539,9 +2540,17 @@ void esp32loop()
                 struct setlogStatFields f;
                 setlogFillStat(&f, (uint32_t)ESP.getFreeHeap());
 
+                // OR-STAT: OnRxDone time distribution (drains the window)
+                {
+                    struct onrxStatsOut o;
+                    onrxStatsSnapshotReset(&o, ONRXDONE_WARN_MS);
+                    f.onrx_n = o.n; f.onrx_avg_ms = o.avg_ms; f.onrx_p95_ms = o.p95_ms;
+                    f.onrx_p99_ms = o.p99_ms; f.onrx_max_ms = o.max_ms; f.onrx_warn = o.warn;
+                }
+
                 if(bDisplayLog)
                 {
-                    char buf[300];
+                    char buf[400];
                     setlogFormatStat(buf, sizeof(buf), &f);
                     setlogPrint(buf);
                 }
