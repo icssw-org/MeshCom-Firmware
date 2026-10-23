@@ -695,6 +695,9 @@ static NbrGwHint nbrGwHintFromDest(char payload_type, const char *dest)
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
+#if INSTRUMENT_ENABLED
+    INSTR_ONRX_BEGIN(size);     // R1-F: print/total split, see instrument.h
+#endif
     // Testfang-Hook (Katalog doc 08 §4, Mechanismus 2): akzeptierte Frames als
     // Rohbytes — das Gegenstueck zum CRC_PAYLOAD-Dump der VERWORFENEN Frames
     // in checkRX (esp32_main.cpp). OnRxDone ist auf beiden Plattformen der
@@ -826,12 +829,16 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         is_receiving = false;
         iReceiveTimeOutTime = millis();
         csma_timeout = csma_compute_timeout(cad_attempt);
+        INSTR_ONRX_END();
         return;
     }
 #endif
 
     if(handleACK(payload, size, rssi, snr))
     {
+#if INSTRUMENT_ENABLED
+        INSTR_PH("ack");
+#endif
 #if defined BOARD_RAK4630
         taskENTER_CRITICAL();
         rxBufInUse[rxBufIndex] = false;
@@ -846,12 +853,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         iReceiveTimeOutTime = millis();
         csma_timeout = csma_compute_timeout(cad_attempt);
 
+#if INSTRUMENT_ENABLED
+        INSTR_ONRX_END();
+#endif
         // TM-06: state above is fully settled -- safe point for
         // test_inject_service() to recurse into OnRxDone() (see there).
         test_inject_service();
 
         return;
     }
+#if INSTRUMENT_ENABLED
+    INSTR_PH("ack");
+#endif
 
     {
         memcpy(RcvBuffer, payload, size);
@@ -942,6 +955,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         
         // print which message type we got
         uint16_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
+#if INSTRUMENT_ENABLED
+        INSTR_PH("dec");
+#endif
 
         // TM-06(a): no-op unless this call is draining a staged raw-inject
         // frame (test_inject.cpp) -- see test_inject_service() below.
@@ -954,6 +970,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         // SL-01: genau EIN is_new_packet() je Frame (die Suche druckt unter
         // --loradebug); unten von setlogCountDedup() wiederverwendet.
         bool rx_is_new = is_new_packet(RcvBuffer+1);
+#if INSTRUMENT_ENABLED
+        INSTR_PH("ded");
+#endif
         bool rx_dup = !rx_is_new;
         bool rx_own_echo = false;
 
@@ -996,6 +1015,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             else
                 printBuffer_aprs((char*)"[LOG]", aprsmsg, tail);
         }
+#if INSTRUMENT_ENABLED
+        INSTR_PH("log");
+#endif
 
         // Nachbarschaftsmatrix Stufe 3 (HN-Bericht): der periodische HEY-artige
         // Nachbarschaftsbericht (payload_type '@', Ziel "HN", max_hop 0, siehe
@@ -1072,6 +1094,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             iReceiveTimeOutTime = millis();
             csma_timeout = csma_compute_timeout(cad_attempt);
 
+#if INSTRUMENT_ENABLED
+            INSTR_PH("nbr");
+            INSTR_ONRX_END();
+#endif
             test_inject_service();
 
             return;
@@ -1387,6 +1413,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                 // updateMheard()/updateHeyPath() (Anzeige, /topo.dat).
                 topoUiChanged(now_min);
             }
+#if INSTRUMENT_ENABLED
+            INSTR_PH("nbr");
+#endif
 
             // LoRx RX to RAW-Buffer
             //memcpy(ringbufferRAWLoraRX[RAWLoRaWrite], charBuffer_aprs((char*)"", aprsmsg).c_str(), UDP_TX_BUF_SIZE-1);
@@ -2221,6 +2250,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                         // SL-02: dieselbe Bedingung wie bisher, nur zerlegt, damit
                         // genau ein Grund benannt wird -- Kurzschlussreihenfolge
                         // und damit jeder checkMesh()-Aufruf bleiben erhalten.
+#if INSTRUMENT_ENABLED
+                        INSTR_PH("rly0");
+#endif
                         bool rly_go = false;
 
                         if(strcmp(destination_call, meshcom_settings.node_call) == 0)
@@ -2355,6 +2387,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 rly_slot = addTxRingEntry(RcvBuffer, size, RING_STATUS_DONE, "rx_relay", 0, true,
                                                            (bNBRRELAY && nn_relay.known) ? RING_KIND_RELAY : RING_KIND_OTHER,
                                                            &nn_relay.need, &nn_relay.alone);
+#if INSTRUMENT_ENABLED
+                                INSTR_PH("rly1");
+#endif
 
                                 // SL-02: Rueckgabe ist der belegte Slot bzw. -1,
                                 // wenn der Ring den Eintrag verworfen hat.
@@ -2522,6 +2557,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         printfdeb("[MC-SM] RX_PROCESS -> RX_LISTEN rc=0\n");
     is_receiving = false;
 
+#if INSTRUMENT_ENABLED
+    INSTR_ONRX_END();
+#endif
     // TM-06: state above is fully settled -- safe point for
     // test_inject_service() to recurse into OnRxDone() (see there).
     test_inject_service();

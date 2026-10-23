@@ -92,6 +92,54 @@ struct InstrSection
 #define INSTR_CAT(a, b)      INSTR_CAT2(a, b)
 #define INSTR_SECTION(name)  InstrSection INSTR_CAT(_instr_sec_, __LINE__)(name)
 
+/* R1-F: OnRxDone time split into
+ * print time vs the rest, plus DIO1-IRQ -> readData latency. ESP32 only.
+ * Records go into a ring of 16 inside OnRxDone (no printing there) and are
+ * emitted by instrument_onrx_drain() from the main loop as
+ *   [INS] ONRX seq=.. total_us=.. print_us=.. bytes=.. len=.. irq_to_read_us=.. ph=name:us,...
+ * ph durations are the time since the previous stamp (first one: since entry). */
+#if defined(ESP32)
+#define INSTR_ONRX 1
+
+#ifndef INSTR_UART_TXBUF
+#define INSTR_UART_TXBUF 0      /* Arm F: UART TX ring bytes, 0 = core default */
+#endif
+
+extern volatile uint32_t instr_irq_us;           /* micros()|1 in the DIO1 ISR, 0 = none */
+extern volatile int32_t  instr_irq_to_read_us;   /* set at radio.readData, -1 = no IRQ stamp */
+extern volatile bool     instr_onrx_active;
+extern void             *instr_onrx_task;
+extern uint32_t          instr_uarttx_bytes;
+extern int               instr_uarttx_ok;
+
+void instrument_onrx_begin(uint16_t len);
+void instrument_onrx_phase(const char *name);
+void instrument_onrx_end(void);
+void instrument_onrx_print(uint32_t print_us, uint32_t uart_us, uint32_t tcp_us, uint32_t bytes);
+void instrument_onrx_drain(void);
+void instrument_onrx_boot(void);
+void instrument_irq_read(void);                  /* consume-once, see INSTR_IRQ_READ */
+void instrument_irq_drop(void);                  /* frame read but OnRxDone not reached */
+void instrument_uarttx_set(void);                /* call before Serial.begin   */
+
+#define INSTR_ONRX_BEGIN(len)  instrument_onrx_begin(len)
+#define INSTR_PH(name)         instrument_onrx_phase(name)
+#define INSTR_ONRX_END()       instrument_onrx_end()
+#define INSTR_IRQ_STAMP()      (instr_irq_us = micros() | 1u)   /* single store; |1 keeps it non-zero */
+#define INSTR_IRQ_READ()       instrument_irq_read()
+#define INSTR_IRQ_DROP()       instrument_irq_drop()
+#define INSTR_ONRX_DRAIN()     instrument_onrx_drain()
+#else
+#define INSTR_ONRX 0
+#define INSTR_ONRX_BEGIN(len)  do {} while (0)
+#define INSTR_PH(name)         do {} while (0)
+#define INSTR_ONRX_END()       do {} while (0)
+#define INSTR_IRQ_STAMP()      do {} while (0)
+#define INSTR_IRQ_READ()       do {} while (0)
+#define INSTR_IRQ_DROP()       do {} while (0)
+#define INSTR_ONRX_DRAIN()     do {} while (0)
+#endif
+
 #define INSTR_T0(v)      uint32_t v = micros()
 #define INSTR_FLUSH(v)   instrument_note_flush((uint32_t)(micros() - (v)))
 #define INSTR_LOOPTICK() instrument_note_loop_tick()
@@ -102,5 +150,13 @@ struct InstrSection
 #define INSTR_FLUSH(v)   do {} while (0)
 #define INSTR_LOOPTICK() do {} while (0)
 #define INSTR_SECTION(name) do {} while (0)
+#define INSTR_ONRX 0
+#define INSTR_ONRX_BEGIN(len)  do {} while (0)
+#define INSTR_PH(name)         do {} while (0)
+#define INSTR_ONRX_END()       do {} while (0)
+#define INSTR_IRQ_STAMP()      do {} while (0)
+#define INSTR_IRQ_READ()       do {} while (0)
+#define INSTR_IRQ_DROP()       do {} while (0)
+#define INSTR_ONRX_DRAIN()     do {} while (0)
 
 #endif

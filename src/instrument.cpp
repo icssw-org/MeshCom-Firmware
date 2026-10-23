@@ -294,4 +294,166 @@ void instrument_report_gui(void)
 #endif
 }
 
+#if defined(ESP32)
+/* ---- R1-F: OnRxDone print/total split and IRQ->read latency ---------------- */
+#define ONRX_RING   16
+#define ONRX_PHASES 12
+
+struct OnrxRec
+{
+    uint32_t seq, total_us, print_us, uart_us, tcp_us, bytes, len;
+    int32_t  irq_to_read_us;     /* -1 = no ISR stamp for this frame */
+    uint8_t  nph;
+    const char *ph_name[ONRX_PHASES];
+    uint32_t    ph_us[ONRX_PHASES];
+};
+
+volatile uint32_t instr_irq_us         = 0;
+volatile int32_t  instr_irq_to_read_us = -1;
+volatile bool     instr_onrx_active    = false;
+void             *instr_onrx_task      = NULL;
+uint32_t          instr_uarttx_bytes   = 0;
+int               instr_uarttx_ok      = 0;
+
+static OnrxRec  s_onrx_ring[ONRX_RING];
+static uint32_t s_onrx_head = 0;          /* next pop  */
+static uint32_t s_onrx_cnt  = 0;
+static uint32_t s_onrx_lost = 0;
+static uint32_t s_onrx_seq  = 0;
+static OnrxRec  s_onrx_cur;
+static uint32_t s_onrx_t0   = 0;
+static uint32_t s_onrx_tlast = 0;
+static portMUX_TYPE s_onrx_mux = portMUX_INITIALIZER_UNLOCKED;
+
+/* Consume-once: the stamp is taken with one atomic exchange, so a stamp the ISR
+ * writes after this point is kept for the next frame. No stamp -> -1. */
+void instrument_irq_read(void)
+{
+    uint32_t st = __atomic_exchange_n(&instr_irq_us, 0u, __ATOMIC_ACQ_REL);
+    if (st)
+    {
+        int32_t d = (int32_t)(micros() - st);
+        instr_irq_to_read_us = d < 0 ? 0 : d;   /* st carries |1: may be 1 us ahead */
+    }
+    else
+        instr_irq_to_read_us = -1;
+}
+
+void instrument_irq_drop(void)
+{
+    (void)__atomic_exchange_n(&instr_irq_us, 0u, __ATOMIC_ACQ_REL);
+    instr_irq_to_read_us = -1;
+}
+
+void instrument_onrx_begin(uint16_t len)
+{
+    memset(&s_onrx_cur, 0, sizeof(s_onrx_cur));
+    s_onrx_cur.seq = ++s_onrx_seq;
+    s_onrx_cur.len = len;
+    s_onrx_cur.irq_to_read_us = instr_irq_to_read_us;
+    instr_irq_to_read_us = -1;
+    instr_onrx_task = (void *)xTaskGetCurrentTaskHandle();
+    s_onrx_t0 = s_onrx_tlast = micros();
+    instr_onrx_active = true;
+}
+
+void instrument_onrx_phase(const char *name)
+{
+    if (!instr_onrx_active)
+        return;
+    uint32_t now = micros();
+    if (s_onrx_cur.nph < ONRX_PHASES)
+    {
+        s_onrx_cur.ph_name[s_onrx_cur.nph] = name;
+        s_onrx_cur.ph_us[s_onrx_cur.nph]   = now - s_onrx_tlast;
+        s_onrx_cur.nph++;
+    }
+    s_onrx_tlast = now;
+}
+
+void instrument_onrx_print(uint32_t print_us, uint32_t uart_us, uint32_t tcp_us, uint32_t bytes)
+{
+    if (!instr_onrx_active || (void *)xTaskGetCurrentTaskHandle() != instr_onrx_task)
+        return;
+    s_onrx_cur.print_us += print_us;
+    s_onrx_cur.uart_us  += uart_us;
+    s_onrx_cur.tcp_us   += tcp_us;
+    s_onrx_cur.bytes    += bytes;
+}
+
+void instrument_onrx_end(void)
+{
+    if (!instr_onrx_active)
+        return;
+    instrument_onrx_phase("exit");
+    s_onrx_cur.total_us = micros() - s_onrx_t0;
+    instr_onrx_active = false;
+
+    portENTER_CRITICAL(&s_onrx_mux);
+    if (s_onrx_cnt == ONRX_RING)
+    {
+        s_onrx_head = (s_onrx_head + 1) % ONRX_RING;
+        s_onrx_cnt--;
+        s_onrx_lost++;
+    }
+    s_onrx_ring[(s_onrx_head + s_onrx_cnt) % ONRX_RING] = s_onrx_cur;
+    s_onrx_cnt++;
+    portEXIT_CRITICAL(&s_onrx_mux);
+}
+
+void instrument_onrx_drain(void)
+{
+    /* two lines per tick at most: the lines themselves are slow on a UART */
+    for (int k = 0; k < 2; k++)
+    {
+        OnrxRec r;
+        uint32_t lost;
+        portENTER_CRITICAL(&s_onrx_mux);
+        if (s_onrx_cnt == 0)
+        {
+            portEXIT_CRITICAL(&s_onrx_mux);
+            return;
+        }
+        r = s_onrx_ring[s_onrx_head];
+        s_onrx_head = (s_onrx_head + 1) % ONRX_RING;
+        s_onrx_cnt--;
+        lost = s_onrx_lost;
+        portEXIT_CRITICAL(&s_onrx_mux);
+
+        char ph[ONRX_PHASES * 16 + 4];
+        size_t n = 0;
+        ph[0] = 0;
+        for (uint8_t i = 0; i < r.nph && n < sizeof(ph) - 16; i++)
+            n += snprintf(ph + n, sizeof(ph) - n, "%s%s:%lu", i ? "," : "", r.ph_name[i], (unsigned long)r.ph_us[i]);
+
+        printfdeb("[INS] ONRX seq=%lu total_us=%lu print_us=%lu bytes=%lu len=%lu irq_to_read_us=%ld ph=%s uart_us=%lu tcp_us=%lu lost=%lu txbuf=%lu/%d\n",
+                  (unsigned long)r.seq, (unsigned long)r.total_us, (unsigned long)r.print_us,
+                  (unsigned long)r.bytes, (unsigned long)r.len, (long)r.irq_to_read_us,
+                  ph, (unsigned long)r.uart_us, (unsigned long)r.tcp_us, (unsigned long)lost,
+                  (unsigned long)instr_uarttx_bytes, instr_uarttx_ok);
+    }
+}
+
+/* Arm F: must run before the first Serial.begin(); HardwareSerial::setTxBufferSize()
+ * returns 0 once the UART is running (arduino-esp32 2.0.17). Not for the S3
+ * HWCDC console, which already sizes its ring (CDC-02). */
+void instrument_uarttx_set(void)
+{
+#if INSTR_UART_TXBUF > 0 && !(ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE)
+    static bool s_done = false;
+    if (s_done)
+        return;
+    s_done = true;
+    instr_uarttx_bytes = (uint32_t)INSTR_UART_TXBUF;
+    instr_uarttx_ok = (Serial.setTxBufferSize(INSTR_UART_TXBUF) >= (size_t)INSTR_UART_TXBUF) ? 1 : 0;
+#endif
+}
+
+void instrument_onrx_boot(void)
+{
+    Serial.printf("[INS] UARTTXBUF bytes=%lu ok=%d\n", (unsigned long)instr_uarttx_bytes, instr_uarttx_ok);
+    Serial.printf("[INS] ONRX_READY\n");
+}
+#endif  /* ESP32 */
+
 #endif  /* INSTRUMENT_ENABLED */

@@ -41,6 +41,7 @@
 static auto& s_hwSerial = Serial;
 
 #include "net_console.h"
+#include "instrument.h"
 #include <configuration.h>        // board defines (HAS_ETHERNET)
 #if defined(HAS_ETHERNET)
 #include <esp32/esp32_flash.h>   // meshcom_settings (Ethernet mode check)
@@ -274,7 +275,13 @@ MeshSerialClass::operator bool()               { return (bool)s_hwSerial; }
 
 size_t MeshSerialClass::write(uint8_t c)
 {
+#if INSTR_ONRX
+    uint32_t _t0 = micros();
+#endif
     s_hwSerial.write(c);
+#if INSTR_ONRX
+    uint32_t _t1 = micros();
+#endif
     if (!isInISR() && s_authenticated)
     {
         if (s_mutex && xSemaphoreTake(s_mutex, 0) == pdTRUE)
@@ -283,12 +290,25 @@ size_t MeshSerialClass::write(uint8_t c)
             xSemaphoreGive(s_mutex);
         }
     }
+#if INSTR_ONRX
+    {
+        uint32_t _t2 = micros();
+        if (!isInISR())     // the += in instrument_onrx_print is non-atomic
+            instrument_onrx_print(_t2 - _t0, _t1 - _t0, _t2 - _t1, 1);
+    }
+#endif
     return 1;
 }
 
 size_t MeshSerialClass::write(const uint8_t* buf, size_t size)
 {
+#if INSTR_ONRX
+    uint32_t _t0 = micros();
+#endif
     s_hwSerial.write(buf, size);
+#if INSTR_ONRX
+    uint32_t _t1 = micros();
+#endif
     if (!isInISR() && s_authenticated)
     {
         if (s_mutex && xSemaphoreTake(s_mutex, 0) == pdTRUE)
@@ -297,6 +317,13 @@ size_t MeshSerialClass::write(const uint8_t* buf, size_t size)
             xSemaphoreGive(s_mutex);
         }
     }
+#if INSTR_ONRX
+    {
+        uint32_t _t2 = micros();
+        if (!isInISR())     // the += in instrument_onrx_print is non-atomic
+            instrument_onrx_print(_t2 - _t0, _t1 - _t0, _t2 - _t1, (uint32_t)size);
+    }
+#endif
     return size;
 }
 
