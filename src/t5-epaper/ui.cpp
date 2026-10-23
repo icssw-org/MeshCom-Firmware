@@ -102,7 +102,6 @@ static const char *line_full_format(int max_c, const char *str1, const char *str
 #define UI_LIST_CREATE(func, handle, list, num, page_num, curr_page)                       \
     static void func##_scr_event(lv_event_t *e)                                            \
     {                                                                                      \
-        lv_obj_t *tgt = (lv_obj_t *)e->target;                                             \
         ui_setting_handle *h = (ui_setting_handle *)e->user_data;                          \
         int n;                                                                             \
         if (e->code == LV_EVENT_CLICKED)                                                   \
@@ -581,8 +580,6 @@ static scr_lifecycle_t screen0 = {
 #if 1
 static lv_obj_t  * calendar;
 static lv_timer_t *get_timer = NULL;
-static lv_meter_indicator_t * indic_min;
-static lv_meter_indicator_t * indic_hour;
 static lv_obj_t *clock_time;
 static lv_obj_t *clock_data;
 static lv_obj_t *clock_ap;
@@ -705,7 +702,6 @@ static lv_obj_t *scr2_lab_buf[20];
 
 static void scr2_list_event(lv_event_t *e)
 {
-    lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t * obj = lv_event_get_target(e);
     for(int i = 0; i < lv_obj_get_child_cnt(obj); i++) 
     {
@@ -726,7 +722,7 @@ static void scr2_list_event(lv_event_t *e)
     }
 }
 
-static lv_obj_t * scr2_create_label(lv_obj_t *parent)
+__attribute__((unused)) static lv_obj_t * scr2_create_label(lv_obj_t *parent)
 {
     lv_obj_t *label = lv_label_create(parent);
     lv_obj_set_width(label, LCD_HOR_SIZE/2-50);
@@ -831,7 +827,7 @@ static void lora_auto_send_event(lv_event_t * e)
         }
     }
     for(int i = 0; i < ARRAY_LEN(scr2_lab_buf); i++){
-        lv_label_set_text_fmt(scr2_lab_buf[i], " ", i);
+        lv_label_set_text_fmt(scr2_lab_buf[i], " ");
     }
     scr2_1_cnt = 0;
 }
@@ -848,7 +844,7 @@ static void lora_timer_event(lv_timer_t *t)
         scr2_1_cnt++;
         if(scr2_1_cnt >= ARRAY_LEN(scr2_lab_buf)) {
             for(int i = 0; i < ARRAY_LEN(scr2_lab_buf); i++){
-                lv_label_set_text_fmt(scr2_lab_buf[i], " ", i);
+                lv_label_set_text_fmt(scr2_lab_buf[i], " ");
             }
             scr2_1_cnt = 0;
         }
@@ -864,7 +860,7 @@ static void lora_timer_event(lv_timer_t *t)
             scr2_1_cnt++;
             if(scr2_1_cnt >= ARRAY_LEN(scr2_lab_buf)) {
                 for(int i = 0; i < ARRAY_LEN(scr2_lab_buf); i++){
-                    lv_label_set_text_fmt(scr2_lab_buf[i], " ", i);
+                    lv_label_set_text_fmt(scr2_lab_buf[i], " ");
                 }
                 scr2_1_cnt = 0;
             }
@@ -919,7 +915,7 @@ static void create2_1(lv_obj_t *parent)
         lv_obj_set_height(scr2_lab_buf[i], LV_SIZE_CONTENT);    /// 1
         lv_obj_set_style_border_width(scr2_lab_buf[i], 0, LV_PART_MAIN);
         lv_label_set_long_mode(scr2_lab_buf[i], LV_LABEL_LONG_DOT);
-        lv_label_set_text_fmt(scr2_lab_buf[i], " ", i);
+        lv_label_set_text_fmt(scr2_lab_buf[i], " ");
     }
 
     scr2_1_sw_btn = lv_btn_create(parent);
@@ -972,13 +968,13 @@ static lv_obj_t *cnt_label;
 static lv_timer_t *lora_send_timer = NULL;
 
 static int send_cnt = 0;
-static int recv_cnt = 0;
+__attribute__((unused)) static int recv_cnt = 0;  // only used by commented-out code
 static int lora_lab_cnt = 0;
 int lab_idx = 0;
 
 static lv_obj_t *scr2_2_cont_info;
 
-static void lora_send_timer_event(lv_timer_t *t)
+__attribute__((unused)) static void lora_send_timer_event(lv_timer_t *t)  // body is commented out
 {
     if(lora_mode_st == LORA_MODE_SEND) return;
     
@@ -1009,7 +1005,7 @@ static void lora_send_timer_event(lv_timer_t *t)
     // }
 }
 
-static void lora_mode_sw_event(lv_event_t * e)
+__attribute__((unused)) static void lora_mode_sw_event(lv_event_t * e)  // registration is commented out
 {
     if(lora_mode_st == LORA_MODE_SEND)
     {
@@ -1040,7 +1036,6 @@ static void ta_event_cb(lv_event_t * e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
-    lv_obj_t * kb = (lv_obj_t *)lv_event_get_user_data(e);
 
     if(code == LV_EVENT_VALUE_CHANGED)
     {
@@ -1080,8 +1075,6 @@ static void ta_event_cb(lv_event_t * e)
         printf("lab_idx=%d, mode=%d, len=%d, %s\n", lab_idx, lora_mode_st, str_len, str);
 
         ui_lora_send(str);
-
-        static bool negation = true;
 
         // if(negation)
         // {
@@ -1244,7 +1237,7 @@ static void scr3_btn_event_cb(lv_event_t * e)
     }
 }
 
-static void scr3_add_img_btn(const char *text, int text_len, int type)
+__attribute__((unused)) static void scr3_add_img_btn(const char *text, int text_len, int type)
 {
     char buf[16] = {0};
     int cut = (text_len > 4) ? min(text_len - 4, (int)sizeof(buf) - 1) : 0;
@@ -1307,7 +1300,6 @@ static void create3(lv_obj_t *parent) {
     ui_photos_img = lv_img_create(scr3_cont_img);
     lv_obj_align(ui_photos_img, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_t *lab1;
     int ret = 0;
     ui_test_get_sd(&ret);
     if(ret) {
@@ -2340,18 +2332,13 @@ static void scr3_GPS_updata(void)
     double lat      = 0; // Latitude
     double lon      = 0; // Longitude
     double speed    = 0; // Speed over ground
-    float alt      = 0; // Altitude
-    float accuracy = 0; // Accuracy
     uint32_t   vsat     = 0; // Visible Satellites
-    int   usat     = 0; // Used Satellites
     uint16_t   year     = 0; // 
     uint8_t   month    = 0; // 
     uint8_t   day      = 0; // 
     uint8_t   hour     = 0; // 
     uint8_t   min      = 0; // 
     uint8_t   sec      = 0; // 
-
-    static int cnt = 0;
 
     lv_label_set_text_fmt(scr3_cnt_lab, " %05d ", ui_gps_get_charsProcessed());
 
@@ -2567,8 +2554,8 @@ static scr_lifecycle_t screen9 = {
 };
 #endif
 //************************************[ UI ENTRY ]******************************************
-static lv_obj_t *menu_keypad;
-static lv_timer_t *menu_timer = NULL;
+__attribute__((unused)) static lv_obj_t *menu_keypad;  // only used by commented-out code
+__attribute__((unused)) static lv_timer_t *menu_timer = NULL;
 
 void menu_taskbar_update_timer_cb(lv_timer_t *t)
 {

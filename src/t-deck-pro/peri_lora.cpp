@@ -9,21 +9,21 @@ static SX1262 radio = new Module(BOARD_LORA_CS, BOARD_LORA_INT, BOARD_LORA_RST, 
 static int lora_mode = LORA_MODE_SEND;
 static String lora_recv_data;
 static bool lora_recv_success = false;
-static int lora_recv_rssi = 0;
+__attribute__((unused)) static int lora_recv_rssi = 0;  // only used by the disabled (commented-out) RX path
 
 // transmit 
-static int transmissionState = RADIOLIB_ERR_NONE;
+__attribute__((unused)) static int transmissionState = RADIOLIB_ERR_NONE;
 static volatile bool transmittedFlag = false;
 
-static void set_transmit_flag(void){
+__attribute__((unused)) static void set_transmit_flag(void){
     transmittedFlag = true;
 }
 
 // receive
-static int receivedState = RADIOLIB_ERR_NONE;
+__attribute__((unused)) static int receivedState = RADIOLIB_ERR_NONE;
 static volatile bool receivedFlag = false;
 
-static void set_receive_flag(void){
+__attribute__((unused)) static void set_receive_flag(void){
     receivedFlag = true;
 }
 

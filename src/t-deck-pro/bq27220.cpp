@@ -98,8 +98,8 @@ bool BQ27220::parameterCheck(uint16_t address, uint32_t value, size_t size, bool
                     "(%d) Data at 0x%04x(%zu): 0x%08lx!=0x%08lx\n", __LINE__,
                     address,
                     size,
-                    *(uint32_t*)&(old_data[0]),
-                    *(uint32_t*)&(buffer[2]));
+                    (unsigned long)*(uint32_t*)&(old_data[0]),
+                    (unsigned long)*(uint32_t*)&(buffer[2]));
             } else {
                 ret = true;
             }
@@ -123,7 +123,7 @@ bool BQ27220::dateMemoryCheck(const BQ27220DMData *data_memory, bool update)
         BQ27220OperationStatus operation_status;
         while(--timeout > 0) {
             if(!getOperationStatus(&operation_status)) {
-                Serial.printf("(%d) Failed to get operation status, retries left %lu", __LINE__, timeout);
+                Serial.printf("(%d) Failed to get operation status, retries left %lu", __LINE__, (unsigned long)timeout);
             } else if(operation_status.reg.CFGUPDATE) {
                 break;
             };
@@ -183,7 +183,7 @@ bool BQ27220::dateMemoryCheck(const BQ27220DMData *data_memory, bool update)
         BQ27220OperationStatus operation_status;
         while(--timeout > 0) {
             if(!getOperationStatus(&operation_status)) {
-                Serial.printf("(%d) Failed to get operation status, retries left %lu\n", __LINE__, timeout);
+                Serial.printf("(%d) Failed to get operation status, retries left %lu\n", __LINE__, (unsigned long)timeout);
             } else if(operation_status.reg.CFGUPDATE != true) {
                 break;
             }
@@ -290,7 +290,7 @@ bool BQ27220::reset(void)
         while (--timeout > 0)
         {
             if(!getOperationStatus(&operat)){
-                Serial.printf("Failed to get operation status, retries left %lu\n", timeout);
+                Serial.printf("Failed to get operation status, retries left %lu\n", (unsigned long)timeout);
             }else if(operat.reg.INITCOMP == true){
                 break;
             }
@@ -300,7 +300,7 @@ bool BQ27220::reset(void)
             Serial.println("INITCOMP timeout after reset");
             break;
         }
-        Serial.printf("(%d) Cycles left: %lu\n", __LINE__, timeout);
+        Serial.printf("(%d) Cycles left: %lu\n", __LINE__, (unsigned long)timeout);
         result = true;
     } while(0);
     return result;
@@ -374,7 +374,7 @@ bool BQ27220::fullAccess(void)
         while (--timeout > 0)
         {
             if(!getOperationStatus(&operat)){
-                Serial.printf("Failed to get operation status, retries left %lu\n", timeout);
+                Serial.printf("Failed to get operation status, retries left %lu\n", (unsigned long)timeout);
             }else {
                 break;
             }

@@ -161,8 +161,7 @@ void BaseDisplay::setWindow(uint16_t left, uint16_t top, uint16_t width, uint16_
     }   // -- Finish calculating window rotation
 
     // Limit window to panel 
-    if (window_left < 0)                    window_left = 0;
-    if (window_top < 0)                     window_top = 0;
+    // window_left / window_top are uint16_t: the lower bound (< 0) can never trigger
     if (rotation % 2) { // Landscape
         if (window_right >= drawing_height - 1)     window_right = drawing_height - 1;
         if (window_bottom >= drawing_width - 1)     window_bottom = drawing_width - 1;

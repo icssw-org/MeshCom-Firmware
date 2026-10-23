@@ -2640,10 +2640,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         TDeck_pro_lora_disp(strPath, strAscii);
 
-        strncpy(pageLastTextLong1[pagePointer], msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
-        pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
-        strncpy(pageLastTextLong2[pagePointer], strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
-        pageLastTextLong2[pagePointer][sizeof(pageLastTextLong2[pagePointer]) - 1] = '\0';
+        // bounded copies, truncation intended (the page shows the head of the text)
+        size_t n1 = strnlen(msg_text, sizeof(pageLastTextLong1[pagePointer]) - 1);
+        memcpy(pageLastTextLong1[pagePointer], msg_text, n1);
+        pageLastTextLong1[pagePointer][n1] = '\0';
+        size_t n2 = strnlen(strAscii.c_str(), sizeof(pageLastTextLong2[pagePointer]) - 1);
+        memcpy(pageLastTextLong2[pagePointer], strAscii.c_str(), n2);
+        pageLastTextLong2[pagePointer][n2] = '\0';
 
         bSetDisplay = false;
 

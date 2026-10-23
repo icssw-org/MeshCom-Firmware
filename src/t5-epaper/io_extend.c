@@ -19,12 +19,6 @@
 // #define PCA_PIN_PC16      0x4000
 // #define PCA_PIN_PC17      0x8000
 
-static bool interrupt_done = false;
-
-static void IRAM_ATTR interrupt_handler(void* arg) {
-    interrupt_done = true;
-    printf("interrupt_handler\n");
-}
 
 
 void io_extend_set_config(uint8_t port, uint8_t mask)
@@ -66,7 +60,7 @@ void io_extend_lora_gps_power_on(bool en)
 
 bool button_read(void)
 {
-    uint8_t io_val0 = pca9555_read_input(BOARD_I2C_PORT, 0);
+    (void)pca9555_read_input(BOARD_I2C_PORT, 0);
     uint8_t io_val = pca9555_read_input(BOARD_I2C_PORT, 1);
     //KBC printf("io_extend : 0x%x  %d\n", io_val, (io_val & (PCA_PIN_PC12 >> 8)));
     return !(io_val & (PCA_PIN_PC12 >> 8));

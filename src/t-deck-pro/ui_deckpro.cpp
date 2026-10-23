@@ -78,7 +78,7 @@ static const char *line_full_format(int max_c, const char *str1, const char *str
 
     len1 = (int)strlen(str1);
 
-    strncpy(global_buf, str1, len1);
+    memcpy(global_buf, str1, len1);
 
     len2 = (int)strlen(str2);
 
@@ -87,7 +87,7 @@ static const char *line_full_format(int max_c, const char *str1, const char *str
         global_buf[j] = ' ';
     }
 
-    strncpy(global_buf + j, str2, len2);
+    memcpy(global_buf + j, str2, len2);
     j = j + len2;
     
     global_buf[j] = '\0'; 
@@ -481,22 +481,12 @@ static scr_lifecycle_t screen1 = {
 static lv_obj_t *scr1_1_cont;
 static lv_obj_t *scr7_cont;
 static lv_obj_t *lora_lab_buf = {0};
-static lv_obj_t *lora_sw_btn;
-static lv_obj_t *lora_sw_btn_info;
 
 static void scr1_1_btn_event_cb(lv_event_t * e)
 {
     if(e->code == LV_EVENT_CLICKED)
     {
         scr_mgr_switch(SCREEN0_ID, false);
-    }
-}
-
-static void lora_mode_sw_event(lv_event_t * e)
-{
-    if(e->code == LV_EVENT_CLICKED)
-    {
-        scr_mgr_switch(SCREEN7_ID, false);
     }
 }
 
@@ -544,8 +534,6 @@ static void create1_1(lv_obj_t *parent)
     lv_label_set_text(lora_lab_buf, strOldLine.c_str());
 
     // Statusbar
-    int status_bar_height = 25;
-
     create_head(parent);
 
     // back
@@ -595,8 +583,6 @@ static scr_lifecycle_t screen1_1 = {
 //************************************[ screen 2 ]****************************************** Setting
 // --------------------- screen 2.1 --------------------- About System
 #if 1
-static lv_obj_t *scr2_1_cont;
-
 static void scr2_1_btn_event_cb(lv_event_t * e)
 {
     if(e->code == LV_EVENT_CLICKED)
@@ -641,7 +627,7 @@ static void create2_1(lv_obj_t *parent)
     
     lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 35);
     
-    lv_obj_t *back2_1_label = scr_back_btn_create(parent, ("About System"), scr2_1_btn_event_cb);
+    scr_back_btn_create(parent, ("About System"), scr2_1_btn_event_cb);
 }
 static void entry2_1(void) 
 {
@@ -689,7 +675,6 @@ static void scr2_btn_event_cb(lv_event_t * e)
 
 static void setting_scr_event(lv_event_t *e)
 {
-    lv_obj_t *tgt = (lv_obj_t *)e->target;
     ui_setting_handle *h = (ui_setting_handle *)e->user_data;
 
     if(e->code == LV_EVENT_CLICKED) {
@@ -911,7 +896,6 @@ static void scr3_GPS_updata(void)
     double alt      = 0; // Altitude
     int hdop        = 0; // hdop
     uint32_t   vsat     = 0; // Visible Satellites
-    int   usat     = 0; // Used Satellites
     uint16_t   year     = 0; // 
     uint8_t   month    = 0; // 
     uint8_t   day      = 0; // 
@@ -1006,7 +990,7 @@ static void create3(lv_obj_t *parent)
     lv_obj_center(scr3_cnt_lab);
     lv_obj_align(scr3_cnt_lab, LV_ALIGN_TOP_RIGHT, -10, 10);
 
-    lv_obj_t *back3_label = scr_back_btn_create(parent, ("GPS"), scr3_btn_event_cb);
+    scr_back_btn_create(parent, ("GPS"), scr3_btn_event_cb);
 }
 
 static void entry3(void) 
@@ -1241,7 +1225,7 @@ static void create4_2(lv_obj_t *parent)
     lv_obj_set_style_border_width(wifi_scan_lab, 0, LV_PART_MAIN);
     lv_label_set_long_mode(wifi_scan_lab, LV_LABEL_LONG_WRAP);
 
-    lv_obj_t *back4_label = scr_back_btn_create(parent, ("Wifi"), scr4_2_btn_event_cb);
+    scr_back_btn_create(parent, ("Wifi"), scr4_2_btn_event_cb);
 }
 static void entry4_2(void) 
 {
@@ -1381,7 +1365,7 @@ static void create5(lv_obj_t *parent)
     lv_obj_align(mh_ta, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_pos(mh_ta, 5, 0);
 
-    lv_obj_t *back5_label = scr_back_btn_create(parent, ("MHeard"), scr5_btn_event_cb);
+    scr_back_btn_create(parent, ("MHeard"), scr5_btn_event_cb);
 }
 static void entry5(void)
 {
@@ -1745,11 +1729,6 @@ static scr_lifecycle_t screen6_2 = {
 #endif
 //************************************[ screen 7 ]****************************************** Other
 #if 1
-static lv_obj_t *scr7_1_cont;
-
-static lv_obj_t *scr7_1_sw_btn;
-static lv_obj_t *scr7_1_sw_btn_info;
-
 static lv_obj_t *scr7_1_send_btn;
 static lv_obj_t *scr7_1_send_btn_info;
 
@@ -1758,9 +1737,6 @@ static lv_obj_t *dm_keypad;
 static lv_obj_t *input_keypad;
 static lv_obj_t *input_info_btn;
 static lv_obj_t *input_info;
-
-static lv_obj_t *lora_sw7_btn;
-static lv_obj_t *lora_sw7_btn_info;
 
 static bool bDM=false;
 static bool bTEXT=true;
@@ -1796,7 +1772,7 @@ static void lora_mode_send()
     // BP-01: origin GUI -- a QRS/QRT/QTA/QRV is written into the on-screen
     // message view (TDeck_pro_lora_disp()), where received texts appear.
     setMsgOrigin(ORIGIN_GUI);
-    int bp_rc = sendMessage(sendtxt, len);
+    (void)sendMessage(sendtxt, len);  // result intentionally ignored, see below
     setMsgOrigin(ORIGIN_NONE);
 
     // BP-07/BP-09 interaction: TDeck_pro_lora_disp() (called from the
@@ -1976,8 +1952,6 @@ static void create7(lv_obj_t *parent)
     lv_obj_center(scr7_1_send_btn_info);
 
     // Statusbar
-    int status_bar_height = 25;
-
     create_head(parent);
 
     // back
@@ -2080,19 +2054,6 @@ void btn_event_handler_track(lv_event_t * e)
     if(code == LV_EVENT_CLICKED)
     {
         btn_handler_track();
-    }
-}
-
-static void cb_8_handler(int state, char keypay_v)
-{
-    if(state == 0)
-    {
-        ui_input_set_keypay_flag();
-
-        if(keypay_v == 0xF9) // SEND
-        {
-            btn_handler_sendpos();
-        }
     }
 }
 
@@ -2263,7 +2224,7 @@ static void create8(lv_obj_t *parent)
         lv_label_set_text(btnlabeltrack, "TRACK ON");
     lv_obj_center(btnlabeltrack);
 
-    lv_obj_t *back8_label = scr_back_btn_create(parent, ("TRACK"), scr8_btn_event_cb);
+    scr_back_btn_create(parent, ("TRACK"), scr8_btn_event_cb);
 }
 static void entry8(void) 
 {
@@ -2924,7 +2885,7 @@ static void create9(lv_obj_t *parent)
 
     /////////////////////////////////////////////////////////////////////////////
     // BACK
-    lv_obj_t *back9_label = scr_back_btn_create(parent, ("Setup"), scr9_btn_event_cb);
+    scr_back_btn_create(parent, ("Setup"), scr9_btn_event_cb);
 }
 static void entry9(void) 
 {
@@ -2948,15 +2909,15 @@ static scr_lifecycle_t screen9 = {
 };
 #endif
 //************************************[ UI ENTRY ]******************************************
-static lv_obj_t *menu_keypad;
-static lv_timer_t *menu_timer = NULL;
+// Only referenced from commented-out code (kept for re-enabling).
+__attribute__((unused)) static lv_obj_t *menu_keypad;
+__attribute__((unused)) static lv_timer_t *menu_timer = NULL;
 
 static void indev_get_gesture_dir(lv_timer_t *t)
 {
     lv_indev_data_t data;
     lv_indev_t * indev_pointer = lv_indev_get_next(NULL);
     lv_coord_t diff_x = 0;
-    lv_coord_t diff_y = 0;
 
     static lv_point_t last_point;
     static bool is_press = false;
@@ -2971,7 +2932,6 @@ static void indev_get_gesture_dir(lv_timer_t *t)
         }
 
         diff_x = last_point.x - data.point.x;
-        diff_y = last_point.x - data.point.y;
 
         if(diff_x > UI_SLIDING_DISTANCE) { // right
             if(ui_get_gesture_dir) {
@@ -3027,7 +2987,6 @@ static void menu_taskbar_update_timer_cb(lv_timer_t *t)
 
     bool charge = 0;
     bool finish = 0;
-    bool wifi = 0;
     int percent = 0;
     int minute = 0;
     bool keylock = false;

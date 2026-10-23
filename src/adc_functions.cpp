@@ -29,8 +29,10 @@ float raw = 0;
 float ADCalpha = 0.1;
 // Filter state lives in the shared Brown block (batt_pipeline.h). ADCexp1 and
 // ADCexp2 stay as globals: --analogset reports them (command_functions.cpp).
+#if defined (ANALOG_PIN)  // only used by loop_ADCFunctions() under this guard
 static batt_brown_t ADCbrown;
 static bool ADCbrownInit = false;
+#endif
 float ADCexp1 = 0.0;
 float ADCexp2 = 0.0;
 

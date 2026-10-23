@@ -54,6 +54,9 @@ Timeout timerSerial;
 #endif //ARDUINO_ARCH_ESP32
 
 // Kompatibilitaets-Macro: DIO1-Pin hat je nach Board verschiedene Namen
+#if defined(BOARD_T5_EPAPER)
+  #include <t5-epaper/utilities.h>   // BOARD_LORA_IRQ is the SX1262 DIO1 (pin defines only)
+#endif
 #ifndef LORA_DIO1
   #if defined(E22_DIO1)
     #define LORA_DIO1 E22_DIO1
@@ -63,6 +66,8 @@ Timeout timerSerial;
     #define LORA_DIO1 RADIO_IRQ_PIN
   #elif defined(PIN_LORA_DIO_1)
     #define LORA_DIO1 PIN_LORA_DIO_1
+  #elif defined(BOARD_LORA_IRQ)
+    #define LORA_DIO1 BOARD_LORA_IRQ
   #else
     #warning "LORA_DIO1 not defined -- safety net digitalRead() disabled"
   #endif

@@ -210,9 +210,10 @@ int lora_get_mode(void)
 
 void lora_receive_loop(void)
 {
-    uint8_t payload[UDP_TX_BUF_SIZE+10];
+    // payload / ibytes are only referenced by the commented-out readData() block below.
+    __attribute__((unused)) uint8_t payload[UDP_TX_BUF_SIZE+10];
     
-    size_t ibytes = UDP_TX_BUF_SIZE;
+    __attribute__((unused)) size_t ibytes = UDP_TX_BUF_SIZE;
 
     if(receivedFlag)
     {
