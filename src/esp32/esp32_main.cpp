@@ -2065,6 +2065,7 @@ void esp32setup()
     #endif
  
     printfdeb("[BLE ]...Waiting a client connection to notify...\n");
+    heapMarkBle();
     #else
     printfdeb("[BLE ]...disabled (DISABLE_BLE)\n");
     #endif
@@ -4260,6 +4261,8 @@ void esp32loop()
             startExternUDP();
         }
     }
+
+    heapMarksPoll();   // [HEAP] boot marks, each once per boot
 
     if (resendPing == 0)
         resendPing = millis();

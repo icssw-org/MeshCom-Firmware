@@ -294,6 +294,10 @@ extern byte_fifo_t udpOutRing;    // UDP-Ausgang (LoRa -> Gateway)
 extern byte_fifo_t phoneRing;     // BLE-Daten zum Telefon (+4 Byte Zeit je Frame ausser 'D')
 extern byte_fifo_t phoneComRing;  // BLE-Kommandos zum Telefon
 
+// ESP32 [HEAP] boot marks (loop_actions_esp32.cpp)
+void heapMarkBle(void);
+void heapMarksPoll(void);
+
 extern bool hasMsgFromPhone;
 
 // ringBufferLoraRX/loraWrite werden jetzt in dedup_functions.h deklariert.

@@ -32,6 +32,7 @@
 #include "configuration.h"
 #include "configuration_global.h"
 #include "regex_functions.h"
+#include "nvs_diag.h"         // --info ...NVS line
 #include "lora_setchip.h"
 #include "spectral_scan.h"
 #include "rtc_functions.h"
@@ -6723,8 +6724,21 @@ void commandAction(char *umsg_text, bool ble)
                 gwLinkFormat(gwl, sizeof(gwl), bGATEWAY, meshcom_settings.node_hasIPaddress, millis());
                 printfdeb("...Server       : %s\n", gwl);
             }
+            #ifdef ESP32
+            { // NVS fill level (saves fail once the 20 KB partition is full)
+                NvsDiagStats nst;
+                if(nvsDiagRead(nst))
+                {
+                    char nvl[64];
+                    nvsDiagFormatInfo(nvl, sizeof(nvl), nst);
+                    printfdeb("...NVS          : %s\n", nvl);
+                }
+                else
+                    printfdeb("...NVS          : n/a\n");
+            }
             #endif
-    
+            #endif
+
             sendDisplayHead(true);
         }
 
