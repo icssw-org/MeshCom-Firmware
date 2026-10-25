@@ -128,6 +128,16 @@ bool sanitize_max_voltage(float &v, float board_min, float board_max, sanitize_l
     return true;
 }
 
+bool sanitize_backlight_level(int &v, int def, const char *field, sanitize_log_fn log)
+{
+    if (v >= 1 && v <= 16)
+        return false;
+
+    report_int(log, field, v, def);
+    v = def;
+    return true;
+}
+
 int resolve_tx_power(int stored, int board_default)
 {
     if (stored == 0 || stored == POWER_NOT_SET)

@@ -78,7 +78,7 @@ extern "C"
 #define LED_GREEN PIN_LED1
 
 #define LED_STATE_ON 0 // State when LED is litted (active low)
-#define BOARD_LED PIN_LED1   // green: --board led heartbeat
+#define BOARD_LED PIN_LED1   // green: heartbeat / RM led
 
 /*
  * Analog pins

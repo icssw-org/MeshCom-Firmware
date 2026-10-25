@@ -18,7 +18,7 @@
 // gwResolve() follows at most ONE redirection and the target must be DIRECT.
 //
 // Pure C++17, no Arduino types, no heap: compiled into the native suite and
-// on ESP32/nRF52. Design:
+// on ESP32/nRF52.
 #pragma once
 
 #include <stdint.h>

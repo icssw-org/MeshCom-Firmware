@@ -6,6 +6,7 @@
 
 #include "loop_functions.h"
 #include "loop_functions_extern.h"   // bDisplayIsOff
+#include <printfdeb_functions.h>
 
 #if defined(HAS_TFT)
 #include "TFT_eSPI.h"
@@ -18,6 +19,56 @@
     {
         pinMode(TFT_BL, OUTPUT);
         analogWrite(TFT_BL, bDisplayIsOff ? 0 : (uint8_t)meshcom_settings.node_contrast);
+    }
+
+    // AU-21: the 160x80 sprite is 25600 B of internal heap (no PSRAM). It is
+    // created/deleted on demand from the loop task, so the AU TLS handshake
+    // can run without it.
+    #define TFT_SPRITE_BYTES (160 * 80 * 2)
+
+    uint32_t tftSpriteBytes(void)
+    {
+        return sprite.created() ? (uint32_t)TFT_SPRITE_BYTES : 0;
+    }
+
+    bool tftSpriteActive(void)
+    {
+        return sprite.created();
+    }
+
+    bool tftSpriteAcquire(void)
+    {
+        if(sprite.created())
+            return true;
+
+        sprite.createSprite(160,80);
+        printfdeb("[TFT];sprite;alloc;%u;%s;free;%lu;blk;%lu\n", (unsigned)TFT_SPRITE_BYTES,
+                  sprite.created() ? "ok" : "fail",
+                  (unsigned long)ESP.getFreeHeap(), (unsigned long)ESP.getMaxAllocHeap());
+        return sprite.created();
+    }
+
+    void tftSpriteRelease(void)
+    {
+        if(!sprite.created())
+            return;
+
+        sprite.deleteSprite();
+        printfdeb("[TFT];sprite;free;%u;free;%lu;blk;%lu\n", (unsigned)TFT_SPRITE_BYTES,
+                  (unsigned long)ESP.getFreeHeap(), (unsigned long)ESP.getMaxAllocHeap());
+    }
+
+    // AU-21: drawn straight through tft, works with the sprite released
+    void tftShowUpdating(void)
+    {
+        tft.fillScreen(TFT_BLACK);
+        tft.setTextFont(2);
+        tft.setTextSize(1);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString("Update...", tft.width() / 2, tft.height() / 2);
+        tft.setTextDatum(TL_DATUM);
+        tftBacklight();
     }
 
     void initTFT()
@@ -33,7 +84,9 @@
 
         tft.setTextFont(0);
         tft.fillScreen(TFT_BLACK);
-        sprite.createSprite(160,80);
+        // AU-21: no sprite while the display is stored off
+        if(!bDisplayOff)
+            tftSpriteAcquire();
     }
 
     #define bigSizeFont     2
@@ -143,6 +196,9 @@
 
     void displayTFT(const String& header)
     {
+        if(!sprite.created())   // AU-21: released
+            return;
+
         sprite.fillRect(0, 0, 160, 19, redColor);
         tftBacklight();
         sprite.setTextFont(2);
@@ -155,6 +211,9 @@
 
     void displayTFT(const String& header, const String& line)
     {
+        if(!sprite.created())   // AU-21: released
+            return;
+
         sprite.fillSprite(TFT_BLACK); 
         sprite.fillRect(0, 0, 160, 19, redColor);
         tftBacklight();
@@ -180,6 +239,9 @@
 
     void displayTFT(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, int wait)
     {
+        if(!sprite.created())   // AU-21: released
+            return;
+
         sprite.fillSprite(TFT_BLACK); 
         sprite.fillRect(0, 0, 160, 19, redColor);
         tftBacklight();
@@ -222,6 +284,9 @@
 
     void displayTFT(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, const String& line5, int wait)
     {
+        if(!sprite.created())   // AU-21: released
+            return;
+
         sprite.fillSprite(TFT_BLACK); 
         sprite.fillRect(0, 0, 160, 19, redColor);
         tftBacklight();

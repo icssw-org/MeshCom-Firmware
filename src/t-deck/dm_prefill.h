@@ -1,5 +1,7 @@
 // Pure logic for the T-Deck DM target prefill and reply button (no LVGL,
 // no Arduino): which callsign goes into the compose "To" field.
+//
+//   pio test -e native -f test_dm_prefill
 #pragma once
 
 #include <string>

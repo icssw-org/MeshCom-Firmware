@@ -1,5 +1,8 @@
 #pragma once
 
+// TXP W1b: der TX-Ring (iRead/iWrite) ist ein Slot-Pool ohne Indizes und nutzt
+// diesen Typ nicht mehr; die Dedup-Ringe verwenden ihn weiter.
+//
 // Ring-Indextyp, aus loop_functions_extern.h herausgeloest (reine
 // Verschiebung, Definition unveraendert). Eigener Header, damit einzelne
 // Ringe in eigene Uebersetzungseinheiten wandern koennen, ohne den kompletten

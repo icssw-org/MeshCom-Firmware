@@ -17,6 +17,16 @@ Setting Parameters
 ============================================
 To set a parameter to the node, use:
 
+	NOTE (RM GUI, request guard): by default (build flag MC_WEB_GUARD=0) the guard below applies only to the
+	remote-management endpoints (/rm*, /?page=remote, /setparam/?rm= and /setparam/?rmstrict=); all other
+	endpoints are unchecked. Built with
+	-D MC_WEB_GUARD=1 every state-changing request (/setparam, /callfunction, /?sendmessage,
+	/?nodepassword and any POST) must carry the header "X-MC: 1" (the web page adds it itself), for example
+	curl -H 'X-MC: 1' 'http://<node>/setparam/?onewire=on'. Without it, or with a Host that is not an IP address,
+	a single-label name or a *.local / *.fritz.box / *.lan / *.home.arpa / *.internal / *.speedport.ip /
+	*.localdomain / *.home name, the node answers 403. Typing a /setparam URL into the browser bar is refused
+	for the same reason.
+
 	/setparam/?setcall=AB1CDE-12		Sets the nodes call-sign 
 	/setparam/?onewiregpio=XX			Sets the GPIO to be used for the 1-Wire bus
 	/setparam/?onewire=on|off			Enables 1-Wire at the configured GPIO
@@ -30,7 +40,15 @@ To set a parameter to the node, use:
 	/setparam/?small=on|off				Set if displayed content should be reduced to fit small displays
 	/setparam/?volt=on|off				If set to on, battery SOC will be displayed as voltage instead of percentage
 	/setparam/?mesh=on|off				Enables mesh / forwarding of received LoRa messages via radio
+	/setparam/?blockcall=LIST|none	Blocked calls (same as --blockcall): comma list of up to 16 calls, CALL blocks all SSIDs, empty or none clears; invalid list = returncode 1, list unchanged; read-back (getparam) is the stored list
 	/setparam/?gateway=on|off			Enables the gateway function
+	/setparam/?rm=on|off				Enables the authenticated RM1 remote management by DM (same as --remotemgmt; stays inactive while no --passwd is set; read-back is the stored switch)
+	/setparam/?rmstrict=on|off			RM brute-force protection (same as --rmstrictsecurity; default off): per-sender lockout, receiver rate limits and the sender budget only with on; read-back is the stored switch)
+	/setparam/?aumode=off|prod|dev		(ESP32 only) Firmware auto update, one setting (off = --autoupdate off; prod|dev = --updchan prod|dev then --autoupdate auto, automatic install at 03:00-05:00 local; read-back is off|notify|prod|dev: "notify" while the console set notify mode, prod/dev only in automatic mode; any other value fails)
+	/setparam/?mtu=1280..1500		Sets the MTU of the node's IP interface (same as --mtu; the web server advertises MSS = MTU - 40; default 1280 for HAMNET / VPN, 1500 for a plain LAN; all boards; read-back is the stored MTU, an out-of-range value fails)
+	/setparam/?autoupdate=off|notify|auto	(ESP32 only) kept for compatibility, the setup page uses aumode: Firmware auto update mode (same as --autoupdate; auto installs at 03:00-05:00 local; read-back is the stored mode)
+	/setparam/?updchan=prod|dev		(ESP32 only) kept for compatibility, the setup page uses aumode: Firmware update channel (same as --updchan; prod = icssw-org releases, dev = DK5EN releases; read-back is the stored channel)
+	/setparam/?ethmtu=1280..1500		kept for compatibility, the setup page uses mtu: same as mtu
 	/setparam/?setlat=XX.xxxxxx			Sets the latitude in decimal degrees (D.D°)
 	/setparam/?setlon=XX.xxxxxx			Sets the longitude in decimal degrees (D.D°)
 	/setparam/?setalt=XXX				Sets the altitude (in meters)
@@ -122,6 +140,9 @@ Functions available so far:
 	/callfunction/?sendpos				The node will send its position or path 
 	/callfunction/?reboot				The node will reboot 
 	/callfunction/?otaupdate			The node will binto the OTA updater
+	/callfunction/?updcheck			(ESP32 only) Check for a newer release now (same as --update check; 200 if the job started, 422 if busy or WiFi is down; read the result on the info page)
+	/callfunction/?updinstall		(ESP32 only) Download and stage the newest release (same as --update install; 200 if the job started or the image is already staged, 422 otherwise)
+	/callfunction/?updapply			(ESP32 only) Apply the staged image now (same as --update apply): the node reboots into Safeboot; 422 if nothing is staged
 
 
 
@@ -137,3 +158,83 @@ To send a message using the Web-API, use:
 
 
 This API call is most likely to be changed soon.
+
+
+
+============================================
+Remote Management of another node (RM1, all boards)
+============================================
+
+The setup page's "Remote management" card signs an authenticated RM1 command with the TARGET node's
+password and sends it as a DM from this node (same protocol as the console; the target must have --remotemgmt on
+and the same --passwd). Two dedicated endpoints serve it; they are NOT part of /setparam or /callfunction.
+The DM may reach the target over LoRa or through the MeshCom server (a gateway node takes the command
+straight from the server); the HMAC tag authenticates it on either path.
+
+SECURITY: the target password travels once, in clear text, over plain HTTP between the browser and this
+node. Do this only inside a LAN you trust, and set a web password on this node (--webpwd) so that nobody
+else can reach these endpoints. This node uses the password only to derive a key (SHA-256), signs the
+command, keeps the derived key in RAM for 10 minutes to verify the reply and never stores it. The node does
+not log it: the request is not echoed to the debug console, the password is not part of any URL, and the
+receive buffer is wiped after the call.
+
+
+POST /rmsend
+
+	Body (application/x-www-form-urlencoded, every value percent-coded):
+
+		dst=AB1CDE-12&pw=<target password>&cmd=gps&args=on
+
+	dst		the target call incl. SSID (upper case)
+	pw		the target's password (1..14 characters)
+	cmd		reboot | status | sendpos | sendtrack | gps | track | display | gateway | mesh | txpower | setout | sync
+	args		on|off for gps/track/display/gateway/mesh, <n> dBm for txpower (<= board maximum),
+			"<a0..b7> <on|off>" for setout, empty otherwise (sync counter: cmd=sync)
+
+	Answer (JSON):	{"ok":true,"ctr":1760000123}		sent, ctr = the counter used (0 for sync)
+			{"ok":false,"err":"<reason>"}		HTTP 422; reason: size | short | form | passwd | cmd | dst |
+							busy (same target within 10 s) | ctr | store | send
+
+	Slot form (a saved node, its key comes from the store; never a password):
+
+		slot=<0..2>&cmd=<cmd>&args=<args>[&force=1][&call=<CALL>]
+
+	call		optional guard (upper or lower case, folded like dst): the send is refused with err "slot"
+			unless the saved slot currently holds exactly that call; nothing is sent, no counter is
+			used. The page's "Run again" posts the row's call, so a slot re-saved in another tab cannot
+			redirect a command to another node. Absent = no guard. call together with dst/pw = err
+			"form"; an empty, over-long (> 9) or invalid call = err "call"; a duplicate = err "form".
+	cmd		folded to lower case by the server.
+	args		reach the wire exactly as typed (names keep their capitals, e.g. "Martin"); the command
+			allowlist decides what is accepted, so "gps ON" is still refused ("cmd"): clients send
+			on/off in lower case themselves.
+
+	Body limit: 260 bytes (err "size" above). Worst case, every field fully %-coded: slot form with call
+	about 220 bytes, dst form 258.
+
+	A GET /rmsend is refused with 405: a password in a URL would be logged by browsers and proxies.
+
+	The command is only SENT: the target's reply arrives later by DM and is verified by the node
+	(see /rmstatus). A reply that fails the check is reported as unverified, never as success.
+
+
+GET /rmstatus
+
+	No parameters. Answer (JSON, printable ASCII only, < > & as \u escapes; never a key, a tag or a password):
+
+	{"on":1,"pw":1,"ok":3,"rej":0,"lock":0,"lockS":0,"hwm":1760000100,
+	 "log":[{"ago":42,"src":"DK5EN-1","ctr":1760000100,"cmd":"gps on","res":"gps=on"}],
+	 "sent":[{"dst":"DK5EN-12","ctr":1760000123,"cmd":"status","ago":8,"rep":1,"ver":1,"reply":"ok v=4.40a up=12"}]}
+
+	on, pw		RM switch of this node, a password is set (yes/no only)
+	ok, rej		commands accepted / rejected since boot (all rejection reasons summed)
+	lock, lockS	at least one sender (callsign-SSID) is locked out (3 rejects of that sender in 90 s) and the
+			seconds until the last such lockout ends; other senders are not affected
+	hwm		persisted counter high-water mark
+	targets		(added to the document above) one object per distinct dst of the sent book plus the target
+			of a command still waiting behind a sync: dst, locked, retry, canForce, cap, pending,
+			chainErr, chainMsg (null or token / sentence)
+	log		the last 5 commands THIS node executed, newest first: seconds ago, requester, counter, command, result
+	sent		the whole book of commands this node SENT (up to 12), newest first, streamed one entry at a
+			time (also fields st = queued|waiting|noanswer|ok|err|unverified and msg = one sentence): rep = some reply arrived, ver = its tag matched
+			(verified); rep=1 with ver=0 is an UNVERIFIED reply, reply holds its raw (truncated) text

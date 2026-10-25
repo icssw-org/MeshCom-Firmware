@@ -5,8 +5,8 @@
  * Why it exists: lora_functions.cpp drags RadioLib and sits in no native
  * build_src_filter, so the base/slot table, the 5/6 and 2/3 retry scaling and the
  * rapid-fire short-circuit had no host test at all. The arithmetic is pure, so it
- * lives here (header-only, no Arduino dependency) and can be
- * unit-tested on the host.
+ * lives here (header-only, no Arduino dependency) and is exercised by
+ * test_csma_timing.
  *
  * lora_functions.cpp (csma_compute_timeout_prio()) is the only production caller.
  *
@@ -61,4 +61,48 @@ static inline unsigned long csmaTimeoutPrio(int attempt, uint8_t priority, long 
     else if (attempt >= 1) base = base * 5 / 6;  // ~17% reduction on 2nd attempt
 
     return base + (unsigned long)jitter_slot * CSMA_SLOT_SIZE;
+}
+
+/* ---- Brief G (LoRa QRT, 2026-10-18): age floor for the hold after a foreign frame ----
+ * The floor applies only to re-arms after a RECEIVED frame. csma_reset() (post-TX)
+ * never calls it. Constants live in configuration_global.h. */
+
+/* 0 = no escalation, 1 = short hold, 2 = rapid hold. stage2_ms == 0 means never. */
+static inline int csmaAgeStageEx(uint32_t age_ms, uint32_t stage1_ms, uint32_t stage2_ms)
+{
+    if (stage2_ms != 0 && age_ms >= stage2_ms) return 2;
+    if (stage1_ms != 0 && age_ms >= stage1_ms) return 1;
+    return 0;
+}
+
+static inline int csmaAgeStage(uint32_t age_ms)
+{
+    return csmaAgeStageEx(age_ms, CSMA_AGE_STAGE1_MS, CSMA_AGE_STAGE2_MS);
+}
+
+/* stage 1: clamp(ACK_WINDOW - airtime - GUARD, MIN, MAX) + jitter*SLOT; stage 2: RAPID_RX + jitter*SLOT */
+static inline unsigned long csmaAgedHoldMs(int stage, unsigned long own_airtime_ms, long jitter_slot)
+{
+    unsigned long hold;
+    if (stage >= 2) {
+        hold = CSMA_RAPID_RX_MS;
+    } else {
+        long v = (long)CSMA_AGE_ACK_WINDOW_MS - (long)own_airtime_ms - (long)CSMA_AGE_GUARD_MS;
+        if (v < (long)CSMA_AGE_SHORT_MIN_MS) v = CSMA_AGE_SHORT_MIN_MS;
+        if (v > (long)CSMA_AGE_SHORT_MAX_MS) v = CSMA_AGE_SHORT_MAX_MS;
+        hold = (unsigned long)v;
+    }
+    return hold + (unsigned long)jitter_slot * CSMA_SLOT_SIZE;
+}
+
+/* Floor decision: min(today, aged) for priorities 1-3 at stage > 0, else today. */
+static inline unsigned long csmaApplyAgeFloor(unsigned long today_ms, uint32_t age_ms, uint8_t priority,
+                                              unsigned long own_airtime_ms, long jitter_slot)
+{
+    if (priority != MSG_PRIO_CRITICAL && priority != MSG_PRIO_HIGH && priority != MSG_PRIO_NORMAL)
+        return today_ms;
+    int stage = csmaAgeStage(age_ms);
+    if (stage == 0) return today_ms;
+    unsigned long aged = csmaAgedHoldMs(stage, own_airtime_ms, jitter_slot);
+    return aged < today_ms ? aged : today_ms;
 }

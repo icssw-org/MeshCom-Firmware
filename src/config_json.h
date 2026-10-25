@@ -243,7 +243,18 @@ struct CfgField
  * test_setter_legal_values_survive_roundtrip pins the known extremes.
  * node_postime (--postime, seconds, no setter ceiling), node_alt (--setalt
  * 0..40000), node_gpsdebug (levels 0..3) and node_ptime (setter fallback
- * TELEMETRY_INTERVAL = 30*60) were narrower and are the cases it caught. */
+ * TELEMETRY_INTERVAL = 30*60) were narrower and are the cases it caught.
+ *
+ * Production lock: node_ptime, node_pingtime and
+ * node_pingmax keep their OLD wide ranges (0..1800, 0..86400, 0..100) on purpose: a
+ * config file exported by an earlier build may hold a value the new setters refuse
+ * (ptime 1800, pingmax 100), and refusing the whole import for that would lock the
+ * operator out of restoring a backup. The import is accepted and prodLockNormalise()
+ * (sub_config_upload before save_settings, and the boot load) repairs the value into
+ * the setter range (ptime 5..120, pingtime 0 or 30..300, pingmax 0..5). node_autoupd is
+ * 0..1: auto (2) is never settable, so an import of 2 is refused and a stored 2 maps
+ * to 1 on load. Spectrum fields are in the setter ranges. node_postime stays 0..86400
+ * (0 = default); prodLockNormalise lifts 1..299 to 300. */
 #define CFG_FIELD_LIST(X)                                                                   \
     X("node_call",     CFG_STR,  node_call,             CFG_NORANGE,        CFG_NOESC)        \
     X("node_short",    CFG_STR,  node_short,            CFG_NORANGE,        CFG_NOESC)        \
@@ -348,6 +359,11 @@ struct CfgField
     X("node_pingmax",  CFG_INT,  node_pingmax,          0.0, 100.0,         CFG_NOESC)        \
     X("node_ethmtu",   CFG_INT,  node_ethmtu,           1280.0, 1500.0,     CFG_NOESC)        \
     X("node_tz",       CFG_STR,  node_tz,               CFG_NORANGE,        CFG_NOESC)        \
+    X("node_stor",     CFG_INT,  node_stor,             0.0, 1.0,           CFG_NOESC)        \
+    X("node_rm",       CFG_INT,  node_rm,               0.0, 1.0,           CFG_NOESC)        \
+    X("node_rmstrict", CFG_INT,  node_rmstrict,         0.0, 1.0,           CFG_NOESC)        \
+    X("node_autoupd",  CFG_INT,  node_autoupd,          0.0, 2.0,           CFG_NOESC)        \
+    X("node_updchan",  CFG_INT,  node_updchan,          0.0, 1.0,           CFG_NOESC)        \
     CFG_FIELD_LIST_PLATFORM(X)
 
 /* Platform-only persisted fields.
@@ -362,10 +378,10 @@ struct CfgField
 #ifdef ESP32
     #define CFG_FIELD_LIST_PLATFORM(X)                                                        \
         X("node_disrot",  CFG_INT, node_disp_rot,          0.0, 270.0,      CFG_NOESC)        \
-        X("node_spstart", CFG_FLT, node_specstart,         0.0, 1.0e9,      CFG_NOESC)        \
-        X("node_spend",   CFG_FLT, node_specend,           0.0, 1.0e9,      CFG_NOESC)        \
-        X("node_spstep",  CFG_FLT, node_specstep,          0.0, 1000.0,     CFG_NOESC)        \
-        X("node_spsamp",  CFG_INT, node_specsamples,       0.0, 65535.0,    CFG_NOESC)        \
+        X("node_spstart", CFG_FLT, node_specstart,         400.0, 960.0,    CFG_NOESC)        \
+        X("node_spend",   CFG_FLT, node_specend,           400.0, 960.0,    CFG_NOESC)        \
+        X("node_spstep",  CFG_FLT, node_specstep,          0.01, 2.0,       CFG_NOESC)        \
+        X("node_spsamp",  CFG_INT, node_specsamples,       500.0, 2048.0,   CFG_NOESC)        \
         X("node_bfakt",   CFG_FLT, node_analog_batt_faktor, CFG_NORANGE,    CFG_NOESC)
 #else
     #define CFG_FIELD_LIST_PLATFORM(X)

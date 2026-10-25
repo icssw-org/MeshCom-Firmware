@@ -92,8 +92,9 @@
 #define GPS_RX_PIN 38
 #define GPS_TX_PIN 39
 
-// White user LED, GPIO35, active HIGH, as on V3: `--board led` heartbeat (off by default). V4R8 has its
-// LED on GPIO46 (GPIO35 is octal PSRAM there); untested on V4 hardware until someone reports.
+// White user LED, GPIO35, active HIGH, as on V3: `--board led` heartbeat (off by default) and RM
+// "led on|flash|off"; REMOTE_LED_PIN derives from BOARD_LED. V4R8 has its LED on GPIO46 (GPIO35 is
+// octal PSRAM there); untested on V4 hardware until someone reports.
 #define BOARD_LED 35
 
 // PA Control Pins (defined in platformio.ini build flags)

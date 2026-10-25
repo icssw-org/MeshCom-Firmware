@@ -23,8 +23,12 @@
 // for e.g. `extern bool bDEEP_SLEEP;`.
 extern void stop_advertising();
 
-// loop_functions.cpp; forward-declared because loop_functions_extern.h is far too heavy for this TU.
+// LED-07 (loop_functions.cpp); forward-declared because loop_functions_extern.h is far too heavy for this TU.
+// remoteLedForceOff() exists wherever REMOTE_LED_PIN is defined, which on nRF52 is BOARD_LED.
 extern void boardLedForceOff(void);
+#if defined(BOARD_LED)
+extern void remoteLedForceOff(void);
+#endif
 
 #if defined(BOARD_T_ECHO)
 // Battery-empty e-ink screen (nrf52_functions.cpp) -- not declared in
@@ -60,7 +64,11 @@ void nrf52EnterDeepSleep()
     // link regardless, so this is enough.
     stop_advertising();
 
-    boardLedForceOff();   // the --board led heartbeat ends dark (no-op without BOARD_LED)
+    // LED-07: RM `led` hold and the --board led heartbeat end dark (no-ops without BOARD_LED)
+    #if defined(BOARD_LED)
+    remoteLedForceOff();
+    #endif
+    boardLedForceOff();
 
     // (c) Display off. RAK4631 has none.
     #if defined(BOARD_HELTEC_T114)

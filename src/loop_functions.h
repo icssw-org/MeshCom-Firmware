@@ -59,16 +59,28 @@ void addBLECommandBack(char *text);
 // Funktionsparameter gueltig; die volle Definition holt sich jede TU, die
 // need/alone tatsaechlich dereferenziert (txring_functions.h/.cpp), selbst.
 struct NbrMask;
-// N-14: kompletter TX-Ring-Enqueue (Slot-Wahl, Payload-Kopie, Prio/Overflow,
-// iWrite/iRead) in einer Funktion unter einem Lock (nRF52) -- siehe
+// N-14: kompletter TX-Ring-Enqueue (Slot-Wahl, Payload-Kopie, Prio/Eviction)
+// in einer Funktion unter einem Lock (nRF52) -- siehe
 // lora_functions.cpp fuer Details/Locking-Begruendung. Rueckgabe: Slot-Index
-// oder -1 wenn die Overflow-Logik den Eintrag verworfen hat.
+// oder < 0 (immer mit `< 0` testen, nie mit `== -1`): -1 = ungueltig
+// (nicht konfiguriertes Rufzeichen, Laenge 0 / > UDP_TX_BUF_SIZE),
+// RING_ENQUEUE_FULL (-2) = Ring voll, nichts Niedrigeres zum Verdraengen.
 // retryCountIn: -1 (Default) laesst retryCount[Slot] unangetastet.
 // kind/need/alone: Nachbarschaftsmatrix Stufe 2 (docs/nbr-wichtigkeit-konzept.md
 // 5.1, txring_functions.h) -- kind=0 ist RING_KIND_OTHER, need/alone=nullptr
 // die leere Maske; der Default gilt fuer jeden Aufrufer, der die Matrix nicht
 // kennt. Literale statt RING_KIND_OTHER, weil dieser Header txring_functions.h
 // nicht einbindet.
+#define RING_ENQUEUE_FULL (-2)
+
+// sendMessage(): braucht ein abgewiesener Eintrag den QTA-Nack? -2 immer
+// (Ring voll, auch bei Tiefe < refuseThreshold, QRT Finding 5); -1 nur als
+// Tiefen-Proxy (Validitaetsfehler liegen typisch unter der Schwelle).
+static inline bool sendMessageNeedsQtaNack(int rc, int depth, int refuseThreshold)
+{
+    return rc == RING_ENQUEUE_FULL || (rc < 0 && depth >= refuseThreshold);
+}
+
 int addTxRingEntry(const uint8_t* frame, uint16_t len, uint8_t ring_status,
                     const char* source, int retryCountIn = -1, bool clearSlotFirst = false,
                     uint8_t kind = 0, const NbrMask *need = nullptr, const NbrMask *alone = nullptr);

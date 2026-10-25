@@ -8,7 +8,9 @@
 #include "tft_display_functions.h"   // #1182: tftBacklight()
 #endif
 #include "printfdeb_functions.h"
+#include "mc_board_id.h" // F4-1a: --id board marker
 #include "command_match.h" // D2-10: commandMatches(), the ladder's matching rule
+#include "blocked_calls.h" // BLK-01: --blockcall
 #include "command_toggles.h" // D2-06: the table-driven on/off toggles
 #include "command_setters.h" // D2-07: numeric argument parse/range/store
 #include "node_position.h"    // DRY-01: hemisphere split / signed decode of the own position
@@ -26,19 +28,22 @@
 #include "ble_json_frame.h"
 #include "ble_phone_drain.h"   // BLE-N1/N2: blePhoneStatsFormat(), g_blePhoneStats
 #include "ble_session.h"       // BLC-03: BleStats, g_bleStats, bleStatsFormat()
-#include "board_led.h"       // boardLedPinFree, ledFitted, ledNotFittedList
+#include "rm_runtime.h"       // RM-06: RmStats, g_rmStats for the --info RM line
+#include "board_led.h"       // LED-04/09/10: boardLedPinFree, ledFitted, ledNotFittedList
 #include "charge_led_mode.h"  // CHG-01/02: SSET2_CHGLED_CFG marker for the charge LED rows
+#include "rm_commands.h"      // RM_NAME_MAX / RM_ATXT_MAX: the --setname / --atxt clip lengths
+#include "rm_validate.h"      // RM GUI W1b: one password validator for --passwd, the web field and the sender
 #include "i2c_scanner.h"
 #include "ArduinoJson.h"
 #include "configuration.h"
 #include "configuration_global.h"
 #include "regex_functions.h"
-#include "nvs_diag.h"         // --info ...NVS line
 #include "lora_setchip.h"
 #include "spectral_scan.h"
 #include "rtc_functions.h"
 #include "time_functions.h" // W4b: convertUNIXtoString() fuer --mheard
 #include "maxhop.h"
+#include "prod_lock.h"     // production-locked settings: gate + clamps
 #include "settings_sanitize.h" // #1132: resolve_tx_power sentinel normalization
 #include "msgstore_settings.h" // store node settings persistence (stage 3, owner C)
 #if defined(ENABLE_MSGSTORE)
@@ -57,6 +62,8 @@
 #ifdef ESP32
 #include "esp32/esp32_functions.h"
 #include "esp32/esp32_sleep.h"
+#include "esp32/fw_update_net.h" // AU-05 (#1187): fwNetStart/fwNetGetStatus for --update, --info AU line
+#include "safeboot/safeboot_ver.h" // AU-12 (#1187): AU_SAFEBOOT_MIN for the capability refuse / status
 #endif
 
 #if defined(NRF52_SERIES)
@@ -118,6 +125,7 @@ extern TinyGPSPlus gps;
 #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
 #include <t-deck/lv_obj_functions.h>
 #include <t-deck/tdeck_debug.h>
+#include <t-deck/tdeck_helpers.h>   // TD-23: --bl
 #include <SD.h>
 #include <esp32/esp32_audio.h>
 #ifdef HEAP_TEST
@@ -127,6 +135,8 @@ extern TinyGPSPlus gps;
 #include "test_inject.h"
 #include "loop_breadcrumb.h"   // F3: --info ...BOOT line
 #include "gw_link_status.h"   // --info ...Server line
+#include "gw_reg_runtime.h"   // --info ...REGISTRATION line
+#include "nvs_diag.h"         // --info ...NVS line
 
 #if defined(BOARD_T5_EPAPER)
 #include <t5-epaper/t5epaper_extern.h>
@@ -202,10 +212,48 @@ static void getBuildDate(char *buf, size_t len)
 
 // CS-01: maxhop.h is Arduino-free (native test), configuration_global.h is not --
 // so the default is written down twice. It must not drift.
+static_assert(PRODLOCK_PING_INTERVAL == PING_INTERVAL && PRODLOCK_PING_MAX == PING_MAX &&
+              PRODLOCK_MAX_HOP_POS == MAX_HOP_POS_DEFAULT && PRODLOCK_HOP_LIMIT == MAX_HOP_LIMIT,
+              "prod_lock.h constants must mirror configuration_global.h");
 static_assert(MAXHOP_TEXT_FALLBACK == MAX_HOP_TEXT_DEFAULT,
               "maxhop.h MAXHOP_TEXT_FALLBACK and configuration_global.h MAX_HOP_TEXT_DEFAULT differ");
 static_assert(MAXHOP_TEXT_MAX < MAX_HOP_LIMIT,
               "the serial --maxhop range must stay inside the on-air hop limit");
+
+#ifdef ESP32
+// AU-08 (#1187): the one place that reboots into Safeboot. `--ota-update` (operator), the AU
+// handover in esp32_main.cpp (auTick) and `--update apply` all end here, so there is exactly
+// one copy of the sequence. Safeboot applies a staged update if it finds an FWS2 record,
+// otherwise it starts the OTA web page. Declared in esp32/fw_update_net.h. Returns false, without
+// restarting, if there is no Safeboot partition or it cannot be made the boot partition.
+bool auRebootToSafeboot(void)
+{
+    // AU-16: refuse before any display, otadata or NVS write; callers check fwNetBootloaderQio() to
+    // tell this from "no safeboot partition". No override.
+    if(!fwNetBootloaderQio())
+    {
+        Serial.printf("[ERR];safeboot;bootloader_dio;renew with the web flasher\n");
+        return false;
+    }
+    if((bWEBSERVER || bGATEWAY) && meshcom_settings.node_hasIPaddress)
+        startDisplay((char*)"OTA using WiFi", meshcom_settings.node_ip, meshcom_settings.node_gw);
+    else
+        startDisplay((char*)"OTA starting as AP", (char*)"192.168.4.1", (char*)"255.255.255.0");
+
+    delay(2000);
+    const esp_partition_t* partition = esp_partition_find_first(esp_partition_type_t::ESP_PARTITION_TYPE_APP, esp_partition_subtype_t::ESP_PARTITION_SUBTYPE_APP_FACTORY, "safeboot");
+    if (!partition)
+        return false;
+
+    // AU-08 R1: a boot partition that did not take must not be followed by a restart: the node
+    // would reboot into the app again and, with a staged record, hand over again at every boot.
+    if (esp_ota_set_boot_partition(partition) != ESP_OK)
+        return false;
+    loopCrumbClear();   // INS-05: deliberate reboot into safeboot
+    esp_restart();
+    return true;   // not reached
+}
+#endif
 
 int commandCheck(char *msg, char *command)
 {
@@ -414,6 +462,9 @@ static void tg_post_board_led_off()
 {
 #if defined(BOARD_LED)   // a NeoPixel-only board (LED_PIN/LED_PIXEL) has no plain pad to drive low
     if(!boardLedPinUsable()) return;   // OneWire/DHT owns the pad (T-Beam GPIO4): never write it
+#if defined(REMOTE_LED_PIN)
+    if(bRemoteLed) return;   // keep an RM `led on` lit
+#endif
     digitalWrite(BOARD_LED, BOARD_LED_ACTIVE_LOW);
 #endif
 }
@@ -597,6 +648,41 @@ static const ToggleRow COMMAND_TOGGLES[] =
 
 static const size_t COMMAND_TOGGLES_N = sizeof(COMMAND_TOGGLES) / sizeof(COMMAND_TOGGLES[0]);
 
+// RM GUI: the ONE place that changes node_passwd (console --passwd and the web Remote page). pw must already
+// have passed rmPasswordProblemN() (the callers do); nullptr, "" or "none" clears the password (open access).
+// Re-keys the net console 2323 and KISS (ESP32), saves the settings. Every change (set or clear) lifts
+// the RM receiver lockout (the operator at the node may always unlock it); clearing the password also
+// switches remote management off (same statement as --remotemgmt off), persisted by the one save below.
+void nodePasswdApply(const char *pw)
+{
+    if(pw == nullptr || pw[0] == 0x00 || strcmp(pw, "none") == 0)
+    {
+        memset(meshcom_settings.node_passwd, 0, sizeof(meshcom_settings.node_passwd));
+        #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
+        netConsoleSetPassword("");
+        #endif
+        #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+        kissSetPassword("");
+        #endif
+        printfdeb("...net console password cleared (open access)\n");
+        meshcom_settings.node_rm = 0;
+        Serial.printf("[RM];off;passwd_cleared\n");
+    }
+    else
+    {
+        snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%-14.14s", pw);
+        #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
+        netConsoleSetPassword(meshcom_settings.node_passwd);
+        #endif
+        #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+        kissSetPassword(meshcom_settings.node_passwd);
+        #endif
+    }
+
+    rmRuntimeReceiverUnlock();
+    save_settings();
+}
+
 void commandAction(char *msg_text, int iphone, bool rxFromPhone)
 {
     bRxFromPhone = rxFromPhone;
@@ -678,9 +764,9 @@ static void cmdArgNotNumber(const char *label, const char *arg)
     printfdeb("%s: <%s> is not a number\n", label, arg);
 }
 
-// DRY-01: the one own-position setter behind --setlat/--setlon/--setalt and the BLE phone frames.
-// Lat/lon are range-checked (-90..90, -180..180) and stored as magnitude + hemisphere
-// letter; on reject nothing is touched. Saving is the caller's job.
+// DRY-01: the one own-position setter behind --setlat/--setlon/--setalt, the BLE phone frames and the
+// RM "pos" write. Lat/lon are range-checked (-90..90, -180..180) and stored as magnitude + hemisphere
+// letter; on reject nothing is touched. Saving is the caller's job (nodeSetPosition() does it on request).
 bool nodeSetLat(double lat)
 {
     double mag;
@@ -722,6 +808,22 @@ void nodeSetAlt(int alt)
 #endif
 }
 
+// All three fields; nothing is touched when lat or lon is out of range.
+bool nodeSetPosition(double lat, double lon, int alt, bool save)
+{
+    if(!nodeLatValid(lat) || !nodeLonValid(lon))
+        return false;
+
+    nodeSetLat(lat);
+    nodeSetLon(lon);
+    nodeSetAlt(alt);
+
+    if(save)
+        save_settings();
+
+    return true;
+}
+
 // Serial/console report of a rejected --setlat/--setlon (same style as the --setalt range reject).
 static void cmdPosRange(const char *label, const char *range, const char *msg_text, bool ble)
 {
@@ -732,6 +834,13 @@ static void cmdPosRange(const char *label, const char *range, const char *msg_te
         addBLECommandBack((char*)msg_text);
     }
 }
+
+// --help text of --updchan: the dev channel exists only in fork builds (fw_update.h)
+#if defined(MC_AU_DEV_CHANNEL)
+#define AU_UPDCHAN_HELP "prod/dev       update source: prod icssw-org, dev DK5EN"
+#else
+#define AU_UPDCHAN_HELP "prod           update source: icssw-org releases"
+#endif
 
 void commandAction(char *umsg_text, bool ble)
 {
@@ -791,13 +900,27 @@ void commandAction(char *umsg_text, bool ble)
     // exact-token; it was then checked mechanically in both directions (no row
     // is intercepted by an earlier rung, no row steals a later rung's input).
 #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
-    // The heartbeat must not take a pad OneWire/DHT owns (T-Beam: both GPIO4). Refuse before the row saves.
+    // LED-04: the heartbeat must not take a pad OneWire/DHT owns (T-Beam: both GPIO4). Refuse before the row saves.
     if(commandMatches(msg_text+2, "board led on") && !boardLedPinUsable())
     {
         printfdeb("\n--board led refused: LED pin is used by OneWire/DHT (see --info, --owgpio)\n");
         return;
     }
 #endif
+    // Production lock: locked settings and the never-settable auto update mode are refused here,
+    // in the inner function, so console, web, BLE and every chained sub-command pass the gate.
+    {
+        const char *lockedName = prodLockRefuses(msg_text+2, INSTRUMENT_ENABLED != 0);
+        if(lockedName != NULL)
+        {
+            snprintf(print_buff, sizeof(print_buff), "[ERR];locked;%s\n", lockedName);
+            Serial.print(print_buff);
+            if(ble)
+                addBLECommandBack(print_buff);
+            return;
+        }
+    }
+
     ToggleAction tgact = toggleApply(COMMAND_TOGGLES, COMMAND_TOGGLES_N, msg_text+2);
 
     if(tgact.matched)
@@ -1042,16 +1165,14 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"postime ") == 0)    // sec
     {
-        sscanf(msg_text+10, "%d", &meshcom_settings.node_postime);
+        bArgOk = cmdArgInt(msg_text+10, &iVar);
 
-        // minimum 3 Minuten
-        if(meshcom_settings.node_postime < (5 * 60))
-            meshcom_settings.node_postime = (5 * 60);
+        if(!bArgOk) { cmdArgNotNumber("postime", msg_text+10); return; }
 
-        // one day at most: the settings schema row (config_json.h) ends there, a
-        // larger value would be clamped to it silently on the next boot
-        if(meshcom_settings.node_postime > (24 * 60 * 60))
-            meshcom_settings.node_postime = (24 * 60 * 60);
+        // 0 = default interval (POSINFO_INTERVAL), 1..299 -> 300 (5 minutes), > 86400 -> one day:
+        // the settings schema row (config_json.h) ends there, a larger value would be clamped
+        // to it silently on the next boot. One source for the bounds: prod_lock.h.
+        meshcom_settings.node_postime = prodClampPostime(iVar);
 
         if(meshcom_settings.node_postime > 0)
             posinfo_interval = meshcom_settings.node_postime;
@@ -1254,24 +1375,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"ota-update") == 0)
     {
-        if((bWEBSERVER || bGATEWAY) && meshcom_settings.node_hasIPaddress)
-            startDisplay((char*)"OTA using WiFi", meshcom_settings.node_ip, meshcom_settings.node_gw);
-        else
-            startDisplay((char*)"OTA starting as AP", (char*)"192.168.4.1", (char*)"255.255.255.0");
-
-        delay(2000);
-        const esp_partition_t* partition = esp_partition_find_first(esp_partition_type_t::ESP_PARTITION_TYPE_APP, esp_partition_subtype_t::ESP_PARTITION_SUBTYPE_APP_FACTORY, "safeboot");
-        if (partition)
-        {
-            esp_ota_set_boot_partition(partition);
-            loopCrumbClear();   // INS-05: deliberate reboot into safeboot
-            esp_restart();
-            return;
-        }
-        else
-        {
-            return;
-        }
+        auRebootToSafeboot();   // returns only without a safeboot partition (or AU-16: DIO bootloader, already reported)
 
         return;
     }
@@ -1294,7 +1398,7 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("MeshCom %-4.4s%-1.1s commands   (a/b = pick one, <x> = value)\n", SOURCE_VERSION, SOURCE_VERSION_SUB);
             delay(100);
 
-            printdeb("\n== Show ==\n--info                  node info\n--pos                   lat/lon/alt/time\n--weather               temp/hum/press (alias --wx)\n--lora                  LoRa settings\n--mheard                heard stations, 12 h (alias --mh)\n--path                  routes per sender (alias --hey)\n--neighbours            neighbour matrix (alias --nbr)\n--msgid                 message-id counter\n--io                    IO config\n--showI2C               scan I2C bus\n--seset                 show sensor settings\n--wifiset               show WiFi settings\n--nodeset               show node settings\n--analogset             show analog settings\n--tel                   show telemetry settings\n--aprsset               show APRS settings\n--regex <call>          test callsign against the validator\n");
+            printdeb("\n== Show ==\n--info                  node info\n--id                    board identity (env, hwid, build tag)\n--pos                   lat/lon/alt/time\n--weather               temp/hum/press (alias --wx)\n--lora                  LoRa settings\n--mheard                heard stations, 12 h (alias --mh)\n--path                  routes per sender (alias --hey)\n--neighbours            neighbour matrix (alias --nbr)\n--msgid                 message-id counter\n--io                    IO config\n--showI2C               scan I2C bus\n--seset                 show sensor settings\n--wifiset               show WiFi settings\n--nodeset               show node settings\n--analogset             show analog settings\n--tel                   show telemetry settings\n--aprsset               show APRS settings\n--regex <call>          test callsign against the validator\n");
             #ifndef DISABLE_NET_CONSOLE
             printdeb("--netconsole            net console status\n");
             #endif
@@ -1317,6 +1421,10 @@ void commandAction(char *umsg_text, bool ble)
             #ifdef ESP32
             printdeb("--ota-update            reboot into safeboot OTA\n");
             #endif
+            #if defined(ESP32)
+            printdeb("--autoupdate notify      firmware update mode (ESP32)\n--updchan " AU_UPDCHAN_HELP "\n");
+            printdeb("--update check/install/status/apply  firmware update now (ESP32)\n");
+            #endif
             printdeb("--conffin               send config-finished to app\n");
             delay(100);
 
@@ -1332,9 +1440,15 @@ void commandAction(char *umsg_text, bool ble)
             // boards where the modal --store lines below do not compile.
             printdeb("--store                 mailbox status (no value: show)\n");
             #if defined(ENABLE_MSGSTORE)
-            printdeb("--store off/own/list/heard store-node mode\n--storecall <list>/none store-node call list (list mode)\n--storetime 1-168       store-node hold hours (no value: show)\n--storeslots 1-50       store-node mailbox slots (no value: show)\n--storenotice on/off    sender-visible custody notice\n--mbox                  store-node mailbox contents\n");
+            printdeb("--store off/own/list/heard store-node mode\n--storecall <list>/none store-node call list (list mode)\n--storetime 1-168       store-node hold hours (no value: show)\n--storeslots 1-50       store-node mailbox slots (no value: show)\n--storenotice on/off    sender-visible custody notice\n--stor on/off           announce mailbox calls to the server (STOR, default off)\n--mbox                  store-node mailbox contents\n");
             #endif
             printdeb("--mesh on/off           relay foreign frames\n");
+            printdeb("--blockcall <list>/none  blocked calls, dropped and not relayed (CALL = all SSIDs)\n");
+            printdeb("--remotemgmt on/off     remote management via LoRa (RM1, needs --passwd)\n");
+            printdeb("--rmstrictsecurity on/off  RM brute-force protection (default off): per-sender lockout,\n"
+                     "                          receiver rate limits and sender spacing/budget. Off = no punishment.\n"
+                     "                          Caution: an off sender can push an on target into its lockout.\n"
+                     "                          Hammering it also drops that sender's counter mark (one extra sync).\n");
             #ifndef BOARD_RAK4630
             #if defined(RELAY_SWITCH)
             printdeb("--relay on/off          board relay output (GPIO)\n");
@@ -1345,7 +1459,7 @@ void commandAction(char *umsg_text, bool ble)
                 defined(SX1262_V3) || defined(USING_SX1262) || defined(BOARD_RAK4630)
             printdeb("--setboostedgain on/off boosted RX gain\n");
             #endif
-            printdeb("--sendpos               send position now\n--sendtrack             send track/APRS beacon now\n--sendhey               send HEY beacon now\n--sendtele              send telemetry now\n--posshot               one-shot position now\n--postime 99            position interval s\n");
+            printdeb("--sendpos               send position now\n--sendtrack             send track/APRS beacon now\n--sendhey               send HEY beacon now\n--sendtele              send telemetry now\n--posshot               one-shot position now\n--postime 300..86400    position interval s (0 = default)\n");
             delay(100);
 
             printdeb("\n== Neighbour matrix ==\n--nbrreset              clear matrix\n--nbrcheck              consistency check\n--nbrrelay off/count/on relay decision: off / log only / active\n--nbrsym on/off         assume symmetric links\n--nbrreport off/auto/on HN neighbour report\n");
@@ -1428,7 +1542,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--setio a0-b7 in/out    MCP IO pin mode\n--setio clear           clear MCP IO config\n--setout a0-b7 on/off   MCP output\n");
             delay(100);
 
-            printdeb("\n== Telemetry ==\n--parm tm1,..,tm5       value names (unused: blank)\n--unit tm1,..,tm5       units (unused: blank)\n--format 1,1,1,1,1      decimals (unused: 0)\n--eqns 0,1,0,...        equations, 15 values\n--values press,hum,temp,onewire,co2  value sources\n--ptime 99              interval min\n");
+            printdeb("\n== Telemetry ==\n--parm tm1,..,tm5       value names (unused: blank)\n--unit tm1,..,tm5       units (unused: blank)\n--format 1,1,1,1,1      decimals (unused: 0)\n--eqns 0,1,0,...        equations, 15 values\n--values press,hum,temp,onewire,co2  value sources\n--ptime 5..120          telemetry interval min\n");
             delay(100);
 
             printdeb("\n== Display ==\n--display on/off        display\n--nomsgall on/off       hide '*' messages\n--contrast 1-255        OLED contrast\n");
@@ -1444,6 +1558,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--persiststat           NVS-only values\n");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             printdeb("--keylock on/off        SYM+K lock\n");
+            printdeb("--bl                    backlight state\n--bl auto on/off        day/night switch\n--bl day|night 1-16     saved level\n");
             #endif
             #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
             printdeb("--board led on/off      board LED\n");
@@ -1457,12 +1572,12 @@ void commandAction(char *umsg_text, bool ble)
             #if defined(ENABLE_SOFTSER)
             printdeb("--softser on/off        soft serial\n--softser send          soft serial send\n--softser app/app0      soft serial app\n--softser baud 9600     soft serial baud\n--softser rxpin 99      soft serial RX pin\n--softser txpin 99      soft serial TX pin\n--softser fixpegel 9.9  fixed level\n--softser fixpegel2 9.9 fixed level 2\n--softser fixtemp 9.9   fixed temperature\n--softserdebug on/off   soft serial debug\n--softserread on/off    show soft serial RX\n");
             #endif
-            printdeb("--pingcall <call>       ping target\n--pingtime 99           ping interval s\n--pingmax 99/max        ping count limit\n--ping start/stop       start/stop pinging\n--spectrum              spectral scan\n");
+            printdeb("--pingcall <call>       ping target\n--pingtime 99           ping interval s (fixed in release builds)\n--pingmax 99/max        ping count limit (fixed in release builds)\n--ping start/stop       start/stop pinging\n--spectrum              spectral scan\n");
             #ifdef HEAP_TEST
             printdeb("--spiffs reset          format SPIFFS\n");
             #endif
             #if MC_DIAG
-            printdeb("--specstart 999.9       scan start MHz\n--specend 999.9         scan end MHz\n--specstep 9.9          scan step MHz\n--specsamples 500-2048  scan samples\n");
+            printdeb("--specstart 999.9       scan start MHz (fixed in release builds)\n--specend 999.9         scan end MHz (fixed in release builds)\n--specstep 9.9          scan step MHz (fixed in release builds)\n--specsamples 500-2048  scan samples (fixed in release builds)\n");
             #endif
             delay(100);
 
@@ -1486,6 +1601,17 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"info") == 0)
     {
         bInfo=true;
+    }
+    else
+    // F4-1a: board identity marker (web flasher autodetect). Reading
+    // mc_board_id here also keeps the object alive through --gc-sections.
+    if(commandCheck(msg_text+2, (char*)"id") == 0)
+    {
+        char idline[128];
+        mcBoardIdLine(idline, sizeof(idline), BOARD_HARDWARE, &mc_board_id);
+        printlndeb(idline);
+
+        return;
     }
     else
     if(commandCheck(msg_text+2, (char*)"all") == 0)
@@ -1667,7 +1793,10 @@ void commandAction(char *umsg_text, bool ble)
             Platform::prepareToSleep();
             #endif
             #if defined(WP_DISP)
-            boardLedForceOff();    // the heartbeat flasher goes dark too
+            #if defined(REMOTE_LED_PIN)
+            remoteLedForceOff();   // RM `led on` must not outlive the node
+            #endif
+            boardLedForceOff();    // LED-12: the heartbeat flasher goes dark too
             loopCrumbClear();   // INS-05: deliberate sleep, RTC memory survives it -- cleared last,
                                 // after the button wait and e-ink refresh that could still trip the WDT
             esp_deep_sleep_start();
@@ -2764,8 +2893,8 @@ void commandAction(char *umsg_text, bool ble)
         if(sVar == "none")
             sVar = "";
 
-        if(sVar.length() > 19)
-            sVar = sVar.substring(0, 19);
+        if(sVar.length() > sizeof(meshcom_settings.node_webpwd) - 1)
+            sVar = sVar.substring(0, sizeof(meshcom_settings.node_webpwd) - 1);
 
         snprintf(meshcom_settings.node_webpwd, sizeof(meshcom_settings.node_webpwd), "%s", sVar.c_str());
 
@@ -2815,8 +2944,8 @@ void commandAction(char *umsg_text, bool ble)
         // delegates to this same handler).
         sVar.replace("#", "");
 
-        if(sVar.length() > 19)
-            sVar = sVar.substring(0, 19);
+        if(sVar.length() > RM_NAME_MAX)
+            sVar = sVar.substring(0, RM_NAME_MAX);
 
         snprintf(meshcom_settings.node_name, sizeof(meshcom_settings.node_name), "%s", sVar.c_str());
 
@@ -3343,32 +3472,25 @@ void commandAction(char *umsg_text, bool ble)
     {
         snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
 
-        _owner_c[14] = 0x00;    // max. 14 chars
+        // RM GUI: strip trailing blanks as every key derivation does, then reject (never truncate) a password
+        // that RM would silently ignore: leading blank, longer than 14, non-printable or non-ASCII.
+        {
+            size_t pwl = strlen(_owner_c);
+            while(pwl > 0 && _owner_c[pwl - 1] == ' ')
+                _owner_c[--pwl] = 0x00;
 
-        if(strcmp(_owner_c, "none") == 0)
-        {
-            // --passwd none clears the password (open access)
-            memset(meshcom_settings.node_passwd, 0, sizeof(meshcom_settings.node_passwd));
-            #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
-            netConsoleSetPassword("");
-            #endif
-            #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
-            kissSetPassword("");
-            #endif
-            printfdeb("...net console password cleared (open access)\n");
-        }
-        else
-        {
-            snprintf(meshcom_settings.node_passwd, sizeof(meshcom_settings.node_passwd), "%-14.14s", _owner_c);
-            #if defined(ESP32) && !defined(DISABLE_NET_CONSOLE)
-            netConsoleSetPassword(meshcom_settings.node_passwd);
-            #endif
-            #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
-            kissSetPassword(meshcom_settings.node_passwd);
-            #endif
+            if(strcmp(_owner_c, "none") != 0)
+            {
+                const RmPasswdProblem pwp = rmPasswordProblemN(_owner_c, pwl);
+                if(pwp != RM_PW_OK)
+                {
+                    printfdeb("...passwd refused: %s\n", rmPasswordProblemText(pwp));
+                    return;
+                }
+            }
         }
 
-        save_settings();
+        nodePasswdApply(_owner_c);   // already validated above; "none" clears
 
         return;
     }
@@ -3584,8 +3706,8 @@ void commandAction(char *umsg_text, bool ble)
         if(sVar == "none")
             sVar = "";
 
-        if(sVar.length() > 39)
-            sVar = sVar.substring(0, 39);
+        if(sVar.length() > RM_ATXT_MAX)
+            sVar = sVar.substring(0, RM_ATXT_MAX);
 
         snprintf(meshcom_settings.node_atxt, sizeof(meshcom_settings.node_atxt), "%s", sVar.c_str());
 
@@ -3721,12 +3843,12 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"pingtime ") == 0)
     {
-        sscanf(msg_text+11, "%d", &meshcom_settings.node_pingtime);
+        bArgOk = cmdArgInt(msg_text+11, &iVar);
 
-        if(meshcom_settings.node_pingtime < 15 || meshcom_settings.node_pingtime > PING_INTERVAL * 5)
-        {
-            meshcom_settings.node_pingtime = PING_INTERVAL;
-        }
+        if(!bArgOk) { cmdArgNotNumber("pingtime", msg_text+11); return; }
+
+        // The main loop pings only at node_pingtime > 29, so 15..29 would be stored but never sent.
+        meshcom_settings.node_pingtime = prodLockPingtimeValid(iVar) ? iVar : PING_INTERVAL;
 
         bReturn = true;
 
@@ -3761,7 +3883,7 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"pingmax max") == 0)
     {
-        meshcom_settings.node_pingmax = 100;
+        meshcom_settings.node_pingmax = PING_MAX;   // was 100, above the PING_MAX upper bound of the setter
 
         bReturn = true;
 
@@ -3770,12 +3892,11 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"pingmax ") == 0)
     {
-        sscanf(msg_text+10, "%d", &meshcom_settings.node_pingmax);
+        bArgOk = cmdArgInt(msg_text+10, &iVar);
 
-        if(meshcom_settings.node_pingmax < 1 || meshcom_settings.node_pingmax > PING_MAX)
-        {
-            meshcom_settings.node_pingmax = PING_MAX;
-        }
+        if(!bArgOk) { cmdArgNotNumber("pingmax", msg_text+10); return; }
+
+        meshcom_settings.node_pingmax = (iVar < 1 || iVar > PING_MAX) ? PING_MAX : iVar;
 
         bReturn = true;
 
@@ -4604,6 +4725,39 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    // BLK-01: call blocklist. Full write; "none" clears; no argument shows.
+    // Not inside ENABLE_MSGSTORE. "blockcall" (exact) and "blockcall " (argument form) cannot shadow each other.
+    if(commandCheck(msg_text+2, (char*)"blockcall ") == 0 || commandCheck(msg_text+2, (char*)"blockcall") == 0)
+    {
+        char blk[BLOCKLIST_CSV_MAX] = {0};
+        char bad[BLOCKLIST_CSV_MAX] = {0};
+        bool blkArg = (commandCheck(msg_text+2, (char*)"blockcall ") == 0);
+        const char *blkIn = blkArg ? msg_text+12 : "";
+        while(*blkIn == ' ')
+            blkIn++;
+
+        if(*blkIn != 0)
+        {
+            if(!blockListSet(blkIn, bad, sizeof(bad)))
+            {
+                Serial.printf("[ERR];blockcall;%s\n", bad);
+                printfdeb("Blocked calls not changed, invalid entry %s (max %d)\n", bad, BLOCKLIST_MAX);
+                return;
+            }
+            if(!blockListSave())
+            {
+                Serial.printf("[ERR];blockcall;save\n");
+                printfdeb("Blocked calls set, but NOT saved to flash (lost at reboot)\n");
+            }
+        }
+
+        blockListGet(blk, sizeof(blk));
+        Serial.printf("[BLOCK];list;%s\n", blk);
+        printfdeb("Blocked calls: %s\n", blk[0] ? blk : "none");
+
+        return;
+    }
+    else
     // Store node (mailbox) settings, stage 3 (docs/dm-stage3-wave-plan-20260914.md)
     // + stage 4 sender-visible custody notice (docs/dm-stage4-plan-20260914.md).
     // T13: persisted through msgstore_settings.cpp's own keys/file, never
@@ -4792,6 +4946,45 @@ void commandAction(char *umsg_text, bool ble)
         return;
     }
     else
+    // SNF-D7 (#1188): STOR = announce the mailbox calls to the central server.
+    // node_stor is an ordinary persisted setting (config_json.h row), default
+    // off until the server operator approves. commandCheck() is exact-token:
+    // "stor" never matches "store ..." and no --store* rung matches "stor", so
+    // the --store family is order-independent. Between the two stor rungs the
+    // argument form ("stor ") must stay first: the bare token also matches
+    // "stor on" (a space ends the token).
+    if(commandCheck(msg_text+2, (char*)"stor ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+7);
+
+        if(casecmp(_owner_c, (char*)"on") == 0)
+        {
+            meshcom_settings.node_stor = 1;
+        }
+        else if(casecmp(_owner_c, (char*)"off") == 0)
+        {
+            meshcom_settings.node_stor = 0;
+        }
+        else
+        {
+            Serial.printf("[ERR];stor;must be on or off\n");
+
+            return;
+        }
+
+        save_settings();
+        Serial.printf("[STOR];%s\n", meshcom_settings.node_stor ? "on" : "off");
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"stor") == 0)
+    {
+        Serial.printf("[STOR];%s\n", meshcom_settings.node_stor ? "on" : "off");
+
+        return;
+    }
+    else
     if(commandCheck(msg_text+2, (char*)"mbox") == 0)
     {
         // F3 (fable-dm-stage4-verdict-20260914.md): matches the STAT path's
@@ -4840,6 +5033,329 @@ void commandAction(char *umsg_text, bool ble)
 
         return;
     }
+    else
+    // RM-06 (#1189): --remotemgmt switches the HMAC-authenticated RM1 remote-management
+    // protocol.
+    // node_rm is an ordinary persisted setting (config_json.h row), default off;
+    // all boards, not behind ENABLE_MSGSTORE. RM1 DMs are only acted on with
+    // node_rm == 1 AND a non-empty node_passwd, so turning it on without a
+    // password still stores the flag but warns. "remotemgmt" is not on the RM core's
+    // allowlist (a positive list), so a remote RM1 command can never reach this rung.
+    // commandCheck() is exact-token (no other rung matches "remotemgmt"); the
+    // argument rung ("remotemgmt ") must stay above the bare one, because a
+    // space ends the token and the bare rung would also match "remotemgmt on".
+    if(commandCheck(msg_text+2, (char*)"remotemgmt ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+13);
+
+        if(casecmp(_owner_c, (char*)"on") == 0)
+        {
+            meshcom_settings.node_rm = 1;
+        }
+        else if(casecmp(_owner_c, (char*)"off") == 0)
+        {
+            meshcom_settings.node_rm = 0;
+        }
+        else
+        {
+            Serial.printf("[ERR];remotemgmt;must be on or off\n");
+
+            return;
+        }
+
+        save_settings();
+        Serial.printf("[RM];%s\n", meshcom_settings.node_rm ? "on" : "off");
+
+        if(meshcom_settings.node_rm && (meshcom_settings.node_passwd[0] == 0x00 || meshcom_settings.node_passwd[0] == ' '))
+            Serial.printf("[RM];warn;no passwd, RM stays inactive\n");
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"remotemgmt") == 0)
+    {
+        Serial.printf("[RM];%s\n", meshcom_settings.node_rm ? "on" : "off");
+
+        return;
+    }
+    else
+    // BF-01: --rmstrictsecurity switches the RM brute-force protection (node_rmstrict, default off):
+    // the receiver's per-sender lockout (3 rejects in 90 s lock the sender for 5 min), the receiver
+    // rate limits and the sender policy (unanswered budget, 10 s spacing, one-shot force). Off, only
+    // the correctness checks (format, allowlist, tag, replay counter) reject. Known consequence of
+    // the OFF default: a sender with the flag off does not hold back, so it can push a target with the
+    // flag ON into its lockout. Console and web only: "rmstrictsecurity" is not on the RM allowlist
+    // (a positive list), so a remote RM1 command can never reach this rung. The argument rung
+    // ("rmstrictsecurity ") stays above the bare one, as for --remotemgmt.
+    if(commandCheck(msg_text+2, (char*)"rmstrictsecurity ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+19);
+
+        if(casecmp(_owner_c, (char*)"on") == 0)
+        {
+            meshcom_settings.node_rmstrict = 1;
+        }
+        else if(casecmp(_owner_c, (char*)"off") == 0)
+        {
+            meshcom_settings.node_rmstrict = 0;
+        }
+        else
+        {
+            Serial.printf("[ERR];rmstrictsecurity;must be on or off\n");
+
+            return;
+        }
+
+        save_settings();
+        Serial.printf("[RM];strict=%s\n", meshcom_settings.node_rmstrict ? "on" : "off");
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"rmstrictsecurity") == 0)
+    {
+        Serial.printf("[RM];strict=%s\n", meshcom_settings.node_rmstrict ? "on" : "off");
+
+        return;
+    }
+    // The leading `else` sits INSIDE the ESP32 block: on nRF52 the block is gone
+    // and the chain continues with the txpower rung's own `else` below.
+    #if defined(ESP32)
+    // AU-03 (#1187): firmware auto update switches. ESP32 only -- the update path
+    // (Safeboot) does not exist on nRF52. Both are ordinary persisted settings
+    // (config_json.h rows); the scheduler that acts on them is a later wave. Neither
+    // is on the RM allowlist (remote_cmd.cpp allowed() is a positive list), so a
+    // remote RM1 command can never reach these rungs. commandCheck() is exact-token:
+    // "autoupdate" / "updchan" collide with no other rung (ladder has no "update*"
+    // name). The argument rung ("autoupdate ") must stay above the bare one, because
+    // a space ends the token and the bare rung would also match "autoupdate notify".
+    else
+    if(commandCheck(msg_text+2, (char*)"autoupdate ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+13);
+
+        if(casecmp(_owner_c, (char*)"off") == 0)
+        {
+            // D1: off no longer exists; notify is the lowest mode. Nothing is changed or saved.
+            Serial.printf("[ERR];autoupdate;off removed, use notify\n");
+
+            return;
+        }
+        else if(casecmp(_owner_c, (char*)"notify") == 0)
+        {
+            meshcom_settings.node_autoupd = 1;
+        }
+        else if(casecmp(_owner_c, (char*)"auto") == 0)
+        {
+            // Unreachable in every build: the prodLockRefuses() gate in commandAction() answers
+            // "--autoupdate auto" first. Kept as defence in depth (AU-12).
+            // AU-12: auto may only be switched on while Safeboot can apply a staged update. Refuse
+            // BEFORE the setting is touched or saved; off and notify never need Safeboot.
+            if(!fwNetSafebootCapable())
+            {
+                if(!fwNetBootloaderQio())
+                    Serial.printf("[ERR];autoupdate;bootloader_dio;renew with the web flasher\n");
+                else
+                {
+                    Serial.printf("[ERR];autoupdate;safeboot_too_old;ver;%d;need;%d\n", fwNetSafebootVersion(), AU_SAFEBOOT_MIN);
+                    Serial.printf("[AU];note;flash once with the web flasher to install the new Safeboot\n");
+                }
+
+                return;
+            }
+            meshcom_settings.node_autoupd = 2;
+        }
+        else
+        {
+            Serial.printf("[ERR];autoupdate;must be notify or auto\n");
+
+            return;
+        }
+
+        save_settings();
+        Serial.printf("[AU];mode;%s\n", meshcom_settings.node_autoupd == 2 ? "auto" : "notify");
+        // WiFi STA is started at boot only (esp32_main.cpp gate); AU on a node without
+        // any other network service needs one reboot to bring WiFi up.
+        if(meshcom_settings.node_autoupd > 0 && !meshcom_settings.node_hasIPaddress)
+            Serial.printf("[AU];note;WiFi not up -- reboot to start it for auto update\n");
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"autoupdate") == 0)
+    {
+        Serial.printf("[AU];mode;%s\n", meshcom_settings.node_autoupd == 2 ? "auto" : "notify");
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"updchan ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+10);
+
+        if(casecmp(_owner_c, (char*)"prod") == 0)
+        {
+            meshcom_settings.node_updchan = 0;
+        }
+        else if(casecmp(_owner_c, (char*)"dev") == 0)
+        {
+            #if defined(MC_AU_DEV_CHANNEL)   // dev channel: fork builds only (fw_update.h)
+            meshcom_settings.node_updchan = 1;
+            #else
+            Serial.printf("[ERR];updchan;no dev channel in this build\n");
+
+            return;
+            #endif
+        }
+        else
+        {
+            Serial.printf("[ERR];updchan;must be prod or dev\n");
+
+            return;
+        }
+
+        save_settings();
+        Serial.printf("[AU];chan;%s\n", meshcom_settings.node_updchan ? "dev" : "prod");
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"updchan") == 0)
+    {
+        Serial.printf("[AU];chan;%s\n", meshcom_settings.node_updchan ? "dev" : "prod");
+
+        return;
+    }
+    // AU-05 (#1187): run the update steps now. "update " (argument form) is an exact
+    // prefix, so it never matches "updchan" / "autoupdate" and vice versa. Not on the RM
+    // allowlist. All three answer at once; the network job runs in the background, the
+    // result is read with --update status.
+    else
+    if(commandCheck(msg_text+2, (char*)"update ") == 0)
+    {
+        snprintf(_owner_c, sizeof(_owner_c), "%s", msg_text+9);
+
+        FwNetStatus _au;
+        fwNetGetStatus(_au);
+        const bool _auBusy = (_au.state == FWS_BUSY);
+        const bool _auNewer = _au.availNewer && _au.availTag[0] != '\0';
+
+        if(casecmp(_owner_c, (char*)"check") == 0)
+        {
+            if(_auBusy || !fwNetStart(FWJ_CHECK, (uint8_t)meshcom_settings.node_updchan))
+                Serial.printf("[ERR];update;check not started (busy or no WiFi)\n");
+            else
+                Serial.printf("[AU];check;started;chan;%s\n", meshcom_settings.node_updchan ? "dev" : "prod");
+        }
+        else if(casecmp(_owner_c, (char*)"install") == 0)
+        {
+            if(_auBusy)
+            {
+                Serial.printf("[ERR];update;busy\n");
+            }
+            else if(!fwNetBootloaderQio())
+            {
+                // AU-16: the handover is blocked anyway, so do not download (web "Install" lands here too)
+                Serial.printf("[ERR];update;bootloader_dio;renew with the web flasher\n");
+            }
+            else if(_au.staged && _au.availTag[0] != '\0' && strcmp(_au.stagedTag, _au.availTag) == 0)
+            {
+                // before the availNewer test: staging records the tag as installed, so the
+                // next CHECK reports "not newer" and this case would otherwise be unreachable
+                Serial.printf("[AU];install;already_staged;%s\n", _au.stagedTag);
+            }
+            else if(_auNewer && !_au.installable)
+            {
+                // newer release without a matching .autoupdate asset and digest: nothing to download
+                Serial.printf("[AU];install;no_asset;%s\n", _au.availTag);
+            }
+            else if(_auNewer)
+            {
+                if(fwNetStart(FWJ_DOWNLOAD, (uint8_t)meshcom_settings.node_updchan))
+                    Serial.printf("[AU];install;started;%s;handover;%s\n", _au.availTag, "manual");
+                else
+                    Serial.printf("[ERR];update;install not started (busy or no WiFi)\n");
+            }
+            else
+            {
+                // nothing known to be newer yet: check first, the user retries when it is done
+                if(fwNetStart(FWJ_CHECK, (uint8_t)meshcom_settings.node_updchan))
+                    Serial.printf("[AU];install;check_first;retry_when_done\n");
+                else
+                    Serial.printf("[ERR];update;check not started (busy or no WiFi)\n");
+            }
+        }
+        else if(casecmp(_owner_c, (char*)"apply") == 0)
+        {
+            // operator action (bench): hand over now, no update window, no idle / phone / battery
+            // test. Needs a valid staged record; fwNetLoadRecord() drops a stale one.
+            FwStageRecord _rec;
+            if(_auBusy)
+            {
+                Serial.printf("[ERR];update;busy\n");
+            }
+            else if(!fwNetLoadRecord(_rec))
+            {
+                Serial.printf("[AU];apply;nothing_staged\n");
+            }
+            else
+            {
+                // the operator may have updated Safeboot meanwhile: try even with the old-Safeboot flag
+                if(!fwNetBootloaderQio())
+                {
+                    // AU-16: the Safeboot handover guard would refuse anyway; stop before the NVS marker
+                    Serial.printf("[ERR];safeboot;bootloader_dio;renew with the web flasher\n");
+                    return;
+                }
+                if(fwNetSafebootOld())
+                    Serial.printf("[AU];apply;note;old_safeboot_flag_set_trying_anyway\n");
+                else if(!fwNetSafebootCapable())
+                    Serial.printf("[AU];apply;note;safeboot_too_old;ver;%d;trying_anyway\n", fwNetSafebootVersion());
+                if(!fwNetMarkHandover(_rec.tag))   // before the reboot, as in the auto path
+                {
+                    Serial.printf("[ERR];update;nvs\n");
+                }
+                else
+                {
+                    Serial.printf("[AU];handover;%s\n", _rec.tag);
+                    if(!auRebootToSafeboot())
+                    {
+                        fwNetUnmarkHandover();
+                        if(fwNetBootloaderQio())   // AU-16: the DIO guard has reported itself
+                            Serial.printf("[ERR];update;no safeboot partition\n");
+                    }
+                }
+            }
+        }
+        else if(casecmp(_owner_c, (char*)"status") == 0)
+        {
+            Serial.printf("[AU];status;mode;%s;chan;%s;avail;%s;newer;%d;staged;%s;busy;%d;err;%s;safeboot;%s;sbver;%d;sbneed;%d;boot;%s;spi0;0x%08x\n",
+                meshcom_settings.node_autoupd == 2 ? "auto" : "notify",
+                meshcom_settings.node_updchan ? "dev" : "prod",
+                _au.availTag[0] ? _au.availTag : "none",
+                _au.availNewer ? 1 : 0,
+                (_au.staged && _au.stagedTag[0]) ? _au.stagedTag : "none",
+                _auBusy ? 1 : 0,
+                _au.lastErr[0] ? _au.lastErr : "none",
+                fwNetSafebootWhy(),
+                fwNetSafebootVersion(), AU_SAFEBOOT_MIN,
+                fwNetBootloaderQio() ? "qio" : "dio", (unsigned)fwNetSpi0Ctrl());
+        }
+        else
+        {
+            Serial.printf("[ERR];update;must be check, install, status or apply\n");
+        }
+
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"update") == 0)
+    {
+        Serial.printf("[ERR];update;must be check, install, status or apply\n");
+
+        return;
+    }
+    #endif
     else
     if(commandCheck(msg_text+2, (char*)"txpower ") == 0)
     {
@@ -5201,6 +5717,8 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_cleanflash,
                       meshcom_settings.node_fwversion);
 
+        Serial.printf("[PERSIST];gw;gwrf;%d;gwrc;%s\n", meshcom_settings.node_gwrf, meshcom_settings.node_gwrc);
+
         #if defined(ESP32) && (defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO))
         Serial.printf("[PERSIST];stat;flash;%d;sd;%d;immediate;%d;mute;%d\n",
                       meshcom_settings.node_persist_to_flash ? 1 : 0,
@@ -5208,14 +5726,17 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_immediate_save ? 1 : 0,
                       meshcom_settings.node_mute ? 1 : 0);
 
-        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d\n",
+        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d;blday;%d;blnight;%d;blauto;%d\n",
                       meshcom_settings.node_keyboardlock ? 1 : 0,
                       meshcom_settings.node_backlightlock ? 1 : 0,
                       meshcom_settings.node_kbllightlock ? 1 : 0,
                       meshcom_settings.node_kbl_sync ? 1 : 0,
                       meshcom_settings.node_map,
                       meshcom_settings.node_modus,
-                      meshcom_settings.node_wifion ? 1 : 0);
+                      meshcom_settings.node_wifion ? 1 : 0,
+                      meshcom_settings.node_bl_day,
+                      meshcom_settings.node_bl_night,
+                      meshcom_settings.node_bl_auto ? 1 : 0);
 
         // One path per line: these are free-text char[128] and a ';' inside a
         // path would otherwise split a field of the line above.
@@ -5285,6 +5806,41 @@ void commandAction(char *umsg_text, bool ble)
         meshcom_settings.node_immediate_save = (commandCheck(msg_text+2, (char*)"immediatesave on") == 0);
         save_settings();
         Serial.printf("[PERSIST];immediate;%d\n", meshcom_settings.node_immediate_save ? 1 : 0);
+        return;
+    }
+    else
+    // TD-23: saved backlight levels and the auto day/night switch. Every form
+    // answers with the [TFT];bl state line; a change is saved and applied at once.
+    // The bare "bl" comes last: an exact token also matches "bl <argument>".
+    if(commandCheck(msg_text+2, (char*)"bl auto on") == 0 ||
+       commandCheck(msg_text+2, (char*)"bl auto off") == 0)
+    {
+        meshcom_settings.node_bl_auto = (commandCheck(msg_text+2, (char*)"bl auto on") == 0);
+        save_settings();
+        brightnessTick(true);
+        tdeck_refresh_SET_view();
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"bl day ") == 0 ||
+       commandCheck(msg_text+2, (char*)"bl night ") == 0)
+    {
+        const bool night = (commandCheck(msg_text+2, (char*)"bl night ") == 0);
+        int seen = 0;
+        int *dest = night ? &meshcom_settings.node_bl_night : &meshcom_settings.node_bl_day;
+        if(cmdStoreInt(msg_text + (night ? 11 : 9), dest, 1, 16, &seen) != CMD_SET_OK)
+        {
+            Serial.printf("[TFT];bl;error;level;%d;range;1-16\n", seen);
+            return;
+        }
+        save_settings();
+        brightnessTick(true);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"bl") == 0)
+    {
+        brightnessLogState("show");
         return;
     }
     #endif
@@ -6271,12 +6827,13 @@ void commandAction(char *umsg_text, bool ble)
     else
     if(commandCheck(msg_text+2, (char*)"ptime ") == 0)
     {
-        sscanf(msg_text+8, "%d", &meshcom_settings.node_parm_time);
+        bArgOk = cmdArgInt(msg_text+8, &iVar);
 
-        if(meshcom_settings.node_parm_time < 5 || meshcom_settings.node_parm_time > 120)
-        {
-            meshcom_settings.node_parm_time = TELEMETRY_INTERVAL;
-        }
+        if(!bArgOk) { cmdArgNotNumber("ptime", msg_text+8); return; }
+
+        // nearest bound of 5..120 minutes; the old fallback TELEMETRY_INTERVAL is 30*60 and landed
+        // at 1800 minutes (30 hours)
+        meshcom_settings.node_parm_time = prodClampPtime(iVar);
 
         bReturn = true;
 
@@ -6551,7 +7108,7 @@ void commandAction(char *umsg_text, bool ble)
 
             printfdeb("...DEBUG %s ...DEBUG %s\n", (bDEBUGCSV?"csv":"man"), (bDEBUGEN?"en":"de"));
 
-            // LED readback
+            // LED-09: LED readback (charge LED shows the effective mode, "(RM x)" while an RM override is active)
             {
                 const LedFitted lf = ledFittedNow();
                 const char *bledTxt = !lf.board ? "not fitted" : !bUSER_BOARD_LED ? "off" : boardLedPinUsable() ? "on" : "on (pin busy)";   // OneWire/DHT holds the pad
@@ -6559,7 +7116,14 @@ void commandAction(char *umsg_text, bool ble)
                 if(!lf.charge)
                     printfdeb("...CHARGE LED: not fitted\n");
                 else
-                    printfdeb("...CHARGE LED: %s\n", bCHARGE_LED ? "auto" : "off");
+                {
+                #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
+                    if(chargeLedOverrideActive())
+                        printfdeb("...CHARGE LED: %s (RM %s)\n", bCHARGE_LED ? "auto" : "off", chargeLedModeName(chargeLedEffective()));
+                    else
+                #endif
+                        printfdeb("...CHARGE LED: %s\n", bCHARGE_LED ? "auto" : "off");
+                }
             }
 
             // TXCAPTURE steht hier, seit tools/meshlogger.py den Vorzustand jedes
@@ -6621,6 +7185,35 @@ void commandAction(char *umsg_text, bool ble)
             bleStatsFormat(g_bleStats, bleLinkStats, sizeof bleLinkStats);
             printfdeb("...%s\n", bleLinkStats);
 
+            // RM-06 (#1189): RM1 remote management -- switch plus the reject/accept counters.
+            {
+                const RmStats &rm = g_rmStats;
+                unsigned long rmRej = (unsigned long)rm.rej_format + rm.rej_tag + rm.rej_replay + rm.rej_blocked +
+                                      rm.rej_rate + rm.rej_lockout + rm.rej_disabled;
+                printfdeb("...RM: %s strict=%s ok=%lu rej=%lu\n", meshcom_settings.node_rm ? "on" : "off",
+                         meshcom_settings.node_rmstrict ? "on" : "off", (unsigned long)rm.ok, rmRej);
+            }
+
+            #if defined(ESP32)
+            // AU-03 (#1187): firmware auto update mode and channel.
+            printfdeb("...AU: %s chan=%s\n", meshcom_settings.node_autoupd == 2 ? "auto" : "notify",
+                meshcom_settings.node_updchan ? "dev" : "prod");
+            #ifndef MC_ENV_NAME
+            #define MC_ENV_NAME ""
+            #endif
+            #ifndef MC_BUILD_TAG
+            #define MC_BUILD_TAG ""
+            #endif
+            printfdeb("...AU env=%s tag=%s\n", MC_ENV_NAME, MC_BUILD_TAG[0] ? MC_BUILD_TAG : "(local)");
+            {
+                // AU-05: what the last check found and what is staged for the Safeboot apply
+                FwNetStatus _auInfo;
+                fwNetGetStatus(_auInfo);
+                printfdeb("...AU avail=%s staged=%s\n", _auInfo.availTag[0] ? _auInfo.availTag : "none",
+                    (_auInfo.staged && _auInfo.stagedTag[0]) ? _auInfo.stagedTag : "none");
+            }
+            #endif
+
             // CS-01: max_hop_text ist persistent und ueber --maxhop setzbar,
             // max_hop_pos bleibt der Compile-Default.
             printfdeb("...MAXHOP text %i / pos %i\n", meshcom_settings.max_hop_text, meshcom_settings.max_hop_pos);
@@ -6628,9 +7221,9 @@ void commandAction(char *umsg_text, bool ble)
 #if defined(ENABLE_MSGSTORE)
             // Store node (mailbox), stage 3 + stage 4 notice --
             // docs/dm-stage3-wave-plan-20260914.md / dm-stage4-plan-20260914.md.
-            printfdeb("...STORE mode=%s used=%d/%u time=%uh notice=%s\n",
+            printfdeb("...STORE mode=%s used=%d/%u time=%uh notice=%s stor=%s\n",
                 msgstoreModeName(msgstoreMode()), msgstoreUsed(), (unsigned)msgstoreSlots(), (unsigned)msgstoreHoldHours(),
-                (msgstoreNotice()?"on":"off"));
+                (msgstoreNotice()?"on":"off"), (meshcom_settings.node_stor?"on":"off"));
 #endif
 
             for(int ig=0;ig<6;ig++)
@@ -6779,8 +7372,22 @@ void commandAction(char *umsg_text, bool ble)
                 gwLinkFormat(gwl, sizeof(gwl), bGATEWAY, meshcom_settings.node_hasIPaddress, millis());
                 printfdeb("...Server       : %s\n", gwl);
             }
+            if(gwRegBlocked())
+                printfdeb("...REGISTRATION: failed\n");
+            { // BLK-01
+                char blk[BLOCKLIST_CSV_MAX];
+                blockListGet(blk, sizeof(blk));
+                printfdeb("...BLOCKED: %s (dropped %lu)\n", blk[0] ? blk : "none", (unsigned long)blockListDrops());
+            }
             #ifdef ESP32
-            { // NVS fill level (saves fail once the 20 KB partition is full)
+            printfdeb("...HEAP         : free %lu min %lu blk %lu\n", (unsigned long)ESP.getFreeHeap(),
+                      (unsigned long)ESP.getMinFreeHeap(), (unsigned long)ESP.getMaxAllocHeap());
+            #if defined(HAS_TFT)
+            printfdeb("...TFT sprite   : %lu B%s\n", (unsigned long)tftSpriteBytes(), bDisplayOff ? " (display off)" : "");
+            #endif
+            #endif
+            #ifdef ESP32
+            { // RM-NVS-01: NVS fill level (RM "remember password" fails when the 20 KB partition is full)
                 NvsDiagStats nst;
                 if(nvsDiagRead(nst))
                 {
@@ -6793,7 +7400,7 @@ void commandAction(char *umsg_text, bool ble)
             }
             #endif
             #endif
-
+    
             sendDisplayHead(true);
         }
 
@@ -7038,7 +7645,7 @@ void sendNodeSetting()
     nsetdoc["GWNPOS"] = bGATEWAY_NOPOS;
     nsetdoc["NOALL"] = bNoMSGtoALL;
     nsetdoc["NOPMOTHER"] = (bool)(meshcom_settings.node_sset3 & 0x8000);
-    // a key is left out of SN when that LED is not fitted (listed in SN1 "LEDNF")
+    // LED-10 (design 6.1): a key is left out of SN when that LED is not fitted (listed in SN1 "LEDNF")
     const LedFitted ledfit = ledFittedNow();
     if(ledfit.board)
         nsetdoc["BLED"] = bUSER_BOARD_LED;
@@ -7078,7 +7685,7 @@ void sendNodeSetting()
     #endif
     char ledNf[16];   // "BLED,CHGLED" = 11 chars + NUL
     if(ledNotFittedList(ledfit, ledNf, sizeof(ledNf)) > 0)
-        nsetdoc1["LEDNF"] = ledNf;   // worst case SN1 167 + 56 (MHOP..KISS) + 22 = 245, only with VIACALL 39 + WSPWD 19 + TZ 39 together; LEDNF is dropped first then
+        nsetdoc1["LEDNF"] = ledNf;   // LED-10: worst case SN1 167 + 56 (MHOP..KISS) + 22 = 245, only with VIACALL 39 + WSPWD 19 + TZ 39 together; LEDNF is dropped first then
 
     sendBleJsonRegister(nsetdoc1); // JSN-01
 }

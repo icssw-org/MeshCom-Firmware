@@ -2,11 +2,75 @@
 #include "ElegantOTA.h"
 #include "ota.h"
 #include "ota_state.h"
+#include "zstream.h"
+#include <miniz.h> // ROM tinfl_decompress (ESP32 and ESP32-S3), as in main.cpp
+#include <new>
 #include "safeboot_log.h" // keep last: renames Serial on the S3
 
 // Owned by main.cpp; driven from the handlers below (docs/safeboot-ota-contract.md).
 extern safeboot::OtaSession g_ota;
 extern portMUX_TYPE g_ota_mux;
+
+// Maps the Updater error left behind by a failed Update.end() to the contract
+// abort reason, so a field report can tell a transfer problem (md5_mismatch)
+// from an image problem (not_bootable / activate_failed).
+static_assert(UPDATE_ERROR_MD5 == 7 && UPDATE_ERROR_READ == 3 && UPDATE_ERROR_ACTIVATE == 9,
+              "OtaSession::fromUpdaterError codes must mirror Update.h");
+
+// ---------------------------------------------------------------------------
+// .autoupdate upload: push-model inflate straight into Update (zstream.h).
+// ---------------------------------------------------------------------------
+static_assert(ZS_ST_DONE == TINFL_STATUS_DONE && ZS_ST_NEEDS_MORE_INPUT == TINFL_STATUS_NEEDS_MORE_INPUT &&
+              ZS_ST_HAS_MORE_OUTPUT == TINFL_STATUS_HAS_MORE_OUTPUT,
+              "zstream.h status values must mirror miniz.h tinfl_status");
+
+// One tinfl_decompress() call, same shape as FwTinflDec in main.cpp: zlib header
+// and adler32 are parsed and checked by tinfl, the output goes to the circular
+// dictionary (no NON_WRAPPING flag). HAS_MORE_INPUT is always set -- the stream
+// end is DONE, a stream that just stops is caught at the final upload frame.
+struct OtaTinflDec {
+  tinfl_decompressor d;
+  int step(const uint8_t *in, size_t *inSize, uint8_t *dictStart, uint8_t *outNext, size_t *outSize, bool more) {
+    mz_uint32 flags = TINFL_FLAG_PARSE_ZLIB_HEADER | (more ? TINFL_FLAG_HAS_MORE_INPUT : 0);
+    return (int)tinfl_decompress(&d, in, inSize, dictStart, outNext, outSize, flags);
+  }
+};
+
+// Everything one zlib upload needs, in a single heap block (about 44 KB),
+// allocated at the first zlib chunk; freed on done, error, a new /ota/start and
+// disconnect, and after a stall abort at the next chunk (loop-task aborts never
+// free it: the AsyncTCP task owns it).
+struct OtaZState {
+  OtaTinflDec dec;
+  ZStreamInflater<OtaTinflDec> inf;
+  uint8_t dict[TINFL_LZ_DICT_SIZE];
+};
+
+// Inflated bytes go to the Updater; a short write is a failure.
+struct OtaUpdateSink {
+  bool write(const uint8_t *src, size_t n) { return Update.write(const_cast<uint8_t *>(src), n) == n; }
+};
+
+// Verdict of a failed upload, from inside the critical section the state machine needs.
+static void otaFail(safeboot::OtaSession::Reason r) {
+  portENTER_CRITICAL(&g_ota_mux);
+  g_ota.onVerified(millis(), false, r);
+  portEXIT_CRITICAL(&g_ota_mux);
+}
+
+void ElegantOTAClass::freeZ() {
+  if (_z != nullptr) {
+    free(_z);
+    _z = nullptr;
+  }
+}
+
+void ElegantOTAClass::resetUploadFormat() {
+  freeZ();
+  _upload_format = FMT_UNDECIDED;
+  _z_done = false;
+  _upload_dead = false;
+}
 
 ElegantOTAClass::ElegantOTAClass(){}
 
@@ -97,6 +161,10 @@ void ElegantOTAClass::begin(ELEGANTOTA_WEBSERVER *server, const char * username,
       }
 
       _update_error_str = "";
+
+      // New session: drop any zlib state of a superseded upload (the next
+      // upload re-detects its format from its first byte).
+      resetUploadFormat();
 
       // Pre-OTA update callback
       if (preUpdateCallback != NULL) preUpdateCallback();
@@ -329,10 +397,15 @@ void ElegantOTAClass::begin(ELEGANTOTA_WEBSERVER *server, const char * username,
           if (request->_tempObject != NULL) {
             *(uint32_t *)request->_tempObject = gen;
           }
-          request->onDisconnect([gen]() {
+          request->onDisconnect([this, gen]() {
+            uint32_t cur;
             portENTER_CRITICAL(&g_ota_mux);
             g_ota.onDisconnect(millis(), gen);
+            cur = g_ota.state().generation;
             portEXIT_CRITICAL(&g_ota_mux);
+            // A superseding /ota/start already released the zlib state; only
+            // the still-current generation owns it.
+            if (cur == gen) freeZ();
           });
         }
 
@@ -351,8 +424,79 @@ void ElegantOTAClass::begin(ELEGANTOTA_WEBSERVER *server, const char * username,
           }
         }
 
+        // Format sniff on the first body byte of the request: 0x78 is the zlib
+        // CMF byte of a .autoupdate upload, anything else (0xE9 = ESP image magic)
+        // takes the raw path unchanged. Decided here, after the generation
+        // guard, so a stale request can never reset a live upload's state.
+        if (!index && len) {
+          resetUploadFormat();
+          _upload_format = (data[0] == 0x78) ? FMT_ZLIB : FMT_RAW;
+          Serial.println(_upload_format == FMT_ZLIB ? "[SAFEBOOT];ota;format;zlib" : "[SAFEBOOT];ota;format;raw");
+        }
+
+        // A zlib upload that already failed: ignore the rest of the request
+        // (the verdict is in g_ota; the completion handler reports it).
+        if (_upload_format == FMT_ZLIB) {
+          if (_upload_dead) return;
+          // The session was aborted behind our back (stall watchdog, drained
+          // in the loop task): release the 44 KB here, in the task that owns it.
+          bool receiving;
+          portENTER_CRITICAL(&g_ota_mux);
+          receiving = g_ota.state().state == safeboot::OtaSession::State::Receiving;
+          portEXIT_CRITICAL(&g_ota_mux);
+          if (!receiving) {
+            freeZ();
+            _upload_dead = true;
+            return;
+          }
+        }
+
         // Write chunked data to the free sketch space
-        if(len){
+        if (_upload_format == FMT_ZLIB) {
+            if (len) {
+                if (!_z_done) {
+                    if (_z == nullptr) {
+                        void *mem = malloc(sizeof(OtaZState));
+                        if (mem == NULL) {
+                            _upload_dead = true;
+                            otaFail(safeboot::OtaSession::Reason::UpdateError);
+                            return request->send(400, "text/plain", "update_error");
+                        }
+                        _z = new (mem) OtaZState;
+                        tinfl_init(&_z->dec.d);
+                        _z->inf.init(&_z->dec, _z->dict, sizeof(_z->dict));
+                    }
+                    OtaUpdateSink sink;
+                    const ZsResult zr = _z->inf.push(data, len, sink);
+                    if (zr == ZS_WRITE) {
+                        freeZ();
+                        _upload_dead = true;
+                        portENTER_CRITICAL(&g_ota_mux);
+                        g_ota.onWriteFailed(millis());
+                        portEXIT_CRITICAL(&g_ota_mux);
+                        return request->send(400, "text/plain", "Failed to write chunked data to free space");
+                    }
+                    if (zr == ZS_DATA || zr == ZS_PARAM) {
+                        freeZ();
+                        _upload_dead = true;
+                        otaFail(safeboot::OtaSession::Reason::InflateFailed);
+                        return request->send(400, "text/plain", "inflate_failed");
+                    }
+                    if (zr == ZS_DONE) {
+                        // Stream complete: release the dictionary now; bytes
+                        // after the stream end are counted but ignored.
+                        _z_done = true;
+                        freeZ();
+                    }
+                }
+                // Progress and the stall watchdog count received (compressed) bytes.
+                portENTER_CRITICAL(&g_ota_mux);
+                g_ota.onChunk(millis(), len);
+                portEXIT_CRITICAL(&g_ota_mux);
+                _current_progress_size += len;
+                if (progressUpdateCallback != NULL) progressUpdateCallback(_current_progress_size, request->contentLength());
+            }
+        } else if(len){
             if (Update.write(data, len) != len) {
                 // Queue ABORT(write_failed); loop()'s drain (main.cpp) calls
                 // the real Update.abort() via ElegantOTA.abortActiveUpdate().
@@ -378,7 +522,14 @@ void ElegantOTAClass::begin(ELEGANTOTA_WEBSERVER *server, const char * username,
           g_ota.onFinalReceived(millis());
           portEXIT_CRITICAL(&g_ota_mux);
 
-            if (!Update.end(true)) { //true to set the size to the current progress
+            if (_upload_format == FMT_ZLIB && !_z_done) {
+                // The body ended before the zlib stream did (truncated .autoupdate):
+                // nothing complete to finalise -- do not call Update.end().
+                freeZ();
+                otaFail(safeboot::OtaSession::Reason::IncompleteUpload);
+            } else if (!Update.end(true)) { //true to set the size to the current progress
+                // Capture the error code before printError() or anything else touches it.
+                const safeboot::OtaSession::Reason fail_reason = safeboot::OtaSession::fromUpdaterError(Update.getError());
                 // Save error to string
                 StreamString str;
                 Update.printError(str);
@@ -386,13 +537,14 @@ void ElegantOTAClass::begin(ELEGANTOTA_WEBSERVER *server, const char * username,
                 _update_error_str.concat("\n");
                 Serial.println(_update_error_str.c_str());
                 portENTER_CRITICAL(&g_ota_mux);
-                g_ota.onVerified(millis(), false, safeboot::OtaSession::Reason::Md5Mismatch);
+                g_ota.onVerified(millis(), false, fail_reason);
                 portEXIT_CRITICAL(&g_ota_mux);
             } else {
                 // TM-49: end(true) succeeded -- length and the client-supplied
-                // MD5 (set in /ota/start) both check out. isFinished() is the
-                // last gate; onVerified() is the only place image_valid may
-                // become true.
+                // MD5 (set in /ota/start; for a .autoupdate upload the MD5 of the
+                // inflated image, which is what Update.write() saw) both check
+                // out. isFinished() is the last gate; onVerified() is the only
+                // place image_valid may become true.
                 bool finished = Update.isFinished();
                 portENTER_CRITICAL(&g_ota_mux);
                 g_ota.onVerified(millis(), finished,

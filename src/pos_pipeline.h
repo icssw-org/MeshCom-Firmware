@@ -46,7 +46,7 @@ enum PosFilterResult posPipelineFix(struct PosPipeline *p, uint32_t now_ms,
                                     double *out_lat, double *out_lon);
 
 /*
- * A manual position set (--setlat/--setlon, BLE, board UI save). Resets
+ * A manual position set (--setlat/--setlon, BLE, RM, board UI save). Resets
  * the pipeline only when the stored position actually changed: a Setup save
  * that rewrites the same value must not throw away the 30 min average.
  */

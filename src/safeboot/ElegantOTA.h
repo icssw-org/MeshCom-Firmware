@@ -94,6 +94,10 @@ _____ _                        _    ___ _____  _
   extern uint8_t _FS_end;
 #endif
 
+// Per-upload zlib state (decompressor + 32 KB dictionary + inflater), defined
+// in ElegantOTA.cpp; heap-allocated at the first zlib chunk of an upload.
+struct OtaZState;
+
 enum OTA_Mode {
     OTA_MODE_FIRMWARE = 0,
     OTA_MODE_FILESYSTEM = 1
@@ -157,6 +161,18 @@ class ElegantOTAClass{
     // That branch is dead code today (src/safeboot/* is only pulled into
     // esp32-safeboot / esp32-S3-safeboot, both ASYNC=1) and was left
     // otherwise untouched per the wave brief.
+
+    // Dual-format upload: the first body byte
+    // decides between a raw image and a zlib stream (.autoupdate), which is
+    // inflated on the fly into Update. All of this is touched only from the
+    // AsyncTCP task (upload handler, /ota/start, disconnect closure).
+    enum UploadFormat : uint8_t { FMT_UNDECIDED = 0, FMT_RAW, FMT_ZLIB };
+    UploadFormat _upload_format = FMT_UNDECIDED;
+    OtaZState *_z = nullptr;    // live while a zlib upload is inflating
+    bool _z_done = false;       // the zlib stream reported its end
+    bool _upload_dead = false;  // zlib upload failed: ignore the rest of the request
+    void freeZ();               // releases _z (idempotent)
+    void resetUploadFormat();   // frees _z, back to FMT_UNDECIDED
 
     std::function<void()> preUpdateCallback = NULL;
     std::function<void(size_t current, size_t final)> progressUpdateCallback = NULL;

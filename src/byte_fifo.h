@@ -30,7 +30,8 @@
 // Nebenlaeufigkeit: auf nRF52 schreibt OnRxDone aus dem Timer-Service-Task,
 // gelesen wird aus der Hauptschleife (CONC-15/16). Jede Operation hier
 // sperrt sich selbst (BF_LOCK), Aufrufer brauchen keinen eigenen kritischen
-// Abschnitt mehr. Auf ESP32 und im Host-Test ist BF_LOCK leer, wie zuvor.
+// Abschnitt mehr. Auf ESP32 ist BF_LOCK ein Spinlock-Kritischer-Abschnitt (portMUX), im Host-Test leer
+// bzw. der Test-Haken.
 //
 // Kein IRAM: keine Funktion traegt IRAM_ATTR, es wird nichts aus der Liste
 // der IRAM-gepinnten libc-Mitglieder gezogen (nur memcpy).
@@ -39,6 +40,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 struct byte_fifo_t
 {
@@ -113,3 +115,32 @@ struct bf_iter_t
 
 void bf_iter_begin(const byte_fifo_t *f, bf_iter_t *it);
 uint8_t bf_iter_next(byte_fifo_t *f, bf_iter_t *it, uint8_t *out, uint16_t outmax);
+
+// Speicher loesen / anbinden (BLE-Pause, AU-17): der Ring gibt seinen Puffer her
+// und verhaelt sich danach wie ein leerer Ring ohne Platz -- push liefert -1
+// (Frame verworfen), peek 0, pop tut nichts, der Verlauf ist leer. Beide laufen unter
+// derselben Sperre (BF_LOCK) wie jede andere Operation: cap und buf werden atomar zu den
+// Zugriffen anderer Tasks gesetzt, danach kann KEIN Zugriff mehr auf dem alten Puffer
+// sein. Der Aufrufer darf den zurueckgelieferten Puffer sofort freigeben. Frames, die vor
+// dem Loesen im Ring lagen, sind nach bf_attach weg. Idempotent: ein zweites bf_detach
+// liefert NULL. Nicht auf nRF52 verwenden (dort kein Pause).
+uint8_t *bf_detach(byte_fifo_t *f);
+
+// Neuen Speicher anbinden, Ring leer (ein zweites bf_attach ersetzt den Puffer; der
+// alte Zeiger geht dabei verloren -- Aufrufer pruefen bf_has_storage()).
+void bf_attach(byte_fifo_t *f, uint8_t *storage, uint16_t cap);
+
+// Mehrere Ringe zusammen anbinden, ganz oder gar nicht: alloc(caps[i]) fuer jeden Ring ohne
+// Speicher; scheitert eine Zuteilung, wird alles Zugeteilte per release() zurueckgegeben
+// und kein Ring angefasst (false). Ringe mit Speicher werden uebersprungen (idempotent).
+// n <= BF_ATTACH_MAX.
+#define BF_ATTACH_MAX 4
+typedef void *(*bf_alloc_fn)(size_t);
+typedef void (*bf_free_fn)(void *);
+bool bf_attach_all(byte_fifo_t *const *rings, const uint16_t *caps, uint8_t n, bf_alloc_fn alloc,
+                   bf_free_fn release);
+
+// Alle Ringe loesen und den Speicher sofort per release() freigeben.
+void bf_detach_free(byte_fifo_t *const *rings, uint8_t n, bf_free_fn release);
+
+static inline bool bf_has_storage(const byte_fifo_t *f) { return f->cap != 0; }

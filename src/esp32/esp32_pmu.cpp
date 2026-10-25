@@ -381,10 +381,20 @@ void pmuSleepRails()
 
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
 
+static ChargeLedOverride chargeLedOv;   // the one override instance (LED-02)
+
+static ChargeLedMode chargeLedStored(void) { return bCHARGE_LED ? CHGLED_AUTO : CHGLED_OFF; }
+
+ChargeLedMode chargeLedEffective(void) { return effectiveChargeLedMode(chargeLedStored(), chargeLedOv); }
+
+bool chargeLedOverrideActive(void) { return chargeLedOv.active(); }
+
 bool chargeLedFitted(void) { return PMU != NULL; }
 
 void setChargeLedOn(bool enableAutoMode)
 {
+    // a console write (and the boot apply) is the new baseline: it supersedes an RM override
+    chargeLedOv.clear();
     if (!PMU)
     {
         return;
@@ -393,8 +403,38 @@ void setChargeLedOn(bool enableAutoMode)
     PMU->setChargingLedMode(enableAutoMode ? XPOWERS_CHG_LED_CTRL_CHG : XPOWERS_CHG_LED_OFF);
 }
 
+bool setChargeLedMode(int mode)
+{
+    if (!PMU)
+    {
+        return false;
+    }
+    // 0 = auto (charger controls the LED), 1 = steady on, 2 = dark -- the values of ChargeLedMode
+    PMU->setChargingLedMode(mode == 1 ? XPOWERS_CHG_LED_ON : mode == 2 ? XPOWERS_CHG_LED_OFF : XPOWERS_CHG_LED_CTRL_CHG);
+    return true;
+}
+
+void chargeLedOverrideSet(ChargeLedMode mode)
+{
+    if (!setChargeLedMode((int)mode))
+        return;   // no PMU object: nothing driven, nothing recorded
+    chargeLedOv.set(mode);
+}
+
+void chargeLedOverrideClear(void)
+{
+    if (!chargeLedOv.active())
+        return;
+    chargeLedOv.clear();
+    setChargeLedMode((int)chargeLedStored());
+}
+
 #else
 
+ChargeLedMode chargeLedEffective(void) { return bCHARGE_LED ? CHGLED_AUTO : CHGLED_OFF; }
+bool chargeLedOverrideActive(void) { return false; }
 bool chargeLedFitted(void) { return false; }
+void chargeLedOverrideSet(ChargeLedMode) {}
+void chargeLedOverrideClear(void) {}
 
 #endif

@@ -7,6 +7,8 @@
 #include <command_functions.h>
 #include <loop_functions.h>
 #include <loop_functions_extern.h>
+#define CET_AGE_WITH_CLOCK
+#include "cet_age.h"
 #include <dedup_functions.h>
 #include "ack_attribution.h"
 #include "dm_dedup.h"
@@ -14,6 +16,7 @@
 #include "dm_stats.h"
 #include "own_msg_status.h"   // late ACK -> durable web GUI status (ring slot may be gone)
 #include "sto_notice.h"      // F1/stage 4: :sto custody notice on server ingress
+#include "rm_rx_gate.h"     // RM-GWRELAY: remote management over the server path
 #include <lora_functions.h>
 #include "pn_retry.h"
 #include <time_functions.h>
@@ -25,7 +28,15 @@
 #include "conf_frame.h"
 #include "setlog_lines.h"
 #include "udp_frame.h"
+#include "gw_udp_ring.h"   // GWRX-01: udp_rx enqueue (text -> RING_KIND_RELAY)
 #include "gw_link_status.h"
+#include "gw_reg_runtime.h"
+#include "gw_reg_state.h"
+#include "blocked_calls.h"   // BLK-01
+#if defined(ENABLE_MSGSTORE)
+#include "msgstore_hook.h"  // SNF-GW-01: shared ack/store classification
+#include "msgstore_api.h"   // SNF-GW-03: store node hook on the server ingress
+#endif
 
 // C1/U1 carve of handleUdpFrame_esp32() out of udp_functions.cpp; see
 // udp_frame.h for why it moved and why the two platform copies are not
@@ -46,6 +57,7 @@ extern String strSource_call;
 extern bool had_initial_udp_conn;
 extern IPAddress node_hostip;
 void logRxDropUnconfigured(const char *call);
+void logRxDropBlocked(const char *path);   // BLK-01
 
 // UDP functions
 // DR-20 (2026-09-12 decided, implemented 2026-09-17 wave W6): returns a
@@ -67,6 +79,11 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
     // mit, statt die Warnung stummzuschalten.
     char source_call[MC_CALL_LEN_Z] = {0};
     char destination_call[MC_CALL_LEN_Z] = {0};
+
+    // registration reply from the server: consumed here, it must not count as link-alive (no last_upd_timer)
+    if (packetSize > 0 && gwRegFrameIsOther(inc_udp_buffer, (size_t)packetSize) &&
+        gwRegOnDatagram((uint32_t)src_ip, inc_udp_buffer, (size_t)packetSize, millis()))
+        return 0;
 
     udp_is_busy = true;
     // if more than n values are 00 we might have received a faulty message
@@ -137,9 +154,30 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
         // Der Puffer wird jetzt VOR beiden Bloecken gefuellt.
         memcpy(convBuffer, inc_udp_buffer + UDP_MSG_INDICATOR_LEN, lora_tx_msg_len);
 
+        // BLK-01: decode ONCE, ahead of the EXTUDP tap, so the tap can skip a
+        // frame whose source or path holds a blocked call. decodeAPRS() does
+        // not write the buffer, so the tap still forwards the same bytes; a
+        // frame decodeAPRS() rejects has bBlockedRx == false and is forwarded
+        // exactly as before, and the tap stays ahead of is_new_packet().
+        struct aprsMessage aprsmsg;
+        uint8_t msg_type_b_lora = 0;
+        bool bBlockedRx = false;
         if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
         {
-          if(hasExternIPaddress)
+          msg_type_b_lora = decodeAPRS(convBuffer, lora_tx_msg_len, aprsmsg);
+          if(msg_type_b_lora > 0 && isBlockedFrame(aprsmsg.msg_source_call, aprsmsg.msg_source_path))
+          {
+            // No effect on the node besides the counter: no display, phone,
+            // EXTUDP, KISS, ACK, relay, dedup-ring insert (the clean RF copy
+            // via another relay must stay "new").
+            bBlockedRx = true;
+            logRxDropBlocked(aprsmsg.msg_source_path);
+          }
+        }
+
+        if (msg_type_b == 0x3A || msg_type_b == 0x21 || msg_type_b == 0x40)
+        {
+          if(hasExternIPaddress && !bBlockedRx)
           {
             if(bEXTUDP)
               sendExtern(true, (char*)"udp", convBuffer, lora_tx_msg_len, 0, 0);
@@ -150,11 +188,10 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
         {
           bool bBLELoopOut = true;
 
+          // server link liveness stays: the server is alive whatever the frame
           last_upd_timer = millis();
           gwLinkNoteRx(millis());
           hb_warn_logged = false;
-
-          struct aprsMessage aprsmsg;
 
           // DR-06 (2026-09-12 decided nrf52-correct): capture decodeAPRS()'s
           // return value and gate everything below on it, matching nRF52
@@ -167,9 +204,8 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           // isUnconfiguredCall("") on the empty source_call a failed decode
           // leaves behind -- that RX-01 coupling below is unchanged and now
           // redundant-but-harmless once decode itself gates entry.
-          uint8_t msg_type_b_lora = decodeAPRS(convBuffer, lora_tx_msg_len, aprsmsg);
-
-          if(msg_type_b_lora > 0)
+          // (decoded above, ahead of the EXTUDP tap -- BLK-01)
+          if(msg_type_b_lora > 0 && !bBlockedRx)
           {
           snprintf(source_call, sizeof(source_call), "%s", aprsmsg.msg_source_call);
           snprintf(destination_call, sizeof(destination_call), "%s", aprsmsg.msg_destination_call);
@@ -245,6 +281,19 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             // DATA (a relayed mesh frame) is high-rate on a busy gateway: only with --udplog
             if(gwRxType[0] != 'D' || bUDPLOG)
               Serial.printf("[GW];rx;type;%s;len;%d;ms;%lu\n", gwRxType, packetSize, (unsigned long)millis());
+
+#ifndef UNIT_TEST   // Messzeile braucht die echte Uhr, nicht die Twin-Stubs
+            // TXP W0: {CET}-Alter am Gateway-Eingang (Messung, kein Verhalten)
+            if(gwRxType[0] == 'C')
+            {
+              uint32_t cetUtc = 0;
+              char cetAge[16];
+              bool cetOk = cetParsePayload(aprsmsg.msg_payload, strlen(aprsmsg.msg_payload), &cetUtc);
+              int cetTr = cetAgeText(cetAge, sizeof(cetAge), cetOk, cetUtc);
+              Serial.printf("[CET];gw_rx;src;%s;age_s;%s;trusted;%d;hop;%d;ms;%lu\n",
+                            aprsmsg.msg_source_call, cetAge, cetTr, (int)(aprsmsg.max_hop & 0x0F), (unsigned long)millis());
+            }
+#endif
           }
 
           // MeshCom 5 (Konzept docs/meshcom5-topologie/ 4.11, Anhang E, Stufe 3):
@@ -263,8 +312,13 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             sendDisplayPosition(aprsmsg, 99, 0);
 
             // add rcvMsg to forward to LoRa TX
-            addLoraRxBuffer(aprsmsg.msg_id, true);
-            stat_newid.fetch_add(1); // S2: server-injected ids occupy dedup-ring slots too
+            // UDP-04: only a NEW id enters the ring / stat_newid; a duplicate server
+            // position must not write a second slot (older ids would fall out sooner).
+            if(bUdpMsgIsNew)
+            {
+                addLoraRxBuffer(aprsmsg.msg_id, true);
+                stat_newid.fetch_add(1); // S2: server-injected ids occupy dedup-ring slots too
+            }
 
             if(bGATEWAY_NOPOS)
               bUDPtoLoraSend=false;
@@ -278,6 +332,39 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
           }
 
           bLED_ORANGE = true;
+
+#if defined(ENABLE_MSGSTORE)
+          // SNF-GW-03 (issue #1188): store-node hook on the server ingress. Runs
+          // BEFORE the own-call append below, so the echo guard sees the path
+          // exactly as the server sent it (a frame carrying our own call is our
+          // own upload coming back). Same decision helper as OnRxDone and the
+          // nRF52 twin (msgstore_hook.h); the LoRa one-shot copy is untouched.
+          if(bUdpMsgIsNew && msg_type_b == MSG_TYPE_TEXT && !bSrcUnconfigured &&
+             strcmp(destination_call, meshcom_settings.node_call) != 0 &&
+             !mboxPathHasCall(aprsmsg.msg_source_path, meshcom_settings.node_call))
+          {
+              MboxDecision mboxDec = mboxClassify(aprsmsg.msg_source_call, destination_call, aprsmsg.msg_payload,
+                                                  CheckGroup(destination_call) != 0,
+                                                  false,                                       // peer delivery is RF-only
+                                                  pnRxIsRepeat(aprsmsg, MSG_TYPE_TEXT),        // XOR copy via the server must not refresh stored_ms
+                                                  msgstoreEligible(destination_call));
+
+              if(mboxDec.action == MBOX_ACK)
+                  msgstoreOnAck(aprsmsg.msg_source_call, destination_call, mboxDec.nnn);   // server-side :ackNNN purges a held PM
+              else
+              if(mboxDec.action == MBOX_STORE)
+              {
+                  char mboxText[MC_PAYLOAD_LEN];
+                  mcSet(mboxText, sizeof(mboxText), aprsmsg.msg_payload);
+                  mcTruncate(mboxText, sizeof(mboxText), mboxDec.textLen);
+                  msgstoreStore(aprsmsg.msg_source_call, destination_call, mboxDec.nnn, mboxText, strlen(mboxText));
+              }
+          }
+#endif
+
+          // GWRX-01: Pfad wie vom Server empfangen, fuer nbrServerNeed() (gw_udp_ring.h)
+          char srcPathAsRx[sizeof(aprsmsg.msg_source_path)];
+          mcSet(srcPathAsRx, sizeof(srcPathAsRx), aprsmsg.msg_source_path);
 
           mcAppendChar(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), ',');
           mcAppend(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
@@ -349,7 +436,8 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
                         // PN-Wiederholung (pn_retry.h): ein :ackNNN ueber den Server stoppt auch
                         // den wartenden Ring-Slot -- das Echo gibt eine eigene PN nicht mehr frei.
-                        int ackSlot = findAndStopRingSlot(msg_counter);
+                        // Ein RM1-Kommando stoppt nur die RM-Schicht (verifizierte Antwort): NoRm1.
+                        int ackSlot = findAndStopRingSlotNoRm1(msg_counter);
                         if(ackSlot >= 0 && bDisplayRetx)
                             printfdeb("\n[RETX] server ACK for retid:%i stop retransmit msg-id:%08X\n",
                                       ackSlot, msg_counter);
@@ -434,7 +522,17 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                   }
                 }
 
-                if(iAckPos <= 0 && bDmDedupNew && !bStoConsumed)
+                // RM-GWRELAY: a DM to the own call that came from the server can be a remote-management
+                // command or a reply (rm_rx_gate.h, same hook as OnRxDone). A command is consumed: not
+                // shown, not handed to the phone; a reply is only copied to the verifier.
+                bool bRmConsumed = false;
+                if(iAckPos <= 0 && iRefPos <= 0 && bDmDedupNew && !bStoConsumed &&
+                   strcmp(destination_call, meshcom_settings.node_call) == 0)
+                    bRmConsumed = rmRxTryQueue(aprsmsg.msg_source_call, aprsmsg.msg_payload,
+                                               rmRxEnabled(meshcom_settings.node_rm, meshcom_settings.node_passwd),
+                                               (uint32_t)aprsmsg.msg_id, (uint32_t)millis());
+
+                if(iAckPos <= 0 && bDmDedupNew && !bStoConsumed && !bRmConsumed)
                 {
                   sendDisplayText(aprsmsg, 99, 0);
                 }
@@ -450,7 +548,7 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
 
                 uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
 
-                if(bDmDedupNew && !bStoConsumed) addBLEOutBuffer(tempRcvBuffer, tempsize);
+                if(bDmDedupNew && !bStoConsumed && !bRmConsumed) addBLEOutBuffer(tempRcvBuffer, tempsize);
 
                 bBLELoopOut=false;
 
@@ -495,6 +593,21 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             int icheck = checkOwnTx(pnOwnTxLookupId(aprsmsg.msg_id, _GW_ID));
             if(icheck < 0)
             {
+              // Finding 7: the own-tx ring wraps in ~10 min on a busy gateway; a server
+              // copy of OUR message (source = own call) coming back later would be queued
+              // as server traffic. Keep the dedup entry, skip enqueue and own-tx bookkeeping.
+              if(strcasecmp(aprsmsg.msg_source_call, meshcom_settings.node_call) == 0)
+              {
+                // a new 0x21 already entered the ring (and stat_newid) once in its branch above (UDP-04)
+                if(msg_type_b != 0x21)
+                {
+                    addLoraRxBuffer(aprsmsg.msg_id, true);
+                    stat_newid.fetch_add(1); // S2: same slot accounting as the relay path
+                }
+                if(bDisplayLog)
+                    Serial.println("[GW] own msg reflected, not queued");
+              }
+              else
               if(bUDPtoLoraSend)
               {
                 // first byte is always the len of the msg
@@ -504,7 +617,7 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
                 // store last message to compare later on
                 insertOwnTx(aprsmsg.msg_id);
 
-                addTxRingEntry(convBuffer, (uint16_t)size, 0xFF, "udp_rx", 0); // 0xFF no retransmission for UDP relay messages
+                gwUdpRxEnqueue(convBuffer, (uint16_t)size, aprsmsg.payload_type, srcPathAsRx, aprsmsg.msg_id); // 0xFF no retransmission for UDP relay messages (GWRX-01: text may become RING_KIND_RELAY)
 
                 if(bDisplayLog)
                 {
@@ -611,6 +724,7 @@ int handleUdpFrame_esp32(unsigned char inc_udp_buffer[UDP_TX_BUF_SIZE], int pack
             else
             {
               snprintf(meshcom_settings.node_call, sizeof(meshcom_settings.node_call), "%s", sCall.c_str());
+              gwRegOnServerRename(meshcom_settings.node_call);
 
               if(cf.hasShort)
                 snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", cf.shortname);

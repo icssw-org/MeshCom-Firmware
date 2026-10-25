@@ -345,6 +345,16 @@ void btn_event_handler_setup_btn(lv_event_t * e)
 
         return;
     }
+    else if (lv_event_get_target(e) == btn_blauto)
+    {
+        // TD-23: same path as the serial "--bl auto on/off" (sets, saves, applies)
+        if (lv_obj_has_state(btn_blauto, LV_STATE_CHECKED))
+            commandAction((char*)"--bl auto on", false);
+        else
+            commandAction((char*)"--bl auto off", false);
+
+        return;
+    }
     else if (lv_event_get_target(e) == btn_track)
     {
         if (bDEBUG)

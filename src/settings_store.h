@@ -31,7 +31,7 @@
 // one per field, in the order the caller's FieldDescriptor array lists them.
 // No header, no length prefix, no framing beyond the newline. This is the
 // STRING-KEYED encoding the sizing doc decided on
-// (docs/opt07-nrf52-settings-store-sizing-20260912.md): 2 937 B worst case
+//: 2 937 B worst case
 // against 149 304 B free flash on the tightest nRF52 env, a ~50x margin --
 // the tagged-record fallback is NOT built here because the decision already
 // closed in its favour.

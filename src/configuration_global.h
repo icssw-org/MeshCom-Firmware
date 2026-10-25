@@ -17,6 +17,15 @@
 #define DEFAULT_CALL "XX0XXX-00"
 #define DEFAULT_CALL_PREFIX "XX0XXX"
 
+// node_sset, den ein T-Beam (MODUL_FW_TBEAM) beim ersten Start mit
+// Werkseinstellungen (node_sset == 0x0004) erhaelt: bDisplayVolt 0x0001,
+// bPosDisplay 0x0004, bButtonCheck 0x0010, bGPSON 0x0040. TRK-03: von V4.21
+// bis 4.40a.10.23 stand hier 0x0035 -- 0x0020 ist bDisplayTrack, nicht bGPSON;
+// ein frisch geflashter T-Beam startete mit Track an und GPS aus. bDisplayVolt
+// war 2023 vermutlich ebenso unbeabsichtigt, bleibt aber, damit sich fuer
+// T-Beams ausser Track/GPS nichts aendert.
+#define TBEAM_FIRST_BOOT_SSET 0x0055
+
 // true, wenn das Rufzeichen noch die Werkseinstellung ist (oder leer/"none").
 // Der 6-Zeichen-Praefixtest deckt "XX0XXX-00" mit ab -- die vier Formen, die
 // safeboot einzeln geprueft hat, sind damit vollstaendig abgedeckt.
@@ -391,6 +400,16 @@ static inline bool flashLayoutCompatible(int stored)
 #define CSMA_MAX_ATTEMPTS   3       // Ab hier: Rapid-fire CAD bis Kanal frei
 #define CSMA_RAPID_RX_MS    100     // Preamble-Check Fenster im Rapid-fire Modus (ms)
 
+// Alters-Boden (Brief G): Kopf-Frame so lange in der Queue -> kuerzere Haltezeit nach Fremdframe.
+// Nur Prio 1-3, nie nach eigenem TX. CSMA_AGE_STAGE2_MS 0 = Stufe 2 nie.
+#define CSMA_AGE_STAGE1_MS      20000UL
+#define CSMA_AGE_STAGE2_MS      60000UL
+#define CSMA_AGE_ACK_WINDOW_MS  2850    // Empfaenger des Vorframes halten 3.0 s; davor enden
+#define CSMA_AGE_GUARD_MS       175
+#define CSMA_AGE_SHORT_MIN_MS   500
+#define CSMA_AGE_SHORT_MAX_MS   1500
+#define CSMA_AGE_SLOTS          5       // Jitter 0..5 Slots (0-175 ms)
+
 // EXTERNAL_RADIO only: bounded channel-access (bridge CHANNEL_BUSY) attempts per
 // message, counted SEPARATELY from the MeshCom delivery retransmission budget
 // (MAX_RETRANSMIT). A bridge CHANNEL_BUSY = channel access denied, not a consumed
@@ -399,7 +418,7 @@ static inline bool flashLayoutCompatible(int stored)
 #define EXT_BUSY_MAX_ATTEMPTS 8
 
 // TX-IRQ Watchdog: Maximale Zeit (ms) fuer einen LoRa-TX-Vorgang bevor Zwangs-Recovery
-// SF11 BW250 CR6 255 Bytes ToA ~6s -> 15s gibt ausreichend Sicherheitsabstand
+// SF11 BW250 CR6 255 Bytes, Preamble 32: ToA ~2,7s -> 15s gibt ausreichend Sicherheitsabstand
 #define TX_WATCHDOG_MS      15000
 
 // OnRxDone processing time monitoring
@@ -421,6 +440,13 @@ static inline bool flashLayoutCompatible(int stored)
 // retransmission maintenance must skip it explicitly. Used only when the optional
 // EXTERNAL_RADIO backend is compiled in; otherwise no slot ever carries it.
 #define RING_STATUS_EXT_PENDING 0x80
+// 0x81: TXP W1b (slot pool). doTX() has picked the slot and the frame is being
+// handed to the radio; the slot keeps its length (so an enqueue cannot take it)
+// but is invisible to selection, the retry ladder and the ACK scans. doTX()
+// ends it via txRingFinishTx(): one-shot -> free, own text -> SENT (parked),
+// rollback -> the status it had before. Outside READY, SENT (0x01..0x14),
+// EXT_PENDING and DONE.
+#define RING_STATUS_INFLIGHT    0x81
 
 // Message Priority Classes (lower = higher priority)
 #define MSG_PRIO_CRITICAL   1   // ACK (0x41) + persoenliche DM
@@ -432,11 +458,26 @@ static inline bool flashLayoutCompatible(int stored)
 // BP-03 (DJ8MEH-RCA 2026-08-31, Teil 2): max age (ms) a BACKGROUND (HEY,
 // prio 5) ring entry may sit unsent before txRingAgeBackground()
 // (txring_functions.cpp) drops it. Tradeoff accepted: a node's OWN HEY
-// beacon ages out the same way, and at trickle intervals up to 480 s the
+// beacon ages out the same way, and at trickle intervals up to 900 s the
 // next copy may follow minutes later -- but a neighbourhood report that
 // cannot be transmitted for 3 minutes is worthless on air, and the
 // DJ8MEH blocker that motivated this sat unsent for 10 minutes.
 #define RING_BG_MAX_AGE_MS 180000UL   // 3 min
+
+// TXP W1a: Lebensdauer je Prioritaet fuer
+// abschliessende (RING_STATUS_DONE) Eintraege, geprueft von txRingAgeBackground()
+// ueber txRingTtlMs() (txring_ttl.h). Eigene, wiederholbare Texte (READY/SENT)
+// altern nie, dort regelt die Retry-Leiter; prio 2 (Gruppe/Broadcast) hat keine
+// TTL. Mit -D ueberschreibbar (INSTRUMENT-Tuning); 0 schaltet die Klasse ab.
+#ifndef RING_TTL_ACK_MS
+#define RING_TTL_ACK_MS   90000UL    // prio 1, nur ACK-Frames (0x41, :ackNNN), DONE: 1.5 min
+#endif
+#ifndef RING_TTL_RELAY_MS
+#define RING_TTL_RELAY_MS 300000UL   // prio 3 (Relay): 5 min
+#endif
+#ifndef RING_TTL_POS_MS
+#define RING_TTL_POS_MS   120000UL   // prio 4 (Position): 2 min
+#endif
 
 // Priority-dependent CSMA base timeouts (ms)
 #define CSMA_PRIO_BASE_1    3000   // ACK/DM

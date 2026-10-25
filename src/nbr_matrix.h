@@ -796,6 +796,18 @@ struct NbrNeed
 // SYM-Log-Zeilen ein, sonst in keine Rechnung.
 NbrNeed nbrRelayNeed(const NbrMatrix &m, const char *path, uint16_t now_min, bool sym, uint32_t msg_id);
 
+// nbrServerNeed -- wie nbrRelayNeed, aber fuer einen vom Server eingespeisten
+// Frame (Gateway, "udp_rx"). CONTRACT: path ist der Pfad wie empfangen (nur der
+// Urheber, meist keine Matrixzeile). Zusaetzlich zu HatF aus nbrRelayNeed zaehlt jede
+// Zeile mit gueltigem Gateway-Flag (NBR_GW_HOLD_MIN) als "hat den Frame": andere
+// Gateways bekommen ihn selbst vom Server. NICHT deren Hoerer -- die haben ihn
+// erst, wenn das Gateway gesendet hat (Deckung in nbrCoverMask beim gehoerten
+// Duplikat). need bleibt gleich (GW-Zeilen sind schon aus dep raus); nur allein
+// aendert sich: direkte GW-Zeilen sind Versorger,
+// ein Abhaengiger X mit lebender Kante "X hat G gehoert" ist damit nicht allein.
+// Sonst identisch (known, inferred, sym, msg_id).
+NbrNeed nbrServerNeed(const NbrMatrix &m, const char *path, uint16_t now_min, bool sym, uint32_t msg_id);
+
 // Deckung durch eine gehoerte fremde Wiederholung: die Hoerer des Relayers
 // (nbrHearersMask seiner Zeile) plus, wenn sym, jedes X, fuer das der
 // Relayer M laut Symmetrie-Fallback X gehoert hat und das noch nicht

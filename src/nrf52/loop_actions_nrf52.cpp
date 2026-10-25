@@ -10,6 +10,8 @@
 #include "loop_functions_extern.h"
 #include "batt_functions.h"
 #include "lora_functions.h"
+#define CET_AGE_WITH_CLOCK
+#include "cet_age.h"
 #include "txring_functions.h"
 #include "command_functions.h"
 #if defined(ENABLE_MSGSTORE)
@@ -56,7 +58,7 @@ void loopAction_retransmit(void)
     // here, in the main-loop tick -- NOT in getNextTxSlot(), which also
     // runs on the nRF52 timer task itself (Advisor F1, the critical
     // finding this fix is named after).
-    txRingAgeBackground(millis());
+    txRingAgeBackground(millis(), cetDeviceClock());
 }
 
 // ---- mcp_refresh_timer -------------------------------------------------

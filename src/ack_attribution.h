@@ -7,7 +7,6 @@
 // (test/test_ack_validate, test/test_ack_phone_frame).
 //
 // Hintergrund und Entscheidungen: docs/ack-wer-hat-quittiert.md,
-// Umsetzung: docs/ack-implementierungsplan.md.
 //
 // Draht (0x41, gelesen):
 //   [0..10]  wie bisher, siehe ack_functions.h

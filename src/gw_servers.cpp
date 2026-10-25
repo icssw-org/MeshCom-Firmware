@@ -13,8 +13,8 @@ const GwServer GW_SERVERS[] = {
     { "OE", "MeshCom OE (Austria/WW)",
       { /*INET*/   { GWM_DIRECT, "", { "meshcom.oevsv.at", {89, 185, 97, 38} }, GW_NTP_POOL },
         /*HAMNET*/ { GWM_DIRECT, "", { nullptr, {44, 143, 8, 143} }, { nullptr, {44, 143, 0, 9} } } } },
-    // DL: Internet server by wish of the German sysadmin. Hamnet users select HC;
-    // DL on the Hamnet is served via HC.
+    // DL: Internet server by wish of the German sysadmin (relayed by Kurt,
+    // 2026-10-15). Hamnet users select HC.
     { "DL", "MeshCom DL (Germany)",
       { /*INET*/   { GWM_DIRECT, "", { "meshcom.hamnet.network", {192, 68, 17, 26} }, GW_NTP_POOL },
         /*HAMNET*/ { GWM_VIA, "HC", { nullptr, {0, 0, 0, 0} }, { nullptr, {0, 0, 0, 0} } } } },

@@ -1,6 +1,7 @@
 #include "mc_text.h"
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include "csma_timing.h"   // W0.6: CSMA back-off arithmetic, native-tested
+#include "mesh_policy.h"   // BL-01: meshTxAllowed(), --mesh off = nur kein Repeat fremder Frames
 #include "Arduino.h"
 #include "configuration.h"
 
@@ -8,6 +9,7 @@
 #include "txring_functions.h"
 #include "ack_functions.h"
 #include "ack_attribution.h"
+#include "gw_ack_frame.h"   // GWACK-01: the gateway's double ACK, one id for both copies
 #include "capture_functions.h"
 #include "dedup_functions.h"
 #include "setlog_lines.h"
@@ -18,14 +20,27 @@
 #include "dm_stats.h"       // stage 0/2.1 DM outcome counters (dmstat_*)
 #include "reack_limiter.h"  // stage 0.2: rate-limited re-ACK for duplicate DMs
 #include "dm_dedup.h"       // stage 2.1: second dedup layer, keyed on (source call, NNN)
+#include "gw_reg_runtime.h"
 #include "instrument.h"     // stage 0.5: --airgap (bAirgap), INSTRUMENT_ENABLED
 #include "pn_retry.h"       // PN retry (XOR form): pnRetryCore/pnRetryId/pnFrameIsOwnPn etc.
 #include "own_msg_status.h"  // late ACK -> durable web GUI status (ring slot may be gone)
 #include "sto_notice.h"     // stage 4: :sto custody notice, sender side -- every board
+#include "rm_queue.h"       // RM-04: RM1 remote-management DMs, OnRxDone -> loop task (every board)
+#include "remote_cmd.h"     // RM: rmIsReply() -- replies are shown, never queued as commands
+#include "rm_rx_gate.h"     // RM: the one receive hook, shared with the server ingress
 #include "hey_echo_upload.h"  // gateway upload of own HEY echoes
 #include "onrx_stats.h"     // OR-STAT: OnRxDone time histogram for the STAT line
 #if defined(ENABLE_MSGSTORE)
+#include "msgstore_hook.h"  // SNF-GW-01: shared ack/store classification
 #include "msgstore_api.h"   // stage 3: store node (last-hop mailbox) receive-path hooks
+#endif
+
+// MC_HAS_RADIOLIB_RADIO: exactly the macros below that declare `extern ... radio`.
+// Keep this list and the extern blocks in sync (lora_time_on_air_ms() uses it).
+#if defined(SX127X) || defined(BOARD_E220) || defined(SX1262X) || defined(SX126X) || \
+    defined(SX1262_E22) || defined(USING_SX1262) || defined(SX1268_E22) || \
+    defined(SX1262_V3) || defined(SX1262_E290) || defined(SX1262_V4)
+    #define MC_HAS_RADIOLIB_RADIO 1
 #endif
 
 #ifdef SX127X
@@ -85,11 +100,14 @@
 #endif
 
 #include "lora_functions.h"
+#include "blocked_calls.h"   // BLK-01
 #if defined(EXTERNAL_RADIO)
 #include "external_radio_txq.h"   // async external-TX ownership record
 #endif
 #include "loop_functions.h"
 #include <loop_functions_extern.h>
+#define CET_AGE_WITH_CLOCK
+#include "cet_age.h"
 #include "aprs_functions.h"
 #include <batt_functions.h>
 #include <udp_functions.h>
@@ -234,6 +252,20 @@ static void queueDisplayPosition(struct aprsMessage &aprsmsg, int16_t rssi, int8
 #endif
 }
 
+// RM-04 (#1189): an authenticated remote-management command ("RM1 <ctr> <cmd>
+// ... <tag>") is not a chat message. The decision is rmRxTryQueue() (rm_rx_gate.h),
+// shared with the server ingress of a gateway node. Since 2026-10-06 (RM-GWRELAY)
+// the server flag no longer matters: a gateway sets it on every frame it relays,
+// and the HMAC tag authenticates a command on either path. Called with the DM text
+// already stripped of its "{NNN" suffix, after dedup and ack. true = consumed: the
+// caller must neither display it nor hand it to BLE.
+static bool rmTryQueue(const struct aprsMessage &aprsmsg, const char *text)
+{
+    return rmRxTryQueue(aprsmsg.msg_source_call, text,
+                        rmRxEnabled(meshcom_settings.node_rm, meshcom_settings.node_passwd),
+                        (uint32_t)aprsmsg.msg_id, (uint32_t)millis());
+}
+
 /**
  * Extract the 4-byte message ID from a ring buffer slot.
  * ringBuffer layout: [0]=len, [1]=status, [2]=msg_type, [3..6]=msg_id (LE)
@@ -255,6 +287,27 @@ static uint32_t extractRingMsgId(int slot)
 // into the "dropped" count on the next line that does print (TM-21's
 // lesson).
 uint32_t stat_rx_drop_unconfigured = 0;
+
+// BLK-01: same rate-limited marker for the call blocklist.
+void logRxDropBlocked(const char *path)
+{
+    static bool s_have_marker = false;
+    static uint32_t s_last_marker_ms = 0;
+    static uint32_t s_dropped_since_marker = 0;
+
+    blockListNoteDrop();
+    s_dropped_since_marker++;
+
+    uint32_t now = (uint32_t)millis();
+    if(!s_have_marker || (uint32_t)(now - s_last_marker_ms) >= 10000UL)
+    {
+        Serial.printf("[RX];drop;blocked;path;%s;ms;%lu;dropped;%lu\n",
+                      path, (unsigned long)now, (unsigned long)s_dropped_since_marker);
+        s_have_marker = true;
+        s_last_marker_ms = now;
+        s_dropped_since_marker = 0;
+    }
+}
 
 void logRxDropUnconfigured(const char *call)
 {
@@ -353,17 +406,23 @@ static bool extTxqAckInvalidateIfOwned(int slot)
  * RAK4631 unter derselben Ring-Sperre wie anderswo in dieser Datei
  * (queueDisplayText() etc.).
  */
-int findAndStopRingSlot(uint32_t msgId)
+static int findAndStopRingSlotImpl(uint32_t msgId, bool skipRm1Cmd)
 {
 #if defined(BOARD_RAK4630)
     taskENTER_CRITICAL();
 #endif
     for(int i = 0; i < MAX_RING; i++)
     {
-        if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY)
+        if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY &&
+           ringBuffer[i][1] != RING_STATUS_INFLIGHT) // INFLIGHT: doTX() ends it (TXP W1b)
         {
             if(pnRetryCore(extractRingMsgId(i)) == pnRetryCore(msgId))
             {
+                // Wave 3a: a binary / DM / server ACK must not stop an own RM1
+                // COMMAND slot -- only the RM layer does (verified reply).
+                if(skipRm1Cmd &&
+                   pnFrameIsOwnRm1Cmd(&ringBuffer[i][2], (uint16_t)ringBuffer[i][0], _GW_ID, meshcom_settings.node_call))
+                    continue;
 #if defined(EXTERNAL_RADIO)
                 // ACK-before-result. If this slot is owned by an in-flight
                 // external TX, drop the ownership record now (deliberate release)
@@ -389,6 +448,65 @@ int findAndStopRingSlot(uint32_t msgId)
     taskEXIT_CRITICAL();
 #endif
     return -1;
+}
+
+// ORIGINAL ids of own RM1 commands the RM layer stopped (reply verified).
+// findAndStopRingSlotImpl() skips READY slots and slots doTX() cleared to len
+// 0, so it can miss the copy that is READY / CSMA-waiting / on air and return
+// -1. The 40 s ladder (updateRetransmissionStatus) looks the slot up here at
+// the threshold and releases it instead of producing another copy: at most
+// that one in-flight copy goes out after the stop, nothing behind it. RAM
+// only, zero-initialised (= empty). Task scope as ringBuffer: guarded by the
+// RAK critical section like the ring itself.
+static Rm1StoppedSet rm1Stopped;
+static_assert(PN_RM1_STOPPED_MAX >= MAX_RING, "one RM1-stopped entry per TX ring slot");
+
+// Stops any matching pending slot, an own RM1 command slot included (the RM
+// layer calls this with the ORIGINAL msg_id when a reply verifies). On a miss
+// it records the id in rm1Stopped (see below). NoRm1 below must NOT do this:
+// a binary / DM / server ACK does not end the RM1 repeats.
+int findAndStopRingSlot(uint32_t msgId)
+{
+    const int slot = findAndStopRingSlotImpl(msgId, false);
+    // No waiting slot found: the copy is READY, in CSMA or on air. Remember the id so the ladder
+    // releases that slot at its next threshold instead of sending another copy -- only while that
+    // slot is still live (status != DONE; doTX clears the length, not the id bytes). A stop after
+    // the ladder ended (key expiry, forget, eviction) records nothing, and entries whose slot is
+    // gone are dropped here, so the set never fills with ids no threshold will take.
+    if(slot < 0)
+    {
+        uint32_t liveIds[MAX_RING];
+        uint8_t nLive = 0;
+#if defined(BOARD_RAK4630)
+        taskENTER_CRITICAL();
+#endif
+        for(int i = 0; i < MAX_RING; i++)
+            if(ringBuffer[i][1] != RING_STATUS_DONE)
+                liveIds[nLive++] = extractRingMsgId(i);
+        pnRm1StoppedRecordMiss(&rm1Stopped, msgId, liveIds, nLive);
+#if defined(BOARD_RAK4630)
+        taskEXIT_CRITICAL();
+#endif
+    }
+    return slot;
+}
+
+// Same, but leaves an own RM1 command slot alone: used by the gateway binary
+// ACK and the DM :ack path, which must not end the RM1 repeats.
+int findAndStopRingSlotNoRm1(uint32_t msgId)
+{
+    return findAndStopRingSlotImpl(msgId, true);
+}
+
+void rm1StoppedForget(uint32_t origMsgId)
+{
+#if defined(BOARD_RAK4630)
+    taskENTER_CRITICAL();
+#endif
+    pnRm1StoppedTake(&rm1Stopped, origMsgId);
+#if defined(BOARD_RAK4630)
+    taskEXIT_CRITICAL();
+#endif
 }
 
 // SL-01 -- Dedup-Verdikt zaehlen, genau einmal je Frame und dort, wo die
@@ -425,6 +543,12 @@ static bool setlogPathHasCall(const char *path, const char *call)
     }
 
     return false;
+}
+
+// Clock for gwAckBuildPair() (src/gw_ack_frame.h): ACK frame ids are uptime ms.
+static uint32_t gwAckMillis(void)
+{
+    return (uint32_t)millis();
 }
 
 /**
@@ -522,7 +646,7 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
             }
 
             // stop retransmission in ring buffer for this msg_id
-            int ackSlot = findAndStopRingSlot(msg_id);
+            int ackSlot = findAndStopRingSlotNoRm1(msg_id);
             if(ackSlot >= 0 && bDisplayRetx)
                 printfdeb("\n[RETX] binary ACK for retid:%i stop retransmit msg-id:%08X\n",
                               ackSlot, msg_id);
@@ -530,7 +654,7 @@ static bool handleACK(uint8_t *payload, uint16_t size, int rssi, int snr)
         else
         {
             // ACK nur weitersenden wenn es eine neue MSG-ID ist && MESH = on && nicht eine MSG-ID ist welche nicht selbst ausgesendet wurde
-            if((print_buff[5] & 0x7F) > 0x00 && bMESH && itxcheck < 0 && !checkServerRx(print_buff+6))
+            if((print_buff[5] & 0x7F) > 0x00 && meshTxAllowed(MESH_TX_FOREIGN_RELAY, bMESH) && itxcheck < 0 && !checkServerRx(print_buff+6))
             {
                 print_buff[5]--;
 
@@ -713,6 +837,30 @@ static NbrGwHint nbrGwHintFromDest(char payload_type, const char *dest)
 //////////////////////////////////////////////////////////////////////////
 // LoRa RX functions
 
+// PN-Wiederholung (XOR, pn_retry.h): gleiche PN unter einer anderen
+// Wiederholungsvariante schon gesehen? Reiner msg-id-Dedup sieht das nicht --
+// checkOwnRx() ist die stille Ringabfrage (kein zweites is_new_packet()).
+// Geteilt von OnRxDone und den beiden GATE-Handlern (SNF-GW-03), die den
+// Frame zuvor mit is_new_packet() als neu erkannt haben muessen.
+bool pnRxIsRepeat(const struct aprsMessage &aprsmsg, uint8_t msg_type)
+{
+    if(msg_type != MSG_TYPE_TEXT ||
+       !pnPayloadIsPn(aprsmsg.msg_payload, strlen(aprsmsg.msg_payload)) ||
+       !pnDestIsPersonal(aprsmsg.msg_destination_call, strlen(aprsmsg.msg_destination_call)))
+        return false;
+
+    uint32_t pn_variants[3];
+    pnVariantIds(aprsmsg.msg_id, pn_variants);
+    for(int pv = 0; pv < 3; pv++)
+    {
+        uint8_t pn_variant_buf[4];
+        pnIdToLe(pn_variants[pv], pn_variant_buf);
+        if(checkOwnRx(pn_variant_buf) >= 0)
+            return true;
+    }
+    return false;
+}
+
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
 #if INSTRUMENT_ENABLED
@@ -834,6 +982,20 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
     bLED_GREEN = true;
 
+    if(gwRegBlocked())
+    {
+#if defined BOARD_RAK4630
+        taskENTER_CRITICAL();
+        rxBufInUse[rxBufIndex] = false;
+        taskEXIT_CRITICAL();
+#endif
+        is_receiving = false;
+        iReceiveTimeOutTime = millis();
+        csma_timeout = csma_compute_timeout(cad_attempt);
+        INSTR_ONRX_END();
+        return;
+    }
+
 #if INSTRUMENT_ENABLED
     // 0.5 --airgap: drop the frame here, after the platform RX plumbing has
     // run (buffer swap, LED, timing capture) but before handleACK()/
@@ -888,13 +1050,31 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     {
         memcpy(RcvBuffer, payload, size);
 
+        // BLK-01: decode BEFORE the ring scan so a blocked call (source or any
+        // path element) can be recognised there. decodeAPRS() only reads
+        // RcvBuffer; the scan below only touches the TX ring.
+        struct aprsMessage aprsmsg;
+
+        // print which message type we got
+        uint16_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
+#if INSTRUMENT_ENABLED
+        INSTR_PH("dec");
+#endif
+
+        // BLK-01: a blocked frame has no effect on this node except the drop
+        // counter/log (further down): not the RX-OK ring release, not the
+        // HN/NBR topology feed, not the NBR relay cover, not the main branch.
+        const bool rx_blocked = msg_type_b_lora != 0 &&
+                                isBlockedFrame(aprsmsg.msg_source_call, aprsmsg.msg_source_path);
+
         // RX-OK do not need retransmission
         // RX-OK: find matching ring buffer slot and release it
         uint32_t dbg_msg_id = 0;
         int rxSlot = -1;
-        for(int i = 0; i < MAX_RING; i++)
+        for(int i = 0; !rx_blocked && i < MAX_RING; i++)
         {
-            if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY)
+            if(ringBuffer[i][0] > 0 && ringBuffer[i][1] != RING_STATUS_DONE && ringBuffer[i][1] != RING_STATUS_READY &&
+               ringBuffer[i][1] != RING_STATUS_INFLIGHT) // INFLIGHT: doTX() ends it (TXP W1b)
             {
                 if(memcmp(ringBuffer[i]+3, RcvBuffer+1, 4) == 0)
                 {
@@ -907,7 +1087,36 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             {
                 if(memcmp(ringBuffer[i]+3, RcvBuffer+1, 4) == 0)
                 {
-                    if(bLORADEBUG)
+                    // QRT Finding 1 / TXP-01: an echo while the copy still waits
+                    // READY releases only a foreign-source text (KISS client). An
+                    // own text stays READY for its first own TX; the 40 s heard
+                    // check (own_msg_id 0x01) then stops the repeat. Own PN / own
+                    // RM1 command keep the old skip.
+                    // RAK4630: same ring lock as findAndStopRingSlotImpl() and as
+                    // doTX()'s claim (txRingBeginTx(), READY/DONE->INFLIGHT, locked;
+                    // getNextTxSlot() itself scans lock-free).
+                    bool readyReleased = false;
+#if defined(BOARD_RAK4630)
+                    taskENTER_CRITICAL();
+#endif
+                    if(ringBuffer[i][0] > 0 && ringBuffer[i][1] == RING_STATUS_READY &&
+                       pnFrameIsReleasableGroupText(RcvBuffer[0], ringBuffer[i] + 2, (uint16_t)ringBuffer[i][0],
+                                                    _GW_ID, meshcom_settings.node_call))
+                    {
+                        ringBuffer[i][1] = RING_STATUS_DONE;
+                        ringBuffer[i][0] = 0;
+                        retryCount[i] = 0;
+                        readyReleased = true;
+                    }
+#if defined(BOARD_RAK4630)
+                    taskEXIT_CRITICAL();
+#endif
+                    if(readyReleased)
+                    {
+                        if(bDisplayRetx)
+                            printfdeb("\n[RETX] echo on READY slot, released retid:%i\n", i);
+                    }
+                    else if(bLORADEBUG)
                         printfdeb("[MC-DBG] ACK_SKIP_READY slot=%d msg_id=%08X\n", i, extractRingMsgId(i));
                 }
             }
@@ -936,10 +1145,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             // 0x02, ueber die Original-id). Dann nicht neu starten, sondern
             // wie bisher freigeben, sonst bleibt der Slot bis zum naechsten
             // Schwellwert (40 s) belegt.
+            // Wave 3a: an own RM1 command repeats like a PN (only the RM layer
+            // stops it); its echo restarts the wait the same way.
             bool pnEcho = dbg_type == MSG_TYPE_TEXT &&
-               pnFrameIsOwnPn(ringBuffer[rxSlot] + 2, dbg_lng, _GW_ID, meshcom_settings.node_call);
+               (pnFrameIsOwnPn(ringBuffer[rxSlot] + 2, dbg_lng, _GW_ID, meshcom_settings.node_call) ||
+                pnFrameIsOwnRm1Cmd(ringBuffer[rxSlot] + 2, dbg_lng, _GW_ID, meshcom_settings.node_call));
             bool pnEchoAcked = false;
-            if(pnEcho)
+            // An RM1 command ignores a 0x02 ("acked") own-status mark: a gateway
+            // ACK must not end the repeats, only the RM layer does.
+            if(pnEcho && !pnFrameIsOwnRm1Cmd(ringBuffer[rxSlot] + 2, dbg_lng, _GW_ID, meshcom_settings.node_call))
             {
                 uint32_t pnEchoOrigId = pnRetryId(pnFrameMsgId(ringBuffer[rxSlot] + 2), _GW_ID, 0);
                 int pnEchoIdx = checkOwnTx(pnEchoOrigId);
@@ -970,14 +1184,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             }
         }
 
-        struct aprsMessage aprsmsg;
-        
-        // print which message type we got
-        uint16_t msg_type_b_lora = decodeAPRS(RcvBuffer, size, aprsmsg);
-#if INSTRUMENT_ENABLED
-        INSTR_PH("dec");
-#endif
-
         // TM-06(a): no-op unless this call is draining a staged raw-inject
         // frame (test_inject.cpp) -- see test_inject_service() below.
         test_inject_raw_report(size, msg_type_b_lora);
@@ -1002,22 +1208,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         bool rx_pn_shape = msg_type_b_lora == MSG_TYPE_TEXT &&
            pnPayloadIsPn(aprsmsg.msg_payload, strlen(aprsmsg.msg_payload)) &&
            pnDestIsPersonal(aprsmsg.msg_destination_call, strlen(aprsmsg.msg_destination_call));
-        bool rx_pn_repeat = false;
-        if(rx_is_new && rx_pn_shape)
-        {
-            uint32_t pn_variants[3];
-            pnVariantIds(aprsmsg.msg_id, pn_variants);
-            for(int pv = 0; pv < 3 && !rx_pn_repeat; pv++)
-            {
-                uint8_t pn_variant_buf[4];
-                pnIdToLe(pn_variants[pv], pn_variant_buf);
-                if(checkOwnRx(pn_variant_buf) >= 0)
-                    rx_pn_repeat = true;
-            }
-
-            if(rx_pn_repeat && bDisplayInfo)
-                printfdeb("[RX] PNREPEAT msg-id:%08X\n", aprsmsg.msg_id);
-        }
+        bool rx_pn_repeat = rx_is_new && rx_pn_shape && pnRxIsRepeat(aprsmsg, msg_type_b_lora);
+        if(rx_pn_repeat && bDisplayInfo)
+            printfdeb("[RX] PNREPEAT msg-id:%08X\n", aprsmsg.msg_id);
 
         if(bDisplayLog)
         {
@@ -1053,7 +1246,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         // Block. Der Selbstschutz gegen das eigene Echo ist bei max_hop 0
         // eigentlich unerreichbar (kein Relay wiederholt so ein Frame), bleibt
         // aber als Guard stehen.
-        if(msg_type_b_lora != 0 && aprsmsg.payload_type == '@' &&
+        // BLK-01: a blocked call's HN report (or one with a blocked relay in
+        // the path) skips this branch and lands in the blocked drop below.
+        if(msg_type_b_lora != 0 && !rx_blocked && aprsmsg.payload_type == '@' &&
            is_equ(aprsmsg.msg_destination_call, "HN") &&
            !is_equ(aprsmsg.msg_source_call, meshcom_settings.node_call))
         {
@@ -1129,7 +1324,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
         // decodeAPRS() aus (aprsmsg waere dann nicht verlaesslich befuellt);
         // der Absender-Retry (ein einzelnes Pfad-Token) und das eigene Echo
         // (letzter Hop == ich) duerfen diesen Zweig nie erreichen.
-        if(bNBRRELAY && msg_type_b_lora != 0 &&
+        if(bNBRRELAY && msg_type_b_lora != 0 && !rx_blocked &&
            (aprsmsg.payload_type == ':' || aprsmsg.payload_type == '!' || aprsmsg.payload_type == '@') &&
            strchr(aprsmsg.msg_source_path, ',') != NULL &&
            !is_equ(aprsmsg.msg_source_last, meshcom_settings.node_call))
@@ -1306,6 +1501,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
             {
                 setlogFormatRly(setlog_buf, sizeof(setlog_buf), aprsmsg.msg_id,
                                 aprsmsg.payload_type, aprsmsg.max_hop & 0x0F, "unconf", 0, -1);
+                setlogPrint(setlog_buf);
+            }
+        }
+        else if(rx_blocked)
+        {
+            // BLK-01: blocked call as source or in the path -- same exit as RX-01.
+            logRxDropBlocked(aprsmsg.msg_source_path);
+
+            if(bDisplayLog && !rx_dup)
+            {
+                setlogFormatRly(setlog_buf, sizeof(setlog_buf), aprsmsg.msg_id,
+                                aprsmsg.payload_type, aprsmsg.max_hop & 0x0F, "blocked", 0, -1);
                 setlogPrint(setlog_buf);
             }
         }
@@ -1763,7 +1970,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                             // BUG #8 fix: clear ringBuffer entry to stop retransmission.
                                             // findAndStopRingSlot() compares pnRetryCore(), so this also
                                             // matches a still-queued XOR-retry copy of this msg_id.
-                                            int dmSlot = findAndStopRingSlot(msg_counter);
+                                            int dmSlot = findAndStopRingSlotNoRm1(msg_counter);
                                             if(dmSlot >= 0 && bDisplayRetx)
                                                 printfdeb("\n[RETX] DM-ACK for retid:%i stop retransmit msg-id:%08X\n",
                                                             dmSlot, msg_counter);
@@ -1853,6 +2060,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
                                             mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), strippedPayload);
 
+                                            // RM-04: remote-management command -> queue for the
+                                            // loop task, no display, no BLE (ack went out above).
+                                            if(!rmTryQueue(aprsmsg, strippedPayload))
+                                            {
                                             uint8_t tempRcvBuffer[255];
 
                                             uint16_t tempsize = encodeAPRS(tempRcvBuffer, aprsmsg);
@@ -1864,6 +2075,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
 
                                             addBLEOutBuffer(tempRcvBuffer, tempsize);
+                                            }
                                         }
                                     }
                                     else
@@ -1871,12 +2083,17 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                         //
                                         // next sequence to send incomming DM-Message to Display and/or APP via BLE
                                         //
+                                        // RM-04: a DM without "{NNN" (no ack to send) can be a
+                                        // remote-management command too.
+                                        if(!rmTryQueue(aprsmsg, aprsmsg.msg_payload))
+                                        {
                                         queueDisplayText(aprsmsg, rssi, snr);
 
                                         if(bDisplayVia)
                                             printfdeb("[MESHx]...SRC-PATH:%s ... DST-PATH:%s TEXT:%s\n", aprsmsg.msg_source_path, aprsmsg.msg_destination_path, aprsmsg.msg_payload);
 
                                         addBLEOutBuffer(RcvBuffer, size);
+                                        }
                                     }
                                 }
                             }
@@ -1914,41 +2131,30 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                                           strcmp(pMboxComma1 + 1, aprsmsg.msg_source_call) != 0 &&
                                                           iMboxTagPos > 0);
 
-                                int iMboxAckPos = mcIndexOfStr(aprsmsg.msg_payload, ":ack");
+                                // SNF-GW-01: the ack/store decision lives in msgstore_hook.h,
+                                // shared with the GATE handlers. isGroup and eligible are
+                                // side-effect free, so computing them up front is safe.
+                                MboxDecision mboxDec = mboxClassify(aprsmsg.msg_source_call, destination_call, aprsmsg.msg_payload,
+                                                                    CheckGroup(destination_call) != 0,
+                                                                    bMboxPeerDelivery,   // F6: don't store a peer's own delivery frame
+                                                                    rx_pn_repeat,        // E2: a repeat XOR copy must not push stored_ms out again
+                                                                    msgstoreEligible(destination_call));
 
-                                if(iMboxAckPos > 0)
+                                if(mboxDec.action == MBOX_ACK)
                                 {
                                     // S3: purge hook -- :ackNNN heard for someone else's DM.
-                                    uint16_t mboxAckNnn = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, (size_t)(iMboxAckPos + 4), strlen(aprsmsg.msg_payload));
-                                    msgstoreOnAck(aprsmsg.msg_source_call, destination_call, mboxAckNnn);
+                                    msgstoreOnAck(aprsmsg.msg_source_call, destination_call, mboxDec.nnn);
                                 }
                                 else
-                                if(strcmp(destination_call, "*") != 0 &&
-                                   // Winlink/SOTA gateway calls: never hold a DM to or from them. A held
-                                   // WLNK-1 reply (Login [NNN] challenge) was replayed about once an hour
-                                   // and broke the login (field report HB9VQQ-3, v4.40a); WLNK-1 acks in
-                                   // the bare "ack<digits>" form, so the purge hook never fired either.
-                                   strcmp(aprsmsg.msg_source_call, "WLNK-1") != 0 && strcmp(aprsmsg.msg_source_call, "APRS2SOTA") != 0 &&
-                                   strcmp(destination_call, "WLNK-1") != 0 && strcmp(destination_call, "APRS2SOTA") != 0 &&
-                                   CheckGroup(destination_call) == 0 &&
-                                   mcIndexOfStr(aprsmsg.msg_payload, ":rej") <= 0 &&
-                                   !mcStartsWith(aprsmsg.msg_payload, "{") &&   // {ping}/{pong}/{MCP}/{SET}/{CET}: control frames, never a DM
-                                   !bMboxPeerDelivery &&                        // F6: don't store a peer's own delivery frame
-                                   !rx_pn_repeat &&                             // E2: a repeat XOR copy must not push stored_ms out again
-                                   msgstoreEligible(destination_call))
+                                if(mboxDec.action == MBOX_STORE)
                                 {
                                     // S3: store hook -- a DM for our store set.
-                                    int iMboxEnqPos = mcIndexOfStrFrom(aprsmsg.msg_payload, "{", 1);
-                                    if(iMboxEnqPos > 0)
-                                    {
-                                        uint16_t mboxNnn = (uint16_t)mcSliceToLong(aprsmsg.msg_payload, (size_t)(iMboxEnqPos + 1), strlen(aprsmsg.msg_payload));
-                                        char mboxPayload[MC_PAYLOAD_LEN];
-                                        mcSet(mboxPayload, sizeof(mboxPayload), aprsmsg.msg_payload);
-                                        mcTruncate(mboxPayload, sizeof(mboxPayload), (size_t)iMboxEnqPos);
+                                    char mboxPayload[MC_PAYLOAD_LEN];
+                                    mcSet(mboxPayload, sizeof(mboxPayload), aprsmsg.msg_payload);
+                                    mcTruncate(mboxPayload, sizeof(mboxPayload), mboxDec.textLen);
 
-                                        msgstoreStore(aprsmsg.msg_source_call, destination_call,
-                                                      mboxNnn, mboxPayload, strlen(mboxPayload));
-                                    }
+                                    msgstoreStore(aprsmsg.msg_source_call, destination_call,
+                                                  mboxDec.nnn, mboxPayload, strlen(mboxPayload));
                                 }
 
                                 // S3: peer-cancel hook -- a hop-0 delivery frame (rly_hop
@@ -1995,6 +2201,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 else
                                 if(memcmp(aprsmsg.msg_payload, "{CET}", 5) == 0)
                                 {
+                                    // TXP W0: {CET}-Alter beim LoRa-Empfang (Messung, kein Verhalten)
+                                    cetLogRx(aprsmsg.msg_payload, aprsmsg.msg_source_call,
+                                             aprsmsg.max_hop & 0x0F, aprsmsg.msg_last_path_cnt);
+
                                     if(memcmp(aprsmsg.msg_payload, "{CET}<", 6) == 0)
                                         bMeshDestination = false;   // falsche Zeit nicht weiter geben
                                     else
@@ -2101,53 +2311,27 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                             //Check DM Message nicht vom GW ACK nur wenn "*" (an alle), "WLNK-1", "APRS2SOTA" und Group-Message
                                             if(strcmp(destination_call, "*") == 0 || strcmp(destination_call, "WLNK-1") == 0 || strcmp(destination_call, "APRS2SOTA") == 0 || CheckGroup(destination_call) > 0)
                                             {
-                                                // ACK MSG 0x41 | 0x01020111 | max_hop | 0x01020304 | 1/0 ack from GW or Node 0x00 = Node, 0x01 = GW
-                                                msg_counter=millis();   // ACK mit neuer msg_id versenden
+                                                // ACK MSG 0x41 | ack id | 0x80 server + max hop | acked msg id | 0x01 = GW | 0x00
+                                                // GWACK-01: two copies with ONE id, the clock is read once. The second copy is a
+                                                // repeat for listeners that missed the first; relays forward an id once. Two reads
+                                                // gave two ids whenever the millisecond ticked in between (DisplayInfo on), and every
+                                                // relay forwarded both.
+                                                GwAckPair gwAck;
+                                                gwAckBuildPair(&gwAck, gwAckMillis, aprsmsg.msg_id, meshcom_settings.max_hop_text);
+                                                msg_counter = gwAck.firstId;
 
-                                                print_buff[0]=MSG_TYPE_ACK;
-                                                print_buff[1]=msg_counter & 0xFF;
-                                                print_buff[2]=(msg_counter >> 8) & 0xFF;
-                                                print_buff[3]=(msg_counter >> 16) & 0xFF;
-                                                print_buff[4]=(msg_counter >> 24) & 0xFF;
-                                                print_buff[5]=0x80;      // server & max hop
-                                                print_buff[5] = print_buff[5] | meshcom_settings.max_hop_text;
-                                                // FIX BUG #6: Include original msg_id so sender can match ACK and stop retransmitting
-                                                print_buff[6]=aprsmsg.msg_id & 0xFF;
-                                                print_buff[7]=(aprsmsg.msg_id >> 8) & 0xFF;
-                                                print_buff[8]=(aprsmsg.msg_id >> 16) & 0xFF;
-                                                print_buff[9]=(aprsmsg.msg_id >> 24) & 0xFF;
-                                                print_buff[10]=0x01;     // switch ack GW / Node currently fixed to 0x00
-                                                print_buff[11]=0x00;     // msg always 0x00 at the end
-                                                
-                                                addTxRingEntry(print_buff, 12, RING_STATUS_DONE, "rx_dm_ack_gw");
+                                                addTxRingEntry(gwAck.first, GW_ACK_FRAME_LEN, RING_STATUS_DONE, "rx_dm_ack_gw");
 
                                                 if(bDisplayInfo)
                                                 {
                                                     printfdeb("%s", getTimeString().c_str());
-                                                    printfdeb(" ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", print_buff[5], print_buff[9], print_buff[8], print_buff[7], print_buff[6], print_buff[10], print_buff[11]);
+                                                    printfdeb(" ACK from LoRa GW %02X %02X%02X%02X%02X %02X %02X\n", gwAck.first[5], gwAck.first[9], gwAck.first[8], gwAck.first[7], gwAck.first[6], gwAck.first[10], gwAck.first[11]);
                                                     bNewLine=true;
                                                 }
-                                                                                            
-                                                unsigned long mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
 
-                                                bool bServerFlag = false;
-                                                if((print_buff[5] & 0x80) == 0x80)
-                                                    bServerFlag=true;
+                                                addLoraRxBuffer(gwAck.firstId, (gwAck.first[5] & 0x80) == 0x80);
 
-                                                addLoraRxBuffer(mid, bServerFlag);
-
-                                                msg_counter=millis();   // ACK mit neuer msg_id versenden
-
-                                                print_buff[1]=msg_counter & 0xFF;
-                                                print_buff[2]=(msg_counter >> 8) & 0xFF;
-                                                print_buff[3]=(msg_counter >> 16) & 0xFF;
-                                                print_buff[4]=(msg_counter >> 24) & 0xFF;
-
-                                                addTxRingEntry(print_buff, 12, RING_STATUS_DONE, "rx_dm_ack_new");
-
-                                                mid = (print_buff[1]) | (print_buff[2]<<8) | (print_buff[3]<<16) | (print_buff[4]<<24);
-                                                
-                                                addLoraRxBuffer(mid, bServerFlag);
+                                                addTxRingEntry(gwAck.second, GW_ACK_FRAME_LEN, RING_STATUS_DONE, "rx_dm_ack_new");
                                             }
                                         }
                                     }
@@ -2402,6 +2586,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 // Pfad) bleibt RING_KIND_OTHER -- heutiges Fluten, nie Fall B
                                 // (Advisor-Fund 2026-09-22, Konzept 1: nichts unterdrueckt auf
                                 // Verdacht).
+                                // TXP W1a D1/D2: altes {CET} nicht weiterleiten (rly_slot -1)
+                                bool rly_cet_stale = cetFrameStale(RcvBuffer, (uint16_t)size, cetDeviceClock());
+                                if(rly_cet_stale) cetLogDrop("relay", RcvBuffer, (uint16_t)size);
+                                if(!rly_cet_stale)
                                 rly_slot = addTxRingEntry(RcvBuffer, size, RING_STATUS_DONE, "rx_relay", 0, true,
                                                            (bNBRRELAY && nn_relay.known) ? RING_KIND_RELAY : RING_KIND_OTHER,
                                                            &nn_relay.need, &nn_relay.alone);
@@ -2409,7 +2597,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 INSTR_PH("rly1");
 #endif
 
-                                // SL-02: Rueckgabe ist der belegte Slot bzw. -1,
+                                // SL-02: Rueckgabe ist der belegte Slot bzw. < 0 (-1 ungueltig, -2 voll),
                                 // wenn der Ring den Eintrag verworfen hat.
                                 if(rly_slot >= 0)
                                 {
@@ -2453,7 +2641,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                     }
                                 }
                                 else
-                                    rly_reason = "full";
+                                    rly_reason = rly_cet_stale ? "cet" : "full";
 
                                 /*
                                 if(bDisplayInfo)
@@ -2673,7 +2861,7 @@ void OnRxError(void)
 //////////////////////////////////////////////////////////////////////////
 // LoRa TX functions
 //
-// getMessagePriority/getNextTxSlot/advanceIReadPastEmpty/addTxRingEntry
+// getMessagePriority/getNextTxSlot/addTxRingEntry
 // wurden nach txring_functions.cpp verschoben (QA-Welle 2026-08-22, N-14) --
 // reine Verschiebung, Logik unveraendert. Siehe txring_functions.h/.cpp und
 // test/test_txring/test_txring.cpp.
@@ -2715,23 +2903,48 @@ bool doTX()
 {
     //#if not defined(BOARD_T_DECK_PRO)
 
+    // TXP W1a: {CET}-Beacon, die seit dem letzten 2-s-Sweep die Altersgrenze
+    // ueberschritten hat, nie senden (nur Gate, keine TTL).
+    txRingDropStaleCet(cetDeviceClock());
+
     // Priority-based slot selection instead of plain FIFO
     int txSlot = getNextTxSlot();
     if (txSlot >= 0)
     {
+        // TXP W1b: claim the slot as INFLIGHT right after the (lock-free) pick,
+        // before anything reads it. The claim re-checks under the lock that the
+        // slot still holds the picked entry (same enqueue time): on nRF52
+        // OnRxDone may evict and refill it in between. INFLIGHT keeps the length
+        // (a concurrent enqueue cannot take it) and is invisible to selection,
+        // the retry ladder and the ACK scans until txRingFinishTx() ends the
+        // window: sent -> freed or parked as SENT, rollback -> prev_status back,
+        // refused -> freed.
+        uint32_t pick_enqueue = ringEnqueueTime[txSlot];
+        uint8_t prev_status = RING_STATUS_READY;
+        if(!txRingBeginTx(txSlot, &prev_status, &pick_enqueue))
+            return false;   // slot changed under us, nothing sent
+
         // Track latency
         uint8_t prio = ringPriority[txSlot];
         uint32_t latency = millis() - ringEnqueueTime[txSlot];
+        if(latency > stat_wait_hwm_ms)
+            stat_wait_hwm_ms = latency;
+        {
+            int _as = csmaAgeStage(latency);
+            if(prio < 1 || prio > MSG_PRIO_NORMAL) _as = 0; // Boden gilt nur Prio 1-3
+            stat_csma_aged_boot[_as]++;
+        }
         if(prio >= 1 && prio <= 5)
         {
             stat_tx_count[prio]++;
             stat_latency_sum[prio] += latency;
             if(latency > stat_latency_max[prio])
-                stat_latency_max[prio] = (uint16_t)min(latency, (uint32_t)65535);
+                stat_latency_max[prio] = latency;
         }
 
-        // Track preemption (out-of-order send)
-        if(txSlot != iRead)
+        // Track preemption: the pick was not the oldest occupied slot by
+        // enqueue time (TXP W1b; stat_preempt_count).
+        if(txRingIsPreempt(txSlot))
             stat_preempt_count++;
 
         sendlng = ringBuffer[txSlot][0];
@@ -2743,11 +2956,35 @@ bool doTX()
 
         lora_tx_buffer[sendlng]=0x00;
 
-        int save_read = txSlot;
+        // TXP W0: {CET}-Alter beim Senden (Messung, kein Verhalten). Frame = ringBuffer[slot]+2.
+        {
+            uint32_t cetUtc = 0;
+            if(ringBuffer[txSlot][2] == MSG_TYPE_TEXT && sendlng > 0 &&
+               memchr(lora_tx_buffer, '{', sendlng) != NULL)
+            {
+                bool cetOk = cetFindInFrame(lora_tx_buffer, (uint16_t)sendlng, &cetUtc);
+                bool cetIs = cetOk;
+                if(!cetIs)
+                {
+                    // {CET}< (falsche Zeit) oder unparsbar: trotzdem als CET messen
+                    for(int ci = 6; ci < sendlng && !cetIs; ci++)
+                        if(lora_tx_buffer[ci] == ':')
+                        {
+                            cetIs = (ci + 5 < sendlng) && memcmp(lora_tx_buffer + ci + 1, "{CET}", 5) == 0;
+                            break;
+                        }
+                }
+                if(cetIs)
+                {
+                    char cetAge[16];
+                    int cetTr = cetAgeText(cetAge, sizeof(cetAge), cetOk, cetUtc);
+                    Serial.printf("[CET];tx;age_s;%s;trusted;%d;wait_ms;%lu;prio;%d;ms;%lu\n",
+                                  cetAge, cetTr, (unsigned long)latency, (int)prio, (unsigned long)millis());
+                }
+            }
+        }
 
-        #ifndef BOARD_TLORA_OLV216
-        char save_ring_status = ringBuffer[txSlot][1];
-        #endif
+        int save_read = txSlot;
 
         if(bLORADEBUG)
         {
@@ -2763,7 +3000,7 @@ bool doTX()
             if(bLORADEBUG)
                 printfdeb("[MC-DBG] RING_TX_READ slot=%d prio=%d type=%02X status=%02X "
                           "len=%d msg_id=%08X retry=%d queued=%d/%d lat=%lums\n",
-                          txSlot, prio, ringBuffer[txSlot][2], ringBuffer[txSlot][1],
+                          txSlot, prio, ringBuffer[txSlot][2], prev_status,
                           sendlng, tx_mid, retryCount[txSlot], queued, MAX_RING, (unsigned long)latency);
         }
 
@@ -2783,25 +3020,8 @@ bool doTX()
                            (char)ringBuffer[txSlot][2],
                            (uint8_t)(ringBuffer[txSlot][7] & 0x0F),
                            prio, (char)ringSource[txSlot], latency, txRingDepth(),
-                           cad_attempt, (uint16_t)sendlng, (uint32_t)millis());
+                           tx_cad_attempt, (uint16_t)sendlng, (uint32_t)millis());
         }
-
-        if(ringBuffer[txSlot][1] == RING_STATUS_READY) // mark open to send
-            ringBuffer[txSlot][1] = RING_STATUS_SENT; // mark as sent
-
-        // For out-of-order reads: clear slot data length so getNextTxSlot skips it
-        // and advance iRead past any empty leading slots
-        #if not defined BOARD_RAK4630
-        int iReadBeforeAdvance = iRead; // saved for startTransmit failure rollback
-        #endif
-
-        ringBuffer[txSlot][0] = 0; // Mark as consumed (data is in lora_tx_buffer)
-        advanceIReadPastEmpty();
-
-        // NOTE: Slot clearing (Bug 1 fix) is deferred until after the transmit
-        // decision. Two rollback paths (CAD wait, APRS chip-switch failure)
-        // restore the slot and retry on the next call.
-        // For rollback: we restore ringBuffer[save_read][0] = sendlng.
 
         // Testfang-Hook TX (siehe capture_functions.h): die Bytes, die dieser
         // Knoten gleich auf den Kanal legt. Ohne diese Seite zeigt der
@@ -2819,10 +3039,10 @@ bool doTX()
         // we can now tx the message
 #if INSTRUMENT_ENABLED
         // 0.5 --airgap: treat like TX disabled, same drop semantics (slot
-        // already marked consumed above -- non-rollback).
-        if (TX_ENABLE == 1 && !bAirgap)
+        // is consumed below -- non-rollback).
+        if (TX_ENABLE == 1 && !bAirgap && !gwRegBlocked())
 #else
-        if (TX_ENABLE == 1)
+        if (TX_ENABLE == 1 && !gwRegBlocked())
 #endif
         {
             // TX-01 (BACKLOG 3.8k): hard backstop -- an unconfigured node
@@ -2830,12 +3050,13 @@ bool doTX()
             // into the ring. addTxRingEntry() already refuses to enqueue
             // for such a node; this is the runtime sibling of TX_ENABLE at
             // the only place in the tree that calls
-            // Radio.Send()/startTransmit(). Non-rollback: the slot was
-            // already marked consumed above, same as the TX-disabled and
+            // Radio.Send()/startTransmit(). Non-rollback: the slot is
+            // consumed (freed right here), same as the TX-disabled and
             // decode-failure drop paths below.
             if(isUnconfiguredCall(meshcom_settings.node_call))
             {
                 logTxRefuseUnconfigured();
+                txRingFinishTx(save_read, prev_status, TXRING_FIN_DROP);
                 return false;
             }
 
@@ -2876,9 +3097,7 @@ bool doTX()
                         {
                             printfdeb("[LoRa] startTransmit(track) failed: %d\n", transmissionState);
                             tx_is_active = false;
-                            ringBuffer[save_read][0] = sendlng;
-                            ringBuffer[save_read][1] = save_ring_status;
-                            iRead = iReadBeforeAdvance;
+                            txRingFinishTx(save_read, prev_status, TXRING_FIN_ROLLBACK);
                             return false;
                         }
                         #endif
@@ -2891,8 +3110,7 @@ bool doTX()
                 if(!lora_setchip_aprs())
                 {
                     // Rollback: restore slot so it gets picked up again
-                    ringBuffer[save_read][0] = sendlng;
-                    ringBuffer[save_read][1] = save_ring_status;
+                    txRingFinishTx(save_read, prev_status, TXRING_FIN_ROLLBACK);
 
                     return false;
                 }
@@ -2921,9 +3139,7 @@ bool doTX()
                     {
                         printfdeb("[LoRa] startTransmit(aprs) failed: %d\n", transmissionState);
                         tx_is_active = false;
-                        ringBuffer[save_read][0] = sendlng;
-                        ringBuffer[save_read][1] = save_ring_status;
-                        iRead = iReadBeforeAdvance;
+                        txRingFinishTx(save_read, prev_status, TXRING_FIN_ROLLBACK);
                         return false;
                     }
                     #endif
@@ -2940,10 +3156,10 @@ bool doTX()
 
                 setlogPrintTx(setlog_tx_buf);   // SL-03
 
-                // For text messages needing retransmit: restore length so
-                // updateRetransmissionStatus() can find and retransmit them.
-                if(ringBuffer[save_read][1] != (char)RING_STATUS_DONE && ringBuffer[save_read][2] == MSG_TYPE_TEXT)
-                    ringBuffer[save_read][0] = sendlng;
+                // Own text (was READY): park as SENT with its length for the retry
+                // ladder (updateRetransmissionStatus()); one-shot (DONE) and
+                // non-text frames free the slot.
+                txRingFinishTx(save_read, prev_status, TXRING_FIN_SENT);
 
                 return true;
             }
@@ -2990,11 +3206,7 @@ bool doTX()
                         {
                             printfdeb("[LoRa] startTransmit failed: %d\n", transmissionState);
                             tx_is_active = false;
-                            ringBuffer[save_read][0] = sendlng;
-                            #ifndef BOARD_TLORA_OLV216
-                            ringBuffer[save_read][1] = save_ring_status;
-                            #endif
-                            iRead = iReadBeforeAdvance; // re-include slot in scan window
+                            txRingFinishTx(save_read, prev_status, TXRING_FIN_ROLLBACK);
                             return false;
                         }
                         #endif
@@ -3024,10 +3236,10 @@ bool doTX()
                         }
                     }
 
-                    // For text messages needing retransmit: restore length so
-                    // updateRetransmissionStatus() can find and retransmit them.
-                    if(ringBuffer[save_read][1] != (char)RING_STATUS_DONE && ringBuffer[save_read][2] == MSG_TYPE_TEXT)
-                        ringBuffer[save_read][0] = sendlng;
+                    // Own text (was READY): park as SENT with its length for the
+                    // retry ladder (updateRetransmissionStatus()); one-shot (DONE)
+                    // and non-text frames free the slot.
+                    txRingFinishTx(save_read, prev_status, TXRING_FIN_SENT);
 
                     return true;
                 }
@@ -3050,7 +3262,9 @@ bool doTX()
 #endif
         }
 
-        // Non-rollback drop paths (TX disabled, unconfigured node, or decode failure) — slot stays cleared
+        // Non-rollback drop paths (TX disabled, unconfigured node, or decode
+        // failure): the slot is consumed, free it (it is still INFLIGHT here).
+        txRingFinishTx(save_read, prev_status, TXRING_FIN_DROP);
     }
 
     //#endif
@@ -3068,10 +3282,18 @@ bool doTX()
 // k=4 wuerde die Retry-Variante auf die urspruengliche id zurueckdrehen.
 static_assert(MAX_RETRANSMIT <= 3, "MAX_RETRANSMIT must stay <=3: pnRetryId's k=retryCount+1 wraps onto the original id at k=4");
 
+// QRT Finding 2: one bit per ring slot, set once the "retry deferred" line was
+// printed for the slot's current wait. Only the loop() task touches it.
+static uint32_t retxDeferLogged = 0;
+
 bool updateRetransmissionStatus()
 {
     for(int ircheck = 0; ircheck < MAX_RING; ircheck++)
     {
+        // TXP W1b: a slot doTX() is sending right now is neither aged nor
+        // coerced nor retransmitted; doTX() ends the INFLIGHT window itself.
+        if(ringBuffer[ircheck][1] == RING_STATUS_INFLIGHT)
+            continue;
 
 #if defined(EXTERNAL_RADIO)
         // owned-slot reuse invariant: a slot owned by an in-flight external TX must not be
@@ -3097,6 +3319,19 @@ bool updateRetransmissionStatus()
             //   Retry 1-3: each waits 40s → total max 120s (2 min)
             uint8_t threshold = 0x15;
 
+            // QRT Finding 2 (log-once bit): a deferred slot is pinned at the
+            // threshold (decremented back below, see the BP_QRT branch), so
+            // it sits exactly at `threshold` after every tick. A freshly
+            // armed slot needs 20 ticks to get there and passes values
+            // below it first. Clearing the bit on every other value (and
+            // for empty/READY/DONE slots, else branch below) therefore
+            // resets it on every release path -- PN-acked, RM1, give-up,
+            // READY-echo (other task), eviction, findAndStopRingSlot() --
+            // without each site having to know about it, and without a
+            // write from the LORA task.
+            if(ringBuffer[ircheck][1] != threshold)
+                retxDeferLogged &= ~(1UL << (ircheck & 31));
+
             if(ringBuffer[ircheck][1] == threshold)
             {
                 // PN-Wiederholung (XOR, pn_retry.h), M1: das Ziel hat schon
@@ -3120,6 +3355,58 @@ bool updateRetransmissionStatus()
                         if(bDisplayRetx)
                             printfdeb("\n[RETX] PN already acked, stop retid:%i msg-id:%08X\n",
                                           ircheck, pnSlotOrigId);
+
+                        continue;
+                    }
+                }
+
+                // RM1 command: the RM layer stopped it (verified reply) while a
+                // copy was READY / on air, so findAndStopRingSlot() missed this
+                // slot. Release it instead of another copy or a give-up (same
+                // idea as M1 above; status 0x02 cannot be used here, a gateway
+                // ACK sets it). The stop is consumed with the release.
+                if(pnFrameIsOwnRm1Cmd(&ringBuffer[ircheck][2], (uint16_t)size, _GW_ID, meshcom_settings.node_call))
+                {
+                    uint32_t rm1SlotOrigId = pnRetryId(pnFrameMsgId(&ringBuffer[ircheck][2]), _GW_ID, 0);
+                    bool rm1WasStopped;
+#if defined(BOARD_RAK4630)
+                    taskENTER_CRITICAL();
+#endif
+                    rm1WasStopped = pnRm1StoppedTake(&rm1Stopped, rm1SlotOrigId);
+                    if(rm1WasStopped)
+                    {
+                        ringBuffer[ircheck][1] = RING_STATUS_DONE;
+                        ringBuffer[ircheck][0] = 0;
+                        retryCount[ircheck] = 0;
+                    }
+#if defined(BOARD_RAK4630)
+                    taskEXIT_CRITICAL();
+#endif
+                    if(rm1WasStopped)
+                    {
+                        if(bDisplayRetx)
+                            printfdeb("\n[RETX] RM1 stopped, release retid:%i msg-id:%08X\n",
+                                          ircheck, rm1SlotOrigId);
+
+                        continue;
+                    }
+                }
+
+                // QRT Finding 1: an own group text that was heard (0x01) or
+                // acked (0x02) meanwhile needs no further copy.
+                if(pnFrameIsRetryEligibleGroupText(&ringBuffer[ircheck][2], (uint16_t)size, _GW_ID, meshcom_settings.node_call))
+                {
+                    int heardIdx = checkOwnTx(extractRingMsgId(ircheck));
+                    if(heardIdx >= 0 && (own_msg_id[heardIdx][4] == 0x01 || own_msg_id[heardIdx][4] == 0x02))
+                    {
+                        ringBuffer[ircheck][1] = RING_STATUS_DONE;
+                        ringBuffer[ircheck][0] = 0;
+                        retryCount[ircheck] = 0;
+                        retxDeferLogged &= ~(1UL << (ircheck & 31));
+
+                        if(bDisplayRetx)
+                            printfdeb("\n[RETX] already heard, stop retid:%i msg-id:%08X\n",
+                                          ircheck, (unsigned int)extractRingMsgId(ircheck));
 
                         continue;
                     }
@@ -3151,7 +3438,10 @@ bool updateRetransmissionStatus()
                         // checkOwnTx() zurueckfalten, sonst findet weder die
                         // 0x04-Held-Pruefung noch das 0x03-Telefonframe unten
                         // den eigenen own_msg_id-Eintrag.
-                        if(pnFrameIsOwnPn(&ringBuffer[ircheck][2], (uint16_t)size, _GW_ID, meshcom_settings.node_call))
+                        // Ein eigenes RM1-Kommando (auch handgetippt mit '{' ab
+                        // Index 1) traegt dieselben Retry-ids.
+                        if(pnFrameIsOwnPn(&ringBuffer[ircheck][2], (uint16_t)size, _GW_ID, meshcom_settings.node_call) ||
+                           pnFrameIsOwnRm1Cmd(&ringBuffer[ircheck][2], (uint16_t)size, _GW_ID, meshcom_settings.node_call))
                             ring_msg_id = pnRetryId(ring_msg_id, _GW_ID, 0);
 
                         struct aprsMessage giveupMsg;
@@ -3220,6 +3510,21 @@ bool updateRetransmissionStatus()
                     continue;
                 }
 
+                // QRT Finding 2: no retry copy while this node refuses user
+                // messages (BP_QRT) -- the copy would evict queued entries.
+                // Stay at the threshold, re-check next tick. Logged once per slot.
+                if(bpCurrentState() == (int)BP_QRT)
+                {
+                    ringBuffer[ircheck][1]--;
+                    if(!(retxDeferLogged & (1UL << (ircheck & 31))))
+                    {
+                        retxDeferLogged |= (1UL << (ircheck & 31));
+                        printfdeb("\n[RETX] QRT, retry deferred retid:%i\n", ircheck);
+                    }
+                    continue;
+                }
+                retxDeferLogged &= ~(1UL << (ircheck & 31));
+
                 if(bLORADEBUG)
                 {
                     unsigned int ring_msg_id = (ringBuffer[ircheck][6]<<24) | (ringBuffer[ircheck][5]<<16) | (ringBuffer[ircheck][4]<<8) | ringBuffer[ircheck][3];
@@ -3281,8 +3586,10 @@ bool updateRetransmissionStatus()
 
                 // Nur eigene PN (eigenes Rufzeichen als Quelle): eine PN, die
                 // sendMessage() fuer einen KISS-Client sendet, bleibt 1:1.
+                // Wave 3a: own RM1 commands take the same retry-id path.
                 if(pnEligible &&
-                   pnFrameIsOwnPn(pnLocalFrame, (uint16_t)size, _GW_ID, meshcom_settings.node_call))
+                   (pnFrameIsOwnPn(pnLocalFrame, (uint16_t)size, _GW_ID, meshcom_settings.node_call) ||
+                    pnFrameIsOwnRm1Cmd(pnLocalFrame, (uint16_t)size, _GW_ID, meshcom_settings.node_call)))
                 {
                     pnNewId = pnRetryId(pnFrameMsgId(pnLocalFrame), _GW_ID,
                                         (uint8_t)(retryCount[ircheck] + 1));
@@ -3292,47 +3599,40 @@ bool updateRetransmissionStatus()
                     // else: kein FCS-Feld gefunden -- 1:1-Pfad unten greift
                 }
 
-                // ready for doTX (text messages) or fire-and-forget, wie zuvor
-                uint8_t retransmitStatus = (ringBuffer[ircheck][2] == MSG_TYPE_TEXT)
-                                            ? RING_STATUS_READY : RING_STATUS_DONE;
+                // TXP W1c: die Wiederholung wird in den geparkten Original-Slot
+                // zurueckgeschrieben (kein Kopieren in einen anderen Slot, kein
+                // Freigeben danach): in einem vollen Pool ging die Kopie sonst
+                // verloren, und ein ACK konnte das Original zwischen Kopie und
+                // Freigabe loeschen. Prio/Quelle/Kind/Need/Alone bleiben im Slot.
+                // Der Status wird unter Lock neu geprueft (Schwelle 0x15); hat ein
+                // ACK/RM1-Stopp den Slot inzwischen freigegeben, passiert nichts.
+                if(!txRingRearmRetry(ircheck, pnRewritten ? pnLocalFrame : &ringBuffer[ircheck][2],
+                                     (uint16_t)size, threshold))
+                    continue;
 
-                // Quelle ist ircheck, Ziel wird erst innerhalb der Funktion (unter
-                // Lock) gewaehlt — ircheck != iWrite im Normalfall (iWrite zeigt auf
-                // einen leeren Slot); selbst im theoretischen Gleichstand ist
-                // memcpy(dst==src) hier folgenlos (Quelle == Ziel-Byte fuer Byte).
-                // Original erst NACH dem Kopieren freigeben, damit die Payload beim
-                // Kopiervorgang garantiert noch gueltig ist.
-                int retxSlot = addTxRingEntry(pnRewritten ? pnLocalFrame : &ringBuffer[ircheck][2],
-                                (uint16_t)size, retransmitStatus,
-                                "retransmit", retryCount[ircheck] + 1);
-
-                // SL-03: "retransmit" bildet auf 'o' ab -- die Kennung des
-                // Quellslots wird deshalb mitgenommen (wie bei der Prio-Verdraengung).
-                if(retxSlot >= 0)
+                if(pnRewritten)
                 {
-                    ringSource[retxSlot] = ringSource[ircheck];
+                    // Eigene Retry-id registrieren wie sendMessage() (sonst
+                    // faelschlich als fremdes eigenes Echo erkannt).
+                    if(bGATEWAY && meshcom_settings.node_hasIPaddress)
+                        addLoraRxBuffer(pnNewId, true);
+                    else
+                        addLoraRxBuffer(pnNewId, false);
 
-                    if(pnRewritten)
-                    {
-                        // Eigene Retry-id registrieren wie sendMessage() (sonst
-                        // faelschlich als fremdes eigenes Echo erkannt).
-                        if(bGATEWAY && meshcom_settings.node_hasIPaddress)
-                            addLoraRxBuffer(pnNewId, true);
-                        else
-                            addLoraRxBuffer(pnNewId, false);
-
-                        if(bDisplayRetx)
-                            printfdeb("\n[RETX] PNRETRY k=%u msg-id:%08X\n",
-                                          (unsigned)(retryCount[ircheck] + 1), pnNewId);
-                    }
+                    if(bDisplayRetx)
+                        printfdeb("\n[RETX] %s k=%u msg-id:%08X\n",
+                                      pnFrameIsOwnRm1Cmd(pnLocalFrame, (uint16_t)size, _GW_ID, meshcom_settings.node_call)
+                                          ? "RM1RETRY" : "PNRETRY",
+                                      (unsigned)retryCount[ircheck], pnNewId);
                 }
-
-                // Mark original as done and free slot (after copy, so len is correct in new slot)
-                ringBuffer[ircheck][1] = RING_STATUS_DONE;
-                ringBuffer[ircheck][0] = 0;  // free slot so getNextTxSlot skips it
 
                 return true;
             }
+        }
+        else
+        {
+            // empty, READY or DONE slot: no deferral can be pending (see above)
+            retxDeferLogged &= ~(1UL << (ircheck & 31));
         }
     }
 
@@ -3544,7 +3844,8 @@ unsigned long externalTxBusyBackoffMs(void)
     // Reuse the existing CSMA backoff timing (priority-aware, bounded). attempt 0
     // gives a normal base+jitter delay; this is a true delay before the next
     // external submission, not a same-pass reselect.
-    return csma_compute_timeout(0);
+    // No age floor: an aged head frame must not burn its busy retries in ~2 s.
+    return csma_compute_timeout_nofloor(0);
 }
 #endif  // EXTERNAL_RADIO
 
@@ -3681,7 +3982,7 @@ void OnHeaderDetect(void)
 // 5.1 -- Menschen warten darauf) sowie der generische Fallback rufen
 // csma_compute_timeout_prio() direkt; alles andere delegiert an
 // txringCaseBackoffSlot().
-unsigned long csma_compute_timeout_slot(int attempt, int slot) {
+static unsigned long csma_compute_timeout_slot_nofloor(int attempt, int slot) {
     if(attempt >= CSMA_MAX_ATTEMPTS)
         return CSMA_RAPID_RX_MS; // rapid-fire with preamble check, wie csma_compute_timeout_prio()
 
@@ -3700,10 +4001,50 @@ unsigned long csma_compute_timeout_slot(int attempt, int slot) {
     return csma_compute_timeout_prio(attempt, prio);
 }
 
+// Own time on air in ms for a frame of len bytes. ESP32: RadioLib radio.getTimeOnAir()
+// returns microseconds; nRF52: Radio.TimeOnAir() returns ms. 0 if no radio object.
+unsigned long lora_time_on_air_ms(int len) {
+#if defined(BOARD_RAK4630)
+    return (unsigned long)Radio.TimeOnAir(MODEM_LORA, len);
+#elif defined(MC_HAS_RADIOLIB_RADIO)
+    return (unsigned long)(radio.getTimeOnAir(len) / 1000);
+#else
+#if defined(ARDUINO) && !defined(EXTERNAL_RADIO)
+    // #pragma message, not #warning: build_src_flags use -Werror=cpp on some envs.
+    #pragma message("lora_time_on_air_ms(): no radio object for this board, airtime 0 (age floor stage 1 degrades to its 1500 ms constant)")
+#endif
+    (void)len;
+    return 0;
+#endif
+}
+
+// Entry for re-arms after a RECEIVED frame: today's result, then the age floor
+// (Brief G; priorities 1-3 only, min() keeps the case-A escape).
+unsigned long csma_compute_timeout_slot(int attempt, int slot) {
+    unsigned long today = csma_compute_timeout_slot_nofloor(attempt, slot);
+    if(slot < 0 || attempt >= CSMA_MAX_ATTEMPTS)
+        return today;
+    uint32_t age = millis() - ringEnqueueTime[slot];
+    if(csmaAgeStage(age) == 0)
+        return today;
+    uint8_t prio = ringPriority[slot];
+    long jit = random(0, CSMA_AGE_SLOTS + 1);
+    unsigned long res = csmaApplyAgeFloor(today, age, prio, lora_time_on_air_ms(ringBuffer[slot][0]), jit);
+    if(bLORADEBUG && prio >= 1 && prio <= MSG_PRIO_NORMAL)
+        printfdeb("[MC-DBG] CSMA_AGED slot=%d age=%lu stage=%d hold=%lu\n", slot, (unsigned long)age, csmaAgeStage(age), res);
+    return res;
+}
+
 unsigned long csma_compute_timeout(int attempt) {
     // Default (no priority context): use priority of next queued packet
     int txSlot = getNextTxSlot();
     return csma_compute_timeout_slot(attempt, txSlot);
+}
+
+// Re-arms that are NOT after a received frame (CAD_BUSY back-off ladder, external
+// TX busy retry): never the age floor.
+unsigned long csma_compute_timeout_nofloor(int attempt) {
+    return csma_compute_timeout_slot_nofloor(attempt, getNextTxSlot());
 }
 
 // Arithmetik (Basis/Slots je Prioritaet, 5/6- und 2/3-Skalierung) liegt in
@@ -3721,5 +4062,7 @@ void csma_reset(void) {
         stat_csma_hwm_attempts = cad_attempt;
 
     cad_attempt = 0;
-    csma_timeout = csma_compute_timeout(0);
+    // Post-TX (and CAD_FREE): never the age floor, neighbours must get the full hold
+    // after our own frame. Structurally: this calls the nofloor variant only.
+    csma_timeout = csma_compute_timeout_slot_nofloor(0, getNextTxSlot());
 }

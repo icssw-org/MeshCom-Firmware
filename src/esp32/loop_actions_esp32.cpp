@@ -12,6 +12,8 @@
 #include "batt_functions.h"
 #include "batt_pipeline.h"
 #include "lora_functions.h"
+#define CET_AGE_WITH_CLOCK
+#include "cet_age.h"
 #include "txring_functions.h"
 #include "command_functions.h"
 #if defined(ENABLE_MSGSTORE)
@@ -69,7 +71,7 @@ void loopAction_retransmit(void)
     // BP-03 (DJ8MEH-RCA): age out stale BACKGROUND (HEY) ring
     // entries here, in the main-loop tick -- NOT in getNextTxSlot(),
     // which also runs on the nRF52 timer task (Advisor F1).
-    txRingAgeBackground(millis());
+    txRingAgeBackground(millis(), cetDeviceClock());
 }
 
 // ---- mcp_refresh_timer -------------------------------------------------
@@ -102,7 +104,7 @@ bool loopEnabled_heapMon(void)
     return on;
 }
 
-// ---- [HEAP] boot marks ------------------------------------------------------
+// ---- [HEAP] boot marks (heap verdict 2026-10-18, 6.5) ------------------------
 // One line per service, once per boot, in the format of the (init) line, so a heap drop is
 // attributable from a single boot log. Unlike (init) they print under --setlog on as well
 // (bench and field nodes run setlog); one short line each. The services come up in different
@@ -113,6 +115,7 @@ bool loopEnabled_heapMon(void)
 //   kiss  bKISS and the link is up (kissLoop() has opened the listener in this pass)
 //   netconsole  bNETCONSOLE and iWlanWait==0 (startNetConsole()/loopNetConsole() ran this pass)
 //   ble   heapMarkBle(), called right after the boot bleStackStart()
+//   tft   heapMarkTft() (HAS_TFT), called right after the boot initTFT()
 extern bool bweb_server_running;   // web_functions.cpp
 extern bool bMDNSOK;               // web_functions.cpp
 extern bool hasIPaddress;          // udp_functions.cpp
@@ -125,6 +128,7 @@ static uint8_t s_heapMarksDone = 0;
 #define HM_KISS 0x10
 #define HM_NETCON 0x20
 #define HM_BLE 0x40
+#define HM_TFT 0x80
 
 #define HEAP_MARK(bit, label)                                                              \
     do                                                                                     \
@@ -139,6 +143,12 @@ void heapMarkBle(void)
 {
     if (!(s_heapMarksDone & HM_BLE))
         HEAP_MARK(HM_BLE, "ble");
+}
+
+void heapMarkTft(void)
+{
+    if (!(s_heapMarksDone & HM_TFT))
+        HEAP_MARK(HM_TFT, "tft");
 }
 
 void heapMarksPoll(void)

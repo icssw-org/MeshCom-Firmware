@@ -21,6 +21,7 @@ void loraDeepSleep();
 #endif
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
+bool pnRxIsRepeat(const struct aprsMessage &aprsmsg, uint8_t msg_type); // SNF-GW-03: XOR repeat of a PN already in the RX ring
 void OnRxTimeout(void);
 void OnRxError(void);
 // is_new_packet() wird jetzt in dedup_functions.h deklariert.
@@ -42,10 +43,19 @@ bool updateRetransmissionStatus(void);
 // eine Retry-Variante umgeschrieben wurde. Auch vom Server-ACK-Pfad
 // (udp_frame_esp32.cpp, udp_frame_nrf52.cpp) aufgerufen. Slot oder -1.
 int findAndStopRingSlot(uint32_t msgId);
+// As above, but skips an own RM1 command slot (binary/DM/server ACKs must not stop it).
+int findAndStopRingSlotNoRm1(uint32_t msgId);
+// A new own RM1 command was enqueued under origMsgId: drop a stale "RM1 stopped" entry with the same
+// id core (left by a stop that missed long after its ladder ended: expiry, forget, eviction), so it
+// cannot release the new command's slot at its first threshold.
+void rm1StoppedForget(uint32_t origMsgId);
 
 unsigned long csma_compute_timeout(int attempt);
+// Same without the age floor (CAD_BUSY ladder, external TX busy retry).
+unsigned long csma_compute_timeout_nofloor(int attempt);
 unsigned long csma_compute_timeout_prio(int attempt, uint8_t priority);
 void csma_reset(void);
+unsigned long lora_time_on_air_ms(int len);
 
 // getMessagePriority/getNextTxSlot: siehe txring_functions.h (verschoben,
 // QA-Welle 2026-08-22, N-14).

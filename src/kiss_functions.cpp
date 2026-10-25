@@ -1,4 +1,4 @@
-// KISS-over-TCP interface (Variant C, ESP32 v1) — see docs/kiss_mode_analysis.md
+// KISS-over-TCP interface (Variant C, ESP32 v1)
 //
 // TCP server (single client, LAN-only) speaking standard KISS framing.
 // RX : MeshCom text/position frame -> decodeAPRS() -> AX.25 UI frame -> KISS.

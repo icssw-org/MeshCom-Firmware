@@ -12,7 +12,6 @@
 // and injected via sendMessage(). The on-air MeshCom protocol is unchanged and
 // the node stays fully in the mesh.
 //
-// See docs/kiss_mode_analysis.md.
 
 #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
 

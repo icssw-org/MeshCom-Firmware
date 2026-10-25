@@ -1735,7 +1735,7 @@ static void nbrISymFlush(NbrSymSink &s)
 // --- Relay-Entscheidung, innerer Teil ----------------------------------------------
 
 static NbrNeed nbrIRelayNeed(const NbrMatrix &m, const uint64_t *words, int ntok, uint16_t now_min, bool sym,
-                             NbrSymSink &sink)
+                             NbrSymSink &sink, bool gw_has_frame)
 {
     NbrNeed r;
     r.need = nbrMaskNone();
@@ -1766,6 +1766,13 @@ static NbrNeed nbrIRelayNeed(const NbrMatrix &m, const uint64_t *words, int ntok
             nbrICovers(m, c, ed))
             nbrMaskSet(hasf, ed.y);
     }
+    // Server-Frame (GWRX-01): jedes GW-gehaltene Gateway hat ihn vom Server. Nur die
+    // Zeile selbst, nicht ihre Hoerer: die haben ihn erst, wenn das Gateway sendet
+    // (das rechnet die Deckung beim gehoerten Duplikat, nbrCoverMask).
+    if (gw_has_frame)
+        for (int x = 1; x < NBR_MAX_ROWS; x++)
+            if (nbrIUsed(m, x) && nbrIGwHeld(m, x, now_min))
+                nbrMaskSet(hasf, x);
 
     NbrMask dep = nbrMaskOr(c.direct, nbrIHeardMeMask(m, now_min));
     nbrMaskClear(dep, 0);
@@ -2913,7 +2920,8 @@ NbrMask nbrHearersMask(const NbrMatrix &m, int row, uint16_t now_min)
     return r;
 }
 
-NbrNeed nbrRelayNeed(const NbrMatrix &m, const char *path, uint16_t now_min, bool sym, uint32_t msg_id)
+static NbrNeed nbrNeedImpl(const NbrMatrix &m, const char *path, uint16_t now_min, bool sym, uint32_t msg_id,
+                           bool gw_has_frame)
 {
     char tokens[8][NBR_CALL_LEN];
     int ntok = nbrTokenizePath(path, tokens, 8);
@@ -2931,10 +2939,20 @@ NbrNeed nbrRelayNeed(const NbrMatrix &m, const char *path, uint16_t now_min, boo
     NbrSymSink sink;
     NBR_LOCK();
     nbrISymBegin(sink, m, tokens, now_min, msg_id);
-    NbrNeed r = nbrIRelayNeed(m, words, ntok, now_min, sym, sink);
+    NbrNeed r = nbrIRelayNeed(m, words, ntok, now_min, sym, sink, gw_has_frame);
     NBR_UNLOCK();
     nbrISymFlush(sink);
     return r;
+}
+
+NbrNeed nbrRelayNeed(const NbrMatrix &m, const char *path, uint16_t now_min, bool sym, uint32_t msg_id)
+{
+    return nbrNeedImpl(m, path, now_min, sym, msg_id, false);
+}
+
+NbrNeed nbrServerNeed(const NbrMatrix &m, const char *path, uint16_t now_min, bool sym, uint32_t msg_id)
+{
+    return nbrNeedImpl(m, path, now_min, sym, msg_id, true);
 }
 
 NbrMask nbrCoverMask(const NbrMatrix &m, const char *relayer, uint16_t now_min, bool sym,

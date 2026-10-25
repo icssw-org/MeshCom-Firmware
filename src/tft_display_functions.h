@@ -7,6 +7,12 @@
 void initTFT();
 #if defined(HAS_TFT)
 void tftBacklight();   // #1182: node_contrast, or 0 while bDisplayIsOff
+// AU-21: sprite (25600 B internal heap) on demand, loop task only
+bool tftSpriteAcquire(void);
+void tftSpriteRelease(void);
+bool tftSpriteActive(void);
+uint32_t tftSpriteBytes(void);
+void tftShowUpdating(void);   // direct via tft, works without sprite
 #endif
 void displayTFT(const String& header);
 void displayTFT(const String& header, const String& line);
