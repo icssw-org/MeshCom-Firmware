@@ -53,7 +53,19 @@ jobs:
       run: "mkdir -p ~/.platformio/platforms/espressif32/boards && wget -O ~/.platformio/platforms/espressif32/boards/t-beams3-supreme.json https://raw.githubusercontent.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/master/boards/t-beams3-supreme.json && cat ~/.platformio/platforms/espressif32/boards/t-beams3-supreme.json"
 
     - name: Build all Projects
-      run: "cd ${{ github.workspace }} && pio run"
+      # Firmware update (#1187): a release tag of the form v4.40a or v4.40a.MM.DD goes into the image
+      # as MC_BUILD_TAG (tools/mc_build_defines.py), so a node knows its own release and can compare it
+      # with the latest one. Any other tag would make the running version unreadable for the update
+      # check; the image is then built without MC_BUILD_TAG and reports SOURCE_VERSION only.
+      run: |
+        cd ${{ github.workspace }}
+        if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]{1,3}\.[0-9]{1,3}[a-z](\.[0-9]{1,2}\.[0-9]{1,2})?$ ]]; then
+          export MC_BUILD_TAG="$GITHUB_REF_NAME"
+          echo "MC_BUILD_TAG=$MC_BUILD_TAG"
+        else
+          echo "::warning::tag '$GITHUB_REF_NAME' is not v<VER> or v<VER>.MM.DD: images carry no release tag, nodes cannot compare it"
+        fi
+        pio run
 
     - name: Convert RAK to UF2
       run: "wget https://raw.githubusercontent.com/microsoft/uf2/refs/heads/master/utils/uf2conv.py && wget https://raw.githubusercontent.com/microsoft/uf2/refs/heads/master/utils/uf2families.json && python3 uf2conv.py .pio/build/wiscore_rak4631/firmware.hex -c -o .pio/build/wiscore_rak4631/wiscore_rak4631.uf2 -f 0xADA52840"
@@ -91,10 +103,27 @@ jobs:
       mv .pio/build/LilyGo_T-Beam-1W/firmware.bin .pio/build/LilyGo_T-Beam-1W/T-Beam-1W.bin &
       mv .pio/build/LilyGo_T3_S3_V1_3/firmware.bin .pio/build/LilyGo_T3_S3_V1_3/T3_S3_V13.bin &
       mv .pio/build/LilyGo_T_Connect_Pro/firmware.bin .pio/build/LilyGo_T_Connect_Pro/t_connect_pro.bin &
+      mv .pio/build/T-ETH-ELITE_1262/firmware.bin .pio/build/T-ETH-ELITE_1262/T-ETH-ELITE_1262.bin &
       mv .pio/build/wiscore_rak4631/firmware.zip .pio/build/wiscore_rak4631/wiscore_rak4631.zip &
       mv .pio/build/heltec_t114/firmware.zip .pio/build/heltec_t114/heltec_t114.zip &
       mv .pio/build/t_echo/firmware.zip .pio/build/t_echo/t_echo.zip &
-      mv .pio/build/esp32-S3-safeboot/bootloader.bin .pio/build/esp32-S3-safeboot/bootloader-s3.bin"
+      mv .pio/build/esp32-S3-safeboot/bootloader.bin .pio/build/esp32-S3-safeboot/bootloader-s3.bin &
+      wait"
+
+    - name: Firmware update assets (.autoupdate)
+      # One zlib twin <name>.autoupdate per ESP32 app image (#1187); the node downloads it and Safeboot
+      # inflates it while writing. --check re-inflates every output and compares it byte-exact.
+      # make_autoupdate.py refuses any input without the 0xE9 app image magic.
+      run: |
+        set -e
+        apps=$(ls .pio/build/*/*.bin | grep -v -E '/firmware\.bin$|/(bootloader|bootloader-s3|partitions|otadata|safeboot|safeboot-s3)\.bin$|/esp32-(S3-)?safeboot/')
+        echo "$apps"
+        n=$(echo "$apps" | wc -l)
+        echo "ESP32 app images: $n"
+        [ "$n" -ge 1 ] || { echo "::error::no ESP32 app image found"; exit 1; }
+        python3 tools/make_autoupdate.py --check $apps
+        z=$(ls .pio/build/*/*.autoupdate | wc -l)
+        [ "$z" -eq "$n" ] || { echo "::error::$n app images but $z .autoupdate files"; exit 1; }
 
     - uses: ncipollo/release-action@v1
       with:
@@ -127,6 +156,8 @@ jobs:
         .pio/build/LilyGo_T-Beam-1W/T-Beam-1W.bin,
         .pio/build/LilyGo_T3_S3_V1_3/T3_S3_V13.bin,
         .pio/build/LilyGo_T_Connect_Pro/t_connect_pro.bin,
+        .pio/build/T-ETH-ELITE_1262/T-ETH-ELITE_1262.bin,
+        .pio/build/*/*.autoupdate,
         .pio/build/wiscore_rak4631/wiscore_rak4631.zip,
         .pio/build/wiscore_rak4631/wiscore_rak4631.uf2,
         .pio/build/heltec_t114/heltec_t114.zip,
