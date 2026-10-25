@@ -1322,6 +1322,30 @@ void E290DisplayUpdate()
     #endif
 }
 
+#if defined(BOARD_E290)
+// E290 refresh policy. Returns true when this page update should be a full refresh (it flashes the panel).
+//  - OTP build (EINK_HELTEC_VME290_OTP): quiet partial refresh, a full "cleaning" refresh only after every
+//    E290_FULL_EVERY page updates (0 = never). The TRACK page always uses partial refresh.
+//  - Stock build: never (original behaviour, partial refresh only).
+#ifndef E290_FULL_EVERY
+#define E290_FULL_EVERY 10
+#endif
+static bool e290FullRefreshDue()
+{
+    #ifdef EINK_HELTEC_VME290_OTP
+    static int cnt = 0;
+    if(bDisplayTrack || E290_FULL_EVERY <= 0)
+        return false;
+    if(++cnt >= E290_FULL_EVERY)
+    {
+        cnt = 0;
+        return true;
+    }
+    #endif
+    return false;
+}
+#endif
+
 void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
 {
     #if !defined (BOARD_T_DECK)  && !defined (BOARD_T_DECK_PLUS)
@@ -1468,7 +1492,19 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     // V1.2) ueberspringen -> je Blaetter-Schritt nur EIN Voll-Refresh.
                     if(memcmp(text, "#N", 2) != 0)
                     #endif
+                    {
+                    #if defined(BOARD_E290)
+                    // E290: partial refresh, full "cleaning" refresh only now and then (see e290FullRefreshDue()).
+                    bool bE290Full = e290FullRefreshDue();
+                    if(bE290Full)
+                        epaper_display.fastmodeOff();
+                    #endif
                     epaper_display.update();
+                    #if defined(BOARD_E290)
+                    if(bE290Full)
+                        epaper_display.fastmodeOn();   // back to fastmode ON: the panel RAMs hold what is on screen
+                    #endif
+                    }
                 }
             }
             
@@ -2950,7 +2986,16 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // kein Ghosting. Die schnellen Partial-Updates (Uhrzeit) bleiben unberuehrt.
     epaper_display.fastmodeOff();
     #endif
+    #if defined(BOARD_E290)
+    bool bE290Full = e290FullRefreshDue();   // E290: partial refresh, full one only now and then
+    if(bE290Full)
+        epaper_display.fastmodeOff();
+    #endif
     epaper_display.update();
+    #if defined(BOARD_E290)
+    if(bE290Full)
+        epaper_display.fastmodeOn();   // back to fastmode ON, see sendDisplay1306
+    #endif
 
     #elif defined (BOARD_T5_EPAPER)
     // extra source

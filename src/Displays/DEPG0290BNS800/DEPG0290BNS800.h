@@ -61,6 +61,10 @@ class DEPG0290BNS800 : public BaseDisplay {
     // =========================
     private:
         void configPartial();       // Configure panel to use partial refresh
+        #ifdef EINK_HELTEC_VME290_OTP
+            void configFull();      // OTP build only: border + internal temperature sensor for the OTP waveform
+            void sendImageData();   // OTP build only: after a fast update write the image to BOTH RAMs (0x24 and 0x26)
+        #endif
         void configPingPong();      // Enable Ping-Pong - single pass partial refresh for Uno
         void activate();            // Command sequence to trigger display update
 

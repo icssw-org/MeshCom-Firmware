@@ -34,7 +34,8 @@
 - ttgo_tbeam_1W.bin
 
 #### E-PAPER
-- vision-master-e290.bin
+- vision-master-e290.bin   (older panel, flex marking 15-22243)
+- vision-master-e290-otp.bin   (newer panel, flex marking FPC-7519revb)
 - vision-master-e213.bin
 
 #### T-DECK

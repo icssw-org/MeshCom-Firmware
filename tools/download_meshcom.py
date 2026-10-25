@@ -30,6 +30,7 @@ def get_target_hardware(asset):
 
     hw_dict = {
     "vision-master-e290.bin": "heltec_e290",
+    "vision-master-e290-otp.bin": "heltec_e290_otp",
     "vision-master-e213.bin": "heltec_e213",
     "esp32-loraprs-e22.bin": "esp32-loraprs-e22",
     "esp32-loraprs-ra01.bin": "esp32-loraprs-ra01",
@@ -65,6 +66,7 @@ def get_target_hardware(asset):
 
     bootloader_dict = {
     "vision-master-e290.bin": "bootloader-s3.bin",
+    "vision-master-e290-otp.bin": "bootloader-s3.bin",
     "vision-master-e213.bin": "bootloader-s3.bin",
     "esp32-loraprs-e22.bin": "bootloader-s3.bin",
     "esp32-loraprs-ra01.bin": "bootloader-s3.bin",
@@ -100,6 +102,7 @@ def get_target_hardware(asset):
 
     safeboot_dict = {
     "vision-master-e290.bin": "safeboot-s3.bin",
+    "vision-master-e290-otp.bin": "safeboot-s3.bin",
     "vision-master-e213.bin": "safeboot-s3.bin",
     "esp32-loraprs-e22.bin": "safeboot-s3.bin",
     "esp32-loraprs-ra01.bin": "safeboot-s3.bin",
