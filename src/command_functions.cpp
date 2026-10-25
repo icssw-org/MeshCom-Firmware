@@ -1023,12 +1023,14 @@ void commandAction(char *umsg_text, bool ble)
 
         if(ble)
         {
-            addBLECommandBack((char*)msg_text);
+
+            // MAXV lives in the info JSON ("I"): send it, so the app shows the stored value
+            bInfo = true;
         }
 
-        save_settings();
+        bReturn = true;
 
-        return;
+        save_settings();
     }
     else
     if(commandCheck(msg_text+2, (char*)"posshot") == 0)
@@ -1078,6 +1080,8 @@ void commandAction(char *umsg_text, bool ble)
         }
 
         save_settings();
+        if(ble)
+            sendNodeSetting();
 
         return;
     }
@@ -1094,6 +1098,8 @@ void commandAction(char *umsg_text, bool ble)
         }
 
         save_settings();
+        if(ble)
+            sendNodeSetting();
 
         return;
     }
@@ -2588,6 +2594,8 @@ void commandAction(char *umsg_text, bool ble)
         meshcom_settings.node_sset2 |= 0x1000;
 
         save_settings();
+        if(ble)
+            sendNodeSetting();
 
         snprintf(_owner_c, sizeof(_owner_c), "on (%s port 2323)", meshcom_settings.node_ip);
         printfdeb("...net console %s\n", _owner_c);
@@ -2600,6 +2608,8 @@ void commandAction(char *umsg_text, bool ble)
         meshcom_settings.node_sset2 = meshcom_settings.node_sset2 & 0xFFFFEFFF;
 
         save_settings();
+        if(ble)
+            sendNodeSetting();
 
         printfdeb("...net console off\n");
         return;
@@ -2620,6 +2630,8 @@ void commandAction(char *umsg_text, bool ble)
         bKISS = true;
         meshcom_settings.node_sset4 |= 0x0010;
         save_settings();
+        if(ble)
+            sendNodeSetting();
         printfdeb("...KISS/TCP on (%s port %d)\n", meshcom_settings.node_ip, KISS_TCP_PORT);
         return;
     }
@@ -2629,6 +2641,8 @@ void commandAction(char *umsg_text, bool ble)
         bKISS = false;
         meshcom_settings.node_sset4 &= ~0x0010;
         save_settings();
+        if(ble)
+            sendNodeSetting();
         printfdeb("...KISS/TCP off\n");
         return;
     }
@@ -2638,6 +2652,8 @@ void commandAction(char *umsg_text, bool ble)
         bKISSTX = true;
         meshcom_settings.node_sset4 |= 0x0020;
         save_settings();
+        if(ble)
+            sendNodeSetting();
         printfdeb("...KISS/TCP TX on\n");
         return;
     }
@@ -2647,6 +2663,8 @@ void commandAction(char *umsg_text, bool ble)
         bKISSTX = false;
         meshcom_settings.node_sset4 &= ~0x0020;
         save_settings();
+        if(ble)
+            sendNodeSetting();
         printfdeb("...KISS/TCP TX off\n");
         return;
     }
@@ -2656,6 +2674,8 @@ void commandAction(char *umsg_text, bool ble)
         bKISSMETA = true;
         meshcom_settings.node_sset4 |= 0x0040;
         save_settings();
+        if(ble)
+            sendNodeSetting();
         printfdeb("...KISS/TCP RxMeta on\n");
         return;
     }
@@ -2665,6 +2685,8 @@ void commandAction(char *umsg_text, bool ble)
         bKISSMETA = false;
         meshcom_settings.node_sset4 &= ~0x0040;
         save_settings();
+        if(ble)
+            sendNodeSetting();
         printfdeb("...KISS/TCP RxMeta off\n");
         return;
     }
@@ -2674,6 +2696,8 @@ void commandAction(char *umsg_text, bool ble)
         bKISSAUTH = true;
         meshcom_settings.node_sset4 |= 0x0080;
         save_settings();
+        if(ble)
+            sendNodeSetting();
         bool hasPw = (meshcom_settings.node_passwd[0] != 0x00 && meshcom_settings.node_passwd[0] != ' ');
         printfdeb("...KISS/TCP auth on%s\n", hasPw ? "" : " (WARNING: --passwd not set — not enforced)");
         return;
@@ -2684,6 +2708,8 @@ void commandAction(char *umsg_text, bool ble)
         bKISSAUTH = false;
         meshcom_settings.node_sset4 &= ~0x0080;
         save_settings();
+        if(ble)
+            sendNodeSetting();
         printfdeb("...KISS/TCP auth off\n");
         return;
     }
@@ -3787,6 +3813,11 @@ void commandAction(char *umsg_text, bool ble)
         // re-apply it on the next link-up.
         netif_mtu::applyConfiguredMtu(meshcom_settings.node_ethmtu);
         #endif
+
+        if(ble)
+        {
+            bNodeSetting = true;
+        }
 
         bReturn = true;
 
@@ -6826,14 +6857,20 @@ void commandAction(char *umsg_text, bool ble)
         JsonDocument sensdoc1;
 
         sensdoc1["TYP"] = "S1";
+        // INA226 keys only when the build has the INA226 (the --ina226/--shunt/--imax/--isamp commands
+        // exist then): the app shows its INA226 settings only if these keys are there
+        #if defined(ENABLE_INA226)
         sensdoc1["INA226"] = ina226_found;
         sensdoc1["SHUNT"] = meshcom_settings.node_shunt;
         sensdoc1["IMAX"] = meshcom_settings.node_imax;
         sensdoc1["SAMP"] = meshcom_settings.node_isamp;
+        #endif
         sensdoc1["SHT"] = bSHT21ON;
         sensdoc1["SHTF"] = sht21_found;
+        #if defined(ENABLE_INA226)
         sensdoc1["226"] = bINA226ON;
         sensdoc1["226F"] = ina226_found;
+        #endif
 
         sendBleJsonRegister(sensdoc1); // JSN-01
 
@@ -7015,7 +7052,13 @@ void sendNodeSetting()
     // {"TYP":"SN1","VIA":true,"VIACALL":"OE1KFR-12","WSPWD":"","ASYM":false,"TZ":"CET-1CEST,M3.5.0,M10.5.0/3"}
     // TZ (TZ-01, up to 39 chars) lives here, not in SN: SN is at 228 of
     // BLE_JSON_PAYLOAD_MAX 244. Worst case SN1: VIACALL 39 + WSPWD 19 + TZ 39 = 167
-    // JSON bytes. TZ is last, so bleJsonFrameFailSoft() would drop it first.
+    // JSON bytes. The keys after TZ are dropped first by bleJsonFrameFailSoft().
+    // App settings (MeshCom app), absent = the build does not have the feature:
+    //   MHOP  text hop limit (--maxhop)
+    //   MTU   Ethernet/WiFi MTU (--mtu)
+    //   VOLT  true = display shows the battery voltage, false = percent (--volt / --proz)
+    //   NCON  net console on (--netconsole), only with net console in the build
+    //   KISS  KISS/TCP bit mask: 1 on, 2 TX, 4 RxMeta, 8 Auth (--kiss ...), only ESP32 with KISS
     JsonDocument nsetdoc1;
 
     nsetdoc1["TYP"] = "SN1";
@@ -7024,9 +7067,18 @@ void sendNodeSetting()
     nsetdoc1["WSPWD"] = meshcom_settings.node_webpwd;
     nsetdoc1["ASYM"] = bGPSAutosymbol;
     nsetdoc1["TZ"] = meshcom_settings.node_tz;
+    nsetdoc1["MHOP"] = meshcom_settings.max_hop_text;
+    nsetdoc1["MTU"] = meshcom_settings.node_ethmtu;
+    nsetdoc1["VOLT"] = bDisplayVolt;
+    #ifndef DISABLE_NET_CONSOLE
+    nsetdoc1["NCON"] = bNETCONSOLE;
+    #endif
+    #if defined(ESP32) && !defined(DISABLE_KISS_TCP)
+    nsetdoc1["KISS"] = (bKISS ? 1 : 0) | (bKISSTX ? 2 : 0) | (bKISSMETA ? 4 : 0) | (bKISSAUTH ? 8 : 0);
+    #endif
     char ledNf[16];   // "BLED,CHGLED" = 11 chars + NUL
     if(ledNotFittedList(ledfit, ledNf, sizeof(ledNf)) > 0)
-        nsetdoc1["LEDNF"] = ledNf;   // worst case SN1 167 + 22 = 189 < BLE_JSON_PAYLOAD_MAX 244
+        nsetdoc1["LEDNF"] = ledNf;   // worst case SN1 167 + 56 (MHOP..KISS) + 22 = 245, only with VIACALL 39 + WSPWD 19 + TZ 39 together; LEDNF is dropped first then
 
     sendBleJsonRegister(nsetdoc1); // JSN-01
 }
