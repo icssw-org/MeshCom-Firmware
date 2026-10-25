@@ -137,6 +137,11 @@ void initTDeck()
 
     Serial.println("[INIT]...initTDeck");
 
+    // TD-23: settings are loaded; the first wake (first boot message ->
+    // tft_on()) restores pre_sleep_brightness_level, so set it to the saved
+    // level of the active day/night period before anything wakes the panel.
+    brightnessApplySaved();
+
     // Issue 962 deepsleep (esp32_sleep.cpp): --deepsleep holds TDECK_POWERON
     // and TDECK_TFT_BACKLIGHT low with gpio_hold_en()/gpio_deep_sleep_hold_en()
     // so they don't float during sleep. That hold survives the wake reset

@@ -19,8 +19,12 @@ extern "C" {
 #endif
 
 /* Runtime gate for the [REDRAW]/[REFR]/[REFRSTART] log lines. Off by default;
- * inv_total/refr_total counters keep accumulating regardless of the gate. */
-void tdeck_dbg_redrawlog(bool on);
+ * inv_total/refr_total counters keep accumulating regardless of the gate.
+ * level: 0 off, 1 refr ([REFRSTART]/[REFR] only), 2 obj (+ per-object [REDRAW],
+ * no bt), 3 full (+ 8-frame backtrace). Prints the ack "[REDRAWLOG];level;N".
+ * tdeck_dbg_redrawlog_enabled() is true at level 3 only (it gates the heavy
+ * [BUS]/[FLUSH] CRC prints in tdeck_main.cpp). TD-20. */
+void tdeck_dbg_redrawlog(int level);
 bool tdeck_dbg_redrawlog_enabled(void);
 void tdeck_dbg_flushfix(bool on);
 void tdeck_dbg_reflush(void);
@@ -137,6 +141,9 @@ const char *tdeck_kbd_raw_support_str(void);
 
 #ifdef __cplusplus
 }
+
+/* Legacy bool form: true = full (3), false = off (0). */
+static inline void tdeck_dbg_redrawlog(bool on) { tdeck_dbg_redrawlog(on ? 3 : 0); }
 #endif
 
 #endif /* BOARD_T_DECK || BOARD_T_DECK_PLUS */

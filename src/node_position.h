@@ -2,8 +2,8 @@
 // meshcom_settings, so the host test env native_node_position can pin them.
 //
 // The node stores a position as an unsigned magnitude plus a hemisphere letter (node_lat/node_lat_c
-// 'N'|'S', node_lon/node_lon_c 'E'|'W'). nodeSetLat()/nodeSetLon() in command_functions.cpp apply the split
-// for the serial and BLE setters; every signed read goes through nodeSignedLat/Lon.
+// 'N'|'S', node_lon/node_lon_c 'E'|'W'). nodeSetPosition() in command_functions.cpp applies the split
+// for the serial, BLE and RM setters; every signed read goes through nodeSignedLat/Lon.
 #ifndef NODE_POSITION_H_
 #define NODE_POSITION_H_
 

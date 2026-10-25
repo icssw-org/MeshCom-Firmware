@@ -65,3 +65,8 @@ bool sanitize_max_voltage(float &v, float board_min, float board_max, sanitize_l
  * compat merge) and -20 (default since upstream 50c1ce59). Anything else is
  * returned unchanged; range clamping stays in getPower(). */
 int resolve_tx_power(int stored, int board_default);
+
+/* TD-23: a stored T-Deck backlight level (node_bl_day / node_bl_night) must lie
+ * in 1..16; 0 would mean "panel off" and is never stored. Anything else is
+ * reset to `def`. Returns true if the value was corrected. */
+bool sanitize_backlight_level(int &v, int def, const char *field, sanitize_log_fn log);

@@ -28,9 +28,13 @@
 //     QRS/QRV pairs under the old rule (depth > 1, i.e. > QUIET_DEPTH),
 //     which sat directly on top of that baseline.
 //   - QRT once when it reaches 80 % of MAX_RING; new *locally originated user*
-//     messages are refused from then on (relay/ACK/beacon keep flowing),
+//     messages are refused until the depth is back below that line (M1,
+//     2026-10-18: release below the line, one QRV, repeat at most every 60 s;
+//     re-entry within the episode is silent, the nack informs),
+//     relay/ACK/beacon keep flowing,
 //   - QTA once when the ring actually threw a message away,
-//   - QRV exactly once when the depth falls back into the quiet band, and
+//   - QRV when QRT is released (M1) or, without an earlier release QRV, when
+//     the depth falls back into the quiet band, and
 //     only if the episode reached QRT or QTA. It closes the episode
 //     silently otherwise (a QRS-only episode never gets a QRV) — operator
 //     decision 2026-08-31: a warning is only worth un-warning if something
@@ -249,6 +253,14 @@ public:
     /// messages drain between keystrokes is not the problem.
     static const int QRS_MIN_USER_MSGS = 3;
 
+    /// M1 (QRT analysis 2026-10-18): QRT is released as soon as the depth is
+    /// back below refuseThreshold(), not only in the quiet band (a gateway
+    /// whose server inflow matches the outflow never gets there: 7 min 57 s
+    /// refused, 6 min 57 s of it with 15 free slots). Each release emits a
+    /// QRV, but at most one per QRV_RELEASE_REPEAT_MS, so a ring that
+    /// oscillates around the threshold does not produce a notice per swing.
+    static const uint32_t QRV_RELEASE_REPEAT_MS = 60000;
+
     explicit BackPressure(int max_ring) { configure(max_ring); }
 
     /// (Re)bind to a ring size and drop any running episode.
@@ -265,6 +277,8 @@ public:
         quiet_armed_  = false;
         quiet_since_  = 0;
         qrs_user_msgs_ = 0;
+        released_     = false;
+        release_ms_   = 0;
     }
 
     int maxRing() const { return max_ring_; }
@@ -347,7 +361,7 @@ public:
 
     /// Feed the outcome of one enqueue attempt.
     /// @param depth   ring depth *after* the attempt
-    /// @param dropped true when addTxRingEntry() returned -1
+    /// @param dropped true when addTxRingEntry() returned < 0
     /// @param now_ms  caller's millis(), injected so this header stays free
     ///                of Arduino and pinnable in a host test
     BpNotice onSend(int depth, bool dropped, uint32_t now_ms)
@@ -366,40 +380,51 @@ public:
             qrs_user_msgs_ = 0;
 
         // A real drop is the most specific news there is, so it outranks the
-        // plain threshold notice — and it always implies the refusal state.
+        // plain threshold notice. At/above the refusal line it also implies
+        // the refusal state. Below the line (a ring-full drop by index span,
+        // Brief D) it must not: QRT there would be M1-released by the next
+        // poll() with a false QRV while the ring is still span-full. The
+        // sender gets the per-message QTA, the episode stays open (latch QTA)
+        // and closes with its QRV at the quiet band. released_ is cleared:
+        // an earlier release QRV preceded this loss, the sender still needs
+        // the all-clear for it.
         if(dropped)
         {
-            state_ = BP_QRT;
+            if(depth >= refuseThreshold())
+                state_ = BP_QRT;
+            else
+            {
+                // Also out of QRT: an untagged sendMessage() caller can get
+                // here before the next bpPollDrain() has released it.
+                state_ = BP_QRS;
+                released_ = false;
+            }
             return latchIfHigher(BP_NOTICE_QTA);
         }
 
         if(depth >= refuseThreshold())
         {
+            // Re-entry after an M1 release stays silent: the latch still sits
+            // at QRT or above, the per-message nack informs the sender.
             state_ = BP_QRT;
             return latchIfHigher(BP_NOTICE_QRT);
         }
 
+        // M1: below the refusal line a QRT episode is over for new messages.
+        BpNotice rel = releaseIfRefusing(now_ms);
+
         if(depth >= qrsThreshold())
         {
-            // Hysteresis: QRT is *not* released here. Once the node has said
-            // "stop", it stays stopped until the ring is genuinely clear —
-            // otherwise it would flip between accepting and refusing around
-            // the threshold and produce a notice per message. The BP_QRS
-            // state itself is only ever entered from qrsThreshold() (5) up;
-            // an already-open QRT episode is untouched by this branch (the
-            // guard above keeps state_ at BP_QRT) and still only releases at
-            // the quiet band below, same as before.
-            //
             // QRS_MIN_USER_MSGS: the first two typed messages that find the
             // ring at/above the line stay silent -- the depth may be relay
-            // traffic the sender did not cause. An open QRT episode dipping
-            // through this band is unaffected either way: state_ stays
-            // BP_QRT (guard below) and its latch already sits above QRS.
+            // traffic the sender did not cause. A QRT episode was released
+            // above (M1) and its latch already sits above QRS, so a released
+            // episode never re-announces QRS.
             if(++qrs_user_msgs_ < QRS_MIN_USER_MSGS)
-                return BP_NOTICE_NONE;
+                return rel;
             if(state_ != BP_QRT)
                 state_ = BP_QRS;
-            return latchIfHigher(BP_NOTICE_QRS);
+            return (rel != BP_NOTICE_NONE) ? rel : latchIfHigher(BP_NOTICE_QRS);
         }
 
         if(depth > QUIET_DEPTH)
@@ -410,15 +435,17 @@ public:
             // It does not touch state_ or the latch either: a QRT episode
             // dipping through here on its way down must keep refusing
             // (hysteresis, unchanged), and a quiet node passing through here
-            // stays quiet until it actually reaches qrsThreshold().
-            return BP_NOTICE_NONE;
+            // stays quiet until it actually reaches qrsThreshold(). A QRT
+            // episode dipping through here is released (M1, above).
+            return rel;
         }
 
         // depth <= QUIET_DEPTH: either genuinely clear (closes immediately)
         // or the water band (1), which the QRV_HOLD_MS hysteresis below
         // guards. The latch/state decisions above are unchanged by that
         // hold — only the closing of the episode is delayed.
-        return closeOrHold(depth, now_ms);
+        BpNotice closing = closeOrHold(depth, now_ms);
+        return (rel != BP_NOTICE_NONE) ? rel : closing;
     }
 
     /// Cheap per-loop drain check. Only ever produces QRV: a queue that fills
@@ -436,16 +463,37 @@ public:
         if(depth < qrsThreshold())
             qrs_user_msgs_ = 0;
 
+        // M1: same release rule as onSend().
+        BpNotice rel = BP_NOTICE_NONE;
+        if(depth < refuseThreshold())
+            rel = releaseIfRefusing(now_ms);
+
         if(depth > QUIET_DEPTH)
         {
             quiet_armed_ = false;
-            return BP_NOTICE_NONE;
+            return rel;
         }
 
-        return closeOrHold(depth, now_ms);
+        BpNotice closing = closeOrHold(depth, now_ms);
+        return (rel != BP_NOTICE_NONE) ? rel : closing;
     }
 
 private:
+    /// M1: QRT -> QRS once the depth is below refuseThreshold() (the caller
+    /// has checked that). QRV is emitted if no release QRV went out in this
+    /// episode, or the last one is QRV_RELEASE_REPEAT_MS old or older.
+    BpNotice releaseIfRefusing(uint32_t now_ms)
+    {
+        if(state_ != BP_QRT)
+            return BP_NOTICE_NONE;
+        state_ = BP_QRS;
+        if(released_ && (uint32_t)(now_ms - release_ms_) < QRV_RELEASE_REPEAT_MS)
+            return BP_NOTICE_NONE;
+        released_   = true;
+        release_ms_ = now_ms;
+        return BP_NOTICE_QRV;
+    }
+
     BpNotice latchIfHigher(BpNotice n)
     {
         if(n > latch_)
@@ -457,7 +505,8 @@ private:
     }
 
     /// Back in the quiet band: close the episode. QRV only if the episode
-    /// reached QRT or worse (QTA included) — operator decision 2026-08-31:
+    /// reached QRT or worse (QTA included) and no release QRV (M1) went out
+    /// in it -- the release already told the sender; operator decision 2026-08-31:
     /// a warning is only worth un-warning if something was actually refused
     /// or dropped, and the sender who lost a message needs the all-clear
     /// most. A QRS-only episode (the queue merely built past qrsThreshold()
@@ -466,8 +515,9 @@ private:
     BpNotice enterQuiet()
     {
         state_ = BP_QUIET;
-        BpNotice closing = (latch_ >= BP_NOTICE_QRT) ? BP_NOTICE_QRV : BP_NOTICE_NONE;
+        BpNotice closing = (latch_ >= BP_NOTICE_QRT && !released_) ? BP_NOTICE_QRV : BP_NOTICE_NONE;
         latch_ = BP_NOTICE_NONE;
+        released_ = false;
         return closing;
     }
 
@@ -511,6 +561,8 @@ private:
     bool     quiet_armed_;
     uint32_t quiet_since_;
     int      qrs_user_msgs_;
+    bool     released_;      ///< a release QRV went out in this episode (M1)
+    uint32_t release_ms_;    ///< when it did
 };
 
 #endif // __cplusplus

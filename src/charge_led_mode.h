@@ -25,7 +25,7 @@
 enum ChargeLedMode
 {
     CHGLED_AUTO = 0,   // PMU drives the LED from the charge state
-    CHGLED_ON = 1,     // steady on (runtime only; never stored)
+    CHGLED_ON = 1,     // steady on (RM override only; never stored)
     CHGLED_OFF = 2     // dark
 };
 
@@ -37,5 +37,27 @@ inline ChargeLedMode chargeLedModeFromSettings(int sset2, int sset3)
 }
 
 inline bool chargeLedAutoFromSettings(int sset2, int sset3) { return chargeLedModeFromSettings(sset2, sset3) != CHGLED_OFF; }
+
+// LED-02: RM "chgled auto|on|off" sits on top of the stored mode and is never persisted. The override is
+// recorded here (owner: one instance in the PMU code), so console, web, BLE and RM show the EFFECTIVE mode.
+// LED-01: deep sleep clears it (clear()) and re-applies the stored mode; boot starts without one.
+struct ChargeLedOverride
+{
+    int mode;   // -1 = none, else a ChargeLedMode
+    ChargeLedOverride() : mode(-1) {}
+    bool active() const { return mode >= 0; }
+    void set(ChargeLedMode m) { mode = (m == CHGLED_AUTO || m == CHGLED_ON || m == CHGLED_OFF) ? (int)m : -1; }
+    void clear() { mode = -1; }
+};
+
+inline ChargeLedMode effectiveChargeLedMode(ChargeLedMode stored, const ChargeLedOverride &ov)
+{
+    return ov.active() ? (ChargeLedMode)ov.mode : stored;
+}
+
+inline const char *chargeLedModeName(ChargeLedMode m)
+{
+    return m == CHGLED_ON ? "on" : (m == CHGLED_OFF ? "off" : "auto");
+}
 
 #endif // CHARGE_LED_MODE_H

@@ -101,6 +101,8 @@ static uint32_t s_ethUdpRxMaxMs = 0;
 static uint32_t s_ethUdpTxMaxMs = 0;
 extern NrfETH neth;
 
+#include "gw_reg_runtime.h"
+
 // ETH-04: Zustand fuer eth_recovery::decide(). s_leaseHeld = aktuelle Adresse kommt
 // aus einem erfolgreichen DHCP; s_lastMaintainRc = letzter Ethernet.maintain()-Code
 // != 0. s_reopenArmed/s_rxAtReopen: ein ReopenUdp lief und s_ethUdpRx zu diesem
@@ -399,6 +401,10 @@ bool udpBeginRaw_nrf52()
 
 bool udpWriteRaw_nrf52(const uint8_t *buf, uint16_t len)
 {
+  // gateway registration state: destination and time of the KEEP actually sent
+  if (len >= 4 && memcmp(buf, "KEEP", 4) == 0)
+    gwRegNoteKeep((uint32_t)neth.udp_dest_addr, millis());
+
   for (int i=0; i<len; i++)
   {
     Udp.write(buf[i]);
@@ -545,18 +551,14 @@ int NrfETH::getUDP()
  */
 void NrfETH::fillUDP_RING_BUFFER(uint8_t buffer [UDP_TX_BUF_SIZE], uint16_t rx_buf_size)
 {
-  // first byte is always the len of the msg
-  // UDP messages send to LoRa TX
-  ringBuffer[iWrite][0] = rx_buf_size;
-  ringBuffer[iWrite][1] = 0xFF;
-  memcpy(ringBuffer[iWrite] + 2, buffer, rx_buf_size);
+  // UDP messages send to LoRa TX: one producer path (addTxRingEntry(): free
+  // slot choice, copy, priority and eviction under the nRF52 ring lock).
+  // Status DONE (0xFF), label "udp_rx" like the other server -> LoRa enqueues
+  // (addUdpRxRingEntry()), no retransmission.
+  int slot = addTxRingEntry(buffer, rx_buf_size, RING_STATUS_DONE, "udp_rx", 0);
+  (void)slot;   // DEBUG_MSG_VAL may compile away
 
-  DEBUG_MSG_VAL("RADIO", (int)iWrite, "fill LORA Send:");
-
-  iWrite++;
-  if (iWrite >= MAX_RING) // if the buffer is full we start at index 0 -> take care of overwriting!
-    iWrite = 0;
-
+  DEBUG_MSG_VAL("RADIO", slot, "fill LORA Send:");
 }
 
 /**@brief Method to check Link Status
@@ -1137,7 +1139,7 @@ void NrfETH::startFIXUDP()
   cfgIp.fromString(meshcom_settings.node_ownip);
   const uint8_t ownIp[4] = {cfgIp[0], cfgIp[1], cfgIp[2], cfgIp[3]};
   // 0 = unset/legacy keeps the old static rule (44er -> Hamnet); 1 Hamnet, 2 auto, 3 Internet
-  // (an explicit Internet choice now works on a 44er node).
+  // (an explicit Internet choice now works on a 44er node, D2).
   const uint8_t staticMode = gwEffectiveMode((uint8_t)meshcom_settings.node_hamnet_only, ownIp, true);
   const char *srv_path = nrfApplyServerTarget(ownIp, staticMode);
 

@@ -35,6 +35,8 @@
 #define MSGSTORE_ACTIONS_PER_HOUR  20           // load-bearing node ceiling
 #define MSGSTORE_UTIL_MAX_PCT      25           // no action above this 5-min utilisation
 #define MSGSTORE_HEARD_WINDOW_MS   43200000UL   // 12 h, the mheard window (D4)
+#define MSGSTORE_TOMB_SLOTS        32           // SNF-ACK-01: acked tombstone ring
+#define MSGSTORE_TOMB_TTL_MS       3600000UL    // SNF-ACK-01: 1 h, the {NNN horizon
 
 enum MsgStoreMode  { MSGSTORE_OFF = 0, MSGSTORE_OWN = 1, MSGSTORE_LIST = 2, MSGSTORE_HEARD = 3 };
 enum MsgStoreState { MSGSTORE_FREE = 0, MSGSTORE_HELD = 1, MSGSTORE_ARMED = 2, MSGSTORE_LADDER = 3, MSGSTORE_COOLDOWN = 4 };
@@ -67,7 +69,8 @@ struct MsgStoreCounters
     uint32_t stored, refreshed, delivered, purged_ack,
              dropped_storetime, dropped_cap, dropped_slots,
              cancelled_peer, blocked_bp,
-             notified, notice_blocked;   // stage 4: :sto notices sent / refused by the caps
+             notified, notice_blocked,   // stage 4: :sto notices sent / refused by the caps
+             dropped_acked;             // SNF-ACK-01: store refused, already acked (tombstone)
 };
 
 // Environment the core runs against. All pointers required except log.
@@ -99,8 +102,17 @@ const char   *msgstoreListCsv(void);
 const char   *msgstoreModeName(enum MsgStoreMode mode);
 const char   *msgstoreStateName(uint8_t state);
 
-// ---- receive-path events (A hooks; never from msg_server frames) ----
+// ---- receive-path events (A hooks; also the UDP GATE handlers) ----
+// Task safety (SNF-GW-02): msgstoreStore, msgstoreOnAck, msgstorePresence and
+// msgstoreOnPeerDelivery may be called from a task other than msgstoreLoop()
+// (nRF52: OnRxDone in the LORA task and the GATE handlers in the loop task).
+// Each takes the internal critical section (src/msgstore_lock.h) around its
+// slot-table access, so two hooks, or a hook and the read-modify-write
+// sections of msgstoreLoop(), never interleave. The operator actions below
+// and msgstoreConfigure() take it too. Callers need no lock of their own and
+// must not call these from inside an env callback of the same task.
 bool msgstoreEligible(const char *dst);                     // store-set test, false when mode is OFF
+bool msgstoreSameBaseCall(const char *a, const char *b);    // same callsign before the first '-' (SSID ignored; "DK5EN" == "DK5EN-0"); false when either base is empty/NULL
 int  msgstoreStore(const char *src, const char *dst, uint16_t nnn,
                    const char *payload, size_t len);        // slot, -1 dropped; same (src,nnn,payload) refreshes
 void msgstoreOnAck(const char *acker, const char *sender, uint16_t nnn);   // :ackNNN from acker to sender
@@ -117,6 +129,7 @@ bool msgstoreDeliverNow(int slot);                          // starts a ladder n
 
 // ---- readers ----
 int                            msgstoreUsed(void);
+int                            msgstoreBytes(void);          // payload bytes held, sum of plen over used slots (RM mailbox counter)
 const struct MsgStoreEntry    *msgstoreEntry(int slot);     // NULL if out of range or FREE
 const struct MsgStoreCounters *msgstoreCounters(void);
 uint8_t                        msgstoreActionsLastHour(void);
@@ -125,6 +138,16 @@ int                            msgstoreFormatLine(char *buf, size_t n); // "MBOX
 
 // ---- test-only ----
 void msgstoreReset(void);
+#if defined(NATIVE_BUILD)
+// Host build only: counters of the internal critical section (the firmware
+// builds use taskENTER_CRITICAL / portENTER_CRITICAL, see msgstore_lock.h).
+// enters == exits and depth == 0 whenever no msgstore call is in flight;
+// depth_max > 1 would mean a nested section. msgstoreTestLockDepth() is for
+// fake env callbacks: it must read 0 there (no callback inside the lock).
+void     msgstoreTestLockStats(uint32_t *enters, uint32_t *exits, uint32_t *depth_max);
+uint32_t msgstoreTestLockDepth(void);
+void     msgstoreTestLockStatsReset(void);
+#endif
 
 // Firmware glue (src/msgstore_glue.cpp): installs the Arduino-side MsgStoreEnv.
 // Called once at boot from the platform main before msgstoreSettingsLoad().

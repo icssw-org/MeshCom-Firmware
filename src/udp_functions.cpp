@@ -5,6 +5,7 @@
 #include <Arduino.h>
 
 #include <udp_functions.h>
+#include "gw_reg_runtime.h"
 #include <extudp_functions.h>
 #include <debugconf.h>
 #include <batt_functions.h>
@@ -28,6 +29,14 @@
 #include "setlog_lines.h"
 #include "wifi_start_gate.h"
 #include "gw_link_status.h"
+
+#if defined(ENABLE_MSGSTORE)
+#include "stor_announce.h"   // SNF-GW W3: STOR announce of the mailbox calls
+#include "msgstore_api.h"
+#include "nbr_matrix.h"
+#include "nbr_views.h"
+#include "uptime_min.h"
+#endif
 
 #if defined(ESP32)
 #include "esp_task_wdt.h"
@@ -53,6 +62,13 @@ String grc_ids;
 #include <WiFiClient.h>
 #include "esp_wifi.h"
 #include <ESP32Ping.h>
+#include "lwip/ip_addr.h"
+#include "lwip/raw.h"
+#include "lwip/tcpip.h"
+#include "lwip/inet_chksum.h"
+#include "lwip/prot/icmp.h"
+#include "lwip/prot/ip4.h"
+#include "wifi_liveness.h"
 #include <Preferences.h>
 #include "esp32/netif_mtu.h"
 #include "gw_servers.h"
@@ -260,6 +276,9 @@ bool udpBeginRaw_esp32()
 
 bool udpWriteRaw_esp32(const uint8_t *buf, uint16_t len)
 {
+    // gateway registration state: destination and time of the KEEP actually sent
+    if (len >= 4 && memcmp(buf, "KEEP", 4) == 0)
+        gwRegNoteKeep((uint32_t)node_hostip, millis());
     return Udp.write(buf, len) != 0;
 }
 
@@ -884,6 +903,128 @@ void wifiLinkHeartbeat()
   wifiLinkLog("link");
 }
 
+// TD-21: IP-Liveness. WL_CONNECTED sagt nichts ueber den IP-Pfad (Heap-Starvation
+// legt ihn lahm, die Assoziation bleibt). Alle 30 s eine Runde ICMP-Echo (3x) an
+// das Gateway, ausgewertet beim naechsten Check. WIFI-HEAP-01: kein esp_ping
+// mehr (dessen Session hielt dauerhaft einen Task mit 3 KB Stack), sondern ein
+// raw-pcb im tcpip-Thread. Ohne CORE_LOCKING laufen alle raw_*-Aufrufe per
+// tcpip_try_callback() dort; der Loop-Task blockiert nie. Ein haengender
+// tcpip-Thread sendet und empfaengt nichts: die Runde schlaegt fehl.
+static constexpr uint32_t WIFI_PROBE_ECHOS = 3;
+static constexpr uint16_t WIFI_PROBE_ID = 0x4D43;      // ICMP-Id "MC"
+static constexpr uint16_t WIFI_PROBE_DATA = 8;         // Nutzdaten je Echo
+static struct raw_pcb *s_probePcb = NULL;              // nur tcpip-Thread, nie freigegeben
+static volatile uint32_t s_probeTxGw = 0;              // Ziel der Runde (Loop schreibt)
+static volatile uint16_t s_probeTxSeq = 0;             // Runde (Loop schreibt)
+static volatile uint16_t s_probeOkSeq = 0;             // neueste beantwortete Runde (tcpip schreibt)
+static volatile bool s_probeQueued = false;            // Callback eingereiht, noch nicht gelaufen
+static wifi_liveness::Round s_probeRound;              // Loop-Task
+static wifi_liveness::State s_liveness;
+static uint32_t s_livenessFailRounds = 0;
+static bool s_livenessSelfReconnect = false;
+
+// tcpip-Thread: Echo-Antwort mit unserer Id vom Gateway -> Runde gilt als beantwortet
+static u8_t wifiProbeRecv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *addr)
+{
+  (void)arg; (void)pcb;
+  if(p->tot_len < sizeof(struct ip_hdr))
+    return 0;
+  const struct ip_hdr *iph = (const struct ip_hdr *)p->payload;
+  uint16_t hl = IPH_HL_BYTES(iph);
+  struct icmp_echo_hdr eh;
+  if(p->tot_len < hl + sizeof(eh) || pbuf_copy_partial(p, &eh, sizeof(eh), hl) != sizeof(eh))
+    return 0;
+  if(eh.type != ICMP_ER || eh.id != lwip_htons(WIFI_PROBE_ID))
+    return 0;                        // nicht unser Echo (z.B. --ping): weiterreichen
+  if(addr && IP_IS_V4(addr) && ip4_addr_get_u32(ip_2_ip4(addr)) == s_probeTxGw)
+    s_probeOkSeq = wifi_liveness::ok_seq_on_reply(s_probeOkSeq, lwip_ntohs(eh.seqno), s_probeTxSeq);
+  pbuf_free(p);
+  return 1;
+}
+
+// tcpip-Thread: pcb bei Bedarf anlegen, Echo-Burst der aktuellen Runde senden
+static void wifiProbeSend(void *ctx)
+{
+  (void)ctx;
+  s_probeQueued = false;
+  if(!s_probePcb)
+  {
+    s_probePcb = raw_new(IP_PROTO_ICMP);
+    if(!s_probePcb)
+      return;                        // kein Speicher: Runde ohne Antwort
+    raw_recv(s_probePcb, wifiProbeRecv, NULL);
+    raw_bind(s_probePcb, IP_ADDR_ANY);
+  }
+  ip_addr_t dst = IPADDR4_INIT(s_probeTxGw);
+  uint16_t seq = s_probeTxSeq;
+  for(uint32_t i = 0; i < WIFI_PROBE_ECHOS; i++)
+  {
+    struct pbuf *q = pbuf_alloc(PBUF_IP, sizeof(struct icmp_echo_hdr) + WIFI_PROBE_DATA, PBUF_RAM);
+    if(!q)
+      return;
+    struct icmp_echo_hdr *eh = (struct icmp_echo_hdr *)q->payload;
+    eh->type = ICMP_ECHO;
+    eh->code = 0;
+    eh->chksum = 0;
+    eh->id = lwip_htons(WIFI_PROBE_ID);
+    eh->seqno = lwip_htons(seq);
+    memset((uint8_t *)q->payload + sizeof(*eh), (int)i, WIFI_PROBE_DATA);
+    eh->chksum = inet_chksum(eh, q->len);
+    raw_sendto(s_probePcb, q, &dst);
+    pbuf_free(q);
+  }
+}
+
+// Ergebnis der letzten Runde: -1 keins, 0 ohne Antwort, 1 ok.
+// Gateway-Wechsel entwaffnet: das neue Gateway muss erst selbst antworten.
+static int wifiProbeCollect()
+{
+  bool disarm = false;
+  int r = wifi_liveness::round_collect(s_probeRound, (uint32_t)WiFi.gatewayIP(), s_probeOkSeq, disarm);
+  if(disarm)
+  {
+    s_liveness = wifi_liveness::State();
+    s_livenessFailRounds = 0;
+  }
+  return r;
+}
+
+// Neue Runde erst starten, nachdem step() entschieden hat (keine Aktion).
+// Scheitert das Einreihen (tcpip-Mailbox voll), bleibt die Runde ohne Antwort.
+// Haengt der tcpip-Thread, bleibt hoechstens ein Callback eingereiht; er sendet
+// beim Aufwachen die dann aktuelle Runde.
+static void wifiProbeStart()
+{
+  uint32_t gw = (uint32_t)WiFi.gatewayIP();
+  if(gw == 0)
+    return;
+  s_probeTxGw = gw;
+  s_probeTxSeq = wifi_liveness::round_start(s_probeRound, gw);
+  if(s_probeQueued)
+    return;
+  s_probeQueued = true;
+  if(tcpip_try_callback(wifiProbeSend, NULL) != ERR_OK)
+    s_probeQueued = false;
+}
+
+static void wifiProbeAbortRound()
+{
+  wifi_liveness::round_abort(s_probeRound);
+}
+
+// Link weg: Zustand entwaffnen, laufende Runde abbrechen
+static void wifiLivenessLinkDown()
+{
+  // Eigener Reconnect (RECONNECT): Zustand behalten, sonst eskaliert ein
+  // wirkungsloser Reconnect nie weiter (entwaffnet ohne erfolgreichen Ping).
+  if(!s_livenessSelfReconnect)
+  {
+    wifi_liveness::step(s_liveness, false, -1);
+    s_livenessFailRounds = 0;
+  }
+  wifiProbeAbortRound();
+}
+
 // F4: Watchdog. Liefert false, solange die Verbindung fehlt; ifalseping == 0
 // heisst fuer den Aufrufer (esp32_main): Funk-Reset ueber startNetwork().
 bool checkWifiPing()
@@ -913,10 +1054,58 @@ bool checkWifiPing()
     s_wifiDownSince = 0;
     s_wifiWdStage = 0;
     ifalseping = 5;
+
+    // TD-21: IP-Pfad pruefen (Gateway-Ping), assoziiert aber tot -> eskalieren
+    s_livenessSelfReconnect = false;
+    {
+      int probe = wifiProbeCollect();
+      bool wasArmed = s_liveness.armed;
+      wifi_liveness::Action act = wifi_liveness::step(s_liveness, true, probe);
+      if(probe == 0 && wasArmed)
+      {
+        s_livenessFailRounds++;
+        Serial.printf("[WIFI];probe;fail;rounds;%lu\n", (unsigned long)s_livenessFailRounds);
+      }
+      else if(probe == 1)
+        s_livenessFailRounds = 0;
+      if(!wasArmed && s_liveness.armed)
+        Serial.printf("[WIFI];probe;armed;ms;%lu\n", (unsigned long)millis());
+
+      uint32_t nowMs = millis();
+      if(act == wifi_liveness::RECONNECT)
+      {
+        Serial.printf("[WIFI];watchdog;ipdead;reconnect;rounds;%lu;ms;%lu\n", (unsigned long)s_livenessFailRounds, (unsigned long)nowMs);
+        s_livenessSelfReconnect = true;
+        wifiProbeAbortRound();   // Runde ueberspannt unsere Aktion: naechster Check startet neu
+        { WifiStall st("disconnect"); WiFi.disconnect(false, false); }
+        wifiBegin();
+        return false;     // ifalseping == 5: Aufrufer prueft in 5 s wieder
+      }
+      else if(act == wifi_liveness::RESET)
+      {
+        Serial.printf("[WIFI];watchdog;ipdead;reset;ms;%lu\n", (unsigned long)nowMs);
+        s_livenessSelfReconnect = true;   // startNetwork() schaltet WiFi aus: Stufe 2 behalten
+        wifiProbeAbortRound();             // Runde ueberspannt unsere Aktion: naechster Check startet neu
+        Udp.stop();
+        hasIPaddress = false;
+        meshcom_settings.node_hasIPaddress = hasIPaddress;
+        ifalseping = 0;   // Aufrufer: stopWebserver() + startNetwork()
+        return false;
+      }
+      else if(act == wifi_liveness::RESTART)
+      {
+        Serial.printf("[WIFI];watchdog;ipdead;restart;ms;%lu\n", (unsigned long)nowMs);
+        Serial.flush();
+        ESP.restart();
+      }
+      wifiProbeStart();     // keine Aktion: naechste Runde, Auswertung beim naechsten Check
+    }
     if(bDEBUG && bDisplayCont)
       printfdeb("%s [WIFI]..WiFi connected\n", getTimeString().c_str());
     return true;
   }
+
+  wifiLivenessLinkDown();
 
   uint32_t now = millis();
   if(s_wifiDownSince == 0)
@@ -1164,6 +1353,7 @@ void sendMeshComHeartbeat()
     if(bGATEWAY)
     {
       sendKEEP();
+      storTick();
     }
 }
 
@@ -1206,6 +1396,73 @@ void addUdpOutBuffer(uint8_t* buffer, uint16_t len)
     // wie viele UNGELESENE Frames die Verdraengung getroffen hat.
     if(lost > 0 && bLORADEBUG)
         printfdeb("[MC-DBG] RING_OVERFLOW buf=udp lost=%i\n", lost);
+}
+
+// SNF-GW W3 (#1188, decisions SNF-D6/D7): tell the server which calls this
+// store node holds PMs for. Off unless --stor on (node_stor) on a gateway: the
+// server operator has not approved the STOR datagram yet. The set is the store
+// set intersected with the calls heard DIRECTLY on LoRa within the last 12 h
+// (NBR_WINDOW_MIN), never the exact own call. Sent every 15 min and once 60 s
+// after the set changed (src/stor_announce.h); called with every KEEP (30 s).
+void storTick()
+{
+#if defined(ENABLE_MSGSTORE)
+    static StorTimer s_storTimer;
+    static bool s_storInit = false;
+    static StorSet s_cur;
+    static char s_heard[STOR_MAX_CALLS][STOR_CALL_LEN];
+
+    if(!s_storInit)
+    {
+        storTimerInit(s_storTimer);
+        s_storInit = true;
+    }
+
+    const bool enabled = bGATEWAY && meshcom_settings.node_stor == 1;
+    if(!enabled)
+    {
+        storTimerDue(s_storTimer, s_cur, millis(), false);   // forgets "sent": re-enable sends at once
+        return;
+    }
+
+    const uint16_t now_min = uptimeMin16();
+    uint8_t rows[STOR_MAX_CALLS];
+    int n = nbrMhRows(nbrMatrix, now_min, NBR_WINDOW_MIN, rows, STOR_MAX_CALLS);
+    if(n > STOR_MAX_CALLS)
+        n = STOR_MAX_CALLS;
+
+    const char *heard[STOR_MAX_CALLS];
+    int k = 0;
+    for(int i = 0; i < n; i++)
+    {
+        NbrMhView v;
+        if(!nbrMhGet(nbrMatrix, rows[i], now_min, &v))
+            continue;
+        snprintf(s_heard[k], STOR_CALL_LEN, "%s", v.call);
+        heard[k] = s_heard[k];
+        k++;
+    }
+
+    storBuildSet(s_cur, heard, k, meshcom_settings.node_call,
+                 [](const char *call, void *) { return msgstoreEligible(call); }, nullptr);
+
+    const uint32_t now = millis();
+    if(!storTimerDue(s_storTimer, s_cur, now, true))
+        return;
+
+    const int total = storChunkCount(s_cur, meshcom_settings.node_call);
+    for(int seq = 1; seq <= total; seq++)
+    {
+        char buf[STOR_DATAGRAM_MAX];
+        int len = storEncodeChunk(buf, sizeof(buf), _GW_ID, meshcom_settings.node_call,
+                                  SOURCE_VERSION, SOURCE_VERSION_SUB, (int)msgstoreHoldHours(),
+                                  s_cur, seq, total);
+        if(len > 0)
+            addUdpOutBuffer((uint8_t *)buf, (uint16_t)(len + 1));   // incl. the NUL, like KEEP
+    }
+    storTimerSent(s_storTimer, s_cur, now);
+    Serial.printf("[STOR];tx;calls;%d;chunks;%d\n", s_cur.n, total);
+#endif
 }
 
 void sendKEEP()

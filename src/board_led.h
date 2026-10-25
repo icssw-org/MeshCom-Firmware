@@ -1,11 +1,11 @@
-// board_led.h -- board LED decision logic. Arduino-free, header-only (host-testable).
+// board_led.h -- board LED decision logic. Arduino-free, header-only.
 //
 // The pin driving (digitalWrite / NeoPixel) stays in loop_functions.cpp (boardLedTick, boardLedForceOff); this
 // header holds what can be tested on the host:
-//   boardLedPinFree()   the heartbeat yields while OneWire/DHT owns the LED pin (T-Beam: both GPIO4)
-//   boardLedPhase()     the 30 ms / 2 s flasher as a pure function; "lit" is a logical state, never a pin level
-//   boardLedLevel()     logical lit -> pin level for the board polarity (BOARD_LED_ACTIVE_LOW)
-//   ledFitted()         which LEDs exist, for BLED / CHGLED "not fitted" reporting
+//   boardLedPinFree()   LED-04  the heartbeat yields while OneWire/DHT owns the LED pin (T-Beam: both GPIO4)
+//   boardLedPhase()     LED-11  the 30 ms / 2 s flasher as a pure function; "lit" is a logical state, never a pin level
+//   boardLedLevel()             logical lit -> pin level for the board polarity (BOARD_LED_ACTIVE_LOW)
+//   ledFitted()         6.1     which LEDs exist, for BLED / CHGLED "not fitted" reporting
 #ifndef BOARD_LED_H
 #define BOARD_LED_H
 

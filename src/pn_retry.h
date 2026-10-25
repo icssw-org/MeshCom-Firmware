@@ -38,6 +38,8 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "dm_text_escape.h"  // dmTextIsRm1Command(): RM1 command payload check
+
 // Mask for the 30 non-variant bits of msg_id (everything except the two
 // "retry variant" bits 10-11).
 #define PN_RETRY_CORE_MASK 0xFFFFF3FFUL
@@ -207,7 +209,8 @@ static inline uint32_t pnFrameMsgId(const uint8_t *frame)
 // personal (non-group) destination -- pnDestIsPersonal() on the DEST
 // part of "SRC>DEST:..." -- whose payload (after the ':' and before the
 // terminating 0x00) is a PN retry candidate, i.e. pnPayloadIsPn() on it.
-static inline bool pnFrameIsPn(const uint8_t *frame, uint16_t len)
+static inline bool pnFramePersonalTextPayload(const uint8_t *frame, uint16_t len,
+                                              const char **payload, size_t *payload_len)
 {
     if (frame == NULL || len < 7)
         return false;
@@ -266,8 +269,34 @@ static inline bool pnFrameIsPn(const uint8_t *frame, uint16_t len)
     if (payload_end < payload_start)
         return false;
 
-    return pnPayloadIsPn((const char *)(frame + payload_start),
-                          (size_t)(payload_end - payload_start));
+    *payload = (const char *)(frame + payload_start);
+    *payload_len = (size_t)(payload_end - payload_start);
+    return true;
+}
+
+static inline bool pnFrameIsPn(const uint8_t *frame, uint16_t len)
+{
+    const char *payload = NULL;
+    size_t payload_len = 0;
+    return pnFramePersonalTextPayload(frame, len, &payload, &payload_len) &&
+           pnPayloadIsPn(payload, payload_len);
+}
+
+// True iff the frame is a text frame to a personal destination whose payload
+// is an RM1 COMMAND ("RM1 <ctr> <cmd> ... <tag>", not "RM1 <ctr> ok|err ...")
+// without a "{NNN" suffix. Structure checks as pnFrameIsPn().
+static inline bool pnFrameIsRm1Cmd(const uint8_t *frame, uint16_t len)
+{
+    const char *payload = NULL;
+    size_t payload_len = 0;
+    if (!pnFramePersonalTextPayload(frame, len, &payload, &payload_len))
+        return false;
+    if (payload_len < 5 || payload_len > 200)
+        return false;
+    char buf[201];
+    memcpy(buf, payload, payload_len);
+    buf[payload_len] = 0;
+    return dmTextIsRm1Command(buf) && !pnPayloadIsPn(payload, payload_len);
 }
 
 // True iff the frame's originating callsign -- the first token of the
@@ -309,6 +338,159 @@ static inline bool pnFrameIsOwnPn(const uint8_t *frame, uint16_t len,
     return pnFrameIsPn(frame, len) &&
            pnIsOwnNodeId(pnFrameMsgId(frame), gw_id) &&
            pnFrameSourceIs(frame, len, own_call);
+}
+
+// An RM1 command this node itself originated (wave 3a): RM1-command-shaped,
+// our node id in msg_id, our own callsign as source. Gets the same retry ids
+// and echo handling as an own PN (copy 1 + 3 repeats on the 40 s ladder), but
+// NO binary-ACK / :ack stop: only the RM layer stops it, on a verified reply,
+// via findAndStopRingSlot(original msg_id).
+static inline bool pnFrameIsOwnRm1Cmd(const uint8_t *frame, uint16_t len,
+                                      uint32_t gw_id, const char *own_call)
+{
+    return pnFrameIsRm1Cmd(frame, len) &&
+           pnIsOwnNodeId(pnFrameMsgId(frame), gw_id) &&
+           pnFrameSourceIs(frame, len, own_call);
+}
+
+// QRT campaign Brief B, Finding 1 / TXP-01 (2026-10-25): a received echo may
+// release a READY slot (copy not yet on air) iff both the received frame and
+// the slot are TEXT frames (type byte 0x3A) and the slot is neither an own PN,
+// an own RM1 command (those repeat on the 40 s ladder and need their own stop
+// rule) nor ANY frame with our own callsign as source. An own group / `*` text
+// must go out on LoRa at least once: releasing it at a READY echo (another
+// gateway sent the server copy first) lost its first own TX (bench: 9 of 10).
+// Its repeat is suppressed later, at the 40 s point, by the heard-check
+// (pnFrameIsRetryEligibleGroupText + own_msg_id 0x01). A PN sent for a KISS
+// client (foreign source call) is still released at the first echo.
+static inline bool pnFrameIsReleasableGroupText(uint8_t rx_type, const uint8_t *slot_frame,
+                                                uint16_t len, uint32_t gw_id,
+                                                const char *own_call)
+{
+    return rx_type == 0x3A && slot_frame != NULL && len > 0 && slot_frame[0] == 0x3A &&
+           !pnFrameSourceIs(slot_frame, len, own_call) &&
+           !pnFrameIsOwnPn(slot_frame, len, gw_id, own_call) &&
+           !pnFrameIsOwnRm1Cmd(slot_frame, len, gw_id, own_call);
+}
+
+// QRT campaign Brief B, Finding 1: at the 40 s threshold a slot that is a
+// TEXT frame, not an own PN and not an own RM1 command is checked against
+// own_msg_id; heard (0x01) or acked (0x02) releases it instead of a retry.
+// Own group texts stay eligible here (TXP-01: only the READY-echo release
+// above excludes them).
+static inline bool pnFrameIsRetryEligibleGroupText(const uint8_t *slot_frame, uint16_t len,
+                                                   uint32_t gw_id, const char *own_call)
+{
+    return slot_frame != NULL && len > 0 && slot_frame[0] == 0x3A &&
+           !pnFrameIsOwnPn(slot_frame, len, gw_id, own_call) &&
+           !pnFrameIsOwnRm1Cmd(slot_frame, len, gw_id, own_call);
+}
+
+// "RM1 stopped" set: ORIGINAL msg_ids of own RM1 commands whose reply verified
+// (the RM layer called findAndStopRingSlot()). findAndStopRingSlot() skips
+// READY slots and slots doTX() has cleared to len 0, so the stop can miss the
+// copy that is READY / on air; the 40 s ladder then looks the slot up here at
+// the threshold and releases it instead of producing another copy (same
+// effect as M1 for PNs, which use own_msg_id status 0x02 -- not usable for
+// RM1 commands, a gateway ACK sets it). RAM only, id 0 = empty.
+// Entries are stored as pnRetryCore(), so any retry copy id matches.
+// Only ids whose slot is still live (status != DONE) are recorded, and every
+// recording first drops the entries whose slot is gone (pnRm1StoppedRecordMiss):
+// so each entry belongs to a live ring slot, and one entry per TX ring slot
+// (largest MAX_RING, configuration_global.h; static_assert in lora_functions.cpp)
+// always fits. As a gateway every stop misses (the server reply beats copy 1
+// out of the ring) and a threshold can come 80 s+ after its stop; the old
+// 8-entry round-robin ring evicted live entries there (bench 2026-10-11), and
+// stops after the ladder had ended (key expiry, forget, eviction) left entries
+// no threshold would ever take.
+#define PN_RM1_STOPPED_MAX 20
+
+struct Rm1StoppedSet
+{
+    uint32_t id[PN_RM1_STOPPED_MAX];
+    uint8_t next;
+};
+
+static inline void pnRm1StoppedInit(Rm1StoppedSet *s)
+{
+    for (uint8_t i = 0; i < PN_RM1_STOPPED_MAX; i++)
+        s->id[i] = 0;
+    s->next = 0;
+}
+
+static inline bool pnRm1StoppedHas(const Rm1StoppedSet *s, uint32_t id)
+{
+    uint32_t core = pnRetryCore(id);
+    if (core == 0)
+        return false;
+    for (uint8_t i = 0; i < PN_RM1_STOPPED_MAX; i++)
+        if (s->id[i] == core)
+            return true;
+    return false;
+}
+
+// Id 0 is ignored; an id already present does not take a second entry; a
+// free entry (taken by a release) is used first; only a full set overwrites,
+// round-robin (oldest first while nothing was taken).
+static inline void pnRm1StoppedAdd(Rm1StoppedSet *s, uint32_t id)
+{
+    uint32_t core = pnRetryCore(id);
+    if (core == 0 || pnRm1StoppedHas(s, id))
+        return;
+    for (uint8_t i = 0; i < PN_RM1_STOPPED_MAX; i++)
+    {
+        if (s->id[i] == 0)
+        {
+            s->id[i] = core;
+            return;
+        }
+    }
+    s->id[s->next] = core;
+    s->next = (uint8_t)((s->next + 1) % PN_RM1_STOPPED_MAX);
+}
+
+// True and removes the entry if present (the release consumed the stop).
+static inline bool pnRm1StoppedTake(Rm1StoppedSet *s, uint32_t id)
+{
+    uint32_t core = pnRetryCore(id);
+    if (core == 0)
+        return false;
+    for (uint8_t i = 0; i < PN_RM1_STOPPED_MAX; i++)
+    {
+        if (s->id[i] == core)
+        {
+            s->id[i] = 0;
+            return true;
+        }
+    }
+    return false;
+}
+
+static inline bool pnRm1CoreIn(const uint32_t *cores, uint8_t n, uint32_t id)
+{
+    uint32_t core = pnRetryCore(id);
+    if (core == 0)
+        return false;
+    for (uint8_t i = 0; i < n; i++)
+        if (pnRetryCore(cores[i]) == core)
+            return true;
+    return false;
+}
+
+// A stop missed its slot. liveIds: msg ids of the ring slots whose status is
+// not DONE (READY, CSMA, on air or waiting for the threshold). Drops every
+// entry whose slot is gone (overwritten, evicted, given up) and records id only
+// if its slot is still live: a stop after the ladder ended has nothing left to
+// release. Returns true if id is in the set afterwards.
+static inline bool pnRm1StoppedRecordMiss(Rm1StoppedSet *s, uint32_t id, const uint32_t *liveIds, uint8_t n)
+{
+    for (uint8_t i = 0; i < PN_RM1_STOPPED_MAX; i++)
+        if (s->id[i] != 0 && !pnRm1CoreIn(liveIds, n, s->id[i]))
+            s->id[i] = 0;
+    if (!pnRm1CoreIn(liveIds, n, id))
+        return false;
+    pnRm1StoppedAdd(s, id);
+    return true;
 }
 
 // Offset of the FCS field: the first 0x00 at index >= 6, plus 3 (skips

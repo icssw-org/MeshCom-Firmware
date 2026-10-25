@@ -78,6 +78,7 @@ extern lv_obj_t    *dropdown_mapselect;
 extern lv_obj_t    *btn_clear_messages;
 extern lv_obj_t    *btn_clear_mh;
 extern lv_obj_t    *btn_clear_nodes;
+extern lv_obj_t     *btn_blauto;
 extern lv_obj_t     *btn_gps;
 extern lv_obj_t     *btn_mesh;
 extern lv_obj_t     *btn_noallmsg;

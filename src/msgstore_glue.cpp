@@ -32,7 +32,9 @@
 #include "nbr_matrix.h"
 #include "nbr_views.h"
 #include "mc_text.h"
-#include "loop_functions.h"        // addTxRingEntryOnce() with its default args
+#include "loop_functions.h"        // addTxRingEntryOnce() with its default args, insertOwnTx()
+#include "dedup_functions.h"       // addLoraRxBuffer()
+#include "udp_functions.h"         // addNodeData()
 #include <loop_functions_extern.h> // ringBuffer[], bpCurrentState(), stat_last_window
 #include "printfdeb_functions.h"
 
@@ -155,8 +157,10 @@ static void glueLog(const char *line)
 // on someone else's behalf; and max_hop is left at the normal text hop
 // count (initAPRS() already sets it from meshcom_settings.max_hop_text for
 // a ':' message -- D1: the sender is normally several hops away, so a
-// hop-0 notice would only ever reach a direct neighbour). Never acked,
-// never insertOwnTx()'d, never uploaded to the server -- same as deliver().
+// hop-0 notice would only ever reach a direct neighbour). Never acked.
+// Unlike deliver(), the notice IS registered as own TX and, on a gateway with
+// an IP, uploaded to the server (SNF-GW-05, issue #1188), so the server's
+// reflection of it is not taken for a new foreign frame.
 static bool glueNotify(const struct MsgStoreEntry *e)
 {
     if(e == NULL)
@@ -192,7 +196,24 @@ static bool glueNotify(const struct MsgStoreEntry *e)
     // kind defaults to RING_KIND_OTHER (loop_functions.h).
     int slot = addTxRingEntryOnce(buf, len, "sto");
     if(slot < 0)
-        return false;
+        return false;   // ring refused: nothing sent, nothing registered, retried next tick
+
+    // SNF-GW-05: from here on the frame is on its way, so book it exactly like
+    // the own-text epilogue in loop_functions.cpp (insertOwnTx / addLoraRxBuffer
+    // / addNodeData): own-TX table so an echo is recognised as ours, dedup ring
+    // with the server flag set when we are a gateway with an IP (same flags as
+    // that path), then the DATA upload. ownMsgStatusRegister() is deliberately
+    // skipped: it only feeds the web-GUI delivery tick of a user-typed message,
+    // and a notice has none. Runs in the loop task (msgstoreLoop), after the
+    // store lock is released (msgstore.cpp calls notify() on a snapshot); no
+    // printf of our own here, and none inside any lock.
+    const bool gw_up = bGATEWAY && meshcom_settings.node_hasIPaddress;
+
+    insertOwnTx(m.msg_id);
+    addLoraRxBuffer(m.msg_id, gw_up);
+
+    if(gw_up)
+        addNodeData(buf, len, 0, 0);   // rssi 0, snr 0 = own frame, not heard on air
 
     return true;
 }

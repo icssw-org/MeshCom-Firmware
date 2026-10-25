@@ -5,6 +5,7 @@
 #include "configuration.h"
 
 #include "via_functions.h"
+#include "mesh_policy.h"   // BL-01: meshTxAllowed()
 
 #include "loop_functions.h"
 #include "loop_functions_extern.h"
@@ -112,7 +113,7 @@ bool checkMesh(struct aprsMessage &aprsmsg)
     {
         if((bDisplayInfo && bMESH) || bDisplayCont)
             printfdeb("%s MESH    : <no via info>return MESH=%s\n", getTimeString().c_str(), bMESH?"true":"false");
-        return bMESH;   // if no destination_path (vai) return bMESH 
+        return meshTxAllowed(MESH_TX_FOREIGN_RELAY, bMESH);   // if no destination_path (vai) return bMESH 
     }
 
     //printfdeb("[MESH]...MESH:%s ...VIA:%s [%s]\n", bMESH?"true":"false", bVIA?"true":"false", meshcom_settings.node_via);
@@ -136,7 +137,7 @@ bool checkMesh(struct aprsMessage &aprsmsg)
     // Der Vertrag oben in dieser Datei sagt "false if bMESH == false", ohne
     // Ausnahme, und der Web-Schalter verspricht dem Bediener
     // "enable mesh/forwarding of received LoRa messages".
-    return bMESH;
+    return meshTxAllowed(MESH_TX_FOREIGN_RELAY, bMESH);
 }
 
 void checkVia(struct aprsMessage &aprsmsg)

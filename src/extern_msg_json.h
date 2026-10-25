@@ -22,20 +22,18 @@
 // Stack.
 #define EXTERN_MSG_JSON_BUF 700
 
-// Campaign docs/campaign-extudp-hwid.md: the EXTUDP "msg" (text) datagram,
+// The EXTUDP "msg" (text) datagram,
 // built here rather than inline in sendExtern() (extudp_functions.cpp) so the
 // key contract -- three new keys on top of the pre-existing wire shape -- is
 // native-testable (test/test_extern_msg_json). Same pattern as
 // extern_tele_json.h / extern_notice_json.h.
 //
-// Key order is byte-for-byte the pre-campaign wire (see the golden "before"
-// datagram in docs/campaign-extudp-hwid.md):
+// Key order is byte-for-byte the previous wire shape:
 //   src_type, type("msg"), src, dst, msg, msg_id, firmware, fw_sub, rssi, snr
 // with the three new keys APPENDED, never inserted:
 //   hw_id, lora_mod, max_hop
 //
-// Provenance (docs/2026-09-16_firmware-extudp-hw-id-on-text-frames.md,
-// sections 3-4): hw_id and lora_mod describe the message's ORIGINATOR, not
+// Provenance: hw_id and lora_mod describe the message's ORIGINATOR, not
 // the last relay hop -- they are parsed back out of the frame epilogue on
 // every received frame (src/aprs_functions.cpp:421 msg_source_hw, :424
 // msg_source_mod), exactly like msg_source_fw_version, which this shape

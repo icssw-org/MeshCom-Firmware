@@ -1,5 +1,5 @@
-// NVS usage snapshot for diagnostics. Header-only and pure (the formatters are host-testable);
-// nvsDiagRead() is supplied by the platform (esp32_flash.cpp, nvs_get_stats()).
+// NVS usage snapshot for diagnostics (RM-NVS-01). Header-only and pure: the formatter is
+// host-testable; nvsDiagRead() is supplied by the platform (esp32_flash.cpp, nvs_get_stats()).
 #pragma once
 
 #include <stdint.h>

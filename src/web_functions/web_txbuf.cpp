@@ -14,6 +14,7 @@
 
 #if defined(ESP32)
 #include <lwip/sockets.h>
+#include "../lora_rx_park.h"
 #endif
 
 static WebTxBuf s_tx;
@@ -50,7 +51,13 @@ static int txSend(void *ctx, const uint8_t *p, size_t n)
 }
 
 static uint32_t txNow(void *) { return millis(); }
-static void txFeed(void *) { meshcom_wdt_feed(); }
+static void txFeed(void *)
+{
+    meshcom_wdt_feed();
+#if defined(ESP32)
+    loraRxParkService(); // WEB-RX-01: park a pending LoRa packet while the loop is blocked in a web send
+#endif
+}
 static void txIdle(void *)
 {
 #if defined(ESP32)

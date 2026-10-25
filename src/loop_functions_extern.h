@@ -31,7 +31,12 @@ extern bool bUSER_BOARD_LED;
 #include "board_led.h"
 LedFitted ledFittedNow(void);
 
-// nRF52 variants state the polarity as LED_STATE_ON (1 = active high); BOARD_LED_ACTIVE_LOW follows it.
+// RM "led on|off": steady LED held on by the remote command (rm_runtime.cpp), never persisted.
+// REMOTE_LED_PIN is the pad it drives: always BOARD_LED (every board with an LED defines it, the
+// Heltec V2/V3/V4 white LED included). Not defined on boards without an LED. A pad shared with
+// OneWire (ttgo_tbeam: GPIO4) is checked at run time (boardLedPinUsable()). Needs configuration.h
+// included before this header.
+// LED-07: nRF52 variants state the polarity as LED_STATE_ON (1 = active high); BOARD_LED_ACTIVE_LOW follows it.
 #if defined(NRF52_SERIES) && defined(BOARD_LED) && !defined(BOARD_LED_ACTIVE_LOW) && defined(LED_STATE_ON)
     #if LED_STATE_ON
         #define BOARD_LED_ACTIVE_LOW 0
@@ -39,13 +44,41 @@ LedFitted ledFittedNow(void);
         #define BOARD_LED_ACTIVE_LOW 1
     #endif
 #endif
+#if !defined(REMOTE_LED_PIN) && defined(BOARD_LED)
+    #define REMOTE_LED_PIN BOARD_LED
+#endif
+#if defined(REMOTE_LED_PIN)
+// LED-POL: the RM levels follow the board LED polarity (BOARD_LED_ACTIVE_LOW 1 = common anode, LOW is lit),
+// so an active-low shared pad is not inverted by "led on".
+#if defined(BOARD_LED_ACTIVE_LOW) && BOARD_LED_ACTIVE_LOW != 0 && BOARD_LED_ACTIVE_LOW != 1
+    #error "BOARD_LED_ACTIVE_LOW must be 0 or 1"
+#endif
+#if defined(BOARD_LED_ACTIVE_LOW) && BOARD_LED_ACTIVE_LOW
+    #define REMOTE_LED_ON_LEVEL  LOW
+    #define REMOTE_LED_OFF_LEVEL HIGH
+#else
+    #define REMOTE_LED_ON_LEVEL  HIGH
+    #define REMOTE_LED_OFF_LEVEL LOW
+#endif
+static_assert((REMOTE_LED_ON_LEVEL) != (REMOTE_LED_OFF_LEVEL), "REMOTE_LED_ON_LEVEL must differ from OFF_LEVEL");
+
+#define REMOTE_LED_FLASH_ON_MS 30     // RM "led flash": same 30 ms / 2 s pattern as the board flasher
+#define REMOTE_LED_FLASH_PERIOD_MS 2000
+
+extern bool bRemoteLed;           // true while RM holds the pin ("led on" or "led flash"); the BOARD_LED blinker yields
+extern bool bRemoteLedFlash;      // true while the hold is the flash pattern (implies bRemoteLed)
+bool remoteLedPinUsable(void);   // false while OneWire owns a pad shared with BOARD_LED
+void remoteLedSet(int mode);      // 0 = release (pin dark), 1 = steady on, 2 = flash pattern
+void remoteLedTick(void);         // main loop: drives the flash pattern while bRemoteLedFlash
+void remoteLedForceOff(void);     // pin off + hold released; call before deep sleep
+#endif
 extern bool bCHARGE_LED;
 
 // Board LED helpers (loop_functions.cpp, decision logic in board_led.h). No-op bodies on boards without
 // BOARD_LED / LED_PIN, so callers need no guard.
-bool boardLedPinUsable(void);   // false while OneWire owns the LED pin or no LED pin exists
+bool boardLedPinUsable(void);   // false while OneWire owns the LED pin (LED-04) or no LED pin exists
 void boardLedTick(void);        // main loop: the 30 ms / 2 s heartbeat while bUSER_BOARD_LED
-void boardLedForceOff(void);    // LED dark + flasher phase reset; call before deep sleep
+void boardLedForceOff(void);    // LED dark + flasher phase reset; call before deep sleep (LED-12)
 
 extern unsigned long rebootAuto;
 
@@ -148,6 +181,7 @@ extern bool bLPS33;
 
 extern bool bme680_found;
 extern bool bmx_found;
+extern bool bmx_is_bme;
 extern int bmx_start;
 extern bool bmp3_found;
 extern bool aht20_found;
@@ -228,8 +262,6 @@ extern float BATexp2;
 
 // RINGBUFFER for incoming UDP lora packets for lora TX
 extern unsigned char ringBuffer[MAX_RING][UDP_TX_BUF_SIZE+5];
-extern ring_index_t iWrite;
-extern ring_index_t iRead;
 extern int iRetransmit;
 extern uint8_t retryCount[MAX_RING];
 extern uint8_t ringPriority[MAX_RING];         // Prio 1-5 pro Slot
@@ -312,8 +344,25 @@ extern byte_fifo_t udpOutRing;    // UDP-Ausgang (LoRa -> Gateway)
 extern byte_fifo_t phoneRing;     // BLE-Daten zum Telefon (+4 Byte Zeit je Frame ausser 'D')
 extern byte_fifo_t phoneComRing;  // BLE-Kommandos zum Telefon
 
+// Classic ESP32 with the AU BLE pause: the two phone rings live on the heap, only while BLE is
+// up (heap verdict 2026-10-18, lever 3: 5 KB back at the AU gate). Everywhere else the storage
+// stays static and attach/detach are no-ops that report success.
+#if defined(ESP32)
+#include "sdkconfig.h" // CONFIG_IDF_TARGET_ESP32
+#endif
+#if defined(AU_BLE_PAUSE)
+#define PHONE_RINGS_DYNAMIC (AU_BLE_PAUSE)
+#elif defined(ESP32) && defined(CONFIG_IDF_TARGET_ESP32)
+#define PHONE_RINGS_DYNAMIC 1
+#else
+#define PHONE_RINGS_DYNAMIC 0
+#endif
+bool phoneRingsAttach(void);   // allocate both rings (idempotent); false = no memory, rings stay empty/drop
+void phoneRingsDetach(void);   // drop queued frames, free both rings; producers then drop
+
 // ESP32 [HEAP] boot marks (loop_actions_esp32.cpp)
 void heapMarkBle(void);
+void heapMarkTft(void);
 void heapMarksPoll(void);
 
 extern bool hasMsgFromPhone;
@@ -416,11 +465,14 @@ extern int trickle_last_neighbor_count;         // Nachbarzahl beim letzten Chec
 // Priority statistics (5-minute window, reset after output)
 extern uint16_t stat_tx_count[6];               // Index 1-5 = Prio 1-5
 extern uint16_t stat_drop_count[6];             // Drops per priority
-extern uint16_t stat_preempt_count;             // Priority preemptions (out-of-order sends)
+extern uint16_t stat_preempt_count;             // doTX picked a slot that was not the oldest occupied one (enqueue time)
 extern uint32_t stat_latency_sum[6];            // Sum of queue-to-TX latency per prio (ms)
-extern uint16_t stat_latency_max[6];            // Max latency per prio (ms)
+extern uint32_t stat_latency_max[6];            // Max latency per prio (ms)
 extern uint8_t  stat_queue_hwm;                 // Queue high-water mark since boot
 extern uint16_t stat_csma_hwm_attempts;         // Max CAD attempts since boot
+extern uint32_t stat_csma_aged_boot[3];         // Sends per age stage since boot
+extern uint32_t stat_wait_hwm_ms;               // Max queue latency since boot
+extern int      tx_cad_attempt;                 // cad_attempt at CAD_FREE (for the TX log)
 extern unsigned long stat_prio_timer;           // Timer for periodic stat output
 extern unsigned long stat_hwm_timer;            // Timer for HWM output
 

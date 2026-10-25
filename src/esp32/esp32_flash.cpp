@@ -8,6 +8,9 @@
 #include <settings_sanitize.h>
 #include <msgid_counter.h>
 #include <lora_setchip.h>
+#include <prod_lock.h>   // prodLockNormalise(): production-locked settings, dependency-free
+#include <daylight.h>    // TD-23: BL_DAY_DEFAULT / BL_NIGHT_DEFAULT for the backlight sanitize
+#include <instrument.h>  // INSTRUMENT_ENABLED
 #else
 #include <maxhop.h>   // MAXHOP_TEXT_FALLBACK, dependency-frei (siehe unten)
 #endif
@@ -15,6 +18,7 @@
 #include <settings_schema.h>
 #include <settings_store.h>
 #include <counters_store.h>
+#include <rm_nodes_store.h>
 #include <nvs_diag.h>
 
 #include <cstring>
@@ -238,6 +242,18 @@ bool sanitize_loaded_settings(void)
     if(sanitize_max_hop_text(meshcom_settings.max_hop_text, sanitize_log))
         fixed++;
 
+    // Production lock: fixed values for the locked settings,
+    // range repair for postime/ptime/ping*, node_autoupd 2 (auto) -> 1, mailbox announcement off.
+    // Idempotent; INSTRUMENT builds keep the tuning values. Runs before the runtime flags are derived.
+    {
+        const int locked = prodLockNormalise(meshcom_settings, INSTRUMENT_ENABLED != 0, true);
+        if(locked > 0)
+        {
+            Serial.printf("[FLASH]...%d locked/range setting(s) normalised\n", locked);
+            fixed += locked;
+        }
+    }
+
     // Akku-Maximalspannung muss ueber der Board-Leerspannung liegen (2S TBEAM_1W: nach
     // Wipe 4.2 V < 6.5 V -> BAT-01 meldet "kein Akku", Anzeige bleibt auf USB)
     #if defined(BAT_MIN_VOLTAGE) && defined(BAT_MAX_VOLTAGE)
@@ -245,8 +261,25 @@ bool sanitize_loaded_settings(void)
         fixed++;
     #endif
 
+    // TD-23: backlight levels 1..16 (0 = panel off is never a stored level)
+    #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
+    if(sanitize_backlight_level(meshcom_settings.node_bl_day, BL_DAY_DEFAULT, "node_bl_day", sanitize_log))
+        fixed++;
+    if(sanitize_backlight_level(meshcom_settings.node_bl_night, BL_NIGHT_DEFAULT, "node_bl_night", sanitize_log))
+        fixed++;
+    #endif
+
     if(fixed > 0)
         Serial.printf("[FLASH]...%d setting(s) out of range, reset to default\n", fixed);
+
+    // D1: "off" no longer exists; a stored 0 becomes notify (idempotent, no marker needed). A stored 2
+    // (auto) was already mapped to 1 by prodLockNormalise() above: auto is never settable or importable.
+    if(meshcom_settings.node_autoupd == 0)
+    {
+        meshcom_settings.node_autoupd = 1;
+        Serial.printf("[AU];migrate;off;notify\n");
+        return true;
+    }
 
     return fixed > 0;
 }
@@ -312,9 +345,112 @@ bool countersSave(void)
     return ok;
 }
 
-// Default NVS partition usage (nvs_get_stats), for --info.
+// RM-05 (#1189): remote-management high-water mark, key "rm_hwm" in the same "Counters" namespace
+// (never cleared by clear_flash(), see below). Own short-lived handle: begin()/end() inside each
+// call, so it cannot close the counters_preferences handle another path may hold open.
+uint32_t rmHwmLoad(void)
+{
+    Preferences p;
+    if (!p.begin("Counters", true))
+        return 0;
+    uint32_t v = p.getUInt("rm_hwm", 0);
+    p.end();
+    return v;
+}
+
+bool rmHwmSave(uint32_t hwm)
+{
+    Preferences p;
+    if (!p.begin("Counters", false))
+        return false;
+    bool ok = p.putUInt("rm_hwm", hwm) > 0;
+    p.end();
+    return ok;
+}
+
+// RM-09: last counter this node SENT in an outgoing RM1 command (rmSendCommand), key "rm_snd".
+uint32_t rmSndLoad(void)
+{
+    Preferences p;
+    if (!p.begin("Counters", true))
+        return 0;
+    uint32_t v = p.getUInt("rm_snd", 0);
+    p.end();
+    return v;
+}
+
+bool rmSndSave(uint32_t ctr)
+{
+    Preferences p;
+    if (!p.begin("Counters", false))
+        return false;
+    bool ok = p.putUInt("rm_snd", ctr) > 0;
+    p.end();
+    return ok;
+}
 #if !defined(NATIVE_BUILD)
-#include <nvs.h>
+#include <nvs.h> // nvs_get_stats(), RM-NVS-01
+
+// RM GUI (contract C1, rm_nodes_store.h): the three known-node slots, ONE blob in its own namespace
+// "RmNodes", key "nodes". Own short-lived handle per call (begin()/end() inside), like rmHwm above.
+// The record carries magic, version, length and CRC, so a missing, short, long or damaged blob
+// reads as "no saved nodes". The sequence (compare, write, read back) is rmNodesBlobSave() in the
+// header; this class only supplies the two storage primitives.
+//
+// Native test builds (NATIVE_BUILD) compile the fail-closed fallback below instead: the fake
+// Preferences of the host tests has no getBytes()/putBytes()/getBytesLength(). The logic
+// itself is host-tested through the same templates.
+namespace
+{
+struct RmNodesNvs
+{
+    size_t read(int, uint8_t *buf, size_t cap)
+    {
+        Preferences p;
+        if (!p.begin("RmNodes", true))
+            return 0;
+        size_t len = p.getBytesLength("nodes");
+        size_t got = 0;
+        if (len > 0)
+        {
+            if (len > cap)
+                len = cap; // anything longer than a record is invalid anyway
+            got = p.getBytes("nodes", buf, len);
+        }
+        p.end();
+        return got;
+    }
+
+    bool write(int, const uint8_t *buf, size_t len)
+    {
+        Preferences p;
+        if (!p.begin("RmNodes", false))
+        {
+            Serial.printf("[RMNODES];write;begin_failed\n");
+            return false;
+        }
+        size_t wrote = p.putBytes("nodes", buf, len);
+        p.end();
+        if (wrote != len)
+            Serial.printf("[RMNODES];write;short;requested;%u;written;%u\n", (unsigned)len, (unsigned)wrote);
+        return wrote == len;
+    }
+};
+} // namespace
+
+bool rmNodesLoad(RmNodes &n)
+{
+    RmNodesNvs s;
+    return rmNodesBlobLoad(s, n);
+}
+
+bool rmNodesSave(const RmNodes &n)
+{
+    RmNodesNvs s;
+    return rmNodesBlobSave(s, n);
+}
+
+// RM-NVS-01: default NVS partition usage (nvs_get_stats), for --info and the RM "store" failure log.
 bool nvsDiagRead(NvsDiagStats &out)
 {
     nvs_stats_t st;
@@ -327,9 +463,28 @@ bool nvsDiagRead(NvsDiagStats &out)
     return true;
 }
 #else
+bool rmNodesLoad(RmNodes &n)
+{
+    rmNodesScrub(n);
+    return false;
+}
+
+bool rmNodesSave(const RmNodes &) { return false; }
+
 bool nvsDiagRead(NvsDiagStats &) { return false; }
 #endif // !NATIVE_BUILD
 #endif // !MC_SAFEBOOT
+
+// Forget the known nodes. Outside the MC_SAFEBOOT guard on purpose: clear_flash() calls it in
+// every build that has clear_flash(). Only begin()/clear()/end(), which the native fakes model.
+void rmNodesWipe(void)
+{
+    Preferences p;
+    if (!p.begin("RmNodes", false))
+        return;
+    p.clear();
+    p.end();
+}
 
 void init_flash(void)
 {
@@ -495,6 +650,10 @@ void clear_flash(void)
 
     printfdeb("[INIT]...FLASH #entries %i after clear\n", preferences.freeEntries());
     preferences.end();
+
+    // RM GUI: the saved known nodes are credentials (derived RM keys), not counters, so a factory
+    // reset and a FLASH_STRUCT_VERSION bump (esp32_main.cpp) forget them together with node_passwd.
+    rmNodesWipe();
 }
 
 void save_settings(void)

@@ -39,7 +39,9 @@ extern SemaphoreHandle_t xSemaphore;
 namespace {
 
 /* ---- always-on counters (single-threaded: LVGL/main task) ---- */
-volatile bool s_redrawlog_on = false;
+/* TD-20 (2026-10-04): 0 off, 1 refr ([REFRSTART]/[REFR] only), 2 obj ([REDRAW]
+ * per object, no bt), 3 full (as before, with the 8-frame backtrace). */
+volatile int s_redrawlog_level = 0;
 uint32_t s_inv_total = 0;
 uint32_t s_refr_total = 0;
 uint32_t s_last_refr_px = 0;
@@ -127,9 +129,12 @@ uint32_t crc32_update(uint32_t crc, const uint8_t * data, size_t len)
 
 } // namespace
 
-extern "C" void tdeck_dbg_redrawlog(bool on)
+extern "C" void tdeck_dbg_redrawlog(int level)
 {
-    s_redrawlog_on = on;
+    if(level < 0) level = 0;
+    if(level > 3) level = 3;
+    s_redrawlog_level = level;
+    Serial.printf("[REDRAWLOG];level;%d\n", level);
 }
 
 static bool s_flushfix_on = true;    // partial refresh needs the lost-flush mitigation
@@ -255,7 +260,8 @@ extern "C" void tdeck_dbg_mapzoom(int dir)
 
 extern "C" bool tdeck_dbg_redrawlog_enabled(void)
 {
-    return s_redrawlog_on;
+    /* Gates the heavy [BUS]/[FLUSH] CRC prints in tdeck_main.cpp: full mode only. */
+    return s_redrawlog_level >= 3;
 }
 
 /* Strong override of the weak hook declared in lib/lvgl/src/core/lv_obj_pos.c. */
@@ -280,7 +286,7 @@ extern "C" void lv_obj_invalidate_hook(const lv_obj_t * obj, const lv_area_t * a
 {
     s_inv_total++;
 
-    if(!s_redrawlog_on) return;
+    if(s_redrawlog_level < 2) return;
 
     uint32_t now = millis();
     if(now - s_rate_window_start_ms >= 1000) {
@@ -301,18 +307,24 @@ extern "C" void lv_obj_invalidate_hook(const lv_obj_t * obj, const lv_area_t * a
     const char * cls = classify_obj(obj);
     const char * name = known_name(obj);
 
-    uint32_t bt[8];
-    int nbt = collect_backtrace(bt, 8);
+    /* The backtrace (collect_backtrace + 8 frames of hex) is what makes a line
+     * ~200 B; only level 3 pays for it. Level 2 omits the "bt" field. */
     char btbuf[8 * 11 + 1];
-    int off = 0;
-    for(int k = 0; k < nbt; k++)
-        off += snprintf(btbuf + off, sizeof(btbuf) - off, "%s0x%08lx", k ? "," : "", (unsigned long)bt[k]);
-    if(nbt == 0) snprintf(btbuf, sizeof(btbuf), "-");
+    btbuf[0] = 0;
+    if(s_redrawlog_level >= 3) {
+        uint32_t bt[8];
+        int nbt = collect_backtrace(bt, 8);
+        int off = 0;
+        for(int k = 0; k < nbt; k++)
+            off += snprintf(btbuf + off, sizeof(btbuf) - off, "%s0x%08lx", k ? "," : "", (unsigned long)bt[k]);
+        if(nbt == 0) snprintf(btbuf, sizeof(btbuf), "-");
+    }
 
-    Serial.printf("[REDRAW];ms;%lu;obj;0x%08lx;cls;%s;area;%d;%d;%d;%d;ra;0x%08lx;bt;%s",
+    Serial.printf("[REDRAW];ms;%lu;obj;0x%08lx;cls;%s;area;%d;%d;%d;%d;ra;0x%08lx",
                   (unsigned long)now, (unsigned long)(uintptr_t)obj, cls,
                   (int)area->x1, (int)area->y1, (int)area->x2, (int)area->y2,
-                  (unsigned long)(uintptr_t)ret_addr, btbuf);
+                  (unsigned long)(uintptr_t)ret_addr);
+    if(s_redrawlog_level >= 3) Serial.printf(";bt;%s", btbuf);
     if(name != NULL) Serial.printf(";name;%s", name);
     Serial.print("\n");
 }
@@ -324,7 +336,7 @@ extern "C" void tdeck_dbg_monitor_cb(lv_disp_drv_t * disp_drv, uint32_t time_ms,
     s_last_refr_px = px;
     s_last_refr_ms = time_ms;
 
-    if(!s_redrawlog_on) return;
+    if(s_redrawlog_level < 1) return;
     Serial.printf("[REFR];ms;%lu;px;%lu;t_ms;%lu\n",
                   (unsigned long)millis(), (unsigned long)px, (unsigned long)time_ms);
 }
@@ -332,7 +344,7 @@ extern "C" void tdeck_dbg_monitor_cb(lv_disp_drv_t * disp_drv, uint32_t time_ms,
 extern "C" void tdeck_dbg_render_start_cb(lv_disp_drv_t * disp_drv)
 {
     (void)disp_drv;
-    if(!s_redrawlog_on) return;
+    if(s_redrawlog_level < 1) return;
 
     lv_disp_t * disp = lv_disp_get_default();
     uint32_t n = (disp != NULL) ? disp->inv_p : 0;
@@ -354,7 +366,7 @@ extern "C" void tdeck_dbg_uistat(void)
                   active_tab, drawer, (unsigned long)objs, msg_list_children,
                   (unsigned long)s_inv_total, (unsigned long)s_refr_total,
                   (unsigned long)s_last_refr_px, (unsigned long)s_last_refr_ms,
-                  s_redrawlog_on ? 1 : 0,
+                  s_redrawlog_level > 0 ? 1 : 0,
                   (unsigned long)ESP.getFreeHeap(), (unsigned long)ESP.getMinFreeHeap(),
                   (unsigned long)ESP.getFreePsram(),
                   tft_is_sleeping ? 1 : 0, (unsigned)current_brightness_level,

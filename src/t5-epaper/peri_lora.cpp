@@ -9,6 +9,7 @@
 // nicht auf; die einzige andere Stelle im Baum schreibt <esp32/esp32_main.h>
 // (src/main.cpp:12). Faellt erst auf, seit diese Umgebung ueberhaupt baut.
 #include "esp32/esp32_main.h"
+#include "gw_reg_runtime.h"   // gwRegBlocked(): no TX while the registration state is set
 
 TaskHandle_t lora_handle;
 
@@ -187,8 +188,11 @@ void lora_set_mode(int mode)
 {
     if(mode == LORA_MODE_SEND){
         radio.setPacketSentAction(set_transmit_flag);
-        Serial.println(F("[LORA] Sending first packet ... "));
-        transmissionState = radio.startTransmit("Hello World!");
+        if(!gwRegBlocked())
+        {
+            Serial.println(F("[LORA] Sending first packet ... "));
+            transmissionState = radio.startTransmit("Hello World!");
+        }
     } else if(mode == LORA_MODE_RECV){
         radio.setPacketReceivedAction(set_receive_flag);
         Serial.println(F("[LORA] Starting to listen ... "));
@@ -248,6 +252,9 @@ void lora_receive_loop(void)
 
 void lora_transmit(const char *str)
 {
+    if(gwRegBlocked())
+        return;
+
     if(transmittedFlag){
         transmittedFlag = false;
         if(transmissionState == RADIOLIB_ERR_NONE){

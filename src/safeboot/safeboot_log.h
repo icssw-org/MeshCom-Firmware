@@ -39,6 +39,11 @@ public:
   void flush() override { Serial0.flush(); }
   void setDebugOutput(bool en) { Serial0.setDebugOutput(en); }
   int available() { return Serial0.available() + (usb_.isConnected() ? usb_.available() : 0); }
+  // Prefer the native USB side when it has data (T-Deck: the only console), else UART0.
+  int read() {
+    if (usb_.isConnected() && usb_.available() > 0) return usb_.read();
+    return Serial0.read();
+  }
 
 private:
   HWCDC usb_;

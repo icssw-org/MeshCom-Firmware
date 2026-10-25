@@ -206,6 +206,7 @@ void setupBMX280(bool bNewStart)
 	else
 		Serial.printf("[INIT]...BMP280 started\n");
 
+	bmx_is_bme = bmx280.isBME280();
 	bmx_found = true;
 }
 
