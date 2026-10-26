@@ -4186,7 +4186,7 @@ void commandAction(char *umsg_text, bool ble)
 
         String sShort = convertCallToShort(meshcom_settings.node_call);
         bSameCall = bSameCall && sShort.equals(meshcom_settings.node_short);
-        snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%s", sShort.c_str());
+        snprintf(meshcom_settings.node_short, sizeof(meshcom_settings.node_short), "%.5s", sShort.c_str());
 
         printfdeb("Call:%s Short:%s set\n", meshcom_settings.node_call, meshcom_settings.node_short);
 
