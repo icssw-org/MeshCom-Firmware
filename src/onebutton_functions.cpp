@@ -112,11 +112,39 @@ void singleClick()
     }
     #endif
 
+    int pageNo = pagePointer + 1;   // number shown top right
+
+    #if defined(BOARD_E290)
+    {
+      // E290: ring of PAGE_MAX slots, the slot after the newest message is always empty.
+      // Click order: newest -> ... -> oldest -> status page -> newest ...
+      // Number top right = position among the stored messages (newest = highest, like Wireless Paper).
+      int e290Newest = pageLastPointer - 1;
+      if(e290Newest < 0) e290Newest += PAGE_MAX;
+
+      if(pageLastLineAnz[pagePointer] == 0)      // past the oldest message (or none stored)
+      {
+        pagePointer = e290Newest;
+        sendDisplayHead(true);
+        return;
+      }
+
+      int e290Count = 0, e290Slot = e290Newest;
+      for(int n = 0; n < PAGE_MAX; n++)
+      {
+        if(pageLastLineAnz[e290Slot] == 0) break;
+        e290Count++;
+        e290Slot--; if(e290Slot < 0) e290Slot += PAGE_MAX;
+      }
+      pageNo = e290Count - ((e290Newest - pagePointer + PAGE_MAX) % PAGE_MAX);
+    }
+    #else
     if(pagePointer == 5)
     {
       sendDisplayHead(true);
       return;
     }
+    #endif
       
     if(pageLastLineAnz[pagePointer] == 0)
       pagePointer = pageLastPointer-1;
@@ -147,7 +175,7 @@ void singleClick()
             int ispos=16;
             #endif
             pageText[its][ispos] = 0x20;
-            pageText[its][ispos+1] = (pagePointer + 1) | 0x30;
+            pageText[its][ispos+1] = pageNo | 0x30;
             pageText[its][ispos+2] = 0x00;
         }
     }
