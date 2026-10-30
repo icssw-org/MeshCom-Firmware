@@ -9,6 +9,7 @@
 #endif
 
 #include "loop_functions.h"
+#include "gfx_charmap.h"   // national characters on the GFXfont displays (E290, WP, E213)
 #include "ack_attribution.h"
 #include "txring_functions.h"
 #include "bp_notice_frame.h"
@@ -2968,7 +2969,17 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     String strAscii = "";//aprsmsg.msg_payload;
 
+    #if defined(BOARD_E290) || defined(WP_DISP)
+    {
+        // National characters: WP_FONT9 (FreeSans9pt7b / FreeSansBold9pt7b) has the glyphs at 0x80..0x9A,
+        // gfx_utf8_to_font() maps UTF-8 to those codes (see gfx_charmap.h). Not listed -> dropped.
+        char gfxText[sizeof(aprsmsg.msg_payload) + 1];
+        gfx_utf8_to_font(aprsmsg.msg_payload, strnlen(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload)), gfxText, sizeof(gfxText));
+        strAscii = String(gfxText);
+    }
+    #else
     strAscii = utf8ascii(String(aprsmsg.msg_payload));
+    #endif
 
     #if defined(WP_DISP)
     // Nachrichtentext mit kompakter Schrift (enger Zeilenabstand 15 statt 22) -> bis zu 160
