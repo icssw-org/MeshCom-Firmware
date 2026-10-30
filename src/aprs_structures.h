@@ -20,10 +20,11 @@
 // DIE BREITEN sind aus dem Decoder abgeleitet, nicht geschaetzt -- eine zu
 // knappe Breite wuerde echten Verkehr abschneiden, statt Bytes zu sparen:
 //
-//   MC_PATH_LEN    Die beiden Pfad-Schleifen in decodeAPRS() nehmen je genau
-//                  120 Zeichen an (`(ib - 6) < 120` bzw.
-//                  `(ib - inextstart) < 120`). 121 bildet das exakt ab, also
-//                  bleibt jeder heute angenommene Frame angenommen.
+//   MC_PATH_LEN    Die beiden Pfad-Schleifen in decodeAPRS() pruefen je 120
+//                  Positionen (`(ib - 6) < 120` bzw. `(ib - inextstart) < 120`),
+//                  das '>' eingeschlossen. Das Feld fasst 120 Zeichen + NUL (121),
+//                  ein decodierbarer Quellpfad hat aber hoechstens 119 Zeichen
+//                  (MC_PATH_MAX_CHARS); 120 Zeichen finden kein '>' mehr.
 //
 //   MC_CALL_LEN_Z  MAX_CALL_LEN (20) ist die im Projekt erklaerte Obergrenze
 //                  fuer ein Rufzeichen, +1 fuer die NUL. Das ist die EINZIGE
@@ -52,6 +53,7 @@
 // deshalb als Literale hier, und die Kopplung an die Konstanten wird dort
 // GEPRUEFT, wo beide Header ohnehin sichtbar sind (aprs_functions.cpp).
 #define MC_PATH_LEN     121
+#define MC_PATH_MAX_CHARS (MC_PATH_LEN - 2)   // laengster decodierbarer Quellpfad (119)
 #define MC_CALL_LEN_Z   21     // MAX_CALL_LEN + 1
 #define MC_PAYLOAD_LEN  256    // UDP_TX_BUF_SIZE + 1
 

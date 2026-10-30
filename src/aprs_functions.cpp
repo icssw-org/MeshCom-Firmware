@@ -1145,7 +1145,7 @@ uint16_t encodeAPRS(uint8_t msg_buffer[UDP_TX_BUF_SIZE], struct aprsMessage &apr
 // NCT = neighbour count as sent on air (nbrNcntAir(), capped at two digits),
 // RSSI as positive number, SNR in dB.
 // Used by the mesh relay path and the gateway UDP upload (same wire format).
-void appendHeySignalReport(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, int ncnt_air)
+bool appendHeySignalReport(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr, int ncnt_air)
 {
     // Die Kette waechst mit jedem Relais um bis zu HEY_REPORT_GROUP_MAX Zeichen.
     // Regulaer begrenzt MAX_HOP_LIMIT die Zahl der Gruppen, ein von der
@@ -1156,7 +1156,7 @@ void appendHeySignalReport(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr
     // Kette hier zu beenden ist der verlustaermere Weg: was bereits drinsteht,
     // bleibt gueltig.
     if (strlen(aprsmsg.msg_payload) + HEY_REPORT_GROUP_MAX > HEY_PATH_PAYLOAD_MAX)
-        return;
+        return false;
 
     // Eine Gruppe, in einem Stueck. Vorher waren das sechs String-Anhaenge mit
     // drei String-Zwischenobjekten; jetzt ein Puffer auf dem Stack und ein
@@ -1167,6 +1167,64 @@ void appendHeySignalReport(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr
     snprintf(cGroup, sizeof(cGroup), "%d,%.0f,%d;",
              ncnt_air, (double)(rssi * -1.0), (int)snr);
     mcAppend(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), cGroup);
+    return true;
+}
+
+// Haengt "," + call an path, wenn das Ergebnis hoechstens MC_PATH_MAX_CHARS
+// (decodierbar) lang ist und in cap passt. Sonst bleibt path unveraendert (kein
+// einzelnes Komma) und false kommt zurueck.
+bool appendCallToPath(char *path, size_t cap, const char *call)
+{
+    if (path == NULL || call == NULL || call[0] == '\0')
+        return false;
+
+    size_t pl = strnlen(path, cap);
+    if (pl >= cap || pl + 1 + strlen(call) > MC_PATH_MAX_CHARS || pl + 1 + strlen(call) + 1 > cap)
+        return false;
+
+    mcAppendChar(path, cap, ',');
+    mcAppend(path, cap, call);
+    return true;
+}
+
+// HEY-UP-01: Gateway haengt beim HEY-Upload sein eigenes Rufzeichen an den
+// msg_source_path, damit der Server den Empfaenger kennt. Immer Long-Path
+// (keine bSHORTPATH-Kuerzung). Haengt nichts an (false), wenn own_call leer
+// ist, nicht in MC_PATH_MAX_CHARS passt oder schon Pfadelement ist
+// (exakter Elementvergleich ueber ","+call+",", wie die Loop-Erkennung).
+bool appendUploaderToPath(struct aprsMessage &aprsmsg, const char *own_call)
+{
+    if (own_call == NULL || own_call[0] == '\0')
+        return false;
+
+    char cSearch[MC_PATH_LEN + 4];
+    char cPath[MC_PATH_LEN + 4];
+    if (snprintf(cSearch, sizeof(cSearch), ",%s,", own_call) >= (int)sizeof(cSearch))
+        return false;
+    if (snprintf(cPath, sizeof(cPath), ",%s,", aprsmsg.msg_source_path) >= (int)sizeof(cPath))
+        return false;
+    if (strstr(cPath, cSearch) != NULL)
+        return false;
+
+    return appendCallToPath(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), own_call);
+}
+
+// HEY-Upload-Rahmen: Pfad sichern, Uploader anhaengen, encodieren, Pfad
+// wiederherstellen (immer). msg_source_path bleibt danach unveraendert, damit
+// Loop-Erkennung und Relay-Append des Aufrufers wie bisher arbeiten.
+// Kein Kopieren der ganzen aprsMessage (LoRa-Task-Stack).
+uint16_t encodeHeyUpload(uint8_t buf[UDP_TX_BUF_SIZE], struct aprsMessage &aprsmsg, const char *own_call)
+{
+    char cSaved[MC_PATH_LEN];
+    memcpy(cSaved, aprsmsg.msg_source_path, sizeof(cSaved));
+
+    appendUploaderToPath(aprsmsg, own_call);
+
+    memset(buf, 0x00, UDP_TX_BUF_SIZE);
+    uint16_t len = encodeAPRS(buf, aprsmsg);
+
+    memcpy(aprsmsg.msg_source_path, cSaved, sizeof(cSaved));
+    return len;
 }
 
 // OE1KBC-17>APLT00-1,WIDE1-1,qAS,OE3CGG-10:!4807.01N/01619.20E[(T-ECHO by F4AVI)

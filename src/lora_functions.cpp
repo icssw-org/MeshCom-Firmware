@@ -2417,11 +2417,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 // append own signal report (NCT,RSSI,SNR) before UDP out, so the
                                 // server gets the same report the mesh gets — the relay path below
                                 // skips its append (RcvBuffer is re-encoded there anyway)
-                                appendHeySignalReport(aprsmsg, rssi, snr, nbrNcntAir(nbrMatrix, uptimeMin16()));
+                                bool bRepOk = appendHeySignalReport(aprsmsg, rssi, snr, nbrNcntAir(nbrMatrix, uptimeMin16()));
                                 bHeyReportAppended = true;
 
-                                memset(RcvBuffer, 0x00, UDP_TX_BUF_SIZE);
-                                size = encodeAPRS(RcvBuffer, aprsmsg);
+                                // HEY-UP-01: Upload-Rahmen traegt zusaetzlich den eigenen Call im
+                                // Pfad (Server erkennt den Empfaenger); msg_source_path bleibt unveraendert
+                                // ohne Bericht-Segment auch kein Gateway-Call im Pfad (NULL)
+                                size = encodeHeyUpload(RcvBuffer, aprsmsg, bRepOk ? meshcom_settings.node_call : NULL);
                                 if(size + 2 > UDP_TX_BUF_SIZE)
                                     size = UDP_TX_BUF_SIZE - 2;
                             }
