@@ -357,18 +357,19 @@ inline bool isPageLoadTarget(Span t)
 inline bool hasRoutedToken(const char *p, size_t n)
 {
     static const char *const tok[] = {"/setparam/", "/callfunction/", "/getparam/", "/config", "/rm",
-                                      "/?sendmessage", "/?getmessages", "/?nodepassword"};
+                                      "/?sendmessage", "/?getmessages", "/?nodepassword", "/?login", "/?logout"};
     for (size_t i = 0; i < sizeof(tok) / sizeof(tok[0]); i++)
         if (contains(p, n, tok[i]))
             return true;
     return false;
 }
 
+// "/?login=" (with the "=") is state-changing; "/?loginnonce" (read-only nonce issue) is routed but not state
 // state-changing route token anywhere in p[0..n) (GET /rmnodes is read-only, POST is caught by the method)
 inline bool hasStateToken(const char *p, size_t n)
 {
     static const char *const tok[] = {"/setparam", "/callfunction", "/?sendmessage", "/?nodepassword",
-                                      "/rmsend", "/rmpasswd"};
+                                      "/?login=", "/?logout", "/rmsend", "/rmpasswd"};
     for (size_t i = 0; i < sizeof(tok) / sizeof(tok[0]); i++)
         if (contains(p, n, tok[i]))
             return true;

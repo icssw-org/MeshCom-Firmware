@@ -23,6 +23,7 @@
 #include "udp_functions.h"
 #include "gw_servers.h"   // GWU: gwCodes(), gwSelectNet() for --setnet / --gateway srv
 #include "radio_units.h"   // RF-01..RF-03 unit conversions
+#include "web_functions/web_auth.h" // WEB-AUTH-01: webAuthReset()
 #include "extudp_functions.h"
 #include "ntp_async.h"
 #include "ble_json_frame.h"
@@ -2897,6 +2898,7 @@ void commandAction(char *umsg_text, bool ble)
             sVar = sVar.substring(0, sizeof(meshcom_settings.node_webpwd) - 1);
 
         snprintf(meshcom_settings.node_webpwd, sizeof(meshcom_settings.node_webpwd), "%s", sVar.c_str());
+        webAuthReset(); // WEB-AUTH-01: a new web password drops every session and nonce
 
         if(ble)
         {
