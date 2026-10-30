@@ -2552,8 +2552,13 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 else
                                 {
                                     /*long path*/
-                                    mcAppendChar(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), ',');
-                                    mcAppend(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call);
+                                    if(!appendCallToPath(aprsmsg.msg_source_path, sizeof(aprsmsg.msg_source_path), meshcom_settings.node_call))
+                                    {
+                                        if(bLORADEBUG)
+                                            printfdeb("[MC-DBG] RELAY_PATH_FULL\n");
+                                        rly_reason = "pathfull";    // SL-02
+                                        goto skip_relay;
+                                    }
                                 }
 
                                 if(aprsmsg.payload_type == '@' && !bHeyReportAppended)
