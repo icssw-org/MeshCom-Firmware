@@ -13,6 +13,25 @@ The Web-API is not yet finished or stable. We will add or change things. Please 
 
 
 ============================================
+Login (web password set)
+============================================
+When a web password is set (--webpwd), every request except the three below needs the session cookie
+"mcs" that a successful login returns (WEB-AUTH-01, #1241). The password itself never travels:
+
+	/?loginnonce					returns 32 hex chars (a one-time nonce, valid 30 s)
+	/?login=<nonce>.<mac>			mac = HMAC-SHA256(key = password, msg = the 32 nonce chars), lowercase hex;
+									200 + Set-Cookie: mcs=<token> on success, else 403 {"ok":false,"err":"..."}
+	/?logout						drops the session of the request cookie
+
+	Example (bash, openssl):
+	n=$(curl -s -H 'X-MC: 1' http://<node>/?loginnonce)
+	m=$(printf %s "$n" | openssl dgst -sha256 -hmac '<password>' | sed 's/.* //')
+	curl -s -H 'X-MC: 1' -c jar "http://<node>/?login=$n.$m"; curl -s -b jar -H 'X-MC: 1' 'http://<node>/setparam/?onewire=on'
+
+	The old /?nodepassword=<password> (plaintext) is refused with 403 {"ok":false,"err":"plaintext"}.
+	Five failed logins within a minute block logins for 60 s. Sessions end after 4 h without a request.
+
+============================================
 Setting Parameters
 ============================================
 To set a parameter to the node, use:
@@ -21,7 +40,7 @@ To set a parameter to the node, use:
 	remote-management endpoints (/rm*, /?page=remote, /setparam/?rm= and /setparam/?rmstrict=); all other
 	endpoints are unchecked. Built with
 	-D MC_WEB_GUARD=1 every state-changing request (/setparam, /callfunction, /?sendmessage,
-	/?nodepassword and any POST) must carry the header "X-MC: 1" (the web page adds it itself), for example
+	/?login=, /?logout and any POST) must carry the header "X-MC: 1" (the web page adds it itself), for example
 	curl -H 'X-MC: 1' 'http://<node>/setparam/?onewire=on'. Without it, or with a Host that is not an IP address,
 	a single-label name or a *.local / *.fritz.box / *.lan / *.home.arpa / *.internal / *.speedport.ip /
 	*.localdomain / *.home name, the node answers 403. Typing a /setparam URL into the browser bar is refused

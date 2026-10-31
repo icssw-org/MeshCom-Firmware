@@ -18,7 +18,7 @@ void stopWebserver();
 
 // Common functions
 String decodeURLPercentCoding(String input);
-String work_webpage(bool get_password, int webid);
+void work_webpage(void);
 
 
 // Pages
@@ -42,10 +42,11 @@ void sub_page_mailbox();        // mailbox (store node) page, stage 3
 void sub_page_unknown();        // a 404 - page
 void sub_content_messages();    // only the formatted messages, not the complete message page
 void sub_page_login();          // login page
+void webLoginScaffoldJs();      // WEB-AUTH-01: login/logout JS (SHA-256, HMAC, nonce login), web_login_page.cpp
 void sub_page_mcp23017();       // mcp23017 page
 
 // related functions
-void send_http_header(uint16_t http_status_code, uint8_t response_type);        // create and send a HTML Header 
+void send_http_header(uint16_t http_status_code, uint8_t response_type, const char *extra_header = nullptr);        // create and send a HTML Header 
 void _create_setup_textinput_element(const char id[], const char labelText[], String inputValue, const char placeHolder[], const char parameterName[], uint8_t maxlength, bool isPassword, bool needConfirm);  // create and send a textinput element used in setup
 void _create_setup_numberinput_element(const char id[], const char labelText[], int inputValue, int minValue, int maxValue, const char parameterName[]);  // number input with range hint (D10)
 void _create_setup_switch_element(const char id[], const char labelText[], const char descriptionText[], bool checked, const char warnText[] = nullptr, bool warnVisible = false);     // create and send a switch element used in setup; TRK-01: optional Warnhinweis neben dem Switch

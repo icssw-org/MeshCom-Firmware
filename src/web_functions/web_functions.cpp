@@ -41,6 +41,7 @@
 #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
 #include "esp32/esp32_pmu.h"    // LED-02: effective charge-LED mode (RM override)
 #endif
+#include "web_auth.h"           // WEB-AUTH-01: nonce login + cookie sessions
 #include "web_guard.h"          // RM GUI W1c: Host allowlist (DNS rebinding) and Sec-Fetch-Site (CSRF), header-only
 #include "web_rm_util.h"       // RM GUI G1: rm_wipe / rm_wipe_string / rm_form_decode / rm_json_str shared with web_rm_page.cpp
 #include "web_rm_page.h"       // RM GUI W2b: sub_page_remote(), rmScaffoldJs()
@@ -192,9 +193,69 @@ static void webApplyEthMss()
 }
 #endif
 
-// password check
-char web_ip[10][20] = {0};
-long web_ip_passwd_time[10] = {0};
+// WEB-AUTH-01: platform random source for login nonces and session tokens (web_auth.h WebAuthRng)
+#if defined(ESP32)
+#include <esp_random.h>
+static bool web_auth_rng(uint8_t *out, size_t n)
+{
+    esp_fill_random(out, n); // hardware TRNG
+    return true;
+}
+#elif defined(NRF52_SERIES)
+#include <nrf_soc.h>
+#include <nrf_sdm.h>
+static bool web_auth_rng(uint8_t *out, size_t n)
+{
+    // via the SoftDevice when it is enabled (NRF_RNG is owned by it then), else the peripheral directly
+    uint8_t sd_en = 0;
+    sd_softdevice_is_enabled(&sd_en);
+    size_t i = 0;
+    uint32_t t0 = millis();
+    if (sd_en)
+    {
+        while (i < n && (uint32_t)(millis() - t0) < 200)
+        {
+            uint8_t avail = 0;
+            sd_rand_application_bytes_available_get(&avail);
+            size_t want = n - i;
+            if (avail > 0 && want > avail)
+                want = avail;
+            if (avail > 0 && sd_rand_application_vector_get(out + i, (uint8_t)want) == NRF_SUCCESS)
+                i += want;
+            else
+                delay(1);
+        }
+    }
+    else
+    {
+        NRF_RNG->EVENTS_VALRDY = 0;
+        NRF_RNG->TASKS_START = 1;
+        while (i < n)
+        {
+            uint32_t t1 = millis();
+            while (!NRF_RNG->EVENTS_VALRDY && (uint32_t)(millis() - t1) < 50)
+                ;
+            if (!NRF_RNG->EVENTS_VALRDY)
+                break;
+            out[i++] = (uint8_t)NRF_RNG->VALUE;
+            NRF_RNG->EVENTS_VALRDY = 0;
+        }
+        NRF_RNG->TASKS_STOP = 1;
+    }
+    // the hardware RNG did not answer in time (should never happen): no nonce, no session
+    return i == n;
+}
+#else
+#error "web_auth_rng: no random source for this platform"
+#endif
+
+// WEB-AUTH-01: client address for the serial log lines (IPAddress::toString() does not exist on nRF52)
+static const char *web_remote_ip(char *buf, size_t n)
+{
+    IPAddress ip = web_client.remoteIP();
+    snprintf(buf, n, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
+    return buf;
+}
 
 // gps_functions.cpp instanziiert das TinyGPSPlus-Objekt unbedingt (auch ohne
 // ENABLE_GPS); hier nur fuer distanceBetween() auf der MHeard-Seite genutzt.
@@ -393,95 +454,14 @@ void loopWebserver()
  */
 void web_client_html(CommonWebClient web_client)
 {
-    IPAddress web_ip_now = web_client.remoteIP();
-    char c_web_ip_now[20];
-    snprintf(c_web_ip_now, sizeof(c_web_ip_now), "%i.%i.%i.%i", web_ip_now[0], web_ip_now[1], web_ip_now[2], web_ip_now[3]);
-
-    if(bDEBUG) {
+    if (bDEBUG)
+    {
         Serial.print("[Web]...Client IP: ");
-    if(bDEBUG) {
-        Serial.print("[Web]...Client IP: ");
-        Serial.println(web_ip_now);
+        Serial.println(web_client.remoteIP());
     }
-    }
-    bool bPasswordOk = false;
 
-    // check password used
-    int inext_free = -1;
-    int iwebid = -1;
-
-    if (strlen(meshcom_settings.node_webpwd) > 0)
-    {
-        for (int iwid = 0; iwid < 10; iwid++)
-        {
-            // check passwort Time expired 4h
-            if((uint32_t)(millis() - (uint32_t)web_ip_passwd_time[iwid]) >= (1000U * 60 * 60 * 4))
-            {
-                web_ip_passwd_time[iwid] = 0;
-                memset(web_ip[iwid], 0x00, sizeof(web_ip[iwid]));
-            }
-
-            // check timeout
-            if (web_ip_passwd_time[iwid] > 0)
-            {
-                if (bDEBUG)
-                    Serial.printf("iwid:%i web_ip[iwid]:%s %s\n", iwid, web_ip[iwid], c_web_ip_now);
-
-                if (is_equ(web_ip[iwid], c_web_ip_now))
-                {
-                    bPasswordOk = true;
-                    web_ip_passwd_time[iwid] = millis();
-                    iwebid = iwid;
-                }
-            }
-            else
-            {
-                if (inext_free < 0)
-                    inext_free = iwid;
-            }
-        }
-
-        if(inext_free < 0)
-        {
-            Serial.print(getTimeString());
-            Serial.printf(" WEBServer not free IP/Password table\n");
-        }
-        else
-        {
-            if (!bPasswordOk)
-            {
-                String strGetPassword = work_webpage(true, inext_free);
-
-                if (is_equ(strGetPassword.c_str(), meshcom_settings.node_webpwd))
-                {
-                    Serial.print(getTimeString());
-                    Serial.printf(" WEBServer Password OK IP:<%s pos:%i>\n", c_web_ip_now, inext_free);
-
-                    snprintf(web_ip[inext_free], sizeof(web_ip[inext_free]), "%s", c_web_ip_now);
-                    web_ip_passwd_time[inext_free] = millis();
-                    bPasswordOk = true;
-                    iwebid = inext_free;
-                }
-                else
-                {
-                    Serial.print(getTimeString());
-                    Serial.printf(" WEBServer Password not found IP:<%s> show LOGIN\n", c_web_ip_now);
-                }
-            }
-        }
-    }
-    else
-        bPasswordOk = true;
-        
-    // no connection via password or no password need
-    if (!bPasswordOk)
-    {
-        work_webpage(true, inext_free);
-    }
-    else
-    {
-        work_webpage(false, iwebid);
-    }
+    // WEB-AUTH-01: the login state is a session cookie, checked in work_webpage()
+    work_webpage();
 }
 
 /**
@@ -875,7 +855,7 @@ static void sub_config_upload(long content_length)
  * Handle Web requests and call the matching sub function
  */
 
-String work_webpage(bool bget_password, int webid)
+void work_webpage(void)
 {
     // RAM-Rueckgewinn (2026-09-20): der 1-kB-Sammelpuffer web_header_collect
     // lag als statisches Feld im DRAM und wurde am Ende ohnehin in den String
@@ -892,7 +872,6 @@ String work_webpage(bool bget_password, int webid)
 
     web_currentTime = millis();
     web_previousTime = web_currentTime;
-    String password_message = "";
     String web_currentLine = ""; // make a String to hold incoming data from the client
 
     // CS-03: an upload needs its body length, and the header may well be
@@ -900,6 +879,13 @@ String work_webpage(bool bget_password, int webid)
     // so it does not depend on that 1 kB window.
     long web_content_length = -1;
     bool web_rm_quiet = false; // W2-1: set once the request line is /rmsend, suppresses the bDEBUG echo
+                               // (WEB-AUTH-01: also /?login= and the legacy /?nodepassword=)
+    bool web_line_quiet = false; // WEB-AUTH-01: the current line is the Cookie header, not echoed
+    // WEB-AUTH-01: Cookie header value, captured as its line completes (it often arrives behind the
+    // WEB_HEADER_MAX window of web_header)
+    char web_cookie[256];
+    size_t web_cookie_len = 0;
+    web_cookie[0] = 0;
 
     if (bDEBUG)
     {
@@ -926,8 +912,13 @@ String work_webpage(bool bget_password, int webid)
             if (!web_rm_quiet && ((web_header.length() == 8 && web_header.startsWith("POST /rm")) ||
                                   (web_header.length() == 7 && web_header.startsWith("GET /rm"))))
                 web_rm_quiet = true; // /rmsend, /rmpasswd, /rmnodes, ... (RM GUI W2 adds more /rm* paths)
+            if (!web_rm_quiet && ((web_header.length() == 12 && web_header.startsWith("GET /?login=")) ||
+                                  (web_header.length() == 19 && web_header.startsWith("GET /?nodepassword="))))
+                web_rm_quiet = true; // WEB-AUTH-01: login argument / legacy plaintext password
+            if (web_currentLine.length() == 7 && web_currentLine.equalsIgnoreCase("cookie:"))
+                web_line_quiet = true; // WEB-AUTH-01: session token
 
-            if (bDEBUG && !web_rm_quiet)
+            if (bDEBUG && !web_rm_quiet && (!web_line_quiet || c == '\n'))
                 Serial.write(c); // print it out the serial monitor
 
             if (c == '\n')
@@ -942,7 +933,7 @@ String work_webpage(bool bget_password, int webid)
                     // RM GUI W1c: refuse DNS-rebinding Hosts and cross-site browser requests before any
                     // routing -- /setparam, /callfunction, /rmsend ... are plain GETs a foreign page could
                     // fire with an <img>. curl/python tools send no Sec-Fetch-Site and an IP/.local Host.
-                    // Must run before the /?nodepassword branch below overwrites web_header.
+                    // Must run before the login routes below (WEB-AUTH-01), which wipe web_header.
                     String wg_path = "/";
                     {
                         int wa = web_header.indexOf(' ');
@@ -969,36 +960,83 @@ String work_webpage(bool bget_password, int webid)
                         continue;
                     }
 
-                    // user sends authentication
-                    if (web_header.indexOf("/?nodepassword") >= 0)
+                    // WEB-AUTH-01: login routes (Web-API_documentation.txt "Login"), after the guard and before the auth gate
+                    if (wg_path.startsWith("/?loginnonce"))
                     {
-                        web_header = web_header.substring(web_header.indexOf("/?nodepassword=") + 15, web_header.indexOf("HTTP/1.1"));
-                        web_header.trim();
-                        // the rewritten header must not route to RM unguarded (guard skipped above)
-                        if (!wg_on && webGuardIsRmRoute(web_header.c_str(), web_header.length()))
+                        char nonce[33];
+                        if (webAuthIssueNonce(millis(), web_auth_rng, nonce))
                         {
-                            rm_wipe_string(web_header);
-                            rm_wipe_string(web_currentLine);
-                            web_cors_ok = false;
-                            send_http_header(403, RESPONSE_TYPE_JSON);
-                            web_client.println("{\"ok\":false,\"err\":\"forbidden\"}");
-                            web_client.stop();
-                            continue;
-                        }
-                        if (web_header.length() == 0)
-                        {
-                            web_ip_passwd_time[webid] = 0; // logging out
-                            if (bDEBUG)
-                                Serial.println("WebUI requested logout");
+                            send_http_header(200, RESPONSE_TYPE_TEXT);
+                            web_client.print(nonce);
                         }
                         else
                         {
-                            password_message = decodeURLPercentCoding(web_header); // try logging in using password
-                            if (bDEBUG)
-                                Serial.println("WebUI requested login");
+                            send_http_header(403, RESPONSE_TYPE_JSON);
+                            web_client.println("{\"ok\":false,\"err\":\"throttled\"}");
                         }
-                        send_http_header(200, RESPONSE_TYPE_TEXT);
+                        web_client.stop();
+                        continue;
                     }
+                    if (wg_path.startsWith("/?login="))
+                    {
+                        String wa_arg = wg_path.substring(8);
+                        int wa_amp = wa_arg.indexOf('&');
+                        if (wa_amp >= 0)
+                            wa_arg = wa_arg.substring(0, wa_amp);
+                        char token[33];
+                        char wa_ip[20];
+                        WebAuthResult war = webAuthLogin(wa_arg.c_str(), wa_arg.length(), meshcom_settings.node_webpwd, millis(),
+                                                         web_auth_rng, token);
+                        if (war == WA_OK)
+                        {
+                            char hdr[96];
+                            snprintf(hdr, sizeof(hdr), "Set-Cookie: mcs=%s; Path=/; HttpOnly; SameSite=Strict", token);
+                            send_http_header(200, RESPONSE_TYPE_JSON, hdr);
+                            web_client.println("{\"ok\":true}");
+                            memset(hdr, 0, sizeof(hdr));
+                            memset(token, 0, sizeof(token));
+                            Serial.print(getTimeString());
+                            Serial.printf(" WEBServer Password OK IP:<%s>\n", web_remote_ip(wa_ip, sizeof(wa_ip)));
+                        }
+                        else
+                        {
+                            send_http_header(403, RESPONSE_TYPE_JSON);
+                            web_client.printf("{\"ok\":false,\"err\":\"%s\"}\n", webAuthErrCode(war));
+                            Serial.print(getTimeString());
+                            Serial.printf(" WEBServer Password rejected (%s) IP:<%s>\n", webAuthErrCode(war),
+                                          web_remote_ip(wa_ip, sizeof(wa_ip)));
+                        }
+                        rm_wipe_string(wa_arg);
+                        rm_wipe_string(wg_path);
+                        rm_wipe_string(web_header);
+                        rm_wipe_string(web_currentLine);
+                        web_client.stop();
+                        continue;
+                    }
+                    if (wg_path.startsWith("/?logout") || wg_path == "/?nodepassword=" || wg_path == "/?nodepassword")
+                    {
+                        webAuthLogout(web_cookie, web_cookie_len);
+                        send_http_header(200, RESPONSE_TYPE_TEXT, "Set-Cookie: mcs=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
+                        if (bDEBUG)
+                            Serial.println("WebUI requested logout");
+                        web_client.stop();
+                        continue;
+                    }
+                    if (wg_path.startsWith("/?nodepassword="))
+                    {
+                        // legacy plaintext login: refused, the value is neither used nor logged
+                        rm_wipe_string(wg_path);
+                        rm_wipe_string(web_header);
+                        rm_wipe_string(web_currentLine);
+                        send_http_header(403, RESPONSE_TYPE_JSON);
+                        web_client.println("{\"ok\":false,\"err\":\"plaintext\"}");
+                        web_client.stop();
+                        continue;
+                    }
+
+                    // WEB-AUTH-01: a password is set and the request carries no live session cookie
+                    const bool bget_password = strlen(meshcom_settings.node_webpwd) > 0 &&
+                                               !webAuthSessionValid(web_cookie, web_cookie_len, millis());
 
                     // in every other case, we check if authentication is required but not yet provided
                     if (bget_password)
@@ -1016,6 +1054,11 @@ String work_webpage(bool bget_password, int webid)
                         }
                         else
                         {
+                            Serial.print(getTimeString());
+                            {
+                                char wa_ip[20];
+                                Serial.printf(" WEBServer no session IP:<%s> show LOGIN\n", web_remote_ip(wa_ip, sizeof(wa_ip)));
+                            }
                             deliver_scaffold(true);
                         }
                     }
@@ -1189,7 +1232,29 @@ String work_webpage(bool bget_password, int webid)
                             web_content_length = web_currentLine.substring(15).toInt();
                     }
 
-                    if (web_currentLine.startsWith("GET /rmsend"))
+                    if (web_line_quiet)
+                    {
+                        // WEB-AUTH-01: keep our "mcs=" pair of the Cookie header in its own bounded buffer
+                        // (found anywhere in the line, so foreign cookies of the same host cannot push it
+                        // out; a second Cookie header without "mcs=" keeps the first one's value)
+                        web_line_quiet = false;
+                        int k = 6;
+                        while ((k = web_currentLine.indexOf("mcs=", k + 1)) >= 0 &&
+                               !(web_currentLine[k - 1] == ':' || web_currentLine[k - 1] == ' ' || web_currentLine[k - 1] == ';'))
+                            ;
+                        if (k >= 0)
+                        {
+                            web_cookie_len = 0;
+                            for (; k < (int)web_currentLine.length() && web_currentLine[k] != ';' &&
+                                   web_cookie_len < sizeof(web_cookie) - 1; k++)
+                                web_cookie[web_cookie_len++] = web_currentLine[k];
+                            web_cookie[web_cookie_len] = 0;
+                        }
+                        rm_wipe_string(web_currentLine);
+                    }
+
+                    if (web_currentLine.startsWith("GET /rmsend") || web_currentLine.startsWith("GET /?nodepassword=") ||
+                        web_currentLine.startsWith("GET /?login="))
                         rm_wipe_string(web_currentLine); // W2-1: never leave a password in a freed String
 
                     web_currentLine = "";
@@ -1211,7 +1276,7 @@ String work_webpage(bool bget_password, int webid)
         #endif
     }
 
-    return password_message;
+    memset(web_cookie, 0, sizeof(web_cookie));
 }
 
 /**
@@ -1371,10 +1436,10 @@ void deliver_scaffold(bool bget_password)
 #if defined(ENABLE_MSGSTORE)
     web_client.println("function autorefreshMbox(){if(cpage=='mailbox')loadPage('mailbox',csender,false);}setInterval(autorefreshMbox,10000);");
 #endif
-    // this function is used for login and logout
-    web_client.println("function login(pwd){var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){window.location.reload(true);}};xhttp.open(\"GET\",\"?nodepassword=\"+pwd,true);xhttp.send();}\n");
+    // WEB-AUTH-01: login(), logout(), mcLoginFocus() -- challenge-response, must stay after the X-MC wrapper above
+    webLoginScaffoldJs();
     // this function is used to load content depending on the navigation button pressed
-    web_client.println("function loadPage(page,sender,useSpinner) {" AU_LP_LEAVE "if(typeof rmPageLeave=='function')rmPageLeave();cpage=page;csender=sender;if(useSpinner){document.getElementById(\"content_layer\").innerHTML=\"<span class=\\\"loader\\\"></span>\"};var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"content_layer\").innerHTML=this.responseText;mcRenderQueue();if(page=='messages' && document.getElementById('messages_panel'))mcRenderHistory();if(page=='remote'&&cpage=='remote')rmPageInit();" AU_LP_INIT "if(page=='setup'&&typeof raSt=='function')raSt();}};xhttp.open(\"GET\",\"?page=\"+page,true);xhttp.send();Array.from(document.querySelectorAll('.nav_button.nbactive ')).forEach((el) => el.classList.remove('nbactive')); sender.classList.add('nbactive');}\n");
+    web_client.println("function loadPage(page,sender,useSpinner) {" AU_LP_LEAVE "if(typeof rmPageLeave=='function')rmPageLeave();cpage=page;csender=sender;if(useSpinner){document.getElementById(\"content_layer\").innerHTML=\"<span class=\\\"loader\\\"></span>\"};var xhttp = new XMLHttpRequest(); xhttp.onreadystatechange=function(){if(this.readyState==4 && this.status==200){document.getElementById(\"content_layer\").innerHTML=this.responseText;if(typeof mcLoginFocus=='function')mcLoginFocus();mcRenderQueue();if(page=='messages' && document.getElementById('messages_panel'))mcRenderHistory();if(page=='remote'&&cpage=='remote')rmPageInit();" AU_LP_INIT "if(page=='setup'&&typeof raSt=='function')raSt();}};xhttp.open(\"GET\",\"?page=\"+page,true);xhttp.send();Array.from(document.querySelectorAll('.nav_button.nbactive ')).forEach((el) => el.classList.remove('nbactive')); sender.classList.add('nbactive');}\n");
     // this function is used to send a message from the browser via node to the mesh
     //
     // BP-09: the input fields used to be cleared unconditionally, right after
@@ -1792,7 +1857,7 @@ void deliver_scaffold(bool bget_password)
     // if the suer has set a password, we deliver a logout button
     if (strlen(meshcom_settings.node_webpwd) > 0)
     {
-        web_client.println("<Button class=\"nav_button\" onclick=\"if(confirm('Logging out, are you sure?')){login('')};\"><svg fill=\"#ffffff\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path d=\"M7.707,8.707,5.414,11H17a1,1,0,0,1,0,2H5.414l2.293,2.293a1,1,0,1,1-1.414,1.414l-4-4a1,1,0,0,1,0-1.414l4-4A1,1,0,1,1,7.707,8.707ZM21,1H13a1,1,0,0,0,0,2h7V21H13a1,1,0,0,0,0,2h8a1,1,0,0,0,1-1V2A1,1,0,0,0,21,1Z\"></path></g></svg></Button>\n");
+        web_client.println("<Button class=\"nav_button\" onclick=\"if(confirm('Logging out, are you sure?')){logout()};\"><svg fill=\"#ffffff\" viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><g stroke-width=\"0\"></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"></g><g><path d=\"M7.707,8.707,5.414,11H17a1,1,0,0,1,0,2H5.414l2.293,2.293a1,1,0,1,1-1.414,1.414l-4-4a1,1,0,0,1,0-1.414l4-4A1,1,0,1,1,7.707,8.707ZM21,1H13a1,1,0,0,0,0,2h7V21H13a1,1,0,0,0,0,2h8a1,1,0,0,0,1-1V2A1,1,0,0,0,21,1Z\"></path></g></svg></Button>\n");
     }
     web_client.printf("</div>\n<div id=\"head_layer\"><p class=\"font-small\">Meshcom %s%s</p><p class=\"font-bold\">%s</p></div>\n</div>\n", SOURCE_VERSION, SOURCE_VERSION_WEB_SUB, meshcom_settings.node_call);
     if(gwRegBlocked())
@@ -1826,24 +1891,6 @@ void sub_page_unknown()
     web_client.println("<div id=\"content_inner\">");
     web_client.println("<p>The page you have requested is not known.</p>");
     web_client.println("</div>");
-    web_client.println(); // The HTTP response ends with another blank line
-}
-
-/**
- * ###########################################################################################################################
- * delivers a page to enter the nodes web password
- */
-void sub_page_login()
-{
-    _create_meshcom_subheader("Login required");
-    web_client.println("<div id=\"content_inner\">");
-    web_client.println("<div class=\"cardlayout\">");
-    web_client.println("<label class=\"cardlabel\">Enter Password</label>");
-    web_client.println("<div class=\"grid\">");
-    web_client.println("<span>In order to continue, you need to log in.</span>");
-    web_client.println("<input type=\"password\" maxlength=\"20\" size=\"20\" id=\"nodepassword\" name=\"nodepassword\">");
-    web_client.println("<button onclick=\"login(document.getElementById('nodepassword').value)\" style=\"justify-self:self-end;\">Login</button");
-    web_client.println("</div></div></div>");
     web_client.println(); // The HTTP response ends with another blank line
 }
 
@@ -4508,7 +4555,7 @@ void sub_page_mcp23017()
  * Sends a valid HTTP header. Takes care of the status code.
  * We may need to set more status_text cases once we need them.
  */
-void send_http_header(uint16_t http_status_code, uint8_t content_type)
+void send_http_header(uint16_t http_status_code, uint8_t content_type, const char *extra_header)
 {
     String status_text = "";
     switch (http_status_code)
@@ -4550,6 +4597,8 @@ void send_http_header(uint16_t http_status_code, uint8_t content_type)
         web_client.println("Access-Control-Allow-Methods: GET, POST, OPTIONS");
         web_client.println("Access-Control-Allow-Headers: access-control-allow-headers,access-control-allow-methods,access-control-allow-origin, Origin, Content-Type, Accept");
     }
+    if (extra_header && extra_header[0])
+        web_client.println(extra_header); // WEB-AUTH-01: Set-Cookie of the login / logout answers
     web_client.println("Connection: close");                                  // tell broser that the connection will be closed (in opposite to keep-alive)
     web_client.println("Cache-Control: no-cache, no-store, must-revalidate"); // set caching policy
     web_client.println("Pragma: no-cache");                                   // Disable caching or request/respinse
