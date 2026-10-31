@@ -1324,11 +1324,12 @@ void E290DisplayUpdate()
 
 #if defined(BOARD_E290)
 // E290 refresh policy. Returns true when this page update should be a full refresh (it flashes the panel).
-//  - OTP build (EINK_HELTEC_VME290_OTP): quiet partial refresh, a full "cleaning" refresh only after every
-//    E290_FULL_EVERY page updates (0 = never). The TRACK page always uses partial refresh.
+//  - OTP build (EINK_HELTEC_VME290_OTP): quiet partial refresh. Default E290_FULL_EVERY=0: never a full
+//    refresh (tested on FPC-7519revb panels, no ghost build-up). Build with -D E290_FULL_EVERY=N to get a full
+//    "cleaning" refresh after every N page updates. The TRACK page always uses partial refresh.
 //  - Stock build: never (original behaviour, partial refresh only).
 #ifndef E290_FULL_EVERY
-#define E290_FULL_EVERY 10
+#define E290_FULL_EVERY 0
 #endif
 static bool e290FullRefreshDue()
 {
