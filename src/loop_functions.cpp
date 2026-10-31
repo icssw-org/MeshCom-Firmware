@@ -4754,10 +4754,14 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
     }
 
     // An APP als Anzeige retour senden
-    if(hasMsgFromPhone)
-    {
+    // UDP-05: EXTUDP sends are echoed too, so they show in the WebUI chat
+    // (and a connected app); the ack frame below stays phone/WebUI-only.
+    // Console "::" sends are echoed further down (bConsoleText).
+    if(phoneEchoWanted(hasMsgFromPhone, bp_origin))
         addBLEOutBuffer(msg_buffer, aprsmsg.msg_len);
 
+    if(hasMsgFromPhone)
+    {
         if(bGATEWAY && meshcom_settings.node_hasIPaddress)
         {
             // set Info message send and Server reached, not on DM

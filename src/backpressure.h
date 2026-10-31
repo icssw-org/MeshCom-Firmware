@@ -136,6 +136,20 @@ enum MsgOrigin
     ORIGIN_GUI
 };
 
+/// UDP-05: does sendMessage() echo the outgoing frame into the phone ring
+/// (BLE app and WebUI chat history)? BLE and WebUI sends set fromPhone
+/// (hasMsgFromPhone); EXTUDP sends do not, but their operator wants to see
+/// them in the WebUI too. ORIGIN_SERIAL stays out: a "::" console send is
+/// already echoed by sendMessage()'s bConsoleText branch, a second echo
+/// would show it twice. ORIGIN_GUI stays out (the T-Deck shows its own sends
+/// via tdeck_add_MSG), ORIGIN_NONE (relay, ACK, beacon) never echoes. The
+/// gateway "server reached" ack frame is not covered here -- it stays
+/// phone/WebUI-only.
+inline bool phoneEchoWanted(bool fromPhone, MsgOrigin origin)
+{
+    return fromPhone || origin == ORIGIN_EXTUDP;
+}
+
 /// Q-code of a notice ("QRS", "QRT", "QTA", "QRV"), "" for BP_NOTICE_NONE.
 inline const char *bpNoticeCode(BpNotice n)
 {
