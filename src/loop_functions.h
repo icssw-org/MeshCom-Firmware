@@ -115,7 +115,8 @@ enum PingResult : uint8_t
 {
     PING_QUEUED = 0,
     PING_SUPPRESSED_TRACK = 1,
-    PING_RING_REFUSED = 2
+    PING_RING_REFUSED = 2,
+    PING_INVALID_TARGET = 3   // Group/special/own/junk target, nothing was queued
 };
 
 PingResult sendPing(char msg_call[10]);

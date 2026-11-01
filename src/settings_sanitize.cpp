@@ -1,5 +1,6 @@
 #include "settings_sanitize.h"
 #include "maxhop.h"
+#include "ping_target.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -143,6 +144,22 @@ int resolve_tx_power(int stored, int board_default)
     if (stored == 0 || stored == POWER_NOT_SET)
         return board_default;
     return stored;
+}
+
+bool sanitize_ping_target(char *pingcall, size_t n, const char *own_call, sanitize_log_fn log)
+{
+    if (pingcall == NULL || n == 0)
+        return false;
+
+    sanitize_cstring(pingcall, n);
+
+    if (pingcall[0] == 0 || pingTargetValid(pingcall, own_call))
+        return false;
+
+    if (log != NULL)
+        log("node_pingcall", pingcall, "\"\"");   // prints: -> ""
+    pingcall[0] = 0;
+    return true;
 }
 
 bool sanitize_cstring(char *s, size_t n)

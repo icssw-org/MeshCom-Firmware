@@ -116,12 +116,20 @@ void logTxRefuseUnconfigured(void)
  * @param len    Frame length (= ringBuffer[slot][0])
  * @param status Slot status the entry is classified with (DONE + TEXT = relay)
  */
-static uint8_t classifyFrame(const uint8_t *frame, int len, uint8_t status)
+static uint8_t classifyFrame(const uint8_t *frame, int len, uint8_t status,
+                             bool own_beacon = false)
 {
     uint8_t msg_type = frame[0];
 
     if(msg_type == MSG_TYPE_ACK)
         return MSG_PRIO_CRITICAL;
+
+    // The node's OWN position/WX/HEY is treated like an own group
+    // message (prio 2). A relayed beacon (own_beacon false) stays 4/5. The
+    // status byte cannot tell them apart (both are stored DONE), see
+    // txRingSourceIsOwnBeacon().
+    if(own_beacon && (msg_type == MSG_TYPE_POSITION || msg_type == MSG_TYPE_HEY))
+        return MSG_PRIO_HIGH;
 
     if(msg_type == MSG_TYPE_POSITION)
         return MSG_PRIO_LOW;
@@ -183,6 +191,9 @@ static uint8_t classifyFrame(const uint8_t *frame, int len, uint8_t status)
 /**
  * Determine message priority from ring buffer slot content.
  * Ring buffer layout: [0]=len, [1]=status, [2]=payload_type, [3-6]=msg_id, [7]=flags, [8+]=path
+ * The slot does not keep the enqueue `source`, so an own beacon (prio 2 in
+ * ringPriority[]) re-classifies here as 4/5. ringPriority[] is authoritative; this
+ * helper has no production caller (tests and the trace replay only).
  */
 uint8_t getMessagePriority(int slot)
 {
@@ -601,7 +612,8 @@ static void txRingSweep(uint32_t now_ms, const CetClock &clk, bool cet_only)
         if(!cet_only)
         {
             uint32_t ttl = txRingTtlMs(ringPriority[i], ringBuffer[i][1],
-                                       txRingFrameIsAck(ringBuffer[i] + 2, ringBuffer[i][0]));
+                                       txRingFrameIsAck(ringBuffer[i] + 2, ringBuffer[i][0]),
+                                       ringBuffer[i][2]);
             ttl_hit = (ttl != 0 && age_ms > ttl);
         }
         // ... und {CET}-Altersgate (D1/D2): zu alte/ungeprueft datierte Beacon weg.
@@ -826,7 +838,8 @@ static int addTxRingEntryCore(const uint8_t* frame, uint16_t len,
     // outside the lock (CheckGroup() builds a String): a pool without a free
     // slot must know the priority before it decides to evict or drop.
     // ringBuffer[slot][2..] = frame, so frame[k] = ringBuffer[slot][k+2].
-    prio = classifyFrame(frame, len, classify_status);
+    prio = classifyFrame(frame, len, classify_status,
+                         txRingSourceIsOwnBeacon(source));
     msgType = frame[0];
     mid = ((uint32_t)frame[4] << 24) | ((uint32_t)frame[3] << 16) |
           ((uint32_t)frame[2] << 8)  |  (uint32_t)frame[1];

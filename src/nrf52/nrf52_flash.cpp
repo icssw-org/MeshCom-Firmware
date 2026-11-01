@@ -392,6 +392,10 @@ void sanitize_loaded_settings(void)
 	if(sanitize_max_hop_text(meshcom_settings.max_hop_text, sanitize_log))
 		fixed++;
 
+	// Ping target must be a plain callsign (no group, special target, own call)
+	if(sanitize_ping_target(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_pingcall), meshcom_settings.node_call, sanitize_log))
+		fixed++;
+
 	// Production lock: fixed values for the locked settings and
 	// range repair. nRF52 has no auto update, node_autoupd stays as stored (hasAutoUpdate = false).
 	{

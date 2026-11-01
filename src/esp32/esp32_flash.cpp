@@ -242,6 +242,10 @@ bool sanitize_loaded_settings(void)
     if(sanitize_max_hop_text(meshcom_settings.max_hop_text, sanitize_log))
         fixed++;
 
+    // Ping target must be a plain callsign (no group, special target, own call)
+    if(sanitize_ping_target(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_pingcall), meshcom_settings.node_call, sanitize_log))
+        fixed++;
+
     // Production lock: fixed values for the locked settings,
     // range repair for postime/ptime/ping*, node_autoupd 2 (auto) -> 1, mailbox announcement off.
     // Idempotent; INSTRUMENT builds keep the tuning values. Runs before the runtime flags are derived.

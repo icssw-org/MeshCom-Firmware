@@ -781,16 +781,24 @@ bool esp32BleResume(void)
 
 
 
+// The Module* of the radio, kept for the read-only chip diagnostic (esp32_radio_diag.h).
+static Module *g_radio_mod = nullptr;
+#define MC_RADIO_MODULE(...) (g_radio_mod = new Module(__VA_ARGS__))
+#if defined(SX1262X) || defined(SX126X) || defined(SX1262_E22) || defined(SX1268_E22) || \
+    defined(SX1262_V3) || defined(USING_SX1262) || defined(SX1262_E290) || defined(SX1262_V4) || defined(BOARD_E220)
+#define MC_RADIO_SX126X_FAMILY 1
+#endif
+
 #ifdef SX127X
 // RadioModule SX1276 
-SX1276 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
+SX1276 radio = MC_RADIO_MODULE(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 // SyncWord - 1byte for SX127x, 2 bytes for SX126x
 // Check which chip is used !!!
 #endif
 
 #ifdef BOARD_E220
 // RadioModule derived from SX1262 
-LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
+LLCC68 radio = MC_RADIO_MODULE(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
 #endif
 
 #ifdef SX1262X
@@ -800,7 +808,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
     //#if not defined(BOARD_T_DECK_PRO)
-    SX1262 radio = new Module(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
+    SX1262 radio = MC_RADIO_MODULE(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
     //#endif
 
 #endif
@@ -811,7 +819,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
-    SX1268 radio = new Module(SX1268_CS, SX1268_IRQ, SX1268_RST, SX1268_GPIO);
+    SX1268 radio = MC_RADIO_MODULE(SX1268_CS, SX1268_IRQ, SX1268_RST, SX1268_GPIO);
 
 #endif
 
@@ -821,7 +829,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
-    SX1262 radio = new Module(SX126x_CS, SX126x_IRQ, SX126x_RST, SX126x_GPIO);
+    SX1262 radio = MC_RADIO_MODULE(SX126x_CS, SX126x_IRQ, SX126x_RST, SX126x_GPIO);
 
 #endif
 
@@ -831,7 +839,7 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // If you have RESET of the E22 connected to a GPIO on the ESP you must initialize the GPIO as output and perform a LOW - HIGH cycle, 
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
-    SX1268 radio = new Module(SX126x_CS, SX126x_IRQ, SX126x_RST, SX126x_GPIO);
+    SX1268 radio = MC_RADIO_MODULE(SX126x_CS, SX126x_IRQ, SX126x_RST, SX126x_GPIO);
 
 #endif
 
@@ -842,13 +850,13 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
     //  begin(sck, miso, mosi, ss).
-    SX1262 radio = new Module(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
+    SX1262 radio = MC_RADIO_MODULE(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
 
 #endif
 
 
 #ifdef USING_SX1262 // BOARD_TBEAM_1W
-    SX1262 radio = new Module(RADIO_CS_PIN, RADIO_IRQ_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
+    SX1262 radio = MC_RADIO_MODULE(RADIO_CS_PIN, RADIO_IRQ_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
 #endif
 
 #ifdef SX1262_E290
@@ -858,14 +866,14 @@ LLCC68 radio = new Module(LORA_CS, LORA_DIO0, LORA_RST, LORA_DIO1);
     // otherwise your E22 is in an undefined state. RESET can be connected, but is not a must. IF so, make RESET before INIT!
 
     //  begin(sck, miso, mosi, ss).
-    SX1262 radio = new Module(PIN_LORA_NSS, PIN_LORA_DIO_1, PIN_LORA_NRST, PIN_LORA_BUSY);
+    SX1262 radio = MC_RADIO_MODULE(PIN_LORA_NSS, PIN_LORA_DIO_1, PIN_LORA_NRST, PIN_LORA_BUSY);
 
 #endif
 
 #ifdef SX1262_V4
     // RadioModule SX1262 for Heltec V4 (with external PA)
     // Same pins as V3, but requires PA control during transmit
-    SX1262 radio = new Module(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
+    SX1262 radio = MC_RADIO_MODULE(SX1262X_CS, SX1262X_IRQ, SX1262X_RST, SX1262X_GPIO);
 
 #endif
 
@@ -875,6 +883,74 @@ int checkRX(bool bRadio);
 #if !defined(BOARD_T5_EPAPER)
 static void loraRxParkDrain(void);
 #endif
+
+// RX-silence diagnostics, ESP32 counterpart of nrf52_main.cpp. Every RX event (checkRXProcess())
+// and every radio action (CAD, own TX, RX restart) runs in the loop task, so the tracker is called directly
+// (no publish/forward step as on nRF52). Counters always run; prints and chip reads only under --loradebug.
+#include "rx_silence.h"
+#include "esp32_radio_diag.h"
+static RxSilenceTracker g_rxs;
+static uint32_t g_rxs_cad_busy = 0, g_rxs_cad_scans = 0, g_rxs_restarts = 0;
+
+// Chip mode name for the RX_SILENCE lines; "na" on SX127x boards (no SX126x chip read).
+__attribute__((unused)) static const char *rxsChipModeName(void)
+{
+#ifdef MC_RADIO_SX126X_FAMILY
+    Esp32RadioDiag d;
+    esp32RadioDiagRead(&radio, g_radio_mod, &d);
+    return esp32RadioChipModeName(d.chip_mode);
+#else
+    return "na";
+#endif
+}
+
+// RX event (successful RX with rssi/snr, or an RX error) at 'now'.
+__attribute__((unused)) static void rxsNoteEvent(bool has_q, int rssi, int snr)
+{
+    if(g_rxs.noteRx(millis()) && bLORADEBUG)
+    {
+        char sc[12], st[12], sr[12];
+        rxSilenceFmtSince(sc, sizeof(sc), g_rxs.end_since_cad_ms);
+        rxSilenceFmtSince(st, sizeof(st), g_rxs.end_since_tx_ms);
+        rxSilenceFmtSince(sr, sizeof(sr), g_rxs.end_since_restart_ms);
+        if(has_q)
+            Serial.printf("[MC-DBG] RX_SILENCE_END dur=%lu by=%s since_cad=%s since_tx=%s since_restart=%s rssi=%d snr=%d\n",
+                (unsigned long)g_rxs.end_dur_s, rxSilenceReasonName(g_rxs.end_reason), sc, st, sr, rssi, snr);
+        else
+            Serial.printf("[MC-DBG] RX_SILENCE_END dur=%lu by=%s since_cad=%s since_tx=%s since_restart=%s rssi=na snr=na\n",
+                (unsigned long)g_rxs.end_dur_s, rxSilenceReasonName(g_rxs.end_reason), sc, st, sr);
+    }
+}
+
+// Snapshot every RX_SILENCE_MS while silent. Loop task.
+__attribute__((unused)) static void rxsTick(void)
+{
+    uint32_t t_s = 0;
+    if(g_rxs.tick(millis(), &t_s) && bLORADEBUG)
+    {
+#ifdef MC_RADIO_SX126X_FAMILY
+        Esp32RadioDiag d;
+        esp32RadioDiagRead(&radio, g_radio_mod, &d);   // read-only SPI commands, RX stays armed
+        Serial.printf("[MC-DBG] RX_SILENCE t=%lu mode=%s drv=na st=0x%02X irq=0x%04X err=0x%04X rssi_inst=%d cad=%lu/%lu restarts=%lu boosted=%d\n",
+            (unsigned long)t_s, esp32RadioChipModeName(d.chip_mode), d.status, d.irq, d.err, (int)d.rssi_inst,
+            (unsigned long)g_rxs_cad_busy, (unsigned long)g_rxs_cad_scans,
+            (unsigned long)g_rxs_restarts, bBOOSTEDGAIN ? 1 : 0);
+#else
+        Serial.printf("[MC-DBG] RX_SILENCE t=%lu mode=na drv=na st=na irq=na err=na rssi_inst=na cad=%lu/%lu restarts=%lu boosted=%d\n",
+            (unsigned long)t_s, (unsigned long)g_rxs_cad_busy, (unsigned long)g_rxs_cad_scans,
+            (unsigned long)g_rxs_restarts, bBOOSTEDGAIN ? 1 : 0);
+#endif
+    }
+}
+
+// Boot counters for --info (read from command_functions.cpp, loop task): silences, longest s, total s.
+void rxSilenceGetStats(uint32_t *silences, uint32_t *longest_s, uint32_t *total_s)
+{
+    uint32_t now = millis();
+    *silences = g_rxs.silences;
+    *longest_s = g_rxs.longestNow(now);
+    *total_s = g_rxs.totalNow(now);
+}
 
 // save transmission state between loops
 volatile int transmissionState = RADIOLIB_ERR_UNKNOWN;
@@ -2034,6 +2110,8 @@ void esp32setup()
     #else
     if(bRadio)
     {
+        g_rxs.init(millis());   // RX-silence tracker starts with the local radio
+
         #if defined(BOARD_WIRELESS_PAPER) || defined(BOARD_E290) || defined(BOARD_E213)
         if(radio.setTCXO(1.8) != RADIOLIB_ERR_NONE)
             printlndeb(F("[LoRa]...TCXO 1.8V konnte nicht gesetzt werden"));
@@ -3279,6 +3357,8 @@ void esp32loop()
         if(bLORADEBUG && receiveFlag)
             printlndeb("receiveflag");
 
+        rxsTick();   // RX-silence snapshot (counters always, print under --loradebug)
+
         if(bLORADEBUG && transmittedFlag)
             printlndeb("transmittedFlag");
 
@@ -3578,7 +3658,11 @@ void esp32loop()
                             digitalWrite(RADIO_CTRL, HIGH);  // RX Mode [OE1KBC]
                             delay(2);
                         #endif
+                        // Chip mode just before the restart (read-only; debug only)
+                        const char *rxs_mode_before = bLORADEBUG ? rxsChipModeName() : "na";
                         int state = radio.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1UL << RADIOLIB_IRQ_PREAMBLE_DETECTED), RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+                        g_rxs_restarts++;
+                        g_rxs.noteAction(RXS_BY_WATCHDOG, millis());
 
                         // Now re-wire the interrupt callback
                         radio.clearPacketReceivedAction();
@@ -3601,7 +3685,7 @@ void esp32loop()
                         if(bLORADEBUG)
                         {
                             printfdeb("[MC-SM] IDLE -> RX_LISTEN rc=%d\n", state);
-                            printfdeb("[MC-DBG] RX_RESTART src=timeout state=%d\n", state);
+                            printfdeb("[MC-DBG] RX_RESTART src=timeout state=%d mode_before=%s\n", state, rxs_mode_before);
                         }
 
                         if(bLORADEBUG)
@@ -3814,6 +3898,9 @@ void esp32loop()
                 #else
                 int cad_result = radio.scanChannel();
                 #endif
+                g_rxs.noteAction(RXS_BY_CAD, millis());
+                g_rxs_cad_scans++;
+                if(cad_result == RADIOLIB_LORA_DETECTED) g_rxs_cad_busy++;   // scan errors are not busy
                 if(bLORADEBUG)
                     printfdeb("[MC-DBG] CAD_SCAN result=%d\n", cad_result);
 
@@ -3832,6 +3919,9 @@ void esp32loop()
                         printfdeb("[CHECK] radio.scanChannel() / 2\n");
 
                     cad_result = radio.scanChannel();
+                    g_rxs.noteAction(RXS_BY_CAD, millis());
+                    g_rxs_cad_scans++;
+                    if(cad_result == RADIOLIB_LORA_DETECTED) g_rxs_cad_busy++;   // scan errors are not busy
                     if(bLORADEBUG)
                         printfdeb("[MC-DBG] CAD_SCAN result=%d\n", cad_result);
                     if(cad_result == RADIOLIB_CHANNEL_FREE)
@@ -3861,6 +3951,7 @@ void esp32loop()
                     if(doTX())
                     {
                         ch_util_tx_start = millis();
+                        g_rxs.noteAction(RXS_BY_TX, ch_util_tx_start);
                         // Debug F: TX_START
                         // BP-02: qlen is txRingDepth() (occupied slots), not
                         // the raw index distance -- see txRingDepth() doc.
@@ -5174,13 +5265,16 @@ void esp32loop()
 
             PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
 
-            printfdeb("[PING]...%s Ping to %s <%i>\n", (pingResult == PING_QUEUED) ? "send" : "FAILED", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
+            // PING_INVALID_TARGET logs its own once-per-episode notice in sendPing().
+            if(pingResult != PING_INVALID_TARGET)
+                printfdeb("[PING]...%s Ping to %s <%i>\n", (pingResult == PING_QUEUED) ? "send" : "FAILED", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
 
             // TRACK ist ein statischer Zustand: würde man das Budget trotzdem verbrauchen,
             // liefe es in N x pingtime Sekunden auf null, ohne dass je etwas gesendet wurde,
             // und der Knoten verstummt dauerhaft -- wirkt dann wie ein Einstellungsfehler.
             // Ein abgelehnter Ring ist dagegen ein echter Sendeversuch und zählt mit.
-            if(pingResult != PING_SUPPRESSED_TRACK)
+            // PING_INVALID_TARGET is no send attempt either.
+            if(pingResult != PING_SUPPRESSED_TRACK && pingResult != PING_INVALID_TARGET)
                 meshcom_settings.node_pingcount--;
         }
     }
@@ -5253,7 +5347,16 @@ struct RxCtx
     int     rssi;       // saved before the RX restart
     int     snr;
     float   ferr;       // not carried through the park (0.0 for parked packets)
+    bool    rxs_noted = false;  // RX-silence event already noted at read time (parked packet)
 };
+
+// RX-silence event for a read packet; rssi/snr only for a received frame, like nRF52
+// (CRC and read errors report na).
+static void rxsNoteRxCtx(const RxCtx &c)
+{
+    rxsNoteEvent(c.ibytes > 0 && (c.state == RADIOLIB_ERR_LORA_HEADER_DAMAGED || c.state == RADIOLIB_ERR_NONE),
+                 c.rssi, c.snr);
+}
 
 // READ half. Returns false when a read is already in action (is_receiving). On true the caller owns
 // is_receiving and must clear it after the process half / park push.
@@ -5390,6 +5493,11 @@ static void checkRXProcess(RxCtx &c)
     uint8_t *payload = c.payload;
     size_t ibytes = c.ibytes;
     int state = c.state;
+
+    // Every frame that reached the PROCESS half is an RX event. A parked frame was already
+    // noted when loraRxParkService() read it.
+    if(!c.rxs_noted)
+        rxsNoteRxCtx(c);
 
     if (state == RADIOLIB_ERR_LORA_HEADER_DAMAGED || state == RADIOLIB_ERR_NONE)
     {
@@ -5554,6 +5662,7 @@ __attribute__((noinline)) static void loraRxParkDrain(void)
         c.rssi = rssi;
         c.snr = snr;
         c.ferr = 0.0f;
+        c.rxs_noted = true;     // Noted in loraRxParkService() at read time
 
         // same exclusion as the flag path: no hook read while a packet is being processed
         is_receiving = true;
@@ -5591,6 +5700,10 @@ void loraRxParkService(void)
     RxCtx c;
     if(!checkRXRead(c))     // sets is_receiving
         return;
+
+    // The RX event happened now, not when the loop drains the park later (a late note would
+    // credit the end of a silence to the RX restart that runs before the drain, and stretch dur=)
+    rxsNoteRxCtx(c);
 
     rxParkPush(c.payload, c.ibytes, (int16_t)c.rssi, (int8_t)c.snr, c.state);
     is_receiving = false;
