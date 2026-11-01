@@ -2730,7 +2730,8 @@ void nrf52loop()
 
                 // Fehlschlag außerhalb von bDisplayInfo sichtbar machen, sonst verstummt
                 // der Knoten für jeden, der mit Info aus läuft, ohne jede Meldung.
-                if(pingResult != PING_QUEUED)
+                // PING_INVALID_TARGET logs its own notice in sendPing().
+                if(pingResult != PING_QUEUED && pingResult != PING_INVALID_TARGET)
                     printfdeb("[PING]...FAILED Ping to %s\n", meshcom_settings.node_pingcall);
             }
         }

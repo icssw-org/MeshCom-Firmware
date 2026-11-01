@@ -39,6 +39,7 @@
 #include "configuration.h"
 #include "configuration_global.h"
 #include "regex_functions.h"
+#include "ping_target.h"   // One ping-target rule
 #include "lora_setchip.h"
 #include "spectral_scan.h"
 #include "rtc_functions.h"
@@ -3816,9 +3817,10 @@ void commandAction(char *umsg_text, bool ble)
         }
         else
         {
-            if(!checkRegexCall(sVar))
+            const PingTargetReason pingReason = pingTargetCheck(sVar.c_str(), meshcom_settings.node_call);
+            if(pingReason != PING_TARGET_OK)
             {
-                printfdeb("\n[ERR]..Ping-Callsign <%s> not valid\n", sVar.c_str());
+                printfdeb("\n[ERR]..Ping-Callsign <%s> not valid (%s)\n", sVar.c_str(), pingTargetReasonText(pingReason));
                 return;
             }
         }

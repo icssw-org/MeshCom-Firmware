@@ -5174,13 +5174,16 @@ void esp32loop()
 
             PingResult pingResult = sendPing(meshcom_settings.node_pingcall);
 
-            printfdeb("[PING]...%s Ping to %s <%i>\n", (pingResult == PING_QUEUED) ? "send" : "FAILED", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
+            // PING_INVALID_TARGET logs its own once-per-episode notice in sendPing().
+            if(pingResult != PING_INVALID_TARGET)
+                printfdeb("[PING]...%s Ping to %s <%i>\n", (pingResult == PING_QUEUED) ? "send" : "FAILED", meshcom_settings.node_pingcall, meshcom_settings.node_pingcount);
 
             // TRACK ist ein statischer Zustand: würde man das Budget trotzdem verbrauchen,
             // liefe es in N x pingtime Sekunden auf null, ohne dass je etwas gesendet wurde,
             // und der Knoten verstummt dauerhaft -- wirkt dann wie ein Einstellungsfehler.
             // Ein abgelehnter Ring ist dagegen ein echter Sendeversuch und zählt mit.
-            if(pingResult != PING_SUPPRESSED_TRACK)
+            // PING_INVALID_TARGET is no send attempt either.
+            if(pingResult != PING_SUPPRESSED_TRACK && pingResult != PING_INVALID_TARGET)
                 meshcom_settings.node_pingcount--;
         }
     }

@@ -70,3 +70,10 @@ int resolve_tx_power(int stored, int board_default);
  * in 1..16; 0 would mean "panel off" and is never stored. Anything else is
  * reset to `def`. Returns true if the value was corrected. */
 bool sanitize_backlight_level(int &v, int def, const char *field, sanitize_log_fn log);
+
+/* A stored ping target (node_pingcall) must be a plain callsign:
+ * no group, no special target, not the node's own call (see ping_target.h).
+ * An invalid one is cleared to "" and logged once as
+ * field "node_pingcall", old value -> "". An empty target is valid ("off").
+ * Returns true if the value was cleared. */
+bool sanitize_ping_target(char *pingcall, size_t n, const char *own_call, sanitize_log_fn log);

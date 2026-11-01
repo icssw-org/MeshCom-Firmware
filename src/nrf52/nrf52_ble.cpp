@@ -23,6 +23,7 @@
 #include <command_functions.h>
 #include <prod_lock.h>      // prodLockNormalise(): the blob is copied unchecked
 #include <maxhop.h>        // maxHopTextSanitize()
+#include <settings_sanitize.h>   // sanitize_ping_target()
 #include <instrument.h>     // INSTRUMENT_ENABLED
 
 extern int isPhoneReady;
@@ -518,6 +519,11 @@ void settings_rx_callback(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *da
 	}
 }
 
+static void bleSanitizeLog(const char *field, const char *oldv, const char *newv)
+{
+	Serial.printf("[FLASH]...sanitized %s: %s -> %s\n", field, oldv, newv);
+}
+
 /**
  * @brief Apply a settings write staged by settings_rx_callback(), if any.
  * Must be called from the Main Loop task only (CONC-17).
@@ -551,6 +557,9 @@ void applyPendingBleSettings(void)
 	// The blob copies every field unchecked: bring the locked settings (production) and the
 	// ranges back before anything is saved or reported to the app.
 	meshcom_settings.max_hop_text = maxHopTextSanitize(meshcom_settings.max_hop_text);
+	// The blob also carries node_pingcall unchecked; before prodLockNormalise(),
+	// which derives node_pingtime from node_pingcall[0]
+	sanitize_ping_target(meshcom_settings.node_pingcall, sizeof(meshcom_settings.node_pingcall), meshcom_settings.node_call, bleSanitizeLog);
 	prodLockNormalise(meshcom_settings, INSTRUMENT_ENABLED != 0, false);
 
 	// Save new settings
