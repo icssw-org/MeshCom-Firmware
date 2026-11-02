@@ -7090,6 +7090,21 @@ void commandAction(char *umsg_text, bool ble)
             idoc1["BDATE"] = bdate;
 
             sendBleJsonRegister(idoc1);
+
+            // BAT-04 (upstream #1073): third info register for live status, here the battery charge
+            // state. Only sent when known, so boards without a PMU keep their I/IS1 burst unchanged.
+            const BattChargeInfo bci = global_batt_charge;
+            if(bci.state != BCS_UNKNOWN)
+            {
+                JsonDocument idoc2;
+
+                idoc2["TYP"] = "IS2";
+                idoc2["CHG"] = battChargeName(bci.state);
+                if(bci.ma_valid)
+                    idoc2["CHGMA"] = bci.ma;   // signed mA: + into the battery, - out of it
+
+                sendBleJsonRegister(idoc2);
+            }
         }
 
         if(!bRxFromPhone)
