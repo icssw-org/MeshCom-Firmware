@@ -377,6 +377,17 @@ bool bGPSL76K = false;
 bool bBMPON = false;
 bool bBMP3ON = false;
 bool bAHT20ON = false;
+bool bUVON = false;
+bool bWINDON = false;
+#if defined(ENABLE_LTR390) || defined(ENABLE_WIND)
+wx_mean_t wx_uv_mean = {0.0f, 0};
+wx_mean_t wx_wind_mean = {0.0f, 0};
+wx_gust_t wx_wind_gust = {{0.0f, 0.0f, 0.0f}, 0, 0, 0.0f, false};
+bool ltr390_found = false;
+uint32_t wx_uv_raw = 0;
+float wx_uv_last = 0.0f;
+float wx_wind_last_kmh = 0.0f;
+#endif
 bool bSHT21ON = false;
 bool bBMEON = false;
 bool bBME680ON = false;

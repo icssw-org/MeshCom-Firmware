@@ -161,6 +161,22 @@ extern bool bGPSL76K;
 extern bool bBMPON;
 extern bool bBMP3ON;
 extern bool bAHT20ON;
+// WX-01 (upstream #999): UV / wind switches (mirrors of node_wx_flags); the state below exists on ESP32 only
+extern bool bUVON;
+extern bool bWINDON;
+#if defined(ENABLE_LTR390) || defined(ENABLE_WIND)
+#include "wx_avg.h"
+extern wx_mean_t wx_uv_mean;
+extern wx_mean_t wx_wind_mean;
+extern wx_gust_t wx_wind_gust;
+extern bool ltr390_found;
+extern uint32_t wx_uv_raw;     // last LTR390 raw counts
+extern float wx_uv_last;       // last UVI
+extern float wx_wind_last_kmh; // last 1 s wind sample
+#endif
+#if defined(ENABLE_WIND)
+bool wxWindPinOk(int pin); // command_functions.cpp: false for LoRa/I2C/GPS/button/flash/input-only pins
+#endif
 extern bool bSHT21ON;
 extern bool bBMEON;
 extern bool bBME680ON;

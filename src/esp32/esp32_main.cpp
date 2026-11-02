@@ -1044,6 +1044,13 @@ bool is_new_packet(uint8_t compBuffer[4]);     // switch if we have a packet rec
 // gatewayService_*() likewise (C4 carve-out)
 #include "gateway_service.h"
 #include "gw_reg_runtime.h"
+#include "wx_pins.h"
+#ifdef ENABLE_LTR390
+#include "ltr390.h"
+#endif
+#ifdef ENABLE_WIND
+#include "wind_counter.h"
+#endif
 
 bool g_meshcom_initialized;
 bool init_flash_done=false;
@@ -1498,6 +1505,8 @@ void esp32setup()
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
     bBMP3ON = meshcom_settings.node_sset3 & 0x0010;
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
+    bUVON = meshcom_settings.node_wx_flags & 0x0001;     // WX-01: UV / wind switches
+    bWINDON = meshcom_settings.node_wx_flags & 0x0002;
     bAnalogFilter = meshcom_settings.node_sset3 & 0x0040;
     bUSER_BOARD_LED = meshcom_settings.node_sset3 & 0x0080;
 
@@ -1806,6 +1815,16 @@ void esp32setup()
 
     #if defined(ENABLE_AHT20)
         setupAHT20(true);
+    #endif
+
+    #if defined(ENABLE_LTR390)
+        if(bUVON)
+            ltr390_found = ltr390Begin();
+    #endif
+
+    #if defined(ENABLE_WIND)
+        if(bWINDON && meshcom_settings.node_wind_pin != 0 && wxWindPinOk(meshcom_settings.node_wind_pin))
+            windBegin(meshcom_settings.node_wind_pin);
     #endif
 
     #if defined(ENABLE_SHT21)
@@ -5021,6 +5040,53 @@ void esp32loop()
                 }
             }
         }
+    }
+    #endif
+
+    // WX-01: UV sample on its own 60 s gate, wind on its own 1 s gate (both non-blocking)
+    #if defined(ENABLE_LTR390)
+    {
+        static unsigned long uvTimeWait = 0;
+        if(bUVON && ltr390_found && (uint32_t)(millis() - uvTimeWait) >= 60000)
+        {
+            uvTimeWait = millis();
+            uint32_t uvRaw = 0;
+            float uvi = 0.0f;
+            if(ltr390Read(&uvRaw, &uvi))
+            {
+                wx_uv_raw = uvRaw;
+                wx_uv_last = uvi;
+                wxMeanAdd(&wx_uv_mean, uvi);
+            }
+        }
+    }
+    #endif
+    #if defined(ENABLE_WIND)
+    {
+        static unsigned long windTimeWait = 0;
+        if(bWINDON && windActive())
+        {
+            unsigned long nowMs = millis();
+            if(windTimeWait == 0)
+            {
+                windTimeWait = nowMs;   // first pass after (re)start: open the window, drop what was counted before
+                (void)windTakePulses();
+            }
+            else if((uint32_t)(nowMs - windTimeWait) >= 1000)
+            {
+                float seconds = (float)((uint32_t)(nowMs - windTimeWait)) / 1000.0f;
+                windTimeWait = nowMs;
+                uint32_t pulses = windTakePulses();
+                float kmh = windKmh(pulses, seconds, meshcom_settings.node_wind_cal);
+                wx_wind_last_kmh = kmh;
+                wxMeanAdd(&wx_wind_mean, kmh);
+                wxGustAdd(&wx_wind_gust, kmh);
+                if(bWXDEBUG)
+                    windDebugLog(pulses, seconds, meshcom_settings.node_wind_cal);
+            }
+        }
+        else
+            windTimeWait = 0;
     }
     #endif
 

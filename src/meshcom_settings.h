@@ -218,6 +218,10 @@
         /* --rotate 0/90/180/270, additive to the board's base rotation (applyDisplayRotation()); \
          * NVS key "node_disrot" */                                                                  \
         M(int, node_disp_rot, 0)                                                                     \
+        /* WX-01 (upstream #999): bit0 UV on, bit1 wind on; pin 0 = off; cal km/h per Hz (WIND_CAL_DEFAULT) */ \
+        M(int, node_wx_flags, 0)                                                                     \
+        M(int, node_wind_pin, 0)                                                                     \
+        M(float, node_wind_cal, 2.4f)                                                                \
         /* runtime: the NTP host in use, recopied from node_ownntp on every connect */              \
         A(char, node_ntp, [40], {0})
 #else
