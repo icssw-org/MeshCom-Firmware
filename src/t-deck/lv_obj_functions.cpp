@@ -23,6 +23,7 @@
 #include <loop_functions_extern.h>
 #include <math.h>
 #include <cstring>
+#include "msg_input_budget.h"   // TD-25 byte budget of the message input
 #include <cctype>
 #include <vector>
 #include <SD.h>
@@ -533,6 +534,39 @@ lv_obj_t * SET_new_line(lv_obj_t * parent, lv_obj_t * last_line, lv_coord_t dist
 /**
  * defines GUI layout
  */
+// TD-25: the input caps bytes (UTF-8), not characters. Clamp text_input to the budget of the
+// current DM callsign on a code-point boundary and show the remaining bytes.
+static lv_obj_t *msg_budget_label = NULL;
+static bool msg_budget_busy = false;
+
+static void msg_input_budget_cb(lv_event_t *e)
+{
+    (void)e;
+    if(msg_budget_busy || text_input == NULL || dm_callsign == NULL)
+        return;
+
+    msg_budget_busy = true;  // set_text re-fires VALUE_CHANGED
+
+    const char *dm = lv_textarea_get_text(dm_callsign);
+    size_t budget = msg_input_budget(dm);
+    const char *txt = lv_textarea_get_text(text_input);
+    size_t len = strlen(txt);
+    size_t keep = msg_input_clamp(txt, len, budget);
+
+    if(keep < len)
+    {
+        String cut = String(txt).substring(0, keep);
+        lv_textarea_set_text(text_input, cut.c_str());
+        lv_textarea_set_cursor_pos(text_input, LV_TEXTAREA_CURSOR_LAST);
+        len = keep;
+    }
+
+    if(msg_budget_label != NULL)
+        lv_label_set_text_fmt(msg_budget_label, "%u bytes left", (unsigned)(budget - len));
+
+    msg_budget_busy = false;
+}
+
 void setDisplayLayout(lv_obj_t *parent)
 {
     static lv_style_t lable_style;
@@ -1690,12 +1724,18 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_textarea_set_text_selection(text_input, false);
     lv_obj_set_size(text_input, 300, LV_VER_RES * 0.5);
     lv_textarea_set_text(text_input, "");
-    lv_textarea_set_max_length(text_input, 150);
+    lv_textarea_set_max_length(text_input, 300);  // TD-25: LVGL cap stays above the byte budget; msg_input_budget_cb() clamps
     lv_obj_align(text_input, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_add_style(text_input, &ta_input_style, LV_PART_MAIN);
     lv_obj_add_style(text_input, &ta_input_cursor, LV_PART_SELECTED | LV_PART_CURSOR);
 
     lv_textarea_set_placeholder_text(text_input, "Type Message");
+    lv_obj_add_event_cb(text_input, msg_input_budget_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    msg_budget_label = lv_label_create(t5);
+    lv_label_set_text(msg_budget_label, "149 bytes left");
+    lv_obj_set_style_text_color(msg_budget_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+    lv_obj_align_to(msg_budget_label, text_input, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 2);
 
     msg_controls = lv_obj_create(t5);
     lv_obj_set_size(msg_controls, screen_w, 40);
@@ -1724,6 +1764,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_textarea_set_accepted_chars(dm_callsign, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-");
     lv_textarea_set_placeholder_text(dm_callsign, "To Call or Group");
     lv_obj_clear_flag(dm_callsign, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(dm_callsign, msg_input_budget_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t * btn = lv_btn_create(msg_controls);
     lv_obj_set_pos(btn, 180, 5);
@@ -3254,6 +3295,13 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
         return;
 
     ensure_msg_styles();
+
+    // TD-24: a first bubble replaces the "No messages ..." hint instead of sitting below it.
+    if(msg_list_hint_label != NULL)
+    {
+        lv_obj_del(msg_list_hint_label);
+        msg_list_hint_label = NULL;
+    }
 
     lv_obj_t *wrapper = lv_obj_create(msg_list);
     // TD-11: tag the live object with the msg_id so tdeck_set_msg_status() can find
