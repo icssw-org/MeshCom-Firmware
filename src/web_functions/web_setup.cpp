@@ -510,6 +510,55 @@ void webSetup_setParam(setupStruct *setupData){
     } else
     #endif
 
+    #if defined(ENABLE_LTR390)
+    if(setupData->paramName.equals("uv")) {
+        snprintf(message_text, sizeof(message_text), "--uv %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bUVON == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bUVON?"on":"off";
+        return;
+    } else
+    #endif
+
+    #if defined(ENABLE_WIND)
+    if(setupData->paramName.equals("wind")) {
+        snprintf(message_text, sizeof(message_text), "--wind %s", setupData->paramValue.c_str());
+        commandAction(message_text, bPhoneReady);
+        setupData->returnCode = (bWINDON == (setupData->paramValue.compareTo("on")==0))?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = bWINDON?"on":"off";
+        return;
+    } else
+
+    if(setupData->paramName.equals("windpin")) {
+        int pin = 0;
+        char tail = 0;
+        // exactly one integer, nothing after it: "abc" must not read as pin 0 and report OK
+        bool bOneInt = (sscanf(setupData->paramValue.c_str(), "%d %c", &pin, &tail) == 1);
+        if(bOneInt) {
+            snprintf(message_text, sizeof(message_text), "--windpin %d", pin);
+            commandAction(message_text, bPhoneReady);
+        }
+        setupData->returnCode = (bOneInt && meshcom_settings.node_wind_pin == pin)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_wind_pin);
+        return;
+    } else
+
+    if(setupData->paramName.equals("windcal")) {
+        float cal = 0.0f;
+        char value[16];
+        snprintf(value, sizeof(value), "%s", setupData->paramValue.c_str());
+        cmdDecimalComma(value);   // "2,5" -> "2.5", same as the temperature offsets
+        bool bOneFloat = (sscanf(value, "%f", &cal) == 1);
+        if(bOneFloat) {
+            snprintf(message_text, sizeof(message_text), "--windcal %s", value);
+            commandAction(message_text, bPhoneReady);
+        }
+        setupData->returnCode = (bOneFloat && fabsf(meshcom_settings.node_wind_cal - cal) < 0.005f)?WS_RETURNCODE_OKAY:WS_RETURNCODE_FAIL;
+        setupData->returnValue = String(meshcom_settings.node_wind_cal, 2);
+        return;
+    } else
+    #endif
+
     #if defined(ENABLE_AHT20)
     if(setupData->paramName.equals("aht20")) {
         snprintf(message_text, sizeof(message_text), "--aht20 %s", setupData->paramValue.c_str());
@@ -1166,6 +1215,30 @@ void webSetup_getParam(setupStruct *setupData){
         setupData->returnValue = bAHT20ON?"on":"off";
         return;
     } else
+
+    #if defined(ENABLE_LTR390)
+    if(setupData->paramName.equals("uv")) {
+        setupData->returnValue = bUVON?"on":"off";
+        return;
+    } else
+    #endif
+
+    #if defined(ENABLE_WIND)
+    if(setupData->paramName.equals("wind")) {
+        setupData->returnValue = bWINDON?"on":"off";
+        return;
+    } else
+
+    if(setupData->paramName.equals("windpin")) {
+        setupData->returnValue = String(meshcom_settings.node_wind_pin);
+        return;
+    } else
+
+    if(setupData->paramName.equals("windcal")) {
+        setupData->returnValue = String(meshcom_settings.node_wind_cal, 2);
+        return;
+    } else
+    #endif
 
     if(setupData->paramName.equals("sht21")) {        
         setupData->returnValue = bSHT21ON?"on":"off";

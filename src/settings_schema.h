@@ -128,8 +128,15 @@ size_t fieldCount();
  * file header comment above for why they could not be schema rows before
  * D1-04 W3 Task 2's char[] conversion. */
 #ifdef ESP32
+    /* WX-01 (upstream #999): UV / wind settings, every ESP32 board, persisted, not exported.
+     * flags bit0 = UV on, bit1 = wind on; pin 0 = off; cal in km/h per Hz. */
+    #define SETTINGS_PERSIST_WX(X)                                                               \
+        X("node_wxflags", CFG_INT, node_wx_flags, 0.0, 3.0,    CFG_NOESC)                        \
+        X("node_windpin", CFG_INT, node_wind_pin, 0.0, 48.0,   CFG_NOESC)                        \
+        X("node_windcal", CFG_FLT, node_wind_cal, 0.1, 100.0,  CFG_NOESC)
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
         #define SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X)                                           \
+            SETTINGS_PERSIST_WX(X)                                                               \
             X("node_map",      CFG_INT,  node_map,             CFG_NORANGE, CFG_NOESC)          \
             X("node_audstart", CFG_STR,  node_audio_start,     CFG_NORANGE, CFG_NOESC)          \
             X("node_audmsg",   CFG_STR,  node_audio_msg,       CFG_NORANGE, CFG_NOESC)          \
@@ -147,7 +154,7 @@ size_t fieldCount();
             X("node_blnight",  CFG_INT,  node_bl_night,         CFG_NORANGE, CFG_NOESC)          \
             X("node_blauto",   CFG_BOOL, node_bl_auto,          CFG_NORANGE, CFG_NOESC)
     #else
-        #define SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X)
+        #define SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X) SETTINGS_PERSIST_WX(X)
     #endif
 #else
     #define SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X)

@@ -13,6 +13,13 @@
 #include "blocked_calls.h" // BLK-01: --blockcall
 #include "command_toggles.h" // D2-06: the table-driven on/off toggles
 #include "command_setters.h" // D2-07: numeric argument parse/range/store
+#include "wx_pins.h"       // WX-01: wxPinAllowed() for --windpin
+#ifdef ENABLE_LTR390
+#include "ltr390.h"        // WX-01: UV sensor driver
+#endif
+#ifdef ENABLE_WIND
+#include "wind_counter.h"  // WX-01: reed anemometer pulse counter
+#endif
 #include "node_position.h"    // DRY-01: hemisphere split / signed decode of the own position
 #include "instrument.h"     // TEMPORARY -- measurement scaffolding, see src/instrument.h
 #include "batt_functions.h"
@@ -480,6 +487,306 @@ static void tg_post_board_led_off()
 #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
 static void tg_post_gps_on() { gpsInitDone = false; init_loop_function(); }
 #endif
+#if defined(ENABLE_LTR390)
+static void tg_post_uv_on() { wxMeanReset(&wx_uv_mean); ltr390_found = ltr390Begin(); }   // fresh window on switch-on
+static void tg_post_uv_off() { ltr390End(); ltr390_found = false; }
+#endif
+#if defined(ENABLE_WIND)
+// WX-01: pins the anemometer must not take: the radio (chip select, reset, busy, DIO/IRQ, RF switch, SPI bus),
+// ETH, SD card, I2C, GPS and button pins of the board (each macro only where the variant defines it), the
+// default SPI bus of the Arduino variant (SS/SCK/MISO/MOSI are constants there, not macros), the flash pins,
+// on the ESP32-S3 with octal PSRAM/flash GPIO 33-37, pins the chip does not have and, on the classic
+// ESP32, the input-only pins 34-39.
+// WX_RES(x) is safe for a macro that is defined EMPTY (LORA_DIO0 on the T-Beam Supreme: "+ 0" makes it 0, which
+// only reserves pin 0 = "off" anyway) and for one that is a runtime expression (SS, RST_LoRa: Arduino constants).
+#define WX_RES(x) , (int)(x + 0)
+bool wxWindPinOk(int pin)
+{
+    const int reserved[] = {
+        -1
+    #if defined(LORA_CS)
+    WX_RES(LORA_CS)
+    #endif
+    #if defined(LORA_NSS)
+    WX_RES(LORA_NSS)
+    #endif
+    #if defined(LORA_RST)
+    WX_RES(LORA_RST)
+    #endif
+    #if defined(LORA_RESET)
+    WX_RES(LORA_RESET)
+    #endif
+    #if defined(LORA_DIO0)
+    WX_RES(LORA_DIO0)
+    #endif
+    #if defined(LORA_DIO1)
+    WX_RES(LORA_DIO1)
+    #endif
+    #if defined(LORA_DIO2)
+    WX_RES(LORA_DIO2)
+    #endif
+    #if defined(LORA_DIO3)
+    WX_RES(LORA_DIO3)
+    #endif
+    #if defined(LORA_SCK)
+    WX_RES(LORA_SCK)
+    #endif
+    #if defined(LORA_MISO)
+    WX_RES(LORA_MISO)
+    #endif
+    #if defined(LORA_MOSI)
+    WX_RES(LORA_MOSI)
+    #endif
+    #if defined(LORA_IRQ)
+    WX_RES(LORA_IRQ)
+    #endif
+    #if defined(LORA_IO0)
+    WX_RES(LORA_IO0)
+    #endif
+    #if defined(LORA_IO1)
+    WX_RES(LORA_IO1)
+    #endif
+    #if defined(LORA_IO2)
+    WX_RES(LORA_IO2)
+    #endif
+    #if defined(SX1262X_CS)
+    WX_RES(SX1262X_CS)
+    #endif
+    #if defined(SX1262X_IRQ)
+    WX_RES(SX1262X_IRQ)
+    #endif
+    #if defined(SX1262X_RST)
+    WX_RES(SX1262X_RST)
+    #endif
+    #if defined(SX1262X_GPIO)
+    WX_RES(SX1262X_GPIO)
+    #endif
+    #if defined(SX1268_CS)
+    WX_RES(SX1268_CS)
+    #endif
+    #if defined(SX1268_IRQ)
+    WX_RES(SX1268_IRQ)
+    #endif
+    #if defined(SX1268_RST)
+    WX_RES(SX1268_RST)
+    #endif
+    #if defined(SX1268_GPIO)
+    WX_RES(SX1268_GPIO)
+    #endif
+    #if defined(SX126x_CS)
+    WX_RES(SX126x_CS)
+    #endif
+    #if defined(SX126x_IRQ)
+    WX_RES(SX126x_IRQ)
+    #endif
+    #if defined(SX126x_RST)
+    WX_RES(SX126x_RST)
+    #endif
+    #if defined(SX126x_GPIO)
+    WX_RES(SX126x_GPIO)
+    #endif
+    #if defined(SX126x_BUSY)
+    WX_RES(SX126x_BUSY)
+    #endif
+    #if defined(RF95_SCK)
+    WX_RES(RF95_SCK)
+    #endif
+    #if defined(RF95_MISO)
+    WX_RES(RF95_MISO)
+    #endif
+    #if defined(RF95_MOSI)
+    WX_RES(RF95_MOSI)
+    #endif
+    #if defined(RF95_NSS)
+    WX_RES(RF95_NSS)
+    #endif
+    #if defined(RADIO_SCLK_PIN)
+    WX_RES(RADIO_SCLK_PIN)
+    #endif
+    #if defined(RADIO_MISO_PIN)
+    WX_RES(RADIO_MISO_PIN)
+    #endif
+    #if defined(RADIO_MOSI_PIN)
+    WX_RES(RADIO_MOSI_PIN)
+    #endif
+    #if defined(RADIO_CS_PIN)
+    WX_RES(RADIO_CS_PIN)
+    #endif
+    #if defined(RADIO_RST_PIN)
+    WX_RES(RADIO_RST_PIN)
+    #endif
+    #if defined(RADIO_IRQ_PIN)
+    WX_RES(RADIO_IRQ_PIN)
+    #endif
+    #if defined(RADIO_BUSY_PIN)
+    WX_RES(RADIO_BUSY_PIN)
+    #endif
+    #if defined(RADIO_DIO1_PIN)
+    WX_RES(RADIO_DIO1_PIN)
+    #endif
+    #if defined(RADIO_SCK)
+    WX_RES(RADIO_SCK)
+    #endif
+    #if defined(RADIO_MISO)
+    WX_RES(RADIO_MISO)
+    #endif
+    #if defined(RADIO_MOSI)
+    WX_RES(RADIO_MOSI)
+    #endif
+    #if defined(RADIO_CTRL)
+    WX_RES(RADIO_CTRL)
+    #endif
+    #if defined(RADIO_LDO_EN)
+    WX_RES(RADIO_LDO_EN)
+    #endif
+    #if defined(PIN_LORA_NSS)
+    WX_RES(PIN_LORA_NSS)
+    #endif
+    #if defined(PIN_LORA_DIO_1)
+    WX_RES(PIN_LORA_DIO_1)
+    #endif
+    #if defined(PIN_LORA_NRST)
+    WX_RES(PIN_LORA_NRST)
+    #endif
+    #if defined(PIN_LORA_BUSY)
+    WX_RES(PIN_LORA_BUSY)
+    #endif
+    #if defined(PIN_LORA_SCK)
+    WX_RES(PIN_LORA_SCK)
+    #endif
+    #if defined(PIN_LORA_MISO)
+    WX_RES(PIN_LORA_MISO)
+    #endif
+    #if defined(PIN_LORA_MOSI)
+    WX_RES(PIN_LORA_MOSI)
+    #endif
+    #if defined(E22_NSS)
+    WX_RES(E22_NSS)
+    #endif
+    #if defined(E22_BUSY)
+    WX_RES(E22_BUSY)
+    #endif
+    #if defined(E22_DIO1)
+    WX_RES(E22_DIO1)
+    #endif
+    #if defined(E22_NRST)
+    WX_RES(E22_NRST)
+    #endif
+    #if defined(E22_RXEN)
+    WX_RES(E22_RXEN)
+    #endif
+    #if defined(E22_TXEN)
+    WX_RES(E22_TXEN)
+    #endif
+    #if defined(E22_SCK)
+    WX_RES(E22_SCK)
+    #endif
+    #if defined(ETH_CS_PIN)
+    WX_RES(ETH_CS_PIN)
+    #endif
+    #if defined(ETH_INT_PIN)
+    WX_RES(ETH_INT_PIN)
+    #endif
+    #if defined(ETH_RST_PIN)
+    WX_RES(ETH_RST_PIN)
+    #endif
+    #if defined(ETH_SCLK_PIN)
+    WX_RES(ETH_SCLK_PIN)
+    #endif
+    #if defined(ETH_MISO_PIN)
+    WX_RES(ETH_MISO_PIN)
+    #endif
+    #if defined(ETH_MOSI_PIN)
+    WX_RES(ETH_MOSI_PIN)
+    #endif
+    #if defined(SDCARD_CS)
+    WX_RES(SDCARD_CS)
+    #endif
+    #if defined(SDCARD_SCLK)
+    WX_RES(SDCARD_SCLK)
+    #endif
+    #if defined(SDCARD_MISO)
+    WX_RES(SDCARD_MISO)
+    #endif
+    #if defined(SDCARD_MOSI)
+    WX_RES(SDCARD_MOSI)
+    #endif
+    #if defined(TDECK_SDCARD_CS)
+    WX_RES(TDECK_SDCARD_CS)
+    #endif
+    #if defined(TDECK_SPI_SCK)
+    WX_RES(TDECK_SPI_SCK)
+    #endif
+    #if defined(TDECK_SPI_MISO)
+    WX_RES(TDECK_SPI_MISO)
+    #endif
+    #if defined(TDECK_SPI_MOSI)
+    WX_RES(TDECK_SPI_MOSI)
+    #endif
+    #if defined(I2C_SDA)
+    WX_RES(I2C_SDA)
+    #endif
+    #if defined(I2C_SCL)
+    WX_RES(I2C_SCL)
+    #endif
+    #if defined(I2C1_SDA)
+    WX_RES(I2C1_SDA)
+    #endif
+    #if defined(I2C1_SCL)
+    WX_RES(I2C1_SCL)
+    #endif
+    #if defined(SDA_PIN)
+    WX_RES(SDA_PIN)
+    #endif
+    #if defined(SCL_PIN)
+    WX_RES(SCL_PIN)
+    #endif
+    #if defined(GPS_RX_PIN)
+    WX_RES(GPS_RX_PIN)
+    #endif
+    #if defined(GPS_TX_PIN)
+    WX_RES(GPS_TX_PIN)
+    #endif
+    #if defined(GPS_EN_PIN)
+    WX_RES(GPS_EN_PIN)
+    #endif
+    #if defined(GPS_PPS_PIN)
+    WX_RES(GPS_PPS_PIN)
+    #endif
+    #if defined(BUTTON_PIN)
+    WX_RES(BUTTON_PIN)
+    #endif
+        WX_RES(SS)
+        WX_RES(SCK)
+        WX_RES(MISO)
+        WX_RES(MOSI)
+    };
+    #if defined(CONFIG_IDF_TARGET_ESP32S3)
+    const bool is_s3 = true;
+    #else
+    const bool is_s3 = false;
+    #endif
+    // octal PSRAM/flash (qio_opi, opi_opi in the board JSON -> sdkconfig.h) takes GPIO 33-37
+    #if defined(CONFIG_SPIRAM_MODE_OCT) || defined(CONFIG_ESPTOOLPY_OCT_FLASH)
+    const bool octal = true;
+    #else
+    const bool octal = false;
+    #endif
+    // a pin the chip does not have (GPIO 22-25 on the S3, 20/24/28-31 on the classic ESP32)
+    if(pin != 0 && (pin < 0 || pin >= GPIO_NUM_MAX || !GPIO_IS_VALID_GPIO(pin))) return false;
+    return wxPinAllowed(pin, reserved, sizeof(reserved) / sizeof(reserved[0]), is_s3, octal);
+}
+#undef WX_RES
+static void tg_post_wind_on()
+{
+    wxMeanReset(&wx_wind_mean);   // fresh window on switch-on (telemetry may have been inactive)
+    wxGustReset(&wx_wind_gust);
+    if(meshcom_settings.node_wind_pin == 0) { printfdeb("wind on, but no pin set: use --windpin <gpio>\n"); return; }
+    if(!wxWindPinOk(meshcom_settings.node_wind_pin)) { printfdeb("wind pin %i not allowed on this board\n", meshcom_settings.node_wind_pin); return; }
+    windBegin(meshcom_settings.node_wind_pin);
+}
+static void tg_post_wind_off() { windEnd(); }
+#endif
 #if defined(ENABLE_AHT20)
 static void tg_post_aht20_on() { aht20_found = false; setupAHT20(false); }
 static void tg_post_aht20_off() { aht20_found = false; }
@@ -617,6 +924,14 @@ static const ToggleRow COMMAND_TOGGLES[] =
 #endif
 #if defined (ENABLE_GPS) or defined(BOARD_RAK4630) or defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
     { "--gps on",             &bGPSON,               &meshcom_settings.node_sset,     0xFFFFFFFF,   0x0040,       tg_post_gps_on,                TG_DIRTY_NODE,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE | TG_POST_FIRST },
+#endif
+#if defined(ENABLE_LTR390)
+    { "--uv on",              &bUVON,                &meshcom_settings.node_wx_flags, 0xFFFFFFFF,   0x0001,       tg_post_uv_on,                 TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--uv off",             &bUVON,                &meshcom_settings.node_wx_flags, 0xFFFFFFFE,   0x00000000,   tg_post_uv_off,                TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
+#endif
+#if defined(ENABLE_WIND)
+    { "--wind on",            &bWINDON,              &meshcom_settings.node_wx_flags, 0xFFFFFFFF,   0x0002,       tg_post_wind_on,               TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
+    { "--wind off",           &bWINDON,              &meshcom_settings.node_wx_flags, 0xFFFFFFFD,   0x00000000,   tg_post_wind_off,              TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN },
 #endif
 #if defined(ENABLE_AHT20)
     { "--aht20 on",           &bAHT20ON,             &meshcom_settings.node_sset3,    0xFFFFFFFF,   0x0020,       tg_post_aht20_on,              TG_DIRTY_SENS,   TG_SAVE | TG_BRETURN | TG_FLAG_TRUE },
@@ -1531,6 +1846,15 @@ void commandAction(char *umsg_text, bool ble)
             #if defined(ENABLE_SHT21)
             printdeb("--sht21 on/off          SHT21\n");
             #endif
+            // WX-01: --windpin/--windcal exist on every board (boards without the sensor code answer
+            // "not supported"); the on/off switches only where the COMMAND_TOGGLES rows are built
+            #if defined(ENABLE_LTR390)
+            printdeb("--uv on/off             UV sensor\n");
+            #endif
+            #if defined(ENABLE_WIND)
+            printdeb("--wind on/off           anemometer\n");
+            #endif
+            printdeb("--windpin 99            anemometer GPIO (ESP32)\n--windcal 2.4           km/h per Hz (ESP32)\n");
             #if defined(LPS33)
             printdeb("--lps33 on/off          LPS33\n");
             #endif
@@ -2517,6 +2841,105 @@ void commandAction(char *umsg_text, bool ble)
 
         save_settings();
     }
+    // WX-01 (upstream #999): outside the OneWire block, so every board answers
+    else
+    if(commandCheck(msg_text+2, (char*)"windpin ") == 0)
+    {
+    #if defined(ENABLE_WIND)
+        int newPin = meshcom_settings.node_wind_pin;
+        CmdSetResult setres = cmdStoreInt(msg_text+10, &newPin, 0.0, 48.0, &iVar);
+
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("windpin", msg_text+10); return; }
+
+        if(setres == CMD_SET_RANGE)
+        {
+            printfdeb("windpin %i out of range (0..48), ignored\n", iVar);
+            return;
+        }
+
+        if(!wxWindPinOk(newPin))
+        {
+            printfdeb("windpin %i not allowed (LoRa, I2C, GPS, button, flash or input-only pin), ignored\n", newPin);
+            return;
+        }
+
+        meshcom_settings.node_wind_pin = newPin;
+
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        printfdeb("\nwindpin:%i\n", meshcom_settings.node_wind_pin);
+
+        bReturn = true;
+
+        save_settings();
+
+        if(bWINDON)
+        {
+            windEnd();
+            if(meshcom_settings.node_wind_pin != 0)
+                windBegin(meshcom_settings.node_wind_pin);
+        }
+    #else
+        // WX-01: wind and UV exist on ESP32 boards with the sensor code only
+        printfdeb("windpin not supported on this board\n");
+        return;
+    #endif
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"windcal ") == 0)
+    {
+    #if defined(ENABLE_WIND)
+        CmdSetResult setres = cmdStoreFloat(msg_text+10, &meshcom_settings.node_wind_cal, 0.1, 100.0, &fVar);
+
+        if(setres == CMD_SET_NAN) { cmdArgNotNumber("windcal", msg_text+10); return; }
+
+        if(setres == CMD_SET_RANGE)
+        {
+            printfdeb("windcal %.2f out of range (0.1..100 km/h per Hz), ignored\n", fVar);
+            return;
+        }
+
+        if(ble)
+        {
+            bSensSetting = true;
+        }
+
+        printfdeb("\nwindcal:%.2f km/h per Hz\n", meshcom_settings.node_wind_cal);
+
+        bReturn = true;
+
+        save_settings();
+    #else
+        // WX-01: wind and UV exist on ESP32 boards with the sensor code only
+        printfdeb("windcal not supported on this board\n");
+        return;
+    #endif
+    }
+    #if !defined(ENABLE_WIND)
+    // Not a commandCheck() rung on purpose: toggle_table_lint.py ignores #if guards, and the
+    // COMMAND_TOGGLES rows for this command exist only when the sensor code is built, so the
+    // rows and this answer never compile into the same image.
+    else
+    if(commandMatches(msg_text+2, "wind on") || commandMatches(msg_text+2, "wind off"))
+    {
+        printfdeb("wind not supported on this board\n");
+        return;
+    }
+    #endif
+    #if !defined(ENABLE_LTR390)
+    // Not a commandCheck() rung on purpose: toggle_table_lint.py ignores #if guards, and the
+    // COMMAND_TOGGLES rows for this command exist only when the sensor code is built, so the
+    // rows and this answer never compile into the same image.
+    else
+    if(commandMatches(msg_text+2, "uv on") || commandMatches(msg_text+2, "uv off"))
+    {
+        printfdeb("uv not supported on this board\n");
+        return;
+    }
+    #endif
 #ifdef OneWire_GPIO
     else
     if(commandCheck(msg_text+2, (char*)"onewire on") == 0)
@@ -6946,6 +7369,16 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("\n\nMeshCom %-4.4s%-1.1s\n...BMP280: %s / BME280: %s%s\n...BMP390: %s%s\n...BME680: %s%s\n...MCU811: %s%s\n...AHT20: %s%s\n...SHT21: %s%s\n...INA226: %s\n...LPS33: %s (RAK)\n", SOURCE_VERSION, SOURCE_VERSION_SUB,
             (bBMPON?"on":"off"), (bBMEON?"on":"off"), cbme, (bBMP3ON?"on":"off"), cbmp3, (bBME680ON?"on":"off"), c680, (bMCU811ON?"on":"off"), c811, (bAHT20ON?"on":"off"), cAHT20, (bSHT21ON?"on":"off"), cSHT21, (bINA226ON?"on":"off"), (bLPS33?"on":"off"));
 
+            #if defined(ENABLE_LTR390)
+            printfdeb("...LTR390: %s%s\n", (bUVON?"on":"off"), bUVON ? (ltr390_found ? " (found)" : " (error)") : "");
+            #endif
+            #if defined(ENABLE_WIND)
+            if(bWINDON)
+                printfdeb("...WIND: on (pin %i, cal %.2f)\n", meshcom_settings.node_wind_pin, meshcom_settings.node_wind_cal);
+            else
+                printfdeb("...WIND: off\n");
+            #endif
+
             printfdeb("...ONEWIRE: %s (%i) DS18%s DHT%s\n", (bONEWIRE?"on":"off"), meshcom_settings.node_owgpio, cone, cdht);
 
             #ifdef NTC_PIN
@@ -7523,6 +7956,19 @@ void commandAction(char *umsg_text, bool ble)
         #if defined(ENABLE_INA226)
         sensdoc1["226"] = bINA226ON;
         sensdoc1["226F"] = ina226_found;
+        #endif
+        // WX-01: UV and wind keys sit in S1, not SE: SE alone is 241 of the BLE_JSON_PAYLOAD_MAX 244 JSON bytes in
+        // the worst case, so +47..56 there would make bleJsonFrameFailSoft drop USERPIN. S1 with these keys: 199.
+        // The sizes are re-computed from this source by test_command_setters (no ArduinoJson in that env).
+        #if defined(ESP32)
+        sensdoc1["UV"] = bUVON;
+        #if defined(ENABLE_LTR390)
+        sensdoc1["UVF"] = ltr390_found;
+        #else
+        sensdoc1["UVF"] = false;
+        #endif
+        sensdoc1["WIND"] = bWINDON;
+        sensdoc1["WINDP"] = meshcom_settings.node_wind_pin;
         #endif
 
         sendBleJsonRegister(sensdoc1); // JSN-01

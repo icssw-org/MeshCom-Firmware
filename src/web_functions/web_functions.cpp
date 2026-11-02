@@ -3734,6 +3734,10 @@ void sub_page_setup()
     #ifdef OneWire_GPIO
     _create_setup_textinput_element("owgpio", "1-Wire GPIO", String(meshcom_settings.node_owgpio), "36", "onewiregpio", 3, false, false); // create Textinput-Element including Label and Button
     #endif
+    #if defined(ENABLE_WIND)
+    _create_setup_textinput_element("windpin", "Anemometer GPIO", String(meshcom_settings.node_wind_pin), "0", "windpin", 2, false, false);
+    _create_setup_textinput_element("windcal", "Anemometer km/h per Hz", String(meshcom_settings.node_wind_cal, 2), "2.4", "windcal", 6, false, false);
+    #endif
 
     web_client.println("</div><div class=\"grid grid2\">");
 
@@ -3791,6 +3795,12 @@ void sub_page_setup()
     #endif
     #if defined(ENABLE_AHT20)
     _create_setup_switch_element("aht20", "AHT20", "enable AHT20 sensor", bAHT20ON);                       // create Switch-Element inclucing Label and Description
+    #endif
+    #if defined(ENABLE_LTR390)
+    _create_setup_switch_element("uv", "UV (LTR390)", "enable LTR390 UV sensor", bUVON);
+    #endif
+    #if defined(ENABLE_WIND)
+    _create_setup_switch_element("wind", "Anemometer", "enable anemometer (reed contact)", bWINDON);
     #endif
     #if defined(ENABLE_SHT21)
     _create_setup_switch_element("sht21", "SHT21", "enable SHT21 sensor", bSHT21ON);                       // create Switch-Element inclucing Label and Description
@@ -4312,6 +4322,34 @@ void sub_page_info()
     #endif
     #if defined(ENABLE_AHT20)
     web_client.printf("AHT20: %s<br>", (bAHT20ON ? "on" : "off"));
+    #endif
+    #if defined(ENABLE_LTR390)
+    {
+        float fuv = 0.0f;
+        if(bUVON)
+        {
+            if(wxMeanGet(&wx_uv_mean, &fuv))
+                web_client.printf("UV (LTR390): on (%s), UVI %.1f, mean %.1f (n=%lu)<br>", (ltr390_found ? "found" : "error"), wx_uv_last, fuv, (unsigned long)wxMeanCount(&wx_uv_mean));
+            else
+                web_client.printf("UV (LTR390): on (%s), UVI %.1f, mean - (n=0)<br>", (ltr390_found ? "found" : "error"), wx_uv_last);
+        }
+        else
+            web_client.printf("UV (LTR390): off<br>");
+    }
+    #endif
+    #if defined(ENABLE_WIND)
+    {
+        float fwm = 0.0f, fwg = 0.0f;
+        if(bWINDON)
+        {
+            char swm[12] = "-", swg[12] = "-";
+            if(wxMeanGet(&wx_wind_mean, &fwm)) snprintf(swm, sizeof(swm), "%.1f", fwm);
+            if(wxGustGet(&wx_wind_gust, &fwg)) snprintf(swg, sizeof(swg), "%.1f", fwg);
+            web_client.printf("Anemometer: on (pin %i), %.1f km/h, mean %s, gust %s<br>", meshcom_settings.node_wind_pin, wx_wind_last_kmh, swm, swg);
+        }
+        else
+            web_client.printf("Anemometer: off<br>");
+    }
     #endif
     #if defined(ENABLE_SHT21)
     web_client.printf("SHT21: %s<br>", (bSHT21ON ? "on" : "off"));

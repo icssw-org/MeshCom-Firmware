@@ -392,6 +392,17 @@ bool bGPSL76K = false;
 bool bBMPON = false;
 bool bBMP3ON = false;
 bool bAHT20ON = false;
+bool bUVON = false;
+bool bWINDON = false;
+#if defined(ENABLE_LTR390) || defined(ENABLE_WIND)
+wx_mean_t wx_uv_mean = {0.0f, 0};
+wx_mean_t wx_wind_mean = {0.0f, 0};
+wx_gust_t wx_wind_gust = {{0.0f, 0.0f, 0.0f}, 0, 0, 0.0f, false};
+bool ltr390_found = false;
+uint32_t wx_uv_raw = 0;
+float wx_uv_last = 0.0f;
+float wx_wind_last_kmh = 0.0f;
+#endif
 bool bSHT21ON = false;
 bool bBMEON = false;
 bool bBME680ON = false;
@@ -6009,6 +6020,10 @@ bool sendHeyShot()
 }
 
 // Telemetry with own Parameters
+#if defined(ENABLE_LTR390) || defined(ENABLE_WIND)
+#include "wx_telemetry.h"
+#endif
+
 void sendTelemetry(int ID)
 {
     String stationCall = meshcom_settings.node_call;
@@ -6236,6 +6251,15 @@ void sendTelemetry(int ID)
                         snprintf(cv, sizeof(cv), "%.1f", meshcom_settings.node_press_asl);
                         strTelemetry.concat(cv);
                     }
+#if defined(ENABLE_LTR390) || defined(ENABLE_WIND)
+                    // WX-01 (upstream #999): window means; empty slot without a value
+                    else
+                    if(strValue == "uvindex" || strValue == "wind" || strValue == "gust")
+                    {
+                        if(wxTelemetryValue(strValue.c_str(), &wx_uv_mean, &wx_wind_mean, &wx_wind_gust, cv, sizeof(cv)))
+                            strTelemetry.concat(cv);
+                    }
+#endif
 
                     strValue="";
                 }
@@ -6261,6 +6285,20 @@ void sendTelemetry(int ID)
                 strTelemetry.concat(",");
                 strTelemetry.concat(cbits);
             }
+
+#if defined(ENABLE_LTR390) || defined(ENABLE_WIND)
+            // WX-01 (upstream #999): this frame carried the value slots (not PARM/UNIT/EQNS/BITS):
+            // log the window and start the next one
+            if(bWXDEBUG)
+            {
+                char cwx[96];
+                wxTelemetryDebugLine(&wx_uv_mean, &wx_wind_mean, &wx_wind_gust, cwx, sizeof(cwx));
+                Serial.println(cwx);
+            }
+            wxMeanReset(&wx_uv_mean);
+            wxMeanReset(&wx_wind_mean);
+            wxGustReset(&wx_wind_gust);
+#endif
         }
 
 

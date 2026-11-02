@@ -165,6 +165,7 @@ void sendHeartbeat();
 #include "rtc_functions.h"
 #include "rtc_offset.h"    // RTC-1..3: UTC<->Knotenzeit, Refresh-Gate (test_rtc_offset)
 #include "softser_functions.h"
+#include "telemetry_app.h"   // periodic T# source: own telemetry or soft-serial app
 
 #include <onewire_functions.h>
 
@@ -2383,7 +2384,7 @@ void nrf52loop()
     {
         bTeleFirst = false;
 
-        { INSTR_SECTION("telemetry"); sendTelemetry(SOFTSER_APP_ID); }
+        { INSTR_SECTION("telemetry"); sendTelemetry(telemetryAppId(bSOFTSERON, SOFTSER_APP_ID)); }
 
         telemetry_timer = millis();
     }
