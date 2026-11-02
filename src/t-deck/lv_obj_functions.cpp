@@ -28,6 +28,7 @@
 #include <SD.h>
 #include <SPI.h>
 #include "tdeck_sdmap.h"
+#include "tdeck_text_cover.h"
 #include "pos_persist.h"
 #include "msg_persist_policy.h"
 #include "msg_tab_policy.h"
@@ -4657,8 +4658,18 @@ void tdeck_refresh_track_view()
  */
 static String tdeck_display_text(String s)
 {
-    s.replace("\xE2\x80\xAF", " ");
-    return s;
+    // Everything the mc_font_latin_* set cannot draw (ș, Greek, CJK, emoji, combining marks, bad
+    // bytes) is folded to ASCII / '?' instead of LVGL's placeholder box; see tdeck_text_cover.h.
+    // No LV_SYMBOL_* reaches this function (message text only), so U+F000.. is folded too.
+    struct StrSink {
+        String &str;
+        void append(const char *p, size_t n) { str.concat(p, (unsigned int)n); }
+    };
+    String out;
+    out.reserve(s.length() + 1);
+    StrSink sink{out};
+    tdeck_text_cover(s.c_str(), s.length(), sink);
+    return out;
 }
 
 /**

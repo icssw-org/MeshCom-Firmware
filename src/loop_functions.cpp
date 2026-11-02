@@ -10,6 +10,7 @@
 
 #include "loop_functions.h"
 #include "gfx_charmap.h"   // national characters on the GFXfont displays (E290, WP, E213)
+#include "text_fold.h"     // CHARS-01: fold what the display font lacks
 #include "ack_attribution.h"
 #include "txring_functions.h"
 #include "bp_notice_frame.h"
@@ -80,6 +81,19 @@ bool gpsInitDone = false;
 #if defined(HAS_TFT) || defined(HAS_TFT_114)
 #include "tft_display_functions.h"
 #endif
+
+// CHARS-01: UTF-8 text -> what the display font can draw (text_fold). Folding can grow
+// ("deg" for a 2-byte degree sign), the buffer has room; text_fold truncates cleanly.
+static inline String foldForDisplay(const char *utf8, TextFoldTarget t)
+{
+#if defined(NRF52_SERIES)
+    static char buf[MC_PAYLOAD_LEN + 48];   // N-22: 4-KB loop stack; display text runs in one task only
+#else
+    char buf[MC_PAYLOAD_LEN + 48];
+#endif
+    text_fold(utf8, strnlen(utf8, MC_PAYLOAD_LEN), buf, sizeof(buf), t);
+    return String(buf);
+}
 
 #if defined(HAS_TFT_CONNECT)
 #include "tft_display_functions.h"
@@ -1687,7 +1701,7 @@ void sendDisplay1306(bool bClear, bool bTransfer, int x, int y, char *text)
                     {
                         snprintf(ptext, sizeof(ptext), "%s", pageText[its]);
                         if(pageLine[its][1] >= 0)
-                            u8g2->drawUTF8(pageLine[its][0], pageLine[its][1], ptext);
+                            u8g2->drawStr(pageLine[its][0], pageLine[its][1], ptext);   // Latin-1 bytes (CHARS-01)
                     }
                 }
 
@@ -1828,7 +1842,18 @@ void sendDisplayHead(bool bInit)
     if(bWIFIAP)
         snprintf(msg_text, sizeof(msg_text), "AP   : %-13.13s", meshcom_settings.node_call);
     else
+    {
+        #if MC_HAS_U8G2
+        // CHARS-01: the SSID is user-set UTF-8; the OLED page draws Latin-1 bytes with drawStr,
+        // so fold first (Latin-1 is never longer than the UTF-8, and %-15.15s can't split a letter)
+        char ssidLatin1[sizeof(meshcom_settings.node_ssid) + 1];
+        text_fold(meshcom_settings.node_ssid, strnlen(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid)),
+                  ssidLatin1, sizeof(ssidLatin1), TF_LATIN1);
+        snprintf(msg_text, sizeof(msg_text), "SSID : %-15.15s", ssidLatin1);
+        #else
         snprintf(msg_text, sizeof(msg_text), "SSID : %-15.15s", meshcom_settings.node_ssid);
+        #endif
+    }
 
     sendDisplay1306(false, false, 3, dzeile[izeile], msg_text);
     izeile++;
@@ -1938,7 +1963,7 @@ void sendDisplayTrack()
         #endif
 
         #if defined(BOARD_T_ECHO)
-        snprintf(msg_text, sizeof(msg_text), "DIR:old%3i new%3i°", (int)posinfo_last_direction, (int)posinfo_direction);
+        snprintf(msg_text, sizeof(msg_text), "DIR:old%3i new%3i", (int)posinfo_last_direction, (int)posinfo_direction);
         sendDisplay1306(false, true, 3, dzeile[7], msg_text);
         #elif defined(BOARD_TRACKER)
         memset(msg_text, 0x00, sizeof(msg_text));
@@ -1997,7 +2022,11 @@ void sendDisplayWX()
 
     sendDisplayMainline();
 
+    #if MC_HAS_U8G2   // CHARS-01: u8g2 drawStr takes Latin-1 bytes, the degree sign is 0xB0 (not UTF-8 C2 B0)
+    snprintf(msg_text, sizeof(msg_text), "TEMP : %.1f \xB0" "C", meshcom_settings.node_temp);
+    #else
     snprintf(msg_text, sizeof(msg_text), "TEMP : %.1f °C", meshcom_settings.node_temp);
+    #endif
     sendDisplay1306(false, false, 3, dzeile[1], msg_text);
 
     snprintf(msg_text, sizeof(msg_text), "HUM  : %.1f %%", meshcom_settings.node_hum);
@@ -2894,7 +2923,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
         cursor_x = 20;
         cursor_y = t5_cursor_y;
-        strMsgT5=aprsmsg.msg_payload;
+        strMsgT5=foldForDisplay(aprsmsg.msg_payload, TF_UTF8_LATIN1);   // FiraSans: Latin-1 + punctuation, rest folded
         disp_next_status(strMsgT5, &cursor_x, &cursor_y, false);
         
         bSetDisplay = false;
@@ -2916,7 +2945,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
                 strPath = String("DM <") + aprsmsg.msg_source_call + ">";
             }
 
-        String strAscii = utf8ascii(String(aprsmsg.msg_payload));
+        String strAscii = foldForDisplay(aprsmsg.msg_payload, TF_ASCII);   // Font_Mono_Bold_14: 0x20-0x7F
 
         TDeck_pro_lora_disp(strPath, strAscii);
 
@@ -2972,13 +3001,13 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     #if defined(BOARD_E290) || defined(WP_DISP)
     {
         // National characters: WP_FONT9 (FreeSans9pt7b / FreeSansBold9pt7b) has the glyphs at 0x80..0x9A,
-        // gfx_utf8_to_font() maps UTF-8 to those codes (see gfx_charmap.h). Not listed -> dropped.
+        // gfx_utf8_to_font() maps UTF-8 to those codes (see gfx_charmap.h). Not listed -> folded via text_fold(TF_ASCII).
         char gfxText[sizeof(aprsmsg.msg_payload) + 1];
         gfx_utf8_to_font(aprsmsg.msg_payload, strnlen(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload)), gfxText, sizeof(gfxText));
         strAscii = String(gfxText);
     }
     #else
-    strAscii = utf8ascii(String(aprsmsg.msg_payload));
+    strAscii = foldForDisplay(aprsmsg.msg_payload, TF_ASCII);   // T-Echo: FreeMonoBold, ASCII only
     #endif
 
     #if defined(WP_DISP)
@@ -3042,7 +3071,8 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
     String strAscii = "";//aprsmsg.msg_payload;
 
-    strAscii = utf8ascii(String(aprsmsg.msg_payload));
+    // TF_ASCII for now (no setCp437, no bench board); upgrade path for T114: TF_CP437 + setCp437(true)
+    strAscii = foldForDisplay(aprsmsg.msg_payload, TF_ASCII);
 
     strncpy(pageLastTextLong1[pagePointer], strPath.c_str(), sizeof(pageLastTextLong1[pagePointer]) - 1);
     pageLastTextLong1[pagePointer][sizeof(pageLastTextLong1[pagePointer]) - 1] = '\0';
@@ -3092,9 +3122,18 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     izeile++;
     bClear=false;
 
-    for(itxt=0; itxt<strlen(aprsmsg.msg_payload); itxt++)
+    // CHARS-01: u8g2 _f fonts draw one Latin-1 byte per glyph (drawStr), so fold to Latin-1 first;
+    // the byte-based wrap and the 25-byte page cuts below can then no longer split a character.
+#if defined(NRF52_SERIES)
+    static char oledText[MC_PAYLOAD_LEN];   // N-22: 4-KB loop stack; sendDisplayText runs in one task only
+#else
+    char oledText[MC_PAYLOAD_LEN];
+#endif
+    size_t oledLen = text_fold(aprsmsg.msg_payload, strnlen(aprsmsg.msg_payload, MC_PAYLOAD_LEN), oledText, sizeof(oledText), TF_LATIN1);
+
+    for(itxt=0; itxt<oledLen; itxt++)
     {
-        words[iwords][ipos]=aprsmsg.msg_payload[itxt];
+        words[iwords][ipos]=oledText[itxt];
 
         if(words[iwords][ipos] == ' ')
         {
@@ -3117,7 +3156,7 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
             iwords++;
             if(iwords >= 100)
                 iwords=99;
-            words[iwords][0]=aprsmsg.msg_payload[itxt];
+            words[iwords][0]=oledText[itxt];
             ipos=1;
         }
         else
@@ -4214,7 +4253,7 @@ static void bpDeliver(const char *text, MsgOrigin origin, const char *dst)
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             addMessage(text);
             #elif defined(BOARD_T_DECK_PRO)
-            TDeck_pro_lora_disp(String("node"), String(text));
+            TDeck_pro_lora_disp(String("node"), foldForDisplay(text, TF_ASCII));
             #endif
             break;
 
@@ -4819,7 +4858,7 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
 
     #if defined(BOARD_T_DECK_PRO)
     String strCall=String("<")+aprsmsg.msg_source_call+"> "+aprsmsg.msg_destination_call;
-    TDeck_pro_lora_disp(strCall, aprsmsg.msg_payload);
+    TDeck_pro_lora_disp(strCall, foldForDisplay(aprsmsg.msg_payload, TF_ASCII));
     #endif
 
     // store last message to compare later on
@@ -6532,114 +6571,6 @@ int conv_fuss(int alt_meter)
 int conv_meter(int alt_fuss)
 {
     return (int)((float)alt_fuss * 0.3048);
-}
-
-// ****** UTF8-Decoder: convert UTF8-string to extended ASCII *******
-byte c1;  // Last character buffer
-
-// Convert a single Character from UTF8 to Extended ASCII
-// Return "0" if a byte has to be ignored
-byte utf8ascii(byte ascii)
-{
-    if ( ascii<128 )   // Standard ASCII-set 0..0x7F handling  
-    {   c1=0;
-        return( ascii );
-    }
-
-    // get previous input
-    byte last = c1;   // get last char
-    c1=ascii;         // remember actual character
-
-    switch (last)     // conversion depending on first UTF8-character
-    {
-        case 0xC3:
-            if(ascii == 0xA4)   // ä
-                return  (0x94);
-            else
-            if(ascii == 0xB6)   // ö
-                return  (0x92);
-            else
-            if(ascii == 0xBC)   // ü
-                return  (0x81);
-            else
-            if(ascii == 0x84)   // Ä
-                return  (0x8E);
-            else
-            if(ascii == 0x96)   // Ö
-                return  (0x99);
-            else
-            if(ascii == 0x9C)   // Ü
-                return  (0x9A);
-            else
-            if(ascii == 0x9F)   // ß
-                return  (0xE1);
-            else
-                return (0);
-            break;
-        case 0xC2:
-            if(ascii == 0xB0)   // °
-                return  (0xF8);
-            break;
-        case 0x82:
-            if(ascii==0xAC)
-                return(0x80);       // special case Euro-symbol
-    }
-
-    return  (0);                                     // otherwise: return zero, if character has to be ignored
-}
-
-// convert String object from UTF8 String to Extended ASCII
-String utf8ascii(String s)
-{      
-        String r="";
-        char c;
-        for (int i=0; i<(int)s.length(); i++)
-        {
-                c = utf8ascii(s.charAt(i));
-                if (c!=0)
-                {
-                    if(c == 0x94)
-                        r+="ae";
-                    else
-                    if(c == 0x92)
-                        r+="oe";
-                    else
-                    if(c == 0x81)
-                        r+="ue";
-                    else
-                    if(c == 0x8E)
-                        r+="Ae";
-                    else
-                    if(c == 0x99)
-                        r+="Oe";
-                    else
-                    if(c == 0x9A)
-                        r+="Ue";
-                    else
-                    if(c == 0xE1)
-                        r+="ss";
-                    else
-                    if(c == 0x80)
-                        r+="*";
-                    else
-                       r+=c;
-                }
-        }
-        return r;
-}
-
-// In Place conversion UTF8-string to Extended ASCII (ASCII is shorter!)
-void utf8ascii(char* s)
-{      
-        int k=0;
-        char c;
-        for (int i=0; i<(int)strlen(s); i++)
-        {
-                c = utf8ascii(s[i]);
-                if (c!=0)
-                        s[k++]=c;
-        }
-        s[k]=0;
 }
 
 String getTimeZone()

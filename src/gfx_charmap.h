@@ -4,7 +4,7 @@
  * The 9pt fonts in src/Fonts (FreeSans9pt7b, FreeSansBold9pt7b) carry extra glyphs at the codes
  * 0x80..0xDF (see tools/gfxfont_add_glyphs.py). gfx_utf8_to_font() converts a UTF-8 text into
  * single bytes for these fonts: ASCII is passed through, a UTF-8 sequence that is listed in
- * kGfxCharmap becomes its glyph code, everything else is dropped (as the old utf8ascii() did).
+ * kGfxCharmap becomes its glyph code, everything else is folded to ASCII by text_fold (CHARS-01).
  *
  * To add a language: append the characters to the font with tools/gfxfont_add_glyphs.py (codes
  * continue at 0xE0, append mode) and add the rows to kGfxCharmap, keeping it sorted by codepoint.
@@ -16,6 +16,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "text_fold.h"
 
 struct GfxCharmapEntry
 {
@@ -145,6 +146,8 @@ static inline size_t gfx_utf8_to_font(const char *in, size_t in_len, char *out, 
 {
     if (out == NULL || out_cap == 0) return 0;
     size_t o = 0, i = 0;
+    bool last_q = false;                    // last folded item was an unmapped '?'
+    bool join = false;                      // a ZWJ followed that '?': swallow the next unmapped '?'
 
     while (i < in_len && o + 1 < out_cap)
     {
@@ -153,6 +156,7 @@ static inline size_t gfx_utf8_to_font(const char *in, size_t in_len, char *out, 
         if (c < 0x80)                       // ASCII: unchanged
         {
             out[o++] = (char)c;
+            last_q = join = false;
             i++;
             continue;
         }
@@ -177,7 +181,26 @@ static inline size_t gfx_utf8_to_font(const char *in, size_t in_len, char *out, 
         i += need + 1;
 
         uint8_t code = gfx_font_code(cp);
-        if (code != 0) out[o++] = (char)code;   // unknown characters (emoji, other scripts): dropped
+        if (code != 0) { out[o++] = (char)code; last_q = join = false; continue; }
+        // no glyph: fold to ASCII (ř -> r, emoji -> ?, ZWJ/FE0F -> nothing). Same join rule as
+        // text_fold: an emoji sequence joined by ZWJ is one '?'.
+        char b[8];
+        size_t k = text_fold_codepoint(cp, TF_ASCII, b, sizeof b);
+        if (k == 0)
+        {
+            if (cp == 0x200D && last_q) join = true;
+            continue;
+        }
+        if (k == 1 && b[0] == '?')
+        {
+            if (!join) { out[o++] = '?'; }
+            last_q = true;
+            join = false;
+            continue;
+        }
+        if (k > out_cap - 1 - o) break;     // expansion does not fit: stop, no later shorter char behind a gap
+        for (size_t m = 0; m < k; m++) out[o++] = b[m];
+        last_q = join = false;
     }
     out[o] = '\0';
     return o;
