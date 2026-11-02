@@ -37,7 +37,7 @@
  *     Euro sign, a deliberately UTF-8-encoded U+0080 is the control
  *     character PAD.
  *   - a small table of bidi/zero-width format characters is stripped:
- *     U+200B-U+200F, U+202A-U+202E, U+2060-U+2064, U+FEFF -- EXCEPT U+200D
+ *     U+200B-U+200F, U+202A-U+202E, U+2060-U+2064, U+2066-U+2069, U+FEFF -- EXCEPT U+200D
  *     ZERO WIDTH JOINER, which passes: it binds a compound emoji sequence
  *     (e.g. shrug + ZWJ + male sign = "person shrugging") into one grapheme,
  *     and dropping it splits that sequence into separate glyphs instead of

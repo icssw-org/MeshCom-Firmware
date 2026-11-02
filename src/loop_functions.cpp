@@ -1850,6 +1850,18 @@ void sendDisplayHead(bool bInit)
         text_fold(meshcom_settings.node_ssid, strnlen(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid)),
                   ssidLatin1, sizeof(ssidLatin1), TF_LATIN1);
         snprintf(msg_text, sizeof(msg_text), "SSID : %-15.15s", ssidLatin1);
+        #elif defined(WP_DISP) || defined(BOARD_E290)
+        // CHARS-01: convert before %-15.15s so the width counts glyphs, not UTF-8 bytes.
+        // WP info page draws in WP_FONT9 (extended -> GFX font codes, one byte per letter);
+        // the E290 info page draws in FreeMonoBold12pt7b (0x20..0x7E only -> ASCII fold).
+        char ssidDisp[sizeof(meshcom_settings.node_ssid) * 2 + 1];
+        size_t ssidLen = strnlen(meshcom_settings.node_ssid, sizeof(meshcom_settings.node_ssid));
+        #if defined(WP_DISP)
+        gfx_utf8_to_font(meshcom_settings.node_ssid, ssidLen, ssidDisp, sizeof(ssidDisp));
+        #else
+        text_fold(meshcom_settings.node_ssid, ssidLen, ssidDisp, sizeof(ssidDisp), TF_ASCII);
+        #endif
+        snprintf(msg_text, sizeof(msg_text), "SSID : %-15.15s", ssidDisp);
         #else
         snprintf(msg_text, sizeof(msg_text), "SSID : %-15.15s", meshcom_settings.node_ssid);
         #endif
@@ -2026,6 +2038,10 @@ void sendDisplayWX()
     snprintf(msg_text, sizeof(msg_text), "TEMP : %.1f \xB0" "C", meshcom_settings.node_temp);
     #else
     snprintf(msg_text, sizeof(msg_text), "TEMP : %.1f °C", meshcom_settings.node_temp);
+    #if defined(BOARD_E290) || defined(WP_DISP)
+    // CHARS-01: the WX page draws in a 12pt font (0x20..0x7E, no extended glyphs) -> "degC"
+    epaper_status_ascii(msg_text, sizeof(msg_text));
+    #endif
     #endif
     sendDisplay1306(false, false, 3, dzeile[1], msg_text);
 

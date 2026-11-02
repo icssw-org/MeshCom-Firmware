@@ -108,7 +108,7 @@ static size_t fold_cp(uint32_t cp, TextFoldTarget t, char* out, bool* unmapped) 
     // absorbed
     if (cp == 0xAD || cp == 0xFEFF ||
         (cp >= 0x200B && cp <= 0x200F) || (cp >= 0x202A && cp <= 0x202E) ||
-        (cp >= 0x2060 && cp <= 0x2064) || (cp >= 0x1F3FB && cp <= 0x1F3FF) ||
+        (cp >= 0x2060 && cp <= 0x2064) || (cp >= 0x2066 && cp <= 0x2069) || (cp >= 0x1F3FB && cp <= 0x1F3FF) ||
         (cp >= 0xFE00 && cp <= 0xFE0F) || (cp >= 0xE0100 && cp <= 0xE01EF) || // variation selectors
         (cp >= 0xE0020 && cp <= 0xE007F) ||                                   // tags (flag subdivisions)
         (cp >= 0x0300 && cp <= 0x036F) || (cp >= 0x20D0 && cp <= 0x20FF))     // combining marks

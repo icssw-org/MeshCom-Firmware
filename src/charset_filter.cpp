@@ -33,6 +33,8 @@ namespace
             return true;
         if (cp >= 0x2060 && cp <= 0x2064)
             return true;
+        if (cp >= 0x2066 && cp <= 0x2069) // bidi isolates LRI RLI FSI PDI
+            return true;
         if (cp == 0xFEFF)
             return true;
         return false;

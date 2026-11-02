@@ -206,4 +206,46 @@ static inline size_t gfx_utf8_to_font(const char *in, size_t in_len, char *out, 
     return o;
 }
 
+// Status lines on pages drawn in a standard 12pt GFXfont (0x20..0x7E, no extended glyphs; Adafruit GFX
+// skips any byte outside that range): fold the snprintf'ed UTF-8 line to ASCII in place
+// ("21.5 °C" -> "21.5 degC", "Café" -> "Cafe"). E290 status pages, WP WX page.
+static inline size_t epaper_status_ascii(char *buf, size_t cap)
+{
+    if (buf == NULL || cap == 0) return 0;
+    size_t n = 0;
+    while (n < cap && buf[n] != '\0') n++;
+    char tmp[256];
+    if (n >= sizeof(tmp)) n = sizeof(tmp) - 1;
+    for (size_t i = 0; i < n; i++) tmp[i] = buf[i];
+    return text_fold(tmp, n, buf, cap, TF_ASCII);
+}
+
+// Reverse direction for the serial echo: font codes (0x80..0xDF) back to UTF-8. ASCII is passed
+// through, bytes without a table row are dropped. Returns the bytes written (without the '\0').
+static inline size_t gfx_font_to_utf8(const char *in, size_t in_len, char *out, size_t out_cap)
+{
+    if (out == NULL || out_cap == 0) return 0;
+    size_t o = 0;
+    for (size_t i = 0; i < in_len; i++)
+    {
+        uint8_t c = (uint8_t)in[i];
+        if (c < 0x80)
+        {
+            if (o + 1 >= out_cap) break;
+            out[o++] = (char)c;
+            continue;
+        }
+        uint32_t cp = 0;
+        for (size_t k = 0; k < kGfxCharmapCount; k++)
+            if (kGfxCharmap[k].code == c) { cp = kGfxCharmap[k].cp; break; }
+        if (cp == 0) continue;
+        size_t need = (cp < 0x800) ? 2 : 3;
+        if (o + need >= out_cap) break;
+        if (need == 2) { out[o++] = (char)(0xC0 | (cp >> 6)); out[o++] = (char)(0x80 | (cp & 0x3F)); }
+        else { out[o++] = (char)(0xE0 | (cp >> 12)); out[o++] = (char)(0x80 | ((cp >> 6) & 0x3F)); out[o++] = (char)(0x80 | (cp & 0x3F)); }
+    }
+    out[o] = '\0';
+    return o;
+}
+
 #endif // _GFX_CHARMAP_H_
