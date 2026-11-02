@@ -134,6 +134,7 @@ Arduino_GFX *gfx = new Arduino_ST7796(
     #include "rtc_offset.h"    // RTC-1..3: UTC<->Knotenzeit, Refresh-Gate (test_rtc_offset)
 #endif
 #include "softser_functions.h"
+#include "telemetry_app.h"   // periodic T# source: own telemetry or soft-serial app
 
 // MeshCom Common (ers32/nrf52) Funktions
 #include <loop_functions.h>
@@ -4898,7 +4899,7 @@ void esp32loop()
         bTeleFirst=false;
 
         // APP-ID , Header only flag
-        sendTelemetry(SOFTSER_APP_ID);
+        sendTelemetry(telemetryAppId(bSOFTSERON, SOFTSER_APP_ID));
 
         telemetry_timer = millis();
     }
