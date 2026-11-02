@@ -14,6 +14,7 @@
 #include "time_functions.h"  // convertUNIXtoString()
 #include <command_functions.h>
 #include "regex_functions.h"
+#include "msg_input_budget.h"   // TD-25 byte budget of the message input
 
 #define SETTING_PAGE_MAX_ITEM 7
 #define GET_BUFF_LEN(a) sizeof(a)/sizeof(a[0])
@@ -1742,6 +1743,44 @@ static lv_obj_t *input_info;
 static bool bDM=false;
 static bool bTEXT=true;
 
+// TD-25: the input caps bytes (UTF-8), not characters. dm_keypad only counts when the send path
+// uses it (1..8 chars).
+static lv_obj_t *input_budget_lab = NULL;
+static bool input_budget_busy = false;
+
+static const char *input_budget_dm(void)
+{
+    size_t n = strlen(lv_textarea_get_text(dm_keypad));
+    return (n > 0 && n < 9) ? lv_textarea_get_text(dm_keypad) : NULL;
+}
+
+static void input_budget_cb(lv_event_t * e)
+{
+    (void)e;
+    if(input_budget_busy || dm_keypad == NULL || input_keypad == NULL)
+        return;
+
+    input_budget_busy = true;  // set_text re-fires VALUE_CHANGED
+
+    size_t budget = msg_input_budget(input_budget_dm());
+    const char *txt = lv_textarea_get_text(input_keypad);
+    size_t len = strlen(txt);
+    size_t keep = msg_input_clamp(txt, len, budget);
+
+    if(keep < len)
+    {
+        String cut = String(txt).substring(0, keep);
+        lv_textarea_set_text(input_keypad, cut.c_str());
+        lv_textarea_set_cursor_pos(input_keypad, LV_TEXTAREA_CURSOR_LAST);
+        len = keep;
+    }
+
+    if(input_budget_lab != NULL)
+        lv_label_set_text_fmt(input_budget_lab, "%u bytes left", (unsigned)(budget - len));
+
+    input_budget_busy = false;
+}
+
 static void scr7_btn_event_cb(lv_event_t * e)
 {
     if(e->code == LV_EVENT_CLICKED)
@@ -1760,11 +1799,15 @@ static void lora_mode_send()
         return;
     }
 
+    // TD-25: clamp the text part on a code-point boundary to the byte budget
+    const char *in_txt = lv_textarea_get_text(input_keypad);
+    size_t in_keep = msg_input_clamp(in_txt, strlen(in_txt), msg_input_budget(input_budget_dm()));
+
     char sendtxt[200];
-    if(strlen(lv_textarea_get_text(dm_keypad)) > 0 && strlen(lv_textarea_get_text(dm_keypad)) < 9)
-        snprintf(sendtxt, sizeof(sendtxt), "{%s}%s", lv_textarea_get_text(dm_keypad), lv_textarea_get_text(input_keypad));
+    if(input_budget_dm() != NULL)
+        snprintf(sendtxt, sizeof(sendtxt), "{%s}%.*s", lv_textarea_get_text(dm_keypad), (int)in_keep, in_txt);
     else
-        snprintf(sendtxt, sizeof(sendtxt), "%s", lv_textarea_get_text(input_keypad));
+        snprintf(sendtxt, sizeof(sendtxt), "%.*s", (int)in_keep, in_txt);
 
     int len = strlen(sendtxt);
 
@@ -1914,6 +1957,7 @@ static void create7(lv_obj_t *parent)
     lv_textarea_set_accepted_chars(dm_keypad, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-");
     lv_obj_add_style(dm_keypad, &ta_style, LV_PART_MAIN);
     lv_obj_add_event_cb(dm_keypad, check_active_dm, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(dm_keypad, input_budget_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     //send text
     input_keypad = lv_textarea_create(parent);
@@ -1923,9 +1967,15 @@ static void create7(lv_obj_t *parent)
     lv_obj_set_style_text_font(input_keypad, FONT_BOLD_SIZE_14, LV_PART_MAIN);
     lv_obj_set_style_radius(input_keypad, 5, LV_PART_MAIN);
     lv_obj_clear_state(input_keypad, LV_STATE_FOCUSED);
-    lv_textarea_set_max_length(input_keypad, 150);
+    lv_textarea_set_max_length(input_keypad, 300);  // TD-25: LVGL cap stays above the byte budget; input_budget_cb() clamps
     lv_obj_add_style(input_keypad, &ta_style, LV_PART_MAIN);
     lv_obj_add_event_cb(input_keypad, check_active_input, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(input_keypad, input_budget_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    input_budget_lab = lv_label_create(parent);
+    lv_obj_set_style_text_font(input_budget_lab, FONT_BOLD_SIZE_15, LV_PART_MAIN);
+    lv_label_set_text(input_budget_lab, "149 bytes left");
+    lv_obj_align(input_budget_lab, LV_ALIGN_TOP_RIGHT, -6, lv_pct(15));
 
     input_info_btn = lv_btn_create(parent);
     lv_obj_set_size(input_info_btn, 70, 25);

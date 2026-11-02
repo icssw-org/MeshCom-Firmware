@@ -188,9 +188,6 @@ void DrawRssi(int cx, int cy, int16_t rssi);
 double degreesToRadians(double degrees);
 #endif
 
-byte utf8ascii(byte ascii);
-String utf8ascii(String s);
-void utf8ascii(char* s);
 
 String getTimeZone();
 

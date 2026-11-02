@@ -4,6 +4,7 @@
 #include "loop_functions_extern.h"
 #include "loop_functions.h"
 #include "command_functions.h"
+#include "gfx_charmap.h"
 
 #include "onebutton_functions.h"
 
@@ -196,7 +197,16 @@ void singleClick()
 
       strncpy(pageTextLong2, pageLastTextLong2[pagePointer], sizeof(pageTextLong2));
       if(bDisplayCont && strlen(pageTextLong2) > 0)
+      {
+        #if defined(BOARD_E290) || defined(WP_DISP)
+        // the page buffer holds GFX font codes (gfx_charmap.h): print readable UTF-8
+        char echoUtf8[sizeof(pageTextLong2) * 2 + 1];
+        gfx_font_to_utf8(pageTextLong2, strnlen(pageTextLong2, sizeof(pageTextLong2)), echoUtf8, sizeof(echoUtf8));
+        Serial.println(echoUtf8);
+        #else
         Serial.println(pageTextLong2);
+        #endif
+      }
       #endif
 
       sendDisplay1306(false, true, 0, 0, (char*)"#N");

@@ -551,8 +551,6 @@ extern String strSOFTSERAPP_FIXPEGEL;
 extern String strSOFTSERAPP_FIXPEGEL2;
 extern String strSOFTSERAPP_FIXTEMP;
 
-extern byte c1;
-
 extern int iDisplayType;
 
 #if defined(BOARD_T_ECHO)
