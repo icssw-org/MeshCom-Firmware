@@ -332,6 +332,25 @@ void loopAction_battCheck(void)
         if(PMU != NULL)
         {
             const float pmu_mv = (float)PMU->getBattVoltage();
+
+            // BAT-04: charge state (+ net current on the AXP192 only), one store.
+            BattChargeInfo bci = { BCS_UNKNOWN, false, 0 };
+            bci.state = battChargeClassify(PMU->isVbusIn(), PMU->isBatteryConnect(), PMU->isCharging());
+            if(PMU->getChipModel() == XPOWERS_AXP192)
+            {
+                // AXP2101 has no battery current ADC: ma stays invalid there.
+                XPowersAXP192 *axp = static_cast<XPowersAXP192 *>(PMU);
+                const float chg_ma = axp->getBatteryChargeCurrent();
+                const float dis_ma = axp->getBattDischargeCurrent();
+                // 13-bit ADC x 0.5 mA tops out at 4095.5 mA; a failed I2C read returns 0xFFFF
+                // (32767.5 mA), which must not show up as a measurement.
+                if(chg_ma <= 4095.5f && dis_ma <= 4095.5f)
+                {
+                    bci.ma = battNetMa(chg_ma, dis_ma);
+                    bci.ma_valid = true;
+                }
+            }
+            global_batt_charge = bci;
             pmu_proz = (int)PMU->getBatteryPercent();   // only the "no battery" verdict, see below
 
             // no BATT
@@ -359,6 +378,7 @@ void loopAction_battCheck(void)
         {
             global_batt = 0;
             global_proz = 0;
+            global_batt_charge = { BCS_UNKNOWN, false, 0 };
 
             // Ohne PMU gibt es keine Messung. Ohne diese Zeile wuerde
             // PositionToAPRS() jetzt dauerhaft "/B=000" senden und damit
@@ -373,7 +393,10 @@ void loopAction_battCheck(void)
         if(bDisplayCont && (uint32_t)(millis() - s_lastPmuPrint) >= 10000UL)
         {
             s_lastPmuPrint = millis();
-            printfdeb("[readBatteryVoltage]...PMU.volt %.1f PMU.proz %i %i\n", global_batt, global_proz, pmu_proz);
+            char chgtxt[40];
+            const BattChargeInfo chg_snap = global_batt_charge;
+            battChargeFormat(chgtxt, sizeof(chgtxt), chg_snap);
+            printfdeb("[readBatteryVoltage]...PMU.volt %.1f PMU.proz %i %i %s\n", global_batt, global_proz, pmu_proz, chgtxt);
         }
     #else
 

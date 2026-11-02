@@ -29,6 +29,9 @@
 float global_batt = 0;
 int global_proz = 0;
 
+// BAT-04: charge state, written by the battery loop only (see src/batt_charge.h).
+BattChargeInfo global_batt_charge = {BCS_UNKNOWN, false, 0};
+
 unsigned long BattTimeWait = 0;
 unsigned long BattTimeAPP = 0;
 

@@ -7106,6 +7106,17 @@ void commandAction(char *umsg_text, bool ble)
                     SOURCE_VERSION, SOURCE_VERSION_SUB , __DATE__ , __TIME__ , meshcom_settings.node_update,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, nbrHardwareName(BOARD_HARDWARE), meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv, millis());
 
+            // BAT-04: charge state line, only on boards that report one
+            {
+                const BattChargeInfo bci = global_batt_charge;
+                if(bci.state != BCS_UNKNOWN)
+                {
+                    char chgbuf[40];
+                    battChargeFormat(chgbuf, sizeof(chgbuf), bci);
+                    printfdeb("...Charge: %s\n", chgbuf);
+                }
+            }
+
             printfdeb("...Flash-Version %i\n", meshcom_settings.node_fversion);
 
             {
