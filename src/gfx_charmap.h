@@ -2,14 +2,14 @@
  * National characters for the GFXfont displays (E290, Wireless Paper, E213).
  *
  * The 9pt fonts in src/Fonts (FreeSans9pt7b, FreeSansBold9pt7b) carry extra glyphs at the codes
- * 0x80..0xDF (see tools/gfxfont_add_glyphs.py). gfx_utf8_to_font() converts a UTF-8 text into
+ * 0x80..0xDF (generated offline with a glyph script). gfx_utf8_to_font() converts a UTF-8 text into
  * single bytes for these fonts: ASCII is passed through, a UTF-8 sequence that is listed in
  * kGfxCharmap becomes its glyph code, everything else is folded to ASCII by text_fold (CHARS-01).
  *
- * To add a language: append the characters to the font with tools/gfxfont_add_glyphs.py (codes
+ * To add a language: append the characters to the font with the glyph script (codes
  * continue at 0xE0, append mode) and add the rows to kGfxCharmap, keeping it sorted by codepoint.
  *
- * Pure C++, no Arduino dependency (host unit test: test/test_gfx_charmap).
+ * Pure C++, no Arduino dependency.
  */
 #ifndef _GFX_CHARMAP_H_
 #define _GFX_CHARMAP_H_
@@ -24,7 +24,7 @@ struct GfxCharmapEntry
     uint8_t  code;   // glyph code in the font
 };
 
-// Sorted by cp. Codes = position in the string given to gfxfont_add_glyphs.py, starting at 0x80:
+// Sorted by cp. Codes = position in the string given to the glyph script, starting at 0x80:
 // "ąćęłńóśźżĄĆĘŁŃÓŚŹŻäöüÄÖÜß°€ÀÁÂÃÅÆÇÈÉÊËÌÍÎÏÐÑÒÔÕØÙÚÛÝÞàáâãåæçèéêëìíîïðñòôõøùúûýþÿŒœŸ¡¿«»‘’“”„–—…•"
 // (PL, DE, then the rest of Latin-1, Œœ Ÿ, ¡¿«» and typographic punctuation: 0x80..0xDF)
 static const GfxCharmapEntry kGfxCharmap[] = {

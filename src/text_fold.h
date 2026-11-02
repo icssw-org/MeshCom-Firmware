@@ -1,6 +1,6 @@
 // text_fold: UTF-8 message text -> what a given display font can draw.
 // Pure C++ (no Arduino, no String, no heap). Every character the font lacks is
-// folded to ASCII (CHARS-01, docs/concept-national-chars-20261101.md).
+// folded to ASCII (CHARS-01).
 #pragma once
 #include <stddef.h>
 #include <stdint.h>

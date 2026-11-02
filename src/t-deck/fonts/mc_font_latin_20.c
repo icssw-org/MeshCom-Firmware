@@ -9,8 +9,7 @@
  *     --font Montserrat-Medium.ttf -r 0xA0-0x17F \
  *     -r 0x2013,0x2014,0x2018,0x2019,0x201C,0x201D,0x201E,0x2022,0x2026,0x20AC \
  *     --format lvgl --force-fast-kern-format -o mc_font_latin_20.c
- * Never --lcd: sub-pixel fonts render blank with LV_USE_FONT_SUBPX 0
- * (tools/tests/test_tdeck_fonts.py).
+ * Never --lcd: sub-pixel fonts render blank with LV_USE_FONT_SUBPX 0.
  * Post-edit: `.fallback = &lv_font_montserrat_20` (was NULL), the extern declaration
  * and `#include <lvgl.h>`.
  * Compiled only in T-Deck builds (src/t-deck/ is excluded from every other env).

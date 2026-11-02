@@ -7,7 +7,7 @@
 
 // Coverage of mc_font_latin_{12,14,16,18,20}.c (cmaps: range_start 160 / range_length 224, and the
 // sparse list at 8211 + {0,1,5,6,9,10,11,15,0x13,0x99}) plus the built-in Montserrat fallback
-// (ASCII 0x20-0x7E). tools/tests/test_tdeck_fonts.py is the place to compare with the .c files.
+// (ASCII 0x20-0x7E).
 static inline bool tdeck_font_covers(uint32_t cp)
 {
     if (cp >= 0x20 && cp <= 0x7E) return true;
