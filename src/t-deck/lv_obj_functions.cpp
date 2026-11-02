@@ -539,7 +539,7 @@ void setDisplayLayout(lv_obj_t *parent)
     static lv_style_t bg_style;
     lv_style_init(&bg_style);
     lv_style_set_text_color(&bg_style, lv_color_white());
-    lv_style_set_text_font(&bg_style, &lv_font_montserrat_16);
+    lv_style_set_text_font(&bg_style, &mc_font_latin_16);
     //lv_style_set_bg_img_src(&bg_style, &image);
     lv_style_set_bg_opa(&bg_style, LV_OPA_100);
 
@@ -568,7 +568,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_menu_icon_label = lv_label_create(tab_menu_button);
     lv_label_set_text(tab_menu_icon_label, LV_SYMBOL_BARS);
-    lv_obj_set_style_text_font(tab_menu_icon_label, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_style_text_font(tab_menu_icon_label, &mc_font_latin_18, LV_PART_MAIN);
     lv_obj_set_style_text_color(tab_menu_icon_label, lv_palette_main(LV_PALETTE_LIGHT_GREEN), LV_PART_MAIN);
     lv_obj_center(tab_menu_icon_label);
 
@@ -583,7 +583,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_kbl_icon_label = lv_label_create(tab_kbl_button);
     lv_label_set_text(tab_kbl_icon_label, LV_SYMBOL_KEYBOARD);
-    lv_obj_set_style_text_font(tab_kbl_icon_label, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_style_text_font(tab_kbl_icon_label, &mc_font_latin_18, LV_PART_MAIN);
     lv_obj_set_style_text_color(tab_kbl_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_kbl_icon_label);
 
@@ -598,51 +598,51 @@ void setDisplayLayout(lv_obj_t *parent)
 
     tab_standby_icon_label = lv_label_create(tab_standby_button);
     lv_label_set_text(tab_standby_icon_label, LV_SYMBOL_EYE_OPEN);
-    lv_obj_set_style_text_font(tab_standby_icon_label, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_style_text_font(tab_standby_icon_label, &mc_font_latin_18, LV_PART_MAIN);
     lv_obj_set_style_text_color(tab_standby_icon_label, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_center(tab_standby_icon_label);
 
     header_time_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_time_label, "--:--");
-    lv_obj_set_style_text_font(header_time_label, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_style_text_font(header_time_label, &mc_font_latin_18, LV_PART_MAIN);
     lv_label_set_long_mode(header_time_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_time_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align(header_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     header_batt_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_label, "0%");
-    lv_obj_set_style_text_font(header_batt_label, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_set_style_text_font(header_batt_label, &mc_font_latin_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_batt_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_batt_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align_to(header_batt_label, header_time_label, LV_ALIGN_OUT_LEFT_MID, -35, 0);
 
     header_batt_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_batt_icon, LV_SYMBOL_BATTERY_EMPTY);
-    lv_obj_set_style_text_font(header_batt_icon, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_style_text_font(header_batt_icon, &mc_font_latin_18, LV_PART_MAIN);
     lv_obj_align_to(header_batt_icon, header_batt_label, LV_ALIGN_OUT_LEFT_MID, -4, 0);
 
     header_sat_label = lv_label_create(tab_menu_header);
     lv_label_set_text(header_sat_label, "0");
-    lv_obj_set_style_text_font(header_sat_label, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_set_style_text_font(header_sat_label, &mc_font_latin_14, LV_PART_MAIN);
     lv_label_set_long_mode(header_sat_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(header_sat_label, lv_palette_main(LV_PALETTE_LIME), LV_PART_MAIN); //ex lv_color_white()
     lv_obj_align_to(header_sat_label, header_batt_icon, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     header_sat_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_sat_icon, LV_SYMBOL_GPS); // Symbol stammt von WpZoom (CC BY-SA 3.0, siehe README)
-    lv_obj_set_style_text_font(header_sat_icon, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_style_text_font(header_sat_icon, &mc_font_latin_18, LV_PART_MAIN);
     lv_obj_align_to(header_sat_icon, header_sat_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
     
     /* wifi + bluetooth icons (left of battery) */
     header_wifi_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_wifi_icon, LV_SYMBOL_WIFI);
-    lv_obj_set_style_text_font(header_wifi_icon, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_style_text_font(header_wifi_icon, &mc_font_latin_18, LV_PART_MAIN);
     // Slightly increase left offset so wifi icon sits closer to battery icon
     lv_obj_align_to(header_wifi_icon, header_sat_icon, LV_ALIGN_OUT_LEFT_MID, -9, 0);
 
     header_bt_icon = lv_label_create(tab_menu_header);
     lv_label_set_text(header_bt_icon, LV_SYMBOL_BLUETOOTH);
-    lv_obj_set_style_text_font(header_bt_icon, &lv_font_montserrat_18, LV_PART_MAIN);
+    lv_obj_set_style_text_font(header_bt_icon, &mc_font_latin_18, LV_PART_MAIN);
     // Match spacing with wifi icon (leave a comfortable gap)
     lv_obj_align_to(header_bt_icon, header_wifi_icon, LV_ALIGN_OUT_LEFT_MID, -7, 0);
 
@@ -710,7 +710,7 @@ void setDisplayLayout(lv_obj_t *parent)
 
     static lv_style_t ta_input_style;
     lv_style_init(&ta_input_style);
-    lv_style_set_text_font(&ta_input_style, &lv_font_montserrat_12);
+    lv_style_set_text_font(&ta_input_style, &mc_font_latin_12);
     lv_style_set_text_color(&ta_input_style, lv_color_black()); // BLAU lv_color_make(0x1C, 0x73, 0xFF));
     lv_style_set_bg_opa(&ta_input_style, LV_OPA_100);
     lv_style_set_bg_color(&ta_input_style, lv_color_white());
@@ -739,7 +739,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_right(&cell_style1, 2);
     lv_style_set_bg_color(&cell_style1, lv_color_white());
     lv_style_set_text_color(&cell_style1, lv_color_black());
-    lv_style_set_text_font(&cell_style1, &lv_font_montserrat_12);
+    lv_style_set_text_font(&cell_style1, &mc_font_latin_12);
     lv_style_set_border_width(&cell_style1, 1);
     lv_style_set_border_color(&cell_style1, lv_color_black());
     lv_style_set_border_side(&cell_style1, LV_BORDER_SIDE_FULL);
@@ -751,7 +751,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_style_set_pad_right(&cell_style2, 2);
     lv_style_set_bg_color(&cell_style2, lv_color_white());
     lv_style_set_text_color(&cell_style2, lv_color_black());
-    lv_style_set_text_font(&cell_style2, &lv_font_montserrat_12);
+    lv_style_set_text_font(&cell_style2, &mc_font_latin_12);
     lv_style_set_border_width(&cell_style2, 1);
     lv_style_set_border_color(&cell_style2, lv_color_black());
     lv_style_set_border_side(&cell_style2, LV_BORDER_SIDE_FULL);
@@ -768,7 +768,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_style_pad_left(t1, 10, LV_PART_MAIN);
     lv_obj_set_style_pad_right(t1, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_top(t1, 5, LV_PART_MAIN);
-    lv_obj_set_style_text_font(t1, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_set_style_text_font(t1, &mc_font_latin_14, LV_PART_MAIN);
 
     // Line Info
     lv_obj_t * setup_line_info = SET_new_line(t1, NULL, 0);
@@ -1949,7 +1949,7 @@ void add_map_point(String callsign, double dlat, double dlon, bool bHome)
     // Rufzeichen als kleine Beschriftung unter dem Punkt
     map_point_label[ipoint] = lv_label_create(map_ta);
     lv_label_set_text(map_point_label[ipoint], callsign.c_str());
-    lv_obj_set_style_text_font(map_point_label[ipoint], &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(map_point_label[ipoint], &mc_font_latin_12, 0);
     lv_obj_set_style_text_color(map_point_label[ipoint], lv_color_black(), 0);
     lv_obj_set_pos(map_point_label[ipoint], x - 5, y + 6);
 
@@ -4648,6 +4648,18 @@ void tdeck_refresh_track_view()
 }
 
 /**
+ * CHARS-01: message text goes to LVGL as UTF-8, no utf8ascii(). The mc_font_latin_* fonts carry
+ * U+00A0..U+017F plus the phone punctuation (src/t-deck/fonts/). Montserrat has no narrow
+ * no-break space U+202F (French puts it before ; : ! ?), so it becomes a plain space instead of
+ * a placeholder box.
+ */
+static String tdeck_display_text(String s)
+{
+    s.replace("\xE2\x80\xAF", " ");
+    return s;
+}
+
+/**
  * adds an message to the MSG view
  */
 void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
@@ -4657,8 +4669,7 @@ void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
     if(ack_pos > 0)
         payload = payload.substring(0, ack_pos);
 
-    payload = utf8ascii(payload);
-
+    payload = tdeck_display_text(payload);
     String local_call = String(meshcom_settings.node_call);
     bool is_outgoing = strcasecmp(aprsmsg.msg_source_path, local_call.c_str()) == 0
         || strcasecmp(aprsmsg.msg_source_call, local_call.c_str()) == 0;
@@ -4734,7 +4745,7 @@ void tdeck_add_MSG(String callsign, String path, String message, bool bWithAudio
     bubble.header = header_source;
     if(header_dest.length() > 0)
         bubble.header += " -> " + header_dest;
-    bubble.body = utf8ascii(message);
+    bubble.body = tdeck_display_text(message);
 
     String tab_override = header_dest;
     tab_override.trim();
