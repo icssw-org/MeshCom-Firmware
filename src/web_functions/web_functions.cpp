@@ -3,6 +3,7 @@
  *  @date        2025-12-03
  */
 #include "mc_text.h"
+#include "msg_body.h"      // CHARS-01: strip only the trailing {NNN ACK marker
 #include "uptime_min.h"   // wrap-safe 16-bit uptime minutes (NBR stamps)
 #include <Arduino.h>
 
@@ -3970,8 +3971,8 @@ void sub_content_messages()
                     if (bDEBUG)
                         Serial.printf("aprsmsg.msg_source_call:%s, aprsmsg.msg_gateway_call:%s, aprsmsg.msg_destination_call:%s, aprsmsg.msg_payload:%s\n", aprsmsg.msg_source_call, aprsmsg.msg_source_last, aprsmsg.msg_destination_call, aprsmsg.msg_payload);
 
-                    if (msgtxt.indexOf('{') > 0)
-                        msgtxt = String(aprsmsg.msg_payload).substring(0, msgtxt.indexOf('{'));
+                    // strip only the trailing "{NNN" ACK marker; a '{' inside the text stays (msg_body.h)
+                    msgtxt = msgtxt.substring(0, msg_body_visible_len(msgtxt.c_str(), msgtxt.length()));
 
                     // WEB-03a: mesh-derived strings (payload, path, callsigns) are attacker-controlled -- escape before HTML output
                     String msgtxt_esc = htmlEscape(msgtxt);

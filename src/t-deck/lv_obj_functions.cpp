@@ -52,6 +52,8 @@ extern TFT_eSPI tft;
 #include <SPIFFS.h>
 #endif
 
+#include <msg_body.h>
+
 #if defined(ENABLE_AUDIO)
 #include <esp32/esp32_audio.h>
 #endif
@@ -4665,9 +4667,8 @@ static String tdeck_display_text(String s)
 void tdeck_add_MSG(aprsMessage aprsmsg, bool bWithAudio)
 {
     String payload = aprsmsg.msg_payload;
-    int ack_pos = payload.indexOf('{');
-    if(ack_pos > 0)
-        payload = payload.substring(0, ack_pos);
+    // hide only a trailing ACK marker "{NNN"; a '{' inside the text stays (CHARS-01)
+    payload = payload.substring(0, msg_body_visible_len(payload.c_str(), payload.length()));
 
     payload = tdeck_display_text(payload);
     String local_call = String(meshcom_settings.node_call);
