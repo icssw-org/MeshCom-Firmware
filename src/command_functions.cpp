@@ -488,7 +488,7 @@ static void tg_post_board_led_off()
 static void tg_post_gps_on() { gpsInitDone = false; init_loop_function(); }
 #endif
 #if defined(ENABLE_LTR390)
-static void tg_post_uv_on() { ltr390_found = ltr390Begin(); }
+static void tg_post_uv_on() { wxMeanReset(&wx_uv_mean); ltr390_found = ltr390Begin(); }   // fresh window on switch-on
 static void tg_post_uv_off() { ltr390End(); ltr390_found = false; }
 #endif
 #if defined(ENABLE_WIND)
@@ -779,6 +779,8 @@ bool wxWindPinOk(int pin)
 #undef WX_RES
 static void tg_post_wind_on()
 {
+    wxMeanReset(&wx_wind_mean);   // fresh window on switch-on (telemetry may have been inactive)
+    wxGustReset(&wx_wind_gust);
     if(meshcom_settings.node_wind_pin == 0) { printfdeb("wind on, but no pin set: use --windpin <gpio>\n"); return; }
     if(!wxWindPinOk(meshcom_settings.node_wind_pin)) { printfdeb("wind pin %i not allowed on this board\n", meshcom_settings.node_wind_pin); return; }
     windBegin(meshcom_settings.node_wind_pin);
