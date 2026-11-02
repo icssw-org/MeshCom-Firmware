@@ -27,6 +27,9 @@
 float max_batt = BATT_MAX_DEFAULT_V;  //alt
 float fBattMax = BATT_MAX_DEFAULT_V;  //später extern [V]
 
+// BAT-04: charge state, written by the battery loop only (see src/batt_charge.h).
+BattChargeInfo global_batt_charge = {BCS_UNKNOWN, false, 0};
+
 #ifdef USE_BATT
 
 unsigned long batt_show_timer = 0;

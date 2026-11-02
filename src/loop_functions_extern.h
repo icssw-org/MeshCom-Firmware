@@ -528,6 +528,8 @@ extern unsigned long web_timer;          // Refreshtime WEbServer
 // batt
 extern float global_batt;
 extern int global_proz;
+#include "batt_charge.h"
+extern BattChargeInfo global_batt_charge;   // BAT-04, see src/batt_charge.h
 
 extern char cTimeSource[10];
 

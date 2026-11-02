@@ -7090,6 +7090,21 @@ void commandAction(char *umsg_text, bool ble)
             idoc1["BDATE"] = bdate;
 
             sendBleJsonRegister(idoc1);
+
+            // BAT-04 (upstream #1073): third info register for live status, here the battery charge
+            // state. Only sent when known, so boards without a PMU keep their I/IS1 burst unchanged.
+            const BattChargeInfo bci = global_batt_charge;
+            if(bci.state != BCS_UNKNOWN)
+            {
+                JsonDocument idoc2;
+
+                idoc2["TYP"] = "IS2";
+                idoc2["CHG"] = battChargeName(bci.state);
+                if(bci.ma_valid)
+                    idoc2["CHGMA"] = bci.ma;   // signed mA: + into the battery, - out of it
+
+                sendBleJsonRegister(idoc2);
+            }
         }
 
         if(!bRxFromPhone)
@@ -7105,6 +7120,17 @@ void commandAction(char *umsg_text, bool ble)
             printfdeb("--MeshCom %-4.4s%-1.1s (build: %s / %s)\n...UPDATE: %s\n...Call: <%s> ...ID %08X ...NODE %i <%s> ...UTC-OFF %f [%s]\n...BATT %.2f V ...BATT %d %% ...MAXV %.3f V\n...TIME %li ms\n", 
                     SOURCE_VERSION, SOURCE_VERSION_SUB , __DATE__ , __TIME__ , meshcom_settings.node_update,
                     meshcom_settings.node_call, _GW_ID, BOARD_HARDWARE, nbrHardwareName(BOARD_HARDWARE), meshcom_settings.node_utcoff, cTimeSource, global_batt/1000.0, global_proz, meshcom_settings.node_maxv, millis());
+
+            // BAT-04: charge state line, only on boards that report one
+            {
+                const BattChargeInfo bci = global_batt_charge;
+                if(bci.state != BCS_UNKNOWN)
+                {
+                    char chgbuf[40];
+                    battChargeFormat(chgbuf, sizeof(chgbuf), bci);
+                    printfdeb("...Charge: %s\n", chgbuf);
+                }
+            }
 
             printfdeb("...Flash-Version %i\n", meshcom_settings.node_fversion);
 

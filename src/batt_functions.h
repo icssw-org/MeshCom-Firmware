@@ -40,6 +40,11 @@ bool battHardwarePresent(void);   // false bei BATT_PROBE_NONE, erkanntem "kein 
 // Both battery files (batt_functions.cpp, batt_function_old.cpp) export it.
 uint32_t battSampleCount(void);
 
+// BAT-04 (upstream #1073): charge state and battery current. Both battery files define it;
+// written only by the battery loop, readers copy the struct once.
+#include "batt_charge.h"
+extern BattChargeInfo global_batt_charge;
+
 #if defined(USE_NEW_BATT)
 
 // Shared battery pipeline (EMA tau 30 s, settle rule, BAT-01 detector incl. battDetect*/

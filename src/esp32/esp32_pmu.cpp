@@ -137,6 +137,11 @@ void setupPMU()
 
         PMU->disableIRQ(XPOWERS_AXP192_ALL_IRQ);
 
+        // BAT-04: battery current ADC (MONITOR_BAT_CURRENT) for getBatteryChargeCurrent().
+        // The VBUS ADC stays off as before: isVbusIn() reads a status bit, and enabling it would
+        // turn a cell-less T-Beam's "USB" (global_batt from getVbusVoltage() == 0) into "5.0V".
+        PMU->enableBattVoltageMeasure();
+
         // Set constant current charging current
         PMU->setChargerConstantCurr(XPOWERS_AXP192_CHG_CUR_450MA);
 

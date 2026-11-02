@@ -4210,12 +4210,17 @@ void sub_page_info()
     // BAT-01: global_batt==0.0 is the established "no reading" convention (grounded pin, or
     // the ADC-path no-battery detection in batt_functions.cpp) -- same check the on-device
     // displays already use, see loop_functions.cpp.
-    if (global_batt == 0.0) {
-        web_client.print("<tr><td>Battery</td><td>USB (no battery)</td></tr>\n");
-    } else {
-        web_client.printf("<tr><td>Battery</td><td>%.3fV (%d%%) max %.3fV", global_batt / 1000.0, global_proz, meshcom_settings.node_maxv);
-        #if defined(XPOWERS_CHIP_AXP192) || defined(XPOWERS_CHIP_AXP2101)
-        #endif
+    {   // BAT-04: charge state appended inside the same cell; BCS_UNKNOWN leaves the HTML unchanged
+        const BattChargeInfo bci = global_batt_charge;
+        char bcsText[40];
+        bcsText[0] = '\0';
+        if (bci.state != BCS_UNKNOWN) battChargeFormat(bcsText, sizeof(bcsText), bci);
+        if (global_batt == 0.0) {
+            web_client.print("<tr><td>Battery</td><td>USB (no battery)");
+        } else {
+            web_client.printf("<tr><td>Battery</td><td>%.3fV (%d%%) max %.3fV", global_batt / 1000.0, global_proz, meshcom_settings.node_maxv);
+        }
+        if (bcsText[0]) web_client.printf(", %s", bcsText);
         web_client.print("</td></tr>\n");
     }
 #if defined(ESP32)
