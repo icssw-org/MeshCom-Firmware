@@ -114,7 +114,7 @@ const char   *msgstoreStateName(uint8_t state);
 bool msgstoreEligible(const char *dst);                     // store-set test, false when mode is OFF
 bool msgstoreSameBaseCall(const char *a, const char *b);    // same callsign before the first '-' (SSID ignored; "DK5EN" == "DK5EN-0"); false when either base is empty/NULL
 int  msgstoreStore(const char *src, const char *dst, uint16_t nnn,
-                   const char *payload, size_t len);        // slot, -1 dropped; same (src,nnn,payload) refreshes
+                   const char *payload, size_t len);        // slot, -1 dropped; same (src,nnn,payload) refreshes before delivery begins
 void msgstoreOnAck(const char *acker, const char *sender, uint16_t nnn);   // :ackNNN from acker to sender
 void msgstorePresence(const char *call);                    // frame heard DIRECTLY from call
 void msgstoreOnPeerDelivery(const char *src, uint16_t nnn); // another store node's hop-0 delivery heard

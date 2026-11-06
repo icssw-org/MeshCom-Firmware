@@ -408,6 +408,15 @@ int msgstoreStore(const char *src, const char *dst, uint16_t nnn,
 
         if(s_entries[i].plen == (uint16_t)len && s_entries[i].pcrc == pcrc)
         {
+            // Once delivery has begun a further copy is most likely the echo
+            // of our own delivery (heard and uploaded by another gateway), so
+            // it must not restart the hold clock or skip the cooldown.
+            if(s_entries[i].attempt > 0)
+            {
+                result = i;
+                goto done;
+            }
+
             // Sender re-flood: same message, still in flight on its end.
             // Refresh the clock and step back from wherever we were.
             s_entries[i].stored_ms  = now;
