@@ -2817,7 +2817,18 @@ void nrf52loop()
     #endif
 
     //  We are on FreeRTOS, give other tasks a chance to run
+    #if defined(BOARD_HELTEC_T114)
+    // The loop body is cheap (measured: ~0 ms), so this delay IS the loop period: the
+    // button was polled only every ~100 ms, which loses short clicks (double/triple click
+    // were hardly ever recognised). Poll it every 10 ms instead; the wait stays 100 ms.
+    for(int iBtnPoll = 0; iBtnPoll < 10; iBtnPoll++)
+    {
+        delay(10);
+        btn.tick();
+    }
+    #else
     delay(100);
+    #endif
 
     yield();
 }
