@@ -150,6 +150,27 @@ void nrf52EnterDeepSleep()
         delay(100);   // contact bounce after release
     }
 
+    #if defined(BOARD_HELTEC_T114)
+    // Waking from System OFF with the user button is a reset with the button still held.
+    // The Adafruit-based bootloader of the T114 takes a held button for "enter DFU" and
+    // starts in the boot/UF2 mode instead of the firmware (field report: press the button
+    // in deep sleep -> boot mode, only RESET starts the node). Tell the bootloader to skip
+    // the DFU check once: DFU_MAGIC_SKIP in GPREGRET, which survives System OFF.
+    {
+        uint8_t sdEnabled = 0;
+        (void)sd_softdevice_is_enabled(&sdEnabled);
+        if (sdEnabled)
+        {
+            sd_power_gpregret_clr(0, 0xFF);
+            sd_power_gpregret_set(0, 0x6D);   // DFU_MAGIC_SKIP
+        }
+        else
+        {
+            NRF_POWER->GPREGRET = 0x6D;
+        }
+    }
+    #endif
+
     if (iButtonPin < PINS_COUNT)
     {
         systemOff(iButtonPin, LOW);   // active-low button, internal pull-up configured by systemOff() itself
