@@ -140,6 +140,11 @@ static bool glueDeliver(const struct MsgStoreEntry *e)
     if(slot < 0)
         return false;
 
+    // Register the fresh msg_id in the dedup ring so a copy coming back (heard
+    // and uploaded by another gateway) is a duplicate. Flag false: this node
+    // does not upload the delivery itself.
+    addLoraRxBuffer(m.msg_id, false);
+
     return true;
 }
 
