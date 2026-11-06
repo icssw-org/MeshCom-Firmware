@@ -281,8 +281,27 @@ static void rxsNoteEvent(bool has_q, int16_t rssi, int8_t snr)
     g_rxs_ev_ms = millis();
     g_rxs_ev_seq = g_rxs_ev_seq + 1;
 }
+// RSSI/SNR of the last frame received without error, for the T114 status page.
+// Kept apart from g_rxs_ev_*, which an RX error resets.
+static volatile bool    g_lastRxValid = false;
+static volatile int16_t g_lastRxRssi = 0;
+static volatile int8_t  g_lastRxSnr = 0;
+
+// Returns false until the first frame was received.
+bool nrf52LastRxQuality(int16_t *rssi, int8_t *snr)
+{
+    if(!g_lastRxValid)
+        return false;
+    *rssi = g_lastRxRssi;
+    *snr = g_lastRxSnr;
+    return true;
+}
+
 static void rxsOnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
+    g_lastRxRssi = rssi;
+    g_lastRxSnr = snr;
+    g_lastRxValid = true;
     rxsNoteEvent(true, rssi, snr);
     OnRxDone(payload, size, rssi, snr);
 }
