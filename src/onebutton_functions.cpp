@@ -342,6 +342,11 @@ void PressLong()
         commandAction((char*)"--deepsleep", isPhoneReady, false);
       #elif defined(BOARD_HELTEC_T114)
         Serial.println("[BOARD_HELTEC_T114]... GO to deepsleep");
+        // Visible feedback: otherwise the display just goes dark and a long press by
+        // accident looks like a crash. The sleep sequence switches the TFT off afterwards.
+        digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON (it may have been off)
+        displayTFT("DEEP SLEEP", "Press button to wake");
+        delay(1500);
         commandAction((char*)"--deepsleep", isPhoneReady, false);
       #elif defined(BOARD_TLORA_OLV216)
         Serial.println("[BOARD_TLORA_OLV216]... GO to deepsleep");
