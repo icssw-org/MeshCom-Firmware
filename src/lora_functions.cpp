@@ -2136,7 +2136,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
                                 // side-effect free, so computing them up front is safe.
                                 MboxDecision mboxDec = mboxClassify(aprsmsg.msg_source_call, destination_call, aprsmsg.msg_payload,
                                                                     CheckGroup(destination_call) != 0,
-                                                                    bMboxPeerDelivery,   // F6: don't store a peer's own delivery frame
+                                                                    // F6: don't store a peer's own delivery frame, nor a frame whose
+                                                                    // path already holds our call (echo of our own delivery)
+                                                                    bMboxPeerDelivery || mboxPathHasCall(aprsmsg.msg_source_path, meshcom_settings.node_call),
                                                                     rx_pn_repeat,        // E2: a repeat XOR copy must not push stored_ms out again
                                                                     msgstoreEligible(destination_call));
 

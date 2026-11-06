@@ -54,7 +54,8 @@ static inline bool mboxIsServiceCall(const char *call)
  * @param dst          destination call of the frame
  * @param payload      APRS text payload
  * @param isGroup      CheckGroup(dst) != 0 (caller computes)
- * @param peerDelivery frame is another store node's own hop-0 delivery (RF only)
+ * @param peerDelivery frame is another store node's own hop-0 delivery, or its path
+ *                     already holds our own call (RF only)
  * @param pnRepeat     frame is a repeat XOR copy of a PN already seen
  * @param eligible     msgstoreEligible(dst) (caller computes; only consulted for STORE)
  *
