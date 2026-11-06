@@ -18,6 +18,10 @@
 #include "tft_display_functions.h"
 #endif
 
+#if defined(BOARD_HELTEC_T114)
+#include "t114_gps_page.h"
+#endif
+
 #if defined(BOARD_T_ECHO)
 #include "nrf52_functions.h"
 #endif
@@ -57,6 +61,12 @@ void singleClick()
           bOneButton = true;   // redraw the track page; the click only wakes the display
           return;
       }
+
+      if(t114GpsPageActive())
+      {
+          t114GpsPageRedraw();   // the click only wakes the display
+          return;
+      }
   }
   #endif
 
@@ -65,6 +75,44 @@ void singleClick()
   {
     if(bDisplayCont)
         Serial.printf("BUTTON single press last:%i pointer:%i lines:%i\n", pageLastPointer, pagePointer, pageLastLineAnz[pagePointer]);
+
+    #if defined(BOARD_HELTEC_T114)
+    {
+      // Page order: stored messages -> status page -> GPS page -> status page (home) ...
+      static unsigned long t114StatusAt = 0;   // millis() when the status page was shown by a click
+
+      if(t114GpsPageActive())
+      {
+        // click on the GPS page: leave it, back to the status page; the next click starts again
+        t114GpsPageClose();
+        t114StatusAt = 0;
+        pageHold = 0;
+        pagePointer = pageLastPointer - 1;
+        if(pagePointer < 0)
+          pagePointer = PAGE_MAX - 1;
+        sendDisplayHead(true);
+        return;
+      }
+
+      // End of the stored messages (the status slot 5, or an empty slot): the status page
+      // first, a click while it is shown opens the GPS page.
+      if(pagePointer == 5 || pageLastLineAnz[pagePointer] == 0)
+      {
+        if(t114StatusAt != 0 && (millis() - t114StatusAt) < 6000)
+        {
+          t114StatusAt = 0;
+          t114GpsPageOpen();
+          return;
+        }
+        t114StatusAt = millis();
+        sendDisplayHead(true);
+        pageHold = 5;
+        return;
+      }
+
+      t114StatusAt = 0;
+    }
+    #endif
 
     #if defined(WP_DISP)
     // ===== Wireless Paper + E213: die letzten WP_MSG_BROWSE_MAX Nachrichten + Status in einer LOOP =====
@@ -288,6 +336,8 @@ void tripleClick()
 
   #if defined(BOARD_HELTEC_T114)
   digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON: sendDisplayHead() below can return early and leave the panel dark
+  t114GpsPageClose();                    // the track page replaces the GPS page
+  pageHold = 0;
   #endif
 
   if(bDisplayTrack)

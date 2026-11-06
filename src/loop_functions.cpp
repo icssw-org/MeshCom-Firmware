@@ -1775,6 +1775,7 @@ void oledStat()
 }
 
 #if defined(BOARD_HELTEC_T114)
+#include "t114_gps_page.h"
 extern bool nrf52LastRxQuality(int16_t *rssi, int8_t *snr);   // nrf52_main.cpp
 #endif
 
@@ -2117,6 +2118,21 @@ void sendDisplayTime()
         if(pagePointer < 0)
             pagePointer=PAGE_MAX-1;
     }
+
+    #if defined(BOARD_HELTEC_T114)
+    // graphic GPS page: updated here once per second, left when its hold time is over
+    if(t114GpsPageActive())
+    {
+        if(pageHold > 0)
+        {
+            t114GpsPageUpdate();
+            return;
+        }
+        t114GpsPageClose();
+        sendDisplayHead(true);   // back to the status page
+        return;
+    }
+    #endif
 
     #if MC_HAS_U8G2   // GRD-01: war die wortgleiche 11-Term-Liste
         if(u8g2 == NULL)
@@ -2945,6 +2961,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // text immer 30 sec stehenlassen und Display immer ON
     DisplayOffWait = millis() + (30 * 1000); // 30 seconds
     bDisplayIsOff=false;
+
+    #if defined(BOARD_HELTEC_T114)
+    t114GpsPageClose();   // the message is drawn over the GPS page
+    #endif
 
     #if defined(WP_DISP)
     wpMsgIdx = 0;       // frisch eintreffende Nachricht -> kein (alter) Browse-Index oben rechts

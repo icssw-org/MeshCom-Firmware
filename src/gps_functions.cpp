@@ -14,6 +14,10 @@
 
 #include "gps_functions.h"
 
+#if defined(BOARD_HELTEC_T114)
+#include "t114_gps_page.h"   // GSV parser for the GPS page
+#endif
+
 #include "gps_filter.h"
 #include "alt_fusion.h"
 #include "pos_pipeline.h"
@@ -722,10 +726,15 @@ void SetupL76K() {
   #endif
   delay(250);
   // ask for only RMC and GGA
+  #if defined(BOARD_HELTEC_T114)
+  // T114: GSV (satellites in view) in addition, for the graphic GPS page
+  Serial.printf("[GPS ]>>> $PCAS03,1,0,0,1,1,0,0,0,0,0,,,0,0*03\n");
+  Serial1.write("$PCAS03,1,0,0,1,1,0,0,0,0,0,,,0,0*03\r\n");
+  #elif defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial.printf("[GPS ]>>> $PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\n");
-  #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
   Serial1.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
   #else
+  Serial.printf("[GPS ]>>> $PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\n");
   GPSSerial.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
   #endif
   Serial.printf("[GPS ]...L76K config finished\n");
@@ -1002,6 +1011,10 @@ void WZ_GPS_Feed()
         #endif
 
         if (gps.encode(char(ic))) { updateGPSdata = true; }
+
+        #if defined(BOARD_HELTEC_T114)
+        t114GsvFeed(char(ic));   // satellites in view for the GPS page
+        #endif
 
         // NMEA-Echo. msg_text ist der globale Kommandopuffer -- diese Schleife
         // laeuft in jedem loop()-Durchlauf, ein memset() darauf waere nicht

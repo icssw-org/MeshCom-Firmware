@@ -2844,6 +2844,13 @@ void nrf52loop()
     {
         delay(10);
         btn.tick();
+
+        // With GSV switched on for the GPS page the L76K sends ~1 kB per second in bursts;
+        // the 250 byte UART ring buffer would overflow within 100 ms. Empty it every 10 ms.
+        #if defined(ENABLE_GPS)
+        if(bGPSON && gpsDetected)
+            WZ_GPS_Feed();
+        #endif
     }
     #else
     delay(100);
