@@ -37,6 +37,29 @@ void singleClick()
         return;
     #endif
 
+  #if defined(BOARD_HELTEC_T114)
+  // The T114 draws the page below via displayTFT() directly, which never touches
+  // the backlight: with the display off (--display off / double click) the click
+  // would paint onto a dark panel. This must run before the early returns below
+  // (sendDisplayHead(true) keeps the panel dark while bDisplayIsOff is set) and
+  // before the TRACK check, so a click can also wake the display in track mode.
+  // Switch the backlight on and, if the display is stored off, arm the same
+  // off-timer a received message uses.
+  if(bDisplayIsOff)
+  {
+      bDisplayIsOff=false;
+      digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON
+      if(bDisplayOff)
+          DisplayOffWait = millis() + (30 * 1000);
+
+      if(bDisplayTrack)
+      {
+          bOneButton = true;   // redraw the track page; the click only wakes the display
+          return;
+      }
+  }
+  #endif
+
   // no oneclick on TRACK=on
   if(!bDisplayTrack)
   {
@@ -231,7 +254,10 @@ void doubleClick()
   #endif
 
   #if defined(BOARD_HELTEC_T114) or defined(BOARD_T_ECHO)
-    if(!bDisplayOff)
+    // Follow what the panel actually shows (bDisplayIsOff), not the stored setting
+    // (bDisplayOff): after a single click woke a stored-off display, bDisplayOff is
+    // still set and the double click would have turned it on permanently.
+    if(!bDisplayIsOff)
     {
         commandAction((char*)"--display off", isPhoneReady, false);
     }
@@ -259,6 +285,10 @@ void tripleClick()
   bDisplayTrack=!bDisplayTrack;
 
   bDisplayIsOff=false;
+
+  #if defined(BOARD_HELTEC_T114)
+  digitalWrite(PIN_TFT_LEDA_CTL, LOW);   // TFT ON: sendDisplayHead() below can return early and leave the panel dark
+  #endif
 
   if(bDisplayTrack)
   {
