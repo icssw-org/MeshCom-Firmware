@@ -172,7 +172,7 @@ int t114GpsSatsInView()
 #define C_WHITE   0xFFFF
 #define C_BLACK   0x0000
 #define C_RED     0xF800
-#define C_GREEN   0x0400   // dark green, readable on white
+#define C_GREEN   0x0660   // medium green (0,204,0); the darker 0x0400 looked black on the T114 TFT
 #define C_ORANGE  0xFC60
 #define C_GRAY    0x8410
 #define C_LGRAY   0xC618
@@ -185,8 +185,8 @@ static const int16_t PX = 114;                    // right panel
 
 static uint16_t snrColor(int snr)
 {
-    if(snr >= 40) return C_GREEN;
-    if(snr >= 25) return C_ORANGE;
+    if(snr >= 35) return C_GREEN;
+    if(snr >= 20) return C_ORANGE;
     return C_RED;
 }
 
