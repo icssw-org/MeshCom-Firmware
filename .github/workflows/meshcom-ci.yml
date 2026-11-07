@@ -167,9 +167,11 @@ jobs:
         .pio/build/t_echo/t_echo.zip,
         .pio/build/t_echo/t_echo.uf2,
         .pio/build/esp32-S3-safeboot/safeboot-s3.bin,
+        .pio/build/t_deck_pro/safeboot-s3-16.bin,
         .pio/build/esp32-safeboot/safeboot.bin,
         .pio/build/esp32-S3-safeboot/bootloader-s3.bin,
         .pio/build/LilyGo_T3_S3_V1_3/bootloader-s3-4.bin,
+        .pio/build/t_deck_pro/bootloader-s3-16.bin,
         .pio/build/esp32-safeboot/bootloader.bin,
         .pio/build/esp32-safeboot/partitions.bin,
         otadata.bin"
