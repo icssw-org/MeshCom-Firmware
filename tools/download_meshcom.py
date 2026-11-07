@@ -86,7 +86,7 @@ def get_target_hardware(asset):
     "ttgo_tbeam_SX1268.bin" : "bootloader.bin",
     "ttgo_tbeam_supreme.bin" : "bootloader-s3.bin",
     "T-Beam-1W.bin" : "bootloader-s3.bin",
-    "T3_S3_V13.bin" : "bootloader-s3.bin",
+    "T3_S3_V13.bin" : "bootloader-s3-4.bin",
     "t_connect_pro.bin" : "bootloader-s3.bin",
     "ttgo-lora32-v21.bin" : "bootloader.bin",
     "t_deck.bin" : "bootloader-s3.bin",
