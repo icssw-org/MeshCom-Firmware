@@ -387,6 +387,9 @@ int direction_E_W = 0;  //0--E, 1--W
 #if defined(ENABLE_RAK_GPS)
 unsigned int getGPS(void);
 void SetupUBLOX();
+void SetupL76K();
+bool GPSprobe();
+void WaitPause();
 #endif
 
 // TEMP/HUM
@@ -946,50 +949,24 @@ void nrf52setup()
         
         Serial.println("=====================================");
 
-        Serial.println("GPS: trying 9600 baud");
-        
-        Serial1.begin(9600);
-        Serial1.setTimeout(500);
-        while (!Serial1);
+        static const unsigned long GPS_BAUDS[] = {9600, 38400};
+        static const size_t   GPS_BAUD_COUNT = sizeof(GPS_BAUDS) / sizeof(GPS_BAUDS[0]);
 
-        if(Serial1)
+        for(int iGpsBaud=0; iGpsBaud < (int)GPS_BAUD_COUNT; iGpsBaud++)
         {
-            if (myGPS.begin(Serial1))
+            Serial.printf("GPS: trying %lu baud\n", GPS_BAUDS[iGpsBaud]);
+            
+            Serial1.begin(GPS_BAUDS[iGpsBaud]);
+            Serial1.setTimeout(500);
+
+            delay(100);
+
+            if(GPSprobe())
             {
-                Serial.println("GPS: connected at 9600 baud");
+                break;
             }
-            else
-            {
-                Serial1.end();
 
-                delay(100);
-                Serial.println("GPS: trying 38400 baud");
-
-                Serial1.begin(38400);
-                Serial1.setTimeout(500);
-                while (!Serial1);
-
-                if(Serial1)
-                {
-                    if (myGPS.begin(Serial1))
-                    {
-                        Serial.println("GPS: connected at 38400 baud");
-                    }
-                    else
-                    {
-                        Serial.println("GPS: speed not found");
-                    }
-                }
-                else
-                    Serial.println("GPS: not connected");
-            }
         }
-        else
-            Serial.println("GPS: not connected");
-
-        delay(100);
-
-        SetupUBLOX();
 
         #endif
     }
@@ -3026,6 +3003,24 @@ void sendUBX_SET_GNSS() {  // Binäres Paket senden
   delay(100); // Kurze Pause für das Modul
 }
 
+String readUBX() {
+  startTimeout = millis() + 500;
+  ver = "";
+  while ((int32_t)(millis() - startTimeout) < 0) {
+    // N-25/B-9: Das Timeout wird bei JEDEM empfangenen Byte neu gesetzt.
+    // Gegen ein dauerhaft sendendes Modul hat diese Schleife daher keine
+    // obere Schranke; ohne Fütterung reboot der Knoten mitten in der
+    // GPS-Erkennung. Die Schranke selbst gehört noch gezogen (S2).
+    //meshcom_wdt_feed();
+    while (Serial1.available()) {
+      if (ver.length() > 500) { break; }  //TODO: mehr Zeichen für ganzen Versions-String
+      ver = ver + char(Serial1.read());
+      startTimeout = millis() + 500;  // retrigger timeout
+    }
+  }
+  return ver;
+}
+
 String readUBXbin() {
   startTimeout = millis() + 500;
   ver = "";
@@ -3046,6 +3041,94 @@ String readUBXbin() {
     }
   }
   return ver;
+}
+
+bool on_L76K;
+bool on_UBLOX;
+
+const int WAIT_DURATION = 2000;   // max. Wartedauer
+
+/**
+ * @brief check if L76K or UBLOX GPS-Modul,
+ * @brief SetupL76K, SetupUBLOX
+ * 
+ * @return on_UBLOX = true || on_L76K = true || false 
+ */
+bool GPSprobe() {
+
+  on_L76K = false;
+  on_UBLOX = false;
+
+  Serial.printf("[GPS ]...Try to init L76K/UBLOX\n");
+  ver = "";
+  startTimeout = millis() + WAIT_DURATION;
+  if(iGPSDEBUG >= 2)
+    Serial.printf("[GPS ]...clear NMEA-Buffer\n");
+  while (Serial1.available()) {  // clear RX-Buffer
+    ver = ver + char(Serial1.read());
+
+    //meshcom_wdt_feed();   // N-25: bis zu WAIT_DURATION = 2000 ms
+
+    if ((int32_t)(millis() - startTimeout) > 0) { // RC-Buffer muss nach WAIT_DURATION leer sein
+      Serial.printf("[GPS_ERR] wait stop NMEA timeout!\n");
+      return false;
+    }
+  }
+
+  // set device info
+  // command --setl76k on
+  // dient dazu um einen GPS-Modul L76K fix zu setzen
+  if (bGPSL76K)
+  {
+    Serial.printf("[GPS ]...set L76K GNSS\n");
+    on_L76K = true;
+    SetupL76K();
+    return true;
+  }
+
+  // command --setublox on
+  // dient dazu um einen GPS-Modul UBLOX fix zu setzen
+  if (bGPSUBLOX)
+  {
+    // getestet auf UBLOX
+    Serial.printf("[GPS ]...set UBLOX\n");
+    on_UBLOX = true;
+    SetupUBLOX();
+    return true;
+  }
+  
+  // get device info
+  Serial.printf("[GPS ]>>> $PCAS06,0*1B\n");
+  WaitPause(); // Pause zwischen Blöcken erreicht
+  Serial1.write("$PCAS06,0*1B\r\n");
+
+  ver = readUBX();
+
+  Serial.printf("[GPS ]<<< %s ...\n", ver.c_str());
+  Serial.printf("check Input\n");
+  // bei L76K kommt: $GxTXT,01,01,02, ...
+  // bei UBLOX kommt: $GxTXT,01,01,01,PCAS inv format (P || N)
+
+  if (ver.indexOf("TXT,01,01,02") >= 0) {  // 02 = general information, zuvor startsWith
+    Serial.printf("[GPS ]...L76K GNSS erfolgreich getestet\n");
+    SetupL76K();
+    on_L76K = true;
+    return true;
+  }
+
+  if (ver.indexOf("TXT,01,01,01,PCAS") >= 0) {  // 01 = warning message => no PCAS
+    // getestet auf UBLOX
+    Serial.printf("[GPS ]...UBLOX connected\n");
+    SetupUBLOX();
+    on_UBLOX = true;
+    return true;
+  }
+
+  Serial.printf("[GPS_ERR] unbekanntes GPS Modul\n");
+  on_UBLOX = false;
+  on_L76K = false;
+
+  return false;
 }
 
 void SetupUBLOX()
@@ -3069,6 +3152,26 @@ void SetupUBLOX()
   if(iGPSDEBUG >= 2)
     Serial.printf("[GPS_VER] %s\n", ver.c_str());
 
+}
+
+void SetupL76K()
+{
+  // Initialize the L76K Chip, use GPS + GLONASS + GALILEO
+  Serial.printf("[GPS ]>>> $PCAS04,D,D,9*10\n");
+  Serial1.write("$PCAS04,D,D,9*10\r\n");
+  delay(250);
+  // Wiederholrate 1s
+  Serial.printf("[GPS ]>>> $PCAS02,1000*2E\n");
+  Serial1.write("$PCAS02,1000*2E\r\n");
+  delay(250);
+  // Switch to portable Mode
+  Serial.printf("[GPS ]>>> $PCAS11,0*1D\n");
+  Serial1.write("$PCAS11,0*1D\r\n");
+  delay(250);
+  // ask for only RMC and GGA
+  Serial.printf("[GPS ]>>> $PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\n");
+  Serial1.write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
+  Serial.printf("[GPS ]...L76K config finished\n");
 }
 
 unsigned int getGPS(void)
