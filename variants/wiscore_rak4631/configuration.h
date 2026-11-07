@@ -27,7 +27,6 @@ definitions for RAK4631
 #define ENABLE_RAK_GPS
 #define ENABLE_GPS_DISABLED   // this board uses ENABLE_RAK_GPS instead of ENABLE_GPS
 
-
 #define LPS33     // Druckmesser
 #define SHTC3     // Temperatur
 
