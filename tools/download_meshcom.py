@@ -127,7 +127,7 @@ def get_target_hardware(asset):
     "ttgo-lora32-v21.bin" : "safeboot.bin",
     "t_deck.bin" : "safeboot-s3.bin",
     "t_deck_plus.bin" : "safeboot-s3.bin",
-    "t_deck_pro.bin" : "safeboot-s3-16.bin",
+    "t_deck_pro.bin" : "safeboot-s3.bin",
     "wiscore_rak4631.uf2" : "wiscore_rak4631.uf2",
     "wiscore_rak4631.zip" : "wiscore_rak4631.zip",
     "heltec_t114.uf2" : "heltec_t114.uf2",
