@@ -70,6 +70,28 @@ void singleClick()
   }
   #endif
 
+  #if defined(BOARD_HELTEC_T114)
+  // Track mode keeps the track page, the click only toggles the graphic GPS page.
+  if(bDisplayTrack)
+  {
+      if(t114GpsPageActive())
+      {
+          t114GpsPageClose();
+          pageHold = 0;
+          pagePointer = pageLastPointer - 1;
+          if(pagePointer < 0)
+              pagePointer = PAGE_MAX - 1;
+          bOneButton = true;
+          sendDisplayHead(true);   // back to the track page
+      }
+      else
+      {
+          t114GpsPageOpen();
+      }
+      return;
+  }
+  #endif
+
   // no oneclick on TRACK=on
   if(!bDisplayTrack)
   {
