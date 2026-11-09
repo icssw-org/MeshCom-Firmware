@@ -1210,7 +1210,12 @@ void commandAction(char *umsg_text, bool ble)
     bool bAnalogSetting=false;
 
     if(bBLEDEBUG && ble)
-        printfdeb("commandAction [%s] ble:%i\n", sVar.c_str(), ble);
+    {
+        if(sVar.startsWith("--aprsis pass"))
+            printfdeb("commandAction [--aprsis pass ***] ble:%i\n", ble);
+        else
+            printfdeb("commandAction [%s] ble:%i\n", sVar.c_str(), ble);
+    }
 
     if(memcmp(sVar.c_str(), "--", 2) != 0)
     {

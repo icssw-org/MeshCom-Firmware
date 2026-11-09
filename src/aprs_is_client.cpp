@@ -57,12 +57,14 @@ struct AprsDns
     volatile bool done;
 };
 static AprsDns s_dns = {0, false};
+static volatile uintptr_t s_dns_gen = 0;   // bumped per cycle; late callbacks of older cycles are ignored
 
 static void aprsDnsCb(const char * /*name*/, const ip_addr_t *ipaddr, void *arg)
 {
-    AprsDns *d = (AprsDns *)arg;
-    d->ip = (ipaddr != NULL) ? (uint32_t)ip_2_ip4(ipaddr)->addr : 0;
-    d->done = true;
+    if((uintptr_t)arg != s_dns_gen)
+        return;   // stale callback from a previous (timed out) cycle
+    s_dns.ip = (ipaddr != NULL) ? (uint32_t)ip_2_ip4(ipaddr)->addr : 0;
+    s_dns.done = true;
 }
 
 static void aprsIsReset(void)
@@ -300,6 +302,7 @@ static AprsStart aprsIsStartCycle(void)
 
     s_rx_len = 0;
     s_deadline_start = millis();
+    s_dns_gen++;
     s_dns.done = false;
     s_dns.ip = 0;
     s_state = AIS_DNS;
@@ -313,7 +316,7 @@ static AprsStart aprsIsStartCycle(void)
     }
     else
     {
-        err_t err = dns_gethostbyname(host, &addr, aprsDnsCb, &s_dns);
+        err_t err = dns_gethostbyname(host, &addr, aprsDnsCb, (void *)s_dns_gen);
         if(err == ERR_OK)
         {
             s_dns.ip = (uint32_t)ip_2_ip4(&addr)->addr;

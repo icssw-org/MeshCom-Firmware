@@ -34,7 +34,7 @@ SO2MK-13>APRS,TCPIP*:!5213.78N/02100.73E_.../...g...t071h45b10132
 - login: `user CALL pass PASS vers MeshCom <firmware version>`
 
 A report is sent only when there is an IP address, a position and at least one reading.
-A temperature of exactly 0.0 C is treated as "no reading".
+A temperature between -0.05 and +0.05 °C is treated as "no reading".
 
 ## Behaviour and limits
 
