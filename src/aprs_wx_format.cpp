@@ -72,6 +72,8 @@ bool aprsWxFormatBody(char *out, size_t out_len,
     if(have_baro)
     {
         int bi = (int)lround((double)qnh_hpa * 10.0);
+        if(bi < 0)
+            bi = 0;
         if(bi > 99999)
             bi = 99999;
         snprintf(bw, sizeof(bw), "b%05d", bi);
