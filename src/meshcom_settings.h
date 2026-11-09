@@ -222,6 +222,14 @@
         M(int, node_wx_flags, 0)                                                                     \
         M(int, node_wind_pin, 0)                                                                     \
         M(float, node_wind_cal, 2.4f)                                                                \
+        /* MCFW-WX1: APRS-IS weather over Wi-Fi: on/off, interval in min (5..1440), WX call (empty = node_call), */ \
+        /* IS server/port and IS passcode (never printed or exported). Persisted, not exported. */      \
+        M(int, node_aprswx, 0)                                                                       \
+        M(int, node_aprswxint, 10)                                                                   \
+        A(char, node_aprswxcall, [10], {0})                                                          \
+        A(char, node_aprsisserver, [40], "euro.aprs2.net")                                           \
+        M(int, node_aprsisport, 14580)                                                               \
+        A(char, node_aprsispass, [16], {0})                                                          \
         /* runtime: the NTP host in use, recopied from node_ownntp on every connect */              \
         A(char, node_ntp, [40], {0})
 #else
