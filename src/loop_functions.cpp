@@ -1774,6 +1774,11 @@ void oledStat()
                   , (unsigned long)oled_last_crc, (unsigned long)oled_skipped);
 }
 
+#if defined(BOARD_HELTEC_T114)
+#include "t114_gps_page.h"
+extern bool nrf52LastRxQuality(int16_t *rssi, int8_t *snr);   // nrf52_main.cpp
+#endif
+
 void sendDisplayHead(bool bInit)
 {
     if((bSetDisplay || pageHold > 0) && !bInit)
@@ -1885,6 +1890,36 @@ void sendDisplayHead(bool bInit)
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
     izeile++;
 
+    #elif defined(BOARD_HELTEC_T114)
+    {
+        // T114 status page, lines 4 and 5 (20 characters per line on the 240 px wide TFT).
+        // GPS: fix state, satellites, HDOP; "off" while the GPS is not switched on.
+        char gpsLine[32];
+        if(bGPSON)
+            snprintf(gpsLine, sizeof(gpsLine), "GPS  : %s %i H%.1f", (posinfo_fix?"fix":"nofix"), (int)posinfo_satcount, fposinfo_hdop);
+        else
+            snprintf(gpsLine, sizeof(gpsLine), "GPS  : off");
+        gpsLine[20] = 0x00;
+        sendDisplay1306(false, false, 3, dzeile[izeile], gpsLine);
+        izeile++;
+
+        // T: time source (GPS, RTC, NTP, HAND, {CET}, INIT = not set yet)
+        // R: RSSI/SNR of the last received frame, "--" until one was received
+        // N: nodes known in the neighbour matrix (without this node)
+        char rxq[16];
+        int16_t lastRssi = 0;
+        int8_t lastSnr = 0;
+        if(nrf52LastRxQuality(&lastRssi, &lastSnr))
+            snprintf(rxq, sizeof(rxq), "%i/%i", (int)lastRssi, (int)lastSnr);
+        else
+            snprintf(rxq, sizeof(rxq), "--");
+
+        char rfLine[40];
+        snprintf(rfLine, sizeof(rfLine), "T:%s R:%s N:%i", cTimeSource, rxq, nbrRowsUsed(nbrMatrix) - 1);
+        rfLine[20] = 0x00;
+        sendDisplay1306(false, true, 3, dzeile[izeile], rfLine);
+        izeile++;
+    }
     #else
     memset(msg_text, 0x00, sizeof(msg_text));
     sendDisplay1306(false, true, 3, dzeile[izeile], msg_text);
@@ -2083,6 +2118,21 @@ void sendDisplayTime()
         if(pagePointer < 0)
             pagePointer=PAGE_MAX-1;
     }
+
+    #if defined(BOARD_HELTEC_T114)
+    // graphic GPS page: updated here once per second, left when its hold time is over
+    if(t114GpsPageActive())
+    {
+        if(pageHold > 0)
+        {
+            t114GpsPageUpdate();
+            return;
+        }
+        t114GpsPageClose();
+        sendDisplayHead(true);   // back to the status page
+        return;
+    }
+    #endif
 
     #if MC_HAS_U8G2   // GRD-01: war die wortgleiche 11-Term-Liste
         if(u8g2 == NULL)
@@ -2911,6 +2961,10 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
     // text immer 30 sec stehenlassen und Display immer ON
     DisplayOffWait = millis() + (30 * 1000); // 30 seconds
     bDisplayIsOff=false;
+
+    #if defined(BOARD_HELTEC_T114)
+    t114GpsPageClose();   // the message is drawn over the GPS page
+    #endif
 
     #if defined(WP_DISP)
     wpMsgIdx = 0;       // frisch eintreffende Nachricht -> kein (alter) Browse-Index oben rechts
