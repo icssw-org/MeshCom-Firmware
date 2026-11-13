@@ -2087,15 +2087,14 @@ void esp32setup()
         bRadio = false;
     #endif
 
-    //#if not defined(BOARD_T_DECK_PRO)
-    // extra source
+    #ifdef BOARD_COUNTRY
+        if(meshcom_settings.node_country == 0)
+            meshcom_settings.node_country = BOARD_COUNTRY;
+    #endif
+
     // > 4.34w we use EU8 instead of EU
     if(meshcom_settings.node_country == 0)
         meshcom_settings.node_country = 8;
-
-    #ifdef BOARD_COUNTRY
-        meshcom_settings.node_country = BOARD_COUNTRY;
-    #endif
 
     lora_setcountry(meshcom_settings.node_country);
 
