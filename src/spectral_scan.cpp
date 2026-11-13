@@ -24,6 +24,10 @@
 #include "lora_setchip.h"
 #include "esp32/esp32_flash.h"
 
+#if defined(ESP32)
+#include "esp_task_wdt.h"
+#endif
+
 #if defined(BOARD_T_DECK_PRO)
 //extern hardware
 #elif defined(SX1262X) || defined(SX126X) || defined(SX1268_V3) || defined(SX1262_V3) || defined(SX1262_E290) || defined(USING_SX1262)
@@ -142,7 +146,7 @@ void sx126x_spectral_scan()
   float freqEnd = 440.2;      // scan end frequency in MHz 
   float samples = 2048;       // amount of samples to be taken
 
-  if(getFreq() > 400)
+  if(getFreq() > 500)
   {
     freqStart = 863.0;          // scan start frequency in MHz 
     freqEnd = 870.0;      // scan end frequency in MHz 
@@ -159,6 +163,8 @@ void sx126x_spectral_scan()
     // get the results
     uint16_t *res;
     res = sx126x_spectral_scan_freq(freqStart, samples);
+
+		esp_task_wdt_reset();
 
     // we have some results, print it
     Serial.print("SCAN ");
