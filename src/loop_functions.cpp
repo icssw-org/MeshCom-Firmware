@@ -4796,22 +4796,22 @@ int sendMessage(char *msg_text, int len, const char *src_override, unsigned int 
             mcSet(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), strMsg.c_str());
         else
         {
-        char cAckId[4] = {0};
-        snprintf(cAckId, sizeof(cAckId), "%03i", meshcom_settings.node_msgid);
-        snprintf(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), "%s{%s", strMsg.c_str(), cAckId);
+            char cAckId[4] = {0};
+            snprintf(cAckId, sizeof(cAckId), "%03i", meshcom_settings.node_msgid);
+            snprintf(aprsmsg.msg_payload, sizeof(aprsmsg.msg_payload), "%s{%s", strMsg.c_str(), cAckId);
 
-        // 0.4: DM outcome counters (docs/dm-transport-impl-plan-20260913.md).
-        // nnn is the same node_msgid value just written into cAckId, before
-        // the increment below.
-        //
-        // P14/P15: nicht fuer ein {ping} -- die Gegenstelle antwortet mit
-        // {pong}, nie mit einem ACK, also stuende es fuer immer als
-        // sent-nie-acked in der DM-Statistik.
-        if(!bPingMsg)
-        {
-            dmstat_sent.fetch_add(1);
-            dmStatNoteSent((uint16_t)meshcom_settings.node_msgid, millis());
-        }
+            // 0.4: DM outcome counters (docs/dm-transport-impl-plan-20260913.md).
+            // nnn is the same node_msgid value just written into cAckId, before
+            // the increment below.
+            //
+            // P14/P15: nicht fuer ein {ping} -- die Gegenstelle antwortet mit
+            // {pong}, nie mit einem ACK, also stuende es fuer immer als
+            // sent-nie-acked in der DM-Statistik.
+            if(!bPingMsg)
+            {
+                dmstat_sent.fetch_add(1);
+                dmStatNoteSent((uint16_t)meshcom_settings.node_msgid, millis());
+            }
         }
     }
 
