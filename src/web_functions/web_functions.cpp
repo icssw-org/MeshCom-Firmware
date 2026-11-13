@@ -4282,7 +4282,7 @@ void sub_page_info()
     { // GW-LINK: MeshCom server path (Internet/Hamnet) and whether it still answers
         char gwl[96];
         gwLinkFormat(gwl, sizeof(gwl), bGATEWAY, meshcom_settings.node_hasIPaddress, millis());
-        web_client.printf("Server: %s<br>", htmlEscape(String(gwl)).c_str());
+        web_client.printf("Gateway: %s<br>", htmlEscape(String(gwl)).c_str());
     }
     #if defined(HAS_ETHERNET)
     web_client.printf("Ethernet Mode: %s<br>", (meshcom_settings.node_netmode == 1 ? "on" : "off"));
