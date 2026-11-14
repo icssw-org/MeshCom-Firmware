@@ -1356,7 +1356,11 @@ int WZ_GPS_Loop() {
             // GPS-02/F1: gleiche Bereichspruefung wie im Fix-Zweig -- dieser
             // Pfad nimmt gerade die Stichproben auf, die das
             // Plausibilitaets-Gate verworfen hat.
-            if(gpsData.year > 2024 && gps.time.isValid()
+            // Ohne Fix ist die Modulzeit nur so gut wie die interne Uhr des GPS-Moduls (bis 1 s
+            // daneben). Ist NTP gueltig, setzt esp32loop/nrf52loop die Uhr bei jedem Durchlauf aus
+            // NTP; dann darf dieser Zweig sie nicht zurueckstellen, sonst springt die sekuendliche
+            // Uhrzeile zwischen beiden Quellen hin und her. Rangfolge: GPS mit Fix, NTP, GPS ohne Fix.
+            if(!bNTPDateTimeValid && gpsData.year > 2024 && gps.time.isValid()
                && gpsDatePlausible((int)gpsData.year, (int)gpsData.month, (int)gpsData.day)
                && gpsTimePlausible((int)gpsData.hour, (int)gpsData.minute, (int)gpsData.second))
             {
