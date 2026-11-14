@@ -51,13 +51,14 @@ inline const TdeckPalette& tdeck_palette(bool dark)
         0xD03A55, 0xFFFFFF, 0xE8A0AC, 0xFFD166, 0x2A2F36, 0x2A2F36, 0, 0x14161A};
     // Light text, muted and bubble fills sit on the RGB565 grid (tdeck_rgb565 is the identity on them) and
     // are >= 1.2:1 off chat_bg; the panel washes out the near-white range (test_light_bubbles_stand_out).
-    // Panel photos (DISP-PAT-01, 2026-11-08): text and outline pure black, muted 0x212021, sent bubble light green,
+    // Panel photos (DISP-PAT-01, 2026-11-08): text and outline pure black, muted 0x212021, sent bubble green 0x8CD38C
+    // (0xCEF3CE read as white on the panel: its green sat in the merged grey steps 29-31, RAW photos),
     // system bubble pale yellow; every chat fill >= 3 RGB565 steps from every other (test_light_panel_measured).
     // Every light bubble and chat group button also gets a 3 px black outline, >= 3:1 against chat_bg and each fill (operator,
     // T-Deck photos 2026-11-08); the outline, not the fill, carries the WCAG 1.4.11 boundary.
     static const TdeckPalette kLight = {
         0xA2182F, 0xFFFFFF, 0xFCEDF0, 0xA2182F, 0xFFFFFF, 0xF9F9F9, 0x000000, 0x212021, 0x767676,
-        0xA2182F, 0xFCEDF0, 0x252323, 0x1A7F37, 0xFFFFFF, 0xCEF3CE, 0xA2182F, 0xFFD166, 0x8A5A00, 0x0969DA,
+        0xA2182F, 0xFCEDF0, 0x252323, 0x1A7F37, 0xFFFFFF, 0x8CD38C, 0xA2182F, 0xFFD166, 0x8A5A00, 0x0969DA,
         0xA2182F, 0xFFFFFF, 0xE8A0AC, 0xFFD166, 0xFFF3C6, 0x000000, 3, 0xCED7DE};
     return dark ? kDark : kLight;
 }
@@ -94,6 +95,17 @@ inline int tdeck_theme_parse(const char* arg)
 inline const char* tdeck_theme_name(uint8_t setting)
 {
     return setting == THEME_DARK ? "dark" : setting == THEME_LIGHT ? "light" : "auto";
+}
+
+// Setup page segments Auto | Light | Dark map to TdeckTheme 0, 2, 1 (enum and stored values unchanged).
+inline uint8_t tdeck_theme_seg_to_setting(uint32_t seg)
+{
+    return seg == 1 ? THEME_LIGHT : seg == 2 ? THEME_DARK : THEME_AUTO;
+}
+
+inline uint32_t tdeck_theme_setting_to_seg(uint8_t setting)
+{
+    return setting == THEME_LIGHT ? 1 : setting == THEME_DARK ? 2 : 0;
 }
 
 // Chat body font size (S/M/L = 12/14/16 px, mc_font_latin_12/14/16). Exact lower-case "s", "m", "l"; else -1.

@@ -132,7 +132,6 @@ lv_obj_t    *dropdown_mapselect;
 lv_obj_t    *btn_clear_messages;
 lv_obj_t    *btn_clear_mh;
 lv_obj_t    *btn_clear_nodes;
-lv_obj_t    *btn_blauto;
 lv_obj_t    *btn_gps;
 lv_obj_t    *btn_mesh;
 lv_obj_t    *btn_noallmsg;
@@ -578,8 +577,9 @@ String getCountryDropbox();
  * SET view new line
  */
 static lv_obj_t *setup_brightness_slider = NULL;
-static lv_obj_t *setup_theme_dropdown = NULL;
-static lv_obj_t *setup_chatfont_dropdown = NULL;
+static lv_obj_t *setup_theme_seg = NULL;
+static lv_obj_t *setup_chatfont_seg = NULL;
+static lv_obj_t *setup_display_seg = NULL;
 
 static void setup_brightness_slider_cb(lv_event_t *e)
 {
@@ -594,24 +594,73 @@ static void setup_brightness_changed_cb(uint8_t level)
         lv_slider_set_value(setup_brightness_slider, level, LV_ANIM_OFF);
 }
 
-static void setup_theme_dropdown_cb(lv_event_t *e)
+// Segmented control: one lv_btnmatrix, checkable, exactly one segment checked, theme styles
+// (checked = tdeck_style_btn_on, else tdeck_style_btn_off). Selector 'sel' is a map of 3 labels.
+static lv_obj_t * setup_segment_create(lv_obj_t * parent, const char ** map, lv_event_cb_t cb)
 {
-    const uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
-    if(sel > THEME_LIGHT || meshcom_settings.node_tdeck_theme == sel)
+    lv_obj_t * m = lv_btnmatrix_create(parent);
+    lv_btnmatrix_set_map(m, map);
+    // CLICK_TRIG: commit on release, so a scroll that starts on a segment or a finger sliding across
+    // segments neither saves nor leaves the shown and stored value apart (LVGL 8.3 fires on press otherwise)
+    lv_btnmatrix_set_btn_ctrl_all(m, (lv_btnmatrix_ctrl_t)(LV_BTNMATRIX_CTRL_CHECKABLE | LV_BTNMATRIX_CTRL_CLICK_TRIG));
+    lv_btnmatrix_set_one_checked(m, true);
+    lv_obj_set_size(m, 210, 30);
+    lv_obj_align(m, LV_ALIGN_LEFT_MID, 77, 0);
+    lv_obj_set_style_pad_all(m, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_gap(m, 4, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(m, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(m, 0, LV_PART_MAIN);
+    lv_obj_add_style(m, &tdeck_style_btn_off, LV_PART_ITEMS | LV_STATE_DEFAULT);
+    lv_obj_add_style(m, &tdeck_style_btn_on, LV_PART_ITEMS | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(m, cb, LV_EVENT_VALUE_CHANGED, NULL);
+    return m;
+}
+
+static void setup_segment_select(lv_obj_t * m, uint32_t idx)
+{
+    if(m != NULL)
+        lv_btnmatrix_set_btn_ctrl(m, (uint16_t)idx, LV_BTNMATRIX_CTRL_CHECKED);
+}
+
+static void setup_sync_segments()
+{
+    setup_segment_select(setup_chatfont_seg, meshcom_settings.node_tdeck_chatfont <= 2 ? meshcom_settings.node_tdeck_chatfont : 0);
+    setup_segment_select(setup_theme_seg, tdeck_theme_setting_to_seg(meshcom_settings.node_tdeck_theme));
+    setup_segment_select(setup_display_seg, brightness_mode_to_seg(brightnessMode()));
+}
+
+static void setup_theme_seg_cb(lv_event_t *e)
+{
+    const uint8_t setting = tdeck_theme_seg_to_setting(lv_btnmatrix_get_selected_btn(lv_event_get_target(e)));
+    if(meshcom_settings.node_tdeck_theme == setting)
         return;
-    meshcom_settings.node_tdeck_theme = (uint8_t)sel;
+    meshcom_settings.node_tdeck_theme = setting;
     save_settings();
     tdeck_theme_reapply();
 }
 
-static void setup_chatfont_dropdown_cb(lv_event_t *e)
+static void setup_chatfont_seg_cb(lv_event_t *e)
 {
-    const uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    const uint16_t sel = lv_btnmatrix_get_selected_btn(lv_event_get_target(e));
     if(sel > 2 || meshcom_settings.node_tdeck_chatfont == sel)
         return;
     meshcom_settings.node_tdeck_chatfont = (uint8_t)sel;
     save_settings();
     tdeck_chatfont_apply();
+}
+
+// Display: Auto = day/night switching, Light = fixed day level, Dark = fixed night level.
+// The slider then edits that slot and the new active level is applied at once (same path as --bl mode).
+static void setup_display_seg_cb(lv_event_t *e)
+{
+    const int mode = brightness_mode_from_seg(lv_btnmatrix_get_selected_btn(lv_event_get_target(e)));
+    if(brightnessMode() == mode)
+        return;
+    brightness_mode_flags(mode, &meshcom_settings.node_bl_auto, &meshcom_settings.node_bl_fnight);
+    save_settings();
+    brightnessTick(true);
+    if(setup_brightness_slider != NULL)
+        lv_slider_set_value(setup_brightness_slider, brightnessActiveLevel(), LV_ANIM_OFF);
 }
 
 lv_obj_t * SET_new_line(lv_obj_t * parent, lv_obj_t * last_line, lv_coord_t distance)
@@ -1461,8 +1510,33 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_event_cb(dropdown_mapselect, btn_event_handler_dropdown_mapselect, LV_EVENT_ALL, NULL);
     lv_dropdown_close(dropdown_mapselect);
 
-    // Line Backlight (TD-23): the callsign and buttons lines are full at 320 px
-    lv_obj_t * setup_line_backlight = SET_new_line(t1, setup_line_buttons, 5);
+    // Font size (S/M/L: chat bubbles and the message input), Theme, Display (backlight mode), Bright.
+    // Segmented controls on one 75 px label column; every segment set re-syncs in tdeck_refresh_SET_view.
+    static const char * seg_font_map[] = {"S", "M", "L", ""};
+    static const char * seg_theme_map[] = {"Auto", "Light", "Dark", ""};
+    static const char * seg_display_map[] = {"Auto", "Light", "Dark", ""};
+
+    lv_obj_t * setup_line_chatfont = SET_new_line(t1, setup_line_buttons, 5);
+
+    lv_obj_t * setup_cf_label = lv_label_create(setup_line_chatfont);
+    lv_obj_align(setup_cf_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_cf_label, 75);
+    lv_label_set_text(setup_cf_label, "Font size ");
+    lv_obj_set_style_text_align(setup_cf_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    setup_chatfont_seg = setup_segment_create(setup_line_chatfont, seg_font_map, setup_chatfont_seg_cb);
+
+    lv_obj_t * setup_line_theme = SET_new_line(t1, setup_line_chatfont, 5);
+
+    lv_obj_t * setup_th_label = lv_label_create(setup_line_theme);
+    lv_obj_align(setup_th_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_th_label, 75);
+    lv_label_set_text(setup_th_label, "Theme ");
+    lv_obj_set_style_text_align(setup_th_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    setup_theme_seg = setup_segment_create(setup_line_theme, seg_theme_map, setup_theme_seg_cb);
+
+    lv_obj_t * setup_line_backlight = SET_new_line(t1, setup_line_theme, 5);
 
     lv_obj_t * setup_bl_label = lv_label_create(setup_line_backlight);
     lv_obj_align(setup_bl_label, LV_ALIGN_LEFT_MID, 0, 0);
@@ -1470,23 +1544,9 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_label_set_text(setup_bl_label, "Display ");
     lv_obj_set_style_text_align(setup_bl_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
 
-    // AUTO DAY/NIGHT BRIGHTNESS (levels are set with SYM+B)
-    btn_blauto = lv_btn_create(setup_line_backlight);
-    lv_obj_align(btn_blauto, LV_ALIGN_TOP_LEFT, 77, 0);
-    lv_obj_set_width(btn_blauto, 140);
-    lv_obj_set_height(btn_blauto, 35);
+    setup_display_seg = setup_segment_create(setup_line_backlight, seg_display_map, setup_display_seg_cb);
 
-    /* Make the button checkable (like a toggle) */
-    lv_obj_add_flag(btn_blauto, LV_OBJ_FLAG_CHECKABLE);
-    lv_obj_add_style(btn_blauto, &tdeck_style_btn_off, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_style(btn_blauto, &tdeck_style_btn_on, LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_add_event_cb(btn_blauto, btn_event_handler_setup_btn, LV_EVENT_VALUE_CHANGED, NULL);
-
-    lv_obj_t * btn_blauto_label = lv_label_create(btn_blauto);
-    lv_label_set_text(btn_blauto_label, "Auto Day/Night");
-    lv_obj_center(btn_blauto_label);
-
-    // Brightness slider (TD-THEME-01): active level 1..BRIGHTNESS_STEPS, same level SYM+B cycles
+    // Brightness slider: edits the slot of the Display segment (Light day, Dark night, Auto the active period)
     lv_obj_t * setup_line_brightness = SET_new_line(t1, setup_line_backlight, 5);
 
     lv_obj_t * setup_br_label = lv_label_create(setup_line_brightness);
@@ -1503,40 +1563,10 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_event_cb(setup_brightness_slider, setup_brightness_slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
     brightnessSetChangeCallback(setup_brightness_changed_cb);
 
-    // Theme (TD-THEME-01): Auto / Dark / Light
-    lv_obj_t * setup_line_theme = SET_new_line(t1, setup_line_brightness, 5);
-
-    lv_obj_t * setup_th_label = lv_label_create(setup_line_theme);
-    lv_obj_align(setup_th_label, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_width(setup_th_label, 75);
-    lv_label_set_text(setup_th_label, "Theme ");
-    lv_obj_set_style_text_align(setup_th_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-
-    setup_theme_dropdown = lv_dropdown_create(setup_line_theme);
-    lv_dropdown_set_options(setup_theme_dropdown, "Auto\nDark\nLight");
-    lv_dropdown_set_selected(setup_theme_dropdown, (uint16_t)(meshcom_settings.node_tdeck_theme <= THEME_LIGHT ? meshcom_settings.node_tdeck_theme : 0));
-    lv_obj_align(setup_theme_dropdown, LV_ALIGN_LEFT_MID, 77, 0);
-    lv_obj_set_size(setup_theme_dropdown, 140, 35);
-    lv_obj_add_event_cb(setup_theme_dropdown, setup_theme_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
-    // Chat text size: S 12 px / M 14 px / L 16 px (applies to existing bubbles at once)
-    lv_obj_t * setup_line_chatfont = SET_new_line(t1, setup_line_theme, 5);
-
-    lv_obj_t * setup_cf_label = lv_label_create(setup_line_chatfont);
-    lv_obj_align(setup_cf_label, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_width(setup_cf_label, 75);
-    lv_label_set_text(setup_cf_label, "Chat text ");
-    lv_obj_set_style_text_align(setup_cf_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-
-    setup_chatfont_dropdown = lv_dropdown_create(setup_line_chatfont);
-    lv_dropdown_set_options(setup_chatfont_dropdown, "S\nM\nL");
-    lv_dropdown_set_selected(setup_chatfont_dropdown, (uint16_t)(meshcom_settings.node_tdeck_chatfont <= 2 ? meshcom_settings.node_tdeck_chatfont : 0));
-    lv_obj_align(setup_chatfont_dropdown, LV_ALIGN_LEFT_MID, 77, 0);
-    lv_obj_set_size(setup_chatfont_dropdown, 140, 35);
-    lv_obj_add_event_cb(setup_chatfont_dropdown, setup_chatfont_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    setup_sync_segments();
 
     // StartupTone
-    lv_obj_t * setup_line_starttone = SET_new_line(t1, setup_line_chatfont, 5);
+    lv_obj_t * setup_line_starttone = SET_new_line(t1, setup_line_brightness, 5);
 
     // StartupTone
     lv_obj_t * setup_stone_label = lv_label_create(setup_line_starttone);
@@ -1875,6 +1905,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_textarea_set_max_length(text_input, 300);  // TD-25: LVGL cap stays above the byte budget; msg_input_budget_cb() clamps
     lv_obj_align(text_input, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_add_style(text_input, &ta_input_style, LV_PART_MAIN);
+    lv_obj_add_style(text_input, &tdeck_style_chat_body, LV_PART_MAIN);   // S/M/L font size, live via tdeck_chatfont_apply
     lv_obj_add_style(text_input, &ta_input_cursor, LV_PART_SELECTED | LV_PART_CURSOR);
 
     lv_textarea_set_placeholder_text(text_input, "Type Message");
@@ -4585,10 +4616,7 @@ void tdeck_refresh_SET_view()
 
     if(setup_brightness_slider != NULL)
         lv_slider_set_value(setup_brightness_slider, brightnessActiveLevel(), LV_ANIM_OFF);
-    if(setup_chatfont_dropdown != NULL)
-        lv_dropdown_set_selected(setup_chatfont_dropdown, (uint16_t)(meshcom_settings.node_tdeck_chatfont <= 2 ? meshcom_settings.node_tdeck_chatfont : 0));
-    if(setup_theme_dropdown != NULL)
-        lv_dropdown_set_selected(setup_theme_dropdown, (uint16_t)(meshcom_settings.node_tdeck_theme <= THEME_LIGHT ? meshcom_settings.node_tdeck_theme : 0));
+    setup_sync_segments();
 
     lv_textarea_set_text(setup_stone, meshcom_settings.node_audio_start);
     lv_textarea_set_text(setup_mtone, meshcom_settings.node_audio_msg);
@@ -4657,11 +4685,6 @@ void tdeck_refresh_SET_view()
         lv_obj_clear_state(btn_soundon, LV_STATE_CHECKED);
     else
         lv_obj_add_state(btn_soundon, LV_STATE_CHECKED);
-    // AUTO DAY/NIGHT BRIGHTNESS (TD-23)
-    if (meshcom_settings.node_bl_auto)
-        lv_obj_add_state(btn_blauto, LV_STATE_CHECKED);
-    else
-        lv_obj_clear_state(btn_blauto, LV_STATE_CHECKED);
     // Save to Flash
     if (meshcom_settings.node_persist_to_flash)
         lv_obj_add_state(btn_persist_to_flash, LV_STATE_CHECKED);

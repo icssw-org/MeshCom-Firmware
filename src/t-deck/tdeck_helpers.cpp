@@ -62,6 +62,11 @@ static void themeNightSync(BlPeriod sun)
     tdeck_theme_set_night(night);
 }
 
+int brightnessMode()
+{
+    return brightness_mode_resolve(meshcom_settings.node_bl_auto, meshcom_settings.node_bl_fnight);
+}
+
 static BlPeriod brightnessEvalPeriod()
 {
     s_bl_elev_ok = false;
@@ -80,8 +85,8 @@ static BlPeriod brightnessEvalPeriod()
 
     const BlPeriod sun = brightness_period(true, c.now_ok, pos_ok, s_bl_was_day);
     themeNightSync(sun);
-    // backlight: with auto off the day level stays in use
-    return meshcom_settings.node_bl_auto ? sun : BL_PERIOD_DAY;
+    // backlight: auto follows the sun, day (auto off) keeps the day level, night keeps the night level
+    return brightness_period_for_mode(brightnessMode(), sun);
 }
 
 uint8_t brightnessActiveLevel()
@@ -100,9 +105,9 @@ void brightnessLogState(const char *why)
     else
         snprintf(elev, sizeof(elev), "na");
 
-    Serial.printf("[TFT];bl;period;%s;level;%d;auto;%d;elev;%s;day;%d;night;%d;why;%s\n",
+    Serial.printf("[TFT];bl;period;%s;level;%d;auto;%d;mode;%s;elev;%s;day;%d;night;%d;why;%s\n",
                   brightness_period_name(s_bl_period), (int)brightnessActiveLevel(),
-                  meshcom_settings.node_bl_auto ? 1 : 0, elev,
+                  meshcom_settings.node_bl_auto ? 1 : 0, brightness_mode_name(brightnessMode()), elev,
                   meshcom_settings.node_bl_day, meshcom_settings.node_bl_night, why);
 }
 

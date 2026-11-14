@@ -14,6 +14,7 @@
 #define BRIGHTNESS_STEPS 16
 
 #include <configuration.h>
+#include <daylight.h> // BlMode helpers (header-only)
 
 extern uint8_t current_brightness_level;
 extern uint8_t pre_sleep_brightness_level;
@@ -27,6 +28,7 @@ void brightnessApplySaved();
 void brightnessTick(bool force);
 void brightnessLogState(const char *why);
 uint8_t brightnessActiveLevel();
+int brightnessMode();                                  // BlMode from node_bl_auto / node_bl_fnight
 void brightnessSetActiveLevel(uint8_t level);          // 1..16, no callback
 void brightnessSetChangeCallback(void (*cb)(uint8_t)); // fired by cycleBrightness (SYM+B) only
 void setKeyboardBacklight(uint8_t value);
