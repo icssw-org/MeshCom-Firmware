@@ -1934,6 +1934,18 @@ void sendDisplayHead(bool bInit)
 
 static void sendDisplayClockLine();
 
+// Time shown in the OLED / e-paper status line: never a few seconds back (display_clock_gate.h).
+static DispClkShown s_dispClkShown = {false, 0};
+static void dispClkShownHms(int *h, int *m, int *sec)
+{
+    const long now_sod = (long)meshcom_settings.node_date_hour * 3600L + (long)meshcom_settings.node_date_minute * 60L
+                       + (long)meshcom_settings.node_date_second;
+    const long sod = dispClkShownSod(s_dispClkShown, now_sod);
+    *h = (int)(sod / 3600L);
+    *m = (int)((sod / 60L) % 60L);
+    *sec = (int)(sod % 60L);
+}
+
 void sendDisplayTrack()
 {
     if(bSetDisplay)
@@ -2249,9 +2261,13 @@ static void sendDisplayClockLine()
         bDisplayDirty = false;
 
         #ifdef BOARD_T_ECHO
-        snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i   %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        { int dh, dm, ds; dispClkShownHms(&dh, &dm, &ds);
+          snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i   %s", dh, dm, ds, cbatt);
+        }
         #else
-        snprintf(msg_text, sizeof(msg_text), "%s%02i:%02i:%02i%s", cstatus, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        { int dh, dm, ds; dispClkShownHms(&dh, &dm, &ds);
+          snprintf(msg_text, sizeof(msg_text), "%s%02i:%02i:%02i%s", cstatus, dh, dm, ds, cbatt);
+        }
         #endif
 
         memcpy(pageText[0], msg_text, 20);
@@ -2333,9 +2349,13 @@ void sendDisplayMainline()
     else
     {
         #ifdef BOARD_T_ECHO
-        snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i    %s", meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        { int dh, dm, ds; dispClkShownHms(&dh, &dm, &ds);
+          snprintf(msg_text, sizeof(msg_text), "%02i:%02i:%02i    %s", dh, dm, ds, cbatt);
+        }
         #else
-        snprintf(msg_text, sizeof(msg_text), "%s%02i:%02i:%02i%s", cstatus, meshcom_settings.node_date_hour, meshcom_settings.node_date_minute, meshcom_settings.node_date_second, cbatt);
+        { int dh, dm, ds; dispClkShownHms(&dh, &dm, &ds);
+          snprintf(msg_text, sizeof(msg_text), "%s%02i:%02i:%02i%s", cstatus, dh, dm, ds, cbatt);
+        }
         #endif
     }
 
@@ -2417,9 +2437,9 @@ void wpRefreshClock()
         snprintf(cstatus, sizeof(cstatus),  "%-4.4s%-1.1s ", SOURCE_VERSION, SOURCE_VERSION_SUB);
 
     char st[40];
-    snprintf(st, sizeof(st), "%s%02i:%02i:%02i%s", cstatus,
-             meshcom_settings.node_date_hour, meshcom_settings.node_date_minute,
-             meshcom_settings.node_date_second, cbatt);
+    int dh, dm, ds;
+    dispClkShownHms(&dh, &dm, &ds);
+    snprintf(st, sizeof(st), "%s%02i:%02i:%02i%s", cstatus, dh, dm, ds, cbatt);
 
     if(bV11)
     {

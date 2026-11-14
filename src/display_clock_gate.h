@@ -72,3 +72,29 @@ static inline const char *dispClkReason(DispClkDecision d)
     }
     return "?";
 }
+
+// The displayed time never runs back by a few seconds. Two time sources (GPS, NTP) can disagree by
+// a second; when the clock is set to the earlier one, the display holds the second it already
+// showed until the clock has caught up. A step back of more than DISP_CLK_HOLD_MAX_S (summer/winter
+// time, a real correction) is shown at once. Times are seconds of the day; midnight wraps.
+#ifndef DISP_CLK_HOLD_MAX_S
+#define DISP_CLK_HOLD_MAX_S 10L
+#endif
+
+struct DispClkShown
+{
+    bool have;    // a time was shown before
+    long sod;     // seconds of the day last shown
+};
+
+static inline long dispClkShownSod(DispClkShown &st, long now_sod)
+{
+    long diff = now_sod - st.sod;
+    if (diff > 43200L)  diff -= 86400L;   // shortest way round midnight
+    if (diff < -43200L) diff += 86400L;
+    if (st.have && diff < 0 && diff >= -DISP_CLK_HOLD_MAX_S)
+        return st.sod;                     // small step back: keep what is shown
+    st.have = true;
+    st.sod = now_sod;
+    return now_sod;
+}
