@@ -19,9 +19,24 @@ static char    g_line[110];
 static uint8_t g_len = 0;
 static bool    g_inLine = false;
 
+// GPS-SKY W4: optional lock around the satellite table, for boards that feed from another task
+// (T-Deck Pro gps_task). The line accumulator is touched only by the feeding task and needs none.
+static void (*g_lock)(void)   = NULL;
+static void (*g_unlock)(void) = NULL;
+static inline void tableLock()   { if(g_lock) g_lock(); }
+static inline void tableUnlock() { if(g_unlock) g_unlock(); }
+
+void gpsSkySetLock(void (*lock)(void), void (*unlock)(void))
+{
+    g_lock = lock;
+    g_unlock = unlock;
+}
+
 void gpsSkyReset()
 {
+    tableLock();
     memset(g_sat, 0, sizeof(g_sat));
+    tableUnlock();
     g_len = 0;
     g_inLine = false;
 }
@@ -107,6 +122,7 @@ bool gpsSkyParseLine(const char *src, uint32_t now_ms)
 
     // fields: 0 id, 1 total, 2 msgNo, 3 inView, then groups of four
     int groups = (nf - 4) / 4;
+    tableLock();
     for(int g = 0; g < groups; g++)
     {
         const char *f = fld[4 + g * 4];
@@ -119,6 +135,7 @@ bool gpsSkyParseLine(const char *src, uint32_t now_ms)
         if(prn > 0 && prn < 256)
             store(sys, prn, elev, azim, snr, now_ms);
     }
+    tableUnlock();
     return true;
 }
 
@@ -154,18 +171,22 @@ void gpsSkyFeed(char c, uint32_t now_ms)
 int gpsSkySatsInView(uint32_t now_ms)
 {
     int n = 0;
+    tableLock();
     for(int i = 0; i < GPS_SKY_MAX_SATS; i++)
         if(slotFresh(g_sat[i], now_ms))
             n++;
+    tableUnlock();
     return n;
 }
 
 int gpsSkyCopy(GpsSkySat *out, int max, uint32_t now_ms)
 {
     int n = 0;
+    tableLock();
     for(int i = 0; i < GPS_SKY_MAX_SATS && n < max; i++)
         if(slotFresh(g_sat[i], now_ms))
             out[n++] = g_sat[i].s;
+    tableUnlock();
     return n;
 }
 

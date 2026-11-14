@@ -10,6 +10,7 @@
 // src/ui_common/gps_protocol.cpp ausgelagert -- siehe dort fuer die
 // Begruendung und den Zwilling src/t5-epaper/peri_gps.cpp.
 #include "../ui_common/gps_protocol.h"
+#include "../gps_skyplot.h"
 
 /* clang-format off */
 
@@ -17,6 +18,14 @@ extern TinyGPSPlus gps;
 void displayInfo();
 
 static TaskHandle_t gps_handle;
+// Guards the sky table: gps_task writes, LVGL loop reads. A spinlock, not a mutex: gps_task is
+// suspended from outside (exit3). A suspended mutex holder would block the loop forever; inside a
+// critical section the holder cannot be switched out before it leaves, so the lock is never held by
+// a suspended task. Sections are short (one GSV sentence or one 40-slot copy).
+static portMUX_TYPE gps_sky_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool gps_sky_lock_set = false;
+static void gps_sky_lock(void)   { taskENTER_CRITICAL(&gps_sky_mux); }
+static void gps_sky_unlock(void) { taskEXIT_CRITICAL(&gps_sky_mux); }
 static double gps_lat=0, gps_lng=0, gps_altitude=0, gps_speed=0;
 static uint16_t gps_year=0;
 static uint8_t gps_month=0, gps_day=0, gps_fix=0;
@@ -44,6 +53,17 @@ bool gps_init(void)
         }
     }
     if(result) {
+        // GSV on UART1 (UBX-CFG-VALSET, RAM layer only) for the sky plot; ACK not awaited
+        static const uint8_t gsv_on[] = {0xB5, 0x62, 0x06, 0x8A, 0x09, 0x00, 0x00, 0x01, 0x00, 0x00,
+                                         0xC5, 0x00, 0x91, 0x20, 0x01, 0x11, 0xFE};
+        SerialGPS.write(gsv_on, sizeof(gsv_on));
+        Serial.println("[GPS ] GSV on (VALSET)");
+
+        if(!gps_sky_lock_set)
+        {
+            gpsSkySetLock(gps_sky_lock, gps_sky_unlock);
+            gps_sky_lock_set = true;
+        }
         Serial.println("GPS Task Create...!");
         gps_task_create();
     }
@@ -61,6 +81,7 @@ void gps_task(void *param)
         while (SerialGPS.available()) {
             int c = SerialGPS.read();
             // Serial.write(c);
+            gpsSkyFeed((char)c, millis());
             if (gps.encode(c)) {
                 displayInfo();
             }

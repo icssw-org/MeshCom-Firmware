@@ -23,6 +23,9 @@ struct GpsSkySat
 enum GpsSkySnrLevel { GPS_SKY_SNR_LOW = 0, GPS_SKY_SNR_MID = 1, GPS_SKY_SNR_HIGH = 2 };
 
 void gpsSkyReset();
+// Optional: lock/unlock around every access to the satellite table. Needed when gpsSkyFeed runs in a
+// different task than the readers (T-Deck Pro). NULL/NULL (default) = no locking.
+void gpsSkySetLock(void (*lock)(void), void (*unlock)(void));
 void gpsSkyFeed(char c, uint32_t now_ms);                    // byte-wise NMEA, stores GSV lines
 bool gpsSkyParseLine(const char *line, uint32_t now_ms);     // one sentence incl. '$' and '*hh'; true if a valid GSV was stored
 bool gpsSkySatFresh(uint32_t seen_ms, uint32_t now_ms);      // millis rollover safe

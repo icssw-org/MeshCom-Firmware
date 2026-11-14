@@ -4595,9 +4595,8 @@ void esp32loop()
             
         if(!bGPSON)
         {
-            #if defined (BOARD_T_DECK_PRO)
-            tdeck_set_gps(false);
-            #endif
+            // T-Deck Pro: no loop-side suspend of gps_task. bGPSON is forced false at boot, so this ran
+            // every 3 s and froze GPS screen 3 (GPS-SKY W4). entry3/exit3 start and stop the task.
 
             if(meshcom_settings.node_postime > 0)
             {
