@@ -162,6 +162,7 @@ extern bool bBMPON;
 extern bool bBMP3ON;
 extern bool bAHT20ON;
 // WX-01 (upstream #999): UV / wind switches (mirrors of node_wx_flags); the state below exists on ESP32 only
+extern bool bAPRSWX;   // MCFW-WX1: mirror of node_aprswx (always false on nRF52)
 extern bool bUVON;
 extern bool bWINDON;
 #if defined(ENABLE_LTR390) || defined(ENABLE_WIND)

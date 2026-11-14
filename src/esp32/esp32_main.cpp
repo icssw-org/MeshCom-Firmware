@@ -37,6 +37,7 @@ SPIClass ethSPI(FSPI);
 #include "esp32_flash.h"
 #include "fw_update.h"       // AU-05 (#1187): update policy (fwTick and friends)
 #include "wifi_start_gate.h" // D15: WiFi start rule for the auto update
+#include "aprs_is_client.h"  // MCFW-WX1: APRS-IS weather
 #include "fw_update_net.h"   // AU-05: CHECK / DOWNLOAD worker (own task)
 #include "rm_au_go.h"        // remote "upd go" state (rm_au_esp32.cpp)
 #include "safeboot/safeboot_ver.h" // AU-12: AU_SAFEBOOT_MIN for the boot demotion
@@ -1506,6 +1507,7 @@ void esp32setup()
     bAnalogCheck = meshcom_settings.node_sset3 & 0x0008;
     bBMP3ON = meshcom_settings.node_sset3 & 0x0010;
     bAHT20ON = meshcom_settings.node_sset3 & 0x0020;
+    bAPRSWX = meshcom_settings.node_aprswx != 0;         // MCFW-WX1
     bUVON = meshcom_settings.node_wx_flags & 0x0001;     // WX-01: UV / wind switches
     bWINDON = meshcom_settings.node_wx_flags & 0x0002;
     bAnalogFilter = meshcom_settings.node_sset3 & 0x0040;
@@ -2450,7 +2452,7 @@ void esp32setup()
     // WIFI
     // AU-05 (#1187): the firmware auto update needs the STA link on its own, independent of the gateway flag.
     // D15: for AU alone only with an SSID set and not in AP mode (wifi_start_gate.h)
-    if(wifiStartWanted(bGATEWAY, bEXTUDP, bWEBSERVER, bNETCONSOLE, meshcom_settings.node_autoupd, bWIFIAP, meshcom_settings.node_ssid))
+    if(wifiStartWanted(bGATEWAY, bEXTUDP, bWEBSERVER, bNETCONSOLE, meshcom_settings.node_autoupd, bWIFIAP, meshcom_settings.node_ssid, bAPRSWX))
     {
         bAllStarted=false;
 
@@ -3195,7 +3197,7 @@ void esp32loop()
     static bool s_bootReadyLogged = false;
     if (!s_bootReadyLogged)
     {
-        bool network_wanted = bGATEWAY || bEXTUDP || bWEBSERVER || bNETCONSOLE;
+        bool network_wanted = bGATEWAY || bEXTUDP || bWEBSERVER || bNETCONSOLE || bAPRSWX;
         // hasIPaddress (global) kippt bei "now listening at IP"; die Kopie in
         // meshcom_settings wird erst spaeter nachgezogen -- beide pruefen.
         extern bool hasIPaddress;
@@ -4893,6 +4895,12 @@ void esp32loop()
         akt_timer = 20 * 1000; // 20 Seconds PARM, UNIT, EQNS and 1st T-Message
     }
         
+    // MCFW-WX1: APRS-IS weather timer + client state machine. Off (default): not a single step is executed.
+    if(bAPRSWX)
+    {
+        aprsWxLoop();
+    }
+
     if (((uint32_t)(millis() - telemetry_timer) >= akt_timer) || (bTeleFirst && bAllStarted))
     {
         bTeleFirst=false;
@@ -5222,7 +5230,7 @@ void esp32loop()
         stopNetConsole();   // no-op unless started
     #endif
 
-    if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE || bKISS)
+    if(bWEBSERVER || bEXTUDP || bGATEWAY || bNETCONSOLE || bKISS || bAPRSWX)
     {
         if (web_timer == 0 || (iWlanWait > 0 && ((uint32_t)(millis() - web_timer) >= 1000)) || ((uint32_t)(millis() - web_timer) >= (HEARTBEAT_INTERVAL * 1000 * 10)))   // repeat 5 minutes
         {

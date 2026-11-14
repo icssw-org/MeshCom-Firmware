@@ -392,6 +392,7 @@ bool bGPSL76K = false;
 bool bBMPON = false;
 bool bBMP3ON = false;
 bool bAHT20ON = false;
+bool bAPRSWX = false;   // MCFW-WX1: APRS-IS weather enabled (mirror of node_aprswx; ESP32 only)
 bool bUVON = false;
 bool bWINDON = false;
 #if defined(ENABLE_LTR390) || defined(ENABLE_WIND)

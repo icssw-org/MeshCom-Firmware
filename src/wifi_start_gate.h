@@ -42,11 +42,20 @@ static inline bool wifiAutoUpdateWantsStart(int autoupd, bool apMode, const char
 }
 
 /**
+ * @brief MCFW-WX1: APRS-IS weather needs the STA link on its own (like AU): only with an SSID, not in AP mode.
+ */
+static inline bool wifiAprsWxWantsStart(bool aprswx, bool apMode, const char *ssid)
+{
+    return aprswx && !apMode && !wifiSsidMissingBlocksStart(apMode, ssid);
+}
+
+/**
  * @brief Startet startNetwork() beim Boot? Die vier Dienste (Gateway, Ext-UDP,
  *        Web, Net-Konsole) wie bisher, AU nur nach wifiAutoUpdateWantsStart().
  */
 static inline bool wifiStartWanted(bool gateway, bool extudp, bool webserver, bool netconsole,
-                                   int autoupd, bool apMode, const char *ssid)
+                                   int autoupd, bool apMode, const char *ssid, bool aprswx = false)
 {
-    return gateway || extudp || webserver || netconsole || wifiAutoUpdateWantsStart(autoupd, apMode, ssid);
+    return gateway || extudp || webserver || netconsole || wifiAutoUpdateWantsStart(autoupd, apMode, ssid)
+           || wifiAprsWxWantsStart(aprswx, apMode, ssid);
 }

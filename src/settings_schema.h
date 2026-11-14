@@ -133,7 +133,14 @@ size_t fieldCount();
     #define SETTINGS_PERSIST_WX(X)                                                               \
         X("node_wxflags", CFG_INT, node_wx_flags, 0.0, 3.0,    CFG_NOESC)                        \
         X("node_windpin", CFG_INT, node_wind_pin, 0.0, 48.0,   CFG_NOESC)                        \
-        X("node_windcal", CFG_FLT, node_wind_cal, 0.1, 100.0,  CFG_NOESC)
+        X("node_windcal", CFG_FLT, node_wind_cal, 0.1, 100.0,  CFG_NOESC)                        \
+        /* MCFW-WX1: APRS-IS weather (NVS keys are limited to 15 chars) */                           \
+        X("node_aprswx",    CFG_INT, node_aprswx,       0.0, 1.0,       CFG_NOESC)                   \
+        X("node_aprswxint", CFG_INT, node_aprswxint,    5.0, 1440.0,    CFG_NOESC)                   \
+        X("node_aprswxcal", CFG_STR, node_aprswxcall,   CFG_NORANGE,    CFG_NOESC)                   \
+        X("node_aprsissrv", CFG_STR, node_aprsisserver, CFG_NORANGE,    CFG_NOESC)                   \
+        X("node_aprsisprt", CFG_INT, node_aprsisport,   1.0, 65535.0,   CFG_NOESC)                   \
+        X("node_aprsispas", CFG_STR, node_aprsispass,   CFG_NORANGE,    CFG_NOESC)
     #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_T_DECK_PRO)
         #define SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X)                                           \
             SETTINGS_PERSIST_WX(X)                                                               \
