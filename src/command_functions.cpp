@@ -141,6 +141,7 @@ extern TinyGPSPlus gps;
 #include <t-deck/lv_obj_functions.h>
 #include <t-deck/tdeck_debug.h>
 #include <t-deck/tdeck_helpers.h>   // TD-23: --bl
+#include <t-deck/tdeck_theme.h>     // TD-THEME-01: --theme
 #include <SD.h>
 #include <esp32/esp32_audio.h>
 #ifdef HEAP_TEST
@@ -1890,7 +1891,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--persiststat           NVS-only values\n");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             printdeb("--keylock on/off        SYM+K lock\n");
-            printdeb("--bl                    backlight state\n--bl auto on/off        day/night switch\n--bl day|night 1-16     saved level\n");
+            printdeb("--bl                    backlight state\n--bl auto on/off        day/night switch\n--bl day|night 1-16     saved level\n--theme auto|dark|light  display theme\n");
             #endif
             #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
             printdeb("--board led on/off      board LED\n");
@@ -6159,7 +6160,7 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_immediate_save ? 1 : 0,
                       meshcom_settings.node_mute ? 1 : 0);
 
-        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d;blday;%d;blnight;%d;blauto;%d\n",
+        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d;blday;%d;blnight;%d;blauto;%d;theme;%d\n",
                       meshcom_settings.node_keyboardlock ? 1 : 0,
                       meshcom_settings.node_backlightlock ? 1 : 0,
                       meshcom_settings.node_kbllightlock ? 1 : 0,
@@ -6169,7 +6170,8 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_wifion ? 1 : 0,
                       meshcom_settings.node_bl_day,
                       meshcom_settings.node_bl_night,
-                      meshcom_settings.node_bl_auto ? 1 : 0);
+                      meshcom_settings.node_bl_auto ? 1 : 0,
+                      (int)meshcom_settings.node_tdeck_theme);
 
         // One path per line: these are free-text char[128] and a ';' inside a
         // path would otherwise split a field of the line above.
@@ -6274,6 +6276,37 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"bl") == 0)
     {
         brightnessLogState("show");
+        return;
+    }
+    else
+    // TD-THEME-01: --theme auto|dark|light. Stored, saved and applied live; bare --theme shows it.
+    // The argument is matched exactly in lower case (tdeck_theme_parse); anything else is an error.
+    if(commandCheck(msg_text+2, (char*)"theme ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 6;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        int t = tdeck_theme_parse(arg);
+        if(t < 0)
+        {
+            Serial.printf("[TFT];theme;error;arg;%s;allowed;auto|dark|light\n", arg);
+            return;
+        }
+        meshcom_settings.node_tdeck_theme = (uint8_t)t;
+        save_settings();
+        tdeck_theme_reapply();
+        Serial.printf("[TFT];theme;%s;dark;%d\n", tdeck_theme_name(meshcom_settings.node_tdeck_theme), tdeck_theme_is_dark() ? 1 : 0);
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"theme") == 0)
+    {
+        Serial.printf("[TFT];theme;%s;dark;%d\n", tdeck_theme_name(meshcom_settings.node_tdeck_theme), tdeck_theme_is_dark() ? 1 : 0);
         return;
     }
     #endif

@@ -252,7 +252,9 @@
         /* TD-23 backlight: day and night level 1..16 (SYM+B), auto day/night switch */             \
         M(int, node_bl_day, 16)                                                                      \
         M(int, node_bl_night, 4)                                                                     \
-        M(bool, node_bl_auto, false)
+        M(bool, node_bl_auto, false)                                                                 \
+        /* TD-THEME-01: 0 auto, 1 dark, 2 light (--theme). Shared block incl. T-Deck Pro (harmless there) */ \
+        M(uint8_t, node_tdeck_theme, 0)
 #else
     #define MESHCOM_SETTINGS_MEMBERS_TDECK(M, A)
 #endif

@@ -152,7 +152,8 @@ size_t fieldCount();
             X("node_wifion",   CFG_BOOL, node_wifion,           CFG_NORANGE, CFG_NOESC)          \
             X("node_blday",    CFG_INT,  node_bl_day,           CFG_NORANGE, CFG_NOESC)          \
             X("node_blnight",  CFG_INT,  node_bl_night,         CFG_NORANGE, CFG_NOESC)          \
-            X("node_blauto",   CFG_BOOL, node_bl_auto,          CFG_NORANGE, CFG_NOESC)
+            X("node_blauto",   CFG_BOOL, node_bl_auto,          CFG_NORANGE, CFG_NOESC)          \
+            X("node_tdtheme",  CFG_CHR,  node_tdeck_theme,      CFG_NORANGE, CFG_NOESC)
     #else
         #define SETTINGS_PERSIST_ONLY_LIST_PLATFORM(X) SETTINGS_PERSIST_WX(X)
     #endif
