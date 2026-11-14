@@ -15,7 +15,7 @@
 #include "gps_functions.h"
 
 #if defined(BOARD_HELTEC_T114)
-#include "t114_gps_page.h"   // GSV parser for the GPS page
+#include "gps_skyplot.h"   // GSV parser for the GPS page
 #endif
 
 #include "gps_filter.h"
@@ -1048,7 +1048,7 @@ void WZ_GPS_Feed()
         if (gps.encode(char(ic))) { updateGPSdata = true; }
 
         #if defined(BOARD_HELTEC_T114)
-        t114GsvFeed(char(ic));   // satellites in view for the GPS page
+        gpsSkyFeed(char(ic), millis());   // satellites in view for the GPS page
         #endif
 
         // NMEA-Echo. msg_text ist der globale Kommandopuffer -- diese Schleife
