@@ -37,6 +37,10 @@ struct TdeckPalette
     uint32_t hdr_off;     // icon state ON header_bg: inactive (dimmed, still >= 3:1)
     uint32_t hdr_err;     // icon state ON header_bg: error / no fix (amber, distinct from hdr_on)
     uint32_t bubble_sys;  // system message bubble (text and muted on it >= 4.5:1); hints use muted
+    uint32_t bubble_border;   // outline of every message bubble (>= 3:1 vs bg, surface and each bubble fill)
+    uint8_t bubble_border_w;  // its width in px; 0 = no outline (dark mode: the panel resolves the dark fills)
+    uint32_t chat_bg;         // chat area background (light: blue-grey so the white bubbles stand off it; dark: = bg, which
+                              // shows like LVGL's dark screen colour 0x15171A that the chat tab showed before)
 };
 
 inline const TdeckPalette& tdeck_palette(bool dark)
@@ -44,11 +48,15 @@ inline const TdeckPalette& tdeck_palette(bool dark)
     static const TdeckPalette kDark = {
         0xA2182F, 0xFFFFFF, 0x3A1D24, 0xD03A55, 0x14161A, 0x1B1E23, 0xE8E8E8, 0xA8ADB5, 0x8A8F98,
         0xB3203A, 0x3A1D24, 0xE8E8E8, 0x3FB950, 0x22262C, 0x3A1D24, 0xFF8A9B, 0xFFD166, 0xFFD166, 0x58A6FF,
-        0xD03A55, 0xFFFFFF, 0xE8A0AC, 0xFFD166, 0x2A2F36};
+        0xD03A55, 0xFFFFFF, 0xE8A0AC, 0xFFD166, 0x2A2F36, 0x2A2F36, 0, 0x14161A};
+    // Light text, muted and bubble fills sit on the RGB565 grid (tdeck_rgb565 is the identity on them) and
+    // are >= 1.2:1 off chat_bg; the panel washes out the near-white range (test_light_bubbles_stand_out).
+    // Every light bubble and chat group button also gets a 3 px near-black outline, >= 3:1 against chat_bg and each fill (operator,
+    // T-Deck photos 2026-11-08); the outline, not the fill, carries the WCAG 1.4.11 boundary.
     static const TdeckPalette kLight = {
-        0xA2182F, 0xFFFFFF, 0xFCEDF0, 0xA2182F, 0xFFFFFF, 0xF9F9F9, 0x252323, 0x595959, 0x767676,
-        0xA2182F, 0xFCEDF0, 0x252323, 0x1A7F37, 0xF0F0F0, 0xFCEDF0, 0xA2182F, 0xFFD166, 0x8A5A00, 0x0969DA,
-        0xA2182F, 0xFFFFFF, 0xE8A0AC, 0xFFD166, 0xE6ECF2};
+        0xA2182F, 0xFFFFFF, 0xFCEDF0, 0xA2182F, 0xFFFFFF, 0xF9F9F9, 0x181818, 0x4A494A, 0x767676,
+        0xA2182F, 0xFCEDF0, 0x252323, 0x1A7F37, 0xFFFFFF, 0xFFEBEF, 0xA2182F, 0xFFD166, 0x8A5A00, 0x0969DA,
+        0xA2182F, 0xFFFFFF, 0xE8A0AC, 0xFFD166, 0xEFF7FF, 0x181818, 3, 0xCED7DE};
     return dark ? kDark : kLight;
 }
 
@@ -84,6 +92,28 @@ inline int tdeck_theme_parse(const char* arg)
 inline const char* tdeck_theme_name(uint8_t setting)
 {
     return setting == THEME_DARK ? "dark" : setting == THEME_LIGHT ? "light" : "auto";
+}
+
+// Chat body font size (S/M/L = 12/14/16 px, mc_font_latin_12/14/16). Exact lower-case "s", "m", "l"; else -1.
+inline int tdeck_chatfont_parse(const char* arg)
+{
+    if(arg == NULL || arg[0] == 0 || arg[1] != 0)
+        return -1;
+    return arg[0] == 's' ? 0 : arg[0] == 'm' ? 1 : arg[0] == 'l' ? 2 : -1;
+}
+
+inline const char* tdeck_chatfont_name(uint8_t v) { return v == 1 ? "m" : v == 2 ? "l" : "s"; }
+
+inline int tdeck_chatfont_px(uint8_t v) { return v == 1 ? 14 : v == 2 ? 16 : 12; }
+
+// The T-Deck panel runs LVGL at LV_COLOR_DEPTH 16: lv_color_hex() truncates to RGB565 (5 bits red and blue,
+// 6 bits green), so near white only every 8th red/blue level exists. Returns the 0xRRGGBB the panel really
+// shows (bits replicated back to 8 bit), so contrast checks judge the displayed colour, not the token.
+inline uint32_t tdeck_rgb565(uint32_t c)
+{
+    uint32_t r5 = (c >> 19) & 0x1F, g6 = (c >> 10) & 0x3F, b5 = (c >> 3) & 0x1F;
+    uint32_t r = (r5 << 3) | (r5 >> 2), g = (g6 << 2) | (g6 >> 4), b = (b5 << 3) | (b5 >> 2);
+    return (r << 16) | (g << 8) | b;
 }
 
 // WCAG 2.x contrast ratio (1..21) of two 0xRRGGBB colours.

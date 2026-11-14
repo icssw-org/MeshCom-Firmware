@@ -579,6 +579,7 @@ String getCountryDropbox();
  */
 static lv_obj_t *setup_brightness_slider = NULL;
 static lv_obj_t *setup_theme_dropdown = NULL;
+static lv_obj_t *setup_chatfont_dropdown = NULL;
 
 static void setup_brightness_slider_cb(lv_event_t *e)
 {
@@ -601,6 +602,16 @@ static void setup_theme_dropdown_cb(lv_event_t *e)
     meshcom_settings.node_tdeck_theme = (uint8_t)sel;
     save_settings();
     tdeck_theme_reapply();
+}
+
+static void setup_chatfont_dropdown_cb(lv_event_t *e)
+{
+    const uint16_t sel = lv_dropdown_get_selected(lv_event_get_target(e));
+    if(sel > 2 || meshcom_settings.node_tdeck_chatfont == sel)
+        return;
+    meshcom_settings.node_tdeck_chatfont = (uint8_t)sel;
+    save_settings();
+    tdeck_chatfont_apply();
 }
 
 lv_obj_t * SET_new_line(lv_obj_t * parent, lv_obj_t * last_line, lv_coord_t distance)
@@ -811,6 +822,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_t *t8 = lv_tabview_add_tab(tv, "\uF0C9");
     lv_obj_t *t1 = lv_tabview_add_tab(tv, LV_SYMBOL_SETTINGS);
 
+    lv_obj_add_style(t2, &tdeck_style_chat_bg, LV_PART_MAIN);   // t2 is the page around msg_list and the group bar
     lv_obj_set_scroll_dir(t2, LV_DIR_VER);
     lv_obj_set_scroll_dir(t5, LV_DIR_VER);
     lv_obj_set_scroll_dir(t3, LV_DIR_VER);
@@ -1507,8 +1519,24 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_set_size(setup_theme_dropdown, 140, 35);
     lv_obj_add_event_cb(setup_theme_dropdown, setup_theme_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
+    // Chat text size: S 12 px / M 14 px / L 16 px (applies to existing bubbles at once)
+    lv_obj_t * setup_line_chatfont = SET_new_line(t1, setup_line_theme, 5);
+
+    lv_obj_t * setup_cf_label = lv_label_create(setup_line_chatfont);
+    lv_obj_align(setup_cf_label, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_width(setup_cf_label, 75);
+    lv_label_set_text(setup_cf_label, "Chat text ");
+    lv_obj_set_style_text_align(setup_cf_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+
+    setup_chatfont_dropdown = lv_dropdown_create(setup_line_chatfont);
+    lv_dropdown_set_options(setup_chatfont_dropdown, "S\nM\nL");
+    lv_dropdown_set_selected(setup_chatfont_dropdown, (uint16_t)(meshcom_settings.node_tdeck_chatfont <= 2 ? meshcom_settings.node_tdeck_chatfont : 0));
+    lv_obj_align(setup_chatfont_dropdown, LV_ALIGN_LEFT_MID, 77, 0);
+    lv_obj_set_size(setup_chatfont_dropdown, 140, 35);
+    lv_obj_add_event_cb(setup_chatfont_dropdown, setup_chatfont_dropdown_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
     // StartupTone
-    lv_obj_t * setup_line_starttone = SET_new_line(t1, setup_line_theme, 5);
+    lv_obj_t * setup_line_starttone = SET_new_line(t1, setup_line_chatfont, 5);
 
     // StartupTone
     lv_obj_t * setup_stone_label = lv_label_create(setup_line_starttone);
@@ -1679,7 +1707,7 @@ void setDisplayLayout(lv_obj_t *parent)
     lv_obj_add_style(msg_list, &cell_style1, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_size(msg_list, 300, LV_VER_RES * 0.6);
     lv_obj_align(msg_list, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_opa(msg_list, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_add_style(msg_list, &tdeck_style_chat_bg, LV_PART_MAIN);   // chat area colour via the theme (live switch)
     lv_obj_set_style_border_width(msg_list, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(msg_list, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_row(msg_list, 0, LV_PART_MAIN);
@@ -3108,9 +3136,9 @@ static MsgTabEntry *msg_tabs_get_or_create_entry(const String &group, int *index
     lv_obj_add_style(new_entry.button, &tdeck_style_tab_sel, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(new_entry.button, LV_OPA_70, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(new_entry.button, LV_OPA_100, LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_border_width(new_entry.button, 0, LV_PART_MAIN);
+    // border and padding come from tdeck_style_grp_btn (outline in light mode); a local value would override it
+    lv_obj_add_style(new_entry.button, &tdeck_style_grp_btn, LV_PART_MAIN);
     lv_obj_set_style_radius(new_entry.button, 8, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(new_entry.button, 6, LV_PART_MAIN);
     lv_obj_set_style_min_width(new_entry.button, 35, LV_PART_MAIN);
     lv_obj_add_flag(new_entry.button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_event_cb(new_entry.button, msg_tab_button_event_cb, LV_EVENT_CLICKED, NULL);
@@ -3492,7 +3520,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     if(max_bubble_width < 80)
         max_bubble_width = 80;
 
-    lv_coord_t content_max_width = max_bubble_width - 12; // allow for bubble padding
+    lv_coord_t content_max_width = max_bubble_width - 16; // 2 x 8 px horizontal padding (pad + border = 8)
     if(content_max_width < 40)
         content_max_width = max_bubble_width;
 
@@ -3500,8 +3528,9 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_obj_set_width(bubble_obj, LV_SIZE_CONTENT);
     lv_obj_set_height(bubble_obj, LV_SIZE_CONTENT);
     lv_obj_set_style_max_width(bubble_obj, max_bubble_width, LV_PART_MAIN);
-    lv_obj_set_style_border_width(bubble_obj, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(bubble_obj, 8, LV_PART_MAIN);
+    // TD-THEME-01: no local border width here; the theme bubble style owns it (outline in light mode only),
+    // and a local value would override that style.
+    // pad_all comes from the theme bubble style (8 - border width) so the outer geometry equals the dark one.
     lv_obj_set_style_pad_row(bubble_obj, 4, LV_PART_MAIN);
     lv_obj_clear_flag(bubble_obj, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(bubble_obj, LV_FLEX_FLOW_COLUMN);
@@ -3642,6 +3671,7 @@ static void msg_list_append_bubble(const MsgBubble &bubble)
     lv_label_set_text(body, bubble.body.c_str());
     lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(body, content_max_width);
+    lv_obj_add_style(body, &tdeck_style_chat_body, LV_PART_MAIN);   // S/M/L chat text size
 
     // footer row with timestamp aligned to right-bottom
     if(bubble.timestamp.length() > 0)
@@ -4555,6 +4585,8 @@ void tdeck_refresh_SET_view()
 
     if(setup_brightness_slider != NULL)
         lv_slider_set_value(setup_brightness_slider, brightnessActiveLevel(), LV_ANIM_OFF);
+    if(setup_chatfont_dropdown != NULL)
+        lv_dropdown_set_selected(setup_chatfont_dropdown, (uint16_t)(meshcom_settings.node_tdeck_chatfont <= 2 ? meshcom_settings.node_tdeck_chatfont : 0));
     if(setup_theme_dropdown != NULL)
         lv_dropdown_set_selected(setup_theme_dropdown, (uint16_t)(meshcom_settings.node_tdeck_theme <= THEME_LIGHT ? meshcom_settings.node_tdeck_theme : 0));
 

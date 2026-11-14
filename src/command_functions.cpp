@@ -1891,7 +1891,7 @@ void commandAction(char *umsg_text, bool ble)
             printdeb("--persiststat           NVS-only values\n");
             #if defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
             printdeb("--keylock on/off        SYM+K lock\n");
-            printdeb("--bl                    backlight state\n--bl auto on/off        day/night switch\n--bl day|night 1-16     saved level\n--theme auto|dark|light  display theme\n");
+            printdeb("--bl                    backlight state\n--bl auto on/off        day/night switch\n--bl day|night 1-16     saved level\n--theme auto|dark|light  display theme\n--chatfont s|m|l        chat text 12/14/16 px\n");
             #endif
             #if defined(BOARD_LED) || (defined(LED_PIN) && defined(LED_PIXEL) && LED_PIXEL > 0)
             printdeb("--board led on/off      board LED\n");
@@ -6160,7 +6160,7 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_immediate_save ? 1 : 0,
                       meshcom_settings.node_mute ? 1 : 0);
 
-        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d;blday;%d;blnight;%d;blauto;%d;theme;%d\n",
+        Serial.printf("[PERSIST];ui;kblock;%d;bllock;%d;kllock;%d;kblsync;%d;map;%d;modus;%d;wifion;%d;blday;%d;blnight;%d;blauto;%d;theme;%d;chatfont;%d\n",
                       meshcom_settings.node_keyboardlock ? 1 : 0,
                       meshcom_settings.node_backlightlock ? 1 : 0,
                       meshcom_settings.node_kbllightlock ? 1 : 0,
@@ -6171,7 +6171,8 @@ void commandAction(char *umsg_text, bool ble)
                       meshcom_settings.node_bl_day,
                       meshcom_settings.node_bl_night,
                       meshcom_settings.node_bl_auto ? 1 : 0,
-                      (int)meshcom_settings.node_tdeck_theme);
+                      (int)meshcom_settings.node_tdeck_theme,
+                      (int)meshcom_settings.node_tdeck_chatfont);
 
         // One path per line: these are free-text char[128] and a ';' inside a
         // path would otherwise split a field of the line above.
@@ -6307,6 +6308,36 @@ void commandAction(char *umsg_text, bool ble)
     if(commandCheck(msg_text+2, (char*)"theme") == 0)
     {
         Serial.printf("[TFT];theme;%s;dark;%d\n", tdeck_theme_name(meshcom_settings.node_tdeck_theme), tdeck_theme_is_dark() ? 1 : 0);
+        return;
+    }
+    else
+    // --chatfont s|m|l: chat bubble body text 12/14/16 px. Exact lower-case (tdeck_chatfont_parse); bare shows it.
+    if(commandCheck(msg_text+2, (char*)"chatfont ") == 0)
+    {
+        char arg[16];
+        size_t n = 0;
+        const char *a = msg_text + 2 + 9;
+        while(*a == ' ')
+            a++;
+        while(*a && *a != ' ' && *a != '\r' && *a != '\n' && n < sizeof(arg) - 1)
+            arg[n++] = *a++;
+        arg[n] = 0;
+        int t = tdeck_chatfont_parse(arg);
+        if(t < 0)
+        {
+            Serial.printf("[TFT];chatfont;error;arg;%s;allowed;s|m|l\n", arg);
+            return;
+        }
+        meshcom_settings.node_tdeck_chatfont = (uint8_t)t;
+        save_settings();
+        tdeck_chatfont_apply();
+        Serial.printf("[TFT];chatfont;%s\n", tdeck_chatfont_name(meshcom_settings.node_tdeck_chatfont));
+        return;
+    }
+    else
+    if(commandCheck(msg_text+2, (char*)"chatfont") == 0)
+    {
+        Serial.printf("[TFT];chatfont;%s\n", tdeck_chatfont_name(meshcom_settings.node_tdeck_chatfont));
         return;
     }
     #endif

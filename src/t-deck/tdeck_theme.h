@@ -24,7 +24,9 @@ bool tdeck_theme_on_change(void (*cb)(void));
 
 extern lv_style_t tdeck_style_header, tdeck_style_header_text, tdeck_style_tab, tdeck_style_tab_sel,
     tdeck_style_screen, tdeck_style_surface, tdeck_style_text, tdeck_style_muted, tdeck_style_btn_on,
-    tdeck_style_btn_off, tdeck_style_bubble_in, tdeck_style_bubble_out, tdeck_style_bubble_sys;
+    tdeck_style_btn_off, tdeck_style_bubble_in, tdeck_style_bubble_out, tdeck_style_bubble_sys, tdeck_style_chat_bg, tdeck_style_chat_body, tdeck_style_grp_btn;
+// Re-reads meshcom_settings.node_tdeck_chatfont into tdeck_style_chat_body and restyles the chat bodies.
+void tdeck_chatfont_apply();
 
 #endif
 #endif

@@ -254,7 +254,9 @@
         M(int, node_bl_night, 4)                                                                     \
         M(bool, node_bl_auto, false)                                                                 \
         /* TD-THEME-01: 0 auto, 1 dark, 2 light (--theme). Shared block incl. T-Deck Pro (harmless there) */ \
-        M(uint8_t, node_tdeck_theme, 0)
+        M(uint8_t, node_tdeck_theme, 0)                                                              \
+        /* 0 S (12 px), 1 M (14 px), 2 L (16 px) chat body text (--chatfont) */                      \
+        M(uint8_t, node_tdeck_chatfont, 0)
 #else
     #define MESHCOM_SETTINGS_MEMBERS_TDECK(M, A)
 #endif

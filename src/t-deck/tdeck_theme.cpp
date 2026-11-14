@@ -8,7 +8,7 @@
 
 lv_style_t tdeck_style_header, tdeck_style_header_text, tdeck_style_tab, tdeck_style_tab_sel, tdeck_style_screen,
     tdeck_style_surface, tdeck_style_text, tdeck_style_muted, tdeck_style_btn_on, tdeck_style_btn_off,
-    tdeck_style_bubble_in, tdeck_style_bubble_out, tdeck_style_bubble_sys;
+    tdeck_style_bubble_in, tdeck_style_bubble_out, tdeck_style_bubble_sys, tdeck_style_chat_bg, tdeck_style_chat_body, tdeck_style_grp_btn;
 
 static bool s_inited = false;
 static lv_disp_t* s_disp = NULL;
@@ -67,6 +67,58 @@ static void fill_styles(const TdeckPalette& p)
     lv_style_set_bg_opa(&tdeck_style_bubble_sys, LV_OPA_COVER);
     lv_style_set_bg_color(&tdeck_style_bubble_sys, C(p.bubble_sys));
     lv_style_set_text_color(&tdeck_style_bubble_sys, C(p.text));
+
+    // Bubble outline: the style owns the border, so a theme switch restyles existing bubbles too.
+    lv_style_t* bubbles[3] = {&tdeck_style_bubble_in, &tdeck_style_bubble_out, &tdeck_style_bubble_sys};
+    for(lv_style_t* st : bubbles)
+    {
+        lv_style_set_border_width(st, p.bubble_border_w);
+        lv_style_set_border_color(st, C(p.bubble_border));
+        lv_style_set_border_opa(st, LV_OPA_COVER);
+        lv_style_set_border_side(st, LV_BORDER_SIDE_FULL);
+        // the border eats into the content box: shrink the padding by it so the outer geometry and the
+        // content area equal the dark (no border) bubble at every theme
+        lv_style_set_pad_all(st, 8 - p.bubble_border_w);
+    }
+
+    // Chat group buttons (*, 262, 9 under the chat): the same outline, so they read as buttons in light mode;
+    // their 6 px padding absorbs it like the bubbles' 8 px.
+    lv_style_set_border_width(&tdeck_style_grp_btn, p.bubble_border_w);
+    lv_style_set_border_color(&tdeck_style_grp_btn, C(p.bubble_border));
+    lv_style_set_border_opa(&tdeck_style_grp_btn, LV_OPA_COVER);
+    lv_style_set_border_side(&tdeck_style_grp_btn, LV_BORDER_SIDE_FULL);
+    lv_style_set_pad_all(&tdeck_style_grp_btn, 6 - p.bubble_border_w);
+
+    lv_style_set_bg_opa(&tdeck_style_chat_bg, LV_OPA_COVER);
+    lv_style_set_bg_color(&tdeck_style_chat_bg, C(p.chat_bg));
+}
+
+static const lv_font_t* chat_font()
+{
+    switch(tdeck_chatfont_px(meshcom_settings.node_tdeck_chatfont))
+    {
+        case 14: return &mc_font_latin_14;
+        case 16: return &mc_font_latin_16;
+        default: return &mc_font_latin_12;
+    }
+}
+
+// Chat body font from meshcom_settings.node_tdeck_chatfont; existing labels follow through the shared style.
+void tdeck_chatfont_apply()
+{
+    if(!s_inited)
+        return;
+    lv_style_set_text_font(&tdeck_style_chat_body, chat_font());
+    lv_obj_report_style_change(&tdeck_style_chat_body);
+    // a larger font grows every bubble; keep the newest message in view
+    extern lv_obj_t* msg_list;
+    if(msg_list != NULL)
+    {
+        lv_obj_update_layout(msg_list);
+        lv_obj_t* last = lv_obj_get_child(msg_list, -1);
+        if(last != NULL)
+            lv_obj_scroll_to_view(last, LV_ANIM_OFF);
+    }
 }
 
 static void apply(bool dark)
@@ -98,12 +150,13 @@ void tdeck_theme_init(lv_disp_t* disp)
                              &tdeck_style_tab_sel, &tdeck_style_screen, &tdeck_style_surface,
                              &tdeck_style_text, &tdeck_style_muted, &tdeck_style_btn_on,
                              &tdeck_style_btn_off, &tdeck_style_bubble_in, &tdeck_style_bubble_out,
-                             &tdeck_style_bubble_sys};
+                             &tdeck_style_bubble_sys, &tdeck_style_chat_bg, &tdeck_style_chat_body, &tdeck_style_grp_btn};
         for(lv_style_t* s : all)
             lv_style_init(s);
     }
     s_disp = disp;
     s_inited = true;
+    lv_style_set_text_font(&tdeck_style_chat_body, chat_font());
     apply(resolve_now());
 }
 
