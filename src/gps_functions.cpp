@@ -874,6 +874,19 @@ void WZ_GPS_Deactivate() {
             digitalWrite(GPS_EN_PIN, LOW);
         #endif /*GPS_EN_PIN*/
     #endif
+
+    #if defined(BOARD_HELTEC_V4) && defined(HV4_GPS_EN_PIN)
+        gpio_hold_dis((gpio_num_t) HV4_GPS_EN_PIN);
+        pinMode(HV4_GPS_EN_PIN, OUTPUT);
+        digitalWrite(HV4_GPS_EN_PIN, !HV4_GPS_EN_ACTIVE);   // GNSS off
+        pinMode(HV4_GPS_WAKE_PIN, OUTPUT);
+        digitalWrite(HV4_GPS_WAKE_PIN, LOW);
+        // Release the lines into the unpowered kit (UART TX idles HIGH, reset is HIGH),
+        // so it is not fed through its IO clamp diodes. GPSSerial.end() is not used: on a
+        // UART that was never begun it takes a NULL mutex. A later WZ_GPS_Init re-attaches TX.
+        pinMode(GPS_TX_PIN, INPUT);
+        pinMode(HV4_GPS_RST_PIN, INPUT);
+    #endif
 }
 
 void WZ_GPS_Reset() {
@@ -886,6 +899,28 @@ void WZ_GPS_Reset() {
             digitalWrite(GPS_EN_PIN, HIGH);
             delay(100);
         #endif /*GPS_EN_PIN*/
+    #endif
+
+    #if defined(BOARD_HELTEC_V4) && defined(HV4_GPS_EN_PIN)
+    if(!bGPSON)
+    {
+        // GPS switched off (e.g. `--gps reset` while off): keep the kit unpowered
+        WZ_GPS_Deactivate();
+    }
+    else
+    {
+        // Heltec V4 (GPSV4-01): a deep-sleep hold may still sit on the enable pad
+        gpio_hold_dis((gpio_num_t) HV4_GPS_EN_PIN);
+        pinMode(HV4_GPS_EN_PIN, OUTPUT);
+        digitalWrite(HV4_GPS_EN_PIN, HV4_GPS_EN_ACTIVE);   // GNSS on (active LOW)
+        pinMode(HV4_GPS_WAKE_PIN, OUTPUT);
+        digitalWrite(HV4_GPS_WAKE_PIN, HIGH);
+        delay(1000);   // power-up warm-up, as Meshtastic
+        pinMode(HV4_GPS_RST_PIN, OUTPUT);
+        digitalWrite(HV4_GPS_RST_PIN, LOW);
+        delay(150);
+        digitalWrite(HV4_GPS_RST_PIN, HIGH);
+    }
     #endif
 
     #if defined(USE_HELTEC_T114) or defined(BOARD_T_ECHO)
@@ -1488,3 +1523,11 @@ bool baroBaseLatchAllowed()
 
     return true;
 }
+
+// Heltec V4 GNSS (Meshtastic variants/esp32s3/heltec_v4/variant.h): GNSS TX -> ESP RX is GPIO39, ESP TX -> GNSS RX
+// is GPIO38, enable GPIO34 (active LOW), reset GPIO42, PPS GPIO41. I2C therefore must not sit on 41/42 (it moved to 4/3).
+#if defined(BOARD_HELTEC_V4)
+static_assert(GPS_RX_PIN == 39 && GPS_TX_PIN == 38, "Heltec V4: GNSS RX must be 39 (GNSS TX) and TX 38 (GNSS RX), not swapped");
+static_assert(HV4_GPS_EN_PIN == 34 && HV4_GPS_RST_PIN == 42, "Heltec V4: GNSS enable must be 34 and reset 42");
+static_assert(I2C_SDA != 41 && I2C_SDA != 42 && I2C_SCL != 41 && I2C_SCL != 42, "Heltec V4: I2C must not use 41/42 (GNSS PPS / reset)");
+#endif

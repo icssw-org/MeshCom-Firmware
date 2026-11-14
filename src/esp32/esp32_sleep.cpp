@@ -10,6 +10,7 @@
 #endif
 
 #include "configuration.h"
+#include "gps_functions.h"   // GPSV4-01: WZ_GPS_Deactivate() before deep sleep
 #include "printfdeb_functions.h"
 #include "lora_functions.h"
 #include "esp32_pmu.h"
@@ -155,7 +156,16 @@ void esp32EnterDeepSleep()
     // have called this function") so it is harmless to call unconditionally
     // on the boards that need it; released on the wake side alongside each
     // pin's own gpio_hold_dis().
-    #if defined(RADIO_LDO_EN) || defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS)
+    // Heltec V4 (GPSV4-01): GNSS off (enable HIGH, its TX/reset lines released) and the enable held;
+    // GPIO34 is not an RTC pad, so it needs the deep-sleep hold too. Released in WZ_GPS_Reset()/Deactivate().
+    // Note: on the S3, gpio_deep_sleep_hold_en() latches EVERY digital pad (22-48) at its pre-sleep state,
+    // not only the gpio_hold_en() ones; that also keeps V4 Vext (36) HIGH = off through the sleep.
+    #if defined(BOARD_HELTEC_V4) && defined(HV4_GPS_EN_PIN)
+    WZ_GPS_Deactivate();
+    gpio_hold_en((gpio_num_t) HV4_GPS_EN_PIN);
+    #endif
+
+    #if defined(RADIO_LDO_EN) || defined(BOARD_T_DECK) || defined(BOARD_T_DECK_PLUS) || defined(BOARD_HELTEC_V4)
     gpio_deep_sleep_hold_en();
     #endif
 

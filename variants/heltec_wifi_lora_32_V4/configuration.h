@@ -44,8 +44,9 @@
 
 #define RESET_OLED RST_OLED
 
-#define I2C_SDA 41 // I2C pins for this board
-#define I2C_SCL 42
+// GPSV4-01: moved off 41/42 (GNSS PPS / reset on V4, see below); 4/3 are free header pins.
+#define I2C_SDA 4 // I2C pins for this board
+#define I2C_SCL 3
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
@@ -88,13 +89,20 @@
 // Funktionsentfernung, keine Bereinigung.
 #define OneWire_GPIO -1
 
-// V4 has different GPS pins than V3
-#define GPS_RX_PIN 38
-#define GPS_TX_PIN 39
+// V4 has different GPS pins than V3 (source: Meshtastic variants/esp32s3/heltec_v4/variant.h)
+#define GPS_RX_PIN 39 // ESP RX <- GNSS TX
+#define GPS_TX_PIN 38 // ESP TX -> GNSS RX
+#define HV4_GPS_EN_PIN 34 // GNSS power enable, active LOW
+#define HV4_GPS_EN_ACTIVE LOW
+#define HV4_GPS_WAKE_PIN 40
+#define HV4_GPS_RST_PIN 42
+#define HV4_GPS_PPS_PIN 41
 
 // White user LED, GPIO35, active HIGH, as on V3: `--board led` heartbeat (off by default) and RM
 // "led on|flash|off"; REMOTE_LED_PIN derives from BOARD_LED. V4R8 has its LED on GPIO46 (GPIO35 is
 // octal PSRAM there); untested on V4 hardware until someone reports.
+// V4R8 is not supported: GPIO34 (GNSS enable here) is an octal-PSRAM line on the S3R8 (PSRAM is not initialised by this
+// env), and the GNSS enable on R8 is reportedly GPIO42. Target is the S3R2 V4 only, no runtime guard.
 #define BOARD_LED 35
 
 // PA Control Pins (defined in platformio.ini build flags)

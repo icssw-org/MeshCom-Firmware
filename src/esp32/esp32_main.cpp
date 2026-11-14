@@ -4232,6 +4232,16 @@ void esp32loop()
         #if defined(GPS_SWITCH)
             digitalWrite(GPS_SWITCH, LOW);
         #endif
+        #if defined(BOARD_HELTEC_V4)
+            // GPSV4-01: GPS off -> GNSS enable driven inactive once, not left floating. This branch runs every
+            // loop pass, so a latch keeps it to one call per boot (a later --gps off deactivates by itself).
+            static bool s_hv4GpsOffApplied = false;
+            if(!s_hv4GpsOffApplied)
+            {
+                WZ_GPS_Deactivate();
+                s_hv4GpsOffApplied = true;
+            }
+        #endif
     }
     #endif
 
