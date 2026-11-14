@@ -30,6 +30,7 @@
 #include "kiss_functions.h"
 #include "configuration.h"
 #include "loop_functions_extern.h"   // REMOTE_LED_PIN rule + RM LED levels
+#include "cet_age.h"   // CET-AGE-01: cetStepAllowed() (pure part only)
 #include "board_led.h"
 #if defined(ESP32)
 #include "esp32/esp32_pmu.h"   // chargeLedFitted()
@@ -2981,8 +2982,33 @@ void sendDisplayText(struct aprsMessage &aprsmsg, int16_t rssi, int8_t snr)
 
             if(Year > 2023)
             {
-                MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
-                snprintf(cTimeSource, sizeof(cTimeSource), (char*)"{CET}");
+                // CET-AGE-01 R1: stale second server stream must not step the clock back.
+                // delta = payload UTC - node clock UTC (node_date_* is local, minus node_utcoff).
+                static bool cetHaveLast = false;
+                static unsigned long cetLastAcceptMs = 0;
+                bool cetAllow = true;
+                uint32_t cetPlLocal = 0, cetNowLocal = 0;
+                const unsigned long cetSinceMs = millis() - cetLastAcceptMs;
+                if(cetEpochFromFields(Year, Month, Day, Hour, Minute, Second, &cetPlLocal) &&
+                   cetEpochFromFields((uint32_t)meshcom_settings.node_date_year, (uint32_t)meshcom_settings.node_date_month,
+                                      (uint32_t)meshcom_settings.node_date_day, (uint32_t)meshcom_settings.node_date_hour,
+                                      (uint32_t)meshcom_settings.node_date_minute, (uint32_t)meshcom_settings.node_date_second,
+                                      &cetNowLocal))
+                {
+                    const int32_t cetOffS = (int32_t)(meshcom_settings.node_utcoff * 3600.0f + (meshcom_settings.node_utcoff < 0 ? -0.5f : 0.5f));
+                    const long cetDeltaS = (long)((int32_t)cetPlLocal - ((int32_t)cetNowLocal - cetOffS));
+                    cetAllow = cetStepAllowed(cetDeltaS, cetHaveLast, cetSinceMs);
+                    if(!cetAllow)
+                        Serial.printf("[CET];skip;back_s;%ld;since_s;%lu\n", -cetDeltaS, cetSinceMs / 1000UL);
+                }
+
+                if(cetAllow)
+                {
+                    MyClock.setCurrentTime(meshcom_settings.node_utcoff, Year, Month, Day, Hour, Minute, Second);
+                    snprintf(cTimeSource, sizeof(cTimeSource), (char*)"{CET}");
+                    cetHaveLast = true;
+                    cetLastAcceptMs = millis();
+                }
             }
         }
 
